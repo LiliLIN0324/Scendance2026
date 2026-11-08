@@ -80,13 +80,15 @@ describe('scene layers', () => {
       evidenceNote: '演练位置核对', reviewedBasis: await handoffBasis(added, item.id, {ownerName:'演练搭建乙',dueDate:'2026-10-10',acceptance:'核对位置'}) };
     const store = createLayoutStore({ layout: added, activeFloorIndex: 0 });
     store.getState().actions.updateItem(item.id, { handoff });
-    expect(await effectiveHandoffStatus(store.getState().layout, item.id)).toBe('accepted');
+    expect(await handoffBasis(store.getState().layout,item.id,handoff)).toBe(handoff.reviewedBasis);
+    expect(await effectiveHandoffStatus(store.getState().layout, item.id)).toBe('needs_review');
     store.getState().actions.removeItem(item.id);
     const saved = serializeLocalProjectBackupV3(store.getState().layout,
       { state: 'ready', scope: base.id, brief: { status: 'absent' } },
       { state: 'ready', scope: base.id, materialCheckins: { status: 'absent' } });
     const restored = switchDesign(parseLocalProjectBackupJson(saved).layout, 'original');
     expect(restored.floors[0]!.items[0]!.handoff).toEqual(handoff);
+    expect(await handoffBasis(restored,item.id,handoff)).not.toBe(handoff.reviewedBasis);
     expect(await effectiveHandoffStatus(restored, item.id)).toBe('needs_review');
   });
 

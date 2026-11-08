@@ -12,12 +12,13 @@ import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapt
 import { mergeProposalPresentation } from '../lib/creative-brief';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
+import { ModelTextDisclosure } from './model-text-disclosure';
 import './material-customization.css';
 
 export interface MaterialCustomizationSeed {
   id: string; scope: string; userId: string; projectId: string; apiUrl: string; sourceAssetId: string;
   objectIds: string[]; name: string; reason: string; materialScope: 'all_materials'|'choose_materials';
-  changes?: MaterialChange | undefined; variantAssetId?: string;
+  changes?: MaterialChange | undefined; variantAssetId?: string; modelSuggested?: boolean | undefined;
 }
 interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; seed?: MaterialCustomizationSeed | undefined; active?: boolean }
 interface Context { scope: string; targetKey: string; base: RoomLayout; projectId: string | null; bindingKey: string; identityEpoch: number; revision: number | null; localRevision: number; generation?: number | undefined; sessionId: string }
@@ -219,7 +220,7 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
   const tint=target.scene?.objects.filter(object=>target.ids.includes(object.id)&&object.color.toLowerCase()!=='#ffffff');
   return <section className="mc-panel" aria-label="物料个性化">
     <div className="sc-section-heading"><div><h2>物料个性化</h2><p>修改指定材质，保留几何与 UV；先对比，再确认应用。</p></div></div>
-    {seed&&<p className="sc-note"><strong>{seed.name}</strong> · {seed.reason}</p>}
+    {seed&&(seed.modelSuggested===false ? <p className="sc-note"><strong>{seed.name}</strong> · {seed.reason}</p> : <ModelTextDisclosure><p>{seed.name} · {seed.reason}</p></ModelTextDisclosure>)}
     {target.error?<p className="sc-note" role="status">{target.error}</p>:<p className="sc-note">目标：{target.ids.length} 个物件 · {target.ids.map(id=>layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??id).join('、')}</p>}
     {!canEdit&&<p className="sc-note">{canConnect?'先准备当前活动的场景服务，再预览和应用。执行资料保留在本机。':'请登录并取得当前项目编辑权后预览和应用。'}</p>}
     {canConnect&&<button type="button" className="sc-button" disabled={busy||!!target.error} onClick={()=>void connectGeometry()}>{connecting?'正在准备场景服务…':'准备当前活动的场景服务'}</button>}
@@ -242,7 +243,7 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
     {preview&&<div className="mc-preview"><div className="mc-comparison" role="group" aria-label="版本对比"><button type="button" aria-pressed={showOriginal} onClick={()=>setShowOriginal(true)}>原版本</button><button type="button" aria-pressed={!showOriginal} onClick={()=>setShowOriginal(false)}>候选版本</button></div>
       <p className="sc-note">预览首个目标；将应用到 {target.ids.length} 件。保留实际尺寸、旋转与实例颜色。</p>
       {active&&!stale&&focusedPreview&&<ScenePreview scene={showOriginal?focusedPreview.before:focusedPreview.after} assetUrls={showOriginal?preview.before.assetUrls:preview.after.assetUrls} assetNames={showOriginal?preview.before.assetNames:preview.after.assetNames}/>}
-      {stale?<p className="sc-note" role="status">场景、材质选择或编辑权已变化，或候选已过期；请重新预览。</p>:<p className="sc-note">{preview.proposal.explanation}</p>}
+      {stale?<p className="sc-note" role="status">场景、材质选择或编辑权已变化，或候选已过期；请重新预览。</p>:<><p className="sc-note">请核对预览与实际改动。</p><ModelTextDisclosure><p>{preview.proposal.explanation}</p></ModelTextDisclosure></>}
       <button type="button" className="sc-button sc-full" disabled={busy||stale||!canEdit} onClick={()=>void apply()}>确认应用到选定物件</button>
       <button type="button" className="sc-button sc-full" disabled={busy} onClick={()=>setPreview(null)}>放弃候选</button>
     </div>}

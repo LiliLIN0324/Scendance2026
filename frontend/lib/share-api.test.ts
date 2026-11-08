@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SceneApiError } from '../../client/scene-client';
 import { getBackendConfig } from './backend-session';
 import { publicationSchema, readShare, shareErrorMessage, shareTokenFromHash } from './share-api';
+import {sceneSchema} from '../../supabase/functions/_shared/domain';
 
 const token = 'a'.repeat(64);
 const id = '50000000-0000-4000-8000-000000000001';
@@ -20,6 +21,15 @@ const payload = () => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('customer publication contract', () => {
+  it('shows why an embedded projection marker breaks the current share reader and is not an authorization boundary',async()=>{
+    const data=payload();const marked={...data.scene,__scendanceReadonlyProjection:true};
+    expect(sceneSchema.safeParse(marked).success).toBe(false);
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({...data,scene:marked}))));
+    await expect(readShare(token,config)).rejects.toMatchObject({code:'INVALID_RESPONSE'});
+    // A client that reconstructs known fields can drop such a marker; it cannot enforce server-side provenance.
+    const {__scendanceReadonlyProjection:_marker,...stripped}=marked;
+    expect(sceneSchema.safeParse(stripped).success).toBe(true);
+  });
   it('reads the token only from a complete fragment value', () => {
     expect(shareTokenFromHash(`#${token}`)).toBe(token);
     expect(shareTokenFromHash(`?token=${token}`)).toBeNull();

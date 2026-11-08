@@ -44,6 +44,11 @@ describe('outcomeSummary', () => {
     expect(text).toContain('跳过 1 件');
   });
 
+  it('does not hide removals when a combined outcome also carries an empty reason',()=>{
+    const out={placed:[],removed:[item('old')],refused:[],skipped:[],scopeEmpty:'NO_SPOT' as const};
+    expect(outcomeSummary(out)).toContain('移除 1 件');
+  });
+
   it('renders a Chinese "nothing placed" line for an empty ledger', () => {
     const out = emptyOutcome<FakeItem>('NO_SPOT');
     expect(outcomeSummary(out)).toBe('本次没放成：全场地找不到合法落点');

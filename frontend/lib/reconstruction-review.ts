@@ -1,9 +1,25 @@
 import type { ImagePoint } from './source-storage';
 import type { SceneV2 } from '../../supabase/functions/_shared/domain';
+/** Reject moves that would detach existing evidence or an earlier confirmation from its geometry. */
+export function reviewedWallMoveBlocked(scene: SceneV2, id: string, patch: Partial<SceneV2['structure']['walls'][number]>): boolean {
+  const wall = scene.structure.walls.find(value => value.id === id);
+  if (!wall) return false;
+  const changed = (patch.start && (patch.start.x !== wall.start.x || patch.start.z !== wall.start.z)) ||
+    (patch.end && (patch.end.x !== wall.end.x || patch.end.z !== wall.end.z));
+  if (!changed) return false;
+  const movedPoints = [patch.start ? wall.start : null, patch.end ? wall.end : null].filter((point): point is ImagePoint => point !== null);
+  const affectedWalls = scene.structure.walls.filter(value => movedPoints.some(point =>
+    Math.hypot(value.start.x - point.x, value.start.z - point.z) < 1e-6 ||
+    Math.hypot(value.end.x - point.x, value.end.z - point.z) < 1e-6));
+  return scene.dimensions.some(dimension => dimension.status === 'confirmed' || !!dimension.sourceAssetId) ||
+    scene.structure.walls.some(value => (value.evidence?.length ?? 0) > 0) ||
+    affectedWalls.some(value => value.status === 'confirmed' || scene.structure.openings.some(opening => opening.wallId === value.id && opening.status === 'confirmed'));
+}
+
 /** A wall endpoint is a shared vertex. Keep connected walls and venue perimeter aligned. */
 export function updateReviewedWall(scene: SceneV2, id: string, patch: Partial<SceneV2['structure']['walls'][number]>): SceneV2 {
   const wall=scene.structure.walls.find(w=>w.id===id);
-  if(!wall)return scene;
+  if(!wall || reviewedWallMoveBlocked(scene,id,patch))return scene;
   const replacements=[...(patch.start?[{before:wall.start,after:patch.start}]:[]),...(patch.end?[{before:wall.end,after:patch.end}]:[])];
   const move=(point:ImagePoint)=>replacements.find(r=>Math.hypot(r.before.x-point.x,r.before.z-point.z)<1e-6)?.after??point;
   const walls=scene.structure.walls.map(w=>({...w,...(w.id===id?patch:{}),start:move(w.start),end:move(w.end)}));

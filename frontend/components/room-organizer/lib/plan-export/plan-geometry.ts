@@ -18,6 +18,17 @@ import type { FloorLayout, FurnitureItem, RoomLayout } from '../types';
  * mirrors the 0.16 m modelled in three/interior-walls.ts. */
 export const INTERIOR_WALL_THICKNESS_M = 0.16;
 
+/** 当前图纸只表达编辑器矩形平面；复杂场馆需另附原图。 */
+export function planExportUnsupportedReason(layout: RoomLayout): string | null {
+  if (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon') return '多边形场地暂不支持平面图导出，请使用原始图纸。';
+  if (layout.backendSceneV2?.structure || layout.scenePreset || layout.floors.some(floor => floor.items.some(item => !!item.glbNode))) return '当前复杂场馆或结构暂不支持平面图导出，请使用原始图纸。';
+  return null;
+}
+
+export function unplacedPlanItems(floor: FloorLayout): FurnitureItem[] {
+  return floor.items.filter(item => !item.position);
+}
+
 /** A placed item: `position` narrowed to non-optional. */
 export type PlacedItem = FurnitureItem & { position: NonNullable<FurnitureItem['position']> };
 

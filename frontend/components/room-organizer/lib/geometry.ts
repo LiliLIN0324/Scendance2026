@@ -332,6 +332,8 @@ export interface FreeSpotOptions {
   roomWidth: number;
   roomDepth: number;
   context?: CollisionContext;
+  /** Optional additional pure validation before accepting a candidate. */
+  accept?: ((position: Vec2) => boolean) | undefined;
   /** 环间距，米。 */
   step?: number;
   /** 最远找多远，米。 */
@@ -344,11 +346,12 @@ export function findFreePosition({
   roomWidth,
   roomDepth,
   context = {},
+  accept,
   step = 0.1,
   maxRadius = 2.4,
 }: FreeSpotOptions): Vec2 | null {
   const origin = item.position ?? { x: 0, z: 0 };
-  const free = (position: Vec2): boolean => !hasCollisions({ ...item, position }, others, roomWidth, roomDepth, context);
+  const free = (position: Vec2): boolean => !hasCollisions({ ...item, position }, others, roomWidth, roomDepth, context) && (!accept || accept(position));
   if (free(origin)) return { ...origin };
   // 同心环：先近后远，同一环上按角度均匀取样，保证结果与方位无关。
   const rings = Math.ceil(maxRadius / step);

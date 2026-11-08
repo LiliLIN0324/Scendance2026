@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { materialCheckinLedgerSchema } from '../../supabase/functions/_shared/material-checkin-contract';
 import { checkedMaterialCheckins, materialCheckinStorageKey, mergeStoredMaterialCheckins, readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from './material-checkin-storage';
 import { readSourceRecord, updateSourceForm } from './source-storage';
+import { createLocalWriteLeaseManager, type LocalWriteCapability } from './local-write-lease';
 
 vi.mock('./source-storage', () => ({ readSourceRecord: vi.fn(), updateSourceForm: vi.fn() }));
 const records = new Map<string, unknown>();
@@ -16,12 +17,16 @@ function ledger(n = 1) {
 beforeEach(() => {
   records.clear(); vi.clearAllMocks();
   vi.mocked(readSourceRecord).mockImplementation(async key => structuredClone(records.get(JSON.stringify(key))) as never);
-  vi.mocked(updateSourceForm).mockImplementation(async (key, update) => {
+  vi.mocked(updateSourceForm).mockImplementation(async (key, update, guard) => {
+    guard?.assertStillHeld();
     const address = JSON.stringify(key), next = update(structuredClone(records.get(address)));
+    guard?.assertStillHeld();
     if (next === undefined) records.delete(address); else records.set(address, structuredClone(next));
     return structuredClone(next) as never;
   });
 });
+
+afterEach(()=>vi.unstubAllGlobals());
 
 describe('project-bound material checkin storage', () => {
   it('uses a compound key and retains no-ledger absence instead of inventing zeros', async () => {
@@ -60,6 +65,24 @@ describe('project-bound material checkin storage', () => {
     await mergeStoredMaterialCheckins(projectId, imported); await mergeStoredMaterialCheckins(projectId, ledger(2));
     await expect(restoreMaterialCheckinsIfUnchanged(projectId, imported, undefined)).rejects.toThrow('新变化');
     expect((await readMaterialCheckins(projectId))!.sheets).toHaveLength(2);
+  });
+  it('并发更新时失效凭证不能覆盖另一持有者已保存的账册',async()=>{
+    const values=new Map<string,string>();const store={getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value),removeItem:(key:string)=>values.delete(key)} as unknown as Storage;
+    const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
+    vi.stubGlobal('window',{localStorage:store});vi.stubGlobal('navigator',{locks});
+    const manager=createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>store}),a=await manager.acquire(),b=await manager.acquire();
+    let resume!:()=>void,started!:()=>void;const began=new Promise<void>(resolve=>{started=resolve;});
+    vi.mocked(updateSourceForm).mockImplementationOnce(async(key,update,guard)=>{
+      guard?.assertStillHeld();const next=update(structuredClone(records.get(JSON.stringify(key))));started();
+      await new Promise<void>(resolve=>{resume=resolve;});guard?.assertStillHeld();records.set(JSON.stringify(key),structuredClone(next));return next as never;
+    });
+    const stale=mergeStoredMaterialCheckins(projectId,ledger(1),()=>{},a.capability);void stale.catch(()=>{});await began;
+    await mergeStoredMaterialCheckins(projectId,ledger(2),()=>{},b.capability);await a.release();resume();
+    await expect(stale).rejects.toThrow('失效');expect((await readMaterialCheckins(projectId))?.sheets.map(row=>row.id)).toEqual([id(2)]);await b.release();
+  });
+  it('伪造普通能力在写事务前被拒绝',async()=>{
+    await expect(mergeStoredMaterialCheckins(projectId,ledger(),()=>{},{kind:'ordinary'} as unknown as LocalWriteCapability)).rejects.toThrow('凭证无效');
+    expect(updateSourceForm).not.toHaveBeenCalled();
   });
   it('rejects invalid future fields and never treats another ledger as an empty local one', () => {
     expect(() => checkedMaterialCheckins(projectId, { ...ledger(), futureData: [] })).toThrow('无法完整读取');

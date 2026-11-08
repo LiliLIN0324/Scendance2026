@@ -97,20 +97,65 @@ const CHAT_MODEL = 'deepseek-v4.1-flash';
 /** Gateway not configured: fall back to the DeepSeek official endpoint, shared with reconstruction. */
 const OFFICIAL_CHAT_URL = 'https://api.deepseek.com/chat/completions';
 const OFFICIAL_CHAT_MODEL = 'deepseek-flash';
+/** Usage labels are fixed categories; never persist the configured endpoint or model. */
+export function chatUsageProvider(env: Env): 'minimax' | 'custom' | 'deepseek' {
+  if (env('AGENT_CHAT_PROFILE') === 'minimax') return 'minimax';
+  return env('AGENT_CHAT_BASE_URL') ? 'custom' : 'deepseek';
+}
 /**
  * OpenAI-compatible chat request. Priority: any OpenAI-compatible provider
  * (`AGENT_CHAT_BASE_URL` + `AGENT_CHAT_KEY` + `AGENT_CHAT_MODEL`) → Tokendance gateway →
  * DeepSeek official endpoint (`DEEPSEEK_API_KEY`, same key as reconstruction). Keeping endpoints,
- * models and keys in one place stops the call sites from drifting; `thinking` is always disabled
- * because this is a reasoning model and each caller bounds its own output tokens. Switching
+ * models and keys in one place stops the call sites from drifting. Switching
  * providers is a `supabase secrets set` away and takes effect immediately, no redeploy.
  */
-export function chatRequest(env: Env, body: Record<string, unknown>): { url: string; init: RequestInit } {
+export function chatRequest(env: Env, body: Record<string, unknown>, options?: { purpose?: 'brief' | 'agent' }): { url: string; init: RequestInit } {
   const customBase = env('AGENT_CHAT_BASE_URL'), customKey = env('AGENT_CHAT_KEY'), customModel = env('AGENT_CHAT_MODEL');
-  if (customBase && customKey && customModel) return { url: `${customBase.replace(/\/+$/, '')}/chat/completions`, init: {
+  const profile = env('AGENT_CHAT_PROFILE');
+  if (profile && !['minimax', 'bailian-qwen'].includes(profile)) throw new ApiError('MODEL_PROVIDER_PROFILE_INVALID', 503);
+  const minimaxAgent = profile === 'minimax' && options?.purpose === 'agent' && env('MINIMAX_AGENT_TOOLS_ENABLED') === '1';
+  if (profile === 'minimax' && options?.purpose !== 'brief' && !minimaxAgent) throw new ApiError('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW', 503);
+  if (profile && (!customBase?.trim() || !customKey?.trim() || !customModel?.trim())) throw new ApiError('MODEL_PROVIDER_INCOMPLETE', 503);
+  if (customBase || customKey || customModel) {
+    if (!customBase?.trim() || !customKey?.trim() || !customModel?.trim()) throw new ApiError('MODEL_PROVIDER_INCOMPLETE', 503);
+    let parsed: URL;
+    try { parsed = new URL(customBase); } catch { throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503); }
+    const localHttp = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+    if ((!localHttp && parsed.protocol !== 'https:') || parsed.username || parsed.password || parsed.search || parsed.hash) throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503);
+    // This product-backend adapter is deliberately limited to Qwen models that
+    // support non-thinking Chat Completions. Coding/Token Plan endpoints are for
+    // interactive coding tools, not product backends (Model Studio Base URL docs).
+    if (profile === 'bailian-qwen') {
+      const host = parsed.hostname.toLowerCase();
+      const standardHost = ['dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'dashscope-us.aliyuncs.com', 'cn-hongkong.dashscope.aliyuncs.com'].includes(host)
+        || /^[a-z0-9-]+\.(cn-beijing|ap-southeast-1|ap-northeast-1|eu-central-1|us-east-1|cn-hongkong)\.maas\.aliyuncs\.com$/.test(host);
+      if ((!localHttp && (!standardHost || host.startsWith('token-plan.'))) || parsed.pathname.replace(/\/+$/, '') !== '/compatible-mode/v1') throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503);
+    }
+    const requestBody = profile === 'minimax' ? (() => {
+      const { thinking: _thinking, temperature: _temperature, response_format: _format, ...rest } = body;
+      if (!minimaxAgent && ('tools' in rest || 'tool_choice' in rest)) throw new ApiError('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW', 503);
+      const effort = env('AGENT_CHAT_REASONING_EFFORT');
+      if (effort && !['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) throw new ApiError('MODEL_PROVIDER_INCOMPLETE', 503);
+      return { model: customModel, ...rest, reasoning_split: true, ...(effort ? { reasoning_effort: effort } : {}) };
+    })() : profile === 'bailian-qwen' ? (() => {
+      const { thinking: _thinking, enable_thinking: _enableThinking, ...rest } = body;
+      // Non-thinking is explicit: the current runtime doesn't replay thinking
+      // content and several Qwen models require streaming when thinking.
+      // Preserve a forced submission without unsupported named tool_choice.
+      const choice = rest.tool_choice;
+      if (choice && typeof choice === 'object' && 'function' in choice) {
+        const name = (choice as {function?:{name?:string}}).function?.name;
+        const tools = Array.isArray(rest.tools) ? rest.tools.filter((tool: {function?:{name?:string}}) => tool.function?.name === name) : [];
+        if (!name || tools.length !== 1) throw new ApiError('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW', 503);
+        return { ...rest, model: customModel, enable_thinking: false, tools, tool_choice: 'auto' };
+      }
+      return { ...rest, model: customModel, enable_thinking: false };
+    })() : { model: customModel, thinking: { type: 'disabled' }, ...body };
+    return { url: `${customBase.replace(/\/+$/, '')}/chat/completions`, init: {
     method: 'POST', headers: { Authorization: `Bearer ${customKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: customModel, thinking: { type: 'disabled' }, ...body }),
-  } };
+    body: JSON.stringify(requestBody),
+    } };
+  }
   const gatewayKey = env(CHAT_API_KEY_ENV);
   if (gatewayKey) return { url: CHAT_URL, init: {
     method: 'POST', headers: { Authorization: `Bearer ${gatewayKey}`, 'Content-Type': 'application/json' },

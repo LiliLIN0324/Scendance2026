@@ -3,6 +3,7 @@ import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib
 import {
   applyLayoutCommand,
   applyLayoutCommandWithRefusals,
+  completeLayoutError,
   executeSceneCommand,
   moveItemCommand,
   placeItemCommand,
@@ -41,6 +42,26 @@ function makeLayout(opts: { width: number; height: number; items: FurnitureItem[
 }
 
 describe('validateCommandShape', () => {
+  it('整体应用遇到拒绝的物件时必须报错，不能把部分候选当作确认结果', () => {
+    const before = makeLayout({ width: 10, height: 8, items: [] });
+    const candidate = makeLayout({ width: 10, height: 8, items: [
+      makeItem({ id: 'a', name: '桌一', position: { x: -2, z: 0 } }),
+      makeItem({ id: 'b', name: '桌二', position: { x: -2, z: 0 } }),
+    ] });
+    const result = applyLayoutCommandWithRefusals(applyLayoutCommand({ layout: candidate }), { layout: before });
+    expect(result.refused.length).toBeGreaterThan(0);
+    expect(completeLayoutError(result)).toContain('未应用');
+    expect(before.floors[0]!.items).toEqual([]);
+  });
+  it('保留墙线上的门洞标记，不把结构当作越界家具拒绝', () => {
+    const marker = makeItem({ id: 'door', name: '门洞', type: 'door', width: 1, depth: 0.16,
+      position: { x: 0, z: -4 }, structuralOpeningId: 'opening' });
+    const before = makeLayout({ width: 10, height: 8, items: [] });
+    const candidate = makeLayout({ width: 10, height: 8, items: [marker] });
+    const result = applyLayoutCommandWithRefusals(applyLayoutCommand({ layout: candidate }), { layout: before });
+    expect(completeLayoutError(result)).toBeNull();
+    expect(result.nextLayout.floors[0]!.items).toContainEqual(marker);
+  });
   it('place-item：合法形状通过', () => {
     const cmd = placeItemCommand({ floorIndex: 0, item: makeItem({ id: 'a', name: '桌', position: { x: 2, z: 1 } }) });
     expect(validateCommandShape(cmd)).toEqual([]);
@@ -191,15 +212,13 @@ describe('executeSceneCommand', () => {
     expect(result.refused[0]!.itemId).toBe('b');
   });
 
-  it('4. move-item 把桌子压到主通道带内 → 被拒（MAIN_AISLE_BLOCKED 映射为 BBOX_OVERLAP）', () => {
-    // 椅子在主通道是豁免的，所以用 table 触发 MAIN_AISLE_BLOCKED。
+  it('4. 没有真实通道标注时，不能把场地中线假定为通道并硬拒绝', () => {
     const table = makeItem({ id: 't', name: '桌', type: 'table', position: { x: -3, z: 0 } });
     const layout = makeLayout({ width: 12, height: 12, items: [table] });
     const cmd = moveItemCommand({ floorIndex: 0, itemId: 't', position: { x: 0, z: 0 } });
     const result = executeSceneCommand(cmd, { layout });
-    expect(result.ok).toBe(false);
-    expect(result.preconditions[0]?.code).toBe('BBOX_OVERLAP');
-    expect(result.nextLayout).toBe(layout);
+    expect(result.ok).toBe(true);
+    expect(result.nextLayout.floors[0]!.items[0]!.position).toEqual({ x: 0, z: 0 });
   });
 
   it('5. move-item 到合法位 → position 改了、其他件不动', () => {

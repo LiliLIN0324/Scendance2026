@@ -1,6 +1,6 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect,vi } from 'vitest';
 import { database,owner,scene,chair,session } from './fixtures.ts';
-import { generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
+import { chatRequest,generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
 import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 import { packGltf } from '../supabase/functions/_shared/models.ts';
 import { tetrahedron } from './model-fixture.ts';
@@ -9,6 +9,13 @@ const env:Env=key=>({HUNYUAN_API_MODE:'legacy',HUNYUAN_API_KEY:'test-key',DEEPSE
 const response=(body:unknown)=>new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
 
 describe('real provider request formats with controlled responses',()=>{
+  it('does not silently use MiniMax for agent tools or fall back when its configuration is incomplete',()=>{
+    const config:Record<string,string>={AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash',TOKENDANCE_API_KEY:'other-key'};
+    expect(()=>chatRequest(key=>config[key],{messages:[],tools:[]})).toThrow('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW');
+    expect(()=>chatRequest(key=>config[key],{messages:[],tools:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW');
+    delete config.AGENT_CHAT_KEY;
+    expect(()=>chatRequest(key=>config[key],{messages:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_INCOMPLETE');
+  });
   it('uses documented Hunyuan header, 3.0 LowPoly and async JobId',async()=>{
     const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{expect(init?.headers).toMatchObject({Authorization:'test-key'});expect(JSON.parse(init?.body as string)).toMatchObject({Model:'3.0',GenerateType:'LowPoly'});return response({Response:{JobId:'job-1'}});}) as unknown as Fetcher;
     expect((await hunyuan(env,fetcher).submit('Prop')).JobId).toBe('job-1');

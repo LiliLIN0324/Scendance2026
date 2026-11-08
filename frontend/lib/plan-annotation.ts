@@ -36,13 +36,16 @@ export type PlanAnnotationGeometry =
       kind: 'door';
       wall: 'north' | 'south' | 'east' | 'west';
       position: number;
-      widthM: number;
+      /** 门洞宽度（米）；缺少来源时为 null，不使用数值占位。 */
+      widthM: number | null;
       /**
        * 数据层合成的推测门（withDefaultDoor 自动补的南门）标 inferred:true；
        * 用户在画布上真实画的门没有该字段或为 false。
        * 2D 渲染层读到推测门应用虚线/「推测」小字区分。
        */
       inferred?: boolean;
+      /** 来自当前场景的门洞记录；并不代表现场或开门方向已确认。 */
+      source?: 'scene';
     };
 
 export interface PlanAnnotation {
@@ -169,7 +172,7 @@ export function formatMeasureLabel(from: PlanPoint, to: PlanPoint): string {
 
 /**
  * 若 annotations 里没有任何 kind:'door'，在南墙居中合成一个默认门
- * （宽 0.9m，wall:'south', position=0）。有 door 则原样返回（同引用，不可变）。
+ * （宽度未知，wall:'south', position=0 均为推测）。有 door 则原样返回（同引用，不可变）。
  * 纯函数：只做数据层兜底，让 evaluateDoorSweep 在用户没画门时也能跑通。
  */
 export function withDefaultDoor(
@@ -182,7 +185,7 @@ export function withDefaultDoor(
     kind: 'door',
     label: '默认南门（推测）',
     stageNo: 1,
-    geometry: { kind: 'door', wall: 'south', position: 0, widthM: 0.9, inferred: true },
+    geometry: { kind: 'door', wall: 'south', position: 0, widthM: null, inferred: true },
   };
   return [...annotations, defaultDoor];
 }

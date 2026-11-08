@@ -94,12 +94,12 @@ describe('场地观感只出场地', () => {
 });
 
 describe('Aholo 产品化壳体', () => {
-  it('面板标题是场地观感，并写明主路径与禁令', () => {
+  it('面板说明空间生成与重建路径和素材限制', () => {
     offline();
     render(<Lux3dDirectTest/>);
-    expect(screen.getByRole('heading', { name: '场地观感' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '生成引擎空间模型' })).toBeTruthy();
     expect(screen.getAllByText(/物料生成在 Bingo 的「物料生成」里/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/主路径：地图圈画/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/真实场地重建：地图圈画/).length).toBeGreaterThan(0);
     expect(screen.getByText(/卫星不可作重建素材/)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Aholo 接口测试' })).toBeNull();
     const gated = screen.getByRole('button', { name: '先勾选扣额度确认闸' }) as HTMLButtonElement;

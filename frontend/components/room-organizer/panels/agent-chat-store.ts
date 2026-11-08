@@ -15,7 +15,9 @@
  * （supabase/functions/_shared/agent-progress.ts），两边不各写一份数字。
  */
 
+import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
 import type { AgentPhase } from '../../../../supabase/functions/_shared/agent-progress';
+import type { AgentRunEvent } from '@/lib/agent-run-events';
 
 /** 四个格子各自一条线。 */
 export type ChatAgent = 'door' | 'bingo' | 'space' | 'material';
@@ -62,12 +64,44 @@ function readStored(): AgentChatThreads {
 let threads: AgentChatThreads = typeof window === 'undefined' ? EMPTY : readStored();
 const listeners = new Set<() => void>();
 
+let sessionRequired = false;
+let sessionGuard: ReturnType<typeof localWriteCapabilityGuard> | null = null;
+let sessionBefore: string | null = null;
+let sessionFailed = false;
+/** A binding is explicit and cannot drop back to unguarded writes after revocation. */
+export function bindAgentChatWriteSession(capability: LocalWriteCapability): () => void {
+  const guard=localWriteCapabilityGuard(capability); guard.assertStillHeld();
+  sessionRequired=true;
+  if (sessionGuard || sessionFailed) throw new Error('对话草稿尚待核对，不能切换编辑权。');
+  const raw=window.localStorage.getItem(STORAGE_KEY);
+  if (raw !== null) {
+    let parsed:unknown;
+    try { parsed=JSON.parse(raw); } catch { throw new Error('对话资料无法完整读取。'); }
+    if (JSON.stringify(parsed)!==JSON.stringify(threads)) throw new Error('对话资料已变化，请先核对。');
+  } else if (Object.values(threads).some(messages=>messages.length)) throw new Error('对话草稿尚未保存，请先核对。');
+  sessionRequired=true;sessionGuard=guard;sessionBefore=raw;
+  const revoke=()=>{if(sessionGuard===guard)sessionGuard=null;};
+  guard.signal.addEventListener('abort',revoke,{once:true});
+  return ()=>{guard.signal.removeEventListener('abort',revoke);revoke();};
+}
+export function agentChatWriteStatus(): 'legacy'|'ready'|'blocked'|'needs_review' {
+  return sessionFailed?'needs_review':sessionGuard?'ready':sessionRequired?'blocked':'legacy';
+}
 function commit(next: AgentChatThreads): void {
   threads = next;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    if (sessionRequired) {
+      const guard=sessionGuard;
+      if (!guard || sessionFailed) throw new Error('本机对话编辑权不可用。');
+      guard.assertStillHeld();
+      if (guard.signal.aborted || window.localStorage.getItem(STORAGE_KEY)!==sessionBefore) throw new Error('对话资料已变化。');
+      const json=JSON.stringify(next);
+      guard.assertStillHeld();window.localStorage.setItem(STORAGE_KEY,json);guard.assertStillHeld();
+      if (window.localStorage.getItem(STORAGE_KEY)!==json) throw new Error('对话保存结果待核对。');
+      sessionBefore=json;
+    } else window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
-    /* 无痕模式或配额满：对话留在内存里，不影响用。 */
+    if (sessionRequired) { sessionFailed=true;sessionGuard=null; }
   }
   for (const listener of listeners) listener();
 }
@@ -86,12 +120,14 @@ function newId(): string {
 }
 
 export function appendAgentChatMessage(agent: ChatAgent, from: ChatFrom, text: string): AgentChatMessage {
+  if (sessionRequired && (!sessionGuard || sessionFailed || threads[agent].length >= LIMIT)) throw new Error('本机对话需要先核对或备份，未丢弃原有消息。');
   const message: AgentChatMessage = { id: newId(), agent, from, text, at: Date.now() };
   commit({ ...threads, [agent]: [...(threads[agent] ?? []), message].slice(-LIMIT) });
   return message;
 }
 
 export function clearAgentChatThread(agent: ChatAgent): void {
+  if (sessionRequired) throw new Error('当前编辑会话暂不支持删除对话，请先保留和核对原有记录。');
   commit({ ...threads, [agent]: [] });
 }
 
@@ -133,6 +169,8 @@ export interface AgentRunState {
   startedAt: number;
   thoughtCount: number;
   stepLog: AgentStepLogEntry[];
+  /** Validated, ordered tool events for this run; no arguments or model text. */
+  eventLog: Array<Pick<AgentRunEvent,'seq'|'tool'|'stage'|'outcome'>>;
   shouldPauseAfterStep: boolean;
   stopRequested: boolean;
   steerNotes: string[];
@@ -159,6 +197,7 @@ const IDLE_RUN: AgentRunState = {
   startedAt: 0,
   thoughtCount: 0,
   stepLog: [],
+  eventLog: [],
   shouldPauseAfterStep: false,
   stopRequested: false,
   steerNotes: [],
@@ -168,7 +207,7 @@ const IDLE_RUN: AgentRunState = {
   scope: 'layout',
 };
 
-let run: AgentRunState = { ...IDLE_RUN, stepLog: [], steerNotes: [] };
+let run: AgentRunState = { ...IDLE_RUN, stepLog: [], eventLog: [], steerNotes: [] };
 const runListeners = new Set<() => void>();
 
 function commitRun(next: AgentRunState): void {
@@ -195,6 +234,7 @@ export function startAgentRun(scope: AgentRunScope = 'layout'): void {
     startedAt: Date.now(),
     scope,
     stepLog: [],
+    eventLog: [],
     steerNotes: [],
   });
 }
@@ -216,6 +256,17 @@ export function endAgentRun(options?: { emptyOutcome?: boolean }): void {
  */
 export function appendAgentStep(entry: AgentStepLogEntry): void {
   commitRun({ ...run, stepLog: [...run.stepLog, entry] });
+}
+
+/** Caller fences the run before and after reading; duplicate/old events are ignored. */
+export function appendAgentRunEvents(events:readonly AgentRunEvent[]):void {
+  let last=run.eventLog.at(-1)?.seq??0;
+  const next=[...run.eventLog];
+  for(const event of events){
+    if(event.seq<=last)continue;
+    next.push({seq:event.seq,tool:event.tool,stage:event.stage,outcome:event.outcome});last=event.seq;
+  }
+  if(next.length!==run.eventLog.length)commitRun({...run,eventLog:next});
 }
 
 /** 模型每出一段自述思考 +1，用来驱动头部"N 条思考"。 */

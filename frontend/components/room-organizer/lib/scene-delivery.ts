@@ -11,7 +11,9 @@ import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
 import { deliverableInventory, layoutProvenanceBreakdown } from './deliverable-inventory';
+import { localDraftAvailable, redactDeliveryValue, safeDeliveryText } from './local-draft-delivery';
 import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
+import { REFERENCE_SOURCE_UNVERIFIED } from './reference-source-status';
 import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
 import type { RoomLayout } from './types';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
@@ -86,36 +88,82 @@ export async function deliveryOperations(layout: RoomLayout, checkins?: Material
   })) };
 }
 
+/** 场景记录与现场确认是两件事；导出时不推断未记录的审批或安全结论。 */
+export function deliveryVerificationScope(scene: ReturnType<typeof deliveryScene>) {
+  const sourceById = new Map(scene.schemaVersion === 2 ? scene.sources.map(source => [source.assetId, source] as const) : []);
+  const dimensions = scene.schemaVersion === 2 ? scene.dimensions.map((dimension,index) => {
+    const source = dimension.sourceAssetId ? sourceById.get(dimension.sourceAssetId) : undefined;
+    return {
+      id: dimension.id, kind: dimension.kind, label: `尺寸记录 ${index+1}（来源待核验）`, valueMeters: dimension.valueMeters,
+      recordedStatus: dimension.status,
+      source: source ? { assetId: source.assetId, kind: source.kind, name: source.name } : null,
+      sourceNote: source ? '来源与本条尺寸已关联；记录状态不代表场地方确认。' : '此尺寸记录没有关联可用来源，来源待确认。',
+    };
+  }) : [];
+  const doors = scene.schemaVersion === 2
+    ? scene.structure.openings.filter(opening => opening.kind === 'door').map(opening => ({
+        id: opening.id, widthMeters: opening.width, recordedStatus: opening.status,
+        source: '场景门洞记录', openingDirection: 'unknown' as const,
+      }))
+    : scene.venue.entrances.map(entrance => ({
+        id: entrance.id, widthMeters: entrance.width, recordedStatus: 'unknown' as const,
+        source: '场景入口记录，来源及确认状态未记录', openingDirection: 'unknown' as const,
+      }));
+  return {
+    state: 'draft_unverified' as const,
+    sceneSize: { widthMeters: scene.venue.width, depthMeters: scene.venue.depth, heightMeters: scene.venue.height,
+      source: '当前编辑场景', note: '这是图中尺寸，不自动代表现场实测；具体依据见尺寸记录。' },
+    dimensions,
+    doors,
+    checks: [
+      { id: 'reference_source', status: 'unknown' as const, note: REFERENCE_SOURCE_UNVERIFIED },
+      { id: 'entrances_exits', status: 'unknown' as const, note: doors.length ? '有门或入口记录，但出口用途、数量及现场状态未在此交付包核实。' : '未记录可核对的门或入口；出口信息待确认。' },
+      { id: 'door_swing', status: 'unknown' as const, note: '门扇开启方向、铰链及净宽未在此交付包核实。' },
+      { id: 'circulation', status: 'unknown' as const, note: '人流、排队、通行净宽与转弯空间未在此交付包核实。' },
+      { id: 'fire_accessibility_capacity', status: 'unknown' as const, note: '消防、无障碍及核定容量未在此交付包核验。' },
+    ],
+    confirmations: {
+      venue: 'unknown' as const, execution: 'unknown' as const, authority: 'unknown' as const,
+      note: '此交付包未记录与本版本绑定的场地方、执行方或主管部门确认；物件工作单状态不代替这些确认。',
+    },
+  };
+}
+
+const SCOPE_NOTICE = `${REFERENCE_SOURCE_UNVERIFIED}本清单未核验出入口、门扇、人流、消防、无障碍或核定容量；现场与相关方仍需确认。隐私过滤不能保证识别全部敏感信息，请分享前核对。`;
+
 export async function sceneDeliveryJson(layout: RoomLayout, snapshot?: DeliverySnapshot, checkins?: MaterialCheckinLedger): Promise<string> {
   const scene = deliveryScene(layout);
-  return JSON.stringify({ format: 'scendance-scene-delivery', version: 2, units: 'm', upAxis: 'Y',
-    coordinateOrigin: 'venue-north-west', name: layout.name, ...(snapshot ? { snapshot } : {}), scene,
-    execution: await deliveryExecution(layout), materials: deliveryMaterials(layout),
+  const deliverySceneRecord=scene.schemaVersion===2?(({design:_unverifiedDesign,...rest})=>({...rest,objects:rest.objects.map(object=>({...object,notes:''})),dimensions:rest.dimensions.map((dimension,index)=>({...dimension,label:`尺寸记录 ${index+1}（来源待核验）`}))}))(scene):{...scene,objects:scene.objects.map(object=>({...object,notes:''}))};
+  const output = { format: 'scendance-scene-delivery', version: 2, units: 'm', upAxis: 'Y',
+    coordinateOrigin: 'venue-north-west', name: layout.name, ...(snapshot ? { snapshot } : {}), scene:deliverySceneRecord,
+    execution: await deliveryExecution(layout), materials: deliveryMaterials(layout), verificationScope: deliveryVerificationScope(scene),
     operations: await deliveryOperations(layout, checkins), operationsTimeZone: 'Asia/Shanghai',
     source: { kind: 'editor-snapshot', layoutId: layout.id ?? null },
-    // 第9批 UI：按 provenance.source 分桶计数；场地自带件不计入布置件。
+    // 系统生成与结构标记分开；缺失来源不作推断。
     provenance: layoutProvenanceBreakdown(layout),
-    note: 'assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。' }, null, 2);
+    note: '原方案自由文字未独立核验，本交付包不包含该部分；原方案记录仍保留。assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。' };
+  const sanitized=redactDeliveryValue(output);
+  return JSON.stringify({ ...(sanitized.value as Record<string,unknown>), privacy: { redactedFields: sanitized.removed, note: '已识别的部分凭据与私密链接已过滤；不能保证识别全部敏感信息，请分享前核对。需要的证据请另行安全提供。' } }, null, 2);
 }
 
 function csvField(value: unknown): string {
-  const text = String(value ?? '');
+  const text = typeof value === 'string' ? safeDeliveryText(value) : String(value ?? '');
   const safe = typeof value === 'string' && /^\s*[=+\-@]|^[\t\r\n]/.test(text) ? `'${text}` : text;
   return `"${safe.replace(/"/g, '""')}"`;
 }
 export function sceneDeliveryCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): string {
-  const rows: unknown[][] = [['名称','物料类型','资产版本ID','来源','宽/m','深/m','高/m','颜色','数量','物件ID','采购状态','来源页面','许可','SHA256','交付编号','生成时间']];
-  for (const item of deliveryMaterials(layout)) rows.push([item.name,item.materialId,item.assetVersionId,item.source,item.width,item.depth,item.height,item.color,item.quantity,item.objectIds.join(';'),item.procurement,item.sourceUrl,item.license,item.sha256,snapshot?.id,snapshot?.generatedAt]);
+  const rows: unknown[][] = [['名称','物料类型','资产版本ID','来源','宽/m','深/m','高/m','颜色','数量','物件ID','采购状态','来源页面','许可','SHA256','交付编号','生成时间',SCOPE_NOTICE]];
+  for (const item of deliveryMaterials(layout)) rows.push([item.name,item.materialId,item.assetVersionId,item.source,item.width,item.depth,item.height,item.color,item.quantity,item.objectIds.join(';'),item.procurement,item.sourceUrl,item.license,item.sha256,snapshot?.id,snapshot?.generatedAt,'待核验']);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 
 export async function sceneExecutionCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
-  const rows: unknown[][] = [['物件ID','名称','物料类型','资产版本ID','楼层','宽/m','深/m','高/m','X/m','Z/m','旋转/度','离地/m','数量','负责人','期限','验收条件','记录状态','有效状态','证据链接','验收说明','交付编号','生成时间']];
+  const rows: unknown[][] = [['物件ID','名称','物料类型','资产版本ID','楼层','宽/m','深/m','高/m','X/m','Z/m','旋转/度','离地/m','数量','负责人','期限','验收条件','记录状态','有效状态','证据链接','验收说明','交付编号','生成时间',SCOPE_NOTICE]];
   for (const item of await deliveryExecution(layout)) rows.push([item.objectId,item.name,item.materialId,item.assetVersionId,
     item.floorName,item.size.width,item.size.depth,item.size.height,item.position.x,item.position.z,item.rotation,item.elevation,
     1,item.ownerName,item.dueDate,item.acceptance,HANDOFF_STATUS_LABELS[item.status],
     item.hasHandoff ? HANDOFF_STATUS_LABELS[item.effectiveStatus] : '未分配',item.evidenceUrls.join('\n'),item.evidenceNote,
-    snapshot?.id,snapshot?.generatedAt]);
+    snapshot?.id,snapshot?.generatedAt,'待核验']);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 
@@ -139,20 +187,26 @@ export async function deliveryManifestCsv(layout: RoomLayout, snapshot?: Deliver
   const id = snapshot?.id ?? '';
   const when = snapshot?.generatedAt ?? '';
   const tasks = layout.eventOperations?.tasks.length ?? 0;
-  const status = gate ? '不支持' : '可导出';
+  // This manifest has only a layout, not the live workspace, storage or export capabilities.
+  // A compatible layout alone cannot establish that the corresponding export is ready.
+  const status = gate ? '不支持' : '待导出时检查';
   const blank = (value: string, fallback: string) => (value || fallback).replace(/\s+/g, '_');
   const rows: unknown[][] = [['类别','建议文件名','状态','件数','说明','交付编号','生成时间']];
   rows.push(['交付清单 CSV', `${layout.name}_交付清单_${id}.csv`, '可导出', rows.length, '本清单：逐行说明可带走的文件、件数与缺失原因。', id, when]);
-  rows.push(['平面图 DXF', `${blank(layout.name, 'Scendance')}_平面_${blank(floorName, '1F')}.dxf`, '可导出', 1, '按真实比例导出，含墙体、门窗、固定结构与尺寸图层；可在 CAD 中量取。', id, when]);
-  rows.push(['平面图打印', `${blank(layout.name, 'Scendance')}_平面_${blank(floorName, '1F')}.pdf`, '可导出', 1, '在浏览器打印窗口按 A4 比例输出；选择「另存为 PDF」即可交付。', id, when]);
+  rows.push(['平面图 DXF', `${blank(layout.name, 'Scendance')}_平面_${blank(floorName, '1F')}.dxf`, '待导出时检查', 1, '导出前核对场地结构及物件位置；墙线未按门洞切断，门洞标记、比例及现场尺寸仍需核对。', id, when]);
+  rows.push(['平面图打印', `${blank(layout.name, 'Scendance')}_平面_${blank(floorName, '1F')}.pdf`, '待导出时检查', 1, '导出前核对场地结构；在浏览器打印窗口选择「另存为 PDF」，输出比例及现场尺寸仍需核对。', id, when]);
   rows.push(['物料清单 CSV', `${layout.name}_物料清单_${id}.csv`, status, materials.length, gate || '每类名称、尺寸、颜色、数量、资产版本、来源许可与采购状态。', id, when]);
   rows.push(['执行清单 CSV', `${layout.name}_执行清单_${id}.csv`, status, execution.length, gate || '每件工作单负责人、期限、验收条件、证据链接与有效状态。', id, when]);
   rows.push(['场景 JSON', `${layout.name}_场景_${id}.json`, status, 1, gate || '场景、执行记录、物料与活动安排同一份快照，便于复核。', id, when]);
-  rows.push(['场景 GLB', `${layout.name}_${id}.glb`, status, execution.length, gate || '重新加载复检通过后导出；不含环境光与后处理，私有模型重开仍需授权。', id, when]);
-  rows.push(['活动安排 CSV', `${layout.name}_活动安排_${id}.csv`, tasks ? '可导出' : '需先补资料', tasks, tasks ? '任务阶段、负责人、计划与实际时间、关联物件。' : '先在活动安排中保存任务。', id, when]);
-  rows.push(['完整活动交接 HTML', `${layout.name}_内部活动交接_${id}.html`, tasks ? '可导出' : '需先补资料', 1, tasks ? '含需求、任务、工作单、制作计划与点验；内部资料，请核对后交付。' : '先在活动安排中保存任务并补齐需求与点验。', id, when]);
-  rows.push(['执行时间表 HTML', `${layout.name}_执行时间表_${id}.html`, tasks ? '可导出' : '需先补资料', 1, tasks ? '计划与实际分别保留；未定项保持待确认。' : '先在活动安排中保存任务。', id, when]);
-  rows.push(['制作交接 HTML', `${layout.name}_内部制作交接_${id}.html`, '可导出', 1, '未确定的人员、供应方与费用会明确标出，不填默认值。', id, when]);
+  const localStatus = localDraftAvailable(layout) ? '仅本地活动可导出' : '需先补资料';
+  rows.push(['本地待核验草案 JSON', `本地待核验草案_${id}.json`, localStatus, 1, '本地布局及尺寸记录；非云端场景、非恢复备份，不含模型文件与私密链接。', id, when]);
+  rows.push(['本地物料草案 CSV', `本地物料草案_${id}.csv`, localStatus, localDraftAvailable(layout) ? deliverableInventory(layout).length : 0, '保留本地楼层、区域与物料数量；规格、库存和现场条件待核验。', id, when]);
+  rows.push(['场景 GLB', `${layout.name}_${id}.glb`, gate ? '不支持' : '待导出时检查', execution.length, gate || '资产就绪并重新加载复检通过后导出；不含环境光与后处理，私有模型重开仍需授权。', id, when]);
+  rows.push(['活动安排 CSV', `${layout.name}_活动安排_${id}.csv`, layout.eventOperations ? '待导出时检查' : '需先补资料', tasks, layout.eventOperations ? '导出前核对点验资料；任务阶段、负责人、计划与实际时间、关联物件按记录列出。' : '先保存活动安排。', id, when]);
+  rows.push(['活动执行资料草案 HTML', `${layout.name}_内部活动交接_${id}.html`, '待导出时检查', 1, '导出前核对工作台、本机记录与点验状态；手工需求未完整包含助手对话需求，请先核对差异。', id, when]);
+  rows.push(['执行时间表 HTML', `${layout.name}_执行时间表_${id}.html`, tasks ? '待导出时检查' : '需先补资料', 1, tasks ? '导出前核对工作台、本机记录与点验状态；计划与实际分别保留。' : '先在活动安排中保存任务。', id, when]);
+  rows.push(['制作交接 HTML', `${layout.name}_内部制作交接_${id}.html`, '待导出时检查', 1, '导出前核对制作计划及点验；未确定的人员、供应方与费用会明确标出。', id, when]);
+  rows.push(['现场与安全核验', '', '待核验', '', SCOPE_NOTICE, id, when]);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 
@@ -184,6 +238,18 @@ export async function prepareDeliveryAssets(layout: RoomLayout, controller?: Bac
   }
 }
 
+/** 仅匹配当前壳体构建器创建的编辑网格；真正的物料在这个步骤之后才加入场景。 */
+function isEditorGrid(child: THREE.Object3D, width: number, depth: number): boolean {
+  const mesh=child as THREE.Mesh;
+  if(!mesh.isMesh || !(mesh.geometry instanceof THREE.PlaneGeometry) || Array.isArray(mesh.material)
+    || !(mesh.material instanceof THREE.MeshBasicMaterial)) return false;
+  const parameters=mesh.geometry.parameters,material=mesh.material;
+  return parameters.width===width && parameters.height===depth && mesh.userData.type==='wall'
+    && mesh.renderOrder===2 && Math.abs(mesh.position.y-.01)<1e-9 && Math.abs(mesh.rotation.x+Math.PI/2)<1e-9
+    && Object.prototype.hasOwnProperty.call(mesh,'raycast') && material.transparent && !material.depthWrite
+    && !material.toneMapped && material.side===THREE.DoubleSide && material.map instanceof THREE.CanvasTexture;
+}
+
 /** Fresh assembly prevents cutaway visibility, selection, ghosting and collision tints leaking into delivery. */
 export function assembleDeliveryScene(layout: RoomLayout): THREE.Scene {
   const canonical = deliveryScene(layout);
@@ -198,7 +264,11 @@ export function assembleDeliveryScene(layout: RoomLayout): THREE.Scene {
       wallOpenings: computeWallOpenings(floor.items,layout.width,layout.height,canonical.venue.height),
       wallColors: floor.wallColors ?? {}, hiddenWalls: floor.hiddenWalls ?? [], floorPlanImage: null,
       floorPlanOpacity: 0, floorPlanFitMode: 'contain', floorPlan3DEffect: false });
-    // Room builders include editing grid lines. They are not physical deliverables.
+    // 两种壳体各有且仅有一个编辑网格；无法唯一识别时停止导出，避免误删物料或泄漏网格。
+    const grids=scene.children.filter(child=>isEditorGrid(child,layout.width,layout.height));
+    if(grids.length!==1)throw new Error('无法准确区分场地与编辑网格，未导出场景。');
+    const grid=grids[0]!;scene.remove(grid);disposeOwnedModel(grid);
+    // Room builders also include editing grid lines. They are not physical deliverables.
     for (const child of [...scene.children]) if ((child as THREE.Line).isLine) { const line=child as THREE.Line;scene.remove(line);line.geometry.dispose();for(const material of Array.isArray(line.material)?line.material:[line.material])material.dispose(); }
     scene.children.forEach((child,index)=>{child.userData.deliveryObjectId=`shell:${index}`;child.userData.deliveryKind='shell';});
     const expected = new Map(canonical.objects.map(object => [object.id, object]));

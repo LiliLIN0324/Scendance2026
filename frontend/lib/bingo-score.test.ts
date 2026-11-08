@@ -63,7 +63,7 @@ describe('computeBingoScore', () => {
     expect(score.breakdown.aisle).toBe(100);
     expect(score.breakdown.bounds).toBe(100);
     expect(score.breakdown.wall).toBe(100);
-    expect(score.summary).toContain('体检通过');
+    expect(score.summary).toContain('仍需核验');
   });
 
   it('一件压内墙 → wall 分项扣分、failedCount=1', () => {

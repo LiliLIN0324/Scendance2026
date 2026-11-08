@@ -6,13 +6,13 @@ import { makeLayout } from '../components/room-organizer/lib/__testfixtures__/fi
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
 import { parseLayoutJson } from '../components/room-organizer/lib/persistence';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from './local-project-backup';
-import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from './local-project-restore';
+import { commitLocalRestoreLayout, localRestoreAvailable, prepareLocalRestoreLayout } from './local-project-restore';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 beforeEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-describe('complete local layout restore domain', () => {
+describe.skipIf(!localRestoreAvailable())('complete local layout restore domain', () => {
   const before = makeLayout({ id: 'activity-a', name: '演练原活动' });
   const next = makeLayout({ id: 'activity-b', name: '演练文件活动', designBook: { activeId: 'file-variant',
     variants: [{ id: 'file-variant', name: '文件方案', layout: makeLayout({ id: 'file-snapshot' }) }] } });
@@ -88,7 +88,7 @@ describe('complete local layout restore domain', () => {
   });
 });
 
-describe('production-plan restore and compensation domain', () => {
+describe.skipIf(!localRestoreAvailable())('production-plan restore and compensation domain', () => {
   const planning = (amountMinor: number | null, id: string) => productionPlanSchema.parse({
     dataKind: 'rehearsal', budget: { limitMinor: null },
     estimates: [{ id, title: '演练人工估算', amountMinor, basisNote: amountMinor === null ? '' : '手动演练依据',
@@ -193,4 +193,41 @@ describe('production-plan restore and compensation domain', () => {
     expect(parseLayoutJson(storage.getItem(STORAGE_KEY)!)!.productionPlan).toEqual(thirdParty.productionPlan);
     expect(parseLayoutJson(storage.getItem(STORAGE_KEY)!)!.id).toBe(thirdParty.id);
   });
+});
+
+it('直接恢复入口暂停时不读取、写入或应用布局', () => {
+  const original=makeLayout({id:'original'}); const candidate=makeLayout({id:'candidate'});
+  const store={getItem:vi.fn(),setItem:vi.fn(),removeItem:vi.fn()} as unknown as Storage;
+  const access={current:vi.fn(()=>original),apply:vi.fn(),beforeReplace:vi.fn()};
+  expect(()=>commitLocalRestoreLayout(candidate,access,store)).toThrow('备份恢复暂不可用');
+  expect(store.getItem).not.toHaveBeenCalled(); expect(store.setItem).not.toHaveBeenCalled();
+  expect(store.removeItem).not.toHaveBeenCalled(); expect(access.current).not.toHaveBeenCalled();
+  expect(access.apply).not.toHaveBeenCalled(); expect(access.beforeReplace).not.toHaveBeenCalled();
+});
+
+it('暂停恢复时备份仍可独立读取，计划和点验数据不被改变', () => {
+  const original = makeLayout({ id: 'backup-project', name: '文件活动', productionPlan: productionPlanSchema.parse({ dataKind: 'rehearsal' }) });
+  const ledger = materialCheckinLedgerSchema.parse({ projectId: 'backup-project', dataKind: 'rehearsal', sheets: [] });
+  const text = serializeLocalProjectBackupV3(original,
+    { state: 'ready', scope: 'backup-project', brief: { status: 'absent' } },
+    { state: 'ready', scope: 'backup-project', materialCheckins: { status: 'present', value: ledger } });
+  const parsed = parseLocalProjectBackupJson(text);
+  expect(parsed.layout.productionPlan).toEqual(original.productionPlan);
+  expect(parsed.materialCheckins).toEqual({ status: 'present', value: ledger });
+  const sideEffect = vi.fn(() => { throw new Error('unexpected side effect'); });
+  const access = { current: sideEffect, apply: sideEffect, beforeReplace: sideEffect };
+  const store = { getItem: sideEffect, setItem: sideEffect, removeItem: sideEffect } as unknown as Storage;
+  expect(() => commitLocalRestoreLayout(parsed.layout, access, store)).toThrow('备份恢复暂不可用');
+  expect(sideEffect).not.toHaveBeenCalled();
+  expect(parseLocalProjectBackupJson(text)).toEqual(parsed);
+});
+
+it('暂停恢复不影响独立验证文件和补全旧版身份', () => {
+  const original = makeLayout({ id: 'known', name: '已知活动' });
+  expect(prepareLocalRestoreLayout(original).id).toBe('known');
+  const legacy = { ...original }; delete legacy.id;
+  expect(prepareLocalRestoreLayout(legacy).id).toMatch(/^house-/);
+  expect(legacy.id).toBeUndefined();
+  const invalid = { ...original, productionPlan: { ...productionPlanSchema.parse({}), actualPaidMinor: 0 } } as RoomLayout;
+  expect(() => prepareLocalRestoreLayout(invalid)).toThrow('制作计划');
 });

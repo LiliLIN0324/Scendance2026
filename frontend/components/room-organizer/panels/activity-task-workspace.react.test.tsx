@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { activityTaskRequestStorageKey, type ActivityTaskRequestIdentity, type ActivityTaskRequestMarker } from '@/lib/activity-task-proposal-storage';
 import { BackendSession, getBackendConfig, SceneApiError, type ActivityTaskRunInput, type BackendSnapshot } from '@/lib/backend-session';
+import { readMaterialCheckins } from '@/lib/material-checkin-storage';
 import { registerSourceFlush, type SourceFormKey } from '@/lib/source-storage';
 import { activityTaskContextSchema, activityTaskRunSchema, type ActivityTaskRun } from '../../../../supabase/functions/_shared/activity-task-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
@@ -42,6 +43,14 @@ vi.mock('@/lib/source-storage', async importOriginal => {
       return structuredClone(value);
     },
   };
+});
+
+// The check-in facade has its own relative import of source-storage. Keep its real
+// schema/identity checks while routing only the IndexedDB read through this fixture.
+vi.mock('@/lib/material-checkin-storage', async importOriginal => {
+  const real = await importOriginal<typeof import('@/lib/material-checkin-storage')>();
+  return {...real, readMaterialCheckins: async (projectId:string) =>
+    real.checkedMaterialCheckins(projectId, structuredClone(boundary.records.get(JSON.stringify(real.materialCheckinStorageKey(projectId))))) };
 });
 
 const uuid = (n: number) => `ab000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -638,4 +647,12 @@ describe('ActivityTaskWorkspace complete history and current authorization', () 
     expect(reopened.commit).toHaveBeenCalledExactlyOnceWith(pending.pending!.operations);
     expect(currentMarker(host.session)?.receipt).toEqual(pending.pending?.receipt); expect(currentMarker(host.session)?.proposal).toEqual(pending.proposal);
   });
+});
+it('uses the mocked source-record boundary for material check-ins',async()=>{
+ expect(await readMaterialCheckins(localId)).toBeUndefined();
+});
+
+it('keeps material check-in validation at the fixture boundary',async()=>{
+ boundary.records.set(JSON.stringify(['material-checkins',localId]),{projectId:'different-project',sheets:[]});
+ await expect(readMaterialCheckins(localId)).rejects.toThrow();
 });

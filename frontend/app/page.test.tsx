@@ -1,5 +1,6 @@
 ﻿// @vitest-environment jsdom
 
+import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { usePathname } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,11 +23,22 @@ vi.mock('@/lib/source-storage', async importOriginal => ({
   ...await importOriginal<object>(),
   readSourceForm: async (key: string) => localInputs.forms.get(key),
   readSourceRecord: async (key: string | [string, string]) => localInputs.forms.get(typeof key === 'string' ? key : key.join(':')),
+  readSourceRecordSnapshot: async (key: string | [string, string]) => {
+    const id = typeof key === 'string' ? key : key.join(':');
+    return localInputs.forms.has(id) ? { present: true, value: localInputs.forms.get(id) } : { present: false };
+  },
   storeSourceForm: async (key: string, value: unknown) => { localInputs.forms.set(key, value); },
   listStoredSources: async (scope: string) => localInputs.sources.filter(source => source.scope === scope),
   storeSource: async (source: Record<string, unknown>) => { localInputs.sources.push(source); },
   deleteSource: async (id: string) => { localInputs.sources = localInputs.sources.filter(source => source.id !== id); },
 }));
+vi.mock('@/lib/material-checkin-storage', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/material-checkin-storage')>();
+  return { ...actual, readMaterialCheckins: async (projectId: string) => {
+    const key = actual.materialCheckinStorageKey(projectId);
+    return actual.checkedMaterialCheckins(projectId, localInputs.forms.get(typeof key === 'string' ? key : key.join(':')));
+  } };
+});
 vi.mock('next/navigation', async () => {
   const { useSyncExternalStore } = await import('react');
   return {
@@ -85,6 +97,7 @@ const createObjectURL = vi.fn();
 const originalCreateURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
 const originalRevokeURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
 const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+const originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
 
 function restore(object: object, key: string, descriptor: PropertyDescriptor | undefined): void {
   if (descriptor) Object.defineProperty(object, key, descriptor);
@@ -92,6 +105,14 @@ function restore(object: object, key: string, descriptor: PropertyDescriptor | u
 }
 
 beforeEach(() => {
+  vi.stubGlobal('crypto',webcrypto);
+  const held=new Set<string>();
+  Object.defineProperty(navigator,'locks',{configurable:true,value:{
+    async request(name:string,_options:LockOptions,callback:(lock:Lock|null)=>Promise<unknown>) {
+      if(held.has(name))return callback(null);
+      held.add(name);try{return await callback({name,mode:'exclusive'} as Lock);}finally{held.delete(name);}
+    },
+  }});
   localStorage.clear(); sessionStorage.clear();
   localInputs.forms.clear(); localInputs.sources.length = 0;
   window.history.replaceState(null, '', '/auth');
@@ -121,6 +142,7 @@ afterEach(() => {
   restore(URL, 'createObjectURL', originalCreateURL);
   restore(URL, 'revokeObjectURL', originalRevokeURL);
   restore(HTMLElement.prototype, 'scrollTo', originalScroll);
+  restore(navigator, 'locks', originalLocks);
 });
 
 function expandBriefSections(): void {
@@ -175,7 +197,7 @@ describe('workspace entry and draft round trips', () => {
 
   it('keeps a pending real proposal available for confirmation without regenerating it', async () => {
     window.history.replaceState(null, '', '/');
-    const snapshot = { ...activeController.getSnapshot(), configured: true, sessionId:proposal.session_id,lease:{projectId,sessionId:proposal.session_id,generation:1,revision:1,expiresAt:'2099-01-01T00:00:00Z'}, user: { id: 'user-test', email: 'editor@example.com' }, writeBlocked: false, status: 'editing' as const, revision: 1, project: { id: projectId, studio_id: 'studio-test', name: '客户方案', revision: 1, scene } };
+    const snapshot = { ...activeController.getSnapshot(), configured: true, localRevision: 0, sessionId:proposal.session_id,lease:{projectId,sessionId:proposal.session_id,generation:1,revision:1,expiresAt:'2099-01-01T00:00:00Z'}, user: { id: 'user-test', email: 'editor@example.com' }, writeBlocked: false, status: 'editing' as const, revision: 1, project: { id: projectId, studio_id: 'studio-test', name: '客户方案', revision: 1, scene } };
     vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
     const generate = vi.spyOn(activeController, 'startAgentRun').mockImplementation(async input=>({id:'60000000-0000-4000-8000-000000000001',projectId,requestId:input.requestId,state:'complete',progress:'完成',callCount:1,candidates:[{label:'A',title:'方案',proposal}],evaluation:null,executionMode:'preview',jevEnabled:false,expiresAt:proposal.expires_at}));
     vi.spyOn(activeController, 'authorizeAssets').mockResolvedValue({ assetUrls: {}, assetNames: {} });

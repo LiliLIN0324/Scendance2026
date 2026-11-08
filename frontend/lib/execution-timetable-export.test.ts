@@ -182,10 +182,10 @@ describe('execution timetable HTML', () => {
     expect(JSON.stringify({ source, facts })).toBe(before);
   });
 
-  it('keeps a current accepted status distinct from actual timestamps and rental quantities', async () => {
+  it('keeps recorded acceptance unverified alongside actual timestamps and rental quantities', async () => {
     const facts = ledger(), source = await acceptedLayout(facts), article = taskArticle(await doc(source, facts));
-    expect(article.querySelector('.record')!.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(2);
-    expect(article.querySelector('.record')!.textContent).not.toContain(OPERATION_STATUS_LABELS.needs_review);
+    expect(article.querySelector('.record')!.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
+    expect(article.querySelector('.record')!.textContent).toContain(OPERATION_STATUS_LABELS.needs_review);
     expect(article.querySelector('.actual')!.textContent).toMatch(/待确认|未填写|未记录/);
     expect(article.querySelector('.actual')!.textContent).not.toContain('09:00');
     expect(source.eventOperations!.tasks[0].actualStartedAt).toBeNull();
@@ -209,7 +209,7 @@ describe('execution timetable HTML', () => {
     delete source.productionPlan;
     source.floors[0].items.push(makeItem({ id: id(30).toUpperCase(), name: '同编号歧义来源' }));
     first.status = 'accepted'; first.evidenceNote = '原沟通核对说明'; first.reviewedBasis = await operationBasis(source, first);
-    expect((await operationReview(source, first)).status).toBe('accepted');
+    expect((await operationReview(source, first)).status).toBe('needs_review');
     const before = JSON.stringify(source), article = taskArticle(await doc(source), id(21));
     expect(article.querySelector('.record')!.textContent).toContain(OPERATION_STATUS_LABELS.accepted);
     expect(article.querySelector('.record')!.textContent).toMatch(/有效状态.*需核对.*关联编号不唯一/);
@@ -222,7 +222,7 @@ describe('execution timetable HTML', () => {
     first.objectIds = [id(30), id(30).toUpperCase()];
     first.status = 'accepted'; first.evidenceNote = '原实例核对说明'; first.reviewedBasis = await operationBasis(source, first);
     expect(eventOperationsSchema.safeParse(source.eventOperations).success).toBe(true);
-    expect((await operationReview(source, first)).status).toBe('accepted');
+    expect((await operationReview(source, first)).status).toBe('needs_review');
     const article = taskArticle(await doc(source));
     expect(article.querySelector('.record')!.textContent).toMatch(/有效状态.*需核对.*关联编号不唯一/);
     expect(article.querySelector('.record')!.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
@@ -234,7 +234,7 @@ describe('execution timetable HTML', () => {
     if (failure === 'throws') vi.spyOn(operations, 'operationReview').mockRejectedValue(new Error('PRIVATE_FAILURE https://private.example/?token=SECRET'));
     else vi.stubGlobal('crypto', undefined);
     const document = await doc(source), article = taskArticle(document);
-    expect(article.querySelector('.record')!.textContent).toMatch(/待核对.*复核未完成/);
+    expect(article.querySelector('.record')!.textContent).toContain(failure === 'throws' ? '待核对（复核未完成）' : '需复核');
     expect(article.querySelector('.record')!.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
     expect(document.body.textContent).not.toContain('PRIVATE_FAILURE');
     expect(document.body.textContent).not.toContain('private.example');
@@ -270,7 +270,7 @@ describe('execution timetable HTML', () => {
     for (const selector of ['.people', '.acceptance', 'details']) expect(first.querySelector(selector)!.textContent).toContain(attack);
     expect(first.id).toBe('task-1'); expect(first.dataset.taskId).toBe(id(20));
     expect(checkArticle(document).textContent).toContain(attack);
-    expect(document.body.textContent).toContain('https://evidence.example/a?x=%22%3E&y=1');
+    expect(document.body.textContent).toContain('[私密链接或凭据已隐藏]');
     expect(html).toContain('&lt;script&gt;');
     expect(fetch).not.toHaveBeenCalled();
     for (const privateValue of ['PRIVATE_', 'private.example', 'reviewedBasis', '"floors":', '"tasks":']) expect(html).not.toContain(privateValue);
@@ -497,4 +497,14 @@ describe('execution timetable HTML', () => {
     expect(blankMain.textContent).not.toContain('已处理');
     expect(source).toEqual(before);
   });
+});
+
+it('时间表 HTML 隐藏签名和凭据，保留普通说明及公开链接', async () => {
+  const source=layout();
+  source.eventOperations!.tasks[0]!.evidenceNote='现场数量待核\n密码：TIME_SECRET';
+  source.eventOperations!.tasks[0]!.evidenceUrls=['https://example.com/evidence?signature=TIME_URL_SECRET','https://example.com/public.pdf'];
+  const html=await executionTimetableHtml(source,snapshot);
+  expect(html).not.toContain('TIME_SECRET'); expect(html).not.toContain('TIME_URL_SECRET');
+  expect(html).toContain('现场数量待核'); expect(html).toContain('https://example.com/public.pdf');
+  expect(html).toContain('[私密链接或凭据已隐藏]'); expect(html).toContain('不能保证识别全部敏感信息');
 });

@@ -53,6 +53,7 @@ export async function database(dataDir?: string) {
   };
   const core=call('scene_rpc'),studios=call('studio_rpc'),jobs=call('job_rpc'),reconstruction=call('reconstruction_rpc');
   const sceneRpc:Rpc=(actor,action,data)=>(action.startsWith('studios.')?studios:core)(actor,action,data);
-  const backend:Backend={scene:sceneRpc,jobs,reconstruction,agent:call('agent_rpc'),user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},upload:async()=>{},sign:async path=>`https://storage.example/signed/${path}`};
+  const rawAgent=call('agent_rpc'),guardedAgent=call('agent_steering_guard_rpc');
+  const backend:Backend={scene:sceneRpc,jobs,reconstruction,originalSceneReview:call('original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:rawAgent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:call('agent_run_events_rpc'),user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},upload:async()=>{},sign:async path=>`https://storage.example/signed/${path}`};
   return {db,rpc:sceneRpc,jobs,reconstruction,backend};
 }

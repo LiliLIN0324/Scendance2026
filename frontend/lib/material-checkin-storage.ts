@@ -1,6 +1,7 @@
 import { canonical } from '../../supabase/functions/_shared/domain';
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../supabase/functions/_shared/material-checkin-contract';
 import { readSourceRecord, updateSourceForm, type SourceFormKey } from './source-storage';
+import { localWriteCapabilityGuard, type LocalWriteCapability } from './local-write-lease';
 
 export function materialCheckinStorageKey(projectId: string): SourceFormKey {
   if (!projectId.trim() || projectId.length > 128) throw new Error('请先保存有明确编号的本地项目，再记录数量点验。');
@@ -19,14 +20,16 @@ export async function readMaterialCheckins(projectId: string): Promise<MaterialC
 }
 
 /** Append-only merge is computed against the native transaction's current value, including other tabs' writes. */
-export async function mergeStoredMaterialCheckins(projectId: string, incoming: MaterialCheckinLedger, beforeWrite: () => void = () => {}): Promise<MaterialCheckinLedger> {
+export async function mergeStoredMaterialCheckins(projectId: string, incoming: MaterialCheckinLedger, beforeWrite: () => void = () => {}, capability?: LocalWriteCapability): Promise<MaterialCheckinLedger> {
   const proposal = checkedMaterialCheckins(projectId, incoming);
   if (proposal === undefined) throw new Error('没有可保存的点验记录，原账册已保留。');
+  const leaseGuard = capability ? localWriteCapabilityGuard(capability) : undefined;
+  const transactionGuard = leaseGuard ? { signal: leaseGuard.signal, assertStillHeld() { leaseGuard.assertStillHeld(); beforeWrite(); } } : undefined;
   return updateSourceForm(materialCheckinStorageKey(projectId), value => {
     beforeWrite();
     const current = checkedMaterialCheckins(projectId, value);
     return current ? mergeMaterialCheckinLedgers(current, proposal) : proposal;
-  });
+  }, transactionGuard);
 }
 
 /** Compensation/explicit undo of an import only; ordinary scene edits never call this. */

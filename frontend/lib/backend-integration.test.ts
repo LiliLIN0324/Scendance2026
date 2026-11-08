@@ -37,7 +37,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     return createSceneClient(`${server.url}/functions/v1/scene-api`, async () => auth.access_token);
   }
 
-  it('round-trips actual editor coordinates, rotation and notes through save and a new login', async () => {
+  it('round-trips actual editor coordinates and rotation through save and a new login', async () => {
     const a = await login();
     expect(await a.listStudios()).toEqual([expect.objectContaining({ id: studio, role: 'owner' })]);
     const initial = layoutToBackendScene(structuredClone(INITIAL_LAYOUT));
@@ -49,17 +49,25 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     object.position = { x: 2.5, z: 1 };
     object.rotation = -Math.PI / 6;
     object.width = 1.8; object.depth = 0.9; object.height = 0.75;
-    object.locked = true; object.notes = '联调私有备注';
+    object.locked = true;
     const submitted = layoutToBackendScene(layout);
     const saved = await a.saveScene(submitted);
     expect(saved.revision).toBe(1);
-    expect(saved.scene.objects[0]).toMatchObject({ position: { x: 7.5, z: 5 }, locked: true, notes: '联调私有备注' });
+    expect(saved.scene.objects[0]).toMatchObject({ position: { x: 7.5, z: 5 }, locked: true });
     expect(saved.scene.objects[0]!.rotation).toBeCloseTo(30, 10);
     await a.renewLease();
     await a.signOut();
     const reopened = await (await login()).getProject(p.id);
     expect(layoutToBackendScene(backendSceneToLayout(reopened.scene))).toEqual(submitted);
     expect(reopened.revision).toBe(1);
+  });
+
+  it('refuses an ordinary cloud save containing original notes and retains the local draft',async()=>{
+    const a=await login(),p=await a.createProject(studio,'备注待核对',scene());await a.acquireLease(p.id);
+    const draft=scene();draft.objects.push(chair('联调私有备注'));
+    await expect(a.saveScene(draft)).rejects.toMatchObject({code:'ORIGINAL_SCENE_REVIEW_REQUIRED'});
+    expect(a.getSnapshot()).toMatchObject({draft,dirty:true,writeBlocked:true,revision:0});
+    expect((await server.rpc(owner,'projects.get',{projectId:p.id})).scene).toEqual(scene());
   });
 
   it('enforces two-account and duplicate-tab leases, then hands off the saved scene', async () => {
@@ -150,7 +158,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     const project = await a.createProject(otherStudio, '公共模型保存', scene());
     await a.acquireLease(project.id);
     const draft = scene();
-    draft.objects.push({ ...chair('模型备注'), materialId: 'asset', assetId: record.id });
+    draft.objects.push({ ...chair(), materialId: 'asset', assetId: record.id });
     const layout = backendSceneToLayout(draft, { assetUrls: { [record.id]: authorized.url }, assetNames: { [record.id]: authorized.name } });
     const saved = await a.saveScene(layoutToBackendScene(layout));
     expect(saved.revision).toBe(1);
@@ -164,7 +172,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   });
 
   it('publishes an immutable anonymous snapshot, strips private notes, and revokes it', async () => {
-    const a = await login(), source = scene(); source.objects.push(chair('绝不能公开的内部备注'));
+    const a = await login(), source = scene(); source.objects.push(chair());
     const p = await a.createProject(studio, '分享联调', source), client = await rawClient();
     const share = await client.request<{ token: string; shareId: string }>(`/projects/${p.id}/publish`, 'POST', { expectedRevision: 0 });
     await a.acquireLease(p.id);
@@ -173,6 +181,11 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     const read = await anonymous.readShare(share.token) as { scene: { objects: unknown[] } };
     expect(read.scene.objects).toHaveLength(1);
     expect(JSON.stringify(read)).not.toContain('绝不能公开的内部备注');
+    // Existing projects can contain private text even though new ordinary writes are blocked.
+    const old=scene();old.objects.push(chair('绝不能公开的内部备注'));
+    const legacy=await server.rpc(owner,'projects.create',{studioId:studio,name:'旧版私有备注',scene:old});
+    const legacyShare=await client.request<{token:string}>(`/projects/${legacy.id}/publish`,'POST',{expectedRevision:0});
+    expect(JSON.stringify(await anonymous.readShare(legacyShare.token))).not.toContain('绝不能公开的内部备注');
     await client.request(`/projects/${p.id}/shares/${share.shareId}`, 'DELETE');
     await expect(anonymous.readShare(share.token)).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
     await a.releaseLease();

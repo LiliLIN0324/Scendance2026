@@ -20,6 +20,29 @@ describe('durable bounded DeepSeek Agent',()=>{
  async function input(extra:Record<string,unknown>={}) {const base=scene(),p=await f.rpc(owner,'projects.create',{studioId:studio,name:'Agent test',scene:base});const lease=await f.rpc(owner,'lease.acquire',{projectId:p.id,sessionId:session});return {projectId:p.id,...agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:lease.generation,expectedRevision:0,localRevision:0,scene:base,selectedIds:[],instruction:'直接添加桌子',executionMode:'direct',...extra})};}
  function send(api:ReturnType<typeof createApi>,i:Awaited<ReturnType<typeof input>>) {const {projectId,...body}=i;return api(new Request(`https://api.test/projects/${projectId}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(body)}));}
  function byRequest(api:ReturnType<typeof createApi>,i:Awaited<ReturnType<typeof input>>) {return api(new Request(`https://api.test/projects/${i.projectId}/agent-runs/by-request/${i.requestId}`,{method:'GET',headers:{authorization:`Bearer ${owner}`}}));}
+ it.each([
+  {label:'default DeepSeek',settings:{DEEPSEEK_API_KEY:'fixture'},expected:'deepseek'},
+  {label:'custom compatible',settings:{AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'},expected:'custom'},
+  {label:'MiniMax',settings:{AGENT_CHAT_PROFILE:'minimax',MINIMAX_AGENT_TOOLS_ENABLED:'1',AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'},expected:'minimax'},
+ ])('attributes $label usage without recording credentials',async({settings,expected})=>{
+  const i=await input({executionMode:'preview'}),fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[tool('submit_candidates',{candidates:[plan()]})]}}],usage:{total_tokens:10}})));
+  const api=createApi(f.backend,key=>(settings as Record<string,string|undefined>)[key],fetcher),res=await send(api,i);
+  expect(res.status).toBe(202);const run=agentRunSchema.parse(await res.json());expect(run.state).toBe('complete');
+  const rows=await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id]);
+  const usage=rows.rows[0]!.usage;expect(Array.isArray(usage)).toBe(true);
+  expect(usage).toEqual(expect.arrayContaining([expect.objectContaining({provider:expected})]));
+  expect(JSON.stringify(usage)).not.toContain('private-fixture-value');
+ });
+ it.each([
+  {label:'missing provider credentials',settings:{}},
+  {label:'incomplete custom configuration',settings:{AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_MODEL:'fixture-model'}},
+ ])('does not create a run or call a model with $label',async({settings})=>{
+  const i=await input({executionMode:'preview'}),fetcher=vi.fn(async()=>completion([tool('submit_candidates',{candidates:[plan()]})]));
+  const api=createApi(f.backend,key=>(settings as Record<string,string|undefined>)[key],fetcher),res=await send(api,i);
+  expect(res.status).toBe(503);expect(fetcher).not.toHaveBeenCalled();
+  const rows=await f.db.query<{count:number}>('select count(*)::int as count from scene_private.agent_runs where project_id=$1',[i.projectId]);
+  expect(rows.rows[0]!.count).toBe(0);
+ });
  it('runs read tool then submit, stores original draft, replays without calling again, applies one undo group',async()=>{
   const i=await input(),fetcher=vi.fn(async()=>fetcher.mock.calls.length===1?completion([tool('get_scene',{})]):completion([tool('submit_candidates',{candidates:[plan()]})]));
   const api=createApi(f.backend,env,fetcher),res=await send(api,i);expect(res.status).toBe(202);const run=agentRunSchema.parse(await res.json());expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'direct'});expect(run.candidates).toHaveLength(1);
@@ -90,6 +113,15 @@ describe('durable bounded DeepSeek Agent',()=>{
    const i=await input({jevEnabled:true});const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'兼容方案',commands:plan().commands})}}],usage:{total_tokens:10}})));
    const run=agentRunSchema.parse(await (await send(createApi(f.backend,key=>key==='DEEPSEEK_AGENT_MODE'?'legacy':env(key),fetcher),i)).json());expect(run.state).toBe('complete');expect(run.executionMode).toBe('preview');expect(run.candidates).toHaveLength(1);expect(run.evaluation?.status).toBe('partial');expect(fetcher).toHaveBeenCalledOnce();
   });
+ it('attributes a custom provider in legacy preview without recording its endpoint or credential',async()=>{
+  const i=await input(),settings:Record<string,string>={DEEPSEEK_AGENT_MODE:'legacy',AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'};
+  const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'仅供预览',commands:plan().commands})}}],usage:{total_tokens:10}})));
+  const res=await send(createApi(f.backend,key=>settings[key],fetcher),i);expect(res.status).toBe(202);
+  const run=agentRunSchema.parse(await res.json());expect(run.state).toBe('complete');
+  const rows=await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id]);
+  const usage=rows.rows[0]!.usage;expect(usage).toEqual(expect.arrayContaining([expect.objectContaining({provider:'custom',mode:'legacy'})]));
+  expect(JSON.stringify(usage)).not.toContain('private-fixture-value');expect(JSON.stringify(usage)).not.toContain('example.test');
+ });
   it('legacy handler rejects a command for an unselected existing object without writing, and replays the terminal result',async()=>{
    const i=await input({scene:scopedScene(),selectedIds:[scopedObjectA],instruction:'只移动选中的椅子',executionMode:'direct'});
    const payload={explanation:'移动未选中的物件',commands:[{op:'move',id:scopedObjectB,position:{x:7,z:7}}],modelSuggestions:[],materialSuggestions:[]};

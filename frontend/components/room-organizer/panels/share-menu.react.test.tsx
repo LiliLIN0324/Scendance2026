@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act,cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RoomLayout } from '../lib/types';
 import { planOutline, ShareMenu, type ShareMenuActions } from './share-menu';
@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 function actions(): ShareMenuActions {
   return {
-    onIssueReviewLink: vi.fn(async () => ({ url: 'https://studio.example/review/issued' })),
+    onIssueReviewLink: vi.fn(async () => ({ url: 'https://studio.example/review/issued',isCurrent:()=>true })),
     onPublish: vi.fn(async () => ({ url: 'https://studio.example/view/#token', revision: 3 })),
     onExportHandoff: vi.fn(),
     onOpenMaterials: vi.fn(),
@@ -72,8 +72,9 @@ describe('发布卡片', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()}/>);
     fireEvent.click(screen.getByRole('button', { name: '发布' }));
     fireEvent.click(screen.getByRole('button', { name: '发评审链接' }));
-    expect((await screen.findByRole('status')).textContent).toContain('链接已复制');
+    expect((await screen.findByRole('status')).textContent).toContain('请确认当前活动和方案后复制');
     expect(screen.getByRole('textbox', { name: '评审链接' })).toHaveProperty('value', 'https://studio.example/review/issued');
+    expect(clipboard).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'复制评审链接'}));
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/review/issued');
     fireEvent.click(screen.getByRole('button', { name: '导出交接' }));
     expect(share.onExportHandoff).toHaveBeenCalledOnce();
@@ -84,6 +85,14 @@ describe('发布卡片', () => {
     fireEvent.click(screen.getByRole('button', { name: '发布' }));
     fireEvent.click(screen.getByRole('button', { name: '到场清单' }));
     expect(share.onOpenChecklist).toHaveBeenCalledOnce();
+  });
+  it('never copies a link whose activity changes before the async result returns',async()=>{
+    const share=actions(),clipboard=vi.fn(async()=>undefined);Object.assign(navigator,{clipboard:{writeText:clipboard}});
+    let finish!:(value:{url:string;isCurrent:()=>boolean})=>void,epoch=0;const token=epoch;
+    vi.mocked(share.onIssueReviewLink).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    render(<ShareMenu actions={share} layout={sampleLayout()}/>);fireEvent.click(screen.getByRole('button',{name:'发布'}));fireEvent.click(screen.getByRole('button',{name:'发评审链接'}));
+    act(()=>{epoch++;epoch++;});await act(async()=>finish({url:'https://studio.example/review/old',isCurrent:()=>epoch===token}));
+    expect(screen.getByRole('status').textContent).toContain('旧链接未复制');expect(clipboard).not.toHaveBeenCalled();expect(screen.queryByRole('textbox',{name:'评审链接'})).toBeNull();
   });
 });
 

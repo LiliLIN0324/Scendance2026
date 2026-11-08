@@ -2,8 +2,9 @@
 
 import { MessageCirclePlus, Pencil, Search, Star, Trash } from '@/components/solid-icons';
 import { useRef, useState } from 'react';
-import { formatAssistantSessionStamp, type AssistantSession } from '../lib/assistant-sessions';
-import { useAssistantSessions } from '../hooks/use-assistant-sessions';
+import { formatAssistantSessionStamp, readAssistantSessionIndex, type AssistantSession } from '../lib/assistant-sessions';
+import { readAssistantSessionBodies, readSessionBubbles } from '../lib/assistant-session-bodies';
+import { listOtherAssistantHistories, useAssistantSessions } from '../hooks/use-assistant-sessions';
 import './session-history-panel.css';
 
 export interface SessionHistoryPanelProps {
@@ -176,14 +177,19 @@ export function SessionHistoryPanel({
 
 export interface SessionHistoryOverlayProps {
   open: boolean;
+  scope?: string;
   onClose(): void;
   onSelect(id: string): void;
+  assertWrite?: (() => void) | undefined;
 }
 
 /** History 浮层：挂在Bingo对话区上方，约占 1/3 高。 */
-export function SessionHistoryOverlay({ open, onClose, onSelect }: SessionHistoryOverlayProps): JSX.Element | null {
-  const sessions = useAssistantSessions();
+export function SessionHistoryOverlay({ open, onClose, onSelect, assertWrite, scope }: SessionHistoryOverlayProps): JSX.Element | null {
+  const sessions = useAssistantSessions(assertWrite, scope);
   if (!open || !sessions.ready) return null;
+  const legacy = scope && scope !== 'legacy' ? readAssistantSessionIndex() : null;
+  const legacyBodies = legacy ? readAssistantSessionBodies() : null;
+  const otherHistories = scope && scope !== 'legacy' ? listOtherAssistantHistories(scope) : [];
   return (
     <>
       <button type="button" className="ap-history-scrim" aria-label="关闭会话历史" onClick={onClose} />
@@ -202,6 +208,20 @@ export function SessionHistoryOverlay({ open, onClose, onSelect }: SessionHistor
           onToggleFavorite={sessions.toggleFavorite}
           onDelete={sessions.deleteSession}
         />
+        {otherHistories.length > 0 && <details className="ap-history-legacy"><summary>其他活动的会话（仅查看）</summary>
+          <p>保留在本机，不会自动作为当前活动的需求。</p>
+          {otherHistories.map((history,index) => <details key={history.scope}><summary>其他活动记录 {index + 1}</summary>
+            {history.index.sessions.map(item => <details key={item.id}><summary>{item.title}</summary>
+              {readSessionBubbles(history.bodies,item.id).map(row => <p key={row.id}>{row.role === 'user' ? '你' : '助手'}：{row.text}</p>)}
+            </details>)}
+          </details>)}
+        </details>}
+        {legacy && legacy.sessions.length > 0 && <details className="ap-history-legacy"><summary>旧会话（未关联活动）</summary>
+          <p>仅供查看，不会自动作为当前活动的需求。</p>
+          {legacy.sessions.map(item => <details key={item.id}><summary>{item.title}</summary>
+            {readSessionBubbles(legacyBodies!, item.id).map(row => <p key={row.id}>{row.role === 'user' ? '你' : '助手'}：{row.text}</p>)}
+          </details>)}
+        </details>}
       </div>
     </>
   );

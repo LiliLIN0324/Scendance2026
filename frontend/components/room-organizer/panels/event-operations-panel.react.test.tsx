@@ -9,12 +9,13 @@ import { productionPlanSchema } from '../../../../supabase/functions/_shared/pro
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { createOperation, operationBasis } from '../lib/event-operations';
+import * as operations from '../lib/event-operations';
 import { parseLayoutEventOperations } from '../lib/schema';
 import { EventOperationsPanel } from './event-operations-panel';
 import type { RoomLayout } from '../lib/types';
 
 beforeEach(() => vi.stubGlobal('crypto', webcrypto));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const itemId = '30000000-0000-4000-8000-000000000001';
 function taskLayout(task: EventOperationTask, withItem = false): RoomLayout {
   return makeLayout({ floors: [makeFloor({ items: withItem ? [makeItem({ id: itemId, name: '签到椅' })] : [] })], eventOperations: eventOperationsSchema.parse({ tasks: [task] }) });
@@ -176,7 +177,7 @@ describe('activity operations in the delivery panel', () => {
     if(problem==='ambiguous')layout.floors=[makeFloor({items:[makeItem({id:itemId,name:'签到椅'}),makeItem({id:itemId,name:'另一把椅'})]})];
     const ui=livePanel(layout);openTask('制作物料核对');await settled();
     if(!reconfirm)fireEvent.change(screen.getByLabelText('任务状态'),{target:{value:target}});
-    const action=reconfirm?(target==='accepted'?'重新确认完成':'重新提交核对'):(target==='accepted'?'确认完成':'提交核对');
+    const action=reconfirm?(target==='accepted'?'重新记录完成':'重新提交核对'):(target==='accepted'?'确认完成':'提交核对');
     const button=screen.getByRole('button',{name:action});
     if(!(button as HTMLButtonElement).disabled)fireEvent.click(button);
     await waitFor(()=>expect((button as HTMLButtonElement).disabled||screen.queryByRole('alert')!==null||ui.updates.mock.calls.length>0).toBe(true));
@@ -193,7 +194,7 @@ describe('activity operations in the delivery panel', () => {
     ui.replace({...ui.layout,floors:[makeFloor({items:[makeItem({id:itemId,name:'签到椅',position:{x:1,z:0}})]})]});await settled();
     expect(screen.getByText('需复核')).toBeDefined();fireEvent.click(screen.getByRole('button',{name:'保存任务'}));
     await waitFor(()=>expect(ui.updates).toHaveBeenCalledOnce());expect(ui.layout.eventOperations!.tasks[0].reviewedBasis).toBe(oldBasis);
-    fireEvent.click(await screen.findByRole('button',{name:'重新确认完成'}));await waitFor(()=>expect(ui.updates).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByRole('button',{name:'重新记录完成'}));await waitFor(()=>expect(ui.updates).toHaveBeenCalledTimes(2));
     expect(ui.layout.eventOperations!.tasks[0].reviewedBasis).not.toBe(oldBasis);
     ui.replace({...ui.layout,floors:[makeFloor({items:[makeItem({id:'replacement-chair',name:'签到椅'})]})]});await settled();
     ui.updates.mockClear();fireEvent.click(screen.getByRole('button',{name:'保存任务'}));await screen.findByRole('alert');
@@ -337,7 +338,7 @@ describe('activity operations in the delivery panel', () => {
     const view = render(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()} onOpenBrief={open} briefState={{ brief: INITIAL_BRIEF, ready: true, error: null, hasSavedBrief: false }}/>);
     expect(screen.queryByText(/品牌快闪/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '打开活动需求表单' })); expect(open).toHaveBeenCalledOnce();
-    view.rerender(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()} onOpenBrief={open} briefState={{ brief: { ...INITIAL_BRIEF, event: '空间共创', guests: 30, description: '交流并共同制作' }, ready: true, error: null, hasSavedBrief: true }}/>);
+    view.rerender(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()} onOpenBrief={open} briefState={{ brief: { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '空间共创', guests: 30, description: '交流并共同制作' }, ready: true, error: null, hasSavedBrief: true }}/>);
     expect(screen.getByText('已保存需求草稿 · 空间共创 · 预计 30 人')).toBeDefined();
     expect(screen.getByText('交流并共同制作')).toBeDefined();
     view.rerender(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()} onOpenBrief={open} briefState={{ brief: INITIAL_BRIEF, ready: true, error: 'internal storage failure', hasSavedBrief: true }}/>);
@@ -347,7 +348,7 @@ describe('activity operations in the delivery panel', () => {
 
   it('loads six labelled example tasks while retaining the current project, scene and saved 24-person requirement', async () => {
     const initial = makeLayout({ name: '周末品牌活动' });
-    const brief = { ...INITIAL_BRIEF, description: '24人客户交流活动', mustHave: '签到与合影' };
+    const brief = { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, description: '24人客户交流活动', mustHave: '签到与合影' };
     const originalBrief = { ...brief };
     const ui = livePanel(initial, { brief, ready: true, error: null, hasSavedBrief: true });
     expect(screen.getByRole('heading', { name: '周末品牌活动' })).toBeDefined();
@@ -373,7 +374,8 @@ describe('activity operations in the delivery panel', () => {
     expect(within(overview).queryByText(/需复核/)).toBeNull();
     await settled();
     expect(overview.textContent).toContain('需复核 1 项，请展开任务重新核对。');
-    vi.stubGlobal('crypto', { randomUUID: webcrypto.randomUUID.bind(webcrypto) });
+    const review=operations.operationReview;
+    vi.spyOn(operations,'operationReview').mockImplementation((layout,task,checkins)=>task.id===reviewed.id?Promise.reject(new Error('review unavailable')):review(layout,task,checkins));
     ui.replace({ ...ui.layout });
     await waitFor(() => expect(screen.getByText('有 1 项任务核对失败，请展开任务检查后重试。')).toBeDefined());
     expect(screen.getByText('有 1 项任务核对失败，请展开任务检查后重试。').closest('details')).toBeNull();
@@ -466,14 +468,15 @@ describe('activity operations in the delivery panel', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存任务' }));
     await waitFor(() => expect(ui.updates).toHaveBeenCalledOnce());
     expect(ui.layout.eventOperations!.tasks[0].reviewedBasis).toBe(oldBasis);
-    await waitFor(() => expect(screen.getByRole('button', { name: '重新确认完成' })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('button', { name: '重新记录完成' })).toBeDefined());
     expect(screen.getByText('需复核')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: '重新确认完成' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新记录完成' }));
     await waitFor(() => expect(ui.updates).toHaveBeenCalledTimes(2));
     expect(ui.layout.eventOperations!.tasks[0].reviewedBasis).not.toBe(oldBasis);
     expect(ui.layout.eventOperations!.tasks[0].evidenceNote).toBe(task.evidenceNote);
     expect(ui.layout.eventOperations!.tasks[0].actualFinishedAt).toBeNull();
-    await waitFor(() => expect(screen.queryByRole('button', { name: '重新确认完成' })).toBeNull());
+    await waitFor(() => expect(screen.getByRole('button', { name: '重新记录完成' })).toBeDefined());
+    expect(screen.getByText('需复核')).toBeDefined();
   });
 
   it('undoes a task deletion and loads the labelled rehearsal only on explicit request', async () => {

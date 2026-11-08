@@ -67,12 +67,13 @@ function harness(opts?: {
 afterEach(() => { cleanup(); });
 
 describe('圈画 → 采集单 → 上传重建', () => {
-  it('圈完一块地，采集单留在浮层里，不用重新打开地图', () => {
+  it('圈完一块地后收起浮层，再打开地图仍能查看采集单', () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const overlay = screen.getByRole('dialog', { name: '地图选址' });
     fireEvent.click(within(overlay).getByRole('button', { name: '模拟圈画' }));
-    expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const card = screen.getByRole('region', { name: '现场采集单' });
     expect(within(card).getByText(/现场采集单 · \d+ 张 · 沿流线/)).toBeTruthy();
   });
@@ -82,6 +83,7 @@ describe('圈画 → 采集单 → 上传重建', () => {
     harness({ onReconUpload });
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     fireEvent.click(within(screen.getByRole('dialog', { name: '地图选址' })).getByRole('button', { name: '模拟圈画' }));
+    fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const card = screen.getByRole('region', { name: '现场采集单' });
     fireEvent.click(within(card).getByRole('button', { name: /去上传现场素材/ }));
     expect(onReconUpload).toHaveBeenCalledWith(expect.objectContaining({ name: '盐官潮乐之城' }));

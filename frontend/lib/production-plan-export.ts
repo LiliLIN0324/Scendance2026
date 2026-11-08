@@ -1,3 +1,5 @@
+import { deliveryPrivateText } from './delivery-private-text';
+import { PLAN_SAFETY_DRAFT_NOTICE } from './plan-safety-notice';
 import { z } from 'zod';
 import { handoffSchema, type Handoff } from '../../supabase/functions/_shared/delivery-contract';
 import { uuid } from '../../supabase/functions/_shared/domain';
@@ -37,7 +39,7 @@ const money = (value: number | null) => value === null ? '待确认' : `¥${form
 const time = (value: string | null) => value === null ? '待确认' : toShanghaiDateTimeInput(value).replace('T', ' ');
 const number = (value: number) => String(Number(value.toFixed(2)));
 const safeColor = (value: string | undefined) => /^#[\da-f]{6}$/i.test(value ?? '') ? value! : '#e9e5db';
-const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g,
+const escape = (value: unknown) => deliveryPrivateText(String(value ?? '')).replace(/[&<>"']/g,
   char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 const para = (value: string, warning = false) => `<p class="text${warning ? ' warning' : ''}">${escape(value)}</p>`;
 const table = (headers: string[], rows: unknown[][], className = '') => `<div class="table-wrap"><table${className ? ` class="${escape(className)}"` : ''}><thead><tr>${headers.map(value => `<th>${escape(value)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(value => `<td>${escape(value)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
@@ -128,7 +130,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
   const brief = activityScope && options?.brief !== undefined ? createLocalProjectBackup(layout,
     { state: 'ready', scope: layout.id ?? 'local', brief: options.brief }, metadata.data.generatedAt).brief : undefined;
   const briefDetails = activityScope ? `<section id="handoff-brief"><h2>活动需求与现场条件</h2>${brief?.status === 'present' ? table(['需求项目', '已保存记录'], [
-    ['活动类型', unknown(brief.value.event)], ['预计人数', brief.value.guests], ['活动描述', unknown(brief.value.description)],
+    ['活动类型', brief.value.eventConfirmed===true?unknown(brief.value.event):'待确认'], ['预计人数', brief.value.guestsConfirmed===true?brief.value.guests:'待确认'], ['活动描述', unknown(brief.value.description)],
     ['必须包含', unknown(brief.value.mustHave)], ['现场条件', unknown(brief.value.venueConditions ?? '')],
     ['风格', unknown(brief.value.style ?? '')], ['色彩', unknown(brief.value.palette ?? '')], ['氛围', unknown(brief.value.atmosphere ?? '')],
   ], 'handoff-brief') : para(brief?.status === 'absent' ? '当前未记录活动需求，活动目的、人数与现场条件待确认。' : '本次未提供活动需求快照，活动目的、人数与现场条件待确认。')}${para('本文件仅含文字记录与可生成的摆位示意；照片、原图纸附件和模型文件需另行提供。')}</section>` : '';
@@ -202,7 +204,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
         productionAmbiguous.length ? `制作计划间接关联物件编号歧义 ${productionAmbiguous.length} 项` : '',
         sourceAmbiguities || duplicateIds(task.objectIds).length ? '当前关联源编号需核对' : '',
       ].filter(Boolean).join('；');
-      taskDiagnostics.set(identity(task.id), { checked: true, reason: reason || (result.status === 'needs_review' ? '当前记录与场景或制作依据已变化' : ''),
+      taskDiagnostics.set(identity(task.id), { checked: true, reason: reason || (result.status === 'needs_review' ? '场地来源或当前场景与制作依据尚未核验' : ''),
         directMissing, directAmbiguous, productionMissing, productionAmbiguous });
     } catch {
       status = '待核对（复核未完成）';
@@ -237,14 +239,14 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
     (!layout.roof || layout.roof.style === 'none') && (!layout.terrain || layout.terrain.frontY === 0 && layout.terrain.backY === 0) &&
     !layout.floors.some(floor => floor.items.some(item => !!item.glbNode || item.mirrored && (item.type === 'door' || item.type === 'window')));
   const safeFloors = simplePlan ? layout.floors.map(floor => ({
-    id: floor.id, name: floor.name, floorColor: safeColor(floor.floorColor),
+    id: floor.id, name: deliveryPrivateText(floor.name), floorColor: safeColor(floor.floorColor),
     ...(floor.height !== undefined ? { height: floor.height } : {}),
     ...(floor.hiddenWalls ? { hiddenWalls: [...floor.hiddenWalls] } : {}),
     ...(floor.interiorWalls ? { interiorWalls: floor.interiorWalls.map(wall => ({ id: wall.id,
       x1: wall.x1, z1: wall.z1, x2: wall.x2, z2: wall.z2,
       ...(wall.height !== undefined ? { height: wall.height } : {}),
       ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}), color: safeColor(wall.color) })) } : {}),
-    ...(floor.zones ? { zones: floor.zones.map(zone => ({ ...zone, color: safeColor(zone.color) })) } : {}),
+    ...(floor.zones ? { zones: floor.zones.map(zone => ({ ...zone, name: deliveryPrivateText(zone.name), color: safeColor(zone.color) })) } : {}),
     items: floor.items.map(item => ({ id: item.id, type: item.type, name: '', icon: '',
       width: item.width, depth: item.depth, height: item.height, color: safeColor(item.color),
       ...(item.position ? { position: { x: item.position.x, z: item.position.z } } : {}),
@@ -259,7 +261,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       ...(item.stairsLeadIn !== undefined ? { stairsLeadIn: item.stairsLeadIn } : {}),
     })),
   })) : [];
-  const planLayout: RoomLayout = { name: layout.name, width: layout.width, height: layout.height, floors: safeFloors };
+  const planLayout: RoomLayout = { name: deliveryPrivateText(layout.name), width: layout.width, height: layout.height, floors: safeFloors };
   const plans = simplePlan ? safeFloors.map(floor => {
     const scale = DEFAULT_SVG_PX_PER_METRE, margin = DEFAULT_SVG_MARGIN;
     const labels = floor.items.filter(item => item.position).map(item => {
@@ -361,7 +363,7 @@ ${para(`已作废的原收退编号：${projection.voidedRootIds.join('、') || 
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"><title>${escape(unknown(layout.name))} · ${title}</title><style>
 .handoff-brief{table-layout:fixed}.handoff-brief th:first-child{width:18%}.handoff-toc{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.handoff-toc a{color:#264e3b;border:1px solid #a5b9a4;padding:6px 12px;text-decoration:none;border-radius:5px}.handoff-toc a:hover,.handoff-toc a:focus-visible{background:#edf3e9}section{scroll-margin-top:20px}@media print{.handoff-toc{display:none}}
 body{margin:0;background:#f3f5f1;color:#20372d;font:14px/1.65 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1050px;margin:24px auto;padding:30px;background:white}h1{font-size:27px;line-height:1.35}h2{font-size:20px;border-bottom:1px solid #a5b9a4;padding-bottom:7px;margin-top:28px}h3{font-size:16px;margin:16px 0 8px}.text,td{white-space:pre-wrap;overflow-wrap:anywhere}.notice{padding:10px 14px;background:#edf3e9}.warning{color:#835a16;border-left:3px solid #a98c42;padding-left:10px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;margin:12px 0}th,td{border:1px solid #d5dfd2;padding:9px;text-align:left;vertical-align:top}th{background:#edf3e9}article table th:first-child{width:26%}.handoff-tasks{table-layout:fixed}.handoff-tasks th:nth-child(1){width:15%}.handoff-tasks th:nth-child(2){width:18%}.handoff-tasks th:nth-child(3){width:14%}.handoff-tasks th:nth-child(4){width:35%}.handoff-tasks th:nth-child(5){width:18%}.handoff-plan{margin:18px 0;padding:14px 14px 10px;border:1px solid #E4E4E7;border-radius:12px;background:#fff}.handoff-plan svg{display:block;max-width:100%;height:auto;margin:0 auto}.handoff-plan figcaption{margin-top:8px;font-size:12px;line-height:1.6;color:#71767E;overflow-wrap:anywhere}details{border:1px solid #d5dfd2;margin-top:26px;padding:12px}summary{cursor:pointer;font-weight:600}summary:focus-visible{outline:2px solid #44684f;outline-offset:4px}footer{font-size:12px;color:#526654;margin-top:24px}@media(max-width:640px){main{margin:0;padding:20px 16px}h1{font-size:23px}}@page{size:A4;margin:14mm}@media print{body{background:white;font-size:10px}main{margin:0;padding:0;max-width:none}h1{font-size:22px}h2{font-size:16px}h3{font-size:12px}table{font-size:9px}.table-wrap{overflow:visible}thead{display:table-header-group}tr,figure{break-inside:avoid}.handoff-plan svg{max-height:110mm;max-width:100%;width:auto;height:auto}h2,h3{break-after:avoid}details:not([open]){display:none}details[open]{break-before:page}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body><main><header><p>幕景 · ${title}</p><h1>${escape(unknown(layout.name))}</h1><div class="notice">${para(`制作计划：${hasPlan ? kinds[plan.dataKind] : '当前未记录'}\n活动任务：${operationsKind === null ? '未记录' : kinds[operationsKind]}${ledger ? `\n数量点验：${kinds[ledger.dataKind]}` : ''}\n冻结时间：${time(metadata.data.generatedAt)}（北京时间）`)}${para('供执行团队内部交接，含内部来源与供应方记录。不要作为客户评审或公开分享文件。')}</div>
+</style></head><body><main><header><p>幕景 · ${title}</p><h1>${escape(unknown(layout.name))}</h1><div class="notice">${para(PLAN_SAFETY_DRAFT_NOTICE, true)}${para(`制作计划：${hasPlan ? kinds[plan.dataKind] : '当前未记录'}\n活动任务：${operationsKind === null ? '未记录' : kinds[operationsKind]}${ledger ? `\n数量点验：${kinds[ledger.dataKind]}` : ''}\n冻结时间：${time(metadata.data.generatedAt)}（北京时间）`)}${para('供执行团队内部交接，含内部来源与供应方记录。不要作为客户评审或公开分享文件。已过滤部分可识别的凭据和私密链接，不能保证识别全部敏感信息，请分享前核对。')}</div>
 ${activityScope ? para(`范围：全部活动任务与逐件物料工作单，含未关联制作计划的安排。\n任务：${tasks.length} 项；物件：${objects.length} 项；已填工作单：${filledHandoffs} / ${objects.length} 项。\n已下载文件是冻结版本，不会随工作台后续修改更新。`) : ''}
 ${hasPlan && operationsKind !== null && operationsKind !== plan.dataKind ? para('制作计划与活动任务的资料性质不同，需先核对；不自动改成真实或已确认。', true) : ''}
 ${ledger && (hasPlan && ledger.dataKind !== plan.dataKind || operationsKind !== null && ledger.dataKind !== operationsKind) ? para('点验账册与当前计划或任务的资料性质不同，需核对，不自动统一。', true) : ''}

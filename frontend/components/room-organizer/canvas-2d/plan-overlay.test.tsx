@@ -72,7 +72,7 @@ describe('2D view transform 往返', () => {
   });
 });
 
-describe('PlanOverlay 门弧：真门 vs 推测门', () => {
+describe('PlanOverlay 门洞：不推断开门方向', () => {
   const t = get2DViewTransform(800, 600, layout, 60);
   const realDoor: PlanAnnotation = {
     id: 'door-real',
@@ -101,25 +101,56 @@ describe('PlanOverlay 门弧：真门 vs 推测门', () => {
     expect(html).toContain('data-door-inferred="true"');
   });
 
-  it('推测门（inferred=true）只有开门弧带 stroke-dasharray，两条门扇保持实线', () => {
+  it('推测门只画虚线门洞和两端标记，不画铰链与开门弧', () => {
     const html = renderMarkup([inferredDoor]);
-    // 关位线 / 开位线是实线门扇，只有扫过弧是虚线。
     const dashCount = (html.match(/stroke-dasharray/g) ?? []).length;
     expect(dashCount).toBe(1);
     expect(html).toContain('stroke-dasharray="6 4"');
+    expect((html.match(/<line/g) ?? []).length).toBe(3);
+    expect(html).not.toContain('<path');
+    expect(html).not.toContain('<circle');
   });
 
-  it('真门（inferred 缺省）的门扇/门弧不带 stroke-dasharray（保持实线）', () => {
+  it('一般门洞记录不画未确认的铰链或开门弧', () => {
     const html = renderMarkup([realDoor]);
     expect(html).not.toContain('stroke-dasharray');
+    expect(html).not.toContain('<path');
+    expect(html).not.toContain('<circle');
   });
 
-  it('推测门旁出现「门未确认」小字（11px 灰 #6b7280）；真门旁不出现', () => {
+  it('所有门洞均显示待核验说明，推测与其他记录可区分', () => {
     const inferredHtml = renderMarkup([inferredDoor]);
-    expect(inferredHtml).toContain('门未确认');
+    expect(inferredHtml).toContain('推测门洞位置、宽度与开向待核验');
     expect(inferredHtml).toContain('font-size="11"');
     expect(inferredHtml).toContain('#6b7280');
     const realHtml = renderMarkup([realDoor]);
-    expect(realHtml).not.toContain('门未确认');
+    expect(realHtml).toContain('门洞位置、宽度与开向待核验');
+  });
+
+  it.each(['north', 'south', 'east', 'west'] as const)('%s 墙的门洞跨度仍按原尺寸投影', (wall) => {
+    const door: PlanAnnotation = { ...realDoor, geometry: { kind: 'door', wall, position: 0, widthM: 0.9 } };
+    const html = renderMarkup([door]);
+    const firstLine = /<line x1="([\d.\-]+)" y1="([\d.\-]+)" x2="([\d.\-]+)" y2="([\d.\-]+)"/.exec(html);
+    expect(firstLine).not.toBeNull();
+    const [, x1, y1, x2, y2] = firstLine!;
+    expect(Math.hypot(Number(x2) - Number(x1), Number(y2) - Number(y1))).toBeCloseTo(0.9 * t.scale, 4);
+    expect(html).not.toContain('<path');
+  });
+
+  it.each(['north', 'south', 'east', 'west'] as const)('%s 墙宽度未知时只画中心符号，不生成门洞跨度', (wall) => {
+    const door: PlanAnnotation = { ...realDoor, geometry: { kind: 'door', wall, position: 1.25, widthM: null } };
+    const html = renderMarkup([door]);
+    expect(html).toContain('data-door-width="unknown"');
+    expect(html).toContain('门中心、宽度与开向待核验');
+    expect((html.match(/<line/g) ?? []).length).toBe(2);
+    expect(html).not.toContain('<path');
+    expect(html).not.toContain('NaN');
+    const expected = wall === 'north' ? { x: 1.25, z: -layout.height / 2 }
+      : wall === 'south' ? { x: 1.25, z: layout.height / 2 }
+        : wall === 'east' ? { x: layout.width / 2, z: 1.25 } : { x: -layout.width / 2, z: 1.25 };
+    const center = worldToScreen(expected.x, expected.z, t, layout);
+    const firstLine = /<line x1="([\d.\-]+)" y1="([\d.\-]+)" x2="([\d.\-]+)" y2="([\d.\-]+)"/.exec(html)!;
+    expect((Number(firstLine[1]) + Number(firstLine[3])) / 2).toBeCloseTo(center.px, 5);
+    expect((Number(firstLine[2]) + Number(firstLine[4])) / 2).toBeCloseTo(center.py, 5);
   });
 });
