@@ -23,6 +23,8 @@ it('writes material counts for the actual applied layout and marks the result hi
  layoutStore.setState({layout:base,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(base));__resetGenerationOutcome();
  render(<><RoomOrganizer/><OutcomeProbe/><BingoAuditCard/></>);
  const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ expect(await screen.findByRole('region',{name:'历史需求待核对'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'按当前记录重新开始'}));
  fireEvent.change(input,{target:{value:'12 人，室内 12×9米，圆桌，出方案'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
  const confirm=await screen.findByRole('button',{name:'确认布置'},{timeout:15000});const before=structuredClone(layoutStore.getState().layout);fireEvent.click(confirm);
  await waitFor(()=>expect(screen.getByTestId('counts').textContent).not.toBe('none'));

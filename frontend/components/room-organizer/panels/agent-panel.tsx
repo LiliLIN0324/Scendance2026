@@ -411,6 +411,11 @@ export interface LayoutAgentCallbacks {
 interface AgentValue {
   sessionScope: string;
   isSessionCurrent(): boolean;
+  historyReviewRequired: boolean;
+  reviewDialogueHistory(): void;
+  acceptFreshSession(id:string):void;
+  retainedOtherSessionProposal:boolean;
+  withdrawRetainedOtherSessionProposal():void;
   unresolvedDialogue: readonly string[];
   withdrawUnresolvedDialogue(text:string): void;
   assertSessionWrite: () => void;
@@ -497,7 +502,7 @@ function volatileMemoriesFor(scope: string): Map<string, BriefMemory> {
   return values;
 }
 
-export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, onDialogueHistoryReview, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; onDialogueHistoryReview?: ((sessionId:string)=>boolean)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   const venueFacts = useVenueFactTracker(layoutStore);
@@ -565,11 +570,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const [exportPreview, setExportPreview] = useState(false);
   // 提案只活在这里：layout 一个字节都不动，所以自动存档、撤销栈、别人的选中态都不受影响。
   const proposal = useRef<PlanProposal | null>(null);
+  const proposalSessionRef=useRef<string|null>(null);
   function setLocalProposal(next:PlanProposal|null):void {
     const previous=proposal.current;
     if(next&&pendingCandidates&&!pendingCandidates.register('local',next))throw new Error('活动已变化，未保留旧方案预览。');
     if(!next&&previous)pendingCandidates?.clear('local',previous);
     proposal.current=next;
+    proposalSessionRef.current=next?boundSessionId.current:null;
   }
   function withCurrentSeatingReview<T extends PlanProposal>(plan:T,previous:PlanProposal|null):T {
     const relevant=!!previous&&Object.hasOwn(previous,'seatingWitness')||memoryRef.current.layoutModeConfirmed===true&&memoryRef.current.layoutMode==='desk-chair';
@@ -615,6 +622,26 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const dialogueIncompleteRef=useRef(onDialogueIncompleteChange);dialogueIncompleteRef.current=onDialogueIncompleteChange;
   const incompleteDialogueTurns=useRef(new Map<string,Set<string>>());
   const [unresolvedDialogue,setUnresolvedDialogue]=useState<readonly string[]>([]);
+  const [,setReviewedHistorySession]=useState<string|null>(null);
+  const reviewedHistorySessionRef=useRef<string|null>(null);
+  const setReviewedHistory=(id:string|null)=>{reviewedHistorySessionRef.current=id;setReviewedHistorySession(id);};
+  const freshSessionProof=useRef<string|null>(null);
+  const isHistoryReviewRequired=()=>!!onDialogueHistoryReview && (!boundSessionId.current||getActiveAssistantSessionId(sessionScope)!==boundSessionId.current||reviewedHistorySessionRef.current!==boundSessionId.current);
+  const historyReviewRequired=isHistoryReviewRequired();
+  function acceptFreshSession(id:string):void {
+    if(sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===id&&!sessionMemories.current.has(id))freshSessionProof.current=id;
+  }
+  function reviewDialogueHistory():void {
+    const id=boundSessionId.current;
+    if(!id||!sessionScopeIsCurrent()||getActiveAssistantSessionId(sessionScope)!==id||(incompleteDialogueTurns.current.get(id)?.size??0)>0)return;
+    if(studioRef.current?.recoverable||studioRef.current?.applyRecovery||studioRef.current?.reviewingApplyRecovery){say({role:'agent',amber:true,text:'请先查询原任务或核对已提交结果，保留原任务记录后再重新开始。'});return;}
+    if(briefRequest.current||generationWait.current||generationQueuedRef.current||studioRef.current?.busy){say({role:'agent',amber:true,text:'当前任务仍在处理，请等待或取消后再重新开始。'});return;}
+    if(studioRef.current&&!studioRef.current.discardPreviewForHistoryReview()){say({role:'agent',amber:true,text:'原任务记录或本机存储尚未核对，请先查询原任务或核对已提交结果；旧记录已保留。'});return;}
+    runToken.current++;briefTurnSequence.current++;pendingCandidates?.invalidate();dropProposal();
+    if(!onDialogueHistoryReview?.(id)){say({role:'agent',amber:true,text:'当前活动或会话正在变化，请稍后重新核对。'});return;}
+    setReviewedHistory(id);phaseRef.current='idle';setPhase('idle');setProgress(0);
+    say({role:'agent',text:'已按当前记录重新开始；旧预览已收回，请重新生成并核对方案。'});
+  }
   const updateDialogueIncomplete=(sessionId:string|null,text:string,incomplete:boolean)=>{
     const value=text.trim();if(!sessionId||!value||isGeneralActivityQuestion(value))return;
     const entries=incompleteDialogueTurns.current.get(sessionId)??new Set<string>(),was=entries.size>0;
@@ -682,9 +709,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     touchActiveSessionRef.current();
   }, [persistBubbles]);
 
-  useEffect(()=>subscribeActiveAssistantSession(sessionScope,()=>{
+  useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
+    if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
     pendingCandidates?.invalidate();
     briefTurnSequence.current++;runToken.current++;
+    if(nextId!==boundSessionId.current&&proposal.current){hidePreview();phaseRef.current='idle';setPhase('idle');setProgress(0);}
     if(generationWait.current||localDraftOwner.current){suppressCancelledCloudPreview.current=true;generationWait.current?.cancel();dropProposal();phaseRef.current='idle';setPhase('idle');setProgress(0);}
   }),[sessionScope,pendingCandidates]);
   useEffect(()=>{
@@ -716,6 +745,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const nextId = assistantSessions.activeId;
     const prevId = boundSessionId.current;
     if (prevId === nextId) return;
+    setReviewedHistory(null);
     briefTurnSequence.current += 1;
     if(briefRequest.current){updateDialogueIncomplete(prevId,briefRequest.current.text,true);uncertainInputs.current.add(briefRequest.current.text);briefRequest.current.controller.abort();say({role:'agent',amber:true,text:'切换会话后已停止等待；服务商可能仍在处理或计费。'});}
     setCancelledInput(null);setRetryUncertain(null);
@@ -727,6 +757,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const nextMemory = (nextId && (sessionMemories.current.get(nextId) ?? readBriefMemory(nextId, scopedAssistantStorage(sessionScope)))) || initialBriefMemory();
     memoryRef.current = nextMemory;
     onBriefMemoryChange?.(nextMemory,nextId);
+    if(nextId&&freshSessionProof.current===nextId){
+      freshSessionProof.current=null;
+      // A fresh conversation must not inherit a previous conversation's cloud
+      // candidate or discard an unknown run while granting its exemption.
+      if((!studioRef.current||studioRef.current.discardPreviewForHistoryReview())&&onDialogueHistoryReview?.(nextId))setReviewedHistory(nextId);
+    } else freshSessionProof.current=null;
     const nextBrief = { event: nextMemory.event, guests: nextMemory.headcount, layoutMode: nextMemory.layoutMode };
     briefRef.current = nextBrief;
     setBrief(nextBrief);
@@ -1784,7 +1820,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
   function confirmProposal(): void {
+    if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求并重新生成，再确认布置。'});return;}
     const sessionId=boundSessionId.current;
+    if(proposal.current&&proposalSessionRef.current!==sessionId){say({role:'agent',amber:true,text:'这版来自其他会话，不能在当前会话确认；请先撤回旧方案并重新生成。'});return;}
     if(sessionId&&(incompleteDialogueTurns.current.get(sessionId)?.size??0)>0){
       say({role:'agent',amber:true,text:'还有尚未处理的要求，请逐项核对后再生成和确认。'});return;
     }
@@ -1987,6 +2025,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 出方案：连着云项目就让云端真 AI 算这一版，否则本地算候选。两条都停在「这版还在预览」。 */
   async function startGeneration(token: number, variant: number, note: string, scale: Scale, seatPriority = false): Promise<void> {
+    if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});setPhase('failed');return;}
     if (memoryRef.current.layoutModeConfirmed !== true || memoryRef.current.pendingBasicFacts?.length || memoryRef.current.layoutModeUnresolved || memoryRef.current.pendingActivityNeeds.length || memoryRef.current.unresolvedActivityNeeds.some(kind=>!(memoryRef.current.deferredActivityNeeds??[]).includes(kind)) || memoryRef.current.mobilityNeedsClarification || memoryRef.current.mobilityRequirement?.decision==='unknown') {
       say({ role: 'agent', amber: true, text: '还有需求待确认，请先核对后再生成方案。' });
       setPhase('failed'); return;
@@ -2302,8 +2341,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({
         role: 'agent',
         text: aholo.kind === 'world'
-          ? '空间生成属于空间 Agent；切到「空间」后用生成引擎生成 3D 重建空间。'
-          : `要生成${aholo.title}，请切到物料 Agent 的「生成物料」入口；Bingo 只负责布置与方案。`,
+          ? '可在「空间」入口使用生成引擎创建或重建 3D 空间。'
+          : `要生成${aholo.title}，请使用「物料」里的生成入口。`,
       });
       return;
     }
@@ -2529,6 +2568,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       });
       return;
     }
+    if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});return;}
     const originalRequest=turn.resumeInstruction??trimmed;
     if(/(?:本地|本机)草案/.test(originalRequest)){
       const variant=command==='again'?(seed.current+=1,seed.current):seed.current;
@@ -2604,7 +2644,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
 
   const value: AgentValue = {
-    sessionScope, isSessionCurrent: sessionScopeIsCurrent, unresolvedDialogue,withdrawUnresolvedDialogue,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
+    sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,withdrawUnresolvedDialogue,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
     canForward:(text)=>{const value=text.trim(),session=boundSessionId.current;return !!value&&!!session&&sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===session&&!pendingModelInputs.current.has(value)&&!uncertainInputs.current.has(value);},cancelUnderstanding,
     cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
@@ -3106,7 +3146,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           className="ap-icon-btn"
           aria-label="新开会话"
           title="新开会话"
-          onClick={() => { assistantSessions.openSession(); setShowHistory(false); inputRef.current?.focus(); }}
+          onClick={() => { const created=assistantSessions.openSession(); if(created?.verifiedFresh)agent.acceptFreshSession(created.id); setShowHistory(false); inputRef.current?.focus(); }}
         >
           <MessageCirclePlus size={18} aria-hidden="true" />
         </button>
@@ -3140,6 +3180,15 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo}/>
+      {activity && agent.historyReviewRequired && <section className="ap-card" aria-label="历史需求待核对">
+        <strong>历史需求待核对</strong>
+        <p>历史状态尚未核对，首次进入也可能出现此提示。你可以继续交流；若按当前已记录的需求重新开始，之前未确认或未处理的要求不会自动纳入，旧预览会被收回。</p>
+        <button type="button" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
+      </section>}
+      {activity && agent.retainedOtherSessionProposal && <section className="ap-card" aria-label="其他会话的旧方案">
+        <p>其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
+        <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
+      </section>}
       {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card" aria-label="尚未处理的要求">
         <strong>尚未处理的要求</strong>
         <p>这些要求尚未完成。若已另行说明，请逐项确认是否撤回旧要求，再重新生成方案。</p>
