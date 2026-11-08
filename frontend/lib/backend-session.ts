@@ -516,10 +516,18 @@ export class BackendSession {
   private persistTokens(_rejected?: Tokens | null): void {}
   private async accessToken(): Promise<string | null> {
     if (!this.supabase || this.snapshot.recoveryReady) return null;
+    const actor = this.snapshot.user?.id;
     let { data, error } = await this.supabase.auth.getSession();
     if (error) throw new SceneApiError("UNAUTHENTICATED", error.status ?? 401, null);
     let session = data.session;
     if (!session) { this.tokens = null; return null; }
+    const assertActor = (current: Session) => {
+      if (!actor || this.snapshot.user?.id !== actor || typeof current.user?.id !== 'string' || current.user.id.toLowerCase() !== actor.toLowerCase())
+        throw new SceneApiError('SESSION_CHANGED', 409, null);
+    };
+    // Auth storage can change independently in another tab. Never send its
+    // token under an editor snapshot owned by a different account.
+    assertActor(session);
     if (session.expires_at && session.expires_at * 1000 <= Date.now() + 30_000) {
       const refreshed = await this.supabase.auth.refreshSession();
       if (refreshed.error || !refreshed.data.session) {
@@ -527,6 +535,7 @@ export class BackendSession {
         throw new SceneApiError("UNAUTHENTICATED", refreshed.error?.status ?? 401, null);
       }
       session = refreshed.data.session;
+      assertActor(session);
     }
     this.tokens = { access: session.access_token, refresh: session.refresh_token, expiresAt: (session.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000 };
     return session.access_token;
@@ -549,7 +558,7 @@ export class BackendSession {
       if(mutates)this.assertCanvasProjectMatch();
     };
   }
-  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation, transport?: (beforeDispatch:()=>void) => Promise<T>,requestCurrent?:()=>boolean): Promise<T> {
+  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation, transport?: (beforeDispatch:()=>void) => Promise<T>,requestCurrent?:()=>boolean, suppressProjectFailure = false): Promise<T> {
     if(method.toUpperCase()!=='GET')this.assertCanvasProjectMatch();
     const epoch = this.epoch,scopeEpoch=this.dispatchScopeEpoch,actor=this.snapshot.user?.id;
     const beforeDispatch=()=>{
@@ -580,8 +589,10 @@ export class BackendSession {
         const permissionLost = error instanceof SceneApiError && (error.status === 401 || ["LEASE_LOST", "REVISION_CONFLICT"].includes(error.code));
         const materialPreviewFailure = path.endsWith('/material-variants') && error instanceof SceneApiError && ['VALIDATION_ERROR','MATERIAL_VARIANT_SELECTION_INVALID','OBJECT_LOCKED','MATERIAL_VARIANT_MISMATCH','ASSET_NOT_GLB','DIMENSION_CONFLICT','STRUCTURAL_COLLISION','IDEMPOTENCY_CONFLICT'].includes(error.code);
         const serviceFailure = materialPreviewFailure || error instanceof SceneApiError && ["SERVICE_NOT_CONFIGURED", "BILLING_NOT_CONFIGURED", "BUDGET_EXCEEDED", "DAILY_BUDGET_EXCEEDED", "AI_BUSY", "AI_IN_PROGRESS", "AI_PREVIOUS_REQUEST_FAILED", "AI_INVALID_PROPOSAL", "AI_INPUT_TOO_LARGE", "PROVIDER_HTTP_ERROR", "PROVIDER_INVALID_JSON", "PROVIDER_TIMEOUT", "GENERATION_BUSY"].includes(error.code);
-        if (permissionLost || blocksWrites === true || (blocksWrites === false && !serviceFailure)) this.block(error);
-        else this.update({ error: failure(error) });
+        if (!suppressProjectFailure || error instanceof SceneApiError && (error.status === 401 || error.code === 'UNAUTHENTICATED')) {
+          if (permissionLost || blocksWrites === true || (blocksWrites === false && !serviceFailure)) this.block(error);
+          else this.update({ error: failure(error) });
+        }
       }
       throw error;
     }
@@ -1296,7 +1307,7 @@ export class BackendSession {
     const parsed = sceneSchema.parse(input.scene);
     if (input.mode === "layout" && parsed.objects.length > 0) throw new SceneApiError("LAYOUT_REQUIRES_EMPTY_SCENE", 422, null);
     const state = this.proposalState(parsed);
-    const epoch = this.epoch;
+    const epoch = this.epoch, actor = this.snapshot.user?.id;
     const requestInput = { projectId: state.projectId, sessionId: state.sessionId, generation: state.generation,
       expectedRevision: state.expectedRevision, localRevision: state.localRevision, scene: parsed,
       instruction: input.prompt.trim(), mode: input.mode, selectedIds: [...new Set(input.selectedIds ?? [])].sort() };
@@ -1343,6 +1354,8 @@ export class BackendSession {
         // Keep the idempotency key after failure. A user retry reuses it; no
         // automatic retry may reserve a second paid request.
         delete record.promise;
+        if (error instanceof SceneApiError && error.code === 'SESSION_CHANGED' && epoch === this.epoch && actor === this.snapshot.user?.id &&
+            !this.isCurrentRequestScope({ projectId: state.projectId, lease: state })) throw new SceneApiError('STALE_PROPOSAL', 409, null);
         throw error;
       } finally { this.proposalPending = false; }
     })();
@@ -1715,7 +1728,11 @@ export class BackendSession {
   }
   /** Call after saving a scene containing asset_id; the server verifies that reference. */
   async markGenerationAdded(id: string, projectId: string): Promise<GenerationJob> {
-    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}/added`, "POST", { projectId: uuid.parse(projectId) }, this.captureRequestScope(projectId), "business"));
+    const targetProject = uuid.parse(projectId);
+    // The target is verified by the server; request lifetime is tied to the
+    // active editor/account, which may legitimately be a different project.
+    const scope = this.captureRequestScope();
+    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}/added`, "POST", { projectId: targetProject }, scope, "business", undefined, undefined, undefined, targetProject !== scope.projectId));
     if (job.id !== id || job.state !== "added") throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return job;
   }

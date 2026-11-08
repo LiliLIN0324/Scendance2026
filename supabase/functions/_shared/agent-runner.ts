@@ -34,6 +34,43 @@ import {trialModelRoundDiagnostic,trialSubmissionDiagnostic,trialValidationDiagn
 import {agentEventOutcome,agentEventTool,type AgentEvent} from './agent-events.ts';
 import type { Backend } from './backend.ts';
 
+/** Compact only byte-identical, large validation arrays in the model transport.
+ * The complete first array remains in an earlier tool receipt; the original
+ * messages and all candidates, checks and persisted results stay untouched. */
+export function compactRepeatedValidationArrays(messages:Record<string,unknown>[]):Record<string,unknown>[] {
+  const calls=new Map<string,{name:string;count:number}>(),responses=new Map<string,number>();
+  for(const message of messages){
+    if(message.role==='assistant'&&Array.isArray(message.tool_calls))for(const call of message.tool_calls){
+      if(!call||typeof call!=='object')continue;
+      const item=call as {id?:unknown;function?:{name?:unknown}};
+      if(typeof item.id!=='string'||typeof item.function?.name!=='string')continue;
+      const old=calls.get(item.id);calls.set(item.id,{name:item.function.name,count:(old?.count??0)+1});
+    }
+    if(message.role==='tool'&&typeof message.tool_call_id==='string')responses.set(message.tool_call_id,(responses.get(message.tool_call_id)??0)+1);
+  }
+  const prior=new Map<string,{id:string;path:string}>();
+  return messages.map(message=>{
+    const id=message.tool_call_id;
+    if(message.role!=='tool'||typeof id!=='string'||!id||calls.get(id)?.name!=='validate_candidate'||calls.get(id)?.count!==1||responses.get(id)!==1||typeof message.content!=='string')return message;
+    let value:unknown;
+    try{value=JSON.parse(message.content);}catch{return message;}
+    if(!value||typeof value!=='object'||Array.isArray(value)||(value as {valid?:unknown}).valid!==true)return message;
+    const result=value as Record<string,unknown>;
+    const review=result.independentReview;
+    let changed=false;
+    const compact=(owner:Record<string,unknown>,key:string,path:string)=>{
+      const array=owner[key];if(!Array.isArray(array))return;
+      const encoded=JSON.stringify(array);if(new TextEncoder().encode(encoded).length<1024)return;
+      const previous=prior.get(encoded);
+      if(previous&&previous.id!==id){owner[key]={sameAsToolCallId:previous.id,path:previous.path,itemCount:array.length};changed=true;}
+      else if(!previous)prior.set(encoded,{id,path});
+    };
+    compact(result,'warnings','warnings');
+    if(review&&typeof review==='object'&&!Array.isArray(review))compact(review as Record<string,unknown>,'unknown','independentReview.unknown');
+    return changed?{...message,content:JSON.stringify(result)}:message;
+  });
+}
+
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
 const preparedCandidateSchema=z.strictObject({preparedId:uuid});
 const validatedCandidateSchema=z.strictObject({validatedId:uuid});
@@ -92,6 +129,7 @@ commands格式：add {materialId,position:{x,z},rotation,color}；remove {id}；
 presetNode 是已归档预设中的可编辑物件，中文名称见 presetObjectLabels；可以移动、旋转、移除或替换，不能把 presetNode 当作独立云资源做材质编辑。普通GLB换色先inspect_materials读取实际槽，再customize_material生成副本后replace_resource。用户明确整件换色可选全部有效槽；只改不明确部位时返回materialSuggestions让用户选择槽。保留旧几何和UV，不能把颜色冒充新纹理。修改参数须读取metadata来源后创建新模型，仅替换目标实例。
 空间判据由引擎算，不由你猜：首条用户消息里的 planOverview 是按米格渲染的平面概览（列=x，行=z，#墙 =门窗洞 O柱子 E出入口 首字母为物件，大写表示锁定），它只表示占位与相邻关系，不代表净空；largestEmptySquare 是概览精度下最大的一块空地。要判断某个尺寸能不能摆、该摆在哪，调用 find_free_areas（占地宽深+需要留出的净距），直接使用它返回的落地中心坐标；要改某块地方，先 inspect_zone 看现状。不要用相邻坐标试错，也不要把"看起来空"当作可摆放。
 工具返回 {code,details,hint} 时，按 hint 检查；同一个 code 在同一个目标上失败两次，就换落点、换尺寸或如实说明限制，不要第三次重试，也不要为了绕过校验去改无关区域。validate_candidate 的 valid 仅是候选构建和部分几何检查结果，必须同时查看 warnings 和 coverage；clearances 是各改动物件到最近障碍的局部几何距离，不代表一条连续通道。不得声称门扇、疏散、无障碍、消防或规范已通过；未检查项保持待核验。valid:false 时 failedCommand 指向相关命令，只处理用户要求的部分。
+验证回执中的 warnings 或 independentReview.unknown 若是 {sameAsToolCallId,path,itemCount}，代表它与先前指定工具回执对应路径的完整数组逐项完全相同；该引用不是通过结论，必须结合原数组阅读。
 最终必须调用submit_candidates，每个候选为验证成功给出的{validatedId}、普通候选{title,explanation,commands,materialSuggestions?}，或组团工具给出的{preparedId}。句柄不能附加其他字段；修改候选须重新验证。组团候选的数量、限制和假设由程序写入，不能改写为已满足。JEV开启时提供三个可比较方案，不能仅改标题、ID或颜色；每个基于原草稿，禁止累积应用。方案解释指出实际差异。只有用户确定应用后程序才改场景；不能提前声称已应用。只询问信息可空commands作答。
 首条用户消息若带 layoutRecipes，那是按本次需求检索到的分区套路与硬判据：用它决定先做什么、哪些东西必须留出净距，但不要照抄里面的示意坐标——每个落点仍必须由 find_free_areas 或 inspect_zone 给出。配方与工具回执冲突时，以工具回执为准；配方标「经验值」的条目不等于规范，不要说成合规。
 用户用形容词提要求（能坐、有荫、走得动、看着舒服）时，先把形容词翻译成格数再动手：inspect_zone 量出实际尺寸，再定几个座位、几格净距、遮荫占几成，把换算写进 explanation。用户没给数就用配方里的经验阈值，并声明这是经验值。形容词没有通过条件，靠形容词自检会一直转下去；宁可用一个说清楚的近似值交付，也不要为了「更周到」反复复核同一个地方。需求抽象到无法落位时（比如让做一条游线却没给宽度），按场地实际尺寸自行补全一组最小可行数值，说明取值理由后直接开工。需求总量超出可用空地时，按 安全 > 可达 > 舒适 > 美观 的顺序砍：安全与可达项（通道净宽、疏散、跌落缓冲、轮椅回转）不能让步，砍掉的可达或舒适项必须在 explanation 里说清「放不下、砍了什么、为什么」，宁可交一个说清楚的降级方案，也不要为了凑数把物件硬塞进通道或缓冲带。`;
@@ -455,7 +493,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(pressure.forceSubmit)messages.push({role:'user',content:`现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个候选；优先用本次已通过验证的 {validatedId}，组团可用 {preparedId}，否则提交完整候选（title、explanation、commands）。不要继续读取或校验。提交仍需通过程序复核，JEV 方案由用户最终选择。`});
       const available=aholoReady?tools:baseTools;
       const offered=available.filter(t=>(t.function.name!=='search_places'||placeReady)&&(!miniMax||!pressure.forceSubmit||t.function.name==='submit_candidates'));
-      const { url, init } = chatRequest(env, { messages, tools:offered, tool_choice:miniMax?'auto':pressure.forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
+      const { url, init } = chatRequest(env, { messages:compactRepeatedValidationArrays(messages), tools:offered, tool_choice:miniMax?'auto':pressure.forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.
       if(new TextEncoder().encode(init.body as string).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
       const requestStarted=Date.now(),remainingMs=Math.max(0,Math.min(900000,deadline-requestStarted));

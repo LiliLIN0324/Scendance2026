@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApi } from '../supabase/functions/_shared/api.ts';
-import { agentRunRequestSchema, agentRunSchema } from '../supabase/functions/_shared/agent-contract.ts';
+import { agentRunRequestSchema } from '../supabase/functions/_shared/agent-contract.ts';
 import { database, owner, scene, session, studio } from './fixtures.ts';
 
 describe('MiniMax paid tool workflow remains closed before budget integration', () => {
@@ -22,10 +22,14 @@ describe('MiniMax paid tool workflow remains closed before budget integration', 
     const response = await api(new Request(`https://api.test/projects/${project.id}/agent-runs`, {
       method: 'POST', headers: { authorization: `Bearer ${owner}`, 'content-type': 'application/json' }, body: JSON.stringify(input),
     }));
-    expect(response.status).toBe(202);
-    const run = agentRunSchema.parse(await response.json());
-    expect(run.state).toBe('failed');
-    expect(run.errorCode).toBe('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW');
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: 'MODEL_PROVIDER_UNSUPPORTED_WORKFLOW' } });
     expect(fetcher).not.toHaveBeenCalled();
+    const runs = await fixture.db.query<{ count: number }>(
+      'select count(*)::int as count from scene_private.agent_runs where project_id=$1', [project.id],
+    );
+    expect(runs.rows[0]!.count).toBe(0);
+    const charges = await fixture.db.query<{ count: number }>('select count(*)::int as count from scene_private.text_daily_budgets');
+    expect(charges.rows[0]!.count).toBe(0);
   });
 });

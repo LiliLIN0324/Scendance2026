@@ -10,7 +10,7 @@ it('refuses a synthetic server before launching the browser or sending a model r
  server.listen(0,'127.0.0.1');await once(server,'listening');
  try{
   const address=server.address();if(!address||typeof address==='string')throw Error('missing address');
-  const child=spawn(process.execPath,[resolve('frontend/scripts/verify-live-agent-workbench.cjs'),String(address.port),'--live'],{stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,[resolve('frontend/scripts/verify-live-agent-workbench.cjs'),String(address.port),'--live','0'],{stdio:['ignore','pipe','pipe']});
   let output='';child.stdout.setEncoding('utf8').on('data',chunk=>output+=chunk);child.stderr.setEncoding('utf8').on('data',chunk=>output+=chunk);
   const [code]=await once(child,'exit');expect(code).not.toBe(0);expect(requests.length).toBeGreaterThan(0);expect(requests.every(request=>request==='GET /status')).toBe(true);expect(output).toContain('trial_not_ready');
  }finally{await new Promise<void>((resolveClose,reject)=>server.close(error=>error?reject(error):resolveClose()));}
