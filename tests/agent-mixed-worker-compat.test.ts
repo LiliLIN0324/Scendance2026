@@ -4,8 +4,7 @@ import {sceneHash} from '../supabase/functions/_shared/domain.ts';
 import {chair,database,owner,session,scene,studio} from './fixtures.ts';
 
 /**
- * Compatibility characterization, NOT a safety approval: the old dispatcher
- * remains callable by a legacy worker even after the new guard is installed.
+ * Mixed old/new compatibility after the shared scene entry is guarded.
  * No external service or user data is involved.
  */
 describe('mixed old/new agent worker compatibility',()=>{
@@ -31,38 +30,63 @@ describe('mixed old/new agent worker compatibility',()=>{
   });
   return result.rows[0]!.result;
  }
- it('demonstrates that a legacy checkpoint and finish can publish after a guarded new requirement',async()=>{
+ it('lets an unsteered legacy task checkpoint and finish normally',async()=>{
   const x=await setup(),key={projectId:x.project.id,id:x.id,claim:x.claim};
+  expect((await oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]})).state).toBe('running');
+  expect((await oldWorker('finish',key)).state).toBe('complete');
+ });
+ it('allows legacy publish before steering, then blocks both legacy scene entries after a requirement',async()=>{
+  const x=await setup(),key={projectId:x.project.id,id:x.id,claim:x.claim};
+  const previous=await oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]});
+  expect(previous.state).toBe('running');
   const accepted=await fixture.backend.agent!(owner,'note',{projectId:x.project.id,id:x.id,note:'保留原物'});
-  expect(accepted.accepted).toBe(true);
+  expect(accepted.accepted).toBe(true);expect(accepted.candidates).toEqual([]);
   await expect(fixture.backend.agent!(owner,'checkpoint',{...key,steerTotal:0,candidates:[candidate(x.base)]})).rejects.toMatchObject({code:'AGENT_STEERING_CHANGED'});
-  const oldCheckpoint=await oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]});
-  expect(oldCheckpoint.state).toBe('running');
-  const oldFinish=await oldWorker('finish',{...key});
-  expect(oldFinish.state).toBe('complete');
+  await expect(oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]})).rejects.toThrow('AGENT_STEERING_CHANGED');
+  await expect(oldWorker('finish',key)).rejects.toThrow('AGENT_STEERING_CHANGED');
+  await expect(fixture.db.transaction(async tx=>{await tx.exec('set local role service_role');return tx.query('select public.agent_rpc_before_activity_tasks($1,$2,$3::jsonb)',[owner,'finish',JSON.stringify(key)]);})).rejects.toThrow('AGENT_STEERING_CHANGED');
   const row=await fixture.db.query<{state:string;notes:number;candidates:number}>(
    "select state,jsonb_array_length(steer_notes) as notes,jsonb_array_length(candidates) as candidates from scene_private.agent_runs where id=$1",[x.id]);
-  expect(row.rows[0]).toMatchObject({state:'complete',notes:1,candidates:1});
-  const proposal=(oldCheckpoint.candidates as Array<{proposal:{id:string}}>)[0]!.proposal;
-  await fixture.rpc(owner,'proposals.apply',{projectId:x.project.id,proposalId:proposal.id,sessionId:session,
-   generation:x.input.generation,expectedRevision:x.input.expectedRevision,localRevision:0,baseHash:x.baseHash});
+  expect(row.rows[0]).toMatchObject({state:'running',notes:1,candidates:0});
+  const proposal=(previous.candidates as Array<{proposal:{id:string}}>)[0]!.proposal;
+  await expect(fixture.rpc(owner,'proposals.apply',{projectId:x.project.id,proposalId:proposal.id,sessionId:session,
+   generation:x.input.generation,expectedRevision:x.input.expectedRevision,localRevision:0,baseHash:x.baseHash})).rejects.toMatchObject({code:'STALE_PROPOSAL'});
   const readback=await fixture.rpc(owner,'projects.get',{projectId:x.project.id});
-  expect(readback.revision).toBe(1);expect(readback.scene.objects).toHaveLength(0);
+  expect(readback.revision).toBe(0);expect(readback.scene).toEqual(x.base);
+  expect(await oldWorker('take_notes',key)).toMatchObject({steerTotal:1});
+  await expect(oldWorker('finish',key)).rejects.toThrow('AGENT_STEERING_CHANGED');
+  await fixture.backend.agent!(owner,'cancel',{projectId:x.project.id,id:x.id});
  });
- it('demonstrates that simultaneous guarded note and legacy finish can both be accepted',async()=>{
+ it('serializes concurrent guarded note and legacy finish without accepting both',async()=>{
   const x=await setup(),key={projectId:x.project.id,id:x.id,claim:x.claim};
   await oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]});
   const [note,finish]=await Promise.allSettled([
    fixture.backend.agent!(owner,'note',{projectId:x.project.id,id:x.id,note:'保留原物'}),
    oldWorker('finish',{...key,candidates:[candidate(x.base)]}),
   ]);
-  // PGlite serializes this fixture's operations; this does not prove real-PG
-  // timing, and an old worker bypass remains the behavior being characterized.
   if(note.status==='fulfilled'){
-   expect(finish.status).toBe('fulfilled');
-   expect((await fixture.backend.agent!(owner,'get',{projectId:x.project.id,id:x.id})).state).toBe('complete');
+   expect(finish.status).toBe('rejected');
+   expect((await fixture.backend.agent!(owner,'get',{projectId:x.project.id,id:x.id})).candidates).toEqual([]);
+   await fixture.backend.agent!(owner,'cancel',{projectId:x.project.id,id:x.id});
   }else{
    expect(finish.status).toBe('fulfilled');
   }
+ });
+ it('rejects direct execution of the old unguarded body for service_role and wrappers for public roles',async()=>{
+  const x=await setup(),key={projectId:x.project.id,id:x.id,claim:x.claim};
+  for(const [role,fn] of [['service_role','agent_rpc_scene_unguarded_internal'],['anon','agent_rpc_before_activity_tasks'],['authenticated','agent_rpc_before_activity_tasks']] as const){
+   await expect(fixture.db.transaction(async tx=>{await tx.exec(`set local role ${role}`);return tx.query(`select public.${fn}($1,$2,$3::jsonb)`,[owner,'finish',JSON.stringify(key)]);})).rejects.toThrow(/permission denied/i);
+  }
+  await fixture.backend.agent!(owner,'cancel',{projectId:x.project.id,id:x.id});
+ });
+ it('makes a legacy note invalidate the checkpoint and leaves updated workers able to continue',async()=>{
+  const x=await setup(),key={projectId:x.project.id,id:x.id,claim:x.claim};
+  await oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]});
+  const noted=await oldWorker('note',{projectId:x.project.id,id:x.id,note:'保留原物'});
+  expect(noted.accepted).toBe(true);expect(noted.candidates).toEqual([]);expect(noted.steerTotal).toBe(1);
+  expect(await fixture.backend.agent!(owner,'take_notes',key)).toMatchObject({notes:['保留原物'],steerTotal:1});
+  await expect(oldWorker('checkpoint',{...key,candidates:[candidate(x.base)]})).rejects.toThrow('AGENT_STEERING_CHANGED');
+  const latest=await fixture.backend.agent!(owner,'checkpoint',{...key,steerTotal:1,candidates:[candidate(x.base)]});expect(latest.candidates).toHaveLength(1);
+  expect((await fixture.backend.agent!(owner,'finish',{...key,steerTotal:1})).state).toBe('complete');
  });
 });

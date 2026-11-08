@@ -952,7 +952,7 @@ beforeEach(() => {
   studioMock.exportCloudMaterialDraft.mockReset(); studioMock.exportCloudMaterialDraft.mockResolvedValue(undefined);studioMock.cloudMaterialDraftAvailable=false;
   studioMock.generate.mockReset(); studioMock.generate.mockResolvedValue(undefined);
   studioMock.cancelRun.mockClear();
-  studioMock.discardPreview.mockClear(); studioMock.setBrief.mockClear();
+  studioMock.discardPreview.mockReset(); studioMock.setBrief.mockClear();
   studioMock.applyPreview.mockReset(); studioMock.applyPreview.mockResolvedValue(undefined);
   studioMock.setCandidateInventory.mockReset();studioMock.setCandidateInventory.mockReturnValue(true);
   studioMock.brief = { event: null, guests: null, eventConfirmed: undefined, guestsConfirmed: undefined };
@@ -2451,6 +2451,34 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const preview=card.closest('#plan-proposal')!;
     expect(within(preview as HTMLElement).getByText('查看模型原文（未经核验）')).toBeTruthy();
     expect(within(preview as HTMLElement).getByText('云端加了一把椅子')).toBeTruthy();
+  });
+
+  it('does not apply a cloud preview after an unhandled layout modification',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+    studioMock.connection='项目已连接';studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
+    studioMock.discardPreview.mockImplementation(()=>{studioMock.preview=null;});
+    const onApply=vi.fn(),onMemory=vi.fn();state.layout=makeLayout({width:12,height:9});
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/><ConfirmationProbe/></LayoutAgentProvider>);
+    send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});studioMock.discardPreview.mockClear();
+    const before=structuredClone(onMemory.mock.lastCall?.[0]);
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'这个调整还需要处理。',unhandled:[{kind:'action',evidence:'请让桌椅形成半圆形'}],factEvidence:[]});
+    send('请让桌椅形成半圆形');await screen.findByText(/以下内容尚未执行或仍需核对/);
+    expect(onMemory.mock.lastCall?.[0]).toEqual(before);
+    expect(screen.getByText(/旧方案预览已收回.*重新生成/)).toBeTruthy();
+    expect(studioMock.discardPreview).toHaveBeenCalledOnce();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'模拟其他确认入口'}));expect(studioMock.applyPreview).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  it('keeps an unchanged preview when the user asks an ordinary question',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+    studioMock.connection='项目已连接';studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
+    studioMock.discardPreview.mockImplementation(()=>{studioMock.preview=null;});
+    state.layout=makeLayout({width:12,height:9});render(ui(state.layout));
+    send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});studioMock.discardPreview.mockClear();
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'活动动线是参与者经过各区域的路径。',unhandled:[{kind:'question',evidence:'什么是活动动线？'}],factEvidence:[]});
+    send('什么是活动动线？');await screen.findByText(/活动动线是参与者经过各区域的路径/);
+    expect(studioMock.discardPreview).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
   });
 
   it('shows the current zero seating result without offering a confirmation',async()=>{

@@ -4,8 +4,8 @@ import {promisify} from 'node:util';
 import {expect,it} from 'vitest';
 
 // Explicit opt-in: a fresh disposable container, existing local image, no network
-// and no host mounts. This characterizes a mixed-version risk, not a release pass.
-it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('shows that old workers bypass the guard after an accepted note in real PostgreSQL',async()=>{
+// and no host mounts. This checks the migrated guard, not a production deployment.
+it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('serializes old and new workers after steering in real PostgreSQL',async()=>{
  const run=promisify(execFile),name=`scendance-mixed-worker-${process.pid}-${Date.now()}`;
  const image='public.ecr.aws/supabase/postgres:17.11.0.002';
  const docker=(args:string[],input?:string)=>execFileSync('docker',args,{encoding:'utf8',...(input===undefined?{}:{input}),stdio:['pipe','pipe','pipe'],maxBuffer:8*1024*1024});
@@ -35,6 +35,10 @@ it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('shows that old workers
   const noteData={projectId:project,id:task,note:'保留原物'};
   const checkpointData={...data,candidates:[candidate]};
   const call=(fn:string,action:string,arg:unknown)=>`select public.${fn}('${actor}','${action}','${json(arg)}'::jsonb);`;
+  expect(psql("select has_function_privilege('service_role','public.agent_rpc_scene_unguarded_internal(uuid,text,jsonb)','EXECUTE'),has_function_privilege('anon','public.agent_rpc_before_activity_tasks(uuid,text,jsonb)','EXECUTE'),has_function_privilege('authenticated','public.agent_rpc_before_activity_tasks(uuid,text,jsonb)','EXECUTE');").trim()).toBe('f|f|f');
+  // Legacy publication remains valid before any instruction is added.
+  psql(`set role service_role; ${call('agent_rpc','checkpoint',checkpointData)}`);
+  expect(psql(`select jsonb_array_length(candidates) from scene_private.agent_runs where id='${task}';`).trim()).toBe('1');
   const slowNote=`set application_name='scendance_mixed_note'; set role service_role; begin; ${call('agent_steering_guard_rpc','note',noteData)} select pg_sleep(3); commit;`;
   const note=spawn('docker',['exec',name,'psql','-U','postgres','-d','mixedguardtest','-v','ON_ERROR_STOP=1','-qAtc',slowNote],{stdio:'ignore'});
   let waiting=false;
@@ -43,11 +47,12 @@ it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('shows that old workers
    await new Promise(resolve=>setTimeout(resolve,100));
   }
   expect(waiting).toBe(true);
-  const legacy=run('docker',['exec',name,'psql','-U','postgres','-d','mixedguardtest','-v','ON_ERROR_STOP=1','-qAtc',`set role service_role; ${call('agent_rpc','checkpoint',checkpointData)} ${call('agent_rpc','finish',data)}`]);
+  const legacy=run('docker',['exec',name,'psql','-U','postgres','-d','mixedguardtest','-v','ON_ERROR_STOP=1','-qAtc',`set role service_role; ${call('agent_rpc','checkpoint',checkpointData)} ${call('agent_rpc','finish',data)}`])
+   .then(()=>({ok:true,stderr:''}),error=>({ok:false,stderr:String(error.stderr??'')}));
   const noteExit=await new Promise<number|null>(resolve=>{if(note.exitCode!==null)resolve(note.exitCode);else note.once('exit',resolve);});
   expect(noteExit).toBe(0);
-  await legacy;
-  expect(psql(`select state||':'||jsonb_array_length(steer_notes)||':'||jsonb_array_length(candidates) from scene_private.agent_runs where id='${task}';`).trim()).toBe('complete:1:1');
+  expect(await legacy).toEqual({ok:false,stderr:expect.stringContaining('AGENT_STEERING_CHANGED')});
+  expect(psql(`select state||':'||jsonb_array_length(steer_notes)||':'||jsonb_array_length(candidates) from scene_private.agent_runs where id='${task}';`).trim()).toBe('running:1:0');
   // A clean second race tests the new worker path: once the note has acquired
   // the same row lock first, a stale guarded checkpoint must be rejected.
   psql(`update scene_private.agent_runs set state='running',steer_notes='[]'::jsonb,steer_total=0,candidates='[]'::jsonb where id='${task}';`);
@@ -80,5 +85,25 @@ it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('shows that old workers
   expect(noteExit3).toBe(0);
   expect(await guardedFinish).toEqual({ok:false,stderr:expect.stringContaining('AGENT_STEERING_CHANGED')});
   expect(psql(`select state||':'||jsonb_array_length(steer_notes)||':'||jsonb_array_length(candidates) from scene_private.agent_runs where id='${task}';`).trim()).toBe('running:1:0');
+  // The legacy note path must have the same atomic behavior and perform one
+  // row update, even when a new worker is attempting publication concurrently.
+  psql(`update scene_private.agent_runs set state='running',steer_notes='[]'::jsonb,steer_total=0,candidates='[]'::jsonb where id='${task}';
+    create table public.fixture_agent_updates(n integer not null);
+    create function public.fixture_count_agent_update() returns trigger language plpgsql as $$ begin insert into public.fixture_agent_updates values (1); return new; end $$;
+    create trigger fixture_count_agent_update after update on scene_private.agent_runs for each row execute function public.fixture_count_agent_update();`);
+  const legacyNote=`set application_name='scendance_legacy_note'; set role service_role; begin; ${call('agent_rpc','note',noteData)} select pg_sleep(3); commit;`;
+  const note4=spawn('docker',['exec',name,'psql','-U','postgres','-d','mixedguardtest','-v','ON_ERROR_STOP=1','-qAtc',legacyNote],{stdio:'ignore'});
+  let waiting4=false;
+  for(let i=0;i<80;i++){
+   if(psql("select count(*) from pg_stat_activity where application_name='scendance_legacy_note' and wait_event='PgSleep';").trim()==='1'){waiting4=true;break;}
+   await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  expect(waiting4).toBe(true);
+  const newWorker=run('docker',['exec',name,'psql','-U','postgres','-d','mixedguardtest','-v','ON_ERROR_STOP=1','-qAtc',`set role service_role; ${call('agent_steering_guard_rpc','checkpoint',{...checkpointData,steerTotal:0})}`])
+   .then(()=>({ok:true,stderr:''}),error=>({ok:false,stderr:String(error.stderr??'')}));
+  const noteExit4=await new Promise<number|null>(resolve=>{if(note4.exitCode!==null)resolve(note4.exitCode);else note4.once('exit',resolve);});
+  expect(noteExit4).toBe(0);expect(await newWorker).toEqual({ok:false,stderr:expect.stringContaining('AGENT_STEERING_CHANGED')});
+  expect(psql('select count(*) from public.fixture_agent_updates;').trim()).toBe('1');
+  expect(psql(`select state||':'||steer_total||':'||jsonb_array_length(steer_notes)||':'||jsonb_array_length(candidates) from scene_private.agent_runs where id='${task}';`).trim()).toBe('running:1:1:0');
  }finally{if(started)try{docker(['stop',name]);}catch{/* only this test's disposable container */}}
 },120000);
