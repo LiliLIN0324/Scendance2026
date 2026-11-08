@@ -535,6 +535,130 @@ describe('dialogue export in-flight fence',()=>{
   const fence=tracker(),incomplete=vi.fn();state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueTurnStart={fence.start} onDialogueIncompleteChange={incomplete}><AgentPanel/></LayoutAgentProvider>);
   send('30人，需要签到，给我物料清单');expect(incomplete).toHaveBeenCalledWith(expect.any(String),true);await waitFor(()=>expect(fence.active.size).toBe(0));expect(incomplete).not.toHaveBeenCalledWith(expect.any(String),false);
  });
+ it('keeps an explicitly unhandled requirement even when the same input asks a general question',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  const input='活动签到怎么安排，门必须保持打开';
+  studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'可以按人数安排签到。',unhandled:[{kind:'other',evidence:'门必须保持打开'}],factEvidence:[]});
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send(input);expect(await screen.findByText(/可以按人数安排签到/)).toBeTruthy();
+  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(input)).toBeTruthy();
+ });
+ // Known gap: the model contract cannot prove complete coverage of a first compound request.
+ it.skip('marks an initial compound request as unverified when the model only extracts one fact',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  const input='30人，灯光必须保持暖白';
+  studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send(input);expect(await screen.findByText(/已记录人数/)).toBeTruthy();
+  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(input)).toBeTruthy();
+ });
+ it('does not clear an unresolved request when a later model interpretation still needs confirmation',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  const text='为30人办室内讲座';
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:text}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{headcount:31},reply:'请核对人数。',unhandled:[],factEvidence:[]});
+  const incomplete=vi.fn();state.layout=makeLayout();
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueIncompleteChange={incomplete}><AgentPanel/></LayoutAgentProvider>);
+  send(text);
+  await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(text)).toBeTruthy());
+  send(text);
+  await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledTimes(2));
+  expect(await screen.findByText(/刚才的本场人数无法确定/)).toBeTruthy();
+  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(text)).toBeTruthy();
+  expect(incomplete).not.toHaveBeenCalledWith(expect.any(String),false);
+ });
+ it('does not treat one extracted fact as proof that a compound request was fully understood',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  const text='30人，灯光必须保持暖白';
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:text}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});
+  state.layout=makeLayout();
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send(text);
+  await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(text)).toBeTruthy());
+  send(text);
+  await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledTimes(2));
+  await screen.findByText(/已记录人数/);
+  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(text)).toBeTruthy();
+ });
+ it('keeps an unresolved fact when the venue changes before the delayed model result is accepted',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  let finish!:(value:unknown)=>void;
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:'30人'}],factEvidence:[]})
+    .mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  state.layout=makeLayout({id:'A',width:12,height:9,venueScan:{assetId:'old',name:'旧场'}});
+  render(<LayoutAgentProvider sessionScope="activity:A" callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('30人');await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy());
+  send('30人');await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledTimes(2));
+  state.layout={...state.layout,width:20,height:15,venueScan:{assetId:'new',name:'新场'}};
+  await act(async()=>{finish({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});await Promise.resolve();});
+  expect(await screen.findByText(/场地在理解需求期间发生变化/)).toBeTruthy();
+  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();
+ });
+ it('clears only the same request when the model really understands it',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  const first='30人',second='花材放在舞台后侧';
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:first}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:second}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});
+  state.layout=makeLayout();
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send(first);await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(first)).toBeTruthy());
+  send(second);await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(second)).toBeTruthy());
+  send(first);await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledTimes(3));
+  await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).queryByText(first)).toBeNull());
+  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(second)).toBeTruthy();
+ });
+ it('keeps an unresolved fact when saving its understood value fails',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:'30人'}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('30人');await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy());
+  const original=Storage.prototype.setItem;
+  const spy=vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){if(key==='scendance.assistant-brief-memory.v1')throw new Error('storage unavailable');return original.call(this,key,value);});
+  try {
+    send('30人');expect(await screen.findByText(/暂时无法保存在本机/)).toBeTruthy();
+    expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();
+  } finally {spy.mockRestore();}
+ });
+ it('keeps an unresolved fact when the saved value cannot be read back',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:'30人'}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('30人');await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy());
+  let written=false;const get=Storage.prototype.getItem,set=Storage.prototype.setItem;
+  const writes=vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){set.call(this,key,value);if(key==='scendance.assistant-brief-memory.v1')written=true;});
+  const reads=vi.spyOn(Storage.prototype,'getItem').mockImplementation(function(this:Storage,key){return written&&key==='scendance.assistant-brief-memory.v1' ? null : get.call(this,key);});
+  try {
+    send('30人');expect(await screen.findByText(/已记录人数/)).toBeTruthy();
+    expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();
+  } finally {writes.mockRestore();reads.mockRestore();}
+ });
+ it('does not clear a fact when storage silently retains the same count with a different mode',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  studioMock.controller.briefConversation
+    .mockResolvedValueOnce({enabled:true,extraction:{},reply:'这项还需核对。',unhandled:[{kind:'other',evidence:'30人'}],factEvidence:[]})
+    .mockResolvedValueOnce({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('30人');await waitFor(()=>expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy());
+  const key='scendance.assistant-brief-memory.v1',store=JSON.parse(localStorage.getItem(key)!);
+  for(const memory of Object.values(store.byId) as Array<{headcount:number;headcountMode:string}>) {memory.headcount=30;memory.headcountMode='must';}
+  localStorage.setItem(key,JSON.stringify(store));
+  const original=Storage.prototype.setItem;
+  const writes=vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,name,value){if(name!==key)original.call(this,name,value);});
+  try {
+    send('30人');expect(await screen.findByText(/已记录人数/)).toBeTruthy();
+    expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();
+  } finally {writes.mockRestore();}
+ });
  it('does not mark a cancelled purely general question as a failed event requirement',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');studioMock.controller.briefConversation.mockImplementationOnce(()=>new Promise(()=>{}));
   const fence=tracker(),incomplete=vi.fn();state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueTurnStart={fence.start} onDialogueIncompleteChange={incomplete}><AgentPanel/></LayoutAgentProvider>);
