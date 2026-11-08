@@ -3,6 +3,7 @@ import { sceneSchema, sceneWarnings, type Scene } from '../supabase/functions/_s
 import { structuralViolations } from '../supabase/functions/_shared/structural-geometry.ts';
 import { findFreeAreas, footprintsIntersect } from '../supabase/functions/_shared/placement-search.ts';
 import { footprint } from '../supabase/functions/_shared/structural-geometry.ts';
+import { reviewAgentCandidate } from '../supabase/functions/_shared/agent-candidate-review.ts';
 
 const id = (n: number) => `90000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
@@ -44,6 +45,35 @@ function withProbe(scene: Scene, x: number, z: number, width: number, depth: num
 }
 
 describe('find_free_areas answers with anchors the editor itself accepts', () => {
+  it('does not return new obstructions in a confirmed door opening', () => {
+    const scene=room();
+    const result=findFreeAreas(scene,{width:1.2,depth:0.6,height:0.75,clearance:0,near:{x:0,z:6},limit:24,step:0.25});
+    expect(result.sites.length).toBeGreaterThan(0);
+    for(const site of result.sites){
+      const candidate=withProbe(scene,site.x,site.z,1.2,0.6);
+      expect(reviewAgentCandidate(scene,candidate,[],true).violations).not.toEqual(expect.arrayContaining([expect.objectContaining({code:'NEW_OR_WORSENED_DOORWAY_OBSTRUCTION'})]));
+    }
+    expect(result.rejected.structure).toBeGreaterThan(0);
+  });
+
+  it('does not claim door or egress verification for an inferred opening', () => {
+    const scene=room();if(scene.schemaVersion!==2)throw new Error('expected structured scene');
+    scene.structure.openings[0]!.status='inferred';
+    const result=findFreeAreas(scene,{width:1.2,depth:0.6,clearance:0,near:{x:0,z:6},limit:4,step:0.25});
+    expect(result.sites.length).toBeGreaterThan(0);
+    expect(result.note).toMatch(/门.*核验/);
+    expect(reviewAgentCandidate(scene,withProbe(scene,result.sites[0]!.x,result.sites[0]!.z,1.2,0.6),[],true).unknown).toEqual(expect.arrayContaining([expect.objectContaining({code:'DOOR_SWING_UNKNOWN'}),expect.objectContaining({code:'EGRESS_UNKNOWN'})]));
+  });
+
+  it('keeps a pre-existing doorway obstruction as unknown rather than banning unrelated new placements', () => {
+    const scene=room();
+    scene.objects.push({id:id(98),materialId:'chair',position:{x:0.25,z:6},rotation:0,size:{width:0.5,depth:0.5,height:0.85},color:'#ffffff',locked:false,notes:''});
+    const result=findFreeAreas(scene,{width:1.2,depth:0.6,height:0.75,clearance:0,near:{x:5,z:7},limit:4});
+    expect(result.sites.length).toBeGreaterThan(0);
+    const review=reviewAgentCandidate(scene,withProbe(scene,result.sites[0]!.x,result.sites[0]!.z,1.2,0.6),[],true);
+    expect(review.violations).not.toEqual(expect.arrayContaining([expect.objectContaining({code:'NEW_OR_WORSENED_DOORWAY_OBSTRUCTION'})]));
+    expect(review.unknown).toEqual(expect.arrayContaining([expect.objectContaining({code:'EXISTING_DOORWAY_OBSTRUCTION'})]));
+  });
   it('returns anchors that pass the same checks a hand-placed object must pass', () => {
     const scene = room();
     const result = findFreeAreas(scene, { width: 1.2, depth: 0.6, clearance: 0.5 });

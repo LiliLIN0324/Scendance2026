@@ -1,5 +1,5 @@
 /// <reference path="../../supabase/functions/_shared/vendor.d.ts" />
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createSceneClient } from '../../client/scene-client';
 import { assetRecord } from '../../supabase/functions/_shared/assets';
 import { packGltf } from '../../supabase/functions/_shared/models';
@@ -16,7 +16,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   let server: Awaited<ReturnType<typeof startLocalServer>>;
   const controllers: BackendSession[] = [];
   beforeAll(async () => { server = await startLocalServer(); }, 30_000);
-  afterEach(() => { for (const c of controllers.splice(0)) c.dispose(); clearGlbAssetCache(); });
+  afterEach(() => { for (const c of controllers.splice(0)) c.dispose(); clearGlbAssetCache(); vi.restoreAllMocks(); });
   afterAll(async () => { await server?.close(); });
   function controller() {
     const c = new BackendSession(getBackendConfig({ url: server.url, anonKey: testPublicKey }));
@@ -26,6 +26,16 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   async function login(index = 0) {
     const c = controller(), account = testAccounts[index]!;
     await c.signIn(account.email, account.password);
+    return c;
+  }
+  // The node test adapter uses one in-memory cookie jar for the whole process.
+  // Pin the session to simulate separate browsers while still using real HTTP,
+  // real login and real migrated PostgreSQL for all subsequent operations.
+  async function isolatedLogin(index = 0) {
+    const c = await login(index);
+    const auth = (c as unknown as { supabase: { auth: { getSession: () => Promise<unknown> } } }).supabase.auth;
+    const session = await auth.getSession();
+    vi.spyOn(auth, 'getSession').mockResolvedValue(session);
     return c;
   }
   async function rawClient(index = 0) {
@@ -71,7 +81,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   });
 
   it('enforces two-account and duplicate-tab leases, then hands off the saved scene', async () => {
-    const a = await login(), b = await login(1), duplicate = await login();
+    const a = await isolatedLogin(), b = await isolatedLogin(1), duplicate = await isolatedLogin();
     const p = await a.createProject(studio, '交接验证', scene());
     await a.acquireLease(p.id);
     await b.getProject(p.id);
@@ -100,7 +110,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   });
 
   it('fences an expired editor after a second account takes over', async () => {
-    const a = await login(), b = await login(1), p = await a.createProject(studio, '过期交接', scene());
+    const a = await isolatedLogin(), b = await isolatedLogin(1), p = await a.createProject(studio, '过期交接', scene());
     const first = await a.acquireLease(p.id);
     await server.db.query("update scene_private.projects set lease_expires=now()-interval '1 second' where id=$1", [p.id]);
     const second = await b.acquireLease(p.id);
@@ -109,6 +119,14 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     await expect(a.saveScene(draft)).rejects.toMatchObject({ code: 'LEASE_LOST' });
     expect(a.getSnapshot()).toMatchObject({ draft, dirty: true, writeBlocked: true });
     await b.releaseLease();
+  });
+
+  it('rejects a stale account snapshot after another login replaces the shared cookie', async () => {
+    const a = await login();
+    const b = await login(1);
+    await expect(a.listStudios()).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(a.getSnapshot().user?.id).toBe(owner);
+    expect((await b.listStudios()).some(item => item.id === studio)).toBe(true);
   });
 
   it('authorizes a referenced GLB for a teammate and keeps loading URLs out of persisted scenes', async () => {

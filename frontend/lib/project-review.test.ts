@@ -504,7 +504,9 @@ describe('30-person rehearsal review example', () => {
     const examplePath = resolve(process.cwd(), '../docs/examples/community-open-day-review.html');
     // Opt-in reproduction only; ordinary tests never update the checked-in example.
     if (process.env.SCENDANCE_WRITE_REVIEW_EXAMPLE === '1') writeFileSync(examplePath, html, 'utf8');
-    expect(readFileSync(examplePath, 'utf8')).toBe(html);
+    // Git may check out the same text with CRLF on Windows; compare all content
+    // after normalizing only line endings, rather than rewriting the example.
+    expect(readFileSync(examplePath, 'utf8').replace(/\r\n/g, '\n')).toBe(html.replace(/\r\n/g, '\n'));
     const document = new DOMParser().parseFromString(html, 'text/html');
     expect(document.body.textContent).toContain('活动类型待确认 / 人数待确认');
     expect(document.querySelectorAll('rect.furniture')).toHaveLength(39);

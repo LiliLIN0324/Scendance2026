@@ -5,6 +5,7 @@ import { convertPreset } from '../../../../scripts/package-scene-presets.mjs';
 import { agentRunRequestSchema } from '../../../../supabase/functions/_shared/agent-contract';
 import { executeAgentRun } from '../../../../supabase/functions/_shared/agent-runner';
 import { buildProposal } from '../../../../supabase/functions/_shared/ai';
+import { reviewAgentCandidate } from '../../../../supabase/functions/_shared/agent-candidate-review';
 import { layoutToBackendScene } from '../lib/backend-adapter';
 import { layoutFromPreset } from './scene-presets';
 import type { Backend } from '../../../../supabase/functions/_shared/backend';
@@ -28,6 +29,7 @@ it.each([3, 6])('keeps the real gym read, BOM, three validations and JEV workflo
     user: async () => 'actor', scene: async () => [], jobs: async () => ({}), reconstruction: async () => ({}), upload: async () => {}, sign: async () => '',
     agent: async (_actor, action, data = {}) => {
       actions.push({ action, data });
+      if (action === 'take_notes') return { notes: [], steerTotal: 0 };
       return action === 'start' ? { claimed: true, claim: 'claim', input, studioId: crypto.randomUUID(), deadline: new Date(Date.now() + 90000).toISOString() } : {};
     },
   };
@@ -67,16 +69,38 @@ it.each([3, 6])('keeps the real gym read, BOM, three validations and JEV workflo
   });
   expect({ ...first.scene, objects: restored }).toEqual(JSON.parse(JSON.stringify(scene)));
   expect(Object.keys(first.presetObjectLabels)).toHaveLength(307);
-  const results = JSON.parse(providerBodies[turns - 1]).messages.filter((message: { role: string }) => message.role === 'tool')
-    .map((message: { content: string }) => JSON.parse(message.content));
+  const receipts = JSON.parse(providerBodies[turns - 1]).messages.filter((message: { role: string }) => message.role === 'tool');
+  const originals = new Map<string, Record<string, unknown>>();
+  let references = 0;
+  const results = receipts.map((message: { tool_call_id: string; content: string }) => {
+    const value = JSON.parse(message.content) as Record<string, unknown>;
+    const review = value.independentReview as Record<string, unknown> | undefined;
+    const restore = (owner: Record<string, unknown>, key: string) => {
+      const reference = owner[key] as { sameAsToolCallId?: string; path?: string; itemCount?: number } | undefined;
+      if (!reference || Array.isArray(reference) || !reference.sameAsToolCallId) return;
+      const previous = originals.get(reference.sameAsToolCallId);
+      expect(previous).toBeDefined(); // References must point backwards, never to a missing or future receipt.
+      const array = reference.path === 'warnings' ? previous?.warnings
+        : reference.path === 'independentReview.unknown' ? (previous?.independentReview as Record<string, unknown> | undefined)?.unknown : undefined;
+      expect(Array.isArray(array)).toBe(true);
+      expect((array as unknown[]).length).toBe(reference.itemCount);
+      owner[key] = array; references++;
+    };
+    restore(value, 'warnings');
+    if (review) restore(review, 'unknown');
+    originals.set(message.tool_call_id, value);
+    return value as any;
+  });
+  expect(references).toBeGreaterThan(0);
   expect(results[0]).toMatchObject({ sameAsInitialScene: true, objectCount: 307 });
   expect(results[0].presetObjectLabels).toBeUndefined();
   expect(results[1].items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0)).toBe(307);
   candidates.forEach((candidate, index) => {
     // 用局部匹配而不是整对象相等：校验回执后来又带上了 clearances（实测净距），
     // 那是回执该有的新字段，不该让这条断言整条挂掉。这里只钉住它该保证的三件事。
+    const built = buildProposal(scene, 'modify', { explanation: candidate.explanation, commands: candidate.commands });
     expect(results[results.length - 3 + index]).toMatchObject({ valid: true, objectCount: 308,
-      warnings: buildProposal(scene, 'modify', { explanation: candidate.explanation, commands: candidate.commands }).warnings });
+      warnings: built.warnings, independentReview: { status: 'unknown', unknown: reviewAgentCandidate(scene, built.scene, [], true).unknown } });
   });
   expect(jevBodies).toHaveLength(1);
   expect(new TextEncoder().encode(jevBodies[0]).length).toBeLessThan(12000);

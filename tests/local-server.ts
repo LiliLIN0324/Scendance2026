@@ -1,6 +1,6 @@
 /** Explicit loopback-only test fixture, never a production authentication fallback. */
 import { createServer } from 'node:http';
-import { once } from 'node:events';
+import { listenLocalFetchSafe } from './local-loopback.ts';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -203,11 +203,9 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
       res.writeHead(500, Object.fromEntries(headers)).end('{"error":"test_fixture_failed"}');
     }
   });
-  server.listen(port, '127.0.0.1');
-  try { await once(server, 'listening'); }
+  let address: Awaited<ReturnType<typeof listenLocalFetchSafe>>;
+  try { address=await listenLocalFetchSafe(server,port); }
   catch (error) { await fixture.db.close(); throw error; }
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Missing loopback address');
   url = `http://127.0.0.1:${address.port}`;
   return {
     ...fixture, backend, url, links, env,
