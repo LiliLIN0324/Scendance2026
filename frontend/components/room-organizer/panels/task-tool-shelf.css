@@ -1,0 +1,169 @@
+/* 助手下方的工具区。冷石灰白纸，绿只标当前这一步。 */
+.sc-task-tools {
+  flex: 1 1 46%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  padding: 10px 12px 12px;
+  overflow: auto;
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+  border-top: 1px solid var(--wk-hair, #e4e4e7);
+  font-size: 14px;
+  line-height: 22px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column:has(> .sc-task-tools) > .sc-agent-panel {
+  flex: 1 1 50% !important;
+  max-height: 54%;
+  overflow: auto;
+}
+.sc-task-next {
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 22px;
+}
+.sc-task-people {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 8px;
+  background: #fff;
+}
+.sc-task-people.is-next {
+  border-color: #4A7C59;
+  box-shadow: inset 0 0 0 1px #4A7C59;
+}
+.sc-task-people span { color: #141416; font-weight: 500; }
+.sc-task-people input {
+  width: 96px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 6px;
+  background: #fff;
+  color: #141416;
+  font: inherit;
+}
+.sc-task-people.is-next input { border-color: #4A7C59; }
+.sc-task-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--wk-hair, #e4e4e7);
+}
+.sc-task-tabs button {
+  flex: 1;
+  min-height: 36px;
+  padding: 6px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #55585f;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.sc-task-tabs button.is-selected {
+  color: #141416;
+  border-bottom-color: #4A7C59;
+}
+.sc-task-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.sc-task-primary,
+.sc-task-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sc-task-primary {
+  border: 0;
+  background: #4A7C59;
+  color: #fff;
+}
+.sc-task-primary:disabled {
+  background: #f4f5f7;
+  color: #71767e;
+  cursor: not-allowed;
+}
+.sc-task-secondary {
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  background: #fff;
+  color: #141416;
+}
+.sc-task-secondary:disabled {
+  color: #71767e;
+  background: #f4f5f7;
+  cursor: not-allowed;
+}
+.sc-task-hint,
+.sc-task-reason {
+  margin: 0;
+  color: #55585f;
+  font-size: 12px;
+  line-height: 20px;
+}
+.sc-task-more { border-top: 1px solid var(--wk-hair, #e4e4e7); padding-top: 8px; }
+.sc-task-more summary { cursor: pointer; color: #55585f; font-size: 12px; line-height: 20px; }
+.sc-task-more[open] { display: flex; flex-direction: column; gap: 8px; }
+.sc-task-slot { min-width: 0; }
+.sc-task-tools .sc-library.is-card,
+.sc-task-tools .sc-space-panel.is-card {
+  display: block;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+.sc-task-tools .sc-library.is-card .sc-library-body,
+.sc-task-tools .sc-library.is-card .sc-library-content,
+.sc-task-tools .sc-library.is-card .sc-library-materials,
+.sc-task-tools .sc-space-panel.is-card .sc-space-body {
+  display: block;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+}
+.sc-task-tools .sc-library.is-card .sc-material-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  height: auto;
+  overflow: visible;
+}
+.sc-task-tools .sc-space-panel.is-card .sc-space-card.is-aholo {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+@media (max-width: 1080px) {
+  .sc-task-tools { flex-basis: auto; max-height: none; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column:has(> .sc-task-tools) > .sc-agent-panel {
+    max-height: 46%;
+  }
+}

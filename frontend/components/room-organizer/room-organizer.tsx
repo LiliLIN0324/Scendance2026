@@ -86,7 +86,7 @@ import { noteVenueThreeIntent } from './lib/venue-library';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
-import { snapshotBeforeReplace } from './lib/restore-point';
+import { isUntouched, snapshotBeforeReplace } from './lib/restore-point';
 import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
 import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
@@ -119,10 +119,9 @@ import { createResearchArea, RESEARCH_SATELLITE_STYLE } from './lib/research-are
 import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
 import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
-import { BingoRailButton } from './panels/bingo-rail-button';
-import { RailLaneDot } from './panels/rail-lane-dot';
-import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
+import { TaskToolShelf, type TaskToolGroupRequest } from './panels/task-tool-shelf';
+import type { TaskToolGroup } from './panels/task-tool-next';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -336,6 +335,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [lux3dOpenKind, setLux3dOpenKind] = useState<{ kind: 'world' | 'recon'; nonce: number; prompt?: string } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [toolGroupRequest, setToolGroupRequest] = useState<TaskToolGroupRequest | null>(null);
+  const toolGroupNonce = useRef(0);
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   // T3 封堵：制作侧画布钉（reviewPins/pinFilter/pinDraft/reviewCleared）整簇删除——门已封死，评审只走分享链接。
@@ -423,7 +424,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     } else setLeftMode(mode => (mode === 'business' ? 'brief' : mode));
   }, []);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
-  /** 左轨四格共用一个面板：切到哪一格，整栏就变成那个 agent 的卡。 */
+  /** 左栏上方的助手保持不动。下面三组工具只打开对应面板，不换一场对话。 */
+  const openToolGroup = useCallback((group: TaskToolGroup) => {
+    setChatPeerId(null);
+    setActiveAgent('door');
+    setAgentClosing(false);
+    setAgentCollapsed(false);
+    setSidePanel(null);
+    setSidebarCollapsed(true);
+    setBusinessOpen(false);
+    toolGroupNonce.current += 1;
+    setToolGroupRequest({ group, nonce: toolGroupNonce.current });
+  }, []);
   const showAgent = useCallback((id: AgentId) => {
     if (id === 'material') setWorkbenchMode('layout');
     // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
@@ -441,9 +453,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, []);
   const openTemplates = useCallback(() => {
     if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
-    showAgent('space');
-    requestAnimationFrame(() => document.querySelector<HTMLElement>('#agent-panel section[aria-label="场景模板"] button')?.focus());
-  }, [showAgent]);
+    openToolGroup('space');
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('#task-tool-shelf section[aria-label="场景模板"] button')?.focus());
+  }, [openToolGroup]);
   const closeLeftPanel = useCallback(() => {
     setBusinessOpen(false);
     setSidebarCollapsed(true);
@@ -1781,14 +1793,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   /** D0：地图立壳后自动挂历史 World .spz（只读 shipped，不扣额度）。 */
   const hangDemoEnvironment = useCallback(() => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    showAgent('space');
+    openToolGroup('space');
     try {
       const source = storedAholoSceneSource(DEMO_WORLD_SCENE_ID);
       selectEnvironment(DEMO_WORLD_SCENE_ID, source.name);
     } catch (failure) {
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
-  }, [selectEnvironment, setView, showAgent]);
+  }, [selectEnvironment, setView, openToolGroup]);
   // 撤销/重做恢复场地：只换场地，物料已经在布局快照里一起退回去了，不再二次覆盖。
   restoreVenueFromHistoryRef.current = (scan) => {
     try {
@@ -2672,9 +2684,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   /** 场景生成/真重建「取回并预览」：先落盘再切到 3D；真成功挂本场 .spz 时同步打开环境预览抽屉，替换当前观感层。 */
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    showAgent('space');
+    openToolGroup('space');
     await startSplat(await loadAholoSceneSource(source));
-  }, [setView, startSplat, showAgent]);
+  }, [setView, startSplat, openToolGroup]);
   // 高斯优先（用户裁决）：室内预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）。
   // 地图户外（盐官一类）和过不了几何闸的壳不改尺寸——以前直接 throw，整页工作台会塌。
   const [splatShellKeptFor, setSplatShellKeptFor] = useState('');
@@ -2920,7 +2932,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         return rects.map(r => r.label).join('、');
       }} callbacks={{
         workbenchMode,
-        onOpenMaterials: () => { setWorkbenchMode('layout'); showAgent('material'); },
+        onOpenMaterials: () => { setWorkbenchMode('layout'); openToolGroup('material'); },
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
@@ -2957,51 +2969,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
             <div className="sc-rail-head">
               <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
-              <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、空间、物料">
-                <BingoRailButton open={isLaneOpen('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
-                <button
-                  type="button"
-                  ref={spaceEntryRef}
-                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('space') ? ' is-active' : ''}`}
-                  aria-pressed={isLaneOpen('space')}
-                  aria-expanded={isLaneOpen('space')}
-                  aria-controls="agent-panel"
-                  aria-label="空间"
-                  data-tip="空间"
-                  onClick={() => toggleAgent('space')}
-                >
-                  <RailAvatar form="cube" size={28} />
-                  <RailLaneDot lane="space" open={isLaneOpen('space')}/>
-                  <span className="sc-rail-label" aria-hidden="true">空间</span>
-                </button>
-                <button
-                  type="button"
-                  ref={toolsEntryRef}
-                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('material') ? ' is-active' : ''}`}
-                  aria-pressed={isLaneOpen('material')}
-                  aria-expanded={isLaneOpen('material')}
-                  aria-controls="agent-panel"
-                  aria-label="物料"
-                  data-tip="物料"
-                  onClick={() => toggleAgent('material')}
-                >
-                  <RailAvatar form="pyramid" size={28} />
-                  <RailLaneDot lane="material" open={isLaneOpen('material')}/>
-                  <span className="sc-rail-label" aria-hidden="true">物料</span>
-                </button>
-                <a
-                  href="/guide/capture"
-                  className="sc-rail-tool sc-rail-disc sc-rail-capture"
-                  aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"
-                  data-tip="拍摄场地 · 出 3D"
-                >
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
-                    <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
-                  </svg>
-                  <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
-                </a>
-              </nav>
+              <nav className="sc-mode-rail-primary" aria-label="工具在左侧栏下方" />
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
@@ -3035,7 +3003,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button
             type="button"
             className="sc-mobile-agent-entry"
-            aria-label="Agent 菜单"
+            aria-label="打开侧栏"
             aria-expanded={mobileRailOpen}
             aria-controls="sc-agent-rail"
             onClick={() => setMobileRailOpen(value => !value)}
@@ -3064,7 +3032,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent="door" chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+          {!personChat && agentPanelVisible && <TaskToolShelf venueReady={!isUntouched(layout) || environment !== null} itemCount={materialCount(activeFloor.items)} groupRequest={toolGroupRequest} onOpenChecklist={() => setChecklistOpen(true)} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} />}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>

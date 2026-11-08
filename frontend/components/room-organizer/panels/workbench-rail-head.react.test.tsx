@@ -7,43 +7,34 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-describe('左轨四形与共用 Agent 面板', () => {
-  it('keeps 门厅 / Bingo / 空间 / 物料 as four rail controls over one agent panel', () => {
+describe('左栏助手与下方工具', () => {
+  it('keeps the assistant toggle and puts space, materials, and handoff under it', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     const brand = source.indexOf('<WorkbenchBrandToggle');
     const primaryStart = source.indexOf('sc-mode-rail-primary');
     const primaryEnd = source.indexOf('sc-mode-rail-foot');
     const primary = source.slice(primaryStart, primaryEnd);
-    const bingo = source.indexOf('<BingoRailButton', primaryStart);
-    const space = source.indexOf('aria-label="空间"', primaryStart);
-    const material = source.indexOf('aria-label="物料"', primaryStart);
     expect(brand).toBeGreaterThan(-1);
     expect(primaryStart).toBeGreaterThan(brand);
-    expect(bingo).toBeGreaterThan(primaryStart);
-    expect(bingo).toBeLessThan(space);
-    expect(space).toBeGreaterThan(-1);
-    expect(material).toBeGreaterThan(space);
-    expect(primary).not.toContain('aria-label="空间与物料"');
-    const spaceBlock = source.slice(space, material);
-    const materialBlock = source.slice(material, primaryEnd);
-    expect(spaceBlock).toContain('<RailAvatar form="cube"');
-    expect(materialBlock).toContain('<RailAvatar form="pyramid"');
+    expect(primary).not.toContain('<BingoRailButton');
+    expect(primary).not.toContain('aria-label="空间"');
+    expect(primary).not.toContain('aria-label="物料"');
+    expect(primary).not.toContain('sc-rail-disc');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 3 个 disc：空间 / 物料，外加 f74a0a9 搬进左轨的「拍摄场地」锚点（<a> 也要保持圆钮形）。
-    expect(primary.match(/sc-rail-disc/g)).toHaveLength(3);
-    expect(primary).toContain('href="/guide/capture"');
-    expect(primary).toContain('data-tip="空间"');
-    expect(primary).toContain('data-tip="物料"');
     expect(primary).not.toContain('sc-space-chevron');
     expect(primary).not.toContain('sc-rail-word');
-    expect(primary).toContain('sc-rail-label');
     expect(primary).not.toContain('title="空间"');
     expect(primary).not.toContain('title="物料"');
+    expect(source).toContain('<TaskToolShelf');
+    expect(source).toContain('activeAgent="door"');
+    expect(source).toContain("openToolGroup('space')");
+    expect(source).toContain("openToolGroup('material')");
+    expect(source).not.toContain("showAgent('space')");
+    expect(source).not.toContain("showAgent('material')");
     expect(source).not.toContain('id="workbench-library-shelf"');
     expect(source).not.toContain('id="workbench-space-shelf"');
     expect(source).not.toContain('id="workbench-material-shelf"');
-    // 旧「场地」轨钮已删；「拍摄场地」（拍摄引导锚点）允许含「场地」二字，故只封具体名称。
     expect(primary).not.toContain('<VenueRailButton');
     expect(primary).not.toContain('Store');
     expect(source).not.toContain('<VenueRailButton');
@@ -53,8 +44,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(source).not.toContain('QingguangAvatarFlight');
     expect(source).not.toContain("sidePanel === 'bingo'");
     expect(source).toContain('const toggleAgent = useCallback');
-    expect(source).toContain("onOpen={() => toggleAgent('bingo')}");
-    expect(source).toContain('activeAgent={activeAgent}');
+    expect(source).not.toContain("onOpen={() => toggleAgent('bingo')}");
     const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
     const bingoSource = readFileSync(join(here, 'bingo-rail-button.tsx'), 'utf8');
     const brandSource = readFileSync(join(here, 'workbench-brand-toggle.tsx'), 'utf8');

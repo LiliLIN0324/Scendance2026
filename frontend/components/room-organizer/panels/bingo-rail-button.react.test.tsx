@@ -48,9 +48,10 @@ describe('Bingo 左轨入口', () => {
   it('does not mount the three mode icons on the workbench rail', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).toContain('<WorkbenchBrandToggle');
-    expect(source).toContain('<BingoRailButton');
-    expect(source).toContain('aria-label="空间"');
-    expect(source).toContain('aria-label="物料"');
+    expect(source).not.toContain('<BingoRailButton');
+    expect(source).toContain('<TaskToolShelf');
+    expect(source).not.toContain('aria-label="空间"');
+    expect(source).not.toContain('aria-label="物料"');
     expect(source).not.toContain('<VenueRailButton');
     expect(source).not.toContain('aria-label="场地"');
     expect(source).not.toContain('AgentReopenCard');
