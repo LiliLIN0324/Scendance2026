@@ -29,7 +29,7 @@ const EPS = 1e-9;
 
 /** 编辑问题：可定位（at 为问题点的 ENU 坐标，可选）。 */
 export interface PlanEditIssue {
-  code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index';
+  code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index' | 'out-of-range' | 'unknown-template';
   message: string;
   at?: PlanPoint;
 }
@@ -70,7 +70,7 @@ function planSegmentsTouch(a1: PlanPoint, a2: PlanPoint, b1: PlanPoint, b2: Plan
 }
 
 /** 两线段是否严格穿越相交（共线重叠、共享端点、贴边触碰都不算；用于跨环的越界/重叠判定）。 */
-function planSegmentsCrossStrict(a1: PlanPoint, a2: PlanPoint, b1: PlanPoint, b2: PlanPoint): boolean {
+export function planSegmentsCrossStrict(a1: PlanPoint, a2: PlanPoint, b1: PlanPoint, b2: PlanPoint): boolean {
   const o1 = planOrient(a1, a2, b1);
   const o2 = planOrient(a1, a2, b2);
   const o3 = planOrient(b1, b2, a1);

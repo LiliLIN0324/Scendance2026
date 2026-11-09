@@ -89,12 +89,13 @@ export const PLANNING_LABELS = {
   worker: '人员',
 } as const;
 
-/** H2-b 画布编辑模式文案（面板工具行）。 */
+/** H2-b/H2-c 画布编辑模式文案（面板工具行）。 */
 export const PLANNING_EDIT_MODE_LABELS = {
   view: '浏览',
   boundary: '画边界',
   'boundary-vertex': '编辑边界',
   zone: '画分区',
+  facility: '放设施',
 } as const;
 
 export type PlanningEditMode = keyof typeof PLANNING_EDIT_MODE_LABELS;

@@ -7,11 +7,16 @@
  * （outdoor-plan-canvas 纯函数）+ 内嵌图层栈开关与编辑面板。独立组件，不动 `room-organizer.tsx`。
  *
  * H2-b 编辑模式（编辑规则全部在 site-plan-editing 纯函数层，组件只做接线）：
- * - 浏览：拖拽平移、滚轮缩放（H2-a 行为不变）。
+ * - 浏览：拖拽平移、滚轮缩放；单击设施命中即选中，空白处点击取消选中。
  * - 画边界：单击加顶点、近首点闭合提交；自交/重合/面积不足拒绝并给原因，Esc 取消草稿。
  * - 编辑边界：拖动顶点实时校验，非法移动吸附回上一个合法位置，松手提交。
  * - 画分区：选语义后圈区提交（语义默认色/透明度）；自交/退化阻止提交，越界与重叠放行但出提示。
  * 分区颜色/透明度/命名可在面板内直接编辑（契约可选字段 opacity，0.05–0.6 区间）。
+ *
+ * H2-c 设施模板拖放（放置规则在 site-plan-facilities 纯函数层）：
+ * - 「放设施」模式下面板出模板目录；点选模板后幽灵占地跟随鼠标（占地预览，越界变红），
+ *   单击提交、可连续放置；从模板按钮拖拽（HTML5 DnD）到画布 dragover/drop 同样生效；
+ * - Esc 取消放置回浏览；放置即选中（白圈高亮 + 面板改名/删除），越界设施出红虚线警示与问题条目。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +25,7 @@ import {
   drawAccessLayer,
   drawBoundaryLayer,
   drawDraftLayer,
+  drawFacilityGhost,
   drawFacilityLayer,
   drawRouteLayer,
   drawWorkerLayer,
@@ -44,6 +50,16 @@ import {
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
 import {
+  PLAN_FACILITY_TEMPLATES,
+  buildFacility,
+  facilityContainsPoint,
+  facilityFootprintRing,
+  facilityPlacementIssues,
+  findFacilityTemplate,
+  planFacilityIssues,
+  type PlanFacilityIssue,
+} from '../lib/site-plan-facilities';
+import {
   publicSourceTileUrl,
   tdtProbeTileUrl,
   visibleTileGrid,
@@ -65,6 +81,7 @@ import {
 import {
   planZoneSemanticLabels,
   planZoneSemantics,
+  type PlanFacility,
   type PlanPoint,
   type PlanZone,
   type SitePlanData,
@@ -133,6 +150,11 @@ export default function OutdoorPlanCanvas({
   const dragVertexRef = useRef<number | null>(null);
   const downPxRef = useRef<{ x: number; y: number } | null>(null);
   const issuesRef = useRef<PlanZoneIssue[]>([]);
+  // H2-c 设施放置：待放模板、幽灵位置、选中设施。
+  const facilityTemplateRef = useRef<string | null>(null);
+  const ghostPointRef = useRef<PlanPoint | null>(null);
+  const selectedFacilityRef = useRef<string | null>(null);
+  const facilityIssuesRef = useRef<PlanFacilityIssue[]>([]);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
@@ -142,12 +164,18 @@ export default function OutdoorPlanCanvas({
   const [zoneSemantic, setZoneSemantic] = useState<PlanningZoneSemantic>('audience');
   const [editMessage, setEditMessage] = useState<string | null>(null);
   const [issues, setIssues] = useState<PlanZoneIssue[]>([]);
+  const [facilityTemplateId, setFacilityTemplateId] = useState<string | null>(null);
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
+  const [facilityIssues, setFacilityIssues] = useState<PlanFacilityIssue[]>([]);
 
   function setMode(next: PlanningEditMode) {
     modeRef.current = next;
     draftRef.current = [];
     previewRingRef.current = null;
     dragVertexRef.current = null;
+    facilityTemplateRef.current = null;
+    ghostPointRef.current = null;
+    setFacilityTemplateId(null);
     setModeState(next);
     setEditMessage(null);
     draw();
@@ -173,6 +201,13 @@ export default function OutdoorPlanCanvas({
     planRef.current = plan;
     issuesRef.current = planZoneIssues(plan);
     setIssues(issuesRef.current);
+    facilityIssuesRef.current = planFacilityIssues(plan);
+    setFacilityIssues(facilityIssuesRef.current);
+    // 选中设施被外层删掉时静默取消选中，避免面板悬挂引用。
+    if (selectedFacilityRef.current && !plan.facilities.some(f => f.id === selectedFacilityRef.current)) {
+      selectedFacilityRef.current = null;
+      setSelectedFacilityId(null);
+    }
     draw();
   }, [plan]);
   useEffect(() => { sourceRef.current = source; draw(); }, [source]);
@@ -255,7 +290,16 @@ export default function OutdoorPlanCanvas({
         current.zones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
       );
     }
-    if (isLayerVisible(vis, 'facility')) drawFacilityLayer({ ctx: planCtx, viewport }, current.facilities);
+    if (isLayerVisible(vis, 'facility')) {
+      const warningFacilityIds = new Set(
+        facilityIssuesRef.current.filter(i => i.issue.code === 'out-of-boundary').map(i => i.facilityId),
+      );
+      drawFacilityLayer(
+        { ctx: planCtx, viewport },
+        current.facilities.map(f => ({ ...f, warning: warningFacilityIds.has(f.id) })),
+        { selectedId: selectedFacilityRef.current },
+      );
+    }
     if (isLayerVisible(vis, 'route')) drawRouteLayer({ ctx: planCtx, viewport }, current.routes);
     if (isLayerVisible(vis, 'worker')) drawWorkerLayer({ ctx: planCtx, viewport }, current.workers);
     if (isLayerVisible(vis, 'access')) drawAccessLayer({ ctx: planCtx, viewport }, current.nodes);
@@ -268,6 +312,20 @@ export default function OutdoorPlanCanvas({
         const draftColor = activeMode === 'zone' ? defaultZoneColor(zoneSemanticRef.current) : PLANNING_LAYER_COLORS.boundary;
         const draftInvalid = draftPoints.length >= 4 && planRingSelfIntersects(draftPoints);
         drawDraftLayer({ ctx: planCtx, viewport }, draftPoints, draftColor, { draftInvalid });
+      }
+    }
+
+    // 4) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；叠加在所有图层之上。
+    if (activeMode === 'facility' && ghostPointRef.current && facilityTemplateRef.current) {
+      const template = findFacilityTemplate(facilityTemplateRef.current);
+      if (template) {
+        const footprint = facilityFootprintRing({
+          position: ghostPointRef.current,
+          rotationDeg: 0,
+          size: { width: template.width, depth: template.depth },
+        });
+        const invalid = facilityPlacementIssues(footprint, current.boundary).length > 0;
+        drawFacilityGhost({ ctx: planCtx, viewport }, template, ghostPointRef.current, { invalid });
       }
     }
   }, []);
@@ -307,7 +365,7 @@ export default function OutdoorPlanCanvas({
     };
   }
 
-  function eventPlanPoint(event: React.MouseEvent): { px: { x: number; y: number }; pt: PlanPoint } | null {
+  function eventPlanPoint(event: { clientX: number; clientY: number }): { px: { x: number; y: number }; pt: PlanPoint } | null {
     const stage = stageRef.current;
     if (!stage) return null;
     const rect = stage.getBoundingClientRect();
@@ -363,6 +421,11 @@ export default function OutdoorPlanCanvas({
   }
 
   function handleDrawClick(px: { x: number; y: number }, pt: PlanPoint) {
+    // H2-c：放设施模式单击提交（可连续放置）。
+    if (modeRef.current === 'facility') {
+      placeFacilityAt(pt);
+      return;
+    }
     const draftPoints = draftRef.current;
     // 近首点 → 尝试闭合提交。
     if (draftPoints.length >= 3) {
@@ -420,10 +483,65 @@ export default function OutdoorPlanCanvas({
     commitPlan({ ...current, zones: current.zones.map(zone => (zone.id === id ? { ...zone, ...patch } : zone)) });
   }
 
+  /* ---------------- H2-c 设施放置与选中 ---------------- */
+
+  function selectFacility(id: string | null) {
+    selectedFacilityRef.current = id;
+    setSelectedFacilityId(id);
+    draw();
+  }
+
+  /** 在面板点选模板（也可直接拖拽到画布）：记录待放模板，幽灵随鼠标。 */
+  function pickFacilityTemplate(templateId: string) {
+    facilityTemplateRef.current = templateId;
+    setFacilityTemplateId(templateId);
+    setEditMessage(null);
+    draw();
+  }
+
+  function placeFacilityAt(pt: PlanPoint) {
+    const templateId = facilityTemplateRef.current;
+    if (!templateId) {
+      setEditMessage('先在面板点选一个设施模板。');
+      return;
+    }
+    const template = findFacilityTemplate(templateId);
+    if (!template) {
+      setEditMessage(`设施模板「${templateId}」不存在。`);
+      return;
+    }
+    const current = planRef.current;
+    const result = buildFacility({ templateId, position: pt }, current.boundary, current.facilities);
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    commitPlan({ ...current, facilities: [...current.facilities, result.value] });
+    selectFacility(result.value.id);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
+    setEditMessage(`已放置「${result.value.name}」，继续单击放置或 Esc 结束${hint}`);
+  }
+
+  function updateFacility(id: string, patch: Partial<Pick<PlanFacility, 'name' | 'notes'>>) {
+    // 空名会让 plan 过不了契约校验：改名时忽略空值。
+    if (patch.name !== undefined && patch.name.trim().length === 0) return;
+    const current = planRef.current;
+    commitPlan({ ...current, facilities: current.facilities.map(f => (f.id === id ? { ...f, ...patch } : f)) });
+  }
+
+  function deleteFacility(id: string) {
+    const current = planRef.current;
+    commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) });
+    selectFacility(null);
+    setEditMessage('设施已删除。');
+  }
+
   function handleStageMouseDown(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     if (activeMode === 'view') {
       panRef.current = { x: event.clientX, y: event.clientY };
+      const hit = eventPlanPoint(event);
+      downPxRef.current = hit ? hit.px : null;
       setDragging(true);
       return;
     }
@@ -454,14 +572,35 @@ export default function OutdoorPlanCanvas({
         // 非法位置不预览（吸附回上一合法位置），给原因。
         setEditMessage(result.issue.message);
       }
+      return;
+    }
+    // H2-c：放设施幽灵跟随鼠标（占地预览）。
+    if (activeMode === 'facility' && facilityTemplateRef.current) {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      const ghost = ghostPointRef.current;
+      if (!ghost || ghost.x !== hit.pt.x || ghost.y !== hit.pt.y) {
+        ghostPointRef.current = hit.pt;
+        draw();
+      }
     }
   }
 
   function handleStageMouseUp(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     if (activeMode === 'view') {
+      const down = downPxRef.current;
+      downPxRef.current = null;
       panRef.current = undefined;
       setDragging(false);
+      // H2-c：浏览模式单击命中设施即选中，空白处点击取消选中。
+      if (down && onPlanChange) {
+        const hit = eventPlanPoint(event);
+        if (hit && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) <= CLICK_MAX_MOVE_PX) {
+          const hitFacility = [...planRef.current.facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
+          selectFacility(hitFacility ? hitFacility.id : null);
+        }
+      }
       return;
     }
     if (activeMode === 'boundary-vertex') {
@@ -488,9 +627,17 @@ export default function OutdoorPlanCanvas({
     downPxRef.current = null;
     dragVertexRef.current = null;
     setPreviewRing(null);
+    ghostPointRef.current = null;
+    draw();
   }
 
   const readOnly = !onPlanChange;
+  // H2-c：分区问题 + 设施问题合并成一张可读清单（各自有序，合计限量展示）。
+  const combinedIssues = [
+    ...issues.map((item, i) => ({ key: `z-${item.zoneId}-${item.issue.code}-${i}`, text: `${item.zoneName}：${item.issue.message}` })),
+    ...facilityIssues.map((item, i) => ({ key: `f-${item.facilityId}-${i}`, text: `${item.facilityName}：${item.issue.message}` })),
+  ];
+  const selectedFacility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) ?? null : null;
   const panelStyle: React.CSSProperties = {
     position: 'absolute',
     right: PLANNING_SPACING.sm,
@@ -533,6 +680,30 @@ export default function OutdoorPlanCanvas({
       onMouseUp={handleStageMouseUp}
       onMouseLeave={handleStageMouseLeave}
       onWheel={e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }}
+      onDragOver={event => {
+        // H2-c：拖模板到画布 → 幽灵占地跟随（占地预览）。
+        if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        ghostPointRef.current = hit.pt;
+        draw();
+      }}
+      onDragLeave={() => {
+        if (modeRef.current === 'facility') {
+          ghostPointRef.current = null;
+          draw();
+        }
+      }}
+      onDrop={event => {
+        // H2-c：拖放提交（与单击提交同一入口 placeFacilityAt）。
+        if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return;
+        event.preventDefault();
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        placeFacilityAt(hit.pt);
+      }}
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
@@ -595,8 +766,34 @@ export default function OutdoorPlanCanvas({
                   {mode === 'boundary' && '单击加顶点，点回起点或再点首点闭合；Esc 取消。'}
                   {mode === 'boundary-vertex' && '拖动绿色手柄调整顶点；非法位置自动吸附回去。'}
                   {mode === 'zone' && '圈出分区后点回起点闭合，自交会被拒绝。'}
-                  {mode === 'view' && '拖拽平移，滚轮缩放。'}
+                  {mode === 'facility' && (facilityTemplateId ? '画布上移动鼠标预览占地，单击放置；也可直接拖模板进来；Esc 取消。' : '先点选下方模板，或直接把模板拖到画布上。')}
+                  {mode === 'view' && '拖拽平移，滚轮缩放；单击设施可选中。'}
                 </div>
+
+                {mode === 'facility' && (
+                  <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <div style={{ ...sectionTitle, marginTop: 0 }}>设施模板</div>
+                    {PLAN_FACILITY_TEMPLATES.map(t => (
+                      <button
+                        key={t.templateId}
+                        type="button"
+                        draggable
+                        data-testid={`facility-template-${t.templateId}`}
+                        title={t.note}
+                        aria-pressed={facilityTemplateId === t.templateId}
+                        onDragStart={event => {
+                          event.dataTransfer.setData('text/plain', t.templateId);
+                          event.dataTransfer.effectAllowed = 'copy';
+                          pickFacilityTemplate(t.templateId);
+                        }}
+                        onClick={() => pickFacilityTemplate(t.templateId)}
+                        style={{ ...modeButtonStyle(facilityTemplateId === t.templateId), display: 'block', width: '100%', textAlign: 'left', marginTop: PLANNING_SPACING.xs }}
+                      >
+                        {t.name} · {t.width}×{t.depth}m
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {plan.zones.length > 0 && (
                   <>
@@ -638,15 +835,46 @@ export default function OutdoorPlanCanvas({
                   </>
                 )}
 
-                {issues.length > 0 && (
+                {selectedFacility && (
                   <>
-                    <div style={{ ...sectionTitle, color: '#e8a3a3' }}>问题提示（{issues.length} 条）</div>
+                    <div style={sectionTitle}>已选中设施</div>
+                    <div style={zoneRowStyle}>
+                      <input
+                        aria-label="选中设施名称"
+                        value={selectedFacility.name}
+                        maxLength={60}
+                        onChange={event => updateFacility(selectedFacility.id, { name: event.target.value })}
+                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                      />
+                    </div>
+                    <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
+                      {selectedFacility.size.width}×{selectedFacility.size.depth} m · 旋转 {Math.round(selectedFacility.rotationDeg)}° · {selectedFacility.templateId}
+                    </div>
+                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+                      <button
+                        type="button"
+                        data-testid="facility-delete"
+                        style={modeButtonStyle(false)}
+                        onClick={() => deleteFacility(selectedFacility.id)}
+                      >
+                        删除设施
+                      </button>
+                      <button type="button" style={modeButtonStyle(false)} onClick={() => selectFacility(null)}>
+                        取消选择
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {combinedIssues.length > 0 && (
+                  <>
+                    <div style={{ ...sectionTitle, color: '#e8a3a3' }}>问题提示（{combinedIssues.length} 条）</div>
                     <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.6 }}>
-                      {issues.slice(0, PLAN_ISSUE_LIST_LIMIT).map((item, i) => (
-                        <li key={`${item.zoneId}-${item.issue.code}-${i}`}>{item.zoneName}：{item.issue.message}</li>
+                      {combinedIssues.slice(0, PLAN_ISSUE_LIST_LIMIT).map(item => (
+                        <li key={item.key}>{item.text}</li>
                       ))}
                     </ul>
-                    {issues.length > PLAN_ISSUE_LIST_LIMIT && <div style={{ opacity: 0.7 }}>其余 {issues.length - PLAN_ISSUE_LIST_LIMIT} 条从略。</div>}
+                    {combinedIssues.length > PLAN_ISSUE_LIST_LIMIT && <div style={{ opacity: 0.7 }}>其余 {combinedIssues.length - PLAN_ISSUE_LIST_LIMIT} 条从略。</div>}
                   </>
                 )}
 

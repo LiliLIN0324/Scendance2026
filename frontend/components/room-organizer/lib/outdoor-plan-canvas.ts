@@ -189,15 +189,22 @@ export function drawZoneLayer(
   }
 }
 
-/** 设施：中心 + 朝向的占地矩形（米制宽深 → 像素），设施色描边。 */
+/**
+ * 设施：中心 + 朝向的占地矩形（米制宽深 → 像素），设施色描边。
+ * warning 为 true 时改红虚线描边（越界警示，数据本身保留）；
+ * opts.selectedId 命中的设施画白色外圈 + 名称标注（H2-c「放置即选中」可视反馈）。
+ */
 export function drawFacilityLayer(
   c: PlanCanvasContext,
   facilities: readonly {
+    id?: string;
     position: PlanPoint;
     rotationDeg: number;
     size: { width: number; depth: number };
     name?: string;
+    warning?: boolean;
   }[],
+  opts: { selectedId?: string | null } = {},
 ): void {
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.facility;
@@ -208,15 +215,79 @@ export function drawFacilityLayer(
     const h = Math.max(4, f.size.depth / metersPerPx);
     ctx.save();
     ctx.translate(center.x, center.y);
-    // 屏幕系 y 向下：逆时针角取负才保持「以东为零、顺时针为正」的地面语义。
+    // 屏幕系 y 向下故取负角；地面语义与 facilityFootprintRing 同一套矩阵：
+    // rotationDeg 以东为零、逆时针为正（+90° 时宽边从东转向北）。
     ctx.rotate(-f.rotationDeg * Math.PI / 180);
     ctx.fillStyle = hexWithAlpha(color, 0.16);
     ctx.fillRect(-w / 2, -h / 2, w, h);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.2;
+    if (f.warning) {
+      ctx.strokeStyle = '#c0392b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+    } else {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+    }
     ctx.strokeRect(-w / 2, -h / 2, w, h);
     ctx.restore();
+    if (opts.selectedId && f.id === opts.selectedId) {
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(-f.rotationDeg * Math.PI / 180);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);
+      ctx.restore();
+      if (f.name) {
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fillText(f.name, center.x, center.y + Math.max(h / 2, 6) + 3);
+      }
+    }
   }
+}
+
+/**
+ * 设施放置幽灵预览（H2-c）：跟随指针的占地虚线框 + 中心十字 + 模板/尺寸标签。
+ * invalid 为 true 时改红色（当前落点越界，由 facilityPlacementIssues 判定），
+ * 旋转矩阵与 drawFacilityLayer / facilityFootprintRing 一致。
+ */
+export function drawFacilityGhost(
+  c: PlanCanvasContext,
+  template: { name: string; width: number; depth: number },
+  position: PlanPoint,
+  opts: { rotationDeg?: number; invalid?: boolean } = {},
+): void {
+  const { ctx, viewport } = c;
+  const metersPerPx = planMetersPerPixel(viewport);
+  const center = planPointToPixel(position, viewport);
+  const w = Math.max(4, template.width / metersPerPx);
+  const h = Math.max(4, template.depth / metersPerPx);
+  const color = opts.invalid ? '#c0392b' : PLANNING_LAYER_COLORS.facility;
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate(-(opts.rotationDeg ?? 0) * Math.PI / 180);
+  ctx.fillStyle = hexWithAlpha(color, 0.12);
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(-w / 2, -h / 2, w, h);
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(-5, 0);
+  ctx.lineTo(5, 0);
+  ctx.moveTo(0, -5);
+  ctx.lineTo(0, 5);
+  ctx.stroke();
+  ctx.restore();
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(15,22,32,0.9)';
+  ctx.fillText(`${template.name} ${template.width}×${template.depth}m`, center.x, center.y + Math.max(h / 2, 6) + 3);
 }
 
 /** 路线：折线 + 终点箭头；人行/车辆/后勤用不同线型（实线/长划/点划）。 */
