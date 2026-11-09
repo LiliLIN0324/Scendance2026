@@ -106,3 +106,12 @@ $null
 console.log\(x\)\)\}
 /.intro-head.*
 
+# Local tooling and throwaway dirs (2026-11-10)
+.zwork/
+.agents/
+.tmp-iso/
+.tmp-handoff-head.txt
+frontend/.tmp-iso/
+frontend/.tmp-preview/
+vibe_images/
+

@@ -30,9 +30,9 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(materialBlock).toContain('<RailAvatar form="pyramid"');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 3 个 disc：空间 / 物料，外加 f74a0a9 搬进左轨的「拍摄场地」锚点（<a> 也要保持圆钮形）。
+    // 空间、物料与工作台内的拍摄入口共用圆钮。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(3);
-    expect(primary).toContain('href="/guide/capture"');
+    expect(primary).toContain('onClick={captureOpen ? closeCapturePanel : openCapturePanel}');
     expect(primary).toContain('data-tip="空间"');
     expect(primary).toContain('data-tip="物料"');
     expect(primary).not.toContain('sc-space-chevron');
@@ -78,7 +78,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(source).toContain('<SpacePanel variant="card"');
     expect(source).toContain('<ScendanceLibrary variant="card"');
     expect(source).toContain("onToggle={() => toggleAgent('door')}");
-    expect(source).not.toContain('<MapRailButton');
+    expect(source).not.toContain('<MapRailButton />');
     expect(source).not.toContain('AgentReopenCard');
   });
 });

@@ -409,6 +409,8 @@ export function paintAsBackLayer(deps: {
 }
 
 /** Draw each Gaussian back layer, then the shared editable layout once. */
+const isoFillLight = new THREE.HemisphereLight(0xfff7e8, 0x8f9a90, 2);
+
 export function paintSplatLayers(deps: {
   renderer: THREE.WebGLRenderer;
   backs: readonly THREE.Scene[];
@@ -432,6 +434,8 @@ export function paintSplatLayers(deps: {
     if (child.userData.type === RESEARCH_BASEMAP_TAG) underlays.push(child);
   }
   for (const child of underlays) backs[0]!.attach(child);
+  const lightIso = underlays.some(child => child.visible && child.userData.isoBasemap === true);
+  if (lightIso) backs[0]!.add(isoFillLight);
   if (deps.guides === false) {
     for (const back of backs) {
       for (const child of back.children) {
@@ -455,6 +459,7 @@ export function paintSplatLayers(deps: {
   renderer.render(scene, camera);
   // 主场景画完再搬回来：点云不写深度，底图若在这趟里画，照样铺在 3D 上面。
   for (const child of underlays) scene.attach(child);
+  if (lightIso) isoFillLight.removeFromParent();
   renderer.autoClear = true;
   scene.background = sky;
   for (const [child, visible] of hidden) child.visible = visible;

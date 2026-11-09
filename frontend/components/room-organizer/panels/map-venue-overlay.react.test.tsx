@@ -41,7 +41,13 @@ vi.mock('./creative-studio', () => ({
 // 真实的高德地图在 jsdom 里画不出来，这里只留「圈完一块地」这个动作。
 vi.mock('./amap-venue-picker', () => ({
   AmapVenuePicker: ({ onPick }: { onPick(pick: { name: string; location: string; polygon: AmapPoint[] }): void }) =>
-    <button type="button" onClick={() => onPick({ name: '盐官潮乐之城', location: '海宁盐官', polygon: rect(12, 8) })}>模拟圈画</button>,
+    <>
+      <button type="button" onClick={() => onPick({ name: '盐官潮乐之城', location: '海宁盐官', polygon: rect(12, 8) })}>模拟圈画</button>
+      <button type="button" onClick={() => onPick({
+        name: '平湖秋月碑亭', location: '杭州西湖',
+        polygon: rect(12, 8).map(point => ({ lng: point.lng - 0.385, lat: point.lat - 0.148 })),
+      })}>圈选西湖场地</button>
+    </>,
 }));
 
 const callbacks = {
@@ -52,14 +58,14 @@ const callbacks = {
 
 function harness(opts?: {
   onReconUpload?: (preset: { name: string; hint: string }) => void;
-  onHangDemoEnvironment?: () => void;
+  onVenueSaved?: () => void;
 }) {
   state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
   return render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
     <ActivityBrief tools={[]}/>
     <MapVenueOverlay
       {...(opts?.onReconUpload === undefined ? {} : { onReconUpload: opts.onReconUpload })}
-      {...(opts?.onHangDemoEnvironment === undefined ? {} : { onHangDemoEnvironment: opts.onHangDemoEnvironment })}
+      {...(opts?.onVenueSaved === undefined ? {} : { onVenueSaved: opts.onVenueSaved })}
     />
   </LayoutAgentProvider>);
 }
@@ -67,6 +73,15 @@ function harness(opts?: {
 afterEach(() => { cleanup(); });
 
 describe('圈画 → 采集单 → 上传重建', () => {
+  it('在西湖选址后，同一份布局同时保存片区模型和活动边界', () => {
+    harness();
+    fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
+    fireEvent.click(screen.getByRole('button', { name: '圈选西湖场地' }));
+    expect(state.layout.researchArea?.presetId).toBe('xihu-scenic');
+    expect(state.layout.mapGroundPolygon).toHaveLength(4);
+    expect(state.layout.sceneAnchor?.source).toBe('picker');
+  });
+
   it('圈完一块地浮层即收；重开地图采集单还在，不用重新圈', () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
@@ -99,12 +114,12 @@ describe('圈画 → 采集单 → 上传重建', () => {
     expect(screen.queryByRole('button', { name: /去上传现场素材/ })).toBeNull();
   });
 
-  it('D0：立壳成功后挂历史环境并收起浮层；再开地图采集单还在', () => {
-    const onHang = vi.fn();
-    harness({ onHangDemoEnvironment: onHang });
+  it('立壳成功后通知工作台并收起浮层；再开地图采集单还在', () => {
+    const onSaved = vi.fn();
+    harness({ onVenueSaved: onSaved });
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     fireEvent.click(within(screen.getByRole('dialog', { name: '地图选址' })).getByRole('button', { name: '模拟圈画' }));
-    expect(onHang).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     expect(screen.getByRole('region', { name: '现场采集单' })).toBeTruthy();

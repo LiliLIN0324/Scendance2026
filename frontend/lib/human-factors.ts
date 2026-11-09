@@ -40,6 +40,8 @@ export interface ScoredViolation {
   /** hard 进扣分；soft 只进 reasons，不扣 score。 */
   severity: 'hard' | 'soft';
   message: string;
+  /** 空间判据编号，用于追溯到规则表。 */
+  ruleId?: string;
   /** 可选：归因的 zoneId。 */
   zoneId?: string;
   /** 四值状态；缺省视为 violated（向后兼容）。 */

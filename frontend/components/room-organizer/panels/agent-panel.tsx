@@ -14,7 +14,7 @@
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
+import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import {
@@ -30,7 +30,7 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
-import { createResearchArea, lookupPlace, matchResearchCommand } from '../lib/research-area';
+import { createPresetResearchArea, createResearchArea, lookupPlace, matchResearchCommand, XIHU_SCENIC_PRESET } from '../lib/research-area';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
@@ -96,7 +96,7 @@ const forceFail = () => process.env.NODE_ENV !== 'production' && typeof window !
   && new URL(window.location.href).searchParams.get('agentFail') === '1';
 
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
-type Bubble = {
+export type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
@@ -275,10 +275,14 @@ interface AgentValue {
   pendingFile: { name: string; url: string } | null;
   removePendingFile(): void;
   send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
+  /** 面板自己也要能回话（场景库对话直接把结果说进这场会话），所以把说话口开放出来。 */
+  say(bubble: Omit<Bubble, 'id'>): void;
 }
 
 const AgentContext = createContext<AgentValue | null>(null);
 export function useAgent(): AgentValue { const value = useContext(AgentContext); if (!value) throw new Error('Agent panel unavailable'); return value; }
+/** 面板可能单独渲染（测试、工作台抽屉）：没有 Agent 上下文时返回 null，不炸。 */
+export function useAgentOptional(): AgentValue | null { return useContext(AgentContext); }
 
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
@@ -1537,7 +1541,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       const was2D = view.view2D;
       try {
         const { layout, cleared } = createVenueFromPick(live.current, pick);
-        onApply(layout);
+        const { west, east, south, north } = XIHU_SCENIC_PRESET.bounds;
+        const withinWestLake = pick.polygon.every(({ lng, lat }) => lng >= west && lng <= east && lat >= south && lat <= north);
+        const researchArea = withinWestLake
+          ? layout.researchArea?.presetId === 'xihu-scenic' ? layout.researchArea : createPresetResearchArea()
+          : layout.researchArea;
+        onApply(researchArea ? { ...layout, researchArea } : layout);
         setVenueIO('outdoor');
         onVenueIOChange?.('outdoor');
         if (was2D) setView(current => ({ ...current, view2D: true }));
@@ -1550,10 +1559,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
         const polyNote = (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon')
           ? '，壳体按圈画真轮廓（非仅外接矩形）'
           : '';
-        const satNote = pick.satelliteGround
-          ? '；已开卫星贴地参考底图（仅观感，不可作重建素材）'
+        const satNote = withinWestLake
+          ? '；已在西湖 3D 中聚焦这块区域，蓝线标出活动范围'
+          : pick.satelliteGround ? '；已开启卫星参考底图'
           : '';
-        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。历史宴会厅环境预览正在挂到画布背景（只读复用场地样例，不新开额度）；浮层收起后就能看见。采集单还在——再点「地图」可导出或上传现场素材做本场重建。` });
+        say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步可在「空间」查看实景，或重新打开地图选址，按采集单拍摄本场素材。` });
         return null;
       } catch (error) {
         const reason = error instanceof Error ? error.message : '地图场地没立起来，再试一次。';
@@ -1565,7 +1575,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
     removePendingFile: () => setPendingFile(null),
-    send, rainOn: view.weather === 'rain',
+    send, say, rainOn: view.weather === 'rain',
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
     walkthrough: () => {
       setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false }));
@@ -1697,8 +1707,10 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
  * 左轨那颗常驻「地图」：圈画是这块场地第一步，只藏在简报的一张卡里，收起左栏就找不着了。
  * 再点一次就把浮层收回去，跟简报里那条链共用同一个开关。
  */
-export function MapRailButton(): JSX.Element {
+export function MapRailButton({ variant = 'rail' }: { variant?: 'rail' | 'canvas' } = {}): JSX.Element {
   const agent = useAgent();
+  if (variant === 'canvas') return <button type="button" className="sc-geo-toggle" aria-pressed={agent.mapPickerOpen}
+    onClick={agent.startMapVenuePicker}>选活动区域</button>;
   return <nav className="sc-rail-tool-group" aria-label="地图选址">
     <button type="button" className={`sc-rail-tool${agent.mapPickerOpen ? ' is-active' : ''}`} aria-pressed={agent.mapPickerOpen} aria-label="地图选址"
       data-tip="地图" title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={24} aria-hidden="true"/></button>
@@ -1745,11 +1757,10 @@ function AgentCapabilityPrompts(): JSX.Element | null {
  * 盖住画布的地图浮层：圈边界要看得清地块，左栏那条窄缝里一个像素就是一米多。
  * 场地已经立起来时同样进这里重圈——替换走 raiseVenue 那条老规矩，放得下的物料留着，放不下才撤并报数。
  */
-export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
+export function MapVenueOverlay({ onReconUpload, onVenueSaved }: {
   /** 采集单拍完的素材要交给生成引擎重建；重建入口可达时才传，按钮不会指向打不开的面板。 */
   onReconUpload?: ((preset: { name: string; hint: string }) => void) | undefined;
-  /** D0：立壳成功后挂上历史场地 .spz 背景；传入则自动收起浮层让画布可见。 */
-  onHangDemoEnvironment?: (() => void) | undefined;
+  onVenueSaved?: (() => void) | undefined;
 }): JSX.Element | null {
   const agent = useAgent();
   const [wide, setWide] = useState(false);
@@ -1786,10 +1797,8 @@ export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
       setBlocked(reason);
       // 场地没立起来就不出采集单——那份站位对应的地块并不存在。
       setCapture(reason ? null : { plan: capturePlanForVenue(pick.polygon, pick.flow), polygon: pick.polygon, name: pick.name, location: pick.location });
-      // D0：立壳即挂历史 splat，并收起浮层露出画布；采集单状态仍留着，再开地图还能看见。
       if (!reason) {
-        // 开了卫星贴地时先露出地面参考；样例 splat 可随后在环境预览手动挂。
-        if (onHangDemoEnvironment && !pick.satelliteGround) onHangDemoEnvironment();
+        onVenueSaved?.();
         agent.closeMapVenuePicker();
       }
     }} />
@@ -1839,6 +1848,10 @@ function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: bo
   // 真实步骤时间线在场时，这套写死的步骤条让位——不同时摆两套进度。
   if (hidden) return null;
   return <div className="ap-card" id="gen-progress">
+    <div className={`ap-bar${paused ? ' is-paused' : ''}`} role="progressbar" aria-label="排布进度"
+      aria-valuemin={1} aria-valuemax={GEN_STEPS.length} aria-valuenow={Math.min(n, GEN_STEPS.length)}>
+      <i style={{ width: `${Math.min(100, Math.round(n / GEN_STEPS.length * 100))}%` }}/>
+    </div>
     <ol className="ap-steps">{GEN_STEPS.map((step, index) => {
       const done = agent.progress > index + 1;
       const current = !paused && index + 1 === n;
@@ -1852,9 +1865,10 @@ function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: bo
 
 /** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
 function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
-  const { layout } = useRoomEditor();
+  const { layout, activeFloor } = useRoomEditor();
   const plan = agent.proposal;
   if (!plan) return null;
+  const items = materialCount(activeFloor.items);
   const names = plan.overlapNames.slice(0, 3).join('、');
   const review = !!plan.review;
   const guests = plan.guests && plan.guests > 0 ? plan.guests : 0;
@@ -1863,9 +1877,19 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
-    <strong>{review ? '改法预览' : '这版还在预览'}</strong>
+    <div className="ap-card-head">
+      <strong>{review ? '改法预览' : '这版还在预览'}</strong>
+      <span className={`ap-card-state${hold ? '' : plan.blocked || plan.overlapCount > 0 ? ' is-warn' : ' is-ok'}`}>
+        {hold ? '整理中' : plan.blocked ? '要先处理' : plan.overlapCount > 0 ? '有冲突' : '可以确认'}
+      </span>
+    </div>
+    <div className="ap-stats">
+      <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>平方米</span></div>
+      <div className="ap-stat"><b>{seats || '—'}</b><span>{guests > 0 ? `座位 / 需 ${guests}` : '座位'}</span></div>
+      <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
+    </div>
     <div className="ap-outcome" role="note" aria-label="本次结果">
-      <p className="ap-outcome-label">本次结果 · {formatArea(venueArea(layout))} ㎡</p>
+      <p className="ap-outcome-label">本次结果</p>
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
     </div>
     {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `按 ${guests} 人摆了 ${seats} 座`}</p>}
@@ -1966,6 +1990,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <h1 className="ap-session-title" title={activity ? sessionTitle : meta.name}>{activity ? sessionTitle : meta.name}</h1>
       </div>
       <div className="ap-session-actions">
+        {activeAgent === 'space' && <details className="sc-space-library-menu">
+          <summary aria-label="场地资料" title="场地资料"><Paperclip size={17} aria-hidden="true"/></summary>
+          <div className="sc-space-library-menu-content">
+            <button type="button" className="chip" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); agent.startVenuePicker(); }}>新建/换场地</button>
+            <button type="button" className="chip" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); agent.callbacks.onOpenReference?.(); }}>图纸与照片</button>
+          </div>
+        </details>}
         {activity && <>
         <button
           type="button"
@@ -2040,8 +2071,15 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {proposed && <ProposalCard agent={agent}/>}
         {planShown && <>
           <div className="ap-card ap-plan" id="plan-summary">
-            <strong>这一版布置</strong>
-            <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
+            <div className="ap-card-head">
+              <strong>这一版布置</strong>
+              <span className={`ap-card-state${agent.overlapCount > 0 ? ' is-warn' : ' is-ok'}`}>{agent.overlapCount > 0 ? '有冲突' : '已就位'}</span>
+            </div>
+            <div className="ap-stats">
+              <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>平方米</span></div>
+              <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
+              <div className="ap-stat"><b>{agent.overlapCount}</b><span>件重叠</span></div>
+            </div>
             {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">没有重叠，也没超出场地。</p>}
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
@@ -2060,14 +2098,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>
-    : <div className={`ap-agent-surface is-${activeAgent}`}>
-      {activeAgent === 'space' && <div className="ap-capabilities ap-space-actions" aria-label="空间工具">
-        <p className="ap-capability-label">空间工具</p>
-        <div className="ap-capability-chips" role="group" aria-label="空间工具">
-          <button type="button" className="chip ap-capability-chip" onClick={agent.startVenuePicker}><MapPin size={14} aria-hidden="true"/><span>新建/换场地</span></button>
-          <button type="button" className="chip ap-capability-chip" onClick={() => agent.callbacks.onOpenReference?.()}><Paperclip size={14} aria-hidden="true"/><span>图纸与照片</span></button>
-        </div>
-      </div>}
+    : <div key={activeAgent} className={`ap-agent-surface is-${activeAgent}`}>
       {activeAgent === 'space' && spaceSlot}
       {activeAgent === 'material' && materialSlot}
     </div>}
@@ -2203,8 +2234,7 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
 
 export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
-  const { activeFloor, collidingIds } = useRoomEditor();
-  const { view, setView } = useRoomEditor();
+  const { activeFloor, collidingIds, layout, view, setView } = useRoomEditor();
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
     const sync = () => setFullscreen(document.fullscreenElement !== null);
@@ -2226,7 +2256,9 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
   if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><div className="ap-walk-controls">
     <button id="walk-fullscreen" type="button" className="ap-canvas-pill" aria-pressed={fullscreen} title={fullscreen ? '退出全屏' : '全屏'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} aria-hidden="true"/> : <Maximize2 size={14} aria-hidden="true"/>}{fullscreen ? '退出全屏' : '全屏'}</button>
-    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>退出第一人称 · Esc</button>
+    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>
+      {(layout.mapGroundPolygon?.length ?? 0) >= 3 ? '返回场地 · Esc' : '退出第一人称 · Esc'}
+    </button>
   </div></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;

@@ -1,0 +1,259 @@
+{
+  "type": "FeatureCollection",
+  "name": "landmark-footprints",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "mode": "name_patch",
+        "id": "map-jingci",
+        "target_id": "229726947",
+        "name": "净慈寺",
+        "provenance": "净慈寺园内主殿轮廓已在 OSM（way/445291616 为 landuse，主殿为 229726947），只补名称，不新建几何"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "mode": "name_patch",
+        "id": "map-yuewang",
+        "target_id": "436322031",
+        "name": "岳王庙",
+        "provenance": "岳王庙园内主殿轮廓已在 OSM，只补名称，不新建几何"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.1434231,
+              30.2633592
+            ],
+            [
+              120.1433949,
+              30.2633835
+            ],
+            [
+              120.1433551,
+              30.2633835
+            ],
+            [
+              120.1433269,
+              30.2633592
+            ],
+            [
+              120.1433269,
+              30.2633248
+            ],
+            [
+              120.1433551,
+              30.2633005
+            ],
+            [
+              120.1433949,
+              30.2633005
+            ],
+            [
+              120.1434231,
+              30.2633248
+            ],
+            [
+              120.1434231,
+              30.2633592
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "mode": "record",
+        "id": "x-baochu-ta",
+        "name": "保俶塔",
+        "type": "tower",
+        "height_m": 45.3,
+        "height_source": "landmark_media",
+        "confidence": 0.8,
+        "geometry_source": "manual_trace",
+        "footprint": "approximate",
+        "anchor_osm_id": "5312284654",
+        "provenance": "OSM 只有 man_made=tower 点（node/5312284654）。八边形塔身近似（外接半径 5 m），高度取 docs/40 S24（杭州文旅 45.3 m）"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.1581057,
+              30.2796077
+            ],
+            [
+              120.1585743,
+              30.2796077
+            ],
+            [
+              120.1585743,
+              30.2800123
+            ],
+            [
+              120.1581057,
+              30.2800123
+            ],
+            [
+              120.1581057,
+              30.2796077
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "mode": "record",
+        "id": "x-huanqiu-zhongxin",
+        "name": "环球中心",
+        "type": "commercial",
+        "height_m": 170,
+        "height_source": "landmark_media",
+        "confidence": 0.78,
+        "geometry_source": "manual_trace",
+        "footprint": "approximate",
+        "anchor_osm_id": "3373040672",
+        "provenance": "OSM 只有 node/3373040672（building=commercial，无高度、无塔楼轮廓）。45×45 m 方形近似，高度取 docs/40 S25（170 m / 41F）"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.2113657,
+              30.2543477
+            ],
+            [
+              120.2118343,
+              30.2543477
+            ],
+            [
+              120.2118343,
+              30.2547523
+            ],
+            [
+              120.2113657,
+              30.2547523
+            ],
+            [
+              120.2113657,
+              30.2543477
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "mode": "record",
+        "id": "x-huawun-dasha",
+        "name": "华润大厦",
+        "type": "commercial",
+        "height_m": 230,
+        "height_source": "landmark_media",
+        "confidence": 0.78,
+        "geometry_source": "manual_trace",
+        "footprint": "approximate",
+        "anchor_osm_id": "340388734",
+        "provenance": "万象城裙楼在 way/340388734（height=40），塔楼无独立轮廓。塔体位置取裙楼东北角 45×45 m 近似，高度取 docs/40 S29（230 m / 51F）"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.2079918,
+              30.2518701
+            ],
+            [
+              120.2084082,
+              30.2518701
+            ],
+            [
+              120.2084082,
+              30.2522299
+            ],
+            [
+              120.2079918,
+              30.2522299
+            ],
+            [
+              120.2079918,
+              30.2518701
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "mode": "record",
+        "id": "x-raffles-t1",
+        "name": "杭州来福士 T1",
+        "type": "commercial",
+        "height_m": 250,
+        "height_source": "landmark_media",
+        "confidence": 0.78,
+        "geometry_source": "manual_trace",
+        "footprint": "approximate",
+        "anchor_osm_id": "513264350",
+        "provenance": "来福士裙楼在 way/513264350（height=60），双塔无独立轮廓。T1 取裙楼北侧 40×40 m 近似，高度取 docs/40 S28/S29（250 m）"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.2086418,
+              30.2518701
+            ],
+            [
+              120.2090582,
+              30.2518701
+            ],
+            [
+              120.2090582,
+              30.2522299
+            ],
+            [
+              120.2086418,
+              30.2522299
+            ],
+            [
+              120.2086418,
+              30.2518701
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "mode": "record",
+        "id": "x-raffles-t2",
+        "name": "杭州来福士 T2",
+        "type": "commercial",
+        "height_m": 250,
+        "height_source": "landmark_media",
+        "confidence": 0.78,
+        "geometry_source": "manual_trace",
+        "footprint": "approximate",
+        "anchor_osm_id": "513264350",
+        "provenance": "来福士裙楼在 way/513264350（height=60），双塔无独立轮廓。T2 取裙楼北侧 40×40 m 近似，高度取 docs/40 S28/S29（250 m）"
+      }
+    }
+  ]
+}

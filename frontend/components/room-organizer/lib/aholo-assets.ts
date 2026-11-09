@@ -192,6 +192,23 @@ export function forgetAholoAsset(assetId: string): void {
   writeRegistry(storage, readRegistry(storage).filter(item => item.assetId !== assetId));
 }
 
+/** Register a completed scan already copied into the loopback proxy's asset cache. */
+export async function importCachedAholoScan(assetId: string, name: string): Promise<AholoAsset> {
+  if (!uuidPattern.test(assetId) || !name.trim()) throw new Error('请填写场地名称和有效的资产编号。');
+  const existing = findAholoAsset(assetId);
+  if (existing?.kind === 'spz') return existing;
+  const url = new URL(`${DIRECT_BASE}/asset/${assetId}.spz`);
+  if (!['localhost', '127.0.0.1'].includes(url.hostname)) throw new Error('请使用本机资产代理。');
+  const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  const bytes = Number(response.headers.get('content-length'));
+  await response.body?.cancel();
+  if (!response.ok || !Number.isFinite(bytes) || bytes <= 0) throw new Error('本机没有找到这个 SPZ 场地。');
+  rememberAholoAsset({ assetId, name, bytes, kind: 'spz', savedAt: Date.now() });
+  const imported = findAholoAsset(assetId);
+  if (!imported) throw new Error('本机场景库无法保存。');
+  return imported;
+}
+
 async function postAsset(source: { url: string; name: string; taskid?: string; lodUrl?: string }): Promise<AholoAsset> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ASSET_TIMEOUT_MS);

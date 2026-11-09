@@ -396,6 +396,16 @@ describe('SC-20：必留区与必留通道是硬约束', () => {
       expect(rb).toBeDefined();
       expect(rb!.severity).toBe('hard');
     }
+    const firePlans = generateScoredPlans(
+      [desk, { ...cross, label: '消防疏散' }],
+      { roomSize: room },
+    );
+    expect(pickRecommendedPlan(firePlans)).toBeNull();
+    for (const plan of firePlans) {
+      expect(plan.violations).toContainEqual(
+        expect.objectContaining({ code: 'ROUTE_BLOCKED', severity: 'hard', ruleId: 'GEN-03' }),
+      );
+    }
     // 动线挪到桌区西侧空地（x=-7.75，距最近桌椅 >2m）：恢复可行。
     const west: PlanAnnotation = {
       id: 'route-west', kind: 'route', label: '宾客动线', stageNo: 1,

@@ -10,7 +10,7 @@ import type { StoredEnvironment } from '../lib/environment-preference';
 type SceneCard = { assetId: string; name: string; image?: string; sample?: boolean };
 
 /** Project-level collection of scanned spaces; each scan keeps its own floor and transform. */
-export function EnvironmentPreview({ preview, current, environments, floors, onSelect, onRemove, onSetFloor, onClear }: {
+export function EnvironmentPreview({ preview, current, environments, floors, onSelect, onRemove, onSetFloor, onClear, gallery, thumbnails, onPreview }: {
   preview: SplatPreviewState;
   current: StoredEnvironment | null;
   environments: readonly StoredEnvironment[];
@@ -19,6 +19,9 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
   onRemove(assetId: string): void;
   onSetFloor(assetId: string, floorIndex: number): void;
   onClear(): void;
+  gallery?: boolean;
+  thumbnails?: Readonly<Record<string, string>>;
+  onPreview?(assetId: string, name: string): void;
 }): JSX.Element {
   const scenes = useMemo<SceneCard[]>(() => {
     // 这里只放演示场景：用户自己的实景扫描统一在空间卡的「真实场地」里选，避免两处重复。
@@ -34,6 +37,28 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
   // 不写进 StoredEnvironment、不碰渲染管线（SuperSplat 行语言，Audit §4.4 红线）。
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set());
   const [soloId, setSoloId] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('scendance.scene-source-photos.v1') ?? '{}') ?? {}; }
+    catch { return {}; }
+  });
+  const [photoError, setPhotoError] = useState('');
+  const savePhoto = async (assetId: string, file: File) => {
+    setPhotoError('');
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (context) context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      if (!context) throw new Error('图片无法读取');
+      const next = { ...JSON.parse(localStorage.getItem('scendance.scene-source-photos.v1') ?? '{}'), [assetId]: canvas.toDataURL('image/jpeg', 0.78) };
+      localStorage.setItem('scendance.scene-source-photos.v1', JSON.stringify(next));
+      setPhotos(next);
+    } catch { setPhotoError('封面保存失败，请换一张 JPG 或 PNG 后重试。'); }
+  };
   const toggleHidden = (assetId: string) => setHiddenIds(current => {
     const next = new Set(current);
     if (next.has(assetId)) next.delete(assetId); else next.add(assetId);
@@ -42,6 +67,44 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
   const toggleSolo = (assetId: string) => setSoloId(current => (current === assetId ? null : assetId));
   const currentScene = scenes.find(scene => scene.assetId === currentId);
   const currentName = currentScene?.name ?? current?.name ?? '';
+  if (gallery) return environments.length ? <>{photoError && <p role="alert">{photoError}</p>}<ul className="sc-project-gallery" aria-label="项目中的空间场景">
+    {[...environments].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')).map(environment => {
+      const scene = scenes.find(entry => entry.assetId === environment.assetId);
+      const name = scene?.name ?? environment.name;
+      const photo = photos[environment.assetId] ?? scene?.image;
+      const cloudPreview = thumbnails?.[environment.assetId];
+      const image = photo ?? cloudPreview;
+      const active = environment.assetId === currentId;
+      const loading = busy && preview.assetId === environment.assetId;
+      const failed = preview.status === 'error' && preview.assetId === environment.assetId;
+      const floorIndex = Math.max(0, Math.min(floors.length - 1, environment.floorIndex ?? 0));
+      return <li key={environment.assetId}>
+        <button type="button" className="sc-project-gallery-preview" aria-label={`预览 ${name}`} aria-pressed={active}
+          onClick={() => (onPreview ?? onSelect)(environment.assetId, name)}>
+          <span className="sc-project-gallery-cover">
+            {image ? <MaterialThumb key={image} src={image}/> : <span className="sc-project-gallery-placeholder"><Mountain size={24} aria-hidden="true"/>打开 3D 预览</span>}
+            {photo && cloudPreview && <span className="sc-project-gallery-hover"><MaterialThumb src={cloudPreview}/><small>高斯场景预览</small></span>}
+            {(loading || failed || active) && <small>{loading ? '加载中' : failed ? '加载失败' : '当前场景'}</small>}
+          </span>
+          <strong title={name}>{name}</strong>
+        </button>
+        <details className="sc-project-gallery-settings">
+          <summary aria-label={`管理 ${name}`}>···</summary>
+          <div>
+            <label className="sc-project-gallery-upload">{photo ? '更换实拍封面' : '添加实拍封面'}
+              <input type="file" accept="image/jpeg,image/png,image/webp" aria-label={`${name}实拍封面`}
+                onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void savePhoto(environment.assetId, file); }}/>
+            </label>
+            <label>楼层 <select aria-label={`${name}所在楼层`} value={floorIndex}
+              onChange={event => onSetFloor(environment.assetId, Number(event.currentTarget.value))}>
+              {floors.map((floor, index) => <option key={floor.id} value={index}>{index + 1}F</option>)}
+            </select></label>
+            <button type="button" aria-label={`移除${name}`} onClick={() => onRemove(environment.assetId)}>移除</button>
+          </div>
+        </details>
+      </li>;
+    })}
+  </ul></> : <p className="sc-note">本活动还没有场景。可以从本机扫描或示例加入。</p>;
   return <>
     <div className="sc-space-section-head">
       <Mountain size={15} aria-hidden="true"/><h3>空间场景</h3><small>{environments.length} 个</small>

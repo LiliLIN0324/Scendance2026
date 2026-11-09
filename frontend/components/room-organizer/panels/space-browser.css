@@ -1,0 +1,215 @@
+.sc-space-panel.is-card {
+  --space-ink: #1b2826;
+  --space-muted: #546461;
+  --space-line: #dde6e3;
+  --space-tint: #edf4f1;
+  --space-accent: #245c4a;
+}
+.sc-space-library-menu { position: relative; color: var(--wk-ink-soft); }
+.sc-space-library-menu > summary {
+  display: grid; place-items: center; list-style: none;
+  width: 32px; min-height: 32px; border-radius: 6px; cursor: pointer;
+}
+.sc-space-library-menu > summary::-webkit-details-marker { display: none; }
+.sc-space-library-menu > summary:hover, .sc-space-library-menu[open] > summary { background: var(--wk-plane); }
+.sc-space-library-menu > .sc-space-library-menu-content {
+  position: absolute; z-index: 5; top: calc(100% + 4px); right: 0;
+  display: grid; gap: 6px; min-width: 160px; width: max-content;
+  max-width: min(240px, 75vw); padding: 8px;
+  background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: 8px;
+  box-shadow: 0 6px 20px #162d2a22;
+}
+.sc-space-browser-head nav { margin: 6px 0 0; }
+.sc-space-panel.is-card [data-space-source] { margin: 0; padding: 0; border: 0; }
+.sc-space-panel.is-card [data-space-source][hidden],
+.sc-space-panel.is-card [data-space-source] > summary { display: none !important; }
+.sc-space-samples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 9px; margin: 0; padding: 0; list-style: none; }
+.sc-space-sample {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--space-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-space-sample:hover { background: var(--space-tint); }
+.sc-space-sample img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 9px; background: var(--space-tint); }
+.sc-space-sample strong, .sc-space-sample span { padding-inline: 3px; font-size: 12px; }
+.sc-space-sample span { color: var(--space-accent); font-size: 11px; }
+/* 本机扫描：打开过的场用截下来的实景止帧，没打开过的收成索引行。
+   同一句话不要在每张卡下重复，状态交给描边和右上角的字。 */
+.sc-scan-frames {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  gap: 14px 9px; margin: 0; padding: 0; list-style: none;
+}
+.sc-scan-frame {
+  display: grid; gap: 5px; width: 100%; padding: 0;
+  border: 0; background: none; color: var(--space-ink);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.sc-scan-frame-shot {
+  position: relative; display: grid; place-items: center;
+  aspect-ratio: 16 / 10; overflow: hidden;
+  border-radius: 10px; background: var(--space-tint);
+}
+.sc-scan-frame-shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sc-scan-frame-loading { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: #18282573; color: #fff; }
+.sc-scan-frame.is-current .sc-scan-frame-shot { outline: 2px solid var(--space-accent); outline-offset: -2px; }
+.sc-scan-frame strong {
+  padding-inline: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; font-weight: 500; line-height: 1.4;
+}
+.sc-scan-frame small {
+  padding-inline: 2px; color: var(--space-muted);
+  font-size: 11px; line-height: 1.35; font-variant-numeric: tabular-nums;
+}
+.sc-scan-frame-tag {
+  position: absolute; z-index: 1; top: 6px; left: 6px;
+  padding: 1px 6px; border-radius: 4px;
+  background: #182825db; color: #fff; font-size: 10px; line-height: 16px;
+}
+.sc-scan-frame-open {
+  position: absolute; z-index: 1; bottom: 6px; left: 6px;
+  padding: 2px 7px; border-radius: 4px;
+  background: #182825db; color: #fff; font-size: 10px; line-height: 16px;
+  opacity: 0; transform: translateY(2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.sc-scan-frame:hover .sc-scan-frame-open,
+.sc-scan-frame:focus-visible .sc-scan-frame-open { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sc-scan-frame-open { transition: none; }
+}
+.sc-scan-plain { margin-top: 18px; }
+.sc-scan-plain-label { margin: 0 0 2px; padding-inline: 2px; color: var(--space-muted); font-size: 11px; line-height: 16px; }
+.sc-scan-plain ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--space-line); }
+.sc-scan-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 2px; border: 0; border-bottom: 1px solid var(--space-line);
+  background: none; color: var(--space-ink);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.sc-scan-row:hover { background: var(--space-tint); }
+.sc-scan-row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
+.sc-scan-row small { flex: none; color: var(--space-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sc-scan-row-tag { flex: none; padding: 0 5px; border: 1px solid var(--space-line); border-radius: 4px; color: var(--space-muted); font-size: 10px; line-height: 16px; }
+.sc-scan-row[aria-pressed="true"] { background: var(--space-tint); box-shadow: inset 2px 0 0 var(--space-accent); }
+.sc-scan-row[aria-pressed="true"] strong { color: var(--space-accent); }
+.sc-space-panel.is-card :is(button, a):focus-visible { outline: 2px solid var(--space-accent); outline-offset: 2px; }
+.sc-project-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  gap: 14px 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sc-project-gallery > li { position: relative; min-width: 0; }
+.sc-project-gallery-preview {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--space-ink);
+  cursor: pointer;
+}
+.sc-project-gallery-preview > strong {
+  padding-inline: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.sc-project-gallery-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border-radius: 9px;
+  background: #e8efec;
+}
+.sc-project-gallery-cover img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+.sc-project-gallery-preview[aria-pressed="true"] .sc-project-gallery-cover { outline: 2px solid var(--space-accent); outline-offset: -2px; }
+.sc-project-gallery-preview:hover > strong { color: var(--space-accent); }
+.sc-project-gallery-cover small, .sc-project-gallery-settings summary {
+  border-radius: 5px;
+  background: #182825e8;
+  color: white;
+}
+.sc-project-gallery-cover small { position: absolute; z-index: 1; top: 6px; left: 6px; padding: 2px 5px; font-size: 10px; }
+.sc-project-gallery-placeholder { display: grid; justify-items: center; gap: 5px; color: var(--space-muted); font-size: 11px; }
+.sc-project-gallery-settings { position: absolute; z-index: 2; top: 6px; right: 6px; }
+.sc-project-gallery-settings summary { list-style: none; cursor: pointer; padding: 0 7px; line-height: 24px; }
+.sc-project-gallery-settings summary::-webkit-details-marker { display: none; }
+.sc-project-gallery-settings > div {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  gap: 6px;
+  min-width: 92px;
+  padding: 8px;
+  border: 1px solid var(--space-line);
+  border-radius: 8px;
+  background: var(--wk-paper);
+  color: var(--space-ink);
+  font-size: 12px;
+}
+.sc-project-gallery-settings label { display: flex; justify-content: space-between; gap: 6px; }
+.sc-project-gallery-settings summary:focus-visible { outline: 2px solid var(--space-accent); outline-offset: 2px; }
+.sc-space-source-note { margin: 8px 0 12px; color: var(--space-muted); font-size: 11px; line-height: 16px; }
+.sc-project-gallery-hover { position: absolute; inset: 0; z-index: 1; opacity: 0; background: #e8efec; transition: opacity 140ms ease; }
+.sc-project-gallery-hover small { top: auto; bottom: 6px; }
+.sc-project-gallery-preview:focus-visible .sc-project-gallery-hover { opacity: 1; }
+@media (hover: hover) {
+  .sc-project-gallery-preview:hover .sc-project-gallery-hover { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-project-gallery-hover { transition: none; }
+}
+.sc-project-gallery-settings .sc-project-gallery-upload { display: grid; gap: 4px; }
+.sc-project-gallery-upload input { width: 155px; font-size: 11px; }
+
+/* 场景库对话：真输入框 + 回话记录，不是几个按钮。 */
+.sc-scene-chat { display: grid; gap: 8px; }
+.sc-scene-chat-feed {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 188px; overflow-y: auto; padding-right: 2px;
+}
+.sc-scene-chat-lead { margin: 0; font-size: 12px; color: var(--space-muted, var(--wk-ink-soft)); }
+.sc-scene-chat-feed .ap-user, .sc-scene-chat-feed .ap-turn { font-size: 12px; }
+.sc-scene-chat-composer { display: flex; gap: 6px; align-items: flex-end; }
+.sc-scene-chat-composer textarea {
+  flex: 1; min-width: 0; min-height: 38px; max-height: 88px; resize: vertical;
+  padding: 9px 10px; border: 1px solid var(--space-line, var(--wk-hair)); border-radius: 8px;
+  background: var(--wk-paper); color: var(--space-ink, var(--wk-ink));
+  font: inherit; font-size: 13px; line-height: 1.45;
+}
+.sc-scene-chat-composer textarea:focus-visible { outline: 2px solid var(--space-accent, #245c4a); outline-offset: -1px; }
+.sc-scene-chat-send {
+  flex: 0 0 auto; width: 30px; height: 30px; padding: 0;
+  border: 1px solid transparent; border-radius: 50%;
+  background: var(--space-accent, #245c4a); color: #fff;
+  display: grid; place-items: center; cursor: pointer;
+}
+.sc-scene-chat-send:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); cursor: default; }
+.sc-scene-chat-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-scene-chat-quick > :is(button, a) {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px;
+  border: 1px solid var(--space-line, var(--wk-hair)); border-radius: 6px;
+  background: var(--wk-paper); color: var(--space-ink, var(--wk-ink));
+  font: inherit; font-size: 12px; cursor: pointer; text-decoration: none;
+}
+.sc-scene-chat-quick > :is(button, a):hover { background: var(--space-tint, var(--wk-plane)); }
+

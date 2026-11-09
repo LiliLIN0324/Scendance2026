@@ -66,6 +66,10 @@ export interface ViewportProps {
   walkthroughInEnvironment?: boolean;
   /** The backdrop is metric: the walker roams the scanned bounds 1:1, not the plate. */
   walkthroughMetric?: boolean;
+  /** 近前可坐的坐具名；漫游里显示「按 F 坐下」。 */
+  walkthroughSeat?: string | null;
+  /** 正坐在坐具上：提示换成「按 F 起身」。 */
+  walkthroughSeated?: boolean;
   hover?: HoverState | null;
   measurementDistance?: number | null;
   /** Points placed with the distance tool; absent while the tool is off. */
@@ -411,6 +415,18 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
               <StatusChip intent="accent">
                 <Icon name="live" size={14} />
                 {walkHint(props.walkthroughPhase, props.walkthroughInEnvironment, props.walkthroughMetric)}
+              </StatusChip>
+            </div>
+          )}
+          {(props.walkthroughSeated || props.walkthroughSeat) && (
+            <div
+              className="pointer-events-none absolute bottom-28 left-1/2"
+              style={{ transform: 'translateX(-50%)' }}
+            >
+              <StatusChip intent="accent">
+                {props.walkthroughSeated
+                  ? '已坐下 · F 或方向键起身'
+                  : `按 F 坐下${props.walkthroughSeat ? ` · ${props.walkthroughSeat}` : ''}`}
               </StatusChip>
             </div>
           )}

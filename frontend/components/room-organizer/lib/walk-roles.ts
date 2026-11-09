@@ -1,0 +1,32 @@
+/**
+ * 漫游角色清单：左侧「漫游角色」只负责选人，右侧 `tool-walk` 负责进出漫游。
+ * 两边共用这一份，改角色不会多出第二个入口。
+ *
+ * `assetId` 是本地资产代理（127.0.0.1:3199）里合成好的 GLB 文件名：
+ * 由 `docs/evidence/aholo/people04-hanfu-batch/_merge-walk.mjs` 把该槽位的
+ * retarget-Idle_Loop / retarget-Walk_Loop 合并成一个双动画模型。
+ */
+export type WalkRole = {
+  assetId: string;
+  name: string;
+  image: string;
+  /** 没有绑骨或没有 Idle/Walk 的角色只能选、不能走。 */
+  walkable: boolean;
+  /** 不能走时说明原因，显示在卡片下面。 */
+  note?: string;
+};
+
+export const WALK_ROLES: readonly WalkRole[] = [
+  { assetId: '7a9f1e21-8c34-4d51-a001-b00000000001', name: '唐女', image: '/assets/avatars/walk-tang-f.jpg', walkable: true },
+  { assetId: '7a9f1e21-8c34-4d51-a002-b00000000002', name: '唐男', image: '/assets/avatars/walk-tang-m.jpg', walkable: true },
+  { assetId: '7a9f1e21-8c34-4d51-a003-b00000000003', name: '宋女', image: '/assets/avatars/walk-song-f.jpg', walkable: true },
+  { assetId: '7a9f1e21-8c34-4d51-a004-b00000000004', name: '明女', image: '/assets/avatars/walk-ming-f.jpg', walkable: true },
+  { assetId: '7a9f1e21-8c34-4d51-a005-b00000000005', name: '明男', image: '/assets/avatars/walk-ming-m.jpg', walkable: true },
+  { assetId: '7a9f1e21-8c34-4d51-a006-b00000000006', name: '宋男', image: '/assets/avatars/walk-song-m.jpg', walkable: true },
+];
+
+export const DEFAULT_WALK_ROLE_ID = WALK_ROLES[0]!.assetId;
+
+export function findWalkRole(assetId: string): WalkRole {
+  return WALK_ROLES.find(role => role.assetId === assetId) ?? WALK_ROLES[0]!;
+}

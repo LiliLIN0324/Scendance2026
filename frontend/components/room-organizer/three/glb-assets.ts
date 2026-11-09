@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { GLB_MAX_FILE_BYTES } from '../lib/glb-limits';
+import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { normalizeGlbRoot } from '../lib/glb-normalize';
 import { isGlbUrl } from '../lib/glb-url';
+import { personIsAnimated, registerPersonAnim } from './people-anim';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
 const TIMEOUT_MS = 30_000;
@@ -67,8 +68,8 @@ export function getGlbAssetSource(key: string): THREE.Object3D | undefined { ret
 export function glbAssetKey(item: Pick<FurnitureItem, 'assetId' | 'glbUrl'>): string | undefined { return item.assetId ?? item.glbUrl; }
 
 /** Reject external URI dependencies: an archived standalone GLB must reopen by itself. */
-export function validateGlbBuffer(buffer: ArrayBuffer): void {
-  if (buffer.byteLength > GLB_MAX_FILE_BYTES) throw new Error('GLB 超过 10 MB，未载入。');
+export function validateGlbBuffer(buffer: ArrayBuffer, maxBytes = GLB_MAX_FILE_BYTES): void {
+  if (buffer.byteLength > maxBytes) throw new Error(`GLB 超过 ${maxBytes / (1024 * 1024)} MB，未载入。`);
   if (buffer.byteLength < 20) throw new Error('GLB 文件不完整。');
   const view = new DataView(buffer);
   if (view.getUint32(0, true) !== 0x46546c67 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== buffer.byteLength) {
@@ -84,11 +85,15 @@ export function validateGlbBuffer(buffer: ArrayBuffer): void {
 
 async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
   if (!isGlbUrl(url)) throw new Error('模型地址无效。');
+  const localTrial = process.env.NODE_ENV === 'development'
+    && LOCAL_WALK_ASSET_IDS.some(assetId => url === `http://127.0.0.1:3199/asset/${assetId}.glb`);
+  const maxBytes = localTrial ? LOCAL_WALK_MAX_FILE_BYTES : GLB_MAX_FILE_BYTES;
+  const tooLarge = () => new Error(`GLB 超过 ${maxBytes / (1024 * 1024)} MB，未载入。`);
   const response = await fetch(url, { signal, credentials: 'omit' });
   if (!response.ok) throw new Error(`模型下载失败（HTTP ${response.status}）。`);
-  if (Number(response.headers.get('content-length')) > GLB_MAX_FILE_BYTES) throw new Error('GLB 超过 10 MB，未载入。');
+  if (Number(response.headers.get('content-length')) > maxBytes) throw tooLarge();
   if (!response.body) {
-    const buffer = await response.arrayBuffer(); validateGlbBuffer(buffer); return buffer;
+    const buffer = await response.arrayBuffer(); validateGlbBuffer(buffer, maxBytes); return buffer;
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -98,14 +103,14 @@ async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffe
       const result = await reader.read();
       if (result.done) break;
       count += result.value.byteLength;
-      if (count > GLB_MAX_FILE_BYTES) { await reader.cancel(); throw new Error('GLB 超过 10 MB，未载入。'); }
+      if (count > maxBytes) { await reader.cancel(); throw tooLarge(); }
       chunks.push(result.value);
     }
   } finally { reader.releaseLock(); }
   const bytes = new Uint8Array(count);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  validateGlbBuffer(bytes.buffer);
+  validateGlbBuffer(bytes.buffer, maxBytes);
   return bytes.buffer;
 }
 
@@ -211,7 +216,7 @@ export function normalizeGlbInstance(
   return result;
 }
 
-export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
+export function createCachedGlbModel(item: FurnitureItem, autoplay = true): THREE.Group | null {
   const key = glbAssetKey(item);
   const entry = key ? cache.get(key) : undefined;
   const asset = entry?.source;
@@ -255,8 +260,26 @@ export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
   }
   group.userData.glbStatus = 'ready';
   // 只有绑骨实例才挂 mixer；挂上后由渲染循环的 advanceGlbAnimations 每帧推进。
-  if (rigged && clips?.length) {
+  if (autoplay && rigged && clips?.length) {
     const mixer = new THREE.AnimationMixer(group);
+    // 正式步态优先（Walk_Formal_Loop，走路胳膊不外撇）；重定向没出这条前回退 Walk_Loop。
+    const walk = clips.find(clip => clip.name === 'Walk_Formal_Loop') ?? clips.find(clip => clip.name === 'Walk_Loop');
+    if (item.type === 'person' && walk && personIsAnimated(item.walkRoute, item.personAction, item.personPaused)) {
+      registerPersonAnim(group, {
+        id: item.id,
+        mixer,
+        rig: null,
+        clips: {
+          walk,
+          idle: clips.find(clip => clip.name === 'Idle_Loop') ?? null,
+          talk: clips.find(clip => clip.name === 'Idle_Talking_Loop') ?? null,
+        },
+        action: item.personAction ?? 'idle',
+        paused: item.personPaused === true,
+        route: item.walkRoute ?? null,
+      });
+      return group;
+    }
     mixer.clipAction(clips[0]).play();
     mixer.timeScale = 1;
     group.userData.glbMixer = mixer;
@@ -264,6 +287,18 @@ export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
     mixers.add(mixer);
   }
   return group;
+}
+
+export function createWalkAvatar(item: FurnitureItem) {
+  const key = glbAssetKey(item);
+  const clips = key ? cache.get(key)?.animations : undefined;
+  const idle = clips?.find(clip => clip.name === 'Idle_Loop');
+  const walk = clips?.find(clip => clip.name === 'Walk_Formal_Loop') ?? clips?.find(clip => clip.name === 'Walk_Loop');
+  if (!idle || !walk) return null;
+  const group = createCachedGlbModel(item, false);
+  if (!group) return null;
+  const mixer = new THREE.AnimationMixer(group);
+  return { group, mixer, idle: mixer.clipAction(idle), walk: mixer.clipAction(walk) };
 }
 
 export interface GlbCatalogInput {

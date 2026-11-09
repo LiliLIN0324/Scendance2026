@@ -10,6 +10,18 @@
   flex: 0 0 auto;
   min-height: 0;
 }
+.ap-tool-actions {
+  padding: 8px 12px 10px;
+  border-top: 1px solid #c7d6cc;
+}
+.ap-tool-actions .ap-composer-left { flex-wrap: wrap; gap: 6px; }
+.ap-tool-actions .ap-gen-chip {
+  min-height: 34px;
+  border-radius: 7px;
+  border-color: #c7d6cc;
+  background: #f7faf7;
+  color: #245c4a;
+}
 
 /* 和 Bingo 的 .ap-feed 同一套内边距与间距，只把高度收在面板下半截。 */
 .ap-chat-feed {

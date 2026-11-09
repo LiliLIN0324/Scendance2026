@@ -304,6 +304,18 @@ describe('evaluateKeepOut / evaluateRouteClear（SC-19 §五.4：必留区与必
     expect(v[0].message).toContain('测试家具×2');
   });
 
+  it('GEN-03：消防疏散预留 3m，同一摆位仍满足普通动线', () => {
+    const route = makeRoute('egress', [{ x: 0, z: -5 }, { x: 0, z: 5 }]);
+    const fireRoute = { ...route, label: '消防疏散' };
+    const near = furniture('d1', 'desk', 2, 0, 0.6, 1.8);
+    expect(evaluateRouteClear([near], [route])).toEqual([]);
+    expect(evaluateRouteClear([near], [fireRoute])).toEqual([
+      expect.objectContaining({ code: 'ROUTE_BLOCKED', severity: 'hard', ruleId: 'GEN-03', zoneId: 'egress' }),
+    ]);
+    const edge = furniture('d1', 'desk', 2.4, 0, 0.6, 1.8);
+    expect(evaluateRouteClear([edge], [fireRoute])).toEqual([]);
+  });
+
   it('线段整个穿过家具 footprint（相交距离=0）必判；斜向线段也不漏', () => {
     const route = makeRoute('r1', [{ x: -3, z: -3 }, { x: 3, z: 3 }]);
     const blocker = furniture('d1', 'desk', 0, 0, 0.6, 1.8);

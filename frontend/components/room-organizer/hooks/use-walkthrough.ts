@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildWalkColliders, resolveWalkerStep } from '../lib/walk-collision';
 import { adoptWalkPointerLock, walkPointerLocked } from '../lib/walk-engage';
+import { SEAT_TYPES, findSeat, type SeatTarget } from '../lib/walk-seat';
 import type { FurnitureItem, InteriorWall } from '../lib/types';
 import type { WalkCollider, WalkCollisionOptions, WalkerPosition } from '../lib/walk-collision';
 import type * as ThreeNS from 'three';
@@ -11,6 +12,8 @@ type ThreeModule = typeof import('three');
 
 const NO_ITEMS: readonly FurnitureItem[] = [];
 const NO_WALLS: readonly InteriorWall[] = [];
+
+export type WalkViewMode = 'first' | 'third' | 'shoulder';
 
 export interface UseWalkthroughOptions {
   enabled: boolean;
@@ -31,6 +34,8 @@ export interface UseWalkthroughOptions {
   /** The active floor's furniture and partitions the walker collides with (#156). */
   items?: readonly FurnitureItem[];
   interiorWalls?: readonly InteriorWall[];
+  /** 楼层地面标高（米）：坐具的坐面与坐姿眼高都从这里起算。 */
+  floorY?: number;
   /** Request a render on the next animation frame (render-on-demand). */
   invalidate?: () => void;
   /**
@@ -39,6 +44,8 @@ export interface UseWalkthroughOptions {
    * browser-reserved and only exits pointer lock.
    */
   onExit?: () => void;
+  viewMode?: WalkViewMode;
+  onWalkFrame?: (frame: { x: number; y: number; z: number; yaw: number; moving: boolean; thirdPerson: boolean; delta: number }) => void;
 }
 
 const MOVEMENT_KEYS = new Set([
@@ -121,6 +128,10 @@ export interface UseWalkthroughResult {
    * press-release on the canvas.
    */
   phase: WalkthroughPhase;
+  /** 近前可坐的坐具；没有就是 null。UI 用它显示「按 F 坐下」。 */
+  nearSeat: SeatTarget | null;
+  /** 正坐着：镜头已在坐姿眼高，按 F 或走动即起身。 */
+  seated: boolean;
 }
 
 const pointerLockControlsPromise = import('three/examples/jsm/controls/PointerLockControls.js');
@@ -139,11 +150,18 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     walkBounds = null,
     items = NO_ITEMS,
     interiorWalls = NO_WALLS,
+    floorY = 0,
     invalidate,
     onExit,
+    viewMode = 'first',
+    onWalkFrame,
   } = options;
 
   const [phase, setPhase] = useState<WalkthroughPhase>('pending');
+  // 坐：近前有没有可坐的、以及此刻坐没坐。状态只在变化时推进 React，
+  // 每帧的判定结果放在 ref 里给 RAF 循环用。
+  const [nearSeat, setNearSeat] = useState<SeatTarget | null>(null);
+  const [seated, setSeated] = useState(false);
   // Read by the RAF loop without re-running the init effect: while the phase
   // is `drag` the loop keeps scrolling the walker even though no pointer lock
   // is held (the drag fallback still walks with WASD).
@@ -160,6 +178,11 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     () => (enabled ? buildWalkColliders(items, interiorWalls, { roomWidth, roomDepth }) : []),
     [enabled, items, interiorWalls, roomWidth, roomDepth]
   );
+  // 坐具单独挑出来：每帧只需要在十几件里找最近的一把，不必扫全屋物料。
+  const seats = useMemo<readonly FurnitureItem[]>(
+    () => (enabled ? items.filter(item => SEAT_TYPES.has(item.type) && !!item.position) : []),
+    [enabled, items]
+  );
 
   // Live values the RAF loop / Esc handler read without re-running the init
   // effect (which would drop pointer lock). Updated every render.
@@ -169,14 +192,28 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
   const roomDepthRef = useRef(roomDepth);
   const walkBoundsRef = useRef(walkBounds);
   const collidersRef = useRef(colliders);
+  const seatsRef = useRef(seats);
+  const floorYRef = useRef(floorY);
+  /** 近前那把坐具与当前坐姿；RAF 每帧读，不触发重渲染。 */
+  const seatRef = useRef<{ near: SeatTarget | null; seated: SeatTarget | null; nearId: string | null }>({
+    near: null,
+    seated: null,
+    nearId: null,
+  });
+  /** F 键只在按下那一帧被消费一次。 */
+  const seatToggleRef = useRef(false);
   const invalidateRef = useRef(invalidate);
   const onExitRef = useRef(onExit);
+  const avatarRef = useRef({ viewMode, onWalkFrame });
+  avatarRef.current = { viewMode, onWalkFrame };
   eyeHeightRef.current = eyeHeight;
   walkSpeedRef.current = walkSpeed;
   roomWidthRef.current = roomWidth;
   roomDepthRef.current = roomDepth;
   walkBoundsRef.current = walkBounds;
   collidersRef.current = colliders;
+  seatsRef.current = seats;
+  floorYRef.current = floorY;
   invalidateRef.current = invalidate;
   onExitRef.current = onExit;
 
@@ -200,6 +237,11 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
   useEffect(() => {
     if (!enabled) {
       setPhase('pending');
+      // 退出漫游：坐姿与近前坐具都作废，下次进来重新判定。
+      seatRef.current = { near: null, seated: null, nearId: null };
+      seatToggleRef.current = false;
+      setSeated(false);
+      setNearSeat(null);
       return undefined;
     }
     const canvas = canvasRef.current;
@@ -268,6 +310,8 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (MOVEMENT_KEYS.has(event.code)) pressed.add(event.code);
+      // F：坐下 / 起身。真正消费在下一帧的循环里，那里才看得到近前有没有坐具。
+      if (event.code === 'KeyF') seatToggleRef.current = true;
     };
     const onKeyUp = (event: KeyboardEvent) => pressed.delete(event.code);
     // Escape exit: the browser reserves the first Escape to release pointer
@@ -285,20 +329,20 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     cleanup.push(() => window.removeEventListener('keyup', onKeyUp));
     cleanup.push(() => window.removeEventListener('keydown', onEscape));
 
-    const clampToFootprint = (): void => {
+    const clampToFootprint = (position: WalkerPosition): void => {
       // 环境预览立着真实米制的点云时，围栏换成点云边界：这段是 1:1 实景漫游。
       const bounds = walkBoundsRef.current;
       if (bounds) {
-        clampToWalkBounds(camera.position, bounds);
+        clampToWalkBounds(position, bounds);
         return;
       }
       const halfW = roomWidthRef.current / 2 - WALL_MARGIN;
       const halfD = roomDepthRef.current / 2 - WALL_MARGIN;
       if (Number.isFinite(halfW) && halfW > 0) {
-        camera.position.x = Math.max(-halfW, Math.min(halfW, camera.position.x));
+        position.x = Math.max(-halfW, Math.min(halfW, position.x));
       }
       if (Number.isFinite(halfD) && halfD > 0) {
-        camera.position.z = Math.max(-halfD, Math.min(halfD, camera.position.z));
+        position.z = Math.max(-halfD, Math.min(halfD, position.z));
       }
     };
 
@@ -312,9 +356,12 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       canvas.ownerDocument.addEventListener('pointerlockchange', adopt);
       cleanup.push(() => canvas.ownerDocument.removeEventListener('pointerlockchange', adopt));
       savedCameraPosition = camera.position.clone();
-      camera.position.set(0, eyeHeightRef.current, 3);
-      camera.lookAt(0, eyeHeightRef.current, 0);
-      clampToFootprint();
+      const bounds = avatarRef.current.onWalkFrame ? walkBoundsRef.current : null;
+      camera.position.set(bounds ? (bounds.minX + bounds.maxX) / 2 : 0, eyeHeightRef.current,
+        bounds ? (bounds.minZ + bounds.maxZ) / 2 : 3);
+      camera.lookAt(camera.position.x, camera.position.y, camera.position.z - 1);
+      clampToFootprint(camera.position);
+      const player = camera.position.clone();
 
       // Not controls.lock(): it drops the promise requestPointerLock returns,
       // so a refused lock was an unhandled rejection the player never saw
@@ -417,6 +464,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       invalidateRef.current?.();
 
       const forward = new THREE.Vector3();
+      const cameraForward = new THREE.Vector3();
       const right = new THREE.Vector3();
       // Scratch for the collision step — reused every frame so the loop
       // allocates nothing (#156).
@@ -424,6 +472,35 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       const walkTo: WalkerPosition = { x: 0, z: 0 };
       const walkOut: WalkerPosition = { x: 0, z: 0 };
       const walkOptions: WalkCollisionOptions = {};
+      /** 坐下：镜头降到坐姿眼高，位置钉在坐具中心。 */
+      const sitDown = (seat: SeatTarget): void => {
+        seatRef.current.seated = seat;
+        seatRef.current.near = seat;
+        seatRef.current.nearId = seat.id;
+        setSeated(true);
+        setNearSeat(seat);
+        player.x = seat.x;
+        player.z = seat.z;
+        player.y = seat.eyeY;
+        camera.position.copy(player);
+        invalidateRef.current?.();
+      };
+      /** 起身：从坐具中心按最近的一面推出去，复用同一套碰撞推挤。 */
+      const standUp = (): void => {
+        const seat = seatRef.current.seated;
+        seatRef.current.seated = null;
+        setSeated(false);
+        if (!seat) return;
+        walkOptions.roomWidth = roomWidthRef.current;
+        walkOptions.roomDepth = roomDepthRef.current;
+        walkFrom.x = seat.x;
+        walkFrom.z = seat.z;
+        resolveWalkerStep(collidersRef.current, walkFrom, walkFrom, WALKER_RADIUS, walkOut, walkOptions);
+        player.x = walkOut.x;
+        player.z = walkOut.z;
+        clampToFootprint(player);
+        invalidateRef.current?.();
+      };
       let lastTime = performance.now();
       const step = () => {
         rafId = requestAnimationFrame(step);
@@ -449,32 +526,72 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
         if (pressed.has('KeyA') || pressed.has('ArrowLeft')) dx -= 1;
         if (pressed.has('KeyD') || pressed.has('ArrowRight')) dx += 1;
 
-        if (dx === 0 && dz === 0) return;
-        const len = Math.hypot(dx, dz);
-        dx /= len;
-        dz /= len;
-
-        camera.getWorldDirection(forward);
-        forward.y = 0;
-        forward.normalize();
+        const len = Math.hypot(dx, dz) || 1;
+        camera.getWorldDirection(cameraForward);
+        forward.set(cameraForward.x, 0, cameraForward.z).normalize();
         right.crossVectors(forward, camera.up).normalize();
+        const avatar = avatarRef.current;
 
-        const distance = speed * delta;
-        walkFrom.x = camera.position.x;
-        walkFrom.z = camera.position.z;
-        camera.position.addScaledVector(forward, -dz * distance);
-        camera.position.addScaledVector(right, dx * distance);
-        walkTo.x = camera.position.x;
-        walkTo.z = camera.position.z;
+        // 坐：F 切换。坐着时镜头定在坐姿眼高（第一人称），按方向键起身接着走。
+        const seatState = seatRef.current;
+        if (seatToggleRef.current) {
+          seatToggleRef.current = false;
+          if (seatState.seated) standUp();
+          else if (seatState.near) sitDown(seatState.near);
+        }
+        if (seatState.seated) {
+          if (dx !== 0 || dz !== 0) {
+            standUp();
+          } else {
+            player.x = seatState.seated.x;
+            player.z = seatState.seated.z;
+            player.y = seatState.seated.eyeY;
+            camera.position.copy(player);
+            avatar.onWalkFrame?.({ x: player.x, y: player.y, z: player.z,
+              yaw: Math.atan2(forward.x, forward.z), moving: false, thirdPerson: false, delta });
+            return;
+          }
+        }
+
+        const distance = speed * delta / len;
+        walkFrom.x = player.x;
+        walkFrom.z = player.z;
+        walkTo.x = player.x + (-dz * forward.x + dx * right.x) * distance;
+        walkTo.z = player.z + (-dz * forward.z + dx * right.z) * distance;
         // Slide around furniture and interior walls (#156). Room dims decide
         // whether outdoor items count; Infinity (no room) reads as "inside".
         walkOptions.roomWidth = roomWidthRef.current;
         walkOptions.roomDepth = roomDepthRef.current;
-        resolveWalkerStep(collidersRef.current, walkFrom, walkTo, WALKER_RADIUS, walkOut, walkOptions);
-        camera.position.x = walkOut.x;
-        camera.position.z = walkOut.z;
-        camera.position.y = eyeHeightRef.current;
-        clampToFootprint();
+        if (dx !== 0 || dz !== 0) {
+          resolveWalkerStep(collidersRef.current, walkFrom, walkTo, WALKER_RADIUS, walkOut, walkOptions);
+          player.x = walkOut.x;
+          player.z = walkOut.z;
+          clampToFootprint(player);
+        }
+        player.y = eyeHeightRef.current;
+        camera.position.copy(player);
+        // 近前有没有可坐的：只在换了一把（或走开）时推进 React，UI 才能稳定显示提示。
+        const candidate = seatsRef.current.length > 0 ? findSeat(seatsRef.current, player, floorYRef.current) : null;
+
+        if ((candidate?.id ?? null) !== seatState.nearId) {
+          seatState.nearId = candidate?.id ?? null;
+          seatState.near = candidate;
+          setNearSeat(candidate);
+        } else {
+          seatState.near = candidate;
+        }
+        if (avatar.viewMode === 'third') {
+          camera.position.addScaledVector(cameraForward, -4).addScaledVector(right, 0.65);
+        } else if (avatar.viewMode === 'shoulder') {
+          camera.position.addScaledVector(cameraForward, -1.5).addScaledVector(right, 0.42);
+          camera.position.y -= 0.18;
+        }
+        const movedX = player.x - walkFrom.x;
+        const movedZ = player.z - walkFrom.z;
+        const moving = Math.hypot(movedX, movedZ) > 0.0001;
+        avatar.onWalkFrame?.({ x: player.x, y: player.y, z: player.z,
+          yaw: Math.atan2(moving ? movedX : forward.x, moving ? movedZ : forward.z),
+          moving, thirdPerson: avatar.viewMode !== 'first', delta });
       };
       rafId = requestAnimationFrame(step);
       cleanup.push(() => cancelAnimationFrame(rafId));
@@ -493,5 +610,5 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     };
   }, [enabled, canvasRef, threeModuleRef, cameraRef, orbitRef]);
 
-  return { phase };
+  return { phase, nearSeat, seated };
 }

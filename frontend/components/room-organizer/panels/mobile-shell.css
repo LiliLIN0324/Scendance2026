@@ -13,7 +13,7 @@
 
 /* “拍场”只在手机弹层里占一格；桌面左轨恢复四格（品牌 + 三个 agent 钮），这里默认收起。
    它是链接而不是按钮，去掉默认下划线，其余沿用 sc-rail-tool。 */
-.sc-rail-capture { display: none; color: inherit; text-decoration: none; }
+.sc-rail-capture { color: inherit; }
 
 @media (max-width: 768px) {
   .sc-workbench {
@@ -160,7 +160,7 @@
   /* 五格：图标 28 + 标签 16，格高 64，整格即触控区 */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand,
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc,
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail a.sc-rail-capture {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-capture {
     display: flex !important; flex-direction: column !important; align-items: center; justify-content: center; gap: 4px;
     width: auto; min-width: 0; height: 64px; min-height: 64px;
     margin: 0; padding: 4px; border: 0; border-radius: 12px; background: transparent;
@@ -171,7 +171,7 @@
     display: grid; flex: none; width: 28px; height: 28px; margin: 0;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-label,
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail a.sc-rail-capture > span.sc-rail-label {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-capture > span.sc-rail-label {
     display: block; flex: none; color: var(--wk-ink-soft); font-size: 12px; line-height: 16px; white-space: nowrap;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active > span.sc-rail-label { color: var(--wk-green-deep); }

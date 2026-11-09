@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { preserveCurrentActivity } from '../../../lib/production-plan';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
-import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
+import { BLANK_VENUE, HARD_FINISH_HALL, createBlankVenue, createHardFinishHall } from '../lib/blank-venue';
 import { isUntouched } from '../lib/restore-point';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { loadScenePreset } from '../three/scene-presets';
@@ -16,7 +16,7 @@ interface Props {
   active?: ScenePresetKey | undefined;
 }
 
-type RailChoice = ScenePresetKey | 'blank';
+type RailChoice = ScenePresetKey | 'blank' | 'hall';
 
 function keepsExecution(layout: RoomLayout): boolean {
   return layout.productionPlan !== undefined || layout.eventOperations !== undefined
@@ -60,8 +60,21 @@ export function ScenePresetsPanel({ layout, onApply, active }: Props): JSX.Eleme
     } catch (error) { setNotice(error instanceof Error ? error.message : '空白空间没立起来，请重试。'); }
     finally { loading.current = false; setBusy(null); }
   }
+  function loadHall(): void {
+    if (loading.current) return;
+    const before = current.current;
+    loading.current = true;
+    setPending(null); setBusy('hall'); setNotice('');
+    try {
+      onApply(createHardFinishHall(before));
+      setNotice('');
+    } catch (error) { setNotice(error instanceof Error ? error.message : '硬装空房没立起来，请重试。'); }
+    finally { loading.current = false; setBusy(null); }
+  }
   const choose = (choice: RailChoice): void => {
-    if (choice === 'blank') loadBlank(); else void load(choice);
+    if (choice === 'blank') loadBlank();
+    else if (choice === 'hall') loadHall();
+    else void load(choice);
   };
   // A fresh plan can be replaced in one click; anything already worked on asks
   // on the card itself rather than through a browser dialog.
@@ -70,9 +83,12 @@ export function ScenePresetsPanel({ layout, onApply, active }: Props): JSX.Eleme
     if (isUntouched(current.current)) { choose(choice); return; }
     setPending(choice);
   };
-  const confirmCopy = (choice: RailChoice): string => choice === 'blank'
-    ? `会清空当前布置换成空地${keepsExecution(current.current) ? '；活动需求和任务保留' : ''}。`
-    : keepsExecution(current.current) ? '活动需求和任务会保留。' : '会替换当前布置。';
+  const confirmCopy = (choice: RailChoice): string => {
+    const keeps = keepsExecution(current.current) ? '；活动需求和任务保留' : '';
+    if (choice === 'blank') return `会清空当前布置换成空地${keeps}。`;
+    if (choice === 'hall') return `会清空当前布置换成 ${HARD_FINISH_HALL.width} × ${HARD_FINISH_HALL.depth} m 的硬装空房${keeps}。`;
+    return keepsExecution(current.current) ? '活动需求和任务会保留。' : '会替换当前布置。';
+  };
   return <section className="sc-preset-board" aria-label="场景预设">
     <div ref={rail.setRef} onKeyDown={rail.onKeyDown} className="sc-preset-rail" role="group" aria-label="场景模板" tabIndex={0}>
       <div className="sc-preset-tile" key="blank">
@@ -84,6 +100,19 @@ export function ScenePresetsPanel({ layout, onApply, active }: Props): JSX.Eleme
         {pending === 'blank' && <div className="sc-preset-confirm" role="group" aria-label="确认换成空白空间">
           <p>{confirmCopy('blank')}</p>
           <div><button type="button" className="is-go" onClick={choose.bind(null, 'blank')}>确认换成</button>
+          <button type="button" onClick={() => setPending(null)}>取消</button></div>
+        </div>}
+      </div>
+      <div className="sc-preset-tile" key="hall">
+        <button className="sc-preset-card" type="button" disabled={busy !== null} onClick={() => press('hall')}
+          aria-label={`载入硬装空房 宴会厅 ${HARD_FINISH_HALL.width} × ${HARD_FINISH_HALL.depth} 米`}
+          title="18 × 12 m、净高 5 m、2.4 m 双开主入口：只有墙、地面、踢脚线和门洞，没有家具">
+          <span className="sc-preset-blank" aria-hidden="true"><small>{HARD_FINISH_HALL.width} × {HARD_FINISH_HALL.depth} m · 净高 {HARD_FINISH_HALL.height} m</small></span>
+          <strong>硬装空房 · 宴会厅</strong>
+        </button>
+        {pending === 'hall' && <div className="sc-preset-confirm" role="group" aria-label="确认换成硬装空房">
+          <p>{confirmCopy('hall')}</p>
+          <div><button type="button" className="is-go" onClick={choose.bind(null, 'hall')}>确认换成</button>
           <button type="button" onClick={() => setPending(null)}>取消</button></div>
         </div>}
       </div>

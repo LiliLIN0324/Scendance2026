@@ -1,0 +1,53 @@
+{
+  "note": "本机扫描清单（人工核对过出处的真实场地高斯）。只有这里列出的资产算「场地扫描」；.cache/aholo 里 10-30 那批 world 测试件、物件 GLB 都不算。生成索引：node scripts/build-local-scan-index.mjs",
+  "scans": [
+    {
+      "assetId": "c338f720-3f60-4adb-8f3b-023300000002",
+      "kind": "spz",
+      "name": "西湖 0233 · 极速档",
+      "source": "XH-02 0233 极速档：worldId 3FO4FMTUKCW4 / task 3FO4K4RLNAJM，SPZ 7,795,522 B（docs/evidence/aholo/xh02-0233-low/）"
+    },
+    {
+      "assetId": "c338f720-3f60-4adb-8f3b-023300000001",
+      "kind": "spz",
+      "name": "西湖 0233 · 标准档",
+      "source": "XH-02 0233 标准档：task 3FO4K4RLN3UK，SPZ 23,239,097 B（docs/evidence/aholo/xh02-0233-normal/）"
+    },
+    {
+      "assetId": "48245ba8-8f0c-456f-a4c4-6a13526e08b9",
+      "kind": "spz",
+      "name": "本机高斯 48245ba8",
+      "source": "Aholo web-scan 实景重建「新场景 2026/11/6」，id 48245ba88f0c456fa4c46a13526e08b9，SPZ 82,917,078 B（docs/evidence/aholo/scan-2026-11-06T13-23-44-623Z/probe.json）"
+    },
+    {
+      "assetId": "6645e211-d690-4673-a4b4-85888d09906d",
+      "kind": "spz",
+      "name": "本机高斯 6645e211",
+      "source": "scan-room130-2048 房间 130，SPZ 61,654,317 B（docs/evidence/aholo/scan-room130-2048/scene.spz）"
+    },
+    {
+      "assetId": "26932bea-190d-4e8d-b2f2-54641d084043",
+      "kind": "spz",
+      "name": "本机高斯 26932bea",
+      "source": "scan-tearoom-130 茶室 130，SPZ 37,133,588 B（docs/evidence/aholo/scan-tearoom-130/artifacts/scene.spz）"
+    },
+    {
+      "assetId": "3358a0af-e609-49e4-83a1-27ea50646c55",
+      "kind": "spz",
+      "name": "本机高斯 3358a0af",
+      "source": "chain-video-discord3 视频重建，SPZ 19,424,187 B（docs/evidence/aholo/chain-video-discord3/3FO4K4RKJOP3.spz）"
+    },
+    {
+      "assetId": "3bac508e-3009-48c6-ab37-b7124735d03b",
+      "kind": "spz",
+      "name": "本机高斯 3bac508e",
+      "source": "茶亭 0194 标准档 pavilion-0194-normal，SPZ 23,199,588 B（docs/evidence/aholo/world-3FO4K4RKIQ9S/）"
+    },
+    {
+      "assetId": "9587c51d-44b4-44b7-a5ea-462444aa218b",
+      "kind": "spz",
+      "name": "本机高斯 9587c51d",
+      "source": "茶亭 0194 极速档 pavilion-0194，SPZ 6,097,192 B（docs/evidence/aholo/world-3FO4K4RKIQ9S/）"
+    }
+  ]
+}

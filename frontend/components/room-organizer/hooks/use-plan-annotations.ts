@@ -12,7 +12,7 @@ import {
 } from '../../../lib/plan-annotation';
 
 /** 绘制模式：off 表示不在画标注；其余三种对应标注 kind。 */
-export type PlanDrawMode = 'off' | PlanAnnotationKind;
+export type PlanDrawMode = 'off' | 'fire-route' | PlanAnnotationKind;
 
 interface PlanAnnotationState {
   draft: LayoutPlanDraft | null;

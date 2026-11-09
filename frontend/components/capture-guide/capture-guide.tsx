@@ -82,6 +82,8 @@ type ScanCompleteness = 'complete' | 'partial' | 'unknown';
 
 const CAPTURE_STEPS: StepId[] = ['mode', 'rules', 'orbit', 'scale', 'verify', 'score', 'export', 'examples', 'receipt'];
 const SCAN_STEPS: StepId[] = ['mode', 'scan', 'score', 'export', 'examples', 'receipt'];
+const WORKBENCH_CAPTURE_STEPS: StepId[] = ['mode', 'verify', 'score', 'export', 'receipt'];
+const WORKBENCH_SCAN_STEPS: StepId[] = ['mode', 'scan', 'score', 'export', 'receipt'];
 
 const STEP_LABELS: Record<StepId, string> = {
   mode: '选择路径',
@@ -141,7 +143,7 @@ function StepHead({
 }): JSX.Element {
   return (
     <div className="cg-stephead">
-      <div className="cg-eyebrow">{eyebrow}</div>
+      {eyebrow && <div className="cg-eyebrow">{eyebrow}</div>}
       <h1 className="cg-title">{title}</h1>
       <p className="cg-lead">{lead}</p>
       {aside}
@@ -178,7 +180,8 @@ function scoreStatItems(score: CaptureScore, scanMode: boolean, scaleMeters: num
   ];
 }
 
-export function CaptureGuide(): JSX.Element {
+export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; venueName?: string | undefined } = {}): JSX.Element {
+  const StepContent = onClose ? 'div' : 'main';
   const [selectedMode, setSelectedMode] = useState<CaptureMode | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [rulesConfirmed, setRulesConfirmed] = useState(false);
@@ -211,7 +214,9 @@ export function CaptureGuide(): JSX.Element {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  const steps = selectedMode === 'scan' ? SCAN_STEPS : CAPTURE_STEPS;
+  const steps = onClose
+    ? selectedMode === 'scan' ? WORKBENCH_SCAN_STEPS : WORKBENCH_CAPTURE_STEPS
+    : selectedMode === 'scan' ? SCAN_STEPS : CAPTURE_STEPS;
   const safeIndex = Math.min(stepIndex, steps.length - 1);
   const currentStep: StepId = steps[safeIndex] ?? 'mode';
   const scanMode = selectedMode === 'scan';
@@ -274,6 +279,7 @@ export function CaptureGuide(): JSX.Element {
       setScoreAt(null);
     }
     setSelectedMode(mode);
+    if (onClose) setStepIndex(1);
   }
 
   function startGps(): void {
@@ -452,6 +458,7 @@ export function CaptureGuide(): JSX.Element {
   if (layerCounts.eye < TARGET_PER_LAYER) gateMissing.push(`视线层还差 ${TARGET_PER_LAYER - layerCounts.eye} 张`);
   if (layerCounts.high < TARGET_PER_LAYER) gateMissing.push(`高层还差 ${TARGET_PER_LAYER - layerCounts.high} 张`);
   if (liveCoverage < GATE_COVERAGE_DEG) gateMissing.push(`环向覆盖还差 ${Math.ceil(GATE_COVERAGE_DEG - liveCoverage)}°`);
+  if (onClose && !scaleOk) gateMissing.push('填写一个实测长度');
   const gateReady = gateMissing.length === 0;
 
   const canAdvance =
@@ -578,12 +585,67 @@ export function CaptureGuide(): JSX.Element {
               ? '生成采集回执'
               : '下一步';
 
+  const gpsPanel = (
+    <section className={`cg-card cg-gps cg-gps--${gpsStatus}`}>
+      <div className="cg-card-head">
+        <div className="cg-card-title">
+          <span className="cg-icon"><MapPin size={20} aria-hidden="true" /></span>
+          <div>
+            <strong>定位记录</strong>
+            <span>每个新机位附上经纬度、精度与时间。</span>
+          </div>
+        </div>
+        <span className={`cg-status cg-status--${gpsStatus}`}>
+          {gpsStatus === 'active'
+            ? '记录中'
+            : gpsStatus === 'requesting'
+              ? '请求中'
+              : gpsStatus === 'denied'
+                ? '被拒绝'
+                : gpsStatus === 'unavailable'
+                  ? '不可用'
+                  : '未开启'}
+        </span>
+      </div>
+      {gpsStatus !== 'active' && gpsStatus !== 'requesting' && (
+        <button type="button" className="cg-btn cg-btn--soft" onClick={startGps} data-testid="gps-start">
+          <MapPin size={16} aria-hidden="true" />
+          开启定位记录
+        </button>
+      )}
+      {gpsStatus === 'requesting' && (
+        <div className="cg-inline-busy"><Loader2 size={15} aria-hidden="true" /> 正在向系统请求定位权限…</div>
+      )}
+      {gpsStatus === 'active' && gpsFixes.length > 0 && (
+        <div className="cg-gps-readout">
+          <span>
+            <b>{gpsFixes[gpsFixes.length - 1]?.latitude.toFixed(5)}</b>,{' '}
+            <b>{gpsFixes[gpsFixes.length - 1]?.longitude.toFixed(5)}</b>
+          </span>
+          <span className={(gpsFixes[gpsFixes.length - 1]?.accuracy ?? 0) > 10 ? 'is-warn' : 'is-ok'}>
+            精度 ±{Math.round(gpsFixes[gpsFixes.length - 1]?.accuracy ?? 0)}m
+          </span>
+        </div>
+      )}
+      {gpsError && <div className="cg-error">{gpsError}</div>}
+      <div className="cg-mini-stats">
+        <span><b>{frames.length - missingGpsCount}</b> / {frames.length} 机位有有效定位</span>
+        <span className={missingGpsCount > 0 ? 'is-warn' : ''}>{missingGpsCount} 个缺失或精度 &gt;10m</span>
+      </div>
+    </section>
+  );
   const verdict = score ? VERDICT_META[score.verdict] : null;
 
   return (
-    <div className="cg-page">
+    <div className={onClose ? 'cg-page is-workbench' : 'cg-page'}>
       <div className="cg-shell">
-        <header className="cg-top">
+        {onClose ? <header className="cg-top">
+          <div className="cg-workbench-title">
+            <strong>拍摄场地</strong>
+            {venueName && <span title={venueName}>{venueName}</span>}
+          </div>
+          <button type="button" className="cg-workbench-close" aria-label="关闭拍摄场地" onClick={onClose}><X size={18} aria-hidden="true" /></button>
+        </header> : <header className="cg-top">
           <Link className="cg-brand" href="/" aria-label="回到幕景工作台">
             <BrandMark size={24} />
             <span>幕景</span>
@@ -592,9 +654,9 @@ export function CaptureGuide(): JSX.Element {
           <Link className="cg-top-link" href="/">
             工作台
           </Link>
-        </header>
+        </header>}
 
-        <div className="cg-progress" aria-hidden="true">
+        {(!onClose || currentStep !== 'mode') && <><div className="cg-progress" aria-hidden="true">
           {steps.map((step, index) => (
             <span key={step} className={index <= safeIndex ? 'is-done' : ''} />
           ))}
@@ -604,7 +666,7 @@ export function CaptureGuide(): JSX.Element {
             第 {safeIndex + 1} / {steps.length} 步
           </span>
           <span>{STEP_LABELS[currentStep]}</span>
-        </div>
+        </div></>}
 
         {notice && (
           <div className="cg-notice" role="status">
@@ -616,13 +678,32 @@ export function CaptureGuide(): JSX.Element {
           </div>
         )}
 
-        <main className="cg-main" data-step={currentStep}>
-          {currentStep === 'mode' && (
+        <StepContent className="cg-main" data-step={currentStep}>
+          {currentStep === 'mode' && onClose && (
+            <>
+              <StepHead eyebrow="" title="你手上有什么素材？" lead="选一种，直接开始检查。" />
+              <div className="cg-modes cg-quick-modes">
+                {([
+                  { mode: 'photo', icon: Camera, title: '照片', description: '检查现场拍的照片' },
+                  { mode: 'video', icon: Video, title: '视频', description: '检查绕场拍的视频' },
+                  { mode: 'scan', icon: Scan, title: '已有扫描', description: '检查 SPZ、PLY 或 GLB 文件' },
+                ] as const).map(({ mode, icon: Icon, title, description }) => (
+                  <button type="button" className="cg-mode" key={mode} onClick={() => chooseMode(mode)} data-testid={`mode-${mode}`}>
+                    <span className="cg-mode-icon"><Icon size={19} aria-hidden="true" /></span>
+                    <span className="cg-mode-body"><strong>{title}</strong><span className="cg-mode-desc">{description}</span></span>
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {currentStep === 'mode' && !onClose && (
             <>
               <StepHead
-                eyebrow="现场采集 · 5 分钟自检"
-                title="先选一条采集路径"
-                lead="守门员只做一件事：在你离开场地前，判断这批素材能不能重建。不通过就不上传。"
+                eyebrow={onClose ? '' : '现场采集 · 5 分钟自检'}
+                title={onClose ? '选择采集方式' : '先选一条采集路径'}
+                lead={onClose ? '选照片、视频或已有扫描，先检查素材是否够用。' : '守门员只做一件事：在你离开场地前，判断这批素材能不能重建。不通过就不上传。'}
               />
               <div className="cg-mode-rec" data-testid="mode-rec">
                 <span className="cg-mode-rec-label">场地多大？</span>
@@ -885,58 +966,12 @@ export function CaptureGuide(): JSX.Element {
           {currentStep === 'verify' && (
             <>
               <StepHead
-                eyebrow="05 现场校验"
-                title="拍完先别走"
-                lead="定位、层数、重复帧、曝光都在这屏过一遍。手机能做的快检，我们全做。"
+                eyebrow={onClose ? '' : '05 现场校验'}
+                title={onClose ? selectedMode === 'video' ? '添加现场视频' : '添加现场照片' : '拍完先别走'}
+                lead={onClose ? '添加素材后，会提示你还缺什么。' : '定位、层数、重复帧、曝光都在这屏过一遍。手机能做的快检，我们全做。'}
               />
 
-              <section className={`cg-card cg-gps cg-gps--${gpsStatus}`}>
-                <div className="cg-card-head">
-                  <div className="cg-card-title">
-                    <span className="cg-icon"><MapPin size={20} aria-hidden="true" /></span>
-                    <div>
-                      <strong>定位记录</strong>
-                      <span>每个新机位附上经纬度、精度与时间。</span>
-                    </div>
-                  </div>
-                  <span className={`cg-status cg-status--${gpsStatus}`}>
-                    {gpsStatus === 'active'
-                      ? '记录中'
-                      : gpsStatus === 'requesting'
-                        ? '请求中'
-                        : gpsStatus === 'denied'
-                          ? '被拒绝'
-                          : gpsStatus === 'unavailable'
-                            ? '不可用'
-                            : '未开启'}
-                  </span>
-                </div>
-                {gpsStatus !== 'active' && gpsStatus !== 'requesting' && (
-                  <button type="button" className="cg-btn cg-btn--soft" onClick={startGps} data-testid="gps-start">
-                    <MapPin size={16} aria-hidden="true" />
-                    开启定位记录
-                  </button>
-                )}
-                {gpsStatus === 'requesting' && (
-                  <div className="cg-inline-busy"><Loader2 size={15} aria-hidden="true" /> 正在向系统请求定位权限…</div>
-                )}
-                {gpsStatus === 'active' && gpsFixes.length > 0 && (
-                  <div className="cg-gps-readout">
-                    <span>
-                      <b>{gpsFixes[gpsFixes.length - 1]?.latitude.toFixed(5)}</b>,{' '}
-                      <b>{gpsFixes[gpsFixes.length - 1]?.longitude.toFixed(5)}</b>
-                    </span>
-                    <span className={(gpsFixes[gpsFixes.length - 1]?.accuracy ?? 0) > 10 ? 'is-warn' : 'is-ok'}>
-                      精度 ±{Math.round(gpsFixes[gpsFixes.length - 1]?.accuracy ?? 0)}m
-                    </span>
-                  </div>
-                )}
-                {gpsError && <div className="cg-error">{gpsError}</div>}
-                <div className="cg-mini-stats">
-                  <span><b>{frames.length - missingGpsCount}</b> / {frames.length} 机位有有效定位</span>
-                  <span className={missingGpsCount > 0 ? 'is-warn' : ''}>{missingGpsCount} 个缺失或精度 &gt;10m</span>
-                </div>
-              </section>
+              {!onClose && gpsPanel}
 
               <section className="cg-card">
                 <div className="cg-card-head">
@@ -962,7 +997,7 @@ export function CaptureGuide(): JSX.Element {
                     </button>
                   ))}
                 </div>
-                {advice && (
+                {advice && (!onClose || frames.length > 0) && (
                   <div className={`cg-advice cg-advice--${advice.priority}`} data-testid="next-advice">
                     <Compass size={15} aria-hidden="true" />
                     <div className="cg-advice-body">
@@ -982,18 +1017,18 @@ export function CaptureGuide(): JSX.Element {
                   </div>
                 )}
                 <div className="cg-capture-actions">
-                  <button type="button" className="cg-btn cg-btn--primary" onClick={() => photoInputRef.current?.click()}>
+                  {(!onClose || selectedMode !== 'video' || frames.length > 0) && <><button type="button" className={`cg-btn ${onClose && selectedMode === 'video' ? 'cg-btn--ghost' : 'cg-btn--primary'}`} onClick={() => photoInputRef.current?.click()}>
                     <Upload size={16} aria-hidden="true" />
                     选照片（可多选）
                   </button>
                   <button type="button" className="cg-btn cg-btn--ghost" onClick={() => cameraInputRef.current?.click()}>
                     <Camera size={16} aria-hidden="true" />
                     拍一张
-                  </button>
-                  <button type="button" className="cg-btn cg-btn--ghost" onClick={() => videoInputRef.current?.click()}>
+                  </button></>}
+                  {(!onClose || selectedMode === 'video') && <button type="button" className={`cg-btn ${onClose ? 'cg-btn--primary' : 'cg-btn--ghost'}`} onClick={() => videoInputRef.current?.click()}>
                     <Video size={16} aria-hidden="true" />
                     选视频
-                  </button>
+                  </button>}
                 </div>
                 <input
                   ref={photoInputRef}
@@ -1151,6 +1186,13 @@ export function CaptureGuide(): JSX.Element {
                 </p>
               </section>
 
+              {onClose && <details className="cg-quick-tools"><summary>定位记录（可选）</summary>{gpsPanel}</details>}
+              {onClose && <label className="cg-scale-card cg-quick-scale">
+                <strong>实测长度</strong>
+                <span>填画面里一段量过的距离，用于校准模型尺寸。</span>
+                <input value={scaleInput} onChange={event => setScaleInput(event.target.value)}
+                  inputMode="decimal" placeholder="例如 1.2m" aria-label="实测长度" />
+              </label>}
               <div className="cg-tip">
                 <ShieldCheck size={16} aria-hidden="true" />
                 <span>评分会把「定位缺失 / 精度差 / 重复 / 过暗」逐项列出来。硬门槛不通过会直接判重采。</span>
@@ -1544,10 +1586,10 @@ export function CaptureGuide(): JSX.Element {
                   <li><b>重建完成后把 GLB 选回来</b><span>在同一屏归一化导出，尺寸与坐标系一起写进结果卡。</span></li>
                   <li><b>把回执放进项目备注</b><span>重建失败时，先对照扣分项，而不是盲猜。</span></li>
                 </ol>
-                <Link className="cg-btn cg-btn--primary" href="/">
+                {!onClose && <Link className="cg-btn cg-btn--primary" href="/">
                   进入工作台
                   <ArrowRight size={16} aria-hidden="true" />
-                </Link>
+                </Link>}
               </section>
 
               <div className="cg-caveat">
@@ -1560,7 +1602,7 @@ export function CaptureGuide(): JSX.Element {
               </button>
             </>
           )}
-        </main>
+        </StepContent>
 
         {shotNotice && (
           <div
@@ -1589,20 +1631,22 @@ export function CaptureGuide(): JSX.Element {
           </div>
         )}
 
-        {currentStep === 'verify' && !gateReady && (
+        {currentStep === 'verify' && !gateReady && (!onClose || frames.length > 0) && (
           <p className="cg-gate-hint" data-testid="gate-hint">
             还差：{gateMissing.join(' · ')}。补够这些机位才能出重建。
           </p>
         )}
 
-        <footer className="cg-foot">
+        {(!onClose || currentStep !== 'mode') && <footer className="cg-foot">
           {safeIndex > 0 && currentStep !== 'receipt' && (
             <button type="button" className="cg-btn cg-btn--ghost" onClick={goBack} data-testid="back">
               <ArrowLeft size={16} aria-hidden="true" />
               上一步
             </button>
           )}
-          {currentStep === 'receipt' ? (
+          {currentStep === 'receipt' ? onClose ? (
+            <button type="button" className="cg-btn cg-btn--primary" onClick={onClose}>返回场地</button>
+          ) : (
             <Link className="cg-btn cg-btn--primary" href="/">
               回到工作台
               <ArrowRight size={16} aria-hidden="true" />
@@ -1626,7 +1670,7 @@ export function CaptureGuide(): JSX.Element {
               <ArrowRight size={16} aria-hidden="true" />
             </button>
           )}
-        </footer>
+        </footer>}
       </div>
     </div>
   );
