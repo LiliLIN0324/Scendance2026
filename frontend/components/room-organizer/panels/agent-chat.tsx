@@ -110,9 +110,8 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
     <div className={`ap-chat is-${agent}`}>
       <AgentRunPanel scope={agent} steerInputId={`ap-chat-${agent}`}/>
 
-      {!hideLibraryActions && <div className="ap-tool-actions">
+      {!hideLibraryActions && agent === 'space' && <div className="ap-tool-actions">
         <div className="ap-composer-left">
-          {agent === 'material' && <MaterialCreateCell variant="action"/>}
           {agent === 'space' && onOpenAholo && <>
             <button type="button" className="ap-gen-chip" onClick={() => { onSelectSpaceWorkflow?.('aholo'); onOpenAholo('world'); }}>
               <Globe size={15} aria-hidden="true"/>生成场地
@@ -132,7 +131,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
       </div>}
 
       <form className="ap-composer ap-composer-compact" aria-label={`${meta.name}动作框`} onSubmit={run.isRunning ? submitSteer : submit}>
-        <label className="sr-only" htmlFor={`ap-chat-${agent}`}>为下一步加备注</label>
+        <label className="sr-only" htmlFor={`ap-chat-${agent}`}>{meta.name}输入框</label>
         <div className="ap-composer-field">
           <textarea
             id={`ap-chat-${agent}`}

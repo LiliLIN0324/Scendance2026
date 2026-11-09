@@ -101,12 +101,12 @@ export async function loadReviewPlan(input: {
   const example=query.get('example');
   if(example==='sharing') {
     const layout=createSharingExample({...INITIAL_LAYOUT,name:'分享会示例（虚构）'});
-    return {ok:true,plan:{source:'sample',layout,planKey:'sample:sharing',notice:'虚构的 12 × 10 米场地示例，仅供查看；场地轮廓、门与物料均为示意，不代表消防或无障碍验收。'}};
+    return {ok:true,plan:{source:'sample',layout,planKey:'sample:sharing',notice:'虚构的 12 × 10 米场地示例，仅供查看；场地轮廓、门与物料均为示意，不代表消防或无障碍验收。',identity:null}};
   }
   if(example==='hall-d5') {
     const layout:RoomLayout={name:'Hall D5 尺寸参考（示意）',width:16.5,height:17.2,
       floors:[{id:'hall-d5-example',name:'场地轮廓（示意）',floorColor:'#f5f6f7',items:[]}]};
-    return {ok:true,plan:{source:'sample',layout,planKey:'sample:hall-d5',notice:'尺寸 16.5 × 17.2 米参考东京国际论坛官网标称；矩形轮廓仅为示意。门位、门宽、开启方向、通道及现场条件未知，未作消防或无障碍验收。'}};
+    return {ok:true,plan:{source:'sample',layout,planKey:'sample:hall-d5',notice:'尺寸 16.5 × 17.2 米参考东京国际论坛官网标称；矩形轮廓仅为示意。门位、门宽、开启方向、通道及现场条件未知，未作消防或无障碍验收。',identity:null}};
   }
   const demo = query.get('demo') === '1';
   if (!demo && input.localLayout) {
