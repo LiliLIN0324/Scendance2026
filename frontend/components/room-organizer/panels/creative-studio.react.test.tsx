@@ -4641,6 +4641,161 @@ describe('T-UI visible interaction',()=>{
 describe('scoped seating constraints in deep generation', () => {
   const evidence = '每2人一桌';
   const allocation = { status:'shared_desk' as const, peoplePerDesk:2, evidence, source:'user' as const };
+  const annotationObservation={status:'ready' as const,binding:{activityScope:'activity:demo',activityEpoch:1,sceneRevision:2,floorId:'floor-1',annotationRevision:3},annotations:[{id:'ann-1',kind:'zone' as const,geometry:{kind:'rect' as const,x:0,z:0,width:2,depth:2},zoneType:'checkin' as const,source:'unverified' as const}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+  it('blocks the same candidate when it newly occupies a user-marked reserved area',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    const floorId=layout.floors[0]!.id;
+    const observation={status:'ready' as const,binding:{activityScope:`activity:${projectId}`,activityEpoch:1,sceneRevision:2,floorId,annotationRevision:3},annotations:[{id:'reserved',kind:'zone' as const,geometry:{kind:'rect' as const,x:-3.6,z:-1.6,width:1.2,depth:1.2},zoneType:'reserved' as const,source:'unverified' as const}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+    const provenance=[{id:'reserved',source:'user' as const,floorId}];
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:observation,annotationProvenance:provenance,readAnnotationReview:()=>({observation,provenance}),isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    const review=await screen.findByText(/新布置占用了已标路线或预留区/);expect(review).toBeTruthy();
+    expect(screen.getByRole('button',{name:'确认布置'}).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'左侧确认'}));
+    await waitFor(()=>expect(controller.applySceneProposal).not.toHaveBeenCalled());expect(onApply).not.toHaveBeenCalled();
+  });
+  it('blocks a candidate that newly intersects a user-marked route centerline',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));const floorId=layout.floors[0]!.id;
+    const observation={status:'ready' as const,binding:{activityScope:`activity:${projectId}`,activityEpoch:1,sceneRevision:2,floorId,annotationRevision:3},annotations:[{id:'route',kind:'route' as const,geometry:{kind:'polyline' as const,points:[{x:-4,z:-1},{x:-2,z:-1}]},source:'unverified' as const}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+    const provenance=[{id:'route',source:'user' as const,floorId}];
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:observation,annotationProvenance:provenance,readAnnotationReview:()=>({observation,provenance}),isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    expect(await screen.findByText(/新布置占用了已标路线或预留区/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'左侧确认'}));
+    await waitFor(()=>expect(controller.applySceneProposal).not.toHaveBeenCalled());expect(onApply).not.toHaveBeenCalled();
+  });
+  it('keeps the annotation review unknown when its controller binding cannot be verified',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    const observation={status:'unavailable' as const};
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:observation,annotationProvenance:[],readAnnotationReview:()=>null,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    expect(await screen.findByText(/规划标注尚未完整核验/)).toBeTruthy();
+    expect(screen.queryByText(/标注.*通过/)).toBeNull();expect(controller.applySceneProposal).not.toHaveBeenCalled();
+  });
+  it('keeps an unchanged pre-existing route obstruction visible as unknown rather than inventing a new violation',async()=>{
+    connected();
+    layout=backendSceneToLayout({...scene,objects:[candidate.objects[0]!]}, {projectId,name:'客户方案'});
+    const baseline=layoutToBackendScene(layout),old=baseline.objects[0]!;
+    const nextScene={...baseline,objects:[old,{...old,id:'20000000-0000-4000-8000-000000000002',position:{x:8,z:8}}]};
+    const nextProposal={...proposal,base_scene:baseline,candidate:nextScene};snapshot.project={...snapshot.project!,scene:baseline};
+    vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(nextProposal));const floorId=layout.floors[0]!.id;
+    const observation={status:'ready' as const,binding:{activityScope:`activity:${projectId}`,activityEpoch:1,sceneRevision:2,floorId,annotationRevision:3},annotations:[{id:'route',kind:'route' as const,geometry:{kind:'polyline' as const,points:[{x:-4,z:-1},{x:-2,z:-1}]},source:'unverified' as const}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+    const provenance=[{id:'route',source:'user' as const,floorId}];
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:observation,annotationProvenance:provenance,readAnnotationReview:()=>({observation,provenance}),isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    expect(await screen.findByText(/规划标注尚未完整核验/)).toBeTruthy();
+    expect(screen.queryByText(/新布置占用了已标路线或预留区/)).toBeNull();
+    expect(screen.getByRole('button',{name:'确认布置'}).hasAttribute('disabled')).toBe(true);
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();
+  });
+  it('keeps a non-conflicting annotation candidate preview-only until review evidence is durable',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));const floorId=layout.floors[0]!.id;
+    const observation={status:'ready' as const,binding:{activityScope:`activity:${projectId}`,activityEpoch:1,sceneRevision:2,floorId,annotationRevision:3},annotations:[],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:observation,annotationProvenance:[],readAnnotationReview:()=>({observation,provenance:[]}),isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));const button=await screen.findByRole('button',{name:'左侧确认'});
+    fireEvent.click(button);expect(await screen.findByText(/本次仅供预览，暂不能应用/)).toBeTruthy();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  // Re-enable together with application after review evidence is durably bound to the scene.
+  it.skip('does not submit if the authenticated lease binding changes inside the apply lock',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));const floorId=layout.floors[0]!.id;
+    const observation={status:'ready' as const,binding:{activityScope:`activity:${projectId}`,activityEpoch:1,sceneRevision:2,floorId,annotationRevision:3},annotations:[],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:observation,annotationProvenance:[],readAnnotationReview:()=>({observation,provenance:[]}),isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));const button=await screen.findByRole('button',{name:'左侧确认'}),locks=navigator.locks;
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{request:(name:string,options:LockOptions,callback:(lock:Lock|null)=>Promise<unknown>)=>locks.request(name,options,async lock=>{snapshot.lease={...snapshot.lease!,generation:2};return callback(lock);})}});
+    fireEvent.click(button);expect(await screen.findByText(/账号、项目或编辑权已变化/)).toBeTruthy();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  it('passes the frozen annotation observation without claiming it was checked',async()=>{
+    connected();const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].context.annotationObservation).toEqual(annotationObservation);
+    expect(await screen.findByText(/本次将提供规划标注供模型读取/)).toBeTruthy();
+    expect(screen.getByText(/提供不代表已经用于排布或安全检查/)).toBeTruthy();
+  });
+  it('reports an unavailable annotation snapshot instead of sending an empty checked list',async()=>{
+    connected();const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:{status:'unavailable' as const},isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].context.annotationObservation).toEqual({status:'unavailable'});
+    expect(await screen.findByText(/无法完整读取规划标注/)).toBeTruthy();
+  });
+  it('does not apply a returned candidate if annotation authority becomes stale',async()=>{
+    connected();let epoch=1;let finish!:(value:AgentRun)=>void;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const capture=()=>{const original=epoch;return {status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>epoch===original};};
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());epoch++;
+    await act(async()=>{finish(runFrom(proposal));});
+    expect(screen.queryByRole('button',{name:'左侧确认'})).toBeNull();expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  it('does not adopt an annotation candidate after the floor changes away and back',async()=>{
+    connected();let floorEpoch=1;let finish!:(value:AgentRun)=>void;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const floorToken={scope:'activity:demo',floorIndex:0,floorId:'floor-1',epoch:1};
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} floorToken={floorToken} isFloorCurrent={token=>!!token&&token.epoch===floorEpoch} captureSeatingAllocation={capture}><IntentGenerationProbe/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    floorEpoch+=2;await act(async()=>{finish(runFrom(proposal));});
+    expect(screen.queryByRole('button',{name:'左侧确认'})).toBeNull();expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  it('refuses confirmation when annotations change after the candidate appears',async()=>{
+    connected();let epoch=1;
+    vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    const capture=()=>{const original=epoch;return {status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>epoch===original};};
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    const button=await screen.findByRole('button',{name:'左侧确认'});epoch++;
+    fireEvent.click(button);
+    await waitFor(()=>expect(controller.applySceneProposal).not.toHaveBeenCalled());expect(onApply).not.toHaveBeenCalled();
+  });
+  it('rechecks annotation authority inside the apply lock before sending',async()=>{
+    connected();let epoch=1;
+    vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    const capture=()=>{const original=epoch;return {status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>epoch===original};};
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    const button=await screen.findByRole('button',{name:'左侧确认'}),locks=navigator.locks;
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{request:(name:string,options:LockOptions,callback:(lock:Lock|null)=>Promise<unknown>)=>locks.request(name,options,async lock=>{epoch++;return callback(lock);})}});
+    fireEvent.click(button);
+    expect(await screen.findByText(/规划标注已变化，旧候选不能应用/)).toBeTruthy();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  // Re-enable once durable review evidence permits annotated candidates to be applied.
+  it.skip('preserves the local scene and records cloud recovery if annotations change after dispatch',async()=>{
+    connected();let epoch=1;let finish!:(value:{id:string;revision:number;scene:Scene;previousScene:Scene;updatedAt:string;undoGroup:string;acceptedLocally:boolean})=>void;
+    vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    vi.mocked(controller.applySceneProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const capture=()=>{const original=epoch;return {status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>epoch===original};};
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));fireEvent.click(await screen.findByRole('button',{name:'左侧确认'}));
+    await waitFor(()=>expect(finish).toBeTypeOf('function'));epoch++;
+    await act(async()=>{finish({id:projectId,revision:2,scene:candidate,previousScene:scene,updatedAt:'2026-10-02T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});});
+    expect(onApply).not.toHaveBeenCalled();expect((await screen.findByRole('alert')).textContent).toContain('云端已提交第 2 版');
+    const key=Object.keys(localStorage).find(value=>value.startsWith('scendance:agent-apply-recovery:'))!;
+    expect(JSON.parse(localStorage.getItem(key)!).outcome).toBe('committed');
+  });
+  it('keeps an old run read-only rather than attaching a new annotation snapshot',async()=>{
+    connected();const requestId='70000000-0000-4000-8000-000000000002',runId=runFrom(proposal).id;
+    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(scene),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]}),seatingToken:'chat-a'}));
+    vi.mocked(controller.getAgentRun).mockResolvedValueOnce({...runFrom(proposal),requestId});
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
+    await waitFor(()=>expect(controller.getAgentRun).toHaveBeenCalledWith(runId));fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
+    expect(await screen.findByText(/原标注快照无法重新核对/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    expect(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`)).not.toBeNull();
+    expect(controller.startAgentRun).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'左侧确认'})).toBeNull();expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
   it('passes selected user-stated furniture sizes and evidence through the deep entry',async()=>{
     connected();
     const specs={desk:{width:{status:'reported' as const,valueM:1.8,evidence:'桌宽1.8米',source:'user' as const}},chair:{depth:{status:'unknown' as const,valueM:null,evidence:'椅深待定',source:'user' as const}}};

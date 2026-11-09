@@ -267,8 +267,22 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(tail==='/agent-runs'&&method==='POST') {
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
           const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;
+          // Reject before storing a run or contacting a provider. An older
+          // worker or legacy workflow must not silently ignore planning marks.
+          if(!activity&&input.context.annotationObservation!==undefined&&
+            (env('AGENT_ANNOTATION_OBSERVATION_ENABLED')!=='1'||env('DEEPSEEK_AGENT_MODE')==='legacy'))throw new ApiError('AGENT_ANNOTATION_UNAVAILABLE',503);
           if(!activity&&input.selectedIds.some(id=>!input.scene.objects.some(object=>object.id===id)))throw new ApiError('INVALID_SELECTION',422);
           if(!activity)requireOriginalSceneWritable((await backend.scene(actor,'projects.get',{projectId})).scene);
+          if(!activity&&input.context.annotationObservation!==undefined){
+            let annotationGuard:unknown;
+            try{annotationGuard=await backend.scene(actor,'annotations.readiness',{projectId});}
+            catch(error){
+              if(error instanceof ApiError&&['PROJECT_NOT_FOUND','FORBIDDEN','UNAUTHENTICATED'].includes(error.code))throw error;
+              throw new ApiError('AGENT_ANNOTATION_GUARD_UNAVAILABLE',503);
+            }
+            if(!z.strictObject({capability:z.literal('annotation_preview_guard'),version:z.literal(1)}).safeParse(annotationGuard).success)
+              throw new ApiError('AGENT_ANNOTATION_GUARD_UNAVAILABLE',503);
+          }
           const miniMaxPreview=!activity&&chatProfile(env)==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
           // Check the configured provider itself before reserving a run. Custom
           // providers and the official fallback do not require a gateway key.
@@ -444,6 +458,8 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(tail==='/proposals/apply' && method==='POST') {
           const input=z.strictObject({...leaseSchema.shape,proposalId:uuid,localRevision:z.number().int().nonnegative(),currentScene:sceneSchema}).parse(await json());
           const proposal=await backend.scene(actor,'proposals.get',{projectId,proposalId:input.proposalId});
+          // Read the stored server-produced proposal, never a client flag.
+          if(Array.isArray(proposal.warnings)&&proposal.warnings.some((warning:unknown)=>!!warning&&typeof warning==='object'&&(warning as {code?:unknown}).code==='ANNOTATION_PREVIEW_ONLY'))throw new ApiError('ANNOTATION_PREVIEW_ONLY',409);
           requireOriginalSceneWritable((await backend.scene(actor,'lease.check',{...input,scene:input.currentScene,projectId})).scene);
           let reconstructionJob:Record<string,unknown>|null=null;
           try{reconstructionJob=await backend.reconstruction(actor,'get',{projectId,id:input.proposalId});}
