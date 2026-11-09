@@ -117,7 +117,7 @@ export function attendanceFromUser(text: string): ReturnType<typeof readUserAtte
   return readUserAttendance(stripped);
 }
 
-export function readTurn(memory: ExploreMemory, text: string): { memory: ExploreMemory; intents: IntentKind[]; reply: string; askedAgain: string[] } {
+export function readTurn(memory: ExploreMemory, text: string): { memory: ExploreMemory; intents: IntentKind[]; reply: string; askedAgain: string[]; confirmIgnored: boolean } {
   const next = structuredClone(memory);
   const intents = readIntents(text);
   if (/讲座/.test(text)) next.event = { status: 'stated', value: /社区讲座/.test(text) ? '社区讲座' : '讲座', evidence: /社区讲座/.test(text) ? '社区讲座' : '讲座' };
@@ -149,9 +149,13 @@ export function readTurn(memory: ExploreMemory, text: string): { memory: Explore
   if (size && intents.includes('assume_venue')) {
     next.venue = { status: 'assumption', widthM: Number(size[1]), depthM: Number(size[2]), evidence: size[0] };
   }
+  const boundary = applyAdviceBoundary(next, text);
   const refreshed = refresh(next);
   const askedAgain = refreshed.deferred.filter(item => item === '座位形式' && /请(?:马上|立即)?(?:选择|决定)座位形式/.test(text));
-  return { memory: refreshed, intents, reply: replyFor(refreshed, intents), askedAgain };
+  const reply = boundary.confirmIgnored && !intents.some(item => item === 'preview_seating' || item === 'move_object' || item === 'bill_of_materials' || item === 'revise_headcount')
+    ? '这句没有把建议收成已确认的座位。未知项还留着。'
+    : replyFor(refreshed, intents);
+  return { memory: refreshed, intents, reply, askedAgain, confirmIgnored: boundary.confirmIgnored };
 }
 
 export function guardModelReply(userText: string, modelText: string): { text: string; dropped: string[] } {
@@ -199,9 +203,11 @@ export function planMove(text: string, objects: readonly DraftObject[], baseRevi
   const hits = objects.filter(object => /签到/.test(text) ? object.label.includes('签到') : false);
   if (hits.length !== 1) return { status: 'unresolved', reason: hits.length === 0 ? '没有唯一的签到桌' : '签到桌不止一件，不能猜是哪一件' };
   const target = hits[0]!;
-  if (!/往左|往右/.test(text)) return { status: 'unresolved', reason: '方向还不明确' };
   if (!Number.isInteger(baseRevision) || baseRevision < 0) return { status: 'unresolved', reason: '缺少当前修订号' };
-  const delta = /往左/.test(text) ? -1 : 1;
+  const left = /往左/.test(text);
+  const right = /往右/.test(text);
+  if (left === right) return { status: 'unresolved', reason: left ? '同一句里有两个方向，不能合成一次移动' : '方向还不明确' };
+  const delta = left ? -1 : 1;
   return {
     status: 'ready',
     axis: delta < 0 ? 'case_x_minus' : 'case_x_plus',
@@ -582,6 +588,7 @@ function refresh(memory: ExploreMemory, preview?: SeatingPreview | null, extras?
 function replyFor(memory: ExploreMemory, intents: IntentKind[]): string {
   const people = attendancePeople(memory);
   const chairs = memory.inventory.find(item => item.name === '椅子');
+  if (intents.includes('defer_layout') && !intents.some(item => item === 'report_inventory' || item === 'revise_headcount' || item === 'move_object' || item === 'bill_of_materials')) return '座位形式先按你的意思留着，不确认。';
   if (intents.includes('bill_of_materials') || intents.includes('move_object')) {
     return `人数改为${people ?? '未知'}。移动和物料清单会分开处理，不会因为后半句要清单就丢掉前半句。`;
   }
@@ -603,4 +610,59 @@ function cloneObject(object: DraftObject): DraftObject {
 /** 模型工具入口只做分类，不执行。打开物料库不能从这里改场景。 */
 export function invokeAsModelTool(name: string) {
   return classifyInvocation(name);
+}
+
+/** 第六句的几种说法。每一句都从同一份「建议尚未确认」的记忆单独重放。 */
+export const SIXTH_SENTENCES = [
+  '座位还是先别确认，刚才那个只是建议',
+  '这个建议先留着，先别确认',
+  '一人一桌只是建议，不要写成已经定了',
+  '确认',
+  '好的，就这样',
+  '建议不错，不过先别定座位形式',
+] as const;
+
+/**
+ * 建议可以留在记忆里。单独一句「确认」或把建议说成已经定了，都不升成已确认事实。
+ * 先别定座位形式时，建议会回到未定，而不是被确认。
+ */
+export function applyAdviceBoundary(memory: ExploreMemory, text: string): { confirmIgnored: boolean } {
+  const bare = /^(?:确认|好的，就这样|好，就这样|就这样|就这么定)$/.test(text.trim().replace(/[。！!]+$/g, ''));
+  const namesLayout = /一人一桌|课桌/.test(text);
+  const deferring = /先别定|暂不|先不定|还没定/.test(text);
+  if (memory.layout.status === 'unknown' && /建议/.test(text) && namesLayout && !deferring && !/已确认|就这么定|确定用|不要一人一桌|别用课桌/.test(text)) {
+    memory.layout = { status: 'suggestion', value: 'one_desk_one_chair', evidence: '建议' };
+  }
+  const mentionsAdvice = /建议|只是建议|先别确认|不要确认|先不要确认|先看看/.test(text);
+  const confirmWords = /确认|就这么定|已经定|已确认/.test(text);
+  if (bare || (confirmWords && (mentionsAdvice || memory.layout.status === 'suggestion'))) return { confirmIgnored: true };
+  return { confirmIgnored: false };
+}
+
+export function adviceConfirmGate(memory: ExploreMemory): { ok: false; code: 'SUGGESTION_NOT_CONFIRMED'; layout: ExploreMemory['layout']['status'] } {
+  return { ok: false, code: 'SUGGESTION_NOT_CONFIRMED', layout: memory.layout.status };
+}
+
+export function runSixthSentences(base: ExploreMemory) {
+  return SIXTH_SENTENCES.map(text => {
+    const turn = readTurn(base, text);
+    const followed = readTurn(turn.memory, '确认');
+    const chosen = selectTools(followed.memory, readIntents('确认'));
+    return {
+      text,
+      layout: turn.memory.layout.status,
+      followedLayout: followed.memory.layout.status,
+      confirmIgnored: turn.confirmIgnored || followed.confirmIgnored,
+      askedAgain: [...turn.askedAgain, ...followed.askedAgain],
+      tools: chosen.tools,
+      attendance: followed.memory.attendance,
+      chairCount: followed.memory.inventory.find(item => item.name === '椅子')?.count ?? null,
+      mobility: followed.memory.mobility.status,
+      unknowns: followed.memory.unknowns,
+      seating: confirmSeating({
+        requested: 1, placed: 1, shortfall: 0, limitReason: null, unknown: [], applied: false, stale: false, assumption: '建议',
+      }),
+      adviceGate: adviceConfirmGate(followed.memory),
+    };
+  });
 }
