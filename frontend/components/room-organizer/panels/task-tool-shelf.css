@@ -1,13 +1,13 @@
-/* 助手下方的工具区。冷石灰白纸，绿只标当前这一步。 */
+/* 助手占上一段，下面一次只开一个工具，占满剩下的高度。 */
 .sc-task-tools {
-  flex: 1 1 46%;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   box-sizing: border-box;
-  padding: 10px 12px 12px;
-  overflow: auto;
+  padding: 8px 12px 12px;
+  overflow: hidden;
   background: var(--paper, #fff);
   color: var(--wk-ink, #141416);
   border-top: 1px solid var(--wk-hair, #e4e4e7);
@@ -15,8 +15,9 @@
   line-height: 22px;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column:has(> .sc-task-tools) > .sc-agent-panel {
-  flex: 1 1 50% !important;
-  max-height: 54%;
+  flex: 0 1 auto !important;
+  min-height: 220px;
+  max-height: 42%;
   overflow: auto;
 }
 .sc-task-next {
@@ -74,10 +75,21 @@
   border-bottom-color: #4A7C59;
 }
 .sc-task-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 0;
+}
+.sc-task-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sc-task-actions .sc-task-primary,
+.sc-task-actions .sc-task-secondary {
+  width: 100%;
 }
 .sc-task-primary,
 .sc-task-secondary {
@@ -122,7 +134,7 @@
 .sc-task-more { border-top: 1px solid var(--wk-hair, #e4e4e7); padding-top: 8px; }
 .sc-task-more summary { cursor: pointer; color: #55585f; font-size: 12px; line-height: 20px; }
 .sc-task-more[open] { display: flex; flex-direction: column; gap: 8px; }
-.sc-task-slot { min-width: 0; }
+.sc-task-slot { min-width: 0; min-height: 0; }
 .sc-task-tools .sc-library.is-card,
 .sc-task-tools .sc-space-panel.is-card {
   display: block;
@@ -162,8 +174,8 @@
   padding: 10px 12px;
 }
 @media (max-width: 1080px) {
-  .sc-task-tools { flex-basis: auto; max-height: none; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column:has(> .sc-task-tools) > .sc-agent-panel {
-    max-height: 46%;
+    min-height: 160px;
+    max-height: 38%;
   }
 }

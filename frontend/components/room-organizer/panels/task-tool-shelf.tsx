@@ -116,11 +116,11 @@ export function TaskToolShelf({
         />
       </label>
       {!studio && <p className="sc-task-reason">人数还读不到。先在上面的对话里说出人数。</p>}
-      <div className="sc-task-tabs" role="tablist" aria-label="空间、物料、检查与交付">
+      <div className="sc-task-tabs" role="tablist" aria-label="空间、物料、检查">
         {([
           ['space', '空间'],
           ['material', '物料'],
-          ['handoff', '检查与交付'],
+          ['handoff', '检查'],
         ] as const).map(([id, label]) => (
           <button
             key={id}
@@ -144,37 +144,29 @@ export function TaskToolShelf({
       >
         {shown === 'space' && (
           <>
-            <button type="button" className={step.focus === 'venue' ? 'sc-task-primary' : 'sc-task-secondary'} onClick={() => agent.startVenuePicker()}>定场地</button>
-            <p className="sc-task-hint">点一下会打开选场地。也可以直接在画面里改尺寸。</p>
-            <div className="sc-task-slot">{spaceSlot}</div>
-            <details className="sc-task-more">
-              <summary>其他场地做法</summary>
+            <div className="sc-task-actions">
+              <button type="button" className={step.focus === 'venue' ? 'sc-task-primary' : 'sc-task-secondary'} onClick={() => agent.startVenuePicker()}>定场地</button>
               <button type="button" className="sc-task-secondary" disabled={!agent.callbacks.onOpenReference} onClick={() => agent.callbacks.onOpenReference?.()}>看图纸和照片</button>
-              {!agent.callbacks.onOpenReference && <p className="sc-task-reason">图纸入口还没接上。</p>}
               <a className="sc-task-secondary" href="/guide/capture">用手机拍场地</a>
-            </details>
+            </div>
+            {!agent.callbacks.onOpenReference && <p className="sc-task-reason">图纸入口还没接上。</p>}
+            <div className="sc-task-slot">{spaceSlot}</div>
           </>
         )}
         {shown === 'material' && (
-          <>
-            <p className="sc-task-hint">点一件，它会放到画面上。拖进去也可以。</p>
-            <div className="sc-task-slot">{materialSlot}</div>
-          </>
+          <div className="sc-task-slot">{materialSlot}</div>
         )}
         {shown === 'handoff' && (
-          <>
+          <div className="sc-task-actions">
             <button type="button" className={step.focus === 'check' ? 'sc-task-primary' : 'sc-task-secondary'} disabled={checkReason !== null} onClick={() => agent.reviewNow()}>检查这一版</button>
             {checkReason && <p className="sc-task-reason" role="status">{checkReason}</p>}
-            <details className="sc-task-more">
-              <summary>交给别人</summary>
-              <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={() => agent.callbacks.onOpenReview()}>准备给客户看</button>
-              <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={() => { agent.issueReviewLink(); setNote('链接写在上面的对话里，可以从那里复制。'); }}>复制给客户的链接</button>
-              <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={() => agent.callbacks.onOpenDelivery()}>交给执行</button>
-              <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={onOpenChecklist}>到场清单</button>
-              {handoffReason && <p className="sc-task-reason" role="status">{handoffReason}</p>}
-              {note && <p className="sc-task-reason" role="status">{note}</p>}
-            </details>
-          </>
+            <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={() => agent.callbacks.onOpenReview()}>准备给客户看</button>
+            <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={() => { agent.issueReviewLink(); setNote('链接写在上面的对话里，可以从那里复制。'); }}>复制给客户的链接</button>
+            <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={() => agent.callbacks.onOpenDelivery()}>交给执行</button>
+            <button type="button" className="sc-task-secondary" disabled={handoffReason !== null} onClick={onOpenChecklist}>到场清单</button>
+            {handoffReason && <p className="sc-task-reason" role="status">{handoffReason}</p>}
+            {note && <p className="sc-task-reason" role="status">{note}</p>}
+          </div>
         )}
       </div>
     </section>

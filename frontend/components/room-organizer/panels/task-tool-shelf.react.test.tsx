@@ -58,11 +58,13 @@ describe('task tool shelf', () => {
     expect(screen.getByText('空间内容')).toBeTruthy();
   });
 
-  it('keeps objects behind the material tab and blocks check until something is placed', () => {
+  it('opens the library once a venue exists, and keeps check actions in that one body', () => {
     shelf(true);
-    fireEvent.click(screen.getByRole('tab', { name: '物料' }));
+    expect(screen.getByRole('tab', { name: '物料' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('物料内容')).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: '检查与交付' }));
+    expect(screen.queryByText('空间内容')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: '检查' }));
+    expect(screen.getByRole('button', { name: '准备给客户看' })).toBeTruthy();
     const check = screen.getByRole('button', { name: '检查这一版' }) as HTMLButtonElement;
     expect(check.disabled).toBe(true);
     expect(screen.getByText('画面上还没有物件。先打开「物料」，点一件放到画面上。')).toBeTruthy();
@@ -99,7 +101,7 @@ describe('task tool shelf', () => {
   });
 
   it('follows an external material request onto the material tab', () => {
-    const view = shelf(true);
+    const view = shelf(false);
     expect(screen.getByRole('tab', { name: '物料' }).getAttribute('aria-selected')).toBe('false');
     view.rerender(
       <TaskToolShelf

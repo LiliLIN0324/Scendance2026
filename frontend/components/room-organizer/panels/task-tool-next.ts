@@ -13,21 +13,29 @@ export interface TaskToolSnapshot {
   unconfirmed: boolean;
 }
 
+/** 一次只打开一个工具。没场地看空间；有场地还没摆东西看物料；已经摆了就看检查。 */
+export function taskToolOpenGroup(input: Pick<TaskToolSnapshot, 'venueReady' | 'itemCount'>): TaskToolGroup {
+  if (!input.venueReady) return 'space';
+  if (input.itemCount > 0) return 'handoff';
+  return 'material';
+}
+
 export function taskToolNextStep(input: Pick<TaskToolSnapshot, 'venueReady' | 'peopleStated' | 'itemCount' | 'planShown'>): {
   focus: TaskToolFocus;
   group: TaskToolGroup;
   text: string;
 } {
+  const group = taskToolOpenGroup(input);
   if (!input.venueReady) {
-    return { focus: 'venue', group: 'space', text: '下一步：点「定场地」。' };
+    return { focus: 'venue', group, text: '下一步：点「定场地」。' };
+  }
+  if (input.itemCount > 0) {
+    return { focus: 'check', group, text: '下一步：点「检查这一版」。' };
   }
   if (!input.peopleStated) {
-    return { focus: 'people', group: 'space', text: '下一步：填写这场来多少人。' };
+    return { focus: 'people', group, text: '下一步：填写这场来多少人。' };
   }
-  if (input.itemCount <= 0 && !input.planShown) {
-    return { focus: 'chat', group: 'space', text: '下一步：在上面的对话里说出这场活动。确认之后才会写进画面。' };
-  }
-  return { focus: 'check', group: 'handoff', text: '下一步：点「检查这一版」。' };
+  return { focus: 'chat', group, text: '下一步：在上面的对话里说出这场活动。确认之后才会写进画面。' };
 }
 
 /** 检查按钮不能点时，原因直接写出来。 */

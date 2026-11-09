@@ -12,17 +12,21 @@ describe('task tool next step', () => {
     });
   });
 
-  it('asks for a headcount once the venue exists', () => {
-    expect(taskToolNextStep({ ...blank, venueReady: true }).focus).toBe('people');
+  it('opens materials once a venue exists and nothing is placed yet', () => {
+    const step = taskToolNextStep({ ...blank, venueReady: true });
+    expect(step.focus).toBe('people');
+    expect(step.group).toBe('material');
   });
 
   it('sends the user back to the assistant when the venue and headcount are ready', () => {
-    expect(taskToolNextStep({ ...blank, venueReady: true, peopleStated: true }).focus).toBe('chat');
+    const step = taskToolNextStep({ ...blank, venueReady: true, peopleStated: true });
+    expect(step.focus).toBe('chat');
+    expect(step.group).toBe('material');
   });
 
-  it('points at the check once a plan or objects are on the canvas', () => {
-    expect(taskToolNextStep({ venueReady: true, peopleStated: true, itemCount: 3, planShown: false }).focus).toBe('check');
-    expect(taskToolNextStep({ venueReady: true, peopleStated: true, itemCount: 0, planShown: true }).group).toBe('handoff');
+  it('opens check once objects are on the canvas', () => {
+    expect(taskToolNextStep({ venueReady: true, peopleStated: true, itemCount: 3, planShown: false }).group).toBe('handoff');
+    expect(taskToolNextStep({ venueReady: true, peopleStated: false, itemCount: 3, planShown: false }).focus).toBe('check');
   });
 
   it('writes a visible reason when check or handoff cannot run', () => {
