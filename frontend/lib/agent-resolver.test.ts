@@ -3,13 +3,39 @@ import { initialBriefMemory } from '@/components/room-organizer/lib/brief-agent'
 import { localPlan } from '@/components/room-organizer/lib/local-plan';
 import { makeFloor, makeLayout } from '@/components/room-organizer/lib/__testfixtures__/fixtures';
 import { resolveBriefTurn, type BriefExtractTransport } from './agent-resolver';
-import { BRIEF_CLIENT_TIMEOUT_MS } from '../../supabase/functions/_shared/brief-extract-contract';
+import { BRIEF_CLIENT_TIMEOUT_MS, briefConversationResponseSchema, parseBriefConversation } from '../../supabase/functions/_shared/brief-extract-contract';
 import { SceneApiError } from '../../client/scene-client';
 
 const context = { venueUp: true, scaleTyped: false, hasBase: false, command: null } as const;
 afterEach(() => {vi.unstubAllEnvs();vi.useRealTimers();});
 
 describe('model requirements', () => {
+  it('presents advice for the real conversation shape while keeping undecided check-in unresolved',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const raw='为长者办一场室内讲座，预计30人，现有80把椅子；是否签到还没决定。请先给建议，不要改场景。';
+    const reply='可先比较讲座座席和交流分组两种方向；椅子规格与实际可用量需核对，签到暂不决定。';
+    const response={enabled:true,extraction:{headcount:30,venueIO:'indoor' as const,audienceTags:['elderly' as const],inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin' as const,decision:'unknown' as const,evidence:'是否签到还没决定'}]},reply,unhandled:[],factEvidence:[{key:'headcount' as const,evidence:'30人'},{key:'venueIO' as const,evidence:'室内'},{key:'audienceTags' as const,evidence:'长者'}]};
+    expect(briefConversationResponseSchema.safeParse(response).success).toBe(true);
+    expect(()=>parseBriefConversation({extraction:response.extraction,reply:response.reply,unhandled:response.unhandled,factEvidence:response.factEvidence},raw)).not.toThrow();
+    const transport={briefExtract:vi.fn(),briefConversation:vi.fn().mockResolvedValue(response)};
+    const turn=await resolveBriefTurn(raw,initialBriefMemory(),context,transport,undefined,{history:[]});
+    expect(turn.kind).toBe('ack');expect(turn.text).toContain(reply);expect(turn.memory.headcount).toBe(30);
+    expect(turn.usesModelText).toBe(true);expect(turn.modelReply).toBeUndefined();expect(turn.memory.pendingGeneration).toBeUndefined();
+    expect(turn.memory.zoneNeeds.checkin).toBeNull();expect(turn.memory.unresolvedActivityNeeds).toContain('checkin');
+    expect(turn.memory.reportedInventory).toEqual(expect.arrayContaining([expect.objectContaining({evidence:expect.stringContaining('80把椅子')})]));
+    const next=await resolveBriefTurn('需要签到',turn.memory,context,transport,undefined,{history:[]});
+    expect(next.memory.zoneNeeds.checkin).toBe(true);
+  });
+  it('does not let deferred check-in advice bypass another pending activity change',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const raw='签到还没决定，需要休息区，先给建议';
+    const previous={...initialBriefMemory(),zoneNeeds:{checkin:null,rest:false,stage:null}};
+    const transport={briefExtract:vi.fn(),briefConversation:vi.fn().mockResolvedValue({enabled:true,extraction:{activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'签到还没决定'},{kind:'rest',decision:'needed',evidence:'需要休息区'}]},reply:'可以考虑多种安排。',unhandled:[],factEvidence:[]})};
+    const turn=await resolveBriefTurn(raw,previous,context,transport,undefined,{history:[]});
+    expect(turn.text).toContain('这样对吗');expect(turn.memory.zoneNeeds.rest).toBe(false);
+    expect(turn.memory.pendingActivityNeeds).toEqual(expect.arrayContaining([expect.objectContaining({kind:'rest',value:true})]));
+    expect(turn.memory.zoneNeeds.checkin).toBeNull();
+  });
   it.each(['先探索','先用假设探索'])('resolves the exact preview request %s without another model call',async raw=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
     const briefExtract=vi.fn(async()=>({enabled:false,extraction:null}));

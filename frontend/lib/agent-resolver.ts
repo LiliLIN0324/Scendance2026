@@ -142,6 +142,17 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
           return {...turn,kind:'ack',text:reply!,memory:{...turn.memory,askedScale:previous.askedScale,pendingBasicFacts:pendingFacts},resolution:'model',usesModelText:true,...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
         }
         if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...(context.command&&!unhandled?.length?{pendingGeneration:{command:context.command,instruction:raw}}:{}) }, resolution: 'model', ...presentation };
+        // A decision explicitly postponed by the user stays unknown; let the
+        // model answer this discussion instead of repeating a generic prompt.
+        // Pending confirmations, non-deferred unknowns and actions retain the
+        // deterministic review path and cannot be bypassed by model prose.
+        if(conversation&&modelReply&&explicitlyDeferred&&!context.command&&!unhandled?.some(item=>item.kind==='action')&&
+          !turn.memory.pendingActivityNeeds.length&&turn.memory.unresolvedActivityNeeds.length>0&&
+          turn.memory.unresolvedActivityNeeds.every(kind=>turn.memory.deferredActivityNeeds?.includes(kind))&&
+          !turn.memory.mobilityNeedsClarification&&!turn.memory.layoutModeUnresolved&&(turn.kind==='ack'||turn.kind==='ask')){
+          return {...turn,kind:'ack',text:reply!,memory:{...turn.memory,askedScale:previous.askedScale,pendingBasicFacts:pendingFacts},resolution:'model',usesModelText:true,
+            ...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
+        }
         const changed=JSON.stringify({...turn.memory,askedScale:false})!==JSON.stringify({...previous,askedScale:false});
         if(reply&&!hasNewFacts&&!changed&&!pendingFacts.length)return {...turn,kind:'ack',text:reply,memory:previous,resolution:'model',readOnlyReply:true,...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
         // The model can discuss an early idea without forcing the user to supply
