@@ -15,6 +15,7 @@ import { useHistory } from '../hooks/use-history';
 import { useLayoutState } from '../hooks/use-layout-state';
 import { layoutStore } from '../hooks/use-layout-store';
 import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from '../lib/pending-candidate-registry';
+import { clearStagedMaterialGenerateForTests } from '../lib/material-generate';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider, MapVenueOverlay, resetVolatileAssistantMemoriesForTests, useAgent, type BriefTool } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
@@ -276,9 +277,27 @@ describe('research map activity scope', () => {
     expect(research.onApplyResearchArea).not.toHaveBeenCalled();
     expect(research.release).toHaveBeenCalledOnce();
   });
-  it.each([['生成一个竹林场景','可在「空间」入口使用生成引擎'],['文生一张白桌','请使用「物料」里的生成入口']])('describes the %s tool entry without inventing another agent',async(input,answer)=>{
+  it.each([['生成一个竹林场景','入口未开放'],['文生一张白桌','登录并连接云项目']])('says why %s cannot start when that tool is closed',async(input,answer)=>{
     render(ui(makeLayout({width:12,height:9})));send(input);
-    const response=await screen.findByText(new RegExp(answer));expect(response.textContent).not.toMatch(/空间 Agent|物料 Agent/);
+    const response=await screen.findByText(new RegExp(answer));
+    expect(response.textContent).not.toMatch(/空间 Agent|物料 Agent|LUX3D|API_KEY/);
+    expect(callbacks.onOpenMaterials).not.toHaveBeenCalled();
+  });
+  it('opens venue generation with the sentence when the space entry is available', async () => {
+    const onOpenLux3d = vi.fn();
+    render(<LayoutAgentProvider callbacks={{ ...callbacks, luxToolsVisible: true, onOpenLux3d }} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    send('生成一个竹林场景');
+    expect(await screen.findByText(/已打开场地生成/)).toBeTruthy();
+    expect(onOpenLux3d).toHaveBeenCalledWith('world', '生成一个竹林场景');
+  });
+  it('opens material generation when the cloud project is connected', async () => {
+    studioMock.connection = '项目已连接';
+    callbacks.onOpenMaterials.mockClear();
+    render(ui(makeLayout({ width: 12, height: 9 })));
+    send('文生一张白桌');
+    expect(await screen.findByText(/已打开物料生成/)).toBeTruthy();
+    expect(callbacks.onOpenMaterials).toHaveBeenCalledOnce();
+    studioMock.connection = '离线引导';
   });
   it('applies a found reference map through its dedicated callback', async () => {
     vi.spyOn(researchArea, 'lookupPlace').mockResolvedValue({ name: '西湖', address: '杭州', lng: 120.15, lat: 30.25 });
@@ -1374,7 +1393,7 @@ beforeEach(() => {
   resetVolatileAssistantMemoriesForTests();
 });
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
 
 describe('T-04 delivery narrative in the Agent panel', () => {
   it('T3 封门：评审模式右栏不再渲染钉议卡槽，面板内没有「打开客户评审」', () => {
@@ -3820,17 +3839,21 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '0');
     try {
       const view = render(ui(makeLayout()));
-      expect(screen.getByText('文字识别按本机规则处理。未连接云端方案生成。')).toBeTruthy();
-      expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBe('ap-data-notice');
+      expect(screen.getByText('文字识别按本机规则处理。')).toBeTruthy();
+      expect(screen.getByText('当前用本机规则出预览；连接云项目后可云端生成。')).toBeTruthy();
+      expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBe('ap-data-notice ap-plan-notice');
       vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
       view.rerender(ui(makeLayout()));
-      expect(screen.getByText('输入文字可能发送至模型服务。未连接云端方案生成。')).toBeTruthy();
+      expect(screen.getByText('输入文字可能发送至模型服务。')).toBeTruthy();
+      expect(screen.getByText('当前用本机规则出预览；连接云项目后可云端生成。')).toBeTruthy();
       studioMock.connection = '项目已连接';
       view.rerender(ui(makeLayout()));
-      expect(screen.getByText('输入文字可能发送至模型服务。云端生成会发送当前场景及部分对话上下文。')).toBeTruthy();
+      expect(screen.getByText('输入文字可能发送至模型服务。')).toBeTruthy();
+      expect(screen.getByText('云端生成会发送当前场景及部分对话上下文。')).toBeTruthy();
       vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '0');
       view.rerender(ui(makeLayout()));
-      expect(screen.getByText('文字识别按本机规则处理。云端生成会发送当前场景及部分对话上下文。')).toBeTruthy();
+      expect(screen.getByText('文字识别按本机规则处理。')).toBeTruthy();
+      expect(screen.getByText('云端生成会发送当前场景及部分对话上下文。')).toBeTruthy();
     } finally { vi.unstubAllEnvs(); }
   });
   it('会话头展示标题，能力芯片与输入框可用', () => {

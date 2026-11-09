@@ -5,13 +5,13 @@ import {AgentChatBridge} from './agent-chat-bridge';
 import type {BackendSession} from '@/lib/backend-session';
 
 const mock=vi.hoisted(()=>({current:true,understanding:false,allowed:true,mode:'layout',session:'conversation-a' as string|null,
-  snapshot:{user:{id:'user-a'},sessionId:'session-a'},listeners:new Set<()=>void>(),send:vi.fn(),forwarded:undefined as boolean|undefined}));
+  snapshot:{user:{id:'user-a'},sessionId:'session-a'},listeners:new Set<()=>void>(),send:vi.fn(),forwarded:undefined as boolean|undefined,controller:undefined as unknown}));
 vi.mock('./agent-panel',()=>({useAgent:()=>({
   sessionScope:'activity:a',isSessionCurrent:()=>mock.current,isUnderstanding:()=>mock.understanding,canForward:()=>mock.allowed,
   callbacks:{workbenchMode:mock.mode},send:mock.send,
 })}));
 vi.mock('../hooks/use-assistant-sessions',()=>({getActiveAssistantSessionId:()=>mock.session}));
-vi.mock('./agent-chat',()=>({AgentChat:({onForwardToActivity}:{onForwardToActivity:(text:string)=>Promise<boolean>})=><button onClick={()=>{void onForwardToActivity('帮我规划活动').then(value=>{mock.forwarded=value;});}}>转交</button>}));
+vi.mock('./agent-chat',()=>({AgentChat:({onForwardToActivity,controller}:{onForwardToActivity:(text:string)=>Promise<boolean>;controller?:unknown})=>{mock.controller=controller;return <button onClick={()=>{void onForwardToActivity('帮我规划活动').then(value=>{mock.forwarded=value;});}}>转交</button>;}}));
 const controller={config:{apiUrl:'https://fixture.invalid'},getSnapshot:()=>mock.snapshot,
   subscribe:(listener:()=>void)=>{mock.listeners.add(listener);return()=>mock.listeners.delete(listener);}} as unknown as BackendSession;
 beforeEach(()=>{mock.current=true;mock.understanding=false;mock.allowed=true;mock.mode='layout';mock.session='conversation-a';mock.snapshot={user:{id:'user-a'},sessionId:'session-a'};mock.forwarded=undefined;mock.send.mockReset();mock.listeners.clear();});
@@ -22,6 +22,7 @@ describe('activity conversation bridge',()=>{
     let finish!:()=>void;mock.send.mockImplementation(()=>new Promise<void>(resolve=>{finish=resolve;}));
     const open=vi.fn();render(<AgentChatBridge controller={controller} agent="material" onOpenActivity={open}/>);
     fireEvent.click(screen.getByRole('button',{name:'转交'}));
+    expect(mock.controller).toBe(controller);
     expect(mock.send).toHaveBeenCalledExactlyOnceWith('帮我规划活动');expect(open).not.toHaveBeenCalled();
     await act(async()=>{finish();});await waitFor(()=>expect(mock.forwarded).toBe(true));expect(open).toHaveBeenCalledOnce();
   });

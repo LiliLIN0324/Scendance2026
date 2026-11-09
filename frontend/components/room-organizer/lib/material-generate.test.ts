@@ -22,7 +22,8 @@ describe('submitMaterialGenerate', () => {
     const fetchImpl = vi.fn();
     const text = await submitMaterialGenerate({ kind: 'text', prompt: '一把沙滩折叠椅' }, { localProxy: false, fetchImpl });
     expect(text).toMatchObject({ ok: false, stub: true });
-    expect(String((text as { message: string }).message)).toContain('NEXT_PUBLIC_SUPABASE_URL');
+    expect(String((text as { message: string }).message)).toContain('登录并连接云项目');
+    expect(String((text as { message: string }).message)).not.toMatch(/NEXT_PUBLIC|API_KEY/);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -92,10 +93,19 @@ describe('submitMaterialGenerate', () => {
     expect(!result.ok&&result.message).not.toContain('private request details');
   });
 
-  it('云端缺凭证时说清缺哪个变量', async () => {
-    const cloud = cloudLane({ createJob: async () => { throw new Error('SERVICE_NOT_CONFIGURED'); } });
-    const result = await submitMaterialGenerate({ kind: 'text', prompt: '金属台' }, { localProxy: false, cloud: cloud.lane });
-    expect(result).toMatchObject({ ok: false, stub: false });
-    expect(String((result as { message: string }).message)).toContain('LUX3D_API_KEY');
+  it('云端未开通、未登录或额度用完时各说一条原因，不暴露变量名', async () => {
+    const cases: Array<[string, string]> = [
+      ['SERVICE_NOT_CONFIGURED', '尚未开通'],
+      ['BILLING_NOT_CONFIGURED', '尚未开通'],
+      ['UNAUTHENTICATED', '请先登录'],
+      ['BUDGET_EXCEEDED', '额度已用完'],
+    ];
+    for (const [code, snippet] of cases) {
+      const cloud = cloudLane({ createJob: async () => { throw Object.assign(new Error('hidden'), { code }); } });
+      const result = await submitMaterialGenerate({ kind: 'text', prompt: '金属台' }, { localProxy: false, cloud: cloud.lane });
+      expect(result).toMatchObject({ ok: false, stub: false });
+      expect(!result.ok && result.message).toContain(snippet);
+      expect(!result.ok && result.message).not.toMatch(/LUX3D_API_KEY|NEXT_PUBLIC|hidden/);
+    }
   });
 });

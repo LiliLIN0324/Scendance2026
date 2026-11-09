@@ -52,6 +52,7 @@ describe('model turn outcome', () => {
   it('distinguishes provider failure, a read-only reply and an unanswered question', () => {
     const result=turn();result.resolution='failed';
     expect(resolvedTurnOutcome(result,initialBriefMemory(),false,'30人')).toEqual({kind:'failed',reason:'model_failed'});
+    expect(incompleteUpdateForOutcome(resolvedTurnOutcome(result,initialBriefMemory(),false,'30人'))).toBe('mark');
     result.resolution='model';result.readOnlyReply=true;
     expect(resolvedTurnOutcome(result,initialBriefMemory(),false,'30人')).toEqual({kind:'control',control:'read_only'});
     result.unhandled=[{kind:'question',evidence:'PRIVATE_FIXTURE'}];
