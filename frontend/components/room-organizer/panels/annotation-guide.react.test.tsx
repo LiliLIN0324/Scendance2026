@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AnnotationGuide } from './annotation-guide';
 
@@ -23,5 +23,17 @@ describe('场地规划引导', () => {
     expect(onModeChange).toHaveBeenCalledWith('door');
     view.rerender(<AnnotationGuide mode="door" zoneType="roundtable" onModeChange={onModeChange} onZoneTypeChange={onZoneTypeChange} onFinish={onFinish} />);
     expect(screen.getByText(/门宽、开启方向与现场情况仍需核对/)).toBeTruthy();
+  });
+
+  it('explains the coverage of each planning path without claiming checks passed', () => {
+    const view=render(<AnnotationGuide mode="zone" zoneType="roundtable" onModeChange={vi.fn()} onZoneTypeChange={vi.fn()} onFinish={vi.fn()} />);
+    const panel=within(view.container);
+    fireEvent.click(panel.getByText('标注如何影响方案'));
+    expect(panel.getByText(/画出的区域会影响区域方案/)).toBeTruthy();
+    expect(panel.getByText(/部分自动布置暂时不会参考这些区域/)).toBeTruthy();
+    expect(panel.getByText(/路线可用于检查是否被物料挡住/)).toBeTruthy();
+    expect(panel.getByText(/部分自动布置尚不检查入口净空/)).toBeTruthy();
+    expect(panel.getByText(/量距只显示距离/)).toBeTruthy();
+    expect(panel.getByText(/具体结果请查看方案检查/)).toBeTruthy();
   });
 });
