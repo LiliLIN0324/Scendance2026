@@ -104,7 +104,7 @@ export function appendPlanZones(layout: RoomLayout, floorIndex: number, draft: L
     const id = zoneId(draft.id, annotation);
     if (!id || reservedIds.has(id)) return { ok: false, reason: '区域编号过长或与已有内容冲突，原布局没有改变。' };
     const g = annotation.geometry;
-    const zone: RoomZone = { id, name, color: COLOR, x: g.x, z: g.z, w: g.width, d: g.depth };
+    const zone: RoomZone = { id, name, color: COLOR, ...(type === undefined ? {} : {zoneType:type}), x: g.x, z: g.z, w: g.width, d: g.depth };
     if (!isZoneRect(zone) || zone.w < MIN_ZONE_SIZE || zone.d < MIN_ZONE_SIZE) return { ok: false, reason: `「${annotation.label}」的区域尺寸无效或过小。` };
     if (zone.x < -layout.width / 2 || zone.z < -layout.height / 2 || zone.x + zone.w > layout.width / 2 || zone.z + zone.d > layout.height / 2) {
       return { ok: false, reason: `「${annotation.label}」超出场地边界，请先调整。` };

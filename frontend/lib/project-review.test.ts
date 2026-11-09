@@ -44,6 +44,14 @@ function picture(overrides: Partial<ProjectReviewImage> = {}): ProjectReviewImag
 }
 
 describe('project review snapshot', () => {
+  it('preserves explicit planning purpose without inferring it from old zone names',()=>{
+    const source=input();source.layout.floors[0]!.zones=[{id:'typed-zone',name:'区域',color:'#4A7C59',x:0,z:0,w:1,d:1,zoneType:'reserved'},{id:'legacy-zone',name:'预留区',color:'#4A7C59',x:2,z:0,w:1,d:1}];
+    const review=createProjectReviewSnapshot(source);
+    expect(review.current.layout.floors[0]!.zones![0]!.zoneType).toBe('reserved');
+    expect(review.current.layout.floors[0]!.zones![1]).not.toHaveProperty('zoneType');
+    source.layout.floors[0]!.zones![0]!.zoneType='checkin';
+    expect(review.current.layout.floors[0]!.zones![0]!.zoneType).toBe('reserved');
+  });
   it('detaches and freezes all chosen source fields without freezing or changing the original', () => {
     const source = input({ notes: [note({ objectIds: [objectId] })] });
     const before = JSON.stringify(source);

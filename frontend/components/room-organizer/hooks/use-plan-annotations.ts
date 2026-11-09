@@ -38,6 +38,7 @@ const initialState: PlanAnnotationState = {
 type Action =
   | { type: 'START_DRAFT' }
   | { type: 'CLEAR_DRAFT' }
+  | { type: 'CONSUME_ZONES' }
   | { type: 'REPLACE_DRAFT'; draft: LayoutPlanDraft }
   | { type: 'TOGGLE_VISIBLE' }
   | { type: 'SET_DRAW_MODE'; mode: PlanDrawMode }
@@ -79,6 +80,12 @@ function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationStat
         return match ? Math.max(next, Number(match[1]) + 1) : next;
       }, 1);
       return bump(state, { ...state, draft: action.draft, nextId });
+    }
+    case 'CONSUME_ZONES': {
+      if(!state.draft)return state;
+      const annotations=state.draft.annotations.filter(item=>item.kind!=='zone');
+      const ids=new Set(annotations.map(item=>item.id));
+      return bump(state,{...state,draft:annotations.length?{...state.draft,annotations,stages:state.draft.stages.map(stage=>({...stage,annotationIds:stage.annotationIds.filter(id=>ids.has(id))}))}:null,drawMode:annotations.length?state.drawMode:'off'});
     }
     case 'TOGGLE_VISIBLE':
       // 可见性是 UI 偏好，不改数据，不 bump revision。
@@ -150,6 +157,8 @@ export interface UsePlanAnnotationsResult {
   /** Only consume the exact reviewed draft; a newer change must remain intact. */
   clearDraftIfRevision(revision: number): boolean;
   replaceDraftIfRevision(revision: number, draft: LayoutPlanDraft): boolean;
+  /** Consume saved zones without re-importing unchanged route/door/measure drawings. */
+  consumeZonesIfRevision(revision:number):boolean;
   startDraft(): void;
   clearDraft(): void;
   replaceDraft(draft: LayoutPlanDraft): void;
@@ -215,6 +224,16 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     if (!Number.isSafeInteger(revision) || current.current.revision !== revision) return false;
     routes.current.clear();floors.current.clear();dispatch({type:'REPLACE_DRAFT',draft:structuredClone(draft)});return true;
   }, [dispatch]);
+  const consumeZonesIfRevision=useCallback((revision:number):boolean=>{
+    const draft=current.current.draft;
+    if(!Number.isSafeInteger(revision)||revision!==current.current.revision||!draft)return false;
+    const annotations=draft.annotations.filter(item=>item.kind!=='zone');
+    const retained=new Set(annotations.map(item=>item.id));
+    for(const id of routes.current.keys())if(!retained.has(id))routes.current.delete(id);
+    for(const id of floors.current.keys())if(!retained.has(id))floors.current.delete(id);
+    dispatch({type:'CONSUME_ZONES'});
+    return true;
+  },[dispatch]);
 
   const startDraft = useCallback(() => {routes.current.clear();floors.current.clear();dispatch({ type: 'START_DRAFT' });}, [dispatch]);
   const clearDraft = useCallback(() => {routes.current.clear();floors.current.clear();dispatch({ type: 'CLEAR_DRAFT' });}, [dispatch]);
@@ -375,6 +394,7 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     getSnapshot,
     clearDraftIfRevision,
     replaceDraftIfRevision,
+    consumeZonesIfRevision,
     startDraft,
     clearDraft,
     replaceDraft,
