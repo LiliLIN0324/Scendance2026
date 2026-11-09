@@ -163,6 +163,14 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
     expect(again.text).toContain('长宽');
   });
 
+  it('人数和尺寸已经记下时，圆桌仍出预览，不说没接住', () => {
+    const memory = { ...initialBriefMemory(), headcount: 80, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, layoutMode: 'dining' as const, layoutModeConfirmed: true };
+    const turn = parseBriefTurn('圆桌', memory, venueUp);
+    expect(turn.kind).toBe('generate');
+    expect(turn.text).not.toContain('没接住');
+    expect(turn.memory.layoutMode).toBe('dining');
+  });
+
   it('已记下的简报上，自由说法直接出预览，不说没接住', () => {
     const memory = { ...initialBriefMemory(), headcount: 30, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, event: '围读会', layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
     for (const text of ['你来布置吧', '帮我摆一下', '换个摆法', '重新布置', '我的意思是你是重新布置']) {

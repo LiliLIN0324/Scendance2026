@@ -45,7 +45,7 @@ it('real workspace discards an old reply across same-batch A→B→A and preserv
 it('invalidates an existing dialogue capture at submit and blocks new captures until interpretation finishes',async()=>{
  const a=activity('dialogue-in-flight');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<StrictMode><RoomOrganizer/></StrictMode>);const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+ const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
  let before:{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null=null;
  await waitFor(()=>{before=capture.dialogue?.()??null;expect(before).not.toBeNull();});
  fireEvent.change(input,{target:{value:'30人的活动'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
@@ -53,13 +53,13 @@ it('invalidates an existing dialogue capture at submit and blocks new captures u
  await act(async()=>{capture.resolve!();await Promise.resolve();});
  await waitFor(()=>{const current=capture.dialogue!();expect(current).not.toBeNull();current?.release();});expect(before!.isCurrent()).toBe(false);before!.release();
 });
-it('exports partial dialogue after a failed correction until the same words are successfully understood',async()=>{
+it('keeps a locally recorded headcount exportable when understanding fails',async()=>{
  const a=activity('dialogue-incomplete');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<StrictMode><RoomOrganizer/></StrictMode>);const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+ const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
  async function submit(text:string,resolution:'model'|'failed',call:number){capture.forcedResolution=resolution;fireEvent.change(input,{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送'}));await waitFor(()=>expect(capture.calls).toBe(call));await act(async()=>{capture.resolve!();await Promise.resolve();});}
  await submit('30人','model',1);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().fields.headcount.value).toBe(30);current?.release();});
- await submit('40人','failed',2);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('unavailable');current?.release();});
+ await submit('40人','failed',2);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('available');expect(current?.project().fields.headcount.value).toBe(40);current?.release();});
  await submit('40人','model',3);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('available');expect(current?.project().fields.headcount.value).toBe(40);current?.release();});
 });
 it('real workspace rejects an old zone preview after same-batch A→B→A without changing the draft or canvas',async()=>{

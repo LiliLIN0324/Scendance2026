@@ -28,8 +28,23 @@ function engagedFreeform(turn: ResolvedBriefTurn): boolean {
   return !!(turn.modelReply || turn.usesModelText);
 }
 
+/** The model failed, but local rules already asked or recorded this utterance and left nothing pending. */
+function acknowledgedDespiteModelFailure(turn: ResolvedBriefTurn): boolean {
+  if (turn.kind !== 'ask' && turn.kind !== 'ack') return false;
+  if (turn.text.includes('没接住')) return false;
+  if (turn.unhandled?.some(item => item.kind === 'action' || item.kind === 'other' || item.kind === 'question')) return false;
+  if (turn.memory.pendingBasicFacts?.length) return false;
+  if (turn.memory.pendingActivityNeeds.length || turn.memory.unresolvedActivityNeeds.length) return false;
+  if (turn.memory.layoutModeUnresolved) return false;
+  if (turn.memory.mobilityNeedsClarification || turn.memory.mobilityRequirement?.decision === 'unknown') return false;
+  return true;
+}
+
 /** No raw user text or model prose is included in this outcome. */
 export function resolvedTurnOutcome(turn: ResolvedBriefTurn, _previous: BriefMemory, mixedUtility: boolean, input: string): TurnOutcome {
+  if ((turn.resolution === 'failed' || turn.resolution === 'unavailable' || turn.resolution === 'not_connected') && acknowledgedDespiteModelFailure(turn)) {
+    return {kind:'understood', next: turn.kind === 'ask' ? 'ask' : 'reply'};
+  }
   if (turn.resolution === 'failed') return {kind:'failed',reason:'model_failed'};
   if (turn.resolution === 'unavailable' || turn.resolution === 'not_connected') return {kind:'failed',reason:'model_unavailable'};
   if (mixedUtility) return {kind:'unresolved',reason:'mixed_utility'};

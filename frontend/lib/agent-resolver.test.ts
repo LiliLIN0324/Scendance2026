@@ -80,6 +80,42 @@ describe('model requirements', () => {
     expect(turn.text).not.toContain('没接住');
   });
 
+  it('previews a bare round table once headcount and size are known, even if understanding fails',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefExtract=vi.fn(async()=>{throw new Error('model down');});
+    const memory={...initialBriefMemory(),headcount:80,venueIO:'indoor' as const,lengthM:12,widthM:9,layoutMode:'dining' as const,layoutModeConfirmed:true};
+    const turn=await resolveBriefTurn('圆桌',memory,context,{briefExtract});
+    expect(turn.kind).toBe('generate');
+    expect(turn.resolution).toBe('local_command');
+    expect(turn.text).not.toContain('没接住');
+    expect(turn.text).not.toContain('没有发起生成');
+  });
+  it('previews the headcount and size that finish a seating ask instead of only recording them',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefExtract=vi.fn(async()=>{throw new Error('model down');});
+    const seated={...initialBriefMemory(),layoutMode:'dining' as const,layoutModeConfirmed:true};
+    const people=await resolveBriefTurn('80人',seated,context,{briefExtract});
+    expect(people.kind).toBe('generate');
+    expect(people.resolution).toBe('local_command');
+    expect(people.text).not.toContain('没有发起生成');
+    const sized=await resolveBriefTurn('室内 12×9',{...seated,headcount:80}, {...context,venueUp:false},{briefExtract});
+    expect(sized.kind).toBe('generate');
+    expect(sized.resolution).toBe('local_command');
+    expect(sized.memory.lengthM).toBe(12);
+    expect(sized.memory.widthM).toBe(9);
+  });
+  it('previews one freeform seating sentence that already contains people and size',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefExtract=vi.fn(async()=>{throw new Error('model down');});
+    const turn=await resolveBriefTurn('想把会场摆成围坐，80人，室内12×9，圆桌，松一点',initialBriefMemory(),context,{briefExtract});
+    expect(turn.kind).toBe('generate');
+    expect(turn.resolution).toBe('local_command');
+    expect(turn.memory.headcount).toBe(80);
+    expect(turn.memory.layoutModeConfirmed).toBe(true);
+    expect(turn.text).not.toContain('没有发起生成');
+    expect(turn.text).not.toContain('没接住');
+  });
+
   it('does not let a model reply swallow a freeform layout ask',async()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
     const briefExtract=vi.fn();

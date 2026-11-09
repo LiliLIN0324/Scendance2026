@@ -507,8 +507,17 @@ describe('dialogue export in-flight fence',()=>{
  it('releases after a failed request without treating it as a successful dialogue',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');studioMock.controller.briefExtract.mockRejectedValueOnce(new Error('fixture failure'));
   const fence=tracker(),incomplete=vi.fn();state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueTurnStart={fence.start} onDialogueIncompleteChange={incomplete}><AgentPanel/></LayoutAgentProvider>);
-  send('30人');expect(fence.active.size).toBe(1);await waitFor(()=>expect(fence.active.size).toBe(0));expect(studioMock.controller.briefExtract).toHaveBeenCalledOnce();expect(incomplete).toHaveBeenCalledWith(expect.any(String),true);
+  send('嗯嗯');expect(fence.active.size).toBe(1);await waitFor(()=>expect(fence.active.size).toBe(0));expect(studioMock.controller.briefExtract).toHaveBeenCalledOnce();expect(incomplete).toHaveBeenCalledWith(expect.any(String),true);
   expect(await screen.findByText('已尝试：正在理解…')).toBeTruthy();
+ });
+ it('drops a handled seating ask when understanding fails and does not leave the process strip stuck',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');
+  studioMock.controller.briefExtract.mockRejectedValue(new Error('model down'));
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('想把会场摆成围坐');
+  expect(await screen.findByText(/还差人数和场地尺寸/)).toBeTruthy();
+  expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull();
+  expect(screen.queryByText('已尝试：正在理解…')).toBeNull();
  });
  it('shows understanding for a freeform layout ask that is not a generate command',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');
@@ -2959,7 +2968,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('把椅子放大');await screen.findByText(/缩放倍数或要求不明确/);
     let list=screen.getByRole('region',{name:'尚未处理的要求'});
     expect(within(list).getByText('把椅子往左挪')).toBeTruthy();expect(within(list).getByText('把椅子放大')).toBeTruthy();
-    fireEvent.click(within(list).getAllByRole('button',{name:'撤回这项要求'})[0]!);
+    fireEvent.click(within(list).getByRole('button',{name:'撤回：把椅子往左挪'}));
     list=screen.getByRole('region',{name:'尚未处理的要求'});
     expect(within(list).queryByText('把椅子往左挪')).toBeNull();expect(within(list).getByText('把椅子放大')).toBeTruthy();
   });
@@ -3027,7 +3036,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     studioMock.discardPreview.mockImplementation(()=>{studioMock.preview=null;});
     const onApply=vi.fn(),review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});
     const tree=()=> <LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onDialogueHistoryReview={review}><AgentPanel/><ConfirmationProbe/></LayoutAgentProvider>;
-    const view=render(tree());fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+    const view=render(tree());await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
     studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'这个要求需要继续处理。',unhandled:[{kind:'other',evidence:'花材只能摆在舞台后侧'}],factEvidence:[]});
@@ -3043,10 +3052,8 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   it('keeps chat available, exempts a verified new session and rechecks restored sessions',async()=>{
     const review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueHistoryReview={review}><AgentPanel/></LayoutAgentProvider>);
-    expect(await screen.findByRole('region',{name:'历史需求待核对'})).toBeTruthy();
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     send('什么是活动动线？');expect(await screen.findByText('什么是活动动线？')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button',{name:'按当前记录重新开始'}));
-    expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'新开会话'}));
     await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     fireEvent.click(screen.getByRole('button',{name:'会话历史'}));
@@ -3061,13 +3068,13 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     state.layout=makeLayout({width:12,height:9});const onApply=vi.fn();
     function SwitchAndConfirm(){const sessions=useAssistantSessions(()=>{});const agent=useAgent();return <button onClick={()=>{const original=sessions.activeId;sessions.openSession();if(original)sessions.selectSession(original);agent.confirmProposal();}}>切换并确认</button>;}
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onDialogueHistoryReview={()=>true}><AgentPanel/><SwitchAndConfirm/></LayoutAgentProvider>);
-    fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});
     fireEvent.click(screen.getByRole('button',{name:'切换并确认'}));
     expect(studioMock.applyPreview).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
   it('does not let history review silently discard a new unresolved requirement',async()=>{
-    const review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});
+    const review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});studioMock.preview=cloudPreview();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueHistoryReview={review}><AgentPanel/></LayoutAgentProvider>);
     await screen.findByRole('region',{name:'历史需求待核对'});
     send('把椅子往左挪');await screen.findByText(/移动距离或要求不明确/);
@@ -3078,7 +3085,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   it('does not carry an ordinary local review candidate into an explicitly new conversation',async()=>{
     state.layout=seatLayout();const onApply=vi.fn();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onDialogueHistoryReview={()=>true}><AgentPanel/><ConfirmationProbe/></LayoutAgentProvider>);
-    fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     await reviewAndFix();await screen.findByRole('button',{name:'确认布置'});
     fireEvent.click(screen.getByRole('button',{name:'新开会话'}));
     await waitFor(()=>expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull());
@@ -3092,7 +3099,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     state.layout=makeLayout({width:12,height:9});studioMock.connection='项目已连接';
     studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
     const onApply=vi.fn();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onDialogueHistoryReview={()=>true}><AgentPanel/><ConfirmationProbe/></LayoutAgentProvider>);
-    fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});
     studioMock.discardPreviewForHistoryReview.mockClear();
     fireEvent.click(screen.getByRole('button',{name:'新开会话'}));
@@ -3105,16 +3112,58 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     state.layout=makeLayout({width:12,height:9});studioMock.connection='项目已连接';
     studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
     const onApply=vi.fn();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onDialogueHistoryReview={()=>true}><AgentPanel/><ConfirmationProbe/></LayoutAgentProvider>);
-    fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
     send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});
     studioMock.discardPreviewForHistoryReview.mockReturnValue(false);
     fireEvent.click(screen.getByRole('button',{name:'新开会话'}));
     expect(await screen.findByRole('region',{name:'历史需求待核对'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'模拟其他确认入口'}));expect(studioMock.applyPreview).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
+  it('opens a local preview for round tables once people and size are known, and does not pile acknowledged asks',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');
+    studioMock.controller.briefExtract.mockRejectedValue(new Error('model down'));
+    const review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueHistoryReview={review}><AgentPanel/></LayoutAgentProvider>);
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
+    send('想把会场摆成围坐');
+    expect(await screen.findByText(/还差人数和场地尺寸/)).toBeTruthy();
+    send('80人');
+    expect(await screen.findByText(/还差场地/)).toBeTruthy();
+    send('室内 12×9');
+    await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
+    expect(screen.queryByText(/没接住/)).toBeNull();
+    expect(screen.queryByText(/没有发起生成/)).toBeNull();
+    expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull();
+    expect(screen.queryByText('已尝试：正在理解…')).toBeNull();
+    send('圆桌');
+    await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
+    expect(screen.queryByText(/没接住/)).toBeNull();
+    send('过道再宽一点');
+    await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
+    expect(screen.queryByText(/请先核对历史需求/)).toBeNull();
+    expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull();
+  },30000);
+  it('keeps the history gate for a session that already has dialogue, with restart still usable',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');
+    const review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});
+    const tree=()=> <LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueHistoryReview={review}><AgentPanel/></LayoutAgentProvider>;
+    const view=render(tree());
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
+    send('80人，室内12×9，圆桌');
+    await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
+    view.unmount();
+    render(tree());
+    const action=await screen.findByRole('button',{name:'按当前记录重新开始'}) as HTMLButtonElement;
+    expect(action.disabled).toBe(false);
+    send('过道再宽一点');
+    expect(await screen.findByText(/请先核对历史需求，再重新生成方案/)).toBeTruthy();
+    expect((screen.getByRole('button',{name:'按当前记录重新开始'}) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'按当前记录重新开始'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull());
+  },30000);
   it('does not start agent generation before the history review',async()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
-    studioMock.connection='项目已连接';state.layout=makeLayout({width:12,height:9});
+    studioMock.connection='项目已连接';studioMock.preview=cloudPreview();state.layout=makeLayout({width:12,height:9});
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueHistoryReview={()=>true}><AgentPanel/></LayoutAgentProvider>);
     await screen.findByRole('region',{name:'历史需求待核对'});
     send('30 人，室内 12×9，课桌椅');
