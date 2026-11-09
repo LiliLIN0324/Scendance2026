@@ -61,7 +61,9 @@ export function ReviewSharePage(): JSX.Element {
       setPhase({ kind: 'loading' });
       setPlanVersion(null);setExportNote('');setPinsUsable(true);
       const shareHash=window.location.hash;
-      const localLayout = readLocalReviewLayout(safeStorage());
+      const example=new URLSearchParams(window.location.search).get('example');
+      const isolatedExample=!shareHash && (example==='sharing'||example==='hall-d5');
+      const localLayout = isolatedExample ? null : readLocalReviewLayout(safeStorage());
       void loadReviewPlan({
         hash: shareHash,
         search: window.location.search,
@@ -78,6 +80,9 @@ export function ReviewSharePage(): JSX.Element {
           return;
         }
         let currentPlan=result.plan;
+        if(currentPlan.planKey==='sample:sharing'||currentPlan.planKey==='sample:hall-d5'){
+          setPins([]);setReturned(false);setReturnNote('');setPhase({kind:'ready',plan:currentPlan});return;
+        }
         if(currentPlan.source==='link'){
           try {const version=await reviewVersionForHash(shareHash);if(!active||current!==ticket)return;
             currentPlan={...currentPlan,planKey:`review-v2:${version.slice(7)}`};linkHashRef.current=shareHash;setPlanVersion(version);
@@ -86,7 +91,7 @@ export function ReviewSharePage(): JSX.Element {
         if(currentPlan.source==='link'&&currentPlan.planKey.startsWith('review-v2:')){
           try {const storage=safeStorage();if(!storage)throw new Error();setPins(readExactReviewSharePins(currentPlan.planKey,storage));}
           catch {setPins([]);setPinsUsable(false);setPinError('本机反馈无法完整读取，请保留原记录，暂不能修改或导出。');}
-        }else setPins(currentPlan.source==='link'?[]:readReviewSharePins(currentPlan.planKey,safeStorage()));
+        }else setPins(currentPlan.source==='link'||currentPlan.planKey==='sample:sharing'||currentPlan.planKey==='sample:hall-d5'?[]:readReviewSharePins(currentPlan.planKey,safeStorage()));
         const storage=safeStorage();
         const receipt = readReviewReturn(storage&&currentPlan.source==='link'?versionedReturnStorage(storage,currentPlan.planKey):storage);
         const already = receipt?.planKey === currentPlan.planKey;
@@ -106,12 +111,13 @@ export function ReviewSharePage(): JSX.Element {
   }, []);
 
   const plan = phase.kind === 'ready' ? phase.plan : null;
+  const exampleOnly=plan?.planKey==='sample:sharing'||plan?.planKey==='sample:hall-d5';
   const floor = plan ? plan.layout.floors[floorIndex] ?? plan.layout.floors[0] : undefined;
   const legend = floor ? itemLegend(floor.items) : { rows: [], hidden: 0 };
   const pinNumbers = useMemo(() => new Map(pins.map((pin, index) => [pin.id, index + 1])), [pins]);
 
   const openPinDraft = useCallback((pick: { itemId: string | null; x: number; z: number }) => {
-    if (!plan || !floor) return;
+    if (!plan || !floor || exampleOnly) return;
     const floorY = floorElevation(plan.layout.floors, floorIndex);
     const item = pick.itemId ? floor.items.find((entry) => entry.id === pick.itemId) : null;
     const origin = item?.position ? { x: item.position.x, y: floorY, z: item.position.z } : null;
@@ -122,7 +128,7 @@ export function ReviewSharePage(): JSX.Element {
     };
     setPinError('');
     setPinDraft({ itemId: pick.itemId, x: pick.x, y: floorY, z: pick.z, offset, camera });
-  }, [plan, floor, floorIndex]);
+  }, [plan, floor, floorIndex, exampleOnly]);
 
   const commitPin = useCallback(async (text: string) => {
     if (!plan || !pinDraft || !floor || pinWritePending.current) return;
@@ -209,7 +215,7 @@ export function ReviewSharePage(): JSX.Element {
     <main className="rsp" data-review-share-page="true" data-review-source={plan?.source ?? phase.kind}>
       <header className="rsp-mast">
         <p className="rsp-brand"><span>幕景</span><small>Scendance</small></p>
-        <p className="rsp-mast-status">可评论方案 · 只读 · 画内落钉</p>
+        <p className="rsp-mast-status">{exampleOnly?'示例预览 · 只读':'可评论方案 · 只读 · 画内落钉'}</p>
       </header>
       {phase.kind === 'loading' ? (
         <section className="rsp-state" role="status"><h1>正在打开方案</h1><p>正在读取平面。</p></section>
@@ -222,7 +228,8 @@ export function ReviewSharePage(): JSX.Element {
             <h1 id="rsp-plan-title">{plan.layout.name}</h1>
             <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>
             <p className="rsp-notice">{plan.notice}</p>
-            {!pinDraft && pins.length === 0 && (
+            {plan.planKey==='sample:hall-d5' && <p><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
+            {!exampleOnly && !pinDraft && pins.length === 0 && (
               <p className="rsp-review-hint" role="status">点物件或地面，钉一条意见</p>
             )}
             {plan.layout.floors.length > 1 && (
@@ -264,7 +271,7 @@ export function ReviewSharePage(): JSX.Element {
               )}
             </div>
           </section>
-          <section className="rsp-comments" aria-labelledby="rsp-comments-title">
+          {!exampleOnly && <section className="rsp-comments" aria-labelledby="rsp-comments-title">
             <div className="rsp-comments-scroll">
               <h2 id="rsp-comments-title">钉汇总</h2>
               <p className="rsp-persist">意见保存在这台浏览器，不会自动同步到其他设备。完成后请导出并发给方案创建者。</p>
@@ -305,7 +312,7 @@ export function ReviewSharePage(): JSX.Element {
               <p role="status">{exportNote || '导出后请把文件交给方案创建者，反馈不会自动同步。'}</p>
               <p role="status">{returnNote || (plan.source==='link'?'完成后可导出反馈；评审状态只记录在这台浏览器。':'完成状态只记录在这台浏览器。')}</p>
             </div>
-          </section>
+          </section>}
         </div>
       ) : (
         <section className="rsp-state" role="alert"><h1>方案没有可看的楼层</h1><p>这份快照里没有楼层，平面没有展开。</p></section>

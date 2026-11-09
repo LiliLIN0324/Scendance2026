@@ -14,7 +14,7 @@
  *   对应 violation 必须走四值 unknown，不得默认 pass；
  * - 南墙一排双开门按图推断位置，标 inferred:true（不是用户在画布上真实画的）；
  * - 西北角「非常口」应急口位置按图估，width/方向 unknown；
- * - roomSize 按图估 19m×15m，字段注释「估测，待场地方核实」；
+ * - roomSize 的 19m×15m 是人为构造的模拟矩形，与官网标称的 16.5m×17.2m 不同；
  * - capacityReference 注释「参考值非消防核定」，文案不得称「消防已批准」。
  */
 
@@ -95,8 +95,8 @@ export interface VenueFixture {
 /**
  * 东京国际论坛 Hall D5（285㎡）。
  *
- * roomSize 19×15 = 285㎡ 是按图估算的外接矩形，
- * 实际厅形可能是矩形带切角，待场地方提供 CAD 后核对；这不是完整官方图复刻。
+ * roomSize 19×15 = 285㎡ 是人为构造的模拟矩形，不是官网标称尺寸。
+ * 官网标称 16.5×17.2m；实际轮廓与门位仍须按图及现场核对。
  */
 export const HALL_D5: VenueFixture = {
   venueKey: 'tokyo-international-forum-hall-d5',
@@ -104,7 +104,7 @@ export const HALL_D5: VenueFixture = {
   roomSize: {
     width: 19,
     height: 15,
-    note: '估测，待场地方核实（按图外接矩形 19×15≈285㎡）',
+    note: '估测的模拟矩形 19×15m；官网标称 16.5×17.2m，实际轮廓待核对',
   },
   doors: [
     {
