@@ -333,6 +333,24 @@ export class BackendSession {
   private readonly clientApiUrl: string;
   private readonly client: ReturnType<typeof createSceneClient>;
 
+  /** Conversation bodies are not valid on the deployed scene-api brief schema.
+   * Only the dedicated function may receive responseMode or history. */
+  private conversationClient():ReturnType<typeof createSceneClient> | null {
+    if(process.env.NEXT_PUBLIC_CONVERSATION_API_ENABLED!=='1')return null;
+    // The function must belong to the same validated Supabase project. Do not
+    // accept an independent URL that could receive the user's access token.
+    try {
+      const project=new URL(this.config.url),api=new URL(this.config.apiUrl);
+      const local=['localhost','127.0.0.1','[::1]'].includes(project.hostname);
+      if(!this.config.configured || (project.protocol!=='https:' && !(local&&project.protocol==='http:')) ||
+        project.username || project.password || project.pathname!=='/' || project.search || project.hash ||
+        api.origin!==project.origin || api.username || api.password || api.search || api.hash ||
+        api.pathname!=='/functions/v1/scene-api' || this.config.apiUrl!==`${this.config.url}/functions/v1/scene-api` ||
+        this.config.apiUrl!==this.clientApiUrl)throw new Error('invalid conversation base');
+      return createSceneClient(`${this.config.url}/functions/v1/conversation-api`,()=>this.accessToken());
+    }catch{throw new SceneApiError('CONVERSATION_API_NOT_CONFIGURED',503,null);}
+  }
+
   constructor(config: BackendConfig = getBackendConfig(), _storage?: Storage, _guestStorage?: Storage) {
     this.config = config;
     this.supabase = config.configured ? createSupabaseBrowserClient(config.url, config.anonKey) : null;
@@ -1456,13 +1474,17 @@ export class BackendSession {
   async briefExtract(message: string, signal?: AbortSignal): Promise<BriefExtractResponse> {
     const input = briefExtractRequestSchema.parse({ message });
     const dispatch=this.scopedDispatchGuard(false);
-    return briefExtractResponseSchema.parse(await this.client.request('/brief/extract', 'POST', input, false, signal,dispatch));
+    const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch);
+    dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
   async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal):Promise<BriefConversationResponse> {
     const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history});
+    const client=this.conversationClient();
+    if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
     const dispatch=this.scopedDispatchGuard(false);
-    const result=briefConversationResponseSchema.parse(await this.client.request('/brief/extract','POST',input,false,signal,dispatch));
+    const response=await client.request('/brief/extract','POST',input,false,signal,dispatch);
+    dispatch();const result=briefConversationResponseSchema.parse(response);
     if(result.enabled){
       if(!result.extraction||!result.reply||result.reason)throw new SceneApiError('INVALID_RESPONSE',502,null);
       parseBriefConversation({extraction:result.extraction,reply:result.reply,unhandled:result.unhandled,factEvidence:result.factEvidence,...(result.materialQueries?{materialQueries:result.materialQueries}:{})},input.message);
@@ -1472,8 +1494,11 @@ export class BackendSession {
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
   async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal): Promise<AssistantChatResult> {
     const input = assistantChatRequestSchema.parse({ message, history });
+    const client=this.conversationClient();
+    if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
-    return assistantChatResponseSchema.parse(await this.client.request('/assistant/chat', 'POST', input, false, signal,dispatch));
+    const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch);
+    dispatch();return assistantChatResponseSchema.parse(result);
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;

@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
 import {createApi} from '../supabase/functions/_shared/api.ts';
-import {briefConversationResponseSchema,BRIEF_CONVERSATION_PROMPT,parseBriefConversation} from '../supabase/functions/_shared/brief-extract-contract.ts';
+import {briefConversationResponseSchema,BRIEF_CONVERSATION_PROMPT,parseBriefConversation,parseModelBrief} from '../supabase/functions/_shared/brief-extract-contract.ts';
 import type {Backend} from '../supabase/functions/_shared/backend.ts';
 
 const backend={user:vi.fn(async()=> 'fixture-user')} as unknown as Backend;
@@ -11,6 +11,88 @@ const input={responseMode:'conversation_v1',message,history:[{role:'user',text:'
 const output={extraction:{headcount:30,activityNeeds:[{kind:'checkin',decision:'needed',evidence:'需要签到'}]},reply:'我理解需要签到；添加桌子的操作还需另行核对。',unhandled:[{kind:'action',evidence:'加一张桌子'}],factEvidence:[{key:'headcount',evidence:'30人'}]};
 const provider=(value:unknown)=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]});
 const request=(body:unknown,auth=true)=>new Request('https://fixture.invalid/brief/extract',{method:'POST',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer fixture'}:{})},body:JSON.stringify(body)});
+
+describe('explicit seating evidence',()=>{
+ it('drops inferred layout and all-seated claims without discarding known facts or advice',()=>{
+  const raw='为长者办一场室内讲座，预计30人，现有80把椅子；是否签到还没决定。请先给建议，不要改场景。';
+  const value={extraction:{event:'讲座',headcount:30,venueIO:'indoor',layoutMode:'desk-chair',inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'是否签到还没决定'},{kind:'all_seated',decision:'needed',evidence:'为长者办一场室内讲座'}],requirements:[{key:'layoutMode',value:'desk-chair',mode:'must'}]},reply:'可以先比较讲座椅与课桌椅方案，签到稍后决定。',unhandled:[{kind:'action',evidence:'不要改场景'}],factEvidence:[{key:'event',evidence:'讲座'},{key:'headcount',evidence:'30人'},{key:'venueIO',evidence:'室内'},{key:'layoutMode',evidence:'椅子'}]};
+  const result=parseBriefConversation(value,raw);
+  expect(result.extraction).toMatchObject({headcount:30,venueIO:'indoor',inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'是否签到还没决定'}],requirements:[]});
+  expect(result.extraction.layoutMode).toBeUndefined();expect(result.factEvidence.some(row=>row.key==='layoutMode')).toBe(false);expect(result.reply).toBe(value.reply);
+ });
+ it('retains explicitly chosen classroom seating and all-attendees-seated',()=>{
+  const raw='采用课桌椅布局，要求全员落座。';
+  const result=parseBriefConversation({extraction:{layoutMode:'desk-chair',activityNeeds:[{kind:'all_seated',decision:'needed',evidence:'全员落座'}]},reply:'先按这项要求讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence:'课桌椅布局'}]},raw);
+  expect(result.extraction.layoutMode).toBe('desk-chair');expect(result.extraction.activityNeeds).toEqual([{kind:'all_seated',decision:'needed',evidence:'全员落座'}]);
+ });
+ it.each([['采用圆桌布局',true],['圆桌',true],['圆桌式',true],['现有8张圆桌',false],['为长者办宴请',false]] as const)('distinguishes chosen round tables from inventory or event type: %s', (raw,expected)=>{
+  const evidence=raw.includes('圆桌')?'圆桌':'宴请';
+  const result=parseBriefConversation({extraction:{layoutMode:'dining'},reply:'可以先讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence}]},raw);
+  expect(result.extraction.layoutMode).toBe(expected?'dining':undefined);
+ });
+ it.each([
+  ['现有8张圆桌，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['现有80套课桌椅，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+ ] as const)('keeps explicit selection despite a neutral inventory mention: %s',(raw,mode,shortEvidence,fullEvidence)=>{
+  for(const evidence of [shortEvidence,fullEvidence]){
+   const result=parseBriefConversation({extraction:{layoutMode:mode,requirements:[{key:'layoutMode',value:mode,mode:'prefer'}]},reply:'可以先讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence}]},raw);
+   expect(result.extraction.layoutMode).toBe(mode);expect(result.extraction.requirements).toHaveLength(1);
+  }
+  expect(parseModelBrief({layoutMode:mode},raw).layoutMode).toBe(mode);
+ });
+ it.each([
+  ['不采用圆桌，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['圆桌是否采用尚未定，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['不采用课桌椅，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+  ['课桌椅是否采用尚未定，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+  ['还没选择圆桌，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['还没采用课桌椅，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+ ] as const)('does not hide a contradictory same-layout clause: %s',(raw,mode,shortEvidence,fullEvidence)=>{
+  for(const evidence of [shortEvidence,fullEvidence]){
+   const result=parseBriefConversation({extraction:{layoutMode:mode},reply:'可以先讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence}]},raw);
+   expect(result.extraction.layoutMode).toBeUndefined();
+  }
+  expect(parseModelBrief({layoutMode:mode},raw).layoutMode).toBeUndefined();
+ });
+ it.each(['现有80套课桌椅','不采用课桌椅布局','是否采用课桌椅布局还没决定','可能采用课桌椅布局','可以考虑课桌椅布局','有80套课桌椅按剧院式摆放'])('does not turn ambiguous or negative layout language into a choice: %s',raw=>{
+  const result=parseBriefConversation({extraction:{layoutMode:'desk-chair'},reply:'可以继续讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence:'课桌椅'}]},raw);
+  expect(result.extraction.layoutMode).toBeUndefined();expect(result.factEvidence).toEqual([]);
+ });
+ it.each(['不要全员落座','全员是否落座还没决定','不安排所有人坐下','不一定全员落座'])('does not turn a denial or open question into mandatory seating: %s',raw=>{
+  const evidence=raw.includes('全员')?'全员':'所有人';
+  const full=raw.includes('全员')?(raw.includes('落座')?raw.slice(raw.indexOf(evidence),raw.indexOf('落座')+2):raw):'所有人坐下';
+  const result=parseBriefConversation({extraction:{activityNeeds:[{kind:'all_seated',decision:'needed',evidence:full}]},reply:'可以继续讨论。',unhandled:[],factEvidence:[]},raw);
+  expect(result.extraction.activityNeeds).toEqual([]);
+ });
+ it('retains the explicitly selected layout after correcting a different alternative',()=>{
+  const raw='不排圆桌改用课桌椅';
+  const result=parseBriefConversation({extraction:{layoutMode:'desk-chair'},reply:'先按课桌椅讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence:'课桌椅'}]},raw);
+  expect(result.extraction.layoutMode).toBe('desk-chair');
+ });
+ it('distinguishes an explicit absence of a seating requirement from an unavailable capacity',()=>{
+  const parse=(raw:string,evidence:string)=>parseBriefConversation({extraction:{activityNeeds:[{kind:'all_seated',decision:'not_needed',evidence}]},reply:'可以继续讨论。',unhandled:[],factEvidence:[]},raw).extraction.activityNeeds;
+  expect(parse('不要求全员落座','全员落座')).toHaveLength(1);
+  expect(parse('无法让全员落座','全员落座')).toEqual([]);
+  expect(parse('现在不是所有人都有座','所有人都有座')).toEqual([]);
+ });
+ it('still rejects fabricated evidence instead of silently dropping it',()=>{
+  expect(()=>parseBriefConversation({extraction:{layoutMode:'desk-chair'},reply:'可以讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence:'课桌椅'}]},'有80把椅子')).toThrow('MODEL_EVIDENCE_MISMATCH');
+ });
+ it('keeps the legacy extractor conservative without changing other validated fields',()=>{
+  const raw='为长者办讲座，预计30人，现有80把椅子';
+  const result=parseModelBrief({headcount:30,layoutMode:'desk-chair',inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'all_seated',decision:'needed',evidence:'为长者办讲座'}]},raw);
+  expect(result).toMatchObject({headcount:30,inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[]});expect(result.layoutMode).toBeUndefined();
+  expect(parseModelBrief({layoutMode:'desk-chair'},'采用课桌椅布局').layoutMode).toBe('desk-chair');
+ });
+ it('returns the remaining information through the API with one provider call',async()=>{
+  const raw='为长者办一场室内讲座，预计30人，现有80把椅子；是否签到还没决定。请先给建议，不要改场景。';
+  const model={extraction:{headcount:30,venueIO:'indoor',layoutMode:'desk-chair',inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'是否签到还没决定'},{kind:'all_seated',decision:'needed',evidence:'为长者办一场室内讲座'}]},reply:'可以先比较不同座椅布局。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'},{key:'venueIO',evidence:'室内'},{key:'layoutMode',evidence:'椅子'}]};
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(provider(model));
+  const response=await createApi(backend,env,fetcher)(request({responseMode:'conversation_v1',message:raw,history:[]}));const result=await response.json();
+  expect(result.enabled).toBe(true);expect(result.extraction).toMatchObject({headcount:30,venueIO:'indoor',inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'是否签到还没决定'}]});
+  expect(result.extraction.layoutMode).toBeUndefined();expect(result.reply).toBe(model.reply);expect(fetcher).toHaveBeenCalledOnce();
+ });
+});
 
 describe('single-call conversation_v1 extraction',()=>{
  it('uses the product namespace instead of the old MiniMax profile and fails closed if incomplete',async()=>{
