@@ -99,7 +99,7 @@ export function mergeZoneNeeds(raw: string, previous: BriefMemory['zoneNeeds']):
   for (const [key, label] of [['checkin', '签到(?:区|台)?'], ['rest', '休息区'], ['stage', '舞台']] as const) {
     const pattern = new RegExp(`(不需要|没有|不用|不要|无需|不设|取消|需要|要|设置|保留|有)\\s*(?:一个|一处|个)?\\s*${label}`, 'g');
     for (const clause of clauses) {
-      if (/(可能|也许|或许|是否|要不要|需不需要|不确定|不知道|待定|看情况|并非|不排除|未必|不一定|不是|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause)) continue;
+      if (SUGGESTION.test(clause) || /(可能|也许|或许|是否|要不要|需不需要|不确定|不知道|待定|看情况|并非|不排除|未必|不一定|不是|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause)) continue;
       for (const match of clause.matchAll(pattern)) next[key] = !/^(不需要|没有|不用|不要|无需|不设|取消)$/.test(match[1]!);
     }
   }
@@ -112,7 +112,7 @@ export function parseMobilityRequirement(raw:string):{decision:'needed'|'not_nee
   const clauses=raw.split(/[，,；;。！!]|但是|但|然而|不过|同时|并且/).map(value=>value.trim()).filter(value=>subject.test(value));
   if(!clauses.length)return null;
   const decisions=clauses.map(clause=>{
-    if(/(不确定|不排除|并非|不是|没有说|没有表示|不要不|未必|不一定|可能|也许|或许|是否|要不要|需不需要|有没有|待定|不知道|看情况|或者|还是|上一场|上次|去年|以前|[吗么?？])/.test(clause))return 'unknown' as const;
+    if(SUGGESTION.test(clause) || /(不确定|不排除|并非|不是|没有说|没有表示|不要不|未必|不一定|可能|也许|或许|是否|要不要|需不需要|有没有|待定|不知道|看情况|或者|还是|上一场|上次|去年|以前|[吗么?？])/.test(clause))return 'unknown' as const;
     // Absence of a known user is not a decision about access requirements.
     // Test this before the positive patterns: otherwise “没有” contains “有”
     // and “没有人需要” contains “需要”, silently reversing the user's words.
@@ -148,6 +148,8 @@ export interface BriefTurn {
 }
 
 const EDUCATION_PATTERN = /(小学|中学|大学|学校|课堂|上课|讲课|教学|课室|班级|学生|小朋友)/;
+/** 建议、推荐和“可以考虑”只是选项，不是用户已经确认的选择。 */
+const SUGGESTION = /建议|可以考虑|推荐|不妨/;
 /** These words select a desk-and-chair style, not the number of people per desk. */
 const DESK_CHAIR_PATTERN = /(课桌|课椅|桌椅|一人一套|每人一套|一套课桌|桌(子)?[^]{0,6}配[^]{0,6}椅)/;
 const BARE_NUMBER_PATTERN = /^(\d{1,5})(个|人)?$/;
@@ -280,7 +282,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   const accepted=mentions.flatMap(({evidence})=>{
     if(!evidence||raw.indexOf(evidence)<0||raw.indexOf(evidence)!==raw.lastIndexOf(evidence))return [];
     const clause=raw.split(/[，,；;。！!？?]/).find(part=>part.includes(evidence));
-    if(!clause||clause.trim().length>200||/(?:上次|上一场|上届|去年|往年|以前|此前|之前|历史|不确定|不一定|可能|也许|大约|大概|左右|至少|至多|是否|要不要|待定|不知道|没有|并无|并非|不是|无需|不需要|尚未|未有|采购|租赁|需要|计划|预计|[?？])/.test(clause))return [];
+    if(!clause||clause.trim().length>200||SUGGESTION.test(clause)||/(?:上次|上一场|上届|去年|往年|以前|此前|之前|历史|不确定|不一定|可能|也许|大约|大概|左右|至少|至多|是否|要不要|待定|不知道|没有|并无|并非|不是|无需|不需要|尚未|未有|采购|已采购|下单|买好|租赁|需要|计划|预计|生成|[?？])/.test(clause))return [];
     if(!/(?:现有|已有|库存|我们有|场地有|手头有|备有|拥有|有)/.test(clause)
       || !/(?:\d+|[零〇一二两三四五六七八九十百千]+)\s*(?:套|把|张|件|只|盏|组|台|块|个)\s*[\u4e00-\u9fa5a-zA-Z]/.test(evidence))return [];
     // Keep the complete original clause, not a model-cropped fragment that loses context.
@@ -304,7 +306,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   const compact = raw.replace(/\s+/g, '');
   const seatingDecisions=new Set<boolean>();
   for(const clause of compact.split(/[，,；;。！!]/)){
-    if (/(可能|也许|或许|是否|是不是|要不要|需不需要|不确定|不知道|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause)) continue;
+    if (SUGGESTION.test(clause) || /(可能|也许|或许|是否|是不是|要不要|需不需要|不确定|不知道|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause)) continue;
     if (/(?:不需要|不要求|不用|无需|不必)(?:每人|人人|所有人|全部人)(?:都有座|都入座|都坐|坐下|入座)/.test(clause)) seatingDecisions.add(false);
     else if (/(?:每人|人人|所有人|全部人)(?:都有座|都入座|都坐|坐下)|(?:必须|一定要|确保).{0,16}(?:人|位).{0,4}(?:都)?(?:坐|入座)/.test(clause)) seatingDecisions.add(true);
   }
@@ -357,11 +359,12 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
     && (DESK_CHAIR_PATTERN.test(clause)||/(?:圆桌|餐桌)/.test(clause))&&!inventoryOnly(clause));
   const usableLayoutClause=(clause:string)=>!inventoryOnly(clause)&&!(hasCurrentLayoutChoice&&historyText.test(clause));
   const deskClauses = clauses.filter(clause => DESK_CHAIR_PATTERN.test(clause) && usableLayoutClause(clause));
-  const deskExplicit = deskClauses.some(clause => !/(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause));
-  const deskAmbiguous = deskClauses.some(clause => /(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause));
+  const layoutUnconfirmed = (clause:string) => SUGGESTION.test(clause) || /(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause);
+  const deskExplicit = deskClauses.some(clause => !layoutUnconfirmed(clause));
+  const deskAmbiguous = deskClauses.some(layoutUnconfirmed);
   const diningClauses = clauses.filter(clause => /(?:圆桌|餐桌)/.test(clause) && usableLayoutClause(clause));
-  const diningExplicit = diningClauses.some(clause => !/(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause));
-  const diningAmbiguous = diningClauses.some(clause => /(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause));
+  const diningExplicit = diningClauses.some(clause => !layoutUnconfirmed(clause));
+  const diningAmbiguous = diningClauses.some(layoutUnconfirmed);
   if (deskExplicit && !deskAmbiguous && !diningExplicit) { memory.layoutMode = 'desk-chair'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (diningExplicit && !diningAmbiguous && !deskExplicit) { memory.layoutMode = 'dining'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (deskAmbiguous || diningAmbiguous || (deskExplicit && diningExplicit)) { memory.layoutModeUnresolved = true; memory.layoutModeConfirmed = false; }
@@ -403,7 +406,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   const postponed=(['checkin','rest','stage','all_seated'] as const).filter(kind=>
     (bareDeferral&&kind===bareTarget) || sourceClauses.some(clause=>!historicPattern.test(clause)&&needPattern[kind].test(clause)&&deferral.test(clause)));
   const explicitlyCurrent=(kind:ActivityNeedKind)=>sourceClauses.some(clause=>{
-    if(historicPattern.test(clause)||!needPattern[kind].test(clause)||/(?:不确定|不一定|可能|也许|是否|要不要|待定|没定|未定|不知道|看情况|[吗么?？])/.test(clause))return false;
+    if(historicPattern.test(clause)||!needPattern[kind].test(clause)||SUGGESTION.test(clause)||/(?:不确定|不一定|可能|也许|是否|要不要|待定|没定|未定|不知道|看情况|[吗么?？])/.test(clause))return false;
     if(kind==='all_seated')return /(?:每人|人人|所有人|全部人).{0,8}(?:坐|座|入座)/.test(clause);
     return mergeZoneNeeds(clause,{checkin:null,rest:null,stage:null})[kind]!==null;
   });
