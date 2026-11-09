@@ -110,7 +110,7 @@ export function SpacePanel({
               <Globe size={14} aria-hidden="true"/><span>空间生成</span><small>默认 · 生成场地</small>
             </button>
             <button type="button" className={workflow === 'traditional' ? 'is-active' : ''} aria-pressed={workflow === 'traditional'} onClick={() => selectWorkflow('traditional')}>
-              <Layers size={14} aria-hidden="true"/><span>传统空间</span><small>空白壳 · 模板</small>
+              <Layers size={14} aria-hidden="true"/><span>传统空间</span><small>空白空间 · 分享会示例</small>
             </button>
           </div>
         </div>
