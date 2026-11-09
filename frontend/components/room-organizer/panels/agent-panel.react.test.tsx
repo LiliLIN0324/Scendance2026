@@ -40,6 +40,8 @@ const studioMock = vi.hoisted(() => ({
   discardPreviewForHistoryReview: vi.fn(()=>true),
   applyPreview: vi.fn(async () => {}),
   setCandidateInventory: vi.fn(() => true),
+  candidateRequirementError: vi.fn(():string|null=>null),
+  candidateAnnotationAdvisory: vi.fn(():string|null=>null),
   setBrief: vi.fn(),
   brief: { event: null as string | null, guests: null as number | null, eventConfirmed: undefined as boolean | undefined, guestsConfirmed: undefined as boolean | undefined },
   hasSavedBrief: false,
@@ -1354,6 +1356,8 @@ beforeEach(() => {
   studioMock.discardPreviewForHistoryReview.mockReset();studioMock.discardPreviewForHistoryReview.mockImplementation(()=>{studioMock.preview=null;return true;});
   studioMock.applyPreview.mockReset(); studioMock.applyPreview.mockResolvedValue(undefined);
   studioMock.setCandidateInventory.mockReset();studioMock.setCandidateInventory.mockReturnValue(true);
+  studioMock.candidateRequirementError.mockReset();studioMock.candidateRequirementError.mockReturnValue(null);
+  studioMock.candidateAnnotationAdvisory.mockReset();studioMock.candidateAnnotationAdvisory.mockReturnValue(null);
   studioMock.brief = { event: null, guests: null, eventConfirmed: undefined, guestsConfirmed: undefined };
   studioMock.hasSavedBrief = false;
   studioMock.preview = null; studioMock.stale = false; studioMock.expired = false; studioMock.busy = false;
@@ -2740,6 +2744,22 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     studioMock.busy = false;
     rerender(ui(state.layout));
     expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+  });
+  it('shows unverified annotation guidance beside a cloud candidate',async()=>{
+    studioMock.connection='项目已连接';studioMock.candidateAnnotationAdvisory.mockReturnValue('本次标注尚未完整核验，实际通行仍需确认。');
+    studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
+    render(ui({...state.layout,width:12,height:9}));send('30 人，室内 12×9，圆桌');
+    expect(await screen.findByText('本次标注尚未完整核验，实际通行仍需确认。')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
+  });
+  it('blocks confirmation when an annotation review detects a new conflict',async()=>{
+    studioMock.connection='项目已连接';studioMock.candidateRequirementError.mockReturnValue('规划路线有新增冲突，请调整后重新核对。');
+    studioMock.candidateAnnotationAdvisory.mockReturnValue('规划路线有新增冲突，请调整后重新核对。');
+    studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
+    render(ui({...state.layout,width:12,height:9}));send('30 人，室内 12×9，圆桌');
+    expect((await screen.findAllByText(/规划路线有新增冲突/)).length).toBeGreaterThan(0);
+    expect(within(document.getElementById('plan-proposal')!).getAllByText(/规划路线有新增冲突/)).toHaveLength(1);
+    expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
   });
   it('adopts a cloud preview when its React update commits after generate resolves',async()=>{
     studioMock.connection='项目已连接';

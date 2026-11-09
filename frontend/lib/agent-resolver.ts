@@ -161,6 +161,8 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       if(signal?.aborted)throw new DOMException('已停止等待','AbortError');
       fallback = 'failed';
       if(error instanceof SceneApiError && error.code==='UNAUTHENTICATED')modelNotice='请先登录以使用智能理解；本次先使用本地规则理解，请核对结果。';
+      else if(error instanceof SceneApiError && error.code==='ROUTE_NOT_FOUND')modelNotice='当前服务尚未提供智能理解，请联系管理员更新服务。本次使用本地规则理解，请核对结果。';
+      else if(error instanceof SceneApiError && error.code==='BRIEF_GUARD_NOT_READY')modelNotice='智能理解暂未开放，请联系管理员完成配置。本次使用本地规则理解，请核对结果。';
       else if(timedOut)modelNotice='智能理解响应超时，已尝试取消请求；服务商可能仍会计费，请先核对状态和用量。本次先使用本地规则理解，请核对结果。';
       else modelNotice='智能理解暂不可用，本次先使用本地规则理解；如请求已发出，请先核对服务状态和用量。';
     } finally {

@@ -17,12 +17,36 @@ const agentSeatingSizeFact=z.discriminatedUnion('status',[
 ]);
 const agentSeatingItemSpecs=z.strictObject({width:agentSeatingSizeFact.optional(),depth:agentSeatingSizeFact.optional(),height:agentSeatingSizeFact.optional()});
 export const agentSeatingSpecsSchema=z.strictObject({desk:agentSeatingItemSpecs.optional(),chair:agentSeatingItemSpecs.optional()});
+// Client-supplied planning marks are an observation, never a site fact or a validation result.
+const annotationId=z.string().min(1).max(128).regex(/^[A-Za-z0-9:_-]+$/);
+const coordinate=z.number().finite().min(-1000).max(1000);
+const annotationPoint=z.strictObject({x:coordinate,z:coordinate});
+const annotationItem=z.discriminatedUnion('kind',[
+  z.strictObject({id:annotationId,kind:z.literal('zone'),geometry:z.strictObject({kind:z.literal('rect'),x:coordinate,z:coordinate,width:z.number().finite().positive().max(1000),depth:z.number().finite().positive().max(1000)}),zoneType:z.enum(['roundtable','checkin','photo','rest','desk','reserved']).nullable(),source:z.literal('unverified')}),
+  z.strictObject({id:annotationId,kind:z.literal('route'),geometry:z.strictObject({kind:z.literal('polyline'),points:z.array(annotationPoint).min(2).max(100)}),source:z.literal('unverified')}),
+  z.strictObject({id:annotationId,kind:z.literal('measure'),geometry:z.strictObject({kind:z.literal('measure'),from:annotationPoint,to:annotationPoint}),source:z.literal('unverified')}),
+  z.strictObject({id:annotationId,kind:z.literal('door'),geometry:z.strictObject({kind:z.literal('door'),wall:z.enum(['north','south','east','west']),position:coordinate}),positionStatus:z.enum(['inferred','unverified']),widthStatus:z.literal('unknown'),directionStatus:z.literal('unknown')}),
+]);
+export const agentAnnotationObservationSchema=z.discriminatedUnion('status',[
+  z.strictObject({status:z.literal('unavailable')}),
+  z.strictObject({status:z.literal('ready'),binding:z.strictObject({activityScope:annotationId.refine(value=>value.startsWith('activity:')&&value.length>9),activityEpoch:z.number().int().nonnegative().safe(),sceneRevision:z.number().int().nonnegative().safe(),floorId:annotationId,annotationRevision:z.number().int().nonnegative().safe()}),annotations:z.array(annotationItem).max(100),notice:z.literal('标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。')}),
+]).superRefine((observation,ctx)=>{
+  if(observation.status!=='ready')return;
+  const ids=new Set<string>();let points=0;
+  for(const item of observation.annotations){
+    if(ids.has(item.id))ctx.addIssue({code:'custom',message:'duplicate annotation'});ids.add(item.id);
+    if(item.kind==='route')points+=item.geometry.points.length;
+    if(item.kind==='zone'&&(Math.abs(item.geometry.x+item.geometry.width)>1000||Math.abs(item.geometry.z+item.geometry.depth)>1000))ctx.addIssue({code:'custom',message:'annotation outside bounds'});
+  }
+  if(points>1000)ctx.addIssue({code:'custom',message:'too many annotation points'});
+});
 export const agentContextSchema=z.strictObject({
   brief:z.string().max(12000).default(''),acceptedDecisions:z.array(z.string().max(1000)).max(20).default([]),
   recentMessages:z.array(z.strictObject({role:z.enum(['user','assistant']),text:z.string().max(3000)})).max(12).default([]),
   lastProposalExplanation:z.string().max(1200).optional(),
   seatingAllocation:agentSeatingAllocationSchema.optional(),
   seatingSpecs:agentSeatingSpecsSchema.optional(),
+  annotationObservation:agentAnnotationObservationSchema.optional(),
 });
 export const agentRunRequestSchema=z.strictObject({
   ...leaseSchema.shape,requestId:uuid,localRevision:z.number().int().nonnegative(),scene:sceneSchema,
