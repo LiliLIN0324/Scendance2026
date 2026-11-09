@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, pendingPlanOf, prepareAholoAsk, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale } from './workbench-agent';
+import { checkDim, classifyFile, classifyLocalLayout, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isLayoutOnlyUtterance, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, layoutGenerateCommand, mentionsUnsupportedSeating, omitHandledLayoutActions, parseBriefSentence, parseMaterialRequest, pendingPlanOf, prepareAholoAsk, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale } from './workbench-agent';
 
 describe('workbench agent v2.4', () => {
   it('shows a bounded server seating shortfall without calling an object limit venue capacity',()=>{
@@ -62,6 +62,25 @@ describe('workbench agent v2.4', () => {
     expect(isGenerateCommand('换一版')).toBe('again');
     expect(isGenerateCommand('换个方案')).toBe('again');
     expect(isGenerateCommand('舞台往左挪')).toBe(null);
+    for (const text of ['你来布置吧', '帮我摆一下', '帮我布置一下']) expect(isGenerateCommand(text)).toBe('first');
+    for (const text of ['换个摆法', '重新布置', '我的意思是你重新布置', '我的意思是你是重新布置', '室内12×9，围成一圈', '沙发围成一圈', '沙发围一圈']) expect(isGenerateCommand(text)).toBe('again');
+    for (const text of ['不要换个摆法', '换个摆法吗？', '你来布置吧，加两把椅子', '怎么布置']) expect(isGenerateCommand(text)).toBeNull();
+    expect(isLayoutOnlyUtterance('你来布置吧')).toBe(true);
+    expect(isLayoutOnlyUtterance('帮我摆一下')).toBe(true);
+    expect(isLayoutOnlyUtterance('30人，你来布置吧')).toBe(false);
+    expect(mentionsUnsupportedSeating('沙发围成一圈')).toBe(true);
+    expect(mentionsUnsupportedSeating('我们有3个沙发')).toBe(false);
+    expect(layoutGenerateCommand('换个摆法')).toBe('again');
+    for (const text of ['摆好看一点', '能不能紧凑一点', '座位多留点过道', '再来一版', '按刚才说的摆', '不要课桌改沙发']) {
+      expect(classifyLocalLayout(text), text).toBe('revise');
+      expect(isGenerateCommand(text), text).toBe('again');
+    }
+    expect(classifyLocalLayout('先出一版看看')).toBe('generate');
+    expect(isGenerateCommand('先出一版看看')).toBe('first');
+    expect(classifyLocalLayout('请帮我办消防验收')).toBe('cannot');
+    expect(isGenerateCommand('今天天气不错')).toBeNull();
+    expect(mentionsUnsupportedSeating('不要课桌改沙发')).toBe(true);
+    expect(omitHandledLayoutActions('你来布置吧', [{ kind: 'action', evidence: '你来布置吧' }, { kind: 'action', evidence: '删除椅子' }])).toEqual([{ kind: 'action', evidence: '删除椅子' }]);
     expect(isEstimateCommand('按图纸估')).toBe(true);
     expect(isEstimateCommand('按图纸比例估一下')).toBe(true);
     expect(isEstimateCommand('出方案')).toBe(false);
