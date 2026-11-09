@@ -249,7 +249,7 @@ export interface BriefSceneScriptInput {
 /**
  * A first script from what the person already said. This is the deterministic "plan on the
  * map" step: mass at the north (stage), a cross aisle in front of it, the seating field
- * below, check-in and planting along the south band. It writes nothing; the compiler does.
+ * below, with an optional check-in band. It writes nothing; the compiler does.
  */
 export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript {
   const { widthM, depthM, guests, layoutMode = 'dining', stage, checkin } = input;
@@ -263,11 +263,10 @@ export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript 
     zones.push({ role: 'stage', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: stageDepth }, label: '主舞台' });
     north += stageDepth;
   }
-  zones.push({ role: 'aisle', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: aisleMinM }, label: '前场通道' });
+  zones.push({ role: 'aisle', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: aisleMinM }, label: '前侧预留带' });
   north += aisleMinM;
 
-  // The south band holds check-in on the west and planting on the east, so the seating
-  // field never gets built on top of either of them.
+  // Keep the optional check-in band clear of seating.
   const southBandD = checkin || stage ? 1.6 : 0;
   const south = depthM / 2 - gap - southBandD;
   const seatingD = south - north;
@@ -286,13 +285,7 @@ export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript 
         label: '签到台',
       });
     }
-    const plantW = Math.min(1.6, widthM * 0.2);
-    zones.push({
-      role: 'plant',
-      rect: { x: widthM / 2 - gap - plantW, z: south + gap, w: plantW, d: southBandD - gap },
-      count: 3,
-      label: '角隅绿植',
-    });
+
   }
 
   return {

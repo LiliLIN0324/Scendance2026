@@ -41,6 +41,55 @@ describe('proposal freshness at the client write boundary', () => {
     await expect(assertFreshProposal(proposal, current)).resolves.toBeUndefined();
   });
 
+  it('keeps the HTTP status when an error body is not JSON', async () => {
+    const token = vi.fn(async () => 'fake-test-token');
+    const network = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('<html>gateway</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }));
+    const client = createSceneClient('https://example.test/scene-api', token);
+    await expect(client.request('/brief/extract', 'POST', { message: '80人' })).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 502, details: null });
+    expect(token).toHaveBeenCalledOnce();
+    expect(network).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a JSON error code and its status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: { code: 'UNAUTHENTICATED', details: { private: 'do-not-surface' } } }), { status: 401, headers: { 'Content-Type': 'application/json' } }));
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    const error = await client.request('/brief/extract', 'POST', { message: '80人' }).then(() => { throw new Error('expected rejection'); }, caught => caught);
+    expect(error).toMatchObject({ code: 'UNAUTHENTICATED', status: 401, details: { private: 'do-not-surface' } });
+  });
+
+  it('does not treat a non-object JSON error as a missing status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]', { status: 500, headers: { 'Content-Type': 'application/json' } }));
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    await expect(client.request('/brief/extract', 'POST', {})).rejects.toMatchObject({ code: 'HTTP_ERROR', status: 500, details: null });
+  });
+
+  it('reports a non-JSON success body with the real status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not-json', { status: 200 }));
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    await expect(client.request('/brief/extract', 'POST', {})).rejects.toMatchObject({ code: 'INVALID_RESPONSE', status: 200, details: null });
+  });
+
+  it('does not invent a status when fetch itself fails', async () => {
+    const failure = new TypeError('network down');
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(failure);
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    await expect(client.request('/brief/extract', 'POST', {})).rejects.toBe(failure);
+  });
+
+  it('classifies a conversation non-JSON body and a failed connection without copying the payload', async () => {
+    const token = vi.fn(async () => 'fake-test-token');
+    const network = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('<html>gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
+      .mockRejectedValueOnce(new TypeError('connect ECONNREFUSED 10.0.0.1'));
+    const client = createSceneClient('https://example.test/functions/v1/conversation-api', token);
+    await expect(client.request('/brief/extract', 'POST', { message: '80人' }, false, undefined, undefined, true)).rejects.toMatchObject({ code: 'NON_JSON_RESPONSE', status: 502, details: { category: 'non_json' } });
+    const networkError = await client.request('/brief/extract', 'POST', { message: '80人' }, false, undefined, undefined, true).catch(error => error);
+    expect(networkError).toMatchObject({ code: 'NETWORK_ERROR', status: 0, details: { category: 'network' } });
+    expect(JSON.stringify(networkError)).not.toContain('ECONNREFUSED');
+    expect(JSON.stringify(networkError)).not.toContain('gateway');
+    expect(network).toHaveBeenCalledTimes(2);
+  });
+
   it('does not request an access token or send an apply request for a malformed expiry', async () => {
     const { proposal, current } = await fixture('not-a-date');
     const token = vi.fn(async () => 'fake-test-token');

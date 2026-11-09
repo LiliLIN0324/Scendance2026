@@ -14,7 +14,7 @@ function measuredScene():SceneV2 {
  },sources:[],dimensions:[]});
 }
 function brokenDistance(s:SceneV2):DimensionConstraint {
- return {id:crypto.randomUUID(),kind:'distance',valueMeters:1,status:'confirmed',label:'Synthetic two-column distance',targetId:s.structure.columns[0].id,targetEndId:crypto.randomUUID(),measure:'width'};
+ return {id:crypto.randomUUID(),kind:'distance',valueMeters:1,status:'confirmed',label:'模型识别尺寸 1（待核验）',targetId:s.structure.columns[0].id,targetEndId:crypto.randomUUID(),measure:'width'};
 }
 
 describe('explicit dimension endpoint identities',()=>{
@@ -86,6 +86,14 @@ describe('explicit dimension endpoint identities',()=>{
   const before=(await f.rpc(owner,'projects.list')).length;
   const response=await request('/projects','POST',{studioId:studio,name:'Synthetic broken distance',scene:s});
   expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({error:{code:'DIMENSION_CONFLICT',details:[{code:'DIMENSION_TARGET_REQUIRED'}]}});
+  expect((await f.rpc(owner,'projects.list')).length).toBe(before);
+ });
+ it('blocks an unreviewed free-text label before attempting any scene write',async()=>{
+  const s=measuredScene();s.dimensions=[{...brokenDistance(s),label:'自由文字尚未核验'}];
+  const before=(await f.rpc(owner,'projects.list')).length;
+  const response=await request('/projects','POST',{studioId:studio,name:'Synthetic protected label',scene:s});
+  expect(response.status).toBe(409);expect(await response.json()).toMatchObject({error:{code:'ORIGINAL_SCENE_REVIEW_REQUIRED'}});
   expect((await f.rpc(owner,'projects.list')).length).toBe(before);
  });
  it('rejects a broken saved distance without advancing revision, then accepts the repaired pair',async()=>{
@@ -94,6 +102,7 @@ describe('explicit dimension endpoint identities',()=>{
   const d=brokenDistance(s),body={sessionId:session,generation:lease.generation,expectedRevision:0,scene:{...s,dimensions:[d]}};
   const failed=await request(`/projects/${project.id}/scene`,'PUT',body);
   expect(failed.status).toBe(422);
+  expect(await failed.json()).toMatchObject({error:{code:'DIMENSION_CONFLICT',details:[{code:'DIMENSION_TARGET_REQUIRED'}]}});
   const reopened=await (await request(`/projects/${project.id}`,'GET')).json();
   expect(reopened.revision).toBe(0);expect(reopened.scene).toEqual(s);
   const repaired={...s,dimensions:[{...d,targetEndId:s.structure.columns[1].id,valueMeters:4}]};

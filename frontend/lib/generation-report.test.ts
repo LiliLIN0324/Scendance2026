@@ -28,7 +28,7 @@ const base = {
 
 describe('buildReasoning', () => {
   it('只陈述实测数字：面积 + 件数', () => {
-    expect(buildReasoning(base)).toBe('按 120 m² 的场地摆了 24 件。');
+    expect(buildReasoning(base)).toBe('按画布面积 120 m²，本次新增 24 件物料。');
   });
 
   it('挪开 / 挪不动 / 被拒 / 保留 都按实际计数出现', () => {
@@ -39,7 +39,7 @@ describe('buildReasoning', () => {
       refusedCount: 1,
       skippedCount: 4,
     });
-    expect(text).toContain('压住通道和边界的 3 件已自动挪开。');
+    expect(text).toContain('有 3 件已调整位置。');
     expect(text).toContain('还有 2 件挪不动，已在画布标红。');
     expect(text).toContain('1 件没过判据被拒，没有硬塞进场地。');
     expect(text).toContain('4 件按原样保留，这次没动。');
@@ -59,7 +59,7 @@ describe('buildReasoning', () => {
 
 describe('buildSuggestion', () => {
   it('有挪不动的件时，先让处理标红', () => {
-    expect(buildSuggestion({ ...base, stuckCount: 2, refusedCount: 5 })).toBe('先处理 2 处标红（压通道或压墙），再交场。');
+    expect(buildSuggestion({ ...base, stuckCount: 2, refusedCount: 5 })).toBe('先检查 2 处标红，再核对现场条件。');
   });
 
   it('没有标红但有被拒件时，先说被拒', () => {
@@ -67,11 +67,11 @@ describe('buildSuggestion', () => {
   });
 
   it('体检分低时给复核建议', () => {
-    expect(buildSuggestion({ ...base, score: score(82) })).toContain('体检 82 分');
+    expect(buildSuggestion({ ...base, score: score(82) })).toContain('通行净宽');expect(buildSuggestion({ ...base, score: score(82) })).not.toMatch(/82 分|1\.2/);
   });
 
   it('全通过时给巡场建议', () => {
-    expect(buildSuggestion(base)).toContain('体检 100 分');
+    expect(buildSuggestion(base)).toContain('另行核验');expect(buildSuggestion(base)).not.toMatch(/100 分|1\.2/);
   });
 });
 
@@ -79,8 +79,8 @@ describe('buildGenerationReport', () => {
   it('组装体检分、为什么、建议与耗时', () => {
     const report = buildGenerationReport(base);
     expect(report.score?.total).toBe(100);
-    expect(report.reasoning).toContain('摆了 24 件');
-    expect(report.suggestion).toContain('体检 100 分');
+    expect(report.reasoning).toContain('新增 24 件物料');
+    expect(report.suggestion).toContain('另行核验');
     expect(report.durationMs).toBe(800);
   });
 

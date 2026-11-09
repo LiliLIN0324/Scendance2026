@@ -225,6 +225,15 @@ describe('material quantity check-in UI', () => {
     expect(materialCheckinSummary(ui.ledger!.sheets[0]!).receivedQuantity).toBe(15);
   });
 
+  it('租约失效时保留填写内容并显示保存状态未确认',async()=>{
+    const store=vi.fn<(value:MaterialCheckinLedger)=>Promise<void>>().mockRejectedValue(new Error('点验未能确认保存，填写内容已保留，请核对原记录后重试。'));
+    const ui=livePanel(layout(),ledger(),store);
+    fireEvent.click(screen.getByRole('button',{name:'记录实收'}));fillBatch('18');await save();
+    await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain('点验未能确认保存'));
+    expect((form().getByLabelText('本批数量') as HTMLInputElement).value).toBe('18');
+    expect(ui.ledger!.sheets[0]!.events).toHaveLength(0);
+  });
+
   it('retries a failed save with the same record ID, timestamp and original payload without double counting', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });vi.setSystemTime(new Date('2026-10-09T07:00:00Z'));
     const store = vi.fn<(value: MaterialCheckinLedger) => Promise<void>>().mockRejectedValueOnce(new Error('演练写入失败')).mockResolvedValueOnce(undefined);

@@ -67,18 +67,29 @@ describe('openPlanPrintWindow', () => {
     expect(html).toContain('Footprint');
     expect(html).toContain('8 m × 8 m');
     expect(html).toContain('Contents');
+    expect(html).toContain('待核验：门洞位置、尺寸及门扇开向');
+    expect(html).toContain('待核验草案：出口、门洞与场地尺度未核验。');
+    expect(html).toContain('通行、疏散、消防、无障碍及核定人数未核验。');
+    expect(html).toContain('打印比例须在打印设置及成品上核对。');
     expect(html).toContain('@page { size: A4 portrait;');
     // 8 m at 1:75 is 106.7 mm plus 2 × 15 mm margins.
     expect(html).toContain('.plan { width: 136.7mm; }');
     // The SVG is emitted in paper px: 53.33 px/m × 8 m + 120 px margins.
-    expect(html).toContain('viewBox="0 0 546.67 546.67"');
+    expect(html).toContain('viewBox="0 0 546.67 580.67"');
   });
 
-  it('switches to landscape for a wide lot instead of overflowing A4 (#288)', () => {
+  it('标出未定位物件名称及数量，并转义名称', () => {
+    const {position: _position, ...unplaced} = makeItem({id:'missing',name:'待定位 <桌>'});
+    const html = openAndCapture(8, 8, [unplaced]);
+    expect(html).toContain('位置待确认 1 件（未绘入平面）');
+    expect(html).toContain('待定位 &lt;桌&gt;');
+  });
+
+  it('chooses a scale that also fits the safety notice on A4 (#288)', () => {
     const html = openAndCapture(40, 30);
-    expect(html).toContain('1:250 (A4 landscape)');
-    expect(html).toContain('@page { size: A4 landscape;');
-    expect(html).toContain('.plan { width: 190.0mm; }');
+    expect(html).toContain('1:500 (A4 portrait)');
+    expect(html).toContain('@page { size: A4 portrait;');
+    expect(html).toContain('.plan { width: 110.0mm; }');
   });
 
   it('sizes the sheet from the plan content so garden items are printed (#287)', () => {
@@ -88,7 +99,7 @@ describe('openPlanPrintWindow', () => {
     // 11.4 m at 1:75 is 152 mm + 30 mm margins = 182 mm: still inside the
     // 230 mm portrait height, so the scale holds and the sheet grows.
     expect(html).toContain('1:75 (A4 portrait)');
-    expect(html).toContain('viewBox="0 0 546.67 728"');
+    expect(html).toContain('viewBox="0 0 546.67 762"');
     expect(html).toContain('>Oak Tree</text>');
     // The same tree 8 m from the wall (content 16.7 m → 253 mm) tips it to 1:100.
     const farTree = { ...tree, position: { x: 0, z: 12 } };

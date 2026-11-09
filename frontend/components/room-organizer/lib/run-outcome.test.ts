@@ -8,6 +8,10 @@ const plan = (overrides: Partial<PlanProposal> = {}): PlanProposal => ({
 });
 
 describe('run-outcome — 一次运行的账单', () => {
+  it('does not describe a generic cloud change as a move',()=>{
+    const outcome=buildOutcome({added:1,removing:1,changed:1,keptLocked:0,dropped:0,blocked:null,changedLabel:'调整'});
+    expect(outcomeLines(outcome)).toEqual(['放进 1 件 · 调整 1 件 · 撤掉 1 件']);
+  });
   it('成功、被拒、锁定各占一行，被拒按原因分开说', () => {
     const outcome = outcomeOfPlan(plan({
       added: 8, removing: 2, keptLocked: 3, dropped: 4,

@@ -7,7 +7,7 @@ import {evaluateCandidates} from '../supabase/functions/_shared/jev.ts';
 import {ApiError,canonical,sceneHash,sha256} from '../supabase/functions/_shared/domain.ts';
 import {generationCapabilities} from '../supabase/functions/_shared/generation-contract.ts';
 import {prepareGenerationRequest} from '../supabase/functions/_shared/generation-input.ts';
-const env=(key:string)=>({DEEPSEEK_API_KEY:'fixture',TOKENDANCE_API_KEY:'fixture',HY3_RETIRED:'true'}[key]);
+const env=(key:string)=>({DEEPSEEK_API_KEY:'fixture',TOKENDANCE_API_KEY:'fixture',HY3_RETIRED:'true',AGENT_ANNOTATION_OBSERVATION_ENABLED:'1'}[key]);
 const plan=(x=2)=>({title:`布局 ${x}`,explanation:'已规划桌子，待程序应用。',commands:[{op:'add',materialId:'table',position:{x,z:3},rotation:0,color:'#ffffff'}]});
 const tool=(name:string,args:unknown,id:string=crypto.randomUUID())=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
 const completion=(calls:ReturnType<typeof tool>[])=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:calls}}],usage:{total_tokens:10}}));
@@ -20,6 +20,203 @@ describe('durable bounded DeepSeek Agent',()=>{
  async function input(extra:Record<string,unknown>={}) {const base=scene(),p=await f.rpc(owner,'projects.create',{studioId:studio,name:'Agent test',scene:base});const lease=await f.rpc(owner,'lease.acquire',{projectId:p.id,sessionId:session});return {projectId:p.id,...agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:lease.generation,expectedRevision:0,localRevision:0,scene:base,selectedIds:[],instruction:'直接添加桌子',executionMode:'direct',...extra})};}
  function send(api:ReturnType<typeof createApi>,i:Awaited<ReturnType<typeof input>>) {const {projectId,...body}=i;return api(new Request(`https://api.test/projects/${projectId}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(body)}));}
  function byRequest(api:ReturnType<typeof createApi>,i:Awaited<ReturnType<typeof input>>) {return api(new Request(`https://api.test/projects/${i.projectId}/agent-runs/by-request/${i.requestId}`,{method:'GET',headers:{authorization:`Bearer ${owner}`}}));}
+ it.each(['validate_candidate','submit_candidates'])('returns reserved-area feedback through %s and accepts a repaired preview',async name=>{
+  const marks={status:'ready',binding:{activityScope:'activity:fixture',activityEpoch:1,sceneRevision:0,floorId:'floor-1',annotationRevision:1},annotations:[{id:'private-mark',kind:'zone',geometry:{kind:'rect',x:-5,z:-3,width:2,depth:2},zoneType:'reserved',source:'unverified'}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'};
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:marks}});let feedback='';
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{})]);
+   if(fetcher.mock.calls.length===2)return completion([tool(name,name==='validate_candidate'?plan(2):{candidates:[plan(2)]})]);
+   const body=JSON.parse(String(init?.body));feedback=body.messages.filter((m:{role:string})=>m.role==='tool').at(-1).content;
+   return completion([tool('submit_candidates',{candidates:[plan(8)]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(feedback).toContain('RESERVED_AREA_OCCUPIED');expect(feedback).toContain('annotation-1');expect(feedback).not.toContain('private-mark');
+  expect(result.state).toBe('complete');expect(result.candidates).toHaveLength(1);expect(result.candidates[0]!.proposal.candidate.objects[0]!.position.x).toBe(8);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).revision).toBe(0);expect(fetcher).toHaveBeenCalledTimes(3);
+ });
+ it.each(['ready','unavailable'] as const)('reads an explicitly supplied annotation snapshot via get_scene: %s',async status=>{
+  const observation=status==='ready'?{status:'ready',binding:{activityScope:'activity:fixture',activityEpoch:1,sceneRevision:2,floorId:'floor-1',annotationRevision:3},annotations:[{id:'ann-1',kind:'zone',geometry:{kind:'rect',x:-2,z:-1,width:2,depth:1},zoneType:'checkin',source:'unverified'}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'}:{status:'unavailable'};
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:observation}});
+  let first='',toolResult:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   const body=JSON.parse(String(init?.body));
+   if(fetcher.mock.calls.length===1){first=JSON.stringify(body.messages);return completion([tool('get_scene',{})]);}
+   toolResult=JSON.parse(body.messages.find((message:{role:string})=>message.role==='tool').content);
+   return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'标注仍需核验。',commands:[]}]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(result.state).toBe('complete');expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(first).not.toContain('ann-1');expect(first).not.toContain('activity:fixture');
+  expect(toolResult.annotationObservation.status).toBe(status);
+  if(status==='ready'){
+   expect(toolResult.annotationObservation).toMatchObject({sceneRevision:2,annotationRevision:3,bindingStatus:'unverified',coverage:'unknown',coordinateSystem:'scene_venue_corner_meters',annotations:[{id:'annotation-1',kind:'zone',geometry:{kind:'rect',x:4,z:4,width:2,depth:1},zoneType:'checkin',source:'unverified'}]});
+   expect(JSON.stringify(toolResult)).not.toContain('activity:fixture');expect(JSON.stringify(toolResult)).not.toContain('floor-1');expect(JSON.stringify(toolResult)).not.toContain('ann-1');
+  }
+ });
+ it('does not validate against marks before the model can observe them',async()=>{
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:{status:'unavailable'}}});let feedback='';
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{}),tool('validate_candidate',plan())]);
+   feedback=JSON.parse(String(init?.body)).messages.filter((m:{role:string})=>m.role==='tool').at(-1).content;
+   return completion([tool('submit_candidates',{candidates:[plan()]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(feedback).toContain('ANNOTATION_READ_REQUIRED');expect(result.state).toBe('complete');
+ });
+ it('keeps old get_scene output unchanged when no observation was supplied',async()=>{
+  const i=await input({executionMode:'preview'});let toolResult:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{})]);
+   const body=JSON.parse(String(init?.body));toolResult=JSON.parse(body.messages.find((message:{role:string})=>message.role==='tool').content);
+   return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'待核验。',commands:[]}]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(result.state).toBe('complete');expect(toolResult).not.toHaveProperty('annotationObservation');
+ });
+ it.each(['ready','unavailable'] as const)('requires a prior round to receive annotations before submission: %s',async status=>{
+  const marks=status==='ready'?{status:'ready',binding:{activityScope:'activity:fixture',activityEpoch:1,sceneRevision:2,floorId:'floor-1',annotationRevision:3},annotations:[],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'}:{status:'unavailable'};
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:marks}});
+  const candidate={title:'讨论草案',explanation:'供讨论。',commands:[]};let correction:any,receipt:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   const body=JSON.parse(String(init?.body));
+   if(fetcher.mock.calls.length===1)return completion([tool('submit_candidates',{candidates:[candidate]})]);
+   if(fetcher.mock.calls.length===2){correction=JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').at(-1).content);return completion([tool('get_scene',{})]);}
+   receipt=JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').at(-1).content).annotationObservation;
+   return completion([tool('submit_candidates',{candidates:[candidate]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(correction).toMatchObject({code:'ANNOTATION_READ_REQUIRED',hint:expect.stringContaining('get_scene')});expect(receipt.status).toBe(status);
+  expect(run.state).toBe('complete');expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(run.candidates[0]?.proposal.explanation).toContain(status==='ready'?'是否遵守标注尚未独立验证':'规划草案无法核对');
+  expect(run.candidates[0]?.proposal.warnings).toEqual(expect.arrayContaining([{code:'ANNOTATION_PREVIEW_ONLY',ids:[]}]));
+ });
+ it('does not treat reading and submitting in the same model batch as observing the result',async()=>{
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:{status:'unavailable'}}});
+  const candidate={title:'讨论草案',explanation:'供讨论。',commands:[]};let errors:any[]=[];
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{}),tool('submit_candidates',{candidates:[candidate]})]);
+   const body=JSON.parse(String(init?.body));errors=body.messages.filter((m:{role:string})=>m.role==='tool').map((m:{content:string})=>JSON.parse(m.content));
+   return completion([tool('submit_candidates',{candidates:[candidate]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.state).toBe('complete');expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(errors.some(result=>result.code==='ANNOTATION_READ_REQUIRED')).toBe(true);expect(run.candidates[0]?.proposal.explanation).toContain('规划草案无法核对');
+ });
+ it('permits a repeat scene read and submission when a prior round already received the snapshot',async()=>{
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:{status:'unavailable'}}});
+  const candidate={title:'讨论草案',explanation:'供讨论。',commands:[]};
+  const fetcher=vi.fn(async()=>fetcher.mock.calls.length===1?completion([tool('get_scene',{})]):completion([tool('get_scene',{}),tool('submit_candidates',{candidates:[candidate]})]));
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.state).toBe('complete');expect(fetcher).toHaveBeenCalledTimes(2);
+ });
+ it('does not reinterpret an earlier rejected tool call ID after reading',async()=>{
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:{status:'unavailable'}}});
+  const candidate={title:'讨论草案',explanation:'供讨论。',commands:[]};let replay:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('submit_candidates',{candidates:[candidate]},'repeated-id')]);
+   if(fetcher.mock.calls.length===2)return completion([tool('get_scene',{})]);
+   if(fetcher.mock.calls.length===3)return completion([tool('submit_candidates',{candidates:[candidate]},'repeated-id')]);
+   const body=JSON.parse(String(init?.body));replay=JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').at(-1).content);
+   return completion([tool('submit_candidates',{candidates:[candidate]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(replay.code).toBe('ANNOTATION_READ_REQUIRED');expect(run.state).toBe('complete');expect(fetcher).toHaveBeenCalledTimes(4);
+ });
+ it('uses the bounded budget and never publishes when the model repeatedly refuses to read',async()=>{
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:{status:'unavailable'}}});
+  const sent:any[]=[];const fetcher=vi.fn(async(_url,init)=>{sent.push(JSON.parse(String(init?.body)));return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'供讨论。',commands:[]}]})]);});
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run.state).toBe('failed');expect(run.errorCode).toBe('ANNOTATION_READ_REQUIRED');expect(run.candidates).toEqual([]);expect(fetcher.mock.calls.length).toBeLessThanOrEqual(6);
+  expect(sent.at(-1).tools.some((entry:any)=>entry.function.name==='get_scene')).toBe(true);
+  expect(JSON.stringify(sent.at(-1).messages)).not.toContain('本轮请只调用 submit_candidates');
+ });
+ it.each(['outside','empty','polygon'] as const)('reports limited annotation observation honestly: %s',async kind=>{
+  const base=scene();if(kind==='polygon'){base.venue.shape='polygon';base.venue.polygon=[{x:0,z:0},{x:12,z:0},{x:12,z:10},{x:0,z:10}];}
+  const marks={status:'ready',binding:{activityScope:'activity:private',activityEpoch:1,sceneRevision:2,floorId:'private-floor',annotationRevision:3},annotations:kind==='empty'?[]:[{id:'PRIVATE_ANNOTATION',kind:'zone',geometry:{kind:'rect',x:kind==='outside'?5:-2,z:0,width:2,depth:1},zoneType:'reserved',source:'unverified'}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'};
+  const i=await input({scene:base,executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:marks}});let observed:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{})]);
+   const body=JSON.parse(String(init?.body));observed=JSON.parse(body.messages.find((message:{role:string})=>message.role==='tool').content).annotationObservation;
+   return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'需核对。',commands:[]}]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(result.state).toBe('complete');
+  expect(observed.status).toBe(kind==='empty'?'ready':'unavailable');expect(observed.bindingStatus).toBe('unverified');expect(observed.coverage).toBe('unknown');
+  expect(observed.notice).toContain('无门');expect(JSON.stringify(observed)).not.toContain('PRIVATE_ANNOTATION');expect(JSON.stringify(observed)).not.toContain('private-floor');
+ });
+ it('converts route and door coordinates to the scene origin without exposing local IDs',async()=>{
+  const marks={status:'ready',binding:{activityScope:'activity:private',activityEpoch:1,sceneRevision:2,floorId:'private-floor',annotationRevision:3},annotations:[
+   {id:'private_route',kind:'route',geometry:{kind:'polyline',points:[{x:-6,z:-5},{x:6,z:5}]},source:'unverified'},
+   {id:'private_door',kind:'door',geometry:{kind:'door',wall:'south',position:-2},positionStatus:'inferred',widthStatus:'unknown',directionStatus:'unknown'},
+  ],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'};
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:marks}});let observed:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{})]);
+   const body=JSON.parse(String(init?.body));observed=JSON.parse(body.messages.find((message:{role:string})=>message.role==='tool').content).annotationObservation;
+   return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'需核对。',commands:[]}]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(result.state).toBe('complete');
+  expect(observed.annotations).toEqual([{id:'annotation-1',kind:'route',geometry:{kind:'polyline',points:[{x:0,z:0},{x:12,z:10}]},source:'unverified'},{id:'annotation-2',kind:'door',geometry:{kind:'door',wall:'south',position:4},positionStatus:'inferred',widthStatus:'unknown',directionStatus:'unknown'}]);
+  expect(JSON.stringify(observed)).not.toContain('private_');
+ });
+ it('converts measure endpoints and both exact limits of each wall',async()=>{
+  const walls=(['north','south','east','west'] as const).flatMap(wall=>{
+   const half=wall==='north'||wall==='south'?6:5;
+   return [-half,half].map((position,index)=>({id:`${wall}-${index}`,kind:'door',geometry:{kind:'door',wall,position},positionStatus:'unverified',widthStatus:'unknown',directionStatus:'unknown'}));
+  });
+  const marks={status:'ready',binding:{activityScope:'activity:fixture',activityEpoch:1,sceneRevision:2,floorId:'floor-1',annotationRevision:3},annotations:[{id:'measure',kind:'measure',geometry:{kind:'measure',from:{x:-6,z:-5},to:{x:6,z:5}},source:'unverified'},...walls],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'};
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:marks}});let observed:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{})]);
+   const body=JSON.parse(String(init?.body));observed=JSON.parse(body.messages.find((message:{role:string})=>message.role==='tool').content).annotationObservation;
+   return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'需核对。',commands:[]}]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(result.state).toBe('complete');
+  expect(observed.annotations[0].geometry).toEqual({kind:'measure',from:{x:0,z:0},to:{x:12,z:10}});
+  expect(observed.annotations.slice(1).map((item:any)=>item.geometry)).toEqual([
+   {kind:'door',wall:'north',position:0},{kind:'door',wall:'north',position:12},
+   {kind:'door',wall:'south',position:0},{kind:'door',wall:'south',position:12},
+   {kind:'door',wall:'east',position:0},{kind:'door',wall:'east',position:10},
+   {kind:'door',wall:'west',position:0},{kind:'door',wall:'west',position:10},
+  ]);
+ });
+ it.each([
+  ['route before left',{kind:'route',geometry:{kind:'polyline',points:[{x:-6.01,z:0},{x:0,z:0}]},source:'unverified'}],
+  ['route after right',{kind:'route',geometry:{kind:'polyline',points:[{x:0,z:0},{x:6.01,z:0}]},source:'unverified'}],
+  ['measure before near',{kind:'measure',geometry:{kind:'measure',from:{x:0,z:-5.01},to:{x:0,z:0}},source:'unverified'}],
+  ['measure after far',{kind:'measure',geometry:{kind:'measure',from:{x:0,z:0},to:{x:0,z:5.01}},source:'unverified'}],
+  ...(['north','south'] as const).flatMap(wall=>[-6.01,6.01].map(position=>[`${wall} ${position}`,{kind:'door',geometry:{kind:'door',wall,position},positionStatus:'unverified',widthStatus:'unknown',directionStatus:'unknown'}] as const)),
+  ...(['east','west'] as const).flatMap(wall=>[-5.01,5.01].map(position=>[`${wall} ${position}`,{kind:'door',geometry:{kind:'door',wall,position},positionStatus:'unverified',widthStatus:'unknown',directionStatus:'unknown'}] as const)),
+ ] as Array<readonly [string,Record<string,unknown>]>)('rejects a mark beyond a digital venue boundary: %s',async(_name,item)=>{
+  const marks={status:'ready',binding:{activityScope:'activity:fixture',activityEpoch:1,sceneRevision:2,floorId:'floor-1',annotationRevision:3},annotations:[{id:'ann-1',...item}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。'};
+  const i=await input({executionMode:'preview',context:{brief:'',acceptedDecisions:[],recentMessages:[],annotationObservation:marks}});let observed:any;
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{})]);
+   const body=JSON.parse(String(init?.body));observed=JSON.parse(body.messages.find((message:{role:string})=>message.role==='tool').content).annotationObservation;
+   return completion([tool('submit_candidates',{candidates:[{title:'讨论草案',explanation:'需核对。',commands:[]}]})]);
+  });
+  const result=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(result.state).toBe('complete');expect(observed).toMatchObject({status:'unavailable',bindingStatus:'unverified',coverage:'unknown'});
+ });
+ it.each([
+  {label:'default DeepSeek',settings:{DEEPSEEK_API_KEY:'fixture'},expected:'deepseek'},
+  {label:'custom compatible',settings:{AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'},expected:'custom'},
+  {label:'MiniMax',settings:{AGENT_CHAT_PROFILE:'minimax',MINIMAX_AGENT_TOOLS_ENABLED:'1',AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'},expected:'minimax'},
+ ])('attributes $label usage without recording credentials',async({settings,expected})=>{
+  const i=await input({executionMode:'preview'}),fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[tool('submit_candidates',{candidates:[plan()]})]}}],usage:{total_tokens:10}})));
+  const api=createApi(f.backend,key=>(settings as Record<string,string|undefined>)[key],fetcher),res=await send(api,i);
+  expect(res.status).toBe(202);const run=agentRunSchema.parse(await res.json());expect(run.state).toBe('complete');
+  const rows=await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id]);
+  const usage=rows.rows[0]!.usage;expect(Array.isArray(usage)).toBe(true);
+  expect(usage).toEqual(expect.arrayContaining([expect.objectContaining({provider:expected})]));
+  expect(JSON.stringify(usage)).not.toContain('private-fixture-value');
+ });
+ it.each([
+  {label:'missing provider credentials',settings:{}},
+  {label:'incomplete custom configuration',settings:{AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_MODEL:'fixture-model'}},
+ ])('does not create a run or call a model with $label',async({settings})=>{
+  const i=await input({executionMode:'preview'}),fetcher=vi.fn(async()=>completion([tool('submit_candidates',{candidates:[plan()]})]));
+  const api=createApi(f.backend,key=>(settings as Record<string,string|undefined>)[key],fetcher),res=await send(api,i);
+  expect(res.status).toBe(503);expect(fetcher).not.toHaveBeenCalled();
+  const rows=await f.db.query<{count:number}>('select count(*)::int as count from scene_private.agent_runs where project_id=$1',[i.projectId]);
+  expect(rows.rows[0]!.count).toBe(0);
+ });
  it('runs read tool then submit, stores original draft, replays without calling again, applies one undo group',async()=>{
   const i=await input(),fetcher=vi.fn(async()=>fetcher.mock.calls.length===1?completion([tool('get_scene',{})]):completion([tool('submit_candidates',{candidates:[plan()]})]));
   const api=createApi(f.backend,env,fetcher),res=await send(api,i);expect(res.status).toBe(202);const run=agentRunSchema.parse(await res.json());expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'direct'});expect(run.candidates).toHaveLength(1);
@@ -90,6 +287,15 @@ describe('durable bounded DeepSeek Agent',()=>{
    const i=await input({jevEnabled:true});const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'兼容方案',commands:plan().commands})}}],usage:{total_tokens:10}})));
    const run=agentRunSchema.parse(await (await send(createApi(f.backend,key=>key==='DEEPSEEK_AGENT_MODE'?'legacy':env(key),fetcher),i)).json());expect(run.state).toBe('complete');expect(run.executionMode).toBe('preview');expect(run.candidates).toHaveLength(1);expect(run.evaluation?.status).toBe('partial');expect(fetcher).toHaveBeenCalledOnce();
   });
+ it('attributes a custom provider in legacy preview without recording its endpoint or credential',async()=>{
+  const i=await input(),settings:Record<string,string>={DEEPSEEK_AGENT_MODE:'legacy',AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'};
+  const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'仅供预览',commands:plan().commands})}}],usage:{total_tokens:10}})));
+  const res=await send(createApi(f.backend,key=>settings[key],fetcher),i);expect(res.status).toBe(202);
+  const run=agentRunSchema.parse(await res.json());expect(run.state).toBe('complete');
+  const rows=await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id]);
+  const usage=rows.rows[0]!.usage;expect(usage).toEqual(expect.arrayContaining([expect.objectContaining({provider:'custom',mode:'legacy'})]));
+  expect(JSON.stringify(usage)).not.toContain('private-fixture-value');expect(JSON.stringify(usage)).not.toContain('example.test');
+ });
   it('legacy handler rejects a command for an unselected existing object without writing, and replays the terminal result',async()=>{
    const i=await input({scene:scopedScene(),selectedIds:[scopedObjectA],instruction:'只移动选中的椅子',executionMode:'direct'});
    const payload={explanation:'移动未选中的物件',commands:[{op:'move',id:scopedObjectB,position:{x:7,z:7}}],modelSuggestions:[],materialSuggestions:[]};

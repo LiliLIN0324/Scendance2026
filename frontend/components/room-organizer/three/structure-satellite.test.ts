@@ -8,7 +8,7 @@ import { outdoorGroundSize } from '../lib/site';
 import { buildStructureShell } from './structure-builder';
 import type { RoomLayout } from '../lib/types';
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('satellite floor texture', () => {
   it('sticks a decoded satellite image on the floor instead of painting olive', async () => {
@@ -61,8 +61,16 @@ describe('satellite floor texture', () => {
       onerror: null | (() => void) = null;
       set src(_value: string) { queueMicrotask(() => this.onerror?.()); }
     });
-    // jsdom 现已装 canvas 包，真 2D context 自带 fillRect/fillText；
-    // 旧的 getContext 猴补缺 beginPath，会把本用例和文件里后续用例一起搞挂（prototype 级污染）。
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({
+      fillStyle: '',
+      font: '',
+      fillRect() {},
+      fillText() {},
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      stroke() {},
+    })) as unknown as HTMLCanvasElement['getContext']);
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, makeLayout({
       satelliteGroundRef: true,

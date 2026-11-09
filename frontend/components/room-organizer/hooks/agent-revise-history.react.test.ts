@@ -11,7 +11,7 @@ import { INITIAL_LAYOUT } from './layout-reducer';
 import type { RoomLayout } from '../lib/types';
 
 const stage = makeItem({
-  id: 'stage-1', type: 'backdrop', materialId: 'backdrop', name: '舞台背景板',
+  id: 'stage-1', type: 'stage-platform', name: '舞台平台',
   width: 5, depth: 1.2, height: 3, position: { x: 0, z: -6 }, rotation: 0,
 });
 const chairA = makeItem({ id: 'chair-a', type: 'chair', name: '椅子 A', width: 0.5, depth: 0.5, height: 0.9, position: { x: -3, z: 2 } });

@@ -1,17 +1,20 @@
+import { HEADCOUNT_MAX } from './workbench-agent';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { backendSceneToLayout } from './backend-adapter';
 import { mergeDiagnostics, rejectedDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
+import { layoutRoleFromAssetName, layoutRoleFromNote, layoutRoleNote } from './layout-role';
+import { ringCenters, ringDiningSet, setFootprint } from './ring-seating';
 import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
 import { presetModelUrl } from './scene-presets';
 import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides } from './structural-layout';
-import { surpriseLayout } from './surprise';
 import type { FurnitureItem, RoomLayout, Vec2 } from './types';
 import { buildVenueShell, type ScaleOrigin } from './venue-shell';
 import type { PlanArtifact } from './plan-artifact';
+import {reviewLocalSeatingWitness,type LocalSeatingReview,type LocalSeatingWitness} from './local-seating-witness';
 
 /**
  * Bingo出布置方案用的两块纯函数：先立场地（T-01 的真相），再在立好的壳体上算一份**没写进画布**的候选。
@@ -61,6 +64,8 @@ export interface PlanInput {
   seatPriority?: boolean;
   /** desk-chair = 一人一套课桌椅（「课桌配椅子」「80 套」）；缺省按餐桌组摆。 */
   layoutMode?: 'dining' | 'desk-chair';
+  /** ring = 圆桌沿环/扇形摆。缺省仍用原来的方格槽位。 */
+  seatingShape?: 'ring' | 'grid';
   /** 缺省仍放舞台背景板。显式 false 才跳过（课室、或人说不要舞台）。 */
   stage?: boolean;
   /** 缺省不放签到台。发布会等活动或人点了签到才放，放不下就丢这一件。 */
@@ -101,6 +106,10 @@ export interface PlanProposal {
   diagnostics?: PlanDiagnostic[];
   /** 这一版的内容身份：确认前比对场地与候选，不看对象引用。 */
   artifact?: PlanArtifact;
+  /** Local-only generated associations; never inferred from nearby furniture or cloud data. */
+  seatingWitness?: LocalSeatingWitness|null;
+  /** Recomputed against the current candidate, not a safety or inventory verdict. */
+  seatingReview?: LocalSeatingReview;
 }
 
 const uid = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${randomSuffix()}`);
@@ -123,11 +132,14 @@ const seatCountIn = (items: readonly FurnitureItem[]): number => items.filter(it
  */
 export function raiseVenue(input: VenueInput): VenuePlan | null {
   const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin, polygonMeters } = input;
-  if (base.scenePreset || base.backendSceneV2) return null;
+  if (base.scenePreset || base.backendSceneV2 || base.floors.length !== 1) return null;
   const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin, ...(polygonMeters?.length ? { polygonMeters } : {}) });
   const shellLayout = backendSceneToLayout(scene, { name: base.name, ...(base.id ? { projectId: base.id } : {}) });
   // 壳体只换结构这几栏：底图、层高、屋顶这些跟布置无关的现场信息得跟着人原来填的走。
-  const shell: RoomLayout = { ...base, ...shellLayout, ...(base.roof ? { roof: base.roof } : {}) };
+  const originalFloor=base.floors[0];
+  const shell: RoomLayout = { ...base, ...shellLayout, ...(base.roof ? { roof: base.roof } : {}),
+    floors:shellLayout.floors.map(floor=>({...floor,...(originalFloor?{id:originalFloor.id,name:originalFloor.name}:{}),
+      ...(originalFloor?.zones ? {zones:originalFloor.zones} : {})})) };
   const index = Math.min(floorIndex, shell.floors.length - 1);
   const markers = structuralOnly(shell.floors[index]?.items ?? []);
   const current = base.floors[floorIndex]?.items ?? [];
@@ -178,6 +190,8 @@ export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
     ...rest, ...shellLayout,
     floors: shellLayout.floors.map(floor => ({
       ...floor,
+      ...(oldFloor ? {id:oldFloor.id,name:oldFloor.name} : {}),
+      ...(oldFloor?.zones ? {zones:oldFloor.zones} : {}),
       ...(oldFloor?.floorColor ? { floorColor: oldFloor.floorColor } : {}),
       ...(oldFloor?.floorPattern ? { floorPattern: oldFloor.floorPattern } : {}),
     })),
@@ -229,7 +243,7 @@ function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items
 }
 
 /** 候选场景里的重叠：跟编辑器同一套算法，只是跑在没落盘的候选上。 */
-function countOverlaps(layout: RoomLayout, floorIndex: number): { count: number; names: string[] } {
+export function countOverlaps(layout: RoomLayout, floorIndex: number): { count: number; names: string[] } {
   const floor = layout.floors[floorIndex];
   if (!floor) return { count: 0, names: [] };
   const keepOut = floorKeepOut(layout, floorIndex);
@@ -323,6 +337,7 @@ function classroomPairSlots(widthM: number, depthM: number, wanted: number): { s
 
 /** 布置提案：读场地（撤掉旧物料）→ 定舞台 → 摆桌椅 → 放绿植 → 检查重叠，全程只算不写。 */
 export function proposePlan(input: PlanInput): PlanProposal {
+  if (!Number.isSafeInteger(input.guests) || !input.guests || input.guests < 1 || input.guests > HEADCOUNT_MAX) return {layouts:[input.base],added:0,removing:0,keptLocked:0,dropped:0,overlapCount:0,overlapNames:[],blocked:'请先说明本场预计人数，再生成布置方案。',guests:null};
   const { widthM, depthM, variant } = input;
   const base = input.base;
   const floorIndex = Math.min(input.floorIndex, base.floors.length - 1);
@@ -380,6 +395,21 @@ export function proposePlan(input: PlanInput): PlanProposal {
         if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
       }
     }
+  } else if (input.seatingShape === 'ring') {
+    const dining = ringDiningSet();
+    const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'ring-measure' });
+    if (sample.length) {
+      const footprint = setFootprint(sample);
+      const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || 4;
+      const centers = ringCenters({ x: -widthM / 2, z: -depthM / 2, w: widthM, d: depthM }, footprint, 0.6, 1.2);
+      const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
+      const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
+      const count = Math.max(1, Math.min(centers.length, wantedSets));
+      for (const center of centers.slice(0, count)) {
+        const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
+        accept(tryAdd(base, current, floorIndex, items));
+      }
+    }
   } else {
     const dining = FURNITURE_SETS.find(set => set.key === 'dining');
     if (dining) {
@@ -401,15 +431,6 @@ export function proposePlan(input: PlanInput): PlanProposal {
         if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
       }
     }
-  }
-  layouts.push(current);
-
-  // 3 放绿植：现有 surprise 生成器里的装饰，只取植物
-  const plants = surpriseLayout({ roomWidth: widthM, roomDepth: depthM, seed: 1000 + variant })
-    .filter(item => item.id.includes('decor') && (item.type === 'plant' || item.type === 'flowerpot'))
-    .map(withId);
-  if (plants.length) {
-    accept(tryAdd(base, current, floorIndex, plants));
   }
   layouts.push(current);
 
@@ -536,6 +557,7 @@ export interface SiteBand {
 
 export type RevisionConflictCode =
   | 'TARGET_NOT_FOUND'
+  | 'TARGET_AMBIGUOUS'
   | 'LOCKED'
   | 'UNKNOWN_ASSET'
   | 'BBOX_OVERLAP'
@@ -558,7 +580,7 @@ export interface RevisionConflict {
 /** 按对象改的统一寻址：优先 itemId；否则按角色 + 序号 + 左右侧认。 */
 export interface PlanTargetHint {
   itemId?: string;
-  /** 文本层还没拿到 itemId 时按名字/类型认（舞台 ≈ 背景板，桌子 ≈ table）。 */
+  /** 文本层还没拿到 itemId 时按明确名字或类型识别。 */
   role?: string;
   /** 「左边第二张桌子」里的 2。 */
   ordinal?: number;
@@ -621,9 +643,9 @@ export interface RevisionProposal extends PlanProposal {
   conflicts: RevisionConflict[];
 }
 
-/** 文本里说的「舞台」在本项目就是贴北墙的背景板；灯按目录里的三种灯认。 */
+/** 舞台和背景板是不同的物料；灯按目录里的三种灯认。 */
 const ROLE_ALIASES: Readonly<Record<string, readonly string[]>> = {
-  舞台: ['backdrop', 'stage', '舞台'],
+  舞台: ['stage', 'stage-platform'],
   背景板: ['backdrop', '背景板'],
   背景墙: ['backdrop'],
   灯: ['lamp', 'floor-lamp', 'pendant-light', 'lamppost', '灯'],
@@ -641,16 +663,26 @@ const ROLE_ALIASES: Readonly<Record<string, readonly string[]>> = {
 function matchesRole(item: FurnitureItem, role: string): boolean {
   const key = role.replace(/[（）()【】[\]·\s]/g, '');
   if (!key) return false;
+  const noted = layoutRoleFromNote(item.notes);
+  if (key === '舞台') {
+    if (noted === '舞台') return true;
+    if (item.type === 'backdrop' || item.materialId === 'backdrop' || /(背景|背板|指示|标识|灯|音箱|屏幕|幕布)/.test(item.name)) return false;
+    return item.type === 'stage' || item.type === 'stage-platform'
+      || (item.materialId === 'asset' && item.assetId === '2476e655-516e-5563-baad-aa821272acb7')
+      || /^(主|临时)?(舞台|讲台)(平台)?([（(].*[）)])?$/.test(item.name.trim());
+  }
   const aliases = ROLE_ALIASES[key] ?? [key];
-  const fields = [String(item.type), item.name, item.materialId ?? '', item.assetId ?? ''];
+  const fields = [String(item.type), item.name, item.materialId ?? '', item.assetId ?? '', noted];
   return aliases.some(alias => fields.some(field => field === alias || (alias.length > 1 && field.includes(alias))));
 }
 
-function resolveTarget(items: readonly FurnitureItem[], op: PlanTargetHint): FurnitureItem | null {
-  if (op.itemId) return items.find(item => item.id === op.itemId) ?? null;
-  if (!op.role) return null;
+function resolveTarget(items: readonly FurnitureItem[], op: PlanTargetHint): { item: FurnitureItem | null; ambiguous: boolean } {
+  if (op.itemId) return { item: items.find(item => item.id === op.itemId) ?? null, ambiguous: false };
+  if (!op.role) return { item: null, ambiguous: false };
   const matches = items.filter(item => !isStructuralMarker(item) && matchesRole(item, op.role!));
-  if (!matches.length) return null;
+  if (!matches.length) return { item: null, ambiguous: false };
+  if (matches.length > 1 && !op.side) return { item: null, ambiguous: true };
+  if (op.side && matches.some(item => !item.position || !Number.isFinite(item.position.x) || !Number.isFinite(item.position.z))) return { item: null, ambiguous: true };
   // 「左边第二张桌子」：同角色按 x 排，左边从最小 x 数，右边从最大 x 数。
   const ordered = op.side === 'left'
     ? [...matches].sort((left, right) => (left.position?.x ?? 0) - (right.position?.x ?? 0))
@@ -658,7 +690,9 @@ function resolveTarget(items: readonly FurnitureItem[], op: PlanTargetHint): Fur
       ? [...matches].sort((left, right) => (right.position?.x ?? 0) - (left.position?.x ?? 0))
       : matches;
   const index = Math.max(0, (op.ordinal ?? 1) - 1);
-  return ordered[index] ?? null;
+  const item = ordered[index] ?? null;
+  if (item && ordered.some((other, i) => i !== index && other.position?.x === item.position?.x)) return { item: null, ambiguous: true };
+  return { item, ambiguous: false };
 }
 
 /** 按 assetId 取一件可放的物料；目录里没有但带了尺寸，就按外部 GLB 资产现场建。 */
@@ -673,11 +707,13 @@ function buildRevisionItem(op: PlanAddOp): { item: FurnitureItem; name: string }
   }
   if (!(op.width && op.depth && op.width > 0 && op.depth > 0)) return null;
   const height = op.height && op.height > 0 ? op.height : Math.max(op.width, op.depth);
+  const role = layoutRoleFromAssetName(op.name ?? op.assetId);
   const item: FurnitureItem = {
     id: uid(), type: 'glb-asset', name: op.name ?? op.assetId,
     width: op.width, depth: op.depth, height,
     color: '#9aa3ad', icon: '📦', materialId: 'asset', assetId: op.assetId, source: 'generated',
     ...(op.glbUrl ? { glbUrl: op.glbUrl } : {}),
+    ...(role ? { notes: layoutRoleNote(role) } : {}),
     position: { x: 0, z: 0 }, rotation: 0,
   };
   return { item, name: item.name };
@@ -794,6 +830,8 @@ export function revisePlan(input: {
   ops: readonly PlanRevisionOp[];
   /** 不许压的带状区域；湖侧景观带由调用方从这句话里解析出来。 */
   bands?: readonly SiteBand[];
+  /** Only generator-origin in-memory witnesses may be supplied by the caller. */
+  seatingWitness?: LocalSeatingWitness|null;
 }): RevisionProposal {
   const base = input.base;
   const floorIndex = Math.min(input.floorIndex, Math.max(0, base.floors.length - 1));
@@ -834,9 +872,11 @@ export function revisePlan(input: {
       const asset = built.item;
       const bothSides = op.anchor?.sides === 'both';
       const wanted = bothSides ? 2 : Math.max(1, Math.min(20, op.count ?? 1));
-      const anchorItem = op.anchor ? resolveTarget(items, { role: op.anchor.role }) : null;
+      const anchor = op.anchor ? resolveTarget(items, { role: op.anchor.role }) : null;
+      const anchorItem = anchor?.item ?? null;
       if (op.anchor && !anchorItem) {
-        fail({ code: 'TARGET_NOT_FOUND', target: op.anchor.role, message: `场地里没有「${op.anchor.role}」，没法按它两侧落灯` }, 'NO_SPOT', `找不到锚点「${op.anchor.role}」`);
+        const message = anchor?.ambiguous ? `有多个「${op.anchor.role}」，请明确选择物件后再放灯。` : `场地里没有「${op.anchor.role}」，没法按它两侧落灯`;
+        fail({ code: anchor?.ambiguous ? 'TARGET_AMBIGUOUS' : 'TARGET_NOT_FOUND', target: op.anchor.role, message }, 'NO_SPOT', message);
         continue;
       }
       let changed = false;
@@ -874,9 +914,15 @@ export function revisePlan(input: {
       continue;
     }
 
-    const target = resolveTarget(items, op);
+    if (op.kind === 'scale' && (!Number.isFinite(op.factor) || op.factor < 0.2 || op.factor > 5)) {
+      fail({code:'NO_SPOT', target:op.itemId ?? op.role ?? '?', message:`缩放倍数 ${op.factor} 超出支持范围 0.2–5 倍，请调整后重试。`}, 'NO_SPOT', '缩放倍数超出支持范围');
+      continue;
+    }
+    const resolution = resolveTarget(items, op);
+    const target = resolution.item;
     if (!target) {
-      fail({ code: 'TARGET_NOT_FOUND', target: op.itemId ?? op.role ?? '?', message: '场地里没有这件' }, 'UNKNOWN_MATERIAL', '场地里没有这件');
+      const message = resolution.ambiguous ? `找到多件「${op.role}」，请先补齐可区分的位置，再说明左右位置或选择具体物件。` : '场地里没有这件';
+      fail({ code: resolution.ambiguous ? 'TARGET_AMBIGUOUS' : 'TARGET_NOT_FOUND', target: op.itemId ?? op.role ?? '?', message }, 'UNKNOWN_MATERIAL', message);
       continue;
     }
     if (target.locked) {
@@ -907,7 +953,7 @@ export function revisePlan(input: {
     } else if (op.kind === 'rotate') {
       candidate = { ...target, rotation: (target.rotation ?? 0) + (op.deltaDeg * Math.PI) / 180 };
     } else {
-      const factor = Math.max(0.2, Math.min(5, op.factor));
+      const factor = op.factor;
       candidate = {
         ...target,
         width: round2(target.width * factor),
@@ -941,5 +987,9 @@ export function revisePlan(input: {
     overlapCount: overlaps.count, overlapNames: overlaps.names,
     blocked, moved, skipped: [...new Set(skipped)], diagnostics, guests: null, seats: 0,
     applied: added + removed + moved, conflicts,
+    ...(Object.hasOwn(input,'seatingWitness')?{
+      seatingWitness:input.seatingWitness?structuredClone(input.seatingWitness):null,
+      seatingReview:reviewLocalSeatingWitness(input.seatingWitness,final),
+    }:{}),
   };
 }

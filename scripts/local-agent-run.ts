@@ -6,34 +6,19 @@
  */
 import { startLocalServer, testAccounts, testPublicKey } from '../tests/local-server.ts';
 import { owner, studio, scene } from '../tests/fixtures.ts';
+import { createLocalAgentModel } from './local-agent-model.ts';
 
-/** 一份可落地的方案：场地中心放一张接待桌，颜色沿用品牌琥珀。 */
-const candidate = {
-  title: '接待区布置',
-  explanation: '在场地中心放一张接待桌，作为签到与咨询的落点。',
-  commands: [{ op: 'add', materialId: 'table', position: { x: 0, z: 0 }, rotation: 0, color: '#C9A96E' }],
-};
+const rawMode=process.env.LOCAL_BRIEF_STUB_MODE;
+if(rawMode&&!['valid','invalid','slow'].includes(rawMode))throw new Error('LOCAL_BRIEF_STUB_MODE 仅支持 valid、invalid 或 slow。');
+const rawDelay=process.env.LOCAL_BRIEF_STUB_DELAY_MS;
+const delayMs=rawDelay===undefined?5000:Number(rawDelay);
+if(!Number.isSafeInteger(delayMs)||delayMs<0||delayMs>130000)throw new Error('LOCAL_BRIEF_STUB_DELAY_MS 须为 0 至 130000 的整数。');
+const stubModel=createLocalAgentModel({briefMode:(rawMode??'valid') as 'valid'|'invalid'|'slow',delayMs});
 
-/** OpenAI 兼容的模型桩：按对话里有没有工具结果决定下一步调用哪个工具。 */
-const stubModel: typeof fetch = async (input, init) => {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  if (!url.includes('chat/completions')) throw new Error(`本地模型桩只处理 chat/completions，收到：${url}`);
-  const body = JSON.parse(String(init?.body ?? '{}')) as { messages?: { role?: string }[] };
-  const hasToolResult = (body.messages ?? []).some(message => message.role === 'tool');
-  const name = hasToolResult ? 'submit_candidates' : 'get_scene';
-  const args = hasToolResult ? { candidates: [candidate] } : {};
-  return Response.json({
-    choices: [{
-      finish_reason: 'tool_calls',
-      message: { content: null, tool_calls: [{ id: crypto.randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } }] },
-    }],
-    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-  });
-};
-
-const server = await startLocalServer(54329, stubModel);
+const server = await startLocalServer(54329, stubModel, {fixtureKind:'agent-model-stub'});
 await server.rpc(owner, 'projects.create', { studioId: studio, name: '智能建造联调项目', scene: scene() });
 console.log('LOCAL AGENT FIXTURE: real API + migrated PGlite + stub model. Data resets on exit.');
+console.log(`Local brief stub mode: ${rawMode??'valid'} (no real provider)`);
 console.log(`NEXT_PUBLIC_SUPABASE_URL=${server.url}`);
 console.log(`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${testPublicKey}`);
 console.log('Explicit test logins:', testAccounts.map(({ email, password }) => ({ email, password })));

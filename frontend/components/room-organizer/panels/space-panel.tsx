@@ -13,6 +13,7 @@ import { SceneChat } from './scene-chat';
 import { ShelfGrip } from './scendance-workspace';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { StructuralPropertiesPanel } from './structural-properties-panel';
+import { VenueFactsPanel } from './venue-facts-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
 import type { RoomLayout } from '../lib/types';
@@ -38,6 +39,8 @@ export function SpacePanel({
   workflow,
   variant = 'shelf',
   onRegisterNew,
+  venueFactScope,
+  isVenueFactScopeCurrent,
 }: {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
@@ -71,6 +74,8 @@ export function SpacePanel({
   variant?: 'shelf' | 'card';
   /** 新建空间收进输入框的 ＋ 菜单：blank 直接立空白壳，template 展开模板卡。 */
   onRegisterNew?(run: (mode?: 'blank' | 'template') => void): void;
+  venueFactScope?: string;
+  isVenueFactScopeCurrent?: () => boolean;
 }): JSX.Element {
   const hostRef = useRef<HTMLElement>(null);
   const [confirm, setConfirm] = useState(false);
@@ -162,6 +167,7 @@ export function SpacePanel({
     <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
       {!card && <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>}
       <div className="sc-space-body">
+        {venueFactScope?.startsWith('activity:') && isVenueFactScopeCurrent && <VenueFactsPanel key={venueFactScope} activityId={venueFactScope.slice('activity:'.length)} isCurrent={isVenueFactScopeCurrent}/>}
         {notice && <p className="sc-note" role="status">{notice}</p>}
         <div className="sc-space-card is-aholo">
           {!card && <section className="sc-space-block" aria-label="真实场地">

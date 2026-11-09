@@ -1,3 +1,4 @@
+import { deliveryPrivateText } from './delivery-private-text';
 import { z } from 'zod';
 import { eventOperationTaskSchema, eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
 import {
@@ -21,7 +22,7 @@ const issues: Record<MaterialCheckinIssueCode, string> = {
   'over-received': '收取数量超过当前约定', 'over-returned': '退回数量超过已收数量', 'quantity-overflow': '数量合计超出安全范围',
 };
 // Match production-plan-export's private five-character HTML escaping; no executable evidence links.
-const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g,
+const escape = (value: unknown) => deliveryPrivateText(String(value ?? '')).replace(/[&<>"']/g,
   char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 const present = (value: string) => value.trim() ? value : '未填写／待确认';
 const time = (value: string | null, missing: string) => value === null ? missing : toShanghaiDateTimeInput(value).replace('T', ' ').replace(/:00$/, '');
@@ -152,7 +153,7 @@ export async function executionTimetableHtml(sourceLayout: RoomLayout, snapshot:
   const policy = "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'";
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${escape(policy)}"><title>${title}｜${escape(layout.name)}</title><style>${css}</style></head><body><main>
     <header class="intro"><p class="eyebrow">内部执行资料</p><h1>${title}</h1><p class="subtitle">${escape(layout.name)}</p><div class="scope"><span>${tasks.length} 项任务</span><span>任务资料：${kinds[operations.data.dataKind]}</span><span>时间显示为北京时间</span></div>
-      <p class="disclaimer">本文件冻结当前记录。有效状态相对这份场景、制作计划与已提供点验账册计算；计划与实际时间分别保留，缺失不会补填。${operations.data.dataKind === 'rehearsal' ? '任务资料明确标注为假设演练，原记录不能证明真实活动已完成。' : '资料性质与任务状态不能替代现场、客户或供应方确认。'}</p></header>
+      <p class="disclaimer">已过滤部分可识别的凭据和私密链接，不能保证识别全部敏感信息，请分享前核对。本文件冻结当前记录。有效状态相对这份场景、制作计划与已提供点验账册计算；计划与实际时间分别保留，缺失不会补填。${operations.data.dataKind === 'rehearsal' ? '任务资料明确标注为假设演练，原记录不能证明真实活动已完成。' : '资料性质与任务状态不能替代现场、客户或供应方确认。'}</p></header>
     <nav class="navigation" aria-label="时间表读法"><a href="#chronology">按日期与时间读</a><a href="#owners">按负责人读</a><a href="#checks">点验差额</a><a href="#provenance">来源与口径</a></nav>
     <section id="chronology"><h2>按日期与计划时间</h2><p class="section-intro">保留全部任务，含无物件关联的安排与沟通任务。日期按计划开始的北京时间归组；开始未填写的任务单独列出。</p><nav class="date-nav" aria-label="日期定位">${[...days.keys()].map((day, index) => `<a href="#day-${index + 1}">${day === 'unknown' ? '日期待安排' : day}</a>`).join('')}</nav>${dayBlocks || '<p>当前未记录活动任务，计划与分工待安排。</p>'}</section>
     <section id="owners"><h2>按负责人读</h2><p class="section-intro">同一批任务的索引；点击标题回到完整时间表。任务数量不表示岗位人数或完成比例。</p><div class="owner-grid">${ownerBlocks || '<p>当前未记录活动任务，负责人待安排。</p>'}</div></section>

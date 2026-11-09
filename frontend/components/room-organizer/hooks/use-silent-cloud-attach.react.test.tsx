@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { consumeSelfAttachedProject } from '@/lib/workspace-api';
 import { makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { useSilentCloudAttach } from './use-silent-cloud-attach';
+import { LOCAL_ZONES_CLOUD_MESSAGE } from '../lib/backend-adapter';
+import { subscribeNotices } from '../lib/editor-notices';
 import type { BackendSession } from '@/lib/backend-session';
 import type { RoomLayout } from '../lib/types';
 
@@ -46,7 +48,7 @@ function cloudLayout(items: Parameters<typeof makeItem>[0][] = [{}], overrides: 
 }
 
 function Probe({ layout, onBind }: { layout: RoomLayout; onBind: (id: string) => void }): null {
-  useSilentCloudAttach({ controller, layout, onBindProject: onBind });
+  useSilentCloudAttach({ controller, layout, onBindProject: onBind, enabled:true, isCurrent:()=>true });
   return null;
 }
 
@@ -63,6 +65,116 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('无感挂云', () => {
+  it('keeps the local canvas unbound and does not retry after creating a read-only projected project',async()=>{
+    const messages:string[]=[];const stop=subscribeNotices(notice=>messages.push(notice.message));
+    try{
+      let finish!:(value:typeof created & {projection:{status:string;changed:boolean;requiresOriginalSceneForWrite:boolean}})=>void;
+      mocks.createProject.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+      const onBind=vi.fn(),base=cloudLayout();const view=render(<Probe layout={base} onBind={onBind}/>);
+      await waitFor(()=>expect(mocks.createProject).toHaveBeenCalledOnce());expect(onBind).not.toHaveBeenCalled();
+      await act(async()=>finish({...created,projection:{status:'read_only',changed:true,requiresOriginalSceneForWrite:true}}));
+      await waitFor(()=>expect(messages.some(message=>message.includes('云端项目已创建')&&message.includes(created.id)&&message.includes('本机草稿未绑定'))).toBe(true));
+      expect(mocks.acquireLease).not.toHaveBeenCalled();expect(onBind).not.toHaveBeenCalled();
+      view.rerender(<Probe layout={cloudLayout([{},{}])} onBind={onBind}/>);await act(async()=>{await Promise.resolve();});
+      expect(mocks.createProject).toHaveBeenCalledOnce();expect(onBind).not.toHaveBeenCalled();
+    }finally{stop();}
+  });
+  it('does not silently create or bind a project before an explicit current-session authorization', async () => {
+    const onBind=vi.fn();
+    function Unapproved(){useSilentCloudAttach({controller,layout:cloudLayout(),onBindProject:onBind});return null;}
+    render(<Unapproved/>);await Promise.resolve();await Promise.resolve();
+    expect(mocks.listStudios).not.toHaveBeenCalled();expect(mocks.createProject).not.toHaveBeenCalled();expect(onBind).not.toHaveBeenCalled();
+  });
+  it('does not replace an in-flight binding authority with a later token for the same layout',async()=>{
+    let finish!:(value:typeof created)=>void;mocks.createProject.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const onBind=vi.fn(),layout=cloudLayout(),first=()=>true,later=()=>true;
+    function Guarded({authority}:{authority:()=>boolean}){useSilentCloudAttach({controller,layout,onBindProject:onBind,enabled:true,isCurrent:authority});return null;}
+    const view=render(<Guarded authority={first}/>);await waitFor(()=>expect(mocks.createProject).toHaveBeenCalledOnce());
+    view.rerender(<Guarded authority={later}/>);await act(async()=>{finish(created);await Promise.resolve();await Promise.resolve();});
+    expect(mocks.acquireLease).not.toHaveBeenCalled();expect(onBind).not.toHaveBeenCalled();
+  });
+  it('does not bind when the activity epoch expires while cloud creation is in flight',async()=>{
+    let finish!:(value:typeof created)=>void,current=true;
+    mocks.createProject.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const onBind=vi.fn(),layout=cloudLayout();
+    function Guarded(){useSilentCloudAttach({controller,layout,onBindProject:onBind,enabled:true,isCurrent:()=>current});return null;}
+    render(<Guarded/>);await waitFor(()=>expect(mocks.createProject).toHaveBeenCalledOnce());
+    current=false;await act(async()=>{finish(created);await Promise.resolve();await Promise.resolve();});
+    expect(mocks.acquireLease).not.toHaveBeenCalled();
+    expect(onBind).not.toHaveBeenCalled();expect(new URLSearchParams(window.location.search).get('project')).toBeNull();
+  });
+
+  it('reports unsupported local zones, does not create a cloud project, and retries after they are removed', async () => {
+    const notices: string[] = [];
+    const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
+    try {
+      const base = cloudLayout();
+      const zone = { id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 };
+      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [zone] }] };
+      const onBind = vi.fn();
+      const { rerender } = render(<Probe layout={local} onBind={onBind}/>);
+      await waitFor(() => expect(notices).toContain(LOCAL_ZONES_CLOUD_MESSAGE));
+      expect(mocks.listStudios).not.toHaveBeenCalled();
+      expect(mocks.createProject).not.toHaveBeenCalled();
+      expect(onBind).not.toHaveBeenCalled();
+      expect(local.floors[0]!.zones).toEqual([zone]);
+      rerender(<Probe layout={base} onBind={onBind}/>);
+      await waitFor(() => expect(onBind).toHaveBeenCalledWith('p-new'));
+    } finally { unsubscribe(); }
+  });
+
+  it('reports unsupported sample furniture even when no zone remains', async () => {
+    const notices: string[] = [];
+    const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
+    try {
+      const onBind = vi.fn();
+      render(<Probe layout={cloudLayout([{ type: 'bench', name: '休息长椅（示意）' }])} onBind={onBind}/>);
+      await waitFor(() => expect(notices.some(text => text.includes('不在活动目录'))).toBe(true));
+      expect(mocks.createProject).not.toHaveBeenCalled();
+      expect(onBind).not.toHaveBeenCalled();
+    } finally { unsubscribe(); }
+  });
+
+  it('does not bind a cloud draft when zones are added while project creation is in flight', async () => {
+    let finish!: (value: typeof created) => void;
+    mocks.createProject.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const notices: string[] = [];
+    const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
+    try {
+      const base = cloudLayout();
+      const onBind = vi.fn();
+      const { rerender } = render(<Probe layout={base} onBind={onBind}/>);
+      await waitFor(() => expect(mocks.createProject).toHaveBeenCalledOnce());
+      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }] }] };
+      rerender(<Probe layout={local} onBind={onBind}/>);
+      finish(created);
+      await waitFor(() => expect(notices.some(text => text.includes('未自动绑定'))).toBe(true));
+      expect(onBind).not.toHaveBeenCalled();
+      expect(mocks.acquireLease).not.toHaveBeenCalled();
+      expect(new URLSearchParams(window.location.search).get('project')).toBeNull();
+      expect(local.floors[0]!.zones).toHaveLength(1);
+    } finally { unsubscribe(); }
+  });
+
+  it('does not submit a cloud project if a zone is added while finding a workspace', async () => {
+    let finish!: (value: typeof studio[]) => void;
+    mocks.listStudios.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const notices: string[] = [];
+    const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
+    try {
+      const base = cloudLayout();
+      const onBind = vi.fn();
+      const { rerender } = render(<Probe layout={base} onBind={onBind}/>);
+      await waitFor(() => expect(mocks.listStudios).toHaveBeenCalledOnce());
+      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }] }] };
+      rerender(<Probe layout={local} onBind={onBind}/>);
+      finish([studio]);
+      await waitFor(() => expect(notices.some(text => text.includes('未自动绑定'))).toBe(true));
+      expect(mocks.createProject).not.toHaveBeenCalled();
+      expect(onBind).not.toHaveBeenCalled();
+      expect(local.floors[0]!.zones).toHaveLength(1);
+    } finally { unsubscribe(); }
+  });
   it('登录 + 未连接 + 摆上第一件物料：建项目、取编辑权、绑定并同步 URL', async () => {
     const onBind = vi.fn();
     render(<Probe layout={cloudLayout()} onBind={onBind} />);
@@ -153,14 +265,19 @@ describe('无感挂云', () => {
     expect(mocks.createProject).toHaveBeenCalledTimes(1);
   });
 
-  it('建项目失败不打扰，下一件物料进场时重试', async () => {
-    mocks.createProject.mockRejectedValueOnce(new Error('network'));
-    const onBind = vi.fn();
-    const { rerender } = render(<Probe layout={cloudLayout()} onBind={onBind} />);
-    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledTimes(1));
-    expect(onBind).not.toHaveBeenCalled();
-    rerender(<Probe layout={cloudLayout([{}, {}])} onBind={onBind} />);
-    await waitFor(() => expect(onBind).toHaveBeenCalledWith('p-new'));
-    expect(mocks.createProject).toHaveBeenCalledTimes(2);
+  it('建项目失败时提示未完成且不泄露内部错误，下一件物料进场时重试', async () => {
+    const notices: string[] = [];
+    const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
+    try {
+      mocks.createProject.mockRejectedValueOnce(new Error('private-provider-token'));
+      const onBind = vi.fn();
+      const { rerender } = render(<Probe layout={cloudLayout()} onBind={onBind} />);
+      await waitFor(() => expect(notices.some(text => text.includes('云端自动保存未完成'))).toBe(true));
+      expect(notices.join(' ')).not.toContain('private-provider-token');
+      expect(onBind).not.toHaveBeenCalled();
+      rerender(<Probe layout={cloudLayout([{}, {}])} onBind={onBind} />);
+      await waitFor(() => expect(onBind).toHaveBeenCalledWith('p-new'));
+      expect(mocks.createProject).toHaveBeenCalledTimes(2);
+    } finally { unsubscribe(); }
   });
 });

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { ChevronDown, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -6,7 +6,8 @@ import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
-import { captureCatalogPlacement, type CatalogPlacementGuard } from '../lib/catalog-placement-guard';
+import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementBatchGuard, type CatalogPlacementGuard, type CatalogPlacementResult } from '../lib/catalog-placement-guard';
+import { layoutStore } from '../hooks/use-layout-store';
 import { CATALOG_GROUPS } from '../lib/catalog-taxonomy';
 import {
   addCustomTag, emptyMaterialLibraryMeta, loadMaterialLibraryMeta, saveMaterialLibraryMeta, toggleAssignment, toggleFavorite,
@@ -22,7 +23,7 @@ import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
 import { MaterialCreateCell } from './material-create-cell';
 import { MaterialThumb } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
-import type { CatalogItem, FurnitureItem } from '../lib/types';
+import type { CatalogItem, FurnitureItem, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
 type GeneratedCard = { id: string; name: string; image?: string; shipped: boolean };
@@ -90,10 +91,13 @@ export function onlineModelDisplayName(model: OnlineModel): string {
 export interface OnlineModelLibraryProps {
   controller?: BackendSession;
   capturePlacement?: () => CatalogPlacementGuard;
+  capturePlacementBatch?: () => CatalogPlacementBatchGuard;
+  /** Layout rendered by the parent, used to avoid placing via an old React closure. */
+  renderedLayout?: RoomLayout;
   /** True while the active floor is full, so tiles stop pretending to be clickable. */
   disabled?: boolean;
   limitMessage?: string;
-  onAdd(item: CatalogItem): void;
+  onAdd(item: CatalogItem): CatalogPlacementResult | void;
   /** 点一套风格：整组一次落进画布（位置与尺寸已算好，带 id/position/rotation）。 */
   onAddSet?(items: FurnitureItem[]): void;
   /** 画布场地尺寸：风格套按它缩放，小场地放不下就不放。 */
@@ -106,7 +110,7 @@ export interface OnlineModelLibraryProps {
   createSlot?: ReactNode;
 }
 
-export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, cardMode = false, importSlot, walkRoleSlot, createSlot }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, cardMode = false, importSlot, walkRoleSlot, createSlot }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
@@ -135,9 +139,14 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller?.config.apiUrl) {
     placementIdentity.current = { controller, apiUrl: controller?.config.apiUrl, epoch: placementIdentity.current.epoch + 1 };
   }
-  const latest = useRef({ disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, busy });
-  latest.current = { disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, busy };
+  const latest = useRef({ disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, busy });
+  latest.current = { disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, busy };
   const placements = useRef(new Set<CatalogPlacementGuard>());
+  const batchQueue = useRef<OnlineModel[]>([]);
+  const batchGuard = useRef<CatalogPlacementBatchGuard | null>(null);
+  const batchRunning = useRef(false);
+  const [queuedCount,setQueuedCount] = useState(0);
+  const renderWaiter = useRef<{target:RoomLayout;resolve:()=>void;reject:(error:Error)=>void;timer:number}|null>(null);
   const alive = useRef(true);
   /** 手动点「取回」和后台轮询不能同时下载同一个任务。 */
   const importing = useRef(false);
@@ -149,9 +158,17 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   }, []);
   useEffect(() => { const activePlacements = placements.current; alive.current = true; return () => {
     alive.current = false;
+    batchQueue.current=[];batchGuard.current?.dispose();batchGuard.current=null;
+    if(renderWaiter.current){window.clearTimeout(renderWaiter.current.timer);renderWaiter.current.reject(new Error('物料库已关闭，剩余物料未添加。'));renderWaiter.current=null;}
     for (const guard of activePlacements) guard.dispose();
     activePlacements.clear();
   }; }, []);
+
+  useEffect(()=>{
+    const waiter=renderWaiter.current;if(!waiter)return;
+    try{batchGuard.current?.assertCurrent();}catch(error){window.clearTimeout(waiter.timer);renderWaiter.current=null;waiter.reject(error instanceof Error?error:new Error('场景已变化，剩余物料未添加。'));return;}
+    if(renderedLayout===waiter.target){window.clearTimeout(waiter.timer);renderWaiter.current=null;waiter.resolve();}
+  },[renderedLayout]);
 
   useEffect(() => {
     let alive = true;
@@ -193,7 +210,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     };
   }, [loadState]);
 
-  // 生成任务在跑：每 15 秒取一次，完成的直接落盘入库并放进画布，用户不用下载再上传。
+  // 旧生成任务没有活动归属：完成后先入库，由用户在当前活动中选择放置。
   useEffect(() => {
     if (!pending.length) return undefined;
     let stopped = false;
@@ -208,13 +225,15 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         const result = await importLatestPendingMaterials();
         // 入库会先清掉待取卡片；本 effect 随之卸载重启，这里不能因为 stopped 丢掉已经下载好的模型。
         if (result.state === 'imported') {
+          if(!alive.current)return;
           setGenerated(generatedMaterialCards());
-          if (latest.current.disabled) setPlaceError('场地已满：模型已存进「我的生成」，腾出位置后点它加入画布。');
-          else latest.current.onAdd(result.item);
+          setPlaceError('模型已存进「我的生成」，请选择后加入当前场景。');
         } else if (result.state === 'failed' && !result.retryable) {
           setGenerated(generatedMaterialCards());
           setPlaceError(result.message);
         }
+      } catch {
+        if(alive.current)setPlaceError('当前活动无法核对；生成模型会保留在「我的生成」供稍后查看。');
       } finally {
         importing.current = false;
       }
@@ -263,31 +282,59 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const favoriteCount = meta.favorites.length;
   const generatedCount = generated.length + pending.length;
 
-  const addOnline = async (model: OnlineModel) => {
-    if (latest.current.disabled || latest.current.busy) return;
-    latest.current.busy = model.slug;
-    setBusy(model.slug);
-    setPlaceError('');
-    let guard: CatalogPlacementGuard | undefined;
-    try {
-      const current = latest.current;
-      guard = current.capturePlacement?.() ?? captureCatalogPlacement(current.controller, () => placementIdentity.current.epoch);
-      placements.current.add(guard);
-      const item = await loadOnlineCatalogItem(model, current.controller);
-      if (!alive.current) return;
-      guard.assertCurrent();
-      if (latest.current.disabled) throw new Error('当前场景物料已满，请腾出位置后重新添加。');
-      latest.current.onAdd(item);
-      // 真正落盘成功才记最近用过；下载失败/被三道门拦下都不进。
-      setRecent(pushRecentSlug(window.localStorage, model.slug));
-    } catch (error) {
-      if (alive.current) {
-        setPlaceError(error instanceof Error ? error.message : '该模型未能下载，请重试或换一个。');
+  const waitForRenderedLayout = (target:RoomLayout):Promise<void> => {
+    if(latest.current.renderedLayout===target)return Promise.resolve();
+    if(!latest.current.renderedLayout)return Promise.reject(new Error('场景尚未刷新，剩余物料未添加。'));
+    return new Promise((resolve,reject)=>{
+      const timer=window.setTimeout(()=>{renderWaiter.current=null;reject(new Error('场景刷新超时，剩余物料未添加。'));},5000);
+      renderWaiter.current={target,resolve,reject,timer};
+    });
+  };
+
+  /** Each click is serialised; every model uses the latest verified scene. */
+  const drainOnline = async () => {
+    if(batchRunning.current)return;
+    batchRunning.current=true;
+    try{
+      while(batchQueue.current.length){
+        const batch=batchGuard.current;if(!batch)throw new Error('放置状态不可用，剩余物料未添加。');
+        batch.assertCurrent();
+        if(latest.current.renderedLayout)await waitForRenderedLayout(layoutStore.getState().layout);
+        batch.assertCurrent();
+        const model=batchQueue.current.shift()!;setQueuedCount(batchQueue.current.length);
+        if(latest.current.disabled)throw new Error('当前场景物料已满，剩余物料未添加。');
+        latest.current.busy=model.slug;setBusy(model.slug);
+        const current=latest.current;
+        const guard=current.capturePlacement?.()??captureCatalogPlacement(current.controller,()=>placementIdentity.current.epoch);
+        placements.current.add(guard);
+        try{
+          const item=await loadOnlineCatalogItem(model,current.controller);
+          if(!alive.current)return;
+          guard.assertCurrent();batch.assertCurrent();
+          if(latest.current.disabled)throw new Error('当前场景物料已满，剩余物料未添加。');
+          const result=batch.runOwnMutation(()=>latest.current.onAdd(item));
+          if(!result)throw new Error('未能确认本次是否放置，请查看画布；剩余物料未添加。');
+          if(result.status==='pending')throw new Error('请先在场地中选择位置；其余物料尚未添加。');
+          if(result.status==='failed')throw new Error(result.message||'这件物料未放置，剩余物料未添加。');
+          setRecent(pushRecentSlug(window.localStorage,model.slug));
+        }finally{if(placements.current.delete(guard))guard.dispose();}
       }
-    } finally {
-      if (guard && placements.current.delete(guard)) guard.dispose();
-      if (alive.current) { latest.current.busy = null; setBusy(null); }
+    }catch(error){
+      batchQueue.current=[];setQueuedCount(0);
+      if(alive.current)setPlaceError(error instanceof Error?error.message:'物料未能添加，请核对后重试。');
+    }finally{
+      batchRunning.current=false;batchGuard.current?.dispose();batchGuard.current=null;
+      if(alive.current){latest.current.busy=null;setBusy(null);}
     }
+  };
+  const addOnline = (model: OnlineModel) => {
+    if(latest.current.disabled){setPlaceError('当前场景物料已满，请先腾出位置。');return;}
+    if(latest.current.busy&&!batchRunning.current){setPlaceError('正在处理其他物料，请稍后再试。');return;}
+    if(batchQueue.current.length+(batchRunning.current?1:0)>=20){setPlaceError('待添加物料较多，请等当前请求处理完成。');return;}
+    try{
+      if(!batchGuard.current)batchGuard.current=latest.current.capturePlacementBatch?.()??captureCatalogPlacementBatch(latest.current.controller,()=>placementIdentity.current.epoch);
+      batchGuard.current.assertCurrent();batchQueue.current.push(model);setQueuedCount(batchQueue.current.length);setPlaceError('');void drainOnline();
+    }catch(error){if(alive.current)setPlaceError(error instanceof Error?error.message:'场景状态已变化，请重新添加。');}
   };
 
   if (loadState === 'loading') {
@@ -326,20 +373,24 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     latest.current.busy = card.id;
     setBusy(card.id);
     setPlaceError('');
+    let guard:CatalogPlacementGuard;
+    try {const current=latest.current;guard=current.capturePlacement?.()??captureCatalogPlacement(current.controller,()=>placementIdentity.current.epoch);placements.current.add(guard);}
+    catch {importing.current=false;latest.current.busy=null;setBusy(null);setPlaceError('当前活动无法核对，请重新选择后放置。');return;}
     const load = pending
       ? importPendingMaterial(card.id)
       : loadStoredAholoCatalogItem(card.id).then(item => ({ state: 'imported' as const, item }));
     void load.then(result => {
       if (!alive.current) return;
       if (result.state === 'imported') {
-        latest.current.onAdd(result.item);
         setGenerated(generatedMaterialCards());
+        try{guard.assertCurrent();const placed=latest.current.onAdd(result.item);if(!placed||placed.status!=='placed')setPlaceError('模型已保存在「我的生成」；请核对画布或选择位置。');}
+        catch{setPlaceError('模型已保存在「我的生成」；活动或场景已变化，请重新选择后放置。');}
       } else {
         setPlaceError(result.message);
       }
     }).catch((error: unknown) => {
       if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
-    }).finally(() => { importing.current = false; if (alive.current) { latest.current.busy = null; setBusy(null); } });
+    }).finally(() => { if(placements.current.delete(guard))guard.dispose();importing.current = false; if (alive.current) { latest.current.busy = null; setBusy(null); } });
   };
 
   // 再放一套：入口已挪到 Bingo；「我的生成」里仍可点历史记录重放。
@@ -389,7 +440,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       const name = onlineModelDisplayName(model);
       const favorited = meta.favorites.includes(model.slug);
       return <li className="sc-lib-tile" key={model.slug}>
-        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null} onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n点击放入空间`}>
+        <button type="button" className="sc-lib-tile-btn" disabled={disabled || (busy !== null && !batchRunning.current)} onClick={() => addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n点击放入空间`}>
           <span className="sc-lib-tile-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
           <span className="sc-lib-tile-name">{name}</span>
           {busy === model.slug && <span className="sc-lib-tile-add" role="status">放入中…</span>}
@@ -475,6 +526,9 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             {groups.every(group => group.models.length === 0) && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>{!query.trim() && !bucket && libraryModels.length === 0 ? '库里没有可用的公共素材' : '没有匹配的模型'}</span></p>}
             {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
           </>}
+        {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
+        {queuedCount>0 && <p className="sc-material-note" role="status">还有 {queuedCount} 件等待添加。</p>}
+        {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
       </div>
     </div>;
   }
@@ -503,6 +557,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     {tagError && <p className="sc-warning sc-material-note" role="alert">{tagError}</p>}
     {armedTag && <p className="sc-note sc-material-note" role="status">点物料角上的标签，把它挂到「{armedTag}」。<button type="button" className="sc-button" onClick={() => setArmedTag('')}>完成挂标签</button></p>}
     {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
+    {queuedCount>0 && <p className="sc-material-note" role="status">还有 {queuedCount} 件等待添加。</p>}
     {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
     {/* 最近用过：纯本地，浏览态才挂；搜索/选分类时让位给结果。 */}
     {recentModels.length > 0 && !query.trim() && !bucket && (
@@ -512,7 +567,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           {recentModels.map(model => {
             const name = onlineModelDisplayName(model);
             return <li className="sc-recent-item" key={model.slug}>
-              <button type="button" className="sc-recent-tile" disabled={disabled || busy !== null} onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={model.name}>
+              <button type="button" className="sc-recent-tile" disabled={disabled || (busy !== null && !batchRunning.current)} onClick={() => addOnline(model)} aria-label={`添加${name}`} title={model.name}>
                 <span className="sc-recent-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
                 <span className="sc-recent-name">{name}</span>
               </button>
@@ -531,7 +586,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         const favorite = meta.favorites.includes(model.slug);
         const tagged = armedTag ? (meta.assignments[model.slug] ?? []).includes(armedTag) : false;
         return <div className="sc-material-tile" key={model.slug}>
-          <button type="button" className="sc-material-card" disabled={disabled || busy !== null}
+          <button type="button" className="sc-material-card" disabled={disabled || (busy !== null && !batchRunning.current)}
             draggable={!disabled && busy === null} onDragStart={event => {
               if (disabled || busy !== null) { event.preventDefault(); return; }
               event.dataTransfer.setData(CATALOG_DRAG_MIME, `online:${model.slug}`);

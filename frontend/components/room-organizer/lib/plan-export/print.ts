@@ -13,8 +13,9 @@ import {
   PRINT_PLAN_EXPORT_VISIBILITY,
   type PlanExportVisibility,
 } from './export-visibility';
-import { planContentBounds } from './plan-geometry';
-import { DEFAULT_SVG_MARGIN, layoutToSvg, planSheetSize } from './svg';
+import { planContentBounds, unplacedPlanItems } from './plan-geometry';
+import { DEFAULT_SVG_MARGIN, PLAN_SAFETY_NOTICE_HEIGHT, layoutToSvg, planSheetSize, unplacedWarningLines } from './svg';
+import { PLAN_SAFETY_DRAFT_NOTICE } from '@/lib/plan-safety-notice';
 import type { FloorLayout, RoomLayout } from '../types';
 
 /** Candidate scale denominators, finest first (#288: coarse end extended
@@ -70,10 +71,10 @@ export function printPxPerMetre(denominator: number): number {
  * before moving to the next coarser denominator. `fits` is false when
  * nothing fits, with the coarsest denominator and landscape reported.
  */
-export function pickPrintScale(contentWidthM: number, contentHeightM: number): PrintScale {
+export function pickPrintScale(contentWidthM: number, contentHeightM: number, extraHeightMm = 0): PrintScale {
   for (const denominator of SCALE_DENOMINATORS) {
     const widthMm = (contentWidthM * 1000) / denominator + 2 * PRINT_MARGIN_MM;
-    const heightMm = (contentHeightM * 1000) / denominator + 2 * PRINT_MARGIN_MM;
+    const heightMm = (contentHeightM * 1000) / denominator + 2 * PRINT_MARGIN_MM + extraHeightMm;
     for (const orientation of ['portrait', 'landscape'] as const) {
       const page = PRINTABLE_MM[orientation];
       if (widthMm <= page.width && heightMm <= page.height) return { denominator, orientation, fits: true };
@@ -100,7 +101,8 @@ export function openPlanPrintWindow(
   // The sheet follows the plan content (room + outdoor items, #287), so the
   // scale is chosen for that extent, not the room alone.
   const content = planContentBounds(layout, floor);
-  const scale = pickPrintScale(content.maxX - content.minX, content.maxZ - content.minZ);
+  const missingCount = unplacedPlanItems(floor).length;
+  const scale = pickPrintScale(content.maxX - content.minX, content.maxZ - content.minZ, (PLAN_SAFETY_NOTICE_HEIGHT + (missingCount ? (unplacedWarningLines(floor).length + 1) * 14 : 0)) * PRINT_MM_PER_PX);
   const pxPerMetre = printPxPerMetre(scale.denominator);
   const svg = layoutToSvg(layout, floor, { pxPerMetre, visibility: layers });
   const sheet = planSheetSize(layout, floor, { pxPerMetre });
@@ -111,6 +113,7 @@ export function openPlanPrintWindow(
     floorName: floor.name,
     dims: layers.roomDimensions ? `${planLengthLabel(layout.width)} × ${planLengthLabel(layout.height)}` : '',
     summary: planFloorSummary(floor),
+    unplaced: unplacedPlanItems(floor).map(item => item.name || '未命名物件'),
     scaleLabel: printScaleLabel(scale),
     date: new Date().toLocaleDateString(),
     orientation: scale.orientation,
@@ -138,6 +141,7 @@ interface PrintHtmlInput {
   dims: string;
   /** Whole-floor counts, including layers left out of the drawing. */
   summary: string;
+  unplaced: string[];
   scaleLabel: string;
   date: string;
   orientation: PrintOrientation;
@@ -162,6 +166,7 @@ function renderPrintHtml(input: PrintHtmlInput): string {
       .plan svg { display: block; width: 100%; height: auto; }
       .sheet-brand { margin: 4mm 0 2mm; font-size: 8pt; letter-spacing: 0.12em; color: #71767E; }
       .sheet-brand i { display: inline-block; width: 2mm; height: 2mm; margin-right: 1.6mm; border-radius: 50%; background: #4A7C59; vertical-align: -0.2mm; }
+      .verification-note { margin: 2mm 0; font-size: 9pt; font-weight: 600; }
       table.titleblock { margin: 0; border-collapse: collapse; font-size: 10pt; width: 100%; }
       table.titleblock td { border: none; border-top: 0.25mm solid #E4E4E7; padding: 1.6mm 4mm 1.6mm 0; vertical-align: baseline; }
       table.titleblock tr:first-child td { border-top: 0.4mm solid #141416; }
@@ -171,6 +176,9 @@ function renderPrintHtml(input: PrintHtmlInput): string {
   </head>
   <body onload="setTimeout(function(){ window.print(); }, 200)">
     <div class="plan">${input.svg}</div>
+    <p class="verification-note">待核验：门洞位置、尺寸及门扇开向；现场与相关方仍需确认。</p>
+    <p class="verification-note">${PLAN_SAFETY_DRAFT_NOTICE}打印比例须在打印设置及成品上核对。</p>
+    ${input.unplaced.length ? `<p class="verification-note">位置待确认 ${input.unplaced.length} 件（未绘入平面）：${input.unplaced.map(escapeHtml).join('、')}</p>` : ''}
     <p class="sheet-brand"><i></i>幕景 · 平面示意</p>
     <table class="titleblock">
       <tr>

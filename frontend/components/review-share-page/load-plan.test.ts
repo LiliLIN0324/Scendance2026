@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STORAGE_KEY } from '../room-organizer/lib/constants';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
+import { collectViolations } from '../../lib/placement-rules';
 import { encodeShareUrl } from '../room-organizer/lib/share';
 import {
   loadReviewPlan,
@@ -25,6 +26,31 @@ function memory(): Storage {
 }
 
 describe('review share plan loading', () => {
+  it('独立示例不读取现有项目内容，且分享会无粗略检查告警', async () => {
+    const existing={...INITIAL_LAYOUT,name:'不应出现在示例中的项目'};
+    const result=await loadReviewPlan({hash:'',search:'?example=sharing',localLayout:existing});
+    expect(result.ok).toBe(true);
+    if(!result.ok)return;
+    expect(result.plan.layout.name).toContain('虚构');
+    expect(result.plan.layout.floors[0]!.items.filter(item=>item.type==='chair')).toHaveLength(16);
+    expect(result.plan.layout.id).toBeUndefined();
+    expect(result.plan.notice).toContain('均为示意');
+    expect(collectViolations(result.plan.layout)).toEqual([]);
+  });
+
+  it('Hall D5 只展示官方标称尺寸与空的示意矩形，不继承原场地事实', async () => {
+    const existing={...INITIAL_LAYOUT,name:'已有项目',id:'existing-activity'};
+    const result=await loadReviewPlan({hash:'',search:'?example=hall-d5',localLayout:existing});
+    expect(result.ok).toBe(true);
+    if(!result.ok)return;
+    expect(result.plan.layout).toMatchObject({width:16.5,height:17.2});
+    expect(result.plan.layout.id).toBeUndefined();
+    expect(result.plan.layout.floors[0]!.items).toEqual([]);
+    expect(result.plan.layout.backendVenue).toBeUndefined();
+    expect(result.plan.layout.backendSceneV2).toBeUndefined();
+    expect(result.plan.notice).toContain('门位、门宽、开启方向、通道及现场条件未知');
+    expect(result.plan.notice).toContain('未作消防或无障碍验收');
+  });
   it('builds a /review/ link from the editor hash and opens that snapshot', async () => {
     const encoded = await encodeShareUrl({ ...INITIAL_LAYOUT, name: '发布会主场' }, 'https://app.example/editor');
     const hash = new URL(encoded.url).hash;

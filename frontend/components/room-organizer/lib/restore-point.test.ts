@@ -43,6 +43,13 @@ describe('snapshotBeforeReplace (#298)', () => {
     expect(mockedRecord).toHaveBeenCalledWith(layout, { force: true });
   });
 
+  it('requires a confirmed snapshot when an explicit capability is supplied', () => {
+    const capability = {} as never, check = vi.fn();
+    mockedRecord.mockReturnValue(false);
+    expect(snapshotBeforeReplace(furnished(), check, capability)).toBe(false);
+    expect(mockedRecord).toHaveBeenCalledWith(expect.anything(), { force:true, assertWrite:check, capability });
+  });
+
   it('skips an empty house', () => {
     snapshotBeforeReplace(INITIAL_LAYOUT);
     expect(mockedRecord).not.toHaveBeenCalled();

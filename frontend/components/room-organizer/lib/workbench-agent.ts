@@ -1,6 +1,8 @@
 /** v2.4 布置第 1–3 步：右栏 Agent 状态机的纯函数部分（无 schema 变更，全部是页面本地状态）。 */
+import { withoutNonTotalHeadcounts } from './attendance-evidence';
 import type { PlanAddOp, PlanMoveOp, PlanRecolorOp, PlanRemoveOp, PlanRevisionOp, PlanRotateOp, PlanScaleOp, SiteBand, SiteSide } from './agent-proposal';
 import type { ScaleOrigin } from './venue-shell';
+import type { BriefSlots } from '../../../../supabase/functions/_shared/brief-extract-contract';
 
 export type AgentState =
   | 'empty' | 'dragHover' | 'baseNoDims' | 'baseReady' | 'nonImageRejected'
@@ -77,13 +79,133 @@ export function formatArea(value: number): string { return Number(value.toFixed(
 /** 「停一下」/「停」等同点 hint 里的停一下。 */
 export function isStopCommand(text: string): boolean { return /^\s*停(一下|下)?[。.!！]?\s*$/.test(text); }
 
+/** Keep Chinese periods as clause breaks. normalizeDimInput turns them into decimal dots. */
+function layoutCompact(text: string): string {
+  return text.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).replace(/\s+/g, '').replace(/[。.!！]+$/g, '');
+}
+
+/** Stems for “arrange this room”, plus nearby wording like tighter, prettier, more aisle. */
+const LAYOUT_STEM = /布置|摆法|摆一下|摆一版|摆个|来摆|帮我摆|重新摆|围成|围坐|围一圈|围着坐|大家围着|出一版|先出/;
+const REVISE_HINT = /换|重新|再布置|再摆|再来一版|再出一版|另一种|围成|围坐|围一圈|紧凑|松一点|疏一点|密一点|好看|大气|随意一点|正式一点|过道|通道|留空|留点|按刚才/;
+const SEATING_SWAP = /(?:不要|别用|不用).{0,8}(?:课桌|课椅|桌椅).{0,8}(?:沙发|圆桌|围|休闲)|(?:改|换)成?沙发/;
+const LAYOUT_OTHER_ACTION = /(?:删除|移除|撤掉|挪动|挪到|往左|往右|导出|交接|清单|旋转|放大|缩小|涂成|刷成|加一把|加一张|加两|再加|加个|加一个)/;
+/** A refusal of the arrange request itself, not “不要课桌、改成沙发”. */
+const REFUSE_LAYOUT = /(?:不要|别|不想|先别).{0,4}(?:换|重新|摆|布置|出一版|再来)/;
+
+/** generate = draw from the brief; revise = another arrangement; cannot = we must not pretend. */
+export type LocalLayoutClass = 'generate' | 'revise' | 'cannot';
+
+/** A whole utterance that only chooses round tables or desks. Negation, questions, and stock lists do not match. */
+function isBareSeatingChoice(compact: string): boolean {
+  return /^(?:请|帮我|我想|想)?(?:把)?(?:会场|场地)?(?:用|改成|换成|摆成|排成|布置成|要|采用|选择|按)?(?:圆桌|餐桌|课桌椅)(?:布置|摆法)?$/.test(compact);
+}
+
+/** Spoken size → the same NxM the indoor form already understands. */
+export function normalizeOralSize(text: string): string {
+  return text
+    .replace(/(\d+(?:\.\d+)?)(?:米|m)?(?:乘以|乘)(\d+(?:\.\d+)?)(?:米|m)?/gi, '$1x$2')
+    .replace(/长(\d+(?:\.\d+)?)(?:米|m)?[，,]?宽(\d+(?:\.\d+)?)(?:米|m)?/g, '$1x$2')
+    .replace(/(\d+(?:\.\d+)?)(?:米|m)?by(\d+(?:\.\d+)?)(?:米|m)?/gi, '$1x$2');
+}
+
+/** 想围着坐 / 围着坐 / 大家围着, and the older 围坐 forms. A refusal is not a request. */
+export function mentionsCircleSeating(text: string): boolean {
+  const compact = layoutCompact(text);
+  if (!compact || /(?:不要|不想|别|不围)围/.test(compact)) return false;
+  return /围着坐|大家围着|围成一圈|围一圈|围坐|围成/.test(compact);
+}
+
+/** Headcount, venue size, indoor/outdoor, or a seating word, with no other request left over. */
+export function isBriefFactUtterance(text: string): boolean {
+  const compact = normalizeOralSize(layoutCompact(text)).replace(/[×X＊✕]/g, 'x').toLowerCase();
+  if (!compact) return false;
+  const remainder = compact
+    .replace(/(?:大约|大概|预计|约|左右)/g, '')
+    .replace(/\d+(?:\.\d+)?(?:人|位|名)/g, '')
+    .replace(/\d+(?:\.\d+)?(?:米|m)?[×xX*]\d+(?:\.\d+)?(?:米|m)?/g, '')
+    .replace(/\d+(?:\.\d+)?(?:平方米|平米|平方公尺|㎡|m²|m2|平)/g, '')
+    .replace(/(?:室内|户外|室外|场馆|宴会厅|会议室|大厅|礼堂)/g, '')
+    .replace(/(?:想围着坐|围着坐|大家围着|圆桌|餐桌|课桌椅|课桌|课椅|围坐|围成一圈|围一圈)/g, '')
+    .replace(/[，,。！!；;、]/g, '');
+  return remainder.length === 0;
+}
+
+/** Sofa / floor-sitting still gets a circle preview; the note says it is not literal sofas. */
+export function mentionsUnsupportedSeating(text: string): boolean {
+  const compact = layoutCompact(text);
+  if (!compact || /[?？]|是什么意思/.test(compact) || /(?:不要|别)(?:用|要)?沙发/.test(compact)) return false;
+  return /(?:沙发|休闲椅|席地|坐地上)/.test(compact) && /(?:围着坐|大家围着|围成|围坐|围一圈|布置|摆|改|换)/.test(compact);
+}
+
+export const CIRCLE_SEATING_NOTE = '围坐先按圆桌出预览，沙发还不能按实物摆进画布。';
+
+/**
+ * Coarse local reading when the model is off or did not yield an action.
+ * Questions that are not polite requests, refusals, and concrete object edits stay null
+ * so the existing move/add/export paths keep them.
+ */
+export function classifyLocalLayout(text: string): LocalLayoutClass | null {
+  const compact = layoutCompact(text);
+  if (!compact || LAYOUT_OTHER_ACTION.test(compact) || REFUSE_LAYOUT.test(compact)) return null;
+  if (/(?:不要|不想|别|不围)围/.test(compact) && !/(?:布置|摆一下|摆一版|出一版|先出|摆法)/.test(compact)) return null;
+  if (/是什么意思/.test(compact)) return null;
+  const polite = /能不能|可不可以|行不行|可以帮我|帮我/.test(compact);
+  if (/[?？吗]|如何|怎样|怎么|是否|要不要/.test(compact) && !polite) return null;
+  if (/(?:消防验收|保证合规|保证不违规|施工图|办证)/.test(compact) && !LAYOUT_STEM.test(compact) && !REVISE_HINT.test(compact)) return 'cannot';
+  if (SEATING_SWAP.test(compact) || mentionsUnsupportedSeating(compact)) return 'revise';
+  if (REVISE_HINT.test(compact) && (LAYOUT_STEM.test(compact) || /座位|座|过道|通道|紧凑|好看|疏|密/.test(compact) || /再来一版|再出一版|按刚才/.test(compact))) return 'revise';
+  if (LAYOUT_STEM.test(compact) || /按刚才说的摆|摆一摆|(?:^|帮我|来|再|请)摆/.test(compact)) return REVISE_HINT.test(compact) ? 'revise' : 'generate';
+  if (isBareSeatingChoice(compact)) return 'generate';
+  return null;
+}
+
+/**
+ * Freeform request to draw or replace a preview.
+ * 'again' changes the arrangement; 'first' draws from the recorded brief.
+ */
+export function layoutGenerateCommand(text: string): 'again' | 'first' | null {
+  const kind = classifyLocalLayout(text);
+  if (kind === 'revise') return 'again';
+  if (kind === 'generate') return 'first';
+  return null;
+}
+
+/** A layout ask with no new attendance, size, or seating-mode fact for the model to miss. */
+export function isLayoutOnlyUtterance(text: string): boolean {
+  if (!layoutGenerateCommand(text)) return false;
+  const parsed = parseBriefSentence(text);
+  if (parsed.headcount != null || parsed.event != null || parsed.venueIO != null || parsed.lengthM != null || parsed.widthM != null || parsed.areaM2 != null) return false;
+  const compact = layoutCompact(text);
+  // Round-table / desk choice is itself the layout ask. Local rules record the mode, so a failed model has nothing else to miss.
+  if (isBareSeatingChoice(compact)) return true;
+  return !/(?:课桌|课椅|圆桌|餐桌)/.test(compact);
+}
+
+/** Drop a layout ask the preview path already owns, and keep every other unhandled item. */
+export function omitHandledLayoutActions<T extends { kind: string; evidence: string }>(raw: string, items: readonly T[] | undefined): T[] | undefined {
+  if (!items) return undefined;
+  if (!layoutGenerateCommand(raw)) return [...items];
+  return items.filter(item => item.kind === 'question' || layoutGenerateCommand(item.evidence) === null);
+}
+
 /**
  * 右栏唯一的生成入口是说话：尺寸表单和大绿钮那个第二入口按 2026-10-26 夜截图钉砍掉了。
  * 这句话是在要「一版布置」吗？'again' = 换一版，'first' = 就按现在这些条件出。
  */
 export function isGenerateCommand(text: string): 'again' | 'first' | null {
   const compact = normalizeDimInput(text).replace(/\s+/g, '');
+  const natural = layoutGenerateCommand(text);
+  if (natural) return natural;
+  // A direct answer to the assistant's offer to explore assumptions creates only a preview.
+  if (/^(?:先探索|先用假设探索)[。！!]*$/.test(compact)) return 'first';
+  const localDraft=/(?:生成|制作|做|出)(?:一版)?(?:本地|本机)草案/.exec(compact);
+  if(localDraft){
+    const start=Math.max(...['，',',','。','；',';','！','!'].map(mark=>compact.lastIndexOf(mark,localDraft.index-1)))+1;
+    const prefix=compact.slice(start,localDraft.index),suffix=compact.slice(localDraft.index+localDraft[0].length).split(/[，,。；;！!]/)[0]??'';
+    if(!/(?:不要|不想|暂不|别|如何|怎样|怎么|能否|是否|要不要)/.test(prefix)&&!/[?？吗么]|是什么意思/.test(suffix))return 'first';
+  }
   if (/(换一版|再来一版|再出一版|重出一版|重新摆|换个方案|换种摆法)/.test(compact)) return 'again';
+  if (/(?:^|[，,。；;！!])(?:请|帮我|直接|现在|先)?生成(?:一版)?方案[。！!]*$/.test(compact)) return 'first';
   if (/(出方案|出一版|摆一版|生成布置|布置起来|开始摆|先摆|就按这个|按这个出)/.test(compact)) return 'first';
   return null;
 }
@@ -99,7 +221,7 @@ export function isEstimateCommand(text: string): boolean {
  */
 export function isReviewCommand(text: string): boolean {
   const compact = normalizeDimInput(text).replace(/\s+/g, '');
-  if (!compact || /换一版|再来一版|再出一版|重出一版|换个方案|换种摆法/.test(compact)) return false;
+  if (!compact || /换一版|再来一版|再出一版|重出一版|换个方案|换种摆法|换个摆法|重新布置|你来布置|围成一圈/.test(compact)) return false;
   return /(哪里有问题|有什么问题|有没有问题|检查一下|检查下|体检|挑毛病|挑挑毛病|优化一下|优化下|改一版|太挤|挤不挤|动线|碰撞|冲突|拉开|留够|走不走得通|顺不顺)/.test(compact);
 }
 
@@ -237,12 +359,16 @@ const COLOR_WORDS: Readonly<Record<string, string>> = {
   白: '#f2f4f6', 黑: '#2b2f36', 灰: '#9aa3ad', 橙: '#e0863c', 原木: '#b98a5a',
 };
 
-function parseRecolorOp(clause: string): PlanRecolorOp | null {
-  const hit = clause.match(/(?:把|将)?(.+?)(?:换成|改成|变成|换为|改为|涂成|刷成)(红|蓝|绿|黄|白|黑|灰|橙|原木)色?/);
+/** An unambiguous color change must consume the complete user instruction. */
+export function parseSafeRecolor(raw: string): PlanRecolorOp | null {
+  const text=normalizeDimInput(raw).replace(/[。.!！]$/, '');
+  if (/(?:不要|不用|别|勿|暂不|暂时|不确定|可能|也许|是否|待定|看情况|[?？])/.test(text)) return null;
+  const hit=text.match(/^(?:把|将)?(.+?)(?:换成|改成|变成|换为|改为|涂成|刷成)(红|蓝|绿|黄|白|黑|灰|橙|原木)色?$/);
   if (!hit) return null;
-  const color = COLOR_WORDS[hit[2]!];
-  return color ? { kind: 'recolor', ...parseTarget(hit[1]!), color } : null;
+  const color=COLOR_WORDS[hit[2]!];
+  return color ? {kind:'recolor',...parseTarget(hit[1]!),color} : null;
 }
+function parseRecolorOp(clause: string): PlanRecolorOp | null { return parseSafeRecolor(clause); }
 
 function parseSiteBands(text: string): SiteBand[] {
   if (!/(湖|景观带|景观|保留带|保留区|视线带)/.test(text)) return [];
@@ -255,30 +381,52 @@ function parseSiteBands(text: string): SiteBand[] {
   return [{ side, depth, label: `${SIDE_LABEL[side]}侧景观带` }];
 }
 
+/** Only a whole, unambiguous directional instruction can supply a movement distance. */
+export function parseSafeDirectionalMove(raw: string): PlanMoveOp | null {
+  const text = normalizeDimInput(raw).replace(/[。.!！]$/, '');
+  if (/(?:不要|不用|别|勿|暂不|暂时|不确定|可能|也许|是否|待定|看情况|[?？]|不超过|最多|至少|大约|左右)/.test(text)) return null;
+  const target = '(?:把|将)?(.+?)';
+  const direction = '(东|西|南|北|左|右|前|后)';
+  const action = '(?:挪|移动|平移|移|搬)';
+  const number = '(\\d+(?:\\.\\d+)?|十[一二三四五六七八九]?|[一二两三四五六七八九]十|[一二两三四五六七八九])';
+  const unit = '(毫米|厘米|米|mm|cm|m)';
+  const vague = text.match(new RegExp(`^${target}(?:往|向|朝)${direction}(?:边|侧|方)?${action}(?:动)?(?:一点|一些|稍微)$`));
+  if (vague) {
+    const vec = DIR_VEC[vague[2]!];
+    return vec ? { kind: 'move', ...parseTarget(vague[1]!), delta: { x: vec.x * 0.3, z: vec.z * 0.3 } } : null;
+  }
+  const first = text.match(new RegExp(`^${target}(?:往|向|朝)${direction}(?:边|侧|方)?${action}(?:动)?${number}${unit}$`, 'i'));
+  const second = first ? null : text.match(new RegExp(`^${target}${action}(?:到|至)?${direction}(?:边|侧|方)?${number}${unit}$`, 'i'));
+  const match = first ?? second;
+  if (!match) return null;
+  const amount = /^\d/.test(match[3]!) ? Number(match[3]) : parseCount(match[3]!);
+  const unitName = match[4]!.toLowerCase();
+  const meters = amount / (unitName === '毫米' || unitName === 'mm' ? 1000 : unitName === '厘米' || unitName === 'cm' ? 100 : 1);
+  if (!Number.isFinite(meters) || meters <= 0 || meters > 500) return null;
+  const vec = DIR_VEC[match[2]!];
+  return vec ? {kind:'move', ...parseTarget(match[1]!), delta:{x:vec.x*meters,z:vec.z*meters}} : null;
+}
+
 function parseMoveOp(clause: string): PlanMoveOp | null {
+  const safe = parseSafeDirectionalMove(clause);
+  if (safe) return safe;
   const to = clause.match(/(?:把|将)?(.+?)(?:挪|移|移动|平移|搬)(?:到|至)(\()?(-?\d+(?:\.\d+)?)[,，](-?\d+(?:\.\d+)?)/);
   if (to) return { kind: 'move', ...parseTarget(to[1]!), to: { x: Number(to[3]), z: Number(to[4]) } };
-  const dir = clause.match(/(?:把|将)?(.+?)(?:往|向|朝)(东|西|南|北|左|右|前|后)(?:边|侧|方)?(?:挪|移|移动|平移|搬|走)(?:动|了)?(\d+(?:\.\d+)?)?(?:米|m)?/);
-  if (dir) {
-    const vec = DIR_VEC[dir[2]!] ?? { x: 0, z: 0 };
-    const meters = dir[3] ? Number(dir[3]) : 1;
-    return { kind: 'move', ...parseTarget(dir[1]!), delta: { x: vec.x * meters, z: vec.z * meters } };
-  }
-  const dirAfter = clause.match(/(?:把|将)?(.+?)(?:挪|移|移动|平移|搬)(?:到|至)?(东|西|南|北|左|右|前|后)(?:边|侧|方)?(\d+(?:\.\d+)?)?(?:米|m)?/);
-  if (dirAfter) {
-    const vec = DIR_VEC[dirAfter[2]!] ?? { x: 0, z: 0 };
-    const meters = dirAfter[3] ? Number(dirAfter[3]) : 1;
-    return { kind: 'move', ...parseTarget(dirAfter[1]!), delta: { x: vec.x * meters, z: vec.z * meters } };
-  }
+
   return null;
 }
 
-function parseRotateOp(clause: string): PlanRotateOp | null {
-  const hit = clause.match(/(?:把|将)?(.+?)(顺时针|逆时针)?(?:旋转|转动|转)(\d+(?:\.\d+)?)(?:度|°)/);
-  if (!hit) return null;
-  const degrees = Number(hit[3]);
-  return { kind: 'rotate', ...parseTarget(hit[1]!), deltaDeg: hit[2] === '逆时针' ? -degrees : degrees };
+/** Rotation must be a complete directional instruction with an explicit angle. */
+export function parseSafeRotation(raw: string): PlanRotateOp | null {
+  const text=normalizeDimInput(raw).replace(/[。.!！]$/, '');
+  if (/(?:不要|不用|别|勿|暂不|暂时|不确定|可能|也许|是否|待定|看情况|[?？]|不超过|最多|至少|大约|左右)/.test(text)) return null;
+  const match=text.match(/^(?:把|将)?(.+?)(顺时针|逆时针)(?:旋转|转动|转)(\d+(?:\.\d{1,3})?)(?:度|°|deg)$/i);
+  if(!match)return null;
+  const degrees=Number(match[3]);
+  if(!Number.isFinite(degrees)||degrees<=0||degrees>360)return null;
+  return {kind:'rotate',...parseTarget(match[1]!),deltaDeg:match[2]==='逆时针'?-degrees:degrees};
 }
+function parseRotateOp(clause: string): PlanRotateOp | null { return parseSafeRotation(clause); }
 
 function parseScaleOp(clause: string): PlanScaleOp | null {
   const hit = clause.match(/(?:把|将)?(.+?)(放大|缩小|缩放|变大|变小)(到)?\s*(\d+(?:\.\d+)?)\s*(倍|%)?/);
@@ -382,6 +530,8 @@ export interface BriefExtraction {
   mobilityAssistance?: boolean | null;
   /** 模型给的一句中文人话建议；null/缺省时前端回退到 buildAudiencePrompt 正则版。 */
   proactiveReply?: string | null;
+  requirements?: Array<{ key: 'headcount' | 'lengthM' | 'widthM' | 'areaM2' | 'venueIO' | 'layoutMode' | 'event' | 'timeOfDay'; value: number | string; mode: 'must' | 'prefer' }> | null;
+  activityNeeds?: BriefSlots['activityNeeds'];
 }
 
 const EVENT_KEYWORDS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -421,9 +571,28 @@ export function suggestDimsFromImageRatio(pixelWidth: number, pixelHeight: numbe
   };
 }
 
+/**
+ * A short rail for a compound ask: shell, seats, aisle, confirm.
+ * Simple one-liners stay a single preview. Confirm is still a person.
+ */
+export function lightPlanRail(text: string): readonly string[] | null {
+  const compact = layoutCompact(text);
+  const seating = mentionsCircleSeating(compact) || /圆桌|课桌|布置|摆一|出一版/.test(compact);
+  if (!seating) return null;
+  const parsed = parseBriefSentence(text);
+  const sized = parsed.lengthM !== null || parsed.areaM2 !== null;
+  const aisle = /过道|通道|留空/.test(compact);
+  const clauses = compact.split(/[，,；;]/).filter(Boolean).length;
+  if (!(sized || aisle || clauses >= 2)) return null;
+  const steps = ['立壳', '摆座'];
+  if (aisle || /签到|舞台/.test(compact) || clauses >= 3) steps.push('留过道');
+  steps.push('确认');
+  return steps;
+}
+
 /** 解析一句话活动描述。全角数字归一，先抠面积/长宽再数人数，避免「300平米」被当成人头。 */
 export function parseBriefSentence(raw: string): BriefExtraction {
-  const text = normalizeDimInput(raw).replace(/[×X＊✕]/g, 'x').toLowerCase();
+  const text = normalizeOralSize(normalizeDimInput(raw).replace(/[×X＊✕]/g, 'x')).toLowerCase();
   const found: BriefExtraction = { event: null, headcount: null, areaM2: null, lengthM: null, widthM: null, venueIO: null, timeOfDay: null };
   let rest = text;
 
@@ -442,10 +611,10 @@ export function parseBriefSentence(raw: string): BriefExtraction {
     }
     rest = rest.replace(dims[0], '-');
   }
-  const headcount = rest.match(/(\d{1,5})(人|位|名)/);
+  const headcount = withoutNonTotalHeadcounts(rest).match(/(\d{1,5})(人|位|名)/);
   if (headcount) {
     const value = Number(headcount[1]);
-    if (Number.isFinite(value) && value >= 2 && value <= HEADCOUNT_MAX) found.headcount = value;
+    if (Number.isFinite(value) && value >= 1 && value <= HEADCOUNT_MAX) found.headcount = value;
   }
   for (const [pattern, label] of EVENT_KEYWORDS) { if (pattern.test(text)) { found.event = label; break; } }
   if (/(户外|室外|露天|草坪|花园|院子|广场|营地|庭院)/.test(text)) found.venueIO = 'outdoor';
@@ -518,16 +687,15 @@ export function workingScale(
   return { length: canvas.width, width: canvas.height, origin: 'canvas', fromVenue: false };
 }
 
-/** 发布会这类先占舞台和签到；课室两者都不要。没点名就按活动类型猜，说「不要」就关掉。 */
-export function layoutAnchors(text: string, event: string | null, layoutMode: 'dining' | 'desk-chair'): { stage: boolean; checkin: boolean } {
-  if (layoutMode === 'desk-chair') return { stage: false, checkin: false };
+/** 只处理本句明确提到的舞台和签到；未提及时由上层保留待确认状态。 */
+export function layoutAnchors(text: string, _event: string | null, _layoutMode: 'dining' | 'desk-chair'): { stage: boolean; checkin: boolean } {
   const compact = text.replace(/\s+/g, '');
-  const noStage = /不要舞台|不设舞台|无舞台/.test(compact);
-  const noCheckin = /不要签到|不设签到|无签到/.test(compact);
-  const gathering = event !== null && event !== '市集';
+  const ambiguous = /(可能|也许|或许|是否|要不要|需不需要|不确定|不知道|待定|看情况|[吗么？?])/.test(compact);
+  const noStage = /(不要|不设|不需要|无需|没有|无).{0,4}(舞台|背景板)/.test(compact);
+  const noCheckin = /(不要|不设|不需要|无需|没有|无).{0,4}(签到|接待)/.test(compact);
   return {
-    stage: !noStage && (/舞台|背景板/.test(compact) || gathering || event === null),
-    checkin: !noCheckin && (/签到|接待/.test(compact) || gathering),
+    stage: !ambiguous && !noStage && /舞台|背景板/.test(compact),
+    checkin: !ambiguous && !noCheckin && /签到|接待/.test(compact),
   };
 }
 
@@ -535,7 +703,7 @@ export function layoutAnchors(text: string, event: string | null, layoutMode: 'd
  * 文生物件 / 场景：只整理要提交的那句，不提交。
  * 布置句（出方案、加人）返回 null，免得把布置当成扣费生成。
  */
-export function prepareAholoAsk(raw: string): { kind: 'text' | 'world'; prompt: string; title: string } | null {
+export function prepareAholoAsk(raw: string): { kind: 'text' | 'world' | 'recon'; prompt: string; title: string } | null {
   const text = raw.trim();
   const compact = text.replace(/\s+/g, '');
   if (!compact || /出方案|布置|确认布置|加一把|加一张|加一个/.test(compact)) return null;
@@ -544,6 +712,13 @@ export function prepareAholoAsk(raw: string): { kind: 'text' | 'world'; prompt: 
   }
   if (/文字建模|文生物件|文生3d|文生三维|文生(?!场景)|生成.{0,24}物件|做.{0,12}物件/i.test(compact)) {
     return { kind: 'text', prompt: text, title: '物件' };
+  }
+  const vendor = /群核|aholo|lux3d/i.test(compact);
+  const verb = /生成|文生|图生|重建|做一|建一/.test(compact);
+  if (vendor && verb && /重建/.test(compact)) return { kind: 'recon', prompt: text, title: '场地' };
+  if (vendor && verb && /场景|场地|空间/.test(compact)) return { kind: 'world', prompt: text, title: '场景' };
+  if ((vendor && verb) || /图生|照片生成|图片生成/.test(compact)) {
+    return { kind: 'text', prompt: text, title: /图生|照片|图片/.test(compact) ? '图片物件' : '物件' };
   }
   return null;
 }
@@ -564,6 +739,57 @@ export interface PendingPlan {
   lockedTouched: number;
   overlapCount: number;
   overlapNames: string[];
+  safetyChecksUnknown?: boolean;
+  seatingShortfall?: string;
+  seatingAllocationUnverified?: boolean;
+  seatingHeadcountUnverified?: boolean;
+  seatingSpecsUnverified?: boolean;
+}
+
+export const SAFETY_CHECKS_UNKNOWN_TEXT='出口、疏散、门扇、无障碍、消防和核定人数仍需核验。';
+export const SEATING_ALLOCATION_UNVERIFIED_TEXT='桌椅配比尚未核验，请核对每桌人数与实际座位。';
+export const SEATING_HEADCOUNT_UNVERIFIED_TEXT='人数来源尚未核验，请核对活动人数。';
+export const SEATING_SPECS_UNVERIFIED_TEXT='桌椅规格尚未核验，请核对候选模型尺寸及实际物料。';
+function zeroPlacementSuggestions(reason:string):string {
+  const first=reason==='object_limit'?'可核对当前物件数量和方案规模。'
+    :reason==='scan_limit'?'可尝试分区试排并核对桌椅规格。'
+    :reason==='preset_unverified'?'请先核对场地预设、图纸和尺寸，再尝试试排。'
+    :'可尝试其他区域并核对桌椅规格。';
+  return `${first}你也可决定是否调整人数、共桌方式或场地；调整后仍需重新试排。`;
+}
+/** Only accept the bounded, program-generated seating warning, never model prose. */
+export function seatingShortfallText(warning:{code:string;ids:readonly string[]}):string|null {
+  const shared=/^SHARED_SEATING_SHORTFALL:(\d{1,3}):(\d{1,3}):(\d{1,2}):(object_limit|no_placement|scan_limit|preset_unverified)$/.exec(warning.code);
+  if(shared&&!warning.ids.length){
+    const requested=Number(shared[1]),placed=Number(shared[2]),tables=Number(shared[3]);
+    if(requested>=1&&requested<=100&&placed>=0&&placed<requested&&tables>=0&&tables<=25&&tables===Math.ceil(placed/2)){
+      const reason=shared[4]==='object_limit'?'已触及云场景物件数量上限':shared[4]==='scan_limit'?'本次搜索达到计算上限':shared[4]==='preset_unverified'?'场地预设尚未核验':'本次排布未找到更多可用位置';
+      if(placed===0)return `本次新增课桌椅组团可安排 0 / ${requested} 人，新增 0 桌；原场景物件未计入。${reason}，不代表场地最大容量；实际座席和现场条件仍需核验。${zeroPlacementSuggestions(shared[4]!)}`;
+      return `本版排了 ${placed} / ${requested} 人，${tables} 桌，尚缺 ${requested-placed} 人。${reason}，不代表场地最大容量。`;
+    }
+    return null;
+  }
+  const match=/^SEATING_SHORTFALL:(\d{1,3}):(\d{1,3}):(object_limit|no_placement|scan_limit|preset_unverified)$/.exec(warning.code);
+  if(!match||warning.ids.length)return null;
+  const requested=Number(match[1]),placed=Number(match[2]);
+  if(requested<1||requested>100||placed<0||placed>=requested)return null;
+  const reason=match[3]==='object_limit'?'已触及云场景物件数量上限，不代表场地最大容量。'
+    :match[3]==='scan_limit'?'本次搜索达到计算上限，不代表场地最大容量。'
+    :match[3]==='preset_unverified'?'场地预设尚未核验，不代表场地最大容量。'
+    :'本次排布未找到更多可用位置，不代表场地最大容量。';
+  if(placed===0)return `本次新增课桌椅组团 0 / ${requested} 套；原场景物件未计入。${reason}实际座席和现场条件仍需核验。${zeroPlacementSuggestions(match[3]!)}`;
+  return `本版排了 ${placed} / ${requested} 套，尚缺 ${requested-placed} 套。${reason}`;
+}
+/** Unrecognized backend codes never appear as internal labels in the UI. */
+export function proposalWarningText(warning:{code:string;ids:readonly string[]},nameOf:(id:string)=>string):string {
+  if(warning.code==='SAFETY_CHECKS_UNKNOWN')return SAFETY_CHECKS_UNKNOWN_TEXT;
+  if(warning.code==='SEATING_ALLOCATION_UNVERIFIED')return SEATING_ALLOCATION_UNVERIFIED_TEXT;
+  if(warning.code==='SEATING_HEADCOUNT_UNVERIFIED')return SEATING_HEADCOUNT_UNVERIFIED_TEXT;
+  if(warning.code==='SEATING_SPECS_UNVERIFIED')return SEATING_SPECS_UNVERIFIED_TEXT;
+  const shortfall=seatingShortfallText(warning);if(shortfall)return shortfall;
+  const names=warning.ids.map(nameOf).join('、');
+  const label=warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项';
+  return names?`${label}：${names}`:label;
 }
 
 /**
@@ -587,5 +813,10 @@ export function pendingPlanOf(
     lockedTouched: differences.filter(change => change.locked && change.kind !== 'added').length,
     overlapCount: overlaps.size,
     overlapNames: [...overlaps],
+    ...(warnings.some(warning=>warning.code==='SAFETY_CHECKS_UNKNOWN')?{safetyChecksUnknown:true}:{}),
+    ...(warnings.some(warning=>warning.code==='SEATING_ALLOCATION_UNVERIFIED')?{seatingAllocationUnverified:true}:{}),
+    ...(warnings.some(warning=>warning.code==='SEATING_HEADCOUNT_UNVERIFIED')?{seatingHeadcountUnverified:true}:{}),
+    ...(warnings.some(warning=>warning.code==='SEATING_SPECS_UNVERIFIED')?{seatingSpecsUnverified:true}:{}),
+    ...(()=>{const warning=warnings.map(seatingShortfallText).find(Boolean);return warning?{seatingShortfall:warning}:{};})(),
   };
 }

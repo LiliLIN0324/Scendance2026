@@ -1,0 +1,61 @@
+// Isolated synthetic workbench only. Never calls a paid model or user project.
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const {createHash}=require('node:crypto');
+const {chromium}=require('playwright');
+const port=Number(process.argv[2]);
+if(!Number.isSafeInteger(port)||port<1024||port>65535||[4186,4196,4197,4198,4213,4215].includes(port))throw Error('请选择隔离模拟端口。');
+const origin=`http://127.0.0.1:${port}`;
+async function main(){
+ const initial=await(await fetch(`${origin}/status`)).json();assert.equal(initial.mode,'synthetic');assert.equal(initial.used,0);
+ const browser=await chromium.launch({headless:true,channel:'msedge'}),context=await browser.newContext(),blocked=[],cloudWrites=[],downloads=[];
+ await context.route('**/*',route=>{const u=new URL(route.request().url());if(u.hostname==='127.0.0.1'||u.protocol==='data:'||u.protocol==='blob:')return route.continue();blocked.push(u.origin);return route.abort();});
+ context.on('request',request=>{const u=new URL(request.url());if(request.method()!=='GET'&&/\/functions\/v1\/scene-api\/projects(?:\/|$)/.test(u.pathname))cloudWrites.push(request.method());});
+ const page=await context.newPage();page.on('download',file=>downloads.push(file));
+ try{
+  await page.goto(origin);const frame=page.frameLocator('iframe[title="幕景工作台"]');await frame.getByLabel('告诉 Agent 要改的').waitFor({timeout:60000});
+  const child=page.frames().find(f=>f!==page.mainFrame()&&f.url().startsWith('http://127.0.0.1:'));assert.ok(child);
+  await page.waitForTimeout(8000);
+  await frame.getByLabel('告诉 Agent 要改的').fill('把场地改成20×20米');await frame.getByRole('button',{name:'发送',exact:true}).click();await frame.getByText('场地改成 20 × 20 m。').waitFor({timeout:15000});
+  await frame.getByRole('button',{name:'账户中心'}).click();await frame.getByLabel('邮箱').fill('owner@scendance.test');await frame.getByLabel('密码').fill('local-integration-only');await frame.getByRole('button',{name:'登录并进入工作台'}).click();await frame.getByText('已登录。').waitFor({timeout:10000});
+  await frame.getByText(/仅本机 · 未存为云端方案/).waitFor({timeout:10000});await frame.getByRole('button',{name:'关闭账户面板'}).click();
+  await frame.getByRole('button',{name:'空间',exact:true}).click();await frame.getByText('场地信息记录',{exact:true}).click();
+  const facts=frame.locator('details').filter({has:frame.getByText('场地信息记录',{exact:true})});
+  await facts.getByLabel('要记录的信息').selectOption('door_width');await facts.getByLabel('数值（米）').fill('1.2');
+  await facts.getByLabel('资料来源').selectOption('site_measurement');await facts.getByLabel('来源说明').fill('PRIVATE_REFERENCE');await facts.getByLabel('记录人').fill('PRIVATE_PERSON');
+  await facts.getByRole('checkbox',{name:'我已核对这项信息'}).check();await facts.getByRole('button',{name:'保存这项信息'}).click();
+  await facts.getByText(/门宽：1.2 米 · 用户已核对/).waitFor({timeout:10000});
+  await frame.locator('.sc-nav-brand').click();
+  const before=await child.evaluate(()=>JSON.parse(localStorage.getItem('scendance-editor-local-v1')||'null'));
+  const beforeIds=new Set(before.floors.flatMap(floor=>floor.items).map(item=>item.id));
+  await frame.getByLabel('告诉 Agent 要改的').fill('30人，按一人一套课桌椅生成本地草案');await frame.getByRole('button',{name:'发送',exact:true}).click();
+  await frame.getByText(/本机草案：本次排了 30 \/ 30 套/).waitFor({timeout:20000});await frame.getByRole('button',{name:'确认布置'}).click();
+  await child.waitForFunction(()=>{try{const v=JSON.parse(localStorage.getItem('scendance-editor-local-v1')||'null');return v?.floors.flatMap(f=>f.items).filter(i=>i.type==='desk'||i.type==='chair').length>=60;}catch{return false;}},null,{timeout:20000});
+  const saved=await child.evaluate(()=>JSON.parse(localStorage.getItem('scendance-editor-local-v1')||'null'));
+  for(const old of before.floors.flatMap(floor=>floor.items))assert.deepEqual(saved.floors.flatMap(floor=>floor.items).find(item=>item.id===old.id),old,'已有物件不应丢失或改变');
+  await frame.getByRole('button',{name:'导出与交接',exact:true}).click();await frame.getByText('内部资料',{exact:true}).click();await frame.getByRole('tab',{name:'导出',exact:true}).click();
+  await frame.getByRole('checkbox',{name:'在可校验草案中附上本机场地记录'}).check();
+  const event=page.waitForEvent('download',{timeout:15000});await frame.getByRole('button',{name:'导出可校验本机草案',exact:true}).click();
+  const text=await fs.readFile(await(await event).path(),'utf8'),envelope=JSON.parse(text),payload=JSON.parse(envelope.payload);
+  assert.equal(createHash('sha256').update(envelope.payload,'utf8').digest('hex'),envelope.digest);
+  const added=payload.layout.floors.flatMap(f=>f.items).filter(item=>!beforeIds.has(item.id)&&(item.type==='desk'||item.type==='chair'));assert.equal(added.length,60);assert.equal(new Set(added.map(item=>item.id)).size,60);
+  assert.equal(added.filter(item=>item.type==='desk').length,30);assert.equal(added.filter(item=>item.type==='chair').length,30);
+  assert.equal(payload.state,'draft_unverified');assert.ok(payload.checks.every(item=>item.status==='unknown'));assert.equal(payload.confirmations.venue,'unknown');
+  const note=payload.unlinkedVenueNotes;assert.equal(note.scope,'当前活动');assert.match(note.notice,/尚未与当前画布或图纸版本关联/);assert.match(note.notice,/仅记录一扇门/);assert.match(note.notice,/不等于场地方确认/);
+  assert.equal(note.facts.find(item=>item.key==='door_width').value,1.2);assert.equal(note.facts.find(item=>item.key==='door_width').recordedStatus,'confirmed');
+  assert.doesNotMatch(text,/PRIVATE_REFERENCE|PRIVATE_PERSON|updatedBy|sourceRef/);
+  const input=frame.getByLabel('校验可校验草案文件');await input.setInputFiles({name:'草案.json',mimeType:'application/json',buffer:Buffer.from(text)});await frame.getByText(/文件内容与所附摘要一致/).waitFor({timeout:10000});
+  const changed=JSON.stringify({...envelope,payload:envelope.payload.replace('1.2','1.3')});await input.setInputFiles({name:'篡改.json',mimeType:'application/json',buffer:Buffer.from(changed)});await frame.getByText(/文件格式不符或内容与摘要不一致/).waitFor({timeout:10000});
+  await child.evaluate(()=>{const s=crypto.subtle,o=s.digest.bind(s);Object.defineProperty(s,'digest',{configurable:true,value:(...args)=>{window.__venueDigestStarted=true;return new Promise((resolve,reject)=>setTimeout(()=>o(...args).then(resolve,reject),4000));}});});
+  const lockName=`scendance:venue-facts:${encodeURIComponent(`activity:${saved.id}`)}`;
+  const other=await context.newPage();await other.goto(`${new URL(child.url()).origin}/icon.svg`);
+  const count=downloads.length;await frame.getByRole('button',{name:'导出可校验本机草案',exact:true}).click();await child.waitForFunction(()=>window.__venueDigestStarted===true,null,{timeout:10000});
+  await other.evaluate(name=>{window.__venueExclusiveAcquired=false;void navigator.locks.request(name,{mode:'exclusive'},()=>{window.__venueExclusiveAcquired=true;});},lockName);
+  await page.waitForTimeout(300);assert.equal(await other.evaluate(()=>window.__venueExclusiveAcquired),false,'摘要期间侧记写入锁不应提前取得');
+  await frame.getByRole('button',{name:'撤销',exact:true}).click();await frame.getByRole('button',{name:'重做',exact:true}).click();await page.waitForTimeout(5000);
+  await other.waitForFunction(()=>window.__venueExclusiveAcquired===true,null,{timeout:5000});await other.close();
+  assert.equal(downloads.length,count,'摘要期间活动变化后不得下载旧草案');assert.deepEqual(blocked,[]);assert.deepEqual(cloudWrites,[]);
+  console.log(JSON.stringify({status:'passed',mode:'synthetic',unlinkedFacts:true,oneDoorOnly:true,identityExcluded:true,safetyUnknown:true,checksumVerified:true,tamperRejected:true,abaNoDownload:true,crossTabWriterWaited:true,externalRequests:0,cloudWrites:0}));
+ }finally{try{await page.getByRole('button',{name:'结束试用'}).click({timeout:3000});}catch{}await context.close();await browser.close();}
+}
+main().catch(error=>{console.error('UNLINKED_VENUE_EXPORT_FAILED',error.message);process.exitCode=1;});

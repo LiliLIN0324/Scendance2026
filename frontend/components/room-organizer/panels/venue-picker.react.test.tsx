@@ -122,7 +122,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
     expect(mocks.listStudios).not.toHaveBeenCalled();
   });
 
-  it('从「你可以做什么」chip 打开弹层，取消即关', async () => {
+  it('从空间工具打开弹层，取消即关', async () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: '新建/换场地' }));
     expect(await screen.findByRole('dialog', { name: '换场地 / 新建' })).toBeTruthy();

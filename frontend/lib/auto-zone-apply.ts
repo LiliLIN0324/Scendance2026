@@ -48,15 +48,19 @@ export function hasZoneApplyProposal(aiReply: string): boolean {
 
 /**
  * 从 AI 回复里抽它提议的 zoneType 列表。
- * - 默认至少含签到区（checkin）和休息区（rest），这是 brief-agent 的兜底提议；
- * - 回复里提到「圆桌」追加 roundtable；
- * - 回复里提到「打卡」追加 photo。
+ * 只提取明确提到的区；否定语句不触发添加，无法确认时返回空。
  * 顺序固定，去重；返回的类型保证和 ZONE_SEMANTIC_LABELS 对得上。
  */
 export function extractProposedZoneTypes(aiReply: string): ZoneSemanticType[] {
-  const out: ZoneSemanticType[] = ['checkin', 'rest'];
-  if (aiReply.includes('圆桌')) out.push('roundtable');
-  if (aiReply.includes('打卡')) out.push('photo');
+  const out: ZoneSemanticType[] = [];
+  const clauses = aiReply.split(/[，,。！？!?；;]/);
+  for (const [word, type] of [['签到', 'checkin'], ['休息', 'rest'], ['圆桌', 'roundtable'], ['打卡', 'photo'], ['课桌', 'desk']] as const) {
+    const mentioned = clauses.some((clause) => {
+      const index = clause.indexOf(word);
+      return index >= 0 && !/(不要|无需|不用|不设|不需要|不安排|取消|不必)/.test(clause.slice(0, index).replaceAll('要不要', ''));
+    });
+    if (mentioned) out.push(type);
+  }
   return out;
 }
 

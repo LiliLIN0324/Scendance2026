@@ -20,6 +20,23 @@ export class SceneAdapterError extends Error {
   }
 }
 
+export const LOCAL_ZONES_CLOUD_MESSAGE = '此云端操作暂不支持本机区域标注。请先备份本机草稿或处理区域标注；现有标注未删除。';
+
+/** 区域暂不属于云端契约；包含区域的方案与历史版本均不能静默转换。 */
+export function assertCloudZoneSupport(layout: RoomLayout): void {
+  const pending = [layout];
+  const seen = new Set<RoomLayout>();
+  while (pending.length) {
+    const current = pending.pop()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    if (current.floors.some(floor => (floor.zones?.length ?? 0) > 0)) {
+      throw new SceneAdapterError('ZONES_NOT_SUPPORTED', LOCAL_ZONES_CLOUD_MESSAGE);
+    }
+    pending.push(...(current.designBook?.variants.map(variant => variant.layout) ?? []));
+  }
+}
+
 const rendererTypes: Record<SceneObject['materialId'], string> = {
   chair: 'chair', table: 'table', reception: 'counter', backdrop: 'backdrop',
   display: 'bookshelf', partition: 'partition', carpet: 'rug', decoration: 'plant', asset: 'glb-asset',
@@ -143,6 +160,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
 
 export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAdapterOptions,'assetIdMap'|'localAssetIds'> = {}): Scene {
   if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '当前云端版暂不支持保存多层方案。这份方案和修改会保留在本机；请勿删除本地方案。');
+  assertCloudZoneSupport(layout);
   if (!layout.backendSceneV2 && (layout.floorPlanImage || layout.backendVenue?.floorplanAssetId)) {
     throw new SceneAdapterError('FLOORPLAN_NOT_SUPPORTED', '平面图尚未接入云保存，不能忽略底图后保存。');
   }
@@ -197,6 +215,42 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
     };
   });
   const geometric = layout.backendSceneV2 ? layoutGeometryScene(layout) : null;
+  if (geometric && layout.backendSceneV2) {
+    const source=layout.backendSceneV2;
+    const changed=(a:number,b:number)=>!Number.isFinite(a)||!Number.isFinite(b)||Math.abs(a-b)>1e-6;
+    const protectedByEvidence=(id:string,status:string)=>status==='confirmed'||source.dimensions.some(d=>d.status==='confirmed'&&(d.targetId===id||d.targetEndId===id));
+    // The editable floor copy cannot promote an inferred/detected wall by changing its status.
+    // A real reconfirmation must replace both the authoritative V2 record and its evidence.
+    for(const current of geometric.structure.walls){
+      const original=source.structure.walls.find(wall=>wall.id===current.id);
+      if(current.status==='confirmed' && original?.status!=='confirmed')
+        throw new SceneAdapterError('STRUCTURE_EVIDENCE_STALE','墙体确认状态与原结构记录不一致，请在结构面板中重新核对。');
+    }
+    for(const wall of source.structure.walls){
+      const current=geometric.structure.walls.find(value=>value.id===wall.id);
+      const protectedWall=protectedByEvidence(wall.id,wall.status)||(wall.evidence?.length??0)>0;
+      if(!protectedWall)continue;
+      if(!current || current.status!==wall.status || current.kind!==wall.kind ||
+        changed(current.start.x,wall.start.x)||changed(current.start.z,wall.start.z)||
+        changed(current.end.x,wall.end.x)||changed(current.end.z,wall.end.z)||
+        changed(current.thickness,wall.thickness)||changed(current.height,wall.height))
+        throw new SceneAdapterError('STRUCTURE_EVIDENCE_STALE','墙体已改变，原结构确认和图纸依据不能沿用；请在结构面板中重新核对。');
+    }
+    for(const opening of source.structure.openings) {
+      if(!protectedByEvidence(opening.id,opening.status))continue;
+      const current=geometric.structure.openings.find(value=>value.id===opening.id);
+      if(!current||current.wallId!==opening.wallId||current.kind!==opening.kind||changed(current.offset,opening.offset)||
+        changed(current.width,opening.width)||changed(current.height,opening.height)||changed(current.sillHeight,opening.sillHeight))
+        throw new SceneAdapterError('STRUCTURE_EVIDENCE_STALE','门窗已改变，原结构确认和尺寸依据不能沿用；请在结构面板中重新核对。');
+    }
+    for(const column of source.structure.columns) {
+      if(!protectedByEvidence(column.id,column.status))continue;
+      const current=geometric.structure.columns.find(value=>value.id===column.id);
+      if(!current||changed(current.position.x,column.position.x)||changed(current.position.z,column.position.z)||changed(current.rotation,column.rotation)||
+        changed(current.size.width,column.size.width)||changed(current.size.depth,column.size.depth)||changed(current.size.height,column.size.height))
+        throw new SceneAdapterError('STRUCTURE_EVIDENCE_STALE','柱子已改变，原结构确认和尺寸依据不能沿用；请在结构面板中重新核对。');
+    }
+  }
   // 主入口只能指着结构里真实存在的门窗。门洞被删或换过墙之后剪掉这条引用（室内外、尺度
   // 置信度这些其它真相留着），否则域校验会把用户锁在「无法保存」上。
   const site = pruneVenueSite(layout.backendVenue?.site, geometric?.structure.openings.map(opening => opening.id) ?? []);
@@ -235,14 +289,14 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
   return result.data;
 }
 
-/** Explicit v1 → v2 upgrade from measured dimensions, without model inference. */
+/** Dimensions are user supplied; rectangular walls remain assumptions until separately reviewed. */
 export function createMeasuredRoomLayout(base: RoomLayout, dimensions: { width: number; depth: number; height: number }): RoomLayout {
   if (base.backendSceneV2) throw new SceneAdapterError('STRUCTURE_RESIZE_REQUIRES_REVIEW', '已有结构需要修改尺寸约束并重新核对，不能只缩放外框。');
   const old = layoutToBackendScene(base);
   const { width, depth, height } = dimensions;
   const points = [{ x: 0, z: 0 }, { x: width, z: 0 }, { x: width, z: depth }, { x: 0, z: depth }];
   const walls = points.map((start, index) => ({ id: crypto.randomUUID(), start, end: points[(index + 1) % 4],
-    thickness: 0.16, height, kind: 'exterior', status: 'confirmed' }));
+    thickness: 0.16, height, kind: 'exterior', status: 'inferred' }));
   const openings = old.venue.entrances.map(entrance => {
     const {x,z}=entrance.position;
     const owners = [Math.abs(z)<1e-6 ? 0 : -1, Math.abs(x-old.venue.width)<1e-6 ? 1 : -1,

@@ -85,6 +85,47 @@ describe('bounded read-only activity task runs', () => {
     expect(fetcher).toHaveBeenCalledOnce();
   }
 
+  it('does not create or call a model for an activity task when the steering guard is unavailable', async () => {
+    const i = await input();
+    const fetcher = vi.fn<Fetcher>(async () => completion());
+    const unavailable = { ...f.backend, agentGuardReady: async () => { throw new ApiError('DATABASE_ERROR', 500); } };
+    const response = await send(createApi(unavailable, env, fetcher), i);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: 'AGENT_STEERING_GUARD_UNAVAILABLE' } });
+    expect(fetcher).not.toHaveBeenCalled();
+    const rows = await f.db.query<{ count: number }>('select count(*)::int as count from scene_private.agent_runs where project_id=$1', [i.projectId]);
+    expect(rows.rows[0]!.count).toBe(0);
+  });
+
+  it('attributes a custom provider task call without exposing its credential', async () => {
+    const i = await input();
+    const settings:Record<string,string>={AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'private-fixture-value',AGENT_CHAT_MODEL:'fixture-model'};
+    const api=createApi(f.backend,key=>settings[key],vi.fn<Fetcher>(async()=>completion()));
+    const response=await send(api,i);expect(response.status).toBe(202);
+    const run=activityTaskRunSchema.parse(await response.json());expect(run.state).toBe('complete');
+    const rows=await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id]);
+    expect(rows.rows[0]!.usage).toEqual(expect.arrayContaining([expect.objectContaining({provider:'custom',kind:'activity_tasks'})]));
+    expect(JSON.stringify(rows.rows[0]!.usage)).not.toContain('private-fixture-value');
+  });
+
+  it('keeps activity task suggestions on their existing provider even with the brief selector enabled', async () => {
+    const settings:Record<string,string>={TOKENDANCE_API_KEY:'old-fixture-secret',BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'product-fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-example'};
+    const i=await input(),before=await snapshot(i.projectId);
+    const fetcher=vi.fn<Fetcher>(async(url,init)=>{
+      expect(String(url)).toBe('https://tokendance.space/gateway/v1/chat/completions');
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer old-fixture-secret');
+      expect(JSON.parse(String(init?.body))).toMatchObject({model:'deepseek-v4.1-flash',thinking:{type:'disabled'},response_format:{type:'json_object'},max_tokens:7000});
+      return completion();
+    });
+    const run=await read(await send(createApi(f.backend,key=>settings[key],fetcher),i));
+    expect(run.state).toBe('complete');expect(fetcher).toHaveBeenCalledOnce();expect(await snapshot(i.projectId)).toEqual(before);
+    const usage=(await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id])).rows[0]!.usage;
+    expect(JSON.stringify(usage)).not.toContain('product-fixture-secret');expect(JSON.stringify(usage)).not.toContain('old-fixture-secret');
+    delete settings.BAILIAN_PRODUCT_KEY;fetcher.mockClear();
+    const second=await read(await send(createApi(f.backend,key=>settings[key],fetcher),await input()));
+    expect(second.state).toBe('complete');expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('creates an activity response without Scene candidate, evaluation or direct-apply fields', async () => {
     const i = await input(), before = await snapshot(i.projectId), stored = await create(i);
     expect(stored).toMatchObject({ kind: 'activity_tasks', projectId: i.projectId, activityId: i.activityContext.projectId,
@@ -106,6 +147,9 @@ describe('bounded read-only activity task runs', () => {
     const api = createApi(f.backend, env, fetcher), response = await send(api, i);
     expect(response.status).toBe(202);
     const raw = await response.json(), run = activityTaskRunSchema.parse(raw);
+    expect(run.modelText).toMatchObject({status:'unverified',scope:'model_generated_text'});
+    expect(activityTaskRunSchema.safeParse({...raw,modelText:{...raw.modelText,status:'verified'}}).success).toBe(false);
+    expect(activityTaskRunSchema.safeParse({...raw,modelText:{...raw.modelText,note:'消防已验收'}}).success).toBe(false);
     expect(agentRunSchema.safeParse(raw).success).toBe(false);
     expect(agentDispatchRunSchema.safeParse(raw).success).toBe(true);
     expect(agentDispatchRunSchema.safeParse({ ...raw, candidates: [], evaluation: null, executionMode: 'direct', jevEnabled: true }).success).toBe(false);
@@ -368,7 +412,8 @@ describe('bounded read-only activity task runs', () => {
     const response = await send(createApi(f.backend, env, fetcher), i, oldBody);
     expect(response.status).toBe(200);
     const raw = await response.json();
-    expect(agentRunSchema.parse(raw)).toEqual(finished);
+    const {modelText,...replayed}=agentRunSchema.parse(raw);
+    expect(modelText).toMatchObject({status:'unverified',scope:'model_generated_text'});expect(replayed).toEqual(finished);
     expect(raw.id).toBe(stored.id);
     expect(raw).toHaveProperty('candidates');
     expect(raw).toHaveProperty('evaluation');

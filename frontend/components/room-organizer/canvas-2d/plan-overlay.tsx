@@ -12,7 +12,7 @@ const DRAFT_STROKE = 'rgba(74, 124, 89, 0.65)';
 /** 推测门旁小字（中性灰，不引新色板）。 */
 const INFERRED_LABEL_INK = '#6b7280';
 /** 推测门开门弧的虚线 pattern（与 drawRoomOutline 隐藏墙 [6,4] 同节奏）。 */
-const INFERRED_ARC_DASH = '6 4';
+const INFERRED_DOOR_DASH = '6 4';
 
 export interface PlanOverlayProps {
   annotations: readonly PlanAnnotation[];
@@ -172,94 +172,57 @@ export function PlanOverlay({
           }
           case 'door': {
             const g = ann.geometry;
-            // 样式决策抽成纯函数 doorRenderStyle：inferred:true → 门弧虚线 + 「门未确认」小字。
-            // 门扇（关位贴墙 / 开位向室内）无论推测与否都保持实线，只虚线开门弧。
             const style = doorRenderStyle(g);
-            // 门洞沿墙 position ± widthM/2；铰链取门洞一端，门长=widthM。
-            // 关位端点 = 铰链 + 沿墙方向 * L；开位端点 = 铰链 + 室内法线 * L。
-            // 房间中心为原点；worldToScreen 已把 (worldX, worldZ) 投影到 CSS px。
-            const halfL = g.widthM / 2;
-            const wallLen = g.widthM;
-            let hingeW = { x: 0, z: 0 };
-            let along = { x: 1, z: 0 }; // 沿墙单位向量（指向门洞另一端）
-            let inward = { x: 0, z: -1 }; // 室内法线（指向房间内）
-            if (g.wall === 'south') {
-              hingeW = { x: g.position - halfL, z: layout.height / 2 };
-              along = { x: 1, z: 0 };
-              inward = { x: 0, z: -1 };
-            } else if (g.wall === 'north') {
-              hingeW = { x: g.position - halfL, z: -layout.height / 2 };
-              along = { x: 1, z: 0 };
-              inward = { x: 0, z: 1 };
-            } else if (g.wall === 'west') {
-              hingeW = { x: -layout.width / 2, z: g.position - halfL };
-              along = { x: 0, z: 1 };
-              inward = { x: 1, z: 0 };
-            } else {
-              hingeW = { x: layout.width / 2, z: g.position - halfL };
-              along = { x: 0, z: 1 };
-              inward = { x: -1, z: 0 };
+            if (!Number.isFinite(g.position)) return null;
+            if (typeof g.widthM !== 'number' || !Number.isFinite(g.widthM) || g.widthM <= 0) {
+              const horizontal = g.wall === 'south' || g.wall === 'north';
+              const center: PlanPoint = horizontal
+                ? { x: g.position, z: (g.wall === 'south' ? 1 : -1) * layout.height / 2 }
+                : { x: (g.wall === 'east' ? 1 : -1) * layout.width / 2, z: g.position };
+              const normal: PlanPoint = horizontal ? { x: 0, z: g.wall === 'south' ? -1 : 1 }
+                : { x: g.wall === 'east' ? -1 : 1, z: 0 };
+              const point = toPx(center);
+              const label = toPx({ x: center.x + normal.x * 0.35, z: center.z + normal.z * 0.35 });
+              return (
+                <g key={ann.id} data-door-width="unknown" data-door-inferred={style.dashed ? 'true' : 'false'}>
+                  <line x1={point.x - 4} y1={point.y - 4} x2={point.x + 4} y2={point.y + 4} stroke={BRAND_GREEN} strokeWidth={1.5} />
+                  <line x1={point.x - 4} y1={point.y + 4} x2={point.x + 4} y2={point.y - 4} stroke={BRAND_GREEN} strokeWidth={1.5} />
+                  <text x={label.x} y={label.y} fontSize={11} fill={INFERRED_LABEL_INK} textAnchor="middle">{style.label}</text>
+                </g>
+              );
             }
-            const hinge = toPx(hingeW);
-            const closedEnd = toPx({
-              x: hingeW.x + along.x * wallLen,
-              z: hingeW.z + along.z * wallLen,
+            const halfWidth = g.widthM / 2;
+            let start: PlanPoint;
+            let end: PlanPoint;
+            let normal: PlanPoint;
+            if (g.wall === 'south' || g.wall === 'north') {
+              const z = (g.wall === 'south' ? 1 : -1) * layout.height / 2;
+              start = { x: g.position - halfWidth, z };
+              end = { x: g.position + halfWidth, z };
+              normal = { x: 0, z: g.wall === 'south' ? -1 : 1 };
+            } else {
+              const x = (g.wall === 'east' ? 1 : -1) * layout.width / 2;
+              start = { x, z: g.position - halfWidth };
+              end = { x, z: g.position + halfWidth };
+              normal = { x: g.wall === 'east' ? -1 : 1, z: 0 };
+            }
+            const a = toPx(start);
+            const b = toPx(end);
+            const cap = (point: PlanPoint, direction: number) => toPx({
+              x: point.x + normal.x * direction * 0.1,
+              z: point.z + normal.z * direction * 0.1,
             });
-            const openEnd = toPx({
-              x: hingeW.x + inward.x * wallLen,
-              z: hingeW.z + inward.z * wallLen,
-            });
-            // 门弧：从关位端点绕铰链 90° 扫到开位端点。
-            // SVG arc：rx=ry=门长在屏幕上的像素长度；large-arc=0；sweep 按几何方向定。
-            const arcR = wallLen * transform.scale;
-            // 铰链→关位 与 铰链→开位 是两条垂直向量；叉积符号决定 sweep 方向。
-            const cross = along.x * inward.z - along.z * inward.x;
-            const sweepFlag = cross > 0 ? 1 : 0;
-            // 门旁小字锚点：把小字放「铰链 + 1.6 倍室内法线」位置（房间内侧、离墙稍远）。
-            const labelAnchor = toPx({
-              x: hingeW.x + inward.x * (wallLen * 1.6),
-              z: hingeW.z + inward.z * (wallLen * 1.6),
-            });
+            const a1 = cap(start, -1), a2 = cap(start, 1), b1 = cap(end, -1), b2 = cap(end, 1);
+            const labelAnchor = toPx({ x: (start.x + end.x) / 2 + normal.x * 0.35,
+              z: (start.z + end.z) / 2 + normal.z * 0.35 });
             return (
               <g key={ann.id} data-door-inferred={style.dashed ? 'true' : 'false'}>
-                {/* 门扇关位（贴墙）：始终实线，推测门也不虚 */}
-                <line
-                  x1={hinge.x}
-                  y1={hinge.y}
-                  x2={closedEnd.x}
-                  y2={closedEnd.y}
-                  stroke={BRAND_GREEN}
-                  strokeWidth={1.5}
-                />
-                {/* 门扇开位（向室内打开）：始终实线 */}
-                <line
-                  x1={hinge.x}
-                  y1={hinge.y}
-                  x2={openEnd.x}
-                  y2={openEnd.y}
-                  stroke={BRAND_GREEN}
-                  strokeWidth={1.2}
-                />
-                {/* 门扇扫过的 90° 弧：真实门实线；推测门（inferred:true）虚线 */}
-                <path
-                  d={`M ${closedEnd.x} ${closedEnd.y} A ${arcR} ${arcR} 0 0 ${sweepFlag} ${openEnd.x} ${openEnd.y}`}
-                  fill="none"
-                  stroke={BRAND_GREEN}
-                  strokeWidth={1}
-                  strokeDasharray={style.dashed ? INFERRED_ARC_DASH : undefined}
-                />
-                <circle cx={hinge.x} cy={hinge.y} r={2.5} fill={BRAND_GREEN} />
-                {style.label && (
-                  <text
-                    x={labelAnchor.x}
-                    y={labelAnchor.y}
-                    fontSize={11}
-                    fill={INFERRED_LABEL_INK}
-                    textAnchor="middle"
-                  >
-                    {style.label}
-                  </text>
-                )}
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={BRAND_GREEN}
+                  strokeWidth={1.5} strokeDasharray={style.dashed ? INFERRED_DOOR_DASH : undefined} />
+                <line x1={a1.x} y1={a1.y} x2={a2.x} y2={a2.y} stroke={BRAND_GREEN} strokeWidth={1} />
+                <line x1={b1.x} y1={b1.y} x2={b2.x} y2={b2.y} stroke={BRAND_GREEN} strokeWidth={1} />
+                <text x={labelAnchor.x} y={labelAnchor.y} fontSize={11} fill={INFERRED_LABEL_INK}
+                  textAnchor="middle">{style.label}</text>
               </g>
             );
           }

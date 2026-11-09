@@ -32,9 +32,9 @@ it('completes recovery without redirecting to the editor and checks password con
   window.history.replaceState(null, '', '/reset-password');
   render(<AuthProvider><ResetPasswordPage /></AuthProvider>);
   fireEvent.change(screen.getByLabelText('注册邮箱'), { target: { value: 'test@example.com' } });
-  await waitFor(() => expect(screen.getByRole('button', { name: '发送验证码' }).hasAttribute('disabled')).toBe(false));
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送重置邮件' }).hasAttribute('disabled')).toBe(false));
   fetchMock.mockResolvedValueOnce(response({}));
-  fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
+  fireEvent.click(screen.getByRole('button', { name: '发送重置邮件' }));
   expect((await screen.findByRole('status')).textContent).toContain('如果该邮箱已注册');
   fetchMock.mockResolvedValueOnce(response(auth));
   fireEvent.change(screen.getByLabelText('六位验证码'), { target: { value: '012345' } });
@@ -61,7 +61,7 @@ it('supports an existing code after reload and blocks immediate repeat sends', a
   fireEvent.change(screen.getByLabelText('注册邮箱'), { target: { value: 'test@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: '输入已有验证码' }));
   await screen.findByLabelText('六位验证码');
-  const resend = screen.getByRole('button', { name: /重新发送验证码|秒后可重新发送/ });
+  const resend = screen.getByRole('button', { name: /重新发送邮件|秒后可重新发送/ });
   await waitFor(() => expect((resend as HTMLButtonElement).disabled).toBe(false));
   fetchMock.mockResolvedValueOnce(response({}));
   fireEvent.click(resend);
@@ -79,6 +79,67 @@ it('strips recovery credentials from the URL before routing the old callback to 
   expect(controller.getSnapshot().user).toBeNull();
 });
 
+it('routes a recovery link landing on the workspace to password reset without signing in', async () => {
+  window.history.replaceState(null, '', '/#access_token=access-test&refresh_token=refresh-test&expires_in=3600&type=recovery');
+  render(<AuthProvider><div>工作台</div></AuthProvider>);
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/reset-password'));
+  expect(window.location.hash).toBe('');
+  expect(controller.getSnapshot()).toMatchObject({ user: null, recoveryReady: true });
+});
+
+it('recognizes a recovery link when the browser session client is created after landing', async () => {
+  controller.dispose();
+  window.history.replaceState(null, '', '/#access_token=access-test&refresh_token=refresh-test&expires_in=3600&type=recovery');
+  controller = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'public-test' }), sessionStorage);
+  vi.mocked(createBackendSession).mockReturnValue(controller);
+  render(<AuthProvider><div>工作台</div></AuthProvider>);
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/reset-password'));
+  expect(controller.getSnapshot()).toMatchObject({ user: null, recoveryReady: true, writeBlocked: true });
+  expect(window.location.hash).toBe('');
+});
+
+it('keeps a recovery link on the legacy login route out of ordinary login navigation', async () => {
+  window.history.replaceState(null, '', '/auth#access_token=access-test&refresh_token=refresh-test&expires_in=3600&type=recovery');
+  render(<AuthProvider><AuthPage /></AuthProvider>);
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/reset-password'));
+  expect(navigation.replace).not.toHaveBeenCalledWith('/?login=1');
+  expect(window.location.hash).toBe('');
+  expect(controller.getSnapshot()).toMatchObject({ user: null, recoveryReady: true });
+});
+
+it('does not restore an ordinary session from an incomplete recovery link', async () => {
+  window.history.replaceState(null, '', '/#type=recovery');
+  const restore = vi.spyOn(controller, 'restoreSession');
+  render(<AuthProvider><div>工作台</div></AuthProvider>);
+  await waitFor(() => expect(window.location.hash).toBe(''));
+  expect(restore).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().user).toBeNull();
+  expect(navigation.replace).not.toHaveBeenCalledWith('/reset-password');
+});
+
+it('treats a code callback landing on reset-password as recovery, not a normal signed-in session', async () => {
+  window.history.replaceState(null, '', '/reset-password?code=synthetic-code');
+  const internal = controller as unknown as { supabase: { auth: { getSession: () => Promise<unknown> } } };
+  vi.spyOn(internal.supabase.auth, 'getSession').mockResolvedValue({ data: { session: auth }, error: null });
+  render(<AuthProvider><ResetPasswordPage /></AuthProvider>);
+  await screen.findByLabelText('新密码');
+  expect(controller.getSnapshot()).toMatchObject({ user: null, recoveryReady: true, writeBlocked: true });
+  expect(window.location.search).toBe('');
+  expect(navigation.replace).not.toHaveBeenCalledWith('/');
+});
+
+it('sends a reset link pointing directly to recovery and explains both email forms', async () => {
+  window.history.replaceState(null, '', '/reset-password');
+  render(<AuthProvider><ResetPasswordPage /></AuthProvider>);
+  fireEvent.change(screen.getByLabelText('注册邮箱'), { target: { value: 'test@example.com' } });
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送重置邮件' }).hasAttribute('disabled')).toBe(false));
+  fetchMock.mockResolvedValueOnce(response({}));
+  fireEvent.click(screen.getByRole('button', { name: '发送重置邮件' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  expect(String(fetchMock.mock.calls[0]![0])).toContain(`redirect_to=${encodeURIComponent(`${window.location.origin}/reset-password`)}`);
+  expect(await screen.findByText(/点击邮件中的重置链接/)).toBeTruthy();
+  expect(screen.getByLabelText('六位验证码')).toBeTruthy();
+});
 
 it.each([
   ['/auth', '/?login=1'],

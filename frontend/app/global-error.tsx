@@ -50,16 +50,23 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
   const [resetProblem, setResetProblem] = useState<string | null>(null);
   // Read before the reset: on a failed move this is the only copy left.
   const [lostRaw, setLostRaw] = useState<string | null>(null);
+  const [retainedRaw, setRetainedRaw] = useState<string | null>(null);
   const resetSavedLayout = () => {
     const raw = readStoredLayoutRaw();
     const outcome = resetStoredLayout();
+    if (outcome === 'recovery-pending') {
+      if (raw !== null) setRetainedRaw(raw);
+      setResetProblem('本机恢复资料尚待核对，未重置原草稿。请保留本地资料并下载草稿。');
+      return;
+    }
     // Nothing stored (or storage unreadable): nothing to lose, just reload.
     if (outcome === 'refused' && raw === null) {
       window.location.reload();
       return;
     }
     if (outcome === 'refused') {
-      setResetProblem('浏览器无法保存备份，原草稿未删除。请释放存储空间或允许本站使用存储后重试。');
+      setRetainedRaw(raw);
+      setResetProblem('浏览器无法保存备份，原草稿未删除。请先下载草稿，释放存储空间或允许本站使用存储后重试。');
       return;
     }
     if (outcome === 'lost') {
@@ -108,11 +115,11 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
                 {chunkFailure ? '重新加载' : '保留备份，开始新方案'}
               </button>
             )}
-            {lostRaw && (
+            {(lostRaw || retainedRaw) && (
               <button
                 type="button"
                 className="sc-global-error-primary"
-                onClick={() => downloadRawLayout(lostRaw, 'scendance-layout.json')}
+                onClick={() => downloadRawLayout(readStoredLayoutRaw() ?? lostRaw ?? retainedRaw!, 'scendance-layout.json')}
               >
                 下载本地草稿
               </button>

@@ -289,7 +289,8 @@ export function validateCommandPreconditions(cmd: BuildCommand, ctx: CommandCont
       };
       const trialViolations = collectViolations(trial, { floorIndex: cmd.floorIndex });
       const hit = trialViolations.find(
-        (v) => v.itemId === cmd.item.id || v.targetId === cmd.item.id,
+        (v) => (v.code === 'OUT_OF_BOUNDS' || v.code === 'WALL_INTERSECTION' || v.code === 'BBOX_OVERLAP')
+          && (v.itemId === cmd.item.id || v.targetId === cmd.item.id),
       );
       if (hit) {
         issues.push({
@@ -326,7 +327,8 @@ export function validateCommandPreconditions(cmd: BuildCommand, ctx: CommandCont
       };
       const trialViolations = collectViolations(trial, { floorIndex: cmd.floorIndex });
       const hit = trialViolations.find(
-        (v) => v.itemId === cmd.itemId || v.targetId === cmd.itemId,
+        (v) => (v.code === 'OUT_OF_BOUNDS' || v.code === 'WALL_INTERSECTION' || v.code === 'BBOX_OVERLAP')
+          && (v.itemId === cmd.itemId || v.targetId === cmd.itemId),
       );
       if (hit) {
         issues.push({
@@ -589,4 +591,12 @@ export function applyLayoutCommandWithRefusals(
 
   const nextLayout: RoomLayout = { ...cmd.layout, floors: nextFloors };
   return { ok: true, nextLayout, shapeIssues: [], preconditions: [], refused };
+}
+
+/** 整体预览只能完整应用；不可因为逐件校验失败而悄悄删掉旧物件。 */
+export function completeLayoutError(result: CommandExecutionResult): string | null {
+  if (!result.ok) return result.shapeIssues.map(issue => issue.message).join('；')
+    || result.preconditions.map(issue => issue.message).join('；') || '候选方案无法应用';
+  if (result.refused.length) return `有 ${result.refused.length} 件物料存在冲突，本次未应用。请先调整：${result.refused[0]?.message ?? '物料位置冲突'}`;
+  return null;
 }

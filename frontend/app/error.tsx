@@ -38,7 +38,7 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
   const chunkFailure = isChunkLoadError(error);
   const [storedRaw, setStoredRaw] = useState(() => (chunkFailure ? null : readStoredLayoutRaw()));
   const [suspectSave] = useState(() => !chunkFailure && crashRecurredAfterReload());
-  const [resetFailure, setResetFailure] = useState<'refused' | 'lost' | null>(null);
+  const [resetFailure, setResetFailure] = useState<'refused' | 'lost' | 'recovery-pending' | null>(null);
 
   const retryChunkLoad = () => {
     clearChunkReloadGuard();
@@ -100,7 +100,7 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
         <p className="sc-page-error-copy">{message}</p>
         {resetFailure && (
           <p role="alert" className="sc-page-error-alert">
-            {resetFailure === 'refused'
+            {resetFailure === 'recovery-pending' ? '本机恢复资料尚待核对，未重置原草稿。请保留本地资料并下载草稿。' : resetFailure === 'refused'
               ? '浏览器无法保存备份，原草稿未删除。请先下载草稿。'
               : '浏览器存储失败，请在离开此页前下载当前草稿。'}
           </p>

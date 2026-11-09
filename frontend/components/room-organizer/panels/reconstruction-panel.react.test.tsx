@@ -9,6 +9,9 @@ import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { backendSceneToLayout,createMeasuredRoomLayout,layoutToBackendScene } from '../lib/backend-adapter';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { useReconstructionPanel } from './reconstruction-panel';
+import {createSourceEditorCoordinator} from '@/lib/source-editor-coordinator';
+import {createLayoutStore} from '../hooks/use-layout-store';
+import {makeItem} from '../lib/__testfixtures__/fixtures';
 import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/source-storage',async importOriginal=>({...await importOriginal<object>(),readSourceForm:vi.fn().mockResolvedValue(undefined),storeSourceForm:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('@/lib/material-checkin-storage',()=>({readMaterialCheckins:vi.fn().mockResolvedValue(undefined)}));
@@ -29,6 +32,33 @@ beforeEach(()=>{
  vi.spyOn(controller,'getSnapshot').mockReturnValue(snapshot);
 });
 describe('reconstruction form read protection',()=>{
+ it('reports drawing edits synchronously and returns to settled only after the current form is saved',async()=>{
+  const scope='isolated-drawing-observer',coordinator=createSourceEditorCoordinator(scope);
+  const brief=coordinator.register('brief'),images=coordinator.register('images');brief.readSucceeded(brief.beginRead());images.readSucceeded(images.beginRead());
+  const view=render(<Panel controller={controller} layout={backendSceneToLayout(scene,{projectId:scope})} sourceCoordinator={coordinator} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(coordinator.snapshot().status).toBe('settled'));
+  act(()=>{fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 15 米'}});expect(coordinator.snapshot().status).toBe('unknown');});
+  await act(async()=>{await flushSourceScope(scope);});await waitFor(()=>expect(coordinator.snapshot().status).toBe('settled'));
+  view.unmount();expect(coordinator.snapshot().status).toBe('unknown');coordinator.destroy();
+ });
+ it('passes the copy lease guard through the registered drawing flush',async()=>{
+  render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(screen.getByLabelText('场地尺寸').matches(':disabled')).toBe(false));
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 15 米'}});
+  const controllerAbort=new AbortController();const guard={kind:'ordinary' as const,signal:controllerAbort.signal,assertStillHeld(){}};
+  await act(async()=>{await flushSourceScope(projectId,guard);});
+  expect(storeSourceForm).toHaveBeenCalledWith(projectId,expect.objectContaining({text:'总宽 15 米'}),guard);
+ });
+ it('keeps the drawing input when its queued guarded autosave loses the lease',async()=>{
+  const abort=new AbortController(),guard={kind:'ordinary' as const,signal:abort.signal,assertStillHeld(){if(abort.signal.aborted)throw new Error('租约失效');}};
+  vi.mocked(storeSourceForm).mockImplementation(async(_scope,_value,received)=>{received?.assertStillHeld();});
+  render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF} sourceWriteGuard={guard}/>);
+  await waitFor(()=>expect(screen.getByLabelText('场地尺寸').matches(':disabled')).toBe(false));vi.useFakeTimers();
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'失锁前的图纸尺寸'}});abort.abort();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(300);});
+  expect(storeSourceForm).toHaveBeenCalledWith(projectId,expect.objectContaining({text:'失锁前的图纸尺寸'}),guard);
+  expect((screen.getByLabelText('场地尺寸') as HTMLTextAreaElement).value).toBe('失锁前的图纸尺寸');
+ });
  it('never overwrites saved registration after a failed read, including an explicit flush, and retries the original data',async()=>{
   const measured=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});
   const original={width:'12',depth:'8',height:'3',text:'原图纸说明',constraints:[],registration:{sourceId:'original-reference',
@@ -106,12 +136,24 @@ describe('manual editing of an applied venue',()=>{
   expect((screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件') as HTMLInputElement).checked).toBe(false);
   fireEvent.change(screen.getByLabelText('门洞 1 · 宽度（米）'),{target:{value:'1.4'}});confirm();
   expect(apply).toHaveBeenCalledOnce();const next=apply.mock.calls[0]![0] as RoomLayout;
+  expect(apply.mock.calls[0]![1]).toEqual({expectedBase:trial.base});expect(apply.mock.calls[0]![1].expectedBase).not.toBe(trial.base);
   expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
   trial.view.rerender(<Panel {...trial.props} layout={next}/>);
   const saved=layoutToBackendScene(next);
   expect(saved.venue.width).toBe(15);if(saved.schemaVersion!==2)throw new Error('v2');expect(saved.structure.openings[0]!.width).toBe(1.4);
   expect(screen.getByText(/场地修改已应用，可撤销/)).toBeDefined();expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
   expect(screen.getByText(/已识别：.*总宽 15 米/)).toBeDefined();
+ });
+ it.each(['lock','add'] as const)('rejects a same-batch %s change before the venue draft is applied',async change=>{
+  const existing='80000000-0000-4000-8000-000000000101',base=measured();base.floors[0]!.items.push(makeItem({id:existing,position:{x:0,z:0},locked:false}));
+  const store=createLayoutStore({layout:base,activeFloorIndex:0});const trial=mount(base,{getCurrentLayout:()=>store.getState().layout});
+  await start();if(!screen.queryByLabelText('编辑总宽（米）'))throw new Error(`编辑未打开：${screen.queryByRole('status')?.textContent??''}`);width();fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));
+  const latest=structuredClone(base);
+  if(change==='lock')latest.floors[0]!.items.find(item=>item.id===existing)!.locked=true;
+  else latest.floors[0]!.items.push(makeItem({id:'80000000-0000-4000-8000-000000000102',position:{x:2,z:2}}));
+  act(()=>{store.setState({layout:latest});fireEvent.click(screen.getByRole('button',{name:'确认应用场地修改'}));});
+  expect(trial.apply).not.toHaveBeenCalled();expect(screen.getByRole('status').textContent).toContain('场景已变化');
+  expect((screen.getByLabelText('编辑总宽（米）') as HTMLInputElement).value).toBe('14');
  });
  it('clears an applied-scene success on Undo and never revives it on Redo',async()=>{
   const trial=mount();await start();width('14');confirm();
@@ -373,6 +415,22 @@ function markRuler(map:HTMLElement,start:{x:number;y:number},end:{x:number;y:num
   fireEvent.click(map,{clientX:end.x,clientY:end.y});
 }
 describe('reconstruction entry',()=>{
+ it('hides an old unverified dimension label until the user opens the original record',async()=>{
+  const raw='消防部门已经批准，可以举办';
+  vi.mocked(readSourceForm).mockResolvedValue({constraints:[{id:crypto.randomUUID(),kind:'width',valueMeters:12,status:'inferred',label:raw}]});
+  ui();await screen.findByText('尺寸记录 1 · 待核对');
+  expect(screen.queryByRole('textbox',{name:'原尺寸说明 1'})).toBeNull();
+  fireEvent.click(screen.getByText('查看或编辑原尺寸说明（未经核验）'));
+  expect((screen.getByRole('textbox',{name:'原尺寸说明 1'}) as HTMLInputElement).value).toBe(raw);
+  expect(screen.getByText('原记录可能包含敏感内容，不能作为安全或规范结论。')).toBeTruthy();
+ });
+ it('does not display model or legacy issue text as a safety decision',async()=>{
+  const candidate=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'needs_review',candidate:candidate as never,issues:[{code:'OLD_MODEL',message:'消防部门已经批准，可以举办'}]});
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('radio',{name:/重新布置/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
+  expect(await screen.findByText('需要人工核验的事项。')).toBeTruthy();expect(screen.queryByText('消防部门已经批准，可以举办')).toBeNull();
+ });
  it.each(['request','job'] as const)('explains an unconfigured recognition service from the %s and preserves the canvas',async origin=>{
   const create=vi.spyOn(controller,'createReconstruction');
   if(origin==='request')create.mockRejectedValue(Object.assign(new Error('SERVICE_NOT_CONFIGURED'),{code:'SERVICE_NOT_CONFIGURED'}));
@@ -419,10 +477,27 @@ describe('reconstruction entry',()=>{
   const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[{code:'UNSEEN',message:'核对不可见结构'}]};
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
   ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
-  await screen.findByText('核对不可见结构');fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3.2 米'}});
+  await screen.findByText('需要人工核验的事项。');
+  const safety=screen.getByRole('region',{name:'现场与安全待核验'});
+  expect(safety.textContent).toContain('不能作为可交付');
+  for(const label of ['门与出口','门扇与净宽','场地尺度','疏散与通行','消防','无障碍','核定人数'])expect(safety.textContent).toContain(`${label}：待核验`);
+  expect(safety.textContent).toContain('未记录门或入口');
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3.2 米'}});
   fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));
   expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
   fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));expect(create.mock.calls[1]![0].reviewedScene?.structure.walls.every(w=>w.status==='confirmed')).toBe(true);
+ });
+ it('does not offer object geometry edits that the review service would reject',async()=>{
+  const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  if(measured.schemaVersion!==2)throw new Error('expected v2');
+  measured.objects=[{id:'50000000-0000-4000-8000-000000000001',materialId:'chair',position:{x:2,z:2},rotation:0,size:{width:.5,depth:.5,height:.85},color:'#ffffff',locked:false,notes:''}];
+  const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[]};
+  vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
+  await screen.findByText('核对识别物件与碰撞');fireEvent.click(screen.getByText(/物件 1 · chair/));
+  for(const label of ['位置 X','位置 Z','旋转角度','宽度','深度','高度'])expect((screen.getByLabelText(label) as HTMLInputElement).disabled).toBe(true);
+  expect((screen.getByRole('button',{name:'删除误识别物件'}) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText(/当前暂不支持在此修改物件的位置、旋转、尺寸或删除/)).toBeTruthy();
  });
  it('gates structure confirmation behind scale confirmation using the longest exterior wall',async()=>{
   const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
@@ -432,6 +507,9 @@ describe('reconstruction entry',()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
   ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   await screen.findByText('核对识别结构');
+  expect(screen.getByText(/结构和物件的手动修改暂不可用/)).toBeDefined();
+  fireEvent.click(screen.getByRole('button',{name:'编辑墙 1'}));
+  expect((screen.getByLabelText('起点 X') as HTMLInputElement).disabled).toBe(true);
   // 清空文字尺寸，回到「识别完成但比例未确认」的状态
   fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:''}});
   await screen.findByText('认出 4 面墙 · 0 扇门 · 0 根柱');
@@ -444,6 +522,8 @@ describe('reconstruction entry',()=>{
   fireEvent.click(screen.getByRole('button',{name:'确认长度并锁定比例'}));
   await screen.findByText(/比例已锁定。可再点选图中另一面墙/);
   expect(screen.queryByText(/请先确认比例/)).toBeNull();
+  expect((screen.getByRole('checkbox',{name:/我已核对所有墙段/}) as HTMLInputElement).checked).toBe(false);
+  fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));
   fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));
   expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
   fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));
@@ -484,6 +564,79 @@ describe('reconstruction entry',()=>{
   fireEvent.click(screen.getByRole('button',{name:'确认标尺并进场地'}));
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
  });
+ it('标尺只确认参考长度，推测墙门柱和尺寸须人工逐项核验',async()=>{
+  const candidate=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  if(candidate.schemaVersion!==2)throw new Error('expected v2');
+  candidate.structure.walls=candidate.structure.walls.map(w=>({...w,status:'inferred' as const}));
+  candidate.structure.openings=[{id:'50000000-0000-4000-8000-000000000001',wallId:candidate.structure.walls[0]!.id,kind:'door',offset:2,width:1.2,height:2.1,sillHeight:0,status:'inferred'}];
+  candidate.structure.columns=[{id:'50000000-0000-4000-8000-000000000002',position:{x:4,z:4},size:{width:.4,depth:.4,height:3},rotation:0,status:'detected'}];
+  candidate.dimensions=[{id:'50000000-0000-4000-8000-000000000003',kind:'width',label:'模型总宽',valueMeters:12,status:'detected'},
+    {id:'50000000-0000-4000-8000-000000000004',kind:'depth',label:'模型总深',valueMeters:8,status:'inferred'}];
+  const before=structuredClone(candidate),job:ReconstructionJob={id:jobId,state:'needs_review',candidate,issues:[]};
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job),applyRemote=vi.spyOn(controller,'applySceneProposal');
+  vi.spyOn(controller,'uploadSource').mockResolvedValue({assetId,kind:'floorplan',name:'平面图.png',width:1000,height:600});
+  const apply=vi.fn(),floorplan={...image,kind:'floorplan' as const,name:'平面图.png',blob:new Blob(['plan'])};
+  render(<Panel controller={controller} layout={layout} onApply={apply} images={[floorplan]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'保留结构'}}/>);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
+  markRuler(screen.getByRole('button',{name:'在平面图上标记标尺两个端点'}),{x:100,y:60},{x:900,y:60});
+  await waitFor(()=>expect((screen.getByLabelText('标尺长度（米）') as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('标尺长度（米）'),{target:{value:'10'}});fireEvent.click(screen.getByRole('button',{name:'确认标尺并进场地'}));
+  await screen.findByText('核对识别结构');expect((screen.getByRole('checkbox',{name:/我已核对所有墙段/}) as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByText(/门 1 · 墙 1 · 待核对/)).toBeTruthy();expect(create).toHaveBeenCalledTimes(1);expect(applyRemote).not.toHaveBeenCalled();expect(apply).not.toHaveBeenCalled();expect(candidate).toEqual(before);
+  fireEvent.click(screen.getByRole('button',{name:'确认尺寸 2'}));
+  fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));
+  await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));
+  const request=create.mock.calls[1]![0];
+  expect(request.dimensions).toContainEqual(expect.objectContaining({label:'模型总宽',status:'confirmed'}));
+  expect(request.dimensions).toContainEqual(expect.objectContaining({label:'模型总深',status:'inferred'}));
+  expect(request.dimensions).toContainEqual(expect.objectContaining({label:'图纸标尺',status:'confirmed'}));
+  expect(apply).not.toHaveBeenCalled();
+ });
+ it('标尺后的 ready 候选仍等待人工确认，不自动应用',async()=>{
+  const candidate=layoutToBackendScene(layout);
+  const proposal={id:'60000000-0000-4000-8000-000000000001',project_id:projectId,session_id:controller.getSnapshot().lease!.sessionId,generation:1,base_revision:1,local_revision:0,base_hash:'test',base_scene:candidate,candidate,expires_at:new Date(Date.now()+100000).toISOString(),applied_at:null,explanation:'待核对候选'} as SceneProposal;
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal});
+  const applyRemote=vi.spyOn(controller,'applySceneProposal');vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{},assetNames:{}});
+  vi.spyOn(controller,'uploadSource').mockResolvedValue({assetId,kind:'floorplan',name:'平面图.png',width:1000,height:600});
+  const apply=vi.fn(),floorplan={...image,kind:'floorplan' as const,name:'平面图.png',blob:new Blob(['plan'])};
+  render(<Panel controller={controller} layout={layout} onApply={apply} images={[floorplan]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
+  markRuler(screen.getByRole('button',{name:'在平面图上标记标尺两个端点'}),{x:100,y:60},{x:900,y:60});
+  await waitFor(()=>expect((screen.getByLabelText('标尺长度（米）') as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('标尺长度（米）'),{target:{value:'10'}});fireEvent.click(screen.getByRole('button',{name:'确认标尺并进场地'}));
+  await screen.findByRole('button',{name:'确认应用并保存'});expect(create).toHaveBeenCalledTimes(1);expect(applyRemote).not.toHaveBeenCalled();expect(apply).not.toHaveBeenCalled();
+ });
+ it('服务误报 ready 但候选仍有推测门时拒绝直接应用并呈现核对',async()=>{
+  const candidate=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));if(candidate.schemaVersion!==2)throw new Error('expected v2');
+  candidate.structure.openings=[{id:'50000000-0000-4000-8000-000000000001',wallId:candidate.structure.walls[0]!.id,kind:'door',offset:2,width:1.2,height:2.1,sillHeight:0,status:'inferred'}];
+  const proposal={id:'60000000-0000-4000-8000-000000000001',project_id:projectId,session_id:controller.getSnapshot().lease!.sessionId,generation:1,base_revision:1,local_revision:0,base_hash:'test',base_scene:layoutToBackendScene(layout),candidate,expires_at:new Date(Date.now()+100000).toISOString(),applied_at:null,explanation:'待核对'} as SceneProposal;
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal}),applyRemote=vi.spyOn(controller,'applySceneProposal');
+  const apply=vi.fn();render(<Panel controller={controller} layout={layout} onApply={apply} images={[image]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
+  await screen.findByText('核对识别结构');expect(screen.getByRole('alert').textContent).toContain('待核对的结构或尺寸');
+  expect(screen.queryByRole('button',{name:'确认应用并保存'})).toBeNull();expect(create).toHaveBeenCalledOnce();expect(applyRemote).not.toHaveBeenCalled();expect(apply).not.toHaveBeenCalled();
+ });
+ it('旧默认创意开启值没有授权标记时不让模型自行扩展',async()=>{
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
+  const props={controller,layout,onApply:vi.fn(),images:[image],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,allowIdeas:true,ideasConfirmed:false,description:'场地'} };
+  const view=render(<Panel {...props}/>);await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(1));
+  expect(create.mock.calls[0]![0].instruction).toContain('只实现明确要求');expect(create.mock.calls[0]![0].instruction).not.toContain('直接设计并布置');
+  view.rerender(<Panel {...props} brief={{...props.brief,ideasConfirmed:true}}/>);
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));
+  expect(create.mock.calls[1]![0].instruction).toContain('直接设计并布置');
+ });
+ it('未确认的活动与人数不会作为事实发送，明确确认后才发送',async()=>{
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
+  const props={controller,layout,onApply:vi.fn(),images:[image],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'只读示意'}};
+  const view=render(<Panel {...props}/>);await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(1));
+  expect(create.mock.calls[0]![0].instruction).toContain('活动：待确认；人数：待确认');
+  view.rerender(<Panel {...props} brief={{...props.brief,event:'真实活动',eventConfirmed:true,guests:40,guestsConfirmed:true}}/>);
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));
+  expect(create.mock.calls[1]![0].instruction).toContain('活动：真实活动；人数：40');
+ });
  it('auto-selects redesign mode when a photo is uploaded',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
   const photo={...image,kind:'photo' as const,name:'现场.png'};
@@ -510,7 +663,10 @@ describe('reconstruction entry',()=>{
 
 describe('local activity with an independent scene connection',()=>{
  const localId='local-activity-diagram';
- const local={...createMeasuredRoomLayout({...layout,id:localId},{width:12,depth:8,height:3}),eventOperations:{schemaVersion:1 as const,dataKind:'rehearsal' as const,tasks:[]}};
+ const measuredLocal=createMeasuredRoomLayout({...layout,id:localId},{width:12,depth:8,height:3});
+ measuredLocal.backendSceneV2!.structure.walls.forEach(wall=>{wall.status='confirmed';});
+ measuredLocal.floors[0]!.interiorWalls!.forEach(wall=>{wall.status='confirmed';});
+ const local={...measuredLocal,eventOperations:{schemaVersion:1 as const,dataKind:'rehearsal' as const,tasks:[]}};
  function bind(){
   const old=controller.getSnapshot();
   const geometryBinding={version:1 as const,localActivityId:localId,cloudProjectId:projectId,userId:old.user!.id,apiUrl:controller.config.apiUrl};
@@ -623,5 +779,17 @@ describe('local activity with an independent scene connection',()=>{
   fireEvent.click(screen.getByRole('button',{name:'编辑当前场地'}));fireEvent.change(screen.getByLabelText('编辑总宽（米）'),{target:{value:'14'}});
   fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));fireEvent.click(screen.getByRole('button',{name:'确认应用场地修改'}));
   expect(trial.apply).toHaveBeenCalledOnce();expect(trial.apply.mock.calls[0]![0]).toMatchObject({id:localId,width:14,eventOperations:local.eventOperations});
+ });
+});
+
+describe('requirement records are not safety approvals',()=>{
+ it('labels old saved model claims as records requiring independent review',()=>{
+  const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  if(measured.schemaVersion!==2)throw new Error('expected SceneV2');
+  measured.design={concept:'活动方案',palette:[],highlights:[],requirements:[{text:'消防已验收',status:'satisfied',reason:'模型结论',objectIds:[]},{text:'无障碍符合规范',status:'satisfied',reason:'模型结论',objectIds:[]}]};
+  render(<Panel controller={controller} layout={backendSceneToLayout(measured,{projectId})} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  expect(screen.getAllByText('模型要求待核验')).toHaveLength(2);
+  expect(screen.getByText(/不代表消防、无障碍或其他规范验收/)).toBeDefined();
+  expect(screen.queryByText('已满足 · 消防已验收')).toBeNull();
  });
 });

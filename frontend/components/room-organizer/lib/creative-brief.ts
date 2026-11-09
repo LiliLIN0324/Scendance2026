@@ -1,14 +1,22 @@
 import { preserveCurrentActivity } from '../../../lib/production-plan';
 import type { RoomLayout } from './types';
 import { HEADCOUNT_MAX } from './workbench-agent';
+import type { LegacyBriefRecord } from './legacy-brief';
 
 export interface CreativeBrief {
+  /** Preserved older values, never a confirmation or model instruction. */
+  legacyBriefRecord?: LegacyBriefRecord | undefined;
+  /** Previously stored but explicitly unconfirmed; may be a default. */
+  unconfirmedSavedBrief?: LegacyBriefRecord | undefined;
   event: string;
+  eventConfirmed?: boolean | undefined;
   hasFloorplan?: boolean;
   guests: number;
+  guestsConfirmed?: boolean | undefined;
   description: string;
   mustHave: string;
   allowIdeas: boolean;
+  ideasConfirmed?: boolean | undefined;
   venueConditions?: string;
   style?: string;
   palette?: string;
@@ -17,8 +25,8 @@ export interface CreativeBrief {
 /** 左栏活动类型的固定选项；聊天说出的其他类型会作为当前值单独回显，不改这份清单。 */
 export const BRIEF_EVENT_OPTIONS = ['品牌快闪', '露营派对', '工作坊', '小型黑客松', '展览市集', '婚礼聚会', '其他活动'] as const;
 export const INITIAL_BRIEF: CreativeBrief = {
-  event: '品牌快闪', guests: 24,
-  description: '', mustHave: '', allowIdeas: true, venueConditions: '', style: '', palette: '', atmosphere: '',
+  event: '品牌快闪', eventConfirmed: false, guests: 24, guestsConfirmed: false,
+  description: '', mustHave: '', allowIdeas: false, ideasConfirmed: false, venueConditions: '', style: '', palette: '', atmosphere: '',
 };
 export const CREATIVE_BRIEF_DESCRIPTION_LIMIT = 1800;
 const MANUAL_BRIEF_HEADING = '【创意简报与观众体验】';
@@ -113,8 +121,8 @@ function eventFocus(event: string): EventFocus {
  * 参考文字，不是空提纲，也不是客户原话。全部来自本机规则。
  */
 export function buildBriefReference(brief: CreativeBrief): string {
-  const event = brief.event.trim() || '这场活动';
-  const guests = Number.isInteger(brief.guests) && brief.guests > 0 ? brief.guests : null;
+  const event = brief.eventConfirmed === true ? brief.event.trim() || '这场活动' : '这场活动';
+  const guests = brief.guestsConfirmed === true && Number.isInteger(brief.guests) && brief.guests > 0 ? brief.guests : null;
   const focus = eventFocus(event);
   const mustHave = brief.mustHave.trim();
   const venue = brief.venueConditions?.trim() ?? '';
@@ -162,17 +170,17 @@ export const IDEA_CARDS = [
 /** Current v1 accepts text only; image bytes must never be implied to reach the model. */
 export function briefInstruction(brief: CreativeBrief, width: number, depth: number): string {
   if (!brief.description.trim()) throw new Error('请先描述客户希望举办怎样的活动。');
-  if (!Number.isInteger(brief.guests) || brief.guests < 1 || brief.guests > HEADCOUNT_MAX) throw new Error(`当前生成服务支持 1–${HEADCOUNT_MAX} 人，请填写范围内的整数。`);
+  if (brief.guestsConfirmed === true && (!Number.isInteger(brief.guests) || brief.guests < 1 || brief.guests > HEADCOUNT_MAX)) throw new Error(`当前生成服务支持 1–${HEADCOUNT_MAX} 人，请填写范围内的整数。`);
   const result = [
-    `请为客户设计一套完整的${brief.event}场景布置方案。场地${width}×${depth}米，预计${brief.guests}人。`,
+    `请为客户设计一套完整的${brief.eventConfirmed === true ? brief.event : '活动'}场景布置方案。场地${width}×${depth}米，${brief.guestsConfirmed === true ? `预计${brief.guests}人` : '人数尚未确认'}。`,
     `客户需求：${brief.description.trim()}`,
     brief.mustHave.trim() ? `必须满足：${brief.mustHave.trim()}` : '',
     brief.venueConditions?.trim() ? `用户确认的现场条件（文字输入，非图片识别）：${brief.venueConditions.trim()}。必须保留出入口与固定设施，不得覆盖。` : '',
     brief.style?.trim() ? `风格要求：${brief.style.trim()}` : '',
     brief.palette?.trim() ? `配色要求：${brief.palette.trim()}` : '',
     brief.atmosphere?.trim() ? `氛围要求：${brief.atmosphere.trim()}；超出现有三种灯光预设的能力仅作为建议说明。` : '',
-    brief.allowIdeas ? '在满足客户需求的基础上，主动布置适合主题的亮点、分区、装饰和氛围，形成完整候选后由客户整体确认。明确说明每个亮点的用途与对应物件。' : '只围绕客户明确提出的要求规划，不自行扩展需求。',
-    '保留锁定对象。提出候选修改，不声称已经应用或保存；应用方式依据本轮用户指令和服务端规则。依据当前资源库优先选用真实物料；缺少所需物件时，可通过桌、椅、柜台、地台、背景板和柜体的参数化工具建模。工具不支持的造型须说明缺项，不得用桌椅冒充，也不得未经确认替换原要求。',
+    brief.ideasConfirmed === true && brief.allowIdeas ? '在满足客户需求的基础上，主动布置适合主题的亮点、分区、装饰和氛围，形成完整候选后由客户整体确认。明确说明每个亮点的用途与对应物件。' : '只围绕客户明确提出的要求规划，不自行扩展需求。',
+    '保留锁定对象。提出候选修改，不声称已经应用或保存；应用方式依据本轮用户指令和服务端规则。优先复用已授权数字模型，型号、实物库存和可用性待核验；缺少所需物件时，可通过桌、椅、柜台、地台、背景板和柜体的参数化工具建模。工具不支持的造型须说明缺项，不得用桌椅冒充，也不得未经确认替换原要求。',
     '现场照片尚未提交给模型；不能声称已经识别、测量或参考了图片内容。',
   ].filter(Boolean).join('\n');
   if (result.length > 12000) throw new Error('需求内容过长，请精简后再生成。');

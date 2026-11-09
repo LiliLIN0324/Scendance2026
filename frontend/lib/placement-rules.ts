@@ -1,4 +1,5 @@
 import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import { isStructuralMarker } from '../components/room-organizer/lib/structural-layout';
 
 /** 几何判据容差（米）。所有数字与相交判断都用同一把尺子。 */
 const EPS = 1e-6;
@@ -48,7 +49,8 @@ export function itemCorners(item: FurnitureItem): Array<{ x: number; z: number }
   const cz = item.position?.z ?? 0;
   const hw = item.width / 2;
   const hd = item.depth / 2;
-  const theta = item.rotation ?? 0;
+  // Editor rotation is Three.js Y rotation: positive turns +X towards -Z.
+  const theta = -(item.rotation ?? 0);
   const c = Math.cos(theta);
   const s = Math.sin(theta);
   // 局部角点顺序：BL → BR → TR → TL（在 x-z 平面内为顺时针）。
@@ -123,9 +125,12 @@ function axesOf(poly: Pt[]): Pt[] {
 function polygonsOverlap(a: Pt[], b: Pt[]): boolean {
   const axes = [...axesOf(a), ...axesOf(b)];
   for (const axis of axes) {
+    if (Math.hypot(axis.x, axis.z) < EPS) continue;
     const pa = projectAlong(a, axis);
     const pb = projectAlong(b, axis);
-    if (pa.max < pb.min - EPS || pb.max < pa.min - EPS) {
+    // Match the backend SAT's 1e-8 unnormalized projection tolerance; this is
+    // numerical noise, not a clearance allowance. Exact contact has no area.
+    if (pa.max <= pb.min + 1e-8 || pb.max <= pa.min + 1e-8) {
       return false;
     }
   }
@@ -183,7 +188,7 @@ function isLowProfile(item: FurnitureItem): boolean {
 
 /** structural-* 标记件（柱/墙/门洞等结构占位）：跳过重叠判据。 */
 function isStructural(item: FurnitureItem): boolean {
-  return typeof item.type === 'string' && item.type.startsWith('structural');
+  return isStructuralMarker(item) || (typeof item.type === 'string' && item.type.startsWith('structural'));
 }
 
 /**
@@ -212,6 +217,8 @@ function checkAgainstFloor(
   const violations: Violation[] = [];
   const floor = layout.floors[floorIndex];
   if (!floor) return violations;
+  // 门洞等结构标记位于墙线上，其几何由结构检查处理，不是越界家具。
+  if (isStructuralMarker(candidate)) return violations;
 
   const poly = itemCorners(candidate);
 

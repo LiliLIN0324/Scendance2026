@@ -1,0 +1,35 @@
+/** Ephemeral, loopback-only trial backend. Never connects to an existing database. */
+import {startLocalServer} from '../tests/local-server.ts';
+import {createChatTrialProvider} from './local-chat-trial-provider.ts';
+import {syntheticChatTransport,syntheticBailianTransport} from './local-chat-trial-synthetic.ts';
+import {SYNTHETIC_LUX3D_CONFIG,startSyntheticLux3dWorker} from './local-lux3d-synthetic.ts';
+import {localLux3dChinaFetch,localLux3dLiveConfig,startLocalLux3dWorker} from './local-lux3d-live.ts';
+
+const origin=process.env.SCENDANCE_CHAT_TRIAL_ORIGIN??'';
+if(!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(origin)||new URL(origin).port==='4186')throw Error('仅允许独立的本机试用页面。');
+const mode=process.env.SCENDANCE_CHAT_TRIAL_MODE??'synthetic';
+const bailian=process.env.SCENDANCE_CHAT_TRIAL_PROVIDER==='bailian-qwen';
+const bailianModel=process.env.SCENDANCE_BAILIAN_MODEL??'';
+if(bailian&&!/^qwen[a-z0-9.-]{1,80}$/i.test(bailianModel))throw Error('请配置受支持的百炼 Qwen 模型。');
+if(process.env.SCENDANCE_CHAT_TRIAL_PROVIDER&&!bailian)throw Error('本机模型供应商配置无效。');
+const luxSynthetic=process.env.SCENDANCE_LUX3D_SYNTHETIC==='1';
+if(luxSynthetic&&mode!=='synthetic')throw Error('模拟 Lux3D 只能在模拟试用中启用。');
+const luxLive=process.env.SCENDANCE_LUX3D_ENABLED==='1';
+if(luxLive&&(mode!=='live'||luxSynthetic))throw Error('真实 Lux3D 需要明确的本机真实试用。');
+const luxInput=luxLive?{key:process.env.SCENDANCE_LUX3D_KEY??'',termsUrl:process.env.SCENDANCE_LUX3D_TERMS_URL??'',reviewedAt:process.env.SCENDANCE_LUX3D_REVIEWED_AT??'',reservationCents:process.env.SCENDANCE_LUX3D_RESERVATION_CENTS??''}:null;
+for(const name of ['SCENDANCE_LUX3D_KEY','SCENDANCE_LUX3D_TERMS_URL','SCENDANCE_LUX3D_REVIEWED_AT','SCENDANCE_LUX3D_RESERVATION_CENTS'])delete process.env[name];
+const luxLiveConfig=luxInput?localLux3dLiveConfig(luxInput):null;
+if(luxInput)luxInput.key='';
+const key=mode==='synthetic'?'synthetic-only':process.env.SCENDANCE_CHAT_TRIAL_KEY??'';
+delete process.env.SCENDANCE_CHAT_TRIAL_KEY;
+if(!['synthetic','live'].includes(mode)||mode==='live'&&(process.env.SCENDANCE_CHAT_TRIAL_CONFIRM!=='EXPLICIT_TRIAL' || !key || key.length>4096 || /[^\x21-\x7e]/.test(key)))throw Error('本机试用配置无效。');
+const provider=createChatTrialProvider(mode==='synthetic'?(bailian?syntheticBailianTransport:syntheticChatTransport):globalThis.fetch,(used,state,diagnostic)=>process.send?.({type:'usage',used,state,diagnostic}),110_000,true,bailian?{provider:'bailian-qwen',model:bailianModel}:undefined);
+const config:Record<string,string>={...(bailian?{AGENT_CHAT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',AGENT_CHAT_MODEL:bailianModel,AGENT_CHAT_PROFILE:'bailian-qwen'}:{AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash',AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_REASONING_EFFORT:'low',MINIMAX_AGENT_TOOLS_ENABLED:'1'}),AGENT_CHAT_KEY:key,BRIEF_CONVERSATION_ENABLED:'1',ASSISTANT_CHAT_ENABLED:'1',...(luxSynthetic?SYNTHETIC_LUX3D_CONFIG:{}),...(luxLiveConfig??{})};
+const server=await startLocalServer(0,provider.fetcher,{origins:[origin],env:name=>config[name],backgroundAgentRuns:true,agentTrace:true,lux3dTextOnly:luxSynthetic||luxLive});
+const worker=luxSynthetic?startSyntheticLux3dWorker(server.backend,name=>config[name]):luxLiveConfig?startLocalLux3dWorker(server.backend,name=>config[name],localLux3dChinaFetch(luxLiveConfig.LUX3D_API_KEY!)):null;
+process.send?.({type:'ready',url:server.url,mode});
+process.on('message',message=>{if(message&&typeof message==='object'&&'type' in message&&message.type==='resume_trial')provider.resume();});
+let closePromise:Promise<void>|null=null;
+const close=()=>closePromise??=(async()=>{await worker?.stop();await server.close();})();
+for(const signal of ['SIGINT','SIGTERM'] as const)process.once(signal,()=>{void close().then(()=>process.exit());});
+process.once('disconnect',()=>{void close().then(()=>process.exit());});

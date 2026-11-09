@@ -1,6 +1,6 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect,vi } from 'vitest';
 import { database,owner,scene,chair,session } from './fixtures.ts';
-import { generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
+import { chatRequest,generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
 import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 import { packGltf } from '../supabase/functions/_shared/models.ts';
 import { tetrahedron } from './model-fixture.ts';
@@ -9,6 +9,26 @@ const env:Env=key=>({HUNYUAN_API_MODE:'legacy',HUNYUAN_API_KEY:'test-key',DEEPSE
 const response=(body:unknown)=>new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
 
 describe('real provider request formats with controlled responses',()=>{
+  it('keeps legacy proposal generation on its existing provider when the brief selector is enabled',async()=>{
+    const config:Record<string,string>={TOKENDANCE_API_KEY:'old-fixture-secret',BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'product-fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-example'};
+    const input={projectId:crypto.randomUUID(),requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),instruction:'Move',mode:'modify' as const,selectedIds:[]};
+    const fetcher=vi.fn<Fetcher>(async(url,init)=>{
+      expect(String(url)).toBe('https://tokendance.space/gateway/v1/chat/completions');
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer old-fixture-secret');
+      expect(JSON.parse(String(init?.body))).toMatchObject({model:'deepseek-v4.1-flash',thinking:{type:'disabled'},response_format:{type:'json_object'},max_tokens:4096});
+      return response({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'No changes',commands:[]})}}],usage:{total_tokens:10}});
+    });
+    const result=await generateProposal(input,key=>config[key],async()=>{},fetcher);expect(result.commands).toEqual([]);expect(fetcher).toHaveBeenCalledOnce();
+    delete config.BAILIAN_PRODUCT_KEY;fetcher.mockClear();
+    await generateProposal(input,key=>config[key],async()=>{},fetcher);expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it('does not silently use MiniMax for agent tools or fall back when its configuration is incomplete',()=>{
+    const config:Record<string,string>={AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash',TOKENDANCE_API_KEY:'other-key'};
+    expect(()=>chatRequest(key=>config[key],{messages:[],tools:[]})).toThrow('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW');
+    expect(()=>chatRequest(key=>config[key],{messages:[],tools:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW');
+    delete config.AGENT_CHAT_KEY;
+    expect(()=>chatRequest(key=>config[key],{messages:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_INCOMPLETE');
+  });
   it('uses documented Hunyuan header, 3.0 LowPoly and async JobId',async()=>{
     const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{expect(init?.headers).toMatchObject({Authorization:'test-key'});expect(JSON.parse(init?.body as string)).toMatchObject({Model:'3.0',GenerateType:'LowPoly'});return response({Response:{JobId:'job-1'}});}) as unknown as Fetcher;
     expect((await hunyuan(env,fetcher).submit('Prop')).JobId).toBe('job-1');

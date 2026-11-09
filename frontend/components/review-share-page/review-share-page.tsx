@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomId } from '../room-organizer/lib/ids';
 import {
   pinSubject,
@@ -15,20 +15,23 @@ import {
   type LoadedReviewPlan,
 } from './load-plan';
 import { itemNames, ReviewPlanSheet } from './review-plan-sheet';
-import { markReviewReturned, readReviewReturn } from './review-return';
+import { markReviewReturned, readReviewReturn, REVIEW_RETURN_STORAGE_KEY } from './review-return';
 import {
   appendReviewSharePin,
   readReviewSharePins,
+  readExactReviewSharePins,
   REVIEW_SHARE_PIN_STORAGE_KEY,
 } from './share-pins';
 import type { FurnitureItem } from '../room-organizer/lib/types';
+import { createReviewFeedbackReceipt, inspectReviewFeedbackReceipt, reviewVersionForHash, type ReceiptPin } from './review-feedback-receipt';
 
 const PIN_ERRORS = {
   text: '请写一句意见，最多 80 个字。',
-  full: '这份方案的演示钉已有 80 条，新的钉没有保存。',
+  full: '这份方案已有 80 条意见，新的意见没有保存。',
   storage: '浏览器没有收下这条钉。',
   plan: '这条钉没有对应的方案，没有保存。',
   draft: '落钉位置无效，请再点一次平面。',
+  unknown: '意见可能已保存，请刷新核对后再操作，暂不要重复提交。',
 } as const;
 
 type Phase =
@@ -45,19 +48,28 @@ export function ReviewSharePage(): JSX.Element {
   const [pinError, setPinError] = useState('');
   const [returned, setReturned] = useState(false);
   const [returnNote, setReturnNote] = useState('');
+  const [planVersion,setPlanVersion]=useState<string|null>(null);
+  const [exportNote,setExportNote]=useState('');
+  const [pinsUsable,setPinsUsable]=useState(true);
+  const linkHashRef=useRef<string|null>(null),pinWritePending=useRef(false);
 
   useEffect(() => {
     let active = true;
     let ticket = 0;
     const load = () => {
       const current = ++ticket;
+      linkHashRef.current=null;
       setPhase({ kind: 'loading' });
-      const localLayout = readLocalReviewLayout(safeStorage());
+      setPlanVersion(null);setExportNote('');setPinsUsable(true);
+      const shareHash=window.location.hash;
+      const example=new URLSearchParams(window.location.search).get('example');
+      const isolatedExample=!shareHash && (example==='sharing'||example==='hall-d5');
+      const localLayout = isolatedExample ? null : readLocalReviewLayout(safeStorage());
       void loadReviewPlan({
-        hash: window.location.hash,
+        hash: shareHash,
         search: window.location.search,
         localLayout,
-      }).then((result) => {
+      }).then(async (result) => {
         if (!active || current !== ticket) return;
         setFloorIndex(0);
         setPinDraft(null);
@@ -68,12 +80,25 @@ export function ReviewSharePage(): JSX.Element {
           setPins([]);
           return;
         }
-        setPins(readReviewSharePins(result.plan.planKey, safeStorage()));
-        const receipt = readReviewReturn(safeStorage());
-        const already = receipt?.planKey === result.plan.planKey;
+        let currentPlan=result.plan;
+        if(currentPlan.planKey==='sample:sharing'||currentPlan.planKey==='sample:hall-d5'){
+          setPins([]);setReturned(false);setReturnNote('');setPhase({kind:'ready',plan:currentPlan});return;
+        }
+        if(currentPlan.source==='link'){
+          try {const version=await reviewVersionForHash(shareHash);if(!active||current!==ticket)return;
+            currentPlan={...currentPlan,planKey:`review-v2:${version.slice(7)}`};linkHashRef.current=shareHash;setPlanVersion(version);
+          } catch {if(!active||current!==ticket)return;setExportNote('无法核对分享版本，暂不能保存或导出反馈。');}
+        }
+        if(currentPlan.source==='link'&&currentPlan.planKey.startsWith('review-v2:')){
+          try {const storage=safeStorage();if(!storage)throw new Error();setPins(readExactReviewSharePins(currentPlan.planKey,storage));}
+          catch {setPins([]);setPinsUsable(false);setPinError('本机反馈无法完整读取，请保留原记录，暂不能修改或导出。');}
+        }else setPins(currentPlan.source==='link'||currentPlan.planKey==='sample:sharing'||currentPlan.planKey==='sample:hall-d5'?[]:readReviewSharePins(currentPlan.planKey,safeStorage()));
+        const storage=safeStorage();
+        const receipt = readReviewReturn(storage&&currentPlan.source==='link'?versionedReturnStorage(storage,currentPlan.planKey):storage);
+        const already = receipt?.planKey === currentPlan.planKey;
         setReturned(already);
-        setReturnNote(already ? '这份方案已记下完成。创作者在这台浏览器收起球时，球会带上红环。' : '');
-        setPhase({ kind: 'ready', plan: result.plan });
+        setReturnNote(already ? currentPlan.source==='link'?'这份方案已记下完成，请导出反馈文件交给方案创建者。':'这台浏览器已记录完成。' : '');
+        setPhase({ kind: 'ready', plan: currentPlan });
       });
     };
     load();
@@ -81,17 +106,19 @@ export function ReviewSharePage(): JSX.Element {
     return () => {
       active = false;
       ticket += 1;
+      linkHashRef.current=null;
       window.removeEventListener('hashchange', load);
     };
   }, []);
 
   const plan = phase.kind === 'ready' ? phase.plan : null;
+  const exampleOnly=plan?.planKey==='sample:sharing'||plan?.planKey==='sample:hall-d5';
   const floor = plan ? plan.layout.floors[floorIndex] ?? plan.layout.floors[0] : undefined;
   const legend = floor ? itemLegend(floor.items) : { rows: [], hidden: 0 };
   const pinNumbers = useMemo(() => new Map(pins.map((pin, index) => [pin.id, index + 1])), [pins]);
 
   const openPinDraft = useCallback((pick: { itemId: string | null; x: number; z: number }) => {
-    if (!plan || !floor) return;
+    if (!plan || !floor || exampleOnly) return;
     const floorY = floorElevation(plan.layout.floors, floorIndex);
     const item = pick.itemId ? floor.items.find((entry) => entry.id === pick.itemId) : null;
     const origin = item?.position ? { x: item.position.x, y: floorY, z: item.position.z } : null;
@@ -102,22 +129,38 @@ export function ReviewSharePage(): JSX.Element {
     };
     setPinError('');
     setPinDraft({ itemId: pick.itemId, x: pick.x, y: floorY, z: pick.z, offset, camera });
-  }, [plan, floor, floorIndex]);
+  }, [plan, floor, floorIndex, exampleOnly]);
 
-  const commitPin = useCallback((text: string) => {
-    if (!plan || !pinDraft) return;
+  const commitPin = useCallback(async (text: string) => {
+    if (!plan || !pinDraft || !floor || pinWritePending.current) return;
+    if(plan.source==='link'&&(!planVersion||!pinsUsable)){setPinError('无法完整核对本机反馈，未保存新意见。');return;}
+    const capturedHash=linkHashRef.current;
+    if(plan.source==='link'&&(!capturedHash||window.location.hash!==capturedHash)){setPinError('分享版本已变化，未保存意见。');return;}
     const storage = safeStorage();
     if (!storage) {
       setPinError(PIN_ERRORS.storage);
       return;
     }
-    const result = appendReviewSharePin(storage, {
+    const write=()=>appendReviewSharePin(storage, {
       planKey: plan.planKey,
       text,
       draft: pinDraft,
       id: randomId('pin'),
+      floorId: floor.id,
     });
+    let result:ReturnType<typeof appendReviewSharePin>;pinWritePending.current=true;
+    try{
+    if(plan.source==='link'){
+      try {
+        if(!navigator.locks?.request)throw new Error();
+        result=await navigator.locks.request('scendance:review-feedback-pins',{ifAvailable:true},lock=>{
+          if(!lock||linkHashRef.current!==capturedHash||window.location.hash!==capturedHash)throw new Error();return write();
+        });
+      }catch{setPinError(linkHashRef.current!==capturedHash||window.location.hash!==capturedHash?'分享版本已变化，未保存意见。':'本机评审正在另一页面修改或无法安全协调，请稍后重试。');return;}
+    } else result=write();
+    if(plan.source==='link'&&(linkHashRef.current!==capturedHash||window.location.hash!==capturedHash))return;
     if (!result.ok) {
+      if(result.reason==='unknown')setPinsUsable(false);
       setPinError(PIN_ERRORS[result.reason] ?? PIN_ERRORS.text);
       return;
     }
@@ -125,29 +168,55 @@ export function ReviewSharePage(): JSX.Element {
     setActivePinId(result.pin.id);
     setPinDraft(null);
     setPinError('');
-  }, [plan, pinDraft]);
+    }finally{pinWritePending.current=false;}
+  }, [plan, pinDraft, floor?.id, planVersion, pinsUsable]);
 
   const onComplete = () => {
     if (!plan) return;
+    if(plan.source==='link'&&(!planVersion||!pinsUsable)){setReturnNote('无法完整核对本机反馈，未记下完成。');return;}
+    if(plan.source==='link'&&(!linkHashRef.current||window.location.hash!==linkHashRef.current)){setReturnNote('分享版本已变化，未记下完成。');return;}
     const storage = safeStorage();
     if (!storage) {
       setReturnNote('这台浏览器没有记下完成。');
       return;
     }
-    const result = markReviewReturned(storage, { planKey: plan.planKey });
+    const receiptStorage=plan.source==='link'?versionedReturnStorage(storage,plan.planKey):storage;
+    try{
+      const prior=receiptStorage.getItem(REVIEW_RETURN_STORAGE_KEY);
+      if(prior!==null&&readReviewReturn(receiptStorage)?.planKey!==plan.planKey){setReturnNote('原完成记录无法核对，已保留，未写入。');return;}
+    }catch{setReturnNote('原完成记录无法读取，未写入。');return;}
+    const result = markReviewReturned(receiptStorage, { planKey: plan.planKey });
     if (!result.ok) {
-      setReturnNote('这台浏览器没有记下完成。');
+      setReturnNote('完成状态可能已写入，请刷新核对后再操作。');
       return;
     }
+    if(readReviewReturn(receiptStorage)?.planKey!==plan.planKey){setReturnNote('完成记录未能核实，未标为完成。');return;}
     setReturned(true);
-    setReturnNote('已记下完成。创作者在这台浏览器打开工作台并收起球时，球会带上红环。');
+    setReturnNote(plan.source==='link'?'已记下完成，请导出反馈文件交给方案创建者。':'这台浏览器已记录完成。');
+  };
+
+  const exportFeedback=async()=>{
+    if(!planVersion||!plan||!pinsUsable||!linkHashRef.current||window.location.hash!==linkHashRef.current){setExportNote('请使用完整分享链接并核对本机反馈后再导出。');return;}
+    try {
+      const storage=safeStorage();if(!storage||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins))throw new Error('反馈已变化');
+      if((readReviewReturn(versionedReturnStorage(storage,plan.planKey))?.planKey===plan.planKey)!==returned)throw new Error('评审完成状态已变化');
+      const json=createReviewFeedbackReceipt(planVersion,pins as ReceiptPin[],returned);
+      const hash=window.location.hash;
+      await inspectReviewFeedbackReceipt(json,hash);
+      if(window.location.hash!==hash||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins)||
+        (readReviewReturn(versionedReturnStorage(storage,plan.planKey))?.planKey===plan.planKey)!==returned)throw new Error('反馈已变化');
+      const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+      try {const link=document.createElement('a');link.href=url;link.download='方案评审反馈.json';link.click();}
+      finally {URL.revokeObjectURL(url);}
+      setExportNote('已发起下载，请将反馈文件发给方案创建者；不会自动同步。');
+    } catch {setExportNote('反馈未能导出，请检查浏览器下载权限并保留本页。');}
   };
 
   return (
     <main className="rsp" data-review-share-page="true" data-review-source={plan?.source ?? phase.kind}>
       <header className="rsp-mast">
         <p className="rsp-brand"><span>幕景</span><small className="sc-brand-en">Scendance</small></p>
-        <p className="rsp-mast-status">可评论方案 · 只读 · 画内落钉</p>
+        <p className="rsp-mast-status">{exampleOnly?'示例预览 · 只读':'可评论方案 · 只读 · 画内落钉'}</p>
       </header>
       {phase.kind === 'loading' ? (
         <section className="rsp-state" role="status"><h1>正在打开方案</h1><p>正在读取平面。</p></section>
@@ -171,7 +240,8 @@ export function ReviewSharePage(): JSX.Element {
               </p>
             )}
             <p className="rsp-notice">{plan.notice}</p>
-            {!pinDraft && pins.length === 0 && (
+            {plan.planKey==='sample:hall-d5' && <p><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
+            {!exampleOnly && !pinDraft && pins.length === 0 && (
               <p className="rsp-review-hint" role="status">点物件或地面，钉一条意见</p>
             )}
             {plan.layout.floors.length > 1 && (
@@ -213,10 +283,10 @@ export function ReviewSharePage(): JSX.Element {
               )}
             </div>
           </section>
-          <section className="rsp-comments" aria-labelledby="rsp-comments-title">
+          {!exampleOnly && <section className="rsp-comments" aria-labelledby="rsp-comments-title">
             <div className="rsp-comments-scroll">
               <h2 id="rsp-comments-title">钉汇总</h2>
-              <p className="rsp-persist">钉留在这台浏览器，刷新还在，不会同步到其他设备。与工作台评审钉同一套短文案。</p>
+              <p className="rsp-persist">意见保存在这台浏览器，不会自动同步到其他设备。完成后请导出并发给方案创建者。</p>
               {pins.length === 0 ? (
                 <p className="rsp-empty">还没有钉。在左侧平面上点选位置即可落钉。</p>
               ) : (
@@ -252,9 +322,11 @@ export function ReviewSharePage(): JSX.Element {
             </div>
             <div className="rsp-finish">
               <button type="button" onClick={onComplete}>{returned ? '已完成评审' : '完成评审'}</button>
-              <p role="status">{returnNote || '点完成评审后，创作者这边的球会变红。这一笔只留在这台浏览器。'}</p>
+              <button type="button" onClick={exportFeedback} disabled={!planVersion||!pinsUsable}>导出评审反馈</button>
+              <p role="status">{exportNote || '导出后请把文件交给方案创建者，反馈不会自动同步。'}</p>
+              <p role="status">{returnNote || (plan.source==='link'?'完成后可导出反馈；评审状态只记录在这台浏览器。':'完成状态只记录在这台浏览器。')}</p>
             </div>
-          </section>
+          </section>}
         </div>
       ) : (
         <section className="rsp-state" role="alert"><h1>方案没有可看的楼层</h1><p>这份快照里没有楼层，平面没有展开。</p></section>
@@ -269,6 +341,11 @@ function safeStorage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function versionedReturnStorage(storage:Storage,planKey:string):Pick<Storage,'getItem'|'setItem'> {
+  return {getItem:key=>storage.getItem(key===REVIEW_RETURN_STORAGE_KEY?`${key}:${planKey}`:key),
+    setItem:(key,value)=>storage.setItem(key===REVIEW_RETURN_STORAGE_KEY?`${key}:${planKey}`:key,value)};
 }
 
 function placedCount(items: readonly FurnitureItem[]): number {

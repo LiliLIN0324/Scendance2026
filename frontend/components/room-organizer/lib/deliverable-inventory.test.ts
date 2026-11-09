@@ -43,6 +43,15 @@ describe('deliverable inventory', () => {
     expect(summarizeInventory(rows)).toEqual([{ name: '椅子', quantity: 3, lockedCount: 0 }]);
   });
 
+  it('保留同规格不同名称，客户和执行视图都不能合并', () => {
+    const rows = deliverableInventory(layout(
+      floor('f1', '一层', [item({id:'a',name:'签到桌'}),item({id:'b',name:'服务台'}),item({id:'c',name:'签到桌'})]),
+      floor('f2', '二层', [item({id:'d',name:'服务台'})]),
+    ));
+    expect(rows.map(row => [row.name,row.quantity])).toEqual([['签到桌',2],['服务台',1],['服务台',1]]);
+    expect(customerInventory(rows).map(row => [row.name,row.quantity])).toEqual([['签到桌',2],['服务台',2]]);
+  });
+
   it('does not count structural markers left by deleted doors or columns', () => {
     const scene = floor('f1', '一层', [
       item({ id: 'real', name: '椅子' }),
@@ -91,41 +100,29 @@ describe('deliverable inventory', () => {
   });
 });
 
-describe('provenance breakdown (第9批 UI)', () => {
-  it('按 provenance.source 分桶：ai / human / procedural / unknown 分开计数', () => {
+describe('物件来源统计', () => {
+  it('区分 AI、人工、系统生成、结构与缺失来源，墙挂家具不是结构', () => {
     const items = [
-      item({ id: '1', name: 'AI椅', provenance: { source: 'ai', opId: 'op-1', recipeId: 'a3f9c2e1' } }),
-      item({ id: '2', name: 'AI桌', provenance: { source: 'ai', opId: 'op-2' } }),
-      item({ id: '3', name: '手动桌', provenance: { source: 'human', opId: 'op-3' } }),
-      item({ id: '4', name: '无provenance旧椅' }), // 旧布局默认 human
-      item({ id: '5', name: '墙挂结构', wallId: 'north' }), // 壳体 → procedural
-      item({ id: '6', name: '结构柱', structuralColumnId: 'col-1' }), // 壳体
+      item({ id: '1', name: 'AI椅', provenance: { source: 'ai', opId: 'op-1' } }),
+      item({ id: '2', name: '手动桌', provenance: { source: 'human', opId: 'op-2' } }),
+      item({ id: '3', name: '系统生成长椅', provenance: { source: 'procedural', opId: 'op-3' } }),
+      item({ id: '4', name: '旧椅' }),
+      item({ id: '5', name: '墙挂家具', wallId: 'north' }),
+      item({ id: '6', name: '结构柱', structuralColumnId: 'col-1', provenance: { source: 'ai', opId: 'op-4' } }),
     ];
-    const p = provenanceBreakdown(items);
-    expect(p.ai).toBe(2);
-    expect(p.human).toBe(2);
-    expect(p.procedural).toBe(2);
-    expect(p.unknown).toBe(0);
-    // deployable 不含场地自带
-    expect(p.deployable).toBe(4);
-    // AI 占比 = round(2/4*100) = 50
-    expect(p.aiPct).toBe(50);
+    expect(provenanceBreakdown(items)).toEqual({ ai: 1, human: 1, procedural: 1, structure: 1, unknown: 2, deployable: 5, aiPct: 20 });
   });
 
-  it('provenance.source 未识别值归入 unknown（兜底），且不进 AI 占比分母', () => {
+  it('未识别来源计入未知，包含在布置件分母', () => {
     const items = [
       item({ id: '1', name: 'AI', provenance: { source: 'ai', opId: 'op-1' } }),
-      // @ts-expect-error 故意喂一个未识别 source 值，验证前向兼容兜底
-      item({ id: '2', name: '怪异', provenance: { source: 'weird', opId: 'op-2' } }),
+      // @ts-expect-error 验证未来未知来源
+      item({ id: '2', name: '未知', provenance: { source: 'weird', opId: 'op-2' } }),
     ];
-    const p = provenanceBreakdown(items);
-    expect(p.ai).toBe(1);
-    expect(p.unknown).toBe(1);
-    expect(p.deployable).toBe(2);
-    expect(p.aiPct).toBe(50);
+    expect(provenanceBreakdown(items)).toEqual({ ai: 1, human: 0, procedural: 0, structure: 0, unknown: 1, deployable: 2, aiPct: 50 });
   });
 
-  it('空布局：全 0，AI 占比 0（不除零）', () => {
-    expect(provenanceBreakdown([])).toEqual({ ai: 0, human: 0, procedural: 0, unknown: 0, deployable: 0, aiPct: 0 });
+  it('空布局不会除零', () => {
+    expect(provenanceBreakdown([])).toEqual({ ai: 0, human: 0, procedural: 0, structure: 0, unknown: 0, deployable: 0, aiPct: 0 });
   });
 });

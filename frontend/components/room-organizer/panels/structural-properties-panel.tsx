@@ -53,6 +53,8 @@ export function StructuralPropertiesPanel(): JSX.Element | null {
     setNotice('');
     setFailed(false);
     const fields = new FormData(event.currentTarget);
+    const confirmStructure=fields.get('confirmStructure')==='yes';
+    const statusAfter=(status:SceneV2['structure']['walls'][number]['status'],changed:boolean)=>confirmStructure?'confirmed' as const:changed&&status==='confirmed'?'inferred' as const:status;
     const read = (key: string) => {
       const raw = fields.get(key);
       if (typeof raw !== 'string' || !raw.trim() || !Number.isFinite(Number(raw))) throw new Error('请填写有效的米制尺寸。');
@@ -81,30 +83,47 @@ export function StructuralPropertiesPanel(): JSX.Element | null {
         const wall = candidate.structure.walls.find(value => value.id === id)!;
         wall.thickness = read('thickness');
         wall.height = read('height');
-        wall.status = 'confirmed';
+        wall.status = statusAfter(selected.value.status,wall.thickness!==selected.value.thickness||wall.height!==selected.value.height);
       } else if (selected.kind === 'opening') {
         const opening = candidate.structure.openings.find(value => value.id === id)!;
         opening.offset = read('offset');
         opening.width = read('width');
         opening.height = read('height');
         opening.sillHeight = read('sillHeight');
-        opening.status = 'confirmed';
+        opening.status = statusAfter(selected.value.status,opening.offset!==selected.value.offset||opening.width!==selected.value.width||opening.height!==selected.value.height||opening.sillHeight!==selected.value.sillHeight);
       } else {
         const column = candidate.structure.columns.find(value => value.id === id)!;
         column.position = { x: read('x'), z: read('z') };
         column.size = { width: read('width'), depth: read('depth'), height: read('height') };
         column.rotation = read('rotation');
-        column.status = 'confirmed';
+        column.status = statusAfter(selected.value.status,column.position.x!==selected.value.position.x||column.position.z!==selected.value.position.z||column.size.width!==selected.value.size.width||column.size.depth!==selected.value.size.depth||column.size.height!==selected.value.size.height||column.rotation!==selected.value.rotation);
       }
-      // A direct size edit is an explicit replacement of that measured size.
-      // Coupled distances (for example two column centres) remain constraints.
+      const moved = selected.kind === 'opening'
+        ? candidate.structure.openings.find(opening => opening.id === id)!.offset !== selected.value.offset
+        : selected.kind === 'column'
+          ? (() => { const column = candidate.structure.columns.find(value => value.id === id)!;
+            return column.position.x !== selected.value.position.x || column.position.z !== selected.value.position.z || column.rotation !== selected.value.rotation; })()
+          : false;
+      // Retain old evidence as unconfirmed whenever the referenced object moved.
+      const manualDimensions: typeof candidate.dimensions = [];
       candidate.dimensions = candidate.dimensions.map(dimension => {
-        if (dimension.targetId !== id || dimension.targetEndId || ['width','depth','height'].includes(dimension.kind)) return dimension;
-        const directSize = selected.kind === 'opening' || selected.kind === 'wall' && dimension.measure === 'height'
-          || selected.kind === 'column' && dimension.measure && dimension.measure !== 'length';
-        const value = directSize ? measurement(candidate, dimension) : undefined;
-        return value === undefined ? dimension : { ...dimension, valueMeters: value, status: 'confirmed' };
+        if (dimension.label.startsWith('旧记录，当前尺寸已改变：') || ['width','depth','height'].includes(dimension.kind)) return dimension;
+        const touchesObject = dimension.targetId === id || dimension.targetEndId === id;
+        if (!touchesObject) return dimension;
+        const directSize = dimension.targetId === id && !dimension.targetEndId && (selected.kind === 'opening' || selected.kind === 'wall' && dimension.measure === 'height'
+          || selected.kind === 'column' && !!dimension.measure && dimension.measure !== 'length');
+        const { sourceAssetId: _source, start: _start, end: _end, ...targetMeasurement } = dimension;
+        const value = directSize ? measurement(candidate, targetMeasurement) : undefined;
+        const changed = value !== undefined && Math.abs(value - dimension.valueMeters) > 1e-6;
+        if (!changed && !moved) return dimension;
+        // Keep the old evidence and its value; a manual edit cannot alter what the source measured.
+        if (changed && value !== undefined) manualDimensions.push({ id: crypto.randomUUID(), kind: dimension.kind, targetId: id,
+          ...(dimension.measure ? { measure: dimension.measure } : {}), valueMeters: value, status: confirmStructure?'confirmed':'inferred',
+          label: `人工修改，来源待核验：${dimension.label}`.slice(0, 200) });
+        return { ...dimension, status: 'inferred' as const,
+          label: `旧记录，当前尺寸已改变：${dimension.label}`.slice(0, 200) };
       });
+      candidate.dimensions.push(...manualDimensions);
       const valid = sceneSchema.safeParse(candidate);
       if (!valid.success || valid.data.schemaVersion !== 2) throw new Error('结构尺寸不合法。');
       let next: RoomLayout;
@@ -186,6 +205,7 @@ export function StructuralPropertiesPanel(): JSX.Element | null {
         </>}
       </div>
       <div className="sc-structure-foot">
+        {selected&&<label><input type="checkbox" name="confirmStructure" value="yes"/><span>我已核对该结构的完整位置、尺寸和高度，与现场或图纸一致</span></label>}
         <button type="submit" className="sc-structure-apply"><Check size={13} aria-hidden="true"/><span>应用</span></button>
         {notice && <p role="status" className={`sc-structure-notice${failed ? ' is-error' : ''}`}>{notice}</p>}
       </div>

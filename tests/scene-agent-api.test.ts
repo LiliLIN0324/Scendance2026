@@ -28,6 +28,23 @@ describe('scene Agent -> real authorization -> proposal -> database application'
     const {projectId,...body}=input;
     return api(new Request(`https://api.test/projects/${projectId}/proposals`,{method:'POST',headers:{authorization:`Bearer ${actor}`,'content-type':'application/json'},body:JSON.stringify(body)}));
   }
+  it.each([
+    {label:'official DeepSeek',settings:{DEEPSEEK_API_KEY:'fixture-key',AI_MAX_REQUEST_CENTS:'40'}},
+    {label:'custom compatible',settings:{AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'fixture-key',AGENT_CHAT_MODEL:'fixture-model',AI_MAX_REQUEST_CENTS:'40'}},
+  ])('accepts $label for direct proposals without an unrelated gateway key',async({settings})=>{
+    const input=await project();const fetcher=vi.fn(async()=>completion({explanation:'保留原方案供核对。',commands:[]}));
+    const response=await request(createApi(f.backend,key=>(settings as Record<string,string|undefined>)[key],fetcher),input);
+    expect(response.status).toBe(201);expect(fetcher).toHaveBeenCalledOnce();
+    expect((await f.rpc(editor,'projects.get',{projectId:input.projectId})).scene).toEqual(input.scene);
+  });
+  it('rejects incomplete custom configuration before reserving or contacting a provider',async()=>{
+    const input=await project(),settings:Record<string,string>={AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_MODEL:'fixture-model',AI_MAX_REQUEST_CENTS:'40'};
+    const fetcher=vi.fn(async()=>completion({explanation:'fixture',commands:[]}));
+    const response=await request(createApi(f.backend,key=>settings[key],fetcher),input);
+    expect(response.status).toBe(503);expect(fetcher).not.toHaveBeenCalled();
+    const rows=await f.db.query<{count:number}>('select count(*)::int as count from scene_private.requests where request_key=$1',[input.requestId]);
+    expect(rows.rows[0]!.count).toBe(0);
+  });
   it('reads the exact current scene and all public resources, then persists an authorized library model',async()=>{
     const existing={...chair(),materialId:'asset' as const,assetId:resource.assetId,size:resource.size!};
     const input=await project(editor,{...scene(),objects:[existing]});let context:Record<string,any>={};

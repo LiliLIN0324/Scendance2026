@@ -24,9 +24,12 @@ const TOOL_KINDS: Record<string, ToolKind> = {
   get_scene: 'read',
   inspect_zone: 'read',
   search_resources: 'read',
+  search_places: 'read',
   inspect_materials: 'read',
   get_bom: 'read',
   find_free_areas: 'probe',
+  prepare_seating_candidate: 'probe',
+  prepare_shared_seating_candidate: 'probe',
   validate_candidate: 'probe',
   create_parametric_model: 'write',
   customize_material: 'write',
@@ -69,7 +72,7 @@ export function briefTarget(tool: string, args: Record<string, unknown>): string
     if (typeof width !== 'number' || typeof depth !== 'number') return undefined;
     return `size(${width}x${depth})`;
   }
-  if (tool === 'search_resources') {
+  if (tool === 'search_resources' || tool === 'search_places') {
     const { query } = args as { query?: unknown };
     if (typeof query !== 'string') return undefined;
     return `q=${query.slice(0, 20)}`;

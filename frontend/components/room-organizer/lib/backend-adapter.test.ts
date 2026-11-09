@@ -23,6 +23,34 @@ function scene(): Scene {
 }
 
 describe('the shared backend scene adapter', () => {
+  it('does not silently drop a locally marked rest area on a cloud round trip', () => {
+    const original = backendSceneToLayout(scene());
+    const zone = { id: 'rest-one', name: '休息区（待核验）', color: '#4A7C59', x: -2, z: -2, w: 2.2, d: 1.6 };
+    original.floors[0].zones = [zone];
+    const localCopy = parseStoredLayout(JSON.parse(JSON.stringify(original)));
+    expect(localCopy?.floors[0].zones).toEqual([zone]);
+    expect(() => layoutToBackendScene(original)).toThrow(/本机区域标注/);
+    try { layoutToBackendScene(original); throw new Error('unexpected success'); }
+    catch (error) { expect((error as SceneAdapterError).code).toBe('ZONES_NOT_SUPPORTED'); }
+    expect(original.floors[0].zones).toEqual([zone]);
+  });
+
+  it('still round-trips a scene with an empty zone list', () => {
+    const layout = backendSceneToLayout(scene());
+    layout.floors[0].zones = [];
+    const roundtrip = backendSceneToLayout(layoutToBackendScene(layout));
+    expect(roundtrip.floors[0].zones ?? []).toEqual([]);
+    expect(roundtrip.floors[0].items.length).toBe(layout.floors[0].items.length);
+  });
+
+  it('also stops if a saved design variant contains a local zone', () => {
+    const layout = backendSceneToLayout(scene());
+    const variant = backendSceneToLayout(scene());
+    variant.floors[0].zones = [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }];
+    layout.designBook = { activeId: 'alternative', variants: [{ id: 'alternative', name: '另一版', layout: variant }] };
+    expect(() => layoutToBackendScene(layout)).toThrow(/本机区域标注/);
+    expect(layout.designBook.variants[0].layout.floors[0].zones).toHaveLength(1);
+  });
   it('accepts only known preset nodes and still rejects arbitrary local GLBs', () => {
     const layout = backendSceneToLayout(scene());
     layout.scenePreset = 'gym';
@@ -201,6 +229,7 @@ describe('measured venue upgrade preserves the current local activity', () => {
     expect(wire.objects).toEqual(layoutToBackendScene(before).objects);
     if (wire.schemaVersion !== 2) throw new Error('expected measured v2');
     expect(wire.structure.walls).toHaveLength(4); expect(wire.structure.walls[0]).toMatchObject({ start: { x: 0, z: 0 }, end: { x: 11, z: 0 }, height: 3.5 });
+    expect(wire.structure.walls.every(wall=>wall.status==='inferred')).toBe(true);
     expect(wire.structure.openings[0]).toMatchObject({ id: entranceId, offset: 4.1, width: 1.8 });
     expect(wire.finishes).toMatchObject({ floorColor: floor.floorColor, floorPattern: 'wood' });
     expect(JSON.stringify(wire)).not.toMatch(/eventOperations|productionPlan|handoff|glbUrl|original/);

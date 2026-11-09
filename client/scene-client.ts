@@ -17,14 +17,35 @@ export async function assertFreshProposal(proposal:Proposal,current:EditorState)
   if(proposal.project_id!==current.projectId || proposal.session_id!==current.sessionId || proposal.generation!==current.generation || proposal.base_revision!==current.expectedRevision || proposal.local_revision!==current.localRevision || proposal.applied_at || !Number.isFinite(expiresAt) || expiresAt<=Date.now() || proposal.base_hash!==await sceneHash(current.scene)) throw new SceneApiError('STALE_PROPOSAL',409,null);
 }
 export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<string|null>) {
-  async function request<T>(path:string,method='GET',body?:unknown,isPublic=false):Promise<T> {
+  async function request<T>(path:string,method='GET',body?:unknown,isPublic=false,signal?:AbortSignal,beforeDispatch?:()=>void,classifyTransport=false):Promise<T> {
     const headers:Record<string,string>={};
     if(!isPublic) {const token=await getAccessToken();if(!token)throw new SceneApiError('UNAUTHENTICATED',401,null);headers.Authorization=`Bearer ${token}`;}
     const multipart=body instanceof FormData;
     if(body!==undefined&&!multipart) headers['Content-Type']='application/json';
-    const response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(body===undefined?{}:{body:multipart?body as FormData:JSON.stringify(body)}),cache:'no-store'});
-    const data=await response.json();
-    if(!response.ok) throw new SceneApiError(data.error?.code??'HTTP_ERROR',response.status,data.error?.details);
+    const payload=body===undefined?undefined:multipart?body as FormData:JSON.stringify(body);
+    beforeDispatch?.();
+    let response:Response;
+    try {
+      response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(payload===undefined?{}:{body:payload}),...(signal?{signal}:{}),cache:'no-store'});
+    } catch (error) {
+      // Scene writes keep the original transport error so an uncertain POST can be recovered by GET.
+      // Only the read-only conversation call classifies a network failure, and it does not keep the message.
+      if(!classifyTransport||(error instanceof Error&&error.name==='AbortError'))throw error;
+      throw new SceneApiError('NETWORK_ERROR',0,{category:'network'});
+    }
+    // Keep the HTTP status when the body is empty or not JSON. A parse failure
+    // must not become an untyped exception that drops 401/502/503.
+    let data:unknown;
+    try { data=await response.json(); }
+    catch(error) {
+      if(typeof error==='object'&&error!==null&&'name' in error&&(error as {name?:string}).name==='AbortError') throw error;
+      throw new SceneApiError(response.ok?'INVALID_RESPONSE':classifyTransport?'NON_JSON_RESPONSE':'HTTP_ERROR',response.status,classifyTransport?{category:'non_json'}:null);
+    }
+    if(!response.ok) {
+      const error=data&&typeof data==='object'&&'error' in data?(data as {error?:{code?:unknown;details?:unknown}}).error:undefined;
+      const code=error&&typeof error==='object'&&typeof error.code==='string'?error.code:'HTTP_ERROR';
+      throw new SceneApiError(code,response.status,error&&typeof error==='object'?error.details??null:null);
+    }
     return data as T;
   }
   function activityResponse(data:unknown,expected:{projectId:string;id?:string;requestId?:string;activityId?:string;contextHash?:string;cancelled?:boolean}):ActivityTaskRun {
@@ -41,24 +62,24 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
   return {
     request,
     /** The caller records this request ID before dispatch; an uncertain POST is recovered only by GET. */
-    async startActivityTaskRun(projectId:string,input:ActivityTaskRunRequest):Promise<ActivityTaskRun> {
+    async startActivityTaskRun(projectId:string,input:ActivityTaskRunRequest,beforeDispatch?:()=>void):Promise<ActivityTaskRun> {
       const remoteId=uuid.parse(projectId),body=activityTaskRunRequestSchema.parse(input);
       const contextHash=await sha256(canonical(body.activityContext));
-      return activityResponse(await request(`/projects/${remoteId}/agent-runs`,'POST',body),{
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs`,'POST',body,false,undefined,beforeDispatch),{
         projectId:remoteId,requestId:body.requestId,activityId:body.activityContext.projectId,contextHash,
       });
     },
-    async getActivityTaskRun(projectId:string,id:string):Promise<ActivityTaskRun> {
+    async getActivityTaskRun(projectId:string,id:string,beforeDispatch?:()=>void):Promise<ActivityTaskRun> {
       const remoteId=uuid.parse(projectId),runId=uuid.parse(id);
-      return activityResponse(await request(`/projects/${remoteId}/agent-runs/${runId}`),{projectId:remoteId,id:runId});
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs/${runId}`,'GET',undefined,false,undefined,beforeDispatch),{projectId:remoteId,id:runId});
     },
-    async getActivityTaskRunByRequest(projectId:string,requestId:string):Promise<ActivityTaskRun> {
+    async getActivityTaskRunByRequest(projectId:string,requestId:string,beforeDispatch?:()=>void):Promise<ActivityTaskRun> {
       const remoteId=uuid.parse(projectId),requestKey=uuid.parse(requestId);
-      return activityResponse(await request(`/projects/${remoteId}/agent-runs/by-request/${requestKey}`),{projectId:remoteId,requestId:requestKey});
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs/by-request/${requestKey}`,'GET',undefined,false,undefined,beforeDispatch),{projectId:remoteId,requestId:requestKey});
     },
-    async cancelActivityTaskRun(projectId:string,id:string):Promise<ActivityTaskRun> {
+    async cancelActivityTaskRun(projectId:string,id:string,beforeDispatch?:()=>void):Promise<ActivityTaskRun> {
       const remoteId=uuid.parse(projectId),runId=uuid.parse(id);
-      return activityResponse(await request(`/projects/${remoteId}/agent-runs/${runId}/cancel`,'POST'),{projectId:remoteId,id:runId,cancelled:true});
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs/${runId}/cancel`,'POST',undefined,false,undefined,beforeDispatch),{projectId:remoteId,id:runId,cancelled:true});
     },
     listSources(projectId:string){return request<SourceImage[]>(`/projects/${projectId}/sources`);},
     uploadSource(projectId:string,file:File,kind:SourceImage['kind']){const body=new FormData();body.set('projectId',projectId);body.set('file',file);body.set('kind',kind);return request<SourceImage>('/assets/sources','POST',body);},
