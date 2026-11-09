@@ -234,6 +234,21 @@ export const XIHU_SCENIC_PRESET: ResearchBasemapPreset = {
   pixelHeight: 2585,
 };
 
+/**
+ * 局部片区：平湖秋月（GCJ-02）。
+ *
+ * 暂时不做西湖以外的地方，地图入口就固定在这一小片。原始控制点来自
+ * scripts/check-pinghu-qiuyue-coords.ts 的 WGS-84（120.141306, 30.254500），
+ * 经 lib/geo-coords.ts 的 wgs84ToGcj02 换到高德那一套坐标。
+ */
+export const XIHU_LOCAL_CENTER = { lng: 120.1460368, lat: 30.2521924 } as const;
+
+/** 局部片区的取景跨度（米）：默认镜头只看平湖秋月周边，不给整片西湖。 */
+export const XIHU_LOCAL_SPAN_M = 1200;
+
+/** 地图入口的名称：整个产品现在只做这一片。 */
+export const XIHU_LOCAL_NAME = '西湖 · 平湖秋月';
+
 /** 预设 → 可直接铺进 3D 的底图。radiusM 只作档位展示，不参与取景（bounds 才是真值）。 */
 export function createPresetResearchArea(preset: ResearchBasemapPreset = XIHU_SCENIC_PRESET): ResearchArea {
   const size = boundsSizeMeters(preset.bounds);

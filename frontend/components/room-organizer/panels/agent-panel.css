@@ -123,8 +123,31 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-user .ap-warn { color: rgba(255, 255, 255, .76); display: flex; align-items: center; gap: 5px; }
 .ap-user .ap-warn span { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .28); color: #fff; font-size: 10px; font-weight: 700; flex: 0 0 14px; }
 
-/* ── 信息卡 ── */
-.ap-card { border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+/* ── 信息卡：一张卡只讲一件事 —— 标题与状态在顶，数字在中，动作在底。 ── */
+.ap-card { border: 1px solid var(--wk-hair); border-radius: var(--r-md); background: var(--wk-paper); padding: 12px 13px; display: flex; flex-direction: column; gap: 11px; }
+.ap-card-head { display: flex; align-items: baseline; gap: 8px; }
+.ap-card-head strong { flex: 1; min-width: 0; font-size: var(--fs-p1); font-weight: 600; color: var(--wk-ink); }
+.ap-card-state { flex: none; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-card-state.is-ok { color: var(--ap-green); }
+.ap-card-state.is-warn { color: var(--warn); }
+/* 三个数一排，用数字说话；分隔线只做分栏，不做装饰。 */
+.ap-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--wk-hair); }
+.ap-stat { display: grid; gap: 1px; padding: 9px 0 1px; min-width: 0; }
+.ap-stat + .ap-stat { padding-left: 11px; border-left: 1px solid var(--wk-hair); }
+.ap-stat b { font-size: 19px; line-height: 1.15; font-weight: 600; color: var(--wk-ink); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.ap-stat span { font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--ap-grey); }
+/* 排布进度：斜纹在走，说明它在干活；停一下就停住。 */
+.ap-bar { position: relative; height: 5px; border-radius: 999px; background: var(--wk-plane); overflow: hidden; }
+.ap-bar i {
+  position: absolute; inset: 0 auto 0 0; border-radius: 999px;
+  background: repeating-linear-gradient(115deg, var(--ap-green) 0 7px, #6f8f7c 7px 14px);
+  background-size: 23px 100%;
+  animation: ap-bar-stripe 720ms linear infinite;
+  transition: width var(--dur-2) var(--ease-spec);
+}
+.ap-bar.is-paused i { animation: none; }
+@keyframes ap-bar-stripe { from { background-position: 0 0; } to { background-position: 23px 0; } }
+@media (prefers-reduced-motion: reduce) { .ap-bar i { animation: none; } }
 .ap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-bottom: 1px solid var(--wk-hair-soft); padding-bottom: 10px; }
 .ap-field { display: flex; flex-direction: column; gap: 3px; position: relative; }
 .ap-field-label { font-size: var(--fs-cap); color: var(--ap-grey); }
@@ -169,8 +192,8 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-inline-error p { margin: 0; color: var(--warn); display: flex; gap: 6px; align-items: flex-start; line-height: 1.5; }
 .ap-plan strong { font-size: var(--fs-p1); }
 .ap-plan p { margin: 0; }
-/* 本次结果 = 一次运行的账单：成功/被拒/没动/空结果各一行，不用卡片再套一层。 */
-.ap-outcome { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--wk-hair); }
+/* 本次结果 = 一次运行的账单：成功/被拒/没动/空结果各一行，数字已经在上面的统计条里。 */
+.ap-outcome { display: grid; gap: 2px; }
 .ap-outcome-label { font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-outcome-line { font-size: var(--fs-p2); color: var(--wk-ink-soft); font-weight: 600; }
 /* 座位这件事要能一眼对上人数：单独一行，不混在件数里。 */
@@ -406,12 +429,9 @@ button.ap-ghost {
   padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 12px;
 }
 
-/* 物料 / 空间：卡片自己定高度（收起 216px / 展开 ≤55%），剩下的全给下面 chat。
-   卡片收起时对话自动变高，不留固定高度的死白。 */
-.sc-agent-panel .ap-agent-surface.is-material { flex: 0 0 auto; min-height: 0; overflow: visible; }
-.sc-agent-panel .ap-agent-surface.is-space { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
-.sc-agent-panel :is(.ap-agent-surface.is-material, .ap-agent-surface.is-space) + .ap-chat { flex: 1 1 auto; min-height: 0; }
-.sc-agent-panel :is(.ap-agent-surface.is-material, .ap-agent-surface.is-space) + .ap-chat .ap-chat-feed { flex: 1 1 auto; max-height: none; }
+/* 让资源列表滚动，把创建入口留在侧栏底部。 */
+.sc-agent-panel :is(.ap-agent-surface.is-material, .ap-agent-surface.is-space) { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.sc-agent-panel :is(.ap-agent-surface.is-material, .ap-agent-surface.is-space) { container-type: size; }
 
 /* 嵌进面板的空间/物料卡：去掉抽屉外框和固定高度，内容跟面板一起滚。 */
 .sc-agent-panel .ap-agent-surface .sc-library.is-card {
@@ -436,6 +456,9 @@ button.ap-ghost {
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-body {
   height: auto; min-height: 0; overflow: visible; padding: 0;
 }
+.sc-agent-panel .ap-agent-surface.is-space > * {
+  flex-shrink: 0;
+}
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-head h2 { display: none; }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-library-presets,
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-board {
@@ -455,6 +478,7 @@ button.ap-ghost {
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-aholo {
   min-height: 0; max-height: none; overflow: visible;
+  padding: 0; border: 0; background: transparent;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded {
   max-height: min(55vh, 420px);
@@ -465,21 +489,23 @@ button.ap-ghost {
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-block.sc-space-env {
   margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--wk-hair);
 }
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-library-presets { overflow: hidden; }
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-library-presets { max-height: none; overflow: visible; }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-rail {
-  display: flex; gap: 6px; height: 64px; margin: 0;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 9px;
+  height: auto; margin: 0; overflow: visible; mask-image: none;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-tile {
-  flex: 0 0 96px; width: 96px; height: 64px;
+  width: auto; height: auto; min-width: 0;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-card {
-  height: 64px; grid-template-rows: minmax(0, 1fr) 16px;
+  height: auto; grid-template-rows: auto auto; width: 100%; gap: 5px;
+  border: 0; background: transparent; padding: 0 0 4px; text-align: left;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-card strong {
-  height: 16px; line-height: 16px; font-size: 10.5px;
+  height: auto; line-height: 1.4; font-size: 12px; padding-inline: 3px;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-card :is(img, .sc-preset-blank) {
+  width: 100%; height: auto; aspect-ratio: 16 / 10; border-radius: 9px;
 }
 /* 收起态是一行摘要：空白场地卡收掉说明字，别和名称叠在一起。 */
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-blank { gap: 0; }

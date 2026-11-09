@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearGlbAssetCache, cloneOwnedGlb, createCachedGlbModel, createGlbCatalogItem, disposeOwnedModel,
   ensureGlbAsset, getGlbAssetState, normalizeGlbInstance, validateGlbBuffer } from './glb-assets';
+import { advancePeopleAnimations, personOdometer } from './people-anim';
 
 function realGlb(): ArrayBuffer {
   return new Uint8Array(readFileSync(new URL('../../../../assets/models/table.glb', import.meta.url))).buffer;
@@ -19,6 +20,25 @@ function template(): THREE.Group {
 afterEach(() => { clearGlbAssetCache(); vi.restoreAllMocks(); });
 
 describe('owned GLB model instances', () => {
+  it('moves an imported rigged person on an editor route', async () => {
+    const bytes = new Uint8Array(readFileSync(new URL('../assets/people.glb', import.meta.url))).buffer;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(bytes));
+    await ensureGlbAsset('walking-rig', '/people.glb');
+    const item = {
+      ...createGlbCatalogItem({ name: '人物', url: '/people.glb', assetId: 'walking-rig', width: 0.55, depth: 0.45, height: 1.65 }),
+      id: 'walking-person', type: 'person' as const, walkRoute: { points: [{ x: -1, z: 0 }, { x: 1, z: 0 }], loop: false },
+    };
+    const group = createCachedGlbModel(item)!;
+    const scene = new THREE.Scene();
+    scene.add(group);
+    for (let i = 0; i < 60; i++) advancePeopleAnimations(1 / 60);
+    expect(personOdometer(item.id)?.travelled).toBeGreaterThan(0.5);
+    expect(group.position.x).toBeGreaterThan(-0.5);
+    scene.remove(group);
+    advancePeopleAnimations(1 / 60);
+    disposeOwnedModel(group);
+  });
+
   it('grounds, centers and sizes a model without losing its original material', () => {
     const source = template();
     const instance = normalizeGlbInstance(source, { width: 1.6, depth: 0.9, height: 0.75 });

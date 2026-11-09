@@ -487,11 +487,10 @@ describe('物料卡三栏互斥', () => {
     localStorage.setItem(MATERIAL_LIBRARY_META_KEY, JSON.stringify({ favorites: ['seating-chaise'] }));
     const onAdd = vi.fn();
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd}/>);
-    await screen.findByRole('button', { name: /^库/ });
-    const tabButton = (label: string) => [...screen.getByRole('tablist', { name: '物料' }).querySelectorAll('button')]
+    await screen.findByRole('button', { name: '物料库' });
+    const tabButton = (label: string) => [...screen.getByRole('navigation', { name: '物料来源' }).querySelectorAll('button')]
       .find(button => button.textContent?.includes(label))!;
-    expect(tabButton('库').textContent).toContain('2');
-    expect(tabButton('收藏').textContent).toContain('1');
+    expect(tabButton('库').getAttribute('aria-pressed')).toBe('true');
     // 收藏的 Lounge Chaise 不在库里；未收藏的仍在库。
     expect(screen.queryByRole('button', { name: '添加Lounge Chaise' })).toBeNull();
     expect(screen.getByRole('button', { name: '添加Lighting Tower' })).toBeTruthy();
@@ -509,8 +508,7 @@ describe('物料卡三栏互斥', () => {
   it('公共物料全被收藏时，库显示空态而不是空白', async () => {
     localStorage.setItem(MATERIAL_LIBRARY_META_KEY, JSON.stringify({ favorites: CATALOGUE.map(item => item.slug) }));
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
-    await screen.findByRole('button', { name: /^库/ });
-    expect(screen.getByRole('button', { name: /^库/ }).textContent).toContain('0');
+    await screen.findByRole('button', { name: '物料库' });
     expect(screen.getByText('库里没有可用的公共素材')).toBeTruthy();
   });
 });
@@ -520,8 +518,8 @@ describe('物料卡的按风格配一套', () => {
     localStorage.setItem(STYLE_RUNS_KEY, JSON.stringify([{ style: 'cream-lounge', at: Date.now() }]));
     const onAdd = vi.fn(), onAddSet = vi.fn();
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd} onAddSet={onAddSet}/>);
-    await screen.findByRole('button', { name: /^库/ });
-    expect(screen.getByRole('tablist', { name: '物料' }).children).toHaveLength(3);
+    await screen.findByRole('button', { name: '物料库' });
+    expect(screen.getByRole('navigation', { name: '物料来源' }).children).toHaveLength(4);
     expect(screen.queryByRole('button', { name: /按风格配一套/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^我的生成/ }));
     fireEvent.click(screen.getByRole('button', { name: '再放一套奶油会客' }));
@@ -537,7 +535,7 @@ describe('最近用过', () => {
   it('records a model only after it actually lands on the floor, then clears on demand', async () => {
     const onAdd = vi.fn();
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd}/>);
-    await screen.findByRole('button', { name: /^库/ });
+    await screen.findByRole('button', { name: '物料库' });
     // 落盘之前：没有「最近用过」分组，localStorage 也是空的。
     expect(screen.queryByRole('list', { name: '最近用过' })).toBeNull();
     expect(screen.queryByText('最近用过')).toBeNull();
@@ -556,7 +554,7 @@ describe('最近用过', () => {
   it('does not record when the download fails or the floor is full', async () => {
     vi.mocked(ensureGlbAsset).mockRejectedValueOnce(new Error('网络不可达'));
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
-    await screen.findByRole('button', { name: /^库/ });
+    await screen.findByRole('button', { name: '物料库' });
     fireEvent.click(await screen.findByRole('button', { name: '添加Lighting Tower' }));
     await screen.findByRole('alert');
     expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();

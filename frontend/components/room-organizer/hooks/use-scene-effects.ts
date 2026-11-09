@@ -1,10 +1,14 @@
-import { useEffect, useMemo, type RefObject, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, type RefObject, type MutableRefObject } from 'react';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { addFloorPlanRepaintHandler, render2DTopDown } from '../canvas-2d/render';
 import { DEFAULT_FLOOR_PLAN_OPACITY } from '../lib/constants';
 import { floorKeepOut, type KeepOutBuilding } from '../lib/floor-keep-out';
 import { isMapReferenceImage } from '../lib/amap-venue';
 import { hasCollisions } from '../lib/geometry';
 import { mountBand } from '../lib/mount-band';
+import { mapVenueFootprint } from '../lib/scene-anchor';
 import { hasNeighbours, lowestGround } from '../lib/site';
 import { buildingHeight, floorElevation, interiorWallHeight, itemForStorey, storeyHeight } from '../lib/storeys';
 import { ENTRANCE_WALL_ID, entranceGeometry, entranceWallCut } from '../lib/street';
@@ -26,11 +30,12 @@ import {
 } from '../three/interior-walls';
 import { clearItemLabels, renderItemLabels } from '../three/item-labels';
 import { applyTimeOfDay } from '../three/lighting';
+import { mountIsoBasemap, setIsoBasemapVisible, type IsoBasemapStatus } from '../three/iso-basemap';
 import { clearMeasurement, clearRoomDimensions, renderMeasurement, renderRoomDimensions } from '../three/measurement';
 import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
 import { buildResearchBasemap, clearGeoCrosses, clearResearchBasemap, buildGeoCrosses, parseGeoCrossParam } from '../three/research-basemap';
-import { buildResearchOverlays, clearResearchOverlays } from '../three/research-overlays';
+import { buildResearchOverlays } from '../three/research-overlays';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
 import { createPresetStructure } from '../three/scene-presets';
@@ -41,6 +46,8 @@ import { useGlbAssets } from './use-glb-assets';
 import type { FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
 import type * as ThreeNS from 'three';
+
+export const MAP_VENUE_BOUNDARY = 'map-venue-boundary';
 
 /** A view-only image plane. Its pixels use the existing canonical metre mapping. */
 export function mountReferenceImage(
@@ -151,6 +158,10 @@ export interface UseSceneEffectsParams {
   wallDraft: { x: number; z: number } | null;
   wallSnapResult: { point: { x: number; z: number }; kind: string } | null;
   measurementPoints: ReadonlyArray<{ x: number; z: number }>;
+  isoRetry?: number;
+  showIso?: boolean;
+  showBasemap?: boolean;
+  onIsoStatus?: (status: IsoBasemapStatus) => void;
 }
 
 export function useSceneEffects({
@@ -177,7 +188,15 @@ export function useSceneEffects({
   wallDraft,
   wallSnapResult,
   measurementPoints,
+  isoRetry = 0,
+  showIso = true,
+  showBasemap = true,
+  onIsoStatus,
 }: UseSceneEffectsParams): void {
+  const showIsoRef = useRef(showIso);
+  showIsoRef.current = showIso;
+  const showBasemapRef = useRef(showBasemap);
+  showBasemapRef.current = showBasemap;
   const glbAssetsRevision = useGlbAssets(layout);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
 
@@ -288,6 +307,7 @@ export function useSceneEffects({
         activeFloorIndex,
         showAllFloors: view.showAllFloors,
       });
+      setIsoBasemapVisible(scene, showIsoRef.current, showBasemapRef.current);
       const camera = cameraRef.current;
       if (camera) applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
       requestShadowUpdate();
@@ -412,6 +432,28 @@ export function useSceneEffects({
     activeFloorIndex,
   ]);
 
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!isReady || !scene || !showBasemap || view.view2D || view.walkthroughMode) return;
+    const points = mapVenueFootprint(layout);
+    if (points.length < 3) return;
+    const geometry = new LineGeometry();
+    geometry.setPositions([...points, points[0]!].flatMap(point => [point.x, 0.05, point.z]));
+    const material = new LineMaterial({ color: 0x2f6bff, linewidth: 3, depthTest: false, depthWrite: false });
+    const boundary = new Line2(geometry, material);
+    boundary.name = MAP_VENUE_BOUNDARY;
+    boundary.renderOrder = 20;
+    scene.add(boundary);
+    invalidate();
+    return () => {
+      removeAndDispose(scene, boundary);
+      invalidate();
+    };
+  // The boundary depends on the saved ring and its coordinate frame, not furniture edits.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, sceneRef, showBasemap, view.view2D, view.walkthroughMode, layout.mapGroundPolygon, layout.sceneAnchor,
+    layout.mapGroundFrame, layout.mapLngLat, layout.width, layout.height, invalidate]);
+
   // 调研底图单独一层：壳体照旧按米建，底图是这一片区域的路网，铺在壳体下方。
   // 换范围只重铺这张图，不动壳体与物料。
   const researchKey = layout.researchArea
@@ -423,7 +465,9 @@ export function useSceneEffects({
       layout.width, layout.height,
       layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0,
       layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale,
-      view.showResearchOverlays === false ? 'overlays-off' : 'overlays-on',
+      layout.sceneAnchor?.lng, layout.sceneAnchor?.lat,
+      layout.sceneAnchor?.orientationDeg, layout.sceneAnchor?.metersPerUnit,
+      view.view2D,
     ].join('|')
     : '';
   useEffect(() => {
@@ -432,22 +476,60 @@ export function useSceneEffects({
     const THREE = threeModuleRef.current;
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
-    buildResearchBasemap(THREE, scene, layout, { onTextureLoaded: invalidate });
-    // 整景区矢量叠加（范围线 + 水面）：与底图同一套 geo→world，默认开，可关。
-    if (layout.researchArea?.presetId && view.showResearchOverlays !== false) {
-      buildResearchOverlays(THREE, scene, layout, { onLoaded: invalidate });
-    }
+    const fallback = buildResearchBasemap(THREE, scene, layout, { onTextureLoaded: invalidate });
+    if (fallback) fallback.visible = showBasemapRef.current;
     // 候选坐标十字核对：?geocross=lng,lat,名字;lng,lat,名字（肉眼读图不可靠，用十字压点核对投影）
     const crosses = parseGeoCrossParam(window.location.search);
     if (crosses.length > 0) buildGeoCrosses(THREE, scene, layout, crosses);
     return () => {
-      clearResearchOverlays(scene);
       clearResearchBasemap(scene);
       clearGeoCrosses(scene);
     };
     // researchKey 已经盖住底图与定位要看的全部字段；layout 只是当期的内容。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, invalidate, threeModuleRef, sceneRef, researchKey]);
+
+  const isoMountRef = useRef<ReturnType<typeof mountIsoBasemap> | null>(null);
+  const isoEnabled = !view.view2D && layout.researchArea?.presetId === 'xihu-scenic';
+  useEffect(() => {
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!isReady || !THREE || !scene || !isoEnabled) return;
+    const mount = mountIsoBasemap(THREE, scene, invalidate, status => onIsoStatus?.(status),
+      () => showIsoRef.current, () => showBasemapRef.current);
+    isoMountRef.current = mount;
+    return () => {
+      isoMountRef.current = null;
+      mount.dispose();
+    };
+  }, [isReady, threeModuleRef, sceneRef, isoEnabled, isoRetry, invalidate, onIsoStatus]);
+
+  useEffect(() => {
+    isoMountRef.current?.place(layout);
+    // Same map assets, different anchor or camera context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, researchKey, isoEnabled, isoRetry]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || !isReady) return;
+    setIsoBasemapVisible(scene, showIso, showBasemap);
+    invalidate();
+  }, [isReady, sceneRef, showIso, showBasemap, invalidate]);
+
+  useEffect(() => {
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!isReady || !THREE || !scene || !showBasemap || !layout.researchArea?.presetId || view.showResearchOverlays !== true) return;
+    const clear = buildResearchOverlays(THREE, scene, layout, { onLoaded: invalidate });
+    invalidate();
+    return () => {
+      clear();
+      invalidate();
+    };
+    // Keep vector visibility independent from the ISO download.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, invalidate, threeModuleRef, sceneRef, researchKey, isoRetry, showBasemap, view.showResearchOverlays]);
 
   // Separate from the shell: v2 walls/floors never depend on image visibility.
   const referenceImageKey = referenceImage

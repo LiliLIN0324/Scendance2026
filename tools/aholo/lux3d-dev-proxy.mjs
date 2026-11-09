@@ -455,23 +455,31 @@ export function createServer({
       }
     }
     async function grabTile(styleId, tx, ty, optional) {
-      const host = 1 + ((tx + ty) % 4);
-      try {
-        const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=${styleId}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
-        if (!res.ok) throw new HttpError(502, 'tile HTTP ' + res.status);
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length < 100) throw new HttpError(502, 'empty tile');
-        return { input: buf, left: (tx - x0) * tile, top: (ty - y0) * tile };
-      } catch (failure) {
-        // 路网注记层缺一块只少一块路，不让整张底图失败；卫星层是本体，缺了就报错。
-        if (optional) return null;
-        throw failure;
+      let lastError = null;
+      // 整片地面要几十块瓦片。单块偶发超时就重试，并换一台主机，避免整张图失败。
+      // 预算：单块 2 次 × 8s；客户端 25s 就会放弃留旧图，瓦片预算不能远超它。
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const host = 1 + ((tx + ty + attempt) % 4);
+        try {
+          const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=${styleId}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
+          if (!res.ok) throw new HttpError(502, 'tile HTTP ' + res.status);
+          const buf = Buffer.from(await res.arrayBuffer());
+          if (buf.length < 100) throw new HttpError(502, 'empty tile');
+          return { input: buf, left: (tx - x0) * tile, top: (ty - y0) * tile };
+        } catch (failure) {
+          lastError = failure;
+        }
       }
+      // 路网注记层缺一块只少一块路，不让整张底图失败；卫星层是本体，缺了就报错。
+      if (optional) return null;
+      throw lastError;
     }
-    const satelliteTiles = (await mapWithLimit(coords, 24, ({ tx, ty }) => grabTile(style, tx, ty, false))).filter(Boolean);
+    // 「街道 2」(8) 单独拉只会得到深底注记：同样按 7 打底、8 叠注记，地址里仍标 style=8。
+    const baseStyle = style === 8 ? 7 : style;
+    const satelliteTiles = (await mapWithLimit(coords, 8, ({ tx, ty }) => grabTile(baseStyle, tx, ty, false))).filter(Boolean);
     // 底图带道路信息（用户拍板）：卫星(6)之上叠路网注记(8)透明 PNG；矢量路网(7)本身带路，不叠。
-    const roadTiles = style === 6
-      ? (await mapWithLimit(coords, 24, ({ tx, ty }) => grabTile(8, tx, ty, true))).filter(Boolean)
+    const roadTiles = style === 6 || style === 8
+      ? (await mapWithLimit(coords, 8, ({ tx, ty }) => grabTile(8, tx, ty, true))).filter(Boolean)
       : [];
     const loaded = [...satelliteTiles, ...roadTiles];
     if (!satelliteTiles.length) throw new HttpError(502, 'no satellite tiles');

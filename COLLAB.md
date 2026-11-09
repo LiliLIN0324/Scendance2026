@@ -63,6 +63,7 @@
 | 2026-11-07 | ZCode 会话 | 九轮·测试漂移对表（HANDOFF「卡住的问题」挂账的 11 个漂移文件清零；只改测试与测试基建，零生产代码）：① jsdom 装 `canvas` 3.2.3 devDep（HANDOFF 既定路径），纹理签名/网格绘制路径复通；② structure-satellite 删掉污染 prototype 的旧 getContext 猴补（jsdom 无 canvas 时代产物，缺 beginPath，把自己和文件里后续用例一起搞挂）；③ structure-v2 补 `@vitest-environment jsdom`；④ scene-delivery 多层文案钉现行「多层方案」+ 新建 `lib/__testshims__/gltf-blob-image-loader.ts`（GLTFExporter 导出 GLB 的 bufferView 纹理走 blob: URL，jsdom Image 永不回调 → parseAsync 挂死；shim 给 ImageLoader 补 node-canvas 真解码，仅该测试文件加载）；⑤ scene-presets gym 块按现行 jev comparisonState 压缩格式重写断言（objectRows/objectColumns 行列格式已弃用）；⑥ space-panel 空态对齐「拍摄场地」链接与 aholo/traditional 分支；⑦ lux3d 标题随 c754e59 禁词收口改「生成引擎空间模型」；⑧ rail-head 计入 f74a0a9 拍摄场地左轨锚点（disc 2→3）；⑨ nav-chrome 对齐 toggleNavColumns 调用位移（room-organizer 只派生 navExpanded）；⑩ scendance-workspace 8 项对齐现行 UI（移动局部物体/进入漫游/画质档 aria-label/导出默认 1080p/楼层切换计数 15/图标改 sc-material-symbol span）；⑪ assets-panel 对齐「物料」区三页签（我的生成/收藏/库、刷新钮、登录文案）。测试多为 Qoder 所写，若对设计意图有异议可回退本提交另行对表。 | 11 个 `*.test.ts(x)` 文件 + 新增 `lib/__testshims__/gltf-blob-image-loader.ts` + `frontend/package.json`（+canvas devDep）；**不碰独占区五文件与几何基线** | 已执行（11 文件 106 例全绿；tsc 0 错；build exit 0），待 Qoder 复核 |
 | 2026-11-07 | ZCode 会话 | 十一轮·真门 UI 入口（独占区两处主题 hunk，零删除）：① 标注钮循环 off→zone→route→measure→**door**→off（原注释「暂未接入画布循环按钮」兑现移除），aria-label 扩「区/线/距/门」，后缀「·门」；② 标注指针 effect 加 `drawMode==='door'` 分支——单击墙边 `pickDoorWallFromPoint`（lib 纯函数：四墙取最近、沿墙米制中心、夹在墙长内、离墙 >2m 不落）→ `planAnnot.addDoorAnnotation`（inferred 缺省=真门）→ 单击即收退回 off；effect deps +2（addDoorAnnotation、layout.width/height）。配套非独占区：lib/plan-annotation.ts（+pickDoorWallFromPoint/DOOR_DEFAULT_WIDTH_M/DOOR_WALL_PICK_MAX_DIST_M）、hooks/use-plan-annotations.ts（+addDoorAnnotation）、两处测试（plan-annotation.test +6、use-plan-annotations.revision.react.test +3）。 | `frontend/components/room-organizer/room-organizer.tsx` | 已执行（门相关 25 例 + plan 系 9 套件 136 例全绿；tsc 0 错），待 Qoder 复核 |
 | 2026-11-08 | Qoder（LiliLIN0324） | B2 一键交付包（独占区一处传递 hunk，零删除）：效果图需要走现有 `captureRenderImage` 才能拿到与相册同一条渲染路径的 1920×1080 成图，而该函数只存在于独占的 room-organizer 内；`SceneDeliveryPanel` 由非独占的 creative-studio 挂载。做法是在 `<CreativeStudioProvider>` 上多传一个只读 prop `captureImage={view => captureRenderImage({ view, scale: 1 })}`，经 StudioValue 透传到交付面板；不改导出/合成逻辑、不改相机档位、不新增全局状态。 | `frontend/components/room-organizer/room-organizer.tsx`（一处 JSX prop）；配套非独占区：panels/creative-studio.tsx（Props/StudioValue 各一行 + 透传）、panels/scene-delivery-panel.tsx（新入口 + 缺件重试）、panels/scene-delivery-panel.css（包结果样式）、lib/delivery-package.ts / lib/delivery-zip.ts（新）、lib/scene-delivery.ts（下载扩展名联合类型 +'zip'） | 已执行（gate 4 步 PASS，核心 18 套 400 例；交付面板 63 例含新增包入口用例），待 Qoder 复核 |
+| 2026-11-08 | ZCode 会话 | P0-1 圈画保存断点修复（**不碰独占区五文件，也不碰几何基线**）：`amap-venue-picker.tsx` 原先把「圈画是否完成」整个押在高德 `MouseTool` 的**隐式 `draw` 事件**上，用户闭合后「生成户外场地」恒灰且无任何原因说明（首轮实测截图 `~/.codex/visualizations/2026/11/08/01a1ba55-.../02c-close-attempt.png` 可见多边形已画出但按钮仍灰）。改为自收点 + 显式闭合：① 地图 `click` 自己收顶点（离上一点 <0.5 m 的重复点忽略，双击闭合第二下不再多出顶点）；② 常驻可见「完成圈画」（<3 点时禁用并在进度行说明「至少 3 个」）+「撤销上一点」+「放弃」；③ 无效轮廓给具体原因（点数不足／自相交穿模／面积 <4 m²），判定抽成纯函数 `lib/venue-drawing.ts` 可脱地图单测；④ 选址预览与保存分开：预览行（`data-testid="venue-preview"`）显式写「尚未写入场地」，写入锚点仍只发生在「生成户外场地」，画到一半时生成禁用。**未改动坐标转换链路**（仍走既有 GCJ-02），未改 `createVenueFromPick` 及任何上游落盘路径。 | `frontend/components/room-organizer/panels/amap-venue-picker.tsx`（圈画交互重写）、`frontend/components/room-organizer/lib/venue-drawing.ts`（新）、`frontend/components/room-organizer/lib/venue-drawing.test.ts`（新）、`frontend/components/room-organizer/panels/amap-venue-picker.react.test.tsx`（+8 例） | 已执行（tsc 0 错；圈画相关 5 套 44 例全绿；纯逻辑 13 例全绿；根因与证据见 docs/plans/circle-draw-save-fix-2026-11-08.md），待 Qoder 复核；**真实高德前台实测（手点一圈→闭合→保存→刷新重开）仍待补** |
 
 ---
 
@@ -78,6 +79,20 @@
 ---
 
 ## 五、收尾纪律
+
+- 2026-11-09，Codex 在工作台画布接入上下文操作面板；`room-organizer.tsx` 复用地图选址、对焦、试走和面板打开回调。
+
+- 2026-11-09，Codex 重排工作台空间与物料面板，独占文件 `room-organizer.tsx` 仅把已有定位和试走操作接给空间面板。
+
+- 2026-11-09，Codex 将拍摄场地接到工作台现有侧栏，`room-organizer.tsx` 调整入口和侧栏状态。
+
+- 2026-11-09，Codex 接入西湖片区到圈选场地的连续取景与下一步操作，独占文件 `room-organizer.tsx` 只接现有工作台入口。
+
+- 2026-11-09，Codex 修复地图场地生成后的主画布取景，`room-organizer.tsx` 复用场地对焦并接入圈画轮廓。
+
+- 2026-11-09，Codex 修复平湖秋月选址流程。独占文件 `room-organizer.tsx` 调整地图立壳和项目重开时的默认环境选择。
+
+- 2026-11-09，Codex 接手关机待办。独占文件 `room-organizer.tsx` 仅接消防疏散折线标注入口，复用普通动线的绘制与保存。
 
 - **长会话结束前必须更新根目录 `HANDOFF.md`**，五节固定：当前任务 / 已完成 / 卡住的问题 / 下一步计划 / 踩过的坑。
 - **新会话开场第一句：「先读 HANDOFF.md」**，读完再动手。

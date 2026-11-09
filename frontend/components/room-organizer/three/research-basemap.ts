@@ -17,6 +17,17 @@ export const RESEARCH_BASEMAP_TAG = 'research-basemap';
 /** 底图压在场地下方，不和壳体地面/高斯地面抢同一层深度（2 cm 不够，远看会互相穿插）。 */
 export const RESEARCH_BASEMAP_Y = -0.12;
 
+export function researchBasemapMesh(scene: ThreeNS.Scene): ThreeNS.Object3D | undefined {
+  return scene.children.find(child => child.userData.type === RESEARCH_BASEMAP_TAG
+    && child.userData.mapReference === true && child.userData.isoBasemap !== true);
+}
+
+export function setResearchBasemapElevation(scene: ThreeNS.Scene, mesh: ThreeNS.Object3D, y: number): void {
+  mesh.position.y = y;
+  const overlay = scene.children.find(child => child.userData.researchOverlay === true);
+  if (overlay) overlay.position.y = y - RESEARCH_BASEMAP_Y;
+}
+
 export interface ResearchBasemapPlacement {
   /** 底图覆盖的世界米（x 向东，z 向南；已随锚点 metersPerUnit 缩放）。 */
   widthM: number;
@@ -168,7 +179,7 @@ export function buildResearchBasemap(
 /** 拆掉旧底图（含挂同 tag 的矢量叠加组），连同贴图一起释放。 */
 export function clearResearchBasemap(scene: ThreeNS.Scene): void {
   for (const child of [...scene.children]) {
-    if (child.userData?.type !== RESEARCH_BASEMAP_TAG) continue;
+    if (child.userData?.type !== RESEARCH_BASEMAP_TAG || child.userData.isoBasemap === true) continue;
     scene.remove(child);
     child.traverse(object => {
       const mesh = object as ThreeNS.Mesh;

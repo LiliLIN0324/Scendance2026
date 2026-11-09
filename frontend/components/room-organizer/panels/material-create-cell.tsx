@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles } from '@/components/solid-icons';
 import { addPendingMaterial, submitMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
@@ -12,14 +12,16 @@ import type { BackendSession } from '@/lib/backend-session';
  * 直连代理在就优先走它（本机加速）；不在就走云端任务队列，GLB 由服务端归档后自动进画布。
  * variant='composer' 是底部对话左下角的那一颗；'tile' 给旧的横条物料轨。
  */
-export function MaterialCreateCell({ disabled = false, variant = 'composer', controller }: {
+export function MaterialCreateCell({ disabled = false, variant = 'composer', controller, openBelow = false, importSlot }: {
   disabled?: boolean;
-  variant?: 'tile' | 'composer';
+  openBelow?: boolean;
+  variant?: 'tile' | 'composer' | 'action' | 'chat';
+  importSlot?: ReactNode;
   /** 登录云项目后的会话：生成走服务端队列，不依赖本机脚本。 */
   controller?: BackendSession;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'menu' | 'text' | 'image'>('menu');
+  const [mode, setMode] = useState<'menu' | 'text' | 'image' | 'import'>('menu');
   const [prompt, setPrompt] = useState('');
   const [credit, setCredit] = useState(false);
   const [needCredit, setNeedCredit] = useState(false);
@@ -30,6 +32,13 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const inline = variant === 'chat';
+  const choose = (next: 'menu' | 'text' | 'image' | 'import') => {
+    setMode(next);
+    setNote('');
+    setCredit(false);
+    setNeedCredit(false);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -69,11 +78,11 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
     setPrompt('');
     setCredit(false);
     if (result.lane === 'cloud') {
-      setNote(`已提交云端生成（任务 ${result.taskid}）。完成后自动进入画布。`);
+      setNote('已开始生成。完成后会自动加入画布。');
       return;
     }
     addPendingMaterial({ id: `pending:${result.taskid}`, name: text, shipped: false });
-    setNote(`已提交描述生成（任务 ${result.taskid}）。完成后带「生成」标签留在这个物料库。`);
+    setNote('已开始生成。完成后可在「我的生成」查看。');
   }
 
   async function submitImage() {
@@ -88,11 +97,11 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
     setImageName('');
     setCredit(false);
     if (result.lane === 'cloud') {
-      setNote(`已提交云端图片生成（任务 ${result.taskid}）。完成后自动进入画布。`);
+      setNote('已开始生成。完成后会自动加入画布。');
       return;
     }
     addPendingMaterial({ id: `pending:${result.taskid}`, name: imageName || '图片物料', shipped: false });
-    setNote(`已提交图片生成（任务 ${result.taskid}，Aholo /image-to-3d）。完成后带「生成」标签留在这个物料库。`);
+    setNote('已开始生成。完成后可在「我的生成」查看。');
   }
 
   function pickImage(file: File | undefined) {
@@ -116,7 +125,7 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
   const trigger = <button
     type="button"
     ref={buttonRef}
-    className={variant === 'composer' ? 'ap-plus-btn ap-generate-btn' : 'sc-material-card sc-material-plus'}
+    className={variant === 'tile' ? 'sc-material-card sc-material-plus' : variant === 'action' ? 'ap-gen-chip' : 'ap-plus-btn ap-generate-btn'}
     aria-label="生成物料"
     aria-haspopup="menu"
     aria-expanded={open}
@@ -124,30 +133,39 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
     disabled={disabled}
     onClick={() => { setOpen(value => !value); setMode('menu'); }}
   >
-    {variant === 'composer'
-      ? <Sparkles size={15} aria-hidden="true"/>
+    {variant !== 'tile'
+      ? <><Sparkles size={15} aria-hidden="true"/>{variant === 'action' && '生成物料'}</>
       : <><span className="sc-material-plus-mark" aria-hidden="true">＋</span><span className="sc-material-name">生成</span></>}
   </button>;
 
-  return <div className={variant === 'composer' ? 'ap-generate' : 'sc-material-tile sc-material-create'}>
-    {trigger}
-    {open && typeof document !== 'undefined' && createPortal(<div
+  const panel = <div
       ref={panelRef}
       id={menuId}
-      className="sc-material-create-menu"
-      role={mode === 'menu' ? 'menu' : 'dialog'}
+      className={`sc-material-create-menu${inline ? ' is-inline' : ''}`}
+      role={inline ? 'group' : mode === 'menu' ? 'menu' : 'dialog'}
       aria-label={mode === 'image' ? '拍照/图片生成物料' : mode === 'text' ? '通过描述生成物料' : '生成物料'}
-      style={rect ? { left: Math.max(8, rect.left), bottom: Math.max(8, window.innerHeight - rect.top + 8) } : undefined}
+      style={rect ? {
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 290)),
+        ...(openBelow ? { top: rect.bottom + 8 } : { bottom: Math.max(8, window.innerHeight - rect.top + 8) }),
+      } : undefined}
     >
-      {mode === 'menu' && <>
-        <button type="button" role="menuitem" onClick={() => { setMode('text'); setNote(''); }}>通过描述生成物料</button>
-        <button type="button" role="menuitem" onClick={() => { setMode('image'); setNote(''); }}>拍照/图片生成物料</button>
-      </>}
+      {mode === 'menu' && (inline ? <>
+        <p>你想怎么添加物料？</p>
+        <div className="sc-library-chat-choices">
+          {importSlot && <button type="button" onClick={() => choose('import')}>导入素材</button>}
+          <button type="button" onClick={() => choose('text')}>用描述生成</button>
+          <button type="button" onClick={() => choose('image')}>用图片生成</button>
+        </div>
+      </> : <>
+        <button type="button" role="menuitem" onClick={() => choose('text')}>通过描述生成物料</button>
+        <button type="button" role="menuitem" onClick={() => choose('image')}>拍照/图片生成物料</button>
+      </>)}
+      {mode === 'import' && <>{importSlot}<button type="button" onClick={() => choose('menu')}>返回</button></>}
       {mode === 'text' && <form onSubmit={event => { event.preventDefault(); void submitText(); }}>
         <label className="sc-material-create-field">描述<textarea rows={3} maxLength={200} value={prompt} disabled={busy} aria-label="物料描述" placeholder="例如：一把沙滩折叠椅" onChange={event => setPrompt(event.target.value)}/></label>
         <CreditRow checked={credit} disabled={busy} invalid={needCredit && !credit} onChange={value => { setCredit(value); if (value) setNeedCredit(false); }}/>
         <div className="sc-material-create-actions">
-          <button type="button" onClick={() => setMode('menu')}>返回</button>
+          <button type="button" disabled={busy} onClick={() => choose('menu')}>返回</button>
           <button type="submit" disabled={busy || !prompt.trim()}>{busy ? '提交中…' : '生成'}</button>
         </div>
       </form>}
@@ -156,16 +174,19 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
           <input type="file" accept="image/png,image/jpeg" aria-label="物料图片" disabled={busy} onChange={event => pickImage(event.target.files?.[0])}/>
         </label>
         {imageName && <p className="sc-note">{imageName}</p>}
-        <p className="sc-note">图片交给 Aholo 图生（/image-to-3d）。不在这里填写密钥。</p>
         <CreditRow checked={credit} disabled={busy} invalid={needCredit && !credit} onChange={value => { setCredit(value); if (value) setNeedCredit(false); }}/>
         <div className="sc-material-create-actions">
-          <button type="button" onClick={() => setMode('menu')}>返回</button>
+          <button type="button" disabled={busy} onClick={() => choose('menu')}>返回</button>
           <button type="submit" disabled={busy || !imageName}>{busy ? '提交中…' : '生成'}</button>
         </div>
       </form>}
       {note && <p className="sc-note" role="status">{note}</p>}
-      {mode !== 'menu' && <button type="button" className="sc-material-create-dismiss" onClick={close}>收起</button>}
-    </div>, document.body)}
+      {!inline && mode !== 'menu' && <button type="button" className="sc-material-create-dismiss" onClick={close}>收起</button>}
+    </div>;
+  if (inline) return panel;
+  return <div className={variant !== 'tile' ? 'ap-generate' : 'sc-material-tile sc-material-create'}>
+    {trigger}
+    {open && typeof document !== 'undefined' && createPortal(panel, document.body)}
   </div>;
 }
 

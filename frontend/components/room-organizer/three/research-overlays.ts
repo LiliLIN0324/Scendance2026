@@ -1,4 +1,5 @@
-import { RESEARCH_BASEMAP_TAG, RESEARCH_BASEMAP_Y, researchBasemapPlacement, researchGeoToWorld } from './research-basemap';
+import { RESEARCH_BASEMAP_TAG, RESEARCH_BASEMAP_Y, researchBasemapMesh, researchBasemapPlacement, researchGeoToWorld } from './research-basemap';
+import { wgs84ToGcj02 } from '../lib/geo-coords';
 import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
@@ -59,7 +60,9 @@ function ringToWorld(layout: RoomLayout, ring: Ring, THREE: typeof import('three
   const points: ThreeNS.Vector3[] = [];
   for (const [lng, lat] of ring) {
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-    const world = researchGeoToWorld(layout, lng, lat);
+    // OSM GeoJSON uses WGS84; the AMap image bounds and scene anchor use GCJ-02.
+    const mapPoint = wgs84ToGcj02(lng, lat);
+    const world = researchGeoToWorld(layout, mapPoint.lng, mapPoint.lat);
     if (!world) continue;
     points.push(new THREE.Vector3(world.x, RESEARCH_OVERLAY_Y, world.z));
   }
@@ -108,7 +111,8 @@ function makeAdaptiveLine(
   ) => {
     if (!renderer || !camera) return;
     renderer.getDrawingBufferSize(size);
-    const distance = camera.position.distanceTo(center);
+    const distance = Math.hypot(camera.position.x - center.x,
+      camera.position.y - center.y - (line.parent?.position.y ?? 0), camera.position.z - center.z);
     const fovRad = 'fov' in camera ? (camera as ThreeNS.PerspectiveCamera).fov * Math.PI / 180 : Math.PI / 3;
     material.resolution.copy(size);
     material.linewidth = researchOverlayLineWidthPx(distance, size.y, fovRad);
@@ -156,6 +160,7 @@ export function buildResearchOverlays(
   const group = new THREE.Group();
   group.userData.type = RESEARCH_BASEMAP_TAG;
   group.userData.researchOverlay = true;
+  group.position.y = (researchBasemapMesh(scene)?.position.y ?? RESEARCH_BASEMAP_Y) - RESEARCH_BASEMAP_Y;
   group.renderOrder = -9;
   scene.add(group);
 

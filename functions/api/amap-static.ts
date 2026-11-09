@@ -143,18 +143,40 @@ async function renderLngLatBounds(
       }
     }
     const tiles = await Promise.all(coords.map(async ({ tx, ty }) => {
-      const host = 1 + ((tx + ty) % 4);
-      const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) return null;
-      return { tx, ty, bitmap: await createImageBitmap(await response.blob()) };
+      const grab = async (styleId: number): Promise<ImageBitmap | null> => {
+        // 单块 2 次 × 8s：客户端等 25s 就会放弃留旧图，瓦片预算不能远超它。
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const host = 1 + ((tx + ty + attempt) % 4);
+          try {
+            const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${styleId}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(8000) });
+            if (!response.ok) continue;
+            return await createImageBitmap(await response.blob());
+          } catch {
+            // 偶发超时换一台主机再试一次。
+          }
+        }
+        return null;
+      };
+      // 高德 style=8 只是叠在路网上的透明注记层，单独铺会得到深底注记。要「街道 2」时按 7 打底、8 叠注记。
+      const baseStyle = style === 8 ? 7 : style;
+      const bitmap = await grab(baseStyle);
+      if (!bitmap) return null;
+      const overlay = style === 8 ? await grab(8) : null;
+      return { tx, ty, bitmap, overlay };
     }));
     if (tiles.some(tile => !tile)) {
-      for (const tile of tiles) tile?.bitmap.close();
+      for (const tile of tiles) { tile?.overlay?.close(); tile?.bitmap.close(); }
       return null;
     }
     for (const tile of tiles) {
       if (!tile) continue;
-      context.drawImage(tile.bitmap, (tile.tx * TILE - nw.x) * scaleX, (tile.ty * TILE - nw.y) * scaleY, TILE * scaleX, TILE * scaleY);
+      const left = (tile.tx * TILE - nw.x) * scaleX;
+      const top = (tile.ty * TILE - nw.y) * scaleY;
+      const width = TILE * scaleX;
+      const height = TILE * scaleY;
+      context.drawImage(tile.bitmap, left, top, width, height);
+      if (tile.overlay) context.drawImage(tile.overlay, left, top, width, height);
+      tile.overlay?.close();
       tile.bitmap.close();
     }
     const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.86 });

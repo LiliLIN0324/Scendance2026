@@ -19,6 +19,13 @@
   flex-direction: column;
 }
 
+.sc-workbench-capture {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .cg-top {
   position: sticky;
   top: 0;
@@ -1415,6 +1422,33 @@
     transition: none;
   }
 }
+
+.cg-page.is-workbench {
+  min-height: 100%;
+  padding: 0;
+  background: var(--paper);
+}
+.is-workbench .cg-shell { min-height: 100%; max-width: none; border: 0; border-radius: 0; }
+.is-workbench .cg-top { height: auto; min-height: 58px; padding: 10px 14px; border-radius: 0; }
+.cg-workbench-title { min-width: 0; flex: 1; display: grid; gap: 3px; font-size: 15px; }
+.cg-workbench-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--wk-muted); }
+.cg-workbench-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: var(--plane); color: var(--ink); cursor: pointer; }
+.is-workbench .cg-main { flex: 1; padding: 8px 14px 18px; }
+.is-workbench .cg-stephead { padding-top: 10px; }
+.is-workbench .cg-title { font-size: 20px; }
+.is-workbench .cg-lead { font-size: 13px; }
+.is-workbench .cg-mode { padding: 10px; }
+.is-workbench .cg-mode-icon { width: 34px; height: 34px; }
+.is-workbench .cg-foot { padding-inline: 14px; border-radius: 0; }
+.is-workbench .cg-shotcard { position: sticky; left: auto; width: auto; margin: 0 10px; transform: none; }
+.is-workbench .cg-rule-grid { grid-template-columns: 1fr; }
+.cg-quick-modes .cg-mode { display: grid; align-items: center; grid-template-columns: auto minmax(0, 1fr) auto; }
+.cg-quick-modes .cg-mode-body strong { font-size: 14px; }
+.cg-quick-modes .cg-mode > svg { color: var(--wk-muted); }
+.cg-quick-tools { margin-block: 10px; font-size: 12px; color: var(--wk-muted); }
+.cg-quick-tools summary { cursor: pointer; padding-block: 6px; }
+.cg-quick-scale { display: grid; gap: 6px; font-size: 12px; }
+.cg-quick-scale input { min-width: 0; min-height: 36px; padding: 7px 9px; border: 1px solid var(--hair); border-radius: var(--r-sm); font: inherit; }
 
 /* 逐张结论卡：拍完一张就告诉用户这一步能不能进重建 */
 

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { SATELLITE_GROUND_LABEL, createVenueFromPick, parseSatelliteImageBounds, satelliteProxyUrl, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
+import { outdoorGroundSize } from '../lib/site';
 import { buildStructureShell } from './structure-builder';
 import type { RoomLayout } from '../lib/types';
 
@@ -254,6 +255,57 @@ describe('satellite floor texture', () => {
     expect(Math.max(...ys)).toBeLessThanOrEqual(1 + 1e-3);
     expect(Math.min(...xs)).toBeLessThan(0.05);
     expect(Math.max(...xs)).toBeGreaterThan(0.95);
+  });
+
+  it('keeps a street basemap clear inside the fence and subdued outside without stretching', () => {
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, makeLayout({
+      satelliteGroundRef: true,
+      floorPlanImage: '/api/amap-static?west=120.53&south=30.40&east=120.54&north=30.41&style=7&x-ref=satellite-ground-ref',
+    }));
+    const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
+    const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
+    const floorMaterial = floor.material as THREE.MeshBasicMaterial;
+    const surroundMaterial = surround.material as THREE.MeshBasicMaterial;
+    expect(floor.userData.groundBasemapStyle).toBe(7);
+    expect(surround.userData.groundBasemapStyle).toBe(7);
+    expect(floorMaterial.opacity).toBeGreaterThan(0.85);
+    expect(surroundMaterial.opacity).toBeLessThan(floorMaterial.opacity);
+    expect(surroundMaterial.opacity).toBeLessThan(0.5);
+    const uv = surround.geometry.getAttribute('uv');
+    const xs = Array.from({ length: uv.count }, (_, index) => uv.getX(index));
+    const ys = Array.from({ length: uv.count }, (_, index) => uv.getY(index));
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(-1e-4);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(1 + 1e-4);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(-1e-4);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(1 + 1e-4);
+  });
+
+  it('spreads the basemap across the outdoor ground plane', () => {
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, makeLayout({
+      width: 20,
+      height: 12,
+      satelliteGroundRef: true,
+      floorPlanImage: '/api/amap-static?location=120.54,30.40&zoom=18&x-ref=satellite-ground-ref',
+    }));
+    const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
+    const pos = surround.geometry.getAttribute('position');
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      minX = Math.min(minX, pos.getX(i));
+      maxX = Math.max(maxX, pos.getX(i));
+      minY = Math.min(minY, pos.getY(i));
+      maxY = Math.max(maxY, pos.getY(i));
+    }
+    const ground = outdoorGroundSize(20, 12);
+    expect(maxX - minX).toBeCloseTo(ground, 3);
+    expect(maxY - minY).toBeCloseTo(ground, 3);
+    expect(minX).toBeCloseTo(-ground / 2, 3);
+    expect(maxX).toBeCloseTo(ground / 2, 3);
   });
 
   it('leaves a plain floor when satellite ground is off', () => {

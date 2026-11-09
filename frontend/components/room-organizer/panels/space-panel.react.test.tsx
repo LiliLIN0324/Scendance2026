@@ -27,7 +27,7 @@ function environment(preview: SplatPreviewState = { status: 'idle', assetId: '',
 }
 
 describe('SpacePanel', () => {
-  it('shows the real-venue entry with an honest empty state, and hosts templates in traditional', () => {
+  it('puts real venues first and folds secondary actions', () => {
     const onApply = vi.fn();
     let runNew: (() => void) | undefined;
     render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onRegisterNew={run => { runNew = run; }}/>);
@@ -36,11 +36,7 @@ describe('SpacePanel', () => {
     expect(screen.getByText('用手机拍一段场地')).toBeTruthy();
     const capture = screen.getByText('拍摄场地') as HTMLAnchorElement;
     expect(capture.getAttribute('href')).toBe('/guide/capture');
-    // 默认 aholo 分支：未传 environment 时显示「当前环境」占位。
-    expect(screen.getByRole('heading', { name: '当前环境' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /传统空间/ }));
-    expect(screen.getByRole('heading', { name: '场景模板' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '环境' })).toBeTruthy();
+    expect(screen.getByText('场景模板').closest('details')?.open).toBe(false);
     // 新建空间已收进输入框的 ＋ 菜单，由 chat 栏调用注册进来的动作。
     runNew?.();
     const next = onApply.mock.calls[0]![0] as RoomLayout;
@@ -75,6 +71,8 @@ describe('SpacePanel', () => {
     rememberAholoAsset({ assetId: current.assetId, kind: 'spz', name: current.name, bytes: 20_000_000, savedAt: 1 });
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} currentScanId={current.assetId}/>);
     expect(screen.getByLabelText('应用真实场地 午后咖啡馆').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByText('更多场地选项'));
+    fireEvent.click(screen.getByText('项目中的场景 · 1'));
     fireEvent.click(screen.getByRole('button', { name: '移除午后咖啡馆' }));
     expect(preview.onRemove).toHaveBeenCalledWith(current.assetId);
   });

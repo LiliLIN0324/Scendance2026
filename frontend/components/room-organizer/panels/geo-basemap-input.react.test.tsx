@@ -1,17 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const lookupPlace = vi.fn();
-vi.mock('../lib/research-area', async (original) => ({
-  ...(await original<typeof import('../lib/research-area')>()),
-  lookupPlace: (keywords: string) => lookupPlace(keywords),
-}));
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GeoBasemapInput } from './geo-basemap-input';
+import { createPresetResearchArea, XIHU_LOCAL_NAME } from '../lib/research-area';
 import type { RoomLayout } from '../lib/types';
 
-const AREA = {
+const AREA: NonNullable<RoomLayout['researchArea']> = {
   name: '杭州西湖风景名胜区',
   address: '浙江省杭州市西湖区',
   center: { lng: 120.121358, lat: 30.222692 },
@@ -23,67 +18,79 @@ const AREA = {
   style: 6 as const,
 };
 
-describe('GeoBasemapInput（docs/19 地理底图输入）', () => {
+const PRESET = createPresetResearchArea() as NonNullable<RoomLayout['researchArea']>;
+
+describe('GeoBasemapInput（地图入口只做平湖秋月）', () => {
   afterEach(cleanup);
-  beforeEach(() => {
-    lookupPlace.mockReset();
-    localStorage.clear();
-  });
 
-  it('没有底图时只露一枚入口；展开输入地名回车即定位铺图', async () => {
+  it('没有底图时只露一枚「西湖 · 平湖秋月」入口，点一下直接铺预设底图', () => {
     const onApply = vi.fn();
-    lookupPlace.mockResolvedValue({ name: '杭州西湖风景名胜区', address: '西湖街道龙井路1号', lng: 120.121358, lat: 30.222692 });
-    const { container } = render(<GeoBasemapInput area={undefined} onApply={onApply} view2D={false} />);
-    expect(screen.queryByText(/底图 ·/)).toBeNull();
-    fireEvent.click(screen.getByTestId('geo-basemap-open'));
-    const input = screen.getByTestId('geo-basemap-query') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '杭州西湖' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
-    const applied = onApply.mock.calls[0][0] as NonNullable<RoomLayout['researchArea']>;
-    expect(applied.name).toBe('杭州西湖风景名胜区');
-    expect(applied.center).toEqual({ lng: 120.121358, lat: 30.222692 });
-    expect(applied.radiusM).toBe(1600);
-    expect(container.querySelector('.sc-geo-basemap')).toBeTruthy();
-  });
-
-  it('查不到地名时如实提示，不铺图也不编坐标', async () => {
-    const onApply = vi.fn();
-    lookupPlace.mockResolvedValue(null);
     render(<GeoBasemapInput area={undefined} onApply={onApply} view2D={false} />);
+    const trigger = screen.getByTestId('geo-basemap-open');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(trigger.textContent).toContain(XIHU_LOCAL_NAME);
+
+    fireEvent.click(trigger);
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const applied = onApply.mock.calls[0][0] as NonNullable<RoomLayout['researchArea']>;
+    expect(applied.presetId).toBe('xihu-scenic');
+    expect(applied.imageUrl).toBe('/basemap/xihu-scenic-z15.jpg');
+    // 简化后不再有搜索地名、半径、样式这些选项。
+    expect(screen.queryByTestId('geo-basemap-query')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: '底图半径' })).toBeNull();
+    expect(screen.queryByText('卫星图')).toBeNull();
+  });
+
+  it('有平湖秋月底图时展开只有回到局部/清除，3D 加载与失败都如实说明', () => {
+    const onApply = vi.fn();
+    const onFrameLocal = vi.fn();
+    const onRetryIso = vi.fn();
+    const { rerender } = render(<GeoBasemapInput area={PRESET} onApply={onApply} onFrameLocal={onFrameLocal} view2D={false} isoStatus="loading" />);
+
     fireEvent.click(screen.getByTestId('geo-basemap-open'));
-    const input = screen.getByTestId('geo-basemap-query') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '不存在的地名xyz' } });
-    fireEvent.click(screen.getByTestId('geo-basemap-search'));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('没查到'));
+    expect(screen.getByRole('region', { name: '地图设置' })).toBeTruthy();
+    expect(screen.getByTestId('geo-basemap-attribution').textContent).toContain('© OpenStreetMap 贡献者');
+    expect(screen.getByRole('status').textContent).toContain('正在加载西湖 3D');
+
+    rerender(<GeoBasemapInput area={PRESET} onApply={onApply} onFrameLocal={onFrameLocal} onRetryIso={onRetryIso} view2D={false} isoStatus="fallback" />);
+    expect(screen.getByRole('status').textContent).toContain('已退回卫星图');
+
+    fireEvent.click(screen.getByRole('button', { name: '重试 3D' }));
+    expect(onRetryIso).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByTestId('geo-basemap-frame'));
+    expect(onFrameLocal).toHaveBeenCalledOnce();
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('已有底图时显示名称胶囊与范围/样式控制：换半径、切卫星/路网、×清除', () => {
+  it('旧的非预设底图可以一步换成平湖秋月，也能清除', () => {
     const onApply = vi.fn();
     render(<GeoBasemapInput area={AREA} onApply={onApply} view2D={false} />);
-    expect(screen.getByText(/底图 · 杭州西湖风景名胜区/)).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox', { name: '底图半径' }), { target: { value: '800' } });
-    expect(onApply.mock.calls[0][0].radiusM).toBe(800);
-    expect(onApply.mock.calls[0][0].name).toBe(AREA.name); // 地名不动，只换范围
-    fireEvent.click(screen.getByRole('button', { name: '卫星含路网' }));
-    expect(onApply.mock.calls[1][0].style).toBe(7);
+    fireEvent.click(screen.getByTestId('geo-basemap-open'));
+    expect(screen.getByText(AREA.name)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('geo-basemap-preset'));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply.mock.calls[0][0].presetId).toBe('xihu-scenic');
+
+    fireEvent.click(screen.getByTestId('geo-basemap-open'));
     fireEvent.click(screen.getByTestId('geo-basemap-clear'));
     expect(onApply).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByRole('region', { name: '地图设置' })).toBeNull();
   });
 
-  it('2D 平面视图不渲染（底图输入只在 3D 场景）', () => {
-    const { container } = render(<GeoBasemapInput area={AREA} onApply={vi.fn()} view2D />);
+  it('2D 平面视图不渲染（底图入口只在 3D 场景）', () => {
+    const { container } = render(<GeoBasemapInput area={PRESET} onApply={vi.fn()} view2D />);
     expect(container.querySelector('.sc-geo-basemap')).toBeNull();
   });
 
-  it('地图署名常驻：动态底图标高德，整景区标高德+OSM（MAP-02 保留来源）', () => {
-    const onApply = vi.fn();
-    const { rerender } = render(<GeoBasemapInput area={AREA} onApply={onApply} view2D={false} />);
-    expect(screen.getByTestId('geo-basemap-attribution').textContent).toBe('底图 © 高德地图');
-    rerender(<GeoBasemapInput area={{ ...AREA, presetId: 'xihu-scenic', imageUrl: '/basemap/xihu-scenic-z15.jpg' }} onApply={onApply} view2D={false} />);
-    expect(screen.getByTestId('geo-basemap-attribution').textContent).toContain('© OpenStreetMap 贡献者');
-    // 清掉底图后署名也随域撤掉，不留无来源的声明
+  it('Escape 收起设置并还焦点给入口', () => {
+    render(<GeoBasemapInput area={PRESET} onApply={vi.fn()} view2D={false} />);
+    const trigger = screen.getByTestId('geo-basemap-open');
+    fireEvent.click(trigger);
     expect(screen.queryByTestId('geo-basemap-attribution')).toBeTruthy();
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(screen.queryByTestId('geo-basemap-attribution')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });

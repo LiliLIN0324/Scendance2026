@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { ChevronDown, ChevronUp, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
+import { ChevronDown, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
@@ -102,18 +102,19 @@ export interface OnlineModelLibraryProps {
   cardMode?: boolean;
   /** 本机 GLB 导入入口，跟着物料轨一起走，不另开一栏。 */
   importSlot?: ReactNode;
+  walkRoleSlot?: ReactNode;
+  createSlot?: ReactNode;
 }
 
-export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, cardMode = false, importSlot }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, cardMode = false, importSlot, walkRoleSlot, createSlot }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
   const [placeError, setPlaceError] = useState('');
   const [query, setQuery] = useState('');
   // 物料卡三块的当前页：我的生成 / 收藏 / 库。三块只是入口，结果都在下方同一块内容区。
-  const [pane, setPane] = useState<'mine' | 'fav' | 'lib'>('lib');
+  const [pane, setPane] = useState<'mine' | 'fav' | 'lib' | 'walk'>('lib');
   // 一张卡两种高度：收起只露一行素材，展开看完整网格；收起把高度还给下面 chat。
-  const [expanded, setExpanded] = useState(false);
   const [bucket, setBucket] = useState('');
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [busy, setBusy] = useState<string | null>(null);
@@ -391,6 +392,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null} onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n点击放入空间`}>
           <span className="sc-lib-tile-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
           <span className="sc-lib-tile-name">{name}</span>
+          {busy === model.slug && <span className="sc-lib-tile-add" role="status">放入中…</span>}
         </button>
         {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, model.slug))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
       </li>;
@@ -414,25 +416,19 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     const styleThumb = (bundle: StyleBundle, small = false) => <span className={`sc-lib-style-thumb${small ? ' is-small' : ''}`} aria-hidden="true">
       {bundle.swatches.map(color => <span className="sc-lib-style-swatch" key={color} style={{ background: color }}/>)}
     </span>;
-    // 「我的生成」既放生成的单件，也放配过的整套：计数按两者之和。
-    const mineCount = generatedShown.length + styleRuns.length;
     // 点哪一块就切到哪一页并展开：tabs 与素材同属一张卡，切换即看到完整内容。
-    const pickPane = (next: 'mine' | 'fav' | 'lib') => { setPane(next); setExpanded(true); };
-    return <div className={`sc-lib-wrap sc-lib-shell${expanded ? ' is-expanded' : ''}`}>
-      <div className="sc-lib-triad" role="tablist" aria-label="物料">
-        <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'mine' ? ' is-active' : ''}`} aria-pressed={pane === 'mine'} onClick={() => pickPane('mine')}>
-          <Sparkles size={15} aria-hidden="true"/><span>我的生成</span><small>{mineCount > 0 ? mineCount : '空'}</small>
-        </button>
-        <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'fav' ? ' is-active' : ''}`} aria-pressed={pane === 'fav'} onClick={() => pickPane('fav')}>
-          <Star size={15} aria-hidden="true"/><span>收藏</span><small>{favoriteRows > 0 ? favoriteRows : '空'}</small>
-        </button>
-        <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'lib' ? ' is-active' : ''}`} aria-pressed={pane === 'lib'} onClick={() => pickPane('lib')}>
-          <LayoutGrid size={15} aria-hidden="true"/><span>库</span><small>{libraryModels.length}</small>
-        </button>
-      </div>
-      {importSlot}
+    return <div className="sc-lib-wrap sc-lib-shell is-browse">
+      {createSlot}
+      <nav className="sc-library-tabs-equal" aria-label="物料来源">
+        <button type="button" aria-pressed={pane === 'lib'} onClick={() => setPane('lib')}>物料库</button>
+        <button type="button" aria-pressed={pane === 'fav'} onClick={() => setPane('fav')}>收藏</button>
+        <button type="button" aria-pressed={pane === 'mine'} onClick={() => setPane('mine')}>我的生成</button>
+        <button type="button" aria-pressed={pane === 'walk'} onClick={() => setPane('walk')}>漫游角色</button>
+      </nav>
+      {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
+      {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
       <div className="sc-lib-results" aria-live="polite">
-        {pane === 'fav'
+        {pane === 'walk' ? (walkRoleSlot ?? <p className="sc-lib-empty">暂无可用的漫游角色</p>) : pane === 'fav'
           ? (favoriteRows === 0
             ? <p className="sc-lib-empty"><Star size={14} aria-hidden="true"/><span>还没有收藏</span></p>
             : <ul className="sc-lib-grid">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)
@@ -461,12 +457,12 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               <Search size={14} aria-hidden="true"/>
               <input aria-label="搜索全库线上模型" placeholder="搜索库内素材" value={query} onChange={event => setQuery(event.target.value)}/>
             </label>
-            {(query.trim() || bucket) && <div className="sc-lib-tools">
+            <div className="sc-lib-tools">
               <div className="sc-lib-chips" role="group" aria-label="物料分类">
                 {chip('', '全部', 0, LayoutGrid, false)}
                 {index.buckets.map(entry => chip(entry.key, entry.label, entry.count, undefined, false))}
               </div>
-            </div>}
+            </div>
             <ul className="sc-lib-list">
               {groups.map(group => <li className="sc-lib-group" key={group.key}>
                 {group.label && <small className={group.key === 'recent' ? 'sc-lib-group-head' : ''}>
@@ -478,14 +474,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             </ul>
             {groups.every(group => group.models.length === 0) && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>{!query.trim() && !bucket && libraryModels.length === 0 ? '库里没有可用的公共素材' : '没有匹配的模型'}</span></p>}
             {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
-            {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
-            {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
           </>}
       </div>
-      <button type="button" className="sc-lib-expand" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-        <span>{expanded ? '收起' : '展开'}</span>
-        {expanded ? <ChevronUp size={13} aria-hidden="true"/> : <ChevronDown size={13} aria-hidden="true"/>}
-      </button>
     </div>;
   }
 

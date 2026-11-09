@@ -123,6 +123,7 @@ export function useSplatPreview(deps: {
   setDisplayMode(mode: SplatDisplayMode): void;
   setTransformMode(mode: SplatTransformMode): void;
   pickScene(ray: ThreeNS.Ray): string | null;
+  framePrimaryScene(): void;
   /** 用已知长标定比例：知道「场地宽 12 m」时直接给出轴和长度。 */
   calibrate(input: { axis: ScanAxis; knownMeters: number }): ScanScaleCalibration | null;
   /** 给定高度 / 法线的基准面；物件落地与锚点都跟着它。 */
@@ -186,6 +187,36 @@ export function useSplatPreview(deps: {
     }
     if (!found || bounds.isEmpty()) return;
     primary.frameBounds(bounds, camera, controls);
+    invalidate();
+  }, [cameraRef, controlsRef, invalidate]);
+
+  const framePrimaryScene = useCallback(() => {
+    const primary = controllerRef.current;
+    const bounds = primary?.worldBounds;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!primary || !bounds || bounds.isEmpty() || !camera || !controls) return;
+    const center = bounds.getCenter(new ThreeNS.Vector3());
+    const half = bounds.getSize(new ThreeNS.Vector3()).multiplyScalar(0.5);
+    const direction = new ThreeNS.Vector3(1, 0.24, 1).normalize();
+    const right = new ThreeNS.Vector3().crossVectors(camera.up, direction).normalize();
+    const up = new ThreeNS.Vector3().crossVectors(direction, right);
+    const vertical = ThreeNS.MathUtils.degToRad(camera.fov / 2);
+    const verticalTangent = Math.tan(vertical);
+    const horizontalTangent = verticalTangent * Math.min(camera.aspect, 1.6);
+    let distance = 2;
+    const corner = new ThreeNS.Vector3();
+    for (const x of [-half.x, half.x]) for (const y of [-half.y, half.y]) for (const z of [-half.z, half.z]) {
+      corner.set(x, y, z);
+      const screenFit = Math.max(Math.abs(corner.dot(right)) / horizontalTangent, Math.abs(corner.dot(up)) / verticalTangent);
+      distance = Math.max(distance, corner.dot(direction) + screenFit * 1.12);
+    }
+    controls.target.copy(center);
+    if ('maxDistance' in controls && typeof controls.maxDistance === 'number') {
+      controls.maxDistance = Math.max(controls.maxDistance, distance);
+    }
+    camera.position.copy(center).addScaledVector(direction, distance);
+    controls.update();
     invalidate();
   }, [cameraRef, controlsRef, invalidate]);
 
@@ -623,7 +654,7 @@ export function useSplatPreview(deps: {
   }, [isReady, calibrate, setGround, setYaw, setOrigin, addAnchor, removeAnchor, landingPlan, resetCalibration, persistCalibration]);
 
   return {
-    state, renderFrame, start, stop, setPosition, displayMode, setDisplayMode, setTransformMode, pickScene,
+    state, renderFrame, start, stop, setPosition, displayMode, setDisplayMode, setTransformMode, pickScene, framePrimaryScene,
     calibrate, setGround, setYaw, setOrigin, addAnchor, removeAnchor, landingPlan,
   };
 }

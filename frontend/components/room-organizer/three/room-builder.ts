@@ -1,3 +1,4 @@
+import { outdoorGroundSize } from '../lib/site';
 import { FLOOR_HEIGHT_METERS } from '../lib/types';
 import { BASEBOARD_DEPTH, BASEBOARD_HEIGHT, BASEBOARD_WALL_GAP, baseboardRuns } from './baseboard';
 import { removeAndDispose } from './builder-utils';
@@ -93,7 +94,7 @@ export function applyWallDisplay(
     // grid, which Sims-style walls-down is supposed to keep (#122).
     const wallId = obj.userData.wallId as WallId | undefined;
     if (!wallId) {
-      setVisible(obj, true);
+      if (obj.userData.mapVenueGround !== true) setVisible(obj, true);
       continue;
     }
 
@@ -388,7 +389,8 @@ function buildFloorPlanMaterial(
   };
 
   const texture = acquireTexture((loaded) => {
-    fitTextureToRoom(loaded, options.width, options.depth, options.floorPlanFitMode);
+    if (options.satelliteGroundRef) fitSatelliteToGroundPlane(loaded, options.width, options.depth);
+    else fitTextureToRoom(loaded, options.width, options.depth, options.floorPlanFitMode);
     options.onTextureLoaded?.();
   });
   texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -419,6 +421,18 @@ function buildFloorPlanMaterial(
     });
   }
   return new THREE.MeshStandardMaterial(params);
+}
+
+/**
+ * 卫星/路网图铺的是整片户外地面，房间只占中间。把贴图缩到房间那一块，
+ * 不要把整张区域图拉满房间地板。
+ */
+function fitSatelliteToGroundPlane(texture: ThreeNS.Texture, roomWidth: number, roomDepth: number): void {
+  const ground = outdoorGroundSize(roomWidth, roomDepth);
+  const repeatX = roomWidth / ground;
+  const repeatY = roomDepth / ground;
+  texture.repeat.set(repeatX, repeatY);
+  texture.offset.set((1 - repeatX) / 2, (1 - repeatY) / 2);
 }
 
 function fitTextureToRoom(

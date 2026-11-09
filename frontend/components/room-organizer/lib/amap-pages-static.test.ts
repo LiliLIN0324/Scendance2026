@@ -81,6 +81,49 @@ describe('pages amap functions', () => {
     }
   });
 
+  it('stitches domestic 高德 street tiles when style=7', async () => {
+    class FakeCanvas {
+      width: number;
+      height: number;
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+      }
+      getContext() {
+        return { drawImage() {} };
+      }
+      async convertToBlob() {
+        const bytes = new Uint8Array(180);
+        bytes[0] = 0xff;
+        bytes[1] = 0xd8;
+        return new Blob([bytes], { type: 'image/jpeg' });
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeCanvas);
+    vi.stubGlobal('createImageBitmap', async () => ({ close() {} }));
+    const tile = new Uint8Array(180);
+    tile[0] = 0xff;
+    tile[1] = 0xd8;
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(tile, { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    });
+    try {
+      const response = await handleAmapStatic(
+        new Request('https://scendance.lilicoding.space/api/amap-static?west=120.53&south=30.40&east=120.54&north=30.41&style=7&x-ref=satellite-ground-ref'),
+        {},
+        fetchImpl as typeof fetch,
+      );
+      expect(response.status).toBe(200);
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls.every(url => url.includes('style=7'))).toBe(true);
+      expect(urls.every(url => url.includes('is.autonavi.com'))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('does not fall back to a centered square when the drawn bounds cannot be rendered', async () => {
     const response = await handleAmapStatic(
       new Request('https://scendance.lilicoding.space/api/amap-static?west=120.53&south=30.40&east=120.54&north=30.41&x-ref=satellite-ground-ref'),

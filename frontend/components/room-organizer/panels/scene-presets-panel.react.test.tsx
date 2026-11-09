@@ -47,6 +47,20 @@ it('puts the blank venue first and loads a 12 × 8 m editable shell without a pr
   expect(screen.queryByRole('status')).toBeNull();
 });
 
+it('stands up an 18 × 12 m hard-finish hall with a 2.4 m double entrance and no furniture', () => {
+  const apply = vi.fn();
+  render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={apply}/>);
+  fireEvent.click(screen.getByRole('button', { name: '载入硬装空房 宴会厅 18 × 12 米' }));
+  expect(loadScenePreset).not.toHaveBeenCalled();
+  const next = apply.mock.calls[0]![0] as RoomLayout;
+  expect(next.width).toBe(18);
+  expect(next.height).toBe(12);
+  expect(next.backendSceneV2?.venue.height).toBe(5);
+  expect(next.backendSceneV2?.structure.walls).toHaveLength(4);
+  expect(next.backendSceneV2?.structure.openings[0]!).toMatchObject({ kind: 'door', width: 2.4 });
+  expect(next.floors[0]?.items.filter(item => !item.structuralOpeningId && !item.structuralColumnId && !item.venueEntranceId)).toHaveLength(0);
+});
+
 it('asks on the blank card before clearing a worked-on layout', () => {
   const apply = vi.fn();
   const populated = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0], items: [{ id: 'existing' }] }] } as RoomLayout;

@@ -777,19 +777,22 @@ body {
 .sc-warning { color: var(--warn) !important; border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); background: var(--paper); font-size: var(--fs-p2); padding: 9px 10px; border-radius: var(--r-sm); line-height: 1.7; margin: 10px 0; overflow-wrap: anywhere; }
 .sc-canvas-stage { position: absolute; top: 0; bottom: 0; left: 291px; right: 0; min-width: 0; border-radius: 0; overflow: hidden; }
 .sc-canvas-heading { position: absolute; top: var(--sc-space-md); left: var(--sc-space-md); display: flex; align-items: center; gap: var(--sc-space-sm); color: var(--wk-muted); font-size: var(--fs-p2); pointer-events: none; }
-/* docs/49 地理底图输入：画布左上角标题下一行；发丝边胶囊，与画布其他浮层同语言。 */
-.sc-geo-basemap { position: absolute; top: calc(var(--sc-space-md) + 24px); left: var(--sc-space-md); display: flex; align-items: center; gap: var(--sc-space-sm); z-index: 26; pointer-events: auto; flex-wrap: wrap; max-width: min(680px, calc(100% - 150px)); }
-.sc-geo-basemap .sc-geo-toggle, .sc-geo-basemap .sc-geo-search, .sc-geo-basemap .sc-geo-chip, .sc-geo-basemap .sc-geo-controls { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); }
-.sc-geo-basemap button { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: none; color: var(--wk-ink-soft); font-size: var(--fs-cap); cursor: pointer; padding: 2px 5px; border-radius: var(--r-sm); min-height: 24px; }
-.sc-geo-basemap button:hover:not(:disabled) { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
-.sc-geo-basemap button[aria-pressed='true'] { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
-.sc-geo-basemap button:disabled { opacity: 0.5; cursor: default; }
-.sc-geo-basemap input { min-height: 26px; width: 170px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); padding: 2px 8px; font-size: var(--fs-cap); background: var(--wk-paper); color: var(--wk-ink); }
-.sc-geo-basemap select { min-height: 26px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-cap); padding: 1px 4px; }
-.sc-geo-basemap .sc-geo-chip strong { color: var(--wk-ink); font-weight: 500; }
-.sc-geo-basemap .sc-geo-chip small { color: var(--wk-muted); }
-.sc-geo-basemap .sc-geo-notice { font-size: var(--fs-cap); color: var(--warn); background: var(--paper); border: 1px solid var(--wk-hair); border-radius: var(--r-sm); padding: 3px 8px; }
-.sc-geo-basemap .sc-geo-attribution { font-size: var(--fs-cap); color: var(--wk-muted); background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: 999px; padding: 3px 9px; opacity: 0.9; }
+.sc-geo-basemap { position: absolute; top: var(--sc-space-md); left: var(--sc-space-md); z-index: 26; pointer-events: auto; }
+.sc-geo-basemap button { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: none; color: var(--wk-ink-soft); font-size: var(--fs-cap); cursor: pointer; padding: 4px 7px; border-radius: var(--r-sm); min-height: 28px; }
+.sc-geo-basemap .sc-geo-toggle { gap: 6px; padding: 4px 9px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); }
+.sc-geo-basemap .sc-geo-toggle + .sc-geo-toggle { margin-inline-start: 6px; }
+.sc-geo-basemap button:hover:not(:disabled), .sc-geo-basemap button[aria-pressed='true'] { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
+.sc-geo-basemap button:disabled { opacity: .5; cursor: default; }
+.sc-geo-panel { position: absolute; top: calc(100% + 6px); left: 0; display: grid; gap: 8px; width: min(260px, calc(100vw - 110px)); max-height: min(70vh, 420px); overflow: auto; padding: 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-cap); }
+.sc-geo-current { display: grid; gap: 4px; }
+.sc-geo-actions, .sc-geo-search { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.sc-geo-search { flex-wrap: nowrap; }
+.sc-geo-search input { flex: 1; min-width: 0; padding-inline: 7px; }
+.sc-geo-search button { flex: none; }
+.sc-geo-panel :is(input, select) { min-height: 28px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: inherit; }
+.sc-geo-notice { margin: 0; color: var(--wk-ink-soft); }
+.sc-geo-notice[role='alert'] { color: var(--warn); }
+.sc-geo-attribution { padding-top: 6px; border-top: 1px solid var(--wk-hair); font-size: inherit; color: var(--wk-muted); }
 .sc-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sc-canvas-dot { color: var(--faint); }
 .sc-canvas-tip { position: absolute; right: 20px; top: 17px; padding-right: 24px; pointer-events: none; }
@@ -824,6 +827,12 @@ body {
 .sc-delete-button { display: flex; justify-content: center; align-items: center; gap: 6px; color: var(--err); border: 1px solid var(--err); background: var(--paper); width: 100%; padding: 9px; margin-top: 8px; border-radius: var(--r-sm); font-size: var(--fs-cap) !important; }
 .sc-local-conflict { position: absolute; top: 60px; left: 20px; right: 20px; z-index: 32; background: var(--paper); border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); color: var(--warn); border-radius: var(--r-sm); padding: 10px 13px; display: flex; align-items: center; gap: 12px; font-size: var(--fs-p2); }
 .sc-local-conflict button { border: none; background: transparent; color: var(--wk-ink-soft); text-decoration: underline; font-size: var(--fs-p2); }
+.sc-canvas-mode { position: absolute; top: 52px; left: var(--sc-space-md); z-index: 24; display: flex; align-items: center; gap: 6px; max-width: min(560px, calc(100% - 32px)); padding: 4px 10px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); }
+.sc-canvas-mode strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wk-ink); font-weight: 500; }
+.sc-canvas-mode button { flex: none; padding: 2px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--wk-ink-soft); cursor: pointer; font-size: inherit; text-decoration: underline; }
+.sc-canvas-mode button:hover { color: var(--sc-accent-ink); }
+.sc-canvas-mode.is-error { border-color: var(--warn); color: var(--warn); }
+.sc-canvas-mode.is-error strong { color: var(--warn); }
 .sc-splat-transform-tools { position: absolute; left: 18px; bottom: 18px; z-index: 31; display: grid; gap: 8px; min-width: 340px; padding: 11px 12px 9px; border: 1px solid var(--wk-hair); border-radius: 12px; background: rgba(255,255,255,.96); box-shadow: 0 5px 20px rgba(29,45,37,.14); color: var(--wk-ink); font-size: 12px; }
 .sc-splat-transform-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sc-splat-transform-heading strong { font-size: 13px; font-weight: 650; }
@@ -1543,6 +1552,51 @@ body {
 }
 .sc-workbench .sc-tool-column .sc-more-pop > button { display: flex; align-items: center; justify-content: flex-start; gap: 8px; white-space: nowrap; }
 .sc-workbench .sc-tool-column .sc-more-pop > button span { flex: 1; text-align: left; }
+/* 地图类型：右轨一级圆钮弹出的底图单，缩略图 + 名字 + 高德标记。 */
+.sc-workbench .sc-map-type-pop {
+  width: 268px; min-width: 268px; padding: 12px 12px 10px; gap: 4px;
+}
+.sc-workbench .sc-map-type-title {
+  padding: 0 4px 8px; font-size: 15px; font-weight: 650; color: var(--wk-ink, #1a1a1a);
+}
+.sc-workbench .sc-tool-pop button.sc-map-type-row {
+  display: flex !important; align-items: center; gap: 10px;
+  width: 100% !important; height: auto !important; min-height: 0 !important;
+  padding: 6px !important; border-radius: 10px !important;
+  border: 2px solid transparent !important; background: transparent !important;
+  box-shadow: none !important; text-align: left; color: inherit;
+}
+.sc-workbench .sc-tool-pop button.sc-map-type-row.is-active { border-color: #2f6bff !important; }
+.sc-workbench .sc-tool-pop button.sc-map-type-row:hover { background: #f4f6f8 !important; }
+.sc-workbench .sc-map-type-thumb {
+  width: 72px; height: 52px; flex: none; border-radius: 6px; border: 1px solid #e6e6e6;
+  background-color: #e7efd8;
+}
+.sc-workbench .sc-map-type-thumb.is-street {
+  background-image:
+    linear-gradient(90deg, transparent 18%, #f0b429 18% 23%, transparent 23% 62%, #c96b4a 62% 66%, transparent 66%),
+    linear-gradient(transparent 28%, #8aa86a 28% 36%, transparent 36% 70%, #d7c4a3 70% 78%, transparent 78%),
+    linear-gradient(#e7f0d6, #f4efe2);
+}
+.sc-workbench .sc-map-type-thumb.is-labels {
+  background-image:
+    linear-gradient(115deg, transparent 42%, #d9d3c8 42% 46%, transparent 46%),
+    linear-gradient(#f7f4ee, #efe8dc);
+}
+.sc-workbench .sc-map-type-thumb.is-satellite {
+  background-image:
+    radial-gradient(circle at 30% 40%, #3d6b45 0 18%, transparent 19%),
+    radial-gradient(circle at 72% 62%, #2c4a38 0 22%, transparent 23%),
+    linear-gradient(160deg, #1e3a2f, #4a6b3a 42%, #6b5a3a 72%, #2a3a28);
+}
+.sc-workbench .sc-map-type-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; flex: 1; }
+.sc-workbench .sc-map-type-copy strong { font-size: 15px; font-weight: 600; color: #1d4ed8; line-height: 1.2; }
+.sc-workbench .sc-map-type-copy small { font-size: 11px; color: #71717a; line-height: 1.2; }
+.sc-workbench .sc-map-type-provider { margin-left: auto; font-size: 12px; font-weight: 700; color: #111; letter-spacing: -0.03em; }
+.sc-workbench .sc-tool-pop button.sc-map-type-off {
+  margin-top: 4px; color: var(--wk-muted); font-size: 12px;
+}
+.sc-workbench .sc-map-type-note { padding: 6px 4px 0; font-size: 10px; line-height: 1.4; color: var(--wk-muted); }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
 /* 发布卡片：一张图 + 一个主动作 + 扫码，项目大纲折叠，说明收进标题旁的 ⓘ。 */
 .sc-workbench .sc-publish-card {
@@ -1797,3 +1851,6 @@ body {
 .sc-page-error-detail[open] summary::before { content: '- '; }
 .sc-page-error-detail summary:focus-visible { outline: 2px solid var(--ink-soft, #55585f); outline-offset: 2px; }
 .sc-page-error-detail p { margin: 8px 0 0; font: 400 11px/18px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--faint, #a6aab2); overflow-wrap: anywhere; }
+.sc-walk-avatar-controls { position:absolute; z-index:35; left:50%; bottom:76px; transform:translateX(-50%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; max-width:85%; padding:6px 9px; border:1px solid var(--wk-hair); border-radius:10px; background:var(--wk-paper); color:var(--wk-ink); font-size:var(--fs-cap); }
+.sc-walk-avatar-controls button { padding:4px 7px; border:1px solid var(--wk-hair); border-radius:6px; background:transparent; color:inherit; cursor:pointer; }
+.sc-walk-avatar-state { display:inline-flex; align-items:center; gap:4px; color:var(--wk-ink-soft); }

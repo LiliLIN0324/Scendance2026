@@ -9,7 +9,7 @@
  * - 没有签到区时不约束（aisleWidthM=Infinity、violations=[]）。
  */
 
-import type { PlanAnnotation } from './plan-annotation';
+import { ANNOTATION_PRESET_LABELS, type PlanAnnotation } from './plan-annotation';
 import type { ZoneFurniturePlacement } from './plan-approve';
 import type { ScoredViolation } from './human-factors';
 
@@ -188,6 +188,8 @@ function rectSurfaceGap(
  * 官方课桌图的走道/消防疏散最低值，不随密度旋钮缩放。
  */
 export const ROUTE_CORRIDOR_WIDTH_M = 1.2;
+/** GEN-03：显式标注的消防疏散主通道预留宽度。 */
+const FIRE_ROUTE_CORRIDOR_WIDTH_M = 3;
 /**
  * 侵入判定容差（米）：量级与 plan-scoring.BBOX_OVERLAP_TOLERANCE_M 对齐
  * （不直接 import 那边，避免 plan-scoring → human-factors → plan-scoring 环）。
@@ -244,7 +246,7 @@ export function evaluateKeepOut(
 
 /**
  * 必留通道（route 折线，宾客动线/消防疏散）压线检查：
- * 折线按 ROUTE_CORRIDOR_WIDTH_M 展宽成走廊，家具 footprint 到任一线段的
+ * 折线按对应预设宽度展宽成走廊，家具 footprint 到任一线段的
  * 距离 < 半宽 − 容差 → 压通道（hard）。压通道的方案不进推荐（SC-20 口径）。
  * 注意：动线终点要停在区外——伸进签到台/桌椅堆里的最后一段按压通道算。
  */
@@ -253,12 +255,13 @@ export function evaluateRouteClear(
   routes: readonly PlanAnnotation[],
 ): ScoredViolation[] {
   const out: ScoredViolation[] = [];
-  const half = ROUTE_CORRIDOR_WIDTH_M / 2;
-  const limit = half - INTRUSION_TOLERANCE_M;
   for (const route of routes) {
     if (route.kind !== 'route' || route.geometry.kind !== 'polyline') continue;
     const pts = route.geometry.points;
     if (pts.length < 2) continue;
+    const fireRoute = route.label.trim() === ANNOTATION_PRESET_LABELS.fire_route;
+    const widthM = fireRoute ? FIRE_ROUTE_CORRIDOR_WIDTH_M : ROUTE_CORRIDOR_WIDTH_M;
+    const limit = widthM / 2 - INTRUSION_TOLERANCE_M;
     const offenders = new Map<string, number>();
     let total = 0;
     for (const p of placements) {
@@ -283,7 +286,8 @@ export function evaluateRouteClear(
       code: 'ROUTE_BLOCKED',
       severity: 'hard',
       zoneId: route.id,
-      message: `「${route.label}」动线要留 ${ROUTE_CORRIDOR_WIDTH_M}m 净空——被 ${total} 件家具压住（${names}）`,
+      ...(fireRoute ? { ruleId: 'GEN-03' } : {}),
+      message: `「${route.label}」动线要留 ${widthM}m 净空——被 ${total} 件家具压住（${names}）`,
     });
   }
   return out;

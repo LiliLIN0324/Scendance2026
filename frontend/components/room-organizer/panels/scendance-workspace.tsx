@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
@@ -6,21 +6,32 @@ import { useRoomEditor, useSelection } from '../contexts';
 import {
   SATELLITE_GROUND_LABEL,
   applySatelliteGroundPatch,
+  basemapCoversGroundPlane,
   ensureSatelliteGround,
   hideSatelliteGround,
   isMapOutdoorLayout,
+  isPlaceholderSatellite,
   isSatelliteGroundImage,
   readAmapKeys,
   satelliteGroundWanted,
   satelliteImageAligned,
   satelliteMissReason,
 } from '../lib/amap-venue';
+import {
+  GROUND_BASEMAP_LAYERS,
+  activeGroundBasemap,
+  groundBasemapStyleOf,
+  type GroundBasemapStyle,
+} from '../lib/ground-basemap';
+import { researchAreaWith } from '../lib/research-area';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
 import { OnlineModelLibrary } from './online-model-library';
+import { MaterialCreateCell } from './material-create-cell';
+import { LibraryChat } from './library-chat';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
 import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
 import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
@@ -125,9 +136,11 @@ export function ShelfGrip({ shelfRef, label = '调整物料库高度' }: { shelf
   ><span aria-hidden="true"/></div>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, controller, onClose, capturePlacement, variant = 'shelf' }: LibraryProps & {
+export function ScendanceLibrary({ placeCatalogItem, controller, onClose, capturePlacement, variant = 'shelf', walkRoles = [] }: LibraryProps & {
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
+  /** 左侧只负责选角色；进出漫游统一走右侧 `tool-walk`。 */
+  walkRoles?: readonly { id: string; name: string; image: string; walkable: boolean; note?: string; selected: boolean; onSelect(): void }[];
 }): JSX.Element {
   const { layout, activeFloor, actions, history } = useRoomEditor();
   const { selectOnly } = useSelection();
@@ -164,7 +177,24 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
       {card
         ? <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}/>
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}
+              createSlot={<LibraryChat title="物料库"><MaterialCreateCell variant="chat" importSlot={importSlot} {...(controller ? { controller } : {})}/></LibraryChat>}
+              walkRoleSlot={walkRoles.length > 0 ? <ul className="sc-lib-grid" aria-label="漫游角色">
+                {walkRoles.map(role => <li key={role.id}>
+                  <button type="button" className={`sc-walk-role-card${role.selected ? ' is-selected' : ''}`}
+                    aria-pressed={role.selected} disabled={!role.walkable}
+                    aria-label={role.walkable ? `选用${role.name}漫游` : `${role.name}无法漫游`}
+                    title={role.note ?? (role.selected ? '当前角色，右侧「进入漫游」用它' : `点一下换成${role.name}`)}
+                    onClick={role.onSelect}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={role.image} alt={`${role.name}全身预览`} loading="lazy"/>
+                  <strong>{role.name}</strong>
+                  {role.note
+                    ? <span className="sc-walk-role-note">{role.note}</span>
+                    : role.selected ? <span className="sc-walk-role-note">当前角色</span> : null}
+                  </button>
+                </li>)}
+              </ul> : undefined}/>
           </div>
         </div>
         : <div className="sc-library-content">
@@ -212,6 +242,8 @@ interface ViewToolsProps {
   shareActions?: ShareMenuActions;
   /** 旧评审入口改道时递增。 */
   shareOpenRequest?: number;
+  /** 进出漫游的唯一入口（room-organizer 的 startWalk）；不传时退回本组件的开关。 */
+  onToggleWalkthrough?(on: boolean): void;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -267,7 +299,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, onToggleWalkthrough }: ViewToolsProps): JSX.Element {
   const sceneMoveActive = sceneMoveMode !== 'off';
   const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
@@ -292,39 +324,78 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const satelliteOn = satelliteGroundWanted(layout);
   const [satelliteBusy, setSatelliteBusy] = useState(false);
   const [satelliteMiss, setSatelliteMiss] = useState<'key' | 'place' | null>(null);
+  const [mapTypeOpen, setMapTypeOpen] = useState(false);
+  const [mapMiss, setMapMiss] = useState(false);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
   const satelliteAttempt = useRef('');
   const busyTimer = useRef(0);
+  const basemapStyleRef = useRef<GroundBasemapStyle>(groundBasemapStyleOf(layout.floorPlanImage));
+  const activeBasemap = activeGroundBasemap(layout);
   const satelliteTip = satelliteMiss === 'key' ? '卫星贴地·需高德 Key' : satelliteMiss === 'place' ? '卫星贴地·未定位' : '卫星贴地';
+  const mapTip = mapMiss
+    ? '地图类型·这一层暂时拉不到，仍显示上一张'
+    : activeBasemap
+      ? `地图类型：${activeBasemap.label} · ${activeBasemap.provider}`
+      : '地图类型';
+  useEffect(() => {
+    if (satelliteBusy) return;
+    basemapStyleRef.current = groundBasemapStyleOf(layout.floorPlanImage);
+  }, [layout.floorPlanImage, satelliteBusy]);
   const releaseBusy = useCallback((mine: number) => {
     window.clearTimeout(busyTimer.current);
     if (satelliteRequest.current === mine) setSatelliteBusy(false);
   }, []);
-  const fillSatellite = useCallback((startedId: string, startedName: string, mine: number, showBusy: boolean) => {
+  const fillSatellite = useCallback((
+    startedId: string,
+    startedName: string,
+    mine: number,
+    showBusy: boolean,
+    style?: GroundBasemapStyle,
+    syncResearch = false,
+  ) => {
     const source = layoutRef.current;
+    const wanted = style ?? basemapStyleRef.current;
     window.clearTimeout(busyTimer.current);
     // 进场自动补图不占钮。只有人点开时才亮 busy，并且到点或结束一定放开。
     if (showBusy) {
       setSatelliteBusy(true);
-      busyTimer.current = window.setTimeout(() => releaseBusy(mine), 12000);
+      busyTimer.current = window.setTimeout(() => releaseBusy(mine), 26000);
     } else {
       setSatelliteBusy(false);
     }
-    void ensureSatelliteGround(source).then(patch => {
+    void ensureSatelliteGround(source, wanted).then(patch => {
       if (mine !== satelliteRequest.current) return;
       const current = layoutRef.current;
       if ((current.id ?? '') !== startedId || current.name !== startedName || current.satelliteGroundRef === false) return;
       setSatelliteMiss(satelliteMissReason(current, patch, readAmapKeys()));
-      if (!patch) return;
-      actions.applyLayout(applySatelliteGroundPatch(current, patch));
-      setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
+      if (!patch) {
+        if (syncResearch || satelliteImageAligned(current.floorPlanImage)) setMapMiss(true);
+        return;
+      }
+      // 占位 SVG 只是「别让地面停在素色」的兜底。本来已有对齐真图（或人在换层）时，
+      // 拉不到就留着旧图并亮 mapMiss，不能拿占位图当成切换成功。
+      if (isPlaceholderSatellite(patch.floorPlanImage) && (syncResearch || satelliteImageAligned(current.floorPlanImage))) {
+        basemapStyleRef.current = groundBasemapStyleOf(current.floorPlanImage);
+        setMapMiss(true);
+        return;
+      }
+      setMapMiss(false);
+      let next = applySatelliteGroundPatch(current, patch);
+      // 调研底图铺在壳体下面。人换了地图类型时一起换，避免圈内是路网、圈外仍是卫星。
+      // 静态预置图与像素一一对应，researchAreaWith 会原样返回。
+      if (syncResearch && current.researchArea) {
+        next = { ...next, researchArea: researchAreaWith(current.researchArea, { style: wanted }) };
+      }
+      actions.applyLayout(next);
+      setView(viewNext => ({ ...viewNext, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
     }).finally(() => { if (showBusy) releaseBusy(mine); });
   }, [actions, releaseBusy, setView]);
   useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
-    if (!satelliteOn || satelliteImageAligned(layout.floorPlanImage)) return undefined;
+    // 窄边旧图虽然对齐，但只盖住场地中间一块。没铺满户外地面就重拉。
+    if (!satelliteOn || (satelliteImageAligned(layout.floorPlanImage) && basemapCoversGroundPlane(layout))) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
     // 旧的 location/zoom 卫星图没有经纬度范围，要重拉，否则贴地会对不齐。
     if (layout.floorPlanImage && !isSatelliteGroundImage(layout.floorPlanImage)) return undefined;
@@ -350,7 +421,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       actions.applyLayout(hideSatelliteGround(current));
       return;
     }
-    if (satelliteImageAligned(current.floorPlanImage)) {
+    if (satelliteImageAligned(current.floorPlanImage) && basemapCoversGroundPlane(current)) {
       actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: current.floorPlanOpacity ?? 0.78 }));
       return;
@@ -358,8 +429,42 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
     fillSatellite(current.id ?? '', current.name, satelliteRequest.current, true);
   };
+  const chooseBasemap = (style: GroundBasemapStyle) => {
+    const current = layoutRef.current;
+    basemapStyleRef.current = style;
+    setMapTypeOpen(false);
+    setMapMiss(false);
+    const token = `${current.id ?? ''}|${current.name}|${current.floorPlanImage ?? ''}|${current.mapGroundPolygon?.length ?? 0}`;
+    satelliteAttempt.current = token;
+    satelliteRequest.current += 1;
+    window.clearTimeout(busyTimer.current);
+    setSatelliteBusy(false);
+    const already = satelliteImageAligned(current.floorPlanImage)
+      && groundBasemapStyleOf(current.floorPlanImage) === style
+      && basemapCoversGroundPlane(current);
+    const research = current.researchArea ? researchAreaWith(current.researchArea, { style }) : undefined;
+    const researchChanged = !!research && research.imageUrl !== current.researchArea?.imageUrl;
+    if (already) {
+      if (current.satelliteGroundRef === true && !researchChanged) return;
+      actions.applyLayout({
+        ...current,
+        satelliteGroundRef: true,
+        floorPlanOpacity: current.floorPlanOpacity ?? 0.78,
+        ...(researchChanged && research ? { researchArea: research } : {}),
+      });
+      setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: current.floorPlanOpacity ?? 0.78 }));
+      return;
+    }
+    actions.applyLayout({
+      ...current,
+      satelliteGroundRef: true,
+      floorPlanOpacity: current.floorPlanOpacity ?? 0.78,
+    });
+    fillSatellite(current.id ?? '', current.name, satelliteRequest.current, true, style, true);
+  };
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
+  const mapTypeMenuRef = useRef<HTMLDivElement>(null);
   const selectActive = view.selectMode && !view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode;
   const selectTip = selectActive
     ? '移动局部物体 · 激活中，再点一次退出'
@@ -409,6 +514,8 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     // this gesture. Waiting for the walk hook's effect drops the gesture.
     if (on) requestWalkPointerLock();
   };
+  // 进出漫游统一走 room-organizer 的入口（场景未就绪拦截、整景区自动进场地）；不传才退回本地开关。
+  const toggleWalk = onToggleWalkthrough ?? setWalkthrough;
   const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6);
   // 打开导出卡先抓同一帧做预览；换机位再抓一次。画质只影响确认后的成图，预览不重抓。
   useEffect(() => {
@@ -449,11 +556,12 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     }
   };
   useEffect(() => {
-    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen) return undefined;
+    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen && !mapTypeOpen) return undefined;
     const onPointer = (event: MouseEvent) => {
       const target = event.target as Node;
       const el = event.target as HTMLElement | null;
       if (exportOpen && exportMenuRef.current && !exportMenuRef.current.contains(target)) setExportOpen(false);
+      if (mapTypeOpen && mapTypeMenuRef.current && !mapTypeMenuRef.current.contains(target)) setMapTypeOpen(false);
       if (atmosphereMenuRef.current && !atmosphereMenuRef.current.contains(target)) {
         setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false);
       } else if (atmosphereMenuRef.current) {
@@ -464,12 +572,12 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); }
+      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); setMapTypeOpen(false); }
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
-  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown]);
+  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown, mapTypeOpen]);
 
   return (
     /* 圆钮贴在画布右上角。所有工具都是一级钮，没有省略号菜单；只有导出还带一层选项弹层。 */
@@ -506,7 +614,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         <MaterialSymbol name="layers" />
       </button>}
       {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
-      <button type="button" id="tool-walk" data-tip={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-label={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => setWalkthrough(!view.walkthroughMode)}>
+      <button type="button" id="tool-walk" data-tip={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-label={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
         <MaterialSymbol name="footprint" />
         <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称走进场'}</span>
       </button>
@@ -520,6 +628,29 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         <MaterialSymbol name={view.snapToGrid ? 'center_focus_strong' : 'grid_3x3'} />
       </button>
       {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。 */}
+      {satelliteVenue && <div className="sc-tool-menu" ref={mapTypeMenuRef}>
+        <button type="button" id="tool-map-type" data-tip={mapTip} aria-label={mapTip} aria-haspopup="dialog" aria-expanded={mapTypeOpen} aria-controls="tool-map-type-panel" aria-busy={satelliteBusy} className={mapTypeOpen ? 'is-active' : ''} onClick={() => { quietShare(); setMapTypeOpen(open => !open); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+          <MaterialSymbol name="map" />
+        </button>
+        {mapTypeOpen && <div id="tool-map-type-panel" className="sc-tool-pop sc-map-type-pop" role="dialog" aria-label="地图类型">
+          <span className="sc-map-type-title">地图类型</span>
+          <div role="listbox" aria-label="地面底图">
+            {GROUND_BASEMAP_LAYERS.map(layer => {
+              const selected = !!activeBasemap && activeBasemap.id === layer.id;
+              return <button type="button" key={layer.id} role="option" aria-selected={selected} className={`sc-map-type-row${selected ? ' is-active' : ''}`} onClick={() => chooseBasemap(layer.style)}>
+                <span className={`sc-map-type-thumb is-${layer.kind === 'satellite' ? 'satellite' : layer.style === 8 ? 'labels' : 'street'}`} aria-hidden="true"/>
+                <span className="sc-map-type-copy">
+                  <strong>{layer.label}</strong>
+                  <small>{layer.detail}</small>
+                </span>
+                <span className="sc-map-type-provider">{layer.provider}</span>
+              </button>;
+            })}
+          </div>
+          {satelliteOn && <button type="button" className="sc-map-type-off" onClick={() => { setMapTypeOpen(false); turnSatellite(); }}>关闭底图</button>}
+          <span className="sc-map-type-note">底图 © 高德地图 · 仅作参照，不可作重建素材</span>
+        </div>}
+      </div>}
       {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
         <MaterialSymbol name="satellite" />
       </button>}
@@ -538,7 +669,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         <MaterialSymbol name="iconpark_zoom_in_solid" />
       </button>
       {onExportImage && <div className="sc-tool-menu" ref={exportMenuRef}>
-        <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+        <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); setMapTypeOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <MaterialSymbol name="photo_camera" />
         </button>
         {exportOpen && <div id="tool-export-panel" className="sc-tool-pop sc-export-pop" role="dialog" aria-label="导出效果图选项">
@@ -560,7 +691,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       </div>}
       {showAtmosphere && <span className="sc-tool-sep" aria-hidden="true"/>}
       {showAtmosphere && <div className="sc-tool-menu" ref={atmosphereMenuRef}>
-        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { quietShare(); setAtmosphereOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { quietShare(); setAtmosphereOpen(open => !open); setMapTypeOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <MaterialSymbol name="sunny" />
         </button>
         {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">

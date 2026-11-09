@@ -22,11 +22,13 @@ import {
   satelliteImageAligned,
   satelliteImageShellRect,
   satellitePhotoShapeRect,
+  basemapCoversGroundPlane,
   orientMapShellNorthUp,
   metersPerDegreeLng,
   METERS_PER_DEGREE_LAT,
 } from './amap-venue';
 import { INITIAL_LAYOUT } from './initial-layout';
+import { outdoorGroundSize } from './site';
 import { parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
@@ -114,6 +116,28 @@ describe('amap venue pick', () => {
     expect(layout.satelliteGroundRef).toBeUndefined();
     expect(layout.floorPlanImage).toBeUndefined();
     expect(layout.mapGroundPolygon).toHaveLength(4);
+  });
+
+  it('keeps the drawn vertices through a save/reopen round trip', () => {
+    // 平湖秋月那种非矩形轮廓：保存后刷新重开，地点、顶点、轮廓都要还在。
+    const before = INITIAL_LAYOUT as RoomLayout;
+    const polygon = lShapePolygon();
+    const { layout } = createVenueFromPick(before, {
+      name: '平湖秋月', location: '浙江省杭州市西湖区孤山路1号', polygon,
+    });
+    expect(layout.mapGroundPolygon).toHaveLength(polygon.length);
+    expect(layout.mapLngLat).toBeTruthy();
+
+    // 走一遍真实的存储往返（schema 校验 + 往返白名单）
+    const reopened = parseStoredLayout(JSON.parse(JSON.stringify(layout)) as unknown);
+    expect(reopened).toBeTruthy();
+    expect(reopened!.mapGroundPolygon).toHaveLength(polygon.length);
+    reopened!.mapGroundPolygon!.forEach((point, index) => {
+      expect(point.lng).toBeCloseTo(polygon[index]!.lng, 9);
+      expect(point.lat).toBeCloseTo(polygon[index]!.lat, 9);
+    });
+    // 名称里的地点也跟着存下来了
+    expect(reopened!.name).toContain('平湖秋月');
   });
 
   it('raises an L-contour shell that is visibly not an axis-aligned rectangle', () => {
@@ -250,6 +274,26 @@ describe('satellite ground backfill', () => {
     expect(patch?.floorPlanImage).not.toContain('test-static');
   });
 
+  it('asks the proxy for 高德 street tiles when a ground style is requested', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
+    vi.stubGlobal('window', {});
+    const bytes = new Uint8Array(120);
+    bytes[0] = 0xff;
+    bytes[1] = 0xd8;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon: lShapePolygon(), satelliteGround: false,
+    });
+    const patch = await ensureSatelliteGround(layout, 7);
+    expect(patch?.floorPlanImage).toContain('style=7');
+    expect(patch?.floorPlanImage).toContain('satellite-ground-ref');
+    expect(patch?.floorPlanImage).not.toContain('test-static');
+  });
+
   it('geocodes a legacy map shell that never stored a polygon', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
@@ -356,7 +400,28 @@ describe('satellite ground backfill', () => {
     const drawn = satelliteProxyUrl(polygon, 'secret-key');
     expect(drawn).toBe(url);
     const rect = satelliteImageShellRect(registration!.frame, registration!.bounds);
+    const ground = outdoorGroundSize(registration!.shellWidth, registration!.shellDepth);
+    expect(rect.width).toBeCloseTo(ground, 1);
+    expect(rect.depth).toBeCloseTo(ground, 1);
+    expect(rect.x + rect.width / 2).toBeCloseTo(registration!.shellWidth / 2, 1);
+    expect(rect.z + rect.depth / 2).toBeCloseTo(registration!.shellDepth / 2, 1);
     expect(rect.northAtTop).toBe(true);
+    const narrow = satelliteProxyUrl(polygon, 'secret-key')!.replace(
+      /west=[^&]+&south=[^&]+&east=[^&]+&north=[^&]+/,
+      'west=120.1000000&south=30.2000000&east=120.1010000&north=30.2010000',
+    );
+    expect(basemapCoversGroundPlane({
+      floorPlanImage: narrow,
+      mapGroundFrame: registration!.frame,
+      width: registration!.shellWidth,
+      height: registration!.shellDepth,
+    })).toBe(false);
+    expect(basemapCoversGroundPlane({
+      floorPlanImage: url!,
+      mapGroundFrame: registration!.frame,
+      width: registration!.shellWidth,
+      height: registration!.shellDepth,
+    })).toBe(true);
     expect(rect.z).toBeLessThan(0);
     expect(orientMapShellNorthUp(layout)).toBe(layout);
     const depth = layout.height;

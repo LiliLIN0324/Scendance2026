@@ -1,0 +1,57 @@
+.page {
+  --paper: #e7ebdf;
+  --water: #cad9d0;
+  --ink: #20392f;
+  --rule: #b4c1b0;
+  --panel: #f4f5ec;
+  min-height: 100dvh;
+  padding: clamp(16px, 3vw, 40px);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.header, .search, .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header { margin-bottom: 20px; flex-wrap: wrap; }
+.header a { text-decoration: underline; text-underline-offset: 3px; }
+.header h1 { margin: 4px 0 0; font-size: clamp(25px, 4vw, 38px); font-weight: 650; }
+.search { justify-content: start; gap: 6px; }
+.search input { min-width: 0; width: min(58vw, 300px); }
+.page :is(button, input) {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.page button { cursor: pointer; }
+.page button:disabled { cursor: default; opacity: .65; }
+.page :is(button, input, a):focus-visible { outline: 2px solid #346e53; outline-offset: 3px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; border: 1px solid var(--rule); }
+.stage { position: relative; isolation: isolate; display: grid; place-items: center; min-height: 68vh; background: var(--water); }
+.stage img, .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.stage img { object-fit: contain; }
+.credit, .poi { position: absolute; z-index: 1; }
+.credit { right: 8px; bottom: 6px; padding: 2px 7px; background: var(--panel); font-size: 11px; }
+.stage .poi { left: 12px; bottom: 28px; font-weight: 600; }
+
+.sidebar { display: flex; flex-direction: column; align-items: stretch; gap: 18px; padding: 18px; background: var(--panel); border-left: 1px solid var(--rule); }
+.sidebar h2 { margin: 0 0 4px; font-size: 23px; font-weight: 650; }
+.sidebar h3 { margin: 0 0 5px; font-size: 15px; font-weight: 650; }
+.sidebar p { margin: 0; }
+.sidebar .row { min-height: 40px; width: 100%; padding: 6px 0; text-align: left; border: 0; border-top: 1px solid var(--rule); border-radius: 0; }
+.row small, .version { color: #465b50; font-size: 12px; }
+.version { margin-top: auto; }
+.notice { z-index: 1; padding: 8px 12px; background: var(--panel); }
+
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; }
+  .stage { min-height: 52vh; }
+  .sidebar { border-left: 0; border-top: 1px solid var(--rule); }
+}

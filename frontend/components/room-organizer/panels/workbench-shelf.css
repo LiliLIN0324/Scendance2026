@@ -653,44 +653,8 @@
 .sc-space-confirm-actions { display:flex; align-items:center; gap:4px; margin-left:auto; }
 .sc-space-confirm-actions .sc-button { height:24px; padding:0 8px; font-size:var(--fs-cap); }
 
-/* ── 物料：三块摘要 + 下方结果区，同属一张卡 ───────────────────────
-   与活动卡同一套容器：1px 细边、--r-md 圆角、paper 底、10px 12px 内边距。
-   收起只露一行素材；展开内部滚动、上限面板约 55%，收起把高度还给 chat。 */
-.sc-lib-wrap {
-  display:flex; flex-direction:column; gap:8px; min-width:0;
-  padding:10px 12px;
-  border:1px solid var(--wk-hair); border-radius:var(--r-md);
-  background:var(--wk-paper);
-  min-height:var(--sc-card-collapsed, 216px);
-  max-height:var(--sc-card-collapsed, 216px);
-  overflow:hidden;
-  transition:max-height 200ms ease-out;
-}
-.sc-lib-wrap.is-expanded { max-height:min(55vh, 420px); }
-.sc-lib-wrap .sc-lib-results { min-height:0; }
-/* 收起态：内容被裁到一行，底部一条渐隐提示还有更多；不出滚动条。 */
-.sc-lib-wrap:not(.is-expanded) .sc-lib-results {
-  /* 收起态也撑满卡内剩余高度，别在「展开」上面留一块死白。 */
-  flex:1 1 auto; min-height:0; overflow:hidden;
-  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
-  mask-image:linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
-}
-.sc-lib-wrap.is-expanded .sc-lib-results {
-  flex:1 1 auto; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin;
-}
-.sc-lib-wrap.is-expanded .sc-lib-results::-webkit-scrollbar { width:6px; }
-.sc-lib-wrap.is-expanded .sc-lib-results::-webkit-scrollbar-thumb {
-  border-radius:3px; background:color-mix(in srgb, var(--wk-ink) 18%, transparent);
-}
-/* 展开控件：一行小字 + 箭头，不做大胶囊按钮。 */
-.sc-lib-expand {
-  display:inline-flex; align-items:center; align-self:flex-end; gap:3px; flex:none;
-  margin-top:auto; padding:0 2px; border:0; background:transparent;
-  color:var(--wk-muted); font-size:var(--fs-cap); line-height:16px; cursor:pointer;
-  transition:color 130ms ease;
-}
-.sc-lib-expand:hover { color:var(--wk-ink); }
-.sc-lib-expand:focus-visible { outline:1px solid var(--wk-ink-soft); outline-offset:1px; border-radius:3px; }
+/* 工作台物料面板直接浏览，整栏滚动。 */
+.sc-lib-wrap { display:flex; flex-direction:column; gap:10px; min-width:0; }
 /* 三块同一版式：图标左、标题中、数量最右；单行不换行，hover 只提亮，选中只留绿内描边。 */
 .sc-lib-triad > button.sc-lib-card {
   display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:none;
@@ -763,6 +727,16 @@
 .sc-lib-list .sc-lib-tile .sc-lib-tile-thumb { flex:none; width:36px; height:36px; aspect-ratio:auto; }
 .sc-lib-list .sc-lib-tile .sc-lib-tile-name { flex:1; font-size:var(--fs-p2); line-height:18px; }
 .sc-lib-list .sc-lib-tile .sc-lib-star { position:static; flex:none; margin-left:auto; width:32px; height:32px; right:auto; top:auto; }
+
+.sc-scan-options > summary, .sc-lib-import > summary { cursor:pointer; font-size:12px; color:var(--wk-ink-soft); padding-block:6px; }
+.is-browse .sc-lib-grid, .is-browse .sc-lib-list .sc-lib-group > ul { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.is-browse .sc-lib-list .sc-lib-tile { display:block; }
+.is-browse .sc-lib-tile .sc-lib-tile-btn { display:flex; flex-direction:column; align-items:stretch; gap:5px; padding:7px; border:1px solid var(--wk-hair); border-radius:var(--r-sm); }
+.is-browse .sc-lib-tile .sc-lib-tile-thumb { width:100%; height:auto; aspect-ratio:16 / 10; background:var(--wk-plane); }
+.is-browse .sc-lib-tile .sc-lib-tile-name { font-size:12px; line-height:17px; }
+.is-browse .sc-lib-tile-add { font-size:11px; color:var(--wk-green-deep); font-weight:600; }
+.is-browse .sc-lib-tile .sc-lib-star { position:absolute; top:10px; right:10px; width:24px; height:24px; opacity:1; }
+.is-browse .sc-lib-list .sc-lib-group { gap:6px; }
 
 /* 本机 GLB：入口就是一格物料卡，桌面上可把单个 .glb 拖进来；说明收进 ⓘ。 */
 .sc-glb-file {
@@ -965,6 +939,9 @@
 .sc-env-scenes > li.is-current { border-color:var(--wk-green); background:var(--wk-green-pale); }
 .sc-env-scenes .sc-env-scene-pick { display:flex; align-items:center; gap:7px; flex:1; min-width:0; padding:0; border:0; background:transparent; color:var(--wk-ink); text-align:left; cursor:pointer; }
 .sc-env-scenes .sc-env-scene-pick:disabled { cursor:default; opacity:.65; }
+.sc-space-library-details { margin-top:8px; padding-top:8px; border-top:1px solid var(--wk-hair); }
+.sc-space-library-details > summary { cursor:pointer; color:var(--wk-ink-soft); font-size:var(--fs-cap); }
+.sc-space-library-details[open] > summary { margin-bottom:6px; }
 .sc-env-scenes .sc-env-preview { width:44px; height:34px; border-radius:5px; }
 .sc-env-scenes .sc-env-meta strong { font-size:12px; line-height:16px; }
 .sc-env-scenes .sc-env-meta small { font-size:10px; line-height:14px; }
@@ -1048,6 +1025,63 @@
   font-size:var(--fs-p2); color:var(--wk-ink); opacity:1;
 }
 .sc-lib-search > input::placeholder { color:var(--wk-muted); }
+.sc-library-tabs-equal { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-bottom: 1px solid var(--wk-hair); }
+.sc-library-tabs-equal > button {
+  position: relative; min-width: 0; min-height: 36px; padding: 6px 2px 9px;
+  border: 0; border-radius: 0;
+  background: transparent; color: var(--wk-muted);
+  font: inherit; font-size: 12px; font-weight: 500; line-height: 1.25;
+  text-align: center; cursor: pointer;
+}
+.sc-library-tabs-equal > button:hover { color: var(--wk-ink); }
+.sc-library-tabs-equal > button[aria-pressed="true"] { color: var(--wk-ink); }
+.sc-library-tabs-equal > button[aria-pressed="true"]::after {
+  content: ''; position: absolute; left: 6px; right: 6px; bottom: -1px;
+  height: 2px; border-radius: 1px; background: var(--wk-green);
+}
+.sc-library-tabs-equal > button:focus-visible { outline: 2px solid var(--wk-green); outline-offset: -2px; border-radius: 4px; }
+.sc-walk-role-card { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.sc-walk-role-card > img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; background: #fafafa; border-radius: 9px; }
+.sc-walk-role-card.is-selected > img { outline: 2px solid #245c4a; outline-offset: -2px; }
+.sc-walk-role-card:disabled { cursor: not-allowed; opacity: .55; }
+.sc-walk-role-note { font-size: 11px; line-height: 1.3; color: var(--wk-muted); }
+.sc-walk-role-card.is-selected .sc-walk-role-note { color: #245c4a; font-weight: 600; }
+.sc-library-chat { position: relative; margin-bottom: 6px; }
+.sc-library-chat-title {
+  position: absolute; top: 0; left: 0; min-height: 34px;
+  display: flex; align-items: center; gap: 6px;
+}
+.sc-library-chat-title h3 { margin: 0; font-size: 16px; font-weight: 650; color: var(--wk-ink); }
+.sc-library-chat-disclosure > summary {
+  box-sizing: border-box; width: max-content; min-height: 34px; margin-inline-start: auto; padding: 4px 8px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  border-radius: 7px; background: var(--wk-green-pale, #edf4f1);
+  color: var(--wk-green-deep, #245c4a); cursor: pointer; list-style: none;
+  font-size: 12px; font-weight: 650;
+}
+.sc-library-chat-disclosure > summary::-webkit-details-marker { display: none; }
+.sc-library-chat-disclosure[open] > summary > :last-child { transform: rotate(180deg); }
+.sc-library-chat-content {
+  box-sizing: border-box; display: grid; align-content: start; gap: 8px;
+  height: max(70px, calc(25cqh - 40px)); overflow-y: auto; overscroll-behavior: contain;
+  margin-top: 6px; padding: 10px;
+  background: var(--wk-plane); border-radius: 8px;
+}
+.sc-library-chat-content p { margin: 0; font-size: 12px; color: var(--wk-ink-soft); }
+.sc-library-chat-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-library-chat-choices > :is(button, a) {
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 8px;
+  border: 0; border-radius: 6px; background: var(--wk-paper); color: var(--wk-ink);
+  font: inherit; font-size: 12px; cursor: pointer; text-decoration: none;
+}
+.sc-library-chat :is(summary, button, a):focus-visible { outline: 2px solid #245c4a; outline-offset: -2px; }
+.sc-material-create-menu.is-inline {
+  position: static; z-index: auto; min-width: 0; max-width: none;
+  padding: 0; border: 0; background: transparent; box-shadow: none;
+}
+.sc-material-create-menu.is-inline > button { background: var(--wk-paper); font-size: 12px; }
+.sc-material-create-menu.is-inline form { display: grid; gap: 8px; }
+.sc-material-create-menu.is-inline input[type="file"] { max-width: 100%; }
 
 .sc-lib-group-head {
   display:flex; align-items:center; gap:6px;

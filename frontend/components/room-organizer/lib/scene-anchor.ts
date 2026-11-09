@@ -46,6 +46,14 @@ export function anchorGeoToWorld(anchor: SceneAnchor, lng: number, lat: number):
   return { x: x / anchor.metersPerUnit, z: z / anchor.metersPerUnit };
 }
 
+/** The saved geographic ring in the same world coordinates as the basemap. */
+export function mapVenueFootprint(layout: RoomLayout): { x: number; z: number }[] {
+  const polygon = layout.mapGroundPolygon;
+  if (!polygon || polygon.length < 3) return [];
+  const anchor = sceneAnchorOf(layout);
+  return anchor ? polygon.map(point => anchorGeoToWorld(anchor, point.lng, point.lat)) : [];
+}
+
 /** 底图网格绕世界 Y 轴的偏航（弧度）：纹理正北要指向 orientationDeg 方位，与 anchorGeoToWorld 的旋转互逆。 */
 export function anchorBasemapYawRad(anchor: SceneAnchor): number {
   if (anchor.orientationDeg === 0) return 0;

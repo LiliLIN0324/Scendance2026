@@ -1,12 +1,12 @@
-# Scendance 文档总览（2026-11-04 整理后）
+# Scendance 文档总览
 
-> 这是 `docs/` 的唯一入口。原来 8 份互相引用的 11 月调研文档已合并为 4 份主题文档，原始件完整归档在 `archive/recon-2026-11-src/`，没有删除。
+> `docs/` 的唯一入口页。**文件清单不在本页维护**——现行有哪些文件、各多大、何时改过，一律看 [INDEX.md](INDEX.md)（脚本扫盘生成，逐条验证存在）。本页只回答三件事：现状结论是什么、某件事该读哪一份、旧编号怎么查。
 >
-> 小程序端代码已独立成仓 [`LiliLIN0324/scendance-capture`](https://github.com/LiliLIN0324/scendance-capture)（私有），本仓自 2026-11-05 起不再保留 `miniprogram/`；本仓 `frontend/lib/capture-guide/` 仍是两端共用的阈值真源。
+> 小程序端代码已独立成仓 [`LiliLIN0324/scendance-capture`](https://github.com/LiliLIN0324/scendance-capture)（私有），本仓自 2026-11-05 起不再保留 `miniprogram/`；本仓 [frontend/lib/capture-guide/](../frontend/lib/capture-guide/) 仍是两端共用的阈值真源。
 
 ## 一、现状四句话
 
-1. **整条 Golden Path 状态为「待复测」（G1/G3 阻塞已解除，端到端需在 staging 复测）。** 2026-11-04 以代码为准复核，修正了本文件此前「G3 入口断、G1 生产完全不可用」的结论：G3 已打通——`panels/space-panel.tsx` 已有「真实场地」区块（扫描列表、空态、选中即应用），`lib/venue-scans.ts` 负责筛 `.spz`/`.ply` 产物，**缩略图仍是占位符**；G1 的生产阻塞解除——`lib/aholo-assets.ts` 只在未配置 `NEXT_PUBLIC_LUX3D_DIRECT_URL` 时于 development 猜 `127.0.0.1:3199`，生产未配置直连时改走云端队列（缺配置返回可读文案，见 `lib/material-generate.ts`）。**不据此写成「能演示」**：未在 staging 跑过端到端。当日实测仍有效的阻塞是 G2（云发布静默丢件）与 G5（分享页无真实环境）。详见 [04-Golden-Path-规格与实测](04-Golden-Path-规格与实测.md)。
+1. **整条 Golden Path 状态为「待复测」（G1/G3 阻塞已解除，端到端需在 staging 复测）。** 2026-11-04 以代码为准复核，修正了本文件此前「G3 入口断、G1 生产完全不可用」的结论：G3 已打通——`frontend/components/room-organizer/panels/space-panel.tsx` 已有「真实场地」区块（扫描列表、空态、选中即应用），`frontend/components/room-organizer/lib/venue-scans.ts` 负责筛 `.spz`/`.ply` 产物，**缩略图仍是占位符**；G1 的生产阻塞解除——`frontend/components/room-organizer/lib/aholo-assets.ts` 只在未配置 `NEXT_PUBLIC_LUX3D_DIRECT_URL` 时于 development 猜 `127.0.0.1:3199`，生产未配置直连时改走云端队列（缺配置返回可读文案，见 `frontend/components/room-organizer/lib/material-generate.ts`）。**不据此写成「能演示」**：未在 staging 跑过端到端。当日实测仍有效的阻塞是 G2（云发布静默丢件）与 G5（分享页无真实环境）。详见 [04-Golden-Path-规格与实测](04-Golden-Path-规格与实测.md)。
 2. **当前不能作为可发布基线。** `vitest` 256 个套件中 14 个红、`tsc` 8 条错、`next build` 失败；其中只有 `creative-venue-photos` 的 4 条是已提交代码的真实缺陷，其余多为并行任务半成品与陈旧断言。详见 [03-测试与构建健康度](03-测试与构建健康度.md)。
 3. **西湖现有素材不能重建。** 32 个文件里 24 张有效静态图、0 / 32 具备可用坐标、覆盖仅 102.6°、曝光跨 16 倍；采集导引自评只有 **49 分**（低于 50 分重采线）。必须重采。详见 [01-素材与3D重建](01-素材与3D重建.md)。
 4. **交付与 Agent 的能力缺口已收窄。** 六项交付能力 2 项已有、3 项部分、1 项缺；`plan.revise`（按物件增量改方案）在 2026-11-04 复核时已落地，剩余缺口是 `plan.check` / `space.inspect` 与 `replace` / `reserve`。详见 [02-交付与Agent能力](02-交付与Agent能力.md)。
@@ -21,82 +21,21 @@
 | [02-交付与Agent能力](02-交付与Agent能力.md) | 六项交付缺什么、Agent 第④步命令契约、按什么优先级补 | 排交付功能、改 Agent、做验收时 |
 | [03-测试与构建健康度](03-测试与构建健康度.md) | 哪些测试红条是真缺陷、能不能发版、怎么复跑 | 发版前、合并并行任务后 |
 | [04-Golden-Path-规格与实测](04-Golden-Path-规格与实测.md) | 五步的规格、当日实测、G1–G7 排序、哪些挡演示 | 对投资人/客户讲进度、定本周做什么 |
-| [05-设计规范.md](05-设计规范.md) | 视觉与交互规范真源（色板、圆角、控件规格） | 动 UI 前，须逐条对照 |
+| [05-设计规范](05-设计规范.md) | 视觉与交互规范真源（色板、圆角、控件规格） | 动 UI 前，须逐条对照 |
 
 ### 支撑材料（按需查阅，不再逐份维护）
 
 | 位置 | 内容 |
 | --- | --- |
-| [06-三态文案审计.md](archive/report/2026-11-03-三态文案审计.md) | 空态 / 加载 / 错误文案审计与「数据是否保留」规则 |
+| [三态文案审计](archive/report/2026-11-03-三态文案审计.md) | 空态 / 加载 / 错误文案审计与「数据是否保留」规则（已归档） |
 | [contracts/](contracts/) | 前后端契约（交付物、场景、物料口径） |
 | [examples/](examples/) | 社区开放日等完整样例（HTML / PDF / JSON / CSV） |
-| [evidence/](evidence/) | 历史验收证据；11 月西湖素材证据见 `evidence/xihu-2026-11/` |
+| [evidence/](evidence/) | 历史验收证据；西湖素材与截图见 [evidence/xihu-2026-11/](evidence/xihu-2026-11/) |
 | [research/](research/) | 协作模型、生成能力等长文调研原始档案 |
-| [archive/research/](archive/research/) | mirasim 人机协作竞品报告（已归档） |
-| [archive/visual/](archive/visual/) | 产品/视觉 HTML 交付物（已归档，含 3000 端口流程截图） |
-| [plans/](plans/) | 远端新增的 IA/智能建造规划（2026-11-04/05），未归档 |
-| [team/](archive/) | 早期团队验收报告（已归档，见 `archive/`） |
-| [archive/](archive/) | 全部历史文档，含本轮 8 份调研原件 |
-
-### 2026-11-04 命名统一（docs 根目录 01–44）
-
-规则：`README.md` 保留总索引；现行正文一律「两位编号 + 中文主题名」，01–04 为合并稿原编号不调号；原英文文件名停用（`git mv` 保留历史）。`archive/`、`evidence/`、`plans/`、`research/`、`contracts/`、`team/`、`examples/` 属归档/专题集合，内部文件名不动。
-
-| 编号 | 文件 | 原文件名 | 一句话主题 |
-|---|---|---|---|
-| 07 | `07-空间与物料Chat设计.md` | `SPACE-MATERIAL-CHAT-DESIGN.md` | 空间 / 物料两个 chat 的交互设计 |
-| 08 | `08-新手指引重写规格.md` | `TUTORIAL-REWRITE-2026-11-04.md` | 新手引导重写规格 |
-| 09 | `09-Taste与IA备忘录.md` | `SCENDANCE-TASTE-IA-MEMO-2026-10-29.md` | 品牌调性与信息架构 |
-| 10 | `10-AI接力手册v2.md` | `SCENDANCE-AI-HANDOFF-v2.0-2026-10-29.md` | 跨会话 AI 交接手册 |
-| 11 | `11-产品定位钉.md` | `PRODUCT-POSITIONING-2026-10-26.md` | 产品定位与一句话 |
-| 12 | `12-商业计划书.md` | `BUSINESS-PLAN-2026-10-26.md` | 商业计划（精简钉版） |
-| 13 | `13-十八席会诊评估.md` | `EVALUATION-2026-11-01-UNIVERSE-AGENTS.md` | 十八席会诊评估 |
-| 14 | `14-活动流程AI-Native框架.md` | `ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md` | 活动流程框架（过程稿，已作废） |
-| 15 | `15-Aholo集成规划.md` | `AHOLO-INTEGRATION-PLAN.md` | Aholo 集成 M0–M3 规划 |
-| 16 | `16-Aholo资产与3DGS预览.md` | `AHOLO-ASSET-AND-SPLAT-PREVIEW-2026-10-30.md` | GLB 本机资产与 3DGS 预览 |
-| 17 | `17-D0地图圈画演示验收.md` | `D0-MAP-SPLAT-DEMO-2026-10-30.md` | 历史场景地面层圈画 + 历史 splat + GLB |
-| 18 | `18-D1采集上传重建验收.md` | `D1-CAPTURE-TO-AHOLO-2026-10-30.md` | 采集单 → 上传/重建 |
-| 19 | `19-D1流线加密站位验收.md` | `D1-FLOW-CAPTURE-2026-10-30.md` | 圈内主客流线加密站位 |
-| 20 | `20-D2场地观感产品化验收.md` | `D2-AHOLO-UX-2026-10-30.md` | Aholo 场地观感产品化 |
-| 21 | `21-D2真重建进画布验收.md` | `D2-RECON-CANVAS-2026-10-30.md` | 真重建进画布 |
-| 22 | `22-D3轮廓壳体与卫星贴地验收.md` | `D3-POLYGON-SAT-2026-10-30.md` | 多边形轮廓壳体 / 卫星贴地 |
-| 23 | `23-平面图上传主路径.md` | `FLOORPLAN-UPLOAD-PATH-2026-10-31.md` | 平面图上传主路径 |
-| 24 | `24-T-Aholo物料入口.md` | `T-AHOLO-ENTRY.md` | 接回物料建模 / Lux3D 入口 |
-| 25 | `25-T-3D验收细节.md` | `T-3D-acceptance-for-executors.md` | 给执行方的 3D 验收细节 |
-| 26 | `26-T-地图圈画偏移.md` | `T-MAP-ALIGN-OFFSET-2026-10-31.md` | 场景地面层圈画与 3D 渲染偏移（历史） |
-| 27 | `27-HY3D升级核查.md` | `HY3_PROVIDER_AUDIT.md` | HY-3D 升级前核查 |
-| 28 | `28-AI场景助理接入.md` | `AI_ASSISTANT.md` | AI 场景助理接入 |
-| 29 | `29-AI系统提示词.md` | `AI_SYSTEM_PROMPT.md` | AI 系统提示词 |
-| 30 | `30-AI使用额度.md` | `AI_USAGE_LIMITS.md` | AI 使用额度 |
-| 31 | `31-HTTP-API与前端接入.md` | `API.md` | HTTP API 与前端接入 |
-| 32 | `32-后端设计.md` | `BACKEND.md` | 后端设计 |
-| 33 | `33-前后端联调.md` | `INTEGRATION.md` | 前后端合并与本地联调 |
-| 34 | `34-前端协议与后端需求.md` | `FRONTEND_V0.2_BACKEND_REQUIREMENTS.md` | 前端协议与后端支持需求 |
-| 35 | `35-本地运行与云端维护.md` | `DEPLOYMENT.md` | 本地运行、云端维护与恢复 |
-| 36 | `36-Cloudflare部署.md` | `CLOUDFLARE_GITHUB_DEPLOYMENT.md` | Cloudflare Pages + GitHub 自动部署 |
-| 37 | `37-自建Supabase教程.md` | `OWN_SUPABASE_TUTORIAL.md` | 用自建 Supabase 当后端 |
-| 38 | `38-登录接入.md` | `AUTH_SETUP.md` | 登录接入 |
-| 39 | `39-邮件验证码找回密码.md` | `AUTH_EMAIL_OTP.md` | 邮件注册与验证码找回 |
-| 40 | `40-提供商配置.md` | `PROVIDER_SETUP.md` | 提供商配置入口 |
-| 41 | `41-DeepSeek发布操作.md` | `DEEPSEEK_RELEASE_OPERATIONS.md` | DeepSeek 发布操作 |
-| 42 | `42-1.0.1发布说明.md` | `RELEASE-1.0.1.md` | 1.0.1 发布说明 |
-| 43 | `43-版本更新文案规范.md` | `RELEASE-NOTES-STANDARD.md` | 版本更新文案规范 |
-| 44 | `44-项目清理记录-2026-11-04.md` | `cleanup-2026-11-04.md` | 项目级清理台账 |
-
-### 2026-11-05 新增（45–54）
-
-| 编号 | 文件 | 一句话主题 |
-|---|---|---|
-| 45 | [15-按次付费与额度](15-按次付费与额度.md)（原 45） | Aholo 积分成本、失败折算、≥3 倍定价骨架、免费额度与退费规则（成本唯一真源） |
-| 46 | [16-小程序变现调研与接入路线](16-小程序变现调研与接入路线.md)（原 46） | 微信虚拟支付费率/结算/品类、小程序侧额度差异与接入顺序 |
-| 47 | [17-Aholo重建真调排查](17-Aholo重建真调排查.md)（原 47） | 资产库门槛、失败矩阵与视频成功样本 |
-| 48 | [18-T-Aholo重建链路修复与复验](18-T-Aholo重建链路修复与复验.md)（原 48） | 资产模块上传链路修复与 0194 复验 |
-| 49 | [19-西湖户外重建接力](19-西湖户外重建接力.md)（原 49） | 西湖户外视频重建接力与产物 |
-| 50 | [20-场地资产地理底图提案](20-场地资产地理底图提案.md)（原 50） | `sceneAnchor` 三态与地理底图的产品提案 |
-| 51 | [21-双端入口与统一任务表](21-双端入口与统一任务表.md)（原 51） | 一个账号、一张任务表、两个入口；地图是场景地面层、Agent 不碰地图 |
-| 52 | [22-资产台账与3DGS可编辑方案](22-资产台账与3DGS可编辑方案.md)（原 52） | 529 个 GLB 台账与 3DGS 可编辑路径 |
-| 53 | [23-智能采集升级提案](23-智能采集升级提案.md)（原 53） | 图片/视频采集升级与实时引导（原误编号为 22，已改） |
-| 54 | [24-Web端三个产品问题](24-Web端三个产品问题.md)（原 54） | 交付包断裂、Agent 生产力、两类客户混做；按优先级给验收线 |
+| [plans/](plans/) | 在建方案与批次交付记录，未归档 |
+| [figures/](figures/) | 阶段页 HTML 与配图 |
+| [archive/visual/](archive/visual/) | 产品/视觉 HTML 交付物（已归档） |
+| [archive/](archive/) | 全部历史文档，按 `plan` / `report` / `research` / `visual` / `example` / `legacy` 分主题，文件名统一 `YYYY-MM-DD-用途` |
 
 > 现行口径：历史文档里的「地图圈画 / 地图选址」统一指**场景地面层的锚定**，不是独立入口、独立搜索或独立定位状态；`archive/` 保留原文不改写。
 
@@ -107,131 +46,50 @@
 - **安排西湖重采** → 01 §七（checklist）+ §八（P0/P1/P2 与缺口工单）。
 - **发版前检查** → 03 §五（能否作为基线）+ 复跑顺序。
 - **改 Agent** → 02 §二（命令契约）+ §七（G1–G12 验收场景）。
-- **改 UI** → `05-设计规范.md`；文案问题再查 `06-三态文案审计.md`。
+- **改 UI** → [05-设计规范](05-设计规范.md)；文案问题再查[三态文案审计](archive/report/2026-11-03-三态文案审计.md)。
 - **定采集端 / 接上传链路 / 对地图与 Agent 边界** → [21-双端入口与统一任务表](21-双端入口与统一任务表.md) §1–§7、§11。
 
-## 四、新旧映射表
+## 四、旧编号怎么查
 
-### 11 月调研 8 份 → 4 份主题文档
+### 编号重排：旧号 → 新号（仅用于查旧引用）
 
-| 旧文件（`recon-2026-11/`） | 原行数 | 新位置 | 合并依据 |
-| --- | --- | --- | --- |
-| `01-素材核查与采集缺口.md` | 378 | [01](01-素材与3D重建.md) §一、二、七、八、附录 | 唯一素材台账，作数字权威来源 |
-| `02-3D重建技术路线调研.md` | 621 | [01](01-素材与3D重建.md) §三、四、五、六、七 | 与 01 同属「素材→重建」主题；删掉其重复的前置结论 |
-| `03-agent-空间能力设计.md` | 387 | [02](02-交付与Agent能力.md) §一、二 | Agent 第④步能力与命令契约 |
-| `05-交付能力审计与设计.md` | 约 450 | [02](02-交付与Agent能力.md) §三、四、五、六 | 与 03 同属「能力缺口→怎么补」 |
-| `06-测试与构建健康度.md` | 74 | [03](03-测试与构建健康度.md) | 独立主题，近乎原文迁移 |
-| `04-结论与路线图.md` | 152 | [04](04-Golden-Path-规格与实测.md) §三、六、八 + 本文件 §一 | 结论只保留一处，避免与 07/08 重复 |
-| `07-Golden-Path-规格与验收.md` | 156 | [04](04-Golden-Path-规格与实测.md) §一、二、四 | 规格与实测合并成一张表 |
-| `08-Golden-Path-现状体检.md` | 115 | [04](04-Golden-Path-规格与实测.md) §二、五、九 | 实测证据并入同一张表 |
+只换前缀、中文语义未改：`45→15`、`46→16`、`47→17`、`48→18`、`49→19`、`50→20`、`51→21`、`52→22`、`54→24`、`11→06`、`12→07`、`16→08`、`23→09`、`28→10`、`29→11`、`30→12`、`31→13`、`32→14`。
 
-### 其它移动
+2026-11-08 解除 `09` 重号：`09-Taste与IA备忘录 → 38-Taste与IA备忘录`。理由：`23-平面图上传主路径` 在上一轮重排中已按「产品钉落在 06–09 区」拿到 09 号，且被 [30-SC04-场地输入核对](30-SC04-场地输入核对.md) 直接引用；Taste 备忘录是 2026-10-29 的设计备忘（内容与 `05-设计规范` 部分重叠），让历史件挪到队尾空号 38，代价最小（只涉及 3 处引用）。
 
-| 旧位置 | 新位置 | 说明 |
-| --- | --- | --- |
-| `docs/INDEX.md` | `docs/README.md` | 旧索引未覆盖 11 月文档，已由本文件取代 |
-| `recon-2026-11/artifacts/`（20 个文件） | `evidence/xihu-2026-11/`（9 个文件） | 只留结论证据与交付样例，过程截图裁掉 11 张 |
-| `recon-2026-11/*.md`（8 份） | `archive/recon-2026-11-src/` | **原件未删**：这 8 份未纳入 git，删除即不可恢复 |
+未出现在上两行的旧号，随 2026-11-05 的分层归档移入 `archive/`；查原名用 `git log --follow -- <现路径>`。
 
-### 明确「不搬」的路径（避免制造死链）
+### 11 月调研 8 份 → 4 份（2026-11-04）
 
-以下目录/文件本轮不改名（属归档、证据或专题集合）：`archive/`、`evidence/`、`plans/`、`research/`、`contracts/`、`team/`、`examples/`；`visual-2026/` 内 3 份 md 已改为 `01-最终版说明.md`、`02-AI产品规划.md`、`03-视觉方向.md`。根目录 43 份已统一为 01–44 编号（见上表），改名用 `git mv`，`git log --follow -- <新路径>` 可追溯。
+素材核查 + 3D 重建路线 → [01](01-素材与3D重建.md)；Agent 空间能力 + 交付能力审计 → [02](02-交付与Agent能力.md)；测试与构建健康度 → [03](03-测试与构建健康度.md)；结论路线图 + Golden Path 规格 + 现状体检 → [04](04-Golden-Path-规格与实测.md)。
+
+> 合并前的 8 份原件当时另存了一份归档目录，该目录在后续 `archive/` 归并中已不存在，且原件从未入 git——**已不可恢复**。合并后的 4 份是唯一存留版本。
 
 ## 五、保留的截图（每张证明什么）
 
-| 文件（`evidence/xihu-2026-11/`） | 一句话证明 |
+| 文件 | 一句话证明 |
 | --- | --- |
-| `capture-guide/pass/06-score.png` | 合格样本 180 张 / 3 层 / 330° 得 **100 分、6/6 项通过**，证明评分闸会放行合格采集 |
-| `capture-guide/fail/06-score.png` | 现有西湖 24 张 / 1 层 / 102° 只得 **49 分**（低于 50 分重采线）并列 3 项扣分，证明差素材会被拦下 |
-| `capture-guide/pass/04-scale.png` | 录入 1.20 m 已知长度后才「通过」，且未过此步评分按钮不打开，证明尺度强制闸生效 |
-| `capture-guide/pass/07-examples.png` | 正确/错误采集对照页，作为现场培训的唯一视觉标准 |
-| `capture-guide/pass/08-receipt.png` | 生成 `capture.v1` JSON 回执（180 张 / 3 层 / 330° / 1.20 m），证明采集凭证可带走复核 |
-| `album-preview.png` | 西湖共创方案效果图册封面，对外交付物样例 |
-| `西湖共创_v0_效果图册.html`、`西湖共创_交付清单_sample-delivery.csv`、`西湖共创_平面_1F.dxf` | 交付三件套样例（图册 / 清单 / 平面），证明交付格式可落地 |
+| [pass/06-score.png](evidence/xihu-2026-11/capture-guide/pass/06-score.png) | 合格样本 180 张 / 3 层 / 330° 得 **100 分、6/6 项通过**，证明评分闸会放行合格采集 |
+| [fail/06-score.png](evidence/xihu-2026-11/capture-guide/fail/06-score.png) | 现有西湖 24 张 / 1 层 / 102° 只得 **49 分**（低于 50 分重采线）并列 3 项扣分，证明差素材会被拦下 |
+| [pass/04-scale.png](evidence/xihu-2026-11/capture-guide/pass/04-scale.png) | 录入 1.20 m 已知长度后才「通过」，且未过此步评分按钮不打开，证明尺度强制闸生效 |
+| [pass/07-examples.png](evidence/xihu-2026-11/capture-guide/pass/07-examples.png) | 正确/错误采集对照页，作为现场培训的唯一视觉标准 |
+| [pass/08-receipt.png](evidence/xihu-2026-11/capture-guide/pass/08-receipt.png) | 生成 `capture.v1` JSON 回执（180 张 / 3 层 / 330° / 1.20 m），证明采集凭证可带走复核 |
+| [album-preview.png](evidence/xihu-2026-11/album-preview.png) | 西湖共创方案效果图册封面，对外交付物样例 |
+| [西湖共创_v0_效果图册.html](evidence/xihu-2026-11/西湖共创_v0_效果图册.html)、[西湖共创_交付清单_sample-delivery.csv](evidence/xihu-2026-11/西湖共创_交付清单_sample-delivery.csv)、[西湖共创_平面_1F.dxf](evidence/xihu-2026-11/西湖共创_平面_1F.dxf) | 交付三件套样例（图册 / 清单 / 平面），证明交付格式可落地 |
 
-另有 `visual-2026/shots3000/` 10 张流程截图保留：它们是 `visual-2026/user-flow-map-2026.html` 的内嵌证据，删除会造成死链。
-
-## 六、删除与移动清单（逐条）
-
-**删除（11 张过程截图，均为同一流程的中间步骤，结论已由保留的 5 张覆盖）：**
-
-1. `capture-guide/pass/01-mode.png` — 入口页，结论见 `07-examples`
-2. `capture-guide/pass/02-rules.png` — 拍摄规则页
-3. `capture-guide/pass/03-orbit.png` — 环绕示意页
-4. `capture-guide/pass/05-verify.png` — 现场校验中间态，结论见 `06-score`
-5. `capture-guide/fail/01-mode.png` — 同上，重复
-6. `capture-guide/fail/02-rules.png` — 同上，重复
-7. `capture-guide/fail/03-orbit.png` — 同上，重复
-8. `capture-guide/fail/04-scale.png` — 与合格版同屏同值，无独立信息
-9. `capture-guide/fail/05-verify.png` — 与 `06-score` 重复
-10. `capture-guide/fail/07-examples.png` — 与 `pass/07-examples.png` **md5 完全相同**
-11. `capture-guide/fail/08-receipt.png` — 回执与合格版同一模板，无独立信息
-
-**删除（1 份文档）：**
-
-12. `docs/INDEX.md` — 264 行旧索引，未收录 11 月全部文档且已过期，由 `README.md` 取代。
-
-**移动（不删除）：**
-
-- `recon-2026-11/*.md` 8 份 → `archive/recon-2026-11-src/`（未入 git，必须保留）
-- `recon-2026-11/artifacts/` → `evidence/xihu-2026-11/`
-
-**2026-11-04 第三轮追加删除（可恢复性见括号）：**
-
-- `archive/process-2026-10/` 51 份（git 跟踪，可 `git log` 找回）。该目录只留 `REFERENCE.md`、`AGENT-PRESENCE-RESEARCH-2026-10-27.md`、`AI-NATIVE-UPGRADE-v1.md`（被 `44-项目清理记录-2026-11-04.md` 引用）。
-- 根目录 5 份旧稿：`AHOLO-INTEGRATION-AUDIT-2026-11-01.md`、`AHOLO-CLOUD-E2E-2026-10-30.md`、`BINGGO_SCENE_AGENT.md`、`ACCOUNT_MANAGEMENT_PANEL.md`、`FRONTEND_PREVIEW_SOURCES.md`（git 跟踪，可恢复）。
-- `evidence/aholo/` 内 `world-3FO4K4RHLLV9`（24.63 MB）与 5 个 `unpacked/`（25.08 MB，29 文件）：**未入 git，删除不可恢复**；`unpacked` 可由 `tools/aholo/lux3d-mvp.mjs` 从 `world.ply` 重新生成。
-
-## 七、以后查历史去哪儿
+## 六、以后查历史去哪儿
 
 | 想查什么 | 去哪儿 |
 | --- | --- |
-| 11 月调研原文（合并前的完整表述、逐文件台账、附录命令） | `archive/recon-2026-11-src/` |
-| 10 月的过程与验收（Aholo / D0–D3 / T-* / 旧计划） | `archive/process-2026-10/` 已于 2026-11-04 裁剪，仅留 `REFERENCE.md`、`AGENT-PRESENCE-RESEARCH-2026-10-27.md`、`AI-NATIVE-UPGRADE-v1.md`；其余用 `git log -- docs/archive/process-2026-10/<文件名>` 从历史取回。D0–D3 / T-* 验收卡仍在 `docs/`（现编号 17–22、24–26），旧计划在 `plans/` |
-| 某个文件当初为什么改 | `git log -- <原路径>`；`docs/` 下绝大多数文件受 git 跟踪（本轮 8 份调研原件与 4 份 11 月新增稿尚未入 git，原件已归档、新增稿保留原处） |
-| 设计与视觉迭代过程 | `visual-2026/`（HTML 可回溯每一版 IA/流程） |
-| 具体验收截图 | `evidence/`（历史）与 `.temp/`（各任务在进行中的证据，不在 docs 内） |
+| 历史方案 / 验收 / 视觉稿 / 旧运维文档 | [archive/](archive/)，文件名统一 `YYYY-MM-DD-用途` |
+| 早期团队验收报告 | [archive/report/](archive/report/) |
+| 某个文件当初为什么改、原名是什么 | `git log --follow -- <现路径>` |
+| 具体验收截图 | [evidence/](evidence/)；西湖素材见 [evidence/xihu-2026-11/](evidence/xihu-2026-11/) |
+| 2026-11-04 删掉的旧稿（11 张过程截图、1 份旧索引、5 份旧稿、`process-2026-10` 的 51 份） | 全部受过 git 跟踪，用 `git log -- <旧路径>` 从历史取回 |
 
-## 八、已知死链与维护规则
+## 七、维护规则
 
-- 2026-11-04 命名统一后复扫（口径：markdown 链接 + HTML `href/src` + CSS `url()`，不含反引号代码路径）：`docs/` 内共 **695 条本地引用，572 条有效 / 123 条失效**；失效引用中**没有一条指向被改名或被删除的路径**（根目录 43 份、`visual-2026/` 3 份、上一轮删的 51+5 份旧稿、`evidence/aholo/world-3FO4K4RHLLV9` 与 5 个 `unpacked/`）。
-- 失效的 123 条全部是改名前的历史死链：`C:/幕景/...` 绝对路径、已裁掉的 `DELIVERY-PROGRESS-*`、`archive/recon-2026-11-src/` 原件里的 `/01-…` 前缀链接。**新增死链 0 条。**
-- 上一轮基线为 751 / 218，与本轮数字**不可直接相减**：基线含反引号代码路径，本轮只计链接型引用；可比较项是「指向被删/被改名路径的失效条数」= 0。
-- 整理前扫描：`docs/` 内共 717 条本地引用，**218 条已失效**；绝大多数是历史文档里的旧路径（`plans/...`、`C:/幕景/...`、源码行号）与已被删除的旧截图，**属整理前既有问题**，本轮未新增。
-- 本轮新增文档的引用已复扫，全部指向现存文件。
-- 维护规则：新增结论先判断落 01–04 哪一份，不要新开第 5 份；单份文档内不再嵌套折叠；删除任何被引用的图片前先跑一次链接扫描。
-
-## 九、本地收敛：25 份活跃文档（2026-11-05 编号）
-
-> 本地一轮收敛把历史稿移入 [`archive/`](archive/)，主目录只留活跃文档（01–24 连续编号 + 本文件，共 25 个 `.md`）。上文 §二 的旧编号表作为历史依据保留，其中多数文件已移入 `archive/`。下表是**合并后现行**的编号与文件。
-
-| # | 文件 | 一句话 |
-| --- | --- | --- |
-| 01 | [01-素材与3D重建.md](01-素材与3D重建.md) | 现有素材盘点 + 3D 重建技术路线（全库唯一数字台账） |
-| 02 | [02-交付与Agent能力.md](02-交付与Agent能力.md) | 交付契约与 Agent 能力边界 |
-| 03 | [03-测试与构建健康度.md](03-测试与构建健康度.md) | 测试、构建、依赖现状与欠账 |
-| 04 | [04-Golden-Path-规格与实测.md](04-Golden-Path-规格与实测.md) | 端到端 Golden Path 规格与实测记录 |
-| 05 | [05-设计规范.md](05-设计规范.md) | 视觉与交互规范（冻结，只读） |
-| 06 | [06-产品定位钉.md](06-产品定位钉.md) | 产品定位与不可动摇的几条钉子 |
-| 07 | [07-商业计划书.md](07-商业计划书.md) | 商业模型与定价叙事 |
-| 08 | [08-Aholo资产与3DGS预览.md](08-Aholo资产与3DGS预览.md) | Aholo 产物如何进前端 3DGS 预览 |
-| 09 | [09-平面图上传主路径.md](09-平面图上传主路径.md) | 平面图上传→重建→入画布主路径 |
-| 10 | [10-AI场景助理接入.md](10-AI场景助理接入.md) | AI 场景助理的前后端接入 |
-| 11 | [11-AI系统提示词.md](11-AI系统提示词.md) | 系统提示词与工具约定 |
-| 12 | [12-AI使用额度.md](12-AI使用额度.md) | AI 调用额度与限流规则 |
-| 13 | [13-HTTP-API与前端接入.md](13-HTTP-API与前端接入.md) | HTTP API 清单与前端调用方式 |
-| 14 | [14-后端设计.md](14-后端设计.md) | 后端分层、存储与迁移 |
-| 15 | [15-按次付费与额度.md](15-按次付费与额度.md) | **成本唯一真源**：积分档位、单价、SKU 与额度 |
-| 16 | [16-小程序变现调研与接入路线.md](16-小程序变现调研与接入路线.md) | 小程序变现调研与接入路线 |
-| 17 | [17-Aholo重建真调排查.md](17-Aholo重建真调排查.md) | Aholo 真调链路排查结论 |
-| 18 | [18-T-Aholo重建链路修复与复验.md](18-T-Aholo重建链路修复与复验.md) | 重建链路修复与复验记录 |
-| 19 | [19-西湖户外重建接力.md](19-西湖户外重建接力.md) | 西湖户外重建接力 |
-| 20 | [20-场地资产地理底图提案.md](20-场地资产地理底图提案.md) | 场地资产与地理底图方案提案 |
-| 21 | [21-双端入口与统一任务表.md](21-双端入口与统一任务表.md) | 双端入口与统一任务表 |
-| 22 | [22-资产台账与3DGS可编辑方案.md](22-资产台账与3DGS可编辑方案.md) | 资产台账与 3DGS 可编辑方案 |
-| 23 | [23-智能采集升级提案.md](23-智能采集升级提案.md) | 智能采集升级提案 |
-| 24 | [24-Web端三个产品问题.md](24-Web端三个产品问题.md) | Web 端三个产品问题 |
-
-旧号 → 新号（只换前缀，中文语义未改）：`45→15`、`46→16`、`47→17`、`48→18`、`49→19`、`50→20`、`51→21`、`52→22`、`54→24`、`11→06`、`12→07`、`16→08`、`23→09`、`28→10`、`29→11`、`30→12`、`31→13`、`32→14`。
-
-远端新增的规程与调研**保留在远端路径**：[`plans/`](plans/)、[`research/`](research/)（含 `research/generation/README.md`），未归档。
+- 新增结论先判断落 01–04 哪一份，不要新开第 5 份；单份文档内不再嵌套折叠。
+- 删除任何被引用的图片前先跑一次链接扫描。
+- 文件增删改后重跑索引脚本更新 [INDEX.md](INDEX.md)：本页不再另存一份会过期的目录。
+- 本页所有路径均为相对 `docs/` 的真实相对路径（2026-11-08 逐条验证存在）。
