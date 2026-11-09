@@ -25,8 +25,19 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
     const payload=body===undefined?undefined:multipart?body as FormData:JSON.stringify(body);
     beforeDispatch?.();
     const response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(payload===undefined?{}:{body:payload}),...(signal?{signal}:{}),cache:'no-store'});
-    const data=await response.json();
-    if(!response.ok) throw new SceneApiError(data.error?.code??'HTTP_ERROR',response.status,data.error?.details);
+    // Keep the HTTP status when the body is empty or not JSON. A parse failure
+    // must not become an untyped exception that drops 401/502/503.
+    let data:unknown;
+    try { data=await response.json(); }
+    catch(error) {
+      if(typeof error==='object'&&error!==null&&'name' in error&&(error as {name?:string}).name==='AbortError') throw error;
+      throw new SceneApiError(response.ok?'INVALID_RESPONSE':'HTTP_ERROR',response.status,null);
+    }
+    if(!response.ok) {
+      const error=data&&typeof data==='object'&&'error' in data?(data as {error?:{code?:unknown;details?:unknown}}).error:undefined;
+      const code=error&&typeof error==='object'&&typeof error.code==='string'?error.code:'HTTP_ERROR';
+      throw new SceneApiError(code,response.status,error&&typeof error==='object'?error.details??null:null);
+    }
     return data as T;
   }
   function activityResponse(data:unknown,expected:{projectId:string;id?:string;requestId?:string;activityId?:string;contextHash?:string;cancelled?:boolean}):ActivityTaskRun {
