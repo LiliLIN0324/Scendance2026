@@ -61,6 +61,26 @@ async function openSample(): Promise<void> {
 }
 
 describe('review share page', () => {
+  it.each([
+    ['sharing','分享会示例（虚构）'],
+    ['hall-d5','Hall D5 尺寸参考（示意）'],
+  ])('示例 %s 只读且不改动本机活动', async (key,title) => {
+    const original=JSON.stringify({...INITIAL_LAYOUT,name:'原场景'});
+    localStorage.setItem(LOCAL_LAYOUT_KEY,original);
+    const reads=vi.spyOn(Storage.prototype,'getItem');
+    const writes=vi.spyOn(Storage.prototype,'setItem');
+    window.history.replaceState(null,'',`/review/?example=${key}`);
+    render(<ReviewSharePage/>);
+    await screen.findByRole('heading',{name:title});
+    expect(screen.getByText('示例预览 · 只读')).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'完成评审'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'mock-plan-click'}));
+    expect(screen.queryByText('钉汇总')).toBeNull();
+    expect(reads).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+    expect(localStorage.getItem(LOCAL_LAYOUT_KEY)).toBe(original);
+    if(key==='hall-d5') expect(screen.getByRole('link',{name:'查看场地方官方资料'}).getAttribute('href')).toBe('https://www.t-i-forum.co.jp/en/facilities/d5/');
+  });
   it('exports a version-bound feedback file after pinning a shared snapshot',async()=>{
     vi.stubGlobal('crypto',webcrypto);
     vi.stubGlobal('navigator',{locks:{request:(_name:string,_options:unknown,fn:(lock:object)=>unknown)=>Promise.resolve(fn({}))}});
