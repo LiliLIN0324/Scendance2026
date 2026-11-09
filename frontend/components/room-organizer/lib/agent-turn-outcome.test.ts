@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ResolvedBriefTurn } from '@/lib/agent-resolver';
 import { initialBriefMemory, parseBriefTurn } from './brief-agent';
-import { incompleteUpdateForOutcome, resolvedTurnOutcome } from './agent-turn-outcome';
+import { incompleteUpdateForOutcome, resolvedTurnOutcome, sofaOnlyUnhandled } from './agent-turn-outcome';
 
 const context = { venueUp:false, scaleTyped:false, hasBase:false, command:null } as const;
 function turn(): ResolvedBriefTurn {
@@ -15,9 +15,29 @@ describe('model turn outcome', () => {
     expect(outcome).toEqual({kind:'understood',next:'reply'});
     expect(incompleteUpdateForOutcome(outcome)).toBe('clear_current');
   });
-  it.each(['约30人','预计30人','20到30人','不是30人','30位','30名'])('does not overstate the meaning of %s', input => {
+  it.each(['约30人','预计30人','20到30人','不是30人','30位','30名'])('does not leave a handled freeform count %s as an incomplete chip', input => {
     const result=turn();result.extraction.headcount=30;
-    expect(incompleteUpdateForOutcome(resolvedTurnOutcome(result,initialBriefMemory(),false,input))).toBe('preserve');
+    const outcome=resolvedTurnOutcome(result,initialBriefMemory(),false,input);
+    expect(outcome).toEqual({kind:'understood',next:'reply'});
+    expect(incompleteUpdateForOutcome(outcome)).toBe('clear_current');
+  });
+  it('clears a freeform ask and waits to clear a preview until the candidate exists', () => {
+    const asked=turn();asked.kind='ask';
+    expect(incompleteUpdateForOutcome(resolvedTurnOutcome(asked,initialBriefMemory(),false,'想围坐着聊天'))).toBe('clear_current');
+    const preview=turn();preview.kind='generate';preview.extraction.headcount=30;
+    const outcome=resolvedTurnOutcome(preview,initialBriefMemory(),false,'围坐聊一聊，出一版');
+    expect(outcome).toEqual({kind:'understood',next:'generate'});
+    expect(incompleteUpdateForOutcome(outcome)).toBe('preserve');
+  });
+  it('asks about a sofa instead of filing another pending chip', () => {
+    const result=turn();result.kind='ask';
+    result.unhandled=[{kind:'other',evidence:'沙发布置'}];
+    expect(sofaOnlyUnhandled(result,'沙发布置')).toBe(true);
+    const outcome=resolvedTurnOutcome(result,initialBriefMemory(),false,'沙发布置');
+    expect(outcome).toEqual({kind:'understood',next:'ask'});
+    expect(incompleteUpdateForOutcome(outcome)).toBe('clear_current');
+    result.unhandled=[{kind:'other',evidence:'沙发布置'},{kind:'action',evidence:'删除舞台'}];
+    expect(resolvedTurnOutcome(result,initialBriefMemory(),false,'沙发布置，删除舞台')).toEqual({kind:'unresolved',reason:'unhandled_requirement'});
   });
   it('retains each previously unresolved item while facts or needs remain to be confirmed', () => {
     const result=turn();result.extraction.headcount=30;
