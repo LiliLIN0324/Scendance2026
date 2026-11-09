@@ -4534,6 +4534,23 @@ it('keeps a newer task recoverable when a cancelled dispatch is acknowledged lat
   expect(controller.applySceneProposal).not.toHaveBeenCalled();
 });
 
+it.each(['AGENT_ANNOTATION_UNAVAILABLE','AGENT_ANNOTATION_GUARD_UNAVAILABLE'])('keeps the newer task marker when an older creation returns late %s',async code=>{
+  connected();let rejectOld!:(reason:unknown)=>void;
+  vi.mocked(controller.startAgentRun).mockImplementationOnce(()=>new Promise((_resolve,reject)=>{rejectOld=reject;})).mockImplementationOnce(()=>new Promise(()=>{}));
+  vi.mocked(controller.getAgentRunByRequest).mockResolvedValueOnce(runFrom(proposal));
+  vi.mocked(controller.cancelAgentRun).mockResolvedValue({...runFrom(proposal),state:'cancelled',candidates:[]});
+  render(ui());
+  const send=(text:string)=>{fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));};
+  send('摆放桌子');fireEvent.click(await screen.findByRole('button',{name:'取消任务'}));
+  await screen.findByText('任务已取消，当前方案保持不变。');send('改为摆放椅子');
+  await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledTimes(2));
+  const second=vi.mocked(controller.startAgentRun).mock.calls[1]![0],key=Object.keys(localStorage).find(value=>value.startsWith('scendance:agent-run:'))!;
+  await act(async()=>rejectOld(new SceneApiError(code,503,null)));
+  expect(JSON.parse(localStorage.getItem(key)!).requestId).toBe(second.requestId);
+  expect(screen.getByRole('button',{name:'取消任务'})).toBeTruthy();
+  expect(controller.applySceneProposal).not.toHaveBeenCalled();
+});
+
 it.each(['ledger','unreadable'] as const)('does not dispatch through a complete cloud project when independent checkins are %s',async state=>{
   connected();
   if(state==='ledger')vi.mocked(readSourceRecord).mockResolvedValue(materialCheckinLedgerSchema.parse({projectId}));
@@ -4642,6 +4659,35 @@ describe('scoped seating constraints in deep generation', () => {
   const evidence = '每2人一桌';
   const allocation = { status:'shared_desk' as const, peoplePerDesk:2, evidence, source:'user' as const };
   const annotationObservation={status:'ready' as const,binding:{activityScope:'activity:demo',activityEpoch:1,sceneRevision:2,floorId:'floor-1',annotationRevision:3},annotations:[{id:'ann-1',kind:'zone' as const,geometry:{kind:'rect' as const,x:0,z:0,width:2,depth:2},zoneType:'checkin' as const,source:'unverified' as const}],notice:'标注是待核验的规划草稿；读取不代表已用于排布或完成安全检查。' as const};
+  it.each(['AGENT_ANNOTATION_UNAVAILABLE','AGENT_ANNOTATION_GUARD_UNAVAILABLE'])('clears the uncreated annotated run after %s and permits a new request',async code=>{
+    connected();vi.mocked(controller.startAgentRun).mockRejectedValueOnce(new SceneApiError(code,503,null)).mockResolvedValueOnce(runFrom(proposal));
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`;
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    await waitFor(()=>{expect(controller.startAgentRun).toHaveBeenCalledTimes(1);expect(localStorage.getItem(key)).toBeNull();expect(screen.queryByRole('button',{name:'查询原任务'})).toBeNull();});
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
+    await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledTimes(2));
+  });
+  it('retains an annotated run marker after an unknown network outcome and does not dispatch again',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockRejectedValueOnce(new TypeError('network unknown'));
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`;
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await screen.findByRole('button',{name:'查询原任务'});
+    expect(JSON.parse(localStorage.getItem(key)!).annotationSnapshot).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));expect(controller.startAgentRun).toHaveBeenCalledTimes(1);
+  });
+  it('retains the marker if a matching 503 arrives after run creation',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce({...runFrom(proposal),state:'running',candidates:[]});
+    vi.mocked(controller.getAgentRun).mockRejectedValueOnce(new SceneApiError('AGENT_ANNOTATION_UNAVAILABLE',503,null));
+    const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
+    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`;
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await screen.findByRole('button',{name:'查询原任务'},{timeout:6000});
+    expect(JSON.parse(localStorage.getItem(key)!).runId).toBe(runFrom(proposal).id);
+    fireEvent.click(screen.getByRole('button',{name:'测试生成'}));expect(controller.startAgentRun).toHaveBeenCalledTimes(1);
+  });
   it('blocks the same candidate when it newly occupies a user-marked reserved area',async()=>{
     connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
     const floorId=layout.floors[0]!.id;

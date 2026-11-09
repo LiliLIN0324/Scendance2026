@@ -1636,7 +1636,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     let venueBinding:VenueBinding|null=null;
     const epoch=++runEpoch.current;
     requestPending.current=true;setBusy(true);
-    let dispatched=false;
+    let dispatched=false,creationResponded=false,dispatchedRequestId:string|null=null;
     let ownPreparation:typeof preparation.current=null;
     try{
       venueBinding=await verifyVenueBinding(base);
@@ -1726,9 +1726,10 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       assertGenerationIntent();
       if(!sessionValid(turnToken)||!floorValid(turnFloor)||!baseIsCurrent(base)||!venueBindingCurrent(venueBinding))throw new Error('活动、楼层或图纸已变化，本次生成尚未提交。');
       try{rememberRun(marker,submittedScope);}catch{throw new Error('无法保存任务编号，尚未提交。请恢复浏览器本机存储后重试。');}
-      requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;
+      requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;dispatchedRequestId=marker.requestId;
       if(annotationObservation)say(annotationObservation.status==='ready'?'本次将提供规划标注供模型读取；标注尚未核验，提供不代表已经用于排布或安全检查。':'本次无法完整读取规划标注，模型不会据此检查区域、路线或入口。');
       const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview'});
+      creationResponded=true;
       if(cancelledRequest.current===marker.requestId){
         if(agentScopeRef.current===submittedScope){
           const cancelled=await controller.cancelAgentRun(result.id);
@@ -1739,8 +1740,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       return await followRun(result,base,submittedBrief,submittedScope,epoch,turnToken,turnFloor,venueBinding,seatingCapture,annotationEvidence);
     }catch(error){if(alive.current&&(agentScopeRef.current===submittedScope||preparation.current?.layout===layoutRef.current)&&epoch===runEpoch.current){
       const text=error instanceof Error?error.message:controller.getSnapshot().error?.message??'生成失败，原方案已保留。';setNotice(text);say(text);
-      if(dispatched&&!applyRecoveryRef.current){
-        if(error instanceof SceneApiError&&([400,401,403,404,409,422].includes(error.status)||['SERVICE_NOT_CONFIGURED','BILLING_NOT_CONFIGURED','AI_INPUT_TOO_LARGE'].includes(error.code)))forgetRun();
+      if(dispatched&&!applyRecoveryRef.current&&agentScopeRef.current===submittedScope&&markerRef.current?.requestId===dispatchedRequestId){
+        if(error instanceof SceneApiError&&([400,401,403,404,409,422].includes(error.status)||['SERVICE_NOT_CONFIGURED','BILLING_NOT_CONFIGURED','AI_INPUT_TOO_LARGE'].includes(error.code)||(!creationResponded&&error.status===503&&['AGENT_ANNOTATION_UNAVAILABLE','AGENT_ANNOTATION_GUARD_UNAVAILABLE'].includes(error.code))))forgetRun();
         else setRecoverable(true);
       }
     }}finally{const cancelledPreparation=!!ownPreparation&&preparation.current===ownPreparation&&ownPreparation.cancelled;if(preparation.current===ownPreparation)preparation.current=null;if(epoch===runEpoch.current||cancelledPreparation){requestPending.current=false;if(alive.current)setBusy(false);}}
