@@ -6,7 +6,7 @@
  * brief-agent 规则版——对话永不因模型抖动中断。决策（记忆/防复读/出方案）始终在前端状态机。
  */
 import { hasNonPersonQuantity, isActivityNeedsAnswer, isUnresolvedNeedsAnswer, parseBriefTurn, type BriefMemory, type BriefTurn, type BriefTurnContext, type LayoutMode, type PendingBasicFact } from '@/components/room-organizer/lib/brief-agent';
-import { HEADCOUNT_MAX, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
+import { HEADCOUNT_MAX, isLayoutOnlyUtterance, layoutGenerateCommand, omitHandledLayoutActions, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
 import { BRIEF_CLIENT_TIMEOUT_MS, type BriefSlots, type BriefConversationResponse } from '../../supabase/functions/_shared/brief-extract-contract';
 import { SceneApiError } from '../../client/scene-client';
 import { isGeneralActivityQuestion } from '@/components/room-organizer/lib/general-activity-question';
@@ -122,6 +122,11 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       const turn = parseBriefTurn('', { ...previous, pendingBasicFacts: [], pendingGeneration:undefined }, { ...context, command: null });
       return { ...turn, kind: 'ack', text: '这部分先不采用，请告诉我正确的信息。', resolution: 'confirmation' };
     }
+    const layoutCommand = layoutGenerateCommand(raw);
+    if (layoutCommand) {
+      const absorbed = parseBriefTurn(raw, previous, { ...context, command: null });
+      return { ...absorbed, kind: 'ask', text: basicQuestion(previous.pendingBasicFacts), memory: { ...absorbed.memory, pendingBasicFacts: previous.pendingBasicFacts, pendingGeneration: { command: layoutCommand, instruction: raw } }, resolution: 'confirmation' };
+    }
     if (context.command) return { ...parseBriefTurn('', {...previous,pendingGeneration:undefined}, { ...context, command: null }), kind: 'ask', text: basicQuestion(previous.pendingBasicFacts), resolution: 'confirmation' };
   }
   if(previous.pendingGeneration)previous={...previous,pendingGeneration:undefined};
@@ -167,7 +172,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
         // The local command handler already owns this exact standalone action.
         // Never swallow a longer instruction, a question, or any other action.
         const localGeneration=context.command==='first'&&raw.split(/[，,；;。！!？?]/u).some(part=>part.trim()==='生成方案');
-        const unhandled=localGeneration?rawUnhandled?.filter(item=>!(item.kind==='action'&&item.evidence==='生成方案')):rawUnhandled;
+        const unhandled=omitHandledLayoutActions(raw, localGeneration?rawUnhandled?.filter(item=>!(item.kind==='action'&&item.evidence==='生成方案')):rawUnhandled);
         const materialQueries='materialQueries' in response && Array.isArray(response.materialQueries)?supportedMaterialQueries(raw,response.materialQueries as BriefConversationResponse['materialQueries']):[];
         const presentation={...(reply?{modelReply:reply}:{}),...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
         const hasNewFacts=Object.values(extraction).some(value=>value!==null&&value!==undefined&&(!Array.isArray(value)||value.length>0));
@@ -194,7 +199,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
             ...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
         }
         const changed=JSON.stringify({...turn.memory,askedScale:false})!==JSON.stringify({...previous,askedScale:false});
-        if(reply&&!hasNewFacts&&!changed&&!pendingFacts.length)return {...turn,kind:'ack',text:reply,memory:previous,resolution:'model',readOnlyReply:true,...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
+        if(reply&&!hasNewFacts&&!changed&&!pendingFacts.length&&!layoutGenerateCommand(raw))return {...turn,kind:'ack',text:reply,memory:previous,resolution:'model',readOnlyReply:true,...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
         // The model can discuss an early idea without forcing the user to supply
         // dimensions immediately. Preserve explicit unknowns and don't pretend the
         // model asked for a scale unless the deterministic prompt was actually shown.
@@ -238,11 +243,15 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   // A failed live understanding request must not silently launch a second
   // provider call through the local command fallback.
   const allowAutomaticGeneration = fallback !== 'failed' && fallback !== 'unavailable';
-  const fallbackContext = allowAutomaticGeneration ? context : { ...context, command: null };
-  const turn = parseBriefTurn(raw, previous, fallbackContext, toExtraction(extraction));
+  // A pure "please arrange it" follow-up has no new fact for a failed model to miss.
+  // Keep drawing from the brief already on record instead of stopping at 没接住.
+  const layoutOnly = isLayoutOnlyUtterance(raw);
+  const fallbackContext = allowAutomaticGeneration || layoutOnly ? context : { ...context, command: null };
+  const turn = parseBriefTurn(raw, previous, fallbackContext.command || !layoutOnly ? fallbackContext : { ...fallbackContext, command: layoutGenerateCommand(raw) }, toExtraction(extraction));
   const pendingFacts = [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending];
-  if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...(allowAutomaticGeneration&&context.command?{pendingGeneration:{command:context.command,instruction:raw}}:{}) }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
-  if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...((allowAutomaticGeneration||layoutOnly)&&(context.command||layoutGenerateCommand(raw))?{pendingGeneration:{command:(context.command??layoutGenerateCommand(raw))!,instruction:raw}}:{}) }, resolution: layoutOnly && !allowAutomaticGeneration ? 'local_command' : fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (!allowAutomaticGeneration && turn.kind === 'generate' && !layoutOnly) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (!allowAutomaticGeneration && layoutOnly && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
 }
 

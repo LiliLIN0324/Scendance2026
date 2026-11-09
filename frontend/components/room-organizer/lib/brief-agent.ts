@@ -13,7 +13,7 @@
  * 模型化路径：turn 函数是唯一接缝，后续接 Vercel AI SDK（选型见 docs/plans/agent-reference-study.md）
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
-import { formatArea, HEADCOUNT_MAX, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
+import { formatArea, HEADCOUNT_MAX, layoutGenerateCommand, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
 import type { LocalSeatingSpecs } from './local-seating-specs';
 import type { SeatingAllocation } from './seating-allocation';
 import type { OriginalPreservation } from './original-preservation';
@@ -365,6 +365,12 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   if (deskExplicit && !deskAmbiguous && !diningExplicit) { memory.layoutMode = 'desk-chair'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (diningExplicit && !diningAmbiguous && !deskExplicit) { memory.layoutMode = 'dining'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (deskAmbiguous || diningAmbiguous || (deskExplicit && diningExplicit)) { memory.layoutModeUnresolved = true; memory.layoutModeConfirmed = false; }
+  // 「围成一圈 / 沙发围坐」is a circle preview. Literal sofas are not auto-placed; round tables are.
+  if (/围成一圈|围一圈|围坐/.test(compact) && !deskExplicit && !/(?:不要|不想|别|不围)/.test(compact)) {
+    memory.layoutMode = 'dining';
+    memory.layoutModeUnresolved = false;
+    memory.layoutModeConfirmed = true;
+  }
   // 模型路径：layoutMode 由 /brief/extract 直接给出，规则没接住时兜进来。
   const mentionedLayoutClauses=clauses.filter(clause=>DESK_CHAIR_PATTERN.test(clause)||/(?:圆桌|餐桌)/.test(clause));
   const onlyInventory=mentionedLayoutClauses.length>0&&mentionedLayoutClauses.every(inventoryOnly);
@@ -503,8 +509,8 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
 
   if (memory.mobilityNeedsClarification || memory.mobilityRequirement?.decision==='unknown') return {kind:'ask',memory,extraction,filledScaleAsk:false,text:'行动辅助或轮椅通行需求尚未确定，这场是否需要？'};
   if (memory.layoutModeUnresolved) return { kind: 'ask', memory, extraction, filledScaleAsk: false, text: '布置方式尚未确定，请告诉我希望采用哪种布置方式。' };
-
-  if ((onlyInventory||hasNonPersonQuantity(raw)) && !context.command && extraction.headcount===null && extraction.event===null && extraction.venueIO===null && extraction.lengthM===null && extraction.widthM===null && extraction.areaM2===null) {
+  const requested = context.command ?? layoutGenerateCommand(raw);
+  if ((onlyInventory||hasNonPersonQuantity(raw)) && !requested && extraction.headcount===null && extraction.event===null && extraction.venueIO===null && extraction.lengthM===null && extraction.widthM===null && extraction.areaM2===null) {
     const missing=[memory.headcount===null?'本场人数':null,memory.layoutModeConfirmed!==true?'布置方式':null].filter(Boolean);
     return {kind:'ask',memory,extraction,filledScaleAsk:false,text:`这句话提到了物品数量，暂未保存为库存。${missing.length?`请再说明${missing.join('和')}。`:'可以继续补充活动要求。'}`};
   }
@@ -514,7 +520,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   const saidSomething = extraction.event !== null || extraction.headcount !== null || extraction.venueIO !== null
     || extraction.areaM2 !== null || (extraction.lengthM !== null && extraction.widthM !== null) || memory.layoutMode !== previous.layoutMode || memory.layoutModeConfirmed !== previous.layoutModeConfirmed;
 
-  if ((context.command || saidSomething) && scaleKnown) {
+  if ((requested || saidSomething) && scaleKnown) {
     if (memory.layoutModeConfirmed !== true) return { kind: 'ask', memory, extraction, filledScaleAsk, text: '还没确定布置方式，请选择圆桌或课桌椅；其他方式请说明，可能需要人工调整。' };
     if (memory.headcount === null) return { kind: 'ask', memory, extraction, filledScaleAsk, text: '请先说明本场预计人数，再生成布置方案。' };
     memory.askedScale = false;
@@ -522,7 +528,14 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   }
   // 还没拿到场地尺寸就继续问：这句补了新要素就先复述再催尺寸；啥也没补（command 空跑或答非所问）
   // 就换一种说法催，不重复同一句开场白。
-  const wantsScale = context.command || saidSomething || (previous.askedScale && !scaleKnown);
+  const wantsScale = requested || saidSomething || (previous.askedScale && !scaleKnown);
+  if (wantsScale && requested) {
+    memory.askedScale = true;
+    const text = memory.headcount === null
+      ? '还差人数和场地尺寸。说一下，我再出预览。'
+      : '还差场地尺寸。说一下长宽或面积，我再出预览。';
+    return { kind: 'ask', memory, extraction, filledScaleAsk: false, text };
+  }
   if (wantsScale) {
     const known = summarizeMemory(memory);
     // 已记下人数就别再用「40 人」当示例误导：示例只催缺的槽。

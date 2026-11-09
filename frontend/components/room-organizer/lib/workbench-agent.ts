@@ -79,12 +79,63 @@ export function formatArea(value: number): string { return Number(value.toFixed(
 /** 「停一下」/「停」等同点 hint 里的停一下。 */
 export function isStopCommand(text: string): boolean { return /^\s*停(一下|下)?[。.!！]?\s*$/.test(text); }
 
+/** Keep Chinese periods as clause breaks. normalizeDimInput turns them into decimal dots. */
+function layoutCompact(text: string): string {
+  return text.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).replace(/\s+/g, '').replace(/[。.!！]+$/g, '');
+}
+
+/** Stems, not a passphrase list: freeform talk about arranging the room. */
+const LAYOUT_STEM = /布置|摆法|摆一下|摆一版|摆个|来摆|帮我摆|重新摆|围成|围坐|围一圈/;
+const AGAIN_HINT = /换|重新|再布置|再摆|另一种|围成|围坐|围一圈/;
+const LAYOUT_BLOCK = /(?:不要|不想|暂不|别|如何|怎样|怎么|能否|是否|要不要)/;
+const LAYOUT_OTHER_ACTION = /(?:删除|移除|撤掉|挪动|挪到|往左|往右|导出|交接|清单|旋转|放大|缩小|涂成|刷成|加一把|加一张|加两|再加|加个|加一个)/;
+
+/** Sofa / floor-sitting still gets a circle preview; the note says it is not literal sofas. */
+export function mentionsUnsupportedSeating(text: string): boolean {
+  const compact = layoutCompact(text);
+  if (!compact || LAYOUT_BLOCK.test(compact) || /[?？]|是什么意思/.test(compact)) return false;
+  return /(?:沙发|休闲椅|席地|坐地上)/.test(compact) && /(?:围成|围坐|围一圈|布置|摆)/.test(compact);
+}
+
+export const CIRCLE_SEATING_NOTE = '围坐先按圆桌出预览，沙发还不能按实物摆进画布。';
+
+/**
+ * Freeform request to draw or replace a preview.
+ * 'again' changes the arrangement; 'first' draws from the recorded brief.
+ * Questions, refusals, and concrete edits (move, delete, add N) stay out.
+ */
+export function layoutGenerateCommand(text: string): 'again' | 'first' | null {
+  const compact = layoutCompact(text);
+  if (!compact || LAYOUT_OTHER_ACTION.test(compact) || /[?？]|是什么意思/.test(compact)) return null;
+  const clauses = compact.split(/[，,。；;！!]/).filter(Boolean);
+  if (!clauses.some(clause => LAYOUT_STEM.test(clause))) return null;
+  if (clauses.some(clause => LAYOUT_BLOCK.test(clause) && (LAYOUT_STEM.test(clause) || AGAIN_HINT.test(clause)))) return null;
+  return clauses.some(clause => AGAIN_HINT.test(clause)) ? 'again' : 'first';
+}
+
+/** A layout ask with no new attendance, size, or seating-mode fact for the model to miss. */
+export function isLayoutOnlyUtterance(text: string): boolean {
+  if (!layoutGenerateCommand(text)) return false;
+  const parsed = parseBriefSentence(text);
+  return parsed.headcount == null && parsed.event == null && parsed.venueIO == null && parsed.lengthM == null && parsed.widthM == null && parsed.areaM2 == null
+    && !/(?:课桌|课椅|圆桌|餐桌)/.test(layoutCompact(text));
+}
+
+/** Drop a layout ask the preview path already owns, and keep every other unhandled item. */
+export function omitHandledLayoutActions<T extends { kind: string; evidence: string }>(raw: string, items: readonly T[] | undefined): T[] | undefined {
+  if (!items) return undefined;
+  if (!layoutGenerateCommand(raw)) return [...items];
+  return items.filter(item => item.kind === 'question' || layoutGenerateCommand(item.evidence) === null);
+}
+
 /**
  * 右栏唯一的生成入口是说话：尺寸表单和大绿钮那个第二入口按 2026-10-26 夜截图钉砍掉了。
  * 这句话是在要「一版布置」吗？'again' = 换一版，'first' = 就按现在这些条件出。
  */
 export function isGenerateCommand(text: string): 'again' | 'first' | null {
   const compact = normalizeDimInput(text).replace(/\s+/g, '');
+  const natural = layoutGenerateCommand(text);
+  if (natural) return natural;
   // A direct answer to the assistant's offer to explore assumptions creates only a preview.
   if (/^(?:先探索|先用假设探索)[。！!]*$/.test(compact)) return 'first';
   const localDraft=/(?:生成|制作|做|出)(?:一版)?(?:本地|本机)草案/.exec(compact);
@@ -110,7 +161,7 @@ export function isEstimateCommand(text: string): boolean {
  */
 export function isReviewCommand(text: string): boolean {
   const compact = normalizeDimInput(text).replace(/\s+/g, '');
-  if (!compact || /换一版|再来一版|再出一版|重出一版|换个方案|换种摆法/.test(compact)) return false;
+  if (!compact || /换一版|再来一版|再出一版|重出一版|换个方案|换种摆法|换个摆法|重新布置|你来布置|围成一圈/.test(compact)) return false;
   return /(哪里有问题|有什么问题|有没有问题|检查一下|检查下|体检|挑毛病|挑挑毛病|优化一下|优化下|改一版|太挤|挤不挤|动线|碰撞|冲突|拉开|留够|走不走得通|顺不顺)/.test(compact);
 }
 

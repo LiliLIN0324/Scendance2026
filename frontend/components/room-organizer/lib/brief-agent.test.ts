@@ -163,6 +163,32 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
     expect(again.text).toContain('长宽');
   });
 
+  it('已记下的简报上，自由说法直接出预览，不说没接住', () => {
+    const memory = { ...initialBriefMemory(), headcount: 30, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, event: '围读会', layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
+    for (const text of ['你来布置吧', '帮我摆一下', '换个摆法', '重新布置', '我的意思是你是重新布置']) {
+      const turn = parseBriefTurn(text, memory, venueUp);
+      expect(turn.kind).toBe('generate');
+      expect(turn.text).not.toContain('没接住');
+    }
+  });
+
+  it('沙发围一圈改成圆桌预览，不说没接住', () => {
+    const memory = { ...initialBriefMemory(), headcount: 30, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
+    const turn = parseBriefTurn('沙发围成一圈', memory, venueUp);
+    expect(turn.kind).toBe('generate');
+    expect(turn.text).not.toContain('没接住');
+    expect(turn.memory.layoutMode).toBe('dining');
+    expect(turn.memory.layoutModeConfirmed).toBe(true);
+  });
+
+  it('人数或场地还没齐时，只问缺的那一项', () => {
+    const turn = parseBriefTurn('你来布置吧', initialBriefMemory(), bare);
+    expect(turn.kind).toBe('ask');
+    expect(turn.text).toBe('还差人数和场地尺寸。说一下，我再出预览。');
+    expect(turn.text).not.toContain('没接住');
+    expect(turn.text).not.toContain('已记下');
+  });
+
   it('课桌椅形态记住后，「换一版」仍按一人一套重排', () => {
     const memory = { ...initialBriefMemory(), headcount: 80, lengthM: 39, widthM: 20, layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
     const turn = parseBriefTurn('换一版', memory, { ...venueUp, command: 'again' });
