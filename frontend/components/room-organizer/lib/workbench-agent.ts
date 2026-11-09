@@ -84,33 +84,53 @@ function layoutCompact(text: string): string {
   return text.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).replace(/\s+/g, '').replace(/[。.!！]+$/g, '');
 }
 
-/** Stems, not a passphrase list: freeform talk about arranging the room. */
-const LAYOUT_STEM = /布置|摆法|摆一下|摆一版|摆个|来摆|帮我摆|重新摆|围成|围坐|围一圈/;
-const AGAIN_HINT = /换|重新|再布置|再摆|另一种|围成|围坐|围一圈/;
-const LAYOUT_BLOCK = /(?:不要|不想|暂不|别|如何|怎样|怎么|能否|是否|要不要)/;
+/** Stems for “arrange this room”, plus nearby wording like tighter, prettier, more aisle. */
+const LAYOUT_STEM = /布置|摆法|摆一下|摆一版|摆个|来摆|帮我摆|重新摆|围成|围坐|围一圈|出一版|先出/;
+const REVISE_HINT = /换|重新|再布置|再摆|再来一版|再出一版|另一种|围成|围坐|围一圈|紧凑|松一点|疏一点|密一点|好看|大气|随意一点|正式一点|过道|通道|留空|留点|按刚才/;
+const SEATING_SWAP = /(?:不要|别用|不用).{0,8}(?:课桌|课椅|桌椅).{0,8}(?:沙发|圆桌|围|休闲)|(?:改|换)成?沙发/;
 const LAYOUT_OTHER_ACTION = /(?:删除|移除|撤掉|挪动|挪到|往左|往右|导出|交接|清单|旋转|放大|缩小|涂成|刷成|加一把|加一张|加两|再加|加个|加一个)/;
+/** A refusal of the arrange request itself, not “不要课桌、改成沙发”. */
+const REFUSE_LAYOUT = /(?:不要|别|不想|先别).{0,4}(?:换|重新|摆|布置|出一版|再来)/;
+
+/** generate = draw from the brief; revise = another arrangement; cannot = we must not pretend. */
+export type LocalLayoutClass = 'generate' | 'revise' | 'cannot';
 
 /** Sofa / floor-sitting still gets a circle preview; the note says it is not literal sofas. */
 export function mentionsUnsupportedSeating(text: string): boolean {
   const compact = layoutCompact(text);
-  if (!compact || LAYOUT_BLOCK.test(compact) || /[?？]|是什么意思/.test(compact)) return false;
-  return /(?:沙发|休闲椅|席地|坐地上)/.test(compact) && /(?:围成|围坐|围一圈|布置|摆)/.test(compact);
+  if (!compact || /[?？]|是什么意思/.test(compact) || /(?:不要|别)(?:用|要)?沙发/.test(compact)) return false;
+  return /(?:沙发|休闲椅|席地|坐地上)/.test(compact) && /(?:围成|围坐|围一圈|布置|摆|改|换)/.test(compact);
 }
 
 export const CIRCLE_SEATING_NOTE = '围坐先按圆桌出预览，沙发还不能按实物摆进画布。';
 
 /**
+ * Coarse local reading when the model is off or did not yield an action.
+ * Questions that are not polite requests, refusals, and concrete object edits stay null
+ * so the existing move/add/export paths keep them.
+ */
+export function classifyLocalLayout(text: string): LocalLayoutClass | null {
+  const compact = layoutCompact(text);
+  if (!compact || LAYOUT_OTHER_ACTION.test(compact) || REFUSE_LAYOUT.test(compact)) return null;
+  if (/是什么意思/.test(compact)) return null;
+  const polite = /能不能|可不可以|行不行|可以帮我|帮我/.test(compact);
+  if (/[?？吗]|如何|怎样|怎么|是否|要不要/.test(compact) && !polite) return null;
+  if (/(?:消防验收|保证合规|保证不违规|施工图|办证)/.test(compact) && !LAYOUT_STEM.test(compact) && !REVISE_HINT.test(compact)) return 'cannot';
+  if (SEATING_SWAP.test(compact) || mentionsUnsupportedSeating(compact)) return 'revise';
+  if (REVISE_HINT.test(compact) && (LAYOUT_STEM.test(compact) || /座位|座|过道|通道|紧凑|好看|疏|密/.test(compact) || /再来一版|再出一版|按刚才/.test(compact))) return 'revise';
+  if (LAYOUT_STEM.test(compact) || /按刚才说的摆|摆一摆|(?:^|帮我|来|再|请)摆/.test(compact)) return REVISE_HINT.test(compact) ? 'revise' : 'generate';
+  return null;
+}
+
+/**
  * Freeform request to draw or replace a preview.
  * 'again' changes the arrangement; 'first' draws from the recorded brief.
- * Questions, refusals, and concrete edits (move, delete, add N) stay out.
  */
 export function layoutGenerateCommand(text: string): 'again' | 'first' | null {
-  const compact = layoutCompact(text);
-  if (!compact || LAYOUT_OTHER_ACTION.test(compact) || /[?？]|是什么意思/.test(compact)) return null;
-  const clauses = compact.split(/[，,。；;！!]/).filter(Boolean);
-  if (!clauses.some(clause => LAYOUT_STEM.test(clause))) return null;
-  if (clauses.some(clause => LAYOUT_BLOCK.test(clause) && (LAYOUT_STEM.test(clause) || AGAIN_HINT.test(clause)))) return null;
-  return clauses.some(clause => AGAIN_HINT.test(clause)) ? 'again' : 'first';
+  const kind = classifyLocalLayout(text);
+  if (kind === 'revise') return 'again';
+  if (kind === 'generate') return 'first';
+  return null;
 }
 
 /** A layout ask with no new attendance, size, or seating-mode fact for the model to miss. */

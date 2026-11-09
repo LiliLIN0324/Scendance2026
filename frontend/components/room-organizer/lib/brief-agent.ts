@@ -13,7 +13,7 @@
  * 模型化路径：turn 函数是唯一接缝，后续接 Vercel AI SDK（选型见 docs/plans/agent-reference-study.md）
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
-import { formatArea, HEADCOUNT_MAX, layoutGenerateCommand, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
+import { classifyLocalLayout, formatArea, HEADCOUNT_MAX, layoutGenerateCommand, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
 import type { LocalSeatingSpecs } from './local-seating-specs';
 import type { SeatingAllocation } from './seating-allocation';
 import type { OriginalPreservation } from './original-preservation';
@@ -365,8 +365,8 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   if (deskExplicit && !deskAmbiguous && !diningExplicit) { memory.layoutMode = 'desk-chair'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (diningExplicit && !diningAmbiguous && !deskExplicit) { memory.layoutMode = 'dining'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (deskAmbiguous || diningAmbiguous || (deskExplicit && diningExplicit)) { memory.layoutModeUnresolved = true; memory.layoutModeConfirmed = false; }
-  // 「围成一圈 / 沙发围坐」is a circle preview. Literal sofas are not auto-placed; round tables are.
-  if (/围成一圈|围一圈|围坐/.test(compact) && !deskExplicit && !/(?:不要|不想|别|不围)/.test(compact)) {
+  // 「围成一圈 / 不要课桌改沙发」is a circle preview. Literal sofas are not auto-placed; round tables are.
+  if ((/围成一圈|围一圈|围坐/.test(compact) || /(?:不要|别用|不用).{0,8}(?:课桌|课椅|桌椅)/.test(compact) && /沙发|圆桌|围|休闲/.test(compact)) && !deskExplicit && !/(?:不要|不想|别|不围)围/.test(compact)) {
     memory.layoutMode = 'dining';
     memory.layoutModeUnresolved = false;
     memory.layoutModeConfirmed = true;
@@ -560,8 +560,11 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
     return { kind: 'ack', memory, extraction, filledScaleAsk, text: memory.allGuestsSeated ? '记下了：每位参加者都需要座位。' : '记下了：不要求所有参加者都入座。' };
   }
   if(mobility && mobility.decision!=='unknown')return {kind:'ack',memory,extraction,filledScaleAsk:false,text:mobility.decision==='needed'?'已记下行动辅助或轮椅通行需求，实际通行条件仍待核验。':'已记下本场不需要所述行动辅助需求；现场条件仍需核对。'};
+  if (classifyLocalLayout(raw) === 'cannot') {
+    return { kind: 'ask', memory, extraction, filledScaleAsk: false, text: '消防验收、施工图和办证我做不到。人和场地可以说一下，我先出布置预览。' };
+  }
   if (memory.headcount === null && memory.event === null && memory.venueIO === null && !hasDims(memory) && memory.areaM2 === null) {
-    return { kind: 'none', memory, extraction, filledScaleAsk: false, text: '这句我没接住。跟我说一句「80 人，室内 12×9」这样的需求，我就能先出一版预览。' };
+    return { kind: 'none', memory, extraction, filledScaleAsk: false, text: '这句我没接住。跟我说这场活动怎么坐、大概多少人，我再出一版预览。' };
   }
   // 基础提取没有新信息时，以中性问题澄清需求，避免把模型自由文本变成操作。
   const known = summarizeMemory(memory);
@@ -578,7 +581,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
       text: `${known ? `记下了：${known}。` : ''}${audiencePrompt}`,
     };
   }
-  return { kind: 'ack', memory, extraction, filledScaleAsk: false, text: `这句我没接住。已记下：${known}${scaleKnown ? '' : '；还差场地多大，说一句「12×9」就行'}。要调布置直接说，比如「加两把椅子」或「换个摆法」。` };
+  return { kind: 'ack', memory, extraction, filledScaleAsk: false, text: `这句我没接住。已记下：${known}。想改布置，直接说你希望怎么坐、松一点还是紧一点。` };
 }
 
 /** 离线兜底只追问本场需求，不从受众标签断言行动能力或固定布局。 */

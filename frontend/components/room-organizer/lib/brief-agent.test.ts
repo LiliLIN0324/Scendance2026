@@ -151,7 +151,7 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
   it('什么都不知道时没接住：如实说，给一个能照抄的例子', () => {
     const turn = parseBriefTurn('嗯嗯', initialBriefMemory(), bare);
     expect(turn.kind).toBe('none');
-    expect(turn.text).toContain('80 人，室内 12×9');
+    expect(turn.text).toContain('这场活动怎么坐');
   });
 
   it('追问过尺寸还没听到：换一种说法，不重复同一句', () => {
@@ -179,6 +179,25 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
     expect(turn.text).not.toContain('没接住');
     expect(turn.memory.layoutMode).toBe('dining');
     expect(turn.memory.layoutModeConfirmed).toBe(true);
+  });
+
+  it('相邻的自由说法也出预览：好看、紧凑、过道、再来一版、按刚才、不要课桌改沙发', () => {
+    const memory = { ...initialBriefMemory(), headcount: 30, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
+    for (const text of ['摆好看一点', '能不能紧凑一点', '座位多留点过道', '先出一版看看', '再来一版', '按刚才说的摆']) {
+      const turn = parseBriefTurn(text, memory, venueUp);
+      expect(turn.kind, text).toBe('generate');
+      expect(turn.text, text).not.toContain('没接住');
+    }
+    const swapped = parseBriefTurn('不要课桌改沙发', memory, venueUp);
+    expect(swapped.kind).toBe('generate');
+    expect(swapped.memory.layoutMode).toBe('dining');
+    expect(swapped.text).not.toContain('没接住');
+    const unrelated = parseBriefTurn('今天天气不错', memory, venueUp);
+    expect(unrelated.text).toContain('没接住');
+    const limit = parseBriefTurn('请帮我办消防验收', memory, venueUp);
+    expect(limit.kind).toBe('ask');
+    expect(limit.text).toContain('做不到');
+    expect(limit.text).not.toContain('没接住');
   });
 
   it('人数或场地还没齐时，只问缺的那一项', () => {
