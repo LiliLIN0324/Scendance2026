@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest';
-import { deliveryManifestCsv } from './scene-delivery';
+import { assertGeneratedListNotProcured, deliveryListViolations } from '@/lib/facts/delivery-list-guard';
+import { ledgerChecklistLines } from '@/lib/facts/ledger-entries';
+import { hallD5SyntheticLecture } from '@/lib/facts/scenario-ledger';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { deliveryManifestCsv } from './scene-delivery';
 import type { RoomLayout } from './types';
 
 const base: RoomLayout = {
@@ -41,6 +44,22 @@ describe('delivery manifest', () => {
       expect(row,label).toContain('待导出时检查');expect(row,label).not.toContain('可导出');
     }
     expect(csv).toContain('delivery-1');
+    assertGeneratedListNotProcured(csv);
+    expect(deliveryListViolations(csv)).toEqual([]);
+    expect(csv).toContain('清单含义');
+  });
+
+  it('appends the three inventory columns without turning a generated list into a purchase', async () => {
+    const lines = ledgerChecklistLines(hallD5SyntheticLecture().chairs);
+    const csv = await deliveryManifestCsv(base, { id: 'delivery-1', generatedAt: '2026-11-04T10:00:00.000Z' }, lines);
+    assertGeneratedListNotProcured(csv);
+    expect(deliveryListViolations(csv)).toEqual([]);
+    expect(csv).toContain('库存账：口述');
+    expect(csv).toContain('oral:unspecified-chair');
+    expect(csv).toContain('库存账：场景模型');
+    expect(csv).toContain('catalog:desk-chair-en');
+    expect(csv).toContain('库存账：核实库存');
+    expect(csv).toContain('待核验');
   });
 
   it('keeps unsupported scene types in the list and explains why', async () => {

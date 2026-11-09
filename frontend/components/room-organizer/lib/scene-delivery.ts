@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GENERATED_LIST_NOTICE, type LedgerChecklistLine } from '@/lib/facts/delivery-list-guard';
 import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
 import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
@@ -11,8 +12,8 @@ import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
 import { deliverableInventory, layoutProvenanceBreakdown } from './deliverable-inventory';
-import { localDraftAvailable, redactDeliveryValue, safeDeliveryText } from './local-draft-delivery';
 import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
+import { localDraftAvailable, redactDeliveryValue, safeDeliveryText } from './local-draft-delivery';
 import { REFERENCE_SOURCE_UNVERIFIED } from './reference-source-status';
 import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
 import type { RoomLayout } from './types';
@@ -172,7 +173,7 @@ export async function sceneExecutionCsv(layout: RoomLayout, snapshot?: DeliveryS
  * 和物料/执行清单共用 deliveryMaterials / deliveryExecution，不另算一套口径。
  * 某类不支持时仍出一行并写明原因，不把失败藏起来。
  */
-export async function deliveryManifestCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
+export async function deliveryManifestCsv(layout: RoomLayout, snapshot?: DeliverySnapshot, ledgerLines?: readonly LedgerChecklistLine[]): Promise<string> {
   let gate = '';
   let materials: DeliveryMaterial[] = [];
   let execution: DeliveryExecution[] = [];
@@ -207,6 +208,14 @@ export async function deliveryManifestCsv(layout: RoomLayout, snapshot?: Deliver
   rows.push(['执行时间表 HTML', `${layout.name}_执行时间表_${id}.html`, tasks ? '待导出时检查' : '需先补资料', 1, tasks ? '导出前核对工作台、本机记录与点验状态；计划与实际分别保留。' : '先在活动安排中保存任务。', id, when]);
   rows.push(['制作交接 HTML', `${layout.name}_内部制作交接_${id}.html`, '待导出时检查', 1, '导出前核对制作计划及点验；未确定的人员、供应方与费用会明确标出。', id, when]);
   rows.push(['现场与安全核验', '', '待核验', '', SCOPE_NOTICE, id, when]);
+  rows.push(['清单含义', '', '已生成', '', GENERATED_LIST_NOTICE, id, when]);
+  for (const line of ledgerLines ?? []) {
+    const column = line?.column === '口述' || line?.column === '场景模型' || line?.column === '核实库存' ? line.column : '待核验';
+    const quantity = Number.isSafeInteger(line?.quantity) && line.quantity >= 0 ? line.quantity : '';
+    const identity = typeof line?.identity === 'string' && line.identity.trim() ? line.identity.trim() : '身份待核验';
+    const note = typeof line?.note === 'string' && line.note.trim() ? line.note.trim() : '说明待补';
+    rows.push([`库存账：${column}`, identity, '待核验', quantity, `${note} ${GENERATED_LIST_NOTICE}`, id, when]);
+  }
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 
