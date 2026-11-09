@@ -65,8 +65,9 @@ describe('outdoor 2D planning tokens (H1-c)', () => {
     expect(PLANNING_ZONE_OPACITY.max).toBeLessThan(1);
   });
 
-  it('labels all four canvas edit modes (H2-b)', () => {
-    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'view', 'zone']);
+  it('labels all five canvas edit modes (H2-b/H2-c)', () => {
+    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'facility', 'view', 'zone']);
     expect(PLANNING_EDIT_MODE_LABELS['boundary-vertex']).toBe('编辑边界');
+    expect(PLANNING_EDIT_MODE_LABELS['facility']).toBe('放设施');
   });
 });

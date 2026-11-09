@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   PLAN_LAYER_STACK,
   defaultLayerVisibility,
+  drawFacilityGhost,
+  drawFacilityLayer,
   enuToLngLat,
   hexWithAlpha,
   isLayerVisible,
@@ -9,6 +11,7 @@ import {
   planPixelToPoint,
   planPointToPixel,
   visiblePlanLayers,
+  type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
 import { PLANNING_LAYER_COLORS } from '@/lib/outdoor-plan-tokens';
@@ -82,5 +85,86 @@ describe('outdoor plan canvas core (H2-a)', () => {
     expect(top.y).toBeGreaterThan(mid.y);
     expect(mid.x).toBeCloseTo(0, 6);
     expect(mid.y).toBeCloseTo(0, 6);
+  });
+});
+
+/* ---------------- H2-c 设施放置绘制（stub ctx 捕获调用） ---------------- */
+
+interface CtxCapture {
+  rects: string[];
+  dash: number[][];
+  texts: string[];
+  strokes: string[];
+}
+
+function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
+  const cap: CtxCapture = { rects: [], dash: [], texts: [], strokes: [] };
+  const ctx = {
+    save: () => {},
+    restore: () => {},
+    translate: () => {},
+    rotate: () => {},
+    beginPath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    closePath: () => {},
+    stroke: () => {},
+    fill: () => {},
+    arc: () => {},
+    setLineDash: (d: number[]) => cap.dash.push([...d]),
+    strokeRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`stroke:${x},${y},${w},${h}`),
+    fillRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`fill:${x},${y},${w},${h}`),
+    fillText: (t: string) => cap.texts.push(t),
+  } as unknown as CanvasRenderingContext2D;
+  Object.defineProperty(ctx, 'strokeStyle', { set: (v: string) => cap.strokes.push(v), get: () => '' });
+  Object.defineProperty(ctx, 'fillStyle', { set: () => {}, get: () => '' });
+  Object.defineProperty(ctx, 'lineWidth', { set: () => {}, get: () => 1 });
+  Object.defineProperty(ctx, 'font', { set: () => {}, get: () => '' });
+  Object.defineProperty(ctx, 'textAlign', { set: () => {}, get: () => 'left' });
+  Object.defineProperty(ctx, 'textBaseline', { set: () => {}, get: () => 'top' });
+  return { ctx, cap };
+}
+
+describe('facility ghost & selection drawing (H2-c)', () => {
+  it('draws the ghost as a dashed footprint with a template/size label', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityGhost({ ctx, viewport: view } as PlanCanvasContext, { name: '市集摊位', width: 2, depth: 2 }, { x: 0, y: 0 });
+    expect(cap.dash).toContainEqual([6, 4]);
+    expect(cap.rects.some(r => r.startsWith('stroke:'))).toBe(true);
+    expect(cap.rects.some(r => r.startsWith('fill:'))).toBe(true);
+    expect(cap.texts.some(t => t.includes('市集摊位') && t.includes('2×2m'))).toBe(true);
+    expect(cap.strokes).toContain(PLANNING_LAYER_COLORS.facility);
+  });
+
+  it('paints an invalid ghost in warning red', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityGhost({ ctx, viewport: view } as PlanCanvasContext, { name: '舞台台面', width: 8, depth: 6 }, { x: 0, y: 0 }, { invalid: true });
+    expect(cap.strokes).toContain('#c0392b');
+    expect(cap.strokes).not.toContain(PLANNING_LAYER_COLORS.facility);
+  });
+
+  it('highlights the selected facility with a white halo and name label', () => {
+    const facility = { id: 'f1', name: '市集摊位 A', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 2, depth: 2 } };
+    const selected = makeCtx();
+    drawFacilityLayer({ ctx: selected.ctx, viewport: view } as PlanCanvasContext, [facility], { selectedId: 'f1' });
+    // 底矩形 + 选中白圈 = 两次 strokeRect；名称标注一次。
+    expect(selected.cap.rects.filter(r => r.startsWith('stroke:')).length).toBe(2);
+    expect(selected.cap.texts).toContain('市集摊位 A');
+
+    const plain = makeCtx();
+    drawFacilityLayer({ ctx: plain.ctx, viewport: view } as PlanCanvasContext, [facility], {});
+    expect(plain.cap.rects.filter(r => r.startsWith('stroke:')).length).toBe(1);
+    expect(plain.cap.texts).toHaveLength(0);
+  });
+
+  it('paints warning facilities with a red dashed outline', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityLayer(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ id: 'f2', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 2, depth: 2 }, warning: true }],
+      {},
+    );
+    expect(cap.strokes).toContain('#c0392b');
+    expect(cap.dash).toContainEqual([6, 4]);
   });
 });

@@ -199,8 +199,8 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H2-b）</h1>
-        <small style={{ color: '#93a4bc' }}>边界绘制 · 语义分区 · 刷新保留草稿</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H2-c）</h1>
+        <small style={{ color: '#93a4bc' }}>边界绘制 · 语义分区 · 设施模板拖放 · 刷新保留草稿</small>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="draft-saved">
           {savedAt ? `草稿已存 ${savedAt}` : ''}
         </span>
