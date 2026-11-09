@@ -22,11 +22,13 @@ import {
   satelliteImageAligned,
   satelliteImageShellRect,
   satellitePhotoShapeRect,
+  basemapCoversGroundPlane,
   orientMapShellNorthUp,
   metersPerDegreeLng,
   METERS_PER_DEGREE_LAT,
 } from './amap-venue';
 import { INITIAL_LAYOUT } from './initial-layout';
+import { outdoorGroundSize } from './site';
 import { parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
@@ -376,7 +378,28 @@ describe('satellite ground backfill', () => {
     const drawn = satelliteProxyUrl(polygon, 'secret-key');
     expect(drawn).toBe(url);
     const rect = satelliteImageShellRect(registration!.frame, registration!.bounds);
+    const ground = outdoorGroundSize(registration!.shellWidth, registration!.shellDepth);
+    expect(rect.width).toBeCloseTo(ground, 1);
+    expect(rect.depth).toBeCloseTo(ground, 1);
+    expect(rect.x + rect.width / 2).toBeCloseTo(registration!.shellWidth / 2, 1);
+    expect(rect.z + rect.depth / 2).toBeCloseTo(registration!.shellDepth / 2, 1);
     expect(rect.northAtTop).toBe(true);
+    const narrow = satelliteProxyUrl(polygon, 'secret-key')!.replace(
+      /west=[^&]+&south=[^&]+&east=[^&]+&north=[^&]+/,
+      'west=120.1000000&south=30.2000000&east=120.1010000&north=30.2010000',
+    );
+    expect(basemapCoversGroundPlane({
+      floorPlanImage: narrow,
+      mapGroundFrame: registration!.frame,
+      width: registration!.shellWidth,
+      height: registration!.shellDepth,
+    })).toBe(false);
+    expect(basemapCoversGroundPlane({
+      floorPlanImage: url!,
+      mapGroundFrame: registration!.frame,
+      width: registration!.shellWidth,
+      height: registration!.shellDepth,
+    })).toBe(true);
     expect(rect.z).toBeLessThan(0);
     expect(orientMapShellNorthUp(layout)).toBe(layout);
     const depth = layout.height;

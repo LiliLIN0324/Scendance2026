@@ -143,10 +143,17 @@ async function renderLngLatBounds(
       }
     }
     const tiles = await Promise.all(coords.map(async ({ tx, ty }) => {
-      const host = 1 + ((tx + ty) % 4);
-      const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) return null;
-      return { tx, ty, bitmap: await createImageBitmap(await response.blob()) };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const host = 1 + ((tx + ty + attempt) % 4);
+        try {
+          const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(12000) });
+          if (!response.ok) continue;
+          return { tx, ty, bitmap: await createImageBitmap(await response.blob()) };
+        } catch {
+          // 整片地面瓦片多，单块超时再试一次，换一台主机。
+        }
+      }
+      return null;
     }));
     if (tiles.some(tile => !tile)) {
       for (const tile of tiles) tile?.bitmap.close();

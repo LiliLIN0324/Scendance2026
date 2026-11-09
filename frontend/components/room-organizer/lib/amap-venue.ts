@@ -1,3 +1,4 @@
+import { outdoorGroundSize } from './site';
 import type { RoomLayout, SceneAnchor } from './types';
 import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
@@ -182,7 +183,10 @@ export function usesLocalAmapProxy(): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '';
 }
 
-/** 3D 圈外留白（壳体米）。卫星图必须带上同样一圈，否则贴地会对不齐。 */
+/**
+ * 旧的圈外窄边（壳体米）。贴地范围已改为整片户外地面，见 satelliteBoundsForFrame。
+ * 仍导出，避免把还在用窄边估算的调用方直接打断。
+ */
 export function satellitePadMeters(shellWidth: number, shellDepth: number): number {
   return Math.max(4, 0.25 * Math.max(shellWidth, shellDepth));
 }
@@ -211,7 +215,7 @@ export interface SatelliteImageBounds {
 
 /**
  * 演示 L 和手圈多边形都走这里：x 向东，z=0 为北缘，超过 100m 才等比缩小。
- * 卫星图范围用同一套原点和缩放，再向外加一圈 pad。
+ * 卫星图范围用同一套原点和缩放，铺满户外地面方片。
  */
 export function groundRegistration(polygon: AmapPoint[]): {
   frame: MapGroundFrame;
@@ -241,21 +245,40 @@ export function groundRegistration(polygon: AmapPoint[]): {
 }
 
 export function satelliteBoundsForFrame(
-  polygon: AmapPoint[],
+  _polygon: AmapPoint[],
   frame: MapGroundFrame,
   shellWidth: number,
   shellDepth: number,
 ): SatelliteImageBounds {
-  const lngs = polygon.map(point => point.lng);
-  const lats = polygon.map(point => point.lat);
-  const padReal = satellitePadMeters(shellWidth, shellDepth) / (frame.scale > 0 ? frame.scale : 1);
+  // 底图铺满产品已有的户外地面方片（outdoorGroundSize），中心在壳体中心。
+  // 只按圈画外接矩形加一圈窄边时，3D 里会剩一块地图碎片，方片其余部分是空的。
+  const half = outdoorGroundSize(shellWidth, shellDepth) / 2;
+  const scale = frame.scale > 0 ? frame.scale : 1;
+  const sign = frame.latSign ?? 1;
   const mLng = metersPerDegreeLng(frame.latMid);
+  const centerLng = frame.lng0 + (shellWidth / 2 / scale) / mLng;
+  const centerLat = frame.lat0 + sign * (shellDepth / 2 / scale) / METERS_PER_DEGREE_LAT;
+  const halfLng = (half / scale) / mLng;
+  const halfLat = (half / scale) / METERS_PER_DEGREE_LAT;
   return {
-    west: Math.min(...lngs) - padReal / mLng,
-    east: Math.max(...lngs) + padReal / mLng,
-    south: Math.min(...lats) - padReal / METERS_PER_DEGREE_LAT,
-    north: Math.max(...lats) + padReal / METERS_PER_DEGREE_LAT,
+    west: centerLng - halfLng,
+    east: centerLng + halfLng,
+    south: centerLat - halfLat,
+    north: centerLat + halfLat,
   };
+}
+
+/** 现有贴地地址是否已经盖住整片户外地面。窄边旧图返回 false，调用方再拉一张对齐的图。 */
+export function basemapCoversGroundPlane(layout: Pick<RoomLayout, 'floorPlanImage' | 'mapGroundFrame' | 'width' | 'height'>): boolean {
+  const frame = layout.mapGroundFrame;
+  const bounds = parseSatelliteImageBounds(layout.floorPlanImage ?? '');
+  if (!frame || !bounds || !(layout.width > 0) || !(layout.height > 0)) return false;
+  const needed = satelliteBoundsForFrame([], frame, layout.width, layout.height);
+  const slop = 1e-5;
+  return bounds.west <= needed.west + slop
+    && bounds.east >= needed.east - slop
+    && bounds.south <= needed.south + slop
+    && bounds.north >= needed.north - slop;
 }
 
 /** 壳体米（x=0 西缘，z=0 为 frame.lat0）→ 卫星图像素比例。v 向北为 1，配合贴图 flipY。 */
@@ -474,7 +497,8 @@ export async function fetchSatelliteGroundDataUrl(
   if (!proxy || typeof window === 'undefined') return null;
   // 浏览器直连 restapi 常被掐；走本机代理。用代理 URL 直接贴地（勿嵌 data URL，避免 localStorage 爆）。
   try {
-    const probe = await fetch(proxy, { method: 'GET', signal: AbortSignal.timeout(10000) });
+    // 整片户外地面要拼几十块瓦片，10 秒常常不够。超时就当没拉到，调用方留着上一张。
+    const probe = await fetch(proxy, { method: 'GET', signal: AbortSignal.timeout(25000) });
     if (!probe.ok) return null;
     // 读头确认是图。不要 await body.cancel()：取消失败会把已经 200 的卫星图当成没拉到，
     // 随后只留下 SVG 占位，而 createImageBitmap 解不开 SVG，地面就变成橄榄绿。

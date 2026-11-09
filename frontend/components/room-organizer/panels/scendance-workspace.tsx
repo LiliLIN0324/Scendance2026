@@ -6,6 +6,7 @@ import { useRoomEditor, useSelection } from '../contexts';
 import {
   SATELLITE_GROUND_LABEL,
   applySatelliteGroundPatch,
+  basemapCoversGroundPlane,
   ensureSatelliteGround,
   hideSatelliteGround,
   isMapOutdoorLayout,
@@ -339,7 +340,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     // 进场自动补图不占钮。只有人点开时才亮 busy，并且到点或结束一定放开。
     if (showBusy) {
       setSatelliteBusy(true);
-      busyTimer.current = window.setTimeout(() => releaseBusy(mine), 12000);
+      busyTimer.current = window.setTimeout(() => releaseBusy(mine), 26000);
     } else {
       setSatelliteBusy(false);
     }
@@ -365,7 +366,8 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   }, [actions, releaseBusy, setView]);
   useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
-    if (!satelliteOn || satelliteImageAligned(layout.floorPlanImage)) return undefined;
+    // 窄边旧图虽然对齐，但只盖住场地中间一块。没铺满户外地面就重拉。
+    if (!satelliteOn || (satelliteImageAligned(layout.floorPlanImage) && basemapCoversGroundPlane(layout))) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
     // 旧的 location/zoom 卫星图没有经纬度范围，要重拉，否则贴地会对不齐。
     if (layout.floorPlanImage && !isSatelliteGroundImage(layout.floorPlanImage)) return undefined;
@@ -409,7 +411,9 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     satelliteRequest.current += 1;
     window.clearTimeout(busyTimer.current);
     setSatelliteBusy(false);
-    const already = satelliteImageAligned(current.floorPlanImage) && groundBasemapStyleOf(current.floorPlanImage) === style;
+    const already = satelliteImageAligned(current.floorPlanImage)
+      && groundBasemapStyleOf(current.floorPlanImage) === style
+      && basemapCoversGroundPlane(current);
     const research = current.researchArea ? researchAreaWith(current.researchArea, { style }) : undefined;
     const researchChanged = !!research && research.imageUrl !== current.researchArea?.imageUrl;
     if (already) {

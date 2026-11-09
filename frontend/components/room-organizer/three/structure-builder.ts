@@ -1,4 +1,5 @@
-import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePadMeters, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
+import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
+import { outdoorGroundSize } from '../lib/site';
 import { groundBasemapOpacity, groundBasemapStyleOf } from '../lib/ground-basemap';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildGridPlane } from './grid';
@@ -135,16 +136,12 @@ export function buildStructureShell(
     const frame = imageBounds
       ? layout.mapGroundFrame ?? (layout.mapGroundPolygon ? frameForExistingShell(layout.mapGroundPolygon, shellPolygon) : null)
       : null;
-    // 有经纬度就让网格外沿等于照片范围。没有时，照片覆盖壳体加同一圈留白，圈外采到的是照片外圈像素，不是被 Clamp 拉长的一条边。
-    const pad = satellitePadMeters(layout.width, layout.height);
+    // 有经纬度就让网格外沿等于照片范围。照片本身铺满户外地面方片。
+    // 没有经纬度时也铺同一张方片，UV 归一化到方片上，避免 Clamp 把边缘拉成线带。
+    const groundHalf = outdoorGroundSize(layout.width, layout.height) / 2;
     const photoRect = imageBounds && frame
       ? satellitePhotoShapeRect(layout.width, layout.height, frame, imageBounds)
-      : {
-          minX: -layout.width / 2 - pad,
-          maxX: layout.width / 2 + pad,
-          minY: -layout.height / 2 - pad,
-          maxY: layout.height / 2 + pad,
-        };
+      : { minX: -groundHalf, maxX: groundHalf, minY: -groundHalf, maxY: groundHalf };
     if (imageBounds && frame) writeGeographicUv(THREE, floorMesh.geometry, layout.width, layout.height, frame, imageBounds);
     else writeNormalizedUv(THREE, floorMesh.geometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
     floorMat.dispose();
