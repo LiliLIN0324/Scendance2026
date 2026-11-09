@@ -60,7 +60,7 @@ function normalizeBriefMobility(input:unknown):unknown {
 }
 
 /** 模型输出必须保留原文证据；这只验证引用，不代表内容已经被用户确认。 */
-export function parseModelBrief(input: unknown, message: string): BriefSlots {
+function parseReferencedModelBrief(input: unknown, message: string): BriefSlots {
   // 老模型有时用 null 表示「未提及」；输出时仍省略该可选布尔字段，兼容旧客户端。
   const normalized = normalizeBriefMobility(input);
   const slots = briefSlotSchema.parse(normalized);
@@ -69,6 +69,55 @@ export function parseModelBrief(input: unknown, message: string): BriefSlots {
   }
   if(slots.inventoryMentions?.some(item=>!message.includes(item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
   return slots;
+}
+
+/** Narrow evidence guard, not a general natural-language verifier. */
+function seatingClauses(message:string,evidence:string):string[] {
+  const clauses=message.split(/[，,；;。！？!?\n]/u).filter(part=>part.includes(evidence)).map(part=>{
+    const before=part.slice(0,part.indexOf(evidence));
+    const correction=[...before.matchAll(/改用|改为|改成|转为/gu)].at(-1);
+    return correction?.index===undefined?part:part.slice(correction.index);
+  });
+  return clauses.length?clauses:[];
+}
+function hasExplicitLayout(message:string,evidence:string,mode:NonNullable<BriefSlots['layoutMode']>):boolean {
+  const term=mode==='desk-chair'?/(?:课桌|教室式|课堂式)/u:/(?:宴会式|宴请布局|宴请式|餐桌式|餐桌布局|圆桌)/u;
+  if(!term.test(evidence))return false;
+  const clauses=seatingClauses(message,evidence);
+  return clauses.length>0&&clauses.every(clause=>{
+    if(/(?:不采用|不使用|不用|不要|不选|不排|不摆|无需|不是|未定|没定|未决定|没决定|不确定|是否|能否|要不要|待定|或者|还是|可以考虑|建议|也许|可能|如果)/u.test(clause))return false;
+    const target=mode==='desk-chair'?'(?:课桌椅|课桌式|课桌|教室式|课堂式)':'(?:圆桌式|圆桌|宴会式|宴请布局|宴请式|餐桌式|餐桌布局)';
+    const chosen=new RegExp(`(?:采用|选择|选用|使用|改用|改为|改成|转为|按照|按)\\s*${target}|${target}(?:布局|布置|排布|形式|方案)`,'u').test(clause);
+    const direct=/^(?:课桌椅|课桌式|教室式|课堂式|宴会式|餐桌式|圆桌|圆桌式)$/u.test(clause.trim());
+    return chosen||direct;
+  });
+}
+function hasExplicitAllSeated(message:string,need:NonNullable<BriefSlots['activityNeeds']>[number]):boolean {
+  if(!/(?:全员|所有人|每个人|每一位|人人|全部人|大家)/u.test(need.evidence)||!/(?:坐|入座|落座|座位|有座)/u.test(need.evidence))return false;
+  const clauses=seatingClauses(message,need.evidence);
+  return clauses.length>0&&clauses.every(clause=>{
+    const uncertain=/(?:不一定|未定|没定|未决定|没决定|不确定|是否|能否|要不要|不清楚|待定|或者|也许|可能|如果)/u.test(clause);
+    const negative=/(?:不要|不安排|不需要|不用|不必|无需|不要求|未要求|不保证|不能|无法|不是|未必)/u.test(clause);
+    const explicitNotRequired=/(?:不要|不安排|不需要|不用|不必|无需|不要求)/u.test(clause);
+    return need.decision==='unknown'?uncertain:need.decision==='not_needed'?explicitNotRequired&&!uncertain:!negative&&!uncertain;
+  });
+}
+function retainExplicitSeating(slots:BriefSlots,message:string,layoutEvidence?:string):BriefSlots {
+  const result={...slots};
+  if(result.layoutMode){
+    const term=result.layoutMode==='desk-chair'?/(?:课桌|教室式|课堂式)/u:/(?:宴会式|宴请布局|宴请式|餐桌式|餐桌布局|圆桌)/u;
+    const evidence=layoutEvidence??message.match(term)?.[0];
+    if(!evidence||!hasExplicitLayout(message,evidence,result.layoutMode)){
+      delete result.layoutMode;
+      if(result.requirements)result.requirements=result.requirements.filter(item=>item.key!=='layoutMode');
+    }
+  }
+  if(result.activityNeeds)result.activityNeeds=result.activityNeeds.filter(need=>need.kind!=='all_seated'||hasExplicitAllSeated(message,need));
+  return result;
+}
+
+export function parseModelBrief(input:unknown,message:string):BriefSlots {
+  return retainExplicitSeating(parseReferencedModelBrief(input,message),message);
 }
 
 export const briefExtractRequestSchema = z.strictObject({ message: z.string().trim().min(1).max(2000) });
@@ -145,7 +194,7 @@ export function parseBriefConversation(input:unknown,message:string):{extraction
     delete candidate.areaM2;
     if(candidate.requirements)candidate.requirements=candidate.requirements.filter(item=>item.key!=='areaM2');
   }
-  const extraction=parseModelBrief(candidate,message);
+  const extraction=parseReferencedModelBrief(candidate,message);
   const seen=new Set<string>();
   for(const row of result.factEvidence){
     if(seen.has(row.key)||!message.includes(row.evidence))throw new Error('MODEL_EVIDENCE_MISMATCH');
@@ -160,6 +209,8 @@ export function parseBriefConversation(input:unknown,message:string):{extraction
   if(result.unhandled.some(item=>!message.includes(item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
   if(result.materialQueries?.some(item=>!message.includes(item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
   if(extraction.requirements?.some(item=>!seen.has(item.key)||extraction[item.key]!==item.value))throw new Error('MODEL_EVIDENCE_MISMATCH');
+  const safeExtraction=retainExplicitSeating(extraction,message,result.factEvidence.find(row=>row.key==='layoutMode')?.evidence);
+  const factEvidence=safeExtraction.layoutMode===undefined?result.factEvidence.filter(row=>row.key!=='layoutMode'):result.factEvidence;
   // This is only a conservative filter of common claims, not a semantic verifier.
   // “已有 GLB” describes an existing resource, not a completed action.
   // This remains a heuristic; a validated execution receipt is the authority.
@@ -168,7 +219,7 @@ export function parseBriefConversation(input:unknown,message:string):{extraction
   // fact in the visible reply. Do not claim the room is rectangular either.
   const reply=inferredArea&&/(?:面积|\d\s*平|平米|平方米|㎡|m²|m2)/iu.test(result.reply)
     ? '已记录本次明确提供的需求；实际场地面积仍需核验。' : result.reply;
-  return {...result,extraction,reply};
+  return {...result,extraction:safeExtraction,factEvidence,reply};
 }
 export const briefExtractResponseSchema = z.strictObject({
   enabled: z.boolean(),
@@ -232,6 +283,7 @@ extraction 只提取本句明确表达的内容，不从 history 补当前事实
 extraction 只允许以下键：event、headcount、venueIO、lengthM、widthM、areaM2、layoutMode、timeOfDay、audienceTags、mobilityAssistance、proactiveReply、requirements、inventoryMentions、activityNeeds。禁止创建任何其他键，也不要把预算、出口约束或其他未支持的要求改写成新字段。对于无法表达的原话，在 unhandled 中逐字保留，绝不可丢失；本轮无法完整理解时向用户说明需要核对。
 例如 message 为「30人，预算不能超过1万」，可返回 {"extraction":{"headcount":30},"reply":"已记下人数；预算要求还需核对。","unhandled":[{"kind":"other","evidence":"预算不能超过1万"}],"factEvidence":[{"key":"headcount","evidence":"30人"}]}；不能在 extraction 添加 budget 键。
 activityNeeds 为数组，元素 {kind,decision,evidence}：kind 只能是 checkin/rest/stage/all_seated，decision 只能是 needed/not_needed/unknown，evidence 是本句包含肯定、否定或疑问上下文的逐字原文。requirements 可为数组 {key,value,mode}，key/value 与对应已提取字段一致，mode 为 must 或 prefer，不得擅自升级。
+讲座、长者、预计人数或已有椅子都不是全员落座或课桌椅布局的证据；只有用户明确表达才提取对应字段。可以在 reply 里把课桌椅或全员入座作为可选择建议，但不要把建议写进 extraction、requirements 或 factEvidence。
 inventoryMentions 为数组 {evidence}：仅记录本句明确已有的物料数量，逐字摘录包含数量、单位和名称的原文；不推断真实库存、规格或可用性，未提及则省略。
 materialQueries 可选数组，最多三项 {query,evidence}，仅提取本句明确提到且适合查模型库的物料名称；evidence 是包含该名称的本句连续原文，query 必须是 evidence 的原样子串。不要从历史补词、编造型号或把查询当作已放置、实物库存/价格；未知或没有明确物料则省略，不重复同一名称。
 factEvidence 为数组 {key,evidence}，每一个非空 event/headcount/venueIO/lengthM/widthM/areaM2/layoutMode/timeOfDay/mobilityAssistance/audienceTags 都必须且只能有一条逐字来自 message 的证据；没提取就不提供证据，不从 history 引用。activityNeeds 和 inventoryMentions 各自带 evidence，不应放入 factEvidence。
