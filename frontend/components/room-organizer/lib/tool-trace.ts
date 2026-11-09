@@ -12,6 +12,8 @@ export interface ToolTraceEvent {
 export interface ToolTraceStep {
   toolName: string;
   itemCount?: number;
+  outcome?: 'running' | 'done' | 'error';
+  thought?: string;
 }
 
 export interface ToolTraceRow {
@@ -48,6 +50,11 @@ const TOOL_NAMES: Readonly<Record<string, string>> = {
   set_annotation: '标注规划',
   update_plan: '标注规划',
   audit_settle: '巡场体检',
+  local_preview: '出预览',
+  local_validate: '核对重叠',
+  local_revise: '修改布置',
+  local_confirm: '确认布置',
+  local_applied: '已落画布',
 };
 
 export function toolStatusWord(status: ToolChipStatus): string {
@@ -88,12 +95,10 @@ export function toolTraceRows(input: {
   const steps = input.steps ?? [];
   return steps.map((step, index) => {
     const last = input.isRunning && index === steps.length - 1;
+    const status: ToolChipStatus = step.outcome === 'error' ? 'error' : step.outcome === 'running' || (step.outcome == null && last) ? 'running' : 'done';
     const count = typeof step.itemCount === 'number' ? ` · ${step.itemCount} 件` : '';
-    return {
-      id: `s-${index}-${step.toolName}`,
-      name: toolName(step.toolName),
-      status: last ? 'running' : 'done',
-      result: last ? '正在调用工具' : `已观察到${count}`,
-    };
+    const result = step.thought
+      ?? (status === 'running' ? '正在调用工具' : status === 'error' ? '没有完成' : `已观察到${count}`);
+    return { id: `s-${index}-${step.toolName}`, name: toolName(step.toolName), status, result };
   });
 }

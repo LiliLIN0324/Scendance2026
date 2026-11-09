@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { finishLocalLayoutRun, getAgentRun, pushLocalLayoutStep, resetAgentRun } from '../panels/agent-chat-store';
 import { toolChipStatus, toolStatusWord, toolTraceRows } from './tool-trace';
 
 describe('tool trace', () => {
@@ -28,6 +29,28 @@ describe('tool trace', () => {
       ['处理任务', 'done', '结果待核对'],
     ]);
     expect(JSON.stringify(rows)).not.toContain('secret_tool');
+  });
+
+  it('keeps preview, confirm, and apply on one local timeline', () => {
+    resetAgentRun();
+    pushLocalLayoutStep('preview', 'running');
+    pushLocalLayoutStep('preview', 'done');
+    pushLocalLayoutStep('validate', 'done');
+    pushLocalLayoutStep('confirm', 'done');
+    pushLocalLayoutStep('applied', 'done');
+    finishLocalLayoutRun();
+    const rows = toolTraceRows({ isRunning: getAgentRun().isRunning, events: [], steps: getAgentRun().stepLog });
+    expect(rows.map(row => row.name)).toEqual(['出预览', '核对重叠', '确认布置', '已落画布']);
+    expect(rows.every(row => row.status === 'done')).toBe(true);
+    resetAgentRun();
+    pushLocalLayoutStep('preview', 'done');
+    pushLocalLayoutStep('confirm', 'error', '椅子和圆桌叠在一起');
+    const failed = toolTraceRows({ isRunning: getAgentRun().isRunning, events: [], steps: getAgentRun().stepLog });
+    expect(failed.map(row => [row.name, row.status, row.result])).toEqual([
+      ['出预览', 'done', '出预览'],
+      ['确认布置', 'error', '椅子和圆桌叠在一起'],
+    ]);
+    resetAgentRun();
   });
 
   it('uses observed steps only when there is no receipt', () => {

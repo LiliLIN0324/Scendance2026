@@ -15,6 +15,8 @@ describe('process strip', () => {
     expect(composeProcessStrip({ ...idle, failed: 'preview' })).toBe('已尝试：正在生成布置预览');
     expect(composeProcessStrip({ ...idle, failed: 'cloud_tool' })).toBe('已尝试：正在调用云端工具');
     expect(composeProcessStrip({ ...idle, failed: 'preview', generating: true })).toBe('正在生成布置预览');
+    expect(composeProcessStrip({ ...idle, generating: true, stageLine: '正在试排圆桌…' })).toBe('正在试排圆桌…');
+    expect(composeProcessStrip({ ...idle, generating: true, stageLine: '正在核对重叠…' })).toBe('正在核对重叠…');
   });
 });
 

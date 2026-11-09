@@ -473,6 +473,13 @@ describe('chat column', () => {
     expect(onApply).toHaveBeenCalled();
     expect(screen.getAllByText(/40 件没写上/)).toHaveLength(1);
     expect(screen.queryByText(message)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '椅子和圆桌叠在一起' }));
+    const trace = document.querySelector('.ap-tool-rows');
+    expect(trace?.textContent).toContain('出预览');
+    expect(trace?.textContent).toContain('确认布置');
+    expect(trace?.textContent).toContain('核对重叠');
+    expect(trace?.textContent).not.toContain('已落画布');
+    expect(trace?.textContent).not.toContain(message);
   }, 20000);
 });
 
@@ -2508,7 +2515,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(await screen.findByText(/还没确定布置方式/)).toBeTruthy();
     send('圆桌');
     expect(await screen.findByText('正在准备布置预览')).toBeTruthy();
-    expect(screen.getByText('正在生成布置预览')).toBeTruthy();
+    expect(screen.getAllByText('正在试排圆桌…').length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/定舞台位置|放绿植/);
     await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
     const final=onPreview.mock.calls.map(([value])=>value as RoomLayout|null).filter((value):value is RoomLayout=>value!==null).at(-1)!;

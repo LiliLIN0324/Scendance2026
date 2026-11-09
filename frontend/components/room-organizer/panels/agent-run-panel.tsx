@@ -70,6 +70,19 @@ function toolCategory(tool:string):'venue'|'material'|'position'|'check'|'candid
   return 'generation';
 }
 const CATEGORY_ICONS={venue:MapPin,material:Box,position:Map,check:ShieldCheck,candidate:ClipboardCheck,generation:Sparkles};
+const LOCAL_STEP_LABEL: Record<string, string> = {
+  local_preview: '出预览',
+  local_validate: '核对重叠',
+  local_revise: '修改布置',
+  local_confirm: '确认布置',
+  local_applied: '已落画布',
+};
+function localStepStatus(outcome: 'running' | 'done' | 'error' | undefined): string | null {
+  if (outcome === 'running') return '进行中';
+  if (outcome === 'done') return '已完成';
+  if (outcome === 'error') return '未完成';
+  return null;
+}
 function eventStatus(stage:'started'|'finished',outcome:'success'|'failed'|'unknown'|null):string {
   if(stage==='started')return '已发起';
   if(outcome==='success')return '已返回结果';
@@ -293,6 +306,14 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
                 <Icon size={15} aria-hidden="true" style={{color:COLOR_GREEN}}/><span>{TOOL_LABELS[event.tool]??'处理任务'}</span><span> · {eventStatus(event.stage,event.outcome)}</span>
               </li>;
             }):visibleSteps.map((step, index) => {
+              const localName = LOCAL_STEP_LABEL[step.toolName];
+              const localStatus = localName ? localStepStatus(step.outcome) : null;
+              if (localName && localStatus) {
+                return <li key={`${step.toolName}-${step.startedAt}-${index}`} style={{ padding: '5px 8px', background: COLOR_STONE, borderRadius: 4, color: '#4a4f57' }}>
+                  <span>{localName}</span><span> · {localStatus}</span>
+                  {step.outcome === 'error' && step.thought ? <span> · {step.thought}</span> : null}
+                </li>;
+              }
               const write = isWriteTool(step.toolName);
               return (
                 <li
