@@ -18,6 +18,18 @@ beforeEach(() => { vi.mocked(loadScenePreset).mockReset(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const load = () => fireEvent.click(screen.getByRole('button', { name: /青序 · 香氛快闪/ }));
 
+it('提供独立预览，不修改当前 57 件场景', () => {
+  const source=structuredClone(INITIAL_LAYOUT);
+  const item=source.floors[0]!.items[0]!;
+  for(let i=0;i<52;i++)source.floors[0]!.items.push({...item,id:`existing-${i}`});
+  const original=structuredClone(source),apply=vi.fn();
+  render(<ScenePresetsPanel layout={source} onApply={apply}/>);
+  expect(screen.getByRole('link',{name:'打开分享会示例预览（新窗口）'}).getAttribute('href')).toBe('/review/?example=sharing');
+  expect(screen.getByRole('link',{name:'打开 Hall D5 尺寸参考预览（新窗口）'}).getAttribute('href')).toBe('/review/?example=hall-d5');
+  expect(apply).not.toHaveBeenCalled();
+  expect(source).toEqual(original);
+});
+
 it('offers a preview card for every packaged preset', () => {
   render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={vi.fn()}/>);
   const keys = Object.keys(SCENE_PRESETS) as ScenePresetKey[];
