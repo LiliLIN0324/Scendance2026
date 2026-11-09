@@ -24,6 +24,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
+import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -92,8 +93,8 @@ import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
-import { requestAgentStop } from './agent-chat-store';
-import { AgentRunPanel, useAgentRun } from './agent-run-panel';
+import { failOpenLocalStep, finishLocalLayoutRun, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
@@ -217,6 +218,8 @@ interface ProposalView extends PendingPlan {
   recolorPreview?: string[];
   candidateArea?: number;
   comparisonOnly?: boolean;
+  /** Zone and seat lines from the script, shown on the card instead of one long bubble. */
+  planNotes?: string[];
   seatWarning?: string;
   annotationWarning?: string;
   functionalWarnings?: string[];
@@ -353,21 +356,12 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
     ...(base && candidate ? {existingChanges:describeExistingChanges(proposalDifferences(base,candidate),base,candidate)} : {}),
     ...(plan.seatingReview ? {seatingReview:plan.seatingReview} : {}),
     ...(candidate ? { candidateArea: venueArea(candidate) } : {}),
+    ...((() => {
+      const planNotes = ((plan as PlanProposal & { summary?: string[] }).summary ?? []).filter(line => line.trim() && !/尚未确认/.test(line));
+      return planNotes.length ? { planNotes } : {};
+    })()),
     ...((plan as PlanProposal & {localDraftDetails?:string[]}).localDraftDetails ? {localDraftDetails:(plan as PlanProposal & {localDraftDetails:string[]}).localDraftDetails} : {}),
   };
-}
-
-/** 脚本那一路会带上「计划读白」：先让人核对计划，再看绿框；旧路径没有计划可念。 */
-function scriptSummaryOf(plan: PlanProposal, memory?: BriefMemory): string {
-  const summary = (plan as PlanProposal & { summary?: string[] }).summary;
-  if (!Array.isArray(summary) || !summary.length) return '';
-  const lines = summary.filter(line => {
-    if (!memory) return true;
-    if (/尚未确认是否需要签到/.test(line) && memory.zoneNeeds.checkin === null && !memory.unresolvedActivityNeeds.includes('checkin')) return false;
-    if (/尚未确认是否需要舞台/.test(line) && memory.zoneNeeds.stage === null && !memory.unresolvedActivityNeeds.includes('stage')) return false;
-    return true;
-  });
-  return lines.length ? `${lines.join(' · ')}。` : '';
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
@@ -737,7 +731,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setCancelledInput({id:Date.now(),text:request.text});
     say({role:'agent',amber:true,text:'已停止等待，本次需求未写入。服务商可能仍在处理或计费；再次发送前请确认。'});
   }
-  useEffect(() => () => { briefTurnSequence.current++; runToken.current++; generationWait.current?.cancel();briefRequest.current?.controller.abort();researchRequest.current?.abort(); }, []);
+  useEffect(() => () => { briefTurnSequence.current++; runToken.current++; generationWait.current?.cancel();briefRequest.current?.controller.abort();researchRequest.current?.abort(); resetAgentRun(); }, []);
   const briefFallbackNotified = useRef(false);
   const touchActiveSessionRef = useRef(assistantSessions.touchActiveSession);
   touchActiveSessionRef.current = assistantSessions.touchActiveSession;
@@ -767,8 +761,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => {
     if (!sessionScopeIsCurrent()) return;
     // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
+    const text = foldConflictBubble(bubble.text);
     const prev = bubblesRef.current;
-    const next = [...prev.slice(-30), { id: uid(), ...bubble }];
+    const last = prev.at(-1);
+    // One click was posting the same overlap refusal twice. A second identical refusal stays one bubble.
+    if (last?.role === 'agent' && last.text === text && text.includes('件没写上')) return;
+    const next = [...prev.slice(-30), { id: uid(), ...bubble, text }];
     bubblesRef.current = next;
     setBubbles(next);
     persistBubbles(boundSessionId.current, next);
@@ -1178,8 +1176,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const base = pending ? pending.layouts[pending.layouts.length - 1]! : live.current;
     let plan: RevisionProposal;
     const reviewSeating=!!pending&&Object.hasOwn(pending,'seatingWitness')||memoryRef.current.layoutModeConfirmed===true&&memoryRef.current.layoutMode==='desk-chair';
+    pushLocalLayoutStep('revise', 'running');
     try { plan = revisePlan({ base, floorIndex: activeFloorIndex, ops: request.ops, bands: request.bands, ...(reviewSeating?{seatingWitness:pending?.seatingWitness??null}:{}) }); }
     catch (error) {
+      pushLocalLayoutStep('revise', 'error', '这版改不动');
+      finishLocalLayoutRun();
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版改不动，先说一下场地长宽或挪开锁着的物件。' });
       return;
     }
@@ -1203,9 +1204,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(!matches){say({role:'agent',amber:true,text:'当前画布精度无法准确完成这个旋转角度；请调整后重试，本次没有修改画布。'});return;}
     }
     if (!plan.applied) {
+      pushLocalLayoutStep('revise', 'error', '这步没改成');
+      finishLocalLayoutRun();
       say({ role: 'agent', amber: true, text: revisionRefusalText(plan.conflicts) });
       return;
     }
+    pushLocalLayoutStep('revise', 'done');
+    finishLocalLayoutRun();
     if (!pending) {proposalBase.current = structuredClone(live.current);proposalFloor.current=floorToken;}
     const scaleOnly = request.ops.length === 1 && request.ops[0]?.kind === 'scale' ? request.ops[0].factor : undefined;
     const rotationOnly = request.ops.length === 1 && request.ops[0]?.kind === 'rotate';
@@ -1651,37 +1656,41 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   async function presentProposal(token: number, lead?: string): Promise<void> {
     const plan = proposal.current;
     if (!plan) return;
-    const intro = lead ?? (plan.kind === 'review' ? '这版改法：' : '先出一版可拖的初稿：');
+    const intro = lead ?? (plan.kind === 'review' ? '这版改法。' : '先出一版可拖的初稿。');
+    if (plan.kind === 'review') pushLocalLayoutStep('revise', 'running');
     phaseRef.current='generating';setPhase('generating');
     for (let step = shownSteps.current; step < plan.layouts.length; step++) {
       if (!sessionScopeIsCurrent()) return;
       if(localDraftOwner.current&&!localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
-        dropProposal();phaseRef.current='failed';setPhase('failed');
+        dropProposal();failOpenLocalStep('这版没出成');phaseRef.current='failed';setPhase('failed');
         say({role:'agent',amber:true,text:'云端连接或本机活动状态已变化，本地草案预览已收回；画布未改。'});return;
       }
-      if(!checkProposalFloor()){setPhase('proposed');return;}
+      if(!checkProposalFloor()){failOpenLocalStep('这版没出成');setPhase('proposed');return;}
       onPreview(plan.layouts[step]!);
       setProgress(step + 1);
       shownSteps.current = step + 1;
       await wait(step === plan.layouts.length - 1 ? 120 : STEP_DELAY_MS);
       if (token !== runToken.current || !sessionScopeIsCurrent()) return;
       if(localDraftOwner.current&&!localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
-        dropProposal();phaseRef.current='failed';setPhase('failed');
+        dropProposal();failOpenLocalStep('这版没出成');phaseRef.current='failed';setPhase('failed');
         say({role:'agent',amber:true,text:'云端连接或本机活动状态已变化，本地草案预览已收回；画布未改。'});return;
       }
-      if(!checkProposalFloor()){setPhase('proposed');return;}
+      if(!checkProposalFloor()){failOpenLocalStep('这版没出成');setPhase('proposed');return;}
     }
+    pushLocalLayoutStep(plan.kind === 'review' ? 'revise' : 'preview', 'done');
+    pushLocalLayoutStep('validate', 'running');
+    await wait(120);
+    if (token !== runToken.current || !sessionScopeIsCurrent()) return;
+    const overlapNote = plan.overlapCount > 0 ? '有物料叠在一起' : undefined;
+    pushLocalLayoutStep('validate', plan.overlapCount > 0 || plan.blocked ? 'error' : 'done', overlapNote);
+    finishLocalLayoutRun();
     phaseRef.current='proposed';setPhase('proposed');
     const planView = viewOfLocalPlan(plan, proposalBase.current ?? undefined);
-    const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
-    // 脚本那一路先把计划念一遍（哪些区、各多大、几座），再报件数与原因；两件都摆不下时
-    // 原因跟着共享账本来，不再只留一个数字。明细仍完整留在下面那张卡。
-    const planned = scriptSummaryOf(plan, memoryRef.current);
-    const counted = outcomeLines(planView.outcome).filter(line => line.length > 0).join('；');
+    const tail = planView.review ? '还没落盘。点「确认布置」才挪。' : '还没落盘，点确认才写进画布。';
     const hint = layoutChatHint(plan);
     say({ role: 'agent', amber: !!planView.blocked || !!hint, text: planView.blocked
-      ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。${hint ? hint : ''}`
-      : `${intro}${planned}${counted ? `${counted}。` : ''}${tail}${hint ? hint : ''}` });
+      ? `这版先看着改。确认先不亮。${hint ? hint : ''}`
+      : `${intro}${tail}${hint ? hint : ''}` });
   }
 
   /**
@@ -1915,8 +1924,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   /** 场地和布置都先在内存中生成，确认时连同物料变化一次应用。 */
   async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false, localDraftNote?:string): Promise<void> {
     if(localDraftNote!==undefined){await runLocalSeatingDraft(token,scale,localDraftNote);return;}
+    pushLocalLayoutStep('preview', 'running');
     const before = live.current;
-    const floorToken=captureFloor(activeFloorIndex);if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
+    const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
     // 模板是固定 GLB 外壳，拉伸它只会看起来「什么都没变」：尺寸一变就卸模板、按新尺寸立矩形空壳。
     const resized = Math.abs(before.width - scale.length) > 1e-6 || Math.abs(before.height - scale.width) > 1e-6;
@@ -1925,22 +1935,25 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     try { venue = (resized ? replaceVenueWithShell(input) : null) ?? raiseVenue(input); }
     catch (error) {
       revertScaleToCanvas();
+      failOpenLocalStep('这版没出成');
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
     }
     if (!venue && resized) {
       revertScaleToCanvas();
+      failOpenLocalStep('这版没出成');
       say({ role: 'agent', amber: true, text: '当前场地结构不能只改外框，请先确认场地尺寸或重新建立场地。' });
       setPhase('failed'); return;
     }
-    if(venue && hasInvalidRetainedZones(venue.layout)){revertScaleToCanvas();say({role:'agent',amber:true,text:'现有区域超出新场地范围或坐标不完整，请先调整区域再生成。'});setPhase('failed');return;}
+    if(venue && hasInvalidRetainedZones(venue.layout)){revertScaleToCanvas();failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'现有区域超出新场地范围或坐标不完整，请先调整区域再生成。'});setPhase('failed');return;}
     const candidateBase = venue?.layout ?? before;
     if (venue) {
-      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '已按所给尺寸准备场地候选，门位仍待核验。';
-      say({ role: 'agent', text: `${shellSummary}场地和物料都要确认后才会应用。` });
+      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '场地按这个尺寸准备好了。';
+      say({ role: 'agent', text: `${shellSummary}确认后才写入。` });
       await wait(STEP_DELAY_MS); if (token !== runToken.current || !sessionScopeIsCurrent()) return;
-      if (!floorStillCurrent(floorToken)) {say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
+      if (!floorStillCurrent(floorToken)) {failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
       if (!sameLayoutContent(before, live.current)) {
+        failOpenLocalStep('这版没出成');
         say({ role: 'agent', amber: true, text: '场景在准备期间发生变化，这版没有应用；请按当前场景重新生成。' });
         setPhase('failed'); return;
       }
@@ -1950,17 +1963,18 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
+      failOpenLocalStep('这版没出成');
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
     }
     const final = plan.layouts.at(-1);
-    if (!final) { setPhase('failed'); say({ role: 'agent', amber: true, text: '这次没有生成可审阅的方案，场景没有改变。' }); return; }
+    if (!final) { failOpenLocalStep('这版没出成'); setPhase('failed'); say({ role: 'agent', amber: true, text: '这次没有生成可审阅的方案，场景没有改变。' }); return; }
     const differences = proposalDifferences(before, final);
     const removing = differences.filter(change => change.kind === 'removed' && change.before && !isStructuralMarker(change.before.item)).length;
     const added = differences.filter(change => change.kind === 'added' && change.after && !isStructuralMarker(change.after.item)).length;
     const lockedChanged = differences.filter(change => change.before?.item.locked && !isStructuralMarker(change.before.item)).length;
     plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}) };
-    if(!floorStillCurrent(floorToken)){say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
+    if(!floorStillCurrent(floorToken)){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
     proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before)); proposalBase.current = structuredClone(before); shownSteps.current = 0;
     await presentProposal(token);
   }
@@ -2037,11 +2051,18 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const routeBlock=localDraftRouteBlock(assessLocalDraftRoutes(currentLayout,final,annotations,currentState.activeFloorIndex));
       if(routeBlock){say({role:'agent',amber:true,text:routeBlock});return;}
     }
+    pushLocalLayoutStep('confirm', 'running');
     try { onApply(final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
     catch (error) {
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。' });
+      const raw = error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。';
+      pushLocalLayoutStep('confirm', 'error', /包围盒重叠|件物料存在冲突/.test(raw) ? '椅子和圆桌叠在一起' : '这版没写上');
+      finishLocalLayoutRun();
+      say({ role: 'agent', amber: true, text: raw });
       return;
     }
+    pushLocalLayoutStep('confirm', 'done');
+    pushLocalLayoutStep('applied', 'done');
+    finishLocalLayoutRun();
     if (sessionScope !== 'legacy' && (memoryRef.current.lengthM !== null || memoryRef.current.areaM2 !== null)) saveMemory({...memoryRef.current,venueScaleBasis:venueScaleBasis(final),venueFactToken:venueFacts.capture() ?? undefined,scaleNeedsReconfirmation:false});
     let styleHistoryFailed = false;
     if (style) {
@@ -2201,7 +2222,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       lastSource.current = 'local';
       await runLocal(token, variant, scale, seatPriority);
     }
-    catch { if (token === runToken.current) setPhase('failed'); }
+    catch { if (token === runToken.current) { failOpenLocalStep('这版没出成'); setPhase('failed'); } }
   }
 
   /** Wait only for the current run; an unresponsive provider must not block chat forever. */
@@ -2692,7 +2713,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
       turn.memory.zoneNeeds.checkin === null && !anchors.checkin && mentionedZone('checkin', /签到/) ? '签到区' : null].filter(Boolean);
     const summary = `${describeExtraction(merged, scale)}${scale.fromVenue ? ' · 按现在的场地' : ''}`;
-    const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
+    const carried = extraction.headcount === null && turn.memory.headcount !== null && !summary.includes(String(turn.memory.headcount))
+      ? ` · 沿用 ${turn.memory.headcount} 人` : '';
     const mentionedNewMaterial=(turn.memory.reportedInventory??[]).some(item=>!(previousMemory.reportedInventory??[]).some(old=>old.evidence===item.evidence));
     if (mentionsUnsupportedSeating(trimmed) && !turn.readOnlyReply) say({ role: 'agent', text: CIRCLE_SEATING_NOTE });
     if(turn.modelReply && turn.modelReply!==turn.text)say({role:'agent',text:`建议：${turn.modelReply}`,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});
@@ -2779,8 +2801,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const rail = lightPlanRail(trimmed);
     const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
     say({ role: 'agent', text: turn.filledScaleAsk
-      ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
-      : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出预览，确认后才写入。${suffix}`
+      : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
     runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }
@@ -3132,6 +3154,37 @@ export function VenuePickerOverlay(): JSX.Element | null {
   </div>;
 }
 
+function ToolCallTrace({ line, rows, understanding, onStop }: {
+  line: string | null;
+  rows: ReturnType<typeof toolTraceRows>;
+  understanding: boolean;
+  onStop(): void;
+}): JSX.Element | null {
+  const status = toolChipStatus(line);
+  const running = rows.some(row => row.status === 'running') || status === 'running';
+  const failed = [...rows].reverse().find(row => row.status === 'error');
+  const [opened, setOpened] = useState(running);
+  useEffect(() => { setOpened(running); }, [running]);
+  if (!line && rows.length === 0 && !failed) return null;
+  return <section className="ap-tools" aria-label="工具调用">
+    {line && status && <p role="status" className={`ap-tool-chip is-${status}`}>
+      <span className="ap-tool-state">{toolStatusWord(status)}</span>
+      <span>{line}</span>
+      {understanding && line === '正在理解活动需求…' && <button type="button" onClick={onStop}>停止等待</button>}
+    </p>}
+    {!line && failed && <p role="status" className="ap-tool-chip is-error">
+      <span className="ap-tool-state">未完成</span>
+      <button type="button" onClick={() => setOpened(value => !value)}>{failed.result || failed.name}</button>
+    </p>}
+    {rows.length > 0 && <details open={opened} onToggle={event => setOpened(event.currentTarget.open)}>
+      <summary>执行过程</summary>
+      <ol className="ap-tool-rows">
+        {rows.map(row => <li key={row.id}><span>{row.name}</span><span>{toolStatusWord(row.status)}</span><span>{row.result}</span></li>)}
+      </ol>
+    </details>}
+  </section>;
+}
+
 function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?: boolean }): JSX.Element {
   const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
   return <>{list.map(bubble => {
@@ -3161,6 +3214,15 @@ function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: bo
   </div>;
 }
 
+/** One overlap refusal, not the long double sentence confirm used to paste twice. */
+function foldConflictBubble(text: string): string {
+  const count = text.match(/有 (\d+) 件物料存在冲突/);
+  if (!count) return text;
+  const why = text.match(/落点不合法：(.+)$/);
+  const reason = (why?.[1] ?? '和旁边的物料叠在一起').replace(/。$/, '');
+  return `${count[1]} 件没写上。${reason}。这次没有写入。`;
+}
+
 /** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
 function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   const { layout } = useRoomEditor();
@@ -3175,43 +3237,15 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
-    <p className="ap-small">{REFERENCE_SOURCE_UNVERIFIED}</p>
-    {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
-    {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {plan.recolorPreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.rotationPreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.scalePreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.movementPreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.restPreview?.map(line => <p className="ap-small" key={line}>{line}；通行和消防条件待核验。</p>)}
+    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
     <div className="ap-outcome" role="note" aria-label="本次结果">
       <p className="ap-outcome-label">本次结果 · {formatArea(plan.candidateArea ?? venueArea(layout))} ㎡</p>
-      {plan.source === 'local' && plan.added > 0 && <p className="ap-small">新增物料由系统规则生成。</p>}
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
     </div>
-    {!!plan.existingChanges?.length && <details open className="ap-existing-changes">
-      <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
-      <p className="ap-small">确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
-      <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
-    </details>}
-    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
-    {/* 一次重排的结果不能证明场地容量上限。 */}
+    {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
+    {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
     {short && !plan.localDraftDetails && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
-    {short && !plan.localDraftDetails && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
-    {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
-    {plan.safetyChecksUnknown && <p className="ap-warn-line">{SAFETY_CHECKS_UNKNOWN_TEXT}</p>}
-    {plan.seatingAllocationUnverified && <p className="ap-warn-line" role="status">{SEATING_ALLOCATION_UNVERIFIED_TEXT}</p>}
-    {plan.seatingHeadcountUnverified && <p className="ap-warn-line" role="status">{SEATING_HEADCOUNT_UNVERIFIED_TEXT}</p>}
-    {plan.seatingSpecsUnverified && <p className="ap-warn-line" role="status">{SEATING_SPECS_UNVERIFIED_TEXT}</p>}
-    {plan.seatingShortfall && <p className="ap-warn-line" role="status">{plan.seatingShortfall}</p>}
-    {plan.seatingReview?.status==='broken' && <p className="ap-warn-line" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
-    {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
-    {plan.localDraftDetails?.map(line=><p className="ap-small" key={line}>{line}</p>)}
-    {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
-    {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
-    {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
-    {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
-    {agent.inventoryWorkspace}
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
@@ -3219,6 +3253,36 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
           {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
         </>}
+    <div className="ap-notes">
+      {plan.source === 'local' && plan.added > 0 && <p>新增物料由系统规则生成。</p>}
+      {plan.planNotes?.map(line => <p key={line}>{line}</p>)}
+      {plan.recolorPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.rotationPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.scalePreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.movementPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.restPreview?.map(line => <p key={line}>{line}；通行和消防条件待核验。</p>)}
+      {short && !plan.localDraftDetails && plan.seatPriority && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+      {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
+      {plan.safetyChecksUnknown && <p className="ap-warn-line">{SAFETY_CHECKS_UNKNOWN_TEXT}</p>}
+      {plan.seatingAllocationUnverified && <p className="ap-warn-line" role="status">{SEATING_ALLOCATION_UNVERIFIED_TEXT}</p>}
+      {plan.seatingHeadcountUnverified && <p className="ap-warn-line" role="status">{SEATING_HEADCOUNT_UNVERIFIED_TEXT}</p>}
+      {plan.seatingSpecsUnverified && <p className="ap-warn-line" role="status">{SEATING_SPECS_UNVERIFIED_TEXT}</p>}
+      {plan.seatingShortfall && <p className="ap-warn-line" role="status">{plan.seatingShortfall}</p>}
+      {plan.seatingReview?.status==='broken' && <p className="ap-warn-line" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
+      {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
+      {plan.localDraftDetails?.map(line=><p key={line}>{line}</p>)}
+      {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
+      {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
+      {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
+      {!!plan.existingChanges?.length && <details className="ap-existing-changes">
+        <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
+        <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
+        <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
+      </details>}
+      <p>{REFERENCE_SOURCE_UNVERIFIED}</p>
+    </div>
+    {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
+    {agent.inventoryWorkspace}
   </div>;
 }
 
@@ -3274,13 +3338,17 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
+  const localStageLine = runState.scope === 'layout'
+    ? runState.stepLog.find(step => step.outcome === 'running')?.thought ?? null
+    : null;
   const processText = composeProcessStrip({
     understanding: agent.understanding || agent.briefBusy,
     generating,
-    cloudRunning: runState.scope === 'layout' && runState.isRunning,
+    cloudRunning: runState.scope === 'layout' && runState.isRunning && runState.eventLog.length > 0,
     cloudRound: runState.thoughtCount,
     cloudTool: agent.toolPending,
     failed: generating || agent.understanding || agent.briefBusy ? null : agent.processFailed,
+    stageLine: agent.toolPending ? null : localStageLine,
   });
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   const suggestion = useSuggestion(AGENT_INPUT_SUGGESTIONS[activeAgent]);
@@ -3369,6 +3437,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo}/>
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' ? toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog }) : []} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card" aria-label="历史需求待核对">
         <p className="ap-status-line">当前记录还未核对。</p>
         <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
@@ -3377,14 +3446,12 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <p>其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
         <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
       </section>}
-      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card ap-status-card" aria-label="尚未处理的要求">
-        <div className="ap-status-head">
-          <strong>尚未处理的要求（{agent.unresolvedDialogue.length}）</strong>
-          <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
-        </div>
+      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-pending" aria-label="尚未处理的要求">
+        <span className="ap-pending-label">待处理</span>
         <ul className="ap-pending-chips">
           {agent.unresolvedDialogue.map(text => <li key={text}><span title={text}>{text}</span><button type="button" className="ap-pending-x" aria-label={`撤回：${text}`} onClick={() => agent.withdrawUnresolvedDialogue(text)}>×</button></li>)}
         </ul>
+        <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
       </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
       {bingo && <div className="ap-card" aria-label="审校状态台">
@@ -3411,8 +3478,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
             没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
-        <AgentRunPanel scope="layout" controls={false}/>
-        {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.stepLog.length > 0}/>}
+        {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
           <p><span aria-hidden="true">!</span>这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
           <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={16} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>
@@ -3487,11 +3553,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
         }}/>
         </div>
-        {processText && <p role="status" className={`ap-process${processText.startsWith('已尝试') ? ' is-failed' : ''}`}>{processText}{agent.understanding && processText === '正在理解活动需求…' && <> <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></>}</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
-        <p id="ap-data-notice" className="ap-small">{understandingLine(Boolean(modelEnabled() && studio?.controller))}{process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1'?'对话可能发送本场近期文字和模型回复。':''}</p>
-        <p id="ap-plan-notice" className="ap-small" role="status">{planGenerationLine(studio?.connection)}</p>
+        <p className="ap-foot">
+          <span id="ap-data-notice">{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
+          {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span>近期对话也会发给模型。</span>}
+          <span id="ap-plan-notice" role="status">{planGenerationLine(studio?.connection)}</span>
+        </p>
         {!!draft && <p className="ap-small">未发送内容仅暂存在当前页面；刷新或关闭后会丢失。</p>}
         {agent.sessionSaveFailed && <p role="status" className="ap-small">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
         <div className="ap-composer-bar">

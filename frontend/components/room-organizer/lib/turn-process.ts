@@ -9,11 +9,15 @@ export function composeProcessStrip(input: {
   cloudRound: number;
   cloudTool: boolean;
   failed: ProcessFailure | null;
+  /** Human step from the local timeline, such as 正在试排圆桌… */
+  stageLine?: string | null;
 }): string | null {
+  if (input.understanding) return '正在理解活动需求…';
+  if (input.generating && input.stageLine) return input.stageLine;
   if (input.cloudRunning) return `云端第 ${Math.max(1, Math.floor(input.cloudRound) || 1)} 轮…`;
   if (input.generating && input.cloudTool) return '正在调用云端工具';
   if (input.generating) return '正在生成布置预览';
-  if (input.understanding) return '正在理解活动需求…';
+  if (input.failed && input.stageLine) return input.stageLine;
   if (input.failed === 'understanding') return '已尝试：正在理解…';
   if (input.failed === 'preview') return '已尝试：正在生成布置预览';
   if (input.failed === 'cloud_tool') return '已尝试：正在调用云端工具';

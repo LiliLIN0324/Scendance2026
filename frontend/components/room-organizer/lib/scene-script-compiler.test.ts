@@ -110,7 +110,7 @@ describe('compileSceneScript — 简报落地成可拖的一版', () => {
     const radii = chairs
       .filter(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)) < 2)
       .map(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)));
-    expect(radii.length).toBe(6);
+    expect(radii.length).toBe(8);
     expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.08);
   });
 });

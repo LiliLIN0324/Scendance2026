@@ -390,6 +390,11 @@ export function parseSafeDirectionalMove(raw: string): PlanMoveOp | null {
   const action = '(?:挪|移动|平移|移|搬)';
   const number = '(\\d+(?:\\.\\d+)?|十[一二三四五六七八九]?|[一二两三四五六七八九]十|[一二两三四五六七八九])';
   const unit = '(毫米|厘米|米|mm|cm|m)';
+  const vague = text.match(new RegExp(`^${target}(?:往|向|朝)${direction}(?:边|侧|方)?${action}(?:动)?(?:一点|一些|稍微)$`));
+  if (vague) {
+    const vec = DIR_VEC[vague[2]!];
+    return vec ? { kind: 'move', ...parseTarget(vague[1]!), delta: { x: vec.x * 0.3, z: vec.z * 0.3 } } : null;
+  }
   const first = text.match(new RegExp(`^${target}(?:往|向|朝)${direction}(?:边|侧|方)?${action}(?:动)?${number}${unit}$`, 'i'));
   const second = first ? null : text.match(new RegExp(`^${target}${action}(?:到|至)?${direction}(?:边|侧|方)?${number}${unit}$`, 'i'));
   const match = first ?? second;

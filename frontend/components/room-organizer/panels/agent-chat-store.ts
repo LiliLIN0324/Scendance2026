@@ -151,6 +151,8 @@ export interface AgentStepLogEntry {
   itemCount?: number;
   thought?: string;
   startedAt: number;
+  /** Local layout steps. Cloud steps leave this unset. */
+  outcome?: 'running' | 'done' | 'error';
 }
 
 /**
@@ -236,6 +238,75 @@ export function startAgentRun(scope: AgentRunScope = 'layout'): void {
     stepLog: [],
     eventLog: [],
     steerNotes: [],
+  });
+}
+
+export type LocalLayoutKind = 'preview' | 'validate' | 'revise' | 'confirm' | 'applied';
+
+const LOCAL_LAYOUT_STEP: Readonly<Record<LocalLayoutKind, { toolName: string; running: string; done: string }>> = {
+  preview: { toolName: 'local_preview', running: '正在试排圆桌…', done: '出预览' },
+  validate: { toolName: 'local_validate', running: '正在核对重叠…', done: '已核对重叠' },
+  revise: { toolName: 'local_revise', running: '正在修改布置…', done: '已修改' },
+  confirm: { toolName: 'local_confirm', running: '确认布置', done: '确认布置' },
+  applied: { toolName: 'local_applied', running: '正在写入画布…', done: '已落画布' },
+};
+
+/**
+ * Local generate / revise / validate / apply. A new preview starts a fresh
+ * timeline. Later steps append, so the row stays 出预览 → 确认布置 → 已落画布.
+ */
+export function pushLocalLayoutStep(kind: LocalLayoutKind, outcome: 'running' | 'done' | 'error', note?: string): void {
+  const spec = LOCAL_LAYOUT_STEP[kind];
+  const now = Date.now();
+  if ((kind === 'preview' && outcome === 'running') || run.scope !== 'layout') startAgentRun('layout');
+  const current = run;
+  const thought = note ?? (outcome === 'running' ? spec.running : spec.done);
+  const stepLog = current.stepLog
+    .filter(step => step.toolName !== spec.toolName)
+    .map(step => step.outcome === 'running'
+      ? { ...step, outcome: 'done' as const, durationMs: Math.max(1, now - step.startedAt) }
+      : step);
+  commitRun({
+    ...current,
+    isRunning: outcome === 'running',
+    stepLog: [...stepLog, {
+      toolName: spec.toolName,
+      durationMs: outcome === 'running' ? 0 : 1,
+      isReadonly: kind !== 'applied',
+      startedAt: now,
+      outcome,
+      thought,
+    }],
+  });
+}
+
+/** Drop the in-memory run. Used when the chat panel goes away. */
+export function resetAgentRun(): void {
+  commitRun({ ...IDLE_RUN, stepLog: [], eventLog: [], steerNotes: [] });
+}
+
+/** Mark the open local step failed without starting a new timeline. */
+export function failOpenLocalStep(note: string): void {
+  if (run.scope !== 'layout') return;
+  const open = [...run.stepLog].reverse().find(step => step.outcome === 'running');
+  if (!open) return;
+  const kind = (Object.keys(LOCAL_LAYOUT_STEP) as LocalLayoutKind[]).find(key => LOCAL_LAYOUT_STEP[key].toolName === open.toolName);
+  if (!kind) return;
+  pushLocalLayoutStep(kind, 'error', note);
+}
+
+/** Stop the clock but keep the local steps so the collapsed trace stays. */
+export function finishLocalLayoutRun(): void {
+  if (run.scope !== 'layout') return;
+  const now = Date.now();
+  commitRun({
+    ...run,
+    isRunning: false,
+    shouldPauseAfterStep: false,
+    stopRequested: false,
+    stepLog: run.stepLog.map(step => step.outcome === 'running'
+      ? { ...step, outcome: 'done' as const, durationMs: Math.max(1, now - step.startedAt) }
+      : step),
   });
 }
 
