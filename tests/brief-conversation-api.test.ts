@@ -30,6 +30,30 @@ describe('explicit seating evidence',()=>{
   const result=parseBriefConversation({extraction:{layoutMode:'dining'},reply:'可以先讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence}]},raw);
   expect(result.extraction.layoutMode).toBe(expected?'dining':undefined);
  });
+ it.each([
+  ['现有8张圆桌，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['现有80套课桌椅，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+ ] as const)('keeps explicit selection despite a neutral inventory mention: %s',(raw,mode,shortEvidence,fullEvidence)=>{
+  for(const evidence of [shortEvidence,fullEvidence]){
+   const result=parseBriefConversation({extraction:{layoutMode:mode,requirements:[{key:'layoutMode',value:mode,mode:'prefer'}]},reply:'可以先讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence}]},raw);
+   expect(result.extraction.layoutMode).toBe(mode);expect(result.extraction.requirements).toHaveLength(1);
+  }
+  expect(parseModelBrief({layoutMode:mode},raw).layoutMode).toBe(mode);
+ });
+ it.each([
+  ['不采用圆桌，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['圆桌是否采用尚未定，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['不采用课桌椅，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+  ['课桌椅是否采用尚未定，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+  ['还没选择圆桌，采用圆桌布局','dining','圆桌','采用圆桌布局'],
+  ['还没采用课桌椅，采用课桌椅布局','desk-chair','课桌椅','采用课桌椅布局'],
+ ] as const)('does not hide a contradictory same-layout clause: %s',(raw,mode,shortEvidence,fullEvidence)=>{
+  for(const evidence of [shortEvidence,fullEvidence]){
+   const result=parseBriefConversation({extraction:{layoutMode:mode},reply:'可以先讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence}]},raw);
+   expect(result.extraction.layoutMode).toBeUndefined();
+  }
+  expect(parseModelBrief({layoutMode:mode},raw).layoutMode).toBeUndefined();
+ });
  it.each(['现有80套课桌椅','不采用课桌椅布局','是否采用课桌椅布局还没决定','可能采用课桌椅布局','可以考虑课桌椅布局','有80套课桌椅按剧院式摆放'])('does not turn ambiguous or negative layout language into a choice: %s',raw=>{
   const result=parseBriefConversation({extraction:{layoutMode:'desk-chair'},reply:'可以继续讨论。',unhandled:[],factEvidence:[{key:'layoutMode',evidence:'课桌椅'}]},raw);
   expect(result.extraction.layoutMode).toBeUndefined();expect(result.factEvidence).toEqual([]);

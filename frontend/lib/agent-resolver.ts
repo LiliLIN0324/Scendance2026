@@ -26,6 +26,15 @@ export interface BriefExtractTransport {
 export type BriefResolution = 'model' | 'confirmation' | 'local_command' | 'disabled' | 'not_connected' | 'unavailable' | 'failed';
 export type ResolvedBriefTurn = BriefTurn & { resolution: BriefResolution; modelNotice?: string; modelReply?:string; unhandled?:BriefConversationResponse['unhandled']; materialQueries?:string[]; readOnlyReply?:boolean; usesModelText?:boolean; resumeInstruction?:string };
 
+/** Only recognise these explicit, non-executing instructions; preserve them
+ * in unhandled for review, and reject any accompanying unrecognised action. */
+function isReadOnlyAdviceBoundary(evidence: string, raw: string): boolean {
+  if (!raw.includes(evidence)) return false;
+  const parts = evidence.split(/[，,；;。]/u).map(part => part.trim()).filter(Boolean);
+  return parts.length > 0 && parts.every(part => /^(?:请)?(?:先)?给(?:我)?(?:一些|一点)?建议$/u.test(part) ||
+    /^(?:请)?(?:不要|别|不必|无需)(?:改|修改|调整)(?:场景|画布|布局)$/u.test(part));
+}
+
 function modelFailureNotice(reason: string | undefined): string {
   if (reason === 'MODEL_PROVIDER_INCOMPLETE' || reason === 'MODEL_PROVIDER_URL_INVALID' || reason === 'MODEL_PROVIDER_PROFILE_INVALID' || reason === 'MODEL_PROVIDER_UNSUPPORTED_WORKFLOW' || reason === 'SERVICE_NOT_CONFIGURED') return '智能理解服务配置不完整或地址无效，请联系管理员检查。';
   if (reason === 'PROVIDER_HTTP_ERROR:401' || reason === 'PROVIDER_HTTP_ERROR:403') return '智能理解服务认证或权限未通过，请联系管理员检查。';
@@ -137,6 +146,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
         // An explicit “not decided yet” is useful context. Keep pending facts
         // as unconfirmed, but don't immediately ask the user to decide them.
         const explicitlyDeferred=/(?:还没|尚未|暂未|未|没)(?:确定|决定|定下来|定)|待定|暂不清楚/.test(raw);
+        const adviceOnlyRequested=raw.split(/[。！？!?]/u).some(part=>part.includes('建议')&&isReadOnlyAdviceBoundary(part.trim(),raw));
         if(conversation&&modelReply&&explicitlyDeferred&&pendingFacts.length>0&&pendingFacts.every(fact=>(fact.key==='headcount'&&fact.value==='待重新说明')||(fact.key==='event'&&fact.requiresRestatement===false))&&
           !turn.memory.pendingActivityNeeds.length&&!turn.memory.unresolvedActivityNeeds.length&&!turn.memory.mobilityNeedsClarification){
           return {...turn,kind:'ack',text:reply!,memory:{...turn.memory,askedScale:previous.askedScale,pendingBasicFacts:pendingFacts},resolution:'model',usesModelText:true,...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};
@@ -144,11 +154,12 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
         if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...(context.command&&!unhandled?.length?{pendingGeneration:{command:context.command,instruction:raw}}:{}) }, resolution: 'model', ...presentation };
         // A decision explicitly postponed by the user stays unknown; let the
         // model answer this discussion instead of repeating a generic prompt.
-        // Pending confirmations, non-deferred unknowns and actions retain the
-        // deterministic review path and cannot be bypassed by model prose.
-        if(conversation&&modelReply&&explicitlyDeferred&&!context.command&&!unhandled?.some(item=>item.kind==='action')&&
+        // Advice can discuss additional unknowns without confirming them.
+        // Pending confirmations and executable actions retain their review path.
+        if(conversation&&modelReply&&explicitlyDeferred&&!context.command&&
+          !unhandled?.some(item=>item.kind==='action'&&!isReadOnlyAdviceBoundary(item.evidence,raw))&&
           !turn.memory.pendingActivityNeeds.length&&turn.memory.unresolvedActivityNeeds.length>0&&
-          turn.memory.unresolvedActivityNeeds.every(kind=>turn.memory.deferredActivityNeeds?.includes(kind))&&
+          (adviceOnlyRequested||turn.memory.unresolvedActivityNeeds.every(kind=>turn.memory.deferredActivityNeeds?.includes(kind)))&&
           !turn.memory.mobilityNeedsClarification&&!turn.memory.layoutModeUnresolved&&(turn.kind==='ack'||turn.kind==='ask')){
           return {...turn,kind:'ack',text:reply!,memory:{...turn.memory,askedScale:previous.askedScale,pendingBasicFacts:pendingFacts},resolution:'model',usesModelText:true,
             ...(unhandled?{unhandled}:{}),...(materialQueries.length?{materialQueries}:{})};

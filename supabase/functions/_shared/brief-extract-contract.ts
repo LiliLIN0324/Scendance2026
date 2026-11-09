@@ -83,14 +83,23 @@ function seatingClauses(message:string,evidence:string):string[] {
 function hasExplicitLayout(message:string,evidence:string,mode:NonNullable<BriefSlots['layoutMode']>):boolean {
   const term=mode==='desk-chair'?/(?:课桌|教室式|课堂式)/u:/(?:宴会式|宴请布局|宴请式|餐桌式|餐桌布局|圆桌)/u;
   if(!term.test(evidence))return false;
-  const clauses=seatingClauses(message,evidence);
-  return clauses.length>0&&clauses.every(clause=>{
-    if(/(?:不采用|不使用|不用|不要|不选|不排|不摆|无需|不是|未定|没定|未决定|没决定|不确定|是否|能否|要不要|待定|或者|还是|可以考虑|建议|也许|可能|如果)/u.test(clause))return false;
+  // Inspect every mention of the selected kind, not only clauses containing
+  // the model's chosen evidence substring. Inventory-only mentions are neutral.
+  const clauses=message.split(/[，,；;。！？!?\n]/u).filter(part=>term.test(part)).map(part=>{
+    const before=part.slice(0,part.search(term)),correction=[...before.matchAll(/改用|改为|改成|转为/gu)].at(-1);
+    return correction?.index===undefined?part:part.slice(correction.index);
+  });
+  let selected=false;
+  for(const clause of clauses){
+    if(/(?:不采用|不使用|不用|不要|不选|不排|不摆|无需|不是|未定|没定|未决定|没决定|(?:未|没)(?:采用|选择|选用|使用|选|确定|决定)|不确定|是否|能否|要不要|待定|或者|还是|可以考虑|建议|也许|可能|如果)/u.test(clause))return false;
     const target=mode==='desk-chair'?'(?:课桌椅|课桌式|课桌|教室式|课堂式)':'(?:圆桌式|圆桌|宴会式|宴请布局|宴请式|餐桌式|餐桌布局)';
     const chosen=new RegExp(`(?:采用|选择|选用|使用|改用|改为|改成|转为|按照|按)\\s*${target}|${target}(?:布局|布置|排布|形式|方案)`,'u').test(clause);
     const direct=/^(?:课桌椅|课桌式|教室式|课堂式|宴会式|餐桌式|圆桌|圆桌式)$/u.test(clause.trim());
-    return chosen||direct;
-  });
+    if(chosen||direct){selected=true;continue;}
+    const inventory=/(?:现有|已有|已经有|库存|备有|拥有|(?:^|我|我们)有)/u.test(clause);
+    if(!inventory||/(?:采用|选择|选用|使用|布局|布置|摆放|排列|排布|按照|按)/u.test(clause))return false;
+  }
+  return selected;
 }
 function hasExplicitAllSeated(message:string,need:NonNullable<BriefSlots['activityNeeds']>[number]):boolean {
   if(!/(?:全员|所有人|每个人|每一位|人人|全部人|大家)/u.test(need.evidence)||!/(?:坐|入座|落座|座位|有座)/u.test(need.evidence))return false;

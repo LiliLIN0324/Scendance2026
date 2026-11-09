@@ -10,18 +10,20 @@ const context = { venueUp: true, scaleTyped: false, hasBase: false, command: nul
 afterEach(() => {vi.unstubAllEnvs();vi.useRealTimers();});
 
 describe('model requirements', () => {
-  it('presents advice for the real conversation shape while keeping undecided check-in unresolved',async()=>{
+  it.each([false,true])('presents advice for the real conversation shape while keeping undecided check-in unresolved (extra unknown: %s)',async extraUnknown=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
     const raw='为长者办一场室内讲座，预计30人，现有80把椅子；是否签到还没决定。请先给建议，不要改场景。';
     const reply='可先比较讲座座席和交流分组两种方向；椅子规格与实际可用量需核对，签到暂不决定。';
-    const response={enabled:true,extraction:{headcount:30,venueIO:'indoor' as const,audienceTags:['elderly' as const],inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin' as const,decision:'unknown' as const,evidence:'是否签到还没决定'}]},reply,unhandled:[],factEvidence:[{key:'headcount' as const,evidence:'30人'},{key:'venueIO' as const,evidence:'室内'},{key:'audienceTags' as const,evidence:'长者'}]};
+    const response={enabled:true,extraction:{headcount:30,venueIO:'indoor' as const,audienceTags:['elderly' as const],inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin' as const,decision:'unknown' as const,evidence:'是否签到还没决定'},...(extraUnknown?[{kind:'stage' as const,decision:'unknown' as const,evidence:'室内讲座'}]:[])]},reply,unhandled:[{kind:'action' as const,evidence:'请先给建议，不要改场景'}],factEvidence:[{key:'headcount' as const,evidence:'30人'},{key:'venueIO' as const,evidence:'室内'},{key:'audienceTags' as const,evidence:'长者'}]};
     expect(briefConversationResponseSchema.safeParse(response).success).toBe(true);
     expect(()=>parseBriefConversation({extraction:response.extraction,reply:response.reply,unhandled:response.unhandled,factEvidence:response.factEvidence},raw)).not.toThrow();
     const transport={briefExtract:vi.fn(),briefConversation:vi.fn().mockResolvedValue(response)};
     const turn=await resolveBriefTurn(raw,initialBriefMemory(),context,transport,undefined,{history:[]});
     expect(turn.kind).toBe('ack');expect(turn.text).toContain(reply);expect(turn.memory.headcount).toBe(30);
     expect(turn.usesModelText).toBe(true);expect(turn.modelReply).toBeUndefined();expect(turn.memory.pendingGeneration).toBeUndefined();
+    expect(turn.unhandled).toEqual(response.unhandled);
     expect(turn.memory.zoneNeeds.checkin).toBeNull();expect(turn.memory.unresolvedActivityNeeds).toContain('checkin');
+    if(extraUnknown)expect(turn.memory.zoneNeeds.stage).toBeNull();
     expect(turn.memory.reportedInventory).toEqual(expect.arrayContaining([expect.objectContaining({evidence:expect.stringContaining('80把椅子')})]));
     const next=await resolveBriefTurn('需要签到',turn.memory,context,transport,undefined,{history:[]});
     expect(next.memory.zoneNeeds.checkin).toBe(true);
@@ -35,6 +37,30 @@ describe('model requirements', () => {
     expect(turn.text).toContain('这样对吗');expect(turn.memory.zoneNeeds.rest).toBe(false);
     expect(turn.memory.pendingActivityNeeds).toEqual(expect.arrayContaining([expect.objectContaining({kind:'rest',value:true})]));
     expect(turn.memory.zoneNeeds.checkin).toBeNull();
+  });
+  it.each(['请先给建议，同时删除椅子','请先给建议并移动椅子','不要改场景，但发送给甲方'])('does not treat a mixed action as a read-only boundary: %s',async action=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const raw=`30人，签到还没决定。${action}`;
+    const unhandled=[{kind:'action' as const,evidence:action}];
+    const transport={briefExtract:vi.fn(),briefConversation:vi.fn().mockResolvedValue({enabled:true,extraction:{headcount:30,activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'签到还没决定'}]},reply:'可以先探索几个方向。',unhandled,factEvidence:[{key:'headcount',evidence:'30人'}]})};
+    const turn=await resolveBriefTurn(raw,initialBriefMemory(),context,transport,undefined,{history:[]});
+    expect(turn.usesModelText).not.toBe(true);expect(turn.unhandled).toEqual(unhandled);
+    expect(turn.memory.zoneNeeds.checkin).toBeNull();expect(turn.memory.pendingGeneration).toBeUndefined();
+  });
+  it('keeps an explicit generation command out of the read-only advice path',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const raw='30人，签到还没决定，请先给建议，生成方案';
+    const transport={briefExtract:vi.fn(),briefConversation:vi.fn().mockResolvedValue({enabled:true,extraction:{headcount:30,activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'签到还没决定'}]},reply:'可以先探索几个方向。',unhandled:[{kind:'action',evidence:'请先给建议'}],factEvidence:[{key:'headcount',evidence:'30人'}]})};
+    const turn=await resolveBriefTurn(raw,initialBriefMemory(),{...context,command:'first'},transport,undefined,{history:[]});
+    expect(turn.usesModelText).not.toBe(true);expect(turn.memory.zoneNeeds.checkin).toBeNull();
+  });
+  it('does not let a read-only instruction bypass an ambiguous attendance fact',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const raw='30人和40人，签到还没决定，请先给建议，不要改场景';
+    const transport={briefExtract:vi.fn(),briefConversation:vi.fn().mockResolvedValue({enabled:true,extraction:{headcount:30,activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'签到还没决定'}]},reply:'可以先探索几个方向。',unhandled:[{kind:'action',evidence:'请先给建议，不要改场景'}],factEvidence:[{key:'headcount',evidence:'30人'}]})};
+    const turn=await resolveBriefTurn(raw,initialBriefMemory(),context,transport,undefined,{history:[]});
+    expect(turn.kind).toBe('ask');expect(turn.usesModelText).not.toBe(true);
+    expect(turn.memory.pendingBasicFacts?.some(fact=>fact.key==='headcount')).toBe(true);
   });
   it.each(['先探索','先用假设探索'])('resolves the exact preview request %s without another model call',async raw=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
