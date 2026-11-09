@@ -31,6 +31,7 @@ import { matchRecipes, renderRecipes } from './agent-recipes.ts';
 import { briefTarget, deadlinePressure, renderTurnBrief, type TurnTraceEntry } from './turn-brief.ts';
 import { rankCandidates, explainRanking, type ScoreInput } from './scorecard.ts';
 import {reviewAgentCandidate} from './agent-candidate-review.ts';
+import {classifySubmittedCandidate} from './candidate-submit-gate.ts';
 import {trialModelRoundDiagnostic,trialSubmissionDiagnostic,trialValidationDiagnostic,type AgentTrialDiagnostic} from './agent-trial-diagnostic.ts';
 import {agentEventOutcome,agentEventTool,type AgentEvent} from './agent-events.ts';
 import type { Backend } from './backend.ts';
@@ -202,6 +203,7 @@ const errorHints:Record<string,string>={
   SEATING_DESK_TOO_NARROW:'桌面宽度不足以容纳两把椅子及所设间距，请调整规格或说明限制。',
   SEATING_SPEC_CONFLICT:'候选桌椅尺寸与用户明确选用的规格不一致，请按已知尺寸重新试排。',
   SEATING_SPEC_UNCONFIRMED:'桌椅规格尚未核对，请先说明可选规格或采用明确的示意假设。',
+  CANDIDATE_NOT_VALIDATED:'带命令的候选要先调用 validate_candidate，再用返回的 validatedId 或同一份命令提交。截止时间迫使提交时不要再校验，程序会收下并标明 DEADLINE_UNVALIDATED，那不是校验通过。',
 };
 const safeError=(error:unknown)=>{
   const code=error instanceof ApiError?error.code:error instanceof z.ZodError?'INVALID_TOOL_INPUT':'AGENT_TOOL_FAILED';
@@ -778,7 +780,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             }
             else if(name==='submit_candidates') {
               if(input.context.annotationObservation!==undefined&&(annotationReadTurn===null||annotationReadTurn>=turn))throw new ApiError('ANNOTATION_READ_REQUIRED',422);
-              const rawCandidates=(args as z.infer<typeof schemas.submit_candidates>).candidates,valid:Candidate[]=[],errors:unknown[]=[];
+              const rawCandidates=(args as z.infer<typeof schemas.submit_candidates>).candidates,valid:Candidate[]=[],errors:unknown[]=[],deadlineUnvalidated:string[]=[];
               for(const rawCandidate of rawCandidates)try{
                 const candidate=build(rawCandidate);
                 // Re-evaluate the exact full candidate against the original base;
@@ -787,6 +789,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
                 if(review.status==='violated')throw new ApiError('CANDIDATE_GEOMETRY_CONFLICT',422,review.violations);
                 const annotations=input.context.annotationObservation===undefined?null:checkReservedAnnotations(input.scene,candidate.scene,annotationReadStatus==='ready'?input.context.annotationObservation:{status:'unavailable'});
                 if(annotations?.violations.length)throw new ApiError('RESERVED_AREA_OCCUPIED',422,annotations.violations);
+                const decision=classifySubmittedCandidate({commandCount:candidate.commands.length,prepared:candidate.prepared===true,previouslyValidated:validatedScores.has(diversityKey(candidate.scene,identities)),forceSubmit});
+                if(decision.action==='reject'){candidate.warnings=[...candidate.warnings,{code:decision.code,ids:[]}];deadlineUnvalidated.push(candidate.title);}
+                else if(decision.flagged){candidate.warnings=[...candidate.warnings,{code:decision.code,ids:[]}];deadlineUnvalidated.push(candidate.title);}
                 if(lastEmptySeating&&lastEmptySeating.steerTotal===consumedSteerTotal&&lastEmptySeating.sceneKey===canonical(input.scene)&&canonical(candidate.scene)===lastEmptySeating.sceneKey)
                   candidate.warnings=[...candidate.warnings,{code:lastEmptySeating.code,ids:[]},...(lastEmptySeating.headcountUnverified?[{code:'SEATING_HEADCOUNT_UNVERIFIED',ids:[]}]:[])];
                 if(candidate.prepared===true||candidate.commands.length)candidate.warnings=[...candidate.warnings,{code:'SAFETY_CHECKS_UNKNOWN',ids:[]}];
@@ -797,9 +802,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
                 const annotationNotice=annotationReadStatus==='ready'?'已读取规划草案；是否遵守标注尚未独立验证。':annotationReadStatus==='unavailable'?'规划草案无法核对，本方案未验证标注。':null;
                 valid.push({...candidate,...(annotationNotice?{explanation:`${candidate.explanation} ${annotationNotice}`} : {}),label:(['A','B','C'] as const)[valid.length]});
               }catch(error){errors.push(safeError(error));}
-              // 引擎实测打分排序：把「哪个方案更好」从模型主观判断换成可复算的分数。
-              // 没跑过 validate_candidate 的候选直接否决（validated:false），净距/结构警告/物件数
-              // 都取自 validate 那一步的引擎回执，不在这里重新算。
+              // 单份带命令候选若没有先校验，已在上面拒绝。截止提交收下来的份会带 DEADLINE_UNVALIDATED。
+              // 多份候选排序仍只用校验回执里的净距；没有回执的份标 validated:false，不在这里重算。
+              if(deadlineUnvalidated.length)result={accepted:valid.length,validated:false,unvalidated:deadlineUnvalidated,notice:'带命令但没有先 validate_candidate 的候选已标明。DEADLINE_UNVALIDATED 只出现在截止提交；其余是 CANDIDATE_NOT_VALIDATED。两者都不是校验通过。'};
               if(valid.length>1){
                 const inputs:ScoreInput[]=valid.map(candidate=>{
                   const key=diversityKey(candidate.scene,identities);
@@ -812,7 +817,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
                 const byTitle=new Map(ranked.map(r=>[r.candidateId,r]));
                 valid.sort((a,b)=>(byTitle.get(a.title)?.total??-1)-(byTitle.get(b.title)?.total??-1));
                 for(const [i,candidate] of valid.entries())candidate.label=(['A','B','C'] as const)[i];
-                result={accepted:valid.length,ranking:explainRanking(ranked),unvalidated:valid.filter(c=>!validatedScores.has(diversityKey(c.scene,identities))).map(c=>c.title)};
+                result={accepted:valid.length,ranking:explainRanking(ranked),unvalidated:valid.filter(c=>!validatedScores.has(diversityKey(c.scene,identities))).map(c=>c.title),...(deadlineUnvalidated.length?{validated:false as const,deadlineUnvalidated,notice:'这些候选在截止提交时没有先经过 validate_candidate，已标明 DEADLINE_UNVALIDATED。这不是校验通过。'}:{})};
               }
               const expected=input.jevEnabled?3:1;
               if(backend.agentTrialDiagnostic)trialDiagnostic(trialSubmissionDiagnostic(valid.length,expected,errors));

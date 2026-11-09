@@ -41,6 +41,17 @@ describe('命令和撤销的校验缺口', () => {
     expect(report.gaps.every(gap => gap.guardIntact)).toBe(true);
     expect(report.commandOps).toEqual(['add', 'remove', 'move', 'rotate', 'recolor', 'replace', 'add_resource', 'replace_resource']);
     expect(report.declaredTools).not.toContain('undo');
+    const history = read('../frontend/components/room-organizer/hooks/use-history.ts');
+    const drag = read('../frontend/components/room-organizer/hooks/use-item-drag.ts');
+    const keyboard = read('../frontend/components/room-organizer/hooks/use-keyboard-shortcuts.ts');
+    for (const source of [history, drag, keyboard]) {
+      expect(source).not.toContain('executeSceneCommand');
+      expect(source).not.toContain('validateCommandShape');
+    }
+    expect(history).toContain('apply(last)');
+    expect(drag).toContain('actions.bulkSetPositions');
+    expect(keyboard).toContain('handlers.undo()');
+    expect(keyboard).toContain('handlers.moveItem(');
     expect(new Set(report.gaps.map(gap => gap.id)).size).toBe(report.gaps.length);
   });
 

@@ -124,7 +124,7 @@ describe('the agent can ask the engine where things fit',()=>{
     // The model placed at the anchor the engine computed, and the editor accepted it.
     expect(sites.length).toBeGreaterThan(0);
     const candidate=run.candidates[0].proposal;
-    expect(candidate.warnings).toEqual([{code:'SAFETY_CHECKS_UNKNOWN',ids:[]}]);
+    expect(candidate.warnings).toEqual([{code:'CANDIDATE_NOT_VALIDATED',ids:[]},{code:'SAFETY_CHECKS_UNKNOWN',ids:[]}]);
     expect(candidate.candidate.objects).toHaveLength(2);
     const placed=candidate.candidate.objects.find(o=>o.id!==id(21))!;
     expect(placed.position.x).toBeCloseTo(sites[0].x,3);

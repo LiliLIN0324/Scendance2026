@@ -42,6 +42,7 @@ describe('useHistory — activity and geometry snapshots', () => {
     expect(edited.floors[0]!.items[0]!.position).toEqual({ x: 2, z: 1 });
     act(() => result.current.history.undo());
     expect(layoutStore.getState().layout).toEqual(initial);
+    expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual(initial.floors[0]!.items[0]!.position);
     act(() => result.current.history.redo());
     expect(layoutStore.getState().layout).toEqual(edited);
     act(() => result.current.actions.removeItem('item-1'));

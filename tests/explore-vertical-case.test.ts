@@ -246,6 +246,12 @@ describe('更多对抗句', () => {
     expect(elderlyCount.memory.inventory[0]).toMatchObject({ count: 30, countsAsPeople: false });
     expect(elderlyCount.memory.mobility.status).toBe('unknown');
     expect(guardSeatingCount(30, elderlyCount.memory).ok).toBe(false);
+
+    const negated = readTurn(initialExploreMemory(), '不是八十个人，我们有八十把椅子，到场大概三十人');
+    expect(negated.memory.attendance).toMatchObject({ status: 'stated', people: 30 });
+    expect(negated.memory.inventory[0]).toMatchObject({ count: 80, countsAsPeople: false, countsAsVerifiedStock: false });
+    expect(negated.memory.mobility.status).toBe('unknown');
+    expect(guardSeatingCount(80, negated.memory)).toEqual({ ok: false, code: 'HEADCOUNT_NOT_FURNITURE' });
   });
 
   it('长者、适老和否定句不会变成轮椅需求', () => {

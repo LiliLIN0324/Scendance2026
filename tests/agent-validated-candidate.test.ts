@@ -46,11 +46,31 @@ describe('run-local validated candidate handles',()=>{
    code=response(JSON.parse(String(init?.body))).errors?.[0]?.code;return reply('submit_candidates',{candidates:[{title:'说明',explanation:'候选不可复用。',commands:[]}]});});
   await run(second,f2);expect(code).toBe('VALIDATED_CANDIDATE_NOT_FOUND');
  });
- it('never issues a handle for an invalid geometry and retains valid siblings',async()=>{
-  const i=await setup();let invalid:any;
+ it('marks one unvalidated command candidate before treating it as checked',async()=>{
+  const i=await setup();
+  const fetcher=vi.fn(async()=>reply('submit_candidates',{candidates:[candidate()]}));
+  const result=await run(i,fetcher);
+  expect(result.state).toBe('complete');expect(result.candidates).toHaveLength(1);
+  expect(result.candidates[0]!.proposal.candidate.objects).toHaveLength(1);
+  expect(result.candidates[0]!.proposal.warnings).toContainEqual({code:'CANDIDATE_NOT_VALIDATED',ids:[]});
+  expect(result.candidates[0]!.proposal.warnings).not.toContainEqual({code:'DEADLINE_UNVALIDATED',ids:[]});
+  expect((await fixture.rpc(owner,'projects.get',{projectId:i.project.id})).scene).toEqual(i.initial);
+ });
+ it('flags a deadline submit that skips further validation instead of dropping it',async()=>{
+  const i=await setup();
+  const fetcher=vi.fn(async()=>fetcher.mock.calls.length<6?reply('get_scene',{}):reply('submit_candidates',{candidates:[candidate()]}));
+  const result=await run(i,fetcher);expect(result.state).toBe('complete');expect(result.candidates).toHaveLength(1);
+  expect(result.candidates[0]!.proposal.candidate.objects).toHaveLength(1);
+  expect(result.candidates[0]!.proposal.warnings).toContainEqual({code:'DEADLINE_UNVALIDATED',ids:[]});
+  expect((await fixture.rpc(owner,'projects.get',{projectId:i.project.id})).scene).toEqual(i.initial);
+ });
+ it('never issues a handle for an invalid geometry and retains a validated sibling',async()=>{
+  const i=await setup();let invalid:any,good='';
   const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{const body=JSON.parse(String(init?.body));
-   if(fetcher.mock.calls.length===1)return reply('validate_candidate',{...candidate(),commands:[{...candidate().commands[0],position:{x:0,z:0}}]});
-   invalid=response(body);return reply('submit_candidates',{candidates:[{validatedId:crypto.randomUUID()},candidate()]});
+   if(fetcher.mock.calls.length===1)return reply('validate_candidate',candidate());
+   if(fetcher.mock.calls.length===2){good=response(body).validatedId;return reply('validate_candidate',{...candidate(),commands:[{...candidate().commands[0],position:{x:0,z:0}}]});}
+   invalid=response(body);return reply('submit_candidates',{candidates:[{validatedId:crypto.randomUUID()},{validatedId:good}]});
   });const result=await run(i,fetcher);expect(invalid.valid).toBe(false);expect(invalid.validatedId).toBeUndefined();expect(result.state).toBe('complete');expect(result.candidates).toHaveLength(1);
+  expect(result.candidates[0]!.proposal.candidate.objects[0]).toMatchObject({position:{x:2,z:3}});
  });
 });

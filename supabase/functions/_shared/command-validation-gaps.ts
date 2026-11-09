@@ -63,8 +63,9 @@ function commandOps(agentRunner: string, aiSource: string): string[] {
 
 function reviewsBeforeAccept(submit: string): boolean {
   const reviewAt = submit.indexOf('reviewAgentCandidate');
+  const markAt = submit.indexOf("decision.action==='reject'");
   const pushAt = submit.indexOf('valid.push');
-  return reviewAt >= 0 && pushAt > reviewAt && !submit.includes("throw new ApiError('CANDIDATE_NOT_VALIDATED'");
+  return reviewAt >= 0 && markAt > reviewAt && pushAt > markAt && submit.includes('classifySubmittedCandidate');
 }
 
 export function auditValidationGaps(sources: {
@@ -98,7 +99,8 @@ export function auditValidationGaps(sources: {
     && !shortcuts.includes('validateCommandPreconditions');
   const submitLoose = sources.agentRunner.includes('submit_candidates:z.strictObject({candidates:z.array(z.unknown()).min(1).max(3)})')
     && sources.agentRunner.includes("name==='submit_candidates'?submitToolSchema:schema");
-  const unvalidatedOpen = submit.includes('validated:false') && submit.includes('if(valid.length>1)');
+  const unvalidatedRejected = submit.includes("decision.action==='reject'") && submit.includes('CANDIDATE_NOT_VALIDATED') && submit.indexOf("decision.action==='reject'") < submit.indexOf('valid.push');
+  const deadlineFlagged = submit.includes('DEADLINE_UNVALIDATED') && submit.includes('forceSubmit') && sources.agentRunner.includes('不要继续读取或校验');
   const legacyOpen = legacy.includes('generateProposal') && legacy.includes("call('finish'") && !legacy.includes('validate_candidate');
   const panelPreview = sources.creativeStudio.includes("executionMode:'preview'")
     && !/executionMode\s*===?\s*['"]direct['"]/.test(sources.creativeStudio);
@@ -142,10 +144,16 @@ export function auditValidationGaps(sources: {
       guardIntact: reviewsBeforeAccept(submit),
     },
     {
-      id: 'unvalidated_single_candidate_accepted',
-      status: unvalidatedOpen ? 'open' : 'closed',
-      summary: '没跑过 validate_candidate 的单份候选不会因缺回执被拒绝。多份候选排序时才标 validated:false。',
-      guardIntact: reviewsBeforeAccept(submit) && submit.includes("reviewAgentCandidate"),
+      id: 'unvalidated_command_candidate_marked',
+      status: unvalidatedRejected ? 'closed' : 'open',
+      summary: '没有先 validate_candidate 的带命令候选，在写入列表前标成 validated:false 和 CANDIDATE_NOT_VALIDATED。空命令和组团句柄不标。',
+      guardIntact: unvalidatedRejected && reviewsBeforeAccept(submit),
+    },
+    {
+      id: 'deadline_unvalidated_submit_is_flagged',
+      status: deadlineFlagged ? 'closed' : 'open',
+      summary: '截止时间仍允许跳过继续校验并提交完整候选，但收下时标明 DEADLINE_UNVALIDATED，不是校验通过。',
+      guardIntact: deadlineFlagged,
     },
     {
       id: 'legacy_mode_skips_validate_tool',
@@ -199,12 +207,13 @@ export const OPEN_GAP_IDS = [
   'drag_end_skips_command_gate',
   'remove_skips_command_gate',
   'submit_schema_looser_than_advertised',
-  'unvalidated_single_candidate_accepted',
   'legacy_mode_skips_validate_tool',
   'synthetic_editor_is_not_room_undo',
 ] as const;
 
 export const CLOSED_GAP_IDS = [
+  'unvalidated_command_candidate_marked',
+  'deadline_unvalidated_submit_is_flagged',
   'confirm_path_uses_layout_command_gate',
   'catalog_place_uses_execute_scene_command',
   'execute_scene_command_checks_shape_and_preconditions',

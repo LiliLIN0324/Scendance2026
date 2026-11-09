@@ -61,6 +61,18 @@ const setup = (
   return { handlers, calls };
 };
 
+describe('keyboard edits stay outside the scene command gate', () => {
+  afterEach(cleanup);
+
+  it('nudges and undoes through handlers, not executeSceneCommand', () => {
+    const { handlers } = setup(false);
+    press('ArrowLeft');
+    press('z', { ctrlKey: true });
+    expect(handlers.moveItem).toHaveBeenCalledWith('chair', -0.1, 0);
+    expect(handlers.undo).toHaveBeenCalledOnce();
+  });
+});
+
 describe('useKeyboardShortcuts — mid-drag gate (#207)', () => {
   afterEach(cleanup);
 

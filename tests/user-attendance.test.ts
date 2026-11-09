@@ -14,5 +14,6 @@ describe('reported attendance in user text',()=>{
   expect(readUserAttendance('不要30人')).toEqual({status:'unknown'});
   expect(readUserAttendance('80位老人来听讲座')).toEqual({status:'reported',people:80});
   expect(readUserAttendance('八十位长者，我们有三十把椅子')).toEqual({status:'reported',people:80});
+  expect(readUserAttendance('不是八十个人，我们有八十把椅子，到场大概三十人')).toEqual({status:'reported',people:30});
  });
 });

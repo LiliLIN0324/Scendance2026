@@ -7,6 +7,28 @@ import { layoutReducer, type LayoutState } from './layout-reducer';
 import { useItemDrag } from './use-item-drag';
 import type { LayoutActions } from './use-layout-state';
 
+describe('drag release stays outside the scene command gate', () => {
+  afterEach(cleanup);
+
+  it('commits the gesture with bulkSetPositions and does not call executeSceneCommand', () => {
+    const bulkSetPositions = vi.fn();
+    const actions = {
+      moveItem: vi.fn(),
+      bulkSetPositions,
+      setLocked: vi.fn(),
+      updateItem: vi.fn(),
+    } as unknown as LayoutActions;
+    const floor = makeFloor({ items: [makeItem({ id: 'a', position: { x: 0, z: 0 } })] });
+    const { result } = renderHook(() => useItemDrag({
+      activeFloor: floor, activeFloorIndex: 0, roomWidth: 10, roomDepth: 10, keepOut: [], frontGap: null, actions, allSelectedIds: new Set(['a']),
+    }));
+    result.current.handleDragStart('a');
+    result.current.handleDrag('a', 2, 3);
+    result.current.handleDragEnd('a');
+    expect(bulkSetPositions).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('useItemDrag — cancelled gestures commit nothing (#207 follow-up)', () => {
   afterEach(cleanup);
 
