@@ -192,6 +192,8 @@ describe('single-call conversation_v1 extraction',()=>{
   const sent=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(sent).toMatchObject({model:'MiniMax-M3.1-Flash',max_completion_tokens:2048,reasoning_split:true});expect(sent.tools).toBeUndefined();
   const forged=vi.fn<typeof fetch>().mockResolvedValue(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(output),tool_calls:[]}}]}));
   expect(await (await createApi(backend,env,forged)(request(input))).json()).toMatchObject({enabled:true,extraction:null,reason:'MODEL_INVALID_RESPONSE'});
+  const qwen=vi.fn<typeof fetch>().mockResolvedValue(Response.json({id:'chatcmpl-fixture',model:'qwen3.8-max',choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content:JSON.stringify(output),tool_calls:null,function_call:null,refusal:null}}]}));
+  expect(await (await createApi(backend,env,qwen)(request(input))).json()).toMatchObject({enabled:true,reply:output.reply,extraction:{headcount:30}});
  });
  it('checks response against the current user message, not the previous history',()=>{
   expect(()=>parseBriefConversation({...output,factEvidence:[{key:'headcount',evidence:'80人'}]},message)).toThrow('MODEL_EVIDENCE_MISMATCH');

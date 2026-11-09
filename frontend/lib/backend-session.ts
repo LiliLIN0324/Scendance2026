@@ -1474,7 +1474,7 @@ export class BackendSession {
   async briefExtract(message: string, signal?: AbortSignal): Promise<BriefExtractResponse> {
     const input = briefExtractRequestSchema.parse({ message });
     const dispatch=this.scopedDispatchGuard(false);
-    const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch);
+    const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch,true);
     dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
@@ -1483,12 +1483,17 @@ export class BackendSession {
     const client=this.conversationClient();
     if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
     const dispatch=this.scopedDispatchGuard(false);
-    const response=await client.request('/brief/extract','POST',input,false,signal,dispatch);
-    dispatch();const result=briefConversationResponseSchema.parse(response);
-    if(result.enabled){
-      if(!result.extraction||!result.reply||result.reason)throw new SceneApiError('INVALID_RESPONSE',502,null);
-      parseBriefConversation({extraction:result.extraction,reply:result.reply,unhandled:result.unhandled,factEvidence:result.factEvidence,...(result.materialQueries?{materialQueries:result.materialQueries}:{})},input.message);
-    } else if(result.extraction!==null||result.reply!==null||result.unhandled.length||result.factEvidence.length||result.materialQueries?.length)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const response=await client.request('/brief/extract','POST',input,false,signal,dispatch,true);
+    dispatch();
+    const parsed=briefConversationResponseSchema.safeParse(response);
+    if(!parsed.success)throw new SceneApiError('INVALID_RESPONSE',502,{category:'contract'});
+    const result=parsed.data;
+    // A classified model failure is {enabled:true, extraction:null, reason}.
+    // Return it so the resolver can show that category. Do not turn it into an unclassified throw.
+    if(result.enabled&&result.extraction&&result.reply&&result.reason===undefined){
+      try{parseBriefConversation({extraction:result.extraction,reply:result.reply,unhandled:result.unhandled,factEvidence:result.factEvidence,...(result.materialQueries?{materialQueries:result.materialQueries}:{})},input.message);}
+      catch{throw new SceneApiError('INVALID_RESPONSE',502,{category:'contract'});}
+    } else if(!result.enabled&&(result.extraction!==null||result.reply!==null||result.unhandled.length||result.factEvidence.length||result.materialQueries?.length))throw new SceneApiError('INVALID_RESPONSE',502,{category:'contract'});
     return result;
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
@@ -1497,7 +1502,7 @@ export class BackendSession {
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
-    const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch);
+    const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch,true);
     dispatch();return assistantChatResponseSchema.parse(result);
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
