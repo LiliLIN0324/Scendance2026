@@ -126,7 +126,9 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
       }
       const body = Buffer.concat(chunks);
       let response: Response;
-      if (address.pathname.startsWith('/functions/v1/scene-api')) {
+      const conversationRoute = address.pathname.startsWith('/functions/v1/conversation-api');
+      if (conversationRoute) address.pathname = address.pathname.slice('/functions/v1/conversation-api'.length) || '/';
+      if (address.pathname.startsWith('/functions/v1/scene-api') || conversationRoute) {
         if (req.method === 'OPTIONS') { res.writeHead(204, Object.fromEntries(corsHeaders)); res.end(); return; }
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(',') : value);

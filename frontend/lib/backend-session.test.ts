@@ -164,19 +164,34 @@ afterEach(() => {
 });
 
 describe('conversation function routing',()=>{
-  it.each(['0','1'])('routes the three conversation methods with flag %s and retains scene routing',async flag=>{
-    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED',flag);
+  it('sends conversation fields only to conversation-api when the flag is on',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');
     const controller=session();queue(auth);await controller.signIn('test@example.com','password-test-only');
     queue({enabled:false,extraction:null});await controller.briefExtract('30人');
-    queue({enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]});await controller.briefConversation('30人',[]);
+    queue({enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]});await controller.briefConversation('30人',[{role:'user',text:'想办讲座'}]);
     queue({status:'ok',answer:'可以继续规划。'});await controller.assistantChat('怎么办',[]);
     queue(project);await controller.getProject(projectId);
-    const expected=flag==='1'?'conversation-api':'scene-api';
-    for(const [index,path] of [[1,'/brief/extract'],[2,'/brief/extract'],[3,'/assistant/chat']] as const){
-      const sent=request(index);expect(sent.url).toBe(`${base}/functions/v1/${expected}${path}`);
-      expect((sent.options.headers as Record<string,string>).Authorization).toBe('Bearer access-test-only');
-    }
+    expect(request(1)).toMatchObject({url:`${base}/functions/v1/conversation-api/brief/extract`,body:{message:'30人'}});
+    expect(request(1).body).not.toHaveProperty('responseMode');
+    expect(request(2)).toMatchObject({url:`${base}/functions/v1/conversation-api/brief/extract`,body:{message:'30人',responseMode:'conversation_v1',history:[{role:'user',text:'想办讲座'}]}});
+    expect(request(3).url).toBe(`${base}/functions/v1/conversation-api/assistant/chat`);
+    expect(request(3).body).toMatchObject({message:'怎么办',history:[]});
+    for(const index of [1,2,3])expect((request(index).options.headers as Record<string,string>).Authorization).toBe('Bearer access-test-only');
     expect(request(4).url).toBe(`${base}/functions/v1/scene-api/projects/${projectId}`);
+    expect(mockFetch.mock.calls.some(call=>String(call[0]).includes('/scene-api/brief/extract'))).toBe(false);
+  });
+  it('keeps a plain extract on scene-api and does not send conversation keys when the flag is off',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','0');
+    const controller=session();queue(auth);await controller.signIn('test@example.com','password-test-only');
+    queue({enabled:false,extraction:null});await controller.briefExtract('30人');
+    expect(request(1)).toMatchObject({url:`${base}/functions/v1/scene-api/brief/extract`,body:{message:'30人'}});
+    expect(request(1).body).not.toHaveProperty('history');
+    const sent=mockFetch.mock.calls.length;
+    await expect(controller.briefConversation('30人',[{role:'user',text:'想办讲座'}])).resolves.toEqual({enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]});
+    await expect(controller.assistantChat('怎么办',[])).resolves.toEqual({status:'disabled',answer:null});
+    expect(mockFetch.mock.calls).toHaveLength(sent);
+    queue(project);await controller.getProject(projectId);
+    expect(request(2).url).toBe(`${base}/functions/v1/scene-api/projects/${projectId}`);
   });
   it('fails closed before sending a token if the scene URL is not the configured project function',async()=>{
     vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');
