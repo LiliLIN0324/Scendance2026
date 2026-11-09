@@ -8,9 +8,9 @@ describe('assistant chat over isolated local HTTP',()=>{
  const sessions:BackendSession[]=[];
  const provider=vi.fn<typeof fetch>(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:'可以先明确入场方式，再安排签到位置。'}}]}));
  const config:Record<string,string>={ASSISTANT_CHAT_ENABLED:'1',AGENT_CHAT_BASE_URL:'https://model.example/v1',AGENT_CHAT_KEY:'fixture-secret',AGENT_CHAT_MODEL:'fixture'};
- beforeAll(async()=>{server=await startLocalServer(0,provider,{env:key=>config[key]});},30000);
+ beforeAll(async()=>{vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');server=await startLocalServer(0,provider,{env:key=>config[key]});},30000);
  afterEach(()=>{for(const session of sessions.splice(0))session.dispose();provider.mockClear();});
- afterAll(async()=>{await server?.close();});
+ afterAll(async()=>{vi.unstubAllEnvs();await server?.close();});
  function make(){const session=new BackendSession(getBackendConfig({url:server.url,anonKey:testPublicKey}));sessions.push(session);return session;}
  it('requires login and returns a real HTTP response without writing a scene',async()=>{
   await expect(make().assistantChat('签到怎么安排？',[])).rejects.toMatchObject({code:'UNAUTHENTICATED'});expect(provider).not.toHaveBeenCalled();

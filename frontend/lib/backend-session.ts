@@ -333,8 +333,10 @@ export class BackendSession {
   private readonly clientApiUrl: string;
   private readonly client: ReturnType<typeof createSceneClient>;
 
-  private conversationClient():ReturnType<typeof createSceneClient> {
-    if(process.env.NEXT_PUBLIC_CONVERSATION_API_ENABLED!=='1')return this.client;
+  /** Conversation bodies are not valid on the deployed scene-api brief schema.
+   * Only the dedicated function may receive responseMode or history. */
+  private conversationClient():ReturnType<typeof createSceneClient> | null {
+    if(process.env.NEXT_PUBLIC_CONVERSATION_API_ENABLED!=='1')return null;
     // The function must belong to the same validated Supabase project. Do not
     // accept an independent URL that could receive the user's access token.
     try {
@@ -1472,14 +1474,16 @@ export class BackendSession {
   async briefExtract(message: string, signal?: AbortSignal): Promise<BriefExtractResponse> {
     const input = briefExtractRequestSchema.parse({ message });
     const dispatch=this.scopedDispatchGuard(false);
-    const result=await this.conversationClient().request('/brief/extract', 'POST', input, false, signal,dispatch);
+    const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch);
     dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
   async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal):Promise<BriefConversationResponse> {
     const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history});
+    const client=this.conversationClient();
+    if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
     const dispatch=this.scopedDispatchGuard(false);
-    const response=await this.conversationClient().request('/brief/extract','POST',input,false,signal,dispatch);
+    const response=await client.request('/brief/extract','POST',input,false,signal,dispatch);
     dispatch();const result=briefConversationResponseSchema.parse(response);
     if(result.enabled){
       if(!result.extraction||!result.reply||result.reason)throw new SceneApiError('INVALID_RESPONSE',502,null);
@@ -1490,8 +1494,10 @@ export class BackendSession {
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
   async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal): Promise<AssistantChatResult> {
     const input = assistantChatRequestSchema.parse({ message, history });
+    const client=this.conversationClient();
+    if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
-    const result=await this.conversationClient().request('/assistant/chat', 'POST', input, false, signal,dispatch);
+    const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch);
     dispatch();return assistantChatResponseSchema.parse(result);
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
