@@ -110,7 +110,7 @@ function record(fixture: string, plans: readonly ScoredPlan[], extra: Record<str
  * ===================================================================== */
 
 describe('C2/SC-20：硬冲突不进推荐', () => {
-  it('真门开门扇区被签到台压住 → DOOR_SWEEP_BLOCKED hard、REC=null、说人话', () => {
+  it('真门开门扇区被签到台压住 → DOOR_SWEEP_BLOCKED soft/unknown、REC 仍出、带现场确认人话（科智口径）', () => {
     const annotations = [
       zone('checkin', 'checkin', { x: -2, z: 2.3, width: 4, depth: 1.5 }, '签到区'),
       realSouthDoor(0),
@@ -119,16 +119,16 @@ describe('C2/SC-20：硬冲突不进推荐', () => {
     record('real-door-sweep-blocked', plans);
 
     expect(plans.length).toBeGreaterThanOrEqual(1);
-    expect(pickRecommendedPlan(plans)).toBeNull();
+    // 科智口径（door-privacy）：门弧压物不再判 hard，一律 soft/unknown 等现场确认；推荐不因门弧缺席。
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
     for (const p of plans) {
-      const hardSweep = p.violations.find(
-        (v) => v.code === 'DOOR_SWEEP_BLOCKED' && v.severity === 'hard',
-      );
-      expect(hardSweep).toBeDefined();
-      expect(hardSweep!.status).toBe('violated');
-      expect(hardSweep!.message).toMatch(/开门会撞家具/);
-      expect(p.feasible).toBe(false);
-      expect(p.feasibilityStatus).toBe('INFEASIBLE');
+      const sweep = p.violations.find((v) => v.code === 'DOOR_SWEEP_BLOCKED');
+      expect(sweep).toBeDefined();
+      expect(sweep!.severity).toBe('soft');
+      expect(sweep!.status).toBe('unknown');
+      expect(sweep!.message).toMatch(/现场确认/);
+      expect(p.violations.some((v) => v.code === 'DOOR_SWEEP_BLOCKED' && v.severity === 'hard')).toBe(false);
     }
   });
 
@@ -142,7 +142,8 @@ describe('C2/SC-20：硬冲突不进推荐', () => {
 
     const rec = pickRecommendedPlan(plans);
     expect(rec).not.toBeNull();
-    expect(rec!.assurance).toBe('verified');
+    // 科智口径：评分层不再自动升 verified，assurance 一律 draft_unverified，等现场确认。
+    expect(rec!.assurance).toBe('draft_unverified');
     expect(rec!.violations.some((v) => v.code === 'DOOR_SWEEP_BLOCKED' && v.severity === 'hard')).toBe(false);
     // 开启方向仍未知 → soft unknown 保留，不声称通过。
     expect(rec!.violations.some((v) => v.code === 'DOOR_SWEEP_BLOCKED' && v.status === 'unknown')).toBe(true);
@@ -234,7 +235,7 @@ describe('C2/SC-19：未知输入不假通过', () => {
     if (rec) expect(rec.feasibilityStatus).not.toBe('FEASIBLE');
   });
 
-  it('没画真门 → DOOR_UNKNOWN soft + draft_unverified；画了真门才 verified', () => {
+  it('没画真门 → DOOR_UNKNOWN soft + draft_unverified；画了真门也不自动升 verified（科智口径：现场确认才升）', () => {
     const base = [zone('checkin', 'checkin', { x: -2, z: -3.8, width: 4, depth: 1.5 }, '签到区')];
     const noDoor = generateScoredPlans(base, { roomSize: { width: 10, height: 8 } });
     record('door-unknown', noDoor);
@@ -248,7 +249,7 @@ describe('C2/SC-19：未知输入不假通过', () => {
     const withDoor = generateScoredPlans([...base, realSouthDoor(3)], { roomSize: { width: 10, height: 8 } });
     record('door-real-far-away', withDoor);
     for (const p of withDoor) {
-      expect(p.assurance).toBe('verified');
+      expect(p.assurance).toBe('draft_unverified');
       expect(p.violations.some((v) => v.code === 'DOOR_UNKNOWN' && v.status === 'unknown')).toBe(false);
     }
   });
@@ -281,7 +282,7 @@ describe('C2/SC-23：库存三类输入', () => {
     }
   });
 
-  it('库存少：缺口精确到件数，推荐版也带缺口人话', () => {
+  it('库存少：缺口精确到件数（shortage），推荐版带缺口人话（科智口径：本次候选比较，实际缺口待核验）', () => {
     const base = generateScoredPlans(annotations, { roomSize });
     const rec = pickRecommendedPlan(base)!;
     const needed = countByType(rec);
@@ -306,7 +307,7 @@ describe('C2/SC-23：库存三类输入', () => {
     }
     for (const s of recShort.shortage!) {
       expect(recShort.reasons).toContainEqual(
-        expect.stringMatching(new RegExp(`缺 ${s.missing} .*${s.name}`)),
+        expect.stringMatching(new RegExp(`比所填库存 ${s.available} 多 ${s.missing}`)),
       );
     }
   });
@@ -345,8 +346,9 @@ describe('C2/SC-23：库存三类输入', () => {
     const chair = recPartial.shortage!.find((s) => s.type === 'desk-chair');
     expect(chair).toBeDefined();
     expect(chair!.available).toBe(partial['desk-chair']);
-    // 没有「课桌库存充足」这类反向断言被写进理由。
-    expect(recPartial.reasons.some((r) => /课桌.*库存/.test(r) && !r.includes('缺'))).toBe(false);
+    // 科智口径：未登记的规格只报「库存未知」，不编造「充足/够用」。
+    expect(recPartial.reasons.some((r) => /课桌.*库存(充足|够用|满足)/.test(r))).toBe(false);
+    expect(recPartial.reasons.some((r) => r.includes('课桌库存未知'))).toBe(true);
   });
 });
 

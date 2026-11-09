@@ -476,8 +476,6 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         <button type="button" aria-pressed={pane === 'mine'} onClick={() => setPane('mine')}>我的生成</button>
         <button type="button" aria-pressed={pane === 'walk'} onClick={() => setPane('walk')}>漫游角色</button>
       </nav>
-      {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
-      {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
       <div className="sc-lib-results" aria-live="polite">
         {pane === 'walk' ? (walkRoleSlot ?? <p className="sc-lib-empty">暂无可用的漫游角色</p>) : pane === 'fav'
           ? (favoriteRows === 0
