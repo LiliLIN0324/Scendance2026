@@ -46,7 +46,6 @@ function deferred<T>() {
 }
 beforeEach(() => {
   vi.spyOn(switchGuard,'useLocalActivitySwitchGuard').mockReturnValue({capture:()=>()=>{}});
-  vi.spyOn(restoreAvailability, 'localRestoreAvailable').mockReturnValue(true);
   vi.stubGlobal('crypto', webcrypto);
   vi.mocked(listLocalActivities).mockReset().mockResolvedValue({ activities: [], unreadableProjectIds: [] });
   vi.mocked(readLocalActivity).mockReset().mockResolvedValue(parseLocalProjectBackupJson(backupText(target)));
@@ -59,6 +58,7 @@ function setup(commitRestore = false) {
   const actions: LocalProjectBackupActions = {
     prepareBackup: vi.fn(async () => backupText(current)),
     restoreBackup: vi.fn(async (candidate: LocalProjectRestoreCandidate) => { if (commitRestore) { current = candidate.layout;view.rerender(element()); } }),
+    createFreshActivity: vi.fn(async (candidate: LocalProjectRestoreCandidate, check?: () => void) => { check?.(); if (commitRestore) { current = candidate.layout;view.rerender(element()); } }),
     undoRestore: vi.fn().mockResolvedValue(undefined), backupPending: false, canUndoRestore: false,
   };
   const element = () => <LocalActivitiesPanel layout={current} actions={actions} disabled={disabled} onComplete={onComplete}/>;
@@ -97,28 +97,30 @@ describe('local activity creation and switching', () => {
     const ui=setup(),pending=deferred<ReturnType<typeof archiveResult>>();vi.mocked(archiveLocalActivity).mockReturnValueOnce(pending.promise);
     name();submit();await waitFor(()=>expect(archiveLocalActivity).toHaveBeenCalledOnce());
     blocker='有未保存的图片原件，请先保留。';await act(async()=>pending.resolve(archiveResult(backupText(original),originalId)));
-    expect(await screen.findByText(/未保存的图片原件/)).toBeTruthy();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
+    expect(await screen.findByText(/未保存的图片原件/)).toBeTruthy();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.actions.createFreshActivity).not.toHaveBeenCalled();
   });
-  it('passes the same live guard into restore so a mid-operation draft blocks its later writes',async()=>{
+  it('passes the same live guard into fresh create so a mid-operation draft blocks its later writes',async()=>{
     let revision=1;const guard=switchGuard.createLocalActivitySwitchGuard({identity:()=>({scope:originalId,layoutRevision:1}),snapshot:()=>({draft:null,revision}),blocker:()=>null});
     vi.mocked(switchGuard.useLocalActivitySwitchGuard).mockReturnValue(guard);
-    const ui=setup();vi.mocked(ui.actions.restoreBackup).mockImplementationOnce(async(_candidate,check)=>{revision++;check?.();});
+    const ui=setup();vi.mocked(ui.actions.createFreshActivity!).mockImplementationOnce(async(_candidate,check)=>{revision++;check?.();});
     name();submit();expect(await screen.findByText(/草稿在准备期间发生变化/)).toBeTruthy();
-    expect(ui.actions.restoreBackup).toHaveBeenCalledOnce();expect(ui.layout).toBe(original);
+    expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.layout).toBe(original);
   });
-  it('disables creating and opening when restoration is paused without archiving or touching current data', async () => {
-    vi.mocked(restoreAvailability.localRestoreAvailable).mockReturnValue(false);
+  it('keeps opening paused while creating a fresh activity stays available', async () => {
+    expect(restoreAvailability.localRestoreAvailable()).toBe(false);
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const ui = setup();
-    expect(screen.getByText(/新建或打开其他活动暂不可用/)).toBeTruthy();
+    expect(screen.getByText(/打开已有活动或从备份文件恢复暂不可用/)).toBeTruthy();
     const form = screen.getByRole('form', { name: '新建活动' });
-    expect((screen.getByRole('button', { name: '新建活动' }) as HTMLButtonElement).disabled || form.querySelector('fieldset')!.disabled).toBe(true);
+    expect(form.querySelector('fieldset')!.disabled).toBe(false);
+    expect((screen.getByRole('button', { name: '新建活动' }) as HTMLButtonElement).disabled).toBe(false);
     const open = await screen.findByRole('button', { name: `打开活动「${target.name}」` });
     expect((open as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.submit(form); fireEvent.click(open);
+    fireEvent.click(open);
     expect(ui.actions.prepareBackup).not.toHaveBeenCalled();
     expect(archiveLocalActivity).not.toHaveBeenCalled(); expect(readLocalActivity).not.toHaveBeenCalled();
-    expect(ui.actions.restoreBackup).not.toHaveBeenCalled(); expect(ui.onComplete).not.toHaveBeenCalled();
+    expect(ui.actions.restoreBackup).not.toHaveBeenCalled(); expect(ui.actions.createFreshActivity).not.toHaveBeenCalled();
+    expect(ui.onComplete).not.toHaveBeenCalled();
     expect(ui.layout).toBe(original);
   });
   it('splits the create card and the archive list for their outside entry points', async () => {
@@ -209,8 +211,8 @@ describe('local activity creation and switching', () => {
     if (mode === 'reuse-layout') fireEvent.click(screen.getByRole('radio', { name: '沿用当前布置' }));
     submit();await waitFor(() => expect(ui.onComplete).toHaveBeenCalledOnce());
     expect(ui.actions.prepareBackup).toHaveBeenCalledOnce();expect(archiveLocalActivity).toHaveBeenCalledWith(backupText(original), originalId, expect.any(Function));
-    expect(ui.actions.restoreBackup).toHaveBeenCalledOnce();
-    const candidate = vi.mocked(ui.actions.restoreBackup).mock.calls[0]![0];
+    expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
+    const candidate = vi.mocked(ui.actions.createFreshActivity!).mock.calls[0]![0];
     expect(candidate).toMatchObject({ source: 'backup', backupVersion: 3, brief: { status: 'absent' }, materialCheckins: { status: 'absent' } });
     expect(candidate.layout.id).not.toBe(originalId);expect(candidate.layout.id).toMatch(/^house-/);expect(candidate.layout.name).toBe('演练新活动');
     expect(candidate.layout.eventOperations).toBeUndefined();expect(candidate.layout.productionPlan).toBeUndefined();expect(candidate.layout.designBook).toBeUndefined();
@@ -233,14 +235,14 @@ describe('local activity creation and switching', () => {
       vi.mocked(archiveLocalActivity).mockRejectedValueOnce(new Error(message));submit();await screen.findByText(message);
       expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
     }
-    vi.mocked(ui.actions.restoreBackup).mockRejectedValueOnce(new Error('演练完整恢复保存失败'));
-    submit();await screen.findByText('演练完整恢复保存失败');
+    vi.mocked(ui.actions.createFreshActivity!).mockRejectedValueOnce(new Error('演练新活动保存失败'));
+    submit();await screen.findByText('演练新活动保存失败');
     expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '演练保留的姓名输入');
     expect((screen.getByRole('radio', { name: '沿用当前布置' }) as HTMLInputElement).checked).toBe(true);
     expect(ui.layout).toBe(original);expect(ui.onComplete).not.toHaveBeenCalled();expect(screen.queryByText(/已打开「/)).toBeNull();
   });
 
-  it('opens a target only after the current archive completes and accepts its legitimate restore scope change once', async () => {
+  it.skipIf(!restoreAvailability.localRestoreAvailable())('opens a target only after the current archive completes and accepts its legitimate restore scope change once', async () => {
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const pending = deferred<ReturnType<typeof archiveResult>>();
     vi.mocked(archiveLocalActivity).mockImplementationOnce(() => pending.promise);
@@ -255,14 +257,15 @@ describe('local activity creation and switching', () => {
     expect(ui.layout.id).toBe(targetId);expect(screen.getByText(/已打开「演练目标活动」/)).toBeTruthy();
   });
 
-  it('shows unreadable archives and refuses a corrupt target without dropping the current activity or original list', async () => {
+  it('shows unreadable archives and does not open them while restoration is paused', async () => {
+    expect(restoreAvailability.localRestoreAvailable()).toBe(false);
     const storedList = { activities: [listedTarget()], unreadableProjectIds: ['house-unreadable-original'] };
     vi.mocked(listLocalActivities).mockResolvedValue(storedList);
-    vi.mocked(readLocalActivity).mockRejectedValueOnce(new Error('演练目标归档无法完整读取，原资料已保留'));
     const ui = setup();expect(await screen.findByText(/有1份活动无法读取，资料已保留/)).toBeTruthy();
-    expect(archiveLocalActivity).not.toHaveBeenCalled();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: `打开活动「${target.name}」` }));
-    await screen.findByText('演练目标归档无法完整读取，原资料已保留');
+    const open = screen.getByRole('button', { name: `打开活动「${target.name}」` });
+    expect((open as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(open);
+    expect(archiveLocalActivity).not.toHaveBeenCalled();expect(readLocalActivity).not.toHaveBeenCalled();
     expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.layout).toBe(original);expect(ui.onComplete).not.toHaveBeenCalled();
     expect(storedList).toEqual({ activities: [listedTarget()], unreadableProjectIds: ['house-unreadable-original'] });
   });
@@ -279,7 +282,7 @@ describe('local activity creation and switching', () => {
       else ui.view.unmount();
       expect(() => args[2]!()).toThrow();
       await act(async () => { pending.resolve(archiveResult(args[0], args[1])); });
-      expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.onComplete).not.toHaveBeenCalled();
+      expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.actions.createFreshActivity).not.toHaveBeenCalled();expect(ui.onComplete).not.toHaveBeenCalled();
       if (interruption !== 'unmount') expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '演练新活动');
       cleanup();
     }
@@ -297,22 +300,22 @@ describe('local activity creation and switching', () => {
     }
   });
 
-  it('suppresses completion after a pending restore finishes in an unrelated activity', async () => {
+  it('suppresses completion after a pending fresh create finishes in an unrelated activity', async () => {
     const pending = deferred<void>();const ui = setup();name();
-    vi.mocked(ui.actions.restoreBackup).mockReturnValueOnce(pending.promise);submit();
-    await waitFor(() => expect(ui.actions.restoreBackup).toHaveBeenCalledOnce());
+    vi.mocked(ui.actions.createFreshActivity!).mockReturnValueOnce(pending.promise);submit();
+    await waitFor(() => expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce());
     ui.replace({ ...target, id: 'house-unrelated-activity' });
     await act(async () => { pending.resolve(); });
     expect(ui.onComplete).not.toHaveBeenCalled();expect(screen.queryByText(/已打开「/)).toBeNull();
     expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '演练新活动');
   });
 
-  it('completes once after the provider flushes the target layout synchronously and resolves restoration later', async () => {
+  it('completes once after the provider flushes the target layout synchronously and resolves creation later', async () => {
     const pending = deferred<void>();const ui = setup();name();
-    vi.mocked(ui.actions.restoreBackup).mockImplementationOnce(candidate => {
+    vi.mocked(ui.actions.createFreshActivity!).mockImplementationOnce(candidate => {
       flushSync(() => ui.replace(candidate.layout));return pending.promise;
     });
-    submit();await waitFor(() => expect(ui.actions.restoreBackup).toHaveBeenCalledOnce());
+    submit();await waitFor(() => expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce());
     expect(ui.onComplete).not.toHaveBeenCalled();
     expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '演练新活动');
     await act(async () => { pending.resolve(); });
@@ -321,11 +324,11 @@ describe('local activity creation and switching', () => {
     expect(screen.getByText(/已打开「演练新活动」/)).toBeTruthy();
   });
 
-  it('completes once when restoration resolves before the parent renders the target scope and retains its later notice', async () => {
+  it('completes once when creation resolves before the parent renders the target scope and retains its later notice', async () => {
     const pending = deferred<void>();const ui = setup();name();
-    vi.mocked(ui.actions.restoreBackup).mockReturnValueOnce(pending.promise);submit();
-    await waitFor(() => expect(ui.actions.restoreBackup).toHaveBeenCalledOnce());
-    const candidate = vi.mocked(ui.actions.restoreBackup).mock.calls[0]![0];
+    vi.mocked(ui.actions.createFreshActivity!).mockReturnValueOnce(pending.promise);submit();
+    await waitFor(() => expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce());
+    const candidate = vi.mocked(ui.actions.createFreshActivity!).mock.calls[0]![0];
     await act(async () => { pending.resolve(); });
     expect(ui.onComplete).toHaveBeenCalledOnce();
     expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '');
@@ -333,16 +336,16 @@ describe('local activity creation and switching', () => {
     expect(ui.onComplete).toHaveBeenCalledOnce();expect(screen.getByText(/已打开「演练新活动」/)).toBeTruthy();
   });
 
-  it('suppresses late completion and preserves the name after disabled A→B→A during an otherwise legitimate restore', async () => {
+  it('suppresses late completion and preserves the name after disabled A→B→A during an otherwise legitimate create', async () => {
     const pending = deferred<void>();const ui = setup();name();
-    vi.mocked(ui.actions.restoreBackup).mockImplementationOnce(candidate => { ui.replace(candidate.layout);return pending.promise; });submit();
-    await waitFor(() => expect(ui.actions.restoreBackup).toHaveBeenCalledOnce());
+    vi.mocked(ui.actions.createFreshActivity!).mockImplementationOnce(candidate => { ui.replace(candidate.layout);return pending.promise; });submit();
+    await waitFor(() => expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce());
     ui.disable(true);ui.disable(false);await act(async () => { pending.resolve(); });
     expect(ui.onComplete).not.toHaveBeenCalled();expect(screen.queryByText(/已打开「/)).toBeNull();
     expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '演练新活动');
   });
 
-  it('makes the whole archive card one native button and runs the open transaction from it', async () => {
+  it('makes the whole archive card one native button and does not open it while restoration is paused', async () => {
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const actions: LocalProjectBackupActions = {
       prepareBackup: vi.fn(async () => backupText(original)), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
@@ -353,9 +356,11 @@ describe('local activity creation and switching', () => {
     // 旧的内嵌小「打开」按钮已消失，整张卡（含封面）都在这颗 button 里。
     expect(view.container.querySelector('.sc-activity-open')).toBeNull();
     expect(card.querySelector('.sc-activity-thumb')).toBeTruthy();
+    expect((card as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(card);
-    await waitFor(() => expect(actions.prepareBackup).toHaveBeenCalledOnce());
-    expect(readLocalActivity).toHaveBeenCalledWith(targetId);
+    expect(actions.prepareBackup).not.toHaveBeenCalled();
+    expect(readLocalActivity).not.toHaveBeenCalled();
+    expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
 
   it('creates a blank activity from the gallery tile, refuses an empty name and collapses the tile afterwards', async () => {
@@ -364,6 +369,7 @@ describe('local activity creation and switching', () => {
     const actions: LocalProjectBackupActions = {
       prepareBackup: vi.fn(async () => backupText(current)),
       restoreBackup: vi.fn(async (candidate: LocalProjectRestoreCandidate) => { current = candidate.layout; }),
+      createFreshActivity: vi.fn(async (candidate: LocalProjectRestoreCandidate) => { current = candidate.layout; }),
       undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
     };
     render(<LocalActivitiesPanel mode="list" layout={current} actions={actions} onComplete={onComplete}/>);
@@ -376,8 +382,9 @@ describe('local activity creation and switching', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '画廊新活动名称' }), { target: { value: '画廊新画布' } });
     fireEvent.submit(tileForm);
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-    expect(actions.restoreBackup).toHaveBeenCalledOnce();
-    const candidate = vi.mocked(actions.restoreBackup).mock.calls[0]![0];
+    expect(actions.createFreshActivity).toHaveBeenCalledOnce();
+    expect(actions.restoreBackup).not.toHaveBeenCalled();
+    const candidate = vi.mocked(actions.createFreshActivity!).mock.calls[0]![0];
     expect(candidate.layout.name).toBe('画廊新画布');
     expect(candidate.layout.floors.flatMap(floor => floor.items)).toHaveLength(0);
     expect(screen.queryByRole('form', { name: '画廊内联新建活动' })).toBeNull();

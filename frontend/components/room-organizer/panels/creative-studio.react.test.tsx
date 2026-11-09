@@ -8,7 +8,9 @@ import { StrictMode, useCallback, useEffect, useLayoutEffect, useRef, useState, 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, SceneApiError, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4 } from '@/lib/local-project-backup';
-import { createLocalWriteLeaseManager, localWriteCapabilityGuard } from '@/lib/local-write-lease';
+import { STORAGE_KEY } from '../lib/constants';
+import { parseLayoutJson } from '../lib/persistence';
+import { createLocalActivitySwitchGuard, LocalActivitySwitchGuardProvider } from '../lib/local-activity-switch-guard';
 import { useWorkspaceWriteGuards } from '../lib/workspace-write-guards';
 import { createActivitySessionTracker } from '../lib/activity-session-epoch';
 import { createFloorSessionTracker,type FloorSessionToken } from '../lib/floor-session-epoch';
@@ -18,7 +20,9 @@ import * as venueSourceRevision from '@/lib/venue-source-revision';
 import {createVenueSourceConfirmation} from '@/lib/venue-source-confirmation';
 import {createSourceEditorCoordinator} from '@/lib/source-editor-coordinator';
 import {prepareLegacyBriefPreservation} from '../lib/legacy-brief';
-import { localRestoreAvailable } from '@/lib/local-project-restore';
+import { readLocalActivity } from '@/lib/local-activities';
+import { commitFreshLocalActivityLayout, localRestoreAvailable } from '@/lib/local-project-restore';
+import { createLocalWriteLeaseManager, localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
 import * as sourceStorage from '@/lib/source-storage';
 import { readMaterialCheckins } from '@/lib/material-checkin-storage';
 import * as layoutPersistence from '../lib/persistence';
@@ -2888,12 +2892,18 @@ describe('complete local backup transactions', () => {
   const prepare = vi.fn<(next:RoomLayout)=>RoomLayout>();
   function Probe() { actions = useLocalProjectBackup()!; return <BriefStateProbe/>; }
   function ActivityProbe({current,onComplete}:{current:RoomLayout;onComplete:()=>void}) {
-    return <LocalActivitiesPanel layout={current} actions={useLocalProjectBackup()!} onComplete={onComplete}/>;
+    const guard=createLocalActivitySwitchGuard({identity:()=>({scope:current.id??'',layoutRevision:1}),snapshot:()=>({draft:null,revision:1}),blocker:()=>null});
+    return <LocalActivitySwitchGuardProvider guard={guard}><LocalActivitiesPanel layout={current} actions={useLocalProjectBackup()!} onComplete={onComplete}/></LocalActivitySwitchGuardProvider>;
   }
-  function Trial({activitiesCompleted,review=false,briefView='brief'}:{activitiesCompleted?:()=>void;review?:boolean;briefView?:'brief'|'reference'} = {}) {
+  function Trial({activitiesCompleted,review=false,briefView='brief',writeCapability}:{activitiesCompleted?:()=>void;review?:boolean;briefView?:'brief'|'reference';writeCapability?:LocalWriteCapability} = {}) {
     const [current, setCurrent] = useState(layout); changeLayout = setCurrent;
+    const currentRef = useRef(layout);
+    currentRef.current = current;
     const [reviewRequest,setReviewRequest]=useState(0);
-    return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} prepareRestoreLayout={prepare} commitRestoredLayout={next => { commit(next); setCurrent(next); }}>
+    return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} {...(writeCapability?{writeCapability}:{})} prepareRestoreLayout={prepare} commitRestoredLayout={next => { commit(next); setCurrent(next); }} commitFreshActivityLayout={(next, clearance) => {
+      commitFreshLocalActivityLayout(next, { current: () => currentRef.current, apply: value => { currentRef.current = value; setCurrent(value); } }, clearance);
+      commit(next);
+    }}>
       <CreativeBriefPanel view={briefView}/><Probe/><output data-testid="backup-layout">{JSON.stringify(current)}</output>
       {review&&<><button onClick={()=>setReviewRequest(value=>value+1)}>打开生产方案评审</button><CreativeAssistant reviewOpenRequest={reviewRequest}/></>}
       {activitiesCompleted&&<ActivityProbe current={current} onComplete={activitiesCompleted}/>}
@@ -3238,31 +3248,100 @@ describe('complete local backup transactions', () => {
     expect(controller.startAgentRun).not.toHaveBeenCalled();
   });
 
-  it.skipIf(!localRestoreAvailable())('completes local-activity navigation after the real provider commits and changes its scope',async()=>{
+  it('creates an empty activity while file restore stays paused, and a refresh can read the new layout', async () => {
+    expect(localRestoreAvailable()).toBe(false);
     const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
     renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
+    expect(screen.getByText(/打开已有活动或从备份文件恢复暂不可用/)).toBeTruthy();
+    expect((screen.getByRole('button',{name:'新建活动'}) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'独立活动集成演练'}});
     fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
     await waitFor(()=>expect(commit).toHaveBeenCalledOnce());
     await waitFor(()=>expect(complete).toHaveBeenCalledOnce());
     const current=JSON.parse(screen.getByTestId('backup-layout').textContent!) as RoomLayout;
+    expect(current.id).toMatch(/^house-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
     expect(current.id).not.toBe(projectId);expect(current.name).toBe('独立活动集成演练');
+    expect(current.floors.flatMap(floor=>floor.items)).toHaveLength(0);
+    const refreshed=parseLayoutJson(localStorage.getItem(STORAGE_KEY)!);
+    expect(refreshed?.id).toBe(current.id);expect(refreshed?.name).toBe('独立活动集成演练');
     expect((screen.getByLabelText('新活动名称') as HTMLInputElement).value).toBe('');
     expect(forms.get(checkinKey())).toEqual(original);
     expect(forms.has(JSON.stringify(['local-activity',projectId]))).toBe(true);
     expect(forms.get(JSON.stringify(['material-checkins',current.id]))).toBeUndefined();
+    expect((await readLocalActivity(projectId)).layout.id).toBe(projectId);
+    expect((await readLocalActivity(projectId)).layout.name).toBe(layout.name);
+    await expect(actions.restoreBackup(file('different-local-activity'))).rejects.toThrow('备份恢复暂不可用');
+    expect(commit).toHaveBeenCalledOnce();
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(current.id);
   });
-  it('keeps the current activity and archive untouched when new activity creation is paused', async () => {
-    const complete=vi.fn(), original=ledger(); forms.set(checkinKey(),original);
-    renderUI(<Trial activitiesCompleted={complete}/>); await waitFor(()=>expect(briefState().ready).toBe(true));
-    expect(screen.getByText(/新建或打开其他活动暂不可用/)).toBeTruthy();
-    const before=structuredClone([...forms.entries()]), writes=vi.mocked(updateSourceForm).mock.calls.length;
-    fireEvent.submit(screen.getByRole('form',{name:'新建活动'}));
-    await act(async()=>{});
-    expect(commit).not.toHaveBeenCalled(); expect(complete).not.toHaveBeenCalled();
-    expect(vi.mocked(updateSourceForm)).toHaveBeenCalledTimes(writes);
-    expect([...forms.entries()]).toEqual(before);
+  it('keeps the original activity when archiving it fails or the new scope is already occupied', async () => {
+    expect(localRestoreAvailable()).toBe(false);
+    const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
+    const stored=JSON.stringify(layout);localStorage.setItem(STORAGE_KEY, stored);
+    renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
+    const impl=vi.mocked(updateSourceForm).getMockImplementation()!;
+    vi.mocked(updateSourceForm).mockImplementation(async(key,update,guard)=>{
+      if(Array.isArray(key)&&key[0]==='local-activity')throw new Error('演练归档写入失败');
+      return impl(key,update,guard);
+    });
+    fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'不应切换'}});
+    fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
+    expect(await screen.findByText('演练归档写入失败')).toBeTruthy();
+    expect(commit).not.toHaveBeenCalled();expect(complete).not.toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
     expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
+    vi.mocked(updateSourceForm).mockImplementation(impl);
+    vi.spyOn(crypto,'randomUUID').mockReturnValue('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    forms.set(JSON.stringify(['local-activity','house-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']),{occupied:true});
+    fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
+    expect(await screen.findByText(/已被归档占用/)).toBeTruthy();
+    expect(commit).not.toHaveBeenCalled();
+    expect(forms.get(JSON.stringify(['local-activity','house-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']))).toEqual({occupied:true});
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
+  });
+  it('keeps the original layout when the new activity cannot be stored or another tab holds the source lock', async () => {
+    expect(localRestoreAvailable()).toBe(false);
+    const complete=vi.fn();
+    const stored=JSON.stringify(layout);localStorage.setItem(STORAGE_KEY, stored);
+    renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
+    const nativeSet=Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key:string,value:string){
+      if(key===STORAGE_KEY)throw new DOMException('full','QuotaExceededError');
+      return nativeSet.call(this,key,value);
+    });
+    fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'存不下的新活动'}});
+    fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
+    expect(await screen.findByText(/新活动未创建|保存失败/)).toBeTruthy();
+    expect(complete).not.toHaveBeenCalled();
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
+    vi.mocked(Storage.prototype.setItem).mockRestore();
+    const nativeRequest=navigator.locks.request.bind(navigator.locks);
+    vi.spyOn(navigator.locks,'request').mockImplementation((name,options,callback)=>{
+      if(name===`scendance:source-editor:${projectId}`&&options?.mode==='exclusive')return Promise.resolve(callback(null));
+      return nativeRequest(name,options,callback);
+    });
+    fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
+    expect(await screen.findByText(/另一编辑页面使用/)).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
+  });
+  it('does not replace the current activity after its write lease is released', async () => {
+    expect(localRestoreAvailable()).toBe(false);
+    const complete=vi.fn();
+    const lease=await createLocalWriteLeaseManager({getLocks:()=>navigator.locks,getStorage:()=>window.localStorage}).acquire();
+    const stored=JSON.stringify(layout);localStorage.setItem(STORAGE_KEY, stored);
+    renderUI(<Trial activitiesCompleted={complete} writeCapability={lease.capability}/>);
+    await waitFor(()=>expect(briefState().ready).toBe(true));
+    await lease.release();
+    fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'失锁后的新活动'}});
+    fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
+    expect(await screen.findByText(/租约已失效/)).toBeTruthy();
+    expect(commit).not.toHaveBeenCalled();expect(complete).not.toHaveBeenCalled();
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
   });
   it.skipIf(!localRestoreAvailable())('backs up a scene-connected local activity and disconnects only its remote context before restoring',async()=>{
     connected();snapshot={...snapshot,geometryBinding:{version:1,localActivityId:projectId,cloudProjectId:projectId,userId:'test-user',apiUrl:controller.config.apiUrl}};
