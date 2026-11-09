@@ -13,8 +13,10 @@ import {
   planMove,
   readIntents,
   readTurn,
+  rejectBypassChannels,
   runCommunityLectureCase,
   selectTools,
+  writeConfirmedFact,
 } from '../supabase/functions/_shared/explore-vertical-case.ts';
 
 function runnerToolNames(source: string): string[] {
@@ -116,7 +118,7 @@ describe('同一句里的多个意图', () => {
       { id: RECEPTION_ID, label: '签到桌', locked: false, position: { x: 2, z: 1 } },
       { id: LOCKED_ID, label: '另一张签到桌', locked: false, position: { x: 4, z: 1 } },
     ];
-    expect(planMove(text, desks)).toMatchObject({ status: 'unresolved' });
+    expect(planMove(text, desks, 0)).toMatchObject({ status: 'unresolved' });
     expect(turn.intents).toContain('bill_of_materials');
   });
 });
@@ -129,8 +131,8 @@ describe('快捷键、按钮和 Agent 共用命令', () => {
   ];
 
   it('两条入口得到同一条命令，绕过通道无效', () => {
-    const command = planMove(text, start);
-    expect(command).toMatchObject({ status: 'ready', axis: 'case_x_minus', command: { op: 'move', id: RECEPTION_ID, position: { x: 1, z: 1 } } });
+    const command = planMove(text, start, 0);
+    expect(command).toMatchObject({ status: 'ready', axis: 'case_x_minus', command: { op: 'move', id: RECEPTION_ID, position: { x: 1, z: 1 }, baseRevision: 0 } });
     if (command.status !== 'ready') throw new Error(command.reason);
     const byAgent = createSharedEditor(start);
     const byShortcut = createSharedEditor(start);
@@ -145,10 +147,10 @@ describe('快捷键、按钮和 Agent 共用命令', () => {
 
   it('锁定、确认和撤销对按钮与 Agent 是同一套结果', () => {
     const editor = createSharedEditor(start);
-    const command = planMove(text, start);
+    const command = planMove(text, start, 0);
     if (command.status !== 'ready') throw new Error(command.reason);
-    expect(editor.execute('shortcut', { op: 'move', id: LOCKED_ID, position: { x: 7, z: 1 } }, 'shared')).toMatchObject({ ok: false, code: 'OBJECT_LOCKED' });
-    expect(editor.execute('agent', { op: 'move', id: '50000000-0000-4000-8000-000000000099', position: { x: 1, z: 1 } }, 'shared')).toMatchObject({ ok: false, code: 'OBJECT_NOT_FOUND' });
+    expect(editor.execute('shortcut', { op: 'move', id: LOCKED_ID, position: { x: 7, z: 1 }, baseRevision: 0 }, 'shared')).toMatchObject({ ok: false, code: 'OBJECT_LOCKED' });
+    expect(editor.execute('agent', { op: 'move', id: '50000000-0000-4000-8000-000000000099', position: { x: 1, z: 1 }, baseRevision: 0 }, 'shared')).toMatchObject({ ok: false, code: 'OBJECT_NOT_FOUND' });
     editor.execute('agent', command.command, 'shared');
     expect(editor.snapshot()).toMatchObject({ pendingPreview: true, moveApplied: false });
     editor.confirm('button', 'shared');
@@ -158,6 +160,30 @@ describe('快捷键、按钮和 Agent 共用命令', () => {
     editor.undo('button', 'shared');
     expect(editor.snapshot().objects.find(item => item.id === RECEPTION_ID)?.position).toEqual({ x: 2, z: 1 });
     expect(editor.snapshot().objects.find(item => item.id === LOCKED_ID)?.position).toEqual({ x: 8, z: 1 });
+  });
+
+  it('执行、确认和撤销都不能绕过校验', () => {
+    const editor = createSharedEditor(start);
+    const command = planMove(text, start, 0);
+    if (command.status !== 'ready') throw new Error(command.reason);
+    const blocked = rejectBypassChannels(editor, command.command);
+    expect(blocked).toHaveLength(9);
+    expect(blocked.every(item => item.code === 'BYPASS_REJECTED' && item.unchanged)).toBe(true);
+    expect(editor.snapshot()).toMatchObject({ revision: 0, pendingPreview: false, moveApplied: false });
+    editor.execute('shortcut', command.command, 'shared');
+    const before = editor.snapshot();
+    expect(editor.confirm('button', 'bypass')).toMatchObject({ ok: false, code: 'BYPASS_REJECTED' });
+    expect(editor.undo('agent', 'bypass')).toMatchObject({ ok: false, code: 'BYPASS_REJECTED' });
+    expect(editor.snapshot()).toEqual(before);
+    expect(editor.execute('agent', command.command, 'shared')).toMatchObject({ ok: false, code: 'STALE_BASE' });
+    expect(editor.snapshot().objects.find(item => item.id === RECEPTION_ID)?.position).toEqual({ x: 1, z: 1 });
+    expect(editor.execute('agent', { op: 'move', id: RECEPTION_ID, position: { x: -1, z: 1 }, baseRevision: editor.snapshot().revision }, 'shared')).toMatchObject({ ok: false, code: 'OUT_OF_BOUNDS' });
+    expect(editor.confirm('agent', 'shared').ok).toBe(true);
+    expect(editor.confirm('shortcut', 'shared')).toMatchObject({ ok: false, code: 'NOTHING_TO_CONFIRM' });
+    expect(writeConfirmedFact({ channel: 'bypass', kind: 'headcount_from_chairs' }).code).toBe('BYPASS_REJECTED');
+    expect(writeConfirmedFact({ channel: 'shared', kind: 'headcount_from_chairs' }).code).toBe('HEADCOUNT_NOT_FURNITURE');
+    expect(writeConfirmedFact({ channel: 'shared', kind: 'suggestion_as_fact' }).code).toBe('SUGGESTION_IS_NOT_FACT');
+    expect(writeConfirmedFact({ channel: 'shared', kind: 'v2_label' }).code).toBe('V2_DEFAULT_OFF');
   });
 });
 
@@ -203,15 +229,29 @@ describe('社区讲座纵向案例', () => {
     expect(report.readback.unknowns).toEqual(expect.arrayContaining(['出入口与门扇', '行动辅助需求', '口述椅子数量不是已核验库存', '试排仍有缺口', '人数改过，旧试排已过期']));
     expect(report.guardedReplies[0]).not.toContain('80位长者');
     expect(report.toolSelections.exploreTools.tools).not.toContain('prepare_seating_candidate');
-    expect(report.toolSelections.chosen.tools).toContain('prepare_seating_candidate');
+    expect(report.toolSelections.chosen.tools).toEqual(expect.arrayContaining(['prepare_seating_candidate', 'find_free_areas']));
     expect(report.toolSelections.chosen.tools).not.toContain('prepare_shared_seating_candidate');
+    expect(report.toolSelections.exploreTools.tools).not.toContain('find_free_areas');
     expect(report.bypassRejected).toBe('BYPASS_REJECTED');
+    expect(report.bypassLog).toHaveLength(9);
+    expect(report.bypassLog.every(item => item.code === 'BYPASS_REJECTED' && item.unchanged)).toBe(true);
+    expect(report.seatingBypass).toEqual({ ok: false, code: 'BYPASS_REJECTED' });
+    expect(report.factWrites.filter(item => item.channel === 'bypass').every(item => item.code === 'BYPASS_REJECTED')).toBe(true);
+    expect(report.factWrites.find(item => item.kind === 'v2_label' && item.channel === 'shared')?.code).toBe('V2_DEFAULT_OFF');
     expect(report.missedObject).toBe('OBJECT_NOT_FOUND');
     expect(report.lockedRejected).toBe('OBJECT_LOCKED');
-    expect(report.commandProof).toMatchObject({ moved: true, restoredX: 2, reconfirmed: true });
+    expect(report.commandProof).toMatchObject({ shortcutMoved: true, stale: 'STALE_BASE', bypassConfirm: 'BYPASS_REJECTED', restoredX: 2, reconfirmed: true, finalRevision: 2 });
+    expect(report.commandProof.discardedReplan).toMatchObject({ baseRevision: 1, position: { x: 0, z: 1 } });
+    expect(report.freeAreas.objectCount).toBe(report.preview!.placed * 2);
+    expect(report.freeAreas.note).toContain('仍需核验');
+    expect(report.readback.freeAreaSites).toBe(report.freeAreas.sites);
+    expect(report.readback.layoutHeld).toBe('suggestion');
     expect(report.readback.moveApplied).toBe(true);
     expect(report.readback.objects.find(item => item.id === RECEPTION_ID)?.position).toEqual({ x: 1, z: 1 });
+    expect(report.readback.unknowns).toContain('空位候选没有补上试排缺口');
+    expect(report.readback.deferred).toContain('座位确认');
     expect(report.library.notice).toContain('不是已核验库存');
+    expect(report.v2Forced).toMatchObject({ enabled: false, reason: 'case_harness_cannot_ship_v2' });
   });
 });
 

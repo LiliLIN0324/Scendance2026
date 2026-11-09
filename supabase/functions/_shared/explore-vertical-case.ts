@@ -6,6 +6,7 @@
  */
 import { catalog, sceneSchema, type Scene } from './domain.ts';
 import { planDeskChairGroups, type DeskChairLayoutResult } from './agent-seating-layout.ts';
+import { findFreeAreas } from './placement-search.ts';
 import { readUserAttendance } from './user-attendance.ts';
 import { classifyInvocation, suggestionChannel, type ModelToolName } from './explore-tool-matrix.ts';
 
@@ -19,10 +20,12 @@ export const COMMUNITY_LECTURE_TURNS = [
   '场地还没量。先按12×9米假设看看可能怎么摆，这只是建议',
   '那就按这个建议预览一人一桌，先不要确认',
   '改成28人，把签到桌往左移1米，并出一份物料清单',
+  '座位还是先别确认，刚才那个只是建议',
 ] as const;
 
 export type Actor = 'shortcut' | 'button' | 'agent';
-export type IntentKind = 'revise_headcount' | 'move_object' | 'bill_of_materials' | 'explore_layout' | 'defer_layout' | 'report_inventory' | 'assume_venue' | 'preview_seating';
+export type IntentKind = 'revise_headcount' | 'move_object' | 'bill_of_materials' | 'explore_layout' | 'defer_layout' | 'report_inventory' | 'assume_venue' | 'preview_seating' | 'hold_confirm';
+export type SharedOp = 'execute' | 'confirm' | 'undo';
 
 export type AttendanceFact =
   | { status: 'unknown' }
@@ -50,12 +53,12 @@ export type ExploreMemory = {
 };
 
 export type DraftObject = { id: string; label: string; locked: boolean; position: { x: number; z: number } };
-export type MoveCommand = { op: 'move'; id: string; position: { x: number; z: number } };
-type EditorSnap = { objects: DraftObject[]; pendingPreview: boolean; moveApplied: boolean };
+export type MoveCommand = { op: 'move'; id: string; position: { x: number; z: number }; baseRevision: number };
+type EditorSnap = { objects: DraftObject[]; pendingPreview: boolean; moveApplied: boolean; revision: number };
 
-export type SharedFailure = 'BYPASS_REJECTED' | 'OBJECT_NOT_FOUND' | 'OBJECT_LOCKED' | 'OUT_OF_BOUNDS' | 'NOTHING_TO_CONFIRM' | 'NOTHING_TO_UNDO';
-export type SharedOk = { ok: true; actor: Actor; objects: DraftObject[]; pendingPreview: boolean; moveApplied: boolean };
-export type SharedNo = { ok: false; actor: Actor; code: SharedFailure; objects: DraftObject[]; pendingPreview: boolean; moveApplied: boolean };
+export type SharedFailure = 'BYPASS_REJECTED' | 'OBJECT_NOT_FOUND' | 'OBJECT_LOCKED' | 'OUT_OF_BOUNDS' | 'STALE_BASE' | 'NOTHING_TO_CONFIRM' | 'NOTHING_TO_UNDO';
+export type SharedOk = { ok: true; actor: Actor; objects: DraftObject[]; pendingPreview: boolean; moveApplied: boolean; revision: number };
+export type SharedNo = { ok: false; actor: Actor; code: SharedFailure; objects: DraftObject[]; pendingPreview: boolean; moveApplied: boolean; revision: number };
 
 export type SeparatedEvaluation = {
   toolFeedback: { tool: string; summary: string };
@@ -104,6 +107,7 @@ export function readIntents(text: string): IntentKind[] {
   if (/\d+\s*把椅子|\d+\s*张(?:桌子|课桌)/.test(text)) intents.push('report_inventory');
   if (/(?:假设|先按|暂按)/.test(text) && /\d+(?:\.\d+)?\s*[×xX]\s*\d+(?:\.\d+)?\s*米/.test(text)) intents.push('assume_venue');
   if (/预览/.test(text) && /一人一桌|一人一套|课桌/.test(text)) intents.push('preview_seating');
+  if (/先别确认|不要确认|先不要确认/.test(text)) intents.push('hold_confirm');
   return intents;
 }
 
@@ -140,6 +144,7 @@ export function readTurn(memory: ExploreMemory, text: string): { memory: Explore
   } else if (intents.includes('preview_seating')) {
     next.layout = { status: 'suggestion', value: 'one_desk_one_chair', evidence: '一人一桌' };
   }
+  if (intents.includes('hold_confirm') && !next.deferred.includes('座位确认')) next.deferred.push('座位确认');
   const size = text.match(/(\d+(?:\.\d+)?)\s*[×xX]\s*(\d+(?:\.\d+)?)\s*米/);
   if (size && intents.includes('assume_venue')) {
     next.venue = { status: 'assumption', widthM: Number(size[1]), depthM: Number(size[2]), evidence: size[0] };
@@ -173,7 +178,7 @@ export function selectTools(memory: ExploreMemory, intents: IntentKind[]): { too
   if (intents.includes('preview_seating')) {
     const chairCount = memory.inventory.find(item => item.name === '椅子')?.count;
     if (chairCount != null) refused.push({ tool: 'prepare_seating_candidate', code: 'HEADCOUNT_NOT_FURNITURE', source: 'negative_control' });
-    if (memory.layout.status === 'suggestion' && (memory.attendance.status === 'approximate' || memory.attendance.status === 'stated')) tools.push('prepare_seating_candidate');
+    if (memory.layout.status === 'suggestion' && (memory.attendance.status === 'approximate' || memory.attendance.status === 'stated')) tools.push('prepare_seating_candidate', 'find_free_areas');
     else refused.push({ tool: 'prepare_seating_candidate', code: 'LAYOUT_NOT_CHOSEN', source: 'selector' });
   }
   if (memory.layout.value !== 'one_desk_one_chair' || memory.layout.status === 'unknown') {
@@ -190,16 +195,17 @@ export function guardSeatingCount(count: number, memory: ExploreMemory): { ok: t
   return { ok: true, count };
 }
 
-export function planMove(text: string, objects: readonly DraftObject[]): { status: 'unresolved'; reason: string } | { status: 'ready'; command: MoveCommand; axis: 'case_x_minus' | 'case_x_plus' } {
+export function planMove(text: string, objects: readonly DraftObject[], baseRevision: number): { status: 'unresolved'; reason: string } | { status: 'ready'; command: MoveCommand; axis: 'case_x_minus' | 'case_x_plus' } {
   const hits = objects.filter(object => /签到/.test(text) ? object.label.includes('签到') : false);
   if (hits.length !== 1) return { status: 'unresolved', reason: hits.length === 0 ? '没有唯一的签到桌' : '签到桌不止一件，不能猜是哪一件' };
   const target = hits[0]!;
   if (!/往左|往右/.test(text)) return { status: 'unresolved', reason: '方向还不明确' };
+  if (!Number.isInteger(baseRevision) || baseRevision < 0) return { status: 'unresolved', reason: '缺少当前修订号' };
   const delta = /往左/.test(text) ? -1 : 1;
   return {
     status: 'ready',
     axis: delta < 0 ? 'case_x_minus' : 'case_x_plus',
-    command: { op: 'move', id: target.id, position: { x: target.position.x + delta, z: target.position.z } },
+    command: { op: 'move', id: target.id, position: { x: target.position.x + delta, z: target.position.z }, baseRevision },
   };
 }
 
@@ -207,14 +213,16 @@ export function createSharedEditor(objects: readonly DraftObject[]) {
   let objectsNow = objects.map(item => ({ ...item, position: { ...item.position } }));
   let pendingPreview = false;
   let moveApplied = false;
+  let revision = 0;
   const past: EditorSnap[] = [];
-  const view = (actor: Actor): SharedOk => ({ ok: true, actor, objects: objectsNow.map(cloneObject), pendingPreview, moveApplied });
-  const fail = (actor: Actor, code: SharedFailure): SharedNo => ({ ok: false, actor, code, objects: objectsNow.map(cloneObject), pendingPreview, moveApplied });
-  const snapshot = (): EditorSnap => ({ objects: objectsNow.map(cloneObject), pendingPreview, moveApplied });
+  const view = (actor: Actor): SharedOk => ({ ok: true, actor, objects: objectsNow.map(cloneObject), pendingPreview, moveApplied, revision });
+  const fail = (actor: Actor, code: SharedFailure): SharedNo => ({ ok: false, actor, code, objects: objectsNow.map(cloneObject), pendingPreview, moveApplied, revision });
+  const snapshot = (): EditorSnap => ({ objects: objectsNow.map(cloneObject), pendingPreview, moveApplied, revision });
   return {
     snapshot,
     execute(actor: Actor, command: MoveCommand, channel: 'shared' | 'bypass'): SharedOk | SharedNo {
       if (channel !== 'shared') return fail(actor, 'BYPASS_REJECTED');
+      if (command.baseRevision !== revision) return fail(actor, 'STALE_BASE');
       const target = objectsNow.find(object => object.id === command.id);
       if (!target) return fail(actor, 'OBJECT_NOT_FOUND');
       if (target.locked) return fail(actor, 'OBJECT_LOCKED');
@@ -223,6 +231,7 @@ export function createSharedEditor(objects: readonly DraftObject[]) {
       objectsNow = objectsNow.map(object => object.id === command.id ? { ...object, position: { ...command.position } } : object);
       pendingPreview = true;
       moveApplied = false;
+      revision += 1;
       return view(actor);
     },
     confirm(actor: Actor, channel: 'shared' | 'bypass'): SharedOk | SharedNo {
@@ -231,6 +240,7 @@ export function createSharedEditor(objects: readonly DraftObject[]) {
       past.push(snapshot());
       pendingPreview = false;
       moveApplied = true;
+      revision += 1;
       return view(actor);
     },
     undo(actor: Actor, channel: 'shared' | 'bypass'): SharedOk | SharedNo {
@@ -240,9 +250,36 @@ export function createSharedEditor(objects: readonly DraftObject[]) {
       objectsNow = previous.objects.map(cloneObject);
       pendingPreview = previous.pendingPreview;
       moveApplied = previous.moveApplied;
+      revision = previous.revision;
       return view(actor);
     },
   };
+}
+
+const sharedActors: readonly Actor[] = ['agent', 'shortcut', 'button'];
+const sharedOps: readonly SharedOp[] = ['execute', 'confirm', 'undo'];
+
+/** 三条入口的执行、确认、撤销都先拒绝绕过通道，草稿保持原样。 */
+export function rejectBypassChannels(editor: ReturnType<typeof createSharedEditor>, command: MoveCommand) {
+  const attempts: Array<{ actor: Actor; op: SharedOp; code: SharedFailure | 'APPLIED'; unchanged: boolean }> = [];
+  for (const actor of sharedActors) for (const op of sharedOps) {
+    const before = JSON.stringify(editor.snapshot());
+    const result = op === 'execute' ? editor.execute(actor, command, 'bypass') : op === 'confirm' ? editor.confirm(actor, 'bypass') : editor.undo(actor, 'bypass');
+    attempts.push({ actor, op, code: result.ok ? 'APPLIED' : result.code, unchanged: JSON.stringify(editor.snapshot()) === before });
+  }
+  return attempts;
+}
+
+export function applySeatingPreview(preview: SeatingPreview | null, channel: 'shared' | 'bypass'): { ok: false; code: 'BYPASS_REJECTED' | 'SHORTFALL_BLOCKS_CONFIRM' | 'STALE_PREVIEW' | 'NO_PREVIEW' | 'SUGGESTION_NOT_CONFIRMED' } {
+  if (channel !== 'shared') return { ok: false, code: 'BYPASS_REJECTED' };
+  return confirmSeating(preview);
+}
+
+export function writeConfirmedFact(input: { channel: 'shared' | 'bypass'; kind: 'headcount_from_chairs' | 'suggestion_as_fact' | 'v2_label' }): { ok: false; code: 'BYPASS_REJECTED' | 'HEADCOUNT_NOT_FURNITURE' | 'SUGGESTION_IS_NOT_FACT' | 'V2_DEFAULT_OFF' } {
+  if (input.channel !== 'shared') return { ok: false, code: 'BYPASS_REJECTED' };
+  if (input.kind === 'headcount_from_chairs') return { ok: false, code: 'HEADCOUNT_NOT_FURNITURE' };
+  if (input.kind === 'suggestion_as_fact') return { ok: false, code: 'SUGGESTION_IS_NOT_FACT' };
+  return { ok: false, code: 'V2_DEFAULT_OFF' };
 }
 
 export function confirmSeating(preview: SeatingPreview | null): { ok: false; code: 'SHORTFALL_BLOCKS_CONFIRM' | 'STALE_PREVIEW' | 'NO_PREVIEW' | 'SUGGESTION_NOT_CONFIRMED' } {
@@ -278,6 +315,7 @@ export function runCommunityLectureCase() {
     { id: LOCKED_ID, label: '固定立柱', locked: true, position: { x: 8, z: 1 } },
   ]);
   const v2 = suggestionChannel({ requested: false });
+  const v2Forced = suggestionChannel({ requested: true, reproduction: { items: 7, failures: 0, rerunOnCurrentMain: true } });
   const guardedReplies: string[] = [];
 
   const read = (text: string) => {
@@ -337,8 +375,24 @@ export function runCommunityLectureCase() {
     '一人一桌看起来像讲座，但这只是偏好，不能盖过缺口。',
   ));
   trace.push({ phase: 'feedback', summary: `试排回执：放下 ${seating.placed}，缺口 ${seating.shortfall}。` });
+  const desk = catalog.find(item => item.id === 'table');
+  if (!desk) throw new Error('CATALOG_MISSING');
+  const objectCountBeforeSearch = previewScene.objects.length;
+  const freeAreas = findFreeAreas(previewScene, { width: desk.size.width, depth: desk.size.depth, height: desk.size.height, clearance: 0.2, limit: 3 });
+  const freeAreaUnused = previewScene.objects.length === objectCountBeforeSearch;
+  memory = refresh(memory, preview, { freeAreaUnused });
+  evaluations.push(evaluation(
+    'find_free_areas',
+    freeAreas.note,
+    `空位候选 ${freeAreas.sites.length} 处。试排缺口仍是 ${preview.shortfall}，没有把候选写进场景。`,
+    false,
+    preview.shortfall,
+    '找到几何空位也不能宣布人数或库存已经满足。',
+  ));
+  trace.push({ phase: 'feedback', summary: `find_free_areas：${freeAreas.sites.length} 个候选，缺口保持 ${preview.shortfall}。` });
   trace.push({ phase: 'preview', summary: '试排结果只是预览，没有写入已确认方案。' });
   const blocked = confirmSeating(preview);
+  const seatingBypass = applySeatingPreview(preview, 'bypass');
   trace.push({ phase: 'confirm', summary: `座位预览不能确认：${blocked.code}。` });
 
   const compound = read(COMMUNITY_LECTURE_TURNS[4]);
@@ -346,35 +400,45 @@ export function runCommunityLectureCase() {
   memory = refresh(memory, preview);
   const staleBlocked = confirmSeating(preview);
   trace.push({ phase: 'confirm', summary: `人数已改，旧试排不能确认：${staleBlocked.code}。` });
-  trace.push({ phase: 'select', summary: `同一句保留：${compound.intents.join('、')}。` });
+  const held = read(COMMUNITY_LECTURE_TURNS[5]);
+  memory = refresh(memory, preview, { freeAreaUnused });
+  trace.push({ phase: 'select', summary: `同一句保留：${compound.intents.join('、')}。座位确认继续搁置：${held.intents.join('、')}。` });
   const bom = digitalBom(previewScene);
   evaluations.push(evaluation('get_bom', bom.notice, `数字椅子 ${bom.counts.chair ?? 0} 把，口述 80 把，人数 ${attendancePeople(memory) ?? '未知'}。三者不相等。`, false, preview?.shortfall ?? null, '清单完整不能用来宣布库存已经够。'));
   trace.push({ phase: 'feedback', summary: bom.notice });
-  const missed = editor.execute('agent', { op: 'move', id: HALLUCINATED_ID, position: { x: 1, z: 1 } }, 'shared');
+  const missed = editor.execute('agent', { op: 'move', id: HALLUCINATED_ID, position: { x: 1, z: 1 }, baseRevision: editor.snapshot().revision }, 'shared');
   trace.push({ phase: 'repair', actor: 'agent', summary: `虚构物件被拒绝：${missed.ok ? 'ok' : missed.code}。` });
-  const bypass = editor.execute('agent', { op: 'move', id: RECEPTION_ID, position: { x: 1, z: 1 } }, 'bypass');
-  trace.push({ phase: 'repair', actor: 'agent', summary: `绕过校验被拒绝：${bypass.ok ? 'ok' : bypass.code}。` });
-  const planned = planMove(COMMUNITY_LECTURE_TURNS[4], editor.snapshot().objects);
+  const planned = planMove(COMMUNITY_LECTURE_TURNS[4], editor.snapshot().objects, editor.snapshot().revision);
   if (planned.status !== 'ready') throw new Error(planned.reason);
-  const shortcutCommand = planMove(COMMUNITY_LECTURE_TURNS[4], editor.snapshot().objects);
-  const moved = editor.execute('agent', planned.command, 'shared');
-  const locked = editor.execute('shortcut', { op: 'move', id: LOCKED_ID, position: { x: 7, z: 1 } }, 'shared');
-  trace.push({ phase: 'preview', actor: 'agent', summary: '签到桌移动进入预览。案例把“左”记为 x 减少 1 米，这不是现场方位。' });
-  trace.push({ phase: 'feedback', actor: 'shortcut', summary: `锁定物件不能移动：${locked.ok ? 'ok' : locked.code}。` });
+  const bypassLog = rejectBypassChannels(editor, planned.command);
+  trace.push({ phase: 'repair', summary: `绕过通道 ${bypassLog.length} 次都没有改草稿。` });
+  const shortcutMoved = editor.execute('shortcut', planned.command, 'shared');
+  const stale = editor.execute('agent', planned.command, 'shared');
+  const replanned = planMove(COMMUNITY_LECTURE_TURNS[4], editor.snapshot().objects, editor.snapshot().revision);
+  trace.push({ phase: 'repair', actor: 'agent', summary: `过期命令被拒绝：${stale.ok ? 'ok' : stale.code}。重新读取后的修订号是 ${replanned.status === 'ready' ? replanned.command.baseRevision : '未知'}，没有再往左移一米。` });
+  const locked = editor.execute('shortcut', { op: 'move', id: LOCKED_ID, position: { x: 7, z: 1 }, baseRevision: editor.snapshot().revision }, 'shared');
+  const bypassConfirm = editor.confirm('button', 'bypass');
+  trace.push({ phase: 'preview', actor: 'shortcut', summary: '签到桌移动进入预览。案例把“左”记为 x 减少 1 米，这不是现场方位。' });
+  trace.push({ phase: 'feedback', actor: 'shortcut', summary: `锁定物件不能移动：${locked.ok ? 'ok' : locked.code}。确认按钮走旁路也被拒绝：${bypassConfirm.ok ? 'ok' : bypassConfirm.code}。` });
   const confirmed = editor.confirm('button', 'shared');
   const undone = editor.undo('button', 'shared');
   const restored = editor.undo('agent', 'shared');
-  const replayed = editor.execute('shortcut', shortcutCommand.status === 'ready' ? shortcutCommand.command : planned.command, 'shared');
-  const reconfirmed = editor.confirm('agent', 'shared');
-  trace.push({ phase: 'confirm', actor: 'button', summary: `移动曾确认：${confirmed.ok}；撤销后回到未移动：x=${restored.objects.find(item => item.id === RECEPTION_ID)?.position.x}；再次确认：${reconfirmed.ok}。` });
+  const replayed = editor.execute('agent', planned.command, 'shared');
+  const reconfirmed = editor.confirm('shortcut', 'shared');
+  trace.push({ phase: 'confirm', summary: `移动曾确认：${confirmed.ok}；撤销后回到未移动：x=${restored.objects.find(item => item.id === RECEPTION_ID)?.position.x}；再次确认：${reconfirmed.ok}。` });
   const commandProof = {
-    moved: moved.ok,
+    shortcutMoved: shortcutMoved.ok,
+    stale: stale.ok ? null : stale.code,
+    discardedReplan: replanned.status === 'ready' ? replanned.command : null,
     confirmed: confirmed.ok,
+    bypassConfirm: bypassConfirm.ok ? null : bypassConfirm.code,
     undone: undone.ok,
     restoredX: restored.objects.find(item => item.id === RECEPTION_ID)?.position.x ?? null,
     replayed: replayed.ok,
     reconfirmed: reconfirmed.ok,
+    finalRevision: editor.snapshot().revision,
   };
+  const factWrites = (['headcount_from_chairs', 'suggestion_as_fact', 'v2_label'] as const).flatMap(kind => (['shared', 'bypass'] as const).map(channel => ({ kind, channel, ...writeConfirmedFact({ channel, kind }) })));
 
   const readback = {
     attendance: memory.attendance,
@@ -390,7 +454,12 @@ export function runCommunityLectureCase() {
     objects: editor.snapshot().objects,
     bom,
     factsConfirmed: false,
+    freeAreaSites: freeAreas.sites.length,
+    layoutHeld: held.memory.layout.status,
   };
+  memory = refresh(memory, preview, { freeAreaUnused });
+  readback.unknowns = memory.unknowns;
+  readback.deferred = memory.deferred;
   trace.push({ phase: 'readback', summary: '回读仍分开保留人数、口述椅子、数字物件、假设场地和未知的行动辅助。' });
 
   return {
@@ -403,11 +472,16 @@ export function runCommunityLectureCase() {
     readback,
     editor,
     v2,
+    v2Forced,
     guardedReplies,
     toolSelections: { firstTools, exploreTools, chosen },
     blockedSeating: blocked,
     staleBlocked,
-    bypassRejected: bypass.ok ? null : bypass.code,
+    bypassRejected: bypassLog.find(item => item.actor === 'agent' && item.op === 'execute')?.code ?? null,
+    bypassLog,
+    seatingBypass,
+    factWrites,
+    freeAreas: { sites: freeAreas.sites.length, note: freeAreas.note, objectCount: previewScene.objects.length },
     missedObject: missed.ok ? null : missed.code,
     lockedRejected: locked.ok ? null : locked.code,
     commandProof,
@@ -489,7 +563,7 @@ function attendancePeople(memory: ExploreMemory): number | null {
   return memory.attendance.status === 'unknown' ? null : memory.attendance.people;
 }
 
-function refresh(memory: ExploreMemory, preview?: SeatingPreview | null): ExploreMemory {
+function refresh(memory: ExploreMemory, preview?: SeatingPreview | null, extras?: { freeAreaUnused?: boolean }): ExploreMemory {
   const unknowns = ['出入口与门扇'];
   if (memory.attendance.status === 'unknown') unknowns.push('本场人数还不知道');
   else unknowns.push('本场人数尚未核定');
@@ -501,6 +575,7 @@ function refresh(memory: ExploreMemory, preview?: SeatingPreview | null): Explor
   if (memory.venue.status === 'assumption') unknowns.push('场地尺寸是假设，不是实测');
   if (preview && preview.shortfall > 0) unknowns.push('试排仍有缺口');
   if (preview?.stale) unknowns.push('人数改过，旧试排已过期');
+  if (extras?.freeAreaUnused) unknowns.push('空位候选没有补上试排缺口');
   return { ...memory, unknowns };
 }
 
@@ -511,6 +586,7 @@ function replyFor(memory: ExploreMemory, intents: IntentKind[]): string {
     return `人数改为${people ?? '未知'}。移动和物料清单会分开处理，不会因为后半句要清单就丢掉前半句。`;
   }
   if (intents.includes('preview_seating')) return `按建议预览一人一桌，人数用你说过的 ${people ?? '未知'} 人，不用 ${chairs?.count ?? '椅子'} 把椅子。这仍是预览。`;
+  if (intents.includes('hold_confirm')) return '座位先保持为建议，不确认。未知项还留着，也不反复追问。';
   if (intents.includes('assume_venue')) return `先按假设的 ${memory.venue.widthM}×${memory.venue.depthM} 米看看。这不是实测，也不会因此选定课桌式。`;
   if (intents.includes('report_inventory')) {
     const approx = memory.attendance.status === 'approximate' ? '大约 ' : '';
