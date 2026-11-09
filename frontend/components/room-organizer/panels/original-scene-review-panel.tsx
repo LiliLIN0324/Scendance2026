@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from 'react';
 import {originalMovableObjects,previewOriginalObjectMove,verifyOriginalMoveSnapshot} from '../lib/original-scene-local-preview';
+import {bindCandidate,decideConfirmation,requirementFromText,type CandidateTicket,type RequirementState} from '../lib/confirmation-guard';
 
 export interface OriginalSceneRecord { scene:unknown; revision:number; originalSceneHash:string }
 export interface OriginalSceneReviewChange { path:string; before:{present:boolean;value?:unknown}; after:{present:boolean;value?:unknown} }
@@ -59,7 +60,7 @@ function downloadOriginal(text:string):void {
 function LocalMovePreview({record,isCurrent,allowConfirm,onConfirm}:{record:OriginalSceneRecord;isCurrent:()=>boolean;allowConfirm:boolean;onConfirm?:((snapshot:OriginalMoveConfirmation,isCandidateCurrent:()=>boolean)=>Promise<'committed'|'unknown'|'blocked'>)|undefined}):JSX.Element {
   const objects=originalMovableObjects(record.scene);
   const [objectId,setObjectId]=useState(''),[x,setX]=useState(''),[z,setZ]=useState('');
-  const [result,setResult]=useState<{snapshotText:string;view:OriginalMoveConfirmation}|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+  const [result,setResult]=useState<{snapshotText:string;view:OriginalMoveConfirmation;ticket:CandidateTicket;requirement:RequirementState}|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const version=useRef(0),confirming=useRef(false);useEffect(()=>()=>{version.current++;},[]);
   function changed(){version.current++;setResult(null);setNotice('');setBusy(false);}
   function choose(id:string){changed();setObjectId(id);const object=objects.find(item=>item.id===id);setX(object?String(object.x):'');setZ(object?String(object.z):'');}
@@ -69,12 +70,18 @@ function LocalMovePreview({record,isCurrent,allowConfirm,onConfirm}:{record:Orig
     try{const output=await previewOriginalObjectMove(record.scene,record.originalSceneHash,objectId,Number(x),Number(z));
       if(version.current!==captured||!current(isCurrent))return;
       const snapshotText=JSON.stringify({...output,revision:record.revision});
-      setResult({snapshotText,view:JSON.parse(snapshotText) as OriginalMoveConfirmation});
+      const requirement=requirementFromText(`${objectId}|${x}|${z}|${record.revision}|${output.candidateHash}`);
+      const ticket=bindCandidate('review',output.candidateHash,requirement);
+      if(!ticket)throw new Error('候选票据无法生成。');
+      setResult({snapshotText,view:JSON.parse(snapshotText) as OriginalMoveConfirmation,ticket,requirement});
     }catch{if(version.current===captured&&current(isCurrent))setNotice('无法生成预览，请检查原始记录、物件锁定状态和坐标。');}
     finally{if(version.current===captured&&current(isCurrent))setBusy(false);}
   }
   async function confirm(){
     if(!allowConfirm||!onConfirm||!result||confirming.current||!current(isCurrent)||result.view.changes.some(change=>!isReadableChange(change)))return;
+    const live=requirementFromText(`${objectId}|${x}|${z}|${record.revision}|${result.view.candidateHash}`);
+    const decision=decideConfirmation(result.ticket,{entry:'review',candidateId:result.ticket.candidateId,requirementVersion:result.ticket.requirementVersion},live);
+    if(!decision.ok){setNotice(decision.message);return;}
     const captured=version.current;confirming.current=true;setBusy(true);setNotice('');
     try{
       const checked=await verifyOriginalMoveSnapshot({raw:record.scene,revision:record.revision,objectId,x:Number(x),z:Number(z),snapshotText:result.snapshotText,isCurrent:()=>version.current===captured&&current(isCurrent)});

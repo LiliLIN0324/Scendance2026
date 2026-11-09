@@ -10,6 +10,7 @@ import {
   readRecoveryCopy,
 } from '../lib/persistence';
 import { confirmReplace } from '../lib/restore-point';
+import { bindCandidate, captureProtection, confirmEntry, requirementFromText } from '../lib/confirmation-guard';
 import { PlanThumb } from './plan-thumb';
 import type { RecoveryCopy } from '../lib/persistence';
 import type { RoomLayout } from '../lib/types';
@@ -64,6 +65,14 @@ export function RecoveryEntry({ currentLayout, onLoad }: RecoveryEntryProps): JS
       refresh();
       return;
     }
+    const live = requirementFromText(`${fresh.key}:${fresh.raw}`);
+    const ticket = bindCandidate('restore', fresh.key, live);
+    const decision = ticket ? confirmEntry({
+      entry: 'restore', ticket,
+      claim: { entry: 'restore', candidateId: fresh.key, requirementVersion: ticket.requirementVersion },
+      live, baseline: captureProtection(currentLayout), candidate: fresh.layout,
+    }) : { ok: false as const, message: '恢复候选无法核对。' };
+    if (!decision.ok) { setStatus(decision.message); return; }
     if (!confirmReplace(currentLayout, 'the recovered copy')) return;
     onLoad(fresh.layout);
     setStatus('Restored the recovered copy. Undo brings back the house it replaced.');

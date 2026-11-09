@@ -29,6 +29,7 @@ import { MaterialCandidatesPanel } from './material-candidates-panel';
 import { CandidateInventoryPanel } from './candidate-inventory-panel';
 import { checkCandidateInventory, type CandidateInventory } from '../lib/candidate-inventory';
 import {captureOriginalPreservation,isStandalonePreservationInstruction,preservationIntent,reviewOriginalPreservation} from '../lib/original-preservation';
+import {acceptRequirement,bindCandidate,captureProtection,confirmEntry,emptyRequirement,isRequirementInput,requirementDigest,reviewProtection,type CandidateTicket,type RequirementState} from '../lib/confirmation-guard';
 import { ModelTextDisclosure } from './model-text-disclosure';
 import { hasMixedUtilityCommand } from '../lib/utility-shortcut-boundary';
 import {reviewLocalRoutes,type LocalRouteInput,type LocalRouteReview} from '../../../lib/local-route-review';
@@ -561,6 +562,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
   const memoryRef = useRef<BriefMemory>(initialBriefMemory());
   const memoryRevision = useRef(0);
+  // 需求版本只活在这次面板会话里。大面板里的地图圈地、空白场地不改这条状态机。
+  const requirementRef = useRef<RequirementState>(emptyRequirement());
+  const requirementEpoch = useRef(0);
+  const cloudTicket = useRef<CandidateTicket | null>(null);
   /** 未明确时不擅自添加舞台或签到。 */
   const anchorsRef = useRef({ stage: false, checkin: false });
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
@@ -573,7 +578,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   // 提案只活在这里：layout 一个字节都不动，所以自动存档、撤销栈、别人的选中态都不受影响。
   const proposal = useRef<PlanProposal | null>(null);
   const proposalSessionRef=useRef<string|null>(null);
-  function setLocalProposal(next:PlanProposal|null):void {
+  function setLocalProposal(next:PlanProposal|null, epoch=requirementEpoch.current):void {
+    if(next){
+      // 生成开始后如果又输入了新需求，这一版不能再挂上新版本号。
+      if(epoch!==requirementEpoch.current)return;
+      const artifact=next.artifact;
+      if(!artifact)return;
+      const entry=next.kind==='review'?'review':'proposal';
+      const ticket=bindCandidate(entry,artifact.id,requirementRef.current);
+      if(!ticket)return;
+      next={...next,artifact:{...artifact,confirmation:ticket}};
+    }
     const previous=proposal.current;
     if(next&&pendingCandidates&&!pendingCandidates.register('local',next))throw new Error('活动已变化，未保留旧方案预览。');
     if(!next&&previous)pendingCandidates?.clear('local',previous);
@@ -1365,7 +1380,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       : current?.expired ? '这版已经过期了，重新出一版再看。'
       : current?.stale ? CLOUD_STALE
       : comparisonOnly ? '这版未改变场景，仅供对照；可选择其他方案或重新生成。'
-      : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料：我不改锁着的东西，先解锁或换一版。`
+      : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料（${differences.filter(change=>change.before?.item.locked).map(change=>change.before!.item.id).join('、')}）：我不改锁着的东西，先解锁或换一版。`
       : requirementError ? requirementError
       : seatCheck.blocked ? seatCheck.blocked
       : restCheck.status === 'unknown' ? restCheck.message
@@ -1570,6 +1585,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   /** 云端那一版也不要留：撤回/改需求之后，画布上不该还挂着上一版的绿框。 */
   function discardCloudPreview(): void {
     confirmPending.current = false;
+    cloudTicket.current = null;
     if (studioRef.current?.preview) studioRef.current.discardPreview();
   }
 
@@ -1756,6 +1772,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** An explicit local-only candidate never enters the cloud scene contract. */
   async function runLocalSeatingDraft(token:number,scale:Scale,note:string):Promise<void> {
+    const requirementEpochAtStart=requirementEpoch.current;
     const owner=studioRef.current?.controller,base=live.current;
     if(!owner||!localDraftAllowed(owner)) { say({role:'agent',amber:true,text:'本地草案需要独立的本机活动；请先结束云端连接或等待正在进行的云端操作，原场景未改。'});setPhase('failed');return; }
     const annotations=readLocalDraftAnnotations();
@@ -1834,7 +1851,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         keptLocked:base.floors[activeFloorIndex]?.items.filter(item=>item.locked&&!isStructuralMarker(item)).length??0,
         dropped:result.shortfall+(requestedTables-placedTables),overlapCount:overlaps.count,overlapNames:overlaps.names,blocked:limitations.join(' ')||null,
         guests:result.requested,seats:result.placed,localDraftDetails,seatingWitness:result.seatingWitness,seatingReview:reviewLocalSeatingWitness(result.seatingWitness,result.layout)};
-      proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(plan,base));proposalBase.current=structuredClone(base);
+      if(requirementEpochAtStart!==requirementEpoch.current){say({role:'agent',amber:true,text:'生成期间需求已更新，这版候选已失效。'});setPhase('failed');return;}
+      proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(plan,base),requirementEpochAtStart);proposalBase.current=structuredClone(base);
       localDraftOwner.current=authority;shownSteps.current=0;
       await presentProposal(token,'先看本机课桌椅草案：');
     }catch(error){say({role:'agent',amber:true,text:error instanceof Error?error.message:'本地草案暂不能生成，原场景未改。'});setPhase('failed');}
@@ -1842,6 +1860,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 场地和布置都先在内存中生成，确认时连同物料变化一次应用。 */
   async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false, localDraftNote?:string): Promise<void> {
+    const requirementEpochAtStart=requirementEpoch.current;
     if(localDraftNote!==undefined){await runLocalSeatingDraft(token,scale,localDraftNote);return;}
     const before = live.current;
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
@@ -1886,10 +1905,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const differences = proposalDifferences(before, final);
     const removing = differences.filter(change => change.kind === 'removed' && change.before && !isStructuralMarker(change.before.item)).length;
     const added = differences.filter(change => change.kind === 'added' && change.after && !isStructuralMarker(change.after.item)).length;
-    const lockedChanged = differences.filter(change => change.before?.item.locked && !isStructuralMarker(change.before.item)).length;
-    plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}) };
+    const lockedIds = differences.filter(change => change.before?.item.locked && !isStructuralMarker(change.before.item)).map(change => change.before!.item.id);
+    const protection = captureProtection(before);
+    const lockedReview = protection ? reviewProtection(protection, final, { locks: true, preserve: null, structural: 'off' }) : { ok: false as const, message: '物件身份无法核对。' };
+    plan = { ...plan, removing, added, ...(!lockedReview.ok || lockedIds.length ? { blocked: !lockedReview.ok ? `这版会改动锁定物料：${lockedReview.message}` : `这版会改动锁定物料 ${lockedIds.join('、')}，请调整后重新生成。` } : {}) };
     if(!floorStillCurrent(floorToken)){say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
-    proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before)); proposalBase.current = structuredClone(before); shownSteps.current = 0;
+    if(requirementEpochAtStart!==requirementEpoch.current){say({role:'agent',amber:true,text:'生成期间需求已更新，这版候选已失效。'});setPhase('failed');return;}
+    proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before),requirementEpochAtStart); proposalBase.current = structuredClone(before); shownSteps.current = 0;
     await presentProposal(token);
   }
 
@@ -1954,6 +1976,20 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (!check.ok) { invalidateProposal(PLAN_OBSOLETE_COPY[check.reason]); return; }
       if (!planCoversLayout(plan.artifact, final)) { invalidateProposal(PLAN_OBSOLETE_COPY['layout-mismatch']); return; }
     }
+    const ticket=plan.artifact?.confirmation??null;
+    const entry=ticket?.entry??(plan.kind==='review'?'review':'proposal');
+    const baseline=captureProtection(expectedBase);
+    const preserve=memoryRef.current.originalPreservation;
+    const preserveIntent=preserve?preservationIntent(preserve.evidence):undefined;
+    const decision=confirmEntry({
+      entry,ticket,
+      claim:{entry,candidateId:ticket?.candidateId??'',requirementVersion:ticket?.requirementVersion??-1},
+      live:requirementRef.current,
+      baseline,
+      candidate:final,
+      preserve:preserveIntent?.keepAll?{keepAll:true,keepPositions:preserve!.keepPositions}:null,
+    });
+    if(!decision.ok){say({role:'agent',amber:true,text:decision.message});return;}
     const floor=proposalFloor.current!;
     // No asynchronous work may separate this final fence from the local apply.
     if(localDraftOwner.current && !localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
@@ -2003,6 +2039,18 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   function confirmCloud(): void {
     const current = studioRef.current;
     if (!current?.preview) { say({ role: 'agent', amber: true, text: '这版已经不在预览里了，重新出一版再确认。' }); return; }
+    const ticket=cloudTicket.current;
+    const saved=memoryRef.current.originalPreservation;
+    const intent=saved?preservationIntent(saved.evidence):undefined;
+    const decision=confirmEntry({
+      entry:'proposal',ticket,
+      claim:{entry:'proposal',candidateId:ticket?.candidateId??'',requirementVersion:ticket?.requirementVersion??-1},
+      live:requirementRef.current,
+      baseline:captureProtection(current.preview.base),
+      candidate:current.preview.layout,
+      preserve:intent?.keepAll?{keepAll:true,keepPositions:saved!.keepPositions}:null,
+    });
+    if(!decision.ok){say({role:'agent',amber:true,text:decision.message});return;}
     if (confirmPending.current) { say({role:'agent',text:'这版正在确认，请稍候；不会重复提交。'}); return; }
     if (current.stale || current.expired) { say({ role: 'agent', amber: true, text: CLOUD_STALE }); return; }
     const check = cloudViewOf(current.preview);
@@ -2063,8 +2111,15 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(suppressCancelledCloudPreview.current)return false;
     const preview = studioRef.current?.preview ?? null;
     const view = cloudViewOf(preview);
-    if (!view) return false;
-    if (announcedPreview.current === preview && phaseRef.current === 'proposed') return true;
+    if (!preview || !view) return false;
+    if (announcedPreview.current === preview && phaseRef.current === 'proposed') {
+      // 新需求清掉票据后，不能把同一份旧预览重新绑定到新版本。
+      return !!cloudTicket.current;
+    }
+    const previewKey=typeof preview.proposal.base_hash==='string'?preview.proposal.base_hash.slice(0,16):'preview';
+    const ticket=bindCandidate('proposal',`cloud:${requirementRef.current.version}:${previewKey}`,requirementRef.current);
+    if(!ticket)return false;
+    cloudTicket.current=ticket;
     announcedPreview.current = preview;
     lastSource.current = 'cloud';
     setProgress(GEN_STEPS.length); setPhase('proposed');
@@ -2100,6 +2155,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 出方案：连着云项目就让云端真 AI 算这一版，否则本地算候选。两条都停在「这版还在预览」。 */
   async function startGeneration(token: number, variant: number, note: string, scale: Scale, seatPriority = false): Promise<void> {
+    const requirementEpochAtStart=requirementEpoch.current;
     if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});setPhase('failed');return;}
     if (memoryRef.current.layoutModeConfirmed !== true || memoryRef.current.pendingBasicFacts?.length || memoryRef.current.layoutModeUnresolved || memoryRef.current.pendingActivityNeeds.length || memoryRef.current.unresolvedActivityNeeds.some(kind=>!(memoryRef.current.deferredActivityNeeds??[]).includes(kind)) || memoryRef.current.mobilityNeedsClarification || memoryRef.current.mobilityRequirement?.decision==='unknown') {
       say({ role: 'agent', amber: true, text: '还有需求待确认，请先核对后再生成方案。' });
@@ -2119,6 +2175,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         const conversationId=getActiveAssistantSessionId(sessionScope),boundId=boundSessionId.current;
         const result=await cloudRun(note);
         if(token===runToken.current&&sessionScopeIsCurrent()&&boundSessionId.current===boundId&&getActiveAssistantSessionId(sessionScope)===conversationId){
+          if(requirementEpochAtStart!==requirementEpoch.current){discardCloudPreview();say({role:'agent',amber:true,text:'生成期间需求已更新，这版候选已失效。'});setPhase('failed');return;}
           if(result?.kind==='unchanged'){setPhase('idle');setProgress(0);say({role:'agent',amber:true,text:result.message});}
           else if(!adoptCloudProposal())setPhase('failed');
         }
@@ -2356,6 +2413,15 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     if(!queued)say({ role: 'user', text: trimmed });
     if(isPureGreeting(trimmed)){say({role:'agent',text:'你好，我可以帮你梳理活动需求、查看方案或准备布置。'});return;}
+    if(isRequirementInput(trimmed)){
+      const nextRequirement=acceptRequirement(requirementRef.current,{inputId:`req-${requirementRef.current.version+1}-${requirementDigest(trimmed)}`,text:trimmed});
+      if(nextRequirement.version!==requirementRef.current.version){
+        // 只让旧票据失效。预览先留着，同一轮修订会盖上新票据；确认时对不上版本就不能应用。
+        requirementRef.current=nextRequirement;
+        requirementEpoch.current+=1;
+        cloudTicket.current=null;
+      }
+    }
     const keepOriginals=preservationIntent(trimmed);
     if(keepOriginals){
       if(keepOriginals.keepAll){

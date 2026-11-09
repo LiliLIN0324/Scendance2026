@@ -33,6 +33,17 @@ describe('explicit original preservation',()=>{
   candidate.floors[0]!.items[0]!.rotation=0;delete candidate.floors[0]!.items[0]!.position;
   expect(reviewOriginalPreservation(requirement,candidate).status).toBe('unknown');
  });
+ it('names the original id when a locked item changes size, even if the count stays the same',()=>{
+  const layout=base();
+  layout.floors[0]!.items[0]!.locked=true;
+  const requirement=captureOriginalPreservation(layout,'保留原有物件',false)!;
+  const candidate=structuredClone(layout);
+  candidate.floors[0]!.items[0]!.width=2;
+  const review=reviewOriginalPreservation(requirement,candidate);
+  expect(review.status).toBe('violated');
+  expect(review.message).toContain('desk');
+  expect(review.message).toContain('宽度');
+ });
  it('does not reuse identities across activities or accept a duplicate ID',()=>{
   const layout=base(),requirement=captureOriginalPreservation(layout,'保留原有物件',false)!;
   expect(reviewOriginalPreservation(requirement,{...layout,id:'activity-b'}).status).toBe('unknown');

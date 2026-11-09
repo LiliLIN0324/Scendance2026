@@ -9,6 +9,7 @@ import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { ScenePreview } from '../../business/scene-preview';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { bindCandidate, captureProtection, confirmEntry, requirementFromText, type CandidateTicket } from '../lib/confirmation-guard';
 import { mergeProposalPresentation } from '../lib/creative-brief';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
@@ -22,7 +23,7 @@ export interface MaterialCustomizationSeed {
 }
 interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; seed?: MaterialCustomizationSeed | undefined; active?: boolean }
 interface Context { scope: string; targetKey: string; base: RoomLayout; projectId: string | null; bindingKey: string; identityEpoch: number; revision: number | null; localRevision: number; generation?: number | undefined; sessionId: string }
-interface Preview { intent: Intent; context: Context; formKey: string; proposal: SceneProposal; before: AuthorizedAssets; after: AuthorizedAssets }
+interface Preview { intent: Intent; context: Context; formKey: string; proposal: SceneProposal; before: AuthorizedAssets; after: AuthorizedAssets; confirmation: CandidateTicket }
 interface Intent { customizeId: string; proposalId: string; proposalKey?: string; proposalExpiresAt?: number; proposalApplied?: boolean; variantId?: string }
 
 export function MaterialCustomization({ controller, layout, onApply, seed, active=true }: Props): JSX.Element {
@@ -177,7 +178,10 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
       await assertGeometryActionSource(captured.base,controller);
       if(!stillCurrent(captured)||token!==operation.current)return;
       if(!Number.isFinite(Date.parse(proposal.expires_at))||Date.parse(proposal.expires_at)<=Date.now())throw new Error('候选已过期，请重新预览。');
-      setPreview({intent,context:captured,formKey,proposal,before,after});setShowOriginal(false);
+      const requirement=requirementFromText(formKey);
+      const confirmation=bindCandidate('material',intent.proposalId,requirement);
+      if(!confirmation)throw new Error('物料候选票据无法生成。');
+      setPreview({intent,context:captured,formKey,proposal,before,after,confirmation});setShowOriginal(false);
       setNotice('候选已就绪，尚未修改场景。确认后只替换列出的物件，原资产版本保留。');
     } catch(error) { if(mounted.current&&token===operation.current)setNotice(assetError(error)); }
     finally { if(token===operation.current){pending.current=false;if(mounted.current)setBusy(false);} }
@@ -209,6 +213,9 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
         }
         if(next.backendSceneV2)for(const item of next.backendSceneV2.objects)item.notes=originalItems.get(item.id)?.notes??'';
       }
+      const live=requirementFromText(formKey);
+      const decision=confirmEntry({entry:'material',ticket:selected.confirmation,claim:{entry:'material',candidateId:selected.intent.proposalId,requirementVersion:selected.confirmation.requirementVersion},live,baseline:captureProtection(selected.context.base),candidate:next});
+      if(!decision.ok)throw new Error(decision.message);
       onApply(next);setPreview(null);setNotice('已应用到选定物件。原版本保留，可在此预览恢复父版本，也可使用画布撤销。');
     } catch(error) { if(mounted.current&&token===operation.current)setNotice(assetError(error)); }
     finally { if(token===operation.current){pending.current=false;if(mounted.current)setBusy(false);} }

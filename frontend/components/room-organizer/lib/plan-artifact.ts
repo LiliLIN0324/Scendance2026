@@ -1,3 +1,4 @@
+import type { CandidateTicket } from './confirmation-guard';
 import type { RoomLayout } from './types';
 
 /**
@@ -29,6 +30,8 @@ export interface PlanArtifact {
   counts: PlanArtifactCounts;
   /** 已经确认过的版本不再接受第二次确认。 */
   appliedAt?: number;
+  /** 确认时必须与当前需求版本一起核对；旧工件没有这张票据。 */
+  confirmation?: CandidateTicket;
 }
 
 export type PlanObsoleteReason = 'stale-base' | 'expired' | 'layout-mismatch' | 'already-applied';

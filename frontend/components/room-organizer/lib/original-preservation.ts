@@ -1,4 +1,5 @@
 import {readPreserveExisting} from '../../../../supabase/functions/_shared/user-preserve';
+import {reviewProtection, type ProtectedAttributes} from './confirmation-guard';
 import type {RoomLayout} from './types';
 
 /** User-declared preservation of objects present at the time of the instruction. */
@@ -6,7 +7,7 @@ export interface OriginalPreservation {
   activityId:string;
   evidence:string;
   keepPositions:boolean;
-  items:Array<{id:string;floorId:string;position:{x:number;z:number}|null;rotation:number|null;elevation:number|null}>;
+  items:Array<{id:string;floorId:string;position:{x:number;z:number}|null;rotation:number|null;elevation:number|null;locked?:boolean|undefined;width?:number|undefined;depth?:number|undefined;height?:number|undefined;type?:string|undefined;name?:string|undefined;assetId?:string|null|undefined;notes?:string|null|undefined;color?:string|undefined}>;
 }
 export type OriginalPreservationCheck = {status:'not_requested'|'pass'|'violated'|'unknown';message:string|null};
 
@@ -42,7 +43,9 @@ export function captureOriginalPreservation(layout:RoomLayout,evidence:string,ke
       const p=item.position;
       items.push({id:item.id,floorId:floor.id,position:p&&Number.isFinite(p.x)&&Number.isFinite(p.z)?{x:p.x,z:p.z}:null,
         rotation:item.rotation===undefined?0:Number.isFinite(item.rotation)?item.rotation:null,
-        elevation:item.elevation===undefined?0:Number.isFinite(item.elevation)?item.elevation:null});
+        elevation:item.elevation===undefined?0:Number.isFinite(item.elevation)?item.elevation:null,
+        locked:item.locked===true,width:item.width,depth:item.depth,height:item.height,type:item.type,name:item.name,
+        assetId:item.assetId??null,notes:item.notes??null,color:item.color});
     }
   }
   return {activityId:layout.id,evidence,keepPositions,items};
@@ -58,18 +61,24 @@ export function reviewOriginalPreservation(requirement:OriginalPreservation|unde
     if(!floor.id||!Array.isArray(floor.items))return {status:'unknown',message:'原物保留要求暂时无法核对，请重新说明后生成。'};
     for(const item of floor.items){if(!item.id||next.has(item.id))return {status:'unknown',message:'物件身份无法核对，请重新生成。'};next.set(item.id,{floorId:floor.id,item});}
   }
-  const seen=new Set<string>();let missing=0,moved=0,unknown=false;
-  for(const old of requirement.items){
-    if(!old.id||seen.has(old.id)){unknown=true;continue;}seen.add(old.id);
-    const found=next.get(old.id);if(!found){missing++;continue;}
-    if(requirement.keepPositions){
-      const p=found.item.position,r=found.item.rotation??0,e=found.item.elevation??0;
-      if(!old.position||old.rotation===null||old.elevation===null||!p||!Number.isFinite(p.x)||!Number.isFinite(p.z)||!Number.isFinite(r)||!Number.isFinite(e)){unknown=true;continue;}
-      const angleDelta=Math.atan2(Math.sin(old.rotation-r),Math.cos(old.rotation-r));
-      if(old.floorId!==found.floorId||Math.abs(old.position.x-p.x)>1e-9||Math.abs(old.position.z-p.z)>1e-9||Math.abs(angleDelta)>1e-9||Math.abs(old.elevation-e)>1e-9)moved++;
-    }
+  const baseline:ProtectedAttributes[]=requirement.items.map(item=>({
+    id:item.id,floorId:item.floorId,locked:item.locked===true,structural:false,position:item.position,rotation:item.rotation,elevation:item.elevation,
+    ...(item.width!==undefined?{width:item.width}:{}),...(item.depth!==undefined?{depth:item.depth}:{}),...(item.height!==undefined?{height:item.height}:{}),
+    ...(item.type!==undefined?{type:item.type}:{}),...(item.name!==undefined?{name:item.name}:{}),
+    ...(item.assetId!==undefined?{assetId:item.assetId}:{}),...(item.notes!==undefined?{notes:item.notes}:{}),...(item.color!==undefined?{color:item.color}:{}),
+  }));
+  const reviewed=reviewProtection(baseline,candidate,{locks:baseline.some(item=>item.locked),preserve:{keepAll:true,keepPositions:requirement.keepPositions},structural:'off'});
+  if(!reviewed.ok){
+    if(reviewed.issues.some(issue=>issue.code==='UNKNOWN'||issue.code==='DUPLICATE'))return {status:'unknown',message:'原物位置或身份信息不完整，暂无法核对保留要求。'};
+    const missing=reviewed.issues.filter(issue=>issue.code==='MISSING');
+    const moved=reviewed.issues.filter(issue=>issue.code==='MOVED');
+    const attributes=reviewed.issues.filter(issue=>issue.code==='ATTRIBUTE');
+    const parts=[
+      missing.length?`${missing.length} 件原物被移除（${missing.map(issue=>issue.id).join('、')}）`:'',
+      moved.length?`${moved.length} 件原物位置或方向改变（${moved.map(issue=>issue.id).join('、')}）`:'',
+      attributes.length?attributes.map(issue=>`物件 ${issue.id} 的${issue.attribute??'保护属性'}已变化`).join('，'):'',
+    ].filter(Boolean);
+    return {status:'violated',message:`这版与保留原物要求冲突：${parts.join('，')}；请调整后重新核对。`};
   }
-  if(missing||moved)return {status:'violated',message:`这版与保留原物要求冲突：${missing?`${missing} 件原物被移除` : ''}${missing&&moved?'，':''}${moved?`${moved} 件原物位置或方向改变`:''}；请调整后重新核对。`};
-  if(unknown)return {status:'unknown',message:'原物位置或身份信息不完整，暂无法核对保留要求。'};
   return {status:'pass',message:null};
 }

@@ -1,5 +1,6 @@
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { layoutReducer } from '../hooks/layout-reducer';
+import { captureProtection, reviewProtection } from './confirmation-guard';
 import { withHouseId } from './ids';
 import { parseLayoutEventOperations } from './schema';
 import type { RoomLayout } from './types';
@@ -39,10 +40,18 @@ export function validateCandidateApply(before: RoomLayout, candidate: RoomLayout
       if(!target)return {ok:false,reason:`候选未保留楼层「${floor.name}」，请先核对；原方案未更改。`};
       for(const zone of floor.zones ?? []) if(!(target.zones ?? []).some(value=>value.id===zone.id))
         return {ok:false,reason:`候选未保留区域「${zone.name}」，请先核对；原方案未更改。`};
+    }
+    const baseline=captureProtection(before);
+    if(!baseline)return {ok:false,reason:'物件身份无法核对，未应用。'};
+    const protection=reviewProtection(baseline,candidate,{locks:true,preserve:null,structural:'off'});
+    if(!protection.ok)return {ok:false,reason:`候选未完整保留锁定物件：${protection.message}请先核对；原方案未更改。`};
+    for(const floor of before.floors) {
+      const target=candidate.floors.find(value=>value.id===floor.id);
+      if(!target)return {ok:false,reason:`候选未保留楼层「${floor.name}」，请先核对；原方案未更改。`};
       for(const item of floor.items) if(item.locked) {
         const preserved=target.items.find(value=>value.id===item.id);
         if(!preserved || !sameRecoveryFormValue(item,preserved))
-          return {ok:false,reason:`候选未完整保留锁定物件「${item.name}」，请先核对；原方案未更改。`};
+          return {ok:false,reason:`候选未完整保留锁定物件「${item.name}」（编号 ${item.id}），请先核对；原方案未更改。`};
       }
     }
     if (!parseLayoutEventOperations(candidate)) return {ok:false,reason:'候选布局资料无效，未应用。'};

@@ -15,6 +15,7 @@ import { referenceSceneBasis, referenceStructure, resolveReferenceImage, type Re
 import { containedImagePoint, parseDimensionText, readSourceForm, readSourceRecordSnapshot, storeSourceForm, registerSourceFlush, type ImagePoint, type SourceWriteGuard } from '@/lib/source-storage';
 import { FloorPlanRuler, type RulerConfirmation } from './floor-plan-ruler';
 import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
+import { bindCandidate, captureProtection, confirmEntry, requirementFromText, type CandidateTicket } from '../lib/confirmation-guard';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { reconstructionSafetyChecklist } from '../../../../supabase/functions/_shared/reconstruction-safety';
 import { useSelection } from '../contexts';
@@ -103,6 +104,13 @@ interface VenueEditDraft {
   base: RoomLayout; scene: SceneV2; sceneKey: string; sourceKey: string; images: VenuePhoto[];
   epoch: number; sessionKey: string; width: string; depth: string;
   openings: SceneV2['structure']['openings']; confirmed: boolean;
+  confirmation: CandidateTicket | null;
+}
+function venueRequirement(draft: Pick<VenueEditDraft, 'width' | 'depth' | 'openings'>) {
+  return requirementFromText(canonical({
+    width: draft.width, depth: draft.depth,
+    openings: draft.openings.map(opening => ({ id: opening.id, wallId: opening.wallId, kind: opening.kind, offset: opening.offset, width: opening.width, height: opening.height, sillHeight: opening.sillHeight })),
+  }));
 }
 function venueSourceKey(images: VenuePhoto[]): string {
   return canonical(images.map(image=>({id:image.id,kind:image.kind??'photo',assetId:image.assetId,width:image.width,height:image.height})));
@@ -402,7 +410,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
       if(!sameRecoveryFormValue(current,layoutRef.current))throw new Error('场景已变化，请重新打开场地编辑。');
       const base=structuredClone(current),scene=readEditableVenue(base),sessionKey=venueSessionKey(controller,scopeRef.current);
       setVenueEdit({base,scene,sceneKey:currentSceneKey(base),sourceKey:venueSourceKey(sourceImages.current),images:[...sourceImages.current],
-        epoch:scopeEpoch.current.epoch,sessionKey,width:String(scene.venue.width),depth:String(scene.venue.depth),openings:structuredClone(scene.structure.openings),confirmed:false});
+        epoch:scopeEpoch.current.epoch,sessionKey,width:String(scene.venue.width),depth:String(scene.venue.depth),openings:structuredClone(scene.structure.openings),confirmed:false,confirmation:null});
     }catch(error){notifyVenue(errorText(error));}
   }
   function confirmVenueEdit():void {
@@ -414,6 +422,10 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
         venueSessionKey(controller,scopeRef.current)!==venueEdit.sessionKey)throw new Error('当前场景或编辑会话已变化，草稿未应用，请重新核对。');
       if(!sameRecoveryFormValue(getCurrentLayout?.()??layoutRef.current,venueEdit.base))throw new Error('场景已变化，草稿未应用，请重新核对。');
       const next=previewVenueEdit(venueEdit.base,{width:Number(venueEdit.width),depth:Number(venueEdit.depth),openings:venueEdit.openings});
+      const live=venueRequirement(venueEdit);
+      const ticket=venueEdit.confirmation;
+      const decision=confirmEntry({entry:'rebuild',ticket,claim:{entry:'rebuild',candidateId:ticket?.candidateId??'',requirementVersion:ticket?.requirementVersion??-1},live,baseline:captureProtection(venueEdit.base),candidate:next});
+      if(!decision.ok)throw new Error(decision.message);
       const frameChanged=next.width!==venueEdit.base.width||next.height!==venueEdit.base.height;
       onApply(next,{expectedBase:venueEdit.base});patch({width:String(next.width),depth:String(next.height)});setVenueEdit(null);
       notifyVenue(`场地修改已应用，可撤销，并沿用当前场景的本机保存。${frameChanged?'总宽或总深已变化，相关墙、门窗和原图尺寸需重新核对。':'原图对应的尺度保持。'}${cloud.project&&!localActivity?'云端保存状态请查看项目面板。':''}`,currentSceneKey(next));
@@ -662,9 +674,9 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
       {!venueEdit?<><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
         <p className="cr-hint">固定图中参考角 (0,0)，调整对边；门窗距离从所属墙的起点计算。</p>
         <fieldset disabled={!!venueStale||venueBlocked} className="rc-venue-fields"><legend>场地编辑草稿 · 尚未应用</legend>
-          <div className="rc-measures rc-venue-measures">{([['width','总宽'],['depth','总深']] as const).map(([key,label])=><label key={key}>{label}（米）<input type="number" step="0.001" min="0.02" max="200" aria-label={`编辑${label}（米）`} value={venueEdit[key]} onChange={event=>{const value=event.target.value;setVenueEdit(current=>current?{...current,[key]:value,confirmed:false}:null);notifyVenue('');}}/></label>)}</div>
+          <div className="rc-measures rc-venue-measures">{([['width','总宽'],['depth','总深']] as const).map(([key,label])=><label key={key}>{label}（米）<input type="number" step="0.001" min="0.02" max="200" aria-label={`编辑${label}（米）`} value={venueEdit[key]} onChange={event=>{const value=event.target.value;setVenueEdit(current=>current?{...current,[key]:value,confirmed:false,confirmation:null}:null);notifyVenue('');}}/></label>)}</div>
           {venueEdit.openings.map((opening,index)=><details key={opening.id}><summary>{opening.kind==='door'?'门洞':'窗户'} {index+1} · 墙 {venueEdit.scene.structure.walls.findIndex(wall=>wall.id===opening.wallId)+1}</summary><div className="rc-measures rc-venue-measures">
-            {(['offset','width','height','sillHeight'] as const).map(key=><NumberField key={key} label={`${opening.kind==='door'?'门洞':'窗户'} ${index+1} · ${{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'离地高度'}[key]}（米）`} value={opening[key]} onChange={value=>{setVenueEdit(current=>current?{...current,confirmed:false,openings:current.openings.map(item=>item.id===opening.id?{...item,[key]:value}:item)}:null);notifyVenue('');}}/>)}
+            {(['offset','width','height','sillHeight'] as const).map(key=><NumberField key={key} label={`${opening.kind==='door'?'门洞':'窗户'} ${index+1} · ${{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'离地高度'}[key]}（米）`} value={opening[key]} onChange={value=>{setVenueEdit(current=>current?{...current,confirmed:false,confirmation:null,openings:current.openings.map(item=>item.id===opening.id?{...item,[key]:value}:item)}:null);notifyVenue('');}}/>)}
           </div></details>)}
           {venueCandidate.layout?.backendSceneV2&&<><VenueEditDrawing before={venueEdit.scene} after={venueCandidate.layout.backendSceneV2}/><p className="cr-hint">灰色虚线为原场地，绿色为草稿，橙色为门窗。所属外墙移动时，门窗位置也会变化，请对照核实。</p><p>总宽 {venueEdit.scene.venue.width} → {venueCandidate.layout.width} 米；总深 {venueEdit.scene.venue.depth} → {venueCandidate.layout.height} 米。</p>{venueCandidate.layout.backendSceneV2.structure.openings.map((opening,index)=>{
             const before=venueEdit.scene.structure.openings.find(item=>item.id===opening.id)!;
@@ -673,7 +685,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
             return changed?<p key={opening.id}>{opening.kind==='door'?'门洞':'窗户'} {index+1} 的位置或尺寸有变化，请核对图中橙色标记。</p>:null;
           })}</>}
           {venueCandidate.error&&<p role="alert" className="cr-notice">{venueCandidate.error} 草稿尚未应用，原场地保持。</p>}
-          <label className="cr-check"><input type="checkbox" disabled={!venueCandidate.layout||!venueChanged} checked={venueEdit.confirmed} onChange={event=>{const confirmed=event.target.checked;setVenueEdit(current=>current?{...current,confirmed}:null);}}/><span>我已核对修改后的尺寸、门窗位置和现场条件</span></label>
+          <label className="cr-check"><input type="checkbox" disabled={!venueCandidate.layout||!venueChanged} checked={venueEdit.confirmed} onChange={event=>{const confirmed=event.target.checked;setVenueEdit(current=>{if(!current)return null;if(!confirmed)return {...current,confirmed,confirmation:null};const requirement=venueRequirement(current);return {...current,confirmed,confirmation:bindCandidate('rebuild',`rebuild:${requirement.digest}`,requirement)};});}}/><span>我已核对修改后的尺寸、门窗位置和现场条件</span></label>
         </fieldset>
         {venueStale&&<p role="alert" className="cr-notice">{venueStale}</p>}
         <div className="rc-actions"><button type="button" className="rc-secondary" onClick={()=>{setVenueEdit(null);notifyVenue('已取消编辑，原场地保持。');}}>取消场地编辑</button><button type="button" className="rc-secondary" disabled={!venueCandidate.layout||!venueEdit.confirmed||!venueChanged||!!venueStale||venueBlocked} onClick={confirmVenueEdit}>确认应用场地修改</button></div>
