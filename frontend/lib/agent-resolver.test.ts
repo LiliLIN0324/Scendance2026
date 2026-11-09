@@ -514,7 +514,38 @@ describe('model requirements', () => {
     const turn=await resolveBriefTurn('继续',previous,context,{briefExtract});
     expect(turn.resolution).toBe('failed');expect(turn.modelNotice).toContain(message);
     expect(turn.modelNotice).not.toContain(code);expect(turn.modelNotice).not.toContain('secret diagnostic');
+    expect(turn.modelDiagnostic).toMatchObject({code,status});
+    expect(JSON.stringify(turn.modelDiagnostic)).not.toContain('secret');
     expect(turn.memory.headcount).toBe(80);expect(briefExtract).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['CONVERSATION_API_NOT_CONFIGURED',503,'config','完成配置'],
+    ['SESSION_CHANGED',409,'session','登录状态已变化'],
+    ['NETWORK_ERROR',0,'network','网络请求没有完成'],
+    ['NON_JSON_RESPONSE',502,'non_json','无法读取'],
+    ['INVALID_RESPONSE',502,'contract','未通过校验'],
+    ['HTTP_ERROR',500,'http','暂不可用'],
+  ] as const)('classifies thrown transport failure %s without the generic-only path',async(code,status,category,message)=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefConversation=vi.fn().mockRejectedValue(new SceneApiError(code,status,{body:'<html>secret gateway</html>'}));
+    const turn=await resolveBriefTurn('80人发布会，室内12×9，安排签到和主舞台',initialBriefMemory(),context,{briefExtract:vi.fn(),briefConversation},undefined,{history:[]});
+    expect(turn.resolution).toBe('failed');
+    expect(turn.modelNotice).toContain(message);
+    expect(turn.modelNotice).not.toContain(code);
+    expect(turn.modelNotice).not.toContain('secret gateway');
+    expect(turn.modelDiagnostic).toEqual({category,code,status});
+    expect(turn.modelReply).toBeUndefined();
+  });
+
+  it('keeps a classified model failure instead of the unclassified catch',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefConversation=vi.fn().mockResolvedValue({enabled:true,extraction:null,reply:null,unhandled:[],factEvidence:[],reason:'MODEL_INVALID_RESPONSE'});
+    const turn=await resolveBriefTurn('80人发布会，室内12×9，安排签到和主舞台',initialBriefMemory(),context,{briefExtract:vi.fn(),briefConversation},undefined,{history:[]});
+    expect(turn.resolution).toBe('unavailable');
+    expect(turn.modelNotice).toContain('未通过校验');
+    expect(turn.modelNotice).not.toContain('暂不可用');
+    expect(turn.modelDiagnostic).toEqual({category:'provider',code:'MODEL_INVALID_RESPONSE'});
   });
 
   it.each([
