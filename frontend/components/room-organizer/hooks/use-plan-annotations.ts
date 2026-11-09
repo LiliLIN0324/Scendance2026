@@ -172,6 +172,10 @@ export interface UsePlanAnnotationsResult {
   addUserRouteFromPoints(points: PlanPoint[], label: string, binding: UserRouteBinding): boolean;
   /** Unknown after imported/replaced drafts, refresh, scope change, or geometry change. */
   getUserRouteProvenance(annotationId: string): UserRouteProvenance | null;
+  /** Session-only floor evidence; caller must fence activity, floor and drawing epochs. */
+  addUserAnnotationFromPoints(points:PlanPoint[],kind:'zone'|'measure',label:string,binding:UserRouteBinding,zoneType?:ZoneSemanticType):boolean;
+  addUserDoorAnnotation(door:{wall:PlanDoorWall;position:number;widthM?:number},binding:UserRouteBinding):boolean;
+  getUserAnnotationFloor(annotationId:string):string|null;
   /**
    * 批量落 zone 矩形（「回好自动落区」专用）。
    * 一次 dispatch 落多个矩形，id 在 reducer 里连续自增；没 draft 时自动建一份空草案。
@@ -194,6 +198,7 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
   const [state, setState] = useState<PlanAnnotationState>(initialState);
   const current = useRef<PlanAnnotationState>(initialState);
   const routes = useRef(new Map<string, { draftId:string; annotation:string; floorId:string; isCurrent:()=>boolean }>());
+  const floors = useRef(new Map<string, { draftId:string; annotation:string; floorId:string; isCurrent:()=>boolean }>());
   // Do not read a render closure when confirming a same-batch user edit.
   const dispatch = useCallback((action: Action) => {
     const next = reducer(current.current, action);
@@ -204,17 +209,17 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
   const getSnapshot = useCallback(() => structuredClone({draft:current.current.draft,revision:current.current.revision}), []);
   const clearDraftIfRevision = useCallback((revision: number): boolean => {
     if (!Number.isSafeInteger(revision) || current.current.revision !== revision || !current.current.draft) return false;
-    routes.current.clear();dispatch({type:'CLEAR_DRAFT'});return true;
+    routes.current.clear();floors.current.clear();dispatch({type:'CLEAR_DRAFT'});return true;
   }, [dispatch]);
   const replaceDraftIfRevision = useCallback((revision: number, draft: LayoutPlanDraft): boolean => {
     if (!Number.isSafeInteger(revision) || current.current.revision !== revision) return false;
-    routes.current.clear();dispatch({type:'REPLACE_DRAFT',draft:structuredClone(draft)});return true;
+    routes.current.clear();floors.current.clear();dispatch({type:'REPLACE_DRAFT',draft:structuredClone(draft)});return true;
   }, [dispatch]);
 
-  const startDraft = useCallback(() => {routes.current.clear();dispatch({ type: 'START_DRAFT' });}, [dispatch]);
-  const clearDraft = useCallback(() => {routes.current.clear();dispatch({ type: 'CLEAR_DRAFT' });}, [dispatch]);
+  const startDraft = useCallback(() => {routes.current.clear();floors.current.clear();dispatch({ type: 'START_DRAFT' });}, [dispatch]);
+  const clearDraft = useCallback(() => {routes.current.clear();floors.current.clear();dispatch({ type: 'CLEAR_DRAFT' });}, [dispatch]);
   const replaceDraft = useCallback(
-    (draft: LayoutPlanDraft) => {routes.current.clear();dispatch({ type: 'REPLACE_DRAFT', draft: structuredClone(draft) });},
+    (draft: LayoutPlanDraft) => {routes.current.clear();floors.current.clear();dispatch({ type: 'REPLACE_DRAFT', draft: structuredClone(draft) });},
     [dispatch],
   );
   const toggleVisible = useCallback(() => dispatch({ type: 'TOGGLE_VISIBLE' }), []);
@@ -279,6 +284,7 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
       const draft=current.current.draft,actual=draft?.annotations.filter(item=>item.id===id);
       if(!draft||actual?.length!==1||JSON.stringify(actual[0])!==JSON.stringify(annotation)||!binding.isCurrent())return false;
       routes.current.set(id,{draftId:draft.id,annotation:JSON.stringify(actual[0]),floorId:binding.floorId,isCurrent:binding.isCurrent});
+      floors.current.set(id,{draftId:draft.id,annotation:JSON.stringify(actual[0]),floorId:binding.floorId,isCurrent:binding.isCurrent});
       return true;
     }catch{return false;}
   },[dispatch]);
@@ -326,6 +332,35 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     [dispatch],
   );
 
+  const captureUserAnnotation = useCallback((binding:UserRouteBinding,append:()=>void):boolean=>{
+    try {
+      if(!binding.floorId.trim()||!binding.isCurrent()||(binding.isDrawingCurrent&&!binding.isDrawingCurrent()))return false;
+      const id=`ann-${current.current.nextId}`;
+      append();
+      const draft=current.current.draft,found=draft?.annotations.filter(item=>item.id===id);
+      if(!draft||found?.length!==1||!binding.isCurrent())return false;
+      floors.current.set(id,{draftId:draft.id,annotation:JSON.stringify(found[0]),floorId:binding.floorId,isCurrent:binding.isCurrent});
+      return true;
+    }catch{return false;}
+  },[]);
+  const addUserAnnotationFromPoints=useCallback((points:PlanPoint[],kind:'zone'|'measure',label:string,binding:UserRouteBinding,zoneType?:ZoneSemanticType):boolean=>{
+    if(points.length!==2||points.some(point=>!Number.isFinite(point.x)||!Number.isFinite(point.z)))return false;
+    return captureUserAnnotation(binding,()=>addAnnotationFromPoints(structuredClone(points),kind,label,zoneType));
+  },[addAnnotationFromPoints,captureUserAnnotation]);
+  const addUserDoorAnnotation=useCallback((door:{wall:PlanDoorWall;position:number;widthM?:number},binding:UserRouteBinding):boolean=>{
+    if(!['north','south','east','west'].includes(door.wall)||!Number.isFinite(door.position))return false;
+    return captureUserAnnotation(binding,()=>addDoorAnnotation({...door}));
+  },[addDoorAnnotation,captureUserAnnotation]);
+  const getUserAnnotationFloor=useCallback((id:string):string|null=>{
+    try{
+      const entry=floors.current.get(id),draft=current.current.draft;
+      if(!entry||!draft||draft.id!==entry.draftId||!entry.isCurrent()){floors.current.delete(id);return null;}
+      const found=draft.annotations.filter(item=>item.id===id);
+      if(found.length!==1||JSON.stringify(found[0])!==entry.annotation){floors.current.delete(id);return null;}
+      return entry.floorId;
+    }catch{return null;}
+  },[]);
+
   const annotations = useMemo(
     () => (state.draft ? state.draft.annotations : []),
     [state.draft],
@@ -348,6 +383,9 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     addAnnotationFromPoints,
     addUserRouteFromPoints,
     getUserRouteProvenance,
+    addUserAnnotationFromPoints,
+    addUserDoorAnnotation,
+    getUserAnnotationFloor,
     addZoneRects,
     addDoorAnnotation,
   };

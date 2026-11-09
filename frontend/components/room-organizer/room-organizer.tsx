@@ -136,6 +136,8 @@ import { checkFunctionalRequirements } from './lib/functional-requirements';
 import { sameLayoutContent } from './lib/persistence';
 import { isVenueScaleCurrent, venueDimensionsMismatch } from './lib/venue-scale-basis';
 import { extractPlanSizeFacts } from '@/lib/plan-size-facts';
+import { readAgentAnnotationObservation } from '@/lib/agent-annotation-observation';
+import { agentAnnotationObservationSchema } from '../../../supabase/functions/_shared/agent-contract';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
 import { useActivitySessionTracker, type ActivitySessionToken } from './lib/activity-session-epoch';
@@ -289,6 +291,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [selectedVariantId, setSelectedVariantId] = useState<PlanVariantId>('balanced');
   const chatTransitionEpoch=useRef(0);
   const briefCaptureEpoch=useRef(0);
+  // A completed originating turn is not a new requirement; later inputs are.
+  const briefIntentEpoch=useRef(0);
   // A submitted message invalidates existing captures immediately, before any
   // model or queue await. Independent tokens prevent concurrent turns from
   // making the export appear idle when only one has finished.
@@ -302,10 +306,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const setDialogueIncomplete=(sessionId:string|null,incomplete:boolean)=>{
     if(!sessionId)return;const key=dialogueSessionKey(sessionId),had=incompleteDialogueSessions.current.has(key);
     if(incomplete)incompleteDialogueSessions.current.add(key);else incompleteDialogueSessions.current.delete(key);
-    if(had!==incomplete)briefCaptureEpoch.current++;
+    if(had!==incomplete){briefCaptureEpoch.current++;briefIntentEpoch.current++;}
   };
   const beginDialogueTurn=()=>{
-    const token=Symbol('dialogue-turn');pendingDialogueTurns.current.add(token);briefCaptureEpoch.current++;
+    const token=Symbol('dialogue-turn');pendingDialogueTurns.current.add(token);briefCaptureEpoch.current++;briefIntentEpoch.current++;
     let released=false;return()=>{if(released)return;released=true;if(pendingDialogueTurns.current.delete(token))briefCaptureEpoch.current++;};
   };
   useEffect(()=>subscribeActiveAssistantSession(sessionScope,(id)=>{
@@ -1621,13 +1625,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
 
     let zoneStart: PlanPoint | null = null;
     let measureFrom: PlanPoint | null = null;
-    const route = planAnnot.drawMode === 'route' ? createRouteDrawingSession(() => {
+    const observeAnnotations=process.env.NEXT_PUBLIC_AGENT_ANNOTATION_OBSERVATION==='1';
+    let drawingBinding: import('./hooks/use-plan-annotations').UserRouteBinding | null = null;
+    const captureDrawingBinding=() => {
+      try {
       const activity=sessionToken, floor=floorSession.capture(), venue=routeVenueFacts.capture();
       if(!activity||!floor||!venue||!activitySession.isCurrent(activity)||!floorSession.isCurrent(floor)||!routeVenueFacts.isCurrent(venue))return null;
       const draft=planAnnot.getSnapshot(),draftSignature=JSON.stringify(draft.draft);
       return {floorId:floor.floorId,isCurrent:()=>activitySession.isCurrent(activity)&&floorSession.isCurrent(floor)&&routeVenueFacts.isCurrent(venue),
         isDrawingCurrent:()=>{const now=planAnnot.getSnapshot();return now.revision===draft.revision&&JSON.stringify(now.draft)===draftSignature;}};
-    },(points,binding)=>planAnnot.addUserRouteFromPoints(points,ANNOTATION_PRESET_LABELS.guest_route,binding)) : null;
+      }catch{return null;}
+    };
+    const route = planAnnot.drawMode === 'route' ? createRouteDrawingSession(captureDrawingBinding,(points,binding)=>planAnnot.addUserRouteFromPoints(points,ANNOTATION_PRESET_LABELS.guest_route,binding)) : null;
     const clearInvalidRoute=()=>{if(route&&!route.revalidate()){setDraftPoints([]);planAnnot.setDrawMode('off');notify('活动、楼层或场地已变化，未完成的路线已取消，请重新绘制。','info');}};
     const unsubscribe=route?layoutStore.subscribe(clearInvalidRoute):()=>{};
 
@@ -1644,14 +1653,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       e.preventDefault();
       e.stopPropagation();
       if (planAnnot.drawMode === 'zone') {
+        if(observeAnnotations){drawingBinding=captureDrawingBinding();
+          if(!drawingBinding){notify('活动、楼层或场地无法核对，请重新绘制。','info');return;}}
         zoneStart = w;
         setDraftPoints([w]);
       } else if (planAnnot.drawMode === 'measure') {
         if (!measureFrom) {
+          if(observeAnnotations){drawingBinding=captureDrawingBinding();
+            if(!drawingBinding){notify('活动、楼层或场地无法核对，请重新绘制。','info');return;}}
           measureFrom = w;
           setDraftPoints([w]);
         } else {
-          planAnnot.addAnnotationFromPoints([measureFrom, w], 'measure', '测距');
+          if(!observeAnnotations)planAnnot.addAnnotationFromPoints([measureFrom,w],'measure','测距');
+          else if(!drawingBinding||!planAnnot.addUserAnnotationFromPoints([measureFrom, w], 'measure', '测距',drawingBinding))notify('活动、楼层或场地已变化，测距未保存，请重新绘制。','info');
+          drawingBinding=null;
           measureFrom = null;
           setDraftPoints([]);
           planAnnot.setDrawMode('off');
@@ -1662,7 +1677,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         // 单击即收（同 measure 的单段语义），Esc/再点标注钮退出。
         const door = pickDoorWallFromPoint(w, { width: layout.width, height: layout.height });
         if (door) {
-          planAnnot.addDoorAnnotation(door);
+          if(!observeAnnotations)planAnnot.addDoorAnnotation(door);
+          else {const binding=captureDrawingBinding();
+            if(!binding||!planAnnot.addUserDoorAnnotation(door,binding))notify('活动、楼层或场地无法核对，入口未保存。','info');}
           setDraftPoints([]);
           planAnnot.setDrawMode('off');
         }
@@ -1689,14 +1706,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       e.stopPropagation();
       if (w && Math.hypot(w.x - zoneStart.x, w.z - zoneStart.z) > 0.1) {
         // 第 11 批：按当前选中的语义类型落标签；画完不退出，可连续画多个框。
-        planAnnot.addAnnotationFromPoints(
+        if(!observeAnnotations)planAnnot.addAnnotationFromPoints([zoneStart,w],'zone',ZONE_SEMANTIC_LABELS[zoneType],zoneType);
+        else if(!drawingBinding||!planAnnot.addUserAnnotationFromPoints(
           [zoneStart, w],
           'zone',
           ZONE_SEMANTIC_LABELS[zoneType],
+          drawingBinding,
           zoneType,
-        );
+        ))notify('活动、楼层或场地已变化，区域未保存，请重新绘制。','info');
       }
       zoneStart = null;
+      drawingBinding=null;
       setDraftPoints([]);
       // 不再 setDrawMode('off')——连续画框；退出靠 Esc 或再点一次标注钮。
     };
@@ -1745,9 +1765,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     view.view2D,
     planAnnot.drawMode,
     clientToWorld2D,
+    planAnnot.addUserAnnotationFromPoints,
     planAnnot.addAnnotationFromPoints,
     planAnnot.addUserRouteFromPoints,
     planAnnot.getSnapshot,
+    planAnnot.addUserDoorAnnotation,
     planAnnot.addDoorAnnotation,
     planAnnot.setDrawMode,
     sessionToken,
@@ -3058,11 +3080,47 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     const record=agentBriefRef.current,chatId=getActiveAssistantSessionId(sessionScope),epoch=chatTransitionEpoch.current;
     if(!isScopedSessionCurrent()||!record||!chatId||record.scope!==sessionScope||record.epoch!==sessionToken?.epoch||record.chatEpoch!==epoch||record.sessionId!==chatId)return {status:'unavailable' as const};
     const value=cloudSeatingAllocation(record.memory),specs=cloudSeatingSpecs(record.memory),defaults=record.memory.localSeatingSpecs?.defaults,fingerprint=JSON.stringify([value??null,specs??null,defaults??null]),token=JSON.stringify([sessionScope,chatId,epoch,fingerprint]);
-    return {status:'ready' as const,value,specs,defaults,token,isCurrent:()=>{
+    const seatingIsCurrent=()=>{
       const latest=agentBriefRef.current;
       return isScopedSessionCurrent()&&chatTransitionEpoch.current===epoch&&getActiveAssistantSessionId(sessionScope)===chatId&&!!latest&&
         latest.scope===sessionScope&&latest.epoch===sessionToken?.epoch&&latest.chatEpoch===epoch&&latest.sessionId===chatId&&JSON.stringify([cloudSeatingAllocation(latest.memory)??null,cloudSeatingSpecs(latest.memory)??null,latest.memory.localSeatingSpecs?.defaults??null])===fingerprint;
-    }};
+    };
+    if(process.env.NEXT_PUBLIC_AGENT_ANNOTATION_OBSERVATION!=='1')return {status:'ready' as const,value,specs,defaults,token,isCurrent:seatingIsCurrent};
+    const floor=floorSession.capture(),activity=sessionToken,scene=layoutStore.getState(),draft=planAnnot.getSnapshot(),venue=routeVenueFacts.capture();
+    const actor=controller.getSnapshot().user?.id??null,briefEpoch=briefIntentEpoch.current;
+    const authorityVersion=controller.localDraftAuthorityVersion(),placementEpoch=placementIdentity.current.epoch;
+    if(!floor||!activity||!venue||!actor||!seatingIsCurrent()||!floorSession.isCurrent(floor)||!routeVenueFacts.isCurrent(venue))return {status:'unavailable' as const};
+    const annotationIsCurrent=()=>{
+      try{
+        const now=layoutStore.getState(),currentDraft=planAnnot.getSnapshot();
+        return seatingIsCurrent()&&activitySession.isCurrent(activity)&&floorSession.isCurrent(floor)&&routeVenueFacts.isCurrent(venue)&&
+          placementIdentity.current.controller===controller&&placementIdentity.current.isActive&&placementIdentity.current.epoch===placementEpoch&&
+          controller.localDraftAuthorityVersion()===authorityVersion&&(controller.getSnapshot().user?.id??null)===actor&&briefIntentEpoch.current===briefEpoch&&now.revision===scene.revision&&
+          now.activeFloorIndex===floor.floorIndex&&currentDraft.revision===draft.revision&&sameRecoveryFormValue(currentDraft.draft,draft.draft);
+      }catch{return false;}
+    };
+    const observation=readAgentAnnotationObservation({binding:{activityScope:sessionScope,activityEpoch:activity.epoch,sceneRevision:scene.revision,floorId:floor.floorId,annotationRevision:draft.revision},
+      read:planAnnot.getSnapshot,bounds:{width:scene.layout.width,depth:scene.layout.height},annotationFloor:planAnnot.getUserAnnotationFloor,isCurrent:annotationIsCurrent});
+    const parsed=agentAnnotationObservationSchema.safeParse(observation);
+    const annotationObservation=parsed.success?parsed.data:{status:'unavailable' as const};
+    const annotationProvenance=annotationObservation.status==='ready'?annotationObservation.annotations.map(item=>{
+      const floorId=planAnnot.getUserAnnotationFloor(item.id);
+      return {id:item.id,source:floorId?'user' as const:'unknown' as const,floorId};
+    }):[];
+    if(!annotationIsCurrent())return {status:'unavailable' as const};
+    return {status:'ready' as const,value,specs,defaults,token,annotationObservation,annotationProvenance,
+      readAnnotationReview:()=>{
+        if(!annotationIsCurrent())return null;
+        const latest=readAgentAnnotationObservation({binding:{activityScope:sessionScope,activityEpoch:activity.epoch,sceneRevision:scene.revision,floorId:floor.floorId,annotationRevision:draft.revision},
+          read:planAnnot.getSnapshot,bounds:{width:scene.layout.width,depth:scene.layout.height},annotationFloor:planAnnot.getUserAnnotationFloor,isCurrent:annotationIsCurrent});
+        const checked=agentAnnotationObservationSchema.safeParse(latest);
+        if(!checked.success||!annotationIsCurrent())return null;
+        const provenance=checked.data.status==='ready'?checked.data.annotations.map(item=>{
+          const floorId=planAnnot.getUserAnnotationFloor(item.id);
+          return {id:item.id,source:floorId?'user' as const:'unknown' as const,floorId};
+        }):[];
+        return annotationIsCurrent()?{observation:checked.data,provenance}:null;
+      },isCurrent:()=>seatingIsCurrent()&&annotationIsCurrent()};
   };
   const captureDialogue = () => {
     const token=sessionToken, selectedFloor=floorToken, chatId=getActiveAssistantSessionId(sessionScope);
@@ -3082,7 +3140,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   };
   const reviewDialogueHistory=(sessionId:string):boolean=>{
     if(!isScopedSessionCurrent()||!activitySession.isCurrent(sessionToken)||!floorSession.isCurrent(floorToken)||pendingDialogueTurns.current.size||getActiveAssistantSessionId(sessionScope)!==sessionId||incompleteDialogueSessions.current.has(dialogueSessionKey(sessionId)))return false;
-    pendingCandidates.invalidate();briefCaptureEpoch.current++;
+    pendingCandidates.invalidate();briefCaptureEpoch.current++;briefIntentEpoch.current++;
     reviewedDialogueHistory.current={scope:sessionScope,sessionId,chatEpoch:chatTransitionEpoch.current,activityEpoch:sessionToken?.epoch??null};
     return true;
   };
@@ -3251,6 +3309,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={isolatedRef.current ? () => { assertIsolatedSession?.(); isolatedRef.current!.session.assertSessionWrite(); } : workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || !sessionToken) return;
         briefCaptureEpoch.current++;
+        const prior=agentBriefRef.current;
+        if(!prior || prior.scope!==sessionScope || prior.epoch!==sessionToken.epoch || prior.chatEpoch!==chatTransitionEpoch.current || prior.sessionId!==sessionId || !sameRecoveryFormValue(prior.memory,memory))briefIntentEpoch.current++;
         const record = { scope: sessionScope, epoch: sessionToken.epoch, chatEpoch:chatTransitionEpoch.current, sessionId, memory };
         agentBriefRef.current = record;
         setAgentBriefRecord(record);

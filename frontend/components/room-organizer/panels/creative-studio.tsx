@@ -33,6 +33,7 @@ import {prepareLegacyBriefPreservation,hasPreservedLegacyBrief} from '../lib/leg
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { captureLocalDraftIntegrityFence } from '../lib/local-draft-integrity';
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
+import { reviewAgentAnnotations, type AnnotationProof, type AnnotationProjectBinding, type AnnotationReviewResult } from '@/lib/agent-annotation-review';
 import type {PendingCandidateAccess,PendingCandidateCapture} from '../lib/pending-candidate-registry';
 import { checkCandidateInventory, type CandidateInventory } from '../lib/candidate-inventory';
 import {inventoryForSessionCandidate,rememberSessionCandidateInventory,type SessionCandidateInventory} from '../lib/session-candidate-inventory';
@@ -80,7 +81,7 @@ function UnsavedSourceNotice({scope}:{scope:string}):JSX.Element|null {
   </section>;
 }
 type Message = { id: string; role: 'user' | 'assistant'; text: string; modelText?: string | undefined; modelSuggestions?: SceneProposal['modelSuggestions']; materialSuggestions?: SceneProposal['materialSuggestions'] };
-type RunMarker = { requestId: string; runId?: string; projectId?: string; baseKey: string; briefKey: string; seatingToken?:string };
+type RunMarker = { requestId: string; runId?: string; projectId?: string; baseKey: string; briefKey: string; seatingToken?:string; annotationSnapshot?:true };
 const runStorageKey = (scope: string) => `scendance:agent-run:${scope}`;
 type CandidatePreview = { label: 'A' | 'B' | 'C'; title: string; preview: Preview };
 export const isUnchangedProposal = (proposal: SceneProposal): boolean => canonical(proposal.candidate)===canonical(proposal.base_scene);
@@ -98,7 +99,8 @@ export interface VenueSourceGuard {
   isSettled(scope:string):boolean;
   subscribeInvalidation(listener:()=>void):()=>void;
 }
-type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string; sessionToken?: ActivitySessionToken | null | undefined; floorToken?:FloorSessionToken|null|undefined; venueBinding?: VenueBinding | null | undefined; seatingCapture?:Extract<SeatingAllocationCapture,{status:'ready'}>|null|undefined };
+type AnnotationEvidence={observation:NonNullable<AgentRunInput['context']['annotationObservation']>;provenance:readonly AnnotationProof[];projectBinding:AnnotationProjectBinding|null;base:RoomLayout};
+type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string; sessionToken?: ActivitySessionToken | null | undefined; floorToken?:FloorSessionToken|null|undefined; venueBinding?: VenueBinding | null | undefined; seatingCapture?:Extract<SeatingAllocationCapture,{status:'ready'}>|null|undefined; annotationEvidence?:AnnotationEvidence|undefined };
 type CheckinRestoreWrite = { scope: string; before: MaterialCheckinLedger | undefined; attempted: MaterialCheckinLedger | undefined };
 type SourceRestoreWrite = { scope: string; before: SourceScopeSnapshot; attempted: SourceScopeSnapshot };
 type ApplyRecovery = { projectId: string; revision: number; proposalId: string; outcome: 'pending' | 'committed' | 'cleanup_failed'; storageScope?: string; baseRevision?: number; baseHash?: string; candidateHash?: string };
@@ -170,7 +172,7 @@ export async function withApplyLock<T>(scope: string, run: () => Promise<T>): Pr
   });
 }
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
-export type SeatingAllocationCapture={status:'ready';value:AgentRunInput['context']['seatingAllocation'];specs?:AgentRunInput['context']['seatingSpecs']|undefined;defaults?:{desk?:string|undefined;chair?:string|undefined}|undefined;token:string;isCurrent:()=>boolean}|{status:'unavailable'};
+export type SeatingAllocationCapture={status:'ready';value:AgentRunInput['context']['seatingAllocation'];specs?:AgentRunInput['context']['seatingSpecs']|undefined;defaults?:{desk?:string|undefined;chair?:string|undefined}|undefined;token:string;annotationObservation?:AgentRunInput['context']['annotationObservation'];annotationProvenance?:readonly AnnotationProof[];readAnnotationReview?:()=>{observation:NonNullable<AgentRunInput['context']['annotationObservation']>;provenance:readonly AnnotationProof[]}|null;isCurrent:()=>boolean}|{status:'unavailable'};
 interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; controller: BackendSession; layout: RoomLayout; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 function serializeReadonlyBrief(scope:string,kind:'original'|'draft',value:unknown):string {
@@ -226,6 +228,7 @@ interface StudioValue extends LocalProjectBackupActions {
   jevEnabled: boolean; setJevEnabled(value:boolean):void; run: AgentRun | null; candidates: CandidatePreview[]; selectCandidate(label: 'A'|'B'|'C'):void; cancelRun():Promise<void>; recoverRun():Promise<void>; recoverable:boolean;
   applyPreview(): Promise<void>; discardPreview(): void; discardPreviewForHistoryReview(): boolean;
   candidateRequirementError(base: RoomLayout, candidate: RoomLayout): string | null;
+  candidateAnnotationAdvisory(candidate:Preview):string|null;
   candidateSeatAdvisory(candidate:Preview): string | null;
   applyRecovery: ApplyRecovery | null; applyRecoveryReview: ApplyRecoveryReview | null; reviewingApplyRecovery: boolean;
   reviewApplyRecovery(): Promise<void>; acknowledgeApplyRecovery(): Promise<void>;
@@ -241,7 +244,7 @@ export function useCreativeBriefState(): CreativeBriefState | null {
 /** v2.4 AgentPanel：只取出方案需要的那几项（复用现有 AI 生成，不新增算法）。
  *  云端提案现在也要在Bingo栏里「确认布置 / 撤回」，所以把预览与确认这几项一起放出来。 */
 export function useStudioAgent(): Pick<StudioValue, 'generate'|'busy'|'run'|'connection'|'notice'|'controller'|'brief'|'setBrief'|'hasSavedBrief'
-  |'preview'|'stale'|'expired'|'recoverable'|'selectCandidate'|'applyPreview'|'discardPreview'|'discardPreviewForHistoryReview'|'cancelRun'|'exportActivity'|'exportCloudMaterialDraft'|'cloudMaterialDraftAvailable'|'candidateRequirementError'|'setCandidateInventory'|'getBoundCandidateInventory'|'getSessionInventory'|'rememberSessionInventory'|'canRememberSessionInventory'|'applyRecovery'|'applyRecoveryReview'|'reviewingApplyRecovery'|'reviewApplyRecovery'|'acknowledgeApplyRecovery'>|null { return useContext(StudioContext); }
+  |'preview'|'stale'|'expired'|'recoverable'|'selectCandidate'|'applyPreview'|'discardPreview'|'discardPreviewForHistoryReview'|'cancelRun'|'exportActivity'|'exportCloudMaterialDraft'|'cloudMaterialDraftAvailable'|'candidateRequirementError'|'candidateAnnotationAdvisory'|'setCandidateInventory'|'getBoundCandidateInventory'|'getSessionInventory'|'rememberSessionInventory'|'canRememberSessionInventory'|'applyRecovery'|'applyRecoveryReview'|'reviewingApplyRecovery'|'reviewApplyRecovery'|'acknowledgeApplyRecovery'>|null { return useContext(StudioContext); }
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 export function useMaterialCheckinState(): MaterialCheckinState { return useStudio().checkins; }
 const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。' }];
@@ -257,6 +260,7 @@ function rememberMessageDraft(scope:string,owner:string,value:MessageDrafts){
 /** Test isolation only; normal editing retains unsent messages until explicitly cleared. */
 export function clearUnsentMessageDraftsForTests(){unsentMessageDrafts.clear();if(typeof window!=='undefined'&&draftWarningInstalled)window.removeEventListener('beforeunload',warnUnsentDrafts);draftWarningInstalled=false;}
 const PARTIAL_RUN_NOTICE='后续处理中断，已保留通过检查的方案，请核对后继续。';
+const ANNOTATION_BLOCK='新布置占用了已标路线或预留区，请调整后重新生成。';
 
 export function CreativeStudioProvider({ pendingCandidates, reviewContext, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken,isFloorCurrent, captureMobility,captureDialogue,captureSeatingAllocation,getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
   const applyAuthority=useRef<{capability:LocalWriteCapability|undefined;source:SourceWriteGuard|undefined;revoked:boolean;abort:AbortController}|null>(null);
@@ -1233,7 +1237,47 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     markerRef.current=null;setRecoverable(false);
     try { localStorage.removeItem(runStorageKey(agentScopeRef.current)); } catch { /* A leftover marker can only trigger a status read. */ }
   }
+  /** Snapshot only controller-owned identity and the active project lease. */
+  function annotationProjectBinding(base:RoomLayout):AnnotationProjectBinding|null {
+    try {
+      const state=controller.getSnapshot(),lease=state.lease,localActivityId=base.id;
+      if(!localActivityId||!state.user?.id||!state.project?.id||!lease||state.writeBlocked||
+        lease.projectId!==state.project.id||lease.sessionId!==state.sessionId||
+        !Number.isFinite(Date.parse(lease.expiresAt))||Date.parse(lease.expiresAt)<=Date.now())return null;
+      const mappedProjectId=geometryProjectId(controller,localActivityId);if(!mappedProjectId)return null;
+      return {actorId:state.user.id,sessionId:state.sessionId,leaseGeneration:lease.generation,localActivityId,projectId:state.project.id,mappedProjectId};
+    }catch{return null;}
+  }
+  function candidateAnnotationReview(selected:Preview,candidate:RoomLayout=selected.layout):AnnotationReviewResult|null {
+    const evidence=selected.annotationEvidence;if(!evidence)return null;
+    try {
+      const current=selected.seatingCapture?.readAnnotationReview?.()??null;
+      const currentBase=currentLayoutGetter.current?.()??layoutRef.current;
+      const proposalBound=!!evidence.projectBinding&&selected.proposal.user_id===evidence.projectBinding.actorId&&selected.proposal.session_id===evidence.projectBinding.sessionId&&selected.proposal.generation===evidence.projectBinding.leaseGeneration;
+      return reviewAgentAnnotations({observation:evidence.observation,currentObservation:current?.observation??{status:'unavailable'},
+        provenance:evidence.provenance,currentProvenance:current?.provenance??[],capturedBase:evidence.base,currentBase,candidate,
+        candidateBinding:evidence.observation.status==='ready'?evidence.observation.binding:null,
+        projectBinding:evidence.projectBinding,currentProjectBinding:proposalBound?annotationProjectBinding(selected.base):null,proposalProjectId:selected.proposal.project_id});
+    }catch{return reviewAgentAnnotations({observation:{status:'unavailable'},currentObservation:{status:'unavailable'},provenance:[],currentProvenance:[],
+      capturedBase:evidence.base,currentBase:evidence.base,candidate,candidateBinding:null,projectBinding:null,currentProjectBinding:null,proposalProjectId:null});}
+  }
+  function candidateAnnotationAdvisory(selected:Preview):string|null {
+    const result=candidateAnnotationReview(selected);if(!result)return null;
+    return result.status==='violated'?ANNOTATION_BLOCK:'规划标注尚未完整核验；路线净宽、出入口、消防与现场条件仍需核对。本次仅供预览，暂不能应用。';
+  }
+  function annotationBindingCurrent(selected:Preview):boolean {
+    const captured=selected.annotationEvidence?.projectBinding;
+    if(!captured)return true; // The review remains unknown; no authority is inferred.
+    return selected.proposal.user_id===captured.actorId&&selected.proposal.project_id===captured.projectId&&
+      selected.proposal.session_id===captured.sessionId&&selected.proposal.generation===captured.leaseGeneration&&
+      sameRecoveryFormValue(captured,annotationProjectBinding(selected.base));
+  }
   function candidateRequirementError(base: RoomLayout, candidate: RoomLayout): string | null {
+    const selected=previewRef.current;
+    if(selected?.base===base && selected.annotationEvidence){
+      if(candidateAnnotationReview(selected,candidate)?.status==='violated')return ANNOTATION_BLOCK;
+      return '规划标注和现场条件尚未完整核验，本次仅供预览，暂不能应用。';
+    }
     return validateCandidateRequirements?.(base, candidate) ?? null;
   }
   function candidateSeatAdvisory(selected:Preview):string|null {
@@ -1348,7 +1392,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     localStorage.setItem(runStorageKey(scope),JSON.stringify(marker));
     markerRef.current=marker;
   }
-  async function consumeRun(result:AgentRun,base:RoomLayout,submittedBrief:string,submittedScope:string,epoch:number,turnToken:ActivitySessionToken|null|undefined,turnFloor:FloorSessionToken|null|undefined,venueBinding:VenueBinding|null,seatingCapture:Extract<SeatingAllocationCapture,{status:'ready'}>|null):Promise<UnchangedRunResult|void> {
+  async function consumeRun(result:AgentRun,base:RoomLayout,submittedBrief:string,submittedScope:string,epoch:number,turnToken:ActivitySessionToken|null|undefined,turnFloor:FloorSessionToken|null|undefined,venueBinding:VenueBinding|null,seatingCapture:Extract<SeatingAllocationCapture,{status:'ready'}>|null,annotationEvidence?:AnnotationEvidence):Promise<UnchangedRunResult|void> {
     if(!alive.current||epoch!==runEpoch.current||agentScopeRef.current!==submittedScope||!sessionValid(turnToken)||!floorValid(turnFloor)||!venueBindingCurrent(venueBinding)||!seatingCurrent(seatingCapture))return;
     if(result.state==='cancelled'){setCandidates([]);setTrackedPreview(null);forgetRun();say('任务已取消，当前方案保持不变。');return;}
     if(!result.candidates.length){forgetRun();sayModel(result.state==='failed'?agentRunFailureMessage(result.errorCode):'本次没有生成候选，画布未改变。',result.message);return;}
@@ -1376,7 +1420,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       const assets=await controller.authorizeAssets(item.proposal.candidate);
       await Promise.all(Object.entries(assets.assetUrls).map(([id,url])=>ensureGlbAsset(id,url)));
       const next=mergeProposalPresentation(base,backendSceneToLayout(item.proposal.candidate,{projectId:base.id!,name:base.name,...assets}));
-      return {label:item.label,title:item.title,preview:{proposal:item.proposal,assets,layout:next,base,briefKey:submittedBrief,scope:submittedScope,sessionToken:turnToken,floorToken:turnFloor,venueBinding,seatingCapture}};
+      return {label:item.label,title:item.title,preview:{proposal:item.proposal,assets,layout:next,base,briefKey:submittedBrief,scope:submittedScope,sessionToken:turnToken,floorToken:turnFloor,venueBinding,seatingCapture,...(annotationEvidence?{annotationEvidence}:{})}};
     }));
     if(!alive.current||!sessionValid(turnToken)||!floorValid(turnFloor)||agentScopeRef.current!==submittedScope||epoch!==runEpoch.current||!seatingCurrent(seatingCapture))return;
     await verifyVenueBinding(base,venueBinding);
@@ -1387,11 +1431,11 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     setTrackedPreview(preferred.preview);setCandidates(prepared);sayModel(result.jevEnabled?'候选方案已准备好。可以分别预览比较，最终由你选择并确认布置。':'方案提案已返回，请核对修改范围后确认布置。',first.explanation,first.modelSuggestions,first.materialSuggestions);
     if(announce&&alive.current&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current)announceRetained();
   }
-  async function followRun(initial:AgentRun,base:RoomLayout,submittedBrief:string,submittedScope:string,epoch:number,turnToken:ActivitySessionToken|null|undefined,turnFloor:FloorSessionToken|null|undefined,venueBinding:VenueBinding|null,seatingCapture:Extract<SeatingAllocationCapture,{status:'ready'}>|null):Promise<UnchangedRunResult|void> {
+  async function followRun(initial:AgentRun,base:RoomLayout,submittedBrief:string,submittedScope:string,epoch:number,turnToken:ActivitySessionToken|null|undefined,turnFloor:FloorSessionToken|null|undefined,venueBinding:VenueBinding|null,seatingCapture:Extract<SeatingAllocationCapture,{status:'ready'}>|null,annotationEvidence?:AnnotationEvidence):Promise<UnchangedRunResult|void> {
     let result=initial;
     const pollingDeadline=Date.now()+120_000;
     const active=()=>alive.current&&sessionValid(turnToken)&&floorValid(turnFloor)&&venueBindingCurrent(venueBinding)&&seatingCurrent(seatingCapture)&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current;
-    const pauseIfSourceChanged=()=>{if(alive.current&&sessionValid(turnToken)&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current&&(!floorValid(turnFloor)||!venueBindingCurrent(venueBinding)||!seatingCurrent(seatingCapture))){setRecoverable(true);setNotice('楼层、图纸或活动会话需求已变化，原任务编号已保留；请核对原任务状态，暂不能应用旧候选。');}};
+    const pauseIfSourceChanged=()=>{if(alive.current&&sessionValid(turnToken)&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current&&(!floorValid(turnFloor)||!venueBindingCurrent(venueBinding)||!seatingCurrent(seatingCapture))){setRecoverable(true);setNotice(seatingCapture?.annotationObservation?'楼层、图纸、规划标注或活动会话需求已变化，原任务编号已保留；请核对原任务状态，暂不能应用旧候选。':'楼层、图纸或活动会话需求已变化，原任务编号已保留；请核对原任务状态，暂不能应用旧候选。');}};
     if(!active()){pauseIfSourceChanged();return;}
     // 第 8 批：把云端这一趟写成运行时账本——头部「N 条思考」用的是云端给的
     // 真实模型调用轮数（call_count，上限 6 轮），步骤流用的是云端自己写的
@@ -1472,7 +1516,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     if(lastProgress)closeAgentStep(Date.now()-stepStartedAt);
     // 本轮既没给候选也没改动画布 → 出空结果回执卡，不许沉默结束。
     endAgentRun({emptyOutcome:!result.candidates.length});
-    if(active())return await consumeRun(result,base,submittedBrief,submittedScope,epoch,turnToken,turnFloor,venueBinding,seatingCapture);
+    if(active())return await consumeRun(result,base,submittedBrief,submittedScope,epoch,turnToken,turnFloor,venueBinding,seatingCapture,annotationEvidence);
     return;
   }
   async function recoverRun():Promise<void> {
@@ -1490,6 +1534,9 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       const result=marker.runId?await controller.getAgentRun(marker.runId):await controller.getAgentRunByRequest(marker.requestId);
       const currentSeating=seatingCaptureRef.current?.();
       const seatingCapture=currentSeating?.status==='ready'?currentSeating:null;
+      // A persisted run ID does not retain in-memory annotation authority;
+      // never attach today's snapshot to a run that predates this feature.
+      if(marker.annotationSnapshot || seatingCapture?.annotationObservation!==undefined){setRun(result);setRecoverable(true);setNotice('已查询原任务；原标注快照无法重新核对，旧候选不可应用，任务记录已保留。');return;}
       if(seatingCaptureRequired.current&&(!seatingCapture||!marker.seatingToken||marker.seatingToken!==seatingCapture.token||!seatingCurrent(seatingCapture))){
         setRun(result);setNotice('已查询原任务；活动会话或桌椅配比无法核对，旧候选不会应用。');
         if(!['queued','running'].includes(result.state))forgetRun();else setRecoverable(true);
@@ -1514,7 +1561,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       const raw=localStorage.getItem(runStorageKey(agentScope));
       if(!raw)return;
       const marker=JSON.parse(raw) as RunMarker;
-      if(typeof marker.requestId!=='string'||typeof marker.baseKey!=='string'||typeof marker.briefKey!=='string'||(marker.runId!==undefined&&typeof marker.runId!=='string')||(marker.projectId!==undefined&&typeof marker.projectId!=='string')||(marker.seatingToken!==undefined&&typeof marker.seatingToken!=='string'))throw new Error('任务记录无法读取，请保留此页面记录并联系管理员核对。');
+      if(typeof marker.requestId!=='string'||typeof marker.baseKey!=='string'||typeof marker.briefKey!=='string'||(marker.runId!==undefined&&typeof marker.runId!=='string')||(marker.projectId!==undefined&&typeof marker.projectId!=='string')||(marker.seatingToken!==undefined&&typeof marker.seatingToken!=='string')||(marker.annotationSnapshot!==undefined&&marker.annotationSnapshot!==true))throw new Error('任务记录无法读取，请保留此页面记录并联系管理员核对。');
       markerRef.current=marker;setRecoverable(true);if(briefReady)void recoverRun();else recoveredScope.current='';
     }catch(error){setRecoverable(true);setNotice(error instanceof Error?error.message:'任务记录无法读取。');}
     // Recovery runs once after this project's brief has loaded. Changes do not launch another paid run.
@@ -1550,7 +1597,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     try{const captured=seatingCaptureRef.current?.();if(captured?.status==='ready')seatingCapture=captured;
       else if(seatingCaptureRequired.current){setNotice('当前会话的桌椅配比尚未核对，本次没有提交。');return;}}
     catch{setNotice('当前会话的桌椅配比无法读取，本次没有提交。');return;}
-    if(!seatingCurrent(seatingCapture)){setNotice('当前会话或桌椅配比已变化，本次没有提交。');return;}
+    if(!seatingCurrent(seatingCapture)){setNotice(seatingCapture?.annotationObservation?'当前活动需求或规划标注已变化，本次没有提交。':'当前会话或桌椅配比已变化，本次没有提交。');return;}
     if(seatingCapture&&options?.seatingAllocation!==undefined&&!sameRecoveryFormValue(seatingCapture.value??null,options.seatingAllocation)){
       setNotice('当前会话的桌椅配比已变化，本次没有提交。');return;
     }
@@ -1565,6 +1612,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const specsResult=inputSpecs===undefined?null:agentSeatingSpecsSchema.safeParse(inputSpecs);
     if(specsResult&&!specsResult.success){setNotice('桌椅规格无法核对，本次没有提交。');return;}
     const seatingSpecs=specsResult?.success?specsResult.data:undefined;
+    const annotationObservation=seatingCapture?.annotationObservation;
     let messageForModel=seatingAllocation&&!message?.includes(seatingAllocation.evidence)&&!message?.includes(JSON.stringify(seatingAllocation.evidence))
       ?`${message?.trim()||'请按当前活动需求生成布置方案。'}\n用户原话：${JSON.stringify(seatingAllocation.evidence)}；桌椅配比仍需结合用户要求核对。`:message;
     const quotes=new Set<string>();
@@ -1588,7 +1636,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     let venueBinding:VenueBinding|null=null;
     const epoch=++runEpoch.current;
     requestPending.current=true;setBusy(true);
-    let dispatched=false;
+    let dispatched=false,creationResponded=false,dispatchedRequestId:string|null=null;
     let ownPreparation:typeof preparation.current=null;
     try{
       venueBinding=await verifyVenueBinding(base);
@@ -1597,7 +1645,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       await assertCurrentLocalRecords(base);
       if(!briefStorage.current.ready)await briefHydration.current;
       if(!alive.current||epoch!==runEpoch.current||submittedScope!==agentScopeRef.current)return;
-      const assertGenerationIntent=()=>{taskGuard?.assertStillHeld();if(taskGuard?.signal.aborted)throw new Error('本机写入租约已失效。');if(!seatingCurrent(seatingCapture))throw new Error('活动会话或桌椅配比已变化，本次没有提交。');const error=validateGenerationIntent?.();if(error)throw new Error(error);};
+      const assertGenerationIntent=()=>{taskGuard?.assertStillHeld();if(taskGuard?.signal.aborted)throw new Error('本机写入租约已失效。');if(!seatingCurrent(seatingCapture))throw new Error(seatingCapture?.annotationObservation?'活动需求或规划标注已变化，本次没有提交。':'活动会话或桌椅配比已变化，本次没有提交。');const error=validateGenerationIntent?.();if(error)throw new Error(error);};
       assertGenerationIntent();
       if(!briefStorage.current.ready||briefStorage.current.scope!==(base.id??'local'))throw new Error(briefStorage.current.error??'活动需求尚未读取完成，请稍后重试。');
       if(layoutRef.current!==base)throw new Error('生成期间方案或需求已变化，旧提案未应用。请根据最新内容重新生成。');
@@ -1664,17 +1712,24 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       if(!message)setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'user',text:`生成${submittedBriefValue.eventConfirmed === true ? submittedBriefValue.event : '活动'}方案：${submittedBriefValue.description.trim()}`}]);
       const remoteProjectId=geometryProjectId(controller,base.id);
       if(!remoteProjectId)throw new Error('当前活动的场景连接已变化，请重新核对后发送。');
+      let annotationEvidence:AnnotationEvidence|undefined;
+      if(annotationObservation){
+        try{annotationEvidence={observation:structuredClone(annotationObservation),provenance:structuredClone(seatingCapture?.annotationProvenance??[]),projectBinding:annotationProjectBinding(base),base:structuredClone(base)};}
+        catch{throw new Error('规划标注无法完整冻结，本次生成尚未提交。');}
+      }
       const pendingRecovery=readApplyRecovery(projectRecoveryScope(controller.config.apiUrl,remoteProjectId));
       if(pendingRecovery){applyRecoveryRef.current=pendingRecovery;setApplyRecovery(pendingRecovery);throw new Error('此云项目有待核对的提交结果，请先查看云端版本。');}
-      const marker:RunMarker={requestId:crypto.randomUUID(),projectId:remoteProjectId,baseKey:canonical(scene),briefKey:submittedBrief,...(seatingCapture?{seatingToken:seatingCapture.token}:{})};
+      const marker:RunMarker={requestId:crypto.randomUUID(),projectId:remoteProjectId,baseKey:canonical(scene),briefKey:submittedBrief,...(seatingCapture?{seatingToken:seatingCapture.token}:{}),...(annotationObservation?{annotationSnapshot:true as const}:{})};
       if(!sessionValid(turnToken)||!floorValid(turnFloor)||!venueBindingCurrent(venueBinding))throw new Error('活动、楼层或图纸已变化，本次生成尚未提交。');
       await verifyVenueBinding(base,venueBinding);
       if(!alive.current||epoch!==runEpoch.current||submittedScope!==agentScopeRef.current)return;
       assertGenerationIntent();
       if(!sessionValid(turnToken)||!floorValid(turnFloor)||!baseIsCurrent(base)||!venueBindingCurrent(venueBinding))throw new Error('活动、楼层或图纸已变化，本次生成尚未提交。');
       try{rememberRun(marker,submittedScope);}catch{throw new Error('无法保存任务编号，尚未提交。请恢复浏览器本机存储后重试。');}
-      requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;
-      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview'});
+      requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;dispatchedRequestId=marker.requestId;
+      if(annotationObservation)say(annotationObservation.status==='ready'?'本次将提供规划标注供模型读取；标注尚未核验，提供不代表已经用于排布或安全检查。':'本次无法完整读取规划标注，模型不会据此检查区域、路线或入口。');
+      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview'});
+      creationResponded=true;
       if(cancelledRequest.current===marker.requestId){
         if(agentScopeRef.current===submittedScope){
           const cancelled=await controller.cancelAgentRun(result.id);
@@ -1682,11 +1737,11 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
         }
         return;
       }
-      return await followRun(result,base,submittedBrief,submittedScope,epoch,turnToken,turnFloor,venueBinding,seatingCapture);
+      return await followRun(result,base,submittedBrief,submittedScope,epoch,turnToken,turnFloor,venueBinding,seatingCapture,annotationEvidence);
     }catch(error){if(alive.current&&(agentScopeRef.current===submittedScope||preparation.current?.layout===layoutRef.current)&&epoch===runEpoch.current){
       const text=error instanceof Error?error.message:controller.getSnapshot().error?.message??'生成失败，原方案已保留。';setNotice(text);say(text);
-      if(dispatched&&!applyRecoveryRef.current){
-        if(error instanceof SceneApiError&&([400,401,403,404,409,422].includes(error.status)||['SERVICE_NOT_CONFIGURED','BILLING_NOT_CONFIGURED','AI_INPUT_TOO_LARGE'].includes(error.code)))forgetRun();
+      if(dispatched&&!applyRecoveryRef.current&&agentScopeRef.current===submittedScope&&markerRef.current?.requestId===dispatchedRequestId){
+        if(error instanceof SceneApiError&&([400,401,403,404,409,422].includes(error.status)||['SERVICE_NOT_CONFIGURED','BILLING_NOT_CONFIGURED','AI_INPUT_TOO_LARGE'].includes(error.code)||(!creationResponded&&error.status===503&&['AGENT_ANNOTATION_UNAVAILABLE','AGENT_ANNOTATION_GUARD_UNAVAILABLE'].includes(error.code))))forgetRun();
         else setRecoverable(true);
       }
     }}finally{const cancelledPreparation=!!ownPreparation&&preparation.current===ownPreparation&&ownPreparation.cancelled;if(preparation.current===ownPreparation)preparation.current=null;if(epoch===runEpoch.current||cancelledPreparation){requestPending.current=false;if(alive.current)setBusy(false);}}
@@ -1716,7 +1771,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       capability?.assertStillHeld();authority?.source?.assertStillHeld();
       if(capability?.signal.aborted||authority?.source?.signal.aborted)throw new Error('本机编辑权已失效，原草稿已保留。');
     };
-    const checkAuthority=()=>{checkWriteAuthority();checkRequirements();if(previewRef.current!==selected)throw new Error('候选已变化，请重新核对。');if(!sessionValid(selected.sessionToken))throw new Error('活动已切换，旧候选不能应用，请重新生成。');if(!floorValid(selected.floorToken))throw new Error('楼层已切换，旧候选不能应用，请重新生成。');if(!venueBindingCurrent(selected.venueBinding))throw new Error('场地图纸或比例资料已变化，请重新核对。');if(!seatingCurrent(selected.seatingCapture))throw new Error('活动会话或桌椅配比已变化，旧候选不能应用，请重新生成。');checkCandidateInventoryAuthority(selected,inventoryVersion);};
+    const checkAuthority=()=>{checkWriteAuthority();checkRequirements();if(previewRef.current!==selected)throw new Error('候选已变化，请重新核对。');if(!sessionValid(selected.sessionToken))throw new Error('活动已切换，旧候选不能应用，请重新生成。');if(!floorValid(selected.floorToken))throw new Error('楼层已切换，旧候选不能应用，请重新生成。');if(!venueBindingCurrent(selected.venueBinding))throw new Error('场地图纸或比例资料已变化，请重新核对。');if(!seatingCurrent(selected.seatingCapture))throw new Error(selected.seatingCapture?.annotationObservation?'活动需求或规划标注已变化，旧候选不能应用，请重新生成。':'活动会话或桌椅配比已变化，旧候选不能应用，请重新生成。');if(!annotationBindingCurrent(selected))throw new Error('账号、项目或编辑权已变化，旧候选不能应用，请重新生成。');checkCandidateInventoryAuthority(selected,inventoryVersion);};
     checkAuthority();
     await withApplyLock(projectRecoveryScope(controller.config.apiUrl,selected.proposal.project_id),()=>applyCandidateLocked(selected,checkAuthority,checkWriteAuthority,checkRequirements,[capability?.signal,authority?.source?.signal,authority?.abort.signal].filter((s):s is AbortSignal=>!!s),inventoryVersion));
     } finally { dialogue?.release(); }
@@ -1794,6 +1849,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       checkRequirements();
       if(!result.acceptedLocally || layoutRef.current!==selected.base) throw new Error('应用期间本地有新修改，已保留本地草稿。');
       if(!sessionValid(selected.sessionToken) || !floorValid(selected.floorToken) || !venueBindingCurrent(selected.venueBinding) || !baseIsCurrent(selected.base)) throw new Error('应用期间本地活动、楼层、图纸或内容已变化，已保留当前画布。');
+      if(!seatingCurrent(selected.seatingCapture)) throw new Error(selected.seatingCapture?.annotationObservation?'应用期间规划标注或活动需求已变化，已保留当前画布。':'应用期间活动会话或桌椅配比已变化，已保留当前画布。');
+      if(!annotationBindingCurrent(selected))throw new Error('应用期间账号、项目或编辑权已变化，已保留当前画布。');
       if(canonical(result.scene)!==canonical(selected.proposal.candidate)) throw new Error('云端返回的场景与预览候选不一致。');
       next=mergeProposalPresentation(selected.base,backendSceneToLayout(result.scene,{projectId:selected.base.id!,name:selected.base.name,...selected.assets}));
       if(!sameLayoutContent(selected.layout,next) || canonical(prepared)!==preparedKey) throw new Error('云端结果转换后与预检候选不一致。');
@@ -1859,7 +1916,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     }finally{materialDraftExportPending.current=false;}
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateAnnotationAdvisory,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}><UnsavedSourceNotice scope={scope}/>{children}</StudioContext.Provider>;
 }
 
@@ -2252,6 +2309,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const submit=()=>{if(!draft.trim()||studio.busy||studio.recoverable)return;const text=draft;setDraft('');setSuggestionsOpen(false);const lock=docked&&suppressAgentLauncher?{requirePreview:true as const}:{};void studio.generate(text,mode==='model'?{intent:'model',...lock}:lock);};
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   const previewUnchanged=studio.preview?isUnchangedProposal(studio.preview.proposal):false;
+  const annotationAdvisory=studio.preview?studio.candidateAnnotationAdvisory(studio.preview):null;
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
   // 第9批 UI：预览卡 5 位人话配方编号。base_hash 是提案自带的 64 位 sha256 hex，
   // 直接取前 5 个 hex 字符映射；真实 Recipe seed 没从管线暴露，所以旁注「seed：本机生成」。
@@ -2424,7 +2482,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           <div>{studio.candidates.map(item=><button type="button" key={item.label} aria-pressed={studio.preview===item.preview} disabled={studio.busy||studio.stale} onClick={()=>studio.selectCandidate(item.label)}><strong>方案 {item.label}</strong>{isUnchangedProposal(item.preview.proposal)&&<span>当前场景，无变化</span>}{studio.run?.evaluation?.status==='complete'&&studio.run.evaluation.probabilities&&<span>模型推荐概率 {(studio.run.evaluation.probabilities[item.label]*100).toFixed(1)}%</span>}</button>)}</div><ModelTextDisclosure>{studio.candidates.map(item=><p key={item.label}>方案 {item.label}：{item.title}</p>)}</ModelTextDisclosure>
           {studio.run.evaluation?.status==='complete'&&studio.run.evaluation.probabilities&&<p>均不推荐：{(studio.run.evaluation.probabilities.NONE*100).toFixed(1)}%{studio.run.evaluation.choice==='NONE'?' · 建议调整需求后重试。':''}</p>}
         </div>}
-        {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span>{previewRecipeId&&<span className="cr-recipe-badge" data-testid="recipe-id" style={{marginLeft:8,padding:'2px 6px',borderRadius:4,background:'#F4F5F7',fontSize:12,color:'#4A7C59',fontWeight:600,letterSpacing:0.5}}>{`方案 #${previewRecipeId}`}</span>}{previewRecipeId&&<span data-testid="seed-origin" style={{marginLeft:6,fontSize:11,opacity:0.7}}>seed：本机生成</span>}<strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>请核对下方实际改动；通行、消防及规范条件仍需独立核验。</p>{seatAdvisory&&<p role="status">{seatAdvisory}</p>}<p>{REFERENCE_SOURCE_UNVERIFIED}</p><ModelTextDisclosure><p>{studio.preview.proposal.explanation}</p></ModelTextDisclosure>{previewRecipeId&&<div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0 8px',flexWrap:'wrap'}}><button type="button" data-testid="variants-toggle" onClick={()=>setVariantRowOpen(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'3px 8px',border:'1px solid var(--sc-line,#ccc)',borderRadius:4,background:'transparent',cursor:'pointer'}}><RefreshCw size={12}/>换一批</button>{variantRowOpen&&variantIds.length>0&&<div style={{display:'flex',gap:6}}>{variantIds.map((id,idx)=>{const active=idx===selectedVariantIdx;return <button key={id} type="button" data-testid={`variant-${idx}`} aria-pressed={active} onClick={()=>setSelectedVariantIdx(idx)} style={{padding:'4px 8px',fontSize:12,fontFamily:'monospace',borderRadius:4,cursor:'pointer',border:`1.5px solid ${active?'#4A7C59':'var(--sc-line,#ccc)'}`,background:active?'#F4F5F7':'transparent',color:active?'#4A7C59':'inherit'}}>#{id}</button>;})}</div>}</div>}{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=><li key={`${warning.code}-${index}`}>{proposalWarningText(warning,id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件')}</li>)}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul><p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:previewUnchanged?<div><p role="status">这版与当前场景一致，没有改动物件；可作为对照，是否满足需求仍需核对。</p><button type="button" onClick={studio.discardPreview}><Trash2 size={16}/>放弃</button></div>:studio.busy||studio.recoverable?<p role="status">{studio.recoverable&&!studio.busy?'上一版还在恢复，确认先不亮。':'正在整理这一版…'}</p>:<div><button type="button" onClick={()=>void studio.applyPreview()}><Check size={16}/>确认布置</button><button type="button" onClick={studio.discardPreview}><Trash2 size={16}/>放弃</button></div>}</div>}
+        {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span>{previewRecipeId&&<span className="cr-recipe-badge" data-testid="recipe-id" style={{marginLeft:8,padding:'2px 6px',borderRadius:4,background:'#F4F5F7',fontSize:12,color:'#4A7C59',fontWeight:600,letterSpacing:0.5}}>{`方案 #${previewRecipeId}`}</span>}{previewRecipeId&&<span data-testid="seed-origin" style={{marginLeft:6,fontSize:11,opacity:0.7}}>seed：本机生成</span>}<strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>请核对下方实际改动；通行、消防及规范条件仍需独立核验。</p>{seatAdvisory&&<p role="status">{seatAdvisory}</p>}<p>{REFERENCE_SOURCE_UNVERIFIED}</p><ModelTextDisclosure><p>{studio.preview.proposal.explanation}</p></ModelTextDisclosure>{previewRecipeId&&<div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0 8px',flexWrap:'wrap'}}><button type="button" data-testid="variants-toggle" onClick={()=>setVariantRowOpen(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'3px 8px',border:'1px solid var(--sc-line,#ccc)',borderRadius:4,background:'transparent',cursor:'pointer'}}><RefreshCw size={12}/>换一批</button>{variantRowOpen&&variantIds.length>0&&<div style={{display:'flex',gap:6}}>{variantIds.map((id,idx)=>{const active=idx===selectedVariantIdx;return <button key={id} type="button" data-testid={`variant-${idx}`} aria-pressed={active} onClick={()=>setSelectedVariantIdx(idx)} style={{padding:'4px 8px',fontSize:12,fontFamily:'monospace',borderRadius:4,cursor:'pointer',border:`1.5px solid ${active?'#4A7C59':'var(--sc-line,#ccc)'}`,background:active?'#F4F5F7':'transparent',color:active?'#4A7C59':'inherit'}}>#{id}</button>;})}</div>}</div>}{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=><li key={`${warning.code}-${index}`}>{proposalWarningText(warning,id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件')}</li>)}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul>{annotationAdvisory&&<p role="status">{annotationAdvisory}</p>}<p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:previewUnchanged?<div><p role="status">这版与当前场景一致，没有改动物件；可作为对照，是否满足需求仍需核对。</p><button type="button" onClick={studio.discardPreview}><Trash2 size={16}/>放弃</button></div>:studio.busy||studio.recoverable?<p role="status">{studio.recoverable&&!studio.busy?'上一版还在恢复，确认先不亮。':'正在整理这一版…'}</p>:<div><button type="button" disabled={!!annotationAdvisory} onClick={()=>void studio.applyPreview()}><Check size={16}/>确认布置</button><button type="button" onClick={studio.discardPreview}><Trash2 size={16}/>放弃</button></div>}</div>}
         {studio.preview&&workspaceExpanded&&!studio.stale&&<button className="cr-return-canvas" type="button" onClick={()=>resizeWorkspace(false)}><Minimize2 size={16}/>回到画布预览</button>}
         </div>
       {studio.notice&&<p className="cr-agent-notice" role="status">{studio.notice}</p>}

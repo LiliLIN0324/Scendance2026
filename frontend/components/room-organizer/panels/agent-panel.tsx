@@ -212,6 +212,7 @@ interface ProposalView extends PendingPlan {
   candidateArea?: number;
   comparisonOnly?: boolean;
   seatWarning?: string;
+  annotationWarning?: string;
   functionalWarnings?: string[];
   modelExplanation?: string;
   localDraftDetails?: string[];
@@ -1358,6 +1359,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const seatCheck = seatRequirement(preview.layout, activeFloorIndex, memory);
     const restCheck = checkRestArea(preview.layout, activeFloorIndex, memory.zoneNeeds.rest === true);
     const requirementError = current?.candidateRequirementError?.(preview.base, preview.layout);
+    const annotationWarning = current?.candidateAnnotationAdvisory?.(preview);
     const comparisonOnly=isUnchangedProposal(preview.proposal);
     const blocked = current?.applyRecovery ? cloudRecoveryMessage(current.applyRecovery)
       : current?.expired ? '这版已经过期了，重新出一版再看。'
@@ -1373,6 +1375,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       existingChanges:describeExistingChanges(differences,preview.base,preview.layout),
       ...(typeof preview.proposal.explanation==='string'&&preview.proposal.explanation.trim()?{modelExplanation:preview.proposal.explanation}:{}),
       ...(seatCheck.warning ? { seatWarning: seatCheck.warning } : {}),
+      ...(annotationWarning && annotationWarning!==blocked ? { annotationWarning } : {}),
       outcome: {...buildOutcome({
         added: plan.added, removing: plan.removing, changed: plan.changed, keptLocked: 0, dropped: 0,
         blocked, lockedTouched: plan.lockedTouched,changedLabel:'调整',
@@ -3109,6 +3112,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
     {plan.localDraftDetails?.map(line=><p className="ap-small" key={line}>{line}</p>)}
     {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
+    {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
     {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
     {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
