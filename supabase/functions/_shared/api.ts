@@ -16,7 +16,7 @@ import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, rando
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import { CHAT_API_KEY_ENV, chatProfile, chatRequest, generateProposal } from './providers.ts';
-import {modelPreservesPlanningZones,planningZonesEditSchema} from './planning-zones-contract.ts';
+import {candidateWithPreservedUserZones,modelPreservesPlanningZones,planningZonesEditSchema} from './planning-zones-contract.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefConversation, parseModelBrief, BRIEF_CONVERSATION_PROMPT, BRIEF_EXTRACT_PROMPT, BRIEF_PROVIDER_TIMEOUT_MS } from './brief-extract-contract.ts';
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
@@ -473,7 +473,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             const resources=await readSceneResources(backend,actor,input.scene);
             const proposal=await generateProposal(input,env,attempt=>backend.jobs(actor,'text.reserve_call',{id:reservation.id,attempt}),fetcher,resources);
             const stored=await backend.scene(actor,'proposals.store',{
-              ...input,id:reservation.id,baseHash:await sceneHash(input.scene),candidate:proposal.scene,explanation:proposal.explanation,warnings:proposal.warnings,
+              ...input,id:reservation.id,baseHash:await sceneHash(input.scene),candidate:candidateWithPreservedUserZones(input.scene,proposal.scene),explanation:proposal.explanation,warnings:proposal.warnings,
             });
             const result={...stored,modelSuggestions:proposal.modelSuggestions,materialSuggestions:proposal.materialSuggestions};
             await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'complete',result,usage:proposal.usage});

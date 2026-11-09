@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {canonical,sceneHash,sceneSchema,sceneV1Schema,sceneV2Schema} from '../supabase/functions/_shared/domain.ts';
-import {cloudZoneWriteMode,generatorZoneRefusal,modelPreservesPlanningZones,parsePlanningZonesCapability,planningZonesEditSchema,planningZonesWriteEnvelope,restoredPlanningZones,savedPlanningZoneFacts} from '../supabase/functions/_shared/planning-zones-contract.ts';
+import {candidateWithPreservedUserZones,cloudZoneWriteMode,generatorZoneRefusal,modelPreservesPlanningZones,parsePlanningZonesCapability,planningZonesEditSchema,planningZonesWriteEnvelope,restoredPlanningZones,savedPlanningZoneFacts,softPlanningZoneConstraint} from '../supabase/functions/_shared/planning-zones-contract.ts';
 import {scene} from './fixtures.ts';
 
 const zone={id:'zone-1',name:'签到区',color:'#4A7C59',x:0,z:0,width:2,depth:1,zoneType:'checkin' as const,source:'unverified' as const};
@@ -65,6 +65,24 @@ describe('planning zones scene extension',()=>{
   expect(generatorZoneRefusal({planningZones:zones})).toMatchObject({code:'PLANNING_ZONES_GENERATION_UNAVAILABLE'});
   expect(generatorZoneRefusal({planningZones:zones})?.message).toContain('不会交给模型改写');
   expect(generatorZoneRefusal(scene())).toBeNull();
+  const mixed={version:1 as const,zones:[zone,{...zone,id:'keep',name:'预留',zoneType:'reserved' as const}]};
+  const soft=softPlanningZoneConstraint({planningZones:mixed});
+  expect(soft.enforcement).toBe('soft');
+  expect(soft.rewriteUserZones).toBe(false);
+  expect(soft.polygon).toBe('not_covered');
+  expect(soft.zones.map(item=>item.hint)).toEqual(['activity','unverified_reserved']);
+  expect(soft.zones.every(item=>item.keepOut===false&&item.source==='unverified')).toBe(true);
+  expect(soft.routeWidth).toBe('unknown');
+  expect(soft.fireEgress).toBe('unknown');
+  const base=scene();
+  const user={...base,planningZones:zones};
+  const rewritten={...user,lighting:'warm' as const,planningZones:{version:1 as const,zones:[{...zone,name:'模型改名',source:'unverified' as const}]}};
+  const kept=candidateWithPreservedUserZones(user,rewritten);
+  expect(kept.lighting).toBe('warm');
+  expect(kept.planningZones).toEqual(zones);
+  const invented=candidateWithPreservedUserZones(base,{...base,planningZones:zones});
+  expect(invented).not.toHaveProperty('planningZones');
+  expect(candidateWithPreservedUserZones(user,user)).toBe(user);
  });
  it('attaches the server previous value and treats an inexact capability as unsupported',()=>{
   expect(parsePlanningZonesCapability({supported:true,version:1})).toEqual({supported:true,version:1});

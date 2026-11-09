@@ -102,3 +102,35 @@ export function generatorZoneRefusal(scene:{planningZones?:PlanningZones|null|un
  if(!scene?.planningZones)return null;
  return {code:PLANNING_ZONES_GENERATION_CODE,message:PLANNING_ZONES_GENERATION_MESSAGE};
 }
+
+/**
+ * How a generator may read saved rectangles. Activity zones are not keep-outs.
+ * A reserved label is only an unverified hint. Nothing here is a hard ban, a fire rule, or a route width.
+ */
+export function softPlanningZoneConstraint(scene:{planningZones?:PlanningZones|null|undefined}|null|undefined){
+ const facts=savedPlanningZoneFacts(scene?.planningZones??undefined);
+ return {
+  enforcement:'soft' as const,
+  rewriteUserZones:false as const,
+  geometry:facts.scope.geometry,
+  polygon:facts.scope.polygon,
+  zones:facts.zones.map(zone=>({
+   id:zone.id,zoneType:zone.zoneType,source:'unverified' as const,keepOut:false as const,
+   hint:zone.role==='reserved_unverified'?'unverified_reserved' as const:'activity' as const,
+  })),
+  routeWidth:'unknown' as const,
+  fireEgress:'unknown' as const,
+ };
+}
+
+/** Furniture in a candidate may change. User zones are copied back and model-invented zones are removed. */
+export function candidateWithPreservedUserZones<T extends {planningZones?:PlanningZones|undefined}>(base:{planningZones?:PlanningZones|null|undefined},candidate:T):T {
+ const userZones=base.planningZones??undefined;
+ if(!userZones){
+  if(candidate.planningZones===undefined)return candidate;
+  const {planningZones:_dropped,...rest}=candidate;
+  return rest as T;
+ }
+ if(modelPreservesPlanningZones(userZones,candidate.planningZones))return candidate;
+ return {...candidate,planningZones:structuredClone(userZones)};
+}

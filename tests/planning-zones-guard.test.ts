@@ -24,6 +24,18 @@ describe('planning-zone database save guard',()=>{
   await expect(f.rpc(owner,'scene.save',{...s.at(2),scene:s.base,planningZonesEdit:{version:1,previous:null}})).rejects.toThrow('PLANNING_ZONES_STALE');
   const removed=await f.rpc(owner,'scene.save',{...s.at(2),scene:s.base,planningZonesEdit:{version:1,previous:zones}});expect(removed.scene).not.toHaveProperty('planningZones');
  });
+ it('blocks a second session while the lease is held, then requires that tab to send the saved zones',async()=>{
+  const s=await setup(),other='30000000-0000-4000-8000-000000000002',withZones={...s.base,planningZones:zones};
+  await expect(f.rpc(owner,'lease.acquire',{projectId:s.project.id,sessionId:other})).rejects.toThrow('LEASE_BUSY');
+  await f.rpc(owner,'scene.save',{...s.at(0),scene:withZones,planningZonesEdit:{version:1,previous:null}});
+  await f.rpc(owner,'lease.release',{projectId:s.project.id,sessionId:session,generation:s.at(0).generation});
+  const handed=await f.rpc(owner,'lease.acquire',{projectId:s.project.id,sessionId:other});
+  const tab={projectId:s.project.id,sessionId:other,generation:handed.generation,expectedRevision:1};
+  await expect(f.rpc(owner,'scene.save',{...tab,scene:s.base,planningZonesEdit:{version:1,previous:null}})).rejects.toThrow('PLANNING_ZONES_STALE');
+  const saved=await f.rpc(owner,'scene.save',{...tab,scene:{...withZones,planningZones:{version:1,zones:[{...zone,name:'第二标签'}]}},planningZonesEdit:{version:1,previous:zones}});
+  expect(saved.revision).toBe(2);expect(saved.scene.planningZones.zones[0].name).toBe('第二标签');
+  expect((await f.rpc(owner,'projects.get',{projectId:s.project.id})).scene.planningZones.zones[0].source).toBe('unverified');
+ });
  it('rejects a second tab that reused the revision but kept an older previous value',async()=>{
   const s=await setup();const withZones={...s.base,planningZones:zones};
   await f.rpc(owner,'scene.save',{...s.at(0),scene:withZones,planningZonesEdit:{version:1,previous:null}});
