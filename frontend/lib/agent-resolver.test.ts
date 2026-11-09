@@ -4,6 +4,7 @@ import { localPlan } from '@/components/room-organizer/lib/local-plan';
 import { makeFloor, makeLayout } from '@/components/room-organizer/lib/__testfixtures__/fixtures';
 import { resolveBriefTurn, type BriefExtractTransport } from './agent-resolver';
 import { BRIEF_CLIENT_TIMEOUT_MS } from '../../supabase/functions/_shared/brief-extract-contract';
+import { SceneApiError } from '../../client/scene-client';
 
 const context = { venueUp: true, scaleTyped: false, hasBase: false, command: null } as const;
 afterEach(() => {vi.unstubAllEnvs();vi.useRealTimers();});
@@ -449,6 +450,19 @@ describe('model requirements', () => {
     expect((await resolveBriefTurn('80人', initialBriefMemory(), context, {
       briefExtract: vi.fn().mockResolvedValue({ enabled: false, extraction: null }),
     })).resolution).toBe('unavailable');
+  });
+
+  it.each([
+    ['ROUTE_NOT_FOUND',404,'更新服务'],
+    ['BRIEF_GUARD_NOT_READY',503,'完成配置'],
+  ] as const)('reports backend readiness %s without losing recorded requirements or retrying',async(code,status,message)=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefExtract=vi.fn().mockRejectedValue(new SceneApiError(code,status,{private:'secret diagnostic'}));
+    const previous={...initialBriefMemory(),headcount:80,headcountMode:'must' as const};
+    const turn=await resolveBriefTurn('继续',previous,context,{briefExtract});
+    expect(turn.resolution).toBe('failed');expect(turn.modelNotice).toContain(message);
+    expect(turn.modelNotice).not.toContain(code);expect(turn.modelNotice).not.toContain('secret diagnostic');
+    expect(turn.memory.headcount).toBe(80);expect(briefExtract).toHaveBeenCalledTimes(1);
   });
 
   it.each([
