@@ -180,7 +180,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,BRIEF_PROVIDER_TIMEOUT_MS);
           if(conversation){
             const checked=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({message:z.object({tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(providerResponse);
-            if((checked.base_resp&&checked.base_resp.status_code!==0)||checked.choices[0]!.message.tool_calls!==undefined||checked.choices[0]!.message.function_call!==undefined)throw new ApiError('MODEL_INVALID_RESPONSE',502);
+            // qwen3.8-max compatible responses set these to null when no tool ran.
+            // Null is not a tool call; an array or object still is.
+            const invoked=(value:unknown)=>value!==undefined&&value!==null;
+            if((checked.base_resp&&checked.base_resp.status_code!==0)||invoked(checked.choices[0]!.message.tool_calls)||invoked(checked.choices[0]!.message.function_call))throw new ApiError('MODEL_INVALID_RESPONSE',502);
           }
           const reply=z.object({choices:z.array(z.object({finish_reason:z.string().nullish(),message:z.object({content:z.string().nullish()})})).min(1)}).parse(providerResponse);
           const choice = reply.choices[0];

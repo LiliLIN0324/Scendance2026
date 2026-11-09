@@ -24,7 +24,9 @@ export interface BriefExtractTransport {
 }
 
 export type BriefResolution = 'model' | 'confirmation' | 'local_command' | 'disabled' | 'not_connected' | 'unavailable' | 'failed';
-export type ResolvedBriefTurn = BriefTurn & { resolution: BriefResolution; modelNotice?: string; modelReply?:string; unhandled?:BriefConversationResponse['unhandled']; materialQueries?:string[]; readOnlyReply?:boolean; usesModelText?:boolean; resumeInstruction?:string };
+/** Stable category for logs and tests. Production chat copy stays in modelNotice. */
+export interface ModelCallDiagnostic { category: 'unauthenticated' | 'route' | 'config' | 'timeout' | 'session' | 'network' | 'non_json' | 'contract' | 'http' | 'provider' | 'unknown'; status?: number; code?: string }
+export type ResolvedBriefTurn = BriefTurn & { resolution: BriefResolution; modelNotice?: string; modelDiagnostic?: ModelCallDiagnostic; modelReply?:string; unhandled?:BriefConversationResponse['unhandled']; materialQueries?:string[]; readOnlyReply?:boolean; usesModelText?:boolean; resumeInstruction?:string };
 
 /** Only recognise these explicit, non-executing instructions; preserve them
  * in unhandled for review, and reject any accompanying unrecognised action. */
@@ -35,6 +37,32 @@ function isReadOnlyAdviceBoundary(evidence: string, raw: string): boolean {
     /^(?:请)?(?:不要|别|不必|无需)(?:改|修改|调整)(?:场景|画布|布局)$/u.test(part));
 }
 
+const SAFE_DIAGNOSTIC_CODE=/^(?:[A-Z][A-Z0-9_]{0,64}|PROVIDER_HTTP_ERROR:[1-5]\d{2})$/;
+function safeDiagnosticCode(value: string | undefined): string | undefined {
+  return value && SAFE_DIAGNOSTIC_CODE.test(value) ? value : undefined;
+}
+function providerDiagnostic(reason: string | undefined, enabled: boolean): ModelCallDiagnostic {
+  const code=safeDiagnosticCode(reason);
+  return {category:enabled?'provider':'config',...(code?{code}:{})};
+}
+function thrownModelFailure(error: unknown, timedOut: boolean): { notice: string; diagnostic: ModelCallDiagnostic } {
+  if(timedOut)return {notice:'智能理解响应超时，已尝试取消请求；服务商可能仍会计费，请先核对状态和用量。本次先使用本地规则理解，请核对结果。',diagnostic:{category:'timeout',code:'MODEL_TIMEOUT'}};
+  if(error instanceof SceneApiError){
+    const code=safeDiagnosticCode(error.code);
+    const status=error.status;
+    const diagnostic=(category: ModelCallDiagnostic['category']): ModelCallDiagnostic => ({category,...(code?{code}:{}),...(Number.isInteger(status)?{status}:{})});
+    if(error.code==='UNAUTHENTICATED')return {notice:'请先登录以使用智能理解；本次先使用本地规则理解，请核对结果。',diagnostic:diagnostic('unauthenticated')};
+    if(error.code==='ROUTE_NOT_FOUND')return {notice:'当前服务尚未提供智能理解，请联系管理员更新服务。本次使用本地规则理解，请核对结果。',diagnostic:diagnostic('route')};
+    if(error.code==='BRIEF_GUARD_NOT_READY'||error.code==='CONVERSATION_API_NOT_CONFIGURED'||error.code==='CONVERSATION_API_DISABLED')return {notice:'智能理解暂未开放，请联系管理员完成配置。本次使用本地规则理解，请核对结果。',diagnostic:diagnostic('config')};
+    if(error.code==='SESSION_CHANGED')return {notice:'登录状态已变化，本次先使用本地规则理解，请核对结果。',diagnostic:diagnostic('session')};
+    if(error.code==='NETWORK_ERROR')return {notice:'智能理解网络请求没有完成，本次先使用本地规则理解，请核对结果。',diagnostic:diagnostic('network')};
+    if(error.code==='NON_JSON_RESPONSE')return {notice:'智能理解服务返回了无法读取的内容，本次先使用本地规则理解，请核对结果。',diagnostic:diagnostic('non_json')};
+    if(error.code==='INVALID_RESPONSE')return {notice:'智能理解结果未通过校验，未能完整理解本次要求，本次未生成方案。本次使用本地规则理解，请核对结果。',diagnostic:diagnostic('contract')};
+    return {notice:'智能理解暂不可用，本次先使用本地规则理解；如请求已发出，请先核对服务状态和用量。',diagnostic:diagnostic('http')};
+  }
+  if(error instanceof Error && error.name==='ZodError')return {notice:'智能理解结果未通过校验，未能完整理解本次要求，本次未生成方案。本次使用本地规则理解，请核对结果。',diagnostic:{category:'contract',code:'INVALID_RESPONSE'}};
+  return {notice:'智能理解暂不可用，本次先使用本地规则理解；如请求已发出，请先核对服务状态和用量。',diagnostic:{category:'unknown'}};
+}
 function modelFailureNotice(reason: string | undefined): string {
   if (reason === 'MODEL_PROVIDER_INCOMPLETE' || reason === 'MODEL_PROVIDER_URL_INVALID' || reason === 'MODEL_PROVIDER_PROFILE_INVALID' || reason === 'MODEL_PROVIDER_UNSUPPORTED_WORKFLOW' || reason === 'SERVICE_NOT_CONFIGURED') return '智能理解服务配置不完整或地址无效，请联系管理员检查。';
   if (reason === 'PROVIDER_HTTP_ERROR:401' || reason === 'PROVIDER_HTTP_ERROR:403') return '智能理解服务认证或权限未通过，请联系管理员检查。';
@@ -108,6 +136,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   }
   let fallback: BriefResolution = modelEnabled() ? 'not_connected' : 'disabled';
   let modelNotice: string | undefined = modelEnabled() && !controller ? '智能理解服务未连接，本次使用本地规则理解；请核对结果。' : undefined;
+  let modelDiagnostic: ModelCallDiagnostic | undefined = modelEnabled() && !controller ? {category:'config',code:'NOT_CONNECTED'} : undefined;
   if (modelEnabled() && controller) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const abort=new AbortController();let timedOut=false;
@@ -177,16 +206,17 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
         return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: 'model', ...presentation };
       }
       fallback = 'unavailable';
-      modelNotice = `${response.enabled ? modelFailureNotice('reason' in response && typeof response.reason==='string'?response.reason:undefined) : '智能理解服务尚未配置，请联系管理员。'} 本次使用本地规则理解，请核对结果。`;
+      const reason='reason' in response && typeof response.reason==='string'?response.reason:undefined;
+      modelNotice = `${response.enabled ? modelFailureNotice(reason) : '智能理解服务尚未配置，请联系管理员。'} 本次使用本地规则理解，请核对结果。`;
+      modelDiagnostic = providerDiagnostic(reason,response.enabled);
     } catch (error) {
-      // 后端不可用/未登录/模型抖动/超时：落到规则版。
+      // 后端不可用/未登录/模型抖动/超时：落到规则版。保留分类，不把响应正文写进界面。
       if(signal?.aborted)throw new DOMException('已停止等待','AbortError');
       fallback = 'failed';
-      if(error instanceof SceneApiError && error.code==='UNAUTHENTICATED')modelNotice='请先登录以使用智能理解；本次先使用本地规则理解，请核对结果。';
-      else if(error instanceof SceneApiError && error.code==='ROUTE_NOT_FOUND')modelNotice='当前服务尚未提供智能理解，请联系管理员更新服务。本次使用本地规则理解，请核对结果。';
-      else if(error instanceof SceneApiError && error.code==='BRIEF_GUARD_NOT_READY')modelNotice='智能理解暂未开放，请联系管理员完成配置。本次使用本地规则理解，请核对结果。';
-      else if(timedOut)modelNotice='智能理解响应超时，已尝试取消请求；服务商可能仍会计费，请先核对状态和用量。本次先使用本地规则理解，请核对结果。';
-      else modelNotice='智能理解暂不可用，本次先使用本地规则理解；如请求已发出，请先核对服务状态和用量。';
+      const classified=thrownModelFailure(error,timedOut);
+      modelNotice=classified.notice;
+      modelDiagnostic=classified.diagnostic;
+      if(process.env.NODE_ENV==='development')console.info('[brief]',classified.diagnostic.category,classified.diagnostic.code??'',classified.diagnostic.status??'');
     } finally {
       if (timeout !== undefined) clearTimeout(timeout);
       if(onCancel)signal?.removeEventListener('abort',onCancel);
@@ -211,9 +241,9 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   const fallbackContext = allowAutomaticGeneration ? context : { ...context, command: null };
   const turn = parseBriefTurn(raw, previous, fallbackContext, toExtraction(extraction));
   const pendingFacts = [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending];
-  if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...(allowAutomaticGeneration&&context.command?{pendingGeneration:{command:context.command,instruction:raw}}:{}) }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}) };
-  if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}) };
-  return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}) };
+  if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...(allowAutomaticGeneration&&context.command?{pendingGeneration:{command:context.command,instruction:raw}}:{}) }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
 }
 
 function basicQuestion(facts: PendingBasicFact[]): string {

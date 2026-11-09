@@ -76,6 +76,20 @@ describe('proposal freshness at the client write boundary', () => {
     await expect(client.request('/brief/extract', 'POST', {})).rejects.toBe(failure);
   });
 
+  it('classifies a conversation non-JSON body and a failed connection without copying the payload', async () => {
+    const token = vi.fn(async () => 'fake-test-token');
+    const network = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('<html>gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
+      .mockRejectedValueOnce(new TypeError('connect ECONNREFUSED 10.0.0.1'));
+    const client = createSceneClient('https://example.test/functions/v1/conversation-api', token);
+    await expect(client.request('/brief/extract', 'POST', { message: '80人' }, false, undefined, undefined, true)).rejects.toMatchObject({ code: 'NON_JSON_RESPONSE', status: 502, details: { category: 'non_json' } });
+    const networkError = await client.request('/brief/extract', 'POST', { message: '80人' }, false, undefined, undefined, true).catch(error => error);
+    expect(networkError).toMatchObject({ code: 'NETWORK_ERROR', status: 0, details: { category: 'network' } });
+    expect(JSON.stringify(networkError)).not.toContain('ECONNREFUSED');
+    expect(JSON.stringify(networkError)).not.toContain('gateway');
+    expect(network).toHaveBeenCalledTimes(2);
+  });
+
   it('does not request an access token or send an apply request for a malformed expiry', async () => {
     const { proposal, current } = await fixture('not-a-date');
     const token = vi.fn(async () => 'fake-test-token');

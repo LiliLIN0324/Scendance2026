@@ -17,21 +17,29 @@ export async function assertFreshProposal(proposal:Proposal,current:EditorState)
   if(proposal.project_id!==current.projectId || proposal.session_id!==current.sessionId || proposal.generation!==current.generation || proposal.base_revision!==current.expectedRevision || proposal.local_revision!==current.localRevision || proposal.applied_at || !Number.isFinite(expiresAt) || expiresAt<=Date.now() || proposal.base_hash!==await sceneHash(current.scene)) throw new SceneApiError('STALE_PROPOSAL',409,null);
 }
 export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<string|null>) {
-  async function request<T>(path:string,method='GET',body?:unknown,isPublic=false,signal?:AbortSignal,beforeDispatch?:()=>void):Promise<T> {
+  async function request<T>(path:string,method='GET',body?:unknown,isPublic=false,signal?:AbortSignal,beforeDispatch?:()=>void,classifyTransport=false):Promise<T> {
     const headers:Record<string,string>={};
     if(!isPublic) {const token=await getAccessToken();if(!token)throw new SceneApiError('UNAUTHENTICATED',401,null);headers.Authorization=`Bearer ${token}`;}
     const multipart=body instanceof FormData;
     if(body!==undefined&&!multipart) headers['Content-Type']='application/json';
     const payload=body===undefined?undefined:multipart?body as FormData:JSON.stringify(body);
     beforeDispatch?.();
-    const response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(payload===undefined?{}:{body:payload}),...(signal?{signal}:{}),cache:'no-store'});
+    let response:Response;
+    try {
+      response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(payload===undefined?{}:{body:payload}),...(signal?{signal}:{}),cache:'no-store'});
+    } catch (error) {
+      // Scene writes keep the original transport error so an uncertain POST can be recovered by GET.
+      // Only the read-only conversation call classifies a network failure, and it does not keep the message.
+      if(!classifyTransport||(error instanceof Error&&error.name==='AbortError'))throw error;
+      throw new SceneApiError('NETWORK_ERROR',0,{category:'network'});
+    }
     // Keep the HTTP status when the body is empty or not JSON. A parse failure
     // must not become an untyped exception that drops 401/502/503.
     let data:unknown;
     try { data=await response.json(); }
     catch(error) {
       if(typeof error==='object'&&error!==null&&'name' in error&&(error as {name?:string}).name==='AbortError') throw error;
-      throw new SceneApiError(response.ok?'INVALID_RESPONSE':'HTTP_ERROR',response.status,null);
+      throw new SceneApiError(response.ok?'INVALID_RESPONSE':classifyTransport?'NON_JSON_RESPONSE':'HTTP_ERROR',response.status,classifyTransport?{category:'non_json'}:null);
     }
     if(!response.ok) {
       const error=data&&typeof data==='object'&&'error' in data?(data as {error?:{code?:unknown;details?:unknown}}).error:undefined;
