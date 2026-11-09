@@ -22,7 +22,8 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
-import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount } from '../lib/agent-turn-outcome';
+import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
+import { chipsAfterFulfilled, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -87,6 +88,7 @@ import {describeExistingChanges,type ExistingChangeDescription} from '../lib/pro
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
+import { requestAgentStop } from './agent-chat-store';
 import { AgentRunPanel, useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
@@ -420,6 +422,10 @@ interface AgentValue {
   withdrawRetainedOtherSessionProposal():void;
   unresolvedDialogue: readonly string[];
   withdrawUnresolvedDialogue(text:string): void;
+  withdrawAllUnresolved(): void;
+  briefBusy: boolean;
+  toolPending: boolean;
+  processFailed: ProcessFailure | null;
   assertSessionWrite: () => void;
   sessionSaveFailed: boolean;
   understanding: boolean; isUnderstanding(text?:string): boolean; cancelUnderstanding(): void;
@@ -619,6 +625,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const uncertainInputs = useRef(new Set<string>());
   const pendingModelInputs = useRef(new Set<string>());
   const [understanding,setUnderstanding]=useState(false);
+  const [briefBusy,setBriefBusy]=useState(false);
+  const [toolPending,setToolPending]=useState(false);
+  const [processFailed,setProcessFailed]=useState<ProcessFailure|null>(null);
+  const layoutAttempt=useRef(false);
+  const cloudAttempt=useRef(false);
+  const previewUtterance=useRef<string|null>(null);
   const [cancelledInput,setCancelledInput]=useState<{id:number;text:string}|null>(null);
   const [retryUncertain,setRetryUncertain]=useState<string|null>(null);
   const dialogueTurnStartRef=useRef(onDialogueTurnStart);dialogueTurnStartRef.current=onDialogueTurnStart;
@@ -659,6 +671,40 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     updateDialogueIncomplete(id,text,false);
     say({role:'agent',text:'已撤回这项尚未处理的要求。其他要求仍然保留；如需方案，请重新生成并核对。'});
   };
+  const withdrawAllUnresolved=()=>{
+    const id=boundSessionId.current;
+    if(!id||!sessionScopeIsCurrent()||getActiveAssistantSessionId(sessionScope)!==id)return;
+    const items=[...(incompleteDialogueTurns.current.get(id)??[])];
+    for(const text of items)updateDialogueIncomplete(id,text,false);
+    if(items.length)say({role:'agent',text:'已撤回这些尚未处理的要求。如需方案，请重新生成并核对。'});
+  };
+  function clearFulfilledChip(text:string|null):void {
+    const id=boundSessionId.current,value=text?.trim()??'';
+    if(!id||!value)return;
+    const current=[...(incompleteDialogueTurns.current.get(id)??[])];
+    if(chipsAfterFulfilled(current,[value]).length===current.length)return;
+    updateDialogueIncomplete(id,value,false);
+  }
+  function beginLayoutAttempt(text:string,cloud:boolean):void {
+    const value=text.trim();
+    if(value)previewUtterance.current=value;
+    cloudAttempt.current=cloud;
+    layoutAttempt.current=true;
+    setToolPending(cloud);
+    setProcessFailed(null);
+  }
+  function finishLayoutAttempt(ok:boolean):void {
+    if(!layoutAttempt.current)return;
+    layoutAttempt.current=false;
+    const cloud=cloudAttempt.current;
+    setToolPending(false);
+    if(ok){setProcessFailed(null);clearFulfilledChip(previewUtterance.current);}
+    else setProcessFailed(cloud?'cloud_tool':'preview');
+  }
+  useEffect(()=>{
+    if(phase==='failed')finishLayoutAttempt(false);
+    if(phase==='proposed'||phase==='ready')finishLayoutAttempt(true);
+  },[phase]);
   function markUnresolvedModification(text:string):void {
     updateDialogueIncomplete(boundSessionId.current,text,true);
     if(phaseRef.current==='proposed'||phaseRef.current==='paused'||studioRef.current?.preview){
@@ -1987,6 +2033,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const skipped = plan.skipped?.length ?? 0;
     const localExploration=!!localDraftOwner.current;
     dropProposal();
+    clearFulfilledChip(previewUtterance.current);
     setPhase('ready'); setProgress(GEN_STEPS.length);
     say({ role: 'agent', text: review
       ? `确认了：${moved} 件换了位置，其他没动${skipped ? `；还有 ${skipped} 件没动（锁着或没找到落点）` : ''}。不想要就撤销一步，整体退回原位。`
@@ -2027,6 +2074,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', amber: true, text: current.notice ? `没写进画布：${current.notice}` : '这版没写进画布，画布还是你确认前的样子。改一下场地或重新出一版。' });
       return;
     }
+    clearFulfilledChip(previewUtterance.current);
     setPhase('ready'); setProgress(GEN_STEPS.length);
     say({ role: 'agent', amber: !!current.notice, text: `写进画布了，物料都能直接拖；不想要就撤销一步，整体退回来。${current.notice ? ` ${current.notice}。` : ''}` });
     callbacks.onFit();
@@ -2153,7 +2201,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const localDraftIntent = useRef<string|null>(null);
   function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
     if (!sessionScopeIsCurrent()) return;
-    if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { say({role:'agent',amber:true,text:'场地已变化，请重新说明当前场地尺寸。'}); return; }
+    if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { finishLayoutAttempt(false); say({role:'agent',amber:true,text:'场地已变化，请重新说明当前场地尺寸。'}); return; }
+    beginLayoutAttempt(previewUtterance.current || note || label || '', studioRef.current?.connection === '项目已连接');
     localDraftIntent.current=/(?:本地|本机)草案/.test(note)?note:null;
     const token = ++runToken.current;
     if (label) say({ role: 'user', text: label });
@@ -2166,6 +2215,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   /** 停一下：只收预览，画布退回确认前状态；提案留着，「接着摆」能续上。 */
   function stop(): void {
     if (phaseRef.current !== 'generating' && !generationWait.current) return;
+    if (lastSource.current === 'cloud') requestAgentStop();
+    layoutAttempt.current=false;setToolPending(false);
     runToken.current++;
     generationWait.current?.cancel();
     const current = studioRef.current;
@@ -2501,7 +2552,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const turnSequence = briefTurnSequence.current;
     const priorTurn = briefTurnTail.current;
     let releaseTurn!: () => void;
-    briefTurnTail.current = new Promise<void>((resolve) => { releaseTurn = () => {if(trackModel)pendingModelInputs.current.delete(trimmed);if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}resolve();}; });
+    briefTurnTail.current = new Promise<void>((resolve) => { releaseTurn = () => {setBriefBusy(false);if(trackModel)pendingModelInputs.current.delete(trimmed);if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}resolve();}; });
+    setBriefBusy(true);
+    setProcessFailed(null);
     await priorTurn;
     await waitForGeneration();
     if (activeRequest.controller.signal.aborted || !sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence) { releaseTurn(); return; }
@@ -2527,9 +2580,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined);
       if(turn.modelNotice?.includes('可能仍会计费'))uncertainInputs.current.add(trimmed);
       if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
-    } catch (error) { releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
+    } catch (error) { setProcessFailed('understanding'); releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
     if (!sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence) { releaseTurn(); return; }
     const outcome=resolvedTurnOutcome(turn,previousMemory,mixedUtility,trimmed);
+    if(outcome.kind==='failed')setProcessFailed('understanding');
     const incompleteUpdate=incompleteUpdateForOutcome(outcome);
     const unhandledRequirement=turn.unhandled?.some(item=>(item.kind==='action'||item.kind==='other')&&!!item.evidence&&trimmed.includes(item.evidence))??false;
     if(incompleteUpdate==='mark')updateDialogueIncomplete(turnSessionId,trimmed,true,unhandledRequirement);
@@ -2538,7 +2592,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({role:'agent',amber:true,text:'这项操作尚未执行，旧方案预览已收回。请带上这项要求重新生成，再核对修改。'});
     }
     if(turn.readOnlyReply){
-      if(turn.unhandled?.length)say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});
+      if(turn.unhandled?.length&&!sofaOnlyUnhandled(turn,trimmed))say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});
       say({role:'agent',text:turn.text,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:{})});releaseTurn();return;
     }
     if (sessionScope !== 'legacy' && (turnVenueBasis !== venueScaleBasis(layoutStore.getState().layout) || !venueFacts.isCurrent(turnVenueFact))) {
@@ -2608,7 +2662,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
     const mentionedNewMaterial=(turn.memory.reportedInventory??[]).some(item=>!(previousMemory.reportedInventory??[]).some(old=>old.evidence===item.evidence));
     if(turn.modelReply && turn.modelReply!==turn.text)say({role:'agent',text:`建议：${turn.modelReply}`,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});
-    if(turn.unhandled?.length){say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});if(turn.kind==='generate')return;}
+    const sofaAsk=sofaOnlyUnhandled(turn,trimmed);
+    if(sofaAsk&&turn.kind==='generate'){say({role:'agent',text:'沙发不是可选的布置方式。请选择圆桌或课桌椅；其他摆法需要说明，可能需要人工调整。'});return;}
+    if(turn.unhandled?.length&&!sofaAsk){say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});if(turn.kind==='generate')return;}
     if(mixedUtility){say({role:'agent',text:turn.text||'活动需求已记录，请核对；其他操作尚未执行。',...(turn.usesModelText?{modelConversation:true}:{}),...(turn.usesModelText&&turn.materialQueries?.length?{materialQueries:turn.materialQueries}:turn.usesModelText&&mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});return;}
     // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
     // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
@@ -2653,7 +2709,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       });
       return;
     }
-    if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});return;}
+    beginLayoutAttempt(trimmed, studioRef.current?.connection === '项目已连接');
+    if(isHistoryReviewRequired()){finishLayoutAttempt(false);say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});return;}
     const originalRequest=turn.resumeInstruction??trimmed;
     if(/(?:本地|本机)草案/.test(originalRequest)){
       const variant=command==='again'?(seed.current+=1,seed.current):seed.current;
@@ -2664,10 +2721,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (cloud?.connection === '项目已连接') {
       // 连着云就只走云预览。忙或恢复中若退回本地生成，会在云端还没稳时亮一颗确认。
       if (cloud.busy || cloud.recoverable) {
-        say({ role: 'agent', amber: true, text: `记下了：${summary}${carried}。云端还在处理上一版，确认先不亮。${suffix}` });
+        finishLayoutAttempt(false);
+        say({ role: 'agent', amber: true, text: '正在调用云端工具未完成：上一版仍在处理，确认先不亮。' });
         return;
       }
-      if(!cloudScaleMatches(scale))return;
+      if(!cloudScaleMatches(scale)){finishLayoutAttempt(false);return;}
       if (briefNote) say({ role: 'agent', text: briefNote });
       const token = ++runToken.current;
       suppressCancelledCloudPreview.current=false;
@@ -2675,9 +2733,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const seatingAllocation=cloudSeatingAllocation(turn.memory);
       const seatingSpecs=cloudSeatingSpecs(turn.memory);
       const conversationId=getActiveAssistantSessionId(sessionScope),boundId=boundSessionId.current;
+      beginLayoutAttempt(trimmed, true);
       trackGeneration(cloud.generate(cloudBriefMessage(turn.resumeInstruction ?? (command === 'again' ? '换一版不同的布局' : trimmed), turn.memory), { requirePreview: true,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}) }).then(result => {
-        if(token!==runToken.current||!sessionScopeIsCurrent()||boundSessionId.current!==boundId||getActiveAssistantSessionId(sessionScope)!==conversationId)return;
-        if(result?.kind==='unchanged'){setPhase('idle');setProgress(0);say({role:'agent',amber:true,text:result.message});}
+        if(token!==runToken.current||!sessionScopeIsCurrent()||boundSessionId.current!==boundId||getActiveAssistantSessionId(sessionScope)!==conversationId){finishLayoutAttempt(false);return;}
+        if(result?.kind==='unchanged'){finishLayoutAttempt(false);setPhase('idle');setProgress(0);say({role:'agent',amber:true,text:result.message});}
         else if (!adoptCloudProposal()) setPhase(current => (current === 'generating' ? 'failed' : current === 'ready' ? 'edited' : current));
       }));
       return;
@@ -2729,7 +2788,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
 
   const value: AgentValue = {
-    sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,withdrawUnresolvedDialogue,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
+    sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,withdrawUnresolvedDialogue,withdrawAllUnresolved,briefBusy,toolPending,processFailed,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
     canForward:(text)=>{const value=text.trim(),session=boundSessionId.current;return !!value&&!!session&&sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===session&&!pendingModelInputs.current.has(value)&&!uncertainInputs.current.has(value);},cancelUnderstanding,
     cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
@@ -3179,6 +3238,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
+  const processText = composeProcessStrip({
+    understanding: agent.understanding || agent.briefBusy,
+    generating,
+    cloudRunning: runState.scope === 'layout' && runState.isRunning,
+    cloudRound: runState.thoughtCount,
+    cloudTool: agent.toolPending,
+    failed: generating || agent.understanding || agent.briefBusy ? null : agent.processFailed,
+  });
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   const suggestion = useSuggestion(AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
@@ -3276,9 +3343,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
       </section>}
       {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card" aria-label="尚未处理的要求">
-        <strong>尚未处理的要求</strong>
-        <p>这些要求尚未完成。若已另行说明，请逐项确认是否撤回旧要求，再重新生成方案。</p>
-        {agent.unresolvedDialogue.map(text=><div key={text}><p>{text}</p><button type="button" onClick={()=>agent.withdrawUnresolvedDialogue(text)}>撤回这项要求</button></div>)}
+        <strong>尚未处理的要求（{agent.unresolvedDialogue.length}）</strong>
+        <p>这些要求尚未完成。已经理解或做成预览的要求会从这里拿掉。</p>
+        <button type="button" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
+        <details open>
+          <summary>查看这 {agent.unresolvedDialogue.length} 项</summary>
+          {agent.unresolvedDialogue.map(text=><div key={text}><p>{text}</p><button type="button" onClick={()=>agent.withdrawUnresolvedDialogue(text)}>撤回这项要求</button></div>)}
+        </details>
       </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
       {bingo && <div className="ap-card" aria-label="审校状态台">
@@ -3381,7 +3452,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
         }}/>
         </div>
-        {agent.understanding && <p role="status" className="ap-small">正在理解活动需求… <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></p>}
+        {processText && <p role="status" className="ap-small">{processText}{agent.understanding && processText === '正在理解活动需求…' && <> <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></>}</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         <p id="ap-data-notice" className="ap-small">{modelEnabled() && studio?.controller ? '输入文字可能发送至模型服务。' : '文字识别按本机规则处理。'}{process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1'?'对话可能发送本场近期文字和模型回复。':''}{studio?.connection === '项目已连接' ? '云端生成会发送当前场景及部分对话上下文。' : '未连接云端方案生成。'}</p>

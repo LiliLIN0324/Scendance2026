@@ -489,6 +489,22 @@ describe('dialogue export in-flight fence',()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');studioMock.controller.briefExtract.mockRejectedValueOnce(new Error('fixture failure'));
   const fence=tracker(),incomplete=vi.fn();state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueTurnStart={fence.start} onDialogueIncompleteChange={incomplete}><AgentPanel/></LayoutAgentProvider>);
   send('30人');expect(fence.active.size).toBe(1);await waitFor(()=>expect(fence.active.size).toBe(0));expect(studioMock.controller.briefExtract).toHaveBeenCalledOnce();expect(incomplete).toHaveBeenCalledWith(expect.any(String),true);
+  expect(await screen.findByText('已尝试：正在理解…')).toBeTruthy();
+ });
+ it('shows understanding for a freeform layout ask that is not a generate command',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');
+  studioMock.controller.briefExtract.mockImplementationOnce(()=>new Promise(()=>{}));
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('想把会场摆成围坐，方便大家说话');
+  expect(await screen.findByText('正在理解活动需求…')).toBeTruthy();
+ });
+ it('asks about a sofa instead of adding another pending chip',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'沙发需要另外说明摆法。',unhandled:[{kind:'other',evidence:'沙发布置'}],factEvidence:[]});
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+  send('沙发布置');
+  expect(await screen.findByText(/沙发不是可选的布置方式|沙发需要另外说明摆法|圆桌或课桌椅/)).toBeTruthy();
+  expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull();
  });
  it('releases on cancellation and does not apply a late provider response',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','0');let resolve!:(value:unknown)=>void;
@@ -570,7 +586,7 @@ describe('dialogue export in-flight fence',()=>{
   expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(text)).toBeTruthy();
   expect(incomplete).not.toHaveBeenCalledWith(expect.any(String),false);
  });
- it('does not treat one extracted fact as proof that a compound request was fully understood',async()=>{
+ it('clears a compound utterance once a later reply accepts it without an unhandled action',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
   const text='30人，灯光必须保持暖白';
   studioMock.controller.briefConversation
@@ -583,7 +599,7 @@ describe('dialogue export in-flight fence',()=>{
   send(text);
   await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledTimes(2));
   await screen.findByText(/已记录人数/);
-  expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText(text)).toBeTruthy();
+  await waitFor(()=>expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull());
  });
  it('keeps an unresolved fact when the venue changes before the delayed model result is accepted',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
@@ -2449,6 +2465,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(await screen.findByText(/还没确定布置方式/)).toBeTruthy();
     send('圆桌');
     expect(await screen.findByText('正在准备布置预览')).toBeTruthy();
+    expect(screen.getByText('正在生成布置预览')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/定舞台位置|放绿植/);
     await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
     const final=onPreview.mock.calls.map(([value])=>value as RoomLayout|null).filter((value):value is RoomLayout=>value!==null).at(-1)!;
