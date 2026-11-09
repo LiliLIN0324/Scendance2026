@@ -3,9 +3,10 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
+import { ledgerChecklistLines } from '@/lib/facts/ledger-entries';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
-import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
+import { deliveryInventoryLedger, deliveryScene, deliveryMaterials, type DeliveryInventoryAccounts, type DeliverySnapshot } from '../lib/scene-delivery';
 import { localDraftAvailable, localDraftDeliveryJson, localDraftMaterialsCsv } from '../lib/local-draft-delivery';
 import {sealLocalDraft,verifyLocalDraft} from '../lib/local-draft-integrity';
 import {withUnlinkedVenueNotes} from '../lib/unlinked-venue-export';
@@ -47,6 +48,8 @@ interface Props {
   /** Captures current activity/floor/session and a synchronous snapshot fence. */
   captureLocalDraftExport?: (()=>{isCurrent():boolean;release():void}|null)|undefined;
   capturePendingCandidates?: (()=>PendingCandidateCapture|null)|undefined;
+  /** 口述与候选库存。省略时场景 JSON 仍按当前物件记场景模型账。 */
+  inventoryAccounts?: DeliveryInventoryAccounts | null | undefined;
 }
 
 /** Only a current-session decision is exported; source text is never included. */
@@ -194,7 +197,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing Bingo Agent entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel,captureMobility,captureDialogue,captureLocalDraftExport,capturePendingCandidates }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel,captureMobility,captureDialogue,captureLocalDraftExport,capturePendingCandidates,inventoryAccounts }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [includeVenueNotes,setIncludeVenueNotes]=useState(false);
@@ -332,7 +335,8 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
           downloadTextFile(`${base}_平面_${part(floor.name, '1F')}.dxf`, 'application/dxf;charset=utf-8', text);
           setNotice(`“${floor.name}”平面 DXF 已导出。${layout.floors.length > 1 ? '其他楼层未包含。' : ''}`);
         } else {
-          const text = await deliveryManifestCsv(layout, metadata);
+          const ledger = deliveryInventoryLedger(before.layout, inventoryAccounts);
+          const text = await deliveryManifestCsv(layout, metadata, ledgerChecklistLines(ledger));
           if (!stillCurrent()) return;
           downloadSceneDelivery(text, 'text/csv;charset=utf-8', `${layout.name}_交付清单_${metadata.id}`, 'csv');
           setNotice('交付清单已导出，逐行列出了可带走文件、件数与缺失原因。');
@@ -343,7 +347,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         downloadSceneDelivery(result.buffer, 'model/gltf-binary', `${layout.name}_${metadata.id}`, 'glb');
         setNotice(`GLB 已重新加载复检，保留 ${result.objectCount} 个物件节点及场地结构。`);
       } else {
-        const text = kind === 'json' ? await sceneDeliveryJson(layout, metadata, before.checkins) : kind === 'execution' ? await sceneExecutionCsv(layout, metadata) : kind === 'operations' ? await eventOperationsCsv(layout, metadata, before.checkins) : sceneDeliveryCsv(layout, metadata);
+        const text = kind === 'json' ? await sceneDeliveryJson(layout, metadata, before.checkins, inventoryAccounts) : kind === 'execution' ? await sceneExecutionCsv(layout, metadata) : kind === 'operations' ? await eventOperationsCsv(layout, metadata, before.checkins) : sceneDeliveryCsv(layout, metadata);
         if (!stillCurrent()) return;
         const label = kind === 'json' ? '场景' : kind === 'execution' ? '执行清单' : kind === 'operations' ? '活动安排' : '物料清单';
         downloadSceneDelivery(text, kind === 'json' ? 'application/json' : 'text/csv;charset=utf-8', `${layout.name}_${label}_${metadata.id}`, kind === 'json' ? 'json' : 'csv');

@@ -5,7 +5,8 @@ import { assertGeneratedListNotProcured, deliveryListViolations } from '@/lib/fa
 import { ledgerChecklistLines } from '@/lib/facts/ledger-entries';
 import { hallD5SyntheticLecture } from '@/lib/facts/scenario-ledger';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { deliveryManifestCsv } from './scene-delivery';
+import { backendSceneToLayout } from './backend-adapter';
+import { deliveryInventoryLedger, deliveryManifestCsv, sceneDeliveryJson } from './scene-delivery';
 import type { RoomLayout } from './types';
 
 const base: RoomLayout = {
@@ -60,6 +61,32 @@ describe('delivery manifest', () => {
     expect(csv).toContain('catalog:desk-chair-en');
     expect(csv).toContain('库存账：核实库存');
     expect(csv).toContain('待核验');
+  });
+
+  it('writes oral, scene and withheld candidate counts into scene JSON', async () => {
+    const chairId = '10000000-0000-4000-8000-000000000001';
+    const current = backendSceneToLayout({
+      schemaVersion: 1, camera: 'overview', lighting: 'neutral',
+      venue: { width: 8, depth: 6, height: 3, shape: 'rectangle', entrances: [] },
+      objects: [1, 2].map(index => ({ id: `30000000-0000-4000-8000-${String(index).padStart(12, '0')}`, assetId: chairId, materialId: 'asset', position: { x: index, z: 1 }, rotation: 0, size: { width: 0.46, depth: 0.514, height: 0.887 }, color: '#ffffff', locked: false, notes: '' })),
+    }, { projectId: '20000000-0000-4000-8000-000000000001', name: '合成讲座', assetNames: { [chairId]: '原版椅子' } });
+    const accounts = {
+      reports: [{ evidence: '我们有80把椅子', status: 'reported' as const }],
+      candidate: { origin: 'user_reported' as const, entries: [{ identity: { kind: 'asset_id', value: chairId }, name: '原版椅子', available: 80, dimensions: { width: 0.46, depth: 0.514, height: 0.887 } }] },
+    };
+    const delivered = JSON.parse(await sceneDeliveryJson(current, { id: 'draft-ledger', generatedAt: '2026-11-09T00:00:00Z' }, undefined, accounts));
+    expect(delivered.inventoryLedger.oral).toEqual([expect.objectContaining({ identity: 'oral:椅子', quantity: 80, source: 'user_statement' })]);
+    expect(delivered.inventoryLedger.sceneModels).toEqual([expect.objectContaining({ identity: `asset:${chairId}`, quantity: 2, source: 'catalog_model' })]);
+    expect(delivered.inventoryLedger.verifiedStock).toEqual([]);
+    expect(delivered.inventoryLedger.stockStatus).toBe('unknown');
+    expect(delivered.inventoryLedger.listMeans).toBe('generated_not_procured_or_placed');
+    expect(delivered.inventoryLedger.withheldCandidateNote).toContain('不是核实库存');
+    assertGeneratedListNotProcured(JSON.stringify(delivered.inventoryLedger));
+    const csv = await deliveryManifestCsv(current, { id: 'draft-ledger', generatedAt: '2026-11-09T00:00:00Z' }, ledgerChecklistLines(deliveryInventoryLedger(current, accounts)));
+    assertGeneratedListNotProcured(csv);
+    expect(csv).toContain('库存账：口述');
+    expect(csv).toContain('库存账：场景模型');
+    expect(csv).not.toContain('库存账：核实库存');
   });
 
   it('keeps unsupported scene types in the list and explains why', async () => {

@@ -3260,7 +3260,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     <LocalActivitySwitchGuardProvider guard={localSwitchGuard}>
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider pendingCandidates={pendingCandidates} floorToken={floorToken} isFloorCurrent={floorSession.isCurrent} sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} captureSeatingAllocation={captureSeatingAllocation} captureDialogue={captureDialogue} captureMobility={()=>{
+    <CreativeStudioProvider pendingCandidates={pendingCandidates} floorToken={floorToken} isFloorCurrent={floorSession.isCurrent} sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} captureSeatingAllocation={captureSeatingAllocation} captureDialogue={captureDialogue} inventoryReports={agentBriefMemory?.reportedInventory} captureMobility={()=>{
       const token=sessionToken,selectedFloor=floorToken;if(!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor))throw new Error('活动或楼层已切换，请重新核对后导出。');
       const snapshot=()=>{const memory=getActiveBrief();return {present:!!memory,requirement:memory?.mobilityRequirement??null,needsClarification:memory?.mobilityNeedsClarification===true};};
       const basis=structuredClone(snapshot()),requirement=basis.requirement;

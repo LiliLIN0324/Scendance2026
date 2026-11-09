@@ -79,6 +79,42 @@ function positive(value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+export interface InventoryCountRow {
+  name: string;
+  type: string;
+  materialId: string;
+  assetVersionId: string | null;
+  width: number;
+  depth: number;
+  height: number;
+  quantity: number;
+  objectIds: readonly string[];
+}
+
+/** 场景清点按资产、物料或类型身份汇总。名称相同不能并成一行。 */
+export function sceneCountsFromInventoryRows(rows: readonly InventoryCountRow[]): SceneCountInput[] {
+  const groups = new Map<string, SceneCountInput>();
+  for (const row of rows) {
+    const asset = row.assetVersionId?.trim();
+    const material = row.materialId?.trim();
+    const type = row.type?.trim();
+    const identity = asset ? `asset:${asset}` : material ? `material:${material}` : type ? `type:${type}` : '';
+    const ids = row.objectIds.filter(id => typeof id === 'string' && id.trim()).join('、') || '未编号';
+    const key = `${identity}|${row.width}|${row.depth}|${row.height}`;
+    const prior = groups.get(key);
+    if (prior && identity) {
+      prior.quantity += row.quantity;
+      prior.evidence = `${prior.evidence}；场景物件 ${ids}`;
+      continue;
+    }
+    groups.set(key, {
+      identity, name: row.name, widthM: row.width, depthM: row.depth, heightM: row.height, quantity: row.quantity,
+      evidence: `场景物件 ${ids}`,
+    });
+  }
+  return [...groups.values()];
+}
+
 export function sceneLinesFromCounts(rows: readonly SceneCountInput[]): { lines: InventoryLine[]; rejected: string[] } {
   const lines: InventoryLine[] = [];
   const rejected: string[] = [];

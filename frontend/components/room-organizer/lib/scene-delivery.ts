@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GENERATED_LIST_NOTICE, type LedgerChecklistLine } from '@/lib/facts/delivery-list-guard';
+import { assembleThreeLedgers, sceneCountsFromInventoryRows, type AssembledLedger, type CandidateStockInput, type OralReport } from '@/lib/facts/ledger-entries';
 import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
 import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
@@ -132,7 +133,40 @@ export function deliveryVerificationScope(scene: ReturnType<typeof deliveryScene
 
 const SCOPE_NOTICE = `${REFERENCE_SOURCE_UNVERIFIED}本清单未核验出入口、门扇、人流、消防、无障碍或核定容量；现场与相关方仍需确认。隐私过滤不能保证识别全部敏感信息，请分享前核对。`;
 
-export async function sceneDeliveryJson(layout: RoomLayout, snapshot?: DeliverySnapshot, checkins?: MaterialCheckinLedger): Promise<string> {
+export interface DeliveryInventoryAccounts {
+  reports?: readonly OralReport[];
+  candidate?: CandidateStockInput | null;
+}
+
+/** 用当前场景清点、口述和候选库存组装三本账。候选填写不会变成核实库存。 */
+export function deliveryInventoryLedger(layout: RoomLayout, accounts?: DeliveryInventoryAccounts | null): AssembledLedger {
+  const scene = sceneCountsFromInventoryRows(deliverableInventory(layout).map(row => ({
+    name: row.name, type: row.type, materialId: row.materialId, assetVersionId: row.assetVersionId,
+    width: row.width, depth: row.depth, height: row.height, quantity: row.quantity, objectIds: row.objectIds,
+  })));
+  return assembleThreeLedgers({ reports: accounts?.reports, scene, candidate: accounts?.candidate ?? null });
+}
+
+function deliveryLedgerRecord(ledger: AssembledLedger) {
+  const line = (item: AssembledLedger['oral'][number]) => ({
+    identity: item.identity, name: item.name, quantity: item.quantity, evidence: item.evidence, source: item.source,
+    dimensions: item.dimensions,
+  });
+  return {
+    listMeans: 'generated_not_procured_or_placed' as const,
+    notice: GENERATED_LIST_NOTICE,
+    stockStatus: ledger.stockStatus,
+    oral: ledger.oral.map(line),
+    sceneModels: ledger.sceneModels.map(line),
+    verifiedStock: ledger.verifiedStock.map(line),
+    shortages: ledger.shortages,
+    unmatchedSceneIdentities: ledger.unmatchedSceneIdentities,
+    unreadOral: ledger.unreadOral,
+    withheldCandidateNote: ledger.withheldCandidateNote,
+  };
+}
+
+export async function sceneDeliveryJson(layout: RoomLayout, snapshot?: DeliverySnapshot, checkins?: MaterialCheckinLedger, accounts?: DeliveryInventoryAccounts | null): Promise<string> {
   const scene = deliveryScene(layout);
   const deliverySceneRecord=scene.schemaVersion===2?(({design:_unverifiedDesign,...rest})=>({...rest,objects:rest.objects.map(object=>({...object,notes:''})),dimensions:rest.dimensions.map((dimension,index)=>({...dimension,label:`尺寸记录 ${index+1}（来源待核验）`}))}))(scene):{...scene,objects:scene.objects.map(object=>({...object,notes:''}))};
   const output = { format: 'scendance-scene-delivery', version: 2, units: 'm', upAxis: 'Y',
@@ -142,7 +176,8 @@ export async function sceneDeliveryJson(layout: RoomLayout, snapshot?: DeliveryS
     source: { kind: 'editor-snapshot', layoutId: layout.id ?? null },
     // 系统生成与结构标记分开；缺失来源不作推断。
     provenance: layoutProvenanceBreakdown(layout),
-    note: '原方案自由文字未独立核验，本交付包不包含该部分；原方案记录仍保留。assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。' };
+    inventoryLedger: deliveryLedgerRecord(deliveryInventoryLedger(layout, accounts)),
+    note: '原方案自由文字未独立核验，本交付包不包含该部分；原方案记录仍保留。assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。生成清单不等于已采购或已布置。' };
   const sanitized=redactDeliveryValue(output);
   return JSON.stringify({ ...(sanitized.value as Record<string,unknown>), privacy: { redactedFields: sanitized.removed, note: '已识别的部分凭据与私密链接已过滤；不能保证识别全部敏感信息，请分享前核对。需要的证据请另行安全提供。' } }, null, 2);
 }

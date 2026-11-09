@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { executionTimetableHtml } from '@/lib/execution-timetable-export';
+import { assertGeneratedListNotProcured } from '@/lib/facts/delivery-list-guard';
 import { serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
 import { productionPlanHandoffHtml } from '@/lib/production-plan-export';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
@@ -561,10 +562,30 @@ describe('Bingo scene delivery panel',()=>{
   it('keeps JSON and CSV as separate explicit downloads',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
-    await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledWith(layout,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),undefined));
+    await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledWith(layout,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),undefined,undefined));
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出物料清单 CSV'}));
     await waitFor(()=>expect(sceneDeliveryCsv).toHaveBeenCalledWith(layout,vi.mocked(sceneDeliveryJson).mock.calls[0][1]));
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
+  });
+  it('sends the three inventory columns from the export buttons', async () => {
+    const accounts = {
+      reports: [{ evidence: '我们有80把椅子', status: 'reported' as const }],
+      candidate: { origin: 'user_reported' as const, entries: [{ identity: { kind: 'type', value: 'chair' }, name: '椅子', available: 80, dimensions: { width: 1, depth: 1, height: 1 } }] },
+    };
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} inventoryAccounts={accounts} />);
+    openExportTab();
+    fireEvent.click(screen.getByRole('button', { name: '导出场景 JSON' }));
+    await waitFor(() => expect(sceneDeliveryJson).toHaveBeenCalledWith(workLayout(), expect.objectContaining({ id: expect.any(String), generatedAt: expect.any(String) }), undefined, accounts));
+    fireEvent.click(screen.getByRole('button', { name: '导出交付清单 CSV' }));
+    await waitFor(() => expect(downloadSceneDelivery).toHaveBeenCalled());
+    const csv = String(vi.mocked(downloadSceneDelivery).mock.calls.at(-1)?.[0]);
+    expect(csv).toContain('库存账：口述');
+    expect(csv).toContain('oral:椅子');
+    expect(csv).toContain('库存账：场景模型');
+    expect(csv).toContain('material:chair');
+    expect(csv).not.toContain('库存账：核实库存');
+    expect(csv).toContain('清单含义');
+    assertGeneratedListNotProcured(csv);
   });
   it('does not download a stale snapshot after scene editing during verification',async()=>{
     let done!:(value:{buffer:ArrayBuffer;objectCount:number})=>void;
