@@ -461,6 +461,28 @@ function send(text: string): void {
   fireEvent.click(screen.getByRole('button', { name: '发送' }));
 }
 
+describe('chat column', () => {
+  it('shows one short conflict card when confirm is refused twice', async () => {
+    const message = '有 40 件物料存在冲突，本次未应用。请先调整：「餐椅」落点不合法：「圆桌」与「餐椅」包围盒重叠';
+    const onApply = vi.fn(() => { throw new Error(message); });
+    render(<LocalHarness initial={makeLayout({ width: 12, height: 9 })} onApply={onApply} />);
+    send('30人，室内12×9，圆桌');
+    const confirm = await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(onApply).toHaveBeenCalled();
+    expect(screen.getAllByText(/40 件没写上/)).toHaveLength(1);
+    expect(screen.queryByText(message)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '椅子和圆桌叠在一起' }));
+    const trace = document.querySelector('.ap-tool-rows');
+    expect(trace?.textContent).toContain('出预览');
+    expect(trace?.textContent).toContain('确认布置');
+    expect(trace?.textContent).toContain('核对重叠');
+    expect(trace?.textContent).not.toContain('已落画布');
+    expect(trace?.textContent).not.toContain(message);
+  }, 20000);
+});
+
 describe('single-agent input bridge',()=>{
   it('accepts only nonempty text for the current active activity and session',async()=>{
     state.layout=makeLayout({id:'bridge-activity'});let current=true;const result=vi.fn();
@@ -2493,7 +2515,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(await screen.findByText(/还没确定布置方式/)).toBeTruthy();
     send('圆桌');
     expect(await screen.findByText('正在准备布置预览')).toBeTruthy();
-    expect(screen.getByText('正在生成布置预览')).toBeTruthy();
+    expect(screen.getAllByText('正在试排圆桌…').length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/定舞台位置|放绿植/);
     await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
     const final=onPreview.mock.calls.map(([value])=>value as RoomLayout|null).filter((value):value is RoomLayout=>value!==null).at(-1)!;
