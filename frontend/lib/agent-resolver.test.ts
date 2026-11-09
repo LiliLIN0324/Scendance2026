@@ -294,7 +294,7 @@ describe('model requirements', () => {
   });
   it('continues an explicitly requested generation only after the pending facts are confirmed', async()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
-    const raw='为30人办室内讲座，场地长12米宽10米，采用课桌椅布局，生成方案';
+    const raw='为30人办室内讲座，采用课桌椅布局，生成方案';
     const transport={briefExtract:async()=>({enabled:true,extraction:{event:'讲座',headcount:30,venueIO:'indoor' as const,lengthM:12,widthM:10,layoutMode:'desk-chair' as const}})};
     const first=await resolveBriefTurn(raw,initialBriefMemory(),{...context,command:'first'},transport);
     expect(first.kind).toBe('ask');expect(first.memory.pendingBasicFacts?.length).toBeGreaterThan(0);
@@ -326,7 +326,7 @@ describe('model requirements', () => {
   });
   it('resumes locally recognized standalone generation after fact confirmation when the model repeats that action as unhandled',async()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
-    const raw='为30人办室内讲座，场地长10米宽8米，采用课桌椅布局，生成方案';
+    const raw='为30人办室内讲座，采用课桌椅布局，生成方案';
     const transport={briefExtract:async()=>({enabled:false,extraction:null}),briefConversation:async()=>({enabled:true,extraction:{headcount:30,lengthM:10,widthM:8},reply:'先核对场地。',unhandled:[{kind:'action' as const,evidence:'生成方案'}],factEvidence:[]})};
     const first=await resolveBriefTurn(raw,initialBriefMemory(),{...context,command:'first'},transport,undefined,{history:[]});
     expect(first.kind).toBe('ask');expect(first.unhandled).toEqual([]);expect(first.memory.pendingGeneration?.instruction).toBe(raw);

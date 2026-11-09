@@ -1,6 +1,7 @@
 import { createGlbCatalogItem, ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { aholoAssetUrl, DIRECT_BASE, findAholoAsset, importAholoAsset } from './aholo-assets';
 import { findShippedAsset, shippedAssetUrl } from './shipped-assets';
+import { layoutRoleFromAssetName, layoutRoleNote } from './layout-role';
 import type { CatalogItem } from './types';
 import type { SplatMeters, SplatSource } from '../three/splat-preview';
 
@@ -54,10 +55,12 @@ async function toCatalogItem(asset: AssetLike, url: string): Promise<CatalogItem
   await ensureGlbAsset(asset.assetId, url);
   const dimensions = getGlbAssetState(asset.assetId).dimensions;
   if (!dimensions) throw new Error('模型没有量出尺寸，请重新落盘。');
+  const role = layoutRoleFromAssetName(asset.name);
   return createGlbCatalogItem({
     name: asset.name, url, assetId: asset.assetId,
     width: dimensions.width, depth: dimensions.depth, height: dimensions.height,
     source: 'generated',
+    ...(role ? { notes: layoutRoleNote(role) } : {}),
   });
 }
 

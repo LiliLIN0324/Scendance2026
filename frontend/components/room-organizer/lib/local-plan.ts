@@ -38,6 +38,8 @@ export interface LocalPlanInput {
   functionalNeeds?: FunctionalNeeds;
   seatPriority?: boolean;
   layoutMode?: 'dining' | 'desk-chair';
+  /** ring = round tables on a loop. Omitted keeps the existing dining grid. */
+  seatingShape?: 'ring' | 'grid';
   stage?: boolean;
   checkin?: boolean;
 }
@@ -145,6 +147,7 @@ function fallbackPlan(input: LocalPlanInput): PlanProposal {
     guests: input.guests ?? null,
     ...(input.seatPriority !== undefined ? { seatPriority: input.seatPriority } : {}),
     ...(input.layoutMode ? { layoutMode: input.layoutMode } : {}),
+    ...(input.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}),
     ...(input.stage !== undefined ? { stage: input.stage } : {}),
     ...(input.checkin !== undefined ? { checkin: input.checkin } : {}),
   });
@@ -162,7 +165,7 @@ function scriptAttempt(input: LocalPlanInput): SceneScriptCompileResult | null {
       checkin: input.checkin ?? false,
       seed: input.variant >>> 0,
     });
-    return compileSceneScript(script, { base: input.base, floorIndex: input.floorIndex });
+    return compileSceneScript(script, { base: input.base, floorIndex: input.floorIndex, ...(input.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}) });
   } catch {
     return null;
   }

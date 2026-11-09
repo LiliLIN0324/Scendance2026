@@ -4,6 +4,8 @@ import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { backendSceneToLayout } from './backend-adapter';
 import { mergeDiagnostics, rejectedDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
+import { layoutRoleFromAssetName, layoutRoleFromNote, layoutRoleNote } from './layout-role';
+import { ringCenters, ringDiningSet, setFootprint } from './ring-seating';
 import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
@@ -62,6 +64,8 @@ export interface PlanInput {
   seatPriority?: boolean;
   /** desk-chair = 一人一套课桌椅（「课桌配椅子」「80 套」）；缺省按餐桌组摆。 */
   layoutMode?: 'dining' | 'desk-chair';
+  /** ring = 圆桌沿环/扇形摆。缺省仍用原来的方格槽位。 */
+  seatingShape?: 'ring' | 'grid';
   /** 缺省仍放舞台背景板。显式 false 才跳过（课室、或人说不要舞台）。 */
   stage?: boolean;
   /** 缺省不放签到台。发布会等活动或人点了签到才放，放不下就丢这一件。 */
@@ -391,6 +395,21 @@ export function proposePlan(input: PlanInput): PlanProposal {
         if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
       }
     }
+  } else if (input.seatingShape === 'ring') {
+    const dining = ringDiningSet();
+    const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'ring-measure' });
+    if (sample.length) {
+      const footprint = setFootprint(sample);
+      const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || 4;
+      const centers = ringCenters({ x: -widthM / 2, z: -depthM / 2, w: widthM, d: depthM }, footprint, 0.6, 1.2);
+      const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
+      const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
+      const count = Math.max(1, Math.min(centers.length, wantedSets));
+      for (const center of centers.slice(0, count)) {
+        const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
+        accept(tryAdd(base, current, floorIndex, items));
+      }
+    }
   } else {
     const dining = FURNITURE_SETS.find(set => set.key === 'dining');
     if (dining) {
@@ -644,14 +663,16 @@ const ROLE_ALIASES: Readonly<Record<string, readonly string[]>> = {
 function matchesRole(item: FurnitureItem, role: string): boolean {
   const key = role.replace(/[（）()【】[\]·\s]/g, '');
   if (!key) return false;
+  const noted = layoutRoleFromNote(item.notes);
   if (key === '舞台') {
+    if (noted === '舞台') return true;
     if (item.type === 'backdrop' || item.materialId === 'backdrop' || /(背景|背板|指示|标识|灯|音箱|屏幕|幕布)/.test(item.name)) return false;
     return item.type === 'stage' || item.type === 'stage-platform'
       || (item.materialId === 'asset' && item.assetId === '2476e655-516e-5563-baad-aa821272acb7')
       || /^(主|临时)?(舞台|讲台)(平台)?([（(].*[）)])?$/.test(item.name.trim());
   }
   const aliases = ROLE_ALIASES[key] ?? [key];
-  const fields = [String(item.type), item.name, item.materialId ?? '', item.assetId ?? ''];
+  const fields = [String(item.type), item.name, item.materialId ?? '', item.assetId ?? '', noted];
   return aliases.some(alias => fields.some(field => field === alias || (alias.length > 1 && field.includes(alias))));
 }
 
@@ -686,11 +707,13 @@ function buildRevisionItem(op: PlanAddOp): { item: FurnitureItem; name: string }
   }
   if (!(op.width && op.depth && op.width > 0 && op.depth > 0)) return null;
   const height = op.height && op.height > 0 ? op.height : Math.max(op.width, op.depth);
+  const role = layoutRoleFromAssetName(op.name ?? op.assetId);
   const item: FurnitureItem = {
     id: uid(), type: 'glb-asset', name: op.name ?? op.assetId,
     width: op.width, depth: op.depth, height,
     color: '#9aa3ad', icon: '📦', materialId: 'asset', assetId: op.assetId, source: 'generated',
     ...(op.glbUrl ? { glbUrl: op.glbUrl } : {}),
+    ...(role ? { notes: layoutRoleNote(role) } : {}),
     position: { x: 0, z: 0 }, rotation: 0,
   };
   return { item, name: item.name };
