@@ -71,6 +71,11 @@ describe('isZoneRect / isRoomZone (#155)', () => {
     expect(isRoomZone({ ...bedroom, name: 3 })).toBe(false);
     expect(isRoomZone({ ...bedroom, color: null })).toBe(false);
   });
+
+  it('accepts known semantic types and rejects malformed values rather than treating them as confirmed',()=>{
+    for(const type of ['roundtable','checkin','photo','rest','desk','reserved'])expect(isRoomZone({...bedroom,zoneType:type})).toBe(true);
+    for(const type of [null,'unknown','__proto__',12])expect(isRoomZone({...bedroom,zoneType:type})).toBe(false);
+  });
 });
 
 describe('zone membership and stats (#155)', () => {
@@ -120,5 +125,6 @@ describe('zone defaults (#155)', () => {
     expect(sameZone(bedroom, { ...bedroom })).toBe(true);
     expect(sameZone(bedroom, { ...bedroom, name: 'Study' })).toBe(false);
     expect(sameZone(bedroom, { ...bedroom, w: 3.1 })).toBe(false);
+    expect(sameZone(bedroom, { ...bedroom, zoneType:'reserved' })).toBe(false);
   });
 });

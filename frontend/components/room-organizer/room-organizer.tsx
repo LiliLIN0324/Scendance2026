@@ -3747,9 +3747,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                       notify('应用后的布局与预览不一致，请先撤销并重新核对。', 'error');
                       return;
                     }
-                    const consumed = prepared.remainingDraft
-                      ? planAnnot.replaceDraftIfRevision(snapshot.revision, prepared.remainingDraft)
-                      : planAnnot.clearDraftIfRevision(snapshot.revision);
+                    const consumed = planAnnot.consumeZonesIfRevision(snapshot.revision);
                     if (!consumed) {
                       notify('布局已应用；新添加的标注已保留，请重新核对。', 'info');
                       return;

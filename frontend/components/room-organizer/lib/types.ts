@@ -3,6 +3,7 @@ import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { Provenance } from '../../../lib/rng';
+import type { ZoneSemanticType } from '../../../lib/plan-annotation';
 
 export type Vec2 = Readonly<{ x: number; z: number }>;
 
@@ -308,6 +309,8 @@ export interface RoomZone {
   id: string;
   name: string;
   color: string;
+  /** Missing on older zones: the intended use is unknown, not inferred from the name. */
+  zoneType?: ZoneSemanticType;
   x: number;
   z: number;
   w: number;
