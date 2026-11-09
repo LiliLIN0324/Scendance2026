@@ -95,15 +95,25 @@ function publicReconstructionJob(input:Record<string,unknown>):Record<string,unk
   const issues=Array.isArray(input.issues)?input.issues.filter((issue:unknown)=>!!issue&&typeof issue==='object'&&(issue as {code?:unknown}).code!=='MODEL_RAW_NOTE').map((issue:unknown)=>({code:safeReviewCodes.has(String((issue as {code?:unknown}).code))?String((issue as {code:unknown}).code):'REVIEW_REQUIRED',message:'需要人工核验的事项。',...((issue as {targetId?:unknown}).targetId?{targetId:(issue as {targetId:unknown}).targetId}:{})})):[];
   return {...input,...(input.candidate!==undefined?{candidate:blocked?null:candidate}:{}),issues,...(proposal?{proposal:blocked?null:safeProposal}:{}),...(blocked?{state:'failed',error_code:'MODEL_TEXT_REVIEW_REQUIRED'}:{}),modelText:MODEL_TEXT_NOTICE,projection:{status:'read_only',changed:blocked,requiresOriginalSceneForWrite:blocked},sceneObjectCounts:counts,sceneObjectCountsScope:'candidate_objects_only',safetyChecklist:reconstructionSafetyChecklist(blocked?null:scene)};
 }
+/** Exact env entries, the production site, and this project's Pages preview hosts. */
+function originPermitted(origin:string,allowed:string[]):boolean {
+  if(allowed.includes(origin)||origin==='https://scendance.lilicoding.space')return true;
+  let url:URL;
+  try { url=new URL(origin); } catch { return false; }
+  if(url.protocol!=='https:'||url.username||url.password||url.port||url.pathname!=='/'||url.search||url.hash)return false;
+  const host=url.hostname.toLowerCase();
+  return host==='scendance-scene-planner-ewz.pages.dev'||/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.scendance-scene-planner-ewz\.pages\.dev$/.test(host);
+}
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUntil?:(task:Promise<unknown>)=>void) {
   return async(request:Request):Promise<Response>=>{
     const origin=request.headers.get('origin');
     const allowed=(env('ALLOWED_ORIGINS')??'http://localhost:3000,http://localhost:3210,http://localhost:3211,http://127.0.0.1:3210,http://127.0.0.1:3211').split(',').map(s=>s.trim());
     const headers=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});
-    if(origin && allowed.includes(origin)) headers.set('Access-Control-Allow-Origin',origin);
+    const permitted=!!origin&&originPermitted(origin,allowed);
+    if(permitted&&origin) headers.set('Access-Control-Allow-Origin',origin);
     const respond=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
     try {
-      if(origin && !allowed.includes(origin)) throw new ApiError('ORIGIN_FORBIDDEN',403);
+      if(origin && !permitted) throw new ApiError('ORIGIN_FORBIDDEN',403);
       if(request.method==='OPTIONS') {
         headers.set('Access-Control-Allow-Methods','GET,POST,PUT,PATCH,DELETE,OPTIONS');
         headers.set('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info');

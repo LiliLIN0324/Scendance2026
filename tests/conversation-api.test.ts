@@ -14,6 +14,17 @@ describe('narrow conversation Edge route',()=>{
   expect((await api(make('/functions/v1/conversation-api/brief/extract',{message:'30人'},true,'https://other.test'))).status).toBe(403);
   const preflight=await api(new Request('https://edge.test/functions/v1/conversation-api/assistant/chat',{method:'OPTIONS',headers:{origin:'https://example.test','access-control-request-method':'POST'}}));
   expect(preflight.status).toBe(204);expect(preflight.headers.get('access-control-allow-origin')).toBe('https://example.test');expect(preflight.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS');expect(fetcher).not.toHaveBeenCalled();
+  const scene=createApi(backend,env,fetcher);
+  for(const origin of ['https://cd61e48a.scendance-scene-planner-ewz.pages.dev','https://codex-production-conversatio.scendance-scene-planner-ewz.pages.dev','https://scendance-scene-planner-ewz.pages.dev','https://scendance.lilicoding.space']){
+   const conversationPreflight=await api(new Request('https://edge.test/functions/v1/conversation-api/brief/extract',{method:'OPTIONS',headers:{origin,'access-control-request-method':'POST'}}));
+   expect(conversationPreflight.status).toBe(204);expect(conversationPreflight.headers.get('access-control-allow-origin')).toBe(origin);expect(conversationPreflight.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS');
+   const scenePreflight=await scene(new Request('https://edge.test/functions/v1/scene-api/studios',{method:'OPTIONS',headers:{origin,'access-control-request-method':'GET'}}));
+   expect(scenePreflight.status).toBe(204);expect(scenePreflight.headers.get('access-control-allow-origin')).toBe(origin);
+  }
+  for(const origin of ['https://evil.pages.dev','https://a.b.scendance-scene-planner-ewz.pages.dev','https://cd61e48a.scendance-scene-planner-ewz.pages.dev.evil.test','http://cd61e48a.scendance-scene-planner-ewz.pages.dev','https://user:pass@cd61e48a.scendance-scene-planner-ewz.pages.dev']){
+   expect((await api(new Request('https://edge.test/functions/v1/conversation-api/brief/extract',{method:'OPTIONS',headers:{origin}}))).status).toBe(403);
+   expect((await scene(new Request('https://edge.test/functions/v1/scene-api/projects',{method:'OPTIONS',headers:{origin}}))).status).toBe(403);
+  }
  });
  it('rejects scene writes, lookalike paths, unsupported methods and unknown preflights',async()=>{
   const backend={user:vi.fn(async()=> 'user'),scene:vi.fn()} as unknown as Backend,fetcher=vi.fn<typeof fetch>(),api=createConversationApi(backend,env,fetcher);
