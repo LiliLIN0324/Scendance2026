@@ -15,7 +15,7 @@ import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
-import { CHAT_API_KEY_ENV, chatRequest, generateProposal } from './providers.ts';
+import { CHAT_API_KEY_ENV, chatProfile, chatRequest, generateProposal } from './providers.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefConversation, parseModelBrief, BRIEF_CONVERSATION_PROMPT, BRIEF_EXTRACT_PROMPT, BRIEF_PROVIDER_TIMEOUT_MS } from './brief-extract-contract.ts';
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
@@ -156,12 +156,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const emptyConversation={reply:null,unhandled:[],factEvidence:[]} as const;
         if(conversation && env('BRIEF_CONVERSATION_ENABLED')!=='1')return respond({enabled:false,extraction:null,...emptyConversation});
         // 与 agent-runner 共用 chatRequest（自定义 OpenAI 兼容供应商 → Tokendance 网关 → DeepSeek 官方）；三路都缺才如实说未启用。
-        if(!env(CHAT_API_KEY_ENV) && !env('DEEPSEEK_API_KEY') && !env('AGENT_CHAT_KEY') && !env('AGENT_CHAT_BASE_URL') && !env('AGENT_CHAT_MODEL') && !env('AGENT_CHAT_PROFILE')) return respond({enabled:false,extraction:null,...(conversation?emptyConversation:{})});
+        if((!env('BAILIAN_PRODUCT_ENABLED') || env('BAILIAN_PRODUCT_ENABLED')==='0') && !env(CHAT_API_KEY_ENV) && !env('DEEPSEEK_API_KEY') && !env('AGENT_CHAT_KEY') && !env('AGENT_CHAT_BASE_URL') && !env('AGENT_CHAT_MODEL') && !env('AGENT_CHAT_PROFILE')) return respond({enabled:false,extraction:null,...(conversation?emptyConversation:{})});
         try {
           const userContent='history' in input?JSON.stringify({message:input.message,history:input.history}):input.message;
           // The existing MiniMax profile forwards token fields unchanged. Keep
           // legacy payloads byte-compatible while bounding the new mode.
-          const tokenLimit=conversation&&env('AGENT_CHAT_PROFILE')==='minimax'?{max_completion_tokens:2048}:{max_tokens:2048};
+          const tokenLimit=conversation&&chatProfile(env,'brief')==='minimax'?{max_completion_tokens:2048}:{max_tokens:2048};
           const { url, init } = chatRequest(env, { messages: [
             { role:'system', content: conversation?BRIEF_CONVERSATION_PROMPT:BRIEF_EXTRACT_PROMPT },
             { role:'user', content: userContent },
@@ -269,7 +269,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;
           if(!activity&&input.selectedIds.some(id=>!input.scene.objects.some(object=>object.id===id)))throw new ApiError('INVALID_SELECTION',422);
           if(!activity)requireOriginalSceneWritable((await backend.scene(actor,'projects.get',{projectId})).scene);
-          const miniMaxPreview=!activity&&env('AGENT_CHAT_PROFILE')==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
+          const miniMaxPreview=!activity&&chatProfile(env)==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
           // Check the configured provider itself before reserving a run. Custom
           // providers and the official fallback do not require a gateway key.
           chatRequest(env,{messages:[]},miniMaxPreview?{purpose:'agent'}:undefined);

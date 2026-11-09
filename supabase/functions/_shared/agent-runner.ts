@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { chatRequest, chatUsageProvider, generateProposal } from './providers.ts';
+import { chatProfile, chatRequest, chatUsageProvider, generateProposal } from './providers.ts';
 import { buildProposal, modificationSchema } from './ai.ts';
 import { agentRunRequestSchema, type AgentRunRequest } from './agent-contract.ts';
 import { ApiError, canonical, catalog, sceneWarnings, uuid, type Scene } from './domain.ts';
@@ -296,7 +296,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   const check=async()=>{if(Date.now()>=deadline)throw new ApiError('AGENT_DEADLINE',409);await call('check');};
   type Candidate=ReturnType<typeof buildProposal>&{label:'A'|'B'|'C';title:string;prepared?:boolean};
   let candidates:Candidate[]=[],lastError:unknown,repair=0,finished=false,consumedSteerTotal=0;
-  const miniMax=env('AGENT_CHAT_PROFILE')==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
+  const miniMax=chatProfile(env)==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
   try {
     const resources=await readSceneResources(backend,actor,input.scene);
     const identities=new Map<string,string>();
