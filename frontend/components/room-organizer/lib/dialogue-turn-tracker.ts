@@ -10,11 +10,17 @@ export interface DialogueTurnTracker {
   readonly size: number;
 }
 
+function usableEventId(eventId: unknown): eventId is string {
+  return typeof eventId === 'string' && eventId.length > 0 && eventId.trim() === eventId;
+}
+
 export function createDialogueTurnTracker(): DialogueTurnTracker {
   const active = new Set<string>();
+  const seen = new Set<string>();
   return {
     begin(eventId: string) {
-      if (typeof eventId !== 'string' || !eventId || active.has(eventId)) throw new Error('INVALID_TURN');
+      if (!usableEventId(eventId) || seen.has(eventId)) throw new Error('INVALID_TURN');
+      seen.add(eventId);
       active.add(eventId);
       let released = false;
       return () => {

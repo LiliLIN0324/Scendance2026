@@ -194,6 +194,154 @@ describe('requirement recovery loop', () => {
     expect(target.coverage()).toEqual({entries:PRODUCT_ENTRIES, runtimeWired:false, singleAgent:true});
   });
 
+  it('rejects blank, duplicate and repeated claims without moving the revision', () => {
+    let issued = 0;
+    const ids = ['event-once', 'event-once'];
+    const target = createRequirementRecoveryLoop({identity, journal:createSharedJournal(identity), createId:() => ids[issued++] ?? `event-${issued}`});
+    expect(target.stageInput(' ', '30人')).toMatchObject({ok:false, received:false, reason:'empty', text:'30人'});
+    expect(target.stageInput('session-1', ' 30人')).toMatchObject({ok:false, received:false, reason:'empty', text:' 30人'});
+    const staged = target.stageInput('session-1', '30人');
+    expect(staged.ok).toBe(true);
+    if (!staged.ok) return;
+    expect(target.stageInput('session-1', '40人')).toMatchObject({ok:false, received:false, reason:'duplicate', text:'40人'});
+    expect(target.read().revision).toBe(1);
+    expect(target.read().turns.map(turn => turn.text)).toEqual(['30人']);
+    expect(target.claimReceived(staged.eventId).received).toBe(true);
+    expect(target.claimReceived(staged.eventId)).toMatchObject({ok:false, received:false, reason:'not_recorded'});
+    const missing = target.bindCandidate('proposal', 'missing');
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.reason).toBe('not_received');
+    expect(target.completeTurn(staged.eventId, 'accepted').ok).toBe(true);
+    expect(target.completeTurn(staged.eventId, 'unresolved').ok).toBe(false);
+    expect(target.abandon(staged.eventId).ok).toBe(false);
+    expect(target.withdraw(staged.eventId).ok).toBe(false);
+  });
+
+  it('invalidates every open entry, keeps a confirmed candidate closed, and does not revive it when the same words return', () => {
+    const target = loop();
+    const first = receive(target, 'session-1', '30人');
+    const proposal = target.bindCandidate('proposal', first.eventId);
+    expect(proposal.ok).toBe(true);
+    if (!proposal.ok) return;
+    expect(target.submitPrepared(proposal.requestId).ok).toBe(true);
+    expect(target.observeOriginal(proposal.requestId, 'complete').ok).toBe(true);
+    expect(target.completeTurn(first.eventId, 'accepted').ok).toBe(true);
+    expect(target.confirm(proposal.candidateId, proposal.requirementRevision - 1)).toMatchObject({ok:false, reason:'revision_mismatch'});
+    expect(target.confirm(proposal.candidateId, proposal.requirementRevision + 1)).toMatchObject({ok:false, reason:'revision_mismatch'});
+    expect(target.confirm(proposal.candidateId, proposal.requirementRevision).ok).toBe(true);
+    for (const entry of PRODUCT_ENTRIES) {
+      if (entry === 'proposal') continue;
+      const again = target.bindCommand(entry);
+      expect(again.ok).toBe(true);
+      if (!again.ok) return;
+      expect(target.read().candidates.filter(candidate => candidate.status === 'open').map(candidate => candidate.entry)).toEqual([entry]);
+    }
+    const open = target.read().candidates.find(candidate => candidate.status === 'open');
+    expect(open?.entry).toBe('restore');
+    const changed = target.stageInput('session-1', '改成40人');
+    expect(changed.ok).toBe(true);
+    if (!changed.ok) return;
+    expect(target.read().candidates.find(candidate => candidate.candidateId === proposal.candidateId)?.status).toBe('confirmed');
+    expect(target.read().candidates.find(candidate => candidate.candidateId === open?.candidateId)?.status).toBe('invalidated');
+    expect(target.lookup(open?.requestId ?? '')?.paidSubmissionCount).toBe(0);
+    expect(target.confirm(proposal.candidateId, proposal.requirementRevision)).toMatchObject({ok:false, reason:'candidate_not_open'});
+    expect(target.claimReceived(changed.eventId).received).toBe(true);
+    expect(target.completeTurn(changed.eventId, 'accepted').ok).toBe(true);
+    const repeated = receive(target, 'session-1', '30人');
+    const rebound = target.bindCandidate('proposal', repeated.eventId);
+    expect(rebound.ok).toBe(true);
+    if (!rebound.ok) return;
+    expect(rebound.candidateId).not.toBe(proposal.candidateId);
+    expect(rebound.requestId).not.toBe(proposal.requestId);
+    expect(rebound.requirementRevision).toBe(changed.requirementRevision + 1);
+    expect(target.confirm(proposal.candidateId, rebound.requirementRevision)).toMatchObject({ok:false, reason:'candidate_not_open'});
+    expect(target.lookup(proposal.requestId)?.paidSubmissionCount).toBe(1);
+  });
+
+  it('refuses every replay of a timed-out or locally unwritten payment, including after the original result is observed', () => {
+    const journal = createSharedJournal(identity);
+    const target = createRequirementRecoveryLoop({identity, journal});
+    const staged = receive(target, 'session-1', '30人');
+    const bound = target.bindCandidate('material', staged.eventId);
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    const beforePay = journal.read();
+    const replay = structuredClone(beforePay);
+    const prepared = replay.runs[0];
+    if (!prepared) throw new Error('missing run');
+    prepared.phase = 'submitted';
+    prepared.paidSubmissionCount = 1;
+    replay.serial = beforePay.serial + 1;
+    expect(journal.commit(beforePay.serial, replay)).toBe(true);
+    expect(journal.commit(beforePay.serial, replay)).toBe(false);
+    expect(target.submitPrepared(bound.requestId)).toMatchObject({ok:false, reason:'already_submitted', paidSubmissionCount:1});
+    expect(target.noteOutcomeUnknown(bound.requestId)).toMatchObject({ok:true, paidSubmissionCount:1});
+    expect(target.noteOutcomeUnknown(bound.requestId)).toMatchObject({ok:false, reason:'not_submitted'});
+    expect(target.submitPrepared(bound.requestId)).toMatchObject({ok:false, paidSubmissionCount:1});
+    expect(target.resubmit(bound.requestId)).toMatchObject({ok:false, reason:'paid_request_not_replayed', paidSubmissionCount:1});
+    expect(target.observeOriginal(bound.requestId, 'still_unknown')).toMatchObject({phase:'outcome_unknown', paidSubmissionCount:1});
+    expect(target.observeOriginal(bound.requestId, 'complete')).toMatchObject({phase:'complete', paidSubmissionCount:1});
+    expect(target.observeOriginal(bound.requestId, 'still_unknown')).toMatchObject({ok:false, reason:'already_complete'});
+    expect(target.resubmit(bound.requestId).paidSubmissionCount).toBe(1);
+    expect(target.lookup(bound.requestId)?.requestId).toBe(bound.requestId);
+    const current = journal.read();
+    const secondPay = structuredClone(current);
+    const run = secondPay.runs[0];
+    if (!run) throw new Error('missing run');
+    run.paidSubmissionCount = 2;
+    secondPay.serial = current.serial + 1;
+    expect(journal.commit(current.serial, secondPay)).toBe(false);
+    run.paidSubmissionCount = 0;
+    run.phase = 'prepared';
+    expect(journal.commit(current.serial, secondPay)).toBe(false);
+    const reopened = structuredClone(current);
+    const candidate = reopened.candidates[0];
+    if (!candidate) throw new Error('missing candidate');
+    candidate.status = 'open';
+    reopened.serial = current.serial + 1;
+    expect(journal.commit(current.serial, reopened)).toBe(false);
+    expect(journal.read().runs[0]).toMatchObject({requestId:bound.requestId, phase:'complete', paidSubmissionCount:1});
+    expect(journal.read().candidates[0]?.status).toBe('open');
+  });
+
+  it('reads back one paid request after a local write failure and still refuses a second charge', () => {
+    const target = loop();
+    const staged = receive(target, 'session-1', '30人');
+    const bound = target.bindCandidate('review', staged.eventId);
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    expect(target.submitPrepared(bound.requestId, {localWrite:'fail'})).toMatchObject({phase:'local_write_failed', paidSubmissionCount:1});
+    expect(target.noteOutcomeUnknown(bound.requestId)).toMatchObject({ok:false, reason:'not_submitted'});
+    expect(target.resubmit(bound.requestId)).toMatchObject({ok:false, reason:'paid_request_not_replayed', paidSubmissionCount:1});
+    expect(target.submitPrepared(bound.requestId)).toMatchObject({ok:false, paidSubmissionCount:1});
+    const later = target.stageInput('session-1', '灯光改暖');
+    expect(later.ok).toBe(true);
+    expect(target.observeOriginal(bound.requestId, 'complete')).toMatchObject({phase:'complete', paidSubmissionCount:1});
+    expect(target.confirm(bound.candidateId, bound.requirementRevision)).toMatchObject({ok:false, reason:'candidate_not_open'});
+    expect(target.readback(bound.requestId)).toMatchObject({requestId:bound.requestId, paidSubmissionCount:1, phase:'complete'});
+    expect(target.resubmit('missing')).toMatchObject({ok:false, reason:'unknown_request', paidSubmissionCount:0});
+    expect(target.observeOriginal(bound.requestId, 'still_unknown')).toMatchObject({ok:false, reason:'already_complete'});
+  });
+
+  it('rejects a tampered journal instead of hydrating a second charge or two open candidates', () => {
+    const journal = createSharedJournal(identity);
+    const target = createRequirementRecoveryLoop({identity, journal});
+    const staged = receive(target, 'session-1', '30人');
+    const bound = target.bindCandidate('rebuild', staged.eventId);
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    expect(target.submitPrepared(bound.requestId).ok).toBe(true);
+    const parsed = JSON.parse(serializeRecoveryJournal(journal)) as {runs:Array<{paidSubmissionCount:number}>; candidates:Array<{status:string}>};
+    parsed.runs[0]!.paidSubmissionCount = 2;
+    expect(() => hydrateRecoveryJournal(JSON.stringify(parsed))).toThrow('INVALID_JOURNAL');
+    expect(() => hydrateRecoveryJournal('{"format":"nope"}')).toThrow('INVALID_JOURNAL');
+    expect(() => hydrateRecoveryJournal('{')).toThrow('INVALID_JOURNAL');
+    const doubled = JSON.parse(serializeRecoveryJournal(journal)) as {candidates:Array<Record<string, unknown>>; runs:Array<Record<string, unknown>>};
+    doubled.candidates.push({...doubled.candidates[0], candidateId:'candidate-2', requestId:'request-2', status:'open'});
+    doubled.runs.push({...doubled.runs[0], candidateId:'candidate-2', requestId:'request-2'});
+    expect(() => hydrateRecoveryJournal(JSON.stringify(doubled))).toThrow('INVALID_JOURNAL');
+  });
+
   it('keeps a queued turn unresolved across refresh until that exact event is withdrawn', () => {
     const journal = createSharedJournal(identity);
     const target = createRequirementRecoveryLoop({identity, journal});

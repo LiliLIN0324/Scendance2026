@@ -44,5 +44,24 @@ describe('assistant conversation scope', () => {
   it('rejects a blank activity or store instead of minting an owned key', () => {
     expect(() => assistantConversationScope('legacy', 'backend', 'actor-a')).toThrow('INVALID_ACTIVITY_SCOPE');
     expect(() => assistantConversationScope('activity:first', ' ', 'actor-a')).toThrow('INVALID_STORE');
+    expect(() => assistantConversationScope(' activity:first', 'backend', 'actor-a')).toThrow('INVALID_ACTIVITY_SCOPE');
+    expect(() => assistantConversationScope('activity:first', 'backend', ' actor-a')).toThrow('INVALID_ACTIVITY_SCOPE');
+    expect(assistantConversationScope('activity:first', 'backend', '   ')).toBe('activity:first');
+    expect(isAccountConversationScope('activity:first')).toBe(false);
+  });
+
+  it('does not treat a forged or non-canonical key as an account', () => {
+    const forged = assistantConversationScope('activity:x', 'backend', 'actor:b');
+    expect(parseAccountConversationScope(forged)?.actorId).toBe('actor:b');
+    expect(forged.includes('actor:b')).toBe(false);
+    expect(() => assistantConversationScope(forged, 'backend', null)).toThrow('INVALID_ACTIVITY_SCOPE');
+    expect(() => assistantConversationScope(forged, 'backend', 'actor-a')).toThrow('INVALID_ACTIVITY_SCOPE');
+    const decodedHyphen = `conv:v1:${encodeURIComponent('activity:first')}:backend:actor%2Da`;
+    expect(parseAccountConversationScope(decodedHyphen)).toBeNull();
+    expect(parseAccountConversationScope('conv:v1:%E0%A4%A:backend:actor-a')).toBeNull();
+    expect(parseAccountConversationScope(`${forged}:extra`)).toBeNull();
+    expect(sameConversationOwner(decodedHyphen, first)).toBe(false);
+    expect(visiblePeerScopes(first, [decodedHyphen, forged, 'activity:legacy', own])).toEqual([own]);
+    expect(retainedUnownedScopes([decodedHyphen, 'activity:legacy', first])).toEqual([decodedHyphen, 'activity:legacy']);
   });
 });

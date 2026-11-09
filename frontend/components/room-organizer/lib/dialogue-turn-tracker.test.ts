@@ -22,12 +22,33 @@ describe('dialogue turn tracker', () => {
     expect(pending.canCapture(second)).toBe(false);
   });
 
-  it('rejects a blank or repeated event id', () => {
+  it('rejects a blank, padded, reused or non-string event id', () => {
     const pending = createDialogueTurnTracker();
     expect(() => pending.begin('')).toThrow('INVALID_TURN');
+    expect(() => pending.begin(' evt-1')).toThrow('INVALID_TURN');
+    expect(() => pending.begin(1 as unknown as string)).toThrow('INVALID_TURN');
     const release = pending.begin('evt-1');
     expect(() => pending.begin('evt-1')).toThrow('INVALID_TURN');
     release();
+    expect(() => pending.begin('evt-1')).toThrow('INVALID_TURN');
+    expect(pending.size).toBe(0);
+    expect(pending.canCapture('evt-1')).toBe(false);
+    expect(pending.canCapture('missing')).toBe(false);
+  });
+
+  it('keeps the remaining turns blocked when any other turn is still in flight', () => {
+    const pending = createDialogueTurnTracker();
+    const releaseFirst = pending.begin('evt-1');
+    const releaseMiddle = pending.begin('evt-2');
+    const releaseLast = pending.begin('evt-3');
+    releaseMiddle();
+    expect(pending.size).toBe(2);
+    expect(pending.canCapture('evt-1')).toBe(false);
+    expect(pending.canCapture('evt-2')).toBe(false);
+    expect(pending.canCapture('evt-3')).toBe(false);
+    releaseFirst();
+    expect(pending.canCapture('evt-3')).toBe(true);
+    releaseLast();
     expect(pending.size).toBe(0);
   });
 });

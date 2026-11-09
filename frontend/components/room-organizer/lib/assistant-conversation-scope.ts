@@ -12,11 +12,22 @@ export interface AccountConversationScope {
   actorId: string;
 }
 
+function usableLabel(value: string): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed !== value) return null;
+  return trimmed;
+}
+
 export function assistantConversationScope(activityScope: string, store: string, actorId: string | null): string {
-  if (typeof activityScope !== 'string' || !activityScope.trim() || activityScope === 'legacy') throw new Error('INVALID_ACTIVITY_SCOPE');
-  if (typeof store !== 'string' || !store.trim()) throw new Error('INVALID_STORE');
-  if (actorId === null || actorId === undefined || !actorId.trim()) return activityScope;
-  return `${PREFIX}${encodeURIComponent(activityScope)}:${encodeURIComponent(store)}:${encodeURIComponent(actorId)}`;
+  const activity = usableLabel(activityScope);
+  const place = usableLabel(store);
+  if (!activity || activity === 'legacy' || activity.startsWith(PREFIX) || isAccountConversationScope(activity)) throw new Error('INVALID_ACTIVITY_SCOPE');
+  if (!place || place.startsWith(PREFIX)) throw new Error('INVALID_STORE');
+  if (actorId === null || actorId === undefined || !actorId.trim()) return activity;
+  const actor = usableLabel(actorId);
+  if (!actor) throw new Error('INVALID_ACTIVITY_SCOPE');
+  return `${PREFIX}${encodeURIComponent(activity)}:${encodeURIComponent(place)}:${encodeURIComponent(actor)}`;
 }
 
 export function parseAccountConversationScope(scope: string): AccountConversationScope | null {
@@ -28,6 +39,8 @@ export function parseAccountConversationScope(scope: string): AccountConversatio
     const store = decodeURIComponent(parts[1] ?? '');
     const actorId = decodeURIComponent(parts[2] ?? '');
     if (!activityScope || !store || !actorId) return null;
+    const canonical = `${PREFIX}${encodeURIComponent(activityScope)}:${encodeURIComponent(store)}:${encodeURIComponent(actorId)}`;
+    if (canonical !== scope) return null;
     return {activityScope, store, actorId};
   } catch {
     return null;
