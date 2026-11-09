@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { backendSceneToLayout, layoutToBackendScene } from './backend-adapter';
+import { deliveryVerificationScope } from './scene-delivery';
 import { isStructuralMarker, materialCount } from './structural-layout';
 import { buildVenueShell, pruneVenueSite, resolveVenueHeight, VENUE_DEFAULT_HEIGHT_M } from './venue-shell';
 
@@ -25,9 +26,13 @@ describe('T-01 venue shell truth', () => {
     expect(sceneSchema.safeParse(shell).success).toBe(true);
   });
 
-  it('only claims confirmed walls when a human gave the scale', () => {
+  it('keeps inferred wall geometry separate from explicitly supplied dimensions', () => {
     const stated = buildVenueShell({ widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'typed' });
-    expect(stated.structure.walls.every(wall => wall.status === 'confirmed')).toBe(true);
+    expect(stated.structure.walls.every(wall => wall.status === 'inferred')).toBe(true);
+    expect(stated.dimensions.map(value=>value.status)).toEqual(['confirmed','confirmed','inferred']);
+    const exported=deliveryVerificationScope(layoutToBackendScene(backendSceneToLayout(stated)));
+    expect(exported.dimensions.map(value=>value.recordedStatus)).toEqual(['confirmed','confirmed','inferred']);
+    expect(buildVenueShell({widthM:12,depthM:9,heightM:3,indoorOutdoor:'indoor',scaleOrigin:'typed'}).dimensions[2]!.status).toBe('confirmed');
     for (const origin of ['area', 'plan', 'canvas'] as const) {
       const shell = buildVenueShell({ widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: origin });
       expect(shell.structure.walls.every(wall => wall.status === 'inferred'), origin).toBe(true);

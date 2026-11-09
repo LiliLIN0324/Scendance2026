@@ -10,6 +10,8 @@ import type { RoomLayout } from '../components/room-organizer/lib/types';
 const EPS = 1e-8;
 const openingFields = ['offset', 'width', 'height', 'sillHeight'] as const;
 const same = (a: number, b: number) => Math.abs(a - b) <= EPS;
+/** Changed or derived geometry cannot inherit a previous confirmation. */
+const invalidated = (status: 'confirmed' | 'detected' | 'inferred') => status === 'confirmed' ? 'inferred' as const : status;
 
 function rectangleEdges(points: readonly { x: number; z: number }[], width: number, depth: number): Set<string> | null {
   const corners = [{ x: 0, z: 0 }, { x: width, z: 0 }, { x: width, z: depth }, { x: 0, z: depth }];
@@ -67,7 +69,7 @@ export function previewVenueEdit(base: RoomLayout, input: { width: number; depth
     const start = point(wall.start), end = point(wall.end);
     if (start.x === wall.start.x && start.z === wall.start.z && end.x === wall.end.x && end.z === wall.end.z) return wall;
     movedWalls.add(wall.id);
-    return { ...wall, start, end, status: 'confirmed' };
+    return { ...wall, start, end, status: invalidated(wall.status) };
   });
   if (resized) {
     const geometric = layoutGeometryScene(base);
@@ -84,17 +86,20 @@ export function previewVenueEdit(base: RoomLayout, input: { width: number; depth
     const edit = edits.get(opening.id)!;
     if (edit.wallId !== opening.wallId || edit.kind !== opening.kind) throw new Error('门窗所属墙体或类型已经变化，请重新打开当前场地核对。');
     if (openingFields.some(field => !Number.isFinite(edit[field]))) throw new Error('请填写有效的门窗米制尺寸。');
-    if (!openingFields.some(field => edit[field] !== opening[field])) return opening;
-    changedOpenings.add(opening.id);
-    return { ...opening, offset: edit.offset, width: edit.width, height: edit.height, sillHeight: edit.sillHeight, status: 'confirmed' };
+    const edited = openingFields.some(field => edit[field] !== opening[field]);
+    if (!edited && !movedWalls.has(opening.wallId)) return opening;
+    if (edited) changedOpenings.add(opening.id);
+    return { ...opening, offset: edit.offset, width: edit.width, height: edit.height, sillHeight: edit.sillHeight, status: invalidated(opening.status) };
   });
   next.dimensions = next.dimensions.map(dimension => {
-    if (dimension.kind === 'width' && width !== current.venue.width) return { ...dimension, valueMeters: width, status: 'confirmed' };
-    if (dimension.kind === 'depth' && depth !== current.venue.depth) return { ...dimension, valueMeters: depth, status: 'confirmed' };
+    // The original measured value and image linkage remain historical evidence.
+    // A changed canvas size does not rewrite that source or create a new confirmation.
+    if (dimension.kind === 'width' && width !== current.venue.width) return { ...dimension, status: invalidated(dimension.status) };
+    if (dimension.kind === 'depth' && depth !== current.venue.depth) return { ...dimension, status: invalidated(dimension.status) };
     // Image distances and pairs remain constraints; only an explicitly edited direct opening size is replaced.
     if (!dimension.targetId || !changedOpenings.has(dimension.targetId) || dimension.targetEndId || dimension.sourceAssetId || ['width', 'depth', 'height'].includes(dimension.kind) || dimension.measure && !['width', 'height'].includes(dimension.measure)) return dimension;
     const actual = measurement(next, dimension);
-    return actual === undefined || actual === measurement(current, dimension) ? dimension : { ...dimension, valueMeters: actual, status: 'confirmed' };
+    return actual === undefined || actual === measurement(current, dimension) ? dimension : { ...dimension, valueMeters: actual, status: invalidated(dimension.status) };
   });
   const valid = sceneV2Schema.safeParse(next);
   if (!valid.success) throw new Error(valid.error.issues[0]?.message ?? '场地或门窗尺寸不合法，请重新核对。');

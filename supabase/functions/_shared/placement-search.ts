@@ -1,7 +1,7 @@
 // Deterministic metre-space placement search. The model asks for a legal anchor
 // instead of guessing coordinates and hoping the validator accepts them.
 import { ApiError, type Point, type Scene, type SceneObject } from './domain.ts';
-import { footprint, footprintsIntersect } from './structural-geometry.ts';
+import { confirmedDoorwayObstructions, footprint, footprintsIntersect } from './structural-geometry.ts';
 import { structureOf } from './scene-digest.ts';
 export { footprintsIntersect } from './structural-geometry.ts';
 
@@ -122,9 +122,12 @@ export function findFreeAreas(scene: Scene, query: FreeAreaQuery): FreeAreaResul
   for (let x = xFrom; x <= xTo + EPS; x += step) {
     for (let z = zFrom; z <= zTo + EPS; z += step) {
       probes++;
-      const exact = footprint(probeAt(x, z, 0));
+      // Check the exact coordinates returned to the caller, including rounding.
+      const siteX=Number(x.toFixed(3)),siteZ=Number(z.toFixed(3));
+      const probe=probeAt(siteX,siteZ,0);
+      const exact = footprint(probe);
       if (height > scene.venue.height + EPS || exact.some(p => !inside(p, poly))) { rejected.outOfBounds++; continue; }
-      const padded = clearance > 0 ? footprint(probeAt(x, z, clearance)) : exact;
+      const padded = clearance > 0 ? footprint(probeAt(siteX, siteZ, clearance)) : exact;
       const paddedBox = boundsOf(padded);
       let blocked = false;
       for (const obstacle of obstacles) {
@@ -139,7 +142,10 @@ export function findFreeAreas(scene: Scene, query: FreeAreaQuery): FreeAreaResul
         if (footprintsIntersect(exact, wall.poly)) { blocked = true; break; }
       }
       if (blocked) { rejected.structure++; continue; }
-      accepted.push({ x: Number(x.toFixed(3)), z: Number(z.toFixed(3)), rotation });
+      // Only the newly searched footprint is compared; existing door obstruction
+      // remains untouched and is still reported by independent candidate review.
+      if(confirmedDoorwayObstructions({...scene,objects:[probe]} as Scene).length){rejected.structure++;continue;}
+      accepted.push({ x: siteX, z: siteZ, rotation });
     }
   }
 
@@ -166,7 +172,7 @@ export function findFreeAreas(scene: Scene, query: FreeAreaQuery): FreeAreaResul
     sites: ranked.slice(0, limit),
     step, clearance, scanned: probes, rejected,
     note: ranked.length
-      ? '坐标是占地中心，可直接写入 add/move 的 position。间隙只对物件和柱子生效，墙按实际厚度判定。'
-      : '没有满足条件的落点：缩小尺寸、减小间隙，或先移除挡路物件。不要盲试邻近坐标。',
+      ? '坐标是占地中心，可用于候选试排。间隙只对物件和柱子生效，墙按实际厚度判定；门扇、通行及现场条件仍需核验。'
+      : '本次没有满足条件的落点，可核对尺寸、间隙和现有物件后再试；门扇、通行及现场条件仍需核验，不代表场地无解。',
   };
 }

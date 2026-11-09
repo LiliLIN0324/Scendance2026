@@ -9,6 +9,30 @@ export function footprint(o:Pick<SceneObject,'position'|'size'|'rotation'>):Poin
 export function polygonPenetration(a:Point[],b:Point[]){let depth=Infinity;for(const poly of[a,b])for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],length=Math.hypot(q.x-p.x,q.z-p.z);if(length<EPS)continue;const nx=-(q.z-p.z)/length,nz=(q.x-p.x)/length;const aa=a.map(v=>v.x*nx+v.z*nz),bb=b.map(v=>v.x*nx+v.z*nz);const overlap=Math.min(Math.max(...aa)-Math.min(...bb),Math.max(...bb)-Math.min(...aa));if(overlap<=EPS)return 0;depth=Math.min(depth,overlap);}return Number.isFinite(depth)?depth:0;}
 /** Separating-axis overlap test: true when two convex footprints share ground area. */
 export function footprintsIntersect(a:Point[],b:Point[]){for(const poly of[a,b])for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],nx=-(q.z-p.z),nz=q.x-p.x;if(Math.hypot(nx,nz)<EPS)continue;const aa=a.map(v=>v.x*nx+v.z*nz),bb=b.map(v=>v.x*nx+v.z*nz);if(Math.max(...aa)<=Math.min(...bb)+1e-8||Math.max(...bb)<=Math.min(...aa)+1e-8)return false;}return true;}
+/** Physical intersection with a confirmed door opening only; this is not an egress or clearance assessment. */
+export function confirmedDoorwayObstructions(scene:Scene):Array<{objectId:string;openingId:string;penetration:number}>{
+ if(scene.schemaVersion!==2)return [];
+ const result:Array<{objectId:string;openingId:string;penetration:number}>=[];
+ for(const opening of scene.structure.openings){
+  if(opening.kind!=='door'||opening.status!=='confirmed')continue;
+  const wall=scene.structure.walls.find(item=>item.id===opening.wallId);
+  if(!wall||wall.status!=='confirmed')continue;
+  const dx=wall.end.x-wall.start.x,dz=wall.end.z-wall.start.z,length=Math.hypot(dx,dz);if(length<=EPS)continue;
+  const center=opening.offset+opening.width/2,angle=Math.atan2(dz,dx)*180/Math.PI;
+  const doorway=footprint({position:{x:wall.start.x+dx*center/length,z:wall.start.z+dz*center/length},rotation:angle,size:{width:opening.width,depth:wall.thickness,height:opening.height}});
+  for(const object of scene.objects){
+   const bottom=object.elevation??0,top=bottom+object.size.height;
+   if(bottom>=opening.sillHeight+opening.height-EPS||top<=opening.sillHeight+EPS)continue;
+   const penetration=polygonPenetration(footprint(object),doorway);
+   if(penetration>EPS)result.push({objectId:object.id,openingId:opening.id,penetration});
+  }
+ }
+ return result;
+}
+export function canApplyConfirmedDoorwayChange(before:Scene,after:Scene):boolean {
+ const prior=new Map(confirmedDoorwayObstructions(before).map(issue=>[`${issue.objectId.toLowerCase()}:${issue.openingId.toLowerCase()}`,issue.penetration]));
+ return confirmedDoorwayObstructions(after).every(issue=>issue.penetration<=(prior.get(`${issue.objectId.toLowerCase()}:${issue.openingId.toLowerCase()}`)??0)+EPS);
+}
 function distance(p:Point,a:Point,b:Point){const dx=b.x-a.x,dz=b.z-a.z,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz||1)));return Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz);}
 function boundaryPenetration(p:Point[],poly:Point[]){let score=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];const t=[0,1];for(let j=0;j<poly.length;j++){const c=poly[j],d=poly[(j+1)%poly.length],dx=b.x-a.x,dz=b.z-a.z,ex=d.x-c.x,ez=d.z-c.z,den=dx*ez-dz*ex;if(Math.abs(den)<EPS)continue;const u=((c.x-a.x)*ez-(c.z-a.z)*ex)/den,v=((c.x-a.x)*dz-(c.z-a.z)*dx)/den;if(u>0&&u<1&&v>=0&&v<=1)t.push(u);}t.sort((a,b)=>a-b);for(let k=0;k<t.length;k++){const candidates=[t[k],k?t[k-1]+(t[k]-t[k-1])/2:t[k]];for(const f of candidates){const sample={x:a.x+(b.x-a.x)*f,z:a.z+(b.z-a.z)*f};if(!pointInPolygon(sample,poly))score=Math.max(score,EPS*2+Math.min(...poly.map((v,j)=>distance(sample,v,poly[(j+1)%poly.length]))));}}}return score;}
 function validMount(o:SceneObject,w:SceneV2['structure']['walls'][number]){

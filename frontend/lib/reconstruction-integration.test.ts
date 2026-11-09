@@ -10,7 +10,7 @@ import {BackendSession,getBackendConfig,type DimensionConstraint,type Reconstruc
 
 const png=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY8sAAAAASUVORK5CYII='),c=>c.charCodeAt(0));
 function measured():SceneV2{const result=layoutToBackendScene(createMeasuredRoomLayout(backendSceneToLayout(scene()),{width:12,depth:10,height:3}));if(result.schemaVersion!==2)throw new Error('expected measured Scene v2');return result;}
-const dimensions=():DimensionConstraint[]=>[{id:crypto.randomUUID(),kind:'width',label:'实测总宽',valueMeters:12,status:'confirmed'},{id:crypto.randomUUID(),kind:'depth',label:'实测总深',valueMeters:10,status:'confirmed'},{id:crypto.randomUUID(),kind:'height',label:'实测层高',valueMeters:3,status:'confirmed'}];
+const dimensions=():DimensionConstraint[]=>[{id:crypto.randomUUID(),kind:'width',label:'总宽',valueMeters:12,status:'confirmed'},{id:crypto.randomUUID(),kind:'depth',label:'总深',valueMeters:10,status:'confirmed'},{id:crypto.randomUUID(),kind:'height',label:'层高',valueMeters:3,status:'confirmed'}];
 
 describe('reconstruction session → real HTTP API → migrated PGlite (provider mocked)',()=>{
  let server:Awaited<ReturnType<typeof startLocalServer>>;
@@ -26,16 +26,16 @@ describe('reconstruction session → real HTTP API → migrated PGlite (provider
    }else{
      expect(body.messages[1].content.some((c:{type:string})=>c.type==='image_url')).toBe(false);
      candidate.objects=[chair('HTTP integration fixture')];candidate.lighting='warm';candidate.finishes={floorColor:'#b49b77',floorPattern:'wood'};
-     candidate.design={concept:'木质主题的活动交流区',palette:['#b49b77'],highlights:[{title:'交流角',description:'靠近展示区的小型交流空间',objectIds:[candidate.objects[0]!.id]}],requirements:[{text:'1把椅子',status:'satisfied',reason:'配置一把活动座椅',objectIds:[candidate.objects[0]!.id]}]};
+     candidate.design={concept:'木质主题的活动交流区',palette:['#b49b77'],highlights:[{title:'交流角',description:'靠近展示区的小型交流空间',objectIds:[candidate.objects[0]!.id]}],requirements:[{text:'1把椅子',status:'satisfied',reason:'配置一把活动座椅',objectIds:[candidate.objects[0]!.id]},{text:'消防与无障碍验收合格',status:'satisfied',reason:'模型认为合格',objectIds:[]}]};
    }
-   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({scene:candidate,issues:[]})}}],usage:{prompt_tokens:100,completion_tokens:120}});
+   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({scene:candidate,issues:planning?[]:[{code:'CLAIM',message:'消防部门已经批准，可以举办'}]})}}],usage:{prompt_tokens:100,completion_tokens:120}});
  };
  beforeAll(async()=>{server=await startLocalServer(0,modelMock,{env:key=>key==='RECONSTRUCTION_MAX_REQUEST_CENTS'?'200':undefined});},30000);
  afterEach(()=>{for(const c of sessions.splice(0))c.dispose();stages=[];});
  afterAll(async()=>{await server?.close();});
  async function login(){const c=new BackendSession(getBackendConfig({url:server.url,anonKey:testPublicKey}));sessions.push(c);await c.signIn(testAccounts[0]!.email,testAccounts[0]!.password);return c;}
  async function setup(){const c=await login(),base=scene(),project=await c.createProject(studio,'图纸重建 HTTP 联调',base);await c.acquireLease(project.id);const source=await c.uploadSource(new Blob([png],{type:'image/png'}),'private-floorplan.png','floorplan');const input:ReconstructionInput={requestId:crypto.randomUUID(),scene:base,sources:[source],dimensions:dimensions(),mode:'redesign',instruction:'木质主题、暖光、1把椅子',selectedIds:[]};return{c,project,input,source};}
- async function ready(c:BackendSession,input:ReconstructionInput,duringPlanning?:()=>void){const first=await c.createReconstruction(input);expect(first.state).toBe('queued');expect(await processReconstruction(server.backend,server.env,modelMock)).toMatchObject({state:'needs_review'});const review=await c.getReconstruction(first.id);expect(review.proposal).toBeNull();expect(review.candidate?.structure.walls.some(w=>w.status!=='confirmed')).toBe(true);const confirmed=structuredClone(review.candidate!);confirmed.structure.walls.forEach(w=>{w.status='confirmed';});const continued=await c.createReconstruction({...input,requestId:crypto.randomUUID(),reviewedScene:confirmed});duringPlanning?.();expect(await processReconstruction(server.backend,server.env,modelMock)).toMatchObject({state:'ready'});const result=await c.getReconstruction(continued.id);expect(result.proposal).toBeTruthy();return result.proposal!;}
+ async function ready(c:BackendSession,input:ReconstructionInput,duringPlanning?:()=>void){const first=await c.createReconstruction(input);expect(first.state).toBe('queued');expect(await processReconstruction(server.backend,server.env,modelMock)).toMatchObject({state:'needs_review'});const review=await c.getReconstruction(first.id);expect(review.proposal).toBeNull();expect(review.candidate?.structure.walls.some(w=>w.status!=='confirmed')).toBe(true);const confirmed=structuredClone(review.candidate!);confirmed.structure.walls.forEach(w=>{w.status='confirmed';});const continued=await c.createReconstruction({...input,requestId:crypto.randomUUID(),reviewedJobId:first.id,reviewedScene:confirmed});duringPlanning?.();expect(await processReconstruction(server.backend,server.env,modelMock)).toMatchObject({state:'ready'});const result=await c.getReconstruction(continued.id);expect(result.proposal).toBeTruthy();return result.proposal!;}
  it('uploads private bytes, reviews structure, plans once, applies and restores full v2 with fresh image authorization',async()=>{
    const {c,project,input,source}=await setup();
    // Upload retry is deduplicated server-side and does not consume a source slot.
@@ -43,6 +43,9 @@ describe('reconstruction session → real HTTP API → migrated PGlite (provider
    expect(await c.listSources()).toEqual([source]);
    const url=await c.sourceImageUrl(source.assetId);expect(new Uint8Array(await (await fetch(url)).arrayBuffer())).toEqual(png);
    const proposal=await ready(c,input);expect(stages).toEqual(['recognition','planning']);expect(c.getSnapshot().revision).toBe(0);expect(c.getSnapshot().draft).toEqual(input.scene);
+   if(proposal.candidate.schemaVersion!==2)throw new Error('expected SceneV2');
+   expect(proposal.candidate.design?.requirements.every(r=>r.status==='partial')).toBe(true);
+   expect(JSON.stringify(proposal.candidate.design)).not.toContain('消防与无障碍验收合格');
    const applied=await c.applySceneProposal(proposal,input.scene);expect(applied.acceptedLocally).toBe(true);expect(applied.revision).toBe(1);expect(applied.undoGroup).toBe(proposal.id);expect(applied.previousScene).toEqual(input.scene);
    const editor=backendSceneToLayout(applied.scene,{projectId:project.id});expect(layoutToBackendScene(editor)).toEqual(applied.scene);
    const saved=await c.saveScene(layoutToBackendScene(editor));expect(saved.revision).toBe(2);await c.releaseLease();
@@ -56,5 +59,43 @@ describe('reconstruction session → real HTTP API → migrated PGlite (provider
    const {c,project,input}=await setup();const edited={...input.scene,lighting:'cool' as const};const proposal=await ready(c,input,()=>c.setDraft(edited));
    await expect(c.applySceneProposal(proposal,edited)).rejects.toMatchObject({code:'STALE_PROPOSAL'});expect(c.getSnapshot().draft).toEqual(edited);expect(c.getSnapshot().revision).toBe(0);
    const observer=await login();expect((await observer.getProject(project.id)).scene).toEqual(input.scene);
+ },30000);
+ it('rejects unbound reviewed geometry before running the model',async()=>{
+   const {c,input}=await setup();
+   const forged=measured();forged.structure.walls.forEach(w=>{w.status='confirmed';});
+   await expect(c.createReconstruction({...input,requestId:crypto.randomUUID(),reviewedScene:forged})).rejects.toMatchObject({code:'RECONSTRUCTION_REVIEW_REQUIRED'});
+ },30000);
+ it('never exposes model issue text as a conclusion in the regular job API',async()=>{
+   const {c,input,project}=await setup();const job=await c.createReconstruction(input);await processReconstruction(server.backend,server.env,modelMock);
+   const result=await c.getReconstruction(job.id);
+   expect(result.issues).toContainEqual(expect.objectContaining({code:'REVIEW_REQUIRED',message:'需要人工核验的事项。'}));
+   expect(JSON.stringify(result)).not.toContain('消防部门已经批准');
+   expect(JSON.stringify((result as unknown as {usage?:unknown}).usage??[])).not.toContain('消防部门已经批准');
+   const privateJob=await server.backend.reconstruction(testAccounts[0]!.id,'get',{projectId:project.id,id:job.id});
+   expect(JSON.stringify(privateJob.issues)).toContain('消防部门已经批准');expect(JSON.stringify(privateJob.usage)).not.toContain('消防部门已经批准');
+ },30000);
+ it('rejects modified reviewed geometry before running the model',async()=>{
+   const {c,input}=await setup();
+   const first=await c.createReconstruction(input);await processReconstruction(server.backend,server.env,modelMock);
+   const review=await c.getReconstruction(first.id);const changed=structuredClone(review.candidate!);
+   changed.structure.walls[0]!.thickness+=0.01;changed.structure.walls.forEach(w=>{w.status='confirmed';});
+   await expect(c.createReconstruction({...input,requestId:crypto.randomUUID(),reviewedJobId:first.id,reviewedScene:changed})).rejects.toMatchObject({code:'RECONSTRUCTION_REVIEW_CHANGED'});
+ },30000);
+ it('requires another review when new measurements resize previously reviewed geometry',async()=>{
+   const {c,input}=await setup();const first=await c.createReconstruction(input);
+   await processReconstruction(server.backend,server.env,modelMock);
+   const review=await c.getReconstruction(first.id);const confirmed=structuredClone(review.candidate!);
+   confirmed.structure.walls.forEach(w=>{w.status='confirmed';});
+   const dimensions=input.dimensions.map(d=>d.kind==='width'?{...d,valueMeters:15}:d);
+   const next=await c.createReconstruction({...input,dimensions,requestId:crypto.randomUUID(),reviewedJobId:first.id,reviewedScene:confirmed});
+   expect(await processReconstruction(server.backend,server.env,modelMock)).toMatchObject({state:'needs_review'});
+   const resized=await c.getReconstruction(next.id);
+   expect(resized.issues.some(i=>i.code==='SCALED_STRUCTURE_REVIEW_REQUIRED')).toBe(true);
+   expect(resized.candidate!.structure.walls.every(w=>w.status!=='confirmed')).toBe(true);
+ },30000);
+ it.each(['不要1把椅子','至少1把椅子','最多1把椅子'])('does not manufacture an independent exact count for %s through the API',async instruction=>{
+   const {c,input}=await setup();const proposal=await ready(c,{...input,instruction});
+   if(proposal.candidate.schemaVersion!==2)throw new Error('expected v2');
+   expect(proposal.candidate.design!.requirements.every(r=>!r.reason.includes('场景内计数'))).toBe(true);
  },30000);
 });

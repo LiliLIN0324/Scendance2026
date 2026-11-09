@@ -4,6 +4,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_LOCAL_PROJECT_BACKUP_BYTES, MAX_LOCAL_PROJECT_BACKUP_V4_BYTES, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4 } from '@/lib/local-project-backup';
+import { localRestoreAvailable } from '@/lib/local-project-restore';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { downloadSceneDelivery } from '../lib/scene-delivery';
 import { createOperation } from '../lib/event-operations';
@@ -67,7 +68,7 @@ describe('local scene and activity backup', () => {
     expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
 
-  it('prechecks V4 image count and source form without loading resources, then uses the existing restore action', async () => {
+  it.skipIf(!localRestoreAvailable())('prechecks V4 image count and source form without loading resources, then uses the existing restore action', async () => {
     const fetch = vi.fn(), decode = vi.fn(); vi.stubGlobal('fetch', fetch); vi.stubGlobal('createImageBitmap', decode);
     const { actions } = setup(); select(file(await sourceFileText())); await screen.findByText('完整项目备份 V4');
     expect(screen.getByText('2 张图片 · 已包含图纸表单')).toBeTruthy();
@@ -81,10 +82,25 @@ describe('local scene and activity backup', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('prechecks V4 without loading resources or allowing replacement while restoration is paused', async () => {
+    const fetch = vi.fn(), decode = vi.fn(); vi.stubGlobal('fetch', fetch); vi.stubGlobal('createImageBitmap', decode);
+    const { actions } = setup(); const text = await sourceFileText(); const selected = file(text, undefined, undefined, '现场资料.json');
+    select(selected); await screen.findByText('完整项目备份 V4');
+    expect(screen.getByText('2 张图片 · 已包含图纸表单')).toBeTruthy();
+    expect(screen.getByText(/备份恢复暂不可用/)).toBeTruthy();
+    const disabled = screen.getByRole('button', { name: '恢复暂不可用' }) as HTMLButtonElement;
+    expect(disabled.disabled).toBe(true); fireEvent.click(disabled);
+    expect(actions.restoreBackup).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled(); expect(decode).not.toHaveBeenCalled();
+    expect(screen.getByText('现场资料.json')).toBeTruthy(); expect(await selected.text()).toBe(text);
+    fireEvent.click(screen.getByRole('button', { name: '取消恢复' }));
+    expect(screen.queryByLabelText('备份预检')).toBeNull(); expect(await selected.text()).toBe(text);
+  });
+
   it('warns that a V4 backup with no images or form clears the target source documents before confirmation', async () => {
     const { actions } = setup(); select(file(await sourceFileText(false, false))); await screen.findByText('完整项目备份 V4');
     expect(screen.getByText('0 张图片 · 未包含图纸表单')).toBeTruthy();
-    expect(screen.getByText(/目标项目原表单及对应点将清除/)).toBeTruthy();
+    if (localRestoreAvailable()) expect(screen.getByText(/目标项目原表单及对应点将清除/)).toBeTruthy();
+    else expect(screen.getByText(/备份恢复暂不可用/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '取消恢复' })); expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
 
@@ -95,7 +111,8 @@ describe('local scene and activity backup', () => {
     const older=JSON.parse(fileText());older.version=1;delete older.coverage.productionPlan;
     select(file(JSON.stringify(older)));await screen.findByText('完整项目备份 V1');
     expect(screen.getByText('当前方案未记录制作计划')).toBeTruthy();
-    expect(screen.getByText(/恢复后当前制作计划将清除/)).toBeTruthy();
+    if (localRestoreAvailable()) expect(screen.getByText(/恢复后当前制作计划将清除/)).toBeTruthy();
+    else expect(screen.getByText(/备份恢复暂不可用/)).toBeTruthy();
     expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
   it('shows production rows from a V2 file before confirming',async()=>{
@@ -104,7 +121,7 @@ describe('local scene and activity backup', () => {
     expect(screen.getByText('1 项岗位需求 · 0 项物料取得 · 0 项人工估算')).toBeTruthy();
     expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
-  it('prechecks the selected file without replacing anything, cancels, then explicitly confirms and awaits verified saving', async () => {
+  it.skipIf(!localRestoreAvailable())('prechecks the selected file without replacing anything, cancels, then explicitly confirms and awaits verified saving', async () => {
     const pending = deferred<void>(); const { actions } = setup({ restoreBackup: vi.fn(() => pending.promise) });
     const target = { ...layout, name: 'A-文件布局', floors: [makeFloor({ items: [makeItem()] })],
       eventOperations: eventOperationsSchema.parse({ tasks: [createOperation('演练任务', 'preparation')] }) };
@@ -130,7 +147,8 @@ describe('local scene and activity backup', () => {
     select(file(status === 'legacy' ? JSON.stringify({ id: layout.id, name: '旧布局', width: 8, height: 8, items: [], floorColor: '#fff' }) : fileText(undefined, 'absent')));
     await screen.findByLabelText('备份预检');
     expect(screen.getByText(status === 'legacy' ? '旧文件未包含活动需求' : '备份明确无已保存需求')).toBeDefined();
-    expect(screen.getByText(/目标项目原有需求将清除/)).toBeDefined();
+    if (localRestoreAvailable()) expect(screen.getByText(/目标项目原有需求将清除/)).toBeDefined();
+    else expect(screen.getByText(/备份恢复暂不可用/)).toBeDefined();
     if (status === 'legacy') expect(screen.getByText('旧布局经兼容修复，请核对后再替换。')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: '取消恢复' })); expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
@@ -166,7 +184,7 @@ describe('local scene and activity backup', () => {
     expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
 
-  it('checks external model dependencies in a design snapshot without fetching or changing its unarchived URL', async () => {
+  it.skipIf(!localRestoreAvailable())('checks external model dependencies in a design snapshot without fetching or changing its unarchived URL', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch); const { actions } = setup();
     const url = 'http://127.0.0.1:9/review.glb?token=FAKE_REVIEW_ONLY';
     const target = { ...layout, designBook: { activeId: 'external', variants: [{ id: 'external', name: '外部方案',
@@ -263,7 +281,7 @@ describe('local scene and activity backup', () => {
     expect(screen.queryByRole('status')).toBeNull(); expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
 
-  it('retains the checked candidate and accurate transaction error for retry, cancellation or replacement', async () => {
+  it.skipIf(!localRestoreAvailable())('retains the checked candidate and accurate transaction error for retry, cancellation or replacement', async () => {
     const { actions } = setup({ restoreBackup: vi.fn().mockRejectedValueOnce(new Error('目标活动需求回滚失败，请保留原草稿。')).mockResolvedValue(undefined) });
     select(file(fileText())); await screen.findByText('A-文件布局');
     fireEvent.click(screen.getByRole('button', { name: '确认替换布局与活动需求' }));
@@ -274,7 +292,7 @@ describe('local scene and activity backup', () => {
     await screen.findByRole('status'); expect(actions.restoreBackup).toHaveBeenCalledTimes(2);
   });
 
-  it('uses the verified restore promise after its own layout change and exposes undo only while the provider permits it', async () => {
+  it.skipIf(!localRestoreAvailable())('uses the verified restore promise after its own layout change and exposes undo only while the provider permits it', async () => {
     const restore = deferred<void>(), undo = deferred<void>(); const { actions, view } = setup({ restoreBackup: vi.fn(() => restore.promise), undoRestore: vi.fn(() => undo.promise) });
     select(file(fileText())); await screen.findByText('A-文件布局');
     fireEvent.click(screen.getByRole('button', { name: '确认替换布局与活动需求' }));
@@ -292,12 +310,12 @@ describe('local scene and activity backup', () => {
   it('disables changes during a provider transaction', async () => {
     const { actions, view } = setup(); select(file(fileText())); await screen.findByText('A-文件布局');
     view.rerender(<LocalProjectBackupPanel layout={layout} actions={{ ...actions, backupPending: true }} briefState={briefState}/>);
-    for (const name of ['下载场景与活动备份', '确认替换布局与活动需求', '取消恢复']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+    for (const name of ['下载场景与活动备份', localRestoreAvailable() ? '确认替换布局与活动需求' : '恢复暂不可用', '取消恢复']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('选择备份文件') as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }) as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('reports undo completion only after the provider verifies the original saved layout and requirements', async () => {
+  it.skipIf(!localRestoreAvailable())('reports undo completion only after the provider verifies the original saved layout and requirements', async () => {
     const pending = deferred<void>(); const { actions, view } = setup({ canUndoRestore: true, undoRestore: vi.fn(() => pending.promise) });
     fireEvent.click(screen.getByRole('button', { name: '撤销本次恢复' }));
     expect(screen.queryByRole('status')).toBeNull();
@@ -307,7 +325,7 @@ describe('local scene and activity backup', () => {
     expect(screen.queryByRole('button', { name: '撤销本次恢复' })).toBeNull();
   });
 
-  it.each(['restore', 'undo'] as const)('suppresses a canceled %s and its old candidate after a human switches project', async kind => {
+  it.skipIf(!localRestoreAvailable()).each(['restore', 'undo'] as const)('suppresses a canceled %s and its old candidate after a human switches project', async kind => {
     const pending = deferred<void>(), onComplete = vi.fn();
     const { actions, view } = setup({ restoreBackup: vi.fn(() => pending.promise), undoRestore: vi.fn(() => pending.promise), canUndoRestore: kind === 'undo' });
     view.rerender(<LocalProjectBackupPanel layout={layout} actions={actions} briefState={briefState} onComplete={onComplete}/>);
@@ -319,7 +337,7 @@ describe('local scene and activity backup', () => {
     expect(screen.queryByLabelText('备份预检')).toBeNull(); expect(onComplete).not.toHaveBeenCalled();
   });
 
-  it('returns to delivery only after successful restore and undo even when their own commits change scope', async () => {
+  it.skipIf(!localRestoreAvailable())('returns to delivery only after successful restore and undo even when their own commits change scope', async () => {
     const restored = deferred<void>(), undone = deferred<void>(), onComplete = vi.fn();
     const { actions, view } = setup({ restoreBackup: vi.fn(() => restored.promise), undoRestore: vi.fn(() => undone.promise) });
     view.rerender(<LocalProjectBackupPanel layout={layout} actions={actions} briefState={briefState} onComplete={onComplete}/>);

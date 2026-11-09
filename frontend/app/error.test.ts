@@ -1,3 +1,4 @@
+import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
@@ -128,7 +129,7 @@ describe('app/error.tsx — recovery never loses the house (#336)', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('says so and keeps the download when storage fails mid-move', () => {
+  it('reports quota refusal and keeps the original available to download', () => {
     crashTwice();
     const setItem = failSetItem('QuotaExceededError');
     try {
@@ -136,9 +137,18 @@ describe('app/error.tsx — recovery never loses the house (#336)', () => {
     } finally {
       setItem.mockRestore();
     }
-    expect(screen.getByRole('alert').textContent).toMatch(/浏览器存储失败，请在离开此页前下载当前草稿/);
+    expect(screen.getByRole('alert').textContent).toMatch(/原草稿未删除/);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(house);
     expect(screen.getByRole('button', { name: /下载本地草稿/ })).toBeDefined();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('待恢复标记存在时明确提示核对并保留主档下载', () => {
+    crashTwice();localStorage.setItem(RESTORE_JOURNAL_MARKER,JSON.stringify({version:1,id:'pending'}));
+    fireEvent.click(screen.getByRole('button',{name:/保留备份，开始新方案/}));
+    expect(screen.getByRole('alert').textContent).toContain('恢复资料尚待核对');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(house);
+    expect(screen.getByRole('button',{name:/下载本地草稿/})).toBeTruthy();expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it('keeps an older recovery copy when starting fresh', () => {
@@ -159,7 +169,7 @@ describe('app/error.tsx — recovery never loses the house (#336)', () => {
     } finally {
       setItem.mockRestore();
     }
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(flushed);
     let downloaded: Blob | null = null;
     Object.assign(URL, {
       createObjectURL: (blob: Blob) => {

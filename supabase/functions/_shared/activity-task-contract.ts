@@ -7,6 +7,8 @@ const unique = (ids: readonly string[]) => new Set(ids.map(activityReferenceKey)
 const objectIds = eventOperationTaskSchema.shape.objectIds.unwrap().refine(unique);
 const localId = objectIds.element;
 const localProjectId = localId.refine(id => id !== 'local');
+/** API metadata remains explicitly unverified and is never accepted as a pass. */
+export const modelGeneratedTextNoticeSchema=z.strictObject({status:z.literal('unverified'),scope:z.literal('model_generated_text'),note:z.literal('模型生成文字未经独立核验，不代表消防、疏散、无障碍或容量验收。')});
 const taskContext = z.strictObject({
   id: eventOperationTaskSchema.shape.id, title: eventOperationTaskSchema.shape.title,
   phase: eventOperationTaskSchema.shape.phase, acceptance: eventOperationTaskSchema.shape.acceptance.unwrap(),
@@ -50,6 +52,7 @@ export const activityTaskRunSchema = z.strictObject({
   state: z.enum(['queued', 'running', 'complete', 'failed', 'cancelled']), progress: z.string(),
   callCount: z.number().int().min(0).max(1), activityId: localProjectId, contextHash: z.string().regex(/^[a-f0-9]{64}$/),
   activityResult: activityTaskResultSchema.nullable(), expiresAt: z.string(),
+  modelText:modelGeneratedTextNoticeSchema.optional(),
   errorCode: z.string().optional(), message: z.string().optional(), reused: z.boolean().optional(),
 }).superRefine((run, ctx) => {
   if ((run.state === 'complete') !== (run.activityResult !== null)) {

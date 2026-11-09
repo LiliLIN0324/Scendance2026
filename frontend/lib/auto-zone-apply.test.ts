@@ -32,14 +32,17 @@ describe('hasZoneApplyProposal', () => {
 });
 
 describe('extractProposedZoneTypes', () => {
-  it('默认含签到+休息', () => {
+  it('只包含实际提到的区域', () => {
     expect(extractProposedZoneTypes('要不要我先在门口圈个签到区？顺便在场地深处留个休息区？'))
       .toEqual(['checkin', 'rest']);
   });
   it('提到圆桌/打卡时追加', () => {
     expect(extractProposedZoneTypes('要不要我直接在 2D 上帮你把签到区、休息区和圆桌区都先圈出来？'))
       .toEqual(['checkin', 'rest', 'roundtable']);
-    expect(extractProposedZoneTypes('打卡区也一起圈')).toEqual(['checkin', 'rest', 'photo']);
+    expect(extractProposedZoneTypes('打卡区也一起圈')).toEqual(['photo']);
+    expect(extractProposedZoneTypes('先圈个休息区？')).toEqual(['rest']);
+    expect(extractProposedZoneTypes('不需要签到区，先圈休息区')).toEqual(['rest']);
+    expect(extractProposedZoneTypes('我在门口圈一下？')).toEqual([]);
   });
 });
 

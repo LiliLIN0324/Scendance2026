@@ -15,6 +15,7 @@ import type { RoomLayout } from '../lib/types';
 
 let selection=new Set<string>();
 vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn() }));
+vi.mock('@/lib/material-checkin-storage',async original=>{const actual=await original<typeof import('@/lib/material-checkin-storage')>();return {...actual,readMaterialCheckins:async(id:string)=>actual.checkedMaterialCheckins(id,await readSourceRecord(actual.materialCheckinStorageKey(id)))};});
 vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:selection})}));
 vi.mock('../three/glb-assets',()=>({ensureGlbAsset:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../../business/scene-preview',()=>({ScenePreview:vi.fn(({scene}:{scene:Scene})=><div data-testid="scene-preview">{scene.objects.map(object=>`${object.id}:${object.assetId}:${object.color}`).join('|')}</div>)}));
@@ -74,6 +75,18 @@ beforeEach(()=>{
 });
 
 describe('local activity geometry binding for material versions',()=>{
+  it('keeps deterministic user-facing material context visible',()=>{
+    render(ui({seed:seed({modelSuggested:false,name:'已更新的物料',reason:'可继续调整或预览恢复父版本。'})}));
+    expect(screen.getByText(/可继续调整或预览恢复父版本。/).closest('details')).toBeNull();
+  });
+  it('keeps a model safety assertion and suggestion behind explicit unverified disclosure',async()=>{
+    vi.mocked(controller.prepareMaterialVariantProposal).mockImplementationOnce(async input=>({...proposal(input.scene,input.objectIds,input.variantAssetId),explanation:'消防条件完全没问题'}));
+    render(ui({seed:seed({reason:'无障碍已满足'})}));
+    const suggestion=screen.getByText(/无障碍已满足/);expect(suggestion.closest('details')?.open).toBe(false);
+    await preview();const explanation=screen.getByText('消防条件完全没问题');const disclosure=explanation.closest('details');
+    expect(disclosure?.open).toBe(false);expect(disclosure?.textContent).toContain('不代表消防');
+    expect(screen.getByText('请核对预览与实际改动。')).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
+  });
   it('synchronizes a private chat or reconstruction draft once on explicit preview before proposalState-style revision capture',async()=>{
     localActivity();const before=structuredClone(current),listeners=new Set<()=>void>();let notifications=0,automaticSyncs=0,preparedRevision=-1;
     vi.spyOn(controller,'subscribe').mockImplementation(listener=>{listeners.add(listener);return()=>{listeners.delete(listener);};});

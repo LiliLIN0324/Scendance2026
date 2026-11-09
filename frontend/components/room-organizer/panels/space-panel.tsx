@@ -10,6 +10,7 @@ import { EnvironmentPreview } from './environment-preview';
 import { ShelfGrip } from './scendance-workspace';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { StructuralPropertiesPanel } from './structural-properties-panel';
+import { VenueFactsPanel } from './venue-facts-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
 import type { RoomLayout } from '../lib/types';
@@ -28,6 +29,8 @@ export function SpacePanel({
   onWorkflowChange,
   variant = 'shelf',
   onRegisterNew,
+  venueFactScope,
+  isVenueFactScopeCurrent,
 }: {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
@@ -54,6 +57,8 @@ export function SpacePanel({
   variant?: 'shelf' | 'card';
   /** 新建空间收进输入框的 ＋ 菜单：blank 直接立空白壳，template 展开模板卡。 */
   onRegisterNew?(run: (mode?: 'blank' | 'template') => void): void;
+  venueFactScope?: string;
+  isVenueFactScopeCurrent?: () => boolean;
 }): JSX.Element {
   const hostRef = useRef<HTMLElement>(null);
   const [confirm, setConfirm] = useState(false);
@@ -96,6 +101,7 @@ export function SpacePanel({
     <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
       {!card && <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>}
       <div className="sc-space-body">
+        {venueFactScope?.startsWith('activity:') && isVenueFactScopeCurrent && <VenueFactsPanel key={venueFactScope} activityId={venueFactScope.slice('activity:'.length)} isCurrent={isVenueFactScopeCurrent}/>}
         {notice && <p className="sc-note" role="status">{notice}</p>}
         <div className="sc-space-workflow" role="group" aria-label="空间生成方式">
           <div className="sc-space-workflow-label"><span>空间生成</span><details className="sc-space-info"><summary aria-label="空间生成方式说明" title="空间生成方式说明"><Info size={12} aria-hidden="true"/></summary><p>项目可包含多个空间。生成可漫游的场地；传统空间用于搭建可编辑的结构和模板。可按需要组合使用。</p></details></div>

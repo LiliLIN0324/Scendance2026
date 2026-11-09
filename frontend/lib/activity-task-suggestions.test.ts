@@ -315,7 +315,7 @@ describe('activity task suggestion context', () => {
     await expect(buildActivityTaskContext(activityInput(ambiguous))).rejects.toThrow();
   });
 
-  it('uses operationReview for effective task status and retains the accepted basis boundary', async () => {
+  it('treats old accepted status as needing review even when its hash matches', async () => {
     const layout = rehearsalLayout();
     const task = layout.eventOperations!.tasks[0];
     task.objectIds = [OBJECT_A];
@@ -324,9 +324,10 @@ describe('activity task suggestion context', () => {
     task.evidenceNote = '演练核对说明';
     task.status = 'accepted';
     task.reviewedBasis = await operationBasis(layout, task);
-    expect((await operationReview(layout, task)).status).toBe('accepted');
+    expect(await operationBasis(layout, task)).toBe(task.reviewedBasis);
+    expect((await operationReview(layout, task)).status).toBe('needs_review');
     const accepted = await buildActivityTaskContext(activityInput(layout));
-    expect(accepted.summary.tasks[0].status).toBe('accepted');
+    expect(accepted.summary.tasks[0].status).toBe('needs_review');
 
     layout.floors[0].items[0].position = { x: 8, z: 8 };
     const changed = await buildActivityTaskContext(activityInput(layout));

@@ -59,6 +59,11 @@ export interface GenerationOutcome<TItem = unknown> {
   refused: OutcomeEntry<TItem>[];
   /** 因锁定/找不到目标/范围外被跳过的件（不是判据错，是「这次不动它」）。 */
   skipped: OutcomeEntry<TItem>[];
+  /** 已从布局移除的物料，与未变动的跳过项不同。 */
+  removed?: TItem[] | undefined;
+  /** 仅内存中的当前布局基线，用于将结果标为历史。 */
+  appliedLayout?: unknown;
+  appliedRevision?: number | undefined;
   /** 整次为空时的原因；有任意一件放置时为 undefined。 */
   scopeEmpty?: ScopeEmptyReason;
   /** 完成卡字段（体检分 / 为什么这么摆 / 后续建议 / 耗时 / 轮数）。 */
@@ -95,14 +100,16 @@ export function combineOutcomes<TItem>(...outs: Array<GenerationOutcome<TItem>>)
   const placed: TItem[] = [];
   const refused: OutcomeEntry<TItem>[] = [];
   const skipped: OutcomeEntry<TItem>[] = [];
+  const removed: TItem[] = [];
 
   for (const out of outs) {
     placed.push(...out.placed);
     refused.push(...out.refused);
     skipped.push(...out.skipped);
+    removed.push(...(out.removed ?? []));
   }
 
-  const merged: GenerationOutcome<TItem> = { placed, refused, skipped };
+  const merged: GenerationOutcome<TItem> = { placed, refused, skipped, ...(removed.length ? {removed} : {}) };
 
   if (placed.length === 0) {
     // 反向遍历，取最后一个非空原因。
@@ -125,13 +132,16 @@ export function combineOutcomes<TItem>(...outs: Array<GenerationOutcome<TItem>>)
  * - 否则：`放了 N 件`，并按是否有 refused / skipped 追加后缀。
  */
 export function outcomeSummary<TItem>(out: GenerationOutcome<TItem>): string {
-  if (out.placed.length === 0 && out.scopeEmpty) {
+  if (out.placed.length === 0 && !(out.removed?.length) && !out.skipped.some(entry=>entry.code==='REMOVED') && out.scopeEmpty) {
     return `本次没放成：${SCOPE_EMPTY_ZH[out.scopeEmpty]}`;
   }
 
   let text = `放了 ${out.placed.length} 件`;
+  const removed=(out.removed?.length ?? 0)+out.skipped.filter(entry=>entry.code==='REMOVED').length;
+  const skipped=out.skipped.filter(entry=>entry.code!=='REMOVED').length;
+  if (removed) text += `、移除 ${removed} 件`;
   if (out.refused.length > 0) text += `、被拒 ${out.refused.length} 件`;
-  if (out.skipped.length > 0) text += `、跳过 ${out.skipped.length} 件`;
+  if (skipped) text += `、跳过 ${skipped} 件`;
   return text;
 }
 
@@ -152,5 +162,5 @@ export function countByCode<TItem>(entries: OutcomeEntry<TItem>[]): Record<strin
  * 「放了 0 件」，把上一次真的生成结果冲掉——审校台上的话必须名副其实。
  */
 export function hasOutcomeChanges<TItem>(out: GenerationOutcome<TItem>): boolean {
-  return out.placed.length > 0 || out.refused.length > 0 || out.skipped.length > 0;
+  return out.placed.length > 0 || (out.removed?.length ?? 0) > 0 || out.refused.length > 0 || out.skipped.length > 0;
 }

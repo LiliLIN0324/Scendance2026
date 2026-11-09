@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { materialCheckinStorageKey, mergeStoredMaterialCheckins, readMaterialCheckins } from '../../../lib/material-checkin-storage';
 import { registerSourceFlush, subscribeSourceRecordChanges } from '../../../lib/source-storage';
+import { assertLocalWriteCapability, type LocalWriteCapability } from '../../../lib/local-write-lease';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 
 const CHANNEL = 'scendance-material-checkin-changes';
@@ -14,15 +15,20 @@ export interface MaterialCheckinState {
 interface StoredState { scope: string | null; epoch: number; ledger: MaterialCheckinLedger | undefined; ready: boolean; error: string | null }
 
 /** Project facts live outside layout history; this view never copies them into a new scene. */
-export function useMaterialCheckins({ projectId, enabled, prepareWrite }: {
+export function useMaterialCheckins({ projectId, enabled, prepareWrite, writeCapability }: {
   projectId: string | undefined; enabled: boolean;
+  /** Omit for legacy callers; a connected writer must provide its ordinary capability. */
+  writeCapability?: LocalWriteCapability;
   prepareWrite(): Promise<() => void>;
 }): MaterialCheckinState {
   const scope = enabled && projectId ? projectId : null;
   const generation = useRef({ scope, epoch: 0 });
   if (generation.current.scope !== scope) generation.current = { scope, epoch: generation.current.epoch + 1 };
   const epoch = generation.current.epoch;
-  const latest = useRef({ scope, prepareWrite }); latest.current = { scope, prepareWrite };
+  // Once capability protection is enabled in this mounted editor, never fall back to legacy writes.
+  const capabilityRequired = useRef(false);
+  if (writeCapability !== undefined) capabilityRequired.current = true;
+  const latest = useRef({ scope, prepareWrite, writeCapability }); latest.current = { scope, prepareWrite, writeCapability };
   const [state, setState] = useState<StoredState>({ scope: null, epoch: -1, ledger: undefined, ready: false, error: null });
   const [savingScope, setSavingScope] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -63,13 +69,23 @@ export function useMaterialCheckins({ projectId, enabled, prepareWrite }: {
   const onSave = useCallback(async (proposal: MaterialCheckinLedger) => {
     const currentScope = latest.current.scope;
     const currentEpoch = generation.current.epoch;
+    const capturedCapability = latest.current.writeCapability;
     if (!currentScope) throw new Error('数量点验暂用于有明确编号的本地项目。');
     if (pending.current.has(currentScope)) throw new Error('本次点验正在保存，请稍候。');
     setSavingScope(currentScope);
     const operation = (async () => {
+      if (capabilityRequired.current && !capturedCapability) throw new Error('本机编辑权尚未就绪，请重新核对。');
       const guard = await latest.current.prepareWrite();
-      const check = () => { if (latest.current.scope !== currentScope || generation.current.epoch !== currentEpoch) throw new Error('项目已切换，原点验输入未写入其他项目。'); guard(); };
-      const saved = await mergeStoredMaterialCheckins(currentScope, proposal, check);
+      const check = () => {
+        if (latest.current.scope !== currentScope || generation.current.epoch !== currentEpoch) throw new Error('项目已切换，原点验输入未写入其他项目。');
+        if (capabilityRequired.current && !capturedCapability) throw new Error('本机编辑权尚未就绪，请重新核对。');
+        if (latest.current.writeCapability !== capturedCapability) throw new Error('本机编辑权已变化，请重新核对。');
+        if (capturedCapability) assertLocalWriteCapability(capturedCapability);
+        guard();
+      };
+      check();
+      const saved = await mergeStoredMaterialCheckins(currentScope, proposal, check, capturedCapability);
+      check();
       if (alive.current && latest.current.scope === currentScope && generation.current.epoch === currentEpoch) {
         reads.current++;
         setState({ scope: currentScope, epoch: currentEpoch, ledger: saved, ready: true, error: null });
@@ -78,6 +94,7 @@ export function useMaterialCheckins({ projectId, enabled, prepareWrite }: {
     })();
     pending.current.set(currentScope, operation);
     try { await operation; }
+    catch (error) { throw new Error(`点验未能确认保存，填写内容已保留，请核对原记录后重试。${error instanceof Error ? ` ${error.message}` : ''}`); }
     finally {
       if (pending.current.get(currentScope) === operation) pending.current.delete(currentScope);
       if (alive.current && latest.current.scope === currentScope) setSavingScope(null);

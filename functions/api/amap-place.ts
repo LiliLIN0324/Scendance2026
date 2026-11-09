@@ -1,4 +1,4 @@
-import { amapKeyFromEnv, type AmapServerEnv } from './amap-env';
+import { amapKeyFromEnv, parseLocation, type AmapServerEnv } from './amap-env';
 
 type Context = { request: Request; env: AmapServerEnv };
 
@@ -38,10 +38,9 @@ export async function handleAmapPlace(request: Request, env: AmapServerEnv, fetc
       pois?: { id?: string; name?: string; address?: string[] | string; location?: string }[];
     };
     const places = (body.pois ?? []).flatMap(poi => {
-      const [lngRaw, latRaw] = (poi.location ?? '').split(',');
-      const lng = Number(lngRaw);
-      const lat = Number(latRaw);
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return [];
+      const point = parseLocation(typeof poi.location === 'string' ? poi.location : null);
+      if (!point) return [];
+      const { lng, lat } = point;
       const address = Array.isArray(poi.address) ? poi.address.join('') : poi.address ?? '';
       return [{
         id: poi.id ?? `${lng},${lat}`,

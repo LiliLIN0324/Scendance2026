@@ -183,27 +183,37 @@ describe('single durable original request', () => {
   });
 });
 
+/** Count only generated proposal/task IDs; source-change notification IDs are unrelated. */
+function countProposalIdAllocations(){
+  const original=crypto.randomUUID.bind(crypto);let count=0;
+  vi.spyOn(crypto,'randomUUID').mockImplementation(()=>{
+    if(/(?:createOperation|prepareActivityTaskSuggestions)/.test(new Error().stack??''))count++;
+    return original();
+  });
+  return ()=>count;
+}
+
 describe('prepared proposals and save acknowledgement', () => {
   it('prepares once across separate module instances and concurrent same-run results, retaining stable task IDs on reopen', async () => {
     database(); const marker = await beginActivityTaskRequest(await input(), guard);
-    const uuidSpy = vi.spyOn(globalThis.crypto, 'randomUUID');
+    const allocations = countProposalIdAllocations();
     vi.resetModules(); const second = await import('./activity-task-proposal-storage');
     const [a, b] = await Promise.all([storeActivityTaskRun(identity, marker.requestId, run(marker), '模拟结果', guard),
       second.storeActivityTaskRun(identity, marker.requestId, run(marker), '模拟结果', guard)]);
-    expect(uuidSpy).toHaveBeenCalledTimes(3); expect(a.proposal).toEqual(b.proposal);
+    expect(allocations()).toBe(3); expect(a.proposal).toEqual(b.proposal);
     expect((await second.readActivityTaskRequest(identity, guard))?.proposal).toEqual(a.proposal);
     expect(await storeActivityTaskRun(identity, marker.requestId, run(marker, { reused: true }), '另一个显示标签', guard)).toEqual(a);
-    expect(uuidSpy).toHaveBeenCalledTimes(3);
+    expect(allocations()).toBe(3);
   });
   it('rejects foreign runs, changed results, undeclared references and model execution fields before any local preparation', async () => {
-    const db = database(), marker = await beginActivityTaskRequest(await input(), guard), uuidSpy = vi.spyOn(globalThis.crypto, 'randomUUID');
+    const db = database(), marker = await beginActivityTaskRequest(await input(), guard), allocations = countProposalIdAllocations();
     for (const override of [{ kind: 'scene' }, { requestId: id(5) }, { projectId: id(5) }, { activityId: 'other-local' },
       { contextHash: '0'.repeat(64) }, { activityResult: { suggestions: [{ title: '建议', phase: 'event', acceptance: '核对', objectIds: ['not-disclosed'] }] } },
       { activityResult: { suggestions: [{ title: '建议', phase: 'event', acceptance: '核对', ownerName: '模型杜撰' }] } }]) {
       await expect(storeActivityTaskRun(identity, marker.requestId, run(marker, override), '模拟结果', guard)).rejects.toThrow();
       expect(db.read()).toEqual(marker);
     }
-    expect(uuidSpy).not.toHaveBeenCalled();
+    expect(allocations()).toBe(0);
     const first = await storeActivityTaskRun(identity, marker.requestId, run(marker), '模拟结果', guard);
     await expect(storeActivityTaskRun(identity, marker.requestId, run(marker, { activityResult: { suggestions: [{ title: '另一建议', phase: 'event', acceptance: '核对', objectIds: [] }] } }), '模拟结果', guard)).rejects.toThrow('完整结果已变化');
     expect(db.read()).toEqual(first);

@@ -90,6 +90,11 @@ describe('briefSlotSchema — mobilityAssistance（elderly ≠ mobilityAssistanc
 });
 
 describe('briefSlotSchema — requirements（must vs prefer，模型不得私自升级）', () => {
+  it('accepts sourced activity needs and rejects unknown operations', () => {
+    expect(briefSlotSchema.safeParse({ activityNeeds: [{ kind: 'checkin', decision: 'not_needed', evidence: '不用接待台' }] }).success).toBe(true);
+    expect(briefSlotSchema.safeParse({ activityNeeds: [{ kind: 'delete_exit', decision: 'needed', evidence: '删除出口' }] }).success).toBe(false);
+    expect(briefSlotSchema.safeParse({ activityNeeds: [{ kind: 'checkin', decision: 'needed', evidence: '' }] }).success).toBe(false);
+  });
   it('must 合法：「必须 80 人」这类强约束', () => {
     const parsed = briefSlotSchema.safeParse({
       headcount: 80,
@@ -129,6 +134,11 @@ describe('briefSlotSchema — requirements（must vs prefer，模型不得私自
 });
 
 describe('briefExtractResponseSchema — 整体响应', () => {
+  it('accepts the existing error response without exposing it as a successful extraction', () => {
+    const parsed = briefExtractResponseSchema.parse({ enabled: true, extraction: null, reason: 'provider unavailable' });
+    expect(parsed.extraction).toBeNull();
+    expect(parsed.reason).toBe('provider unavailable');
+  });
   it('extraction 为 null 合法（后端禁用模型时返回 enabled:false）', () => {
     const parsed = briefExtractResponseSchema.safeParse({ enabled: false, extraction: null });
     expect(parsed.success).toBe(true);

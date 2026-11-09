@@ -43,6 +43,67 @@ describe('the agent can ask the engine where things fit',()=>{
     expect(response.status).toBe(202);return agentRunSchema.parse(await response.json());
   }
 
+  it('keeps unverified exit and safety checks unknown even when local geometry returns valid',async()=>{
+    const draft=room();draft.venue.entrances=[];
+    if(draft.schemaVersion===2)draft.structure.openings[0]!.status='inferred';
+    const i=await input(draft,{instruction:'仅试算候选',executionMode:'preview'});
+    const proposal={title:'空候选',explanation:'等待现场确认。',commands:[]};
+    let prompt='',receipt:Record<string,unknown>={};
+    const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
+      const messages=JSON.parse(String(init?.body)).messages as Array<{role:string;content:string}>;
+      prompt=messages[0]!.content;
+      if(fetcher.mock.calls.length===1)return completion([tool('validate_candidate',proposal)]);
+      receipt=JSON.parse(messages.filter(message=>message.role==='tool').at(-1)!.content);
+      return completion([tool('submit_candidates',{candidates:[proposal]})]);
+    });
+    await send(i,fetcher);
+    expect(receipt).toMatchObject({valid:true,coverage:{status:'partial',uncovered:expect.arrayContaining([
+      expect.objectContaining({id:'exit',status:'unknown'}),expect.objectContaining({id:'egress',status:'unknown'}),
+      expect.objectContaining({id:'fire',status:'unknown'}),expect.objectContaining({id:'accessibility',status:'unknown'})])}});
+    expect(prompt).not.toContain('valid:true 即已达标');expect(prompt).not.toMatch(/主通道按\s*1\.2\s*米/);
+    expect(prompt).toContain('不得声称');
+  },30000);
+
+  it('rejects newly overlapping geometry during validation and retains unknown coverage',async()=>{
+    const draft=room(),i=await input(draft,{instruction:'试算桌椅',executionMode:'preview'});
+    const conflict={title:'重叠候选',explanation:'待核验。',commands:[{op:'add',materialId:'table',position:{x:2.5,z:2.5},rotation:0,color:'#ffffff'}]};
+    let receipt:Record<string,unknown>={};
+    const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
+      if(fetcher.mock.calls.length===1)return completion([tool('validate_candidate',conflict)]);
+      const messages=JSON.parse(String(init?.body)).messages as Array<{role:string;content:string}>;
+      receipt=JSON.parse(messages.filter(message=>message.role==='tool').at(-1)!.content);
+      return completion([tool('submit_candidates',{candidates:[{title:'不更改',explanation:'待核验。',commands:[]}]})]);
+    });
+    await send(i,fetcher);
+    expect(receipt).toMatchObject({valid:false,code:'CANDIDATE_GEOMETRY_CONFLICT',failedCommand:1,details:expect.arrayContaining([expect.objectContaining({code:'NEW_OVERLAP'})]),coverage:{status:'partial',uncovered:expect.arrayContaining([expect.objectContaining({id:'egress',status:'unknown'})])}});
+  },30000);
+
+  it('keeps an unchanged existing overlap unknown instead of rejecting a separate change',async()=>{
+    const draft=room(),existing=draft.objects[0]!;
+    draft.objects.push({...existing,id:id(22),position:{...existing.position}});
+    const i=await input(draft,{instruction:'只在空地试摆椅子',executionMode:'preview'});
+    const proposal={title:'空地示意',explanation:'原有冲突仍需核验。',commands:[{op:'add',materialId:'chair',position:{x:9,z:8},rotation:0,color:'#ffffff'}]};
+    let receipt:Record<string,unknown>={};
+    const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
+      if(fetcher.mock.calls.length===1)return completion([tool('validate_candidate',proposal)]);
+      const messages=JSON.parse(String(init?.body)).messages as Array<{role:string;content:string}>;
+      receipt=JSON.parse(messages.filter(message=>message.role==='tool').at(-1)!.content);
+      return completion([tool('submit_candidates',{candidates:[proposal]})]);
+    });
+    await send(i,fetcher);
+    expect(receipt).toMatchObject({valid:true,independentReview:{status:'unknown',unknown:expect.arrayContaining([expect.objectContaining({code:'EXISTING_OVERLAP'}),expect.objectContaining({code:'EGRESS_UNKNOWN'})])}});
+  },30000);
+
+  it('independently rejects a single final candidate with a new overlap even without a validate tool call',async()=>{
+    const draft=room(),i=await input(draft,{instruction:'在现有桌子上再放一张桌子',executionMode:'preview'});
+    const conflict={title:'重叠候选',explanation:'把桌子放到已有桌子上。',commands:[{op:'add',materialId:'table',position:{x:2.5,z:2.5},rotation:0,color:'#ffffff'}]};
+    const fetcher=vi.fn(async()=>completion([tool('submit_candidates',{candidates:[conflict]})]));
+    const run=await send(i,fetcher);
+    expect(run.candidates).toEqual([]);expect(run.state).toBe('failed');
+    expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(draft);
+    const proposals=await f.db.query<{count:number}>('select count(*)::integer as count from scene_private.agent_proposals where run_id=$1',[run.id]);expect(proposals.rows[0]!.count).toBe(0);
+  },30000);
+
   it('sees a plan of the room before it picks coordinates',async()=>{
     const draft=room(),i=await input(draft);
     let opening:{planOverview?:{plan:{lines:string[]};structure:{walls:number};occupancy:{objects:number}}}={};
@@ -63,7 +124,7 @@ describe('the agent can ask the engine where things fit',()=>{
     // The model placed at the anchor the engine computed, and the editor accepted it.
     expect(sites.length).toBeGreaterThan(0);
     const candidate=run.candidates[0].proposal;
-    expect(candidate.warnings).toEqual([]);
+    expect(candidate.warnings).toEqual([{code:'SAFETY_CHECKS_UNKNOWN',ids:[]}]);
     expect(candidate.candidate.objects).toHaveLength(2);
     const placed=candidate.candidate.objects.find(o=>o.id!==id(21))!;
     expect(placed.position.x).toBeCloseTo(sites[0].x,3);
@@ -72,7 +133,7 @@ describe('the agent can ask the engine where things fit',()=>{
 
   it('turns a refusal into one next action instead of a bare code',async()=>{
     const draft=room(),i=await input(draft,{selectedIds:[id(21)],instruction:'直接把选中的桌子换个位置'});
-    let refusal:{code?:string;hint?:string}={};
+    let refusal:{code?:string;hint?:string;coverage?:{status:string}}={};
     const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
       const body=JSON.parse(String(init?.body));
       if(fetcher.mock.calls.length===1)return completion([tool('validate_candidate',{title:'挪动',explanation:'尝试移动未选中的物件',commands:[{op:'move',id:id(6),position:{x:4,z:4}}]})]);
@@ -82,6 +143,7 @@ describe('the agent can ask the engine where things fit',()=>{
     const run=await send(i,fetcher);
     expect(run.state).toBe('complete');
     expect(refusal.code).toBe('INVALID_SELECTION');
+    expect(refusal.coverage?.status).toBe('partial');
     expect(refusal.hint).toContain('selectedIds');
     expect(run.candidates[0].proposal.candidate.objects.find(o=>o.id===id(21))?.position).toEqual({x:4,z:4});
   },30000);

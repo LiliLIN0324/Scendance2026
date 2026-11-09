@@ -12,9 +12,22 @@ import { materialCheckinLedgerSchema, type MaterialCheckinLedger } from '../../.
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { createOperation } from '../lib/event-operations';
+import { createMeasuredRoomLayout } from '../lib/backend-adapter';
 import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis } from '../lib/scene-handoff';
+import {extractMobilityWidth} from '../lib/mobility-export';
+import {initialBriefMemory} from '../lib/brief-agent';
+import {projectDialogueHandoff} from '../lib/dialogue-handoff';
+import {captureOriginalPreservation} from '../lib/original-preservation';
+import {createLayoutStore} from '../hooks/use-layout-store';
+import {createActivitySessionTracker} from '../lib/activity-session-epoch';
+import {createFloorSessionTracker} from '../lib/floor-session-epoch';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
+import {captureLocalDraftIntegrityFence,verifyLocalDraft} from '../lib/local-draft-integrity';
+import {localDraftDeliveryJson} from '../lib/local-draft-delivery';
+import {emptyVenueFacts,updateVenueFact} from '../lib/venue-facts';
+import {venueFactsStorageKey} from '../lib/venue-facts-storage';
+import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from '../lib/pending-candidate-registry';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { FurnitureItem } from '../lib/types';
 vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
@@ -74,17 +87,187 @@ function openBackupTab(): void {
   const tab = screen.queryByRole('tab', { name: '本机备份' });
   if (tab) fireEvent.click(tab);
 }
+function knownMobilityDialogue() {
+  const memory={...initialBriefMemory(),mobilityRequirement:{decision:'needed' as const,evidence:'仅测试'}};
+  return {project:(reference?:{event?:string|null;guests?:number|null})=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}};
+}
 describe('Bingo scene delivery panel',()=>{
+  it('blocks direct delivery while either local or cloud candidate remains pending',async()=>{
+    const registry=createPendingCandidateRegistry(),scope={},access=bindPendingCandidateRegistry(registry,scope,()=>true),local={},cloud={};
+    access.register('local',local);access.register('cloud',cloud);
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} capturePendingCandidates={access.capture}/>);openExportTab();
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
+    expect(await screen.findByText(/当前有尚未应用的方案预览/)).toBeTruthy();expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    access.clear('local',local);
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    access.clear('cloud',cloud);
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+  });
+  it('cancels direct delivery if a candidate appears while the file is being prepared',async()=>{
+    const registry=createPendingCandidateRegistry(),scope={},access=bindPendingCandidateRegistry(registry,scope,()=>true),candidate={};
+    const pending=deferred<string>();vi.mocked(sceneDeliveryJson).mockReturnValueOnce(pending.promise);
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} capturePendingCandidates={access.capture}/>);openExportTab();
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
+    await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
+    access.register('local',candidate);
+    await act(async()=>{pending.resolve('{}');await pending.promise;});
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    expect(await screen.findByText(/方案预览或活动已变化，未导出资料/)).toBeTruthy();
+  });
+  it('includes explicitly selected unlinked venue facts inside the checksum without upgrading or leaking them',async()=>{
+    const current=makeLayout({id:'facts-example',roof:{style:'none'},floors:[makeFloor({items:Array.from({length:60},(_,index)=>makeItem({id:`chair-${index}`,name:'示意椅'}))})]});
+    const scope='activity:facts-example',facts=updateVenueFact(emptyVenueFacts(scope),'door_width',{value:1.2,source:'site_measurement',status:'confirmed',uncertainty:.02,sourceRef:'PRIVATE_REFERENCE',updatedBy:'PRIVATE_PERSON',updatedAt:'2026-11-08T00:00:00Z'},0);
+    localStorage.setItem(venueFactsStorageKey(scope)!,JSON.stringify(facts));
+    const old=Object.getOwnPropertyDescriptor(navigator,'locks');
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{request:async(_name:string,_options:unknown,callback:()=>Promise<unknown>)=>callback()}});
+    try{
+      render(<SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={()=>captureLocalDraftIntegrityFence(()=>true,[])}/>);openExportTab();
+      fireEvent.click(screen.getByRole('checkbox',{name:'在可校验草案中附上本机场地记录'}));
+      fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
+      await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+      const sealed=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
+      expect(await verifyLocalDraft(sealed)).toMatchObject({status:'consistent'});
+      const payload=JSON.parse(JSON.parse(sealed).payload);
+      expect(payload.unlinkedVenueNotes.notice).toMatch(/尚未与当前画布或图纸版本关联/);
+      expect(payload.unlinkedVenueNotes.notice).toMatch(/不等于场地方确认/);
+      expect(payload.unlinkedVenueNotes.facts.find((fact:{key:string})=>fact.key==='door_width')).toMatchObject({value:1.2,recordedStatus:'confirmed',source:'site_measurement',uncertainty:.02});
+      expect(sealed).not.toMatch(/PRIVATE_REFERENCE|PRIVATE_PERSON|updatedBy|sourceRef/);
+    }finally{localStorage.removeItem(venueFactsStorageKey(scope)!);if(old)Object.defineProperty(navigator,'locks',old);else Reflect.deleteProperty(navigator,'locks');}
+  });
+  it('does not download selected venue facts when they are missing',async()=>{
+    const current=makeLayout({id:'missing-facts',roof:{style:'none'}}),old=Object.getOwnPropertyDescriptor(navigator,'locks');
+    Object.defineProperty(navigator,'locks',{configurable:true,value:{request:async(_name:string,_options:unknown,callback:()=>Promise<unknown>)=>callback()}});
+    try{
+      render(<SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={()=>captureLocalDraftIntegrityFence(()=>true,[])}/>);openExportTab();
+      fireEvent.click(screen.getByRole('checkbox',{name:'在可校验草案中附上本机场地记录'}));fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
+      expect(await screen.findByText(/尚无本机场地记录/)).toBeTruthy();expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    }finally{if(old)Object.defineProperty(navigator,'locks',old);else Reflect.deleteProperty(navigator,'locks');}
+  });
+  it('exports an independently verifiable local snapshot without replacing existing JSON/CSV',async()=>{
+    const current=makeLayout({id:'activity-test',roof:{style:'none'},floors:[makeFloor({items:Array.from({length:60},(_,index)=>makeItem({id:`item-${index}`,name:'示意物料'}))})]});
+    const capture=()=>captureLocalDraftIntegrityFence(()=>true,[]);
+    render(<SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={capture}/>);openExportTab();
+    expect(screen.getByRole('button',{name:'导出本地待核验草案 JSON'})).toBeTruthy();
+    expect(screen.getByRole('button',{name:'导出本地物料草案 CSV'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const text=vi.mocked(downloadSceneDelivery).mock.calls[0]![0];expect(typeof text).toBe('string');
+    expect(await verifyLocalDraft(text as string)).toMatchObject({status:'consistent'});
+    expect(screen.getByText(/文件摘要仅用于核对内容一致/)).toBeTruthy();
+  });
+  it('does not download when an A→B→A transition occurs while computing the checksum',async()=>{
+    let value='A',invalidate=()=>{};const digest=deferred<ArrayBuffer>();
+    vi.stubGlobal('crypto',{randomUUID:()=>webcrypto.randomUUID(),subtle:{digest:vi.fn(()=>digest.promise)}});
+    const capture=()=>captureLocalDraftIntegrityFence(()=>value==='A',[listener=>{invalidate=listener;return()=>{};}]);
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} captureLocalDraftExport={capture}/>);openExportTab();
+    fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
+    await waitFor(()=>expect(crypto.subtle.digest).toHaveBeenCalledOnce());
+    value='B';invalidate();value='A';invalidate();
+    await act(async()=>{digest.resolve(new Uint8Array(32).buffer);await digest.promise;});
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    expect(await screen.findByText(/活动或场景已变化，未导出草案/)).toBeTruthy();
+  });
+  it('verifies a selected file locally without modifying the current scene',async()=>{
+    const source=workLayout(),payload=localDraftDeliveryJson(source,{id:'sample',generatedAt:'2026-11-08T00:00:00Z'});
+    const {sealLocalDraft}=await import('../lib/local-draft-integrity');const text=await sealLocalDraft(payload);
+    const file=new File([text],'sample.json',{type:'application/json'});
+    Object.defineProperty(file,'arrayBuffer',{value:async()=>new TextEncoder().encode(text).buffer});
+    const before=JSON.stringify(source);
+    render(<SceneDeliveryPanel layout={source} controller={controller}/>);openExportTab();
+    fireEvent.change(screen.getByLabelText('校验可校验草案文件'),{target:{files:[file]}});
+    expect(await screen.findByText(/文件内容与所附摘要一致/)).toBeTruthy();
+    expect(screen.getByText(/不证明文件来源、内容真实/)).toBeTruthy();
+    expect(JSON.stringify(source)).toBe(before);expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
+  it('明确图纸仅覆盖首层及未包含的其他楼层',()=>{
+    const current=makeLayout({roof:{style:'none'},floors:[makeFloor({id:'first',name:'一层'}),makeFloor({id:'second',name:'二层'})]});
+    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    openExportTab();
+    expect(screen.getByText(/平面打印和 DXF 仅包含首层“一层”，其他 1 层未包含/)).toBeTruthy();
+  });
+  it('不允许对复杂结构导出伪造矩形图纸',()=>{
+    const current={...layout,backendVenue:{width:8,depth:8,height:3,shape:'polygon' as const,polygon:[{x:0,z:0},{x:8,z:0},{x:0,z:8}],entrances:[]}};
+    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    openExportTab();
+    expect(screen.getByText(/多边形场地暂不支持平面图导出/)).toBeTruthy();
+    expect((screen.getByRole('button',{name:'打开按比例打印（另存 PDF）'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button',{name:'导出平面 DXF'}) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('未定位物件允许打印警示但禁止 DXF',()=>{
+    const {position:_position,...unplaced}=makeItem({id:'unplaced',name:'待定位椅'});
+    const current=makeLayout({roof:{style:'none'},floors:[makeFloor({items:[unplaced]})]});
+    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    openExportTab();
+    expect(screen.getByText(/部分物件位置待确认/)).toBeTruthy();
+    expect((screen.getByRole('button',{name:'打开按比例打印（另存 PDF）'}) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button',{name:'导出平面 DXF'}) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it.each(['导出本地待核验草案 JSON','导出本地物料草案 CSV'])('结构冲突时面板拒绝下载 %s 并提示保留备份',async label=>{
+    const current=createMeasuredRoomLayout(makeLayout({roof:{style:'none'}}),{width:12,depth:9,height:3});
+    current.backendSceneV2!.structure.walls[0]!.status='confirmed';
+    current.floors[0]!.interiorWalls![0]!.status='confirmed';
+    current.floors[0]!.interiorWalls![0]!.x1+=0.1;
+    render(<SceneDeliveryPanel layout={current} controller={controller}/>);openExportTab();
+    fireEvent.click(screen.getByRole('button',{name:label}));
+    expect((await screen.findAllByText(/请保留原始完整备份/)).length).toBeGreaterThan(0);
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
+  it('展示与交付数据一致的来源统计，旧物件保持未知',()=>{
+    const current=makeLayout({roof:{style:'none'},floors:[makeFloor({items:[
+      makeItem({id:'ai',name:'AI椅',provenance:{source:'ai',opId:'op-a'}}),
+      makeItem({id:'system',name:'示意长椅',type:'bench',provenance:{source:'procedural',opId:'op-b'}}),
+      makeItem({id:'old',name:'旧椅'}),
+      makeItem({id:'column',name:'结构柱',structuralColumnId:'col-1'}),
+    ]})]});
+    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    const summary=screen.getByTestId('provenance-summary');
+    expect(summary.textContent).toContain('AI 生成 1 件');
+    expect(summary.textContent).toContain('系统生成 1 件');
+    expect(summary.textContent).toContain('来源未知 1 件');
+    expect(summary.textContent).toContain('结构标记 1 件');
+    expect(summary.textContent).toContain('AI 占布置件 33%');
+  });
+  it('offers separate local draft exports for an unsupported cloud zone and bench without exporting their signed URL',async()=>{
+    const current=makeLayout({name:'本地活动',roof:{style:'none'},floors:[makeFloor({
+      zones:[{id:'rest',name:'休息区（待核验）',color:'#4A7C59',x:-4,z:-3,w:2.2,d:1.6}],
+      items:[makeItem({id:itemId,type:'bench',name:'休息长椅（示意）',category:'rest',width:1.4,depth:.4,height:.45,
+        position:{x:-3,z:-2},glbUrl:'https://assets.example/sign/chair.glb?token=private-token'})],
+    })]});
+    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    openExportTab();
+    expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button',{name:'导出本地待核验草案 JSON'}) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText(/不是云端场景或可恢复备份/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'导出本地待核验草案 JSON'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(1));
+    const json=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
+    expect(JSON.parse(json)).toMatchObject({format:'scendance-local-draft-delivery',state:'draft_unverified'});
+    expect(JSON.parse(json).layout.floors[0].zones[0].name).toContain('休息区');
+    expect(json).not.toContain('private-token');
+    expect(sceneDeliveryJson).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'导出本地物料草案 CSV'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(2));
+    const csv=String(vi.mocked(downloadSceneDelivery).mock.calls[1]![0]);
+    expect(csv).toContain('休息长椅（示意）');
+    expect(csv).not.toContain('private-token');
+    expect(sceneDeliveryCsv).not.toHaveBeenCalled();
+  });
   it('exports full saved activity records without requiring a production plan or generating models',async()=>{
     const f=completeActivity();
     render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
     expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();
-    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
     expect(productionPlanHandoffHtml).toHaveBeenCalledWith(expect.objectContaining({id:checkinProject}),expect.anything(),undefined,{scope:'activity',brief:f.briefSnapshot.brief});
     const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
     expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('保存的活动目标');
+    expect(html).toContain('活动需求来自执行页已保存的手工需求记录');
+    expect(html).toContain('未完整包含活动助手对话中的人数、签到、舞台及其他需求');
+    expect(html).toContain('未比较二者是否冲突');
+    expect(await screen.findByText(/对话需求未完整包含，请核对手工记录与当前对话后交付/)).toBeTruthy();
     expect(mime).toBe('text/html;charset=utf-8');expect(name).toContain('内部活动交接');expect(extension).toBe('html');
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
@@ -94,7 +277,7 @@ describe('Bingo scene delivery panel',()=>{
     else if(kind==='wrong-project')f.backupActions.prepareBackup.mockResolvedValue(f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
     else f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackup(f.current,f.briefSnapshot));
     render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
-    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await screen.findByText(kind==='error'?'活动资料读取失败':'活动资料未完整对应当前项目，请重新读取后导出。');
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
@@ -103,10 +286,129 @@ describe('Bingo scene delivery panel',()=>{
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
     const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true};
     const view=render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} briefState={briefState}/>);
-    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
     view.rerender(<SceneDeliveryPanel layout={field==='layout'?{...f.current,name:'后续编辑'}:f.current} controller={controller} backupActions={f.backupActions} briefState={field==='brief'?{...briefState,brief:{...f.brief,description:'后续需求'}}:briefState}/>);
     await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
+  it('exports only the current mobility decision, with no original evidence or compliance claim',async()=>{
+    const f=completeActivity(),capture={decision:'needed' as const,isCurrent:()=>true,evidence:'私密原话 token=example-secret'};
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>capture} captureDialogue={knownMobilityDialogue}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
+    expect(html).toContain('主办方已提出行动辅助或轮椅通行需求');expect(html).toContain('实际通行、场地条件和法规符合性均未核验');
+    expect(html).not.toContain('私密原话');expect(html).not.toContain('example-secret');
+  });
+  it.each(['unavailable','missing','unresolved','contradictory'] as const)('never exports old mobility decisions when dialogue is %s',async state=>{
+    const f=completeActivity();const old={decision:'not_needed' as const,isCurrent:()=>true};
+    const memory={...initialBriefMemory(),mobilityRequirement:{decision:(state==='contradictory'?'needed':'not_needed') as 'needed'|'not_needed',evidence:'私密旧依据'},mobilityNeedsClarification:state==='unresolved'};
+    const capture=state==='missing'?undefined:()=>({project:()=>projectDialogueHandoff(state==='unavailable'?null:memory),isCurrent:()=>true,release:()=>{}});
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>old} captureDialogue={capture}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
+    expect(html).toContain('当前会话没有已确认的行动辅助需求记录');expect(html).not.toContain('主办方说明本场不需要所述行动辅助需求');expect(html).not.toContain('私密旧依据');
+  });
+  it('exports separately attributed structured dialogue and reports conflicts with confirmed manual values',async()=>{
+    const f=completeActivity();
+    const manual={...f.brief,event:'会议',eventConfirmed:true,guests:40,guestsConfirmed:true};
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current,{state:'ready',scope:checkinProject,brief:{status:'present',value:manual}},{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
+    const memory={...initialBriefMemory(),event:'讲座',headcount:30,reportedInventory:[{evidence:'SECRET-INVENTORY',status:'reported' as const}],unresolvedActivityNeeds:['checkin' as const]};
+    const release=vi.fn();
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
+    expect(html).toContain('活动助手对话需求（待核验）');expect(html).toContain('刚发送或尚未处理的消息可能未包含');expect(html).toContain('30 人');
+    expect(html).toContain('人数与已确认手工记录：不一致，请核对');expect(html).toContain('活动类型与已确认手工记录：不一致，请核对');
+    expect(html).toContain('<th>签到</th><td>未知</td>');expect(html).toContain('对话曾提到物料；数量与规格须回对话核验');expect(html).not.toContain('SECRET-INVENTORY');expect(release).toHaveBeenCalledOnce();
+  });
+  it.each([false,true])('exports original preservation as a user requirement, not a completed field check: positions=%s',async keepPositions=>{
+    const f=completeActivity(),evidence=keepPositions?'保留原有物件，位置不变':'保留原有物件';
+    const memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(f.current,evidence,keepPositions)!};
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
+    expect(html).toContain('对话要求保留 1 件原物');expect(html).toContain(keepPositions?'要求保持原位、方向和高度':'未要求保持原位');
+    expect(html).toContain('具体名单及现场执行情况仍需核对');expect(html).not.toContain(evidence);
+  });
+  it('does not export a different activity preservation list as if it were this activity',async()=>{
+    const f=completeActivity(),other={...f.current,id:'different-activity'};
+    const memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(other,'保留原有物件',false)!};
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('原物保留要求或名单暂无法核对');expect(html).not.toContain('对话要求保留 1 件原物');
+  });
+  it('reports preservation conflicts rather than claiming the requirement has been satisfied',async()=>{
+    const f=completeActivity(),memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(f.current,'保留原有物件',false)!};
+    const current=structuredClone(f.current);current.floors[0]!.items=[];
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(current,f.briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
+    render(<SceneDeliveryPanel layout={current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('当前场景与该要求存在冲突，请先处理');expect(html).toContain('现场执行情况仍需核对');
+  });
+  it('escapes even malformed preservation values before HTML export',async()=>{
+    const f=completeActivity();
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:()=>{
+      const result=projectDialogueHandoff(initialBriefMemory());
+      result.fields.originalPreservation={status:'recorded',count:'<script>bad</script>' as unknown as number,keepPositions:false};return result;
+    },isCurrent:()=>true,release:()=>{}})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('&lt;script&gt;bad&lt;/script&gt;');expect(html).not.toContain('<script>bad</script>');
+  });
+  it('does not export if the preservation requirement changes during preparation',async()=>{
+    const f=completeActivity();let finish!:(value:string)=>void,revision=0;const release=vi.fn();
+    f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    const memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(f.current,'保留原有物件',false)!};
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>{const captured=revision;return {project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>revision===captured,release};}}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
+    revision++;await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(release).toHaveBeenCalledOnce();
+    expect(await screen.findByText('活动或资料已变化，未生成交接文件。')).toBeTruthy();
+  });
+  it('does not export stale or unavailable dialogue captures and always releases acquired captures',async()=>{
+    const f=completeActivity();let finish!:(value:string)=>void,current=true;const release=vi.fn();
+    f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:()=>projectDialogueHandoff(initialBriefMemory()),isCurrent:()=>current,release})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
+    current=false;await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(release).toHaveBeenCalledOnce();
+    expect(await screen.findByText('活动或资料已变化，未生成交接文件。')).toBeTruthy();
+  });
+  it('does not silently export when a configured dialogue capture cannot be acquired',async()=>{
+    const f=completeActivity();render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>null}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+    expect(await screen.findByText('当前对话或活动无法核对，未生成交接文件。')).toBeTruthy();expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();
+  });
+  it('does not export when the mobility snapshot becomes stale during preparation',async()=>{
+    const f=completeActivity();let finish!:(value:string)=>void,current=true;f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>current})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
+    current=false;await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(await screen.findByText('活动或资料已变化，未生成交接文件。')).toBeTruthy();
+  });
+  it.each([['需要1.5米轮椅通道','1.5 米'],['需要轮椅通道净宽150厘米','150 厘米'],['需要轮椅通道净宽1500毫米','1500 毫米']] as const)('exports user-stated width and units from %s without the private original sentence',async(evidence,shown)=>{
+    const f=completeActivity(),width=extractMobilityWidth({decision:'needed',evidence},false);
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',width,isCurrent:()=>true})} captureDialogue={knownMobilityDialogue}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain(shown);expect(html).toContain('data-source="user_statement"');expect(html).toContain('value="1.5"');
+    expect(html).toContain('待核验');expect(html).not.toContain(evidence);
+  });
+  it('marks the width absent rather than guessing it from conflicting text',async()=>{
+    const f=completeActivity(),width=extractMobilityWidth({decision:'needed',evidence:'需要1.5米轮椅通道，或2米轮椅通道'},false);
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',width,isCurrent:()=>true})} captureDialogue={knownMobilityDialogue}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('具体通道尺寸未随包提供');expect(html).not.toContain('data-source="user_statement"');
+  });
+  it.each(['activity','floor'] as const)('does not export when %s switches away and back during preparation',async kind=>{
+    const f=completeActivity(),store=createLayoutStore({layout:f.current,activeFloorIndex:0}),activity=createActivitySessionTracker(store),floor=createFloorSessionTracker(store);
+    activity.start();floor.start();const token=activity.capture(),floorToken=floor.capture();let finish!:(value:string)=>void;
+    f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>activity.isCurrent(token)&&floor.isCurrent(floorToken)})}/>);
+    openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
+    act(()=>{if(kind==='activity'){store.setState({layout:{...f.current,id:'another-activity'}});store.setState({layout:f.current});}else{store.setState({activeFloorIndex:1});store.setState({activeFloorIndex:0});}});
+    await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();activity.stop();floor.stop();
   });
   it('keeps local checkins and production editing available when the scene service lease is blocked',async()=>{
     const projectId='91000000-0000-4000-8000-000000000001';
@@ -316,12 +618,13 @@ describe('Bingo scene delivery panel',()=>{
     expect(await effectiveHandoffStatus(changed,itemId)).toBe('needs_review');
     view.rerender(<SceneDeliveryPanel layout={changed} controller={controller} onUpdateItem={update}/>);
     await waitFor(()=>expect(screen.getByText('需复核')).toBeDefined());
-    fireEvent.click(screen.getByRole('button',{name:'重新确认验收'}));
+    fireEvent.click(screen.getByRole('button',{name:'重新记录验收'}));
     const nextBasis=await handoffBasis(changed,itemId,patch.handoff!); await waitFor(()=>expect(update.mock.calls[1][1].handoff.reviewedBasis).toBe(nextBasis));
     const confirmed={...changed,floors:[{...changed.floors[0],items:[{...changed.floors[0].items[0],...update.mock.calls[1][1]}]}]};
     view.rerender(<SceneDeliveryPanel layout={confirmed} controller={controller} onUpdateItem={update}/>);
     await waitFor(()=>expect(screen.getByText('已验收')).toBeDefined());
-    expect(screen.queryByRole('button',{name:'重新确认验收'})).toBeNull();
+    expect(screen.getByRole('button',{name:'重新记录验收'})).toBeDefined();
+    expect(await effectiveHandoffStatus(confirmed,itemId)).toBe('needs_review');
   });
   it('rejects clearing the last evidence from an accepted record',async()=>{
     const current=workLayout(), update=vi.fn(); const acceptance='核对尺寸';

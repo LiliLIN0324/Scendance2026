@@ -1,3 +1,6 @@
+import {captureWorkspaceWriteFence,resolveWorkspaceWriteCapability} from '@/lib/workspace-write-fence';
+import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
+import { LIBRARY_PENDING_KEY } from '@/lib/library-pending';
 import { safeGetItem, safeRemoveItem } from './safe-storage';
 import { MAX_NAME_LENGTH, capText, parseStoredLayout } from './schema';
 import { setItemEvictingSnapshots } from './version-history';
@@ -79,18 +82,60 @@ function readIndex(): LibraryIndex {
   return parseLibraryIndex(safeGetItem(LIBRARY_INDEX_KEY));
 }
 
-function writeIndex(index: LibraryIndex): void {
-  if (typeof window === 'undefined') return;
+function indexText(index: LibraryIndex): string {
   const entries: unknown[] = [
     ...index.entries.map((entry) => ({ ...index.raw.get(entry.id), ...entry })),
     ...index.unreadable,
   ];
-  // Restore points give way to the library on a full quota (#295).
-  setItemEvictingSnapshots(
-    window.localStorage,
-    LIBRARY_INDEX_KEY,
-    JSON.stringify({ ...index.rest, entries })
-  );
+  return JSON.stringify({ ...index.rest, entries });
+}
+function writeIndex(index: LibraryIndex): void {
+  if (typeof window === 'undefined') return;
+  setItemEvictingSnapshots(window.localStorage, LIBRARY_INDEX_KEY, indexText(index));
+}
+
+const PENDING_KEY = LIBRARY_PENDING_KEY;
+type PendingLibraryChange = { version: 1; key: string; beforeBlob: string | null; beforeIndex: string | null; afterBlob: string | null; afterIndex: string };
+function checkedChange(value: unknown): value is PendingLibraryChange {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const x = value as Record<string, unknown>;
+  const nullableString = (v: unknown) => v === null || typeof v === 'string';
+  return x.version === 1 && typeof x.key === 'string' && x.key.startsWith(LIBRARY_KEY_PREFIX) && x.key !== LIBRARY_INDEX_KEY && x.key !== PENDING_KEY &&
+    nullableString(x.beforeBlob) && nullableString(x.beforeIndex) && nullableString(x.afterBlob) && typeof x.afterIndex === 'string';
+}
+function guardedStorage(capability: LocalWriteCapability) {
+  const guard = localWriteCapabilityGuard(capability);
+  const fence=captureWorkspaceWriteFence(capability);
+  return { check: () => { fence?.(); guard.assertStillHeld(); if (guard.signal.aborted) throw new Error('本机编辑权已失效'); } };
+}
+/** Return a partial guarded save/delete to its prior state without touching a newer conflicting edit. */
+export function recoverNamedLayoutChange(capability: LocalWriteCapability): boolean {
+  try {
+    const { check } = guardedStorage(capability); check();
+    const storage = window.localStorage, raw = storage.getItem(PENDING_KEY);
+    if (raw === null) return true;
+    const change: unknown = JSON.parse(raw);
+    if (!checkedChange(change)) return false;
+    const blob = storage.getItem(change.key), index = storage.getItem(LIBRARY_INDEX_KEY);
+    if ((blob !== change.beforeBlob && blob !== change.afterBlob) || (index !== change.beforeIndex && index !== change.afterIndex)) return false;
+    const restore = (key: string, value: string | null) => { check(); if (value === null) storage.removeItem(key); else storage.setItem(key, value); check(); };
+    restore(change.key, change.beforeBlob); restore(LIBRARY_INDEX_KEY, change.beforeIndex);
+    check(); storage.removeItem(PENDING_KEY);
+    return true;
+  } catch { return false; }
+}
+function guardedChange(change: PendingLibraryChange, capability: LocalWriteCapability): boolean {
+  try {
+    const { check } = guardedStorage(capability), storage = window.localStorage;
+    check(); if (storage.getItem(PENDING_KEY) !== null || storage.getItem(change.key) !== change.beforeBlob || storage.getItem(LIBRARY_INDEX_KEY) !== change.beforeIndex) return false;
+    const marker = JSON.stringify(change);
+    check(); storage.setItem(PENDING_KEY, marker); check();
+    if (storage.getItem(PENDING_KEY) !== marker) throw new Error('方案库核对记录未能读回');
+    if (change.afterBlob === null) storage.removeItem(change.key); else storage.setItem(change.key, change.afterBlob);
+    check(); storage.setItem(LIBRARY_INDEX_KEY, change.afterIndex); check();
+    storage.removeItem(PENDING_KEY);
+    return true;
+  } catch { return false; }
 }
 
 /** The id an unreadable index value still names, if any. */
@@ -173,13 +218,17 @@ function totalItemCount(layout: RoomLayout): number {
  * are kept consistent: if the index write fails, the blob is rolled back.
  * Automatic restore points are evicted before a save is refused (#295).
  */
-export function saveNamedLayout(layout: RoomLayout, name: string): SaveResult | null {
+export function saveNamedLayout(layout: RoomLayout, name: string, capability?: LocalWriteCapability): SaveResult | null {
+  try { capability=resolveWorkspaceWriteCapability(capability); } catch { return null; }
+  try { if (window.localStorage.getItem(PENDING_KEY) !== null) return null; } catch { return null; }
   const trimmed = name.trim() || layout.name || 'Untitled';
   // The slot comes from the full name, as it always has; the stored name is
   // capped like the schema caps it, so the saved house parses unchanged.
   const id = slugify(trimmed);
   const shown = capText(trimmed, MAX_NAME_LENGTH);
-  const index = readIndex();
+  let beforeIndex: string | null;
+  try { beforeIndex = window.localStorage.getItem(LIBRARY_INDEX_KEY); } catch { return null; }
+  const index = capability === undefined ? readIndex() : parseLibraryIndex(beforeIndex);
   const existingIndex = index.entries.findIndex((entry) => entry.id === id);
 
   const entry: SavedLayoutEntry = {
@@ -193,7 +242,16 @@ export function saveNamedLayout(layout: RoomLayout, name: string): SaveResult | 
   // The house keeps its own id: the slug names the library slot, and two
   // houses saved under one name in turn are still different houses (#342).
   const layoutCopy: RoomLayout = { ...layout, name: shown };
-  const previousBlob = safeGetItem(layoutKey(id));
+  let previousBlob: string | null;
+  try { previousBlob = window.localStorage.getItem(layoutKey(id)); } catch { return null; }
+  if (capability !== undefined) {
+    if (existingIndex >= 0) index.entries[existingIndex] = entry; else index.entries.push(entry);
+    const unreadable = index.unreadable.filter(value => unreadableId(value) !== id);
+    const success = guardedChange({ version: 1, key: layoutKey(id), beforeBlob: previousBlob,
+      beforeIndex, afterBlob: JSON.stringify(layoutCopy),
+      afterIndex: indexText({ ...index, unreadable }) }, capability);
+    return success ? { entry, overwrote: existingIndex >= 0 } : null;
+  }
   try {
     setItemEvictingSnapshots(window.localStorage, layoutKey(id), JSON.stringify(layoutCopy));
   } catch {
@@ -236,9 +294,13 @@ export function loadNamedLayout(id: string): RoomLayout | null {
   }
 }
 
-export function deleteNamedLayout(id: string): boolean {
+export function deleteNamedLayout(id: string, capability?: LocalWriteCapability): boolean {
   if (typeof window === 'undefined') return false;
-  const index = readIndex();
+  try { capability=resolveWorkspaceWriteCapability(capability); } catch { return false; }
+  try { if (window.localStorage.getItem(PENDING_KEY) !== null) return false; } catch { return false; }
+  let beforeIndex: string | null;
+  try { beforeIndex = window.localStorage.getItem(LIBRARY_INDEX_KEY); } catch { return false; }
+  const index = capability === undefined ? readIndex() : parseLibraryIndex(beforeIndex);
   const filtered = index.entries.filter((entry) => entry.id !== id);
   if (filtered.length === index.entries.length) return false;
   // Index first, blob second: the old order removed the blob and then let a
@@ -247,6 +309,12 @@ export function deleteNamedLayout(id: string): boolean {
   // A second index entry for this id named the blob being removed: dropped
   // with it, or it would list a house that can no longer load.
   const unreadable = index.unreadable.filter((value) => unreadableId(value) !== id);
+  if (capability !== undefined) {
+    let beforeBlob: string | null;
+    try { beforeBlob = window.localStorage.getItem(layoutKey(id)); } catch { return false; }
+    return guardedChange({ version: 1, key: layoutKey(id), beforeBlob, beforeIndex, afterBlob: null,
+      afterIndex: indexText({ ...index, entries: filtered, unreadable }) }, capability);
+  }
   try {
     writeIndex({ ...index, entries: filtered, unreadable });
   } catch {

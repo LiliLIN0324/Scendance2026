@@ -1,0 +1,36 @@
+// @vitest-environment jsdom
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {StrictMode} from 'react';
+import {afterEach,expect,it,vi} from 'vitest';
+import {resetAssistantSessionsStoreForTests} from './hooks/use-assistant-sessions';
+import {resetVolatileAssistantMemoriesForTests} from './panels/agent-panel';
+import {makeFloor,makeLayout} from './lib/__testfixtures__/fixtures';
+import {layoutStore} from './hooks/use-layout-store';
+import {STORAGE_KEY} from './lib/constants';
+import {INITIAL_LAYOUT} from './lib/initial-layout';
+vi.mock('next/navigation',()=>({useRouter:()=>({push:vi.fn(),replace:vi.fn()}),usePathname:()=> '/',useSearchParams:()=>new URLSearchParams()}));
+import {RoomOrganizer} from './room-organizer';
+afterEach(()=>{cleanup();layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();resetAssistantSessionsStoreForTests();resetVolatileAssistantMemoriesForTests();});
+it('a confirmed scale is invalidated by same-batch geometry change and undo in the real workspace',async()=>{
+ vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener:()=>{},removeEventListener:()=>{}}));
+ Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute('open');}});
+ Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute('open','');}});
+ vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}});vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);
+ const a=makeLayout({id:'epoch-project',name:'真实活动',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'floor',items:[]})]});
+ layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
+ render(<StrictMode><RoomOrganizer/></StrictMode>);
+ const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+ fireEvent.change(input,{target:{value:'12 人，室内 12×9米，圆桌，出方案'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
+ await screen.findByRole('button',{name:'确认布置'}, {timeout:15000});
+ const before=structuredClone(layoutStore.getState().layout);
+ act(()=>{layoutStore.setState({layout:{...before,width:20},activeFloorIndex:0});layoutStore.setState({layout:before,activeFloorIndex:0});});
+ await waitFor(()=>expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull());
+ expect(screen.getAllByText(/场地已变化/).length).toBeGreaterThan(0);
+ expect(layoutStore.getState().layout).toEqual(before);
+ const current=screen.getByLabelText('告诉 Agent 要改的');
+ fireEvent.change(current,{target:{value:'12×9米'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
+ await waitFor(()=>expect(screen.getAllByText(/12.*9/).length).toBeGreaterThan(0));
+ fireEvent.change(current,{target:{value:'出方案'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
+ expect(await screen.findByRole('button',{name:'确认布置'},{timeout:15000})).toBeTruthy();
+},35000);

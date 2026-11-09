@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PlanCard } from './plan-card';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
 import type { ScoredPlan } from '../../../lib/plan-scoring';
+import { getCatalogByType } from '../../../lib/furniture-catalog';
 
 /** 造一份最小草案（一个阶段、一个圆桌区标注）。 */
 function draft(): LayoutPlanDraft {
@@ -25,18 +26,18 @@ function plan(overrides: Partial<ScoredPlan> = {}): ScoredPlan {
     variantId: 'balanced',
     label: '适中',
     density: 0.5,
-    placements: [],
+    placements: [{ zoneId: 'z1', zoneType: 'roundtable', x: 0, z: 0, rotation: 0, spec: getCatalogByType('dining-chair')! }],
     skipped: [],
     capacitySeats: 24,
     outOfBounds: 0,
-    flow: { aisleWidthM: 3, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] },
+    flow: { aisleWidthM: null, wheelChairPassable: null, normalPassable: null, checkinBlocked: null, status: 'unknown', violations: [] },
     score: 24,
     reasons: ['适中：平衡容量与通道；可坐 24 座'],
     violations: [],
     subScores: { capacity: 100, flow: 100, ergonomics: 100 },
-    assurance: 'verified',
+    assurance: 'draft_unverified',
     feasible: true,
-    feasibilityStatus: 'FEASIBLE',
+    feasibilityStatus: 'INSUFFICIENT_INPUT',
     ...overrides,
   };
 }
@@ -62,17 +63,17 @@ describe('PlanCard 版级可行性出口（SC-19/G1）', () => {
         onApprove={noop} onReplace={noop} onCancel={noop} onComment={noop} />,
     );
     expect(screen.getByTestId('plan-variant-badge-dense').textContent).toContain('不可行');
-    // 可行版不出徽标。
-    expect(screen.queryByTestId('plan-variant-badge-balanced')).toBeNull();
+    // 无硬冲突也不能把未知检查标成通过。
+    expect(screen.getByTestId('plan-variant-badge-balanced').textContent).toContain('待核验');
   });
 
-  it('缺尺寸（INSUFFICIENT_INPUT）出「缺尺寸未核验」徽标', () => {
+  it('缺资料（INSUFFICIENT_INPUT）出「待核验」徽标', () => {
     const insufficient = plan({ feasible: false, feasibilityStatus: 'INSUFFICIENT_INPUT' });
     render(
       <PlanCard draft={draft()} plans={[insufficient]} recommendedId={undefined}
         onApprove={noop} onReplace={noop} onCancel={noop} onComment={noop} />,
     );
-    expect(screen.getByTestId('plan-variant-badge-balanced').textContent).toContain('缺尺寸未核验');
+    expect(screen.getByTestId('plan-variant-badge-balanced').textContent).toContain('待核验');
   });
 
   it('推测门草案（draft_unverified）出「待核验草案」小字', () => {
@@ -111,6 +112,17 @@ describe('PlanCard 版级可行性出口（SC-19/G1）', () => {
     expect(screen.queryByTestId('plan-card-no-recommendation')).toBeNull();
     expect(screen.getByText('✅ 推荐 适中版')).toBeDefined();
   });
+
+  it('未生成完整物料或检查未知时，不误称所有候选存在硬冲突', () => {
+    const incomplete = plan({ placements: [], violations: [{ code: 'DOOR_UNKNOWN', severity: 'soft', status: 'unknown', message: '门位置待核验' }] });
+    render(
+      <PlanCard draft={draft()} plans={[incomplete]} recommendedId={undefined}
+        onApprove={noop} onReplace={noop} onCancel={noop} onComment={noop} />,
+    );
+    expect(screen.queryByTestId('plan-card-no-recommendation')).toBeNull();
+    expect(screen.getByText(/本次没有找到可应用的完整候选/)).toBeDefined();
+    expect(screen.getByText('门位置待核验')).toBeDefined();
+  });
 });
 
 describe('PlanCard 推荐理由露出（B4 降容话术）', () => {
@@ -121,8 +133,8 @@ describe('PlanCard 推荐理由露出（B4 降容话术）', () => {
         plans={[plan({
           reasons: [
             '适中：平衡容量与通道；可坐 24 座（6 件家具）',
-            '通道 1.5m，轮椅可过',
-            '这里最多约可坐 24 座，装不下 250 人；建议把人数降到约 20 人，或换更大的场地',
+            '实际通行条件仍需核验',
+            '当前这些区域估算 24 座，距目标 250 座还差约 226 座；可调整区域、摆法或目标人数。',
           ],
         })]}
         recommendedId="balanced"
@@ -133,8 +145,8 @@ describe('PlanCard 推荐理由露出（B4 降容话术）', () => {
     expect(block.textContent).toContain('可坐 24 座（6 件家具）');
     // B4 核心：降容建议出方案时就可见，不再埋在批准 toast 的 slice(0,2) 之后。
     const advice = screen.getByTestId('plan-card-capacity-advice');
-    expect(advice.textContent).toContain('装不下 250 人');
-    expect(advice.textContent).toContain('建议把人数降到约 20 人');
+    expect(advice.textContent).toContain('距目标 250 座还差约 226 座');
+    expect(advice.textContent).not.toContain('场地最多');
   });
 
   it('非推荐版不渲染理由块（只在推荐版露出，避免三版理由刷屏）', () => {

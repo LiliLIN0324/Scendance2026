@@ -14,10 +14,11 @@ vi.mock('./flow-constraints', () => ({
   AISLE_MIN_NORMAL: 1.2,
   AISLE_MIN_WHEELCHAIR: 1.5,
   evaluateFlow: vi.fn(() => ({
-    aisleWidthM: Infinity,
-    wheelChairPassable: true,
-    normalPassable: true,
-    checkinBlocked: false,
+    aisleWidthM: null,
+    wheelChairPassable: null,
+    normalPassable: null,
+    checkinBlocked: null,
+    status: 'unknown',
     violations: [] as string[],
   })),
   evaluateReachability: vi.fn(() => ({
@@ -64,10 +65,11 @@ beforeEach(() => {
   mockPlanZones.mockReturnValue({ placements: [], skipped: [] });
   mockEvaluateFlow.mockReset();
   mockEvaluateFlow.mockImplementation(() => ({
-    aisleWidthM: Infinity,
-    wheelChairPassable: true,
-    normalPassable: true,
-    checkinBlocked: false,
+    aisleWidthM: null,
+    wheelChairPassable: null,
+    normalPassable: null,
+    checkinBlocked: null,
+    status: 'unknown',
     violations: [],
   }));
   mockReach.mockReset();
@@ -111,7 +113,14 @@ function chairAt(x: number, z: number, zoneId = 'z1'): ZoneFurniturePlacement {
 }
 
 describe('generateScoredPlans — 空输入', () => {
-  it('空 annotations → 三版算出完全相同，合并为 1 版 balanced，pickRecommendedPlan 返回 balanced', () => {
+  it('同分但家具位置不同的候选不能被当成同一版', () => {
+    mockPlanZones.mockImplementation((_annotations, density) => ({ placements: [chairAt(density, 1)], skipped: [] }));
+    const plans = generateScoredPlans([makeZone('z1')]);
+    expect(plans).toHaveLength(3);
+    expect(new Set(plans.map(p => p.score)).size).toBe(1);
+    expect(new Set(plans.map(p => p.placements[0]!.x)).size).toBe(3);
+  });
+  it('空 annotations 合并为一版但不推荐空方案', () => {
     const plans = generateScoredPlans([]);
     // 空 annotations 三版同分同 subScores，按合并规则只保留 balanced。
     expect(plans.length).toBeGreaterThanOrEqual(1);
@@ -128,11 +137,17 @@ describe('generateScoredPlans — 空输入', () => {
       expect(p.violations.some(v => v.code === 'DOOR_UNKNOWN')).toBe(true);
     }
     const rec = pickRecommendedPlan(plans);
-    expect(rec!.variantId).toBe('balanced');
+    expect(rec).toBeNull();
   });
 });
 
 describe('capacitySeats — 按家具名计数', () => {
+  it('目标少一座也报告具体缺口，不把当前排法说成场地上限', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1')], { targetCapacity: 2 });
+    expect(plans[0]!.reasons.join(' ')).toContain('目标 2 座还差约 1 座');
+    expect(plans[0]!.reasons.join(' ')).not.toContain('最多');
+  });
   it('4 餐椅 + 1 长椅 = 6 座；圆桌本身不算座', () => {
     // 椅放在圆桌周环 0.9m 处（与桌边留 0.075m > 0.02m 容差，不触发 BBOX_OVERLAP）。
     const fakePlacements: ZoneFurniturePlacement[] = [
@@ -149,7 +164,7 @@ describe('capacitySeats — 按家具名计数', () => {
       expect(p.capacitySeats).toBe(6);
       expect(p.outOfBounds).toBe(0);
       expect(p.score).toBe(6);
-      expect(p.reasons[0]).toContain('可坐 6 座');
+      expect(p.reasons[0]).toContain('估算 6 座');
       expect(p.reasons.length).toBeGreaterThanOrEqual(2);
     }
   });
@@ -202,84 +217,24 @@ describe('outOfBounds — 越界件数', () => {
   });
 });
 
-describe('flow penalty — 动线扣分', () => {
-  it('「轮椅过不去」且 normalPassable=false → -5；checkinBlocked → -8', () => {
+describe('动线待核验', () => {
+  it('局部间距提示不会被当成通行结论或转换为扣分', () => {
     mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
-    mockEvaluateFlow.mockImplementation(() => ({
-      aisleWidthM: 0.8,
-      wheelChairPassable: false,
-      normalPassable: false,
-      checkinBlocked: true,
-      violations: ['签到台前通道只剩 0.8m，轮椅过不去', '签到区入口被家具贴脸堵住'],
-    }));
-    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
-    for (const p of plans) {
-      // capacity=1, OOB=0, skipped=0, flow = -5 (轮椅) + -8 (blocked) = -13
-      expect(p.score).toBe(1 - 13);
-      expect(p.reasons.some(r => r.includes('轮椅过不去'))).toBe(true);
-    }
-  });
-
-  it('「轮椅过不去」但 normalPassable=true → -2', () => {
-    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
-    mockEvaluateFlow.mockImplementation(() => ({
-      aisleWidthM: 1.3,
-      wheelChairPassable: false,
-      normalPassable: true,
-      checkinBlocked: false,
-      violations: ['签到台前通道 1.3m，轮椅过不去，但行人能过'],
-    }));
-    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
-    for (const p of plans) {
-      // sparse/balanced: capacity=1, 轮椅过不去但行人能过 → -2 → score=-1
-      // dense: 通道收紧 1.3-0.3=1.0m，normalPassable 变 false → -5 → score=-4
-      if (p.variantId === 'dense') {
-        expect(p.score).toBe(1 - 5);
-      } else {
-        expect(p.score).toBe(1 - 2);
-      }
+    mockEvaluateFlow.mockReturnValue({ aisleWidthM: 0.8, wheelChairPassable: null, normalPassable: null,
+      checkinBlocked: null, status: 'unknown', violations: ['局部间距待核对'] });
+    for (const plan of generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })])) {
+      expect(plan.score).toBe(1);
+      expect(plan.subScores.flow).toBeNull();
+      expect(plan.reasons.join(' ')).not.toMatch(/轮椅可过|行人能过|通道宽敞/);
     }
   });
 });
 
 describe('pickRecommendedPlan — 排序、并列、不可变', () => {
-  it('dense 容量大但通道违规扣分后更低 → balanced 胜出', () => {
-    mockPlanZones.mockImplementation((_a, density) => {
-      const isDense = Math.abs(density - 0.8) < 1e-6;
-      if (isDense) {
-        // 4 椅分散到 1.5m 网格，避免触发 BBOX_OVERLAP（本用例只钉 flow 扣分）。
-        return {
-          placements: [chairAt(0, 0), chairAt(1.5, 0), chairAt(0, 1.5), chairAt(1.5, 1.5)],
-          skipped: [],
-        };
-      }
-      return { placements: [chairAt(1, 1)], skipped: [] };
-    });
-    mockEvaluateFlow.mockImplementation((placements) => {
-      if (placements.length >= 4) {
-        return {
-          aisleWidthM: 0.8, wheelChairPassable: false, normalPassable: false, checkinBlocked: false,
-          violations: ['签到台前通道只剩 0.8m，轮椅过不去'],
-        };
-      }
-      return { aisleWidthM: 1.6, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] };
-    });
-    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
-    // sparse 与 balanced mock 出完全相同的 1 椅 → 合并为 1 版 balanced；dense 4 椅 -5。
-    expect(plans.length).toBe(2);
-    expect(plans[0]!.variantId).toBe('balanced');
-    expect(plans[0]!.score).toBe(1);
-    expect(plans[1]!.variantId).toBe('dense');
-    // dense: 4 座 -5（轮椅过不去）= -1
-    expect(plans[1]!.score).toBe(-1);
-    const rec = pickRecommendedPlan(plans);
-    expect(rec!.variantId).toBe('balanced'); // 并列时 balanced > sparse
-  });
-
   it('并列 score → 优先 balanced > sparse > dense（乱序输入也成立）', () => {
     const base = {
-      placements: [] as any[], skipped: [] as any[], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'], violations: [] as any[],
-      flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
+      placements: [chairAt(0, 0)], skipped: [] as any[], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'], violations: [] as any[],
+      flow: { aisleWidthM: null, wheelChairPassable: null, normalPassable: null, checkinBlocked: null, status: 'unknown' as const, violations: [] as string[] },
       subScores: { capacity: 10, flow: 100, ergonomics: 100 },
       assurance: 'verified' as const,
       feasible: true as const,
@@ -297,8 +252,8 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
 
   it('pickRecommendedPlan 不修改输入数组（不可变）', () => {
     const base = {
-      placements: [] as any[], skipped: [] as any[], outOfBounds: 0, reasons: ['x'], violations: [] as any[],
-      flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
+      placements: [chairAt(0, 0)], skipped: [] as any[], outOfBounds: 0, reasons: ['x'], violations: [] as any[],
+      flow: { aisleWidthM: null, wheelChairPassable: null, normalPassable: null, checkinBlocked: null, status: 'unknown' as const, violations: [] as string[] },
       subScores: { capacity: 10, flow: 100, ergonomics: 100 },
       assurance: 'verified' as const,
       feasible: true as const,
@@ -316,9 +271,9 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
 
   it('feasible=false 的方案不参与推荐；全不可行时返回 null', () => {
     const infeasible = {
-      placements: [] as any[], skipped: [] as any[], outOfBounds: 0, capacitySeats: 99, score: 99,
+      placements: [chairAt(0, 0)], skipped: [] as any[], outOfBounds: 0, capacitySeats: 99, score: 99,
       reasons: ['hard conflict'], violations: [] as any[],
-      flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
+      flow: { aisleWidthM: null, wheelChairPassable: null, normalPassable: null, checkinBlocked: null, status: 'unknown' as const, violations: [] as string[] },
       subScores: { capacity: 100, flow: 100, ergonomics: 0 },
       assurance: 'verified' as const,
       feasible: false as const,
@@ -337,29 +292,37 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
     expect(pickRecommendedPlan([infeasible])).toBeNull();
     expect(pickRecommendedPlan([])).toBeNull();
   });
+
+  it('不推荐空方案或有跳过物料的方案，即使分数更高且没有硬冲突', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    const valid = generateScoredPlans([makeZone('z1')])[0]!;
+    const empty = { ...valid, placements: [], score: 1000 };
+    const skipped = { ...valid, skipped: [{ zoneId:'z1', label:'签到区', reason:'空间不足' }], score: 999 };
+    expect(pickRecommendedPlan([empty, skipped])).toBeNull();
+    expect(pickRecommendedPlan([empty, skipped, valid])).toBe(valid);
+  });
 });
 
 describe('reasons — 每版至少 2 条人话', () => {
-  it('干净有签到区场景 → 含容量 + 正面通道描述', () => {
+  it('没有可核实的通道时只说明待核验', () => {
     mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
-    mockEvaluateFlow.mockImplementation(() => ({
-      aisleWidthM: 1.6, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [],
-    }));
-    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
-    for (const p of plans) {
-      expect(p.reasons.length).toBeGreaterThanOrEqual(2);
-      expect(p.reasons[0]).toContain('可坐 1 座');
-      // sparse/balanced 通道 1.6m 轮椅可过；dense 收紧到 1.3m 行人能过
-      if (p.variantId === 'dense') {
-        expect(p.reasons.some(r => r.includes('行人能过'))).toBe(true);
-      } else {
-        expect(p.reasons.some(r => r.includes('轮椅可过'))).toBe(true);
-      }
+    for (const plan of generateScoredPlans([makeZone('z1')])) {
+      expect(plan.reasons.join(' ')).toContain('通行条件待核验');
+      expect(plan.reasons.join(' ')).not.toMatch(/轮椅可过|行人能过|通道宽敞/);
     }
   });
 });
 
 describe('P0 接入：violations 字段 + ZONE_UNREACHABLE 扣分', () => {
+  it('unknown 状态即使被错误标为 hard 也不能当成明确冲突或静默隐藏', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    mockHumanFactors.mockReturnValue([{ code: 'CHAIR_GAP', severity: 'hard', status: 'unknown', message: '椅距待核对' }]);
+    const plan = generateScoredPlans([makeZone('z1')])[0]!;
+    expect(plan.feasible).toBe(true);
+    expect(plan.score).toBe(1);
+    expect(plan.feasibilityStatus).toBe('INSUFFICIENT_INPUT');
+    expect(plan.reasons).toContain('椅距待核对');
+  });
   it('每个 ScoredPlan 都带 violations 数组（类型正确、可空）', () => {
     mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
     const plans = generateScoredPlans([makeZone('z1')]);
@@ -521,7 +484,9 @@ describe('库存库存短缺（ScoringOptions.inventory）', () => {
       expect(chairShort!.available).toBe(10);
       expect(chairShort!.missing).toBe(5);
       expect(chairShort!.name).toBe('讲座椅');
-      expect(p.reasons.some((r) => r.includes('缺 5') && r.includes('讲座椅'))).toBe(true);
+      expect(p.reasons.some((r) => r.includes('多 5') && r.includes('讲座椅') && r.includes('实际缺口待核验'))).toBe(true);
+      expect(p.inventoryNotes?.join(' ')).toContain('课桌库存未知');
+      expect(p.inventoryNotes?.join(' ')).toContain('既有家具及其他楼层未计入');
       // shortage 不静默截断 placements，placements 仍然是 20 件。
       expect(p.placements.length).toBe(20);
     }
@@ -540,11 +505,23 @@ describe('库存库存短缺（ScoringOptions.inventory）', () => {
     }
   });
 
+  it('treats missing, negative and invalid stock values as unknown', () => {
+    mockPlanZones.mockReturnValue({ placements: [deskChairAt(0, 0), deskTableAt(2, 0)], skipped: [] });
+    for (const inventory of [{}, { 'desk-chair': -1 }, { 'desk-chair': NaN }]) {
+      const plan = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })], { inventory })[0]!;
+      expect(plan.shortage).toEqual([]);
+      expect(plan.inventoryNotes?.join(' ')).toContain('讲座椅库存未知');
+      expect(plan.inventoryNotes?.join(' ')).toContain('课桌库存未知');
+    }
+  });
+
   it('不传 inventory → shortage 字段缺省（undefined），兼容旧调用', () => {
     mockPlanZones.mockReturnValue({ placements: [deskChairAt(0, 0)], skipped: [] });
     const plans = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })]);
     for (const p of plans) {
       expect(p.shortage).toBeUndefined();
+      expect(p.inventoryNotes?.join(' ')).toContain('讲座椅库存未知');
+      expect(p.inventoryNotes?.join(' ')).toContain('既有家具及其他楼层未计入');
       expect(p.reasons.some((r) => /缺\s*\d+\s*(把|张|件|面|盆|条)/.test(r))).toBe(false);
     }
   });

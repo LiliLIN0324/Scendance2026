@@ -1,4 +1,4 @@
-import { amapKeyFromEnv, type AmapServerEnv } from './amap-env';
+import { amapKeyFromEnv, parseLocation, type AmapServerEnv } from './amap-env';
 
 type Context = { request: Request; env: AmapServerEnv };
 
@@ -20,12 +20,10 @@ export async function handleAmapGeocode(request: Request, env: AmapServerEnv, fe
     const response = await fetchImpl(upstream, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) return new Response('geocode HTTP ' + response.status, { status: 502 });
     const body = await response.json() as { pois?: { location?: string }[] };
-    const location = body.pois?.[0]?.location ?? '';
-    const [lngRaw, latRaw] = location.split(',');
-    const lng = Number(lngRaw);
-    const lat = Number(latRaw);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return new Response('no place', { status: 404 });
-    return new Response(JSON.stringify({ lng, lat }), {
+    const location = body.pois?.[0]?.location;
+    const point = parseLocation(typeof location === 'string' ? location : null);
+    if (!point) return new Response('no place', { status: 404 });
+    return new Response(JSON.stringify(point), {
       status: 200,
       headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, max-age=600' },
     });

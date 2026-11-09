@@ -31,7 +31,7 @@ import {
   sameEntrance,
   streetLevel,
 } from '../lib/street';
-import { canApplyLayoutGeometry, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
+import { canApplyLayoutGeometry, isEvidenceProtectedWall, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, sameZone } from '../lib/zones';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -184,9 +184,34 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
   return layout === next.layout ? next : { ...next, layout };
 }
 
+/** Structural facts require the dedicated editor, which preserves and invalidates their evidence. */
+function sameExistingStructuralMarkers(before: RoomLayout, after: RoomLayout): boolean {
+  for (const floor of before.floors) {
+    const nextFloor=after.floors.find(value=>value.id===floor.id);
+    for(const item of floor.items) {
+      if(!item.structuralOpeningId && !item.structuralColumnId) continue;
+      const current=nextFloor?.items.find(value=>value.id===item.id);
+      if(!current)return false;
+      const geometry=(value:FurnitureItem)=>JSON.stringify({opening:value.structuralOpeningId??null,column:value.structuralColumnId??null,
+        wall:value.wallId??null,type:value.type,position:value.position??null,width:value.width,depth:value.depth,height:value.height,
+        rotation:value.rotation??0,sillHeight:value.sillHeight??0,elevation:value.elevation??null});
+      if(geometry(item)!==geometry(current))return false;
+    }
+  }
+  return true;
+}
+
 function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): LayoutState {
+  // A structural marker cannot be duplicated as another confirmed physical fact.
+  if(state.layout.backendSceneV2 && action.type==='duplicateItem') {
+    const item=state.layout.floors[state.activeFloorIndex]?.items.find(value=>value.id===action.sourceId);
+    if(item?.structuralOpeningId||item?.structuralColumnId)return state;
+  }
+  if(state.layout.backendSceneV2 && action.type==='removeInteriorWall' && isEvidenceProtectedWall(state.layout,action.id))return state;
+  if(state.layout.backendSceneV2 && action.type==='clearInteriorWalls' &&
+    (state.layout.floors[state.activeFloorIndex]?.interiorWalls??[]).some(wall=>isEvidenceProtectedWall(state.layout,wall.id)))return state;
   // A measured outline cannot be resized by the legacy rectangle sliders.
-  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'duplicateFloor'].includes(action.type)) return state;
+  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'addFloor', 'duplicateFloor', 'removeFloor', 'reorderFloor'].includes(action.type)) return state;
   let next = reduceLayout(state, action);
   if (next !== state && state.layout.backendSceneV2 && STRUCTURAL_ACTIONS.has(action.type)) {
     // Keep marker meshes on their owned wall and aligned after any edit path.
@@ -197,6 +222,7 @@ function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): Lay
     })}));
     next = {...next,layout:{...next.layout,floors}};
   }
+  if (next !== state && state.layout.backendSceneV2 && STRUCTURAL_ACTIONS.has(action.type) && !sameExistingStructuralMarkers(state.layout,next.layout)) return state;
   if (next !== state && STRUCTURAL_ACTIONS.has(action.type) && !canApplyLayoutGeometry(state.layout, next.layout)) return state;
   const entrance = next.layout.entrance;
   if (next === state || !entrance) return next;

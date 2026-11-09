@@ -67,6 +67,25 @@ describe('project review snapshot', () => {
     expect(() => createProjectReviewSnapshot(input({ briefSnapshot: { state: 'ready', scope: 'other', brief: { status: 'absent' } } }))).toThrow('不一致');
   });
 
+  it('retains legacy values in the frozen review as unconfirmed records', () => {
+    const old:CreativeBrief={event:'公益讲座',guests:80,allowIdeas:true,description:'原需求',mustHave:''};
+    const snapshot=createProjectReviewSnapshot(input({briefSnapshot:{state:'ready',scope,brief:{status:'present',value:old}}}));
+    expect(snapshot.brief).toMatchObject({status:'present',value:{event:'',guests:0,allowIdeas:false,eventConfirmed:false,guestsConfirmed:false,ideasConfirmed:false,legacyBriefRecord:{event:'公益讲座',guests:80,allowIdeas:true}}});
+    const html=projectReviewHtml(snapshot);
+    expect(html).toContain('来源待确认的旧记录（不代表已确认）');
+    expect(html).toContain('活动：公益讲座');expect(html).toContain('人数：80');expect(html).toContain('允许扩展创意：是');
+    expect(html).toContain('活动类型待确认 / 人数待确认');
+  });
+
+  it('shows explicitly unconfirmed stored values without claiming authorship or confirmation', () => {
+    const old:CreativeBrief={event:'自定义讲座',eventConfirmed:false,guests:80,guestsConfirmed:false,allowIdeas:true,ideasConfirmed:false,description:'原需求',mustHave:''};
+    const snapshot=createProjectReviewSnapshot(input({briefSnapshot:{state:'ready',scope,brief:{status:'present',value:old}}}));
+    expect(snapshot.brief).toMatchObject({status:'present',value:{event:'',guests:0,allowIdeas:false,unconfirmedSavedBrief:{event:'自定义讲座',guests:80,allowIdeas:true}}});
+    const html=projectReviewHtml(snapshot);
+    expect(html).toContain('当前未确认的保存值（可能是默认值，不代表需求）');
+    expect(html).toContain('活动：自定义讲座');expect(html).toContain('人数：80');expect(html).toContain('允许扩展创意：是');
+  });
+
   it('keeps rehearsal, pending text and unsaved status; never infers consent from execution acceptance', () => {
     const original = layout();
     original.floors[0].items[0].handoff = { ownerName: '内部执行人', dueDate: '2026-10-08', acceptance: '内部通过条件',
@@ -75,7 +94,7 @@ describe('project review snapshot', () => {
       notes: [note({ kind: 'team-check', text: '团队自查：演练布局通过' }),
         note({ kind: 'client-feedback', text: '模拟意见，不是真实客户反馈' })] }));
     expect(review.adopted).toBeNull();
-    expect(review.brief).toEqual({ status: 'present', value: brief() });
+    expect(review.brief).toMatchObject({ status: 'present', value: { ...brief(), event:'', guests:0, allowIdeas:false, eventConfirmed:false, guestsConfirmed:false, ideasConfirmed:false } });
     const html = projectReviewHtml(review);
     expect(html).toContain('未保存草稿');
     expect(html).toContain('真实客户意见／确认：尚未记录，待补');
@@ -179,9 +198,19 @@ describe('project review snapshot', () => {
     const review = createProjectReviewSnapshot(input({ layout: original }));
     expect(review.current.layout.design!.requirements[0].status).toBe('satisfied');
     expect(review.current.layout.design!.missingObjectIds).toEqual([objectId]);
-    expect(projectReviewHtml(review)).toContain('需复核；原记录 satisfied');
+    expect(projectReviewHtml(review)).toContain('关联有变动，需复核');
     expect(projectReviewHtml(review)).toContain('不是客户意见');
     expect(JSON.stringify(review)).not.toContain('backendSceneV2');
+  });
+
+  it('hides unverified safety approvals in older model design narratives in the review', () => {
+    const scene=sceneSchema.parse({schemaVersion:2,venue:{width:10,depth:8,height:3,shape:'rectangle',entrances:[]},
+      camera:'overview',lighting:'neutral',structure:{walls:[],columns:[],openings:[]},objects:[],
+      design:{concept:'本方案已通过消防验收',palette:[],highlights:[{title:'无障碍符合规范',description:'疏散已达标',objectIds:[]}],
+        requirements:[{text:'消防已经合规',status:'satisfied',reason:'无障碍已验收',objectIds:[]}]}});
+    const html=projectReviewHtml(createProjectReviewSnapshot(input({layout:{...backendSceneToLayout(scene),id:scope}})));
+    expect(html).toContain('原方案自由文字未经独立验收');
+    for(const claim of ['本方案已通过消防验收','无障碍符合规范','疏散已达标','消防已经合规','无障碍已验收'])expect(html).not.toContain(claim);
   });
 
   it('rejects ambiguous duplicated instance IDs rather than associating by name', () => {
@@ -196,6 +225,16 @@ describe('project review snapshot', () => {
     expect(review.current.layout.floors[0].items[0].role).toBe('material');
     expect(projectReviewHtml(review)).toContain('2 件示意物料');
     expect(review.current.layout.limitations[0].reason).toContain('节点不据此视为固定设施');
+  });
+
+  it('有模板节点但无场馆预设时不绘制简化矩形', () => {
+    const source=layout();
+    source.floors[0].items[0].glbNode='Preset_Object_1';
+    const review=createProjectReviewSnapshot(input({layout:source}));
+    const html=projectReviewHtml(review);
+    expect(review.current.layout.hasTemplateNodes).toBe(true);
+    expect(html).toContain('完整场馆或结构没有简化平面示意');
+    expect(html).not.toContain('class="plan"');
   });
 
   it('rejects custom serialization, getters and non-atomic wall kind/status without executing callbacks', () => {
@@ -465,9 +504,11 @@ describe('30-person rehearsal review example', () => {
     const examplePath = resolve(process.cwd(), '../docs/examples/community-open-day-review.html');
     // Opt-in reproduction only; ordinary tests never update the checked-in example.
     if (process.env.SCENDANCE_WRITE_REVIEW_EXAMPLE === '1') writeFileSync(examplePath, html, 'utf8');
-    expect(readFileSync(examplePath, 'utf8')).toBe(html);
+    // Git may check out the same text with CRLF on Windows; compare all content
+    // after normalizing only line endings, rather than rewriting the example.
+    expect(readFileSync(examplePath, 'utf8').replace(/\r\n/g, '\n')).toBe(html.replace(/\r\n/g, '\n'));
     const document = new DOMParser().parseFromString(html, 'text/html');
-    expect(document.body.textContent).toContain('工作坊 / 30 人');
+    expect(document.body.textContent).toContain('活动类型待确认 / 人数待确认');
     expect(document.querySelectorAll('rect.furniture')).toHaveLength(39);
     const summaryRows = document.querySelectorAll('.materials tbody tr');
     expect([...summaryRows].map(row => row.children[0].textContent)).toEqual(['桌子', '椅子', '签到台', '背景板', '展架', '装饰道具']);

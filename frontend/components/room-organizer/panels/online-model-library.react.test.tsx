@@ -12,9 +12,13 @@ import { MATERIAL_LIBRARY_META_KEY } from '../lib/material-library-meta';
 import { STYLE_RUNS_KEY } from '../lib/style-bundles';
 import { listShippedAssets } from '../lib/shipped-assets';
 import { ensureGlbAsset } from '../three/glb-assets';
+import * as aholoAssets from '../lib/aholo-assets';
+import * as aholoPlacement from '../lib/aholo-model-placement';
+import * as materialGenerate from '../lib/material-generate';
+import * as lux3dImport from '../lib/lux3d-import';
 import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
 import type { OnlineModel } from '../lib/online-models';
-import type { FurnitureItem } from '../lib/types';
+import type { CatalogItem, FurnitureItem } from '../lib/types';
 
 // Only the network boundary is stubbed: `createGlbCatalogItem` stays real so these
 // specs pin the actual catalogue item the library hands to the scene. Vitest hoists
@@ -55,9 +59,9 @@ const INDEX = buildOnlineModelIndex(CATALOGUE);
 const originalLayoutState = layoutStore.getState();
 
 function PlacementConsumer() {
-  const { actions } = useRoomEditor();
+  const { actions,layout } = useRoomEditor();
   const { selectOnly, selectedItemId } = useSelection();
-  return <><OnlineModelLibrary onAdd={item => selectOnly(actions.addCatalogItem(item))}/><output aria-label="选中物料编号">{selectedItemId}</output></>;
+  return <><OnlineModelLibrary renderedLayout={layout} onAdd={item => {const id=actions.addCatalogItem(item);selectOnly(id);return {status:'placed',id};}}/><output aria-label="选中物料编号">{selectedItemId}</output></>;
 }
 
 function PlacementWorkspace({ hidden = false }: { hidden?: boolean }) {
@@ -114,6 +118,78 @@ describe('onlineModelDisplayName', () => {
 });
 
 describe('OnlineModelLibrary', () => {
+  it('queues rapid repeated clicks and places each against the freshly rendered scene',async()=>{
+    let release!:()=>void;
+    vi.mocked(ensureGlbAsset).mockImplementationOnce(()=>new Promise<void>(resolve=>{release=resolve;})).mockResolvedValue(undefined);
+    render(<PlacementWorkspace/>);
+    const tile=await screen.findByRole('button',{name:'添加Lounge Chaise'});
+    fireEvent.click(tile);fireEvent.click(tile);fireEvent.click(tile);
+    expect((tile as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledOnce());
+    await act(async()=>{release();});
+    await waitFor(()=>expect(layoutStore.getState().layout.floors[0]!.items).toHaveLength(3));
+    const ids=layoutStore.getState().layout.floors[0]!.items.map(item=>item.id);
+    expect(new Set(ids).size).toBe(3);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('stops an entire pending batch after an external edit and never places a late model',async()=>{
+    let release!:()=>void;vi.mocked(ensureGlbAsset).mockImplementation(()=>new Promise<void>(resolve=>{release=resolve;}));
+    render(<PlacementWorkspace/>);const tile=await screen.findByRole('button',{name:'添加Lounge Chaise'});
+    fireEvent.click(tile);fireEvent.click(tile);await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledOnce());
+    act(()=>layoutStore.getState().actions.setWidth(layoutStore.getState().layout.width+1));
+    await act(async()=>{release();});
+    expect(layoutStore.getState().layout.floors[0]!.items).toHaveLength(0);
+    expect(screen.getByRole('alert').textContent).toMatch(/变化/);
+  });
+  it('keeps the first completed item but rejects a queued late item after floor A→B→A',async()=>{
+    const layout=makeLayout({id:'rehearsal-activity-a',floors:[makeLayout().floors[0]!,{...makeLayout().floors[0]!,id:'upper'}]});
+    layoutStore.setState({layout,activeFloorIndex:0});let release!:()=>void;
+    vi.mocked(ensureGlbAsset).mockResolvedValueOnce(undefined).mockImplementationOnce(()=>new Promise<void>(resolve=>{release=resolve;}));
+    render(<PlacementWorkspace/>);const tile=await screen.findByRole('button',{name:'添加Lounge Chaise'});fireEvent.click(tile);fireEvent.click(tile);
+    await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledTimes(2));
+    expect(layoutStore.getState().layout.floors[0]!.items).toHaveLength(1);
+    act(()=>{layoutStore.getState().actions.setActiveFloorIndex(1);layoutStore.getState().actions.setActiveFloorIndex(0);});
+    await act(async()=>{release();});
+    expect(layoutStore.getState().layout.floors[0]!.items).toHaveLength(1);
+    expect(screen.getByRole('alert').textContent).toMatch(/变化/);
+  });
+  it('stops queued additions when the first item needs a manually chosen location',async()=>{
+    let release!:()=>void;vi.mocked(ensureGlbAsset).mockImplementationOnce(()=>new Promise<void>(resolve=>{release=resolve;}));
+    const onAdd=vi.fn(()=>({status:'pending' as const}));render(<OnlineModelLibrary onAdd={onAdd}/>);
+    const tile=await screen.findByRole('button',{name:'添加Lounge Chaise'});fireEvent.click(tile);fireEvent.click(tile);
+    await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledOnce());await act(async()=>{release();});
+    await waitFor(()=>expect(onAdd).toHaveBeenCalledOnce());
+    expect(screen.getByRole('alert').textContent).toContain('请先在场地中选择位置');
+    expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();
+  });
+  it('keeps a generated model in the library when the activity changes while it loads',async()=>{
+    const asset={assetId:'10000000-0000-4000-8000-000000000019',kind:'glb',name:'合成生成模型'} as ReturnType<typeof aholoAssets.listAholoAssets>[number];
+    const listing=vi.spyOn(aholoAssets,'listAholoAssets').mockReturnValue([asset]);
+    let release!:(item:CatalogItem)=>void;
+    const loading=vi.spyOn(aholoPlacement,'loadStoredAholoCatalogItem').mockImplementation(()=>new Promise(resolve=>{release=resolve;}));
+    try{
+      const onAdd=vi.fn();render(<OnlineModelLibrary cardMode onAdd={onAdd}/>);
+      fireEvent.click(await screen.findByRole('button',{name:/我的生成/}));
+      fireEvent.click(await screen.findByRole('button',{name:'添加合成生成模型'}));
+      const original=layoutStore.getState().layout;
+      act(()=>{layoutStore.getState().actions.applyLayout(makeLayout({id:'rehearsal-activity-b'}));layoutStore.getState().actions.applyLayout(original);});
+      await act(async()=>{release({type:'chair',name:'合成椅',width:.5,depth:.5,height:.8,color:'#fff',icon:'椅'} as CatalogItem);});
+      expect(onAdd).not.toHaveBeenCalled();expect((await screen.findByRole('alert')).textContent).toContain('活动或场景已变化');
+    }finally{listing.mockRestore();loading.mockRestore();}
+  });
+  it('does not auto-place a completed generation after the activity changes',async()=>{
+    const pending=vi.spyOn(materialGenerate,'usePendingMaterials').mockReturnValue([{id:'pending:fixture',name:'模拟生成',shipped:false}]);
+    let release!:(result:{state:'imported';item:CatalogItem})=>void;
+    const loading=vi.spyOn(lux3dImport,'importLatestPendingMaterials').mockImplementation(()=>new Promise(resolve=>{release=resolve;}));
+    try{
+      const onAdd=vi.fn();render(<OnlineModelLibrary cardMode onAdd={onAdd}/>);
+      await waitFor(()=>expect(loading).toHaveBeenCalledOnce());
+      const original=layoutStore.getState().layout;
+      act(()=>{layoutStore.getState().actions.applyLayout(makeLayout({id:'rehearsal-activity-b'}));layoutStore.getState().actions.applyLayout(original);});
+      await act(async()=>{release({state:'imported',item:{type:'chair',name:'合成椅',width:.5,depth:.5,height:.8,color:'#fff',icon:'椅'} as CatalogItem});});
+      expect(onAdd).not.toHaveBeenCalled();expect((await screen.findByRole('alert')).textContent).toContain('请选择后加入当前场景');
+    }finally{pending.mockRestore();loading.mockRestore();}
+  });
   it('does not place a late download after local A → B → A in one act, without an intermediate React render', async () => {
     let release!: () => void;
     vi.mocked(ensureGlbAsset).mockImplementation(() => new Promise<void>(resolve => { release = resolve; }));
@@ -535,7 +611,7 @@ describe('物料卡的按风格配一套', () => {
 
 describe('最近用过', () => {
   it('records a model only after it actually lands on the floor, then clears on demand', async () => {
-    const onAdd = vi.fn();
+    const onAdd = vi.fn((item:CatalogItem)=>{const id=layoutStore.getState().actions.addCatalogItem(item);return {status:'placed' as const,id};});
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd}/>);
     await screen.findByRole('button', { name: /^库/ });
     // 落盘之前：没有「最近用过」分组，localStorage 也是空的。

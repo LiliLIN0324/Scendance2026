@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendAgentStep,
+  appendAgentRunEvents,
   clearAgentSteerNotes,
   closeAgentStep,
   endAgentRun,
@@ -70,8 +71,8 @@ describe('AgentRunPanel', () => {
     appendAgentStep({ toolName: '正在读取当前场景', durationMs: 1200, isReadonly: true, startedAt: Date.now() - 1200 });
     appendAgentStep({ toolName: '正在整理候选方案', durationMs: 800, isReadonly: true, startedAt: Date.now() - 800 });
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText('正在思考')).toBeTruthy();
-    expect(screen.getByText(/第 4 轮/)).toBeTruthy();
+    expect(screen.getByText('正在处理')).toBeTruthy();
+    expect(screen.getByText(/已进行 4 轮模型调用/)).toBeTruthy();
     expect(screen.getByText('正在读取当前场景')).toBeTruthy();
     expect(screen.getByText('正在整理候选方案')).toBeTruthy();
   });
@@ -81,11 +82,8 @@ describe('AgentRunPanel', () => {
     setAgentThoughtCount(3);
     appendAgentStep({ toolName: '正在检索模型资源', durationMs: 900, isReadonly: true, startedAt: Date.now() - 900 });
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText('第 2/4 阶段 · 定落点')).toBeTruthy();
-    // 这一段具体在做什么，要说得出话。
-    expect(screen.getByText('算合法落点、建缺的模型')).toBeTruthy();
-    // 轮数还在，但退到副行当预算读数——它不占主标题。
-    expect(screen.getByText(/第 3 轮/)).toBeTruthy();
+    expect(screen.getByText(/当前阶段：定落点/)).toBeTruthy();
+    expect(screen.getByText(/已进行 3 轮模型调用/)).toBeTruthy();
   });
 
   it('拿不到阶段就不写阶段，也不拿轮数顶替', () => {
@@ -93,21 +91,20 @@ describe('AgentRunPanel', () => {
     setAgentThoughtCount(2);
     render(<AgentRunPanel scope="layout"/>);
     expect(screen.queryByText(/阶段 ·/)).toBeNull();
-    expect(screen.getByText('正在思考')).toBeTruthy();
+    expect(screen.getByText('正在处理')).toBeTruthy();
   });
 
   it('步骤流默认只显示最后 3 步，可以展开全部', () => {
-    for (let i = 1; i <= 5; i += 1) {
-      appendAgentStep({ toolName: `第 ${i} 步`, durationMs: 100, isReadonly: true, startedAt: Date.now() });
-    }
+    const labels=['正在读取当前场景','正在检索模型资源','正在读取局部平面','正在搜索可落点','正在检查方案'];
+    for (const toolName of labels) appendAgentStep({ toolName, durationMs: 100, isReadonly: true, startedAt: Date.now() });
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.queryByText('第 1 步')).toBeNull();
-    expect(screen.queryByText('第 2 步')).toBeNull();
-    expect(screen.getByText('第 3 步')).toBeTruthy();
-    expect(screen.getByText('第 5 步')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '共 5 步，展开全部' }));
-    expect(screen.getByText('第 1 步')).toBeTruthy();
-    expect(screen.getByText('第 2 步')).toBeTruthy();
+    expect(screen.queryByText(labels[0]!)).toBeNull();
+    expect(screen.queryByText(labels[1]!)).toBeNull();
+    expect(screen.getByText(labels[2]!)).toBeTruthy();
+    expect(screen.getByText(labels[4]!)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '共观察到 5 条，展开全部' }));
+    expect(screen.getByText(labels[0]!)).toBeTruthy();
+    expect(screen.getByText(labels[1]!)).toBeTruthy();
   });
 
   it('别的脸的账不串进来', () => {
@@ -130,15 +127,53 @@ describe('AgentRunPanel', () => {
     appendAgentStep({ toolName: '正在检查方案', durationMs: 900, isReadonly: true, startedAt: Date.now() - 900 });
     endAgentRun();
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText('这一趟走完了')).toBeTruthy();
-    expect(screen.getByText(/第 3 轮 · 1 步/)).toBeTruthy();
+    expect(screen.getByText('本次运行已结束')).toBeTruthy();
+    expect(screen.getByText(/已进行 3 轮模型调用/)).toBeTruthy();
     expect(screen.getByText('正在检查方案')).toBeTruthy();
   });
 
   it('空结果出回执卡，不沉默结束', () => {
     endAgentRun({ emptyOutcome: true });
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText('没做成。')).toBeTruthy();
+    expect(screen.getByText('本次没有返回可用候选。')).toBeTruthy();
+  });
+
+  it('执行过程可收起，明确记录可能不完整，不把模型原文或任意进度文本展示成过程', () => {
+    appendAgentStep({toolName:'用户私密内容或非白名单文本',thought:'模型内部内容',durationMs:30,isReadonly:true,startedAt:Date.now()});
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText(/可能遗漏步骤/)).toBeTruthy();
+    expect(screen.getByText('正在处理任务')).toBeTruthy();
+    expect(screen.queryByText('用户私密内容或非白名单文本')).toBeNull();
+    expect(screen.queryByText(/模型内部内容/)).toBeNull();
+    expect(screen.queryByText(/耗时/)).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'收起执行过程'}));
+    expect(screen.queryByRole('list',{name:'执行过程'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'查看执行过程'}));
+    expect(screen.getByRole('list',{name:'执行过程'})).toBeTruthy();
+  });
+  it('renders real started/finished outcomes without treating start or unknown as success',()=>{
+    appendAgentRunEvents([
+      {seq:1,tool:'get_scene',stage:'started',outcome:null,errorCode:null},
+      {seq:2,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null},
+      {seq:3,tool:'validate_candidate',stage:'finished',outcome:'unknown',errorCode:null},
+    ]);
+    appendAgentRunEvents([{seq:2,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null}]);
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText(/已发起/)).toBeTruthy();expect(screen.getByText(/已返回结果/)).toBeTruthy();
+    expect(screen.getByText(/结果待核对/)).toBeTruthy();expect(screen.getByText(/工具返回结果不代表安全或规范检查通过/)).toBeTruthy();
+    expect(screen.getAllByText('读取场景')).toHaveLength(2);
+    expect(getAgentRun().eventLog).toHaveLength(3);
+    startAgentRun('layout');expect(getAgentRun().eventLog).toHaveLength(0);
+  });
+  it('distinguishes tool categories with decorative icons while keeping status readable',()=>{
+    const tools=['get_scene','search_resources','find_free_areas','validate_candidate','submit_candidates','create_parametric_model'] as const;
+    appendAgentRunEvents(tools.map((tool,index)=>({seq:index+1,tool,stage:'finished' as const,outcome:index===3?'failed' as const:'success' as const,errorCode:null})));
+    render(<AgentRunPanel scope="layout"/>);fireEvent.click(screen.getByRole('button',{name:'共观察到 6 条，展开全部'}));
+    const rows=within(screen.getByRole('list',{name:'执行过程'})).getAllByRole('listitem');
+    expect(rows.map(row=>row.getAttribute('data-tool-category'))).toEqual(['venue','material','position','check','candidate','generation']);
+    expect(rows.every(row=>row.querySelector('[aria-hidden="true"]'))).toBe(true);
+    expect(within(rows[3]!).getByText(/未完成/)).toBeTruthy();
+    expect(within(rows[4]!).getByText(/已返回结果/)).toBeTruthy();
   });
 
   it('改道备注的「已送达」是服务端绝对值，不是前端自己加', () => {

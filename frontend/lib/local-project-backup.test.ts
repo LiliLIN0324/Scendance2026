@@ -747,3 +747,10 @@ describe('V4 optional local source documents', () => {
     expect(restored.form).toEqual({ registration }); expect(restored.sources[0]!.id).toBe(original[0]!.id);
   });
 });
+
+it('round-trips the preserved legacy record without promoting it to a confirmed fact',()=>{
+  const value:CreativeBrief={...brief(),event:'新活动',eventConfirmed:true,guests:60,guestsConfirmed:true,allowIdeas:false,ideasConfirmed:true,
+    legacyBriefRecord:{event:'公益讲座',guests:80,allowIdeas:true}, unconfirmedSavedBrief:{event:'旧自定义活动',guests:75,allowIdeas:false}};
+  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(),ready(value),createdAt));
+  expect(restored.brief).toEqual({status:'present',value});
+});

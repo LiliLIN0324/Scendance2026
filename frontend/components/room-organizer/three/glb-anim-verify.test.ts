@@ -1,10 +1,12 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { advanceGlbAnimations, clearGlbAssetCache, createCachedGlbModel, createGlbCatalogItem, disposeOwnedModel,
   ensureGlbAsset, getGlbAssetState, hasGlbAnimations, normalizeGlbInstance } from './glb-assets';
 
-const RIGGED = 'C:/Users/13266/.dsh/bot/workspace/Scendance2026/docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb';
+const RIGGED = new URL('../../../../docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb', import.meta.url);
 const TABLE = new URL('../../../../assets/models/table.glb', import.meta.url);
 
 const out: Record<string, unknown> = {};
@@ -17,7 +19,7 @@ function glbResponse(path: string | URL): Response {
  * Node 里没有 `self`/`Image`，GLTFLoader 走到内嵌贴图就会 `ReferenceError: self is not defined`。
  * 这里只在解析前把 images/textures 摘掉，几何、蒙皮权重、骨骼与 clip 的字节原样保留。
  */
-function texturelessGlb(path: string): ArrayBuffer {
+function texturelessGlb(path: string | URL): ArrayBuffer {
   const bytes = new Uint8Array(readFileSync(path));
   const view = new DataView(bytes.buffer, bytes.byteOffset);
   const jsonLength = view.getUint32(12, true);
@@ -156,9 +158,15 @@ describe('rigged sculpture animation wiring', () => {
     disposeOwnedModel(legacy); disposeOwnedModel(group);
   });
 
-  it('writes the measured numbers to evidence', () => {
-    writeFileSync('C:/Users/13266/.dsh/bot/workspace/Scendance2026/docs/evidence/aholo/sculpture-rig-local/anim-verify.json',
-      JSON.stringify(out, null, 2));
-    console.log('MEASURED', JSON.stringify(out, null, 2));
+  it('writes and reads the measured numbers in an isolated temporary directory', () => {
+    const directory=mkdtempSync(join(tmpdir(),'scendance-glb-animation-'));
+    const output=join(directory,'anim-verify.json');
+    try {
+      writeFileSync(output,JSON.stringify(out,null,2),'utf8');
+      expect(JSON.parse(readFileSync(output,'utf8'))).toEqual(out);
+    } finally {
+      // Only the file and empty directory created by this test are removed.
+      try { if(existsSync(output))unlinkSync(output); } finally { rmdirSync(directory); }
+    }
   });
 });

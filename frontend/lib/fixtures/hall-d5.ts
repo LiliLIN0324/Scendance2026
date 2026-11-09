@@ -3,7 +3,7 @@
  *
  * 数据来源（主会话亲自抓官方 PDF 后人工录入，仅作排序参照，非消防/官方核定值）：
  * - 东京国际论坛 Hall D5：285㎡，官方剧院 200 / 课桌 120。
- *   课桌 1.8×0.6m；椅 0.49×0.57m；圆桌 Ø1.8m；
+ *   课桌 1.8×0.6×0.7m；英文页椅 0.49×0.57m（日文页规格不同，待核验）；圆桌 Ø1.8m；
  *   剧院排距 900mm、走道 1000mm、台前留空 5000mm、三列块；
  *   课桌排距 1400mm、走道 1200mm、每桌 3 人、三列块、台前 5000mm。
  * - 广州增城保利皇冠假日会议室 6：12.9×7.1m / 93㎡，
@@ -50,7 +50,7 @@ export interface FixtureDoor {
 /** 家具尺寸参考（米）。 */
 export interface FixtureFurnitureRef {
   /** 课桌（1.8×0.6）。 */
-  deskTable: { width: number; depth: number };
+  deskTable: { width: number; depth: number; referenceHeightM?: number };
   /** 座椅（0.49×0.57）。 */
   deskChair: { width: number; depth: number };
   /** 圆桌直径（官方 1.8m；与 catalog 内 1.2m 圆桌是不同道具）。 */
@@ -62,6 +62,7 @@ export interface FixtureCapacityReference {
   theater?: number;
   classroom?: number;
   uShape?: number;
+  hollowSquare?: number;
   roundtable?: number;
   notes: string;
 }
@@ -95,7 +96,7 @@ export interface VenueFixture {
  * 东京国际论坛 Hall D5（285㎡）。
  *
  * roomSize 19×15 = 285㎡ 是按图估算的外接矩形，
- * 实际厅形可能是矩形带切角，待场地方提供 CAD 后校准。
+ * 实际厅形可能是矩形带切角，待场地方提供 CAD 后核对；这不是完整官方图复刻。
  */
 export const HALL_D5: VenueFixture = {
   venueKey: 'tokyo-international-forum-hall-d5',
@@ -125,7 +126,8 @@ export const HALL_D5: VenueFixture = {
     },
   ],
   furniture: {
-    deskTable: { width: 1.8, depth: 0.6 },
+    // 官方参考桌高 0.70m；通用 catalog 为 0.75m，不能称完整规格一致。
+    deskTable: { width: 1.8, depth: 0.6, referenceHeightM: 0.7 },
     deskChair: { width: 0.49, depth: 0.57 },
     roundTableDiameterM: 1.8,
   },
@@ -155,7 +157,7 @@ export const GUANGZHOU_MEETING_ROOM_6: VenueFixture = {
   roomSize: {
     width: 12.9,
     height: 7.1,
-    note: '官方实测（12.9×7.1，标称 93㎡）',
+    note: '场地资料标称 12.9×7.1m、93㎡，现况待核实',
   },
   doors: [
     {
@@ -167,11 +169,13 @@ export const GUANGZHOU_MEETING_ROOM_6: VenueFixture = {
       inferred: true,
     },
   ],
+  // 广州资料未列家具尺寸；此处沿用 D5 尺寸作为测试假设，待场地方核实。
   furniture: {
     deskTable: { width: 1.8, depth: 0.6 },
     deskChair: { width: 0.49, depth: 0.57 },
     roundTableDiameterM: 1.8,
   },
+  // 排距和走道沿用 D5 的测试假设，不是广州场地发布的布局数据。
   layoutReference: {
     theaterRowPitchM: 0.9,
     theaterAisleM: 1.0,
@@ -184,7 +188,7 @@ export const GUANGZHOU_MEETING_ROOM_6: VenueFixture = {
     theater: 80,
     classroom: 45,
     uShape: 36,
-    roundtable: 42,
+    hollowSquare: 42,
     notes: '官方参考值，非消防核定',
   },
 };

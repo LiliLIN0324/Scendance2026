@@ -24,7 +24,7 @@ export interface PublishedLink {
 
 export interface ShareMenuActions {
   /** 生成一份可留言的方案页链接。 */
-  onIssueReviewLink(): Promise<{ url: string }>;
+  onIssueReviewLink(): Promise<{ url: string; isCurrent:()=>boolean }>;
   /** 把当前保存的版本发布成只读页，返回扫码链接。 */
   onPublish(): Promise<PublishedLink>;
   /** 打开既有的完整活动交接确认，不切执行模式。 */
@@ -83,6 +83,8 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   const [published, setPublished] = useState<PublishedLink | null>(null);
   const [qrSvg, setQrSvg] = useState('');
   const [reviewUrl, setReviewUrl] = useState('');
+  const reviewGuard=useRef<(()=>boolean)|null>(null);
+  const reviewCurrent=()=>{try{return reviewGuard.current?.()===true;}catch{return false;}};
   const [viewerLink, setViewerLink] = useState<{ url: string; name: string; objects: number; droppedAssets: number } | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -106,6 +108,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   useEffect(() => {
     setPublished(readPublishedLink(projectId));
     setReviewUrl('');
+    reviewGuard.current=null;
   }, [projectId]);
 
   useEffect(() => {
@@ -161,9 +164,10 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
     setNotice('');
     try {
       const result = await actions.onIssueReviewLink();
+      if(!result.isCurrent())throw new Error('活动、楼层或方案已变化，旧链接未复制。');
+      reviewGuard.current=result.isCurrent;
       setReviewUrl(result.url);
-      const copied = await copyText(result.url);
-      setNotice(copied ? '链接已复制。对方打开即可看平面并留言。' : '链接已生成。请从框里手动复制。');
+      setNotice('评审链接已生成；请确认当前活动和方案后复制。');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
@@ -213,6 +217,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
 
   const copyReview = async () => {
     if (!reviewUrl) return;
+    if(!reviewCurrent()){setReviewUrl('');setNotice('活动、楼层或方案已变化，旧链接未复制。');return;}
     const copied = await copyText(reviewUrl);
     setNotice(copied ? '链接已复制。' : '复制没成功，请从框里手动复制。');
   };
@@ -272,13 +277,13 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
         </div>
       </section>
 
-      {reviewUrl && <section className="sc-publish-review">
+      {reviewUrl && reviewCurrent() && <section className="sc-publish-review">
         <label>可留言的方案页
           <input readOnly value={reviewUrl} aria-label="评审链接" onFocus={event => event.currentTarget.select()}/>
         </label>
         <div className="sc-publish-row">
           <button type="button" aria-label="复制评审链接" onClick={() => { void copyReview(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
-          <a href={reviewUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden="true"/><span>打开对方所见</span></a>
+          <a href={reviewUrl} target="_blank" rel="noopener noreferrer" onClick={event=>{if(!reviewCurrent()){event.preventDefault();setReviewUrl('');setNotice('活动、楼层或方案已变化，旧链接未打开。');}}}><ExternalLink size={14} aria-hidden="true"/><span>打开对方所见</span></a>
         </div>
       </section>}
 
