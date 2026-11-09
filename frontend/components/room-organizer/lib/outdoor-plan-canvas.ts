@@ -13,6 +13,7 @@
  */
 
 import { PLANNING_LAYER_COLORS, type PlanningLayerKind } from '@/lib/outdoor-plan-tokens';
+import { planZoneFillAlpha } from './site-plan-editing';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -37,6 +38,16 @@ export function planPointToPixel(p: PlanPoint, viewport: PlanViewport): { x: num
   return {
     x: originPx.x + p.x / metersPerPx,
     y: originPx.y - p.y / metersPerPx,
+  };
+}
+
+/** 画布 CSS 像素点 → ENU 米制点（planPointToPixel 的逆映射，H2-b 绘制/顶点编辑取点用）。 */
+export function planPixelToPoint(px: { x: number; y: number }, viewport: PlanViewport): PlanPoint {
+  const metersPerPx = planMetersPerPixel(viewport);
+  const originPx = planAnchorPixel(viewport);
+  return {
+    x: (px.x - originPx.x) * metersPerPx,
+    y: (originPx.y - px.y) * metersPerPx,
   };
 }
 
@@ -101,10 +112,11 @@ export interface PlanCanvasContext {
   viewport: PlanViewport;
 }
 
-/** 场地边界：品牌绿描边 + 低透明填充，顶点小方点。 */
+/** 场地边界：品牌绿描边 + 低透明填充，顶点小方点；编辑模式下顶点画成可拖手柄。 */
 export function drawBoundaryLayer(
   c: PlanCanvasContext,
   boundary: readonly PlanPoint[],
+  opts: { vertexHandles?: boolean } = {},
 ): void {
   if (boundary.length < 3) return;
   const { ctx, viewport } = c;
@@ -117,26 +129,55 @@ export function drawBoundaryLayer(
   ctx.stroke();
   for (const p of boundary) {
     const pt = planPointToPixel(p, viewport);
-    ctx.fillStyle = color;
-    ctx.fillRect(pt.x - 2.5, pt.y - 2.5, 5, 5);
+    if (opts.vertexHandles) {
+      // 可拖顶点手柄：白底绿边圆点，命中热区由组件按同半径判定。
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = color;
+      ctx.fillRect(pt.x - 2.5, pt.y - 2.5, 5, 5);
+    }
   }
 }
 
-/** 分区：填充色 + 名称标注；分区自带色优先。 */
+/**
+ * 分区：填充色 + 名称标注；分区自带色/透明度优先（H2-b）。
+ * warning 为 true 时改红虚线描边（越界/重叠警示，分区数据本身保留原色）。
+ */
 export function drawZoneLayer(
   c: PlanCanvasContext,
-  zones: readonly { polygon: readonly PlanPoint[]; name: string; color?: string | undefined }[],
+  zones: readonly {
+    polygon: readonly PlanPoint[];
+    name: string;
+    color?: string | undefined;
+    opacity?: number | undefined;
+    warning?: boolean | undefined;
+  }[],
 ): void {
   const { ctx } = c;
   for (const zone of zones) {
     if (zone.polygon.length < 3) continue;
     const fill = zone.color ?? PLANNING_LAYER_COLORS.zone;
     traceRing(c, zone.polygon);
-    ctx.fillStyle = hexWithAlpha(fill, 0.22);
+    ctx.fillStyle = hexWithAlpha(fill, planZoneFillAlpha({ opacity: zone.opacity }));
     ctx.fill();
-    ctx.strokeStyle = fill;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    if (zone.warning) {
+      ctx.save();
+      ctx.strokeStyle = '#c0392b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
     const label = zoneLabelPixel(c, zone.polygon);
     if (label) {
       ctx.font = '11px system-ui, sans-serif';
@@ -253,6 +294,45 @@ export function drawAccessLayer(
     ctx.fillStyle = 'rgba(15,22,32,0.85)';
     ctx.fillText(n.name, pt.x + 7, pt.y - 2);
   }
+}
+
+/* ---------------- 绘制草稿（H2-b 画边界/画分区） ---------------- */
+
+/**
+ * 顶点收集草稿：虚线折线 + 顶点方块；≥3 点时首点画闭合热区圆圈提示。
+ * draftInvalid 为 true 时整条草稿画红色（当前形状自交/重合，用户能立刻看到）。
+ */
+export function drawDraftLayer(
+  c: PlanCanvasContext,
+  draft: readonly PlanPoint[],
+  color: string,
+  opts: { draftInvalid?: boolean } = {},
+): void {
+  if (draft.length === 0) return;
+  const { ctx, viewport } = c;
+  const stroke = opts.draftInvalid ? '#c0392b' : color;
+  if (draft.length >= 2) {
+    ctx.save();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    tracePolyline(c, draft);
+    if (draft.length >= 3) ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+  draft.forEach((p, i) => {
+    const pt = planPointToPixel(p, viewport);
+    if (i === 0 && draft.length >= 3) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 9, 0, Math.PI * 2);
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.fillStyle = stroke;
+    ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+  });
 }
 
 /* ---------------- 内部工具 ---------------- */

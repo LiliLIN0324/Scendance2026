@@ -6,6 +6,7 @@ import {
   hexWithAlpha,
   isLayerVisible,
   planMetersPerPixel,
+  planPixelToPoint,
   planPointToPixel,
   visiblePlanLayers,
   type PlanViewport,
@@ -64,5 +65,22 @@ describe('outdoor plan canvas core (H2-a)', () => {
     const z17 = planMetersPerPixel({ ...view, zoom: 17 });
     expect(z16).toBeGreaterThan(0);
     expect(z17).toBeLessThan(z16);
+  });
+
+  it('round-trips pixels back to ENU metres (H2-b 绘制取点)', () => {
+    const p = { x: 37.5, y: -12.25 };
+    const px = planPointToPixel(p, view);
+    const back = planPixelToPoint(px, view);
+    expect(back.x).toBeCloseTo(p.x, 6);
+    expect(back.y).toBeCloseTo(p.y, 6);
+  });
+
+  it('keeps north-up semantics in the inverse mapping (H2-b)', () => {
+    // 屏幕上方（y 更小）→ 更北（y 米更大）。
+    const top = planPixelToPoint({ x: view.canvasW / 2, y: view.canvasH / 2 - 50 }, view);
+    const mid = planPixelToPoint({ x: view.canvasW / 2, y: view.canvasH / 2 }, view);
+    expect(top.y).toBeGreaterThan(mid.y);
+    expect(mid.x).toBeCloseTo(0, 6);
+    expect(mid.y).toBeCloseTo(0, 6);
   });
 });

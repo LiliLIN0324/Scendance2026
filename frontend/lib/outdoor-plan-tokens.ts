@@ -35,6 +35,32 @@ export const PLANNING_LAYER_COLORS = {
 
 export type PlanningLayerKind = keyof typeof PLANNING_LAYER_COLORS;
 
+/**
+ * 分区语义默认色（H2-b）。覆盖 SitePlan 契约全部九类语义（含卡片「六类」主语义），
+ * 分区未显式指定 color 时按语义取默认；医疗红取警示语义，舞台沿用设施暖色系。
+ * 全为 #rrggbb 小写，符合 SitePlan 颜色约束。
+ */
+export const PLANNING_ZONE_COLORS = {
+  stage: '#c98a2c',
+  audience: '#7fb69a',
+  parking: '#5e7fa6',
+  loading: '#8a6fa8',
+  checkin: '#3d8fa8',
+  queue: '#c9a22c',
+  medical: '#c0392b',
+  vip: '#b3628c',
+  reserved: '#8b9aa6',
+} as const;
+
+export type PlanningZoneSemantic = keyof typeof PLANNING_ZONE_COLORS;
+
+/** 分区透明度（H2-b）：OnePlan Areas 的 fill 透明度对应，默认 22%，可编辑但夹在区间内。 */
+export const PLANNING_ZONE_OPACITY = {
+  default: 0.22,
+  min: 0.05,
+  max: 0.6,
+} as const;
+
 /** Lucide 图标名（kebab-case，lucide-react 可导入）。H4-a 自绘同风格，不扒 OnePlan 素材。 */
 export const PLANNING_ICONS = [
   'shapes', // 边界 / 区域
@@ -62,3 +88,13 @@ export const PLANNING_LABELS = {
   access: '出入口',
   worker: '人员',
 } as const;
+
+/** H2-b 画布编辑模式文案（面板工具行）。 */
+export const PLANNING_EDIT_MODE_LABELS = {
+  view: '浏览',
+  boundary: '画边界',
+  'boundary-vertex': '编辑边界',
+  zone: '画分区',
+} as const;
+
+export type PlanningEditMode = keyof typeof PLANNING_EDIT_MODE_LABELS;
