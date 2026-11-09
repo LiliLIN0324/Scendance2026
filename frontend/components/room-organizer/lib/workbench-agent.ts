@@ -639,7 +639,7 @@ export function layoutAnchors(text: string, _event: string | null, _layoutMode: 
  * 文生物件 / 场景：只整理要提交的那句，不提交。
  * 布置句（出方案、加人）返回 null，免得把布置当成扣费生成。
  */
-export function prepareAholoAsk(raw: string): { kind: 'text' | 'world'; prompt: string; title: string } | null {
+export function prepareAholoAsk(raw: string): { kind: 'text' | 'world' | 'recon'; prompt: string; title: string } | null {
   const text = raw.trim();
   const compact = text.replace(/\s+/g, '');
   if (!compact || /出方案|布置|确认布置|加一把|加一张|加一个/.test(compact)) return null;
@@ -648,6 +648,13 @@ export function prepareAholoAsk(raw: string): { kind: 'text' | 'world'; prompt: 
   }
   if (/文字建模|文生物件|文生3d|文生三维|文生(?!场景)|生成.{0,24}物件|做.{0,12}物件/i.test(compact)) {
     return { kind: 'text', prompt: text, title: '物件' };
+  }
+  const vendor = /群核|aholo|lux3d/i.test(compact);
+  const verb = /生成|文生|图生|重建|做一|建一/.test(compact);
+  if (vendor && verb && /重建/.test(compact)) return { kind: 'recon', prompt: text, title: '场地' };
+  if (vendor && verb && /场景|场地|空间/.test(compact)) return { kind: 'world', prompt: text, title: '场景' };
+  if ((vendor && verb) || /图生|照片生成|图片生成/.test(compact)) {
+    return { kind: 'text', prompt: text, title: /图生|照片|图片/.test(compact) ? '图片物件' : '物件' };
   }
   return null;
 }

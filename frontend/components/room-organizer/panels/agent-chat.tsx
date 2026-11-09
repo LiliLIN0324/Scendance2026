@@ -12,6 +12,7 @@ import {
 } from './agent-chat-store';
 import { AgentRunPanel } from './agent-run-panel';
 import { MaterialCreateCell } from './material-create-cell';
+import type { BackendSession } from '@/lib/backend-session';
 import './agent-chat.css';
 
 /**
@@ -42,9 +43,11 @@ export interface AgentChatProps {
   /** True means the current activity accepted the text for its existing conversation. */
   onForwardToActivity?: ((text:string) => boolean | Promise<boolean>) | undefined;
   draftScope?: string | undefined;
+  /** 登录后的云会话。物料生成靠它提交，不在浏览器里放密钥。 */
+  controller?: BackendSession | undefined;
 }
 
-export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflow, onForwardToActivity, draftScope }: AgentChatProps): JSX.Element | null {
+export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflow, onForwardToActivity, draftScope, controller }: AgentChatProps): JSX.Element | null {
   const { layout } = useRoomEditor();
   void layout;
   const [draft, setDraft] = useState(()=>draftScope ? retainedDrafts.get(draftScope)??'' : '');
@@ -205,7 +208,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
               </div>
             </details>
             {/* 物料这一格的左下角就是那颗生成物料星，和生成入口那格同一个入口、同一颗钮。 */}
-            {agent === 'material' && <MaterialCreateCell/>}
+            {agent === 'material' && <MaterialCreateCell {...(controller ? { controller } : {})} listenForAsk/>}
           </div>
           <button type="submit" className="ap-send" aria-label="发送" disabled={forwarding || !draft.trim()}><ArrowUp size={18}/></button>
         </div>

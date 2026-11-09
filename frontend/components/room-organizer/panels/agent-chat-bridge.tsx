@@ -14,7 +14,7 @@ export function AgentChatBridge({onOpenActivity,controller,...props}:Omit<AgentC
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const sessionId=getActiveAssistantSessionId(activity.sessionScope);
   const draftScope=JSON.stringify([activity.sessionScope,sessionId,snapshot.user?.id??null,props.agent]);
-  return <AgentChat key={draftScope} {...props} draftScope={draftScope} onForwardToActivity={async text=>{
+  return <AgentChat key={draftScope} {...props} controller={controller} draftScope={draftScope} onForwardToActivity={async text=>{
     if(!sessionId||!activity.isSessionCurrent()||activity.isUnderstanding(text)||!activity.canForward(text)||activity.callbacks.workbenchMode!=='layout')return false;
     const identity=()=>JSON.stringify([controller.config.apiUrl,controller.getSnapshot().user?.id??null,controller.getSnapshot().sessionId]);
     const initial=identity();let invalidated=false;
