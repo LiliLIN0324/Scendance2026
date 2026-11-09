@@ -19,8 +19,7 @@ export default function ResetPasswordPage(): JSX.Element {
   const [done, setDone] = useState(false);
   const requestCode = async () => {
     cooldown.start();
-    // Keep the already-allowed callback URL for old link templates as well.
-    await auth.controller.requestPasswordReset(email, `${window.location.origin}/auth/callback`);
+    await auth.controller.requestPasswordReset(email, `${window.location.origin}/reset-password`);
     setSent(true); cooldown.start();
     setNotice('如果该邮箱已注册，你会收到密码重置邮件。请同时检查垃圾邮件。');
   };
@@ -30,8 +29,8 @@ export default function ResetPasswordPage(): JSX.Element {
     <section className="sc-auth-card">
       <div className="sc-auth-intro"><span>BACK TO YOUR SCENE</span><h1>重新连接，<br />你的创作。</h1><p>验证邮箱后设置新密码，<br />回到你的工作室。</p><a href="/auth">← 返回登录</a></div>
       <div className="sc-auth-form-wrap">
-        <h2>{done ? '密码已更新' : cloud.recoveryReady ? '设置新密码' : sent ? '输入验证码' : '找回密码'}</h2>
-        <p className="sc-auth-hint">{done ? '请使用新密码重新登录。' : cloud.recoveryReady ? '新密码至少 12 位。刷新页面后需要重新获取验证码。' : sent ? `请输入发送至 ${email.trim()} 的六位验证码。` : '输入注册邮箱，我们会发送六位验证码。'}</p>
+        <h2>{done ? '密码已更新' : cloud.recoveryReady ? '设置新密码' : sent ? '查看重置邮件' : '找回密码'}</h2>
+        <p className="sc-auth-hint">{done ? '请使用新密码重新登录。' : cloud.recoveryReady ? '新密码至少 12 位。刷新页面后需要重新验证邮箱。' : sent ? `请查看发送至 ${email.trim()} 的邮件，点击邮件中的重置链接；如果邮件提供六位验证码，也可在下方输入。` : '输入注册邮箱，我们会发送密码重置邮件。'}</p>
         {!done && <form onSubmit={async event => {
           event.preventDefault();
           if (busy) return;
@@ -51,7 +50,7 @@ export default function ResetPasswordPage(): JSX.Element {
             <label>新密码<input type="password" autoComplete="new-password" minLength={12} value={password} onChange={e => setPassword(e.target.value)} required /></label>
             <label>确认新密码<input type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={e => setConfirmation(e.target.value)} required /></label>
           </> : sent ? <label>六位验证码<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} required /></label> : <label>注册邮箱<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>}
-          <button className="sc-auth-submit" type="submit" disabled={busy || !auth.ready || !cloud.configured || !sent && !cloud.recoveryReady && cooldown.remaining > 0}>{busy ? '正在处理…' : cloud.recoveryReady ? '保存新密码' : sent ? '验证邮箱' : cooldown.remaining > 0 ? `${cooldown.remaining} 秒后可发送` : '发送验证码'}</button>
+          <button className="sc-auth-submit" type="submit" disabled={busy || !auth.ready || !cloud.configured || !sent && !cloud.recoveryReady && cooldown.remaining > 0}>{busy ? '正在处理…' : cloud.recoveryReady ? '保存新密码' : sent ? '验证邮箱' : cooldown.remaining > 0 ? `${cooldown.remaining} 秒后可发送` : '发送重置邮件'}</button>
         </form>}
         {!done && !cloud.recoveryReady && <div className="sc-auth-actions">
           {sent ? <>
@@ -60,7 +59,7 @@ export default function ResetPasswordPage(): JSX.Element {
               try { await requestCode(); setCode(''); }
               catch (err) { setFailed(true); setNotice(err instanceof Error ? err.message : '发送失败，请稍后重试。'); }
               finally { setBusy(false); }
-            }}>{cooldown.remaining > 0 ? `${cooldown.remaining} 秒后可重新发送` : '重新发送验证码'}</button>
+            }}>{cooldown.remaining > 0 ? `${cooldown.remaining} 秒后可重新发送` : '重新发送邮件'}</button>
             <button type="button" disabled={busy} onClick={() => { setSent(false); setCode(''); setNotice(''); }}>修改邮箱</button>
           </> : <button type="button" disabled={busy || !email.trim()} onClick={() => { setSent(true); setNotice('请输入收到的密码重置验证码，或重新发送。'); }}>输入已有验证码</button>}
         </div>}

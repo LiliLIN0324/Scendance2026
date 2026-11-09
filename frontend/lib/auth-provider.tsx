@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createBackendSession, type BackendSession } from './backend-session';
 
 const AuthContext = createContext<{ controller: BackendSession; ready: boolean; error: string } | null>(null);
@@ -9,6 +10,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
   const [controller] = useState(() => createBackendSession());
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const router = useRouter();
   const started = useRef(false);
   useEffect(() => controller.retain(), [controller]);
   useEffect(() => {
@@ -16,20 +18,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
     started.current = true;
     const path = window.location.pathname.replace(/\/$/, '');
     const callback = path === '/auth/callback' || path === '/reset-password';
-    const recovery = path === '/reset-password' || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery';
     const hash = window.location.hash;
-    const task = recovery && hash.includes('access_token=')
+    const recoveryHash = new URLSearchParams(hash.replace(/^#/, '')).get('type') === 'recovery';
+    const recovery = path === '/reset-password' || recoveryHash;
+    const task = recoveryHash
       ? controller.acceptCallback(hash, 'recovery')
       : controller.restoreSession(recovery);
     // 本机 Supabase 没起时，auth-js 会对 refresh 重试七八次；别让本地工作台跟着白屏。
     if (!callback && !recovery) window.setTimeout(() => setReady(true), 1500);
     void task
+      .then(() => { if (recoveryHash && path !== '/reset-password' && path !== '/auth/callback' && controller.getSnapshot().recoveryReady) router.replace('/reset-password'); })
       .catch(err => setError(err instanceof Error ? err.message : '登录验证失败，请重试。'))
       .finally(() => {
         if (callback) window.history.replaceState(null, '', window.location.pathname);
+        else if (recoveryHash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
         setReady(true);
       });
-  }, [controller]);
+  }, [controller, router]);
   return <AuthContext.Provider value={{ controller, ready, error }}>{children}</AuthContext.Provider>;
 }
 
