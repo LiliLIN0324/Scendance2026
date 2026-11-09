@@ -49,6 +49,8 @@ export const planZoneSchema = z.strictObject({
   name: z.string().min(1).max(60),
   polygon: planRingSchema,
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
+  /** 填充透明度 0–1（H2-b）：可选，缺省由渲染层取 tokens 默认 0.22；旧数据不带该字段照常解析。 */
+  opacity: z.number().min(0).max(1).optional(),
   notes: z.string().max(500).default(''),
 });
 export type PlanZone = z.infer<typeof planZoneSchema>;

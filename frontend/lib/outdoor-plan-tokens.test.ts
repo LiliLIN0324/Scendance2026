@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PLANNING_EDIT_MODE_LABELS,
   PLANNING_ICONS,
   PLANNING_LAYER_COLORS,
   PLANNING_RADIUS,
   PLANNING_SPACING,
+  PLANNING_ZONE_COLORS,
+  PLANNING_ZONE_OPACITY,
 } from './outdoor-plan-tokens';
 
 describe('outdoor 2D planning tokens (H1-c)', () => {
@@ -35,5 +38,35 @@ describe('outdoor 2D planning tokens (H1-c)', () => {
     expect(PLANNING_ICONS.length).toBeGreaterThan(5);
     for (const name of PLANNING_ICONS) expect(name).toMatch(/^[a-z][a-z0-9-]*$/);
     expect(new Set(PLANNING_ICONS).size).toBe(PLANNING_ICONS.length);
+  });
+
+  it('gives every zone semantic a lowercase #rrggbb default colour (H2-b)', () => {
+    const semantics = Object.keys(PLANNING_ZONE_COLORS) as (keyof typeof PLANNING_ZONE_COLORS)[];
+    // 契约九类语义全量；卡片「六类」主语义（观众/停车/装卸/签到/医疗/排队）必须在内。
+    expect(semantics).toContain('audience');
+    expect(semantics).toContain('parking');
+    expect(semantics).toContain('loading');
+    expect(semantics).toContain('checkin');
+    expect(semantics).toContain('medical');
+    expect(semantics).toContain('queue');
+    expect(semantics.length).toBe(9);
+    for (const value of Object.values(PLANNING_ZONE_COLORS)) {
+      expect(value).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    // 主语义色互异，图例可辨。
+    const mainSix = ['audience', 'parking', 'loading', 'checkin', 'medical', 'queue'] as const;
+    expect(new Set(mainSix.map(s => PLANNING_ZONE_COLORS[s])).size).toBe(6);
+  });
+
+  it('keeps zone opacity in a sane editable band (H2-b)', () => {
+    expect(PLANNING_ZONE_OPACITY.min).toBeGreaterThan(0);
+    expect(PLANNING_ZONE_OPACITY.default).toBeGreaterThanOrEqual(PLANNING_ZONE_OPACITY.min);
+    expect(PLANNING_ZONE_OPACITY.default).toBeLessThanOrEqual(PLANNING_ZONE_OPACITY.max);
+    expect(PLANNING_ZONE_OPACITY.max).toBeLessThan(1);
+  });
+
+  it('labels all four canvas edit modes (H2-b)', () => {
+    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'view', 'zone']);
+    expect(PLANNING_EDIT_MODE_LABELS['boundary-vertex']).toBe('编辑边界');
   });
 });

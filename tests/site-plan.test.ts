@@ -176,4 +176,26 @@ describe('site plan contract', () => {
     expect(planZoneSemanticLabels.reserved).toBe('预留区');
     expect(planRouteKindLabels.service).toBe('后勤');
   });
+
+  it('keeps zone opacity optional and round-trips it when present (H2-b)', () => {
+    // 旧数据不带 opacity：解析成功且不虚构字段。
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.zones[0].opacity).toBeUndefined();
+
+    // 带透明度：往返逐字段保留（与颜色同一口径）。
+    const styled = samplePlan();
+    (styled.zones[0] as { opacity?: number }).opacity = 0.35;
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(styled)));
+    expect(restored.zones[0].opacity).toBe(0.35);
+  });
+
+  it('rejects zone opacity outside 0–1 (H2-b)', () => {
+    const tooSolid = samplePlan();
+    (tooSolid.zones[0] as { opacity?: number }).opacity = 1.5;
+    expect(sitePlanDataSchema.safeParse(tooSolid).success).toBe(false);
+
+    const negative = samplePlan();
+    (negative.zones[0] as { opacity?: number }).opacity = -0.1;
+    expect(sitePlanDataSchema.safeParse(negative).success).toBe(false);
+  });
 });
