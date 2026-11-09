@@ -3004,6 +3004,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
     }
     const settledLayout = settleReport.layout;
+    const appliedLayout: RoomLayout = { ...settledLayout, ...(layout.designBook && !settledLayout.designBook ? { designBook: layout.designBook } : {}) };
     const candidateValidation = validateCandidateApply(before, settledLayout, activeFloorIndex);
     if (!candidateValidation.ok) throw new Error(candidateValidation.reason);
     // 集成接线：Bingo 体检分即时 notify，并把同一份数带进「本次报告」卡（第 7 批收尾）。
@@ -3016,7 +3017,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       }
       commitHistoryNow();
       snapshotBeforeReplace(layout);
-      actions.applyLayout({ ...settledLayout, ...(layout.designBook && !settledLayout.designBook ? { designBook: layout.designBook } : {}) });
+      actions.applyLayout(appliedLayout);
       if (!sameRecoveryFormValue(layoutStore.getState().layout, settledLayout)) {
         throw new Error('应用后的布局与预览不一致，请先撤销并重新核对。');
       }
@@ -3062,9 +3063,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         durationMs: Date.now() - applyStartedAt,
         ...(rounds === undefined ? {} : { rounds }),
       });
-      let appliedLayout: RoomLayout | undefined;
-      try { appliedLayout = structuredClone(finalLayout); } catch { /* 无可靠快照时只能显示历史结果。 */ }
-      applyOutcome({ ...outcome, report, ...(appliedLayout ? {appliedLayout,appliedRevision:layoutStore.getState().revision} : {}) });
+      let appliedAuditLayout: RoomLayout | undefined;
+      try { appliedAuditLayout = structuredClone(appliedLayout); } catch { /* 无可靠快照时只能显示历史结果。 */ }
+      applyOutcome({ ...outcome, report, ...(appliedAuditLayout ? {appliedLayout: appliedAuditLayout,appliedRevision:layoutStore.getState().revision} : {}) });
     }
     setPreviewGuard(null);
     clearTransientSelection();
@@ -3695,7 +3696,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               <button
                 type="button"
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
-                aria-label="切换标注模式：区/线/疏散/距/门"
+                aria-label={planAnnot.drawMode === 'off' ? '规划活动区域' : '结束规划绘制'}
+                aria-pressed={planAnnot.drawMode !== 'off'}
+                data-tip="标注：区/线/疏散/距/门循环切换"
                 onClick={() => {
                   // 首次点击时开一份空草案。
                   // door（真门标注）已接入：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。

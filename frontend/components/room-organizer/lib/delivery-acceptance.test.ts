@@ -195,10 +195,11 @@ function readDxf(text: string): DxfReading {
       return { minX: Math.min(...fxs), maxX: Math.max(...fxs), minY: Math.min(...fys), maxY: Math.max(...fys) };
     })
     .sort((left, right) => left.minX - right.minX);
-  const door = entities.find((entity) => entity.type === 'ARC' && layerOf(entity) === 'DOORS');
+  const doorTicks = entities.filter((entity) => entity.type === 'LINE' && layerOf(entity) === 'DOORS');
   const windows = entities.filter((entity) => entity.type === 'LINE' && layerOf(entity) === 'WINDOWS');
   if (furniture.length < 2) throw new Error('DXF 家具折线不足两条');
-  if (!door) throw new Error('DXF 缺门弧');
+  // 科智口径：门不画开向弧，只画两条门轴标线（jamb ticks），门宽 = 两轴标间距，开向待现场核验。
+  if (doorTicks.length < 2) throw new Error('DXF 缺门洞轴标');
   if (!windows[0]) throw new Error('DXF 缺窗线');
   // 窗线前两条是 0.25 m 窗垛标记，长线才是窗宽；取最长一条即可避开标记。
   const windowWidth = Math.max(...windows.map((line) => Math.hypot(
@@ -209,7 +210,10 @@ function readDxf(text: string): DxfReading {
     unitsMetres: /\$INSUNITS\n70\n6/.test(text),
     width: Math.max(...xs) - Math.min(...xs),
     depth: Math.max(...ys) - Math.min(...ys),
-    doorWidth: pairNumber(door, 40),
+    doorWidth: Math.hypot(
+      pairNumber(doorTicks[1]!, 10) - pairNumber(doorTicks[0]!, 10),
+      pairNumber(doorTicks[1]!, 20) - pairNumber(doorTicks[0]!, 20),
+    ),
     windowWidth,
     gap: furniture[1]!.minX - furniture[0]!.maxX,
     dimensionLabels: entities.filter((entity) => entity.type === 'TEXT' && layerOf(entity) === 'DIMENSIONS').length,
