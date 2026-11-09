@@ -461,6 +461,21 @@ function send(text: string): void {
   fireEvent.click(screen.getByRole('button', { name: '发送' }));
 }
 
+describe('chat column', () => {
+  it('shows one short conflict card when confirm is refused twice', async () => {
+    const message = '有 40 件物料存在冲突，本次未应用。请先调整：「餐椅」落点不合法：「圆桌」与「餐椅」包围盒重叠';
+    const onApply = vi.fn(() => { throw new Error(message); });
+    render(<LocalHarness initial={makeLayout({ width: 12, height: 9 })} onApply={onApply} />);
+    send('30人，室内12×9，圆桌');
+    const confirm = await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(onApply).toHaveBeenCalled();
+    expect(screen.getAllByText(/40 件没写上/)).toHaveLength(1);
+    expect(screen.queryByText(message)).toBeNull();
+  }, 20000);
+});
+
 describe('single-agent input bridge',()=>{
   it('accepts only nonempty text for the current active activity and session',async()=>{
     state.layout=makeLayout({id:'bridge-activity'});let current=true;const result=vi.fn();

@@ -760,8 +760,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => {
     if (!sessionScopeIsCurrent()) return;
     // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
+    const text = foldConflictBubble(bubble.text);
     const prev = bubblesRef.current;
-    const next = [...prev.slice(-30), { id: uid(), ...bubble }];
+    const last = prev.at(-1);
+    // One click was posting the same overlap refusal twice. A second identical refusal stays one bubble.
+    if (last?.role === 'agent' && last.text === text && text.includes('件没写上')) return;
+    const next = [...prev.slice(-30), { id: uid(), ...bubble, text }];
     bubblesRef.current = next;
     setBubbles(next);
     persistBubbles(boundSessionId.current, next);
@@ -1925,8 +1929,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(venue && hasInvalidRetainedZones(venue.layout)){revertScaleToCanvas();say({role:'agent',amber:true,text:'现有区域超出新场地范围或坐标不完整，请先调整区域再生成。'});setPhase('failed');return;}
     const candidateBase = venue?.layout ?? before;
     if (venue) {
-      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '已按所给尺寸准备场地候选，门位仍待核验。';
-      say({ role: 'agent', text: `${shellSummary}场地和物料都要确认后才会应用。` });
+      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '场地按这个尺寸准备好了。';
+      say({ role: 'agent', text: `${shellSummary}确认后才写入。` });
       await wait(STEP_DELAY_MS); if (token !== runToken.current || !sessionScopeIsCurrent()) return;
       if (!floorStillCurrent(floorToken)) {say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
       if (!sameLayoutContent(before, live.current)) {
@@ -2681,7 +2685,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
       turn.memory.zoneNeeds.checkin === null && !anchors.checkin && mentionedZone('checkin', /签到/) ? '签到区' : null].filter(Boolean);
     const summary = `${describeExtraction(merged, scale)}${scale.fromVenue ? ' · 按现在的场地' : ''}`;
-    const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
+    const carried = extraction.headcount === null && turn.memory.headcount !== null && !summary.includes(String(turn.memory.headcount))
+      ? ` · 沿用 ${turn.memory.headcount} 人` : '';
     const mentionedNewMaterial=(turn.memory.reportedInventory??[]).some(item=>!(previousMemory.reportedInventory??[]).some(old=>old.evidence===item.evidence));
     if (mentionsUnsupportedSeating(trimmed) && !turn.readOnlyReply) say({ role: 'agent', text: CIRCLE_SEATING_NOTE });
     if(turn.modelReply && turn.modelReply!==turn.text)say({role:'agent',text:`建议：${turn.modelReply}`,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});
@@ -3150,6 +3155,15 @@ function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: bo
   </div>;
 }
 
+/** One overlap refusal, not the long double sentence confirm used to paste twice. */
+function foldConflictBubble(text: string): string {
+  const count = text.match(/有 (\d+) 件物料存在冲突/);
+  if (!count) return text;
+  const why = text.match(/落点不合法：(.+)$/);
+  const reason = (why?.[1] ?? '和旁边的物料叠在一起').replace(/。$/, '');
+  return `${count[1]} 件没写上。${reason}。这次没有写入。`;
+}
+
 /** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
 function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   const { layout } = useRoomEditor();
@@ -3368,14 +3382,12 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <p>其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
         <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
       </section>}
-      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card ap-status-card" aria-label="尚未处理的要求">
-        <div className="ap-status-head">
-          <strong>尚未处理的要求（{agent.unresolvedDialogue.length}）</strong>
-          <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
-        </div>
+      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-pending" aria-label="尚未处理的要求">
+        <span className="ap-pending-label">待处理</span>
         <ul className="ap-pending-chips">
           {agent.unresolvedDialogue.map(text => <li key={text}><span title={text}>{text}</span><button type="button" className="ap-pending-x" aria-label={`撤回：${text}`} onClick={() => agent.withdrawUnresolvedDialogue(text)}>×</button></li>)}
         </ul>
+        <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
       </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
       {bingo && <div className="ap-card" aria-label="审校状态台">
@@ -3481,8 +3493,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {processText && <p role="status" className={`ap-process${processText.startsWith('已尝试') ? ' is-failed' : ''}`}>{processText}{agent.understanding && processText === '正在理解活动需求…' && <> <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></>}</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
-        <p id="ap-data-notice" className="ap-small">{understandingLine(Boolean(modelEnabled() && studio?.controller))}{process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1'?'对话可能发送本场近期文字和模型回复。':''}</p>
-        <p id="ap-plan-notice" className="ap-small" role="status">{planGenerationLine(studio?.connection)}</p>
+        <p className="ap-foot">
+          <span id="ap-data-notice">{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
+          {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span>近期对话也会发给模型。</span>}
+          <span id="ap-plan-notice" role="status">{planGenerationLine(studio?.connection)}</span>
+        </p>
         {!!draft && <p className="ap-small">未发送内容仅暂存在当前页面；刷新或关闭后会丢失。</p>}
         {agent.sessionSaveFailed && <p role="status" className="ap-small">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
         <div className="ap-composer-bar">
