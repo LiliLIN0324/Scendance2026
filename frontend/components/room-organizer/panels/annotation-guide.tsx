@@ -25,6 +25,12 @@ export function AnnotationGuide({ mode, zoneType, onModeChange, onZoneTypeChange
     {mode === 'route' && <p>在平面图上依次点击路线经过的位置，至少选择两点，再按 Enter 或双击结束。切换工具会取消未完成的线。</p>}
     {mode === 'measure' && <p>在平面图上依次点击起点和终点，即可标出两点距离。</p>}
     {mode === 'door' && <p>在平面图的墙边点击入口位置。门宽、开启方向与现场情况仍需核对。</p>}
+    <details>
+      <summary>标注如何影响方案</summary>
+      <p>画出的区域会影响区域方案；部分自动布置暂时不会参考这些区域。</p>
+      <p>路线可用于检查是否被物料挡住；部分自动布置尚不检查入口净空。门的位置、宽度和方向仍需核对。</p>
+      <p>量距只显示距离，不会自动作为布置条件。具体结果请查看方案检查。</p>
+    </details>
     <p>出入口、通行和现场条件仍需人工核对。</p>
   </section>;
 }
