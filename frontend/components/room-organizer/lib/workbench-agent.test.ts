@@ -133,8 +133,14 @@ describe('一句话开场解析', () => {
   it('prepares an Aholo sentence without treating a layout ask as a paid generate', () => {
     expect(prepareAholoAsk('生成一个竹林场景')).toEqual({ kind: 'world', prompt: '生成一个竹林场景', title: '场景' });
     expect(prepareAholoAsk('文生一张白桌')).toMatchObject({ kind: 'text', title: '物件' });
+    expect(prepareAholoAsk('用群核做一个竹林场景')).toMatchObject({ kind: 'world', title: '场景' });
+    expect(prepareAholoAsk('群核生成一把椅子')).toMatchObject({ kind: 'text', title: '物件' });
+    expect(prepareAholoAsk('请用群核重建这块场地')).toMatchObject({ kind: 'recon', title: '场地' });
+    expect(prepareAholoAsk('图生一把折叠椅')).toMatchObject({ kind: 'text', title: '图片物件' });
     expect(prepareAholoAsk('80 人发布会，出方案')).toBeNull();
     expect(prepareAholoAsk('加一个签到台')).toBeNull();
+    expect(prepareAholoAsk('换个摆法')).toBeNull();
+    expect(prepareAholoAsk('群核是什么')).toBeNull();
   });
   it('stays silent on metres before the scale is confirmed', () => {
     // 硬钉「确认前不报假米数」：画布当前那块空地不是场地真相，一个字米数都不能报。

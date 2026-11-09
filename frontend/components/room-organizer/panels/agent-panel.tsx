@@ -85,6 +85,9 @@ import {
 import { proposalDifferences } from '../three/proposal-preview';
 import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
+import { aholoChatStep, planGenerationLine, understandingLine } from '../lib/cloud-tool-connection';
+import { isLux3dLocalProxy } from '../lib/aholo-assets';
+import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
 import { AgentRunPanel, useAgentRun } from './agent-run-panel';
@@ -2416,12 +2419,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
     const aholo = prepareAholoAsk(trimmed);
     if (aholo) {
-      say({
-        role: 'agent',
-        text: aholo.kind === 'world'
-          ? '可在「空间」入口使用生成引擎创建或重建 3D 空间。'
-          : `要生成${aholo.title}，请使用「物料」里的生成入口。`,
-      });
+      const step = aholoChatStep(aholo.kind, {
+        spaceEntry: Boolean(callbacks.luxToolsVisible && callbacks.onOpenLux3d),
+        materialReady: studioRef.current?.connection === '项目已连接' || isLux3dLocalProxy(),
+      }, aholo.title === '图片物件');
+      if (step.start === 'space-world') callbacks.onOpenLux3d?.('world', aholo.prompt);
+      else if (step.start === 'space-recon') callbacks.onOpenLux3d?.('recon', aholo.prompt);
+      else if (step.start === 'material') {
+        stageMaterialGenerate({ kind: aholo.title === '图片物件' ? 'image' : 'text', prompt: aholo.prompt });
+        callbacks.onOpenMaterials();
+      }
+      say({ role: 'agent', text: step.text });
       return;
     }
     // 按对象改（挪舞台/加灯/删除）走增量命令；普通「加两把椅子」仍走下面的物料请求。
@@ -3375,7 +3383,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
@@ -3384,7 +3392,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {agent.understanding && <p role="status" className="ap-small">正在理解活动需求… <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></p>}
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
-        <p id="ap-data-notice" className="ap-small">{modelEnabled() && studio?.controller ? '输入文字可能发送至模型服务。' : '文字识别按本机规则处理。'}{process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1'?'对话可能发送本场近期文字和模型回复。':''}{studio?.connection === '项目已连接' ? '云端生成会发送当前场景及部分对话上下文。' : '未连接云端方案生成。'}</p>
+        <p id="ap-data-notice" className="ap-small">{understandingLine(Boolean(modelEnabled() && studio?.controller))}{process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1'?'对话可能发送本场近期文字和模型回复。':''}</p>
+        <p id="ap-plan-notice" className="ap-small" role="status">{planGenerationLine(studio?.connection)}</p>
         {!!draft && <p className="ap-small">未发送内容仅暂存在当前页面；刷新或关闭后会丢失。</p>}
         {agent.sessionSaveFailed && <p role="status" className="ap-small">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
         <div className="ap-composer-bar">

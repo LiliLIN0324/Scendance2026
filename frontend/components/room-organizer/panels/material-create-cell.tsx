@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles } from '@/components/solid-icons';
-import { addPendingMaterial, submitMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
+import { addPendingMaterial, submitMaterialGenerate, subscribeStagedMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
 import { CREDIT_CONFIRM_LABEL } from '../lib/site-recon-mock';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -12,11 +12,13 @@ import type { BackendSession } from '@/lib/backend-session';
  * 直连代理在就优先走它（本机加速）；不在就走云端任务队列，GLB 由服务端归档后自动进画布。
  * variant='composer' 是底部对话左下角的那一颗；'tile' 给旧的横条物料轨。
  */
-export function MaterialCreateCell({ disabled = false, variant = 'composer', controller }: {
+export function MaterialCreateCell({ disabled = false, variant = 'composer', controller, listenForAsk = false }: {
   disabled?: boolean;
   variant?: 'tile' | 'composer';
   /** 登录云项目后的会话：生成走服务端队列，不依赖本机脚本。 */
   controller?: BackendSession;
+  /** 活动对话点名生成时，打开这个框并填上原话。仍须确认额度。 */
+  listenForAsk?: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'menu' | 'text' | 'image'>('menu');
@@ -30,6 +32,18 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+
+  useEffect(() => {
+    if (!listenForAsk) return undefined;
+    return subscribeStagedMaterialGenerate(request => {
+      setOpen(true);
+      setMode(request.kind === 'image' ? 'image' : 'text');
+      setPrompt(request.kind === 'text' ? request.prompt : '');
+      setNote(request.kind === 'image' ? '请选一张照片。确认额度后才会提交。' : '');
+      setCredit(false);
+      setNeedCredit(false);
+    });
+  }, [listenForAsk]);
 
   useEffect(() => {
     if (!open) return undefined;
