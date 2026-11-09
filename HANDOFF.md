@@ -4,15 +4,21 @@
 
 > 先读HANDOFF.md。
 
+2026-11-10 二十三轮 · 户外 2D 规划评审稿定稿（**拍板为下一版本蓝图**，随本轮提交）+ 当前版本推送 + 每日自动化轮次挂定时：
+- 评审稿 [docs/plans/2026-11-10-outdoor-event-planning.md](docs/plans/2026-11-10-outdoor-event-planning.md)（11 节 26 小节）：基于 OnePlan 实地拆解（桌面 oneplan-study 抓包/登录态截图 + 官方文档与官网全量调研）。主链路「地图（天地图免费 WMTS 满铺 + 高德退为搜索/POI 语义层，key 服务端代理）→ 平面布置（基础设施/流量管理/人力资源三大支柱全进 P0）→ 平面智能（规则检查 P0、一句话初稿/物料布置 P1）→ 3D 预览（二级入口）」；`SitePlan` 为唯一数据契约（带 UUID 几何）；西湖低模 3D 降级为二级入口「3D 展示」档（不作数据真源）；导出对标 OnePlan 四件套；22 个中文类型页筛成首批 6 类垂直页。**用户拍板：大改 = 下一版本（v5.x 级），当前版本推出后开工**；P0a 探针在本机干净分支做（评审稿 10.1 有 8 步清单）。
+- **版本状态更正（二十二轮「合流方案另行执行」→ 已执行，销案）**：41 提交合流已落本地 main（`03b0696` + `3fb6b94` + `904ab16`），tag `v4.9.0` 已打。
+- **当前版本已推送（用户确认）**：release gate 4 步全绿（131.3s：根 tsc / 前端 tsc / 核心测试 / 静态导出 build）后 push 成功（`55ec6e1..904ab16`，15 提交上 origin/main）。**tag `v4.9.0` 仍在本地未推远端**，是否推 tag 另待用户确认。
+- **定时任务已挂**：「幕景自动化轮次（HANDOFF 取卡）」（ais id `99d8ede4c7c26563b549a6b0c96c41a3`），每天 09:00（Asia/Shanghai，下一轮 2026-11-10 09:00），按 §4 开场指令取卡执行→验证→回填→只本地提交；YOLO 关闭，花钱/发布/删除/真实素材照旧停下等用户确认；提示词已注明勿混入下一版本大改。
+
 2026-11-09 工作台体验：画布现在显示当前场地、尺寸和本层物料数，随进度提供选址、放物料、试走和审校入口。空间和物料侧栏保留各自的库，生成入口改为直接操作；只在本栏任务运行时显示追加备注的输入框。本地用平湖秋月验证了 3D 周边与圈选边界同屏、漫游返回、场景库和物料入口；本轮未提交云端生成。
 
 2026-11-09 地图入口收成局部：3D 画布左上的地图入口只剩一枚「西湖 · 平湖秋月」。点一下直接铺西湖整景区底图，3D 能加载就自动用 3D，失败自动退回卫星图（失败时面板里才出现「重试 3D」）；删掉了「搜索其他地点 / 卫星图 / 西湖 ISO / 纯路网（卫星含路网）」这些切换和「参考水线与范围」，也不再给半径档位。默认镜头收在平湖秋月周边 1200 m × 1200 m（`lib/research-area.ts` 的 `XIHU_LOCAL_CENTER` / `XIHU_LOCAL_SPAN_M`），面板里「回到平湖秋月」可随时回；旧的非预设底图可以一步「换成平湖秋月」。`app/explore` 是另一张未接导航的实验页，本轮没动。frontend `npm run typecheck` 0 错；`npm run build` 编译与类型检查通过后在沙箱里卡在 spawn EPERM（与 vitest 同一条沙箱边界），需在可跑环境复核。
 
 2026-11-10 宋男解锁：rig 重跑已成功（summary.json 的 rerunNote，2026-11-09 19:36 本地），素材层 PEOPLE-04 达 6/6。应用层补齐三步：`_merge-walk.mjs` 的 ROLES 补 song-m 并实跑，生成 `.cache/aholo` 的 a006（44,498,840 B，Idle_Loop/Walk_Loop 各 53ch、54 节点，前 5 个重跑字节不变）；`lib/glb-limits.ts` 的 LOCAL_WALK_ASSET_IDS 加 a006（本机试走 48 MB 上限内）；`lib/walk-roles.ts` 宋男改 walkable:true 并删掉过时的「绑骨失败」注记。frontend typecheck 0 错，浏览器里漫游角色六张卡全部可点；evidence 与 cache 均被 .gitignore 挡住，只在本机。
 
-2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；远端 main 已领先本地 41 提交（endtree 10 个 PR，chat/围坐大线），与本地未提交改动重叠 23 文件，合流方案另行执行。
+2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-10（二十二轮 · 满铺底图与地图类型移植进工作区并修 PR#100 的 4 个 Bugbot；宋男解锁 PEOPLE-04 6/6）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-10（二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
@@ -342,6 +348,7 @@
 
 | 工作 | 当前结果 |
 | --- | --- |
+| **户外 2D 规划评审稿 + 当前版本推送 + 自动化定时轮次（2026-11-10 二十三轮，TeleAgent 会话）** | ① 评审稿 [docs/plans/2026-11-10-outdoor-event-planning.md](docs/plans/2026-11-10-outdoor-event-planning.md) 定稿：OnePlan 全拆解（14 步流 / 导出四件套 / 22 中文类型页 / 定价=免费 25 对象 / 首页转化与机翻弱点）+ 免费图源选型（天地图 WMTS vec/cva/img/cia、`w`=EPSG:3857、key 服务端代理）+ `SitePlan` 数据契约 + 三大支柱进 P0 + 西湖 3D 降二级入口 + 平面智能四档——**拍板为下一版本（v5.x 级）**，P0a 8 步清单在 10.1，须在干净分支做。② 当前版本推送：release gate 4 步 131.3s 全绿后 push 成功（`55ec6e1..904ab16`，15 提交上 origin/main）；tag `v4.9.0` 未推远端待确认。③ 定时任务：每天 09:00 自动化轮次（ais id `99d8ede4c7c26563b549a6b0c96c41a3`），按 §4 开场指令执行，YOLO 关闭。 |
 | **P0-1 圈画保存断点修复（2026-11-08，ZCode 会话）** | 对应平湖秋月的圈画保存验收。**根因**：`amap-venue-picker.tsx` 把「圈画是否完成」整个押在高德 `MouseTool` 的**隐式 `draw` 事件**上（只在双击/回到起点闭合时抛），用户看不到任何完成控件，闭合没被 SDK 认下时 `bbox` 恒为 `null` → `disabled={!bbox}` 的「生成户外场地」**永远是灰的**，且界面不区分「没点够」「闭合失败」「轮廓退化」。首轮实测证据：`~/.codex/visualizations/2026/11/08/01a1ba55-.../02c-close-attempt.png`（多边形已画出但按钮仍灰）。**修复**：① 改为地图 `click` 自收顶点，**离上一点 <0.5 m 的重复点忽略**（双击闭合第二下不再多出顶点）；② **常驻可见「完成圈画」**（<3 点时禁用并在进度行写明「至少 3 个」）+「撤销上一点」+「放弃」，不再让用户找完成入口；③ 无效轮廓给**具体原因**（点数不足／自相交穿模／面积 <4 m² 并报出 m² 数），判定抽成纯函数 `lib/venue-drawing.ts` 可脱地图单测；④ **选址预览与保存分开**：预览行 `data-testid="venue-preview"` 显式写「尚未写入场地」，写入锚点仍只发生在「生成户外场地」，画到一半时生成禁用。**未动**坐标转换链路（仍 GCJ-02）、`createVenueFromPick` 及上游落盘路径，且**不碰 COLLAB 五独占文件与几何基线**（已登记）。**验证**：`tsc --noEmit` 0 错；纯逻辑 13 例全绿；picker 交互新增 8 例；圈画相关 5 套 **44 例全绿**。根因与证据 [docs/plans/circle-draw-save-fix-2026-11-08.md](docs/plans/circle-draw-save-fix-2026-11-08.md)。后续本地验收已验证实际四点圈画、闭合、生成和刷新重开。 |
 | **C1 MP-PLAN 风格 brief 三套（2026-11-08 二十轮，Qoder 会话）** | 新建 `frontend/lib/style-plan.ts`：3 套内置 brief（暖木宴会/墨白剧院/雾蓝接待），每套=配色表 + 可选配方覆盖；`plan-approve`/`plan-scoring` 增加可选 `PlanZoneStyle` 参数，白名单仅 `roundtable→desk\|checkin`，不传风格时与旧行为逐字段一致。差异量化 `compareStylePlans` 按 zoneId+区内顺序配对，SKU=`type\|name`、位移阈值 0.5m、颜色集合族比较，通过线 `(SKU≥30% 或 位置≥40%) && 色彩族不同`。夹具 18×12m 房间、14×7m 区实测：宴会 27 件/24 座、剧院 120 件/90 座（圆桌→课桌）、接待 24 件/12 座（圆桌→签到台多排），3/3 feasible、0 skipped、0 越界；三组两两 SKU 替换 100%、位置变动 100%/100%/95.8%、色彩族均不同，3/3 过 2-3。`style-plan.test.ts` 9 例入门禁；`rowCheckin` 加可选 depth 多排（仅风格覆盖时生效，普通签到区单排不变）。**仍挂**：2-2 三人盲评（真人）、工作台三版入口（要改 `room-organizer.tsx`，先登记）、2-1/2-4/2-5 真实项目计时。证据 [docs/evidence/C1](docs/evidence/C1)，规格 [docs/37](docs/37-MP-PLAN风格brief规格.md)。**下一步**：C2。 |
 | **B3 SC-16 四件套验收（2026-11-08 十九轮，Qoder 会话）** | 新增 `lib/delivery-acceptance.test.ts` 并入 `npm run gate`：用 10 份确认版布局逐份打包解包，10/10 `complete`、包根唯一、0 人工改名、耗时 52 ms；逐份核对 8 文件路径、`snapshotId` 同时出现在 manifest/CSV/分享、分享 URL 自校通过、DXF 房间宽深/门宽/窗宽/家具间距 5 处与真值一致（米制、6 图层、2 标注、标题带楼层）、CSV 行数与数量对齐。**真机**（Chrome 实点）：确认这一版 → 导出交付包，下载真 zip 8 文件、3 张照片均 1920×1080；打开包内分享链接，`/review/` 显示 v1.0 + 同快照并自校「内容与快照一致」（dev 热启 7.2 s，冷启 68 s 全是编译）。证据 [docs/evidence/SC-16](docs/evidence/SC-16)：批量结果、真机包/分享页读数、三张实拍图、逐条结论。**仍挂**：效果图无水印/版号（渲染侧）、清单无单价（SC-34/F1）、生产静态首屏与 30 天有效期（服务侧）、3 人盲评与甲方三问（真人）——docs/24 1-2/1-4/1-5/1-6 不能记满。**下一步**：C1。 |
@@ -739,5 +746,4 @@ $env:NEXT_DIST_DIR = '.next-ci'; npm run build    # 跑完记得 Remove-Item Env
 
 > 下次开新会话第一句：先读 HANDOFF.md。
 
-
-
+> AI生成
