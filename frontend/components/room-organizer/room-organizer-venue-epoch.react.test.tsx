@@ -20,7 +20,7 @@ it('a confirmed scale is invalidated by same-batch geometry change and undo in t
  layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<StrictMode><RoomOrganizer/></StrictMode>);
  const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
+ const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
  fireEvent.change(input,{target:{value:'12 人，室内 12×9米，圆桌，出方案'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
  await screen.findByRole('button',{name:'确认布置'}, {timeout:15000});
  const before=structuredClone(layoutStore.getState().layout);

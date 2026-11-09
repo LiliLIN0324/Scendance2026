@@ -6,7 +6,7 @@
  * brief-agent 规则版——对话永不因模型抖动中断。决策（记忆/防复读/出方案）始终在前端状态机。
  */
 import { hasNonPersonQuantity, isActivityNeedsAnswer, isUnresolvedNeedsAnswer, parseBriefTurn, type BriefMemory, type BriefTurn, type BriefTurnContext, type LayoutMode, type PendingBasicFact } from '@/components/room-organizer/lib/brief-agent';
-import { HEADCOUNT_MAX, isLayoutOnlyUtterance, layoutGenerateCommand, omitHandledLayoutActions, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
+import { HEADCOUNT_MAX, isBriefFactUtterance, isLayoutOnlyUtterance, layoutGenerateCommand, omitHandledLayoutActions, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
 import { BRIEF_CLIENT_TIMEOUT_MS, type BriefSlots, type BriefConversationResponse } from '../../supabase/functions/_shared/brief-extract-contract';
 import { SceneApiError } from '../../client/scene-client';
 import { isGeneralActivityQuestion } from '@/components/room-organizer/lib/general-activity-question';
@@ -250,8 +250,12 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   const turn = parseBriefTurn(raw, previous, fallbackContext.command || !layoutOnly ? fallbackContext : { ...fallbackContext, command: layoutGenerateCommand(raw) }, toExtraction(extraction));
   const pendingFacts = [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending];
   if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...((allowAutomaticGeneration||layoutOnly)&&(context.command||layoutGenerateCommand(raw))?{pendingGeneration:{command:(context.command??layoutGenerateCommand(raw))!,instruction:raw}}:{}) }, resolution: layoutOnly && !allowAutomaticGeneration ? 'local_command' : fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
-  if (!allowAutomaticGeneration && turn.kind === 'generate' && !layoutOnly) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
-  if (!allowAutomaticGeneration && layoutOnly && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  // A failed model must not start another provider call. A brief the local rules can already draw — seating ask, or the headcount/size that finishes one — still uses the local preview.
+  const scaleReady = (turn.memory.lengthM !== null && turn.memory.widthM !== null) || turn.memory.areaM2 !== null || context.venueUp || context.scaleTyped;
+  const briefReady = turn.kind === 'generate' && turn.memory.layoutModeConfirmed === true && turn.memory.headcount !== null && scaleReady;
+  const continuesLayout = layoutOnly || layoutGenerateCommand(raw) !== null || isBriefFactUtterance(raw);
+  if (!allowAutomaticGeneration && turn.kind === 'generate' && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
 }
 

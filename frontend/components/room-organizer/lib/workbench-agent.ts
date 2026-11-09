@@ -95,6 +95,26 @@ const REFUSE_LAYOUT = /(?:不要|别|不想|先别).{0,4}(?:换|重新|摆|布�
 /** generate = draw from the brief; revise = another arrangement; cannot = we must not pretend. */
 export type LocalLayoutClass = 'generate' | 'revise' | 'cannot';
 
+/** A whole utterance that only chooses round tables or desks. Negation, questions, and stock lists do not match. */
+function isBareSeatingChoice(compact: string): boolean {
+  return /^(?:请|帮我|我想|想)?(?:把)?(?:会场|场地)?(?:用|改成|换成|摆成|排成|布置成|要|采用|选择|按)?(?:圆桌|餐桌|课桌椅)(?:布置|摆法)?$/.test(compact);
+}
+
+/** Headcount, venue size, indoor/outdoor, or a seating word, with no other request left over. */
+export function isBriefFactUtterance(text: string): boolean {
+  const compact = layoutCompact(text);
+  if (!compact) return false;
+  const remainder = compact
+    .replace(/(?:大约|大概|预计|约|左右)/g, '')
+    .replace(/\d+(?:\.\d+)?(?:人|位|名)/g, '')
+    .replace(/\d+(?:\.\d+)?(?:米|m)?[×xX*]\d+(?:\.\d+)?(?:米|m)?/g, '')
+    .replace(/\d+(?:\.\d+)?(?:平方米|平米|平方公尺|㎡|m²|m2|平)/g, '')
+    .replace(/(?:室内|户外|室外|场馆|宴会厅|会议室|大厅|礼堂)/g, '')
+    .replace(/(?:圆桌|餐桌|课桌椅|课桌|课椅|围坐|围成一圈|围一圈)/g, '')
+    .replace(/[，,。！!；;、]/g, '');
+  return remainder.length === 0;
+}
+
 /** Sofa / floor-sitting still gets a circle preview; the note says it is not literal sofas. */
 export function mentionsUnsupportedSeating(text: string): boolean {
   const compact = layoutCompact(text);
@@ -119,6 +139,7 @@ export function classifyLocalLayout(text: string): LocalLayoutClass | null {
   if (SEATING_SWAP.test(compact) || mentionsUnsupportedSeating(compact)) return 'revise';
   if (REVISE_HINT.test(compact) && (LAYOUT_STEM.test(compact) || /座位|座|过道|通道|紧凑|好看|疏|密/.test(compact) || /再来一版|再出一版|按刚才/.test(compact))) return 'revise';
   if (LAYOUT_STEM.test(compact) || /按刚才说的摆|摆一摆|(?:^|帮我|来|再|请)摆/.test(compact)) return REVISE_HINT.test(compact) ? 'revise' : 'generate';
+  if (isBareSeatingChoice(compact)) return 'generate';
   return null;
 }
 
@@ -137,8 +158,11 @@ export function layoutGenerateCommand(text: string): 'again' | 'first' | null {
 export function isLayoutOnlyUtterance(text: string): boolean {
   if (!layoutGenerateCommand(text)) return false;
   const parsed = parseBriefSentence(text);
-  return parsed.headcount == null && parsed.event == null && parsed.venueIO == null && parsed.lengthM == null && parsed.widthM == null && parsed.areaM2 == null
-    && !/(?:课桌|课椅|圆桌|餐桌)/.test(layoutCompact(text));
+  if (parsed.headcount != null || parsed.event != null || parsed.venueIO != null || parsed.lengthM != null || parsed.widthM != null || parsed.areaM2 != null) return false;
+  const compact = layoutCompact(text);
+  // Round-table / desk choice is itself the layout ask. Local rules record the mode, so a failed model has nothing else to miss.
+  if (isBareSeatingChoice(compact)) return true;
+  return !/(?:课桌|课椅|圆桌|餐桌)/.test(compact);
 }
 
 /** Drop a layout ask the preview path already owns, and keep every other unhandled item. */
