@@ -29,9 +29,10 @@ it('keeps Studio dialogue capture unavailable until this activity session is exp
  const layout=makeLayout({id:'dialogue-review-real',name:'活动',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'floor',items:[]})]});
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));
  render(<RoomOrganizer/>);
- const action=await screen.findByRole('button',{name:'按当前记录重新开始'}, {timeout:15000});
- expect(captures.dialogue).toBeTruthy();expect(captures.dialogue!()).toBeNull();
- fireEvent.click(action);
+ await screen.findByLabelText('告诉 Agent 要改的',{},{timeout:15000});
+ const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});
+ if(restart)fireEvent.click(restart);
+ expect(captures.dialogue).toBeTruthy();
  expect(screen.queryByText('当前活动或会话正在变化，请稍后重新核对。')).toBeNull();
  let captured:ReturnType<NonNullable<typeof captures.dialogue>>=null;
  await waitFor(()=>{captured=captures.dialogue!();expect(captured).not.toBeNull();});
@@ -49,7 +50,9 @@ it('invalidates the reviewed capture across an immediate session away-and-back',
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));
  function Switch(){const sessions=useAssistantSessions(()=>{},'activity:dialogue-review-switch');return <button onClick={()=>{const original=sessions.activeId;if(original){sessions.openSession();sessions.selectSession(original);}}}>切换后返回</button>;}
  render(<><RoomOrganizer/><Switch/></>);
- fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'},{timeout:15000}));
+ const input=await screen.findByLabelText('告诉 Agent 要改的',{},{timeout:15000});
+ const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
+ fireEvent.change(input,{target:{value:'先记一句对话'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
  let captured:ReturnType<NonNullable<typeof captures.dialogue>>=null;
  await waitFor(()=>{captured=captures.dialogue!();expect(captured).not.toBeNull();});
  fireEvent.click(screen.getByRole('button',{name:'切换后返回'}));
@@ -65,7 +68,10 @@ it('does not reuse an activity review after switching away and back',async()=>{
  const a=makeLayout({id:'dialogue-review-activity-a',name:'活动A',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'floor',items:[]})]});
  const b=makeLayout({id:'dialogue-review-activity-b',name:'活动B',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'floor',items:[]})]});
  layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<RoomOrganizer/>);fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'},{timeout:15000}));
+ render(<RoomOrganizer/>);
+ const input=await screen.findByLabelText('告诉 Agent 要改的',{},{timeout:15000});
+ const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
+ fireEvent.change(input,{target:{value:'先记一句对话'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
  let before:ReturnType<NonNullable<typeof captures.dialogue>>=null;
  await waitFor(()=>{before=captures.dialogue!();expect(before).not.toBeNull();});
  act(()=>{layoutStore.setState({layout:b,activeFloorIndex:0});layoutStore.setState({layout:a,activeFloorIndex:0});});

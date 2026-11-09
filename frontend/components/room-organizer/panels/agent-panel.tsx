@@ -519,6 +519,12 @@ function volatileMemoriesFor(scope: string): Map<string, BriefMemory> {
   if(!values){values=new Map();volatileSessionMemories.set(scope,values);}
   return values;
 }
+/** No recorded brief and no dialogue yet: there is no prior plan for the history gate to protect. */
+function layoutMemoryIsBlank(memory: BriefMemory): boolean {
+  return memory.headcount === null && memory.event === null && memory.lengthM === null && memory.widthM === null && memory.areaM2 === null
+    && memory.layoutModeConfirmed !== true && !memory.layoutModeUnresolved && memory.pendingActivityNeeds.length === 0 && memory.unresolvedActivityNeeds.length === 0
+    && !(memory.pendingBasicFacts?.length) && !(memory.reportedInventory?.length) && !memory.pendingGeneration;
+}
 
 export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, onDialogueHistoryReview, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; onDialogueHistoryReview?: ((sessionId:string)=>boolean)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
@@ -803,11 +809,23 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   // 点历史 / 新开会话：换 activeId 时把气泡切到对应正文；新场没有正文就是空对话。
+  function grantEmptyLayoutReview(sessionId: string | null, dialogue: readonly { id: string }[], memory: BriefMemory): void {
+    if (!sessionId || !onDialogueHistoryReview || reviewedHistorySessionRef.current === sessionId) return;
+    if (dialogue.length || !layoutMemoryIsBlank(memory) || (incompleteDialogueTurns.current.get(sessionId)?.size ?? 0) > 0) return;
+    const cloud = studioRef.current;
+    if (cloud?.preview || cloud?.recoverable || cloud?.applyRecovery || cloud?.busy || cloud?.reviewingApplyRecovery) return;
+    if (!sessionScopeIsCurrent() || getActiveAssistantSessionId(sessionScope) !== sessionId) return;
+    // Nothing old to withdraw. A stored run marker still refuses, and the gate stays up.
+    if (cloud && !cloud.discardPreviewForHistoryReview()) return;
+    if (!onDialogueHistoryReview(sessionId)) return;
+    setReviewedHistory(sessionId);
+  }
+  const studioReviewReady = !studio?.preview && !studio?.recoverable && !studio?.applyRecovery && !studio?.busy && !studio?.reviewingApplyRecovery;
   useEffect(() => {
     if (!assistantSessions.ready || !sessionScopeIsCurrent()) return;
     const nextId = assistantSessions.activeId;
     const prevId = boundSessionId.current;
-    if (prevId === nextId) return;
+    if (prevId === nextId) { grantEmptyLayoutReview(nextId, bubblesRef.current, memoryRef.current); return; }
     setReviewedHistory(null);
     briefTurnSequence.current += 1;
     if(briefRequest.current){updateDialogueIncomplete(prevId,briefRequest.current.text,true);uncertainInputs.current.add(briefRequest.current.text);briefRequest.current.controller.abort();say({role:'agent',amber:true,text:'切换会话后已停止等待；服务商可能仍在处理或计费。'});}
@@ -835,7 +853,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       : [];
     bubblesRef.current = loaded;
     setBubbles(loaded);
-  }, [assistantSessions.ready, assistantSessions.activeId, persistBubbles]);
+    grantEmptyLayoutReview(nextId, loaded, nextMemory);
+  }, [assistantSessions.ready, assistantSessions.activeId, persistBubbles, studioReviewReady]);
 
   /** 对话记忆 → 右栏回放与生成条件共用的那份真相（人数/活动名/布置形态）。 */
   function syncMemory(memory: BriefMemory): void {
@@ -3351,23 +3370,22 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo}/>
-      {activity && agent.historyReviewRequired && <section className="ap-card" aria-label="历史需求待核对">
-        <strong>历史需求待核对</strong>
-        <p>历史状态尚未核对，首次进入也可能出现此提示。你可以继续交流；若按当前已记录的需求重新开始，之前未确认或未处理的要求不会自动纳入，旧预览会被收回。</p>
-        <button type="button" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
+      {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card" aria-label="历史需求待核对">
+        <p className="ap-status-line">当前记录还未核对。</p>
+        <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
       </section>}
       {activity && agent.retainedOtherSessionProposal && <section className="ap-card" aria-label="其他会话的旧方案">
         <p>其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
         <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
       </section>}
-      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card" aria-label="尚未处理的要求">
-        <strong>尚未处理的要求（{agent.unresolvedDialogue.length}）</strong>
-        <p>这些要求尚未完成。已经理解或做成预览的要求会从这里拿掉。</p>
-        <button type="button" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
-        <details open>
-          <summary>查看这 {agent.unresolvedDialogue.length} 项</summary>
-          {agent.unresolvedDialogue.map(text=><div key={text}><p>{text}</p><button type="button" onClick={()=>agent.withdrawUnresolvedDialogue(text)}>撤回这项要求</button></div>)}
-        </details>
+      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card ap-status-card" aria-label="尚未处理的要求">
+        <div className="ap-status-head">
+          <strong>尚未处理的要求（{agent.unresolvedDialogue.length}）</strong>
+          <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
+        </div>
+        <ul className="ap-pending-chips">
+          {agent.unresolvedDialogue.map(text => <li key={text}><span title={text}>{text}</span><button type="button" className="ap-pending-x" aria-label={`撤回：${text}`} onClick={() => agent.withdrawUnresolvedDialogue(text)}>×</button></li>)}
+        </ul>
       </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
       {bingo && <div className="ap-card" aria-label="审校状态台">
@@ -3470,7 +3488,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
         }}/>
         </div>
-        {processText && <p role="status" className="ap-small">{processText}{agent.understanding && processText === '正在理解活动需求…' && <> <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></>}</p>}
+        {processText && <p role="status" className={`ap-process${processText.startsWith('已尝试') ? ' is-failed' : ''}`}>{processText}{agent.understanding && processText === '正在理解活动需求…' && <> <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></>}</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         <p id="ap-data-notice" className="ap-small">{understandingLine(Boolean(modelEnabled() && studio?.controller))}{process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1'?'对话可能发送本场近期文字和模型回复。':''}</p>

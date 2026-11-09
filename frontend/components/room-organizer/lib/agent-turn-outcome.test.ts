@@ -21,6 +21,25 @@ describe('model turn outcome', () => {
     expect(outcome).toEqual({kind:'understood',next:'reply'});
     expect(incompleteUpdateForOutcome(outcome)).toBe('clear_current');
   });
+  it('clears an ask the local rules already answered when the model fails', () => {
+    const asked=turn();
+    asked.resolution='failed';
+    asked.kind='ask';
+    asked.text='还差人数和场地尺寸。说一下，我再出预览。';
+    const outcome=resolvedTurnOutcome(asked,initialBriefMemory(),false,'想把会场摆成围坐');
+    expect(outcome).toEqual({kind:'understood',next:'ask'});
+    expect(incompleteUpdateForOutcome(outcome)).toBe('clear_current');
+    const recorded=turn();
+    recorded.resolution='unavailable';
+    recorded.kind='ack';
+    recorded.text='已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。';
+    expect(incompleteUpdateForOutcome(resolvedTurnOutcome(recorded,initialBriefMemory(),false,'80人'))).toBe('clear_current');
+    const missed=turn();
+    missed.resolution='failed';
+    missed.kind='ack';
+    missed.text='这句我没接住。已记下：80 人。';
+    expect(incompleteUpdateForOutcome(resolvedTurnOutcome(missed,initialBriefMemory(),false,'圆桌'))).toBe('mark');
+  });
   it('clears a freeform ask and waits to clear a preview until the candidate exists', () => {
     const asked=turn();asked.kind='ask';
     expect(incompleteUpdateForOutcome(resolvedTurnOutcome(asked,initialBriefMemory(),false,'想围坐着聊天'))).toBe('clear_current');
