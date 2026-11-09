@@ -13,7 +13,7 @@
  * 模型化路径：turn 函数是唯一接缝，后续接 Vercel AI SDK（选型见 docs/plans/agent-reference-study.md）
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
-import { classifyLocalLayout, formatArea, HEADCOUNT_MAX, layoutGenerateCommand, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
+import { classifyLocalLayout, formatArea, HEADCOUNT_MAX, layoutGenerateCommand, mentionsCircleSeating, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
 import type { LocalSeatingSpecs } from './local-seating-specs';
 import type { SeatingAllocation } from './seating-allocation';
 import type { OriginalPreservation } from './original-preservation';
@@ -55,6 +55,8 @@ export interface BriefMemory {
   scaleNeedsReconfirmation?: boolean | undefined;
   previousVenueScale?: { lengthM:number | null; widthM:number | null; areaM2:number | null } | undefined;
   layoutMode: LayoutMode;
+  /** ring = 圆桌沿环/扇形摆；grid = 课桌行列。缺省沿用原方格餐桌。 */
+  seatingShape?: 'ring' | 'grid' | undefined;
   /** 只有用户明确选择或确认后，才能把布局方式用于生成。 */
   layoutModeConfirmed?: boolean | undefined;
   /** 用户否定或尚未决定布置方式时，等待明确指定替代方式。 */
@@ -211,7 +213,7 @@ export function cloudBriefMessage(raw: string, memory: BriefMemory): string {
   if (memory.venueIO) facts.push(`场地：${memory.venueIO === 'indoor' ? '室内' : '户外'}`);
   if (memory.lengthM !== null && memory.widthM !== null) facts.push(`尺寸：${formatArea(memory.lengthM)} × ${formatArea(memory.widthM)} 米`);
   else if (memory.areaM2 !== null) facts.push(`面积：${formatArea(memory.areaM2)} 平方米（长宽未确认）`);
-  if (memory.layoutModeConfirmed === true) facts.push(memory.layoutMode === 'desk-chair' ? '布置：课桌配椅' : '布置：圆桌');
+  if (memory.layoutModeConfirmed === true) facts.push(memory.layoutMode === 'desk-chair' ? '布置：课桌配椅' : memory.seatingShape === 'ring' ? '布置：圆桌围坐，沿环形或扇形摆，椅子绕桌，不要排成方格，中间留过道' : '布置：圆桌');
   if(memory.localSeatingAllocation)facts.push(`桌椅人数关系的用户原话：${JSON.stringify(memory.localSeatingAllocation.evidence)}；${memory.localSeatingAllocation.status==='unknown'?'关系尚未确定，不能擅自改写。':'仅作用户需求，仍需检查方案。'}`);
   const specs=cloudSeatingSpecs(memory);
   if(specs){
@@ -362,14 +364,15 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   const diningClauses = clauses.filter(clause => /(?:圆桌|餐桌)/.test(clause) && usableLayoutClause(clause));
   const diningExplicit = diningClauses.some(clause => !/(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause));
   const diningAmbiguous = diningClauses.some(clause => /(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause));
-  if (deskExplicit && !deskAmbiguous && !diningExplicit) { memory.layoutMode = 'desk-chair'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
-  else if (diningExplicit && !diningAmbiguous && !deskExplicit) { memory.layoutMode = 'dining'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
+  if (deskExplicit && !deskAmbiguous && !diningExplicit) { memory.layoutMode = 'desk-chair'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; memory.seatingShape = 'grid'; }
+  else if (diningExplicit && !diningAmbiguous && !deskExplicit) { memory.layoutMode = 'dining'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; memory.seatingShape = 'ring'; }
   else if (deskAmbiguous || diningAmbiguous || (deskExplicit && diningExplicit)) { memory.layoutModeUnresolved = true; memory.layoutModeConfirmed = false; }
-  // 「围成一圈 / 不要课桌改沙发」is a circle preview. Literal sofas are not auto-placed; round tables are.
-  if ((/围成一圈|围一圈|围坐/.test(compact) || /(?:不要|别用|不用).{0,8}(?:课桌|课椅|桌椅)/.test(compact) && /沙发|圆桌|围|休闲/.test(compact)) && !deskExplicit && !/(?:不要|不想|别|不围)围/.test(compact)) {
+  // 「围着坐 / 大家围着 / 围成一圈 / 不要课桌改沙发」is a circle preview. Literal sofas are not auto-placed; round tables are.
+  if ((mentionsCircleSeating(raw) || /(?:不要|别用|不用).{0,8}(?:课桌|课椅|桌椅)/.test(compact) && /沙发|圆桌|围|休闲/.test(compact)) && !deskExplicit && !/(?:不要|不想|别|不围)围/.test(compact)) {
     memory.layoutMode = 'dining';
     memory.layoutModeUnresolved = false;
     memory.layoutModeConfirmed = true;
+    memory.seatingShape = 'ring';
   }
   // 模型路径：layoutMode 由 /brief/extract 直接给出，规则没接住时兜进来。
   const mentionedLayoutClauses=clauses.filter(clause=>DESK_CHAIR_PATTERN.test(clause)||/(?:圆桌|餐桌)/.test(clause));

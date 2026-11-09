@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkDim, classifyFile, classifyLocalLayout, describeExtraction, hasBriefSignals, isBriefFactUtterance, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isLayoutOnlyUtterance, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, layoutGenerateCommand, mentionsUnsupportedSeating, omitHandledLayoutActions, parseBriefSentence, parseMaterialRequest, pendingPlanOf, prepareAholoAsk, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale } from './workbench-agent';
+import { checkDim, classifyFile, classifyLocalLayout, describeExtraction, hasBriefSignals, isBriefFactUtterance, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isLayoutOnlyUtterance, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, layoutGenerateCommand, lightPlanRail, mentionsCircleSeating, mentionsUnsupportedSeating, normalizeOralSize, omitHandledLayoutActions, parseBriefSentence, parseMaterialRequest, pendingPlanOf, prepareAholoAsk, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale } from './workbench-agent';
 
 describe('workbench agent v2.4', () => {
   it('shows a bounded server seating shortfall without calling an object limit venue capacity',()=>{
@@ -87,6 +87,17 @@ describe('workbench agent v2.4', () => {
       expect(classifyLocalLayout(text), text).toBe('revise');
       expect(isGenerateCommand(text), text).toBe('again');
     }
+    for (const text of ['想围着坐', '围着坐', '大家围着']) {
+      expect(mentionsCircleSeating(text), text).toBe(true);
+      expect(classifyLocalLayout(text), text).toBe('generate');
+      expect(isGenerateCommand(text), text).toBe('first');
+      expect(prepareAholoAsk(text), text).toBeNull();
+    }
+    expect(mentionsCircleSeating('不想围着坐')).toBe(false);
+    expect(classifyLocalLayout('不想围着坐')).toBeNull();
+    expect(isBriefFactUtterance('80人，室内20米乘15米')).toBe(true);
+    expect(lightPlanRail('想围着坐')).toBeNull();
+    expect(lightPlanRail('20米乘15米，80人，想围着坐，留条过道')).toEqual(['立壳', '摆座', '留过道', '确认']);
     expect(classifyLocalLayout('先出一版看看')).toBe('generate');
     expect(isGenerateCommand('先出一版看看')).toBe('first');
     expect(classifyLocalLayout('请帮我办消防验收')).toBe('cannot');
@@ -121,6 +132,13 @@ describe('一句话开场解析', () => {
   });
   it('normalises full-width digits and × separators', () => {
     expect(parseBriefSentence('１２×１６米，５０人工作坊')).toMatchObject({ lengthM: 12, widthM: 16, headcount: 50, event: '工作坊' });
+  });
+  it('reads spoken sizes the same way as 室内 NxM', () => {
+    expect(normalizeOralSize('20米乘15米')).toBe('20x15');
+    for (const text of ['20 米乘 15 米', '20米乘以15米', '长20宽15', '长20米，宽15米', '20 by 15']) {
+      expect(parseBriefSentence(`室内${text}`), text).toMatchObject({ lengthM: 20, widthM: 15, venueIO: 'indoor' });
+    }
+    expect(parseBriefSentence('室内 12×9')).toMatchObject({ lengthM: 12, widthM: 9, venueIO: 'indoor' });
   });
   it('reads 酒会 as the event and leaves 宴会厅 as the room', () => {
     expect(parseBriefSentence('80 人室内酒会')).toMatchObject({ headcount: 80, venueIO: 'indoor', event: '酒会' });

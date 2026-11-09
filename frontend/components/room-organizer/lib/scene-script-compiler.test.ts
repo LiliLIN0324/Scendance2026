@@ -99,6 +99,20 @@ describe('compileSceneScript — 简报落地成可拖的一版', () => {
     expect(result.removing).toBe(1);
     expect(finalItems(result.layouts[result.layouts.length - 1]!).some((item) => item.id === 'loose-1')).toBe(false);
   });
+
+  it('围坐用环形圆桌，椅子不排成正方四角', () => {
+    const result = compileSceneScript(script({ guests: 12 }), { base: baseLayout(), floorIndex: 0, makeId: ids(), seatingShape: 'ring' });
+    const items = finalItems(result.layouts[result.layouts.length - 1]!);
+    const chairs = items.filter(item => item.type === 'dining-chair' && item.name === '餐椅');
+    expect(chairs.length).toBeGreaterThanOrEqual(6);
+    const table = items.find(item => item.type === 'dining-table' && item.name === '圆桌');
+    expect(table?.position).toBeTruthy();
+    const radii = chairs
+      .filter(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)) < 2)
+      .map(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)));
+    expect(radii.length).toBe(6);
+    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.08);
+  });
 });
 
 describe('compileSceneScript — 脚本不成立时先说清，不硬建', () => {

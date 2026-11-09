@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chipsAfterFulfilled, composeProcessStrip } from './turn-process';
+import { chipsAfterFulfilled, chipsAfterLayoutPreview, composeProcessStrip } from './turn-process';
 
 const idle = { understanding: false, generating: false, cloudRunning: false, cloudRound: 0, cloudTool: false, failed: null } as const;
 
@@ -22,5 +22,10 @@ describe('pending chips after a fulfilled turn', () => {
   it('removes only the utterance that was understood or previewed', () => {
     expect(chipsAfterFulfilled(['沙发布置', '把椅子往左挪'], ['沙发布置'])).toEqual(['把椅子往左挪']);
     expect(chipsAfterFulfilled(['把椅子往左挪'], [])).toEqual(['把椅子往左挪']);
+  });
+  it('clears a related seating chip when the layout preview succeeds', () => {
+    expect(chipsAfterLayoutPreview(['想围着坐', '把椅子往左挪'], ['出一版'])).toEqual(['把椅子往左挪']);
+    expect(chipsAfterLayoutPreview(['想围着坐'], ['想围着坐'])).toEqual([]);
+    expect(chipsAfterLayoutPreview(['把椅子往左挪'], [])).toEqual(['把椅子往左挪']);
   });
 });

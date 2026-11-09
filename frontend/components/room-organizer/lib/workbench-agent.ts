@@ -85,7 +85,7 @@ function layoutCompact(text: string): string {
 }
 
 /** Stems for “arrange this room”, plus nearby wording like tighter, prettier, more aisle. */
-const LAYOUT_STEM = /布置|摆法|摆一下|摆一版|摆个|来摆|帮我摆|重新摆|围成|围坐|围一圈|出一版|先出/;
+const LAYOUT_STEM = /布置|摆法|摆一下|摆一版|摆个|来摆|帮我摆|重新摆|围成|围坐|围一圈|围着坐|大家围着|出一版|先出/;
 const REVISE_HINT = /换|重新|再布置|再摆|再来一版|再出一版|另一种|围成|围坐|围一圈|紧凑|松一点|疏一点|密一点|好看|大气|随意一点|正式一点|过道|通道|留空|留点|按刚才/;
 const SEATING_SWAP = /(?:不要|别用|不用).{0,8}(?:课桌|课椅|桌椅).{0,8}(?:沙发|圆桌|围|休闲)|(?:改|换)成?沙发/;
 const LAYOUT_OTHER_ACTION = /(?:删除|移除|撤掉|挪动|挪到|往左|往右|导出|交接|清单|旋转|放大|缩小|涂成|刷成|加一把|加一张|加两|再加|加个|加一个)/;
@@ -100,9 +100,24 @@ function isBareSeatingChoice(compact: string): boolean {
   return /^(?:请|帮我|我想|想)?(?:把)?(?:会场|场地)?(?:用|改成|换成|摆成|排成|布置成|要|采用|选择|按)?(?:圆桌|餐桌|课桌椅)(?:布置|摆法)?$/.test(compact);
 }
 
+/** Spoken size → the same NxM the indoor form already understands. */
+export function normalizeOralSize(text: string): string {
+  return text
+    .replace(/(\d+(?:\.\d+)?)(?:米|m)?(?:乘以|乘)(\d+(?:\.\d+)?)(?:米|m)?/gi, '$1x$2')
+    .replace(/长(\d+(?:\.\d+)?)(?:米|m)?[，,]?宽(\d+(?:\.\d+)?)(?:米|m)?/g, '$1x$2')
+    .replace(/(\d+(?:\.\d+)?)(?:米|m)?by(\d+(?:\.\d+)?)(?:米|m)?/gi, '$1x$2');
+}
+
+/** 想围着坐 / 围着坐 / 大家围着, and the older 围坐 forms. A refusal is not a request. */
+export function mentionsCircleSeating(text: string): boolean {
+  const compact = layoutCompact(text);
+  if (!compact || /(?:不要|不想|别|不围)围/.test(compact)) return false;
+  return /围着坐|大家围着|围成一圈|围一圈|围坐|围成/.test(compact);
+}
+
 /** Headcount, venue size, indoor/outdoor, or a seating word, with no other request left over. */
 export function isBriefFactUtterance(text: string): boolean {
-  const compact = layoutCompact(text);
+  const compact = normalizeOralSize(layoutCompact(text)).replace(/[×X＊✕]/g, 'x').toLowerCase();
   if (!compact) return false;
   const remainder = compact
     .replace(/(?:大约|大概|预计|约|左右)/g, '')
@@ -110,7 +125,7 @@ export function isBriefFactUtterance(text: string): boolean {
     .replace(/\d+(?:\.\d+)?(?:米|m)?[×xX*]\d+(?:\.\d+)?(?:米|m)?/g, '')
     .replace(/\d+(?:\.\d+)?(?:平方米|平米|平方公尺|㎡|m²|m2|平)/g, '')
     .replace(/(?:室内|户外|室外|场馆|宴会厅|会议室|大厅|礼堂)/g, '')
-    .replace(/(?:圆桌|餐桌|课桌椅|课桌|课椅|围坐|围成一圈|围一圈)/g, '')
+    .replace(/(?:想围着坐|围着坐|大家围着|圆桌|餐桌|课桌椅|课桌|课椅|围坐|围成一圈|围一圈)/g, '')
     .replace(/[，,。！!；;、]/g, '');
   return remainder.length === 0;
 }
@@ -119,7 +134,7 @@ export function isBriefFactUtterance(text: string): boolean {
 export function mentionsUnsupportedSeating(text: string): boolean {
   const compact = layoutCompact(text);
   if (!compact || /[?？]|是什么意思/.test(compact) || /(?:不要|别)(?:用|要)?沙发/.test(compact)) return false;
-  return /(?:沙发|休闲椅|席地|坐地上)/.test(compact) && /(?:围成|围坐|围一圈|布置|摆|改|换)/.test(compact);
+  return /(?:沙发|休闲椅|席地|坐地上)/.test(compact) && /(?:围着坐|大家围着|围成|围坐|围一圈|布置|摆|改|换)/.test(compact);
 }
 
 export const CIRCLE_SEATING_NOTE = '围坐先按圆桌出预览，沙发还不能按实物摆进画布。';
@@ -132,6 +147,7 @@ export const CIRCLE_SEATING_NOTE = '围坐先按圆桌出预览，沙发还不�
 export function classifyLocalLayout(text: string): LocalLayoutClass | null {
   const compact = layoutCompact(text);
   if (!compact || LAYOUT_OTHER_ACTION.test(compact) || REFUSE_LAYOUT.test(compact)) return null;
+  if (/(?:不要|不想|别|不围)围/.test(compact) && !/(?:布置|摆一下|摆一版|出一版|先出|摆法)/.test(compact)) return null;
   if (/是什么意思/.test(compact)) return null;
   const polite = /能不能|可不可以|行不行|可以帮我|帮我/.test(compact);
   if (/[?？吗]|如何|怎样|怎么|是否|要不要/.test(compact) && !polite) return null;
@@ -550,9 +566,28 @@ export function suggestDimsFromImageRatio(pixelWidth: number, pixelHeight: numbe
   };
 }
 
+/**
+ * A short rail for a compound ask: shell, seats, aisle, confirm.
+ * Simple one-liners stay a single preview. Confirm is still a person.
+ */
+export function lightPlanRail(text: string): readonly string[] | null {
+  const compact = layoutCompact(text);
+  const seating = mentionsCircleSeating(compact) || /圆桌|课桌|布置|摆一|出一版/.test(compact);
+  if (!seating) return null;
+  const parsed = parseBriefSentence(text);
+  const sized = parsed.lengthM !== null || parsed.areaM2 !== null;
+  const aisle = /过道|通道|留空/.test(compact);
+  const clauses = compact.split(/[，,；;]/).filter(Boolean).length;
+  if (!(sized || aisle || clauses >= 2)) return null;
+  const steps = ['立壳', '摆座'];
+  if (aisle || /签到|舞台/.test(compact) || clauses >= 3) steps.push('留过道');
+  steps.push('确认');
+  return steps;
+}
+
 /** 解析一句话活动描述。全角数字归一，先抠面积/长宽再数人数，避免「300平米」被当成人头。 */
 export function parseBriefSentence(raw: string): BriefExtraction {
-  const text = normalizeDimInput(raw).replace(/[×X＊✕]/g, 'x').toLowerCase();
+  const text = normalizeOralSize(normalizeDimInput(raw).replace(/[×X＊✕]/g, 'x')).toLowerCase();
   const found: BriefExtraction = { event: null, headcount: null, areaM2: null, lengthM: null, widthM: null, venueIO: null, timeOfDay: null };
   let rest = text;
 
