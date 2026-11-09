@@ -1,5 +1,5 @@
 'use client';
-import { localRestoreAvailable, requireLocalRestoreAvailable } from '@/lib/local-project-restore';
+import { isFreshActivityId, localRestoreAvailable, proveFreshActivityScopeUnused, requireLocalRestoreAvailable, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 
 import { ArrowLeft, ArrowUp, Check, Loader2, Maximize2, Minimize2, RefreshCw, SlidersHorizontal, Sparkles, Trash2, X } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
@@ -173,7 +173,7 @@ export async function withApplyLock<T>(scope: string, run: () => Promise<T>): Pr
 }
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
 export type SeatingAllocationCapture={status:'ready';value:AgentRunInput['context']['seatingAllocation'];specs?:AgentRunInput['context']['seatingSpecs']|undefined;defaults?:{desk?:string|undefined;chair?:string|undefined}|undefined;token:string;annotationObservation?:AgentRunInput['context']['annotationObservation'];annotationProvenance?:readonly AnnotationProof[];readAnnotationReview?:()=>{observation:NonNullable<AgentRunInput['context']['annotationObservation']>;provenance:readonly AnnotationProof[]}|null;isCurrent:()=>boolean}|{status:'unavailable'};
-interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; controller: BackendSession; layout: RoomLayout; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
+interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; controller: BackendSession; layout: RoomLayout; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; commitFreshActivityLayout?(next: RoomLayout, clearance: FreshActivityScopeClearance): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 function serializeReadonlyBrief(scope:string,kind:'original'|'draft',value:unknown):string {
   const envelope={format:'scendance-readonly-brief-v1',scope,kind,notice:kind==='original'?'原始本机保存记录；来源及确认状态均需独立核对。':'当前未保存的页面草稿；不代表已保存或已确认。',value};
@@ -187,7 +187,7 @@ function downloadReadonlyBrief(json:string,kind:'original'|'draft'):void {
   finally{setTimeout(()=>URL.revokeObjectURL(url),0);}
 }
 export interface LocalProjectBackupActions {
-  prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void): Promise<void>; undoRestore(): Promise<void>;
+  prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void): Promise<void>; createFreshActivity?(candidate: LocalProjectRestoreCandidate, assertSwitchCurrent?: () => void): Promise<void>; undoRestore(): Promise<void>;
   backupPending: boolean; canUndoRestore: boolean;
 }
 interface StudioValue extends LocalProjectBackupActions {
@@ -262,7 +262,7 @@ export function clearUnsentMessageDraftsForTests(){unsentMessageDrafts.clear();i
 const PARTIAL_RUN_NOTICE='后续处理中断，已保留通过检查的方案，请核对后继续。';
 const ANNOTATION_BLOCK='新布置占用了已标路线或预留区，请调整后重新生成。';
 
-export function CreativeStudioProvider({ pendingCandidates, reviewContext, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken,isFloorCurrent, captureMobility,captureDialogue,captureSeatingAllocation,getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
+export function CreativeStudioProvider({ pendingCandidates, reviewContext, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken,isFloorCurrent, captureMobility,captureDialogue,captureSeatingAllocation,getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, commitFreshActivityLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
   const applyAuthority=useRef<{capability:LocalWriteCapability|undefined;source:SourceWriteGuard|undefined;revoked:boolean;abort:AbortController}|null>(null);
   if(!applyAuthority.current&&(writeCapability||sourceWriteGuard))applyAuthority.current={capability:writeCapability,source:sourceWriteGuard,revoked:false,abort:new AbortController()};
   else if(applyAuthority.current&&(writeCapability!==applyAuthority.current.capability||sourceWriteGuard!==applyAuthority.current.source)){
@@ -851,11 +851,11 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     if(!isLocalActivityWorkspace(controller))throw new Error('当前工作台连接了云项目，请先切换到本地项目再恢复备份。');
     if(!prepareRestoreLayout||!commitRestoredLayout)throw new Error('此工作台尚未开放完整备份恢复。');
   }
-  async function disconnectSceneForRestore():Promise<void> {
+  async function disconnectSceneForRestore(purpose:'restore'|'fresh'='restore'):Promise<void> {
     if(!controller.getSnapshot().geometryBinding)return;
     const before={layout:layoutRef.current,scope:scopeRef.current,edits:briefEditEpoch.current,user:controller.getSnapshot().user?.id};
     await controller.disconnectGeometryWorkbench();
-    if(!alive.current||controllerRef.current!==controller||layoutRef.current!==before.layout||scopeRef.current!==before.scope||briefEditEpoch.current!==before.edits||controller.getSnapshot().user?.id!==before.user)throw new Error('断开场景连接期间活动有新改动，未继续恢复。当前资料已保留，请重新核对。');
+    if(!alive.current||controllerRef.current!==controller||layoutRef.current!==before.layout||scopeRef.current!==before.scope||briefEditEpoch.current!==before.edits||controller.getSnapshot().user?.id!==before.user)throw new Error(purpose==='fresh'?'断开场景连接期间活动有新改动，未继续新建。当前资料已保留，请重新核对。':'断开场景连接期间活动有新改动，未继续恢复。当前资料已保留，请重新核对。');
   }
   async function writeBackupBrief(targetScope:string,value:CreativeBrief|undefined):Promise<void> {
     if(value===undefined)await deleteSourceForm(`${targetScope}:brief`);
@@ -918,6 +918,44 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const held=editorLease.current;editorLease.current=undefined;
     await held?.lease.release();
     if(held&&editorLeases.current.get(held.scope)===held.lease)editorLeases.current.delete(held.scope);
+  }
+  async function createFreshActivity(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void):Promise<void> {
+    assertSwitchCurrent?.();
+    if(requestPending.current)throw new Error('助手仍在处理，请先等待或取消当前任务，再新建活动。');
+    if(!isLocalActivityWorkspace(controller))throw new Error('当前工作台连接了云项目，请先切换到本地项目再新建活动。');
+    if(!commitFreshActivityLayout)throw new Error('此工作台尚未开放新建活动。');
+    const checked=validateLocalProjectRestoreCandidate(candidate);
+    if(checked.source!=='backup'||checked.backupVersion!==3||checked.brief.status!=='absent'||checked.materialCheckins.status!=='absent'||checked.sourceDocuments.status!=='not-in-file')throw new Error('新建活动不能用来恢复旧备份。');
+    const proposed=checked.layout;
+    if(proposed.eventOperations||proposed.productionPlan||proposed.designBook||proposed.floorPlanImage||proposed.itemLayers)throw new Error('新建活动不能带入旧的执行资料或方案历史。');
+    const proposedId=proposed.id;
+    if(!isFreshActivityId(proposedId)||proposedId===scopeRef.current)throw new Error('新活动编号无效或与当前活动重复，未切换。');
+    assertSwitchCurrent?.();
+    const lease=writeCapability?localWriteCapabilityGuard(writeCapability):undefined;
+    lease?.assertStillHeld();
+    await disconnectSceneForRestore('fresh');
+    assertSwitchCurrent?.();
+    lease?.assertStillHeld();
+    const operation=beginBackupOperation(assertSwitchCurrent);
+    try {
+      await flushBackupBase(operation);
+      lease?.assertStillHeld();
+      await releaseEditorForRestore(false);
+      operation.check();
+      await withSourceRestoreLock([operation.base.scope,proposedId],async()=>{
+        operation.check();
+        lease?.assertStillHeld();
+        const clearance=await proveFreshActivityScopeUnused(proposedId,operation.base.scope);
+        operation.check();
+        lease?.assertStillHeld();
+        flushSync(()=>{
+          operation.check();
+          lease?.assertStillHeld();
+          commitFreshActivityLayout!(proposed,clearance);
+          adoptRestoredBrief(proposedId,undefined);
+        });
+      });
+    } finally {endBackupOperation();}
   }
   async function restoreBackup(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void):Promise<void> {
     requireLocalRestoreAvailable();
@@ -1916,7 +1954,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     }finally{materialDraftExportPending.current=false;}
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateAnnotationAdvisory,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,createFreshActivity,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateAnnotationAdvisory,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}><UnsavedSourceNotice scope={scope}/>{children}</StudioContext.Provider>;
 }
 
