@@ -10,6 +10,13 @@ verify_jwt = false
 entrypoint = "./functions/scene-api/index.ts"
 import_map = "./functions/deno.json"
 
+[functions.conversation-api]
+enabled = true
+# The narrow handler delegates bearer authentication and CORS to createApi.
+verify_jwt = false
+entrypoint = "./functions/conversation-api/index.ts"
+import_map = "./functions/deno.json"
+
 [functions.generation-worker]
 enabled = true
 verify_jwt = false
