@@ -24,6 +24,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
+import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -93,7 +94,7 @@ import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
 import { requestAgentStop } from './agent-chat-store';
-import { AgentRunPanel, useAgentRun } from './agent-run-panel';
+import { useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
@@ -3126,6 +3127,30 @@ export function VenuePickerOverlay(): JSX.Element | null {
   </div>;
 }
 
+function ToolCallTrace({ line, rows, understanding, onStop }: {
+  line: string | null;
+  rows: ReturnType<typeof toolTraceRows>;
+  understanding: boolean;
+  onStop(): void;
+}): JSX.Element | null {
+  if (!line && rows.length === 0) return null;
+  const status = toolChipStatus(line);
+  const running = rows.some(row => row.status === 'running') || status === 'running';
+  return <section className="ap-tools" aria-label="工具调用">
+    {line && status && <p role="status" className={`ap-tool-chip is-${status}`}>
+      <span className="ap-tool-state">{toolStatusWord(status)}</span>
+      <span>{line}</span>
+      {understanding && line === '正在理解活动需求…' && <button type="button" onClick={onStop}>停止等待</button>}
+    </p>}
+    {rows.length > 0 && <details>
+      <summary>{running ? '正在调用工具' : '工具结果'} · {rows.length}</summary>
+      <ol className="ap-tool-rows">
+        {rows.map(row => <li key={row.id}><span>{row.name}</span><span>{toolStatusWord(row.status)}</span><span>{row.result}</span></li>)}
+      </ol>
+    </details>}
+  </section>;
+}
+
 function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?: boolean }): JSX.Element {
   const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
   return <>{list.map(bubble => {
@@ -3374,6 +3399,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo}/>
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' ? toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog }) : []} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card" aria-label="历史需求待核对">
         <p className="ap-status-line">当前记录还未核对。</p>
         <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
@@ -3414,7 +3440,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
             没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
-        <AgentRunPanel scope="layout" controls={false}/>
         {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.stepLog.length > 0}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
           <p><span aria-hidden="true">!</span>这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
@@ -3490,7 +3515,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
         }}/>
         </div>
-        {processText && <p role="status" className={`ap-process${processText.startsWith('已尝试') ? ' is-failed' : ''}`}>{processText}{agent.understanding && processText === '正在理解活动需求…' && <> <button type="button" onClick={agent.cancelUnderstanding}>停止等待</button></>}</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         <p className="ap-foot">
