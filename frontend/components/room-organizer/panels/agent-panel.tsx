@@ -77,8 +77,8 @@ import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE, SAFETY_CHECKS_UNKNOWN_TEXT, SEATING_ALLOCATION_UNVERIFIED_TEXT, SEATING_HEADCOUNT_UNVERIFIED_TEXT, SEATING_SPECS_UNVERIFIED_TEXT,
-  checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
+  checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutGenerateCommand, mentionsUnsupportedSeating, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
   prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type RevisionRequest, type VenueIO,
 } from '../lib/workbench-agent';
@@ -352,9 +352,16 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
 }
 
 /** 脚本那一路会带上「计划读白」：先让人核对计划，再看绿框；旧路径没有计划可念。 */
-function scriptSummaryOf(plan: PlanProposal): string {
+function scriptSummaryOf(plan: PlanProposal, memory?: BriefMemory): string {
   const summary = (plan as PlanProposal & { summary?: string[] }).summary;
-  return Array.isArray(summary) && summary.length ? `${summary.join(' · ')}。` : '';
+  if (!Array.isArray(summary) || !summary.length) return '';
+  const lines = summary.filter(line => {
+    if (!memory) return true;
+    if (/尚未确认是否需要签到/.test(line) && memory.zoneNeeds.checkin === null && !memory.unresolvedActivityNeeds.includes('checkin')) return false;
+    if (/尚未确认是否需要舞台/.test(line) && memory.zoneNeeds.stage === null && !memory.unresolvedActivityNeeds.includes('stage')) return false;
+    return true;
+  });
+  return lines.length ? `${lines.join(' · ')}。` : '';
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
@@ -1605,7 +1612,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
     // 脚本那一路先把计划念一遍（哪些区、各多大、几座），再报件数与原因；两件都摆不下时
     // 原因跟着共享账本来，不再只留一个数字。明细仍完整留在下面那张卡。
-    const planned = scriptSummaryOf(plan);
+    const planned = scriptSummaryOf(plan, memoryRef.current);
     const counted = outcomeLines(planView.outcome).filter(line => line.length > 0).join('；');
     say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
       ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。`
@@ -2314,7 +2321,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         say({role:'agent',amber:true,text:'还有需求待确认，请先核对后再确认布置。'});return;
       }
       if(phaseRef.current!=='proposed'||(!proposal.current&&!studioRef.current?.preview)){
-        say({role:'agent',amber:true,text:'当前没有可确认的布置预览；请先生成并核对方案。'});return;
+        say({role:'agent',amber:true,text:'当前没有可确认的布置预览。说一下想怎么摆，我再出一版给你确认。'});return;
       }
       confirmProposal();return;
     }
@@ -2489,8 +2496,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (isExportCommand(trimmed)) { proposeExport(); return; }
     }
     const command = mixedUtility ? null : isGenerateCommand(trimmed);
-    // 话锋一变，上一版预览就不再代表这次的要求：先收掉，别让两张卡同屏打架。
-    if (!unifiedConversation && (phase === 'proposed' || phase === 'paused')) { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
+    // 布置跟进先留着当前预览。生成开始才会换成新的一版；还差事实时确认入口还在。
+    const relatedLayout = !mixedUtility && layoutGenerateCommand(trimmed) !== null;
+    if (!unifiedConversation && !relatedLayout && (phase === 'proposed' || phase === 'paused')) { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
     // 对话核心：真模型（scene-api /brief/extract，key 在 Supabase secrets）优先提槽位，
     // 失败/未配置自动回退规则版；记忆合并、防复读、出方案闸门都在 brief-agent 状态机里。
     if(pendingModelInputs.current.has(trimmed)){say({role:'agent',amber:true,text:'这句需求仍在处理中，请等待结果。'});return;}
@@ -2602,11 +2610,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     anchorsRef.current = anchors;
     const scale = scaleFrom(merged);
     const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
-    const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage ? '舞台' : null,
-      turn.memory.zoneNeeds.checkin === null && !anchors.checkin ? '签到区' : null].filter(Boolean);
+    const mentionedZone = (kind: 'stage' | 'checkin', word: RegExp) => turn.memory.unresolvedActivityNeeds.includes(kind) || word.test(trimmed);
+    const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
+      turn.memory.zoneNeeds.checkin === null && !anchors.checkin && mentionedZone('checkin', /签到/) ? '签到区' : null].filter(Boolean);
     const summary = `${describeExtraction(merged, scale)}${scale.fromVenue ? ' · 按现在的场地' : ''}`;
     const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
     const mentionedNewMaterial=(turn.memory.reportedInventory??[]).some(item=>!(previousMemory.reportedInventory??[]).some(old=>old.evidence===item.evidence));
+    if (mentionsUnsupportedSeating(trimmed) && !turn.readOnlyReply) say({ role: 'agent', text: CIRCLE_SEATING_NOTE });
     if(turn.modelReply && turn.modelReply!==turn.text)say({role:'agent',text:`建议：${turn.modelReply}`,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});
     if(turn.unhandled?.length){say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});if(turn.kind==='generate')return;}
     if(mixedUtility){say({role:'agent',text:turn.text||'活动需求已记录，请核对；其他操作尚未执行。',...(turn.usesModelText?{modelConversation:true}:{}),...(turn.usesModelText&&turn.materialQueries?.length?{materialQueries:turn.materialQueries}:turn.usesModelText&&mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});return;}

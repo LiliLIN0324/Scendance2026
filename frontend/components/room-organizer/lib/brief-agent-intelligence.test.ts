@@ -180,7 +180,7 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
   it('什么都不知道时没接住：如实说，给一个能照抄的例子', () => {
     const turn = parseBriefTurn('嗯嗯', initialBriefMemory(), bare);
     expect(turn.kind).toBe('none');
-    expect(turn.text).toContain('80 人，室内 12×9');
+    expect(turn.text).toContain('这场活动怎么坐');
   });
 
   it('追问过尺寸还没听到：换一种说法，不重复同一句', () => {
