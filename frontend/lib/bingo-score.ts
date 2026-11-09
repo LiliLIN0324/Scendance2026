@@ -97,13 +97,13 @@ export function computeBingoScore(
 
   let summary: string;
   if (total >= 95 && stuckCount === 0) {
-    summary = `体检通过：${itemCount}件全部可达主通道，0堵点`;
+    summary = `粗略检查发现 ${failedCount} 件待调整；入口、疏散与现场条件仍需核验。`;
   } else if (fixedCount > 0 && stuckCount === 0) {
     summary = `发现 ${fixedCount} 处堵点已自动挪开，${itemCount} 件全部就位`;
   } else if (stuckCount > 0) {
     summary = `发现 ${fixedCount} 处堵点已自动挪开，${stuckCount} 处挪不动已标红（请手动调整）`;
   } else {
-    summary = `体检发现 ${failedCount} 处违规，已标记待调整`;
+    summary = `粗略检查提示 ${failedCount} 件需关注；实际通行与现场条件仍需核验。`;
   }
 
   return {

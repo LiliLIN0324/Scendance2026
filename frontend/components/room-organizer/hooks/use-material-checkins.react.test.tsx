@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { mergeStoredMaterialCheckins, readMaterialCheckins } from '../../../lib/material-checkin-storage';
 import { useMaterialCheckins, type MaterialCheckinState } from './use-material-checkins';
+import { createLocalWriteLeaseManager, type LocalWriteCapability } from '../../../lib/local-write-lease';
 
 vi.mock('../../../lib/material-checkin-storage', async original => ({ ...await original<typeof import('../../../lib/material-checkin-storage')>(),
   readMaterialCheckins: vi.fn(), mergeStoredMaterialCheckins: vi.fn() }));
@@ -16,8 +17,8 @@ class Channel {
 }
 let state: MaterialCheckinState;
 const prepare = vi.fn(async () => () => {});
-function View({ projectId = 'house-a', enabled = true }: { projectId?: string; enabled?: boolean }) {
-  state = useMaterialCheckins({ projectId, enabled, prepareWrite: prepare });
+function View({ projectId = 'house-a', enabled = true, capability }: { projectId?: string; enabled?: boolean; capability?: LocalWriteCapability }) {
+  state = useMaterialCheckins({ projectId, enabled, prepareWrite: prepare, ...(capability ? {writeCapability:capability} : {}) });
   return <output>{state.ready ? state.ledger?.projectId ?? '无点验' : state.error ?? '读取中'}</output>;
 }
 beforeEach(() => {
@@ -71,6 +72,33 @@ describe('material checkin view lifecycle', () => {
     view.rerender(<View projectId="house-b"/>); await waitFor(() => expect(state.ledger?.projectId).toBe('house-b'));
     await act(async () => { release(); await expect(pending).rejects.toThrow('项目已切换'); });
     expect(state.ledger?.projectId).toBe('house-b');
+  });
+  it('排队准备期间失锁，不触发写入且保留点验输入和未确认提示', async () => {
+    const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
+    vi.stubGlobal('navigator',{locks});const manager=createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage});const lease=await manager.acquire();
+    let resume!:(guard:()=>void)=>void;prepare.mockImplementationOnce(()=>new Promise(resolve=>{resume=resolve;}));
+    render(<View capability={lease.capability}/>);await waitFor(()=>expect(state.ready).toBe(true));
+    const proposal=ledger('house-a'),original=structuredClone(proposal);let pending!:Promise<void>;
+    act(()=>{pending=state.onSave(proposal);});await lease.release();
+    await act(async()=>{resume(()=>{});await expect(pending).rejects.toThrow('点验未能确认保存');});
+    expect(proposal).toEqual(original);expect(state.ledger?.projectId).toBe('house-a');expect(mergeStoredMaterialCheckins).not.toHaveBeenCalled();
+  });
+  it('接入过 capability 后失去凭证不降级为无保护写入',async()=>{
+    const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
+    vi.stubGlobal('navigator',{locks});const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
+    const view=render(<View capability={lease.capability}/>);await waitFor(()=>expect(state.ready).toBe(true));
+    view.rerender(<View/>);const proposal=ledger('house-a'),original=structuredClone(proposal);
+    await act(async()=>{await expect(state.onSave(proposal)).rejects.toThrow('点验未能确认保存');});
+    expect(prepare).not.toHaveBeenCalled();expect(mergeStoredMaterialCheckins).not.toHaveBeenCalled();expect(proposal).toEqual(original);await lease.release();
+  });
+  it('保存排队时 capability 被替换会拒绝原请求',async()=>{
+    const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
+    vi.stubGlobal('navigator',{locks});const manager=createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage});const a=await manager.acquire(),b=await manager.acquire();
+    let resume!:(guard:()=>void)=>void;prepare.mockImplementationOnce(()=>new Promise(resolve=>{resume=resolve;}));
+    const view=render(<View capability={a.capability}/>);await waitFor(()=>expect(state.ready).toBe(true));let pending!:Promise<void>;
+    act(()=>{pending=state.onSave(ledger('house-a'));});view.rerender(<View capability={b.capability}/>);
+    await act(async()=>{resume(()=>{});await expect(pending).rejects.toThrow('编辑权已变化');});
+    expect(mergeStoredMaterialCheckins).not.toHaveBeenCalled();await a.release();await b.release();
   });
   it('reports a failed read and can explicitly retry without inventing an empty ledger', async () => {
     vi.mocked(readMaterialCheckins).mockRejectedValueOnce(new Error('原账无法读取'));

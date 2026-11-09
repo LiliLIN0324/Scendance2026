@@ -1,8 +1,7 @@
-import { useCallback, useMemo, useReducer } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   addAnnotation as addAnnotationToDraft,
   createEmptyPlanDraft,
-  DOOR_DEFAULT_WIDTH_M,
   type LayoutPlanDraft,
   type PlanAnnotation,
   type PlanAnnotationKind,
@@ -52,6 +51,10 @@ export interface ZoneRectItem {
   rect: { x: number; z: number; width: number; depth: number };
 }
 
+/** In-memory evidence only; imported drafts never carry this authority. */
+export interface UserRouteBinding { floorId: string; isCurrent(): boolean; isDrawingCurrent?(): boolean }
+export interface UserRouteProvenance { source: 'user'; floorId: string; sourceBasis: 'unknown' }
+
 function bump(state: PlanAnnotationState, next: Omit<PlanAnnotationState, 'revision'>): PlanAnnotationState {
   return { ...next, revision: state.revision + 1 };
 }
@@ -70,8 +73,13 @@ function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationStat
       if (!state.draft) return state;
       // 取消/换一版必须整份关闭（draft 置 null），否则空草案会永远卡在「还没有阶段」。
       return bump(state, { ...state, draft: null, drawMode: 'off' });
-    case 'REPLACE_DRAFT':
-      return bump(state, { ...state, draft: action.draft, nextId: 1 });
+    case 'REPLACE_DRAFT': {
+      const nextId = action.draft.annotations.reduce((next, annotation) => {
+        const match = /^ann-(\d+)$/.exec(annotation.id);
+        return match ? Math.max(next, Number(match[1]) + 1) : next;
+      }, 1);
+      return bump(state, { ...state, draft: action.draft, nextId });
+    }
     case 'TOGGLE_VISIBLE':
       // 可见性是 UI 偏好，不改数据，不 bump revision。
       return { ...state, annotationsVisible: !state.annotationsVisible };
@@ -82,7 +90,7 @@ function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationStat
       // 调用方没先 startDraft 也能直接落（例如「回好自动落区」在一个事件回调里连落多个矩形）：
       // reducer 自己补一份空草案，避免闭包里 state.draft 还是 null 被静默丢弃。
       const base = state.draft ?? createEmptyPlanDraft();
-      const nextDraft = addAnnotationToDraft(base, action.annotation);
+      const nextDraft = addAnnotationToDraft(base, { ...action.annotation, id: `ann-${state.nextId}` });
       return bump(state, {
         ...state,
         draft: nextDraft,
@@ -137,6 +145,11 @@ export interface UsePlanAnnotationsResult {
    * 旧结论在重算完成前应标记为 stale / 「核验中」。
    */
   revision: number;
+  /** Reads the authoritative draft synchronously, including changes queued before React renders. */
+  getSnapshot(): { draft: LayoutPlanDraft | null; revision: number };
+  /** Only consume the exact reviewed draft; a newer change must remain intact. */
+  clearDraftIfRevision(revision: number): boolean;
+  replaceDraftIfRevision(revision: number, draft: LayoutPlanDraft): boolean;
   startDraft(): void;
   clearDraft(): void;
   replaceDraft(draft: LayoutPlanDraft): void;
@@ -155,6 +168,10 @@ export interface UsePlanAnnotationsResult {
     label: string,
     zoneType?: ZoneSemanticType,
   ): void;
+  /** Record provenance only for an actual UI drawing with a live activity/floor/venue fence. */
+  addUserRouteFromPoints(points: PlanPoint[], label: string, binding: UserRouteBinding): boolean;
+  /** Unknown after imported/replaced drafts, refresh, scope change, or geometry change. */
+  getUserRouteProvenance(annotationId: string): UserRouteProvenance | null;
   /**
    * 批量落 zone 矩形（「回好自动落区」专用）。
    * 一次 dispatch 落多个矩形，id 在 reducer 里连续自增；没 draft 时自动建一份空草案。
@@ -162,8 +179,7 @@ export interface UsePlanAnnotationsResult {
    */
   addZoneRects(items: readonly ZoneRectItem[]): void;
   /**
-   * 落一扇用户在画布上真实画的门（inferred 缺省 = 真门，非 withDefaultDoor 推测）。
-   * 落地后 draft_unverified 小字与推测门虚线随之消失，评分层走 verified 门弧检查。
+   * 记录用户在画布上指示的门；宽度或开向缺资料时保持待核验。
    * 没 draft 时由 reducer 自动补一份空草案（同 ADD_ANNOTATION 语义）。
    */
   addDoorAnnotation(door: { wall: PlanDoorWall; position: number; widthM?: number }): void;
@@ -171,17 +187,35 @@ export interface UsePlanAnnotationsResult {
 
 /**
  * 第 7.5 批「规划标注层」本地态：草案、绘制模式、显示开关。
- * 不接 zustand，纯 useReducer；「换一版」由 replaceDraft / clearDraft 完成，
+ * 不接 zustand；同步计算同一个 reducer，React state 只负责展示，
  * RoomLayout 完全不参与，因此规划反复横跳不会污染家具。
  */
 export function usePlanAnnotations(): UsePlanAnnotationsResult {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, setState] = useState<PlanAnnotationState>(initialState);
+  const current = useRef<PlanAnnotationState>(initialState);
+  const routes = useRef(new Map<string, { draftId:string; annotation:string; floorId:string; isCurrent:()=>boolean }>());
+  // Do not read a render closure when confirming a same-batch user edit.
+  const dispatch = useCallback((action: Action) => {
+    const next = reducer(current.current, action);
+    if (next === current.current) return;
+    current.current = next;
+    setState(next);
+  }, []);
+  const getSnapshot = useCallback(() => structuredClone({draft:current.current.draft,revision:current.current.revision}), []);
+  const clearDraftIfRevision = useCallback((revision: number): boolean => {
+    if (!Number.isSafeInteger(revision) || current.current.revision !== revision || !current.current.draft) return false;
+    routes.current.clear();dispatch({type:'CLEAR_DRAFT'});return true;
+  }, [dispatch]);
+  const replaceDraftIfRevision = useCallback((revision: number, draft: LayoutPlanDraft): boolean => {
+    if (!Number.isSafeInteger(revision) || current.current.revision !== revision) return false;
+    routes.current.clear();dispatch({type:'REPLACE_DRAFT',draft:structuredClone(draft)});return true;
+  }, [dispatch]);
 
-  const startDraft = useCallback(() => dispatch({ type: 'START_DRAFT' }), []);
-  const clearDraft = useCallback(() => dispatch({ type: 'CLEAR_DRAFT' }), []);
+  const startDraft = useCallback(() => {routes.current.clear();dispatch({ type: 'START_DRAFT' });}, [dispatch]);
+  const clearDraft = useCallback(() => {routes.current.clear();dispatch({ type: 'CLEAR_DRAFT' });}, [dispatch]);
   const replaceDraft = useCallback(
-    (draft: LayoutPlanDraft) => dispatch({ type: 'REPLACE_DRAFT', draft }),
-    [],
+    (draft: LayoutPlanDraft) => {routes.current.clear();dispatch({ type: 'REPLACE_DRAFT', draft: structuredClone(draft) });},
+    [dispatch],
   );
   const toggleVisible = useCallback(() => dispatch({ type: 'TOGGLE_VISIBLE' }), []);
   const setDrawMode = useCallback(
@@ -194,9 +228,9 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
       if (points.length === 0) return;
       // draft 为 null 时由 reducer 自动补一份空草案（见 ADD_ANNOTATION case），
       // 所以这里不再 early-return；nextId 读闭包，连续多个 annotation 会在 reducer 里自增。
-      const id = `ann-${state.nextId}`;
+      const id = `ann-${current.current.nextId}`;
       // 默认挂到现有最大阶段号；没有阶段时落 1。
-      const stageNo = state.draft?.stages.reduce(
+      const stageNo = current.current.draft?.stages.reduce(
         (max, s) => Math.max(max, s.stageNo),
         0,
       ) || 1;
@@ -231,8 +265,32 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
       };
       dispatch({ type: 'ADD_ANNOTATION', annotation });
     },
-    [state.draft, state.nextId],
+    [dispatch],
   );
+
+  const addUserRouteFromPoints = useCallback((points:PlanPoint[],label:string,binding:UserRouteBinding):boolean=>{
+    try {
+      if(points.length<2||points.some(point=>!Number.isFinite(point.x)||!Number.isFinite(point.z))||
+        !binding.floorId.trim()||!binding.isCurrent()||(binding.isDrawingCurrent&&!binding.isDrawingCurrent()))return false;
+      const id=`ann-${current.current.nextId}`;
+      const stageNo=current.current.draft?.stages.reduce((max,stage)=>Math.max(max,stage.stageNo),0)||1;
+      const annotation:PlanAnnotation={id,kind:'route',label,stageNo,geometry:{kind:'polyline',points:structuredClone(points)}};
+      dispatch({type:'ADD_ANNOTATION',annotation});
+      const draft=current.current.draft,actual=draft?.annotations.filter(item=>item.id===id);
+      if(!draft||actual?.length!==1||JSON.stringify(actual[0])!==JSON.stringify(annotation)||!binding.isCurrent())return false;
+      routes.current.set(id,{draftId:draft.id,annotation:JSON.stringify(actual[0]),floorId:binding.floorId,isCurrent:binding.isCurrent});
+      return true;
+    }catch{return false;}
+  },[dispatch]);
+  const getUserRouteProvenance=useCallback((id:string):UserRouteProvenance|null=>{
+    try{
+      const entry=routes.current.get(id),draft=current.current.draft;
+      if(!entry||!draft||draft.id!==entry.draftId||!entry.isCurrent())return null;
+      const found=draft.annotations.filter(item=>item.id===id);
+      if(found.length!==1||JSON.stringify(found[0])!==entry.annotation)return null;
+      return {source:'user',floorId:entry.floorId,sourceBasis:'unknown'};
+    }catch{return null;}
+  },[]);
 
   const addZoneRects = useCallback(
     (items: readonly ZoneRectItem[]) => {
@@ -244,27 +302,28 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
 
   const addDoorAnnotation = useCallback(
     (door: { wall: PlanDoorWall; position: number; widthM?: number }) => {
-      const id = `ann-${state.nextId}`;
-      const stageNo = state.draft?.stages.reduce(
+      const id = `ann-${current.current.nextId}`;
+      const stageNo = current.current.draft?.stages.reduce(
         (max, s) => Math.max(max, s.stageNo),
         0,
       ) || 1;
       const annotation: PlanAnnotation = {
         id,
         kind: 'door',
-        label: '主入口门',
+        label: '用户标注门（待核验）',
         stageNo,
-        // 用户真实画的门不带 inferred——渲染层实线门弧、评分层 verified。
+        // 图上点击不构成现场尺寸、门扇或疏散出口的确认。
         geometry: {
           kind: 'door',
           wall: door.wall,
           position: door.position,
-          widthM: door.widthM ?? DOOR_DEFAULT_WIDTH_M,
+          widthM: typeof door.widthM === 'number' && Number.isFinite(door.widthM) && door.widthM > 0 ? door.widthM : null,
+          inferred: true,
         },
       };
       dispatch({ type: 'ADD_ANNOTATION', annotation });
     },
-    [state.draft, state.nextId],
+    [dispatch],
   );
 
   const annotations = useMemo(
@@ -278,12 +337,17 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     annotationsVisible: state.annotationsVisible,
     annotations,
     revision: state.revision,
+    getSnapshot,
+    clearDraftIfRevision,
+    replaceDraftIfRevision,
     startDraft,
     clearDraft,
     replaceDraft,
     toggleVisible,
     setDrawMode,
     addAnnotationFromPoints,
+    addUserRouteFromPoints,
+    getUserRouteProvenance,
     addZoneRects,
     addDoorAnnotation,
   };

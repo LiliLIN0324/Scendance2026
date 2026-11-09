@@ -1,7 +1,9 @@
+import { inspectRestoreStartup } from '@/lib/restore-startup';
 import { STORAGE_KEY } from './constants';
 import { notify } from './editor-notices';
 import { isPackagedGlbUrl } from './glb-url';
 import { isUntouched } from './restore-point';
+import { withStorageWriteGuard } from './guarded-storage';
 import { parseLayoutEventOperations, parseStoredLayout, storedEntryCount } from './schema';
 import { classifyStorageError, type StorageErrorKind } from './storage-errors';
 import { setItemEvictingSnapshots } from './version-history';
@@ -31,7 +33,7 @@ export function parseLayoutJson(raw: string): RoomLayout | null {
   }
 }
 
-export function loadLayout(): RoomLayout | null {
+export function loadLayout(assertWrite?: () => void): RoomLayout | null {
   try {
     const raw = localStorageOrNull()?.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -42,7 +44,7 @@ export function loadLayout(): RoomLayout | null {
     if (layout && storedEntryCount(layout) < storedEntryCount(parsed)) {
       // No room for the copy: treat the save as unopenable, so the caller
       // holds autosave off and the original stays the only thing stored.
-      if (!backupStoredLayout()) return null;
+      if (!backupStoredLayout(undefined, undefined, assertWrite)) return null;
       notify(
         '这份布置的物料数超出单层上限，只载入了一部分；原件已另存一份，不会被覆盖。',
         'info'
@@ -162,13 +164,13 @@ function newRecoveryKey(store: RawStore, now: number, slots: RecoverySlot[]): st
  * house is stored somewhere. If the copy still can't be written, the dropped
  * copies are put back in the room they left and the error is rethrown.
  */
-function keepRecoveryCopy(store: RawStore, raw: string, now: number): boolean {
+function keepRecoveryCopy(store: RawStore, raw: string, now: number, exact = false, assertWrite?: () => void): boolean {
   const parsed = parseLayoutJson(raw);
   if (parsed && isUntouched(parsed)) return false;
   const slots = recoverySlots(store);
   const alreadyKept = slots.some(({ key }) => {
     const kept = store.getItem(key);
-    return kept !== null && sameStoredHouse(kept, raw);
+    return kept !== null && (exact ? kept === raw : sameStoredHouse(kept, raw));
   });
   if (alreadyKept) return false;
   const key = newRecoveryKey(store, now, slots);
@@ -187,12 +189,13 @@ function keepRecoveryCopy(store: RawStore, raw: string, now: number): boolean {
   let remaining = slots;
   for (;;) {
     try {
-      setItemEvictingSnapshots(store, key, raw);
+      setItemEvictingSnapshots(store, key, raw, assertWrite);
+      if (store.getItem(key) !== raw) throw new Error('备份读回不一致。');
       break;
     } catch (error) {
       try {
         const oldest = remaining[0];
-        const mayDrop = oldest !== undefined && classifyStorageError(error) === 'quota' && store.getItem(STORAGE_KEY) === raw;
+        const mayDrop = !assertWrite && oldest !== undefined && classifyStorageError(error) === 'quota' && store.getItem(STORAGE_KEY) === raw;
         const oldestRaw = mayDrop ? store.getItem(oldest.key) : null;
         if (!oldest || oldestRaw === null) throw error;
         store.removeItem(oldest.key);
@@ -223,8 +226,8 @@ function keepRecoveryCopy(store: RawStore, raw: string, now: number): boolean {
  * keeping), false when the copy couldn't be written — the caller must then
  * leave the main save alone, since it's the only copy of the house.
  */
-export function backupStoredLayout(storage?: RawStore, now: number = Date.now()): boolean {
-  const outcome = keepStoredLayout(storage, now);
+export function backupStoredLayout(storage?: RawStore, now: number = Date.now(), assertWrite?: () => void): boolean {
+  const outcome = keepStoredLayout(storage, now, assertWrite);
   return outcome === 'kept' || outcome === 'nothing';
 }
 
@@ -237,14 +240,16 @@ export function backupStoredLayout(storage?: RawStore, now: number = Date.now())
  */
 export function keepStoredLayout(
   storage?: RawStore,
-  now: number = Date.now()
+  now: number = Date.now(),
+  assertWrite?: () => void,
 ): 'kept' | 'nothing' | StorageErrorKind {
-  const target = storage ?? localStorageOrNull();
+  const rawTarget = storage ?? localStorageOrNull();
+  const target = rawTarget ? withStorageWriteGuard(rawTarget, assertWrite) : null;
   if (!target) return 'nothing';
   try {
     const raw = target.getItem(STORAGE_KEY);
     if (!raw) return 'nothing';
-    return keepRecoveryCopy(target, raw, now) ? 'kept' : 'nothing';
+    return keepRecoveryCopy(target, raw, now, false, assertWrite) ? 'kept' : 'nothing';
   } catch (error) {
     console.warn('Failed to back up stored layout; leaving it in place:', error);
     return classifyStorageError(error);
@@ -291,15 +296,16 @@ export function withoutExpiringAssetUrls(layout: RoomLayout): RoomLayout {
  * oldest-first and retries before giving up (#295). `storage` is injectable
  * for tests and defaults to `window.localStorage`.
  */
-export function saveLayout(layout: RoomLayout, storage?: VersionHistoryStore): SaveResult {
+export function saveLayout(layout: RoomLayout, storage?: VersionHistoryStore, assertWrite?: () => void): SaveResult {
   if (!storage && typeof window === 'undefined') return { ok: false, reason: 'unknown' };
   try {
-    const target = storage ?? localStorageOrNull();
+    const rawTarget = storage ?? localStorageOrNull();
+    const target = rawTarget ? withStorageWriteGuard(rawTarget, assertWrite) : null;
     if (!target) return { ok: false, reason: 'blocked' };
     const checked = parseLayoutEventOperations(withoutExpiringAssetUrls(layout));
     if (!checked) return { ok: false, reason: 'unknown' };
     const json = JSON.stringify(checked);
-    setItemEvictingSnapshots(target, STORAGE_KEY, json);
+    setItemEvictingSnapshots(target, STORAGE_KEY, json, assertWrite);
     return { ok: true, json };
   } catch (error) {
     // Reported to the caller so the HUD never shows "Saved" for a layout that
@@ -342,17 +348,19 @@ function withoutId(layout: RoomLayout): Partial<RoomLayout> {
  * misbehaved mid-move — lost it from storage, so the caller's in-memory
  * copy is the last one and must be offered for download.
  */
-export type ResetOutcome = 'moved' | 'refused' | 'lost';
+export type ResetOutcome = 'moved' | 'refused' | 'lost' | 'recovery-pending';
 
 /**
  * Move the stored house aside to a recovery copy and clear the main save,
- * for the error screen's "start fresh" (#336). Never deletes without a copy:
- * on a full quota the copy is retried in the space the original frees, and
- * the original is put back if even that fails.
+ * for the error screen's "start fresh" (#336). The source stays in place
+ * until an exact backup has been written and read back. A full store refuses reset.
  */
-export function resetStoredLayout(storage?: RawStore, now: number = Date.now()): ResetOutcome {
-  const target = storage ?? localStorageOrNull();
-  if (!target) return 'refused';
+export function resetStoredLayout(storage?: RawStore, now: number = Date.now(), assertWrite?: () => void): ResetOutcome {
+  const rawTarget = storage ?? localStorageOrNull();
+  const target = rawTarget ? withStorageWriteGuard(rawTarget, assertWrite) : null;
+  if (!target) return 'recovery-pending';
+  const recoveryBlocked = () => inspectRestoreStartup(() => target as Storage).status !== 'ready';
+  if (recoveryBlocked()) return 'recovery-pending';
   let raw: string | null;
   try {
     raw = target.getItem(STORAGE_KEY);
@@ -366,6 +374,7 @@ export function resetStoredLayout(storage?: RawStore, now: number = Date.now()):
     // A blank lot isn't worth a copy, and keeping one would push a real
     // house out of the copies kept (#336).
     try {
+      if (recoveryBlocked()) return 'recovery-pending';
       target.removeItem(STORAGE_KEY);
       return 'moved';
     } catch {
@@ -373,31 +382,16 @@ export function resetStoredLayout(storage?: RawStore, now: number = Date.now()):
     }
   }
   try {
-    keepRecoveryCopy(target, raw, now);
+    if (recoveryBlocked()) return 'recovery-pending';
+    keepRecoveryCopy(target, raw, now, true, assertWrite);
+    // Refuse if the backup or the source changed before the final removal.
+    if (target.getItem(STORAGE_KEY) !== raw || !recoverySlots(target).some(({ key }) => target.getItem(key) === raw)) return 'refused';
   } catch (error) {
-    if (classifyStorageError(error) !== 'quota') {
-      console.warn('Failed to back up the saved layout; leaving it in place:', error);
-      return 'refused';
-    }
-    try {
-      target.removeItem(STORAGE_KEY);
-      keepRecoveryCopy(target, raw, now);
-      return 'moved';
-    } catch (retryError) {
-      console.warn('Failed to back up the saved layout; putting it back:', retryError);
-      try {
-        target.setItem(STORAGE_KEY, raw);
-        return 'refused';
-      } catch {
-        try {
-          return target.getItem(STORAGE_KEY) === raw ? 'refused' : 'lost';
-        } catch {
-          return 'lost';
-        }
-      }
-    }
+    console.warn('Failed to back up the saved layout; leaving it in place:', error);
+    return 'refused';
   }
   try {
+    if (recoveryBlocked()) return 'recovery-pending';
     target.removeItem(STORAGE_KEY);
   } catch {
     // The copy exists and the original is still there: nothing was lost,
@@ -456,10 +450,11 @@ export function readRecoveryCopy(key: string, storage?: RawStore): RecoveryCopy 
 }
 
 /** Whether the recovery copy under `key` is now gone. */
-export function discardRecoveryCopy(key: string, storage?: RawStore): boolean {
+export function discardRecoveryCopy(key: string, storage?: RawStore, assertWrite?: () => void): boolean {
   if (!isRecoveryKey(key)) return false;
   try {
-    const target = storage ?? localStorageOrNull();
+    const rawTarget = storage ?? localStorageOrNull();
+    const target = rawTarget ? withStorageWriteGuard(rawTarget, assertWrite) : null;
     if (!target) return false;
     target.removeItem(key);
     return true;

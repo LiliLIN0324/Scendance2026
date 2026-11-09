@@ -38,9 +38,15 @@ describe('Agent model tools preserve instance boundaries and meaningful alternat
   function scaledInstances():Scene {
     return {...scene(),objects:[
       {...chair(),materialId:'asset',assetId:source.asset.id,size:{width:0.8,depth:0.5,height:0.6},position:{x:2,z:2}},
-      {...chair('保留备注'),materialId:'asset',assetId:source.asset.id,size:{width:2,depth:1.1,height:0.95},position:{x:7,z:6},rotation:0.4,color:'#abcdef'},
+      {...chair(),materialId:'asset',assetId:source.asset.id,size:{width:2,depth:1.1,height:0.95},position:{x:7,z:6},rotation:0.4,color:'#abcdef'},
     ]};
   }
+  it('refuses ordinary model generation on an original scene with undisclosed notes',async()=>{
+    const draft=scaledInstances();draft.objects[1].notes='需要授权核对的原始备注';const i=await input(draft),{projectId,...body}=i;
+    const fetcher=vi.fn();const response=await createApi(f.backend,env,fetcher as unknown as typeof fetch)(new Request(`https://api.test/projects/${projectId}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(body)}));
+    expect(response.status).toBe(409);expect((await response.json()).error.code).toBe('ORIGINAL_SCENE_REVIEW_REQUIRED');expect(fetcher).not.toHaveBeenCalled();
+    expect((await f.rpc(owner,'projects.get',{projectId})).scene).toEqual(draft);
+  });
   it('applies a material variant without changing selected scaled dimensions, color, placement or other instances',async()=>{
     const draft=scaledInstances(),target=draft.objects[1],i=await input(draft,{selectedIds:[target.id]});
     const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{

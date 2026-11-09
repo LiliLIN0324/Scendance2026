@@ -2,6 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, pendingPlanOf, prepareAholoAsk, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale } from './workbench-agent';
 
 describe('workbench agent v2.4', () => {
+  it('shows a bounded server seating shortfall without calling an object limit venue capacity',()=>{
+    for(const code of ['SEATING_SHORTFALL:30:0:no_placement','SHARED_SEATING_SHORTFALL:30:0:0:no_placement']){
+      const text=pendingPlanOf([], [{code,ids:[]}], id=>id).seatingShortfall;
+      expect(text).toContain('本次新增');expect(text).toContain('原场景物件未计入');expect(text).toContain('不代表场地最大容量');
+      expect(text).toContain('尝试其他区域并核对桌椅规格');expect(text).toContain('你也可决定是否调整人数、共桌方式或场地');expect(text).toContain('仍需重新试排');
+    }
+    const limit=pendingPlanOf([], [{code:'SEATING_SHORTFALL:30:0:object_limit',ids:[]}], id=>id).seatingShortfall;
+    expect(limit).toContain('核对当前物件数量和方案规模');expect(limit).not.toContain('换场地就能解决');
+    expect(pendingPlanOf([], [{code:'SEATING_SHORTFALL:30:0:preset_unverified',ids:[]}], id=>id).seatingShortfall).toContain('核对场地预设、图纸和尺寸');
+    expect(pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:0:0:scan_limit',ids:[]}], id=>id).seatingShortfall).toContain('分区试排');
+    expect(pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:2:0:no_placement',ids:[]}], id=>id).seatingShortfall).toBeUndefined();
+    const shared=pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:24:12:object_limit',ids:[]}], id=>id);
+    expect(shared.seatingShortfall).toContain('24 / 30 人，12 桌，尚缺 6 人');
+    expect(shared.seatingShortfall).toContain('不代表场地最大容量');
+    for(const code of ['SHARED_SEATING_SHORTFALL:30:24:13:object_limit','SHARED_SEATING_SHORTFALL:30:30:15:object_limit','SHARED_SEATING_SHORTFALL:101:24:12:object_limit','SHARED_SEATING_SHORTFALL:30:24:12:fake'])
+      expect(pendingPlanOf([], [{code,ids:[]}], id=>id).seatingShortfall).toBeUndefined();
+    expect(pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:24:12:object_limit',ids:['unexpected']}], id=>id).seatingShortfall).toBeUndefined();
+    const plan=pendingPlanOf([], [{code:'SEATING_SHORTFALL:30:24:object_limit',ids:[]}], id=>id);
+    expect(plan.seatingShortfall).toContain('24 / 30 套');
+    expect(plan.seatingShortfall).toContain('尚缺 6 套');
+    expect(plan.seatingShortfall).toContain('不代表场地最大容量');
+    for(const code of ['SEATING_SHORTFALL:30:31:object_limit','SEATING_SHORTFALL:101:1:object_limit','SEATING_SHORTFALL:30:24:fake']) {
+      expect(pendingPlanOf([], [{code,ids:[]}], id=>id).seatingShortfall).toBeUndefined();
+    }
+    expect(pendingPlanOf([], [{code:'SEATING_SHORTFALL:30:24:object_limit',ids:['unexpected']}], id=>id).seatingShortfall).toBeUndefined();
+  });
   it('validates length/width 1–500 m with handoff copy', () => {
     expect(checkDim('', '长度')).toEqual({ ok: false, empty: true });
     expect(checkDim('0', '长度')).toMatchObject({ message: '长度要大于 0' });
@@ -22,6 +48,14 @@ describe('workbench agent v2.4', () => {
   });
   it('treats the conversation as the only generate entry', () => {
     expect(isGenerateCommand('出方案')).toBe('first');
+    expect(isGenerateCommand('为30人办室内讲座，场地长12米宽10米，采用课桌椅布局，生成方案')).toBe('first');
+    expect(isGenerateCommand('生成方案')).toBe('first');
+    expect(isGenerateCommand('先用假设探索')).toBe('first');
+    expect(isGenerateCommand('先探索')).toBe('first');
+    for(const text of ['不要先探索','如何先探索','先用假设探索吗？','探索不同活动的历史'])expect(isGenerateCommand(text)).toBe(null);
+    expect(isGenerateCommand('30人，按一人一套课桌椅生成本地草案，不要签到')).toBe('first');
+    for(const text of ['不要生成本地草案','如何生成本地草案','生成本地草案是什么意思','生成本地草案吗？'])expect(isGenerateCommand(text)).toBe(null);
+    for(const text of ['不要生成方案','如何生成方案','能否生成方案？','生成方案是什么意思'])expect(isGenerateCommand(text)).toBe(null);
     expect(isGenerateCommand('就按这个出')).toBe('first');
     expect(isGenerateCommand('80 人发布会，室内 12×9')).toBe(null);
     expect(isGenerateCommand('再加两排桌子')).toBe(null);
@@ -92,7 +126,7 @@ describe('一句话开场解析', () => {
     expect(describeExtraction(parseBriefSentence('60人的沙龙'), bare)).toContain('场地尺寸还没定');
   });
   it('names stage and check-in for a launch, and skips both for a classroom', () => {
-    expect(layoutAnchors('80人发布会', '发布会', 'dining')).toEqual({ stage: true, checkin: true });
+    expect(layoutAnchors('80人发布会', '发布会', 'dining')).toEqual({ stage: false, checkin: false });
     expect(layoutAnchors('不要签到', '发布会', 'dining').checkin).toBe(false);
     expect(layoutAnchors('课桌配椅子', '教学', 'desk-chair')).toEqual({ stage: false, checkin: false });
   });
@@ -153,6 +187,9 @@ describe('一句话开场解析', () => {
   });
   it('reports an empty proposal as nothing to confirm', () => {
     expect(pendingPlanOf([], [], () => '物件')).toMatchObject({ added: 0, removing: 0, changed: 0, lockedTouched: 0, overlapCount: 0 });
+  });
+  it('carries incomplete safety coverage to the main proposal card',()=>{
+    expect(pendingPlanOf([{kind:'added',locked:false}],[{code:'SAFETY_CHECKS_UNKNOWN',ids:[]}],()=> '物件')).toMatchObject({safetyChecksUnknown:true});
   });
 });
 

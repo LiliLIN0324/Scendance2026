@@ -39,16 +39,19 @@ describe('activity operations references and review', () => {
     layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:'abcdef00-0000-4000-8000-000000000020',title:'取得C1',taskIds:[task.id],objectIds:[objectId]}],estimates:[{id:'abcdef00-0000-4000-8000-000000000021',title:'C2费用估算',taskIds:[task.id],objectIds:[second.id]}]});
     task.reviewedBasis=await operationBasis(layout,task);unrelated.reviewedBasis=await operationBasis(layout,unrelated);
     const secondChanged={...layout,floors:[{...layout.floors[0],items:layout.floors[0].items.map(item=>item.id===second.id?{...item,position:{x:1.2,z:1}}:item)}]};
-    expect((await operationReview(secondChanged,task)).status).toBe('accepted');
+    expect((await operationReview(secondChanged,task)).status).toBe('needs_review');
+    expect(await operationBasis(secondChanged,task)).toBe(task.reviewedBasis);
     const firstChanged={...layout,floors:[{...layout.floors[0],items:layout.floors[0].items.map(item=>item.id===objectId?{...item,width:item.width+.1,rotation:0.5,color:'#123456'}:item)}]};
-    expect((await operationReview(firstChanged,task)).status).toBe('needs_review');expect((await operationReview(firstChanged,unrelated)).status).toBe('accepted');
+    expect((await operationReview(firstChanged,task)).status).toBe('needs_review');expect((await operationReview(firstChanged,unrelated)).status).toBe('needs_review');
+    expect(await operationBasis(firstChanged,task)).not.toBe(task.reviewedBasis);
+    expect(await operationBasis(firstChanged,unrelated)).toBe(unrelated.reviewedBasis);
   });
   it('resolves UUID aliases but never chooses one of multiple physical instances',async()=>{
     const layout=venue(),task=await accepted(layout),known='abcdef00-0000-4000-8000-000000000002';
     layout.floors[0].items[0].id=known;
     layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:'abcdef00-0000-4000-8000-000000000020',title:'演练取得',taskIds:[task.id.toUpperCase()],objectIds:[known.toUpperCase()]}]});
     expect(operationObjectReview(layout,task)).toEqual({missingObjectIds:[],ambiguousObjectIds:[],missingProductionObjectIds:[],ambiguousProductionObjectIds:[]});
-    task.reviewedBasis=await operationBasis(layout,task);expect((await operationReview(layout,task)).status).toBe('accepted');
+    task.reviewedBasis=await operationBasis(layout,task);expect((await operationReview(layout,task)).status).toBe('needs_review');
     const ambiguous={...layout,floors:[{...layout.floors[0],items:[layout.floors[0].items[0],{...layout.floors[0].items[0],id:known.toUpperCase()}]}]};
     expect(operationObjectReview(ambiguous,task).ambiguousProductionObjectIds).toEqual([known.toUpperCase()]);expect((await operationReview(ambiguous,task)).status).toBe('needs_review');
     expect(operationObjectReview(ambiguous,{...task,objectIds:[known]}).ambiguousObjectIds).toEqual([known]);
@@ -61,7 +64,7 @@ describe('activity operations references and review', () => {
   });
   it('confirms a task without inventing material or actual completion times', async () => {
     const layout = { ...venue(), floors: [makeFloor()] }; const task = await accepted(layout);
-    expect(await operationReview(layout, task)).toEqual({ status: 'accepted', missingObjectIds: [] });
+    expect(await operationReview(layout, task)).toEqual({ status: 'needs_review', missingObjectIds: [] });
     expect(task.objectIds).toEqual([]); expect(task.actualFinishedAt).toBeNull();
   });
   it.each(['phase', 'ownerName', 'contractorName', 'plannedEndAt', 'acceptance'] as const)('requires review after %s changes while preserving actual records', async field => {
@@ -70,11 +73,11 @@ describe('activity operations references and review', () => {
     expect((await operationReview(layout, changed)).status).toBe('needs_review');
     expect(changed.actualStartedAt).toBe(task.actualStartedAt); expect(changed.actualFinishedAt).toBeNull(); expect(changed.evidenceNote).toBe(task.evidenceNote);
   });
-  it('keeps missing references, does not match replacements by name, and restores the connection on undo', async () => {
+  it('keeps missing references and does not revive confirmation when the object returns', async () => {
     const layout = venue(), task = await accepted(layout, [objectId]);
     const removed = { ...layout, floors: [makeFloor({ items: [{ ...layout.floors[0].items[0], id: '30000000-0000-4000-8000-000000000002' }] })] };
     expect(await operationReview(removed, task)).toEqual({ status: 'needs_review', missingObjectIds: [objectId] });
-    expect(task.objectIds).toEqual([objectId]); expect((await operationReview(layout, task)).status).toBe('accepted');
+    expect(task.objectIds).toEqual([objectId]); expect((await operationReview(layout, task)).status).toBe('needs_review');
   });
   it.each([
     { stairsShape: 'winder' as const }, { stairsLeadIn: 2 }, { sofaShape: 'L-shape' as const },
@@ -92,11 +95,11 @@ describe('activity operations references and review', () => {
     const task = await accepted(layout, [objectId]);
     const changed = { ...layout, floors: [{ ...layout.floors[0], interiorWalls: layout.floors[0].interiorWalls!.map((wall, index) => index ? wall : { ...wall, thickness: .3 }) }] };
     expect((await operationReview(changed, task)).status).toBe('needs_review');
-    expect((await operationReview({ ...layout, backendCamera: 'customer', backendLighting: 'cool' }, task)).status).toBe('accepted');
+    expect((await operationReview({ ...layout, backendCamera: 'customer', backendLighting: 'cool' }, task)).status).toBe('needs_review');
     const asset = { ...layout, floors: [{ ...layout.floors[0], items: [{ ...layout.floors[0].items[0], assetId: '40000000-0000-4000-8000-000000000001', glbUrl: 'https://example.test/model?token=old' }] }] };
     const assetTask = await accepted(asset, [objectId]);
     const renewed = { ...asset, floors: [{ ...asset.floors[0], items: [{ ...asset.floors[0].items[0], glbUrl: 'https://example.test/model?token=new' }] }] };
-    expect((await operationReview(renewed, assetTask)).status).toBe('accepted');
+    expect((await operationReview(renewed, assetTask)).status).toBe('needs_review');
   });
   it.each(['https://example.test/replacement.glb', 'https://example.test/chair.glb?version=2'])(
     'requires review when an unarchived model reference changes to %s without losing prior evidence', async glbUrl => {
@@ -111,7 +114,7 @@ describe('activity operations references and review', () => {
         effectiveStatus: 'needs_review', actualStartedAt: task.actualStartedAt, evidenceNote: task.evidenceNote,
       });
       expect(await eventOperationsCsv(changed)).toContain('需复核');
-      expect((await operationReview(layout, task)).status).toBe('accepted');
+      expect((await operationReview(layout, task)).status).toBe('needs_review');
       expect(task.reviewedBasis).toMatch(/^sha256:[0-9a-f]{64}$/);
     },
   );
@@ -145,12 +148,12 @@ describe('activity operations references and review', () => {
       effectiveStatus: 'needs_review', evidenceNote: task.evidenceNote, actualStartedAt: task.actualStartedAt,
     });
     expect(await eventOperationsCsv(reopened!)).toContain('需复核');
-    expect((await operationReview(layout, task)).status).toBe('accepted');
+    expect((await operationReview(layout, task)).status).toBe('needs_review');
   });
   it('treats omitted and explicit solid floor patterns as the same physical finish', async () => {
     const layout = venue(), task = await accepted(layout);
     const explicit = { ...layout, floors: [{ ...layout.floors[0], floorPattern: 'solid' as const }] };
-    expect((await operationReview(explicit, task)).status).toBe('accepted');
+    expect((await operationReview(explicit, task)).status).toBe('needs_review');
   });
 });
 

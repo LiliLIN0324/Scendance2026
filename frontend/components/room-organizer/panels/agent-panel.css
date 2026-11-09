@@ -558,7 +558,8 @@ button.ap-ghost {
 .ap-audit-badge.is-returned { color: var(--warn); }
 .ap-audit-meta { display: flex; align-items: center; gap: 5px; margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-meta small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ap-audit-link { display: inline-flex; padding: 0; border: 0; background: none; color: var(--ap-grey); cursor: pointer; }
+.ap-audit-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.ap-audit-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--ap-grey); cursor: pointer; }
 .ap-audit-link:hover { color: var(--ink); }
 .ap-audit-pins { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 0 10px; list-style: none; }
 .ap-audit-pins > li { display: flex; flex-direction: column; gap: 3px; padding-left: 8px; border-left: 2px solid var(--wk-hair); }

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 /*
  * COLLAB.md 独占区（Qoder 侧只提需求）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
  * 整景区视距下点云退化成锚点 POI，进到 100 m 内再挂/显示 splat。
@@ -7,6 +7,7 @@
 
 import { PanelLeftClose } from '@/components/solid-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib/pending-candidate-registry';
 import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -14,16 +15,14 @@ import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
-import { getAgentRun, getAgentChatThreads } from './panels/agent-chat-store';
-import { getBriefHeadcount } from './panels/brief-headcount-store';
+import { generationMaterialDiff } from './lib/generation-material-diff';
+import { getAgentRun } from './panels/agent-chat-store';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
 import {
-  executeSceneCommand,
   applyLayoutCommandWithRefusals,
-  placeItemCommand,
+  completeLayoutError,
   applyLayoutCommand,
 } from '@/lib/build-command';
-import { settlePlacement } from '@/lib/settle-placement';
 import { combineOutcomes, hasOutcomeChanges, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
 import { isOpening } from './lib/opening-snap';
 import { planPointToCanvas } from './lib/review-pins';
@@ -46,6 +45,9 @@ import { useKeyboardPlacement } from './hooks/use-keyboard-placement';
 import { useSilentCloudAttach } from './hooks/use-silent-cloud-attach';
 import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts';
 import { useLayoutPersistence } from './hooks/use-layout-persistence';
+import { applyGuardedWorkspaceReplacement, useWorkspaceWriteGuards } from './lib/workspace-write-guards';
+import type { WorkspaceWriteSession } from '@/lib/workspace-write-session';
+import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
 import { useNpcs } from './hooks/use-npcs';
@@ -68,13 +70,20 @@ import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-
 import { findAholoAsset } from './lib/aholo-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { suggestDropPoint } from './lib/drop-zone';
-import { captureCatalogPlacement } from './lib/catalog-placement-guard';
+import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementGuard, type CatalogPlacementResult } from './lib/catalog-placement-guard';
+import { resolveCatalogPosition } from './lib/catalog-placement-position';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
 import { crowdHintsFromLayout } from './lib/crowd-route';
 import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
-import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, writeEnvironments, type StoredEnvironment } from './lib/environment-preference';
+import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, readEnvironmentsStrict, writeEnvironments, type EnvironmentScope, type StoredEnvironment } from './lib/environment-preference';
+import { persistEnvironmentPosition } from './lib/environment-position-transaction';
+import { registerReadonlyDraftReader,readLiveReadonlyDraft } from './lib/readonly-draft-registry';
+import {createLocalActivitySwitchGuard,LocalActivitySwitchGuardProvider} from './lib/local-activity-switch-guard';
+import {unsavedSourceDrafts} from './panels/unsaved-source-drafts';
+import { reconcilePendingEnvironmentWrite, type PendingEnvironmentWrite } from './lib/environment-write-reconciliation';
+import { downloadTextFile } from './lib/plan-export/download';
 import { alignSelection, distributeSelection, type AlignEdge, type DistributeAxis } from './lib/alignment';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
@@ -106,7 +115,7 @@ import { SceneGeoDots } from './panels/scene-geo-dots';
 import { SplatLodMarker } from './panels/splat-lod-marker';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
-import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
+import { canApplyLayoutGeometry, structuralItemCollides, materialCount, isEvidenceProtectedWall } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { ROUTE_WAYPOINT_CLEARANCE_WARN_M, routePointError, routePointErrorInRect } from './lib/person-route';
 import { buildWalkColliders, walkerClearanceAt } from './lib/walk-collision';
@@ -116,8 +125,27 @@ import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
 import { GeoBasemapInput } from './panels/geo-basemap-input';
 import { createResearchArea, RESEARCH_SATELLITE_STYLE } from './lib/research-area';
-import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
-import { AgentChat } from './panels/agent-chat';
+import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, readonlyComposerDrafts, type AgentId } from './panels/agent-panel';
+import { cloudSeatingAllocation, cloudSeatingSpecs, type BriefMemory } from './lib/brief-agent';
+import { projectDialogueHandoff } from './lib/dialogue-handoff';
+import { hasBlockingActivityNeeds } from './lib/activity-need-gate';
+import { getActiveAssistantSessionId, subscribeActiveAssistantSession } from './hooks/use-assistant-sessions';
+import {extractMobilityWidth} from './lib/mobility-export';
+import { checkRequiredSeats, checkRestArea } from './lib/seat-requirement';
+import { checkFunctionalRequirements } from './lib/functional-requirements';
+import { sameLayoutContent } from './lib/persistence';
+import { isVenueScaleCurrent, venueDimensionsMismatch } from './lib/venue-scale-basis';
+import { extractPlanSizeFacts } from '@/lib/plan-size-facts';
+import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
+import { createRouteDrawingSession } from './lib/route-drawing-session';
+import { useActivitySessionTracker, type ActivitySessionToken } from './lib/activity-session-epoch';
+import { useFloorSessionTracker, type FloorSessionToken } from './lib/floor-session-epoch';
+import { validateCandidateApply } from './lib/candidate-apply-validation';
+import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
+import { applyVenueHistorySnapshot } from './lib/venue-history';
+import { appendPlanZones } from '@/lib/plan-zone-persistence';
+import { prepareZonePlan, zonePlanCandidates } from '@/lib/zone-plan-application';
+import { AgentChatBridge } from './panels/agent-chat-bridge';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
@@ -151,14 +179,13 @@ import { F3CoachBubble } from './panels/f3-coach-bubble';
 import { usePlanAnnotations } from './hooks/use-plan-annotations';
 import { buildDefaultZoneRects } from '@/lib/auto-zone-apply';
 import { PlanOverlay } from './canvas-2d/plan-overlay';
+import { AnnotationGuide } from './panels/annotation-guide';
 import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
-import { estimateCapacity } from '@/lib/capacity-meter';
 import { computeBingoScore } from '@/lib/bingo-score';
 import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, pickDoorWallFromPoint, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
 // 第 12 批：三版打分 + 动线约束 + AI 建议（纯函数层，已独立测试）。
 import {
-  generateScoredPlans,
   pickRecommendedPlan,
   type ScoredPlan,
   type PlanVariantId,
@@ -207,7 +234,12 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, isActive = true }: { controller?: BackendSession; isActive?: boolean } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, isolatedWriteSession }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession } = {}): JSX.Element {
+  const isolatedRef=useRef<{session:WorkspaceWriteSession;revoked:boolean}|null>(null);
+  if(!isolatedRef.current&&isolatedWriteSession)isolatedRef.current={session:isolatedWriteSession,revoked:false};
+  else if(isolatedRef.current&&isolatedWriteSession!==isolatedRef.current.session)isolatedRef.current.revoked=true;
+  const assertIsolatedSession=isolatedRef.current?()=>{const current=isolatedRef.current!;if(current.revoked)throw new Error('本机编辑会话已变化。');current.session.assertCapability(localWriteCapability);}:undefined;
+  const workspaceWriteGuards = useWorkspaceWriteGuards(localWriteCapability,assertIsolatedSession);
   const dropActive = useRef(isActive);
   useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
@@ -223,13 +255,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (!placementIdentity.current.isActive) throw new Error('工作台已关闭，请返回后重新添加模型。');
     }, dispose: guard.dispose };
   }, []);
+  const capturePlacementBatch = useCallback(() => {
+    const guard = captureCatalogPlacementBatch(placementIdentity.current.controller, () => placementIdentity.current.epoch);
+    const assertCurrent=()=>{guard.assertCurrent();if(!placementIdentity.current.isActive)throw new Error('工作台已关闭，剩余物料未添加。');};
+    return {assertCurrent,dispose:guard.dispose,runOwnMutation:(action:()=>CatalogPlacementResult|void)=>{assertCurrent();const result=guard.runOwnMutation(action);assertCurrent();return result;}};
+  }, []);
   useEffect(() => controller.retain(), [controller]);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvas2DRef = useRef<HTMLCanvasElement>(null);
   const assistantEntryHostRef = useRef<HTMLDivElement>(null);
   const frameViewportRef = useRef(() => {});
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  const sessionScope = layout.id ? `activity:${layout.id}` : 'draft:unidentified';
+  const activitySession = useActivitySessionTracker(layoutStore);
+  const sessionToken = activitySession.token;
+  const pendingCandidateRegistry=useMemo(()=>createPendingCandidateRegistry(),[]);
+  const pendingCandidates=useMemo(()=>bindPendingCandidateRegistry(pendingCandidateRegistry,sessionToken,()=>activitySession.isCurrent(sessionToken)),[pendingCandidateRegistry,sessionToken,activitySession.isCurrent]);
+  // The session guard below temporarily unmounts the viewport on a switch.
+  // A fresh ref identity makes the existing canvas effects detach from the old
+  // DOM node and bind the new one without changing the renderer pipeline.
+  const canvasRef = useMemo<React.MutableRefObject<HTMLCanvasElement | null>>(()=>({current:null}),[sessionToken?.scope,sessionToken?.epoch]);
+  const canvas2DRef = useMemo<React.MutableRefObject<HTMLCanvasElement | null>>(()=>({current:null}),[sessionToken?.scope,sessionToken?.epoch]);
+  const floorSession = useFloorSessionTracker(layoutStore);
+  const floorToken = floorSession.token;
+  const routeVenueFacts = useVenueFactTracker(layoutStore);
   // 集成接线：F3 首次吸附教练气泡、规划标注层、确认弹层状态。
   const f3Coach = useF3CoachBubble();
   const planAnnot = usePlanAnnotations();
@@ -239,6 +287,46 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [zoneType, setZoneType] = useState<ZoneSemanticType>('roundtable');
   // 第 12 批：三版打分里用户手动选中的布置版本；默认适中版，批准时按它落家具。
   const [selectedVariantId, setSelectedVariantId] = useState<PlanVariantId>('balanced');
+  const chatTransitionEpoch=useRef(0);
+  const briefCaptureEpoch=useRef(0);
+  // A submitted message invalidates existing captures immediately, before any
+  // model or queue await. Independent tokens prevent concurrent turns from
+  // making the export appear idle when only one has finished.
+  const pendingDialogueTurns=useRef(new Set<symbol>());
+  // Session-local, in-memory warning only. It is not a persistent audit log.
+  const incompleteDialogueSessions=useRef(new Set<string>());
+  // Recovered conversation history may omit unresolved requirements. Nothing is
+  // trusted until this exact activity/session has been explicitly rechecked.
+  const reviewedDialogueHistory=useRef<{scope:string;sessionId:string;chatEpoch:number;activityEpoch:number|null}|null>(null);
+  const dialogueSessionKey=(sessionId:string)=>JSON.stringify([sessionScope,sessionId]);
+  const setDialogueIncomplete=(sessionId:string|null,incomplete:boolean)=>{
+    if(!sessionId)return;const key=dialogueSessionKey(sessionId),had=incompleteDialogueSessions.current.has(key);
+    if(incomplete)incompleteDialogueSessions.current.add(key);else incompleteDialogueSessions.current.delete(key);
+    if(had!==incomplete)briefCaptureEpoch.current++;
+  };
+  const beginDialogueTurn=()=>{
+    const token=Symbol('dialogue-turn');pendingDialogueTurns.current.add(token);briefCaptureEpoch.current++;
+    let released=false;return()=>{if(released)return;released=true;if(pendingDialogueTurns.current.delete(token))briefCaptureEpoch.current++;};
+  };
+  useEffect(()=>subscribeActiveAssistantSession(sessionScope,(id)=>{
+    const reviewed=reviewedDialogueHistory.current;
+    // Initial store hydration may emit the same session immediately after an
+    // explicit review. A genuine away-and-back still increments on the away.
+    if(reviewed&&reviewed.scope===sessionScope&&reviewed.sessionId===id&&reviewed.activityEpoch===(sessionToken?.epoch??null)&&reviewed.chatEpoch===chatTransitionEpoch.current)return;
+    chatTransitionEpoch.current++;
+  }),[sessionScope,sessionToken?.epoch]);
+  const [agentBriefRecord, setAgentBriefRecord] = useState<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
+  const agentBriefRef = useRef<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
+  const agentBriefMemory = agentBriefRecord?.scope === sessionScope && agentBriefRecord.epoch === sessionToken?.epoch && agentBriefRecord.chatEpoch===chatTransitionEpoch.current && agentBriefRecord.sessionId!==null && agentBriefRecord.sessionId===getActiveAssistantSessionId(sessionScope) ? agentBriefRecord.memory : null;
+  const getStoreSessionScope = () => {
+    const id = layoutStore.getState().layout.id;
+    return id ? `activity:${id}` : 'draft:unidentified';
+  };
+  const getActiveBrief = () => {
+    const scope = getStoreSessionScope();
+    return activitySession.isCurrent(sessionToken) && agentBriefRef.current?.scope === scope && agentBriefRef.current.epoch === sessionToken?.epoch && agentBriefRef.current.chatEpoch===chatTransitionEpoch.current && agentBriefRef.current.sessionId!==null && agentBriefRef.current.sessionId===getActiveAssistantSessionId(scope)
+      ? agentBriefRef.current.memory : null;
+  };
   // canvas 尺寸变化（view 切到 2D / 窗口缩放）时 bump，触发 overlay 重算 transform。
   const [overlayTick, setOverlayTick] = useState(0);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
@@ -344,9 +432,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [environments, setEnvironments] = useState<StoredEnvironment[]>([]);
   const environment = environments[0] ?? null;
   const environmentsRef = useRef(environments);
+  const environmentPreferenceReadyRef=useRef(false);
+  const pendingEnvironmentPositionRef=useRef<PendingEnvironmentWrite|null>(null);
   environmentsRef.current = environments;
   // 撤销/重做落回旧布局时，把布局里记着的真实场地也挂回去；具体切换逻辑在下面赋值。
-  const restoreVenueFromHistoryRef = useRef<(scan: { assetId: string; name: string }) => void>(() => {});
+  const restoreVenueFromHistoryRef = useRef<(scan: { assetId: string; name: string }, previousLayout: RoomLayout) => void>(() => {});
   // 换场前那份布局没有 venueScan，撤销回到它时靠这份按对象身份的记录找回原场地。
   const venueByLayoutRef = useRef(new WeakMap<RoomLayout, { assetId: string; name: string }>());
   // 高斯校准只做一次；换场时若已按扫描自带尺寸设好壳体，预览就绪后不再二次改尺寸。
@@ -463,21 +553,28 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setAgentCollapsed(false);
   }, []);
   const issueReviewLink = useCallback(async () => {
-    const layout = layoutStore.getState().layout;
+    const token=sessionToken,selectedFloor=floorToken,initial=layoutStore.getState();
+    if(!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor))throw new Error('活动或楼层正在切换，请重新生成评审链接。');
+    const layout=structuredClone(initial.layout);
+    if(!sameRecoveryFormValue(layout,initial.layout))throw new Error('当前方案无法完整核对，未生成评审链接。');
+    const isCurrent=()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&layoutStore.getState().revision===initial.revision&&sameRecoveryFormValue(layoutStore.getState().layout,layout);
+    const check=()=>{if(!isCurrent())throw new Error('活动、楼层或方案已变化；旧评审记录如已写入会保留，链接未复制。');};
     const encoded = await encodeShareUrl(layout, window.location.origin);
+    check();
     const url = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
     if (!url) throw new Error('评审链接没有生成。');
     const projectKey = (layout.id ?? '').trim() || 'local-draft';
     const reviewPlanKey = reviewPlanKeyForClientUrl(url) ?? localPlanKey(layout);
-    rememberReviewLinkMark({
+    await rememberReviewLinkMark({
       projectKey,
       title: layout.name?.trim() || '未命名活动',
       shareId: projectKey,
       clientUrl: url,
       reviewPlanKey,
-    });
-    return { url };
-  }, []);
+    },{isCurrent});
+    check();
+    return { url,isCurrent };
+  }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
   const publishVersion = useCallback(async () => {
     const snapshot = controller.getSnapshot();
@@ -544,6 +641,24 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setBackupOpenRequest(value => value + 1);
   }, [openBusinessWorkspace]);
   const [pendingCatalog, setPendingCatalog] = useState<CatalogItem | null>(null);
+  const pendingPlacement = useRef<{item:CatalogItem;guard:CatalogPlacementGuard;unsubscribe:()=>void}|null>(null);
+  const clearPendingPlacement=useCallback(()=>{
+    const pending=pendingPlacement.current;pendingPlacement.current=null;
+    pending?.unsubscribe();pending?.guard.dispose();setPendingCatalog(null);
+  },[]);
+  const armPendingPlacement=useCallback((item:CatalogItem):boolean=>{
+    if(pendingPlacement.current)return false;
+    const guard=capturePlacement();
+    const observe=()=>{
+      if(pendingPlacement.current?.guard!==guard)return;
+      try{guard.assertCurrent();}catch{clearPendingPlacement();notify('场景、楼层或登录状态已变化，待放置物料已取消，请重新选择。','info');}
+    };
+    const stopLayout=layoutStore.subscribe(observe),stopSession=controller.subscribe(observe);
+    pendingPlacement.current={item,guard,unsubscribe:()=>{stopLayout();stopSession();}};
+    setPendingCatalog(item);return true;
+  },[capturePlacement,clearPendingPlacement,controller]);
+  useEffect(()=>()=>{const pending=pendingPlacement.current;pendingPlacement.current=null;pending?.unsubscribe();pending?.guard.dispose();},[]);
+  useEffect(()=>{const pending=pendingPlacement.current;if(!pending)return;try{pending.guard.assertCurrent();}catch{clearPendingPlacement();notify('场景、楼层或登录状态已变化，待放置物料已取消，请重新选择。','info');}},[layout,activeFloorIndex,isActive,clearPendingPlacement]);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
   const [measurementPoints, setMeasurementPoints] = useState<ReadonlyArray<{ x: number; z: number }>>([]);
@@ -1029,6 +1144,33 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       ),
   });
 
+  // Canvas gestures can outlive the DOM node until React effect cleanup.
+  // Never let a late pointer event from a previous activity/floor reach the
+  // state-changing drag callbacks, even before the next render is committed.
+  const dragAuthority=useRef<{id:string;activity:ActivitySessionToken;floor:FloorSessionToken}|null>(null);
+  const dragCancelRef=useRef(handleDragCancel);dragCancelRef.current=handleDragCancel;
+  const scopedDragStart=useCallback((id:string)=>{
+    const floor=floorSession.capture();
+    if(!sessionToken||!activitySession.isCurrent(sessionToken)||!floor||!floorSession.isCurrent(floor))return;
+    dragAuthority.current={id,activity:sessionToken,floor};handleDragStart(id);
+  },[sessionToken,activitySession.isCurrent,floorSession.capture,floorSession.isCurrent,handleDragStart]);
+  const scopedDragMove=useCallback((id:string,x:number,z:number)=>{
+    const authority=dragAuthority.current;if(!authority||authority.id!==id)return;
+    if(!activitySession.isCurrent(authority.activity)||!floorSession.isCurrent(authority.floor)){
+      dragAuthority.current=null;handleDragCancel(id);return;
+    }
+    handleDrag(id,x,z);
+  },[activitySession.isCurrent,floorSession.isCurrent,handleDrag,handleDragCancel]);
+  const scopedDragCancel=useCallback((id:string,options?:Parameters<typeof handleDragCancel>[1])=>{
+    const authority=dragAuthority.current;if(!authority||authority.id!==id)return;
+    const current=activitySession.isCurrent(authority.activity)&&floorSession.isCurrent(authority.floor);
+    dragAuthority.current=null;handleDragCancel(id,current?options:undefined);
+  },[activitySession.isCurrent,floorSession.isCurrent,handleDragCancel]);
+  useEffect(()=>{
+    const token=sessionToken;
+    return ()=>{const authority=dragAuthority.current;if(!token||!authority||authority.activity.scope!==token.scope||authority.activity.epoch!==token.epoch)return;dragAuthority.current=null;dragCancelRef.current(authority.id);};
+  },[sessionToken?.scope,sessionToken?.epoch]);
+
   // Re-seat a wall-mounted camera against its wall. A flush camera's body moves
   // to whichever side it faces (so the body + cone start at the wall surface
   // instead of passing through it); a bracketed camera stands off the wall by a
@@ -1113,14 +1255,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const history = useHistory(layout, useCallback(
     (snapshot: RoomLayout) => {
-      actions.applyLayout(snapshot);
-      // 布局里的场地标记跟着撤销/重做走：一次撤销就把画布和真实场地一起退回上一套。
-      // 换场前的旧快照没有 venueScan，用换场时记下的对象映射补上。
-      const scan = venueByLayoutRef.current.get(snapshot) ?? snapshot.venueScan;
-      if (scan && scan.assetId !== environmentsRef.current[0]?.assetId) restoreVenueFromHistoryRef.current(scan);
+      applyVenueHistorySnapshot(snapshot, venueByLayoutRef.current, () => layoutStore.getState().layout,
+        actions.applyLayout, () => environmentsRef.current[0]?.assetId,
+        (scan, previousLayout) => restoreVenueFromHistoryRef.current(scan, previousLayout));
     },
     [actions]
-  ));
+  ), {canApply: snapshot => {
+    if(!workspaceWriteGuards)return true;
+    try { workspaceWriteGuards.assertLayoutWrite(); } catch { notify('本机编辑权已失效，历史方案未应用。','error');return false; }
+    if(!environmentPreferenceReadyRef.current || pendingEnvironmentPositionRef.current){notify('场地资料尚待核对，历史方案未应用。','error');return false;}
+    const venue=venueByLayoutRef.current.get(snapshot) ?? snapshot.venueScan;
+    const current=environmentsRef.current[0];
+    if((venue?.assetId ?? null)!==(current?.assetId ?? null)) {
+      notify('历史方案涉及不同场地或场地来源不明，暂不能切换；当前布局与历史已保留。','error');return false;
+    }
+    return true;
+  }});
   // The stable callbacks, so the wrappers below don't change identity every
   // time canUndo/canRedo flips.
   const { commitNow: commitHistoryNow, clear: clearHistory } = history;
@@ -1270,14 +1420,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // after placing from merging with the placement (#P0-3).
   const handleDragEndWithHistory = useCallback(
     (id: string) => {
+      const authority=dragAuthority.current;if(!authority||authority.id!==id)return;
+      if(!activitySession.isCurrent(authority.activity)||!floorSession.isCurrent(authority.floor)){
+        dragAuthority.current=null;handleDragCancel(id);return;
+      }
+      dragAuthority.current=null;
       commitHistoryNow();
       handleDragEnd(id);
     },
-    [commitHistoryNow, handleDragEnd]
+    [activitySession.isCurrent,floorSession.isCurrent,commitHistoryNow,handleDragEnd,handleDragCancel]
   );
 
-  const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout, acknowledgeRestoredLayout, ensurePersistentIdentity, persistVerifiedLayout } = useLayoutPersistence({
+  const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout, reopenRemoteLayout, externalConflict, hasRemoteCandidate, acknowledgeRestoredLayout, ensurePersistentIdentity, persistVerifiedLayout, flushPendingBeforeSwitch, interruptedDrafts, downloadInterruptedDraft } = useLayoutPersistence({
     layout,
+    layoutSource:layoutStore,
+    ...(workspaceWriteGuards ? { assertWriteLease: workspaceWriteGuards.assertLayoutWrite, localWriteCapability: workspaceWriteGuards.capability } : {}),
     onHydrate: useCallback(
       (saved: RoomLayout) => {
         actions.applyLayout(saved);
@@ -1295,11 +1452,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // switching to the other tab's version is one Ctrl+Z away from being undone.
   const adoptRemoteLayout = useCallback(() => {
     if (!remoteLayout) return;
-    snapshotBeforeReplace(layout);
-    actions.applyLayout(remoteLayout);
+    if(!activitySession.isCurrent(sessionToken)||layoutStore.getState().layout!==layout){notify('活动已变化，请重新核对更新。','error');return;}
+    try { applyGuardedWorkspaceReplacement(layout, workspaceWriteGuards?.assertLayoutWrite, () => actions.applyLayout(remoteLayout), workspaceWriteGuards?.capability); }
+    catch (error) { notify(error instanceof Error ? error.message : '本机编辑权不可用，未切换布局。', 'error'); return; }
     clearTransientSelection();
     clearRemoteLayout();
-  }, [remoteLayout, layout, actions, clearTransientSelection, clearRemoteLayout]);
+  }, [remoteLayout, layout, actions, clearTransientSelection, clearRemoteLayout, workspaceWriteGuards,activitySession.isCurrent,sessionToken]);
 
   const selectedItem = useMemo(
     () => (selectedItemId ? activeFloor.items.find((item) => item.id === selectedItemId) ?? null : null),
@@ -1346,50 +1504,53 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const placeDiscrete = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }): string => {
-      if (materialCount(activeFloor.items) >= editorItemLimit(layout)) { notify(`当前场景最多支持 ${editorItemLimit(layout)} 件物料。`, 'info'); return ''; }
+      const pending=pendingPlacement.current;
+      if(pending){
+        try{pending.guard.assertCurrent();}catch{clearPendingPlacement();notify('场景、楼层或登录状态已变化，待放置物料已取消，请重新选择。','info');return '';}
+        if(!position||pending.item!==catalogItem){notify('请先放置或取消当前待放置物料。','info');return '';}
+      }
+      const current=layoutStore.getState(),currentLayout=current.layout,currentFloor=currentLayout.floors[current.activeFloorIndex];
+      if(!currentFloor){notify('当前楼层无法读取，请重新选择。','info');return '';}
+      if (materialCount(currentFloor.items) >= editorItemLimit(currentLayout)) { notify(`当前场景最多支持 ${editorItemLimit(currentLayout)} 件物料。`, 'info'); return ''; }
       // M2 命令门（P0-1）：普通家具在落盘前过一次几何判据；门洞 / 窗 / 摄像机 / 户外件
       // 在 useItemPlacement 内部有自己的 snap 与 canApplyLayoutGeometry 兜底，这里不重复预判。
       const bypassCommandGate = isOpening(catalogItem.type)
         || catalogItem.type === 'security-camera'
         || catalogItem.category === 'outdoor';
       if (!bypassCommandGate) {
-        const trialItem: FurnitureItem = {
-          ...catalogItem,
-          id: `__trial_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          position: position ?? { x: 0, z: 0 },
-          rotation: 0,
-        } as FurnitureItem;
-        const trialResult = executeSceneCommand(
-          placeItemCommand({ floorIndex: activeFloorIndex, item: trialItem }),
-          { layout },
-        );
-        if (!trialResult.ok) {
+        const resolved=resolveCatalogPosition(currentLayout,current.activeFloorIndex,catalogItem,`__trial_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,position);
+        if (!resolved.ok) {
           const entry: OutcomeEntry<FurnitureItem> = {
-            item: trialItem,
-            reason:
-              trialResult.refused[0]?.message
-              ?? trialResult.preconditions[0]?.message
-              ?? trialResult.shapeIssues.map(s => s.message).join('；')
-              ?? '落点不合法',
-            code:
-              trialResult.refused[0]?.code
-              ?? trialResult.preconditions[0]?.code
-              ?? 'SHAPE_INVALID',
+            item: resolved.item,reason:resolved.reason,code:resolved.code,
           };
           notify(`「${catalogItem.name}」没放成：${entry.reason}`, 'info');
           applyOutcome(combineOutcomes(
             lastOutcomeRef.current ?? { placed: [], refused: [], skipped: [] },
             { placed: [], refused: [entry], skipped: [] },
           ));
-          setPendingCatalog(catalogItem);
+          if(!pending)armPendingPlacement(catalogItem);
           return '';
         }
+        if(layoutStore.getState()!==current){notify('场景已变化，请重新选择放置位置。','info');return '';}
+        if(pending)clearPendingPlacement();
+        commitHistoryNow();
+        const id=actions.addCatalogItem(catalogItem,resolved.position);
+        if(!layoutStore.getState().layout.floors[current.activeFloorIndex]?.items.some(item=>item.id===id)){
+          if(!pendingPlacement.current)armPendingPlacement(catalogItem);
+          notify('物料未放入画布，请点击场地选择位置。','info');return '';
+        }
+        actions.setLocked(id,false);
+        actions.updateItem(id,{provenance:{source:'human',opId:`manual-${Date.now()}-${Math.random().toString(36).slice(2,7)}`}});
+        return id;
       }
+      // Wall-mounted/outdoor placement uses the hook's render-bound geometry;
+      // do not let a stale closure place into a newer scene.
+      if(currentLayout!==layout||current.activeFloorIndex!==activeFloorIndex){notify('场景已变化，请重新选择物料。','info');return '';}
+      if(pending)clearPendingPlacement();
       commitHistoryNow();
       const id = placeCatalogItem(catalogItem, position);
-      if (!id) { setPendingCatalog(catalogItem); notify('此处与结构相交，请点击场地中的其他位置放置。', 'info'); }
+      if (!id) { armPendingPlacement(catalogItem); notify('此处与结构相交，请点击场地中的其他位置放置。', 'info'); }
       else {
-        setPendingCatalog(null);
         // M6 provenance：手动放的件打上 human 标签，方便 handoff / 审校卡区分 AI 与人工。
         actions.updateItem(id, {
           provenance: { source: 'human', opId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` },
@@ -1397,7 +1558,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       return id;
     },
-    [commitHistoryNow, placeCatalogItem, activeFloor.items, layout, activeFloorIndex, actions, applyOutcome]
+    [commitHistoryNow, placeCatalogItem, layout, activeFloorIndex, actions, applyOutcome,armPendingPlacement,clearPendingPlacement]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -1415,6 +1576,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     selectOnly,
     placeCatalogItem: placeDiscrete,
   });
+  const placeCatalogItemResult=useCallback((item:CatalogItem):CatalogPlacementResult=>{
+    const id=placeFromCatalog(item);
+    if(id)return {status:'placed',id};
+    if(pendingPlacement.current?.item===item)return {status:'pending'};
+    return {status:'failed',message:pendingPlacement.current?'请先放置或取消当前待放置物料。':'物料未添加，请检查场地后重试。'};
+  },[placeFromCatalog]);
 
   // 2D plan select/drag (#219). Reuses use-item-drag's session, so the commit
   // semantics (single dispatch, lock-on-release, wall settling, isDragActive
@@ -1434,10 +1601,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     onItemDoubleClick: openPropertiesForItem,
     onDeselect: deselectAll,
     snapPosition,
-    onItemDragStart: handleDragStart,
-    onItemDrag: handleDrag,
+    onItemDragStart: scopedDragStart,
+    onItemDrag: scopedDragMove,
     onItemDragEnd: handleDragEndWithHistory,
-    onItemDragCancel: handleDragCancel,
+    onItemDragCancel: scopedDragCancel,
     gizmoMode,
     onMarqueeSelect: handleMarqueeSelect,
   });
@@ -1447,12 +1614,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   useEffect(() => {
     const canvas = canvas2DRef.current;
     if (!view.view2D || planAnnot.drawMode === 'off' || !canvas) {
-      setDraftPoints([]);
+      setDraftPoints(current => current.length ? [] : current);
       return;
     }
+    setDraftPoints(current => current.length ? [] : current);
 
     let zoneStart: PlanPoint | null = null;
     let measureFrom: PlanPoint | null = null;
+    const route = planAnnot.drawMode === 'route' ? createRouteDrawingSession(() => {
+      const activity=sessionToken, floor=floorSession.capture(), venue=routeVenueFacts.capture();
+      if(!activity||!floor||!venue||!activitySession.isCurrent(activity)||!floorSession.isCurrent(floor)||!routeVenueFacts.isCurrent(venue))return null;
+      const draft=planAnnot.getSnapshot(),draftSignature=JSON.stringify(draft.draft);
+      return {floorId:floor.floorId,isCurrent:()=>activitySession.isCurrent(activity)&&floorSession.isCurrent(floor)&&routeVenueFacts.isCurrent(venue),
+        isDrawingCurrent:()=>{const now=planAnnot.getSnapshot();return now.revision===draft.revision&&JSON.stringify(now.draft)===draftSignature;}};
+    },(points,binding)=>planAnnot.addUserRouteFromPoints(points,ANNOTATION_PRESET_LABELS.guest_route,binding)) : null;
+    const clearInvalidRoute=()=>{if(route&&!route.revalidate()){setDraftPoints([]);planAnnot.setDrawMode('off');notify('活动、楼层或场地已变化，未完成的路线已取消，请重新绘制。','info');}};
+    const unsubscribe=route?layoutStore.subscribe(clearInvalidRoute):()=>{};
 
     const toWorld = (clientX: number, clientY: number): PlanPoint | null => {
       const p = clientToWorld2D(clientX, clientY);
@@ -1480,7 +1657,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           planAnnot.setDrawMode('off');
         }
       } else if (planAnnot.drawMode === 'door') {
-        // 真门标注：单击墙边落一扇门（inferred 缺省 = 真门，非 withDefaultDoor 推测）。
+        // 用户在墙边标注入口位置；门宽与开启方向仍需现场核验。
         // 离四墙都太远时静默不落（保持绘制模式，用户点到墙边再落）；
         // 单击即收（同 measure 的单段语义），Esc/再点标注钮退出。
         const door = pickDoorWallFromPoint(w, { width: layout.width, height: layout.height });
@@ -1490,7 +1667,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           planAnnot.setDrawMode('off');
         }
       } else if (planAnnot.drawMode === 'route') {
-        setDraftPoints((prev) => [...prev, w]);
+        const added=route?.add(w);
+        if(added==='added')setDraftPoints(route!.points());
+        else {setDraftPoints([]);planAnnot.setDrawMode('off');notify('活动、楼层或场地无法核对，路线未保存，请重新绘制。','info');}
       }
     };
 
@@ -1523,21 +1702,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     };
 
     const finishRoute = (): void => {
-      setDraftPoints((prev) => {
-        if (prev.length >= 2) {
-          planAnnot.addAnnotationFromPoints(
-            prev,
-            'route',
-            ANNOTATION_PRESET_LABELS.guest_route,
-          );
-        }
-        // 让 setState 落账后再清空 draftPoints / 退出绘制模式。
-        window.setTimeout(() => {
-          setDraftPoints([]);
-          planAnnot.setDrawMode('off');
-        }, 0);
-        return prev;
-      });
+      const result=route?.finish();
+      if(result==='invalidated'||result==='failed')notify('路线的活动、楼层或场地无法核对，请重新绘制。','info');
+      setDraftPoints([]);planAnnot.setDrawMode('off');
     };
 
     const onDoubleClick = (e: MouseEvent): void => {
@@ -1553,6 +1720,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       // 第 11 批：Esc 随时退出绘制（zone 连续画框时用它收尾）。
       if (e.key === 'Escape' && planAnnot.drawMode !== 'off') {
+        route?.cancel();
         planAnnot.setDrawMode('off');
         setDraftPoints([]);
       }
@@ -1565,6 +1733,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
+      unsubscribe();
+      if(route?.points().length){route.cancel();notify('画布状态已变化，未完成的路线已取消，请重新绘制。','info');}
       canvas.removeEventListener('pointerdown', onPointerDown, true);
       canvas.removeEventListener('pointermove', onPointerMove, true);
       canvas.removeEventListener('pointerup', onPointerUp, true);
@@ -1576,8 +1746,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     planAnnot.drawMode,
     clientToWorld2D,
     planAnnot.addAnnotationFromPoints,
+    planAnnot.addUserRouteFromPoints,
+    planAnnot.getSnapshot,
     planAnnot.addDoorAnnotation,
     planAnnot.setDrawMode,
+    sessionToken,
+    activitySession.isCurrent,
+    floorSession.capture,
+    floorSession.isCurrent,
+    routeVenueFacts.capture,
+    routeVenueFacts.isCurrent,
     zoneType,
     layout.width,
     layout.height,
@@ -1592,7 +1770,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const ro = new ResizeObserver(() => setOverlayTick((t) => t + 1));
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [view.view2D]);
+  }, [view.view2D,canvas2DRef]);
 
   // 第 10 批：PlanOverlay 用的真实 fit-and-center 变换（与 render2DTopDown 同源）。
   const overlayTransform: View2DTransform | null = useMemo(() => {
@@ -1606,14 +1784,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     } catch {
       return null;
     }
-  }, [view.view2D, layout, overlayTick]);
+  }, [view.view2D, layout, overlayTick, canvas2DRef]);
 
   // 3DGS 环境预览的渲染入口；useThreeScene 每帧走它，预览关闭时它是空的。
   const splatPaintRef = useRef<SplatPaint | null>(null);
   const environmentPickerRef = useRef<((ray: ThreeNS.Ray) => string | null) | null>(null);
   const environmentSelectionRef = useRef<((assetId: string) => void) | null>(null);
 
-  const { isReady, error, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef, worldPositionFromClient } =
+  const { isReady: rendererReady, error, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef, worldPositionFromClient } =
     useThreeScene({
       canvasRef,
       // 环境预览开着时，这一帧由点云那条渲染栈先画背景再画本场景；关掉时它自己退回默认渲染。
@@ -1630,10 +1808,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       onItemSelect: handleSelect,
       onItemDoubleClick: openPropertiesForItem,
       selectedIds: allSelectedIds,
-      onItemDragStart: handleDragStart,
-      onItemDrag: handleDrag,
+      onItemDragStart: scopedDragStart,
+      onItemDrag: scopedDragMove,
       onItemDragEnd: handleDragEndWithHistory,
-      onItemDragCancel: handleDragCancel,
+      onItemDragCancel: scopedDragCancel,
       onItemHover: setHover,
       onEmptyClick: handleEmptyClick,
       onEnvironmentPick: ray => {
@@ -1656,17 +1834,62 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       transformMode: gizmoMode,
     });
 
+  // `rendererReady` can briefly describe the previous, now detached canvas
+  // while the session-scoped ref has not yet bound to its replacement.
+  // Recheck after the canvas commits so React observes the new binding even
+  // when the renderer's internal false/true state updates are batched.
+  const [,refreshCanvasBinding]=useState(0);
+  useEffect(()=>{
+    if(!rendererReady)return undefined;
+    const frame=requestAnimationFrame(()=>refreshCanvasBinding(value=>value+1));
+    return ()=>cancelAnimationFrame(frame);
+  },[canvasRef,rendererReady]);
+  const isReady=activitySession.isCurrent(sessionToken)&&rendererReady&&!!canvasRef.current&&rendererRef.current?.domElement===canvasRef.current;
+
   const preserveSplatCameraRef = useRef(false);
   preserveSplatCameraRef.current = walkthroughActive;
-  const onSplatPositionChange = useCallback((position: SplatPosition) => {
-    setEnvironments(current => {
-      if (!current.length) return current;
-      const next = [{ ...current[0]!, position }, ...current.slice(1)];
-      environmentsRef.current = next;
-      writeEnvironments(layoutStore.getState().layout.id, next);
-      return next;
+  const splatPositionSetterRef=useRef<(position:SplatPosition)=>void>(()=>{});
+  const [pendingEnvironmentPosition,setPendingEnvironmentPosition]=useState<PendingEnvironmentWrite|null>(null);
+  useEffect(()=>{
+    const scope=layout.id??'local';
+    return registerReadonlyDraftReader(scope,'environment',()=>{
+      const pending=pendingEnvironmentPositionRef.current;
+      if(!pending)return {status:'none'};
+      const pendingScope=pending.scope.kind==='project'?pending.scope.id:'local';
+      return pendingScope===scope?{status:'captured',value:pending.intended}:{status:'none'};
     });
-  }, []);
+  },[layout.id]);
+  const onSplatPositionChange = useCallback((position: SplatPosition) => {
+    const current=environmentsRef.current, active=current[0];
+    if(!active)return;
+    const reset=(value: SplatPosition)=>splatPositionSetterRef.current(value);
+    if(!workspaceWriteGuards){
+      const next=[{...active,position},...current.slice(1)];environmentsRef.current=next;setEnvironments(next);
+      writeEnvironments(layoutStore.getState().layout.id,next);return;
+    }
+    if(pendingEnvironmentPositionRef.current){
+      reset((pendingEnvironmentPositionRef.current.intended?.[0]?.position ?? active.position ?? ZERO_SPLAT_POSITION));
+      notify('上次场地位置保存结果尚待核对，请先保留候选，不能重复写入。','error');return;
+    }
+    const id=layoutStore.getState().layout.id;
+    const scope:EnvironmentScope=id?{kind:'project',id}:{kind:'draft'};
+    const token=sessionToken;
+    const assertCurrent=()=>{
+      workspaceWriteGuards.assertLayoutWrite();
+      if(!token||!activitySession.isCurrent(token)||layoutStore.getState().layout.id!==id)throw new Error('活动已变化');
+    };
+    const result=persistEnvironmentPosition({scope,generation:token?.epoch ?? -1,environments:current,assetId:active.assetId,
+      position,capability:workspaceWriteGuards.capability,assertCurrent});
+    if(result.status==='saved'){
+      environmentsRef.current=result.next;setEnvironments(result.next);reset(position);return;
+    }
+    if(result.status==='uncertain'&&result.pending&&result.next){
+      pendingEnvironmentPositionRef.current=result.pending;setPendingEnvironmentPosition(result.pending);
+      environmentsRef.current=result.next;setEnvironments(result.next);reset(position);
+      notify('场地位置保存结果待核对，已保留候选，暂不重复写入。','error');return;
+    }
+    reset(active.position ?? ZERO_SPLAT_POSITION);notify(result.reason,'error');
+  }, [workspaceWriteGuards,sessionToken,activitySession.isCurrent]);
   const otherSplatScenes = useMemo(() => environments.slice(1).flatMap(entry => {
     try {
       return [{ id: entry.assetId, source: storedAholoSceneSource(entry.assetId), position: entry.position ?? ZERO_SPLAT_POSITION,
@@ -1707,11 +1930,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     position: environment?.position ?? ZERO_SPLAT_POSITION,
     transformMode: splatTransformMode,
     onPositionChange: onSplatPositionChange,
+    calibrationReadOnly: !!workspaceWriteGuards,
+    calibrationCapability: workspaceWriteGuards?.capability,
     otherScenes: otherSplatScenes,
     activeFloorIndex,
     primaryVisible: (environment?.floorIndex ?? 0) === activeFloorIndex && splatLod !== 'poi',
     preserveCameraRef: preserveSplatCameraRef,
   });
+  splatPositionSetterRef.current=setSplatPosition;
   environmentPickerRef.current = pickSplatScene;
   // The Gaussian venue and its editable room layout form one placed unit.
   // Apply the venue offset to the main scene too, so walls, floors, furniture,
@@ -1725,14 +1951,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, isReady, sceneRef, invalidate]);
   splatPaintRef.current = paintSplatFrame;
   const restoredEnvironmentRef = useRef('');
-  // 第 3 步：整景区视距下自动挂载只记在这里，不 startSplat；进到 100 m 内再补挂。
+  // 遥远视距先记录场景，进入范围后再加载。
   const deferredEnvironmentRef = useRef<StoredEnvironment | null>(null);
-  const selectEnvironment = useCallback((assetId: string, name: string, options?: { restoreItems?: boolean }) => {
+  const selectEnvironment = useCallback((assetId: string, name: string, options?: { restoreItems?: boolean; previousLayout?: RoomLayout }) => {
+    if(workspaceWriteGuards)throw new Error('当前编辑权模式暂不支持切换场地及其物料，请保留现有资料。');
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     const current = environmentsRef.current;
     if (current[0]?.assetId === assetId) return;
     deferredEnvironmentRef.current = null;
-    const liveLayout = layoutStore.getState().layout;
+    const liveLayout = options?.previousLayout ?? layoutStore.getState().layout;
     const currentItems = liveLayout.floors.map(floor => floor.items.map(item => ({
       ...item,
       ...(item.position ? { position: { ...item.position } } : {}),
@@ -1767,7 +1994,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setEnvironments(next);
     writeEnvironments(liveLayout.id, next);
     restoredEnvironmentRef.current = '';
-  }, [actions, activeFloorIndex, layout.floors, layout.height, layout.width, setView]);
+  }, [actions, activeFloorIndex, layout.floors, layout.height, layout.width, setView, workspaceWriteGuards]);
   const startStoredScene = useCallback((assetId: string) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     try {
@@ -1790,9 +2017,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     }
   }, [selectEnvironment, setView, showAgent]);
   // 撤销/重做恢复场地：只换场地，物料已经在布局快照里一起退回去了，不再二次覆盖。
-  restoreVenueFromHistoryRef.current = (scan) => {
+  restoreVenueFromHistoryRef.current = (scan, previousLayout) => {
     try {
-      selectEnvironment(scan.assetId, scan.name, { restoreItems: false });
+      selectEnvironment(scan.assetId, scan.name, { restoreItems: false, previousLayout });
     } catch (failure) {
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
@@ -1813,8 +2040,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   useEffect(() => {
     const previousKey = environmentKeyRef.current;
     environmentKeyRef.current = environmentKey;
+    if(previousKey!==environmentKey)environmentPreferenceReadyRef.current=false;
     if (previousKey === environmentKey) return;
     const carried = previousKey === 'draft' ? environmentsRef.current : [];
+    if(workspaceWriteGuards){
+      const scope:EnvironmentScope=layout.id?{kind:'project',id:layout.id}:{kind:'draft'};
+      const result=readEnvironmentsStrict(scope,workspaceWriteGuards.capability);
+      if(!result.ok){notify('本机场地资料暂时无法核对，原资料已保留。','error');return;}
+      environmentPreferenceReadyRef.current=true;
+      const stored=result.snapshot.value;
+      const list=Array.isArray(stored)?stored:stored?[stored]:[];
+      environmentsRef.current=list;setEnvironments(list);if(!list.length)stopSplat();
+      return;
+    }
     const hasPreference = hasEnvironmentPreference(layout.id);
     restoredEnvironmentRef.current = '';
     if (hasPreference) {
@@ -1835,7 +2073,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     writeEnvironments(layout.id, defaults);
     environmentsRef.current = defaults;
     setEnvironments(defaults);
-  }, [environmentKey, layout.id, stopSplat]);
+  }, [environmentKey, layout.id, stopSplat, workspaceWriteGuards]);
   // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
   // 第 3 步：整景区视距（>200 m）下不解码点云，先挂锚点 POI；等到 <100 m 再补挂。
   // 等 splatLodMeasured 才判断，避免相机/控件尚未就绪时把「还没量」误当成近景。
@@ -1862,6 +2100,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     restoreEnvironment(deferred);
   }, [isReady, splatLodMeasured, splatLod, environmentKey, restoreEnvironment]);
   const removeEnvironment = useCallback((assetId: string) => {
+    if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     const next = environmentsRef.current.filter(entry => entry.assetId !== assetId);
     environmentsRef.current = next;
     setEnvironments(next);
@@ -1872,16 +2111,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       clearEnvironment(layoutStore.getState().layout.id);
       stopSplat();
     }
-  }, [stopSplat]);
+  }, [stopSplat,workspaceWriteGuards]);
   const dropEnvironment = useCallback(() => {
+    if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     environmentsRef.current = [];
     setEnvironments([]);
     clearEnvironment(layoutStore.getState().layout.id);
     restoredEnvironmentRef.current = '';
     deferredEnvironmentRef.current = null;
     stopSplat();
-  }, [stopSplat]);
+  }, [stopSplat,workspaceWriteGuards]);
   const setEnvironmentFloor = useCallback((assetId: string, floorIndex: number) => {
+    if(workspaceWriteGuards){notify('当前编辑权模式暂不支持更换场地楼层，请保留现有资料。','error');return;}
     let current = environmentsRef.current;
     let entry = current.find(value => value.assetId === assetId);
     if (!entry) return;
@@ -1899,13 +2140,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     writeEnvironments(layoutStore.getState().layout.id, next);
     actions.setActiveFloorIndex(floorIndex);
     if (current[0]?.assetId === assetId) setSplatPosition(position);
-  }, [actions, selectEnvironment, setSplatPosition]);
+  }, [actions, selectEnvironment, setSplatPosition, workspaceWriteGuards]);
   useEffect(() => {
-    if ((environment?.floorIndex ?? 0) === activeFloorIndex) return;
+    if (workspaceWriteGuards || (environment?.floorIndex ?? 0) === activeFloorIndex) return;
     const match = environments.find(entry => (entry.floorIndex ?? 0) === activeFloorIndex);
     if (!match) return;
     selectEnvironment(match.assetId, match.name);
-  }, [activeFloorIndex, environment?.floorIndex, environments, selectEnvironment]);
+  }, [activeFloorIndex, environment?.floorIndex, environments, selectEnvironment, workspaceWriteGuards]);
 
   useEffect(() => {
     const focusObject = (event: Event) => {
@@ -2301,6 +2542,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       toggleSidebar: () => toggleAgent('material'),
       setGizmoMode: (next: GizmoMode) => setGizmoMode(next),
       removeInteriorWall: (id: string) => {
+        if (isEvidenceProtectedWall(layoutStore.getState().layout, id)) {
+          notify('墙体有关联图纸或已确认依据，请先在结构面板重新核对。', 'info');
+          return;
+        }
         actions.removeInteriorWall(id);
         setSelectedWall(null);
       },
@@ -2362,12 +2607,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (workbenchMode === 'layout') return;
     selectOnly(null);
     setSelectedWall(null);
-    setPendingCatalog(null);
+    clearPendingPlacement();
     cancelPlacement();
     setView(current => (current.drawWallMode || current.drawZoneMode || current.measurementMode)
       ? { ...current, drawWallMode: false, drawZoneMode: false, measurementMode: false }
       : current);
-  }, [workbenchMode, selectOnly, cancelPlacement, setView]);
+  }, [workbenchMode, selectOnly, cancelPlacement, setView,clearPendingPlacement]);
 
 
 
@@ -2427,11 +2672,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [isReady, fitToRoom]);
 
   const onLoadLayout = useCallback((next: RoomLayout) => {
-    snapshotBeforeReplace(layout);
-    actions.applyLayout(next);
+    const before=layoutStore.getState().layout;
+    if (!activitySession.isCurrent(sessionToken) || before!==layout) throw new Error('活动已变化，请重新打开。');
+    if((before.id??null)!==(next.id??null))flushPendingBeforeSwitch();
+    if(layoutStore.getState().layout!==before)throw new Error('保存期间活动已变化，请重新打开。');
+    applyGuardedWorkspaceReplacement(layout, workspaceWriteGuards?.assertLayoutWrite, () => actions.applyLayout(next), workspaceWriteGuards?.capability);
     clearTransientSelection();
     clearHistory(layoutStore.getState().layout);
-  }, [actions, layout, clearTransientSelection, clearHistory]);
+  }, [actions, layout, clearTransientSelection, clearHistory, workspaceWriteGuards,activitySession.isCurrent,sessionToken,flushPendingBeforeSwitch]);
 
   const prepareRestoreLayout = useCallback((next: RoomLayout): RoomLayout => {
     if (controller.getSnapshot().project || new URL(window.location.href).searchParams.has('project')) {
@@ -2440,41 +2688,53 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     return prepareLocalRestoreLayout(next);
   }, [controller]);
   const commitRestoredLayout = useCallback((candidate: RoomLayout): void => {
+    workspaceWriteGuards?.assertLayoutWrite();
+    if(!activitySession.isCurrent(sessionToken))throw new Error('活动已变化，未恢复备份。');
     const next = prepareRestoreLayout(candidate);
     const before = layoutStore.getState().layout;
+    if((before.id??null)!==(next.id??null))flushPendingBeforeSwitch();
+    if(layoutStore.getState().layout!==before)throw new Error('保存期间活动已变化，未恢复备份。');
     const json = commitLocalRestoreLayout(next, {
       current: () => layoutStore.getState().layout,
       apply: value => actions.applyLayout(value),
-      beforeReplace: () => { commitHistoryNow(); snapshotBeforeReplace(before); },
+      beforeReplace: () => { workspaceWriteGuards?.assertLayoutWrite(); commitHistoryNow(); snapshotBeforeReplace(before, workspaceWriteGuards?.assertLayoutWrite); workspaceWriteGuards?.assertLayoutWrite(); },
     });
     const restored = layoutStore.getState().layout;
     acknowledgeRestoredLayout(restored, json);
     clearTransientSelection(); clearHistory(restored);
     initiallyFramed.current = false;
-  }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory]);
+  }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards,flushPendingBeforeSwitch,activitySession.isCurrent,sessionToken]);
 
-  const onApplyCreative = useCallback((next: RoomLayout) => {
-    const before = layoutStore.getState().layout;
+  const onApplyCreative = useCallback((next: RoomLayout, options?: { preserveProvenance?: boolean; expectedBase?: RoomLayout; expectedFloor?: FloorSessionToken }) => {
+    workspaceWriteGuards?.assertLayoutWrite();
+    if(!activitySession.isCurrent(sessionToken))throw new Error('活动已变化，请重新核对方案。');
+    const initialState = layoutStore.getState();
+    const before = initialState.layout;
+    if((before.id??null)!==(next.id??null))flushPendingBeforeSwitch();
+    if(layoutStore.getState().layout!==before)throw new Error('保存期间活动已变化，请重新核对方案。');
+    if (options?.expectedFloor && !floorSession.isCurrent(options.expectedFloor)) {
+      throw new Error('楼层已变化，请重新核对方案。');
+    }
     // 第 7 批收尾：记录本次落盘 + 体检的起始时刻，完成卡上的「落盘耗时」用它算。
     const applyStartedAt = Date.now();
-    let forceApply = false;
-    if (previewGuard) {
-      const decision = decideOnApply(before, previewGuard);
-      // 预览卡本身就是确认：prompt 场景不再 window.confirm 阻塞，直接 forceApply 继续，
-      // 用户已在预览里看过候选，二次确认由撤销历史兜底。
-      forceApply = decision.action === 'prompt';
+    const expectedBase = options?.expectedBase;
+    if (expectedBase && (before.id !== expectedBase.id || !sameLayoutContent(before, expectedBase))) {
+      throw new Error('场景在预览期间已变化，请重新生成并核对方案。');
+    }
+    if (previewGuard && decideOnApply(before, previewGuard).action === 'prompt') {
+      throw new Error('场景在预览期间已变化，请重新生成并核对方案。');
     }
     if (!canApplyLayoutGeometry(before, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
 
-    // M6 provenance：给 AI 候选里每件打上 ai 标签（map 新数组，不 mutation 原候选）。
+    // 只给新物件记录来源，已有物件的来源不能被这次预览覆盖。
     const aiOpId = `ai-${Date.now()}`;
+    const existingIds = new Set(before.floors.flatMap(f => f.items.map(item => item.id)));
     const provenanceNext: RoomLayout = {
       ...next,
       floors: next.floors.map(f => ({
         ...f,
-        items: f.items.map(item => ({
-          ...item,
-          provenance: {
+        items: f.items.map(item => options?.preserveProvenance || existingIds.has(item.id) ? item : ({
+          ...item, provenance: {
             source: 'ai' as const,
             opId: aiOpId,
             ...(previewGuard?.recipeId ? { recipeId: previewGuard.recipeId } : {}),
@@ -2484,43 +2744,38 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     };
 
     // M2 命令门（P0-2）：逐件分流——合法件进 nextLayout，越界/重叠件进 refused（真记账）。
-    // 用户已经在 decideOnApply 里 confirm 过的话，本次跳过 baseFingerprint 再校验。
     const cmd = applyLayoutCommand({
       layout: provenanceNext,
-      ...(forceApply || !previewGuard?.baselineFingerprint
+      ...(!previewGuard?.baselineFingerprint
         ? {}
         : { baseFingerprint: previewGuard.baselineFingerprint }),
     });
     const result = applyLayoutCommandWithRefusals(cmd, { layout: before });
-    if (!result.ok) {
-      const msg = result.shapeIssues.map(s => s.message).join('；')
-        || result.preconditions.map(p => p.message).join('；')
-        || '候选方案无法应用';
-      throw new Error(msg);
-    }
+    const applicationError = completeLayoutError(result);
+    if (applicationError) throw new Error(applicationError);
 
-    // M3 settle 自动体检（P0-2 接线）：AI 摆完立刻跑一遍 BFS 可达性 + 最小平移收敛器，
-    // 把堵主通道 / 孤立刻直接挪开；挪不动的留给 UI 标红。
-    const settleReport = settlePlacement(result.nextLayout, activeFloorIndex);
-    const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
-    const stillBad = settleReport.remainingViolations.length;
-    if (movedCount > 0 || stillBad > 0) {
-      notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
-    }
-    const finalLayout = settleReport.layout;
+    // 确认的候选即最终落盘内容；不在确认后悄悄移动家具。
+    const finalLayout: RoomLayout = { ...result.nextLayout, ...(before.designBook && !result.nextLayout.designBook ? { designBook: before.designBook } : {}) };
+    const candidateValidation = validateCandidateApply(before, finalLayout, activeFloorIndex);
+    if (!candidateValidation.ok) throw new Error(candidateValidation.reason);
     // 集成接线：Bingo 体检分即时 notify，并把同一份数带进「本次报告」卡（第 7 批收尾）。
-    const bingoScore = computeBingoScore(finalLayout, settleReport);
-    notify(bingoScore.summary, bingoScore.total >= 95 && bingoScore.stuckCount === 0 ? 'success' : 'info');
-
-    commitHistoryNow();
-    snapshotBeforeReplace(layout);
-    actions.applyLayout({ ...finalLayout, ...(layout.designBook && !finalLayout.designBook ? { designBook: layout.designBook } : {}) });
+    const bingoScore = computeBingoScore(finalLayout);
+    applyGuardedWorkspaceReplacement(before, workspaceWriteGuards?.assertLayoutWrite, () => {
+      const latestState = layoutStore.getState();
+      const current = latestState.layout;
+      if ((options?.expectedFloor && !floorSession.isCurrent(options.expectedFloor)) || current.id !== before.id || !sameLayoutContent(current, before)) {
+        throw new Error('场景在应用前已变化，请重新生成并核对方案。');
+      }
+      commitHistoryNow();
+      actions.applyLayout(finalLayout);
+      if (!sameRecoveryFormValue(layoutStore.getState().layout, finalLayout)) {
+        throw new Error('应用后的布局与预览不一致，请先撤销并重新核对。');
+      }
+    }, workspaceWriteGuards?.capability);
+    notify(bingoScore.summary, 'info');
 
     // M5：按 id 差分写 Outcome 账本；refused 不再硬编码空数组。
-    const beforeIds = new Set(before.floors.flatMap(f => f.items.map(i => i.id)));
-    const placedItems = finalLayout.floors.flatMap(f => f.items).filter(i => !beforeIds.has(i.id));
-    const finalIds = new Set(finalLayout.floors.flatMap(f => f.items.map(i => i.id)));
-    const removedItems = before.floors.flatMap(f => f.items).filter(i => !finalIds.has(i.id));
+    const {added:placedItems,removed:removedItems}=generationMaterialDiff(before,finalLayout);
     const candidateById = new Map(provenanceNext.floors.flatMap(f => f.items.map(i => [i.id, i])));
     const refusedEntries: OutcomeEntry<FurnitureItem>[] = result.refused.map(r => ({
       item: candidateById.get(r.itemId) ?? ({ id: r.itemId, name: r.itemId } as unknown as FurnitureItem),
@@ -2537,7 +2792,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const outcome: GenerationOutcome<FurnitureItem> = {
       placed: placedItems,
       refused: refusedEntries,
-      skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
+      skipped: [], removed: removedItems,
     };
     if (hasOutcomeChanges(outcome)) {
       // 第 8 批：模型轮数取云端那一趟的真值（AgentRun.call_count），
@@ -2548,20 +2803,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         score: bingoScore,
         placedCount: placedItems.length,
         refusedCount: refusedEntries.length,
-        skippedCount: removedItems.length,
+        skippedCount: 0,
+        removedCount: removedItems.length,
         fixedCount: bingoScore.fixedCount,
         stuckCount: bingoScore.stuckCount,
         areaM2: finalLayout.width * finalLayout.height,
         durationMs: Date.now() - applyStartedAt,
         ...(rounds === undefined ? {} : { rounds }),
       });
-      applyOutcome({ ...outcome, report });
+      let appliedLayout: RoomLayout | undefined;
+      try { appliedLayout = structuredClone(finalLayout); } catch { /* 无可靠快照时只能显示历史结果。 */ }
+      applyOutcome({ ...outcome, report, ...(appliedLayout ? {appliedLayout,appliedRevision:layoutStore.getState().revision} : {}) });
     }
     setPreviewGuard(null);
     clearTransientSelection();
     initiallyFramed.current = false;
     setView(current => ({ ...current, view2D: false }));
-  }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome]);
+  }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome, workspaceWriteGuards, floorSession.isCurrent,flushPendingBeforeSwitch,activitySession.isCurrent,sessionToken]);
 
   /**
    * docs/19 地理底图：只动 researchArea 与场景锚点，走正式历史；输入与自动铺图共用这一条路。
@@ -2578,6 +2836,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     /** 锚点朝向（度，正北顺时针）：scanAssetId 自动铺图带资产采集朝向时写入；缺省沿用现有锚点。 */
     orientationDeg?: number;
   }) => {
+    if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) {
+      notify('活动已变化，请重新核对底图。', 'error');
+      return false;
+    }
     const current = layoutStore.getState().layout;
     const next: RoomLayout = (() => {
       if (!area) {
@@ -2599,12 +2861,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       return { ...current, sceneAnchor, researchArea: area };
     })();
     try {
+      workspaceWriteGuards?.assertLayoutWrite();
       commitHistoryNow();
+      workspaceWriteGuards?.assertLayoutWrite();
+      if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || layoutStore.getState().layout !== current) throw new Error('活动或场景已变化，请重新核对底图。');
       actions.applyLayout(next);
+      if (!sameLayoutContent(layoutStore.getState().layout, next)) throw new Error('底图结果未能读回，请重新核对。');
+      return true;
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
+      return false;
     }
-  }, [actions, commitHistoryNow, notify]);
+  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, activitySession.isCurrent, sessionToken, sessionScope]);
 
   /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
@@ -2617,32 +2885,33 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       zoomToVenue(venue, venue.assetId === focusedVenueId);
       return;
     }
+    if(workspaceWriteGuards){notify('当前编辑权模式暂不支持切换场地及其布局，请保留现有资料。','error');return;}
+    if (!venue.meters || !Number.isFinite(venue.meters.width) || !Number.isFinite(venue.meters.depth)
+      || venue.meters.width <= 0 || venue.meters.depth <= 0) {
+      notify('这个场地的实际尺寸尚未确认，暂不能切换并沿用当前布局；请先核实场地尺寸。', 'error');
+      return;
+    }
     const active = environmentsRef.current[0];
     const before = layoutStore.getState().layout;
-    // 换场前的这份布局就是撤销目标；记下它当时的场地，撤销时画布才能一起退回去。
-    if (active) venueByLayoutRef.current.set(before, { assetId: active.assetId, name: active.name });
-    // 只换场地，物料不在这里覆盖；下面会把场地自己的物料一起放进同一次布局变更。
-    selectEnvironment(venue.assetId, venue.name, { restoreItems: false });
-    const live = layoutStore.getState().layout;
     const entry = environmentsRef.current.find(item => item.assetId === venue.assetId);
-    // 尺寸未知的扫描也先把场地挂上：尺寸一栏如实写「未标注」，不拿旧场地的数字冒充。
-    const size = venue.meters
-      ? { width: Math.round(venue.meters.width * 10) / 10, height: Math.round(venue.meters.depth * 10) / 10 }
-      : {};
+    const size = { width: Math.round(venue.meters.width * 10) / 10, height: Math.round(venue.meters.depth * 10) / 10 };
     try {
       onApplyCreative({
-        ...live,
+        ...before,
         ...size,
         venueScan: { assetId: venue.assetId, name: venue.name },
         ...(entry?.itemsByFloor ? {
-          floors: live.floors.map((floor, index) => ({
+          floors: before.floors.map((floor, index) => ({
             ...floor,
             items: entry.itemsByFloor?.[index] ? [...entry.itemsByFloor[index]!] : floor.items,
           })),
         } : {}),
-      });
+      }, { preserveProvenance: true });
+      if (active) venueByLayoutRef.current.set(before, { assetId: active.assetId, name: active.name });
+      selectEnvironment(venue.assetId, venue.name, { restoreItems: false, previousLayout: before });
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
+      return;
     }
     // MAP-03：整景区视距（POI）下点云被延后挂载，等 splat ready 再 zoom 会永远等不到——
     // 先把相机推到场地，推近途中视距翻回 splat（<100 m），延后的挂载自动补上。
@@ -2652,7 +2921,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     }
     // 场地 splat 异步加载，就绪后 zoom 到该场景（pending 效果在 splatState ready 时触发）。
     pendingVenueZoomRef.current = venue;
-  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, splatLod]);
+  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, workspaceWriteGuards, splatLod]);
 
   // 场景点位（docs/19 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
   const sceneGeoDots = useMemo(() => {
@@ -2747,12 +3016,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const updateSplatPosition = (axis: keyof SplatPosition, value: number) => {
     if (!Number.isFinite(value)) return;
     const position = { ...(environment?.position ?? ZERO_SPLAT_POSITION), [axis]: value };
-    setSplatPosition(position);
     if (!environment) return;
-    const next = [{ ...environment, position }, ...environmentsRef.current.slice(1)];
-    environmentsRef.current = next;
-    setEnvironments(next);
-    writeEnvironments(layout.id, next);
+    onSplatPositionChange(position);
   };
   const setSplatTransformMode = useCallback((mode: SplatTransformMode) => {
     setSplatTransformModeState(mode);
@@ -2766,20 +3031,70 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [environment, setSplatTransform]);
 
   const onBindProject = useCallback((projectId: string) => {
-    actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
-  }, [actions]);
+    const before=layoutStore.getState().layout;
+    if(!activitySession.isCurrent(sessionToken))throw new Error('活动已变化，未绑定项目。');
+    if(before.id!==projectId)flushPendingBeforeSwitch();
+    if(layoutStore.getState().layout!==before)throw new Error('保存期间活动已变化，未绑定项目。');
+    actions.applyLayout({ ...before, id: projectId });
+  }, [actions,activitySession.isCurrent,sessionToken,flushPendingBeforeSwitch]);
   // 无感挂云（设计规范 v2.5.2 §二.4）：登录态摆上第一件物料时静默建云项目并接上保存链。
   useSilentCloudAttach({ controller, layout, onBindProject });
 
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
-    setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
+    const current = layoutStore.getState().layout;
+    setAiPreview(candidate ? { base: current, candidate } : null);
     if (candidate) {
       setView(current => ({ ...current, view2D: false }));
-      setPreviewGuard(snapshotPreviewContext(liveLayout.current, candidate));
+      setPreviewGuard(snapshotPreviewContext(current, candidate));
     } else {
       setPreviewGuard(null);
     }
   }, []);
+  const isScopedSessionCurrent = useCallback(() => {
+    const id = layoutStore.getState().layout.id;
+    return activitySession.isCurrent(sessionToken) && (id ? `activity:${id}` : 'draft:unidentified') === sessionScope;
+  }, [activitySession.isCurrent, sessionToken, sessionScope]);
+  const captureSeatingAllocation = () => {
+    const record=agentBriefRef.current,chatId=getActiveAssistantSessionId(sessionScope),epoch=chatTransitionEpoch.current;
+    if(!isScopedSessionCurrent()||!record||!chatId||record.scope!==sessionScope||record.epoch!==sessionToken?.epoch||record.chatEpoch!==epoch||record.sessionId!==chatId)return {status:'unavailable' as const};
+    const value=cloudSeatingAllocation(record.memory),specs=cloudSeatingSpecs(record.memory),defaults=record.memory.localSeatingSpecs?.defaults,fingerprint=JSON.stringify([value??null,specs??null,defaults??null]),token=JSON.stringify([sessionScope,chatId,epoch,fingerprint]);
+    return {status:'ready' as const,value,specs,defaults,token,isCurrent:()=>{
+      const latest=agentBriefRef.current;
+      return isScopedSessionCurrent()&&chatTransitionEpoch.current===epoch&&getActiveAssistantSessionId(sessionScope)===chatId&&!!latest&&
+        latest.scope===sessionScope&&latest.epoch===sessionToken?.epoch&&latest.chatEpoch===epoch&&latest.sessionId===chatId&&JSON.stringify([cloudSeatingAllocation(latest.memory)??null,cloudSeatingSpecs(latest.memory)??null,latest.memory.localSeatingSpecs?.defaults??null])===fingerprint;
+    }};
+  };
+  const captureDialogue = () => {
+    const token=sessionToken, selectedFloor=floorToken, chatId=getActiveAssistantSessionId(sessionScope);
+    if(pendingDialogueTurns.current.size||!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor)||!isScopedSessionCurrent())return null;
+    const chatEpoch=chatTransitionEpoch.current, briefEpoch=briefCaptureEpoch.current;
+    const reviewed=reviewedDialogueHistory.current;
+    if(!chatId||!reviewed||reviewed.scope!==sessionScope||reviewed.sessionId!==chatId||reviewed.activityEpoch!==(token?.epoch??null)||reviewed.chatEpoch!==chatEpoch)return null;
+    let memory:BriefMemory|null;
+    try{memory=chatId&&incompleteDialogueSessions.current.has(dialogueSessionKey(chatId))?null:structuredClone(getActiveBrief());}catch{return null;}
+    let released=false;
+    return {
+      project:(reference?:{event?:string|null;guests?:number|null})=>projectDialogueHandoff(memory,reference),
+      isCurrent:()=>!released&&reviewedDialogueHistory.current===reviewed&&pendingDialogueTurns.current.size===0&&activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&isScopedSessionCurrent()&&
+        chatTransitionEpoch.current===chatEpoch&&briefCaptureEpoch.current===briefEpoch&&getActiveAssistantSessionId(sessionScope)===chatId,
+      release:()=>{released=true;},
+    };
+  };
+  const reviewDialogueHistory=(sessionId:string):boolean=>{
+    if(!isScopedSessionCurrent()||!activitySession.isCurrent(sessionToken)||!floorSession.isCurrent(floorToken)||pendingDialogueTurns.current.size||getActiveAssistantSessionId(sessionScope)!==sessionId||incompleteDialogueSessions.current.has(dialogueSessionKey(sessionId)))return false;
+    pendingCandidates.invalidate();briefCaptureEpoch.current++;
+    reviewedDialogueHistory.current={scope:sessionScope,sessionId,chatEpoch:chatTransitionEpoch.current,activityEpoch:sessionToken?.epoch??null};
+    return true;
+  };
+  const scopedPreview = useCallback((candidate: RoomLayout | null) => {
+    const id = layoutStore.getState().layout.id;
+    if (activitySession.isCurrent(sessionToken) && (id ? `activity:${id}` : 'draft:unidentified') === sessionScope) onPreviewAi(candidate);
+  }, [onPreviewAi, sessionScope, activitySession.isCurrent, sessionToken]);
+  const scopedApply = useCallback((next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }) => {
+    const id = layoutStore.getState().layout.id;
+    if (!activitySession.isCurrent(sessionToken) || (id ? `activity:${id}` : 'draft:unidentified') !== sessionScope) throw new Error('活动已切换，请重新核对方案。');
+    onApplyCreative(next, options);
+  }, [onApplyCreative, sessionScope, activitySession.isCurrent, sessionToken]);
   const openAholoWorkflow = useCallback((kind: 'world' | 'recon' = 'world', prompt?: string) => {
     noteVenueThreeIntent();
     setSpaceWorkflow('aholo');
@@ -2823,54 +3138,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }), [isReady, view.view2D]);
   const reviewContext=JSON.stringify(referenceImage.layer??null);
   // §二.4 默认在云上：保存态只说「已保存」，不出现云/本地二元说法。
-  const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存' : '草稿';
-  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '';
-  const draftTitle = saveError ? '保存失败，请导出备份' : draftLabel;
+  const hasLocalZones = layout.floors.some(floor => (floor.zones?.length ?? 0) > 0);
+  const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : hasLocalZones ? '本机草稿' : lastSavedAt ? '已保存' : '草稿';
+  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : hasLocalZones ? '本机草稿' : lastSavedAt ? '已保存' : '';
+  const draftTitle = saveError ? '保存失败，请导出备份' : hasLocalZones ? '区域标注仅在本机保留，云端暂不支持；请备份。' : draftLabel;
   // 集成接线：顶栏容量计——从 layout 读宽深（height 字段在本仓库里是深度），调用纯函数估算。
-  const capacityPlacedCount = activeFloor.items.length;
-  const capacityEstimate = (typeof layout.width === 'number' && typeof layout.height === 'number' && layout.width > 0 && layout.height > 0)
-    ? estimateCapacity(layout.width, layout.height, capacityPlacedCount)
-    : null;
-  const capacityText = capacityEstimate
-    ? `本场上限 ${capacityEstimate.maxItems} 件 · 已放 ${capacityEstimate.placedItems} 件`
-    : '本场上限 —';
-  const capacityOverloaded = !!capacityEstimate && capacityEstimate.ratio > 0.9;
+  // A heuristic object density is neither the venue's approved capacity nor
+  // a physical upper bound. Show the observable count and keep capacity unknown.
+  const capacityText = `当前物料 ${materialCount(activeFloor.items)} 件 · 场地容量待核验`;
 
   // 第 12 批：「能摆 → 会摆」三版打分。draft.annotations 里的 zone 标注跑三档密度
   // （松/适中/密），每版独立打分，父组件把分数条 + 推荐版传给 PlanCard。
   // 纯函数，没有副作用，每次 render 重算即可（zone 数量小）。
   const draftAnnotations = planAnnot.draft?.annotations ?? [];
+  const zonePreparation = planAnnot.draft ? appendPlanZones(layout, activeFloorIndex, planAnnot.draft) : null;
   const zoneAnnotationsForScoring = draftAnnotations.filter((a) => a.kind === 'zone');
-  // 第 12 批：把场地尺寸喂给打分层，启用「zone 越出场地边界」整块跳过判定。
-  const roomSizeForScoring = (typeof layout.width === 'number' && typeof layout.height === 'number')
-    ? { width: layout.width, height: layout.height }
-    : undefined;
-  // SC-19 修复：需求人数从左栏「活动需求」镜像读（provider 树外读不到 context），
-  // 装不下时方案卡才出「装不下 N 人 + 建议降到」的降容话术（docs/27 B4 断点补上）。
-  const targetCapacityForScoring = getBriefHeadcount() ?? undefined;
-  // SC-19 §五.4：传全量 draft 标注（zone+route+door+measure，各消费端按 kind 过滤）——
-  // 只传 zone 会把门/动线在 UI 边界丢掉，门弧检查与 verified assurance 在产品里永不激活，
-  // route 折线也进不了评分。是否出三版仍以「画过区」为准。
-  const scoredPlans: ScoredPlan[] = zoneAnnotationsForScoring.length > 0
-    ? generateScoredPlans(
-        draftAnnotations,
-        roomSizeForScoring || targetCapacityForScoring !== undefined
-          ? {
-              ...(roomSizeForScoring ? { roomSize: roomSizeForScoring } : {}),
-              ...(targetCapacityForScoring !== undefined ? { targetCapacity: targetCapacityForScoring } : {}),
-            }
-          : undefined,
-      )
-    : [];
+  const scoredPlans: ScoredPlan[] = planAnnot.draft
+    ? zonePlanCandidates(layout, activeFloorIndex, planAnnot.draft, agentBriefMemory) : [];
   const recommendedPlan: ScoredPlan | null = scoredPlans.length > 0
     ? pickRecommendedPlan(scoredPlans)
     : null;
   const effectiveSelectedPlan: ScoredPlan | null =
     scoredPlans.find((p) => p.variantId === selectedVariantId) ?? recommendedPlan;
-  // 第 12 批：AI 建议（受众/区类型/场地短边命中式）。
-  // audience 从本机对话账本 getAgentChatThreads() 拼所有 'you' 消息文本——
-  // 用户在左轨跟空间/物料/活动/Bingo 四条线说过的所有话，就是活动画像的近似来源。
-  const zoneTypesForSuggestions: ZoneSemanticType[] = [
+  // 只根据本活动已绘制区域和场地尺寸提示，不读取其他活动的对话。
+  const zoneTypesForSuggestions = [
     ...new Set(
       zoneAnnotationsForScoring
         .filter((a): a is typeof a & { zoneType: ZoneSemanticType } => typeof a.zoneType === 'string')
@@ -2880,38 +3171,104 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const roomShortSideM = (typeof layout.width === 'number' && typeof layout.height === 'number')
     ? Math.min(layout.width, layout.height)
     : undefined;
-  const audienceForSuggestions = (() => {
-    try {
-      const threads = getAgentChatThreads();
-      const parts: string[] = [];
-      for (const agent of ['door', 'bingo', 'space', 'material'] as const) {
-        for (const m of threads[agent] ?? []) {
-          if (m.from === 'you' && typeof m.text === 'string' && m.text.trim()) {
-            parts.push(m.text.trim());
-          }
-        }
-      }
-      return parts.join(' ');
-    } catch {
-      return '';
-    }
-  })();
   const activitySuggestions: ActivitySuggestion[] = zoneAnnotationsForScoring.length > 0
     ? generateSuggestions({
-        audience: audienceForSuggestions,
+        audience: '',
         zoneTypes: zoneTypesForSuggestions,
         ...(typeof roomShortSideM === 'number' ? { roomShortSideM } : {}),
       })
     : [];
 
+  const localSwitchGuard=useMemo(()=>createLocalActivitySwitchGuard({
+    identity:()=>{const current=layoutStore.getState();return {scope:current.layout.id??'',layoutRevision:current.revision};},
+    snapshot:planAnnot.getSnapshot,
+    blocker:scope=>{
+      if(pendingEnvironmentPositionRef.current)return '场地位置尚待核对，请先保留并处理候选，再切换活动。';
+      if(unsavedSourceDrafts(scope).length)return '有未保存的图片原件，请先保存或导出，再切换活动。';
+      if(readonlyComposerDrafts(`activity:${scope}`).length)return '有未发送的活动对话，请先发送或保留草稿，再切换活动。';
+      for(const [kind,label] of [['brief','活动需求'],['creative-conversation','未发送对话']] as const){
+        const draft=readLiveReadonlyDraft(scope,kind);
+        if(draft.status==='unavailable')return `${label}当前无法完整核对，未切换活动。`;
+        if(draft.status==='captured')return `${label}尚有未保存内容，请先保存或保留草稿，再切换活动。`;
+      }
+      if(!activitySession.isCurrent(sessionToken)||getStoreSessionScope()!==sessionScope)return '活动已变化，未切换。';
+      try{flushPendingBeforeSwitch();}catch(error){return error instanceof Error?error.message:'当前活动未保存，未切换。';}
+      return null;
+    },
+  }),[planAnnot.getSnapshot,activitySession.isCurrent,sessionToken,sessionScope,flushPendingBeforeSwitch]);
+  if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
+
   return (
+    <LocalActivitySwitchGuardProvider guard={localSwitchGuard}>
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider onUpdateProductionPlan={value=>{commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} controller={controller} layout={layout} onApply={onApplyCreative} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+    <CreativeStudioProvider pendingCandidates={pendingCandidates} floorToken={floorToken} isFloorCurrent={floorSession.isCurrent} sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} captureSeatingAllocation={captureSeatingAllocation} captureDialogue={captureDialogue} captureMobility={()=>{
+      const token=sessionToken,selectedFloor=floorToken;if(!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor))throw new Error('活动或楼层已切换，请重新核对后导出。');
+      const snapshot=()=>{const memory=getActiveBrief();return {present:!!memory,requirement:memory?.mobilityRequirement??null,needsClarification:memory?.mobilityNeedsClarification===true};};
+      const basis=structuredClone(snapshot()),requirement=basis.requirement;
+      const decision=!basis.needsClarification&&(requirement?.decision==='needed'||requirement?.decision==='not_needed')?requirement.decision:null;
+      const width=extractMobilityWidth(requirement,basis.needsClarification);
+      return {decision,width,isCurrent:()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&sameRecoveryFormValue(snapshot(),basis)};
+    }} sourceWriteGuard={workspaceWriteGuards?.source} writeCapability={workspaceWriteGuards?.capability} onUpdateProductionPlan={value=>{if(!activitySession.isCurrent(sessionToken)||getStoreSessionScope()!==sessionScope)throw new Error('活动已切换，请重新核对。');commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} controller={controller} layout={layout} getCurrentLayout={() => layoutStore.getState().layout} onApply={scopedApply} validateGenerationIntent={() => {
+      const brief = getActiveBrief();
+      if (!brief) return '活动需求正在切换，请稍后再试。';
+      if (brief.headcount === null) return '请先确认本场活动人数，再生成方案。';
+      if ((!isVenueScaleCurrent(brief, layoutStore.getState().layout) || !isVenueFactMemoryCurrent(brief, layoutStore))) return '场地已变化，请重新核对当前场地尺寸。';
+      const dimensionsMismatch = venueDimensionsMismatch(brief, layoutStore.getState().layout);
+      if (dimensionsMismatch) return dimensionsMismatch;
+      if (brief && brief.layoutModeConfirmed !== true) return '布置方式尚未确认，请先选择圆桌或课桌椅。';
+      return brief && (hasBlockingActivityNeeds(brief,true) || brief.layoutModeUnresolved || brief.mobilityNeedsClarification || brief.mobilityRequirement?.decision === 'unknown' || brief.pendingBasicFacts?.length)
+        ? '活动需求仍有待确认的内容，请先核对再生成。' : null;
+    }} preflightApply={(base, candidate) => {
+      const current = layoutStore.getState().layout;
+      if (!sameLayoutContent(current, base)) return '当前画布已经变化，请重新生成方案。';
+      if (candidate.floors.some(floor => (floor.zones?.length ?? 0) > 0)) return '当前云端场景不能保存区域标注，请先备份本地方案并处理标注。';
+      if (!canApplyLayoutGeometry(current, candidate)) return '候选方案与墙体、柱子或边界冲突，请先修正。';
+      return completeLayoutError(applyLayoutCommandWithRefusals(applyLayoutCommand({ layout: candidate }), { layout: current }));
+    }} validateCandidateRequirements={(_base, candidate) => {
+      const memory = getActiveBrief();
+      const issues: string[] = [];
+      if (!memory) issues.push('活动需求正在切换，请稍后再试。');
+      else if (memory.headcount === null) issues.push('请先确认本场活动人数，再应用方案。');
+      if (memory && (!isVenueScaleCurrent(memory, layoutStore.getState().layout) || !isVenueFactMemoryCurrent(memory, layoutStore))) issues.push('场地已变化，请重新核对当前场地尺寸。');
+      if (memory) { const mismatch = venueDimensionsMismatch(memory, candidate, 'candidate'); if (mismatch) issues.push(mismatch); }
+      if (memory && memory.layoutModeConfirmed !== true) issues.push('布置方式尚未确认，请先选择圆桌或课桌椅。');
+      if (memory && (hasBlockingActivityNeeds(memory,false) || memory.layoutModeUnresolved || memory.mobilityNeedsClarification || memory.mobilityRequirement?.decision === 'unknown' || memory.pendingBasicFacts?.length)) issues.push('活动需求仍有待确认的内容，请先核对。');
+      if (candidate.floors.some(floor => (floor.zones?.length ?? 0) > 0)) issues.push('当前云端场景不能保存区域标注，请先备份本地方案并处理标注。');
+      const seats = checkRequiredSeats(candidate, activeFloorIndex, memory?.headcount,
+        memory?.allGuestsSeated === true);
+      if (seats.status === 'unknown' && seats.message) issues.push(seats.message);
+      const rest = checkRestArea(candidate, activeFloorIndex, memory?.zoneNeeds.rest === true);
+      if (rest.status === 'unknown' && rest.message) issues.push(rest.message);
+      issues.push(...checkFunctionalRequirements(candidate, activeFloorIndex, { checkin: memory?.zoneNeeds.checkin ?? null, stage: memory?.zoneNeeds.stage ?? null })
+        .filter(check => check.status === 'unknown' && memory?.zoneNeeds[check.kind] != null).map(check => check.message));
+      return issues.length ? issues.join(' ') : null;
+    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+      if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。');
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider handoffExportRequest={handoffExportRequest} onVenueIOChange={io => setOutdoorVenue(io === 'outdoor')} onPreview={onPreviewAi} onApply={onApplyCreative} onApplyResearchArea={applyResearchArea} onApplyZoneRects={(zones) => {
+      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={isolatedRef.current ? () => { assertIsolatedSession?.(); isolatedRef.current!.session.assertSessionWrite(); } : workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
+        if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || !sessionToken) return;
+        briefCaptureEpoch.current++;
+        const record = { scope: sessionScope, epoch: sessionToken.epoch, chatEpoch:chatTransitionEpoch.current, sessionId, memory };
+        agentBriefRef.current = record;
+        setAgentBriefRecord(record);
+      }} onVenueIOChange={io => { if (activitySession.isCurrent(sessionToken) && getStoreSessionScope() === sessionScope) setOutdoorVenue(io === 'outdoor'); }}
+      onPreview={scopedPreview}
+      onApply={scopedApply} onApplyResearchArea={area=>{if(!applyResearchArea(area))throw new Error('当前活动无法写入调研底图。');}} onApplyZoneRects={(zones) => {
+        if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) { notify('活动已切换，请重新核对区域建议。', 'info'); return null; }
+        const brief = getActiveBrief();
+        if (!brief) { notify('活动需求正在切换，请稍后再试。', 'info'); return null; }
+        if ((!isVenueScaleCurrent(brief, layoutStore.getState().layout) || !isVenueFactMemoryCurrent(brief, layoutStore))) { notify('场地已变化，请重新核对当前场地尺寸。', 'info'); return null; }
+        if (brief && (brief.pendingActivityNeeds.length || brief.unresolvedActivityNeeds.length || brief.layoutModeUnresolved || brief.mobilityNeedsClarification || brief.mobilityRequirement?.decision === 'unknown' || brief.pendingBasicFacts?.length)) {
+          notify('活动需求仍有待确认内容，请先核对再规划区域。', 'error');
+          return null;
+        }
+        if (zones.some(zone => (zone === 'checkin' || zone === 'rest') && brief?.zoneNeeds[zone] !== true)) {
+          notify('区域建议已过期或需求尚未确认，请重新说明需要的区域。', 'error');
+          return null;
+        }
         // 「回好自动落区」：把 AI 提议的 zone 类型按 defaultZoneRect 排到 2D 草案。
         // drawMode 保持 off，不强迫用户进绘制模式；reducer 内部没有 draft 时自动建一份。
         const rects = buildDefaultZoneRects(zones, { width: layout.width, height: layout.height });
@@ -2924,7 +3281,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
-        onIssueReviewLink: async () => (await issueReviewLink()).url,
+        onIssueReviewLink: issueReviewLink,
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
@@ -2942,7 +3299,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               padding: '2px 8px',
               borderRadius: 4,
               background: '#F4F5F7',
-              color: capacityOverloaded ? '#C0392B' : '#4A7C59',
+              color: '#4A7C59',
               fontSize: 11,
               lineHeight: '18px',
               fontFamily: 'inherit',
@@ -3009,26 +3366,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <button
                 type="button"
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
-                aria-label="切换标注模式：区/线/距/门"
+                aria-label={planAnnot.drawMode === 'off' ? '规划活动区域' : '结束规划绘制'}
+                aria-pressed={planAnnot.drawMode !== 'off'}
+                data-tip="画区域、路线或测量距离"
                 onClick={() => {
-                  // 集成接线：规划标注模式循环 off→zone→route→measure→door→off；首次点击时开一份空草案。
-                  // door（真门标注）已接入：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。
-                  const order: Array<'off' | 'zone' | 'route' | 'measure' | 'door'> = ['off', 'zone', 'route', 'measure', 'door'];
-                  const idx = order.indexOf(planAnnot.drawMode);
-                  const next = order[(idx + 1) % order.length];
+                  if (planAnnot.drawMode !== 'off') { planAnnot.setDrawMode('off'); return; }
                   if (!planAnnot.draft) planAnnot.startDraft();
-                  planAnnot.setDrawMode(next);
+                  setView(current => ({ ...current, view2D: true, walkthroughMode: false }));
+                  planAnnot.setDrawMode('zone');
                 }}
               >
-                <span className="sc-annotation-toggle__label">标注</span>
-                {planAnnot.drawMode === 'zone' && <span className="sc-annotation-toggle__suffix">·区</span>}
-                {planAnnot.drawMode === 'route' && <span className="sc-annotation-toggle__suffix">·线</span>}
-                {planAnnot.drawMode === 'measure' && <span className="sc-annotation-toggle__suffix">·距</span>}
-                {planAnnot.drawMode === 'door' && <span className="sc-annotation-toggle__suffix">·门</span>}
+                <span className="sc-annotation-toggle__label">{planAnnot.drawMode === 'off' ? '规划区域' : '结束绘制'}</span>
               </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
-              <CloudPanel controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}
@@ -3064,7 +3416,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} {...(sessionScope.startsWith("activity:") ? {venueFactScope:sessionScope} : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -3208,6 +3560,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               cameraReady={isReady}
             />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            {workspaceWriteGuards && environmentShown && <div className="sc-local-conflict" role="status"><span>当前编辑权模式暂不支持修改场地标定；标定结果仍需现场核对。</span></div>}
             {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
               {environmentShown
                 ? <button type="button" aria-label="收起场地提示" onClick={() => setSplatShellKeptFor('')}>收起</button>
@@ -3231,8 +3584,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               </div>
               <span className="sc-splat-transform-hint">{splatTransformMode === 'gizmo' ? '拖动红 X、绿 Y、蓝 Z 轴调整位置' : '用上方数值调整位置，场景中不显示坐标轴'}</span>
             </div>}
-            {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
-            {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
+            {pendingEnvironmentPosition && <div className="sc-local-conflict" role="status"><span>场地位置保存结果待核对，候选暂留本页；关闭前请导出，核对前不能重复保存。</span><button type="button" onClick={()=>downloadTextFile('场地位置待核对草稿.json','application/json;charset=utf-8',JSON.stringify({version:1,scope:pendingEnvironmentPosition.scope,candidate:pendingEnvironmentPosition.intended},null,2))}>导出候选</button><button type="button" onClick={()=>{
+              if(!workspaceWriteGuards||!sessionToken)return;
+              try { workspaceWriteGuards.assertLayoutWrite(); if(!activitySession.isCurrent(sessionToken))throw new Error(); }
+              catch { notify('本机编辑权或活动已变化，请保留候选并重新核对。','error');return; }
+              const id=layoutStore.getState().layout.id,scope:EnvironmentScope=id?{kind:'project',id}:{kind:'draft'};
+              const result=reconcilePendingEnvironmentWrite(pendingEnvironmentPosition,scope,sessionToken.epoch,readEnvironmentsStrict(scope,workspaceWriteGuards.capability));
+              if(result.status==='confirmed'&&pendingEnvironmentPosition.intended){environmentsRef.current=pendingEnvironmentPosition.intended;setEnvironments(pendingEnvironmentPosition.intended);pendingEnvironmentPositionRef.current=null;setPendingEnvironmentPosition(null);notify('已核对本机场地位置。','success');}
+              else notify(result.status==='retryable'?'候选尚未保存，请保留本页并重新核对。':'场地位置仍无法确认，请保留本页和原资料。','error');
+            }}>核对保存结果</button></div>}
+            {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={clearPendingPlacement}>取消放置</button></div>}
+            {interruptedDrafts.length>0&&<div className="sc-local-conflict" role="alert"><span>切换时保留了未保存的活动布局，仅暂留本页，关闭后会丢失。请先下载并核对；布局草稿可能不包含原图，模型可能需要重新关联，并非完整备份。</span>{interruptedDrafts.map(draft=><button key={draft.key} type="button" onClick={()=>{try{downloadInterruptedDraft(draft.key);}catch(error){notify(error instanceof Error?error.message:'草稿暂时无法下载，请保留本页。','error');}}}>下载「{draft.name}」布局草稿</button>)}</div>}
+            {externalConflict && <div className="sc-local-conflict" role="status"><span>另一标签页更新了本地副本，自动保存已暂停。请先备份当前内容，再核对更新。</span>{remoteLayout ? <><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>稍后核对</button></> : hasRemoteCandidate ? <button type="button" onClick={reopenRemoteLayout}>重新核对更新</button> : <span>当前无法读取另一版本，请保留本页并检查本机存档。</span>}</div>}
             <PlacementHint active={placingId !== null}/>
             <StatusToastHost/>
             {/* 集成接线：F3 首次吸附教练气泡，固定锚点（画布中央偏左），不追求精确吸附位置。 */}
@@ -3248,21 +3611,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               />
             )}
             {/* 第 11 批：正在画区时，底部浮出语义类型选择条（连续画框中随时切换）。 */}
-            {view.view2D && planAnnot.drawMode === 'zone' && (
-              <div className="sc-zone-picker" role="toolbar" aria-label="标注区类型">
-                {(Object.keys(ZONE_SEMANTIC_LABELS) as ZoneSemanticType[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-pressed={zoneType === key}
-                    className={zoneType === key ? 'is-active' : ''}
-                    onClick={() => setZoneType(key)}
-                  >
-                    {ZONE_SEMANTIC_LABELS[key]}
-                  </button>
-                ))}
-                <span className="sc-zone-picker__hint">拖框即画，可连续画；Esc 收尾</span>
-              </div>
+            {view.view2D && (planAnnot.drawMode === 'zone' || planAnnot.drawMode === 'route' || planAnnot.drawMode === 'measure') && (
+              <AnnotationGuide mode={planAnnot.drawMode} zoneType={zoneType} onModeChange={planAnnot.setDrawMode}
+                onZoneTypeChange={setZoneType} onFinish={() => planAnnot.setDrawMode('off')} />
             )}
             {planAnnot.draft && (planAnnot.draft.stages.length > 0 || planAnnot.draft.annotations.length > 0) && (
               <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
@@ -3271,107 +3622,83 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   plans={scoredPlans}
                   recommendedId={recommendedPlan?.variantId}
                   selectedId={effectiveSelectedPlan?.variantId}
+                  {...(zonePreparation && !zonePreparation.ok ? { blockedReason: zonePreparation.reason } : {})}
+                  {...(zonePreparation?.ok && zonePreparation.warnings.length ? { zoneWarnings: zonePreparation.warnings } : {})}
                   onSelectVariant={setSelectedVariantId}
                   suggestions={activitySuggestions}
+                  functionalNeeds={agentBriefMemory?.zoneNeeds ?? { checkin: null, stage: null }}
+                  {...(activitySession.isCurrent(sessionToken) && layoutStore.getState().layout === layout
+                    ? { sizeFacts: extractPlanSizeFacts(layout, activeFloorIndex) } : {})}
                   onApprove={() => {
-                    const draft = planAnnot.draft;
-                    if (!draft) return;
-                    const zoneAnnotations = draft.annotations.filter((a) => a.kind === 'zone');
-                    if (zoneAnnotations.length === 0) {
-                      notify('还没画任何区，请先拖框画一个签到/休息/圆桌区', 'info');
-                      planAnnot.clearDraft();
+                    if (!floorSession.isCurrent(floorToken) || layoutStore.getState().activeFloorIndex !== activeFloorIndex) {
+                      notify('楼层已切换，请重新核对当前区域方案。', 'info');
                       return;
                     }
-                    // 第 12 批：按用户选中的版本（默认推荐版）落家具，不再写死 0.5 密度。
+                    try { workspaceWriteGuards?.assertLayoutWrite(); }
+                    catch { notify('本机编辑权不可用，区域草案已保留。', 'error'); return; }
+                    const reviewedDraft = planAnnot.draft;
+                    const snapshot = planAnnot.getSnapshot();
+                    const draft = snapshot.draft;
                     const plan = effectiveSelectedPlan;
-                    if (!plan) {
-                      notify('三版打分未生成，请重新画标注', 'error');
+                    if (snapshot.revision !== planAnnot.revision) {
+                      notify('区域草案已经变化，请重新核对。', 'error');
                       return;
                     }
-                    const placements = plan.placements;
-                    const skipped = plan.skipped;
-                    if (placements.length === 0) {
-                      // 只画了预留区（keep-out 不摆家具）时别误报「区太小」。
-                      const onlyReserved = draft.annotations
-                        .filter((a) => a.kind === 'zone')
-                        .every((a) => a.zoneType === 'reserved');
-                      notify(
-                        skipped.map((s) => s.reason).join('；')
-                        || (onlyReserved
-                          ? '预留区不摆家具；请再画至少一个要落家具的区'
-                          : '标注区太小，摆不下家具，请扩大标注范围'),
-                        'error',
-                      );
+                    if (!draft || !reviewedDraft || !plan) {
+                      notify('请先绘制区域并选择方案。', 'info');
                       return;
                     }
-                    const opId = `approve-${Date.now()}`;
-                    const stamp = { source: 'ai' as const, opId };
-                    const newItems: FurnitureItem[] = placements.map((p, idx) => {
-                      const baseId = `approve-${p.spec.type}-${idx}-${Date.now().toString(36)}`;
-                      return {
-                        id: baseId,
-                        type: p.spec.type,
-                        name: p.spec.name,
-                        width: p.spec.width,
-                        depth: p.spec.depth,
-                        height: p.spec.height,
-                        color: p.spec.color,
-                        icon: p.spec.icon,
-                        position: { x: p.x, z: p.z },
-                        rotation: p.rotation,
-                        category: p.spec.category,
-                        provenance: stamp,
-                      } as FurnitureItem;
+                    if (plan.placements.length === 0) {
+                      const onlyReserved = draft.annotations.filter(a => a.kind === 'zone').every(a => a.zoneType === 'reserved');
+                      notify(plan.skipped.map(item => item.reason).join('；') || (onlyReserved ? '预留区不摆家具；请再画至少一个要落家具的区。' : '本次未能排入家具，请检查区域与可用物料。'), 'error');
+                      return;
+                    }
+                    if ((!isVenueScaleCurrent(getActiveBrief(), layoutStore.getState().layout) || !isVenueFactMemoryCurrent(getActiveBrief(), layoutStore))) {
+                      notify('场地已变化，请重新核对当前场地尺寸。', 'error');
+                      return;
+                    }
+                    const prepared = prepareZonePlan({
+                      layout: layoutStore.getState().layout,
+                      reviewedLayout: layout,
+                      draft,
+                      reviewedDraft,
+                      floorIndex: activeFloorIndex,
+                      reviewedPlan: plan,
+                      brief: getActiveBrief(),
+                      reviewedBrief: agentBriefMemory,
                     });
-                    const before = layout;
-                    const candidate: RoomLayout = {
-                      ...before,
-                      floors: before.floors.map((f, i) =>
-                        i === activeFloorIndex ? { ...f, items: [...f.items, ...newItems] } : f,
-                      ),
-                    };
-                    const cmd = applyLayoutCommand({ layout: candidate });
-                    const result = applyLayoutCommandWithRefusals(cmd, { layout: before });
-                    if (!result.ok) {
-                      const msg =
-                        result.shapeIssues.map((s) => s.message).join('；') ||
-                        result.preconditions.map((p) => p.message).join('；') ||
-                        '候选方案无法应用';
-                      notify(msg, 'error');
+                    if (!prepared.ok) { notify(prepared.reason, 'error'); return; }
+                    const current = layoutStore.getState().layout;
+                    const candidateValidation = validateCandidateApply(current, prepared.layout, activeFloorIndex);
+                    if (!candidateValidation.ok) { notify(candidateValidation.reason, 'error'); return; }
+                    try {
+                      workspaceWriteGuards?.assertLayoutWrite();
+                      const latestState = layoutStore.getState();
+                      const latest = latestState.layout;
+                      if (!floorSession.isCurrent(floorToken) || latestState.activeFloorIndex !== activeFloorIndex || latest.id !== current.id || !sameLayoutContent(latest, current)) {
+                        notify('场景已经变化，请重新核对区域草案。', 'error');
+                        return;
+                      }
+                      commitHistoryNow();
+                      workspaceWriteGuards?.assertLayoutWrite();
+                      actions.applyLayout(prepared.layout);
+                    } catch { notify('本机编辑权不可用，区域草案已保留。', 'error'); return; }
+                    if (!sameRecoveryFormValue(layoutStore.getState().layout, prepared.layout)) {
+                      notify('应用后的布局与预览不一致，请先撤销并重新核对。', 'error');
                       return;
                     }
-                    const settleReport = settlePlacement(result.nextLayout, activeFloorIndex);
-                    commitHistoryNow();
-                    actions.applyLayout(settleReport.layout);
-                    const placedCount = newItems.length - result.refused.length;
-                    const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
-                    // 第 11 批：回执说人话——按名统计落了什么、被拒为什么、哪个区没摆下。
-                    const nameCounts = new Map<string, number>();
-                    for (const p of placements) {
-                      nameCounts.set(p.spec.name, (nameCounts.get(p.spec.name) ?? 0) + 1);
+                    const consumed = prepared.remainingDraft
+                      ? planAnnot.replaceDraftIfRevision(snapshot.revision, prepared.remainingDraft)
+                      : planAnnot.clearDraftIfRevision(snapshot.revision);
+                    if (!consumed) {
+                      notify('布局已应用；新添加的标注已保留，请重新核对。', 'info');
+                      return;
                     }
-                    const doneText = [...nameCounts.entries()].map(([name, n]) => `${name} ${n} 件`).join('、');
-                    const REFUSED_HUMAN: Record<string, string> = {
-                      OUT_OF_BOUNDS: '超出场地边界',
-                      WALL_INTERSECTION: '压住墙体',
-                      BBOX_OVERLAP: '压住现有家具',
-                      FLOOR_OUT_OF_RANGE: '不在本层',
-                    };
-                    const refusedText = result.refused.length
-                      ? `；${result.refused.length} 件未放（${[
-                          ...new Set(result.refused.map((r) => REFUSED_HUMAN[r.code] ?? r.code)),
-                        ].join('、')}）`
-                      : '';
-                    const skippedText = skipped.length ? `；${skipped.map((s) => s.reason).join('；')}` : '';
-                    // 第 12 批：回执带上推荐版标签 + 前两条打分理由，让用户知道为什么是这版。
-                    const recommendTag = recommendedPlan
-                      ? `；推荐${recommendedPlan.label}版（${recommendedPlan.reasons.slice(0, 2).join('；')}）`
-                      : '';
-                    notify(
-                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件（${doneText}）${recommendTag}；${movedCount} 处堵点已自动挪开${refusedText}${skippedText}`,
-                      'success',
-                    );
-                    planAnnot.clearDraft();
+                    const nameCounts = new Map<string, number>();
+                    for (const item of prepared.items) nameCounts.set(item.name, (nameCounts.get(item.name) ?? 0) + 1);
+                    const itemsText = [...nameCounts.entries()].map(([name, n]) => `${name} ${n} 件`).join('、');
+                    const remainingNote = prepared.remainingDraft ? '；门、路线或测距仍在当前草案中，尚未保存' : '';
+                    notify(`已按 ${prepared.addedZones.length} 个标注区布置 ${prepared.items.length} 件（${itemsText}）；${prepared.warnings.join('；')}${remainingNote}`, 'success');
                   }}
                   onReplace={() => planAnnot.replaceDraft(createEmptyPlanDraft())}
                   onCancel={() => planAnnot.clearDraft()}
@@ -3406,6 +3733,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     </CreativeStudioProvider>
     </SelectionProvider>
     </RoomEditorProvider>
+    </LocalActivitySwitchGuardProvider>
   );
 }
 

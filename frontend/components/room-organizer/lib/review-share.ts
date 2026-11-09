@@ -20,6 +20,8 @@
  *   也不把Bingo换成第二套评审 Agent。
  */
 import type { RoomLayout } from './types';
+import {isShareHash,MAX_SHARE_HASH_LENGTH,readShareHash} from './share';
+import {reviewVersionForHash} from '../../review-share-page/review-feedback-receipt';
 
 /** @deprecated local-demo frozen：生产无入口，仅测试与 Q4 云化预留接口读取，禁止新增调用方。 */
 export const REVIEW_SHARE_STORAGE = 'local-demo' as const;
@@ -40,6 +42,8 @@ export interface BingoMarkRepository {
 const SHARE_PREFIX = 'scendance.reviewShare.v1.';
 const COMMENT_PREFIX = 'scendance.reviewComments.v1.';
 const MARK_KEY = 'scendance.reviewMark.v1';
+/** Same-document notification only; subscribers always reread durable storage. */
+export const REVIEW_MARK_CHANGED_EVENT = 'scendance:review-marks-changed';
 const MAX_MARKS = 40;
 const MAX_ITEMS = 240;
 const MAX_COMMENTS = 80;
@@ -221,32 +225,60 @@ export function addReviewComment(shareId: string, input: { parentId: string | nu
   return comment;
 }
 
-export function rememberReviewLinkMark(input: {
+export async function rememberReviewLinkMark(input: {
   projectKey: string;
   title: string;
   shareId: string;
   clientUrl: string;
   reviewPlanKey: string;
   markedAt?: string;
-}): void {
+},options?:{isCurrent?:()=>boolean}): Promise<void> {
+  const check=()=>{if(options?.isCurrent&&options.isCurrent()!==true)throw new Error('活动、楼层或方案已变化；旧评审记录如已写入会保留，链接未复制。');};
+  check();
   const projectKey = clip(input.projectKey, 80);
   const shareId = clip(input.shareId, 80);
-  const clientUrl = clip(input.clientUrl, 512);
-  const reviewPlanKey = clip(input.reviewPlanKey, 80);
-  if (!projectKey || !shareId || !clientUrl || !reviewPlanKey) return;
-  rememberReviewMark({
+  if (!projectKey || projectKey!==input.projectKey || !shareId || shareId!==input.shareId || typeof input.clientUrl!=='string' || input.clientUrl.length>MAX_SHARE_HASH_LENGTH+2048)throw new Error('评审链接信息无效，未记录。');
+  let url:URL;try{url=new URL(input.clientUrl);}catch{throw new Error('评审链接无效，未记录。');}
+  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||!['/review','/review/'].includes(url.pathname)||!isShareHash(url.hash)||url.hash.length>MAX_SHARE_HASH_LENGTH)throw new Error('评审链接无效，未记录。');
+  if(!(await readShareHash(url.hash)).ok)throw new Error('评审链接无法完整读取，未记录。');
+  check();
+  const reviewPlanKey=`review-v2:${(await reviewVersionForHash(url.hash)).slice(7)}`;
+  check();
+  const mark={
     saved: true,
-    status: 'needs-review',
+    status: 'needs-review' as const,
     projectKey,
     title: clip(input.title, MAX_TITLE) || '未命名活动',
     shareId,
     markedAt: input.markedAt ?? new Date().toISOString(),
-    clientUrl,
+    clientUrl:input.clientUrl,
     reviewPlanKey,
+    versionBinding:'sha256-v1',
+  };
+  if(!Number.isFinite(Date.parse(mark.markedAt)))throw new Error('评审记录时间无效，未记录。');
+  if(typeof navigator==='undefined'||!navigator.locks?.request)throw new Error('浏览器无法安全协调评审记录，未记录。');
+  await navigator.locks.request('scendance:review-marks',{ifAvailable:true},lock=>{
+    if(!lock)throw new Error('另一页面正在记录评审，请稍后重试。');
+    check();
+    let raw:string|null;try{raw=localStorage.getItem(MARK_KEY);}catch{throw new Error('无法读取原评审记录，未写入。');}
+    let values:unknown;try{values=raw===null?[]:JSON.parse(raw);}catch{throw new Error('原评审记录损坏，已保留，未写入。');}
+    if(!Array.isArray(values)||values.some(value=>!value||typeof value!=='object'||Array.isArray(value)))throw new Error('原评审记录无法核对，已保留，未写入。');
+    if(values.some(value=>value.projectKey===projectKey&&value.clientUrl===input.clientUrl&&value.versionBinding==='sha256-v1'&&value.reviewPlanKey===reviewPlanKey))return;
+    if(values.length>=MAX_MARKS)throw new Error('本机评审版本已满，请先备份并处理旧记录。');
+    const next=JSON.stringify([mark,...values]);
+    if(next.length>MAX_PAYLOAD)throw new Error('本机评审记录已满，请先备份并处理旧记录。');
+    try{check();if(localStorage.getItem(MARK_KEY)!==raw)throw new Error('原评审记录已变化，未写入。');localStorage.setItem(MARK_KEY,next);if(localStorage.getItem(MARK_KEY)!==next)throw new Error();}
+    catch{throw new Error('评审记录未能核实，请保留当前资料并重新检查。');}
   });
+  check();
+  // 同页 storage 事件不会触发；仅在写入或已存在记录核实后通知，不携带记录内容。
+  if(typeof window!=='undefined')window.dispatchEvent(new Event(REVIEW_MARK_CHANGED_EVENT));
 }
 
 function rememberReviewMark(mark: ReviewBingoMark & { clientUrl?: string; reviewPlanKey?: string }): void {
+  // The frozen legacy writer cannot preserve the new versioned records.
+  const existing=readJson(MARK_KEY);
+  if(Array.isArray(existing)&&existing.some(value=>value&&typeof value==='object'&&(value as Record<string,unknown>).versionBinding==='sha256-v1'))throw new Error('旧评审演示不能覆盖已保存的版本记录。');
   const rest = readReviewMarks().filter(entry => entry.projectKey !== mark.projectKey);
   writeJson(MARK_KEY, [mark, ...rest].slice(0, MAX_MARKS));
 }

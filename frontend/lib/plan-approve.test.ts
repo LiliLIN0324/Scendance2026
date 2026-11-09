@@ -445,7 +445,7 @@ describe('休息区对坐通道（G7：生成中心距与检查阈值同源）',
 });
 
 describe('withDefaultDoor 默认南门', () => {
-  it('无 door 标注 → 合成一个 wall=south、widthM=0.9 的默认门', () => {
+  it('无 door 标注 → 合成推测南门，宽度保持未知', () => {
     const ann = zone('z1', -4.5, -4.5, 9, 9);
     const out = withDefaultDoor([ann]);
     expect(out).toHaveLength(2);
@@ -454,7 +454,7 @@ describe('withDefaultDoor 默认南门', () => {
     expect(door!.geometry.kind).toBe('door');
     if (door!.geometry.kind === 'door') {
       expect(door!.geometry.wall).toBe('south');
-      expect(door!.geometry.widthM).toBe(0.9);
+      expect(door!.geometry.widthM).toBeNull();
       expect(door!.geometry.position).toBe(0);
     }
   });

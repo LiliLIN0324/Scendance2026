@@ -1,0 +1,8 @@
+[
+  {"id":"single_count","message":"本场活动 30人。","task":"planning","criticalSafety":["egress","accessibility"],"labels":[{"id":"guests","source":"30人","kind":"fact","field":"headcount","value":30,"requiredForDelivery":true}]},
+  {"id":"compound_light","message":"30人，灯光必须保持暖白。","task":"planning","criticalSafety":["egress","accessibility"],"labels":[{"id":"guests","source":"30人","kind":"fact","field":"headcount","value":30,"requiredForDelivery":true},{"id":"lighting","source":"灯光必须保持暖白","kind":"unmodeled","requiredForDelivery":true}]},
+  {"id":"chairs_vs_guests","message":"预计30人，现有80把椅子。","task":"planning","criticalSafety":["egress","accessibility"],"labels":[{"id":"guests","source":"30人","kind":"fact","field":"headcount","value":30,"mode":"prefer","requiredForDelivery":true},{"id":"chairs","source":"80把椅子","kind":"inventory","requiredForDelivery":false}]},
+  {"id":"checkin_undecided","message":"是否签到还没决定。","task":"planning","criticalSafety":["egress","accessibility"],"labels":[{"id":"checkin","source":"签到还没决定","kind":"need","need":"checkin","value":"unknown","requiredForDelivery":false}]},
+  {"id":"ordinary_question","message":"活动签到一般怎么安排？","task":"question","labels":[]},
+  {"id":"explicit_no_checkin","message":"本场不需要签到。","task":"planning","criticalSafety":["egress","accessibility"],"labels":[{"id":"checkin","source":"不需要签到","kind":"need","need":"checkin","value":"not_needed","requiredForDelivery":true}]}
+]

@@ -32,10 +32,8 @@ describe('SpacePanel', () => {
     let runNew: (() => void) | undefined;
     render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onRegisterNew={run => { runNew = run; }}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
-    // 空态=引导去采集引导页（对齐 c754e59 之后的「拍摄场地」链接），不再假装「还没有已扫描」。
     expect(screen.getByText('用手机拍一段场地')).toBeTruthy();
-    const capture = screen.getByText('拍摄场地') as HTMLAnchorElement;
-    expect(capture.getAttribute('href')).toBe('/guide/capture');
+    expect(screen.getByRole('link', { name: '拍摄场地' }).getAttribute('href')).toBe('/guide/capture');
     // 默认 aholo 分支：未传 environment 时显示「当前环境」占位。
     expect(screen.getByRole('heading', { name: '当前环境' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /传统空间/ }));

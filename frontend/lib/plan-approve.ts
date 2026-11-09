@@ -56,8 +56,7 @@ export const ROUND_TABLE_PITCH_GUARD_M = 0.1;
 export const ROUND_TABLE_INSET_M = ZONE_INSET + CHAIR_RING_RADIUS + CHAIR_SIZE / 2;
 
 /* ---------- 课桌式（教室式）布局常数（对齐东京国际论坛 Hall D5 官方图） ---------- */
-// 红线：以下常数直接来自官方图，不要用 density 旋钮缩放——课桌排距 1.4m、
-// 走道 1.2m 是消防/人体工学硬值，dense 档也不能压到 0.9m。
+// 以下间距取自 Hall D5 的参考布局，不作为其他场地的消防或人体工学合规结论。
 
 /** 课桌宽（米，沿 x 方向）。 */
 export const DESK_TABLE_WIDTH_M = 1.8;

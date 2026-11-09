@@ -124,8 +124,7 @@ describe('H. 空 annotations → 合并为 1 版 balanced', () => {
       expect(p.capacitySeats).toBe(0);
     }
     const rec = pickRecommendedPlan(plans);
-    expect(rec!.variantId).toBe('balanced');
-    expect(rec!.placements).toEqual([]);
+    expect(rec).toBeNull(); // 没有物料时只能展示诊断，不能推荐。
   });
 });
 
@@ -174,10 +173,8 @@ describe('P1. subScores 0-100 三维子分', () => {
     for (const p of plans) {
       expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
       expect(p.subScores.capacity).toBeLessThanOrEqual(100);
-      expect(p.subScores.flow).toBeGreaterThanOrEqual(0);
-      expect(p.subScores.flow).toBeLessThanOrEqual(100);
-      expect(p.subScores.ergonomics).toBeGreaterThanOrEqual(0);
-      expect(p.subScores.ergonomics).toBeLessThanOrEqual(100);
+      expect(p.subScores.flow).toBeNull();
+      expect(p.subScores.ergonomics).toBeNull();
     }
   });
 
@@ -185,10 +182,9 @@ describe('P1. subScores 0-100 三维子分', () => {
     const plans = generateScoredPlans([]);
     for (const p of plans) {
       expect(Number.isFinite(p.subScores.capacity)).toBe(true);
-      expect(Number.isFinite(p.subScores.flow)).toBe(true);
-      expect(Number.isFinite(p.subScores.ergonomics)).toBe(true);
+      expect(p.subScores.flow).toBeNull();
+      expect(p.subScores.ergonomics).toBeNull();
       expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
-      expect(p.subScores.flow).toBeLessThanOrEqual(100);
     }
   });
 });
@@ -209,7 +205,7 @@ describe('4.0.1 默认南门（withDefaultDoor）+ 墙退距', () => {
     }
   });
 
-  it('用户已画真实门时 assurance=verified（不是 draft_unverified）', () => {
+  it('画了门仍不能声称已核验：门的开启方向及检查覆盖仍未知', () => {
     const userDoor: PlanAnnotation = {
       id: 'user-door-north',
       kind: 'door',
@@ -220,8 +216,9 @@ describe('4.0.1 默认南门（withDefaultDoor）+ 墙退距', () => {
     const zone = makeZone('round', { x: -4, z: 0, w: 4, d: 4, zoneType: 'roundtable' });
     const plans = generateScoredPlans([zone, userDoor], { roomSize: { width: 12, height: 10 } });
     for (const p of plans) {
-      expect(p.assurance).toBe('verified');
+      expect(p.assurance).toBe('draft_unverified');
       expect(p.violations.some(v => v.code === 'DOOR_UNKNOWN')).toBe(false);
+      expect(p.violations.some(v => v.code === 'DOOR_SWEEP_BLOCKED' && v.status === 'unknown')).toBe(true);
     }
   });
 
@@ -289,16 +286,15 @@ describe('SC-19：圆桌路径修复（G5）+ 降容数字断言', () => {
     const rec = pickRecommendedPlan(plans);
     expect(rec).not.toBeNull();
     expect(rec!.feasible).toBe(true);
-    expect(rec!.feasibilityStatus).toBe('FEASIBLE');
+    expect(rec!.feasibilityStatus).toBe('INSUFFICIENT_INPUT');
     // 配方上限 = 单区 3 桌 × 每桌 8 椅 = 24 座。
     expect(rec!.capacitySeats).toBe(24);
     expect(rec!.placements.filter((p) => p.spec.type === 'dining-table')).toHaveLength(3);
     expect(rec!.placements.filter((p) => p.spec.type === 'dining-chair')).toHaveLength(24);
     const text = rec!.reasons.join('\n');
-    expect(text).toMatch(/装不下\s*250/);
-    expect(text).toMatch(/配方一区最多 3 桌 × 8 椅/);
-    // 降容建议 = floor(cap/10)×10（docs/27 A11 人工核对项自动化）。
-    expect(text).toContain('建议把人数降到约 20 人');
+    expect(text).toContain('距目标 250 座还差约 226 座');
+    expect(text).toContain('当前配方每区最多 3 桌、每桌 8 椅');
+    expect(text).not.toMatch(/最多约可坐|场地最多/);
   });
 
   it('不传 targetCapacity 时圆桌区同样可行（G5 修复不引入回归）', () => {
@@ -312,17 +308,18 @@ describe('SC-19：圆桌路径修复（G5）+ 降容数字断言', () => {
 });
 
 describe('SC-19：rest 带不再错杀整版（G7 + S1②）', () => {
-  it('课桌区 + 过浅 rest 带：rest 被跳过，课桌版保持可行', () => {
+  it('课桌区 + 过浅 rest 带：rest 被明确跳过，避免推荐不完整方案', () => {
     // docs/32 §三 S1②：rest 对坐距 1.5 < 1.65 曾让任何含 rest 的方案全变体 INFEASIBLE。
     const desk = makeZone('desk', { x: -8.5, z: -5.5, w: 17, d: 9, zoneType: 'desk' });
     const rest = makeZone('keep', { x: -8, z: 3.5, w: 16, d: 2, zoneType: 'rest' });
     const plans = generateScoredPlans([desk, rest], { roomSize: { width: 19, height: 15 } });
     const rec = pickRecommendedPlan(plans);
-    expect(rec).not.toBeNull();
-    expect(rec!.feasible).toBe(true);
+    expect(rec).toBeNull();
     for (const p of plans) {
       // 过浅 rest 区在生成层就被跳过，不再产出会自撞的长椅。
       expect(p.placements.some((pl) => pl.spec.type === 'bench')).toBe(false);
+      expect(p.placements.some((pl) => pl.zoneId === 'desk')).toBe(true);
+      expect(p.skipped.some((item) => item.zoneId === 'keep')).toBe(true);
     }
   });
 
@@ -383,7 +380,7 @@ describe('SC-20：必留区与必留通道是硬约束', () => {
 
   it('宾客动线横穿课桌区：ROUTE_BLOCKED hard、不进推荐；挪到空地后恢复可行', () => {
     const room = { width: 19, height: 15 };
-    const desk = makeZone('desk', { x: 0, z: -3.5, w: 12, d: 8, zoneType: 'desk', label: '课桌区' });
+    const desk = makeZone('desk', { x: -6, z: -3.5, w: 12, d: 8, zoneType: 'desk', label: '课桌区' });
     // 动线 x=0 从南到北纵穿桌区（桌区 x∈[-6,6]）→ 桌椅距线段 <0.58m。
     const cross: PlanAnnotation = {
       id: 'route-cross', kind: 'route', label: '宾客动线', stageNo: 1,

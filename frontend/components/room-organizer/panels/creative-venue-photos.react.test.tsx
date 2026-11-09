@@ -6,9 +6,10 @@ import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { flushSourceScope } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
 import { CreativeBriefPanel, CreativeStudioProvider } from './creative-studio';
+import {clearUnsavedSourceDraftsForTests,unsavedSourceDrafts} from './unsaved-source-drafts';
 
 const persisted = vi.hoisted(() => ({ sources: [] as Record<string, unknown>[], forms: new Map<string, unknown>() }));
-vi.mock('@/lib/source-storage', async importOriginal => ({...await importOriginal<object>(),listStoredSources:async()=>[],storeSource:async(value:Record<string,unknown>)=>{persisted.sources.push(value);},deleteSource:async()=>{},readSourceForm:async()=>undefined,storeSourceForm:async(scope:string,value:unknown)=>{persisted.forms.set(scope,value);}}));
+vi.mock('@/lib/source-storage', async importOriginal => ({...await importOriginal<object>(),listStoredSources:async()=>[],storeSource:async(value:Record<string,unknown>)=>{persisted.sources.push(value);},deleteSource:async()=>{},readSourceForm:async()=>undefined,readSourceRecordSnapshot:async(key:string)=>persisted.forms.has(key)?{present:true,value:persisted.forms.get(key)}:{present:false},storeSourceForm:async(scope:string,value:unknown)=>{persisted.forms.set(scope,value);}}));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
 
 const layout = backendSceneToLayout({ schemaVersion: 1, venue: { width: 12, depth: 10, height: 3, shape: 'rectangle', entrances: [] }, objects: [], camera: 'overview', lighting: 'warm' }, { projectId: '10000000-0000-4000-8000-000000000001' });
@@ -36,6 +37,7 @@ function photos() {
 }
 
 beforeEach(() => {
+  clearUnsavedSourceDraftsForTests();
   persisted.sources.length=0;persisted.forms.clear();
   vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);
   decode.mockReset().mockImplementation(async () => bitmap());
@@ -49,6 +51,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup(); controller.dispose();
+  clearUnsavedSourceDraftsForTests();
   expect(fetch).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
   if (originalCreate) Object.defineProperty(URL, 'createObjectURL', originalCreate); else Reflect.deleteProperty(URL, 'createObjectURL');
@@ -125,14 +128,16 @@ describe('venue photo input lifecycle', () => {
     expect(photos().getAllByRole('img')).toHaveLength(12);
   });
 
-  it('rolls back a partially decoded invalid batch and accepts the next queued valid selection', async () => {
+  it('preserves the original valid file from an invalid batch and accepts the next queued selection', async () => {
     const rendered = renderUi();
     upload(rendered.container, [file('temporary.png'), new File(['svg'], 'invalid.svg', { type: 'image/svg+xml' })]);
     rendered.rerender(ui(layout.id, false, 'brief'));
     await screen.findByText('请选择 PNG、JPEG 或 WebP 图片。');
     rendered.rerender(ui(layout.id, false, 'reference'));
     expect(photos().queryAllByRole('img')).toHaveLength(0);
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:temporary.png');
+    expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:temporary.png');
+    expect(unsavedSourceDrafts(layout.id).some(entry=>entry.image.name==='temporary.png'&&entry.image.blob instanceof File)).toBe(true);
+    expect(screen.getByText(/有图片尚未保存到本机/)).toBeTruthy();
     upload(rendered.container, [file('valid.png')]);
     expect(await screen.findByRole('img', { name: '现场照片：valid.png' })).toBeTruthy();
   });
@@ -153,7 +158,8 @@ describe('venue photo input lifecycle', () => {
     const oldBitmap = bitmap();
     await act(async () => { finish(oldBitmap); });
     expect(oldBitmap.close).toHaveBeenCalledOnce();
-    expect(createObjectURL.mock.calls.map(call => call[0].name)).not.toContain('pending-old.png');
+    expect(createObjectURL.mock.calls.map(call => call[0].name)).toContain('pending-old.png');
+    expect(unsavedSourceDrafts(layout.id).some(entry=>entry.image.name==='pending-old.png'&&entry.image.blob instanceof File)).toBe(true);
     expect(photos().getAllByRole('img')).toHaveLength(1);
   });
 

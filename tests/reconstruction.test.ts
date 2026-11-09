@@ -57,7 +57,10 @@ describe('deterministic structural geometry',()=>{
  });
  it('reports confirmed dimension drift without modifying scene and overrides optimistic counts',()=>{
   const s=structuralScene();s.dimensions=dims();s.venue.width=13;const before=structuredClone(s);expect(dimensionConflicts(s)).toContainEqual(expect.objectContaining({code:'DIMENSION_CONFLICT',actual:13}));expect(s).toEqual(before);
-  s.objects=[chair()];s.design={concept:'活动',palette:[],highlights:[],requirements:[{text:'20个座位',status:'satisfied',reason:'模型自称完成',objectIds:[]}]};verifyInventoryRequirements(s,'放20个座位');expect(s.design.requirements[0].status).toBe('partial');expect(s.design.requirements[0].reason).toContain('实际有 1 个');
+   s.objects=[chair()];s.design={concept:'活动',palette:[],highlights:[],requirements:[{text:'20个座位',status:'satisfied',reason:'模型自称完成',objectIds:[]}]};verifyInventoryRequirements(s,'放置20个座位');
+   const count=s.design.requirements.find(r=>r.text==='20 个座位');expect(count).toMatchObject({status:'partial',objectIds:[s.objects[0].id]});expect(count?.reason).toContain('场景内计数 1 个');expect(count?.reason).toContain('不代表现场');
+   expect(s.design.requirements.some(r=>r.text==='模型要求 1（待核验）'&&r.status==='partial')).toBe(true);
+   const ambiguous=structuralScene();ambiguous.objects=[chair()];ambiguous.design={concept:'活动',palette:[],highlights:[],requirements:[]};verifyInventoryRequirements(ambiguous,'至少20个座位');expect(ambiguous.design.requirements.some(r=>r.status==='satisfied')).toBe(false);
  });
  it('calibrates a selected part of a wall using image evidence and refuses unsupported correspondence',()=>{
   const s=structuralScene(),image={assetId:crypto.randomUUID(),kind:'floorplan' as const,name:'plan',width:1000,height:500};s.sources=[image];
@@ -97,7 +100,7 @@ describe('deterministic structural geometry',()=>{
  });
  it('never reports model-only aisle claims as verified or mistakes metre widths for counts',()=>{
   const s=structuralScene();s.design={concept:'活动',palette:[],highlights:[],requirements:[{text:'通道净宽1.5米',status:'satisfied',reason:'模型表示满足',objectIds:[]}]};
-  verifyInventoryRequirements(s,'通道净宽1.5米；背景板2米宽');expect(s.design.requirements).toHaveLength(1);expect(s.design.requirements[0].status).toBe('partial');expect(s.design.requirements[0].reason).toContain('仍需核对');
+   verifyInventoryRequirements(s,'通道净宽1.5米；背景板2米宽');expect(s.design.requirements.every(r=>r.status==='partial')).toBe(true);expect(s.design.requirements.some(r=>r.text==='通道与动线要求'&&r.reason.includes('仍需核对'))).toBe(true);expect(s.design.requirements.some(r=>/背景板.*(?:\d+\s*个|计数)/.test(r.text))).toBe(false);
   s.design.requirements=[];verifyInventoryRequirements(s,'保留入口疏散动线');expect(s.design.requirements[0].status).toBe('partial');
  });
  it('keeps v1 valid and rejects malformed openings/v2 IDs',()=>{
@@ -155,12 +158,15 @@ describe('durable reconstruction + v2 persistence',()=>{
  it('plans a reviewed scene, stores candidate, applies once and preserves revision guards',async()=>{
   const {candidate,input,job,lease}=await queue();const output=structuredClone(candidate);output.objects=[chair()];output.lighting='warm';output.design={concept:'暖色交流空间',palette:['#ffffff'],highlights:[{title:'交流点',description:'围绕活动交流',objectIds:[output.objects[0].id]}],requirements:[{text:'暖色',status:'satisfied',reason:'采用暖光',objectIds:[]}]};
   const fetcher=async(_url:unknown,init?:RequestInit)=>{expect(JSON.parse(String(init?.body)).thinking.type).toBe('enabled');return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({scene:output,issues:[]})},finish_reason:'stop'}]}));};
-  expect(await processReconstruction(f.backend,env,fetcher as typeof fetch)).toMatchObject({state:'ready'});const read=await f.reconstruction(owner,'get',{projectId:lease.projectId,id:job.id});expect(read.proposal.candidate).toEqual(output);
+   expect(await processReconstruction(f.backend,env,fetcher as typeof fetch)).toMatchObject({state:'ready'});const read=await f.reconstruction(owner,'get',{projectId:lease.projectId,id:job.id});
+   const savedCandidate=read.proposal.candidate as SceneV2;
+   expect({...savedCandidate,design:undefined}).toEqual({...output,design:undefined});
+   expect(savedCandidate.design).toEqual({concept:'模型设计说明待人工核验。',palette:['#ffffff'],highlights:[{title:'模型建议（待核验）',description:'模型建议未独立核验，请人工检查。',objectIds:[output.objects[0].id]}],requirements:[{text:'模型要求 1（待核验）',status:'partial',reason:'模型意见未经独立核验，不代表现场或规范验收。',objectIds:[]}]});
   const apply={...lease,proposalId:job.id,localRevision:0,baseHash:await sceneHash(input.scene)};await expect(f.rpc(owner,'proposals.apply',{...apply,localRevision:1})).rejects.toThrow('STALE_PROPOSAL');
   const saved=await f.rpc(owner,'proposals.apply',apply);expect(saved.scene.schemaVersion).toBe(2);expect(saved.previousScene).toEqual(input.scene);expect(saved.undoGroup).toBe(job.id);
   await expect(f.rpc(owner,'history.restore',{...lease,expectedRevision:1,proposalId:job.id,currentScene:input.scene})).rejects.toThrow('STALE_HISTORY_RESTORE');
-  const restored=await f.rpc(owner,'history.restore',{...lease,expectedRevision:1,proposalId:job.id,currentScene:output});expect(restored.scene).toEqual(input.scene);expect(restored.revision).toBe(2);
-  await expect(f.rpc(owner,'history.restore',{...lease,expectedRevision:2,proposalId:job.id,currentScene:output})).rejects.toThrow('STALE_HISTORY_RESTORE');
+   const restored=await f.rpc(owner,'history.restore',{...lease,expectedRevision:1,proposalId:job.id,currentScene:savedCandidate});expect(restored.scene).toEqual(input.scene);expect(restored.revision).toBe(2);
+   await expect(f.rpc(owner,'history.restore',{...lease,expectedRevision:2,proposalId:job.id,currentScene:savedCandidate})).rejects.toThrow('STALE_HISTORY_RESTORE');
  });
  it('fails unsafe planner mutations without replacing the scene and records reserved calls',async()=>{
   const {candidate,lease}=await queue();candidate.structure.walls[0].height=2;

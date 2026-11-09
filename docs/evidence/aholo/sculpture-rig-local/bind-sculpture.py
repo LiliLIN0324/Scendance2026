@@ -164,4 +164,3 @@ for frame, name in ((first_frame, "rest"), (peak_frame, "bow")):
     scene.frame_set(frame)
     scene.render.filepath = str(output / (name + ".png"))
     bpy.ops.render.render(write_still=True)
-

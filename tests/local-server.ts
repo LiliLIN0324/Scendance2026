@@ -1,12 +1,13 @@
 /** Explicit loopback-only test fixture, never a production authentication fallback. */
 import { createServer } from 'node:http';
-import { once } from 'node:events';
+import { listenLocalFetchSafe } from './local-loopback.ts';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { database, owner, editor, outsider } from './fixtures.ts';
 import { createApi } from '../supabase/functions/_shared/api.ts';
 import { ApiError } from '../supabase/functions/_shared/domain.ts';
+import {trialModelRoundDiagnostic,trialSubmissionDiagnostic,trialValidationDiagnostic,type AgentTrialDiagnostic} from '../supabase/functions/_shared/agent-trial-diagnostic.ts';
 
 export const testAccounts = [
   { id: owner, email: 'owner@scendance.test', password: 'local-integration-only' },
@@ -14,6 +15,18 @@ export const testAccounts = [
   { id: outsider, email: 'outsider@scendance.test', password: 'local-integration-only' },
 ];
 export const testPublicKey = 'sb_publishable_local_integration_only';
+const traceTools=new Set(['get_scene','search_resources','search_places','inspect_zone','find_free_areas','prepare_seating_candidate','prepare_shared_seating_candidate','inspect_materials','get_bom','validate_candidate','submit_candidates','create_parametric_model','customize_material','start_lux3d_model']);
+const traceErrors=new Set(['AGENT_TOOL_CALL_CONFLICT','CANDIDATE_GEOMETRY_CONFLICT','DIMENSION_CONFLICT','INVALID_MATERIAL_TARGET','INVALID_SELECTION','INVALID_TOOL_INPUT','PLACE_SEARCH_FAILED','PLACE_SEARCH_UNAVAILABLE','PREPARED_CANDIDATE_NOT_FOUND','RESOURCE_NOT_FOUND','SEATING_ALLOCATION_CONFLICT','SEATING_ALLOCATION_UNCONFIRMED','SEATING_SPEC_CONFLICT','SEATING_SPEC_UNCONFIRMED','SEATING_ATTEMPTS_EXHAUSTED','SEATING_RESULT_INVALID','UNKNOWN_TOOL','VALIDATED_CANDIDATE_NOT_FOUND']);
+/** Project-owned fixture only: never expose arguments, model text or provider response. */
+type LocalAgentTraceEntry={tool:string;outcome:'succeeded'|'failed'|'unknown';errorCode?:string};
+export function safeLocalAgentTrace(usage:unknown):LocalAgentTraceEntry[] {
+  if(!Array.isArray(usage))return [];
+  return usage.flatMap<LocalAgentTraceEntry>(entry=>{
+    if(!entry||typeof entry!=='object'||typeof entry.tool!=='string'||!traceTools.has(entry.tool))return [];
+    if(typeof entry.errorCode==='string')return [{tool:entry.tool,outcome:'failed' as const,...(traceErrors.has(entry.errorCode)?{errorCode:entry.errorCode}:{})}];
+    return [{tool:entry.tool,outcome:entry.ok===true?'succeeded' as const:'unknown' as const}];
+  });
+}
 
 export interface LocalServerOptions {
   /** Explicitly passed by the isolated development runner; never reads production credentials. */
@@ -21,9 +34,18 @@ export interface LocalServerOptions {
   origins?: string[];
   /** Dedicated local test data, never an existing Supabase database. */
   dataDirectory?: string;
+  /** Identifies the explicitly isolated, deterministic local agent runner. */
+  fixtureKind?: 'agent-model-stub';
+  /** Match the deployed background runner so slow providers do not hold the HTTP request open. */
+  backgroundAgentRuns?: boolean;
+  /** Opt in only for isolated trial telemetry; never included in production API. */
+  agentTrace?: boolean;
+  /** Local Lux3D only: loopback image URLs cannot be consumed by the vendor. */
+  lux3dTextOnly?: boolean;
 }
 
 export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, options: LocalServerOptions = {}) {
+  const businessTrace=new Map<string,AgentTrialDiagnostic[]>();
   if (options.dataDirectory) await mkdir(options.dataDirectory, { recursive: true });
   const fixture = await database(options.dataDirectory ? join(options.dataDirectory, 'postgres') : undefined);
   const sessions = new Map<string, { id: string; refresh: string }>();
@@ -45,6 +67,15 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
   let url = '';
   const backend = {
     ...fixture.backend,
+    ...(options.agentTrace?{agentTrialDiagnostic(actor:string,projectId:string,runId:string,value:AgentTrialDiagnostic){
+      const checked=value.tool==='validate_candidate'?trialValidationDiagnostic(value):
+        value.tool==='submit_candidates'?trialSubmissionDiagnostic(value.accepted,value.expected,value.errorCodes.map(code=>({code}))):
+        value.tool==='model_round'?trialModelRoundDiagnostic(value.turn,value.phase,value.remainingMs,value.elapsedMs):null;
+      if(!checked)return;
+      const key=`${actor}/${projectId}/${runId}`;
+      if(!businessTrace.has(key)&&businessTrace.size>=128)businessTrace.delete(businessTrace.keys().next().value!);
+      const entries=businessTrace.get(key)??[];if(entries.length<64)entries.push(checked);businessTrace.set(key,entries);
+    }}:{}),
     async user(token: string) {
       const user = sessions.get(token);
       if (!user) throw new ApiError('UNAUTHENTICATED', 401);
@@ -72,12 +103,16 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
     ALLOWED_ORIGINS: origins.join(','), PUBLIC_APP_URL: origins[0],
     ...(aiFetcher ? { DEEPSEEK_API_KEY: 'test-provider-only', TOKENDANCE_API_KEY: 'test-provider-only', AI_MAX_REQUEST_CENTS: '40' } : {}),
   })[key] ?? options.env?.(key);
-  const api = createApi(backend, env, aiFetcher);
+  const pendingRuns=new Set<Promise<unknown>>();
+  const waitUntil=options.backgroundAgentRuns?(task:Promise<unknown>)=>{
+    pendingRuns.add(task);void task.then(()=>pendingRuns.delete(task),()=>pendingRuns.delete(task));
+  }:undefined;
+  const api = createApi(backend, env, aiFetcher, waitUntil);
   const server = createServer(async (req, res) => {
     // 浏览器直连本机服务要过跨域与私有网络两道预检，Node 侧集成测试走不到这里。
     const origin = req.headers.origin;
     const allowOrigin = origin && origins.includes(origin) ? origin : null;
-    const corsHeaders = new Headers({ 'Access-Control-Allow-Headers': 'authorization,apikey,content-type', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Allow-Local-Network': 'true' });
+    const corsHeaders = new Headers({ 'Access-Control-Allow-Headers': 'authorization,apikey,content-type,x-client-info,x-supabase-api-version', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Allow-Local-Network': 'true' });
     if (allowOrigin) corsHeaders.set('Access-Control-Allow-Origin', allowOrigin);
     try {
       const address = new URL(req.url ?? '/', url);
@@ -95,16 +130,38 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
         if (req.method === 'OPTIONS') { res.writeHead(204, Object.fromEntries(corsHeaders)); res.end(); return; }
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(',') : value);
-        response = await api(new Request(address, {
-          method: req.method ?? 'GET', headers,
+        const cancelled=new AbortController();
+        res.once('close',()=>{if(!res.writableEnded)cancelled.abort();});
+        let unsupportedImage=false;
+        if(options.lux3dTextOnly&&req.method==='POST'&&address.pathname==='/functions/v1/scene-api/jobs')try{
+          const data=JSON.parse(body.toString()) as {provider?:unknown;kind?:unknown};unsupportedImage=data?.provider==='aholo'&&data?.kind==='image';
+        }catch{/* Let the normal API validate malformed requests. */}
+        const authorizedFixture=!!sessions.get((req.headers.authorization??'').replace(/^Bearer /,''))&&req.headers.apikey===testPublicKey;
+        response = unsupportedImage&&authorizedFixture?Response.json({error:{code:'LOCAL_LUX3D_IMAGE_UNAVAILABLE'}},{status:400}):await api(new Request(address, {
+          method: req.method ?? 'GET', headers, signal:cancelled.signal,
           ...(body.length ? { body } : {}),
         }));
+        if(options.lux3dTextOnly&&req.method==='GET'&&address.pathname==='/functions/v1/scene-api/generation/capabilities'&&response.ok){
+          const capabilities=await response.json() as Record<string,unknown>;
+          response=Response.json({...capabilities,aholoImageToModel:false},{status:response.status,headers:response.headers});
+        }
       } else {
         const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         for (const [key, value] of corsHeaders) headers.set(key, value);
         const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
         if (origin && !origins.includes(origin)) response = json({ error: 'test_origin_forbidden' }, 403);
         else if (req.method === 'OPTIONS') response = new Response(null, { status: 204, headers });
+        else if (address.pathname === '/__fixture' && req.method === 'GET' && options.fixtureKind === 'agent-model-stub') response=json({fixture:'agent-model-stub',provider:'local-deterministic',production:false});
+        else if (options.agentTrace && req.method==='GET' && /^\/__test-agent-trace\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(address.pathname)) {
+          const authenticated=sessions.get((req.headers.authorization??'').replace(/^Bearer /,''));
+          if(!authenticated||req.headers.apikey!==testPublicKey)response=json({error:'unauthenticated'},401);
+          else {
+            const [, , projectId, runId]=address.pathname.split('/');
+            const rows=await fixture.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1 and project_id=$2 and owner_id=$3',[runId,projectId,authenticated.id]);
+            const details=businessTrace.get(`${authenticated.id}/${projectId}/${runId}`);
+            response=rows.rows.length?json({tools:safeLocalAgentTrace(rows.rows[0]!.usage),...(details?.length?{business:details}:{})}):json({error:'not_found'},404);
+          }
+        }
         else if (address.pathname === '/auth/v1/token' && req.method === 'POST') {
           const input = JSON.parse(body.toString());
           const grant = address.searchParams.get('grant_type');
@@ -139,23 +196,22 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
       for (const [key, value] of corsHeaders) { try { response.headers.set(key, value); } catch { /* 不可变的响应头（重定向等）保持原样 */ } }
       res.writeHead(response.status, Object.fromEntries(response.headers));
       res.end(Buffer.from(await response.arrayBuffer()));
-    } catch (error) {
-      console.error('Local integration fixture failed:', error);
+    } catch {
+      console.error('Local integration fixture failed.');
       const headers = new Headers({ 'Content-Type': 'application/json' });
       for (const [key, value] of corsHeaders) headers.set(key, value);
       res.writeHead(500, Object.fromEntries(headers)).end('{"error":"test_fixture_failed"}');
     }
   });
-  server.listen(port, '127.0.0.1');
-  try { await once(server, 'listening'); }
+  let address: Awaited<ReturnType<typeof listenLocalFetchSafe>>;
+  try { address=await listenLocalFetchSafe(server,port); }
   catch (error) { await fixture.db.close(); throw error; }
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Missing loopback address');
   url = `http://127.0.0.1:${address.port}`;
   return {
     ...fixture, backend, url, links, env,
     async close() {
       await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); });
+      await Promise.allSettled([...pendingRuns]);
       await fixture.db.close();
     },
   };

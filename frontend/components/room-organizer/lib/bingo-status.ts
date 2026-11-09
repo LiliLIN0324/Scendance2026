@@ -10,6 +10,7 @@
  */
 
 import { reviewPlanKeyForClientUrl } from '../../review-share-page/load-plan';
+import {MAX_SHARE_HASH_LENGTH} from './share';
 
 export const BINGO_MARK_KEY = 'scendance.reviewMark.v1';
 export const BINGO_RETURN_KEY = 'scendance-review-share-return-v1';
@@ -31,6 +32,8 @@ export interface BingoPlan {
   reviewPlanKey: string;
   /** 甲方打开的链接。创作者侧 Bingo 只读反馈，不当成「去评审页写评论」入口。 */
   clientHref: string;
+  /** Truncated/unsafe old links are retained but cannot establish a version. */
+  linkStatus?: 'needs-verification' | 'unavailable';
   returned: boolean;
 }
 
@@ -141,9 +144,16 @@ function parsePlan(value: unknown, receipt: BingoReceipt | null): BingoPlan | nu
   if (typeof record.projectKey !== 'string' || typeof record.markedAt !== 'string') return null;
   const projectKey = clip(record.projectKey, MAX_KEY);
   if (!projectKey || !record.markedAt) return null;
-  const clientUrl = typeof record.clientUrl === 'string' ? clip(record.clientUrl, 512) : '';
+  const rawUrl=typeof record.clientUrl==='string'?record.clientUrl:'';
+  let clientUrl='',linkStatus:BingoPlan['linkStatus'];
+  if(rawUrl){
+    try{
+      const parsed=new URL(rawUrl),valid=['http:','https:'].includes(parsed.protocol)&&!parsed.username&&!parsed.password&&!parsed.search&&['/review','/review/'].includes(parsed.pathname)&&parsed.hash.startsWith('#layout=')&&parsed.hash.length<=MAX_SHARE_HASH_LENGTH&&rawUrl.length<=MAX_SHARE_HASH_LENGTH+2048;
+      if(valid&&!(record.versionBinding!=='sha256-v1'&&rawUrl.length>=512)){clientUrl=rawUrl;linkStatus='needs-verification';}else linkStatus='unavailable';
+    }catch{linkStatus='unavailable';}
+  }
   // UUID 分支为 T5 冻结的旧 /review/<id> 链遗留兼容；新链全部走 /review/#layout= hash 快照。
-  const clientHref = clientUrl || (SHARE_ID.test(shareId) ? reviewPlanHref(shareId) : '/review/');
+  const clientHref = clientUrl || (!rawUrl&&SHARE_ID.test(shareId) ? reviewPlanHref(shareId) : '/review/');
   const storedReviewKey = typeof record.reviewPlanKey === 'string' ? clip(record.reviewPlanKey, MAX_KEY) : '';
   const reviewPlanKey = storedReviewKey || reviewPlanKeyForClientUrl(clientHref) || projectKey;
   const receiptKeys = new Set([projectKey, shareId, reviewPlanKey]);
@@ -154,7 +164,8 @@ function parsePlan(value: unknown, receipt: BingoReceipt | null): BingoPlan | nu
     markedAt: record.markedAt,
     reviewPlanKey,
     clientHref,
-    returned: receipt !== null && receiptKeys.has(receipt.planKey),
+    ...(linkStatus?{linkStatus}:{}),
+    returned: linkStatus!=='unavailable'&&receipt !== null && receiptKeys.has(receipt.planKey),
   };
 }
 

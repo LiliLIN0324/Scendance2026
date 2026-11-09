@@ -5,7 +5,7 @@ import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import type { FurnitureItem, RoomLayout } from './types';
 
 const stage = makeItem({
-  id: 'stage-1', type: 'backdrop', materialId: 'backdrop', name: '舞台背景板',
+  id: 'stage-1', type: 'stage-platform', name: '舞台平台',
   // 层高 3m：舞台留出余量，缩放测试才不会因为高过屋顶被几何闸挡下。
   width: 5, depth: 1.2, height: 2.4, position: { x: 0, z: -6 }, rotation: 0,
 });
@@ -23,6 +23,63 @@ const itemsOf = (layout: RoomLayout): FurnitureItem[] => layout.floors[0]!.items
 const byId = (layout: RoomLayout, id: string): FurnitureItem | undefined => itemsOf(layout).find(item => item.id === id);
 
 describe('plan.revise — 只改目标物件', () => {
+  it('targets the real stage instead of a backdrop, including the registered asset after cloud reload', () => {
+    const backdrop = makeItem({ id: 'backdrop', type: 'backdrop', materialId: 'backdrop', name: '舞台背景板', position: { x: 0, z: -6 } });
+    const platform = makeItem({ id: 'platform', type: 'glb-asset', materialId: 'asset', assetId: '2476e655-516e-5563-baad-aa821272acb7', name: '社区会堂舞台模块', position: { x: 0, z: -3 } });
+    const layout = makeLayout({ width: 24, height: 16, floors: [makeFloor({ items: [backdrop, platform] })] });
+    const plan = revisePlan({ base: layout, floorIndex: 0, ops: parseRevisionRequest('删除舞台')!.ops });
+    expect(plan.removing).toBe(1);
+    expect(byId(finalOf(plan), 'backdrop')).toEqual(backdrop);
+    expect(byId(finalOf(plan), 'platform')).toBeUndefined();
+    const onlyBackdrop = makeLayout({ floors: [makeFloor({ items: [backdrop] })] });
+    expect(revisePlan({ base: onlyBackdrop, floorIndex: 0, ops: parseRevisionRequest('删除舞台')!.ops }).applied).toBe(0);
+  });
+
+  it('asks which object when a role matches several items, including locked ones', () => {
+    const locked = { ...chairA, locked: true };
+    const layout = makeLayout({ width: 24, height: 16, floors: [makeFloor({ items: [locked, chairB] })] });
+    const plan = revisePlan({ base: layout, floorIndex: 0, ops: parseRevisionRequest('删除椅子')!.ops });
+    expect(plan.applied).toBe(0);
+    expect(plan.conflicts[0]).toMatchObject({ code: 'TARGET_AMBIGUOUS', message: expect.stringContaining('说明左右位置') });
+    expect(finalOf(plan)).toEqual(layout);
+    const selectedLocked = revisePlan({ base: layout, floorIndex: 0, ops: parseRevisionRequest('把左边椅子删掉')!.ops });
+    expect(selectedLocked.applied).toBe(0);
+    expect(selectedLocked.conflicts[0]?.code).toBe('LOCKED');
+  });
+
+  it.each([false,true])('refuses leftmost selection with unknown positions and preserves locked objects: locked=%s', locked => {
+    const {position: _missing, ...unknown} = {...chairA, locked};
+    const layout = makeLayout({width:24,height:16,floors:[makeFloor({items:[unknown,chairB]})]});
+    for (const text of ['把左边椅子删掉','把左边椅子往左挪1米']) {
+      const proposal=revisePlan({base:layout,floorIndex:0,ops:parseRevisionRequest(text)!.ops});
+      expect(proposal.applied).toBe(0);
+      expect(proposal.conflicts[0]?.code).toBe('TARGET_AMBIGUOUS');
+      expect(finalOf(proposal)).toEqual(layout);
+    }
+  });
+  it('refuses side selection when any candidate has a non-finite position', () => {
+    const layout=makeLayout({width:24,height:16,floors:[makeFloor({items:[{...chairA,position:{x:NaN,z:0}},chairB]})]});
+    const proposal=revisePlan({base:layout,floorIndex:0,ops:parseRevisionRequest('把左边椅子删掉')!.ops});
+    expect(proposal.applied).toBe(0);expect(proposal.conflicts[0]?.code).toBe('TARGET_AMBIGUOUS');
+  });
+  it.each([['把椅子放大5倍',5],['把椅子缩小到0.2倍',0.2]])('retains the exact scale boundary for %s', (text, factor) => {
+    expect(parseRevisionRequest(text)?.ops[0]).toMatchObject({kind:'scale',factor});
+  });
+  it.each([0.19,5.01,10,Number.POSITIVE_INFINITY])('rejects out-of-range scale %s without clamping', factor => {
+    const proposal=revisePlan({base,floorIndex:0,ops:[{kind:'scale',itemId:'chair-a',factor}]});
+    expect(proposal.applied).toBe(0);
+    expect(proposal.conflicts[0]?.message).toContain('超出支持范围');
+    expect(finalOf(proposal)).toEqual(base);
+  });
+  it('does not select an arbitrary anchor or a tied leftmost item', () => {
+    const sameX = { ...chairB, position: { x: chairA.position!.x, z: 5 } };
+    const layout = makeLayout({ width: 24, height: 16, floors: [makeFloor({ items: [chairA, sameX] })] });
+    const plan = revisePlan({ base: layout, floorIndex: 0, ops: parseRevisionRequest('把左边椅子删掉')!.ops });
+    expect(plan.conflicts[0]?.code).toBe('TARGET_AMBIGUOUS');
+    const anchor = revisePlan({ base: layout, floorIndex: 0, ops: [{ kind: 'add', assetId: 'lamp', anchor: { role: '椅子', sides: 'both' } }] });
+    expect(anchor.conflicts[0]?.code).toBe('TARGET_AMBIGUOUS');
+    expect(anchor.applied).toBe(0);
+  });
   it('按 itemId 挪舞台：其它物件引用与位置都不动', () => {
     const plan = revisePlan({ base, floorIndex: 0, ops: [{ kind: 'move', itemId: 'stage-1', delta: { x: -1.5, z: 0 } }] });
     const final = finalOf(plan);
@@ -120,7 +177,7 @@ describe('plan.revise — 只改目标物件', () => {
     const plan = revisePlan({ base: layout, floorIndex: 0, ops: [{ kind: 'move', itemId: 'stage-1', delta: { x: -1.5, z: 0 } }] });
     expect(plan.applied).toBe(0);
     expect(plan.conflicts[0]).toMatchObject({ code: 'LOCKED' });
-    expect(plan.skipped).toContain('舞台背景板');
+    expect(plan.skipped).toContain('舞台平台');
     expect(byId(finalOf(plan), 'stage-1')!.position).toEqual({ x: 0, z: -6 });
   });
 });
@@ -131,7 +188,7 @@ describe('plan.revise — 边界约束与替代位置', () => {
     expect(plan.added).toBe(0);
     expect(plan.applied).toBe(0);
     expect(plan.conflicts[0]).toMatchObject({
-      code: 'BBOX_OVERLAP', requested: { x: 0, z: -6 }, message: '压在「舞台背景板」的包围盒里',
+      code: 'BBOX_OVERLAP', requested: { x: 0, z: -6 }, message: '压在「舞台平台」的包围盒里',
     });
     expect(plan.conflicts[0]!.alternative).toBeTruthy();
     expect(itemsOf(finalOf(plan)).some(item => item.type === 'lamp')).toBe(false);

@@ -2,6 +2,8 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { createLocalWriteLeaseManager } from '@/lib/local-write-lease';
+import { createLayoutPersistenceCapability } from '../lib/layout-capability-persistence';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../lib/constants';
 import { withHouseId } from '../lib/ids';
@@ -898,12 +900,64 @@ describe('useLayoutPersistence — no ping-pong between tabs (#334)', () => {
     expect(tab.result.current.remoteLayout).toBeNull();
   });
 
-  it('treats the same house under another id as no change — two tabs on a fresh lot', () => {
+  it('recognises a different activity id even when geometry matches', () => {
     const tab = mountTab(makeLayout({ id: 'tab-a' }));
     act(() => fireStorage(STORAGE_KEY, JSON.stringify(makeLayout({ id: 'tab-b' }))));
-    expect(tab.result.current.remoteLayout).toBeNull();
+    expect(tab.result.current.remoteLayout?.id).toBe('tab-b');
     act(() => fireStorage(STORAGE_KEY, JSON.stringify(makeLayout({ id: 'tab-b', width: 9 }))));
     expect(tab.result.current.remoteLayout?.width).toBe(9);
+  });
+
+  it('freezes pending autosave and background flush after another tab writes, including after dismiss', () => {
+    const initial = makeLayout({ id:'activity', name:'原方案' });
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    const tab = mountTab(initial);
+    const draft = { ...initial, name:'本页未保存修改' };
+    tab.rerender({ layout:draft });
+    const other = { ...initial, name:'另一页已保存' };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(other));
+    act(() => fireStorage(STORAGE_KEY, JSON.stringify(other)));
+    act(() => tab.result.current.clearRemoteLayout());
+    act(() => { vi.advanceTimersByTime(DEBOUNCE); window.dispatchEvent(new Event('pagehide')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!).name).toBe('另一页已保存');
+    expect(tab.result.current.saveError).not.toBeNull();
+    expect(draft.name).toBe('本页未保存修改');
+  });
+
+  it('keeps the conflict visible after dismissal, reopens it, and saves the next edit after adoption', () => {
+    const initial = makeLayout({ id:'activity', name:'原方案' });
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    const tab = mountTab(initial);
+    tab.rerender({layout:{...initial}});
+    tab.rerender({layout:{...initial,name:'本页草稿'}});
+    const other = {...initial,name:'另一页版本'};
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(other));
+    act(() => fireStorage(STORAGE_KEY, JSON.stringify(other)));
+    act(() => tab.result.current.clearRemoteLayout());
+    expect(tab.result.current.externalConflict).toBe(true);
+    expect(tab.result.current.hasRemoteCandidate).toBe(true);
+    expect(tab.result.current.remoteLayout).toBeNull();
+    act(() => tab.result.current.reopenRemoteLayout());
+    expect(tab.result.current.remoteLayout?.name).toBe('另一页版本');
+    tab.rerender({layout:{...other}});
+    expect(tab.result.current.externalConflict).toBe(false);
+    expect(tab.result.current.saveError).toBeNull();
+    tab.rerender({layout:{...other,name:'采用后的新修改'}});
+    act(() => vi.advanceTimersByTime(DEBOUNCE));
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!).name).toBe('采用后的新修改');
+  });
+
+  it('checks the storage baseline before saving even if the storage event has not arrived', () => {
+    const initial = makeLayout({ id:'activity', name:'原方案' });
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    const tab = mountTab(initial);
+    tab.rerender({ layout:{ ...initial } });
+    tab.rerender({ layout:{ ...initial, name:'本页待保存' } });
+    const other = { ...initial, name:'另一页先保存' };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(other));
+    act(() => vi.advanceTimersByTime(DEBOUNCE));
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!).name).toBe('另一页先保存');
+    expect(tab.result.current.remoteLayout?.name).toBe('另一页先保存');
   });
 
   it('withdraws a pending notice once the other tab writes what this tab shows', () => {
@@ -1043,5 +1097,89 @@ describe('useLayoutPersistence — an unreadable save that cannot be copied (#33
     expect(tab.result.current.saveError).toBeNull();
     expect(readRecoveryCopies().map(({ raw }) => raw)).toEqual(['{unreadable house']);
     expect(loadLayout()?.width).toBe(10);
+  });
+});
+
+
+describe('useLayoutPersistence — injected write lease', () => {
+  beforeEach(() => { localStorage.clear(); window.history.replaceState(null, '', '/'); vi.useFakeTimers(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+  function mountLeaseEditor() {
+    const original=makeLayout({id:'lease-activity',name:'原活动',width:8});
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(original));
+    layoutStore.setState({layout:original,activeFloorIndex:0});
+    let held=true;
+    const assertion=vi.fn(()=>{if(!held)throw new Error('租约失效');});
+    const tab=renderHook(({lease})=>{const editor=useLayoutState();return {...editor,persistence:useLayoutPersistence({layout:editor.layout,onHydrate:editor.actions.applyLayout,debounceMs:100,assertWriteLease:lease})};}, {initialProps:{lease:assertion}});
+    return {original,tab,assertion,lose:()=>{held=false;},regain:()=>{held=true;act(()=>tab.rerender({lease:vi.fn(()=>{if(!held)throw new Error('租约失效');})}));}};
+  }
+  it('排队后失锁时防抖、隐藏、关闭和卸载都不覆盖存档，也不报已保存',()=>{
+    const f=mountLeaseEditor();act(()=>f.tab.result.current.actions.setWidth(9));f.lose();
+    const write=vi.spyOn(Storage.prototype,'setItem');
+    act(()=>{vi.advanceTimersByTime(100);vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden');document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('pagehide'));});
+    expect(loadLayout()?.width).toBe(8);expect(f.tab.result.current.persistence.lastSavedAt).toBeNull();
+    expect(f.tab.result.current.persistence.saveError).toBe('unknown');
+    act(()=>f.tab.unmount());expect(write.mock.calls.filter(([key])=>key===STORAGE_KEY)).toHaveLength(0);
+  });
+  it('uses the real capability assertion to reject a queued save after lease release', async()=>{
+    const original=makeLayout({id:'capability-activity',width:8});
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(original));layoutStore.setState({layout:original,activeFloorIndex:0});
+    const previous=Object.getOwnPropertyDescriptor(navigator,'locks');
+    const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>callback({}));}} as unknown as LockManager;
+    Object.defineProperty(navigator,'locks',{configurable:true,value:locks});
+    try {
+      const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
+      const assertion=createLayoutPersistenceCapability(lease.capability).assertWrite;
+      const tab=renderHook(()=>{const editor=useLayoutState();return {...editor,persistence:useLayoutPersistence({layout:editor.layout,onHydrate:editor.actions.applyLayout,debounceMs:100,assertWriteLease:assertion})};});
+      act(()=>tab.result.current.actions.setWidth(9));
+      await act(async()=>{await lease.release();});
+      const write=vi.spyOn(Storage.prototype,'setItem');act(()=>vi.advanceTimersByTime(100));
+      expect(loadLayout()?.width).toBe(8);expect(write.mock.calls.filter(([key])=>key===STORAGE_KEY)).toHaveLength(0);
+      expect(tab.result.current.persistence.saveError).toBe('unknown');tab.unmount();
+    } finally { if(previous)Object.defineProperty(navigator,'locks',previous);else Reflect.deleteProperty(navigator,'locks'); }
+  });
+  it('失锁时身份核对和任务提交都拒绝写入',async()=>{
+    const f=mountLeaseEditor();const expected=f.tab.result.current.layout;
+    const next={...expected,eventOperations:eventOperationsSchema.parse({tasks:[{id:'a1000000-0000-4000-8000-000000000002',title:'任务',phase:'event'}]})};
+    f.lose();const write=vi.spyOn(Storage.prototype,'setItem');
+    act(()=>expect(()=>f.tab.result.current.persistence.ensurePersistentIdentity()).toThrow('编辑权已失效'));
+    await act(async()=>{await expect(f.tab.result.current.persistence.persistVerifiedLayout(expected,next,()=>{})).rejects.toThrow('租约失效');});
+    expect(write.mock.calls.filter(([key])=>key===STORAGE_KEY)).toHaveLength(0);expect(loadLayout()).toEqual(f.original);
+    expect(f.tab.result.current.persistence.lastSavedAt).toBeNull();
+  });
+  it('任务校验期间丢失租约，最终写入之前再核验',async()=>{
+    const f=mountLeaseEditor();const expected=f.tab.result.current.layout;
+    const next={...expected,eventOperations:eventOperationsSchema.parse({tasks:[{id:'a1000000-0000-4000-8000-000000000002',title:'任务',phase:'event'}]})};
+    const write=vi.spyOn(Storage.prototype,'setItem');
+    await act(async()=>{await expect(f.tab.result.current.persistence.persistVerifiedLayout(expected,next,()=>{f.lose();})).rejects.toThrow('租约失效');});
+    expect(write.mock.calls.filter(([key])=>key===STORAGE_KEY)).toHaveLength(0);expect(loadLayout()).toEqual(f.original);
+  });
+  it('写入后若立即失锁，不把结果标成已保存',()=>{
+    const f=mountLeaseEditor();act(()=>f.tab.result.current.actions.setWidth(9));const original=Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){original.call(this,key,value);if(key===STORAGE_KEY)f.lose();});
+    act(()=>vi.advanceTimersByTime(100));
+    expect(loadLayout()?.width).toBe(9);expect(f.tab.result.current.persistence.lastSavedAt).toBeNull();expect(f.tab.result.current.persistence.saveError).toBe('unknown');
+  });
+  it('身份核验失锁不丢排队草稿，重获租约且存档未变化时自动重试',()=>{
+    const f=mountLeaseEditor();act(()=>f.tab.result.current.actions.setWidth(9));f.lose();
+    act(()=>expect(()=>f.tab.result.current.persistence.ensurePersistentIdentity()).toThrow('编辑权已失效'));
+    act(()=>vi.advanceTimersByTime(100));expect(loadLayout()?.width).toBe(8);
+    f.regain();act(()=>vi.advanceTimersByTime(100));
+    expect(loadLayout()?.width).toBe(9);expect(f.tab.result.current.persistence.saveError).toBeNull();
+  });
+  it('重获租约前另一标签改了存档时保留草稿并拒绝自动覆盖',()=>{
+    const f=mountLeaseEditor();act(()=>f.tab.result.current.actions.setWidth(9));f.lose();
+    act(()=>expect(()=>f.tab.result.current.persistence.ensurePersistentIdentity()).toThrow('编辑权已失效'));
+    const newer={...f.original,width:10};localStorage.setItem(STORAGE_KEY,JSON.stringify(newer));
+    f.regain();act(()=>vi.advanceTimersByTime(100));
+    expect(loadLayout()?.width).toBe(10);expect(f.tab.result.current.layout.width).toBe(9);
+    expect(f.tab.result.current.persistence.externalConflict).toBe(true);
+  });
+  it('任务校验在写前失锁时也保留未保存画布，重获租约后才重排自动保存',async()=>{
+    const f=mountLeaseEditor();act(()=>f.tab.result.current.actions.setWidth(9));const expected=f.tab.result.current.layout;
+    const next={...expected,eventOperations:eventOperationsSchema.parse({tasks:[{id:'a1000000-0000-4000-8000-000000000002',title:'任务',phase:'event'}]})};
+    f.lose();await act(async()=>{await expect(f.tab.result.current.persistence.persistVerifiedLayout(expected,next,()=>{})).rejects.toThrow('租约失效');});
+    act(()=>vi.advanceTimersByTime(100));expect(loadLayout()?.width).toBe(8);
+    f.regain();act(()=>vi.advanceTimersByTime(100));expect(loadLayout()?.width).toBe(9);
   });
 });

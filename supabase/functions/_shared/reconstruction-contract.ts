@@ -11,6 +11,11 @@ export const reconstructionRequestSchema=z.strictObject({...leaseSchema.shape,re
  }
 });
 export type ReconstructionRequest=z.infer<typeof reconstructionRequestSchema>;
+/** Review can confirm only the exact displayed candidate; edits require a fresh candidate. */
+export function sameReviewedGeometry(candidate:z.infer<typeof sceneV2Schema>,reviewed:z.infer<typeof sceneV2Schema>):boolean{
+ const geometry=(scene:z.infer<typeof sceneV2Schema>)=>({venue:scene.venue,structure:{walls:scene.structure.walls.map(({status,...wall})=>wall),openings:scene.structure.openings.map(({status,...opening})=>opening),columns:scene.structure.columns.map(({status,...column})=>column)},sources:scene.sources,objects:scene.objects});
+ return canonical(geometry(candidate))===canonical(geometry(reviewed));
+}
 export const reconstructionIssueSchema=z.object({code:z.string(),message:z.string(),targetId:z.string().optional()});
 export type ReconstructionIssue=z.infer<typeof reconstructionIssueSchema>;
 export const reconstructionJobSchema=z.object({id:uuid,state:z.enum(['queued','recognizing','needs_review','planning','validating','ready','failed']),candidate:sceneV2Schema.nullable().optional(),proposal:z.object({id:uuid,candidate:sceneSchema}).passthrough().nullable().optional(),issues:z.array(reconstructionIssueSchema).default([]),error_code:z.string().nullable().optional()}).passthrough();

@@ -1,0 +1,9 @@
+{
+ "elderly_context":{"headcount":30,"venueIO":"indoor","audienceTags":["elderly"],"activityNeeds":[{"kind":"checkin","decision":"unknown","evidence":"签到和舞台尚未决定"},{"kind":"stage","decision":"unknown","evidence":"签到和舞台尚未决定"}]},
+ "mobility_explicit":{"mobilityAssistance":true,"activityNeeds":[{"kind":"checkin","decision":"needed","evidence":"需要签到"}]},
+ "no_checkin":{"activityNeeds":[{"kind":"checkin","decision":"not_needed","evidence":"不需要签到"},{"kind":"stage","decision":"not_needed","evidence":"不用搭舞台"}]},
+ "ambiguous_checkin":{"activityNeeds":[{"kind":"checkin","decision":"unknown","evidence":"签到要不要安排还没定"}]},
+ "ambiguous_stage":{"activityNeeds":[{"kind":"stage","decision":"unknown","evidence":"舞台可能要，但也可能不用"}]},
+ "one_person":{"headcount":1,"venueIO":"indoor","lengthM":12,"widthM":9,"layoutMode":"dining"},
+ "contradictory_headcount":{},"history_headcount":{},"area_only":{"areaM2":120},"centimetres":{},"imperial":{},"no_evidence":{},"prompt_injection":{}
+}

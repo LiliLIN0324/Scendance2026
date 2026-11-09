@@ -1,5 +1,5 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect } from 'vitest';
-import { database,owner,editor,outsider } from './fixtures.ts';
+import { database,owner,editor,outsider,studio,scene,chair } from './fixtures.ts';
 import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 
 describe('generation queue, idempotency, fencing and budget',()=>{
@@ -95,6 +95,25 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     const done=await f.jobs(null,'jobs.complete',{id:j.id,workerToken:q.worker_token,asset,usage:{credits:20}});
     expect(done.state).toBe('ready');expect((await f.rpc(owner,'assets.get',{assetId:j.id})).owner_id).toBe(owner);
     await expect(f.jobs(owner,'jobs.added',{id:j.id,projectId:crypto.randomUUID()})).rejects.toThrow('ASSET_NOT_IN_SAVED_SCENE');
+  });
+  it('marks a saved asset only for its job owner in a project they belong to',async()=>{
+    const job=await f.jobs(owner,'jobs.create',input()),assetId=crypto.randomUUID();
+    await f.rpc(owner,'assets.register',{id:assetId,name:'Fixture asset',source:'hunyuan',license:{},format:'glb',storagePath:`${assetId}.glb`,byteSize:100,sha256:'a'.repeat(64),metadata:{}});
+    await f.db.query("update scene_private.generation_jobs set state='ready',asset_id=$2 where id=$1",[job.id,assetId]);
+    const withAsset=scene();withAsset.objects.push({...chair(),materialId:'asset',assetId});
+    const target=await f.rpc(owner,'projects.create',{studioId:studio,name:'Saved asset target',scene:withAsset});
+    const without=await f.rpc(owner,'projects.create',{studioId:studio,name:'No saved asset',scene:scene()});
+    const otherStudio=crypto.randomUUID();
+    await f.db.query('insert into scene_private.studios(id,name) values($1,$2)',[otherStudio,'Other fixture']);
+    await f.db.query("insert into scene_private.members values($1,$2,'owner','Owner')",[otherStudio,owner]);
+    const formerMemberProject=await f.rpc(owner,'projects.create',{studioId:otherStudio,name:'Former member',scene:withAsset});
+    await f.db.query('delete from scene_private.members where studio_id=$1 and user_id=$2',[otherStudio,owner]);
+    await expect(f.jobs(outsider,'jobs.added',{id:job.id,projectId:target.id})).rejects.toThrow('ASSET_NOT_IN_SAVED_SCENE');
+    await expect(f.jobs(editor,'jobs.added',{id:job.id,projectId:target.id})).rejects.toThrow('ASSET_NOT_IN_SAVED_SCENE');
+    await expect(f.jobs(owner,'jobs.added',{id:job.id,projectId:without.id})).rejects.toThrow('ASSET_NOT_IN_SAVED_SCENE');
+    await expect(f.jobs(owner,'jobs.added',{id:job.id,projectId:formerMemberProject.id})).rejects.toThrow('ASSET_NOT_IN_SAVED_SCENE');
+    expect((await f.jobs(owner,'jobs.get',{id:job.id})).state).toBe('ready');
+    expect((await f.jobs(owner,'jobs.added',{id:job.id,projectId:target.id})).state).toBe('added');
   });
   it('persists text usage and replay result without another reservation',async()=>{
     const i=input(),r=await f.jobs(owner,'reserve',i);

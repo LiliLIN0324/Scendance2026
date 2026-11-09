@@ -1,3 +1,4 @@
+import {isWorkspaceWriteFenceRequired} from '@/lib/workspace-write-fence';
 /**
  * Bingo「方案会话」索引：一场对话 / 一套方案的标题、收藏和时间。
  *
@@ -187,6 +188,7 @@ export function readAssistantSessionIndex(storage?: Storage): AssistantSessionIn
 }
 
 export function writeAssistantSessionIndex(index: AssistantSessionIndex, storage?: Storage): boolean {
+  if(isWorkspaceWriteFenceRequired())return false;
   const payload = JSON.stringify({
     version: index.version,
     activeId: index.activeId,

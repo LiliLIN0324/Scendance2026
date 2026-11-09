@@ -25,8 +25,8 @@ describe('material variant authorization, immutable storage and explicit proposa
   async function variant() {
     const response=await req(`/assets/${source.id}/customize`,'POST',changes());expect(response.status).toBe(201);return materialVariantAssetSchema.parse(await response.json());
   }
-  async function project() {
-    const s=scene();s.objects=[{...chair('keep these notes'),materialId:'asset',assetId:source.id,color:'#dddddd',rotation:0.4},{...chair(),materialId:'asset',assetId:source.id,position:{x:6,z:3}}];
+  async function project(notes='') {
+    const s=scene();s.objects=[{...chair(notes),materialId:'asset',assetId:source.id,color:'#dddddd',rotation:0.4},{...chair(),materialId:'asset',assetId:source.id,position:{x:6,z:3}}];
     const p=await f.rpc(owner,'projects.create',{studioId:studio,name:'Material preview',scene:s}),lease=await f.rpc(owner,'lease.acquire',{projectId:p.id,sessionId:session});
     return {p,s,context:{sessionId:session,generation:lease.generation,expectedRevision:0}};
   }
@@ -77,6 +77,15 @@ describe('material variant authorization, immutable storage and explicit proposa
     // The new replay row must not prevent existing project/proposal deletion flows.
     await f.db.query('delete from scene_private.proposals where project_id=$1',[p.id]);
     expect((await f.db.query('select * from scene_private.material_variant_proposals where proposal_id=$1',[proposal.id])).rows).toHaveLength(0);
+  });
+  it('preserves undisclosed original notes and blocks applying an ordinary material proposal',async()=>{
+    const asset=await variant(),{p,s,context}=await project('需要授权核对的原始备注');
+    const input={...context,requestId:crypto.randomUUID(),localRevision:5,scene:s,objectIds:[s.objects[0].id],sourceAssetId:source.id,variantAssetId:asset.id};
+    const response=await req(`/projects/${p.id}/material-variants`,'POST',input);expect(response.status).toBe(201);
+    const proposal=await response.json();expect(proposal.candidate.objects[0].notes).toBe(s.objects[0].notes);
+    const denied=await req(`/projects/${p.id}/proposals/apply`,'POST',{...context,proposalId:proposal.id,localRevision:5,currentScene:s});
+    expect(denied.status).toBe(409);expect((await denied.json()).error.code).toBe('ORIGINAL_SCENE_REVIEW_REQUIRED');
+    const original=await f.rpc(owner,'projects.get',{projectId:p.id});expect(original.revision).toBe(0);expect(original.scene).toEqual(s);
   });
   it('rejects locked, wrong-source, stale and unrelated replacement selections',async()=>{
     const asset=await variant(),{p,s,context}=await project(),base={...context,requestId:crypto.randomUUID(),localRevision:0,scene:s,objectIds:[s.objects[0].id],sourceAssetId:source.id,variantAssetId:asset.id};

@@ -3,13 +3,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { layoutStore } from '../hooks/use-layout-store';
 import { makeFloor, makeLayout } from './__testfixtures__/fixtures';
-import { captureCatalogPlacement } from './catalog-placement-guard';
+import { captureCatalogPlacement, captureCatalogPlacementBatch } from './catalog-placement-guard';
 
 const original = layoutStore.getState();
 beforeEach(() => { layoutStore.setState({ layout: makeLayout({ id: 'rehearsal-a', floors: [makeFloor(), makeFloor({ id: 'upper' })] }), activeFloorIndex: 0 }); });
 afterEach(() => { layoutStore.setState(original); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('captureCatalogPlacement', () => {
+  it('allows sequential verified single insertions but rejects an outside edit',()=>{
+    const batch=captureCatalogPlacementBatch();
+    const add=(id:string)=>batch.runOwnMutation(()=>{
+      const current=layoutStore.getState().layout;
+      layoutStore.setState({layout:{...current,floors:current.floors.map((f,i)=>i?f:{...f,items:[...f.items,{id,type:'chair' as const,name:'椅子',icon:'椅',width:.5,depth:.5,height:.8,color:'#fff',position:{x:0,z:0},rotation:0}]})}});
+      return {status:'placed',id};
+    });
+    expect(()=>add('first')).not.toThrow();expect(()=>add('second')).not.toThrow();
+    layoutStore.getState().actions.setWidth(layoutStore.getState().layout.width+1);
+    expect(()=>batch.assertCurrent()).toThrow(/剩余物料未添加/);batch.dispose();
+  });
+  it('rejects a claimed insertion that also changes unrelated geometry',()=>{
+    const batch=captureCatalogPlacementBatch();
+    expect(()=>batch.runOwnMutation(()=>{
+      const current=layoutStore.getState().layout;
+      layoutStore.setState({layout:{...current,width:current.width+1,floors:current.floors.map((f,i)=>i?f:{...f,items:[...f.items,{id:'added',type:'chair' as const,name:'椅子',icon:'椅',width:.5,depth:.5,height:.8,color:'#fff',position:{x:0,z:0},rotation:0}]})}});
+      return {status:'placed',id:'added'};
+    })).toThrow(/变化无法核对/);batch.dispose();
+  });
   it('rejects a floor switch back even when the immutable layout is still the very same object', () => {
     const layout = layoutStore.getState().layout, guard = captureCatalogPlacement();
     layoutStore.getState().actions.setActiveFloorIndex(1);

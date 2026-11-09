@@ -14,10 +14,11 @@ import {
 } from '../room-organizer/lib/review-pins';
 
 export const REVIEW_SHARE_PIN_STORAGE_KEY = 'scendance-review-share-pins-v1';
+export const REVIEW_SHARE_PIN_STORAGE_KEY_V2 = 'scendance-review-share-pins-v2';
 export const REVIEW_SHARE_PINS_PER_PLAN = 80;
 export const REVIEW_SHARE_PIN_PLANS = 40;
 
-export type ReviewSharePinFailure = 'text' | 'full' | 'storage' | 'plan' | 'draft';
+export type ReviewSharePinFailure = 'text' | 'full' | 'storage' | 'plan' | 'draft' | 'unknown';
 
 export type AppendReviewSharePinResult =
   | { ok: true; pins: ReviewPin[]; pin: ReviewPin }
@@ -49,6 +50,18 @@ export function readReviewSharePins(
   return file.byPlan[planKey] ?? [];
 }
 
+/** Strong-version records must never silently drop malformed pins before export. */
+export function readExactReviewSharePins(planKey:string,storage:Pick<Storage,'getItem'>):ReviewPin[] {
+  const raw=storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2);if(raw===null)return [];
+  let parsed:unknown;try{parsed=JSON.parse(raw);}catch{throw new Error('本机评审钉无法完整读取。');}
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('本机评审钉无法完整读取。');
+  const file=parsed as Record<string,unknown>;
+  if(file.version!==1||!file.byPlan||typeof file.byPlan!=='object'||Array.isArray(file.byPlan))throw new Error('本机评审钉无法完整读取。');
+  const rows=(file.byPlan as Record<string,unknown>)[planKey];if(rows===undefined)return [];
+  if(!Array.isArray(rows)||rows.length>REVIEW_SHARE_PINS_PER_PLAN||rows.some(row=>!isPin(row)||typeof (row as ReviewPin & {floorId?:unknown}).floorId!=='string'||!(row as ReviewPin & {floorId:string}).floorId.trim())||new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('本机评审钉无法完整读取。');
+  return rows as ReviewPin[];
+}
+
 export function appendReviewSharePin(
   storage: PinStore,
   input: {
@@ -56,11 +69,37 @@ export function appendReviewSharePin(
     text: string;
     draft: ReviewPinDraft;
     id?: string;
+    floorId?: string;
   },
 ): AppendReviewSharePinResult {
   if (!input.planKey || input.planKey.length > 80) return { ok: false, reason: 'plan' };
-  const pin = createReviewPin({ id: input.id ?? newPinId(), text: input.text, draft: input.draft });
-  if (!pin) return { ok: false, reason: 'text' };
+  const created = createReviewPin({ id: input.id ?? newPinId(), text: input.text, draft: input.draft });
+  if (!created) return { ok: false, reason: 'text' };
+  if (input.floorId !== undefined && (!input.floorId.trim() || input.floorId.length > 128)) return {ok:false,reason:'draft'};
+  const pin = input.floorId === undefined ? created : { ...created, floorId: input.floorId };
+
+  if(input.planKey.startsWith('review-v2:')) {
+    try {
+      const raw=storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2);
+      const parsed:unknown=raw===null?{version:1,byPlan:{}}:JSON.parse(raw);
+      if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return {ok:false,reason:'storage'};
+      const file=parsed as {version:unknown;byPlan:unknown};
+      if(file.version!==1||!file.byPlan||typeof file.byPlan!=='object'||Array.isArray(file.byPlan))return {ok:false,reason:'storage'};
+      const byPlan=file.byPlan as Record<string,unknown>;
+      for(const [key,rows] of Object.entries(byPlan)){
+        if(!key||key.length>80||!Array.isArray(rows)||rows.length>REVIEW_SHARE_PINS_PER_PLAN||rows.some(row=>!isPin(row))||new Set(rows.map(row=>row.id)).size!==rows.length)return {ok:false,reason:'storage'};
+      }
+      const existing=(byPlan[input.planKey]??[]) as ReviewPin[];
+      if(existing.length>=REVIEW_SHARE_PINS_PER_PLAN||(!(input.planKey in byPlan)&&Object.keys(byPlan).length>=REVIEW_SHARE_PIN_PLANS))return {ok:false,reason:'full'};
+      if(existing.some(row=>row.id===pin.id))return {ok:false,reason:'storage'};
+      byPlan[input.planKey]=[...existing,pin];
+      const next=JSON.stringify(parsed);
+      if(storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)!==raw)return {ok:false,reason:'storage'};
+      try{storage.setItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2,next);if(storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)!==next)return {ok:false,reason:'unknown'};}
+      catch{return {ok:false,reason:'unknown'};}
+      return {ok:true,pins:byPlan[input.planKey] as ReviewPin[],pin};
+    } catch {return {ok:false,reason:'storage'};}
+  }
 
   let file: PinFile;
   try {

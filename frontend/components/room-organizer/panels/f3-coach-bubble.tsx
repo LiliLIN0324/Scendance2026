@@ -7,7 +7,7 @@ export interface F3CoachBubbleProps {
 
 /**
  * F3 首次吸附教练气泡：纯 DOM，绝对定位在锚点附近，不依赖 3D。
- * 文案：「拖近已有物件会自动留出通道间距，试试靠近一张桌子」。
+ * 拖动物件时提示用户核对实际通行空间。
  */
 export function F3CoachBubble({ anchor, visible, onDismiss }: F3CoachBubbleProps) {
   if (!visible || !anchor) return null;
@@ -33,7 +33,7 @@ export function F3CoachBubble({ anchor, visible, onDismiss }: F3CoachBubbleProps
       }}
     >
       <div style={{ marginBottom: 8 }}>
-        拖近已有物件会自动留出通道间距，试试靠近一张桌子。
+        拖动物件可以调整位置；实际通行空间还需核对。
       </div>
       <div style={{ textAlign: 'right' }}>
         <button

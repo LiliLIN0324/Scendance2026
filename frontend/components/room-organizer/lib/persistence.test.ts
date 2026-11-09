@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { MAX_ROOM_DIMENSION, STORAGE_KEY } from './constants';
 import { randomId } from './ids';
@@ -266,14 +267,14 @@ describe('persistence — start fresh keeps a copy (#336)', () => {
     expect(keptRaws(store)).toEqual(['house']);
   });
 
-  it('frees the save first when the copy only fits in its space', () => {
+  it('refuses reset when a copy only fits after deleting the primary save', () => {
     const house = 'h'.repeat(100);
     // Room for the house once, under either key — not for both.
     const store = quotaStore(STORAGE_KEY.length + RECOVERY_STORAGE_KEY.length + 170);
     store.setItem(STORAGE_KEY, house);
-    expect(resetStoredLayout(store, 1_000)).toBe('moved');
-    expect(store.getItem(STORAGE_KEY)).toBeNull();
-    expect(keptRaws(store)).toEqual([house]);
+    expect(resetStoredLayout(store, 1_000)).toBe('refused');
+    expect(store.getItem(STORAGE_KEY)).toBe(house);
+    expect(keptRaws(store)).toEqual([]);
   });
 
   it('refuses and leaves the save in place when no copy can be kept', () => {
@@ -304,7 +305,7 @@ describe('persistence — start fresh keeps a copy (#336)', () => {
     expect(removeItem).not.toHaveBeenCalled();
   });
 
-  it('reports a house lost mid-move so the caller offers its in-memory copy', () => {
+  it('refuses reset if backup writes fail, preserving original bytes', () => {
     const store = quotaStore(Number.MAX_SAFE_INTEGER);
     store.setItem(STORAGE_KEY, 'house');
     const broken = withOverrides(store, {
@@ -312,7 +313,25 @@ describe('persistence — start fresh keeps a copy (#336)', () => {
         throw domError('QuotaExceededError', 22);
       },
     });
-    expect(resetStoredLayout(broken)).toBe('lost');
+    expect(resetStoredLayout(broken)).toBe('refused');
+    expect(store.getItem(STORAGE_KEY)).toBe('house');
+  });
+
+  it('refuses if a backup write silently does nothing, retaining exact original bytes', () => {
+    const raw='原始数据\r\n\u0000  {未修复}';const store=quotaStore(Number.MAX_SAFE_INTEGER);
+    store.setItem(STORAGE_KEY,raw);const remove=vi.fn((key:string)=>store.removeItem(key));
+    const silent=withOverrides(store,{setItem:(key,value)=>{if(!isRecoveryKey(key))store.setItem(key,value);},removeItem:remove});
+    expect(resetStoredLayout(silent)).toBe('refused');
+    expect(store.getItem(STORAGE_KEY)).toBe(raw);
+    expect(remove.mock.calls.some(([key])=>key===STORAGE_KEY)).toBe(false);
+  });
+  it('requires a byte-exact backup even if an older parsed layout has the same geometry', () => {
+    const store=quotaStore(Number.MAX_SAFE_INTEGER);
+    const a=JSON.stringify(makeLayout({id:'activity-a',name:'同一布局'}));
+    const b=JSON.stringify(makeLayout({id:'activity-b',name:'同一布局'}));
+    store.setItem(STORAGE_KEY,a);expect(backupStoredLayout(store,1_000)).toBe(true);
+    store.setItem(STORAGE_KEY,b);expect(resetStoredLayout(store,2_000)).toBe('moved');
+    expect(keptRaws(store)).toContain(b);
   });
 
   it('reads recovery copies through the schema, the legacy undated one as the oldest', () => {
@@ -583,7 +602,7 @@ describe('persistence — missing storage object (#472)', () => {
       expect(localStorageOrNull()).toBeNull();
       expect(saveLayout(makeLayout())).toEqual({ ok: false, reason: 'blocked' });
       expect(loadLayout()).toBeNull();
-      expect(resetStoredLayout()).toBe('refused');
+      expect(resetStoredLayout()).toBe('recovery-pending');
       expect(readStoredLayoutRaw()).toBeNull();
       expect(readRecoveryCopies()).toEqual([]);
       expect(() => backupStoredLayout()).not.toThrow();
@@ -651,5 +670,31 @@ describe('persistence — third-review fixes (#336)', () => {
     });
     for (const { key } of readRecoveryCopies(withHouse)) withHouse.removeItem(key);
     expect(keepStoredLayout(unwritable, 3)).toBe('blocked');
+  });
+});
+
+
+describe('重置主档的恢复标记保护', () => {
+  beforeEach(()=>window.localStorage.clear());
+  afterEach(()=>vi.restoreAllMocks());
+  it.each([JSON.stringify({version:1,id:'pending-restore'}),'broken-marker'])('真实本地存储中标记 %s 阻断重置并保留原始字节', marker => {
+    const raw='原活动\r\n{原始内容}';window.localStorage.setItem(STORAGE_KEY,raw);window.localStorage.setItem(RESTORE_JOURNAL_MARKER,marker);
+    const writes=vi.spyOn(Storage.prototype,'setItem'),deletes=vi.spyOn(Storage.prototype,'removeItem');
+    expect(resetStoredLayout()).toBe('recovery-pending');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);expect(window.localStorage.getItem(RESTORE_JOURNAL_MARKER)).toBe(marker);
+    expect(writes).not.toHaveBeenCalled();expect(deletes).not.toHaveBeenCalled();
+  });
+  it('标记读取失败时不写入也不删除主档',()=>{
+    const raw='主档原字节';window.localStorage.setItem(STORAGE_KEY,raw);
+    const original=Storage.prototype.getItem;vi.spyOn(Storage.prototype,'getItem').mockImplementation(function(this:Storage,key){if(key===RESTORE_JOURNAL_MARKER)throw new Error('blocked');return original.call(this,key);});
+    const writes=vi.spyOn(Storage.prototype,'setItem'),deletes=vi.spyOn(Storage.prototype,'removeItem');
+    expect(resetStoredLayout()).toBe('recovery-pending');expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);
+    expect(writes).not.toHaveBeenCalled();expect(deletes).not.toHaveBeenCalled();
+  });
+  it('保存备份后出现标记时不删除主档',()=>{
+    const raw='原始主档';window.localStorage.setItem(STORAGE_KEY,raw);
+    const original=Storage.prototype.setItem;vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){original.call(this,key,value);if(isRecoveryKey(key))original.call(this,RESTORE_JOURNAL_MARKER,JSON.stringify({version:1,id:'late'}));});
+    const deletes=vi.spyOn(Storage.prototype,'removeItem');expect(resetStoredLayout()).toBe('recovery-pending');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);expect(deletes.mock.calls.some(([key])=>key===STORAGE_KEY)).toBe(false);
   });
 });

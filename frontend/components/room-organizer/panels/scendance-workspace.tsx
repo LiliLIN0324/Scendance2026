@@ -22,7 +22,7 @@ import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
 import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
-import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
+import type { CatalogPlacementBatchGuard, CatalogPlacementGuard, CatalogPlacementResult } from '../lib/catalog-placement-guard';
 import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
 import { MAX_FLOORS } from '../lib/constants';
 import type { SplatDisplayMode } from '../three/splat-preview';
@@ -33,7 +33,9 @@ interface LibraryProps {
   controller?: BackendSession;
   onClose?(): void;
   capturePlacement?(): CatalogPlacementGuard;
+  capturePlacementBatch?(): CatalogPlacementBatchGuard;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
+  placeCatalogItemResult?(item: CatalogItem): CatalogPlacementResult;
 }
 
 export function MaterialGlyph({ materialId, color = 'currentColor' }: { materialId?: string | undefined; color?: string }): JSX.Element {
@@ -125,7 +127,7 @@ export function ShelfGrip({ shelfRef, label = '调整物料库高度' }: { shelf
   ><span aria-hidden="true"/></div>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, controller, onClose, capturePlacement, variant = 'shelf' }: LibraryProps & {
+export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, controller, onClose, capturePlacement, capturePlacementBatch, variant = 'shelf' }: LibraryProps & {
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
 }): JSX.Element {
@@ -135,11 +137,12 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
   const atLimit = materialCount(activeFloor.items) >= editorItemLimit(layout);
   const card = variant === 'card';
 
-  const addMaterial = (item: CatalogItem) => {
-    if (atLimit) return;
+  const addMaterial = (item: CatalogItem):CatalogPlacementResult => {
+    if (atLimit) return {status:'failed',message:'当前场景物料已满，请先腾出位置。'};
     // 放置只选中、不掀属性面板：要看尺寸/颜色得双击画面里那件物料。
-    const id = placeCatalogItem(item);
-    if (id) selectOnly(id, { keepPanel: true });
+    const result = placeCatalogItemResult?.(item) ?? (()=>{const id=placeCatalogItem(item);return id?{status:'placed' as const,id}:{status:'pending' as const};})();
+    if (result.status==='placed') selectOnly(result.id, { keepPanel: true });
+    return result;
   };
 
   // 风格套整组一次落盘：一次提交、一次撤销，不按件走放置动画。
@@ -164,12 +167,12 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
       {card
         ? <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}/>
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}/>
           </div>
         </div>
         : <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot}/>
+            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot}/>
           </div>
         </div>}
     </div>
@@ -371,11 +374,13 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     setPreset(next);
   };
   const cyclePreset = () => choosePreset(angleNext.id);
+  const addFloorBlocked = !!layout.backendSceneV2 && activeFloorIndex >= layout.floors.length - 1;
+  const floorBlockMessage = '当前结构场景暂不支持新增、删除或调整楼层。';
   const changeVisibleFloor = (delta: -1 | 1) => {
     const next = activeFloorIndex + delta;
     if (next < 0) return;
     if (next >= layout.floors.length) {
-      if (delta !== 1 || layout.floors.length >= MAX_FLOORS) return;
+      if (delta !== 1 || layout.floors.length >= MAX_FLOORS || layout.backendSceneV2) return;
       // The up control doubles as “add next storey” at the top of the stack.
       // addFloor creates a clean floor and makes it active in one history step.
       actions.addFloor();
@@ -475,9 +480,10 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     /* 圆钮贴在画布右上角。所有工具都是一级钮，没有省略号菜单；只有导出还带一层选项弹层。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
       <div className="sc-floor-switcher" role="group" aria-label={`楼层切换，当前第 ${activeFloorIndex + 1} 层`}>
+        {addFloorBlocked && <span role="note" style={{ maxWidth: 140, padding: '4px 6px', borderRadius: 6, background: '#F4F5F7', color: '#4A7C59', fontSize: 11, lineHeight: 1.3 }}>{floorBlockMessage}</span>}
         <span className="sc-floor-switcher-label" aria-hidden="true">{activeFloorIndex + 1}F</span>
         <div className="sc-floor-switcher-arrows">
-          <button type="button" aria-label={activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} title={activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} disabled={activeFloorIndex >= MAX_FLOORS - 1 || (activeFloorIndex >= layout.floors.length - 1 && layout.floors.length >= MAX_FLOORS)} onClick={() => changeVisibleFloor(1)}>
+          <button type="button" aria-label={addFloorBlocked ? floorBlockMessage : activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} title={addFloorBlocked ? floorBlockMessage : activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} disabled={addFloorBlocked || activeFloorIndex >= MAX_FLOORS - 1 || (activeFloorIndex >= layout.floors.length - 1 && layout.floors.length >= MAX_FLOORS)} onClick={() => changeVisibleFloor(1)}>
             <FloorTriangle direction="up"/>
           </button>
           <button type="button" aria-label={activeFloorIndex > 0 ? `切换到第 ${activeFloorIndex} 层` : '已经是底层'} title={activeFloorIndex > 0 ? `切换到第 ${activeFloorIndex} 层` : '已经是底层'} disabled={activeFloorIndex <= 0} onClick={() => changeVisibleFloor(-1)}>
