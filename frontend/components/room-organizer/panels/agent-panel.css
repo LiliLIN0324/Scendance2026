@@ -226,6 +226,13 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-composer-bar { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 .ap-composer-left { display: flex; align-items: center; gap: 6px; min-width: 0; justify-self: start; }
 .ap-composer-bar > .ap-send { justify-self: end; }
+/* 监督档位：文字胶囊。不能复用 26px 图标格（sc-chat-plus），否则「监督」会被挤成一字一行溢出（用户截图 bug）。 */
+.ap-supervise { position: relative; display: inline-flex; flex: none; }
+.ap-supervise > summary { list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; font-size: 12px; color: var(--wk-muted); cursor: pointer; white-space: nowrap; }
+.ap-supervise > summary::-webkit-details-marker { display: none; }
+.ap-supervise > summary:hover { background: var(--wk-plane); color: var(--wk-ink); }
+.ap-supervise-dot { width: 6px; height: 6px; border-radius: 50%; background: #4A7C59; flex: none; }
+.ap-supervise-menu { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 4; min-width: 200px; max-width: calc(100vw - 48px); max-height: min(50vh, 320px); overflow-y: auto; padding: 8px 10px; border: 1px solid var(--wk-hair); border-radius: 8px; background: var(--wk-paper); box-shadow: var(--e1); }
 .ap-attach { border: 0; background: transparent; border-radius: var(--r-sm); padding: 3px; display: flex; align-items: center; color: var(--wk-ink-faint); }
 .ap-attach:hover:not(:disabled) { color: var(--wk-ink-soft); background: var(--wk-plane); }
 /* 待发附件：选进来的图纸/照片先挂在输入框上，点发送才读进场地。 */
