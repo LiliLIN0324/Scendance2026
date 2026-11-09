@@ -15,6 +15,7 @@ import { useHistory } from '../hooks/use-history';
 import { useLayoutState } from '../hooks/use-layout-state';
 import { layoutStore } from '../hooks/use-layout-store';
 import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from '../lib/pending-candidate-registry';
+import {createSharedJournal, type JournalOwner} from '../lib/requirement-recovery-loop';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider, MapVenueOverlay, resetVolatileAssistantMemoriesForTests, useAgent, type BriefTool } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
@@ -738,6 +739,40 @@ describe('explicit local-only seating draft',()=>{
     expect(screen.getByText(/图纸和照片资料状态、原件版本/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));expect(onApply).toHaveBeenCalledOnce();
   },20000);
+  it('writes the local confirm into the recovery journal and does not charge', async () => {
+    configureLocalController();
+    const owner: JournalOwner = {projectId:'project-local', activityId:'local-seating', actorId:'actor-local', store:'local'};
+    const journal = createSharedJournal(owner);
+    state.layout = makeLayout({id:'local-seating', width:20, height:20});
+    const onApply = vi.fn();
+    render(<LayoutAgentProvider sessionScope="activity:local-seating" requirementJournal={journal} requirementOwner={owner} getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('30人，室内20×20，按一人一套课桌椅生成本地草案');
+    fireEvent.click(await screen.findByRole('button', {name:'确认布置'}, {timeout:15000}));
+    expect(onApply).toHaveBeenCalledOnce();
+    expect(journal.read().candidates.filter(candidate => candidate.status === 'confirmed' && candidate.entry === 'proposal')).toHaveLength(1);
+    expect(journal.read().runs).toEqual([expect.objectContaining({phase:'prepared', paidSubmissionCount:0})]);
+  }, 20000);
+  it('does not apply a local proposal after a newer requirement invalidates its journal candidate', async () => {
+    configureLocalController();
+    const owner: JournalOwner = {projectId:'project-local', activityId:'local-seating', actorId:'actor-local', store:'local'};
+    const journal = createSharedJournal(owner);
+    state.layout = makeLayout({id:'local-seating', width:20, height:20});
+    const onApply = vi.fn();
+    render(<LayoutAgentProvider sessionScope="activity:local-seating" requirementJournal={journal} requirementOwner={owner} getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('30人，室内20×20，按一人一套课桌椅生成本地草案');
+    await screen.findByRole('button', {name:'确认布置'}, {timeout:15000});
+    const open = journal.read().candidates.find(candidate => candidate.status === 'open');
+    expect(open?.entry).toBe('proposal');
+    const {createRequirementRecoveryLoop} = await import('../lib/requirement-recovery-loop');
+    const outside = createRequirementRecoveryLoop({identity: owner, journal});
+    const newer = outside.stageInput('session-1', '改成40人');
+    expect(newer.ok).toBe(true);
+    fireEvent.click(screen.getByRole('button', {name:'确认布置'}));
+    expect(onApply).not.toHaveBeenCalled();
+    expect(await screen.findByText(/这版候选已经失效或版本对不上/)).toBeTruthy();
+    expect(journal.read().runs[0]).toMatchObject({paidSubmissionCount:0, phase:'prepared'});
+    if (open) expect(outside.resubmit(open.requestId).paidSubmissionCount).toBe(0);
+  }, 20000);
   it('blocks a candidate that newly intersects a verified hand-drawn centreline',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     annotationSnapshot={revision:1,draft:{id:'draft',createdAt:1,stages:[],annotations:[{id:'route',kind:'route',label:'入场',stageNo:1,geometry:{kind:'polyline',points:[{x:-9.5,z:-9.475},{x:9.5,z:-9.475}]}}]}};

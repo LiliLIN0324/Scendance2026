@@ -185,6 +185,21 @@ describe('requirement recovery loop', () => {
     expect(target.read().turns.map(turn => turn.eventId)).toEqual(['event-left', retry.ok ? retry.eventId : '']);
   });
 
+  it('confirms an unpaid local candidate without charging and refuses a later submit', () => {
+    const target = loop();
+    const staged = receive(target, 'session-1', '30人');
+    expect(target.completeTurn(staged.eventId, 'accepted').ok).toBe(true);
+    const bound = target.bindCommand('proposal');
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    const confirmed = target.confirmPrepared(bound.candidateId, bound.requirementRevision);
+    expect(confirmed).toMatchObject({ok:true, paidSubmissionCount:0, unresolvedEventIds:[]});
+    expect(target.lookup(bound.requestId)).toMatchObject({phase:'prepared', paidSubmissionCount:0});
+    expect(target.submitPrepared(bound.requestId)).toMatchObject({ok:false, reason:'candidate_not_open', paidSubmissionCount:0});
+    expect(target.resubmit(bound.requestId)).toMatchObject({ok:false, reason:'not_submitted', paidSubmissionCount:0});
+    expect(target.confirm(bound.candidateId, bound.requirementRevision)).toMatchObject({ok:false, reason:'candidate_not_open'});
+  });
+
   it('refuses another account on the same journal and an empty utterance', () => {
     const journal = createSharedJournal(identity);
     expect(() => createRequirementRecoveryLoop({identity:{...identity, actorId:'actor-2'}, journal})).toThrow('OWNER_MISMATCH');

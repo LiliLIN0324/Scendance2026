@@ -278,6 +278,7 @@ export interface RequirementRecoveryLoop {
   lookup(requestId: string): JournalRun | null;
   readback(requestId: string): JournalRun | null;
   confirm(candidateId: string, requirementRevision: number): {ok: true; candidateId: string; requirementRevision: number; unresolvedEventIds: string[]} | {ok: false; reason: string; unresolvedEventIds: string[]};
+  confirmPrepared(candidateId: string, requirementRevision: number): {ok: true; candidateId: string; requirementRevision: number; paidSubmissionCount: 0; unresolvedEventIds: string[]} | {ok: false; reason: string; unresolvedEventIds: string[]};
   completeTurn(eventId: string, disposition: 'accepted' | 'unresolved'): {ok: boolean; reason?: string};
   abandon(eventId: string): {ok: boolean};
   withdraw(eventId: string): {ok: boolean; unresolvedEventIds: string[]};
@@ -377,6 +378,8 @@ export function createRequirementRecoveryLoop(options: {identity: RecoveryIdenti
       const current = owned();
       const existing = current?.runs.find(run => run.requestId === requestId);
       if (!current || !existing) return {ok:false, reason:'unknown_request', paidSubmissionCount:existing?.paidSubmissionCount ?? 0};
+      const linked = current.candidates.find(candidate => candidate.candidateId === existing.candidateId);
+      if (!linked || linked.status !== 'open') return {ok:false, reason:'candidate_not_open', paidSubmissionCount:existing.paidSubmissionCount};
       if (existing.phase !== 'prepared') return {ok:false, reason:'already_submitted', paidSubmissionCount:existing.paidSubmissionCount};
       const next = structuredClone(current);
       const run = next.runs.find(item => item.requestId === requestId)!;
@@ -441,6 +444,22 @@ export function createRequirementRecoveryLoop(options: {identity: RecoveryIdenti
       next.serial += 1;
       if (!commit(current, next)) return {ok:false, reason:'conflict', unresolvedEventIds};
       return {ok:true, candidateId, requirementRevision, unresolvedEventIds:unresolvedIds(next)};
+    },
+    confirmPrepared(candidateId, requirementRevision) {
+      const current = owned();
+      if (!current) return {ok:false, reason:'owner_mismatch', unresolvedEventIds:[]};
+      const unresolvedEventIds = unresolvedIds(current);
+      const candidate = current.candidates.find(item => item.candidateId === candidateId);
+      if (!candidate) return {ok:false, reason:'unknown_candidate', unresolvedEventIds};
+      if (candidate.status !== 'open') return {ok:false, reason:'candidate_not_open', unresolvedEventIds};
+      if (candidate.requirementRevision !== requirementRevision || requirementRevision !== current.revision) return {ok:false, reason:'revision_mismatch', unresolvedEventIds};
+      const run = current.runs.find(item => item.requestId === candidate.requestId);
+      if (!run || run.candidateId !== candidate.candidateId || run.phase !== 'prepared' || run.paidSubmissionCount !== 0 || run.requirementRevision !== requirementRevision) return {ok:false, reason:'run_not_ready', unresolvedEventIds};
+      const next = structuredClone(current);
+      next.candidates.find(item => item.candidateId === candidateId)!.status = 'confirmed';
+      next.serial += 1;
+      if (!commit(current, next)) return {ok:false, reason:'conflict', unresolvedEventIds};
+      return {ok:true, candidateId, requirementRevision, paidSubmissionCount:0, unresolvedEventIds:unresolvedIds(next)};
     },
     completeTurn(eventId, disposition) {
       const current = owned();

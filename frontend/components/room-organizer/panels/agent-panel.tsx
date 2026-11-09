@@ -4,6 +4,7 @@ import { validateCandidateApply } from '../lib/candidate-apply-validation';
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
+import {createRequirementRecoveryLoop, type JournalOwner, type RequirementRecoveryLoop, type SharedJournal} from '../lib/requirement-recovery-loop';
 
 /**
  * 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
@@ -504,9 +505,12 @@ function volatileMemoriesFor(scope: string): Map<string, BriefMemory> {
   return values;
 }
 
-export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, onDialogueHistoryReview, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; onDialogueHistoryReview?: ((sessionId:string)=>boolean)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', requirementJournal, requirementOwner, isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, onDialogueHistoryReview, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; requirementJournal?: SharedJournal; requirementOwner?: JournalOwner; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; onDialogueHistoryReview?: ((sessionId:string)=>boolean)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
+  const recoveryLoop = useRef<RequirementRecoveryLoop | null>(null);
+  const recoveryBinding = useRef<{candidateId: string; requirementRevision: number} | null>(null);
+  if (requirementJournal && requirementOwner && !recoveryLoop.current) recoveryLoop.current = createRequirementRecoveryLoop({identity: requirementOwner, journal: requirementJournal});
   const venueFacts = useVenueFactTracker(layoutStore);
   const sessionCurrentRef = useRef(isSessionCurrent); sessionCurrentRef.current = isSessionCurrent;
   const sessionGuardRef = useRef(assertSessionWrite);
@@ -579,6 +583,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(!next&&previous)pendingCandidates?.clear('local',previous);
     proposal.current=next;
     proposalSessionRef.current=next?boundSessionId.current:null;
+    if (!recoveryLoop.current) return;
+    if (!next) { recoveryBinding.current = null; return; }
+    const bound = recoveryLoop.current.bindCommand(next.kind === 'review' ? 'review' : 'proposal');
+    recoveryBinding.current = bound.ok ? {candidateId: bound.candidateId, requirementRevision: bound.requirementRevision} : null;
   }
   function withCurrentSeatingReview<T extends PlanProposal>(plan:T,previous:PlanProposal|null):T {
     const relevant=!!previous&&Object.hasOwn(previous,'seatingWitness')||memoryRef.current.layoutModeConfirmed===true&&memoryRef.current.layoutMode==='desk-chair';
@@ -1965,6 +1973,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const routeBlock=localDraftRouteBlock(assessLocalDraftRoutes(currentLayout,final,annotations,currentState.activeFloorIndex));
       if(routeBlock){say({role:'agent',amber:true,text:routeBlock});return;}
     }
+    if (recoveryLoop.current) {
+      const binding = recoveryBinding.current;
+      if (!binding) { say({role:'agent', amber:true, text:'需求日志没有这版候选，未写入画布。'}); return; }
+      const decision = recoveryLoop.current.confirmPrepared(binding.candidateId, binding.requirementRevision);
+      if (!decision.ok) { say({role:'agent', amber:true, text:'这版候选已经失效或版本对不上，未写入画布。'}); return; }
+    }
     try { onApply(final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。' });
@@ -2001,6 +2015,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
    * 两者都要等它自己那一帧渲染完才读得到，所以这里只按下开关，结果交给下面的 effect 照实播报。
    */
   function confirmCloud(): void {
+    if (recoveryLoop.current) { say({role:'agent', amber:true, text:'云端确认还没有写入需求日志，未提交，也不会重新付费。'}); return; }
     const current = studioRef.current;
     if (!current?.preview) { say({ role: 'agent', amber: true, text: '这版已经不在预览里了，重新出一版再确认。' }); return; }
     if (confirmPending.current) { say({role:'agent',text:'这版正在确认，请稍候；不会重复提交。'}); return; }
