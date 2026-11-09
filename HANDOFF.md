@@ -8,7 +8,7 @@
 - **用户拍板（睡前）**：户外 2D 复刻即刻开工（当前版本已推、无需再等）；后续全部由助手决策，**不允许向用户提问**（用户中午 12:00 回来验收）；每小时定时任务（`0 * * * *`，ais id `99d8ede4c7c26563b549a6b0c96c41a3`，YOLO 开）已改按 §5「H 批」接力执行，任务提示词与本节同步。
 - **分支纪律**：H 批全部工作在 `feat/outdoor-2d` 分支（本会话自 main 新建）；一卡一提交，不 push、不打 tag、不部署。
 - **12 点验收契约（2026-11-10 中午）**：① H0-a 瓦片代理 + H0-b 满铺探针页完成且有证据（H0-c 尽力）；② H1-a SitePlan 契约完成、H1-b 尽力；③ 每轮回填可查；④ 11:00 轮产出 `docs/evidence/noon-report-2026-11-10.md` 验收报告。天地图 key 未到位时相关项如实标「待 key 实测」，不算失败。
-- **认领表**：H0-a ✅（二十四轮，`3e96d2c`）。H0-b ✅（二十四轮，`314c845`：`frontend/app/tdt-probe/` 独立路由 EPSG:3857 满铺画布、矢量/影像切换、注记叠加、比例尺/署名/回到场地、无 key 降级占位网格；`tdt-probe.test.ts` 6/6、前端 tsc 0、build 16/16 含 `/tdt-probe` 静态页、浏览器实测 mock 渲染 100% 填充 + 图层切换）。H0-c ✅（二十四轮，`2af99e5`：`lib/tdt-probe-scale.ts(.test)` 500×500m 尺度夹具 + GCJ-02↔WGS-84 对位，测试 4/4；探针报告 `docs/evidence/tdt-probe-2026-11-10.md`；OSM 回落/指针测距/额度实测为待 key 或尽力项）。H1-a ✅（二十四轮，`112522d`：`supabase/functions/_shared/site-plan.ts` 米制 ENU + UUID + 版本快照信封，`tests/site-plan.test.ts` 7/7、根 tsc 0）。H1-b 前端侧 ✅（二十四轮，`3a81e4d`：`lib/site-plan-store.ts` 版本化存储 + 并发冲突保护 + 与 scene 并存，不落线上 schema；`site-plan-store.test.ts` 5/5、前端 tsc 0；云端表/权限接线仍归 B 留评审）。其余卡认领时在下行追加（卡号 + 会话 + 时间），结束解除。
+- **认领表**：H0-a ✅（二十四轮，`3e96d2c`）。H0-b ✅（二十四轮，`314c845`：`frontend/app/tdt-probe/` 独立路由 EPSG:3857 满铺画布、矢量/影像切换、注记叠加、比例尺/署名/回到场地、无 key 降级占位网格；`tdt-probe.test.ts` 6/6、前端 tsc 0、build 16/16 含 `/tdt-probe` 静态页、浏览器实测 mock 渲染 100% 填充 + 图层切换）。H0-c ✅（二十四轮，`2af99e5`：`lib/tdt-probe-scale.ts(.test)` 500×500m 尺度夹具 + GCJ-02↔WGS-84 对位，测试 4/4；探针报告 `docs/evidence/tdt-probe-2026-11-10.md`；OSM 回落/指针测距/额度实测为待 key 或尽力项）。H1-a ✅（二十四轮，`112522d`：`supabase/functions/_shared/site-plan.ts` 米制 ENU + UUID + 版本快照信封，`tests/site-plan.test.ts` 7/7、根 tsc 0）。H1-b 前端侧 ✅（二十四轮，`3a81e4d`：`lib/site-plan-store.ts` 版本化存储 + 并发冲突保护 + 与 scene 并存，不落线上 schema；`site-plan-store.test.ts` 5/5、前端 tsc 0；云端表/权限接线仍归 B 留评审）。H1-c ✅（接力轮，`9301565`：`lib/site-plan-migrate.ts(.test)` 壳体几何→SitePlan ENU 迁移演练（先预览后复制、缺尺度/朝向/锚点/退化进待校准、缺宽深/越界丢弃、旧项目只读不写，迁移 9 例）+ `lib/outdoor-plan-tokens.ts(.test)` 视觉 tokens（幕景绿 #35624A / 间距 / 圆角 / Lucide / 图层色，5 例）；根+前端 tsc 0、`.next-h1c` build 16/16；证据 `docs/evidence/H1c-migrate-tokens-2026-11-10.md` 本地未入库）。其余卡认领时在此行追加（①号 + 会话 + 时间），结束解除。
 - **红线不动**：SC-34 价格、磁盘清理批 2/3、AHOLO 花钱授权、对外发布——跳过并记录，不问用户。
 
 2026-11-10 二十三轮 · 户外 2D 规划评审稿定稿（**拍板为下一版本蓝图**，随本轮提交）+ 当前版本推送 + 每日自动化轮次挂定时：
@@ -143,7 +143,7 @@
 | H0-c | 500×500m 尺度夹具（两底图对角线/面积 ≤1cm 断言）+ GCJ-02→WGS84 对位记录 +（有 key 时）额度实测 + 探针报告 | 1.5h | H0-b | L1 |
 | H1-a | SitePlan domain 类型（边界/分区/设施/路线/人员/节点，全带 UUID+米制）+ schema 往返测试 | 2h | 无（可与 H0 并行） | L2 |
 | H1-b | 版本化子资源（表+权限+契约测试）+ 与 use-layout-persistence 并存（旧 scene PUT 不动、断网/并发草稿保护） | 2.5h | H1-a | L2 |
-| H1-c | 旧项目迁移演练 + 视觉 design tokens（幕景绿 #35624A / Lucide / 间距/圆角） | 1.5h | H1-b | L1 |
+| H1-c ✅ | 旧项目迁移演练 + 视觉 design tokens（幕景绿 #35624A / Lucide / 间距/圆角）（`9301565`：迁移 9 例 + 视觉 5 例、根+前端 tsc 0、`.next-h1c` build 16/16；证据 `docs/evidence/H1c-migrate-tokens-2026-11-10.md` 本地未入库） | 1.5h | H1-b | L1 |
 | H2-a | 满铺画布组件 + 图层栈（底图/边界/分区/设施/路线/人员） | 2h | H0-b, H1-c | L2 |
 | H2-b | 边界绘制（顶点编辑/自交拒绝/面积下限）+ 六类语义分区（颜色/透明度/越界提示） | 2.5h | H2-a | L2 |
 | H2-c | 设施模板拖放（占地预览/单击提交/Esc 取消/放置即选中） | 2h | H2-b | L2 |
