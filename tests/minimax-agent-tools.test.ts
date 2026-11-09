@@ -24,6 +24,7 @@ describe('opt-in MiniMax agent tool loop',()=>{
   const i=await setup();let site:{x:number;z:number}|undefined;
   const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
    const body=JSON.parse(String(init?.body));
+   expect(String(_url)).toBe('https://api.minimax.cn/v1/chat/completions');expect(new Headers(init?.headers).get('authorization')).toBe('Bearer fixture');
    expect(body.model).toBe(settings.AGENT_CHAT_MODEL);expect(body.reasoning_split).toBe(true);expect(body.max_completion_tokens).toBe(7000);
    expect(body.tools.map((t:{function:{name:string}})=>t.function.name)).not.toContain('start_lux3d_model');
    if(fetcher.mock.calls.length===1)return reply([tool('call-1','get_scene',{})]);
@@ -36,7 +37,7 @@ describe('opt-in MiniMax agent tool loop',()=>{
    const result=JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').at(-1).content);site=result.sites[0];expect(site).toBeDefined();
    return reply([tool('call-3','submit_candidates',{candidates:[{title:'椅子方案',explanation:'位置来自空位查询；出口和现场条件待确认。',commands:[{op:'add',materialId:'chair',position:{x:site!.x,z:site!.z},rotation:0,color:'#ffffff'}]}]})]);
   });
-  const response=await run(i,fetcher);expect(response.status).toBe(202);const result=agentRunSchema.parse(await response.json());
+  const response=await run(i,fetcher,{...settings,BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'separate-fixture',BAILIAN_PRODUCT_MODEL:'qwen-example'});expect(response.status).toBe(202);const result=agentRunSchema.parse(await response.json());
   expect(result.state).toBe('complete');expect(result.executionMode).toBe('preview');expect(result.candidates[0]!.proposal.candidate.objects).toHaveLength(1);
   expect(result.candidates[0]!.proposal.warnings).toContainEqual({code:'SAFETY_CHECKS_UNKNOWN',ids:[]});
   expect((await fixture.rpc(owner,'projects.get',{projectId:i.project.id})).scene).toEqual(i.base);

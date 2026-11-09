@@ -97,9 +97,16 @@ const CHAT_MODEL = 'deepseek-v4.1-flash';
 /** Gateway not configured: fall back to the DeepSeek official endpoint, shared with reconstruction. */
 const OFFICIAL_CHAT_URL = 'https://api.deepseek.com/chat/completions';
 const OFFICIAL_CHAT_MODEL = 'deepseek-flash';
+/** The product opt-in applies only to brief and read-only assistant requests. */
+export function chatProfile(env: Env, purpose?: 'brief' | 'agent'): string | undefined {
+  if(purpose!=='brief')return env('AGENT_CHAT_PROFILE');
+  const selected=env('BAILIAN_PRODUCT_ENABLED');
+  if(selected && selected!=='0' && selected!=='1')throw new ApiError('MODEL_PROVIDER_PROFILE_INVALID',503);
+  return selected==='1'?'bailian-qwen':env('AGENT_CHAT_PROFILE');
+}
 /** Usage labels are fixed categories; never persist the configured endpoint or model. */
 export function chatUsageProvider(env: Env): 'minimax' | 'custom' | 'deepseek' {
-  if (env('AGENT_CHAT_PROFILE') === 'minimax') return 'minimax';
+  if (chatProfile(env) === 'minimax') return 'minimax';
   return env('AGENT_CHAT_BASE_URL') ? 'custom' : 'deepseek';
 }
 /**
@@ -110,8 +117,9 @@ export function chatUsageProvider(env: Env): 'minimax' | 'custom' | 'deepseek' {
  * providers is a `supabase secrets set` away and takes effect immediately, no redeploy.
  */
 export function chatRequest(env: Env, body: Record<string, unknown>, options?: { purpose?: 'brief' | 'agent' }): { url: string; init: RequestInit } {
-  const customBase = env('AGENT_CHAT_BASE_URL'), customKey = env('AGENT_CHAT_KEY'), customModel = env('AGENT_CHAT_MODEL');
-  const profile = env('AGENT_CHAT_PROFILE');
+  const productBailian=options?.purpose==='brief' && env('BAILIAN_PRODUCT_ENABLED')==='1';
+  const customBase = env(productBailian?'BAILIAN_PRODUCT_BASE_URL':'AGENT_CHAT_BASE_URL'), customKey = env(productBailian?'BAILIAN_PRODUCT_KEY':'AGENT_CHAT_KEY'), customModel = env(productBailian?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
+  const profile = chatProfile(env,options?.purpose);
   if (profile && !['minimax', 'bailian-qwen'].includes(profile)) throw new ApiError('MODEL_PROVIDER_PROFILE_INVALID', 503);
   const minimaxAgent = profile === 'minimax' && options?.purpose === 'agent' && env('MINIMAX_AGENT_TOOLS_ENABLED') === '1';
   if (profile === 'minimax' && options?.purpose !== 'brief' && !minimaxAgent) throw new ApiError('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW', 503);

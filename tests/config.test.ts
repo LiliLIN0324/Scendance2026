@@ -17,6 +17,47 @@ function check(env:Record<string,string>={},args:string[]=[]) {
 afterAll(()=>rmSync(directory,{recursive:true,force:true}));
 
 describe('offline backend configuration preflight',()=>{
+  it('validates the selected independent Bailian namespace without exposing values',()=>{
+    const product={BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'bailian-fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-fixture-model'};
+    const old={AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://old.example/v1',AGENT_CHAT_KEY:'old-fixture-secret',AGENT_CHAT_MODEL:'old-fixture-model'};
+    const valid=check({...core,...old,...product});expect(valid.status).toBe(0);expect(valid.output).toContain('Agent chat: configured');
+    for(const value of [old.AGENT_CHAT_KEY,old.AGENT_CHAT_MODEL,old.AGENT_CHAT_BASE_URL,product.BAILIAN_PRODUCT_KEY,product.BAILIAN_PRODUCT_MODEL,product.BAILIAN_PRODUCT_BASE_URL])expect(valid.output).not.toContain(value);
+    for(const key of ['BAILIAN_PRODUCT_BASE_URL','BAILIAN_PRODUCT_KEY','BAILIAN_PRODUCT_MODEL']){
+      const result=check({...core,...old,...product,[key]:''});expect(result.status).toBe(1);expect(result.output).toContain(key);expect(result.output).not.toContain('old-fixture-secret');expect(result.output).not.toContain('bailian-fixture-secret');
+    }
+    expect(check({...core,...old,...product,BAILIAN_PRODUCT_ENABLED:'0',BAILIAN_PRODUCT_KEY:''}).status).toBe(0);
+    expect(check({...core,...old,...product,BAILIAN_PRODUCT_ENABLED:'maybe'}).status).toBe(1);
+    const reused=check({...core,...product,BAILIAN_PRODUCT_KEY:core.GENERATION_WORKER_SECRET});expect(reused.status).toBe(1);expect(reused.output).not.toContain(core.GENERATION_WORKER_SECRET);
+  });
+  it('rejects incomplete or unknown chat profiles even when a legacy fallback exists',()=>{
+    for(const overrides of [
+      {AGENT_CHAT_PROFILE:'bailian-qwen'},
+      {AGENT_CHAT_PROFILE:'unknown',AGENT_CHAT_BASE_URL:'https://example.test/v1',AGENT_CHAT_KEY:'fixture-secret',AGENT_CHAT_MODEL:'fixture-model'},
+      {AGENT_CHAT_BASE_URL:'https://example.test/v1'},
+      {AGENT_CHAT_KEY:'fixture-secret'},
+      {AGENT_CHAT_MODEL:'fixture-model'},
+    ] as Record<string,string>[]) {
+      const result=check({...core,...providers,...overrides});
+      expect(result.status).toBe(1);expect(result.output).toContain('AGENT_CHAT_');
+      for(const value of ['fixture-secret','fixture-model','https://example.test/v1'])expect(result.output).not.toContain(value);
+    }
+  });
+  it('checks Bailian and generic endpoint rules without printing endpoint or model values',()=>{
+    const base={...core,AGENT_CHAT_PROFILE:'bailian-qwen',AGENT_CHAT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',AGENT_CHAT_KEY:'fixture-secret',AGENT_CHAT_MODEL:'fixture-model',AI_MAX_REQUEST_CENTS:'40'};
+    const valid=check(base);expect(valid.status).toBe(0);expect(valid.output).toContain('Agent chat: configured');
+    expect(valid.output).toContain('not been verified online');expect(valid.output).toContain('Account balance, quota, model access, and connectivity are not checked');
+    for(const url of ['https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1','https://dashscope.aliyuncs.com/api/v1','https://untrusted.example/compatible-mode/v1','https://user:pass@dashscope.aliyuncs.com/compatible-mode/v1','https://dashscope.aliyuncs.com/compatible-mode/v1?x=secret']) {
+      const result=check({...base,AGENT_CHAT_BASE_URL:url});expect(result.status).toBe(1);expect(result.output).toContain('AGENT_CHAT_BASE_URL');
+      expect(result.output).not.toContain(url);expect(result.output).not.toContain('fixture-secret');expect(result.output).not.toContain('fixture-model');
+    }
+    const generic={...base,AGENT_CHAT_PROFILE:'',AGENT_CHAT_BASE_URL:'http://untrusted.example/v1'};
+    expect(check(generic).status).toBe(1);
+    expect(check({...generic,AGENT_CHAT_BASE_URL:'http://127.0.0.1:9999/v1'}).status).toBe(0);
+  });
+  it('does not require legacy DeepSeek keys when only the chat budget and a custom provider are configured',()=>{
+    const result=check({...core,AGENT_CHAT_PROFILE:'bailian-qwen',AGENT_CHAT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',AGENT_CHAT_KEY:'fixture-secret',AGENT_CHAT_MODEL:'fixture-model',AI_MAX_REQUEST_CENTS:'40'});
+    expect(result.status).toBe(0);expect(result.output).toContain('Agent chat: configured');expect(result.output).toContain('AI: disabled');
+  });
   it('reports missing fields without reading unrelated environment values',()=>{
     const result=check({UNRELATED_SECRET:'never-print-this-secret'});
     expect(result.status).toBe(1);
@@ -41,6 +82,8 @@ describe('offline backend configuration preflight',()=>{
       const result=check({...core,GENERATION_WORKER_SECRET:secret,SUPABASE_SERVICE_ROLE_KEY:core.GENERATION_WORKER_SECRET});
       expect(result.status).toBe(1);expect(result.output).toContain('GENERATION_WORKER_SECRET');expect(result.output).not.toContain(secret);
     }
+    const reused=check({...core,AGENT_CHAT_PROFILE:'bailian-qwen',AGENT_CHAT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',AGENT_CHAT_KEY:core.GENERATION_WORKER_SECRET,AGENT_CHAT_MODEL:'fixture-model'});
+    expect(reused.status).toBe(1);expect(reused.output).toContain('GENERATION_WORKER_SECRET');expect(reused.output).not.toContain(core.GENERATION_WORKER_SECRET);
   });
   it('does not allow service credentials to be used as public client credentials',()=>{
     const jwt=`e30.${Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url')}.signature`;

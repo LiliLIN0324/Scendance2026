@@ -11,6 +11,13 @@ const request=(value:unknown,auth=true)=>new Request('http://localhost/scene-api
 const response=(content:string,finish='stop')=>Response.json({choices:[{finish_reason:finish,message:{content}}]});
 
 describe('只读活动聊天',()=>{
+ it('routes the product opt-in independently of an old MiniMax profile and never falls back',async()=>{
+  const config:Record<string,string>={...values,AGENT_CHAT_PROFILE:'minimax',BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'new-fixture',BAILIAN_PRODUCT_MODEL:'qwen-example'};
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(response('请先确认签到方式。'));
+  expect((await answerAssistantChat({...input,enabled:true,env:key=>config[key],fetcher})).status).toBe('ok');
+  const sent=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(sent).toMatchObject({model:'qwen-example',enable_thinking:false,max_tokens:1024});expect(sent.max_completion_tokens).toBeUndefined();
+  delete config.BAILIAN_PRODUCT_KEY;fetcher.mockClear();expect((await answerAssistantChat({...input,enabled:true,env:key=>config[key],fetcher})).status).toBe('unavailable');expect(fetcher).not.toHaveBeenCalled();
+ });
  it('requires authentication and remains disabled without making requests',async()=>{
   const fetcher=vi.fn<typeof fetch>();const api=createApi(backend,()=>undefined,fetcher);
   expect((await api(request(input,false))).status).toBe(401);

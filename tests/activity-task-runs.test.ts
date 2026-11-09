@@ -108,6 +108,24 @@ describe('bounded read-only activity task runs', () => {
     expect(JSON.stringify(rows.rows[0]!.usage)).not.toContain('private-fixture-value');
   });
 
+  it('keeps activity task suggestions on their existing provider even with the brief selector enabled', async () => {
+    const settings:Record<string,string>={TOKENDANCE_API_KEY:'old-fixture-secret',BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'product-fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-example'};
+    const i=await input(),before=await snapshot(i.projectId);
+    const fetcher=vi.fn<Fetcher>(async(url,init)=>{
+      expect(String(url)).toBe('https://tokendance.space/gateway/v1/chat/completions');
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer old-fixture-secret');
+      expect(JSON.parse(String(init?.body))).toMatchObject({model:'deepseek-v4.1-flash',thinking:{type:'disabled'},response_format:{type:'json_object'},max_tokens:7000});
+      return completion();
+    });
+    const run=await read(await send(createApi(f.backend,key=>settings[key],fetcher),i));
+    expect(run.state).toBe('complete');expect(fetcher).toHaveBeenCalledOnce();expect(await snapshot(i.projectId)).toEqual(before);
+    const usage=(await f.db.query<{usage:unknown}>('select usage from scene_private.agent_runs where id=$1',[run.id])).rows[0]!.usage;
+    expect(JSON.stringify(usage)).not.toContain('product-fixture-secret');expect(JSON.stringify(usage)).not.toContain('old-fixture-secret');
+    delete settings.BAILIAN_PRODUCT_KEY;fetcher.mockClear();
+    const second=await read(await send(createApi(f.backend,key=>settings[key],fetcher),await input()));
+    expect(second.state).toBe('complete');expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('creates an activity response without Scene candidate, evaluation or direct-apply fields', async () => {
     const i = await input(), before = await snapshot(i.projectId), stored = await create(i);
     expect(stored).toMatchObject({ kind: 'activity_tasks', projectId: i.projectId, activityId: i.activityContext.projectId,
