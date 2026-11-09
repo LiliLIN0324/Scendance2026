@@ -78,6 +78,17 @@ const readyCheckins = (value = checkinLedger()): BackupMaterialCheckinSnapshot =
   state: 'ready', scope: value.projectId, materialCheckins: { status: 'present', value },
 });
 
+it('preserves a structured reserved zone through backup and rejects invalid semantics',()=>{
+  const original=layout();
+  original.floors[0]!.zones=[{id:'reserved-zone',name:'保留空间',color:'#4A7C59',x:0,z:0,w:1,d:1,zoneType:'reserved'},
+    {id:'legacy-zone',name:'预留区',color:'#4A7C59',x:2,z:0,w:1,d:1}];
+  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(original,ready(),createdAt)).layout;
+  expect(restored.floors[0]!.zones).toEqual(original.floors[0]!.zones);
+  expect(restored.floors[0]!.zones![1]).not.toHaveProperty('zoneType');
+  const invalid=structuredClone(original);(invalid.floors[0]!.zones![0] as unknown as {zoneType:string}).zoneType='unknown';
+  expect(()=>serializeLocalProjectBackup(invalid,ready(),createdAt)).toThrow();
+});
+
 describe('explicit V3 material checkin backup', () => {
   it('keeps the old writer V2 and writes V3 only with an explicit ready ledger snapshot', async () => {
     const base = { ...layout(), productionPlan: plan() };

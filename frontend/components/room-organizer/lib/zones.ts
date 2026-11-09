@@ -1,6 +1,7 @@
 import { MAX_ROOM_DIMENSION } from './constants';
 import { totalCost } from './geometry';
 import type { FurnitureItem, RoomZone, Vec2 } from './types';
+import { ZONE_SEMANTIC_LABELS } from '../../../lib/plan-annotation';
 
 /**
  * Room zones (#155): named, coloured rectangles a floor is divided into by
@@ -67,10 +68,16 @@ export function isZoneRect(value: unknown): value is ZoneRect {
   );
 }
 
+/** Missing is a valid legacy value; malformed present values must be rejected. */
+export function isValidZoneType(value:unknown):boolean {
+  return value === undefined || typeof value === 'string' && Object.hasOwn(ZONE_SEMANTIC_LABELS,value);
+}
+
 export function isRoomZone(value: unknown): value is RoomZone {
   if (!isZoneRect(value)) return false;
   const v = value as Record<string, unknown>;
-  return typeof v.id === 'string' && typeof v.name === 'string' && typeof v.color === 'string';
+  return typeof v.id === 'string' && typeof v.name === 'string' && typeof v.color === 'string' &&
+    isValidZoneType(v.zoneType);
 }
 
 /**
@@ -136,7 +143,7 @@ export function defaultZoneName(existing: readonly RoomZone[]): string {
 /** Field-wise equality, so re-submitting a zone unchanged keeps state identity. */
 export function sameZone(a: RoomZone, b: RoomZone): boolean {
   return (
-    a.id === b.id && a.name === b.name && a.color === b.color && a.x === b.x && a.z === b.z && a.w === b.w && a.d === b.d
+    a.id === b.id && a.name === b.name && a.color === b.color && a.zoneType === b.zoneType && a.x === b.x && a.z === b.z && a.w === b.w && a.d === b.d
   );
 }
 
