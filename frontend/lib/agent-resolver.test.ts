@@ -69,6 +69,55 @@ describe('model requirements', () => {
     const turn=await resolveBriefTurn(raw,memory,{...context,command:'first'},{briefExtract});
     expect(turn.kind).toBe('generate');expect(turn.memory.unresolvedActivityNeeds).toEqual(['checkin']);expect(briefExtract).not.toHaveBeenCalled();
   });
+  it.each(['你来布置吧','帮我摆一下','换个摆法','重新布置','我的意思是你是重新布置'])('still previews %s when understanding fails',async phrase=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefExtract=vi.fn(async()=>{throw new Error('model down');});
+    const memory={...initialBriefMemory(),headcount:30,venueIO:'indoor' as const,lengthM:12,widthM:9,event:'围读会',layoutMode:'desk-chair' as const,layoutModeConfirmed:true};
+    const turn=await resolveBriefTurn(phrase,memory,{...context,command:phrase.includes('换')||phrase.includes('重新')?'again':'first'},{briefExtract});
+    expect(briefExtract).toHaveBeenCalledOnce();
+    expect(turn.kind).toBe('generate');
+    expect(turn.resolution).toBe('local_command');
+    expect(turn.text).not.toContain('没接住');
+  });
+
+  it('does not let a model reply swallow a freeform layout ask',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    const briefExtract=vi.fn();
+    const briefConversation=vi.fn(async()=>({enabled:true,extraction:{},reply:'好，我来摆。',unhandled:[{kind:'action' as const,evidence:'帮我摆一下'}],factEvidence:[]}));
+    const memory={...initialBriefMemory(),headcount:30,venueIO:'indoor' as const,lengthM:12,widthM:9,layoutMode:'desk-chair' as const,layoutModeConfirmed:true};
+    const turn=await resolveBriefTurn('帮我摆一下',memory,{...context,command:'first'},{briefExtract,briefConversation},undefined,{history:[]});
+    expect(briefConversation).toHaveBeenCalledOnce();
+    expect(turn.kind).toBe('generate');
+    expect(turn.readOnlyReply).not.toBe(true);
+    expect(turn.unhandled??[]).toEqual([]);
+    expect(turn.text).not.toContain('没接住');
+  });
+
+  it('parks a layout ask until the pending size is confirmed, then previews',async()=>{
+    const waiting={...initialBriefMemory(),headcount:30,venueIO:'indoor' as const,layoutMode:'dining' as const,layoutModeConfirmed:true,pendingBasicFacts:[{key:'lengthM' as const,value:12,requiresRestatement:false},{key:'widthM' as const,value:9,requiresRestatement:false}]};
+    const parked=await resolveBriefTurn('你来布置吧',waiting,{...context,command:'first'});
+    expect(parked.kind).toBe('ask');
+    expect(parked.memory.pendingGeneration).toMatchObject({command:'first'});
+    expect(parked.memory.pendingBasicFacts).toHaveLength(2);
+    const confirmed=await resolveBriefTurn('确认',parked.memory,context);
+    expect(confirmed.kind).toBe('generate');
+    expect(confirmed.text).not.toContain('已记下你确认的信息');
+    expect(confirmed.memory.lengthM).toBe(12);
+    expect(confirmed.memory.widthM).toBe(9);
+    expect(confirmed.resumeInstruction).toBe('你来布置吧');
+  });
+
+  it('sofa circle confirms round seating and resumes into a preview',async()=>{
+    const waiting={...initialBriefMemory(),headcount:30,venueIO:'indoor' as const,pendingBasicFacts:[{key:'lengthM' as const,value:12,requiresRestatement:false},{key:'widthM' as const,value:9,requiresRestatement:false}]};
+    const parked=await resolveBriefTurn('沙发围一圈',waiting,{...context,command:'again'});
+    expect(parked.memory.layoutMode).toBe('dining');
+    expect(parked.memory.layoutModeConfirmed).toBe(true);
+    expect(parked.memory.pendingGeneration?.command).toBe('again');
+    const confirmed=await resolveBriefTurn('确认',parked.memory,context);
+    expect(confirmed.kind).toBe('generate');
+    expect(confirmed.memory.layoutMode).toBe('dining');
+  });
+
   it('accepts an explicit bare local-draft command without calling the model',async()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
     const briefExtract=vi.fn(async()=>({enabled:false,extraction:null}));

@@ -3162,6 +3162,34 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect((await screen.findAllByText(/物料数量输入无效/)).length).toBeGreaterThan(0);
   });
 
+  it('turns a recorded brief into a preview for layout phrases, and tells how to regenerate when nothing is waiting',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');
+    const onApply=vi.fn();state.layout=makeLayout({width:12,height:9});
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('确认布置');
+    expect(await screen.findByText(/说一下想怎么摆，我再出一版给你确认/)).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+    send('30 人，室内 12×9，圆桌');
+    await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
+    const drafts=()=>screen.queryAllByText(/先出一版可拖的初稿/).length;
+    for(const phrase of ['你来布置吧','帮我摆一下','换个摆法','重新布置','我的意思是你是重新布置']){
+      const before=drafts();
+      send(phrase);
+      await waitFor(()=>expect(drafts()).toBeGreaterThan(before),{timeout:15000});
+      expect(screen.queryByText(/没接住/)).toBeNull();
+      expect(studioMock.controller.briefExtract).not.toHaveBeenCalled();
+      expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
+    }
+    const beforeSofa=drafts();
+    send('沙发围成一圈');
+    expect(await screen.findByText(/围坐先按圆桌出预览/, {}, {timeout:15000})).toBeTruthy();
+    await waitFor(()=>expect(drafts()).toBeGreaterThan(beforeSofa),{timeout:15000});
+    expect(screen.queryByText(/没接住/)).toBeNull();
+    expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
+    send('确认布置');
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+  },30000);
+
   it('applies a visible local candidate once on an explicit standalone chat confirmation',async()=>{
     const onApply=vi.fn();state.layout=makeLayout({width:12,height:9});
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
