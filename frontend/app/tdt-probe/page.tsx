@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './tdt-probe.module.css';
 import {
-  TDT_PROBE_ATTRIBUTION,
+  PUBLIC_SOURCE_SPECS,
   TDT_PROBE_DEFAULT,
   TDT_PROBE_MAX_ZOOM,
   TDT_PROBE_MIN_ZOOM,
   TDT_PROBE_TILE,
   drawMockTile,
   metersPerPixel,
+  probeSourceAttribution,
+  publicSourceTileUrl,
   tdtProbeTileUrl,
   visibleTileGrid,
+  type ProbePublicSource,
   type TdtProbeLayer,
 } from '@/components/room-organizer/lib/tdt-probe';
 
@@ -21,9 +24,19 @@ interface View {
   zoom: number;
 }
 
+/** 探针图源：天地图两档（待 key）+ 公开源三档（无需 key，立即可出真图）。 */
+type ProbeSource = TdtProbeLayer | ProbePublicSource;
+
+const TDT_SOURCES: { id: TdtProbeLayer; label: string }[] = [
+  { id: 'vec', label: '天地图矢量（待 key）' },
+  { id: 'img', label: '天地图影像（待 key）' },
+];
+
 const TILE_REQ_BASE = '/api/tdt-tiles';
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+const isTdtSource = (s: ProbeSource): s is TdtProbeLayer => s === 'vec' || s === 'img';
 
 /** 把一份经纬度中心转成当前缩放级下的「画布中心像素坐标」（以整幅墨卡托世界为原点）。 */
 function centerPixel(v: View): { px: number; py: number } {
@@ -38,16 +51,16 @@ export default function TdtProbePage() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View>({ ...TDT_PROBE_DEFAULT });
-  const layerRef = useRef<TdtProbeLayer>('vec');
+  const sourceRef = useRef<ProbeSource>('osm');
 
   const [view, setView] = useState<View>({ ...TDT_PROBE_DEFAULT });
-  const [layer, setLayer] = useState<TdtProbeLayer>('vec');
+  const [source, setSource] = useState<ProbeSource>('osm');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [tileCount, setTileCount] = useState(0);
   const [errorTiles, setErrorTiles] = useState(0);
-  // mock 模式：服务端没 key 拉不到真瓦片时，用程序化占位网格兜底，交互仍可验证。
+  // mock 模式：天地图没 key 拉不到真瓦片时，用程序化占位网格兜底，交互仍可验证。
   const [mockMode, setMockMode] = useState(false);
   const [hasRealTiles, setHasRealTiles] = useState(false);
 
@@ -76,50 +89,69 @@ export default function TdtProbePage() {
     ctx.clearRect(0, 0, cssW, cssH);
 
     const v = viewRef.current;
-    const currentLayer = layerRef.current;
+    const activeSource = sourceRef.current;
+    const tdt = isTdtSource(activeSource);
     const { px: centerPx, py: centerPy } = centerPixel(v);
     const grid = visibleTileGrid(v.lng, v.lat, v.zoom, cssW, cssH);
     const total = grid.tiles.length;
+    // 公开源单层一张；天地图双层（底图+注记）。完成计数按「每瓦片一票」计：
+    // 天地图等两层都结束才计一票，公开源一层结束就计一票。
     setTileCount(total);
 
     let finished = 0;
     let failed = 0;
     let anyReal = false;
+    const mockDrawn = new Set<string>();
     const baseX = (tx: number) => tx * TDT_PROBE_TILE - centerPx + cssW / 2;
     const baseY = (ty: number) => ty * TDT_PROBE_TILE - centerPy + cssH / 2;
 
-    const drawMock = (tileX: number, tileY: number, tileLayer: TdtProbeLayer) => {
-      ctx.save();
-      ctx.translate(baseX(tileX), baseY(tileY));
-      drawMockTile(ctx, tileX, tileY, v.zoom, tileLayer);
-      ctx.restore();
+    const drawMockIfNeeded = (tileX: number, tileY: number, requestsDone: number) => {
+      // 天地图：两层都失败才补占位（避免盖住半张真图）；公开源：单层失败即补。
+      const needMock = tdt ? requestsDone === 2 : requestsDone === 1;
+      if (needMock && !mockDrawn.has(`${tileX},${tileY}`)) {
+        mockDrawn.add(`${tileX},${tileY}`);
+        ctx.save();
+        ctx.translate(baseX(tileX), baseY(tileY));
+        drawMockTile(ctx, tileX, tileY, v.zoom, tdt ? activeSource : 'vec');
+        ctx.restore();
+      }
     };
 
-    const loadAndDraw = (url: string, tileX: number, tileY: number, tileLayer: TdtProbeLayer, onDone: () => void) => {
+    const loadAndDraw = (url: string, tileX: number, tileY: number, onDone: () => void) => {
       const img = new Image();
       img.onload = () => {
         anyReal = true;
         ctx.drawImage(img, baseX(tileX), baseY(tileY), TDT_PROBE_TILE, TDT_PROBE_TILE);
         onDone();
       };
-      img.onerror = () => { failed++; drawMock(tileX, tileY, tileLayer); onDone(); };
+      img.onerror = () => { failed++; onDone(); };
       img.crossOrigin = 'anonymous';
       img.src = url;
     };
 
+    const perTileRequests = tdt ? 2 : 1;
     grid.tiles.forEach(({ x, y }) => {
-      const urls = tdtProbeTileUrl(currentLayer, v.zoom, x, y, TILE_REQ_BASE);
-      const complete = () => {
-        finished++;
-        if (finished === total) {
-          setErrorTiles(failed);
-          setLoading(false);
-          setMockMode(!anyReal && failed > 0);
-          setHasRealTiles(anyReal);
+      let done = 0;
+      const onRequestDone = (tileX: number, tileY: number) => () => {
+        done++;
+        drawMockIfNeeded(tileX, tileY, done);
+        if (done === perTileRequests) {
+          finished++;
+          if (finished === total) {
+            setErrorTiles(failed);
+            setLoading(false);
+            setMockMode(!anyReal && failed > 0);
+            setHasRealTiles(anyReal);
+          }
         }
       };
-      loadAndDraw(urls.base, x, y, currentLayer, complete);
-      loadAndDraw(urls.annotation, x, y, currentLayer, complete);
+      if (tdt) {
+        const urls = tdtProbeTileUrl(activeSource, v.zoom, x, y, TILE_REQ_BASE);
+        loadAndDraw(urls.base, x, y, onRequestDone(x, y));
+        loadAndDraw(urls.annotation, x, y, onRequestDone(x, y));
+      } else {
+        loadAndDraw(publicSourceTileUrl(activeSource, v.zoom, x, y), x, y, onRequestDone(x, y));
+      }
     });
   }, []);
 
@@ -158,19 +190,30 @@ export default function TdtProbePage() {
     return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${meters} m`;
   }
 
+  const sourceLabel = isTdtSource(source)
+    ? TDT_SOURCES.find(s => s.id === source)?.label ?? source
+    : PUBLIC_SOURCE_SPECS[source].label;
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <h1>天地图满铺探针（H0-b）</h1>
-        <small>EPSG:3857 · key 走服务端 /api/tdt-tiles</small>
+        <h1>地图满铺探针（H0-b+公开源）</h1>
+        <small>EPSG:3857 · 天地图走服务端代理 · OSM/Carto 公开源直连</small>
         <div className={styles.controls}>
           <select
-            aria-label="底图图层"
-            value={layer}
-            onChange={event => { const next = event.target.value as TdtProbeLayer; layerRef.current = next; setLayer(next); setNotice(''); setLoading(true); draw(); }}
+            aria-label="底图图源"
+            value={source}
+            onChange={event => {
+              const next = event.target.value as ProbeSource;
+              sourceRef.current = next;
+              setSource(next);
+              setNotice('');
+              setLoading(true);
+              draw();
+            }}
           >
-            <option value="vec">矢量底图</option>
-            <option value="img">影像底图</option>
+            {TDT_SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            {Object.values(PUBLIC_SOURCE_SPECS).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
           <button onClick={() => { commitView({ ...TDT_PROBE_DEFAULT }); draw(); }}>回到平湖秋月</button>
         </div>
@@ -188,7 +231,7 @@ export default function TdtProbePage() {
         onMouseLeave={() => { dragRef.current = undefined; setDragging(false); }}
         onWheel={e => { e.preventDefault(); zoomStep(e.deltaY < 0 ? 1 : -1); }}
       >
-        <canvas ref={canvasRef} className={styles.canvas} aria-label="天地图满铺画布" />
+        <canvas ref={canvasRef} className={styles.canvas} aria-label="地图满铺画布" />
         {notice && <div className={styles.notice} role="status">{notice}</div>}
         <div className={styles.zoombar}>
           <button onClick={() => zoomStep(1)} aria-label="放大">+</button>
@@ -198,10 +241,10 @@ export default function TdtProbePage() {
           <div className={styles.line} />
           <span>{scaleLabel()}</span>
         </div>
-        <div className={`${styles.overlay} ${styles.attribution}`}>{TDT_PROBE_ATTRIBUTION}</div>
+        <div className={`${styles.overlay} ${styles.attribution}`}>{probeSourceAttribution(source)}</div>
       </div>
       <footer className={styles.statusbar}>
-        <span>图层 <b>{layer === 'vec' ? '矢量' : '影像'}</b></span>
+        <span>图源 <b>{sourceLabel}</b></span>
         <span>缩放 <b>z{view.zoom}</b></span>
         <span>瓦片 <b>{loading ? `${tileCount} 加载中` : `${tileCount} 张`}</b></span>
         <span>失败 <b>{errorTiles}</b></span>
