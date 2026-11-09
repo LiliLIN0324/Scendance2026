@@ -1,0 +1,8 @@
+{
+  "single_count": {"extraction":{"headcount":30},"reply":"我会继续核对。","factEvidence":[{"key":"headcount","evidence":"30人"}],"unhandled":[]},
+  "compound_light": {"extraction":{"headcount":30},"reply":"我会继续核对。","factEvidence":[{"key":"headcount","evidence":"30人"}],"unhandled":[]},
+  "chairs_vs_guests": {"extraction":{"headcount":30,"requirements":[{"key":"headcount","value":30,"mode":"prefer"}],"inventoryMentions":[{"evidence":"现有80把椅子"}]},"reply":"我会继续核对。","factEvidence":[{"key":"headcount","evidence":"30人"}],"unhandled":[]},
+  "checkin_undecided": {"extraction":{"activityNeeds":[{"kind":"checkin","decision":"unknown","evidence":"签到还没决定"}]},"reply":"我会继续核对。","factEvidence":[],"unhandled":[]},
+  "ordinary_question": {"extraction":{},"reply":"可以一起讨论。","factEvidence":[],"unhandled":[{"kind":"question","evidence":"活动签到一般怎么安排？"}]},
+  "explicit_no_checkin": {"extraction":{"activityNeeds":[{"kind":"checkin","decision":"not_needed","evidence":"不需要签到"}]},"reply":"我会继续核对。","factEvidence":[],"unhandled":[]}
+}
