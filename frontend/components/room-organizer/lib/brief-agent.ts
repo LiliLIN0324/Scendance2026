@@ -312,6 +312,10 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   }
   if(seatingDecisions.size===1)memory.allGuestsSeated=[...seatingDecisions][0]!;
   const extraction = preExtraction ?? parseBriefSentence(raw);
+  if (!preExtraction && SUGGESTION.test(raw)) {
+    const counts = new Set(raw.split(/[，,；;。！!]/).filter(clause => !SUGGESTION.test(clause)).map(clause => parseBriefSentence(clause).headcount).filter((value): value is number => value !== null));
+    extraction.headcount = counts.size === 1 ? [...counts][0]! : null;
+  }
   if (previous.pendingActivityNeeds.length && isActivityNeedsAnswer(raw)) {
     const accepted = !/^(不对|不是|否)$/.test(raw.trim());
     if (accepted) {
@@ -359,12 +363,14 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
     && (DESK_CHAIR_PATTERN.test(clause)||/(?:圆桌|餐桌)/.test(clause))&&!inventoryOnly(clause));
   const usableLayoutClause=(clause:string)=>!inventoryOnly(clause)&&!(hasCurrentLayoutChoice&&historyText.test(clause));
   const deskClauses = clauses.filter(clause => DESK_CHAIR_PATTERN.test(clause) && usableLayoutClause(clause));
-  const layoutUnconfirmed = (clause:string) => SUGGESTION.test(clause) || /(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause);
-  const deskExplicit = deskClauses.some(clause => !layoutUnconfirmed(clause));
-  const deskAmbiguous = deskClauses.some(layoutUnconfirmed);
+  // A suggestion sentence must not cancel an explicit choice in another sentence.
+  const hardLayout = (clause:string) => /(不|没|无|取消|可能|也许|或|是否|待定|看情况|上次|上一场|上届|去年|往年|以前|此前|之前|历史|[吗么？?])/.test(clause);
+  const chosenLayout = (clause:string) => !SUGGESTION.test(clause) && !hardLayout(clause);
+  const deskExplicit = deskClauses.some(chosenLayout);
+  const deskAmbiguous = deskClauses.some(clause => !SUGGESTION.test(clause) && hardLayout(clause)) || (deskClauses.some(clause => SUGGESTION.test(clause)) && !deskExplicit);
   const diningClauses = clauses.filter(clause => /(?:圆桌|餐桌)/.test(clause) && usableLayoutClause(clause));
-  const diningExplicit = diningClauses.some(clause => !layoutUnconfirmed(clause));
-  const diningAmbiguous = diningClauses.some(layoutUnconfirmed);
+  const diningExplicit = diningClauses.some(chosenLayout);
+  const diningAmbiguous = diningClauses.some(clause => !SUGGESTION.test(clause) && hardLayout(clause)) || (diningClauses.some(clause => SUGGESTION.test(clause)) && !diningExplicit);
   if (deskExplicit && !deskAmbiguous && !diningExplicit) { memory.layoutMode = 'desk-chair'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (diningExplicit && !diningAmbiguous && !deskExplicit) { memory.layoutMode = 'dining'; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
   else if (deskAmbiguous || diningAmbiguous || (deskExplicit && diningExplicit)) { memory.layoutModeUnresolved = true; memory.layoutModeConfirmed = false; }

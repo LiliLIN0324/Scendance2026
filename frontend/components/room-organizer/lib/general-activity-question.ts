@@ -17,6 +17,28 @@ export function isGeneralActivityQuestion(raw:string):boolean {
  return /(?:什么是|什么叫|什么为|是什么|哪些|有何|有什么|为何|为什么|如何|怎样|怎么|区别|含义|作用)/.test(body);
 }
 
+const READ_ONLY_ADVICE_PART = /^(?:请)?(?:先)?给(?:我)?(?:一些|一点)?建议$|^(?:请)?(?:不要|别|不必|无需)(?:改|修改|调整)(?:场景|画布|布局)$/u;
+const SCENE_ACTION = /删除|删掉|删去|移除|撤掉|拿走|移动|挪动|平移|发送|(?:往|向|朝)[^。！？!?]{0,6}(?:移|挪)/u;
+
+/** One sentence that only asks for advice or says not to change the scene. */
+export function isReadOnlyAdviceSentence(sentence: string): boolean {
+  const parts = sentence.split(/[，,；;]/u).map(part => part.trim()).filter(Boolean);
+  return parts.length > 0 && parts.every(part => READ_ONLY_ADVICE_PART.test(part));
+}
+
+/**
+ * Scene edits that share a message with “请先给建议” or “不要改场景”.
+ * They stay visible and unexecuted; an advice sentence must not apply them
+ * and must not make them disappear.
+ */
+export function adviceLeavesSceneActions(raw: string): string[] {
+  const sentences = raw.split(/[。！？!?]/u).map(part => part.trim()).filter(Boolean);
+  const advice = sentences.some(isReadOnlyAdviceSentence)
+    || sentences.some(sentence => /给(?:我)?(?:一些|一点)?建议/u.test(sentence) && SCENE_ACTION.test(sentence));
+  if (!advice) return [];
+  return sentences.filter(sentence => SCENE_ACTION.test(sentence));
+}
+
 /** A greeting must consume the whole message; never discard an attached need. */
 export function isPureGreeting(raw:string):boolean {
  return /^(?:你好|您好|嗨|哈喽|hello|hi|早上好|早安|中午好|下午好|晚上好|晚安|谢谢|谢谢你|多谢|感谢|再见|拜拜|bye)(?:呀|啊|啦|哇)?[。.!！?？\s]*$/i.test(raw.trim());

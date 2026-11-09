@@ -3,7 +3,9 @@ import { hideUnverifiedSafetyClaim } from '../../../../supabase/functions/_share
 import { decideOnApply, snapshotPreviewContext } from '@/lib/preview-guard';
 import { checkCandidateInventory } from './candidate-inventory';
 import { deliverableInventory } from './deliverable-inventory';
+import { adviceLeavesSceneActions, isReadOnlyAdviceSentence } from './general-activity-question';
 import { cloudBriefMessage, initialBriefMemory, memoryExtraction, mergeZoneNeeds, parseBriefTurn, parseMobilityRequirement } from './brief-agent';
+import { parseRevisionRequest } from './workbench-agent';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 
 const bare = { venueUp: false, scaleTyped: false, hasBase: false, command: null as const };
@@ -77,6 +79,53 @@ describe('建议不是确认', () => {
     const ctx = snapshotPreviewContext(base, suggested);
     expect(decideOnApply(base, ctx).action).toBe('apply');
     expect(decideOnApply(suggested, ctx).action).toBe('prompt');
+  });
+});
+
+describe('多句简报与请先给建议', () => {
+  it('keeps an explicit choice when another sentence only asks for advice', () => {
+    const raw = '采用课桌椅。请先给建议看看课桌。';
+    const turn = parseBriefTurn(raw, initialBriefMemory(), bare);
+    expect(turn.memory.layoutMode).toBe('desk-chair');
+    expect(turn.memory.layoutModeConfirmed).toBe(true);
+    expect(isReadOnlyAdviceSentence('请先给建议，不要改场景')).toBe(true);
+    expect(adviceLeavesSceneActions(raw)).toEqual([]);
+  });
+
+  it('does not confirm a layout or a headcount that appears only inside a suggestion', () => {
+    const layout = parseBriefTurn('请先给建议看看课桌。', initialBriefMemory(), bare);
+    expect(layout.memory.layoutModeConfirmed).not.toBe(true);
+    const people = parseBriefTurn('建议改成80人。本场30人。', initialBriefMemory(), bare);
+    expect(people.memory.headcount).toBe(30);
+    expect(parseBriefTurn('建议改成80人。', initialBriefMemory(), bare).memory.headcount).toBeNull();
+  });
+
+  it('reads 30 people, oral chairs and undecided check-in from separate sentences', () => {
+    const raw = '为长者办一场室内讲座。预计30人。现有80把椅子。是否签到还没决定。请先给建议，不要改场景。';
+    const local = parseBriefTurn(raw, initialBriefMemory(), bare);
+    expect(local.memory.headcount).toBe(30);
+    expect(local.memory.reportedInventory).toBeUndefined();
+    expect(local.memory.zoneNeeds.checkin).toBeNull();
+    expect(local.memory.mobilityRequirement?.decision).not.toBe('needed');
+    expect(local.memory.layoutModeConfirmed).not.toBe(true);
+    expect(local.kind).not.toBe('generate');
+    const recorded = parseBriefTurn(raw, initialBriefMemory(), bare, { ...mention('80把椅子'), headcount: 30 });
+    expect(recorded.memory.headcount).toBe(30);
+    expect(recorded.memory.reportedInventory).toEqual([{ evidence: '现有80把椅子', status: 'reported' }]);
+    expect(deliverableInventory(makeLayout())).toEqual([]);
+  });
+
+  it('keeps a later delete visible and unexecuted beside 请先给建议', () => {
+    const raw = '30人。请先给建议，不要改场景。删除椅子。';
+    const turn = parseBriefTurn(raw, initialBriefMemory(), bare);
+    expect(turn.memory.headcount).toBe(30);
+    expect(turn.kind).not.toBe('generate');
+    expect(adviceLeavesSceneActions(raw)).toEqual(['删除椅子']);
+    expect(parseRevisionRequest(raw)?.ops).toEqual([expect.objectContaining({ kind: 'remove' })]);
+    expect(adviceLeavesSceneActions('请先给建议，同时删除椅子')).toEqual(['请先给建议，同时删除椅子']);
+    expect(adviceLeavesSceneActions('删除椅子')).toEqual([]);
+    expect(adviceLeavesSceneActions('请先给建议，不要改场景。把椅子往左移1米。')).toEqual(['把椅子往左移1米']);
+    expect(adviceLeavesSceneActions('请先给建议。发送给甲方。')).toEqual(['发送给甲方']);
   });
 });
 

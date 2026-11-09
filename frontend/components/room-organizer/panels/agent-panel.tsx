@@ -23,7 +23,7 @@ import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maxi
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount } from '../lib/agent-turn-outcome';
-import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
+import { adviceLeavesSceneActions, isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
 import { CandidateInventoryPanel } from './candidate-inventory-panel';
@@ -2374,6 +2374,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const turnHistory=queued?(queuedHistory??[]):chatUserHistory(bubblesRef.current.slice(0,-1),trimmed);
     if(!unifiedConversation && process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1' && !attachment && isGeneralActivityQuestion(trimmed)) {await answerGeneralQuestion(trimmed);return;}
     const mixedUtility=hasMixedUtilityCommand(trimmed);
+    const heldSceneActions=adviceLeavesSceneActions(trimmed);
     if(mixedUtility)updateDialogueIncomplete(boundSessionId.current,trimmed,true);
     if (callbacks.workbenchMode !== 'layout') {
       if(mixedUtility){say({role:'agent',amber:true,text:'这句话包含多项要求，请回到活动对话继续；原话已保留，本次没有执行。'});return;}
@@ -2433,10 +2434,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(mentionsRotation&&!safeRotation){markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'旋转方向、角度或要求不明确，请单独说明物件、顺时针或逆时针和准确角度；本次没有修改画布。'});return;}
     const directionalMove = /(?:往|向|朝)(?:东|西|南|北|左|右|前|后)(?:边|侧|方)?(?:挪|移动|平移|移|搬)|(?:挪|移动|平移|移|搬)(?:到|至)?(?:东|西|南|北|左|右|前|后)/.test(trimmed.replace(/\s+/g,''));
     const safeMove = directionalMove ? parseSafeDirectionalMove(trimmed) : null;
-    if (directionalMove && !safeMove && hasMixedActivityRequirements(trimmed)) {
+    if (!heldSceneActions.length && directionalMove && !safeMove && hasMixedActivityRequirements(trimmed)) {
       markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。'}); return;
     }
-    if (directionalMove && !safeMove) {
+    if (!heldSceneActions.length && directionalMove && !safeMove) {
       markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'移动距离或要求不明确，请单独说明物件、方向和准确距离（米、厘米或毫米）；本次没有修改画布。'}); return;
     }
     const revision = safeMove ? {ops:[safeMove],bands:[]} : safeRotation ? {ops:[safeRotation],bands:[]} : safeRecolor ? {ops:[safeRecolor],bands:[]} : parseRevisionRequest(trimmed);
@@ -2456,9 +2457,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if ((revision || request) && needsMaterialCommandClarification(trimmed, !!revision, !!request)) {
       markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '物料增减的意思尚不明确，请逐件说明要加什么；本次没有修改画布。' }); return;
     }
-    if (revision) {
+    if (revision && !heldSceneActions.length) {
       if (hasMixedActivityRequirements(trimmed)) { markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
       reviseMaterials(revision); return;
+    }
+    if (heldSceneActions.length) {
+      markUnresolvedModification(trimmed);
+      say({role:'agent',amber:true,text:`这些句子尚未执行，也没有改场景：${heldSceneActions.join('、')}。`});
     }
     if (request) {
       if (hasMixedActivityRequirements(trimmed)) { markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
