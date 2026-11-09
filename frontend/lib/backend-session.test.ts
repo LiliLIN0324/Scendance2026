@@ -160,6 +160,68 @@ afterEach(() => {
   for (const controller of sessions.splice(0)) controller.dispose();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe('conversation function routing',()=>{
+  it('sends conversation fields only to conversation-api when the flag is on',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');
+    const controller=session();queue(auth);await controller.signIn('test@example.com','password-test-only');
+    queue({enabled:false,extraction:null});await controller.briefExtract('30人');
+    queue({enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]});await controller.briefConversation('30人',[{role:'user',text:'想办讲座'}]);
+    queue({status:'ok',answer:'可以继续规划。'});await controller.assistantChat('怎么办',[]);
+    queue(project);await controller.getProject(projectId);
+    expect(request(1)).toMatchObject({url:`${base}/functions/v1/conversation-api/brief/extract`,body:{message:'30人'}});
+    expect(request(1).body).not.toHaveProperty('responseMode');
+    expect(request(2)).toMatchObject({url:`${base}/functions/v1/conversation-api/brief/extract`,body:{message:'30人',responseMode:'conversation_v1',history:[{role:'user',text:'想办讲座'}]}});
+    expect(request(3).url).toBe(`${base}/functions/v1/conversation-api/assistant/chat`);
+    expect(request(3).body).toMatchObject({message:'怎么办',history:[]});
+    for(const index of [1,2,3])expect((request(index).options.headers as Record<string,string>).Authorization).toBe('Bearer access-test-only');
+    expect(request(4).url).toBe(`${base}/functions/v1/scene-api/projects/${projectId}`);
+    expect(mockFetch.mock.calls.some(call=>String(call[0]).includes('/scene-api/brief/extract'))).toBe(false);
+  });
+  it('keeps a plain extract on scene-api and does not send conversation keys when the flag is off',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','0');
+    const controller=session();queue(auth);await controller.signIn('test@example.com','password-test-only');
+    queue({enabled:false,extraction:null});await controller.briefExtract('30人');
+    expect(request(1)).toMatchObject({url:`${base}/functions/v1/scene-api/brief/extract`,body:{message:'30人'}});
+    expect(request(1).body).not.toHaveProperty('history');
+    const sent=mockFetch.mock.calls.length;
+    await expect(controller.briefConversation('30人',[{role:'user',text:'想办讲座'}])).resolves.toEqual({enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]});
+    await expect(controller.assistantChat('怎么办',[])).resolves.toEqual({status:'disabled',answer:null});
+    expect(mockFetch.mock.calls).toHaveLength(sent);
+    queue(project);await controller.getProject(projectId);
+    expect(request(2).url).toBe(`${base}/functions/v1/scene-api/projects/${projectId}`);
+  });
+  it('fails closed before sending a token if the scene URL is not the configured project function',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');
+    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
+    const controller=new BackendSession({...config,apiUrl:'https://other.example/functions/v1/scene-api'});sessions.push(controller);
+    queue(auth);await controller.signIn('test@example.com','password-test-only');
+    await expect(controller.briefExtract('30人')).rejects.toMatchObject({code:'CONVERSATION_API_NOT_CONFIGURED'});
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+  it('discards a returned conversation result after signing out',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');
+    const controller=session();queue(auth);await controller.signIn('test@example.com','password-test-only');
+    let finish!:(value:Response)=>void;
+    mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const pending=controller.assistantChat('怎么办',[]);
+    await vi.waitFor(()=>expect(mockFetch).toHaveBeenCalledTimes(2));
+    await controller.signOut();finish(response({status:'ok',answer:'旧账号的回答'}));
+    await expect(pending).rejects.toMatchObject({code:'SESSION_CHANGED'});
+  });
+  it('does not dispatch an old account request when the account changes during token acquisition',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_CONVERSATION_API_ENABLED','1');
+    const controller=session();queue(auth);await controller.signIn('test@example.com','password-test-only');
+    let release!:(token:string)=>void;
+    vi.spyOn(controller as unknown as {accessToken:()=>Promise<string|null>},'accessToken').mockImplementationOnce(()=>new Promise(resolve=>{release=resolve;}));
+    const pending=controller.briefExtract('30人');
+    await controller.signOut();
+    queue({...auth,user:{...auth.user,id:'user-b'}});await controller.signIn('other@example.com','password-test-only');
+    release('old-test-token');await expect(pending).rejects.toMatchObject({code:'SESSION_CHANGED'});
+    expect(mockFetch.mock.calls.some(call=>String(call[0]).includes('/conversation-api/'))).toBe(false);
+  });
 });
 
 describe("local activity geometry bindings", () => {
