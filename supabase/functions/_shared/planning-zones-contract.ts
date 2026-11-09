@@ -88,3 +88,17 @@ function stableZoneValue(value:unknown):string {
 export function modelPreservesPlanningZones(before:PlanningZones|null|undefined,after:PlanningZones|null|undefined):boolean {
  return stableZoneValue(before??null)===stableZoneValue(after??null);
 }
+
+/** Explicit history restore writes the snapshot's zones back unchanged. It does not merge or confirm them. */
+export function restoredPlanningZones(snapshot:{planningZones?:PlanningZones|null|undefined}|null|undefined):PlanningZones|null {
+ return snapshot?.planningZones??null;
+}
+
+export const PLANNING_ZONES_GENERATION_CODE='PLANNING_ZONES_GENERATION_UNAVAILABLE' as const;
+export const PLANNING_ZONES_GENERATION_MESSAGE='已保存的用户区域不会交给模型改写。本次不生成布置；路线宽度和消防疏散仍未知。';
+
+/** Saved user zones block generation. The refusal does not drop, retype, or confirm them. */
+export function generatorZoneRefusal(scene:{planningZones?:PlanningZones|null|undefined}|null|undefined):{code:typeof PLANNING_ZONES_GENERATION_CODE;message:string}|null {
+ if(!scene?.planningZones)return null;
+ return {code:PLANNING_ZONES_GENERATION_CODE,message:PLANNING_ZONES_GENERATION_MESSAGE};
+}

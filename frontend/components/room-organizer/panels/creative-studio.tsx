@@ -24,7 +24,7 @@ import { useSelection } from '../contexts';
 import { useMaterialCheckins, type MaterialCheckinState } from '../hooks/use-material-checkins';
 import { layoutStore } from '../hooks/use-layout-store';
 import { getActiveAssistantSessionId, subscribeActiveAssistantSession } from '../hooks/use-assistant-sessions';
-import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { assertGeneratorLeavesSavedZones, backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { agentRunFailureMessage } from '../lib/agent-run-failure';
 import { STORAGE_KEY } from '../lib/constants';
 import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARDS, INITIAL_BRIEF, isBlankBriefScaffold, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
@@ -1707,6 +1707,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
         submittedBriefValue.palette?.trim()&&`配色要求：${submittedBriefValue.palette.trim()}`,
         submittedBriefValue.atmosphere?.trim()&&`氛围要求：${submittedBriefValue.atmosphere.trim()}`,
       ].filter(Boolean).join('\n');
+      assertGeneratorLeavesSavedZones(base, controller.getSnapshot().project?.scene);
       const scene=layoutToBackendScene(base),context=buildAgentContext({briefInstruction:modelRequest?modelBrief:message&&!submittedBriefValue.description.trim()?'':briefInstruction(submittedBriefValue,base.width,base.height),message:modelRequest?`仅创建或调整本次请求指定的物料，不重新设计整场。\n${messageForModel?.trim()??''}`:messageForModel?.trim()||'请按上述需求生成布置方案。',confirmedMaterialDecisions:acceptedDecisions,recentMessages:message?messages.filter(item=>item.id!=='welcome'):[],lastProposalExplanation:message?lastExplanation:''});
       if(context.omittedHistory)say(`已省略 ${context.omittedHistory} 条较早或过长的背景对话；当前需求完整保留。`);
       if(!message)setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'user',text:`生成${submittedBriefValue.eventConfirmed === true ? submittedBriefValue.event : '活动'}方案：${submittedBriefValue.description.trim()}`}]);

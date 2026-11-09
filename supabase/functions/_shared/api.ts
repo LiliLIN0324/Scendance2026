@@ -513,7 +513,6 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           // client did not review and must not be discarded by restoring base.
           requireOriginalSceneWritable(previous.candidate);
           requireOriginalSceneWritable(previous.base_scene);
-          if(!modelPreservesPlanningZones(sceneSchema.parse(previous.candidate).planningZones,sceneSchema.parse(previous.base_scene).planningZones))throw new ApiError('PLANNING_ZONES_WRITE_PROTECTED',409);
           const restored=await backend.scene(actor,'history.restore',{...input,projectId});
           const projected=projectSceneResponse(restored);const previousScene=projectUnverifiedScene(restored.previousScene as z.infer<typeof sceneSchema>);
           return respond({...projected,previousScene:previousScene.scene,previousProjection:previousScene.projection,warnings:sceneWarnings(sceneSchema.parse(restored.scene))});

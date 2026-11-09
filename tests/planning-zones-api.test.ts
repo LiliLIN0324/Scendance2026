@@ -2,7 +2,7 @@ import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {database,owner,outsider,studio,session,scene} from './fixtures.ts';
 import {createApi} from '../supabase/functions/_shared/api.ts';
 import {agentRunRequestSchema} from '../supabase/functions/_shared/agent-contract.ts';
-import {sceneV2Schema} from '../supabase/functions/_shared/domain.ts';
+import {sceneHash,sceneV2Schema} from '../supabase/functions/_shared/domain.ts';
 
 describe('planning zones HTTP rollout',()=>{
  let f:Awaited<ReturnType<typeof database>>;
@@ -53,5 +53,16 @@ describe('planning zones HTTP rollout',()=>{
   expect(shared.status).toBe(422);expect(await shared.json()).toMatchObject({error:{code:'PLANNING_ZONES_SHARING_UNSUPPORTED'}});
   expect((await f.rpc(owner,'projects.get',{projectId:project.id})).scene.planningZones).toEqual(zones);
   expect((await f.db.query('select id from scene_private.publications where project_id=$1',[project.id])).rows).toHaveLength(0);
+ });
+ it('restores an explicit snapshot that carries user zones',async()=>{
+  const {project,key}=await setup();
+  const id=crypto.randomUUID(),base=scene(),baseHash=await sceneHash(base);
+  await f.rpc(owner,'proposals.store',{...key,projectId:project.id,id,localRevision:0,baseHash,scene:base,candidate:base,explanation:'fixture',warnings:[]});
+  await f.rpc(owner,'proposals.apply',{...key,projectId:project.id,proposalId:id,localRevision:0,baseHash});
+  await f.db.query('update scene_private.proposals set base_scene=$2::jsonb where id=$1',[id,JSON.stringify({...base,planningZones:zones})]);
+  const restored=await req(`/projects/${project.id}/history/restore`,'POST',{...key,expectedRevision:1,proposalId:id,currentScene:base});
+  expect(restored.status).toBe(200);
+  expect((await restored.json()).scene.planningZones).toEqual(zones);
+  expect((await f.rpc(owner,'projects.get',{projectId:project.id})).scene.planningZones).toEqual(zones);
  });
 });

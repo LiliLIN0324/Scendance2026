@@ -1009,6 +1009,23 @@ describe('canvas and cloud project mismatch',()=>{
     expect(request(8).body.planningZonesEdit).toEqual({ version: 1, previous: zones });
     expect(request(8).body.scene).not.toHaveProperty('planningZones');
   });
+  it('refuses generation when saved user zones are already on the server scene', async () => {
+    const zones = { version: 1 as const, zones: [{ id: 'zone-1', name: '签到区', color: '#4A7C59', x: 0, z: 0, width: 2, depth: 1, zoneType: 'checkin' as const, source: 'unverified' as const }] };
+    const zoned = { ...scene, planningZones: zones };
+    const controller = session();
+    queue(auth);
+    await controller.signIn('test@example.com', 'pass');
+    queue({ ...project, scene: zoned });
+    await controller.getProject(projectId);
+    const sessionId = controller.getSnapshot().sessionId;
+    queue({ sessionId, generation: 3, expiresAt: new Date(Date.now() + 90_000).toISOString(), revision: 4, scene: zoned });
+    await controller.acquireLease(projectId);
+    const before = mockFetch.mock.calls.length;
+    await expect(controller.startAgentRun({ requestId: '70000000-0000-4000-8000-000000000099', scene, selectedIds: [], instruction: '不要改区域', context: { brief: '', acceptedDecisions: [], recentMessages: [] }, jevEnabled: false, executionMode: 'preview' })).rejects.toMatchObject({ code: 'PLANNING_ZONES_GENERATION_UNAVAILABLE' });
+    await expect(controller.createReconstruction({ requestId: '70000000-0000-4000-8000-000000000098', scene, sources: [], dimensions: [], mode: 'redesign', instruction: '不要改区域', selectedIds: [] })).rejects.toMatchObject({ code: 'PLANNING_ZONES_GENERATION_UNAVAILABLE' });
+    expect(mockFetch).toHaveBeenCalledTimes(before);
+    expect(controller.getSnapshot().project?.scene.planningZones).toEqual(zones);
+  });
   it('clears only the captured mismatched lease when the server confirms it is no longer valid',async()=>{
     const controller=await editing();controller.suspendForCanvasProjectMismatch(projectId);
     queue({error:{code:'LEASE_LOST'}},409);

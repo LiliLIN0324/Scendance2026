@@ -66,23 +66,30 @@ describe('planning-zone database save guard',()=>{
   const applied=await f.rpc(owner,'proposals.apply',{...s.at(1),proposalId:kept,localRevision:0,baseHash:await sceneHash(withZones)});
   expect(applied.scene.planningZones).toEqual(zones);expect(applied.scene.lighting).toBe('warm');
  });
- it('does not let history restore or original review redraw saved zones',async()=>{
+ it('restores zones from the explicit snapshot and rejects a forged restore body',async()=>{
   const s=await setup(),withZones={...s.base,planningZones:zones};
   const id=crypto.randomUUID(),baseHash=await sceneHash(s.base);
   await f.rpc(owner,'proposals.store',{...s.at(0),id,localRevision:0,baseHash,scene:s.base,candidate:s.base,explanation:'fixture',warnings:[]});
   await f.rpc(owner,'proposals.apply',{...s.at(0),proposalId:id,localRevision:0,baseHash});
   await f.db.query('update scene_private.proposals set base_scene=$2::jsonb where id=$1',[id,JSON.stringify(withZones)]);
-  await expect(f.rpc(owner,'history.restore',{...s.at(1),proposalId:id,currentScene:s.base})).rejects.toThrow('PLANNING_ZONES_WRITE_PROTECTED');
-  expect((await f.rpc(owner,'projects.get',{projectId:s.project.id})).scene).not.toHaveProperty('planningZones');
-  await f.rpc(owner,'scene.save',{...s.at(1),scene:withZones,planningZonesEdit:{version:1,previous:null}});
+  await expect(f.rpc(owner,'scene.save',{...s.at(1),scene:{...s.base,lighting:'cool',planningZones:zones},restoreFromProposal:id})).rejects.toThrow('PLANNING_ZONES_WRITE_PROTECTED');
+  expect((await f.rpc(owner,'projects.get',{projectId:s.project.id})).revision).toBe(1);
+  const restored=await f.rpc(owner,'history.restore',{...s.at(1),proposalId:id,currentScene:s.base});
+  expect(restored.revision).toBe(2);expect(restored.scene.planningZones).toEqual(zones);
+  await expect(f.rpc(owner,'history.restore',{...s.at(2),proposalId:id,currentScene:withZones})).rejects.toThrow('STALE_HISTORY_RESTORE');
+  expect((await f.rpc(owner,'projects.get',{projectId:s.project.id})).scene.planningZones).toEqual(zones);
+ });
+ it('does not let original review redraw saved zones',async()=>{
+  const s=await setup(),withZones={...s.base,planningZones:zones};
+  await f.rpc(owner,'scene.save',{...s.at(0),scene:withZones,planningZonesEdit:{version:1,previous:null}});
   const review=f.backend.originalSceneReview!;
   const moved={...structuredClone(withZones),objects:[chair('保留区域')]},dropped=structuredClone(moved);
   delete (dropped as {planningZones?:unknown}).planningZones;
   const movedHash=await sceneHash(moved),droppedHash=await sceneHash(dropped),currentHash=await sceneHash(withZones);
-  await review(owner,'create',{id:crypto.randomUUID(),projectId:s.project.id,sessionId:session,generation:s.at(2).generation,expectedRevision:2,baseScene:withZones,baseHash:currentHash,candidate:moved,candidateHash:movedHash});
+  await review(owner,'create',{id:crypto.randomUUID(),projectId:s.project.id,sessionId:session,generation:s.at(1).generation,expectedRevision:1,baseScene:withZones,baseHash:currentHash,candidate:moved,candidateHash:movedHash});
   const harmful=crypto.randomUUID();
-  await review(owner,'create',{id:harmful,projectId:s.project.id,sessionId:session,generation:s.at(2).generation,expectedRevision:2,baseScene:withZones,baseHash:currentHash,candidate:dropped,candidateHash:droppedHash});
-  await expect(review(owner,'apply',{...s.at(2),id:harmful,baseHash:currentHash,candidateHash:droppedHash})).rejects.toThrow('PLANNING_ZONES_WRITE_PROTECTED');
+  await review(owner,'create',{id:harmful,projectId:s.project.id,sessionId:session,generation:s.at(1).generation,expectedRevision:1,baseScene:withZones,baseHash:currentHash,candidate:dropped,candidateHash:droppedHash});
+  await expect(review(owner,'apply',{...s.at(1),id:harmful,baseHash:currentHash,candidateHash:droppedHash})).rejects.toThrow('PLANNING_ZONES_WRITE_PROTECTED');
   expect((await f.rpc(owner,'projects.get',{projectId:s.project.id})).scene.planningZones).toEqual(zones);
  });
  it('restricts readiness to a project member',async()=>{

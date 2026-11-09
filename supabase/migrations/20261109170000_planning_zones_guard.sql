@@ -54,17 +54,26 @@ begin
 
   execute $sql$create or replace function scene_private.save_scene(actor uuid,input jsonb,doc jsonb) returns jsonb
   language plpgsql set search_path='' as $body$
-  declare p scene_private.projects; edit jsonb; old_zones jsonb; new_zones jsonb;
+  declare p scene_private.projects; edit jsonb; old_zones jsonb; new_zones jsonb; snapshot scene_private.proposals; zone_restore boolean:=false;
   begin
     p:=scene_private.require_lease(actor,input);
     if p.scene->>'schemaVersion'='2' and doc->>'schemaVersion'='1' and input->>'restoreFromProposal' is null then raise exception 'SCHEMA_DOWNGRADE_FORBIDDEN'; end if;
     perform scene_private.validate_planning_zones(p.scene);
     perform scene_private.validate_planning_zones(doc);
     old_zones:=coalesce(p.scene->'planningZones','null'::jsonb);new_zones:=coalesce(doc->'planningZones','null'::jsonb);
-    -- Proposal apply, history restore and original review must not redraw user zones, even with a proof.
-    if old_zones is distinct from new_zones and (input ? 'restoreFromProposal' or input ? 'proposalId' or input ? 'candidateHash' or input->'scene' is distinct from doc) then raise exception 'PLANNING_ZONES_WRITE_PROTECTED'; end if;
-    if old_zones is distinct from new_zones and not (input ? 'planningZonesEdit') then raise exception 'PLANNING_ZONES_EDIT_REQUIRED'; end if;
-    if input ? 'planningZonesEdit' then
+    -- Explicit history restore may write the stored snapshot's zones back. The current
+    -- scene must still be that proposal's candidate, and the document must be its base.
+    if old_zones is distinct from new_zones and input ? 'restoreFromProposal' then
+      select * into snapshot from scene_private.proposals
+        where id=(input->>'restoreFromProposal')::uuid and project_id=p.id and user_id=actor and applied_at is not null and restored_at is null
+        for update;
+      if not found or snapshot.candidate is distinct from p.scene or snapshot.base_scene is distinct from doc then raise exception 'PLANNING_ZONES_WRITE_PROTECTED'; end if;
+      zone_restore:=true;
+    end if;
+    -- Proposal apply, rebuild review and a forged restore flag must not redraw user zones.
+    if old_zones is distinct from new_zones and not zone_restore and (input ? 'proposalId' or input ? 'candidateHash' or input ? 'restoreFromProposal' or input->'scene' is distinct from doc) then raise exception 'PLANNING_ZONES_WRITE_PROTECTED'; end if;
+    if old_zones is distinct from new_zones and not zone_restore and not (input ? 'planningZonesEdit') then raise exception 'PLANNING_ZONES_EDIT_REQUIRED'; end if;
+    if not zone_restore and input ? 'planningZonesEdit' then
       edit:=input->'planningZonesEdit';
       if jsonb_typeof(edit) is distinct from 'object' or (edit-array['version','previous'])<>'{}'::jsonb or not (edit ?& array['version','previous']) or edit->'version'<>'1'::jsonb then raise exception 'PLANNING_ZONES_EDIT_INVALID'; end if;
       if edit->'previous' is distinct from old_zones then raise exception 'PLANNING_ZONES_STALE'; end if;

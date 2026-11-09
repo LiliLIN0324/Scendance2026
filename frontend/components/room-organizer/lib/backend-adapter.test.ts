@@ -5,7 +5,8 @@ import { corners, sceneSchema, type Scene } from '../../../../supabase/functions
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { layoutReducer, type LayoutState } from '../hooks/layout-reducer';
-import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene, SceneAdapterError } from './backend-adapter';
+import { assertGeneratorLeavesSavedZones, backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene, SceneAdapterError } from './backend-adapter';
+import { restoredPlanningZones } from '../../../../supabase/functions/_shared/planning-zones-contract';
 import { parseStoredLayout } from './schema';
 
 const objectId = '00000000-0000-4000-8000-000000000001';
@@ -90,6 +91,19 @@ describe('the shared backend scene adapter', () => {
     }
     const input = { ...scene(), planningZones: { version: 1, zones: [{ id: 'keep', name: '区域', color: '#fff', x: 0, z: 0, width: 1, depth: 1, source: 'confirmed' }] } };
     expect(() => backendSceneToLayout(input)).toThrow();
+  });
+  it('keeps an explicit snapshot restore separate from a zone-free candidate and blocks generation', () => {
+    const layout = backendSceneToLayout(scene());
+    layout.floors[0]!.zones = [{ id: 'keep', name: '签到区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 1, zoneType: 'checkin' }];
+    const snapshot = layoutToBackendScene(layout, { planningZonesV1: true });
+    const candidate = backendSceneToLayout(scene());
+    expect(restoredPlanningZones(snapshot)?.zones[0]).toMatchObject({ id: 'keep', zoneType: 'checkin', source: 'unverified' });
+    expect(layoutToBackendScene(candidate)).not.toHaveProperty('planningZones');
+    expect(layout.floors[0]!.zones).toHaveLength(1);
+    expect(() => assertGeneratorLeavesSavedZones(layout)).toThrow(/不会交给模型改写/);
+    try { assertGeneratorLeavesSavedZones(layout); throw new Error('unexpected'); }
+    catch (error) { expect((error as SceneAdapterError).code).toBe('PLANNING_ZONES_GENERATION_UNAVAILABLE'); }
+    expect(layout.floors[0]!.zones?.[0]?.zoneType).toBe('checkin');
   });
   it('does not silently drop a locally marked rest area on a cloud round trip', () => {
     const original = backendSceneToLayout(scene());

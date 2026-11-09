@@ -11,7 +11,7 @@ import { materialVariantProposalRequestSchema } from "../../supabase/functions/_
 import { briefExtractRequestSchema, briefExtractResponseSchema, briefConversationRequestSchema, briefConversationResponseSchema, parseBriefConversation, type BriefExtractResponse, type BriefConversationResponse } from "../../supabase/functions/_shared/brief-extract-contract";
 import { assistantChatRequestSchema, assistantChatResponseSchema, type AssistantChatResult } from "../../supabase/functions/_shared/assistant-chat-contract";
 import { canonical, sha256, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
-import { parsePlanningZonesCapability, planningZonesWriteEnvelope, type PlanningZonesCapability } from "../../supabase/functions/_shared/planning-zones-contract";
+import { generatorZoneRefusal, parsePlanningZonesCapability, planningZonesWriteEnvelope, type PlanningZonesCapability } from "../../supabase/functions/_shared/planning-zones-contract";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
@@ -301,6 +301,7 @@ function failure(error: unknown): BackendFailure {
     AI_BUSY: "已有方案正在生成，请等待本次请求完成。",
     GENERATION_BUSY: "已有模型生成任务正在处理，请先查看任务状态。",
     IDEMPOTENCY_CONFLICT: "同一请求编号不能用于不同需求，请创建新的请求。",
+    PLANNING_ZONES_GENERATION_UNAVAILABLE: "已保存的用户区域不会交给模型改写。本次不生成布置；路线宽度和消防疏散仍未知。",
   };
   return { code, status: error instanceof SceneApiError ? error.status : 0, message: messages[code] ?? (localCode && error instanceof Error ? error.message : `云端操作失败（${code}），草稿已保留。`) };
 }
@@ -1302,9 +1303,13 @@ export class BackendSession {
     };
     if (!scopeOk || Object.values(checks).some(v => !v)) throw new SceneApiError("STALE_PROPOSAL", 409, null);
   }
+  private assertGeneratorLeavesSavedZones(scene: Scene): void {
+    if (generatorZoneRefusal(scene) || generatorZoneRefusal(this.snapshot.project?.scene)) throw new SceneApiError("PLANNING_ZONES_GENERATION_UNAVAILABLE", 503, null);
+  }
   /** Generate a preview only. Requests never change or save the scene. */
   async requestProposal(input: SceneProposalInput): Promise<SceneProposal> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    this.assertGeneratorLeavesSavedZones(input.scene);
     const parsed = sceneSchema.parse(input.scene);
     if (input.mode === "layout" && parsed.objects.length > 0) throw new SceneApiError("LAYOUT_REQUIRES_EMPTY_SCENE", 422, null);
     const state = this.proposalState(parsed);
@@ -1365,6 +1370,7 @@ export class BackendSession {
   /** Start once; uncertain dispatches are recovered by request ID through GET. */
   async startAgentRun(input: AgentRunInput): Promise<AgentRun> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    this.assertGeneratorLeavesSavedZones(input.scene);
     const state = this.proposalState(input.scene);
     const body = agentRunRequestSchema.parse({ ...input, sessionId: state.sessionId, generation: state.generation, expectedRevision: state.expectedRevision, localRevision: state.localRevision });
     const run = agentRunSchema.parse(await this.request(`/projects/${state.projectId}/agent-runs`, 'POST', body, { projectId: state.projectId, lease: state }, false));
@@ -1577,6 +1583,7 @@ export class BackendSession {
     return url.href;
   }
   async createReconstruction(input: ReconstructionInput): Promise<ReconstructionJob> {
+    this.assertGeneratorLeavesSavedZones(input.scene);
     const state = this.proposalState(input.scene);
     const request = reconstructionRequestSchema.parse({ ...input, sessionId: state.sessionId, generation: state.generation, expectedRevision: state.expectedRevision, localRevision: state.localRevision });
     const job = parseReconstructionJob(await this.request(`/projects/${state.projectId}/reconstructions`, 'POST', request, {projectId:state.projectId,lease:state}, false));

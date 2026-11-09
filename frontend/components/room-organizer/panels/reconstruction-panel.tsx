@@ -18,7 +18,7 @@ import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { reconstructionSafetyChecklist } from '../../../../supabase/functions/_shared/reconstruction-safety';
 import { useSelection } from '../contexts';
-import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { assertGeneratorLeavesSavedZones, backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { mergeProposalPresentation, type CreativeBrief } from '../lib/creative-brief';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -542,6 +542,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
     try{
       await assertGeometryActionSource(base,controller);
       if(!current())throw new Error('当前活动或场景连接已变化，请重新核对。');
+      assertGeneratorLeavesSavedZones(base, controller.getSnapshot().project?.scene);
       const scene=layoutToBackendScene(base),sources=await uploadSources(current);
       if(!current())throw new Error('场景连接或图纸已变化，请重新核对。');
       const fixedIds=form.fixedIds??{width:crypto.randomUUID(),depth:crypto.randomUUID(),height:crypto.randomUUID()};

@@ -2,6 +2,7 @@ import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import libraryAssetLabels from '../../../../assets/library/asset-labels.zh.json';
 /** The backend domain is the single wire-format authority. No parallel API schema. */
 import { catalog, presetManifest, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
+import { PLANNING_ZONES_GENERATION_MESSAGE } from '../../../../supabase/functions/_shared/planning-zones-contract';
 import { dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
 import { MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { mergeProposalPresentation } from './creative-brief';
@@ -26,6 +27,13 @@ export const LOCAL_ZONES_CLOUD_MESSAGE = '此云端操作暂不支持本机区�
 const hasZoneData = (zones: unknown): boolean => zones !== undefined && (!Array.isArray(zones) || zones.length > 0);
 export function layoutCarriesCloudZones(layout: RoomLayout): boolean {
   return layout.floors.some(floor => hasZoneData(floor.zones)) || layout.backendSceneV2?.planningZones !== undefined;
+}
+
+/** Generation must stop before it can drop saved zones. The layout itself is left unchanged. */
+export function assertGeneratorLeavesSavedZones(layout: RoomLayout, serverScene?: { planningZones?: unknown } | null): void {
+  if (layoutCarriesCloudZones(layout) || serverScene?.planningZones !== undefined) {
+    throw new SceneAdapterError('PLANNING_ZONES_GENERATION_UNAVAILABLE', PLANNING_ZONES_GENERATION_MESSAGE);
+  }
 }
 
 /** 未显式开启矩形首版时，当前层和历史版本里的区域都不能静默转换。多边形区域不在首版范围内。 */

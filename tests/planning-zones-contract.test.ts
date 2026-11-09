@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {canonical,sceneHash,sceneSchema,sceneV1Schema,sceneV2Schema} from '../supabase/functions/_shared/domain.ts';
-import {cloudZoneWriteMode,modelPreservesPlanningZones,parsePlanningZonesCapability,planningZonesEditSchema,planningZonesWriteEnvelope,savedPlanningZoneFacts} from '../supabase/functions/_shared/planning-zones-contract.ts';
+import {cloudZoneWriteMode,generatorZoneRefusal,modelPreservesPlanningZones,parsePlanningZonesCapability,planningZonesEditSchema,planningZonesWriteEnvelope,restoredPlanningZones,savedPlanningZoneFacts} from '../supabase/functions/_shared/planning-zones-contract.ts';
 import {scene} from './fixtures.ts';
 
 const zone={id:'zone-1',name:'签到区',color:'#4A7C59',x:0,z:0,width:2,depth:1,zoneType:'checkin' as const,source:'unverified' as const};
@@ -57,6 +57,14 @@ describe('planning zones scene extension',()=>{
   expect(modelPreservesPlanningZones(zones,zones)).toBe(true);
   expect(modelPreservesPlanningZones(zones,{...zones,zones:[{...zone,name:'被模型改名'}]})).toBe(false);
   expect(modelPreservesPlanningZones(zones,undefined)).toBe(false);
+  const restored=restoredPlanningZones({planningZones:zones});
+  expect(restored).toEqual(zones);
+  expect(restored?.zones[0]?.source).toBe('unverified');
+  expect(savedPlanningZoneFacts(restored).routeWidth).toBe('unknown');
+  expect(savedPlanningZoneFacts(restored).fireEgress).toBe('unknown');
+  expect(generatorZoneRefusal({planningZones:zones})).toMatchObject({code:'PLANNING_ZONES_GENERATION_UNAVAILABLE'});
+  expect(generatorZoneRefusal({planningZones:zones})?.message).toContain('不会交给模型改写');
+  expect(generatorZoneRefusal(scene())).toBeNull();
  });
  it('attaches the server previous value and treats an inexact capability as unsupported',()=>{
   expect(parsePlanningZonesCapability({supported:true,version:1})).toEqual({supported:true,version:1});
