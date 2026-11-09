@@ -13,9 +13,21 @@ function chineseNumber(value:string):number|null {
 /**
  * `undefined` means no attendance claim; `unknown` means an ambiguous one.
  * Only raw user text is suitable input. A summary or model output is not proof.
+ * A leading negated attendance clause does not erase a later positive count.
+ * "不是30人" alone stays unknown. "不是80个人，到场大概30人" keeps 30.
+ * "不要确认" does not cancel a count; "不要30人" still does.
+ * Furniture counts are never attendance; this function does not read 把/张.
  */
+function withoutLeadingNegatedAttendance(text:string):string {
+  const clauses=text.split(/[，,。；;！!？?]/).map(item=>item.trim()).filter(Boolean);
+  if(clauses.length<2)return text;
+  const negated=clauses.filter(clause=>/^(?:不是|并非)/.test(clause)&&/(?:人|位|名)/.test(clause));
+  if(!negated.length||negated.length===clauses.length)return text;
+  return clauses.filter(clause=>!negated.includes(clause)).join('，');
+}
+
 export function readUserAttendance(raw:string):UserAttendance|undefined {
-  const text=raw.normalize('NFKC').replace(/\s+/g,'');
+  const text=withoutLeadingNegatedAttendance(raw.normalize('NFKC').replace(/\s+/g,''));
   if(/(?:人数|参与人数|参会人数|参加人数).{0,4}(?:尚未|还没|未|没|不)(?:确定|决定|定|知道)|(?:人数|参与人数|参会人数|参加人数).{0,4}(?:待定|未知)/.test(text))return {status:'unknown'};
   const deskFirst=new RegExp(`(?:每桌|每张(?:课|长条|长|圆|方)?桌(?:子)?|(?:一|1)(?:张)?(?:课|长条|长|圆|方)?桌(?:子)?)(?:坐|供|配|安排|容纳)?${numberPattern}(?:个)?(?:人|位|名)`,'g');
   const peopleFirst=new RegExp(`(?:每)?${numberPattern}(?:个)?(?:人|位|名)(?:(?:共用|合用|共坐|共)(?:(?:一|1)(?:张)?)?|(?:一|1)(?:张)?)(?:课桌|长条桌|长桌|圆桌|方桌|桌子|桌|套)`,'g');
@@ -25,7 +37,7 @@ export function readUserAttendance(raw:string):UserAttendance|undefined {
   const matches=[...clean.matchAll(new RegExp(`(${numberPattern})(?:个)?(?:人|位|名)`,'g'))];
   if(!matches.length)return undefined;
   // Ranges, alternatives, explicit exclusions or conflicting totals need user clarification.
-  if(/(?:不是|不要|不超过|至多|超过|少于|至少|最多|不少于|或|或者|大于|小于|不参加|不来|没来|缺席|[~～—–-])/.test(clean))return {status:'unknown'};
+  if(/(?:不是|不要(?:\d|[零〇一二两三四五六七八九十百千人位名])|不超过|至多|超过|少于|至少|最多|不少于|或|或者|大于|小于|不参加|不来|没来|缺席|[~～—–-])/.test(clean))return {status:'unknown'};
   const values=matches.map(match=>chineseNumber(match[1]!));
   if(values.some(value=>value===null)||new Set(values).size!==1)return {status:'unknown'};
   return {status:'reported',people:values[0]!};

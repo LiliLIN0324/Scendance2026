@@ -96,8 +96,9 @@ export function initialExploreMemory(): ExploreMemory {
 
 export function readIntents(text: string): IntentKind[] {
   const intents: IntentKind[] = [];
-  if (/(?:大概|大约|约)?\d+\s*(?:个)?人|改成\d+人/.test(text)) intents.push('revise_headcount');
-  if (/把|往左|往右|移/.test(text) && /桌|椅|签到/.test(text)) intents.push('move_object');
+  const headcountText = text.replace(/一人一[桌套椅]/g, '');
+  if (/(?:大概|大约|约)?\d+\s*(?:个)?人|改成\d+人|(?:[零〇一二两三四五六七八九十]{1,4})(?:个)?(?:人|位)/.test(headcountText)) intents.push('revise_headcount');
+  if ((/往左|往右|移动|挪/.test(text)) && /桌|椅|签到/.test(text)) intents.push('move_object');
   if (/清单|物料单/.test(text)) intents.push('bill_of_materials');
   if (/怎么摆|看看可能/.test(text)) intents.push('explore_layout');
   if (/(?:先别定|暂不|先不定|还没定)/.test(text) && /座位|形式|布局|课桌/.test(text)) intents.push('defer_layout');
@@ -107,21 +108,48 @@ export function readIntents(text: string): IntentKind[] {
   return intents;
 }
 
-/** 人数只采用用户原话里的到场人数。家具数量、模型句子都不能写成人数。 */
+/**
+ * 人数只采用用户原话里的到场人数。
+ * 「80 位老人」是 80 个人，不是 80 把轮椅；椅子数量仍由库存读取，不进这里。
+ */
 export function attendanceFromUser(text: string): ReturnType<typeof readUserAttendance> {
-  const stripped = text.replace(/\d+\s*位(?:长者|老人|长辈)/g, ' ');
-  return readUserAttendance(stripped);
+  return readUserAttendance(text);
+}
+
+/** 轮椅只在用户本句明确说需要或明确否定时改变。长者、适老、别假设，都不算确认。 */
+export function readMobilityMention(text: string): ExploreMemory['mobility'] | null {
+  if (!/轮椅|助行|拐杖|腿脚不便/.test(text)) return null;
+  const clauses = text.split(/[，,。；;！!？?]/).map(item => item.trim()).filter(Boolean);
+  let needed = false;
+  let declined = false;
+  let blocked = false;
+  for (const clause of clauses) {
+    if (!/轮椅|助行|拐杖|腿脚不便/.test(clause)) continue;
+    if (/别假设|不要假设|不等于|不愿被当成|不被当成|不一定|没有人提|还没提|先别/.test(clause)) {
+      blocked = true;
+      continue;
+    }
+    if (/不需要轮椅|没有轮椅|无轮椅|不用轮椅|不要轮椅/.test(clause)) {
+      declined = true;
+      continue;
+    }
+    if (/需要轮椅|有轮椅|轮椅使用者|要用轮椅|腿脚不便|助行器|拐杖/.test(clause)) needed = true;
+  }
+  if (needed && (declined || blocked)) return { status: 'unknown', evidence: null };
+  if (needed) return { status: 'needed', evidence: '用户本句明确提到行动辅助' };
+  if (declined) return { status: 'declined', evidence: '用户本句明确否定轮椅' };
+  return { status: 'unknown', evidence: null };
 }
 
 export function readTurn(memory: ExploreMemory, text: string): { memory: ExploreMemory; intents: IntentKind[]; reply: string; askedAgain: string[] } {
   const next = structuredClone(memory);
   const intents = readIntents(text);
   if (/讲座/.test(text)) next.event = { status: 'stated', value: /社区讲座/.test(text) ? '社区讲座' : '讲座', evidence: /社区讲座/.test(text) ? '社区讲座' : '讲座' };
-  if (/长者|老人|长辈|老年/.test(text) && !/(?:没有|不是).{0,4}(?:长者|老人|长辈)/.test(text)) {
+  if (/长者|老人|长辈|老年|适老/.test(text) && !/(?:没有|不是).{0,4}(?:长者|老人|长辈)/.test(text)) {
     if (!next.audienceTags.includes('elderly')) next.audienceTags.push('elderly');
   }
-  if (/不需要轮椅|没有轮椅|无轮椅/.test(text)) next.mobility = { status: 'declined', evidence: '用户本句明确否定轮椅' };
-  else if (/需要轮椅|有轮椅|轮椅使用者|腿脚不便|助行器|拐杖/.test(text)) next.mobility = { status: 'needed', evidence: '用户本句明确提到行动辅助' };
+  const mobility = readMobilityMention(text);
+  if (mobility) next.mobility = mobility;
   const inventory = readInventory(text);
   for (const item of inventory) {
     if (!next.inventory.some(saved => saved.evidence === item.evidence)) next.inventory.push(item);
@@ -139,6 +167,8 @@ export function readTurn(memory: ExploreMemory, text: string): { memory: Explore
     if (!next.deferred.includes('座位形式')) next.deferred.push('座位形式');
   } else if (intents.includes('preview_seating')) {
     next.layout = { status: 'suggestion', value: 'one_desk_one_chair', evidence: '一人一桌' };
+  } else if (/建议/.test(text) && /一人一桌|课桌/.test(text) && !/已确认|就这么定|确定用/.test(text)) {
+    next.layout = { status: 'suggestion', value: 'one_desk_one_chair', evidence: '建议' };
   }
   const size = text.match(/(\d+(?:\.\d+)?)\s*[×xX]\s*(\d+(?:\.\d+)?)\s*米/);
   if (size && intents.includes('assume_venue')) {
@@ -152,10 +182,10 @@ export function readTurn(memory: ExploreMemory, text: string): { memory: Explore
 export function guardModelReply(userText: string, modelText: string): { text: string; dropped: string[] } {
   const attendance = attendanceFromUser(userText);
   const supported = attendance?.status === 'reported' ? attendance.people : null;
-  const mobilityAffirmed = /需要轮椅|有轮椅|轮椅使用者|腿脚不便|助行器|拐杖/.test(userText);
+  const mobilityAffirmed = readMobilityMention(userText)?.status === 'needed';
   const dropped: string[] = [];
   const kept = modelText.split(/(?<=[。！!])/).map(item => item.trim()).filter(Boolean).filter(sentence => {
-    const claimed = [...sentence.matchAll(/(\d{1,5})(?=\s*(?:位|个)?(?:长者|老人|人|位|名))/g)].map(item => Number(item[1]));
+    const claimed = claimedPeople(sentence);
     const badPeople = claimed.some(count => count !== supported);
     const badChair = /轮椅/.test(sentence) && !mobilityAffirmed && !/未知|还不知道|不能确定|尚未|不是/.test(sentence);
     const badConfirmed = /已确认|已经定了|库存已核|现场已核对/.test(sentence);
@@ -194,8 +224,10 @@ export function planMove(text: string, objects: readonly DraftObject[]): { statu
   const hits = objects.filter(object => /签到/.test(text) ? object.label.includes('签到') : false);
   if (hits.length !== 1) return { status: 'unresolved', reason: hits.length === 0 ? '没有唯一的签到桌' : '签到桌不止一件，不能猜是哪一件' };
   const target = hits[0]!;
-  if (!/往左|往右/.test(text)) return { status: 'unresolved', reason: '方向还不明确' };
-  const delta = /往左/.test(text) ? -1 : 1;
+  const left = /往左/.test(text);
+  const right = /往右/.test(text);
+  if (left === right) return { status: 'unresolved', reason: left ? '同一句里有两个方向，不能合成一次移动' : '方向还不明确' };
+  const delta = left ? -1 : 1;
   return {
     status: 'ready',
     axis: delta < 0 ? 'case_x_minus' : 'case_x_plus',
@@ -462,8 +494,35 @@ function readInventory(text: string): InventoryFact[] {
     found.push({ status: 'reported_unverified', count, name, evidence, countsAsPeople: false, countsAsVerifiedStock: false });
   };
   for (const match of text.matchAll(/(\d{1,5})把椅子/g)) push(Number(match[1]), '椅子', match[0], match.index ?? 0);
+  for (const match of text.matchAll(/([零〇一二两三四五六七八九十]{1,3})把椅子/g)) {
+    const count = smallChinese(match[1]!);
+    if (count) push(count, '椅子', match[0], match.index ?? 0);
+  }
   for (const match of text.matchAll(/(\d{1,5})张(桌子|课桌)/g)) push(Number(match[1]), match[2]!, match[0], match.index ?? 0);
   return found;
+}
+
+function smallChinese(value: string): number | null {
+  const digit: Record<string, number> = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (value === '十') return 10;
+  const ten = value.indexOf('十');
+  if (ten < 0) return value.length === 1 && value in digit ? digit[value]! : null;
+  const head = value.slice(0, ten);
+  const tail = value.slice(ten + 1);
+  const high = head ? digit[head] : 1;
+  if (high == null || head.length > 1) return null;
+  if (!tail) return high * 10;
+  if (tail.length === 1 && tail in digit) return high * 10 + digit[tail]!;
+  return null;
+}
+
+function claimedPeople(sentence: string): number[] {
+  const counts = [...sentence.matchAll(/(\d{1,5})(?=\s*(?:位|个)?(?:长者|老人|人|位|名))/g)].map(item => Number(item[1]));
+  for (const match of sentence.matchAll(/([零〇一二两三四五六七八九十]{1,3})(?=(?:位|个)?(?:长者|老人|人|位|名))/g)) {
+    const count = smallChinese(match[1]!);
+    if (count) counts.push(count);
+  }
+  return counts;
 }
 
 function clauseAt(text: string, index: number): string {

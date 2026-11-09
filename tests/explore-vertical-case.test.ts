@@ -1,45 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { declaredToolNames } from '../supabase/functions/_shared/command-validation-gaps.ts';
 import { MODEL_TOOL_NAMES, USER_TASK_MATRIX, V2_ADVERSARIAL_HISTORY, suggestionChannel } from '../supabase/functions/_shared/explore-tool-matrix.ts';
 import {
   COMMUNITY_LECTURE_TURNS,
   LOCKED_ID,
   RECEPTION_ID,
   attendanceFromUser,
+  confirmSeating,
+  type SeatingPreview,
   createSharedEditor,
   guardModelReply,
+  guardSeatingCount,
   initialExploreMemory,
   invokeAsModelTool,
   planMove,
   readIntents,
+  readMobilityMention,
   readTurn,
   runCommunityLectureCase,
   selectTools,
 } from '../supabase/functions/_shared/explore-vertical-case.ts';
 
-function runnerToolNames(source: string): string[] {
-  const start = source.indexOf('const schemas={');
-  const end = source.indexOf('const descriptions:', start);
-  if (start < 0 || end < 0) throw new Error('找不到 agent-runner 的工具声明');
-  const keys: string[] = [];
-  let depth = 0;
-  let token = '';
-  for (let index = source.indexOf('{', start); index < end; index += 1) {
-    const char = source[index]!;
-    if (char === '{') { depth += 1; if (depth === 1) token = ''; continue; }
-    if (char === '}') { depth -= 1; if (depth === 0) break; continue; }
-    if (depth !== 1) continue;
-    if (/[A-Za-z0-9_]/.test(char)) token += char;
-    else if (char === ':' && token) { keys.push(token); token = ''; }
-    else if (!/\s/.test(char)) token = '';
-  }
-  return keys;
-}
-
 describe('当前 main 的工具矩阵', () => {
   it('和 agent-runner 声明的工具名一致', () => {
     const source = readFileSync(new URL('../supabase/functions/_shared/agent-runner.ts', import.meta.url), 'utf8');
-    expect(runnerToolNames(source)).toEqual([...MODEL_TOOL_NAMES]);
+    expect(declaredToolNames(source)).toEqual([...MODEL_TOOL_NAMES]);
     expect(source).toContain("t.function.name!=='start_lux3d_model'");
     expect(source).toContain("t.function.name!=='search_places'||placeReady");
   });
@@ -212,6 +198,136 @@ describe('社区讲座纵向案例', () => {
     expect(report.readback.moveApplied).toBe(true);
     expect(report.readback.objects.find(item => item.id === RECEPTION_ID)?.position).toEqual({ x: 1, z: 1 });
     expect(report.library.notice).toContain('不是已核验库存');
+  });
+});
+
+describe('更多对抗句', () => {
+  const desks = [{ id: RECEPTION_ID, label: '签到桌', locked: false, position: { x: 2, z: 1 } }];
+  const emptyPreview: SeatingPreview = {
+    requested: 1,
+    placed: 1,
+    shortfall: 0,
+    limitReason: null,
+    unknown: [],
+    applied: false,
+    stale: false,
+    assumption: '建议',
+  };
+
+  it('80 把椅子、中文数量和否定句都不会写成人数', () => {
+    const mixed = readTurn(initialExploreMemory(), '我们有80把椅子，不是80个人，到场大概30人');
+    expect(mixed.memory.attendance).toMatchObject({ status: 'approximate', people: 30 });
+    expect(mixed.memory.inventory[0]).toMatchObject({ count: 80, countsAsPeople: false, countsAsVerifiedStock: false });
+    expect(guardSeatingCount(80, mixed.memory)).toEqual({ ok: false, code: 'HEADCOUNT_NOT_FURNITURE' });
+    expect(readIntents('我们有80把椅子，不是80个人，到场大概30人')).not.toContain('move_object');
+
+    const spoken = readTurn(initialExploreMemory(), '八十把椅子，三十个人来听讲座');
+    expect(spoken.memory.attendance).toMatchObject({ status: 'stated', people: 30 });
+    expect(spoken.memory.inventory.map(item => item.count)).toEqual([80]);
+    expect(spoken.memory.mobility.status).toBe('unknown');
+
+    const enough = readTurn(initialExploreMemory(), '80把椅子够坐，到场大概30人');
+    expect(enough.memory.attendance).toMatchObject({ people: 30 });
+    expect(enough.memory.inventory[0]?.count).toBe(80);
+    expect(enough.memory.layout.status).toBe('unknown');
+
+    const damaged = readTurn(initialExploreMemory(), '80把椅子里有10把坏的，来的大概30个人');
+    expect(damaged.memory.inventory.map(item => item.count)).toEqual([80]);
+    expect(damaged.memory.inventory[0]?.countsAsVerifiedStock).toBe(false);
+    expect(damaged.memory.attendance).toMatchObject({ people: 30 });
+
+    const uncounted = readTurn(initialExploreMemory(), '请按80把椅子安排座位，人还没统计');
+    expect(uncounted.memory.attendance.status).toBe('unknown');
+    expect(guardSeatingCount(80, uncounted.memory).ok).toBe(false);
+    expect(selectTools(uncounted.memory, uncounted.intents).tools).not.toContain('prepare_seating_candidate');
+
+    const elderlyCount = readTurn(initialExploreMemory(), '八十位长者，我们有三十把椅子');
+    expect(elderlyCount.memory.attendance).toMatchObject({ status: 'stated', people: 80 });
+    expect(elderlyCount.memory.inventory[0]).toMatchObject({ count: 30, countsAsPeople: false });
+    expect(elderlyCount.memory.mobility.status).toBe('unknown');
+    expect(guardSeatingCount(30, elderlyCount.memory).ok).toBe(false);
+  });
+
+  it('长者、适老和否定句不会变成轮椅需求', () => {
+    const assume = readTurn(initialExploreMemory(), '来的多是长者，腿脚都好，先别假设轮椅');
+    expect(assume.memory.audienceTags).toEqual(['elderly']);
+    expect(assume.memory.mobility).toEqual({ status: 'unknown', evidence: null });
+    expect(readMobilityMention('不愿被当成轮椅使用者')?.status).toBe('unknown');
+
+    const unspoken = readTurn(initialExploreMemory(), '老年大学的讲座，没有人提轮椅');
+    expect(unspoken.memory.audienceTags).toEqual(['elderly']);
+    expect(unspoken.memory.mobility.status).toBe('unknown');
+    expect(unspoken.reply).toContain('还不知道');
+    expect(unspoken.reply).not.toMatch(/配备轮椅|已经需要轮椅/);
+
+    const refuse = readTurn(initialExploreMemory(), '长者不愿被当成轮椅使用者');
+    expect(refuse.memory.mobility.status).toBe('unknown');
+    expect(refuse.memory.audienceTags).toEqual(['elderly']);
+
+    const aging = readTurn(initialExploreMemory(), '适老化不等于上轮椅');
+    expect(aging.memory.audienceTags).toEqual(['elderly']);
+    expect(aging.memory.mobility.status).toBe('unknown');
+
+    const declined = readTurn(initialExploreMemory(), '80位老人来听讲座，不需要轮椅');
+    expect(declined.memory.attendance).toMatchObject({ status: 'stated', people: 80 });
+    expect(declined.memory.mobility.status).toBe('declined');
+    expect(declined.memory.layout.status).not.toBe('stated');
+
+    const explicit = readTurn(initialExploreMemory(), '有一位来宾是轮椅使用者');
+    expect(explicit.memory.mobility.status).toBe('needed');
+    expect(explicit.memory.audienceTags).toEqual([]);
+    expect(explicit.memory.attendance).toMatchObject({ status: 'stated', people: 1 });
+  });
+
+  it('建议可以留下，但不能确认，也不能当成已经选定', () => {
+    expect(confirmSeating(emptyPreview)).toEqual({ ok: false, code: 'SUGGESTION_NOT_CONFIRMED' });
+    const suggested = readTurn(initialExploreMemory(), '我建议先一人一桌，但先别确认');
+    expect(suggested.memory.layout).toMatchObject({ status: 'suggestion', value: 'one_desk_one_chair' });
+    expect(selectTools(suggested.memory, suggested.intents).tools).not.toContain('prepare_seating_candidate');
+    expect(selectTools(suggested.memory, suggested.intents).tools).not.toContain('prepare_shared_seating_candidate');
+
+    const question = readTurn(initialExploreMemory(), '要不要改成课桌？只是问问');
+    expect(question.memory.layout.status).toBe('unknown');
+    const look = readTurn(initialExploreMemory(), '按你的建议看看，不要写入场景');
+    expect(look.memory.layout.status).not.toBe('stated');
+    const defer = readTurn(initialExploreMemory(), '这个建议不错，不过先别定座位形式');
+    expect(defer.memory.layout.status).toBe('unknown');
+    expect(defer.memory.deferred).toContain('座位形式');
+    const directSuggestion = readTurn(initialExploreMemory(), '建议直接摆好一人一桌');
+    expect(directSuggestion.memory.layout.status).toBe('suggestion');
+    expect(directSuggestion.memory.layout.status).not.toBe('stated');
+  });
+
+  it('同一句里的改人数、移动、清单和不确定的轮椅都留下', () => {
+    const text = '改成28人，把签到桌往左移1米，并出一份物料清单，长者不一定要轮椅，这只是建议';
+    expect(readIntents(text)).toEqual(['revise_headcount', 'move_object', 'bill_of_materials']);
+    const turn = readTurn(initialExploreMemory(), text);
+    expect(turn.memory.attendance).toMatchObject({ status: 'stated', people: 28 });
+    expect(turn.memory.mobility.status).toBe('unknown');
+    expect(turn.memory.audienceTags).toEqual(['elderly']);
+    expect(turn.memory.layout.status).not.toBe('stated');
+    expect(planMove(text, desks)).toMatchObject({ status: 'ready', axis: 'case_x_minus' });
+
+    const kept = '不要确认。改成28人，签到桌往左1米，出物料清单。';
+    expect(readIntents(kept)).toEqual(['revise_headcount', 'move_object', 'bill_of_materials']);
+    expect(readTurn(initialExploreMemory(), kept).memory.attendance).toMatchObject({ people: 28 });
+
+    const bothWays = '把签到桌往左移1米，再往右移0.5米，人数改成28人，清单也要';
+    expect(readIntents(bothWays)).toEqual(['revise_headcount', 'move_object', 'bill_of_materials']);
+    expect(planMove(bothWays, desks)).toMatchObject({ status: 'unresolved' });
+    expect(readTurn(initialExploreMemory(), bothWays).memory.attendance).toMatchObject({ people: 28 });
+    expect(readTurn(initialExploreMemory(), bothWays).intents).toContain('bill_of_materials');
+  });
+
+  it('模型把中文人数或轮椅说成事实时会被丢掉', () => {
+    const guarded = guardModelReply('大概30个人来，来的多是长者', '预计将有八十位长者参加。需要准备轮椅通道。大约30人可以先记下来。');
+    expect(guarded.dropped.join('')).toContain('八十位长者');
+    expect(guarded.dropped.join('')).toContain('轮椅');
+    expect(guarded.text).toContain('30人');
+    expect(guarded.text).not.toContain('轮椅');
+    const confirmed = guardModelReply('我建议先一人一桌', '已确认一人一桌。可以先按建议看看。');
+    expect(confirmed.dropped.join('')).toContain('已确认');
+    expect(confirmed.text).not.toContain('已确认');
   });
 });
 
