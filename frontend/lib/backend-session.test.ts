@@ -978,6 +978,37 @@ describe('canvas and cloud project mismatch',()=>{
     queue({});await controller.releaseLeaseAfterCanvasMismatch(projectId);
     expect(controller.getSnapshot()).toMatchObject({lease:null,writeBlocked:true});
   });
+  it('sends the last server zones as previous and does not upgrade an inexact capability', async () => {
+    const zones = { version: 1 as const, zones: [{ id: 'zone-1', name: '签到区', color: '#4A7C59', x: 0, z: 0, width: 2, depth: 1, zoneType: 'checkin' as const, source: 'unverified' as const }] };
+    const zoned = { ...scene, planningZones: zones };
+    const controller = session();
+    queue(auth);
+    await controller.signIn('test@example.com', 'pass');
+    queue({ ...project, scene: zoned });
+    await controller.getProject(projectId);
+    const sessionId = controller.getSnapshot().sessionId;
+    queue({ sessionId, generation: 3, expiresAt: new Date(Date.now() + 90_000).toISOString(), revision: 4, scene: zoned });
+    await controller.acquireLease(projectId);
+    queue({ supported: true, version: 2 });
+    await expect(controller.saveScene(zoned)).rejects.toMatchObject({ code: 'PLANNING_ZONES_UNAVAILABLE' });
+    expect(controller.getSnapshot().writeBlocked).toBe(false);
+    expect(request(3).url).toContain('/planning-zones/capabilities');
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    queue({ supported: true, version: 1, confirmed: true });
+    await expect(controller.saveScene({ ...zoned, lighting: 'warm' })).rejects.toMatchObject({ code: 'PLANNING_ZONES_UNAVAILABLE' });
+    const changed = { ...zoned, lighting: 'warm' as const };
+    queue({ supported: true, version: 1 });
+    queue({ id: projectId, revision: 5, scene: changed, updatedAt: new Date().toISOString(), warnings: [] });
+    await controller.saveScene(changed);
+    expect(request(6).body).toMatchObject({ expectedRevision: 4, scene: changed, planningZonesEdit: { version: 1, previous: zones } });
+    expect(request(6).body.scene.planningZones.zones[0].source).toBe('unverified');
+    const cleared = { ...scene, lighting: 'cool' as const };
+    queue({ supported: true, version: 1 });
+    queue({ id: projectId, revision: 6, scene: cleared, updatedAt: new Date().toISOString(), warnings: [] });
+    await controller.saveScene(cleared);
+    expect(request(8).body.planningZonesEdit).toEqual({ version: 1, previous: zones });
+    expect(request(8).body.scene).not.toHaveProperty('planningZones');
+  });
   it('clears only the captured mismatched lease when the server confirms it is no longer valid',async()=>{
     const controller=await editing();controller.suspendForCanvasProjectMismatch(projectId);
     queue({error:{code:'LEASE_LOST'}},409);

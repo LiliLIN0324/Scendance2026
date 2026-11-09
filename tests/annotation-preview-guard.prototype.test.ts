@@ -6,7 +6,7 @@ import {applyWithPreviewGuardPrototype} from './fixtures/annotation-preview-guar
 
 describe('local-only annotation apply guard prototype',()=>{
  let f:Awaited<ReturnType<typeof database>>;
- beforeAll(async()=>{f=await database(undefined,{excludeMigrations:['20261109160000_annotation_preview_guard.sql']});},30000);afterAll(async()=>{await f.db.close();});
+ beforeAll(async()=>{f=await database(undefined,{excludeMigrations:['20261109160000_annotation_preview_guard.sql','20261109170000_planning_zones_guard.sql']});},30000);afterAll(async()=>{await f.db.close();});
  async function setup(annotated:boolean,warning=false){
   const base=scene(),project=await f.rpc(owner,'projects.create',{studioId:studio,name:'synthetic guard',scene:base});
   const lease=await f.rpc(owner,'lease.acquire',{projectId:project.id,sessionId:session});

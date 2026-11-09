@@ -20,7 +20,7 @@ it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('checks annotation prev
   let ready=false;for(let i=0;i<120;i++){try{if(docker(['exec',name,'pg_isready','-U','postgres']).includes('accepting connections')){await new Promise(r=>setTimeout(r,4000));docker(['exec',name,'psql','-U','postgres','-d','postgres','-Atc','select 1']);ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,250));}expect(ready).toBe(true);
   docker(['exec',name,'createdb','-U','postgres','annotationtest']);
   psql('create schema if not exists auth; create table if not exists auth.users(id uuid primary key,email text); create schema if not exists storage; create table if not exists storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]); grant usage on schema auth,public to service_role; grant select on auth.users to service_role;');
-  for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')&&f!==guard).sort())psql(readFileSync(new URL(file,migrations),'utf8'));
+  for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')&&f!==guard&&f!=='20261109170000_planning_zones_guard.sql').sort())psql(readFileSync(new URL(file,migrations),'utf8'));
   psql(`insert into auth.users(id) values ('${actor}'); insert into scene_private.studios(id,name) values ('${studio}','fixture'); insert into scene_private.members values ('${studio}','${actor}','owner','fixture');`);
   const make=(n:number,annotated:boolean)=>{
    const project=`30000000-0000-4000-8000-${String(n).padStart(12,'0')}`,task=`50000000-0000-4000-8000-${String(n).padStart(12,'0')}`,request=`70000000-0000-4000-8000-${String(n).padStart(12,'0')}`;

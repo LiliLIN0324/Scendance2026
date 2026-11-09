@@ -11,7 +11,7 @@ const migrationSql=()=>readFileSync(new URL(migration,migrationDir),'utf8');
 async function databaseBeforeAnnotation(excludeEntryGuard=false){
  const db=new PGlite();
  await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key,email text); grant usage on schema auth,public to service_role; grant select on auth.users to service_role; grant usage on schema public to anon,authenticated; create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);');
- for(const file of readdirSync(migrationDir).filter(name=>name.endsWith('.sql')&&name!==migration&&(!excludeEntryGuard||name!=='20261109010000_scene_rpc_entry_guard.sql')).sort())await db.exec(readFileSync(new URL(file,migrationDir),'utf8'));
+ for(const file of readdirSync(migrationDir).filter(name=>name.endsWith('.sql')&&name!==migration&&name!=='20261109170000_planning_zones_guard.sql'&&(!excludeEntryGuard||name!=='20261109010000_scene_rpc_entry_guard.sql')).sort())await db.exec(readFileSync(new URL(file,migrationDir),'utf8'));
  await db.query("insert into auth.users(id,email) values ($1,'owner@example.test'),($2,'outsider@example.test')",[owner,outsider]);
  await db.query('insert into scene_private.studios(id,name) values ($1,$2)',[studio,'Fixture studio']);
  await db.query("insert into scene_private.members values ($1,$2,'owner','Owner')",[studio,owner]);

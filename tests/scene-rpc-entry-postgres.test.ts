@@ -16,7 +16,7 @@ it.skipIf(process.env.RUN_ISOLATED_POSTGRES_TESTS!=='1')('guards all old scene e
   let ready=false;for(let i=0;i<120;i++){try{if(docker(['exec',name,'pg_isready','-U','postgres']).includes('accepting connections')){await new Promise(resolve=>setTimeout(resolve,4000));docker(['exec',name,'psql','-U','postgres','-d','postgres','-Atc','select 1']);ready=true;break;}}catch{}await new Promise(resolve=>setTimeout(resolve,250));}expect(ready).toBe(true);
   docker(['exec',name,'createdb','-U','postgres','sceneguardtest']);
   psql('create schema if not exists auth; create table if not exists auth.users(id uuid primary key,email text); create schema if not exists storage; create table if not exists storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]); grant usage on schema auth,public to service_role; grant select on auth.users to service_role;');
-  for(const file of readdirSync(migrations).filter(item=>item.endsWith('.sql')&&item!==guard).sort())psql(readFileSync(new URL(file,migrations),'utf8'));
+  for(const file of readdirSync(migrations).filter(item=>item.endsWith('.sql')&&item!==guard&&item!=='20261109170000_planning_zones_guard.sql').sort())psql(readFileSync(new URL(file,migrations),'utf8'));
   // A mismatched owner must abort the whole migration without changing the old function.
   expect(()=>psql(`begin; create role fixture_other_owner; alter function public.scene_rpc_legacy(uuid,text,jsonb) owner to fixture_other_owner; ${migration} commit;`)).toThrow();
   expect(psql("select prosecdef from pg_proc where oid='public.scene_rpc(uuid,text,jsonb)'::regprocedure").trim()).toBe('f');

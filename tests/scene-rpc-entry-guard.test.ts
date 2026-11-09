@@ -51,7 +51,7 @@ it.each([
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key,email text); grant usage on schema auth,public to service_role; grant select on auth.users to service_role; grant usage on schema public to anon,authenticated; create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);');
   // The annotation migration depends on this guard and must not be installed
   // while testing this guard's own preflight against an earlier schema.
-  for(const file of readdirSync(dir).filter(name=>name.endsWith('.sql')&&name!==guard&&name!=='20261109160000_annotation_preview_guard.sql').sort())await db.exec(readFileSync(new URL(file,dir),'utf8'));
+  for(const file of readdirSync(dir).filter(name=>name.endsWith('.sql')&&name!==guard&&name!=='20261109160000_annotation_preview_guard.sql'&&name!=='20261109170000_planning_zones_guard.sql').sort())await db.exec(readFileSync(new URL(file,dir),'utf8'));
   await db.exec(`create role fixture_inherited; grant execute on function public.${inherited}(uuid,text,jsonb) to fixture_inherited; grant fixture_inherited to ${role};`);
   expect((await db.query<{allowed:boolean}>(`select has_function_privilege('${role}','public.${inherited}(uuid,text,jsonb)','execute') as allowed`)).rows[0]!.allowed).toBe(true);
   await expect(db.exec(readFileSync(new URL(guard,dir),'utf8'))).rejects.toThrow('SCENE_RPC_GUARD_INHERITED_PRIVILEGE');

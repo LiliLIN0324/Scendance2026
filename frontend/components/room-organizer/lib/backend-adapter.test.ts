@@ -23,6 +23,74 @@ function scene(): Scene {
 }
 
 describe('the shared backend scene adapter', () => {
+  it.each([1, 2] as const)('requires explicit capability and round-trips saved zones for scene V%s', version => {
+    const source = version === 1 ? scene() : sceneSchema.parse({ schemaVersion: 2, venue: { shape: 'rectangle', width: 10, depth: 8, height: 3, entrances: [] }, objects: [], camera: 'overview', lighting: 'neutral', structure: { walls: [], openings: [], columns: [] }, sources: [], dimensions: [] });
+    const layout = backendSceneToLayout(source);
+    layout.floors[0]!.zones = [{ id: 'keep', name: '保留空间', color: '#4A7C59', x: -2.1, z: -1.2, w: 1.25, d: 2, zoneType: 'reserved' },
+      { id: 'legacy', name: '预留区', color: '#ffffff', x: 1, z: 1, w: 1, d: 1 }];
+    expect(() => layoutToBackendScene(layout)).toThrow(/本机区域标注/);
+    const wire = layoutToBackendScene(layout, { planningZonesV1: true });
+    expect(wire.planningZones?.zones).toEqual([{ id: 'keep', name: '保留空间', color: '#4A7C59', x: 2.9, z: 2.8, width: 1.25, depth: 2, zoneType: 'reserved', source: 'unverified' },
+      { id: 'legacy', name: '预留区', color: '#ffffff', x: 6, z: 5, width: 1, depth: 1, source: 'unverified' }]);
+    const reopened = backendSceneToLayout(wire);
+    expect(reopened.floors[0]!.zones![0]).toMatchObject({ id: 'keep', name: '保留空间', color: '#4A7C59', zoneType: 'reserved', w: 1.25, d: 2 });
+    expect(Math.abs(reopened.floors[0]!.zones![0]!.x + 2.1)).toBeLessThan(1e-9);
+    expect(reopened.floors[0]!.zones![1]).not.toHaveProperty('zoneType');
+    expect(layoutToBackendScene(reopened, { planningZonesV1: true }).planningZones).toEqual(wire.planningZones);
+  });
+  it('keeps old zone-free encoding identical with or without capability', () => {
+    const layout = backendSceneToLayout(scene());
+    expect(JSON.stringify(layoutToBackendScene(layout, { planningZonesV1: true }))).toBe(JSON.stringify(layoutToBackendScene(layout)));
+    expect(layoutToBackendScene(layout)).not.toHaveProperty('planningZones');
+    layout.floors[0]!.zones = [];
+    expect(JSON.stringify(layoutToBackendScene(layout, { planningZonesV1: true }))).toBe(JSON.stringify(layoutToBackendScene(layout)));
+  });
+  it('removes the old wire area after the user clears the editable floor zones', () => {
+    const source = sceneSchema.parse({ schemaVersion: 2, venue: { shape: 'rectangle', width: 10, depth: 8, height: 3, entrances: [] }, objects: [], camera: 'overview', lighting: 'neutral', structure: { walls: [], openings: [], columns: [] }, sources: [], dimensions: [],
+      planningZones: { version: 1, zones: [{ id: 'keep', name: '区域', color: '#fff', x: 1, z: 1, width: 2, depth: 2, zoneType: 'reserved', source: 'unverified' }] } });
+    const layout = backendSceneToLayout(source);
+    expect(layout.floors[0]!.zones).toHaveLength(1);
+    layout.floors[0]!.zones = [];
+    const wire = layoutToBackendScene(layout, { planningZonesV1: true });
+    expect(wire).not.toHaveProperty('planningZones');
+    expect(source.planningZones?.zones).toHaveLength(1);
+    expect(() => layoutToBackendScene(layout)).toThrow(/本机区域标注/);
+  });
+  it('keeps design-history areas blocked even when root-zone capability is present', () => {
+    const layout = backendSceneToLayout(scene()), variant = backendSceneToLayout(scene());
+    layout.floors[0]!.zones = [{ id: 'root', name: '区域', color: '#fff', x: -1, z: -1, w: 1, d: 1 }];
+    variant.floors[0]!.zones = [{ id: 'old', name: '旧区域', color: '#fff', x: -1, z: -1, w: 1, d: 1 }];
+    layout.designBook = { activeId: 'a', variants: [{ id: 'a', name: '历史', layout: variant }] };
+    expect(() => layoutToBackendScene(layout, { planningZonesV1: true })).toThrow(/本机区域标注/);
+  });
+  it('states that polygon venues are outside the rectangle-only first version', () => {
+    const source = sceneSchema.parse({ schemaVersion: 2, venue: { shape: 'polygon', width: 10, depth: 8, height: 3, entrances: [], polygon: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 8 }, { x: 0, z: 8 }] }, objects: [], camera: 'overview', lighting: 'neutral', structure: { walls: [], openings: [], columns: [] }, sources: [], dimensions: [] });
+    const layout = backendSceneToLayout(source);
+    layout.floors[0]!.zones = [{ id: 'edge', name: '区域', color: '#fff', x: -1, z: -1, w: 1, d: 1 }];
+    expect(() => layoutToBackendScene(layout, { planningZonesV1: true })).toThrow(/多边形/);
+  });
+  it('normalizes floating coordinates once and retains an edge-fitting area without crossing the venue', () => {
+    const layout = backendSceneToLayout(scene());
+    layout.floors[0]!.zones = [{ id: 'edge', name: '边缘', color: '#fff', x: 4.7, z: 3.0000000001, w: 0.3, d: 0.9999999998 }];
+    const wire = layoutToBackendScene(layout, { planningZonesV1: true }), zone = wire.planningZones!.zones[0]!;
+    expect(zone).toMatchObject({ x: 9.7, z: 7, width: 0.3, depth: 1 });
+    const roundtrip = layoutToBackendScene(backendSceneToLayout(wire), { planningZonesV1: true });
+    expect(roundtrip.planningZones).toEqual(wire.planningZones);
+    expect(Math.abs(zone.z - (layout.floors[0]!.zones![0]!.z + 4))).toBeLessThanOrEqual(1e-9);
+    expect(Math.abs(zone.depth - layout.floors[0]!.zones![0]!.d)).toBeLessThanOrEqual(1e-9);
+  });
+  it('rejects malformed local zones and wire fields instead of truncating or guessing', () => {
+    const layout = backendSceneToLayout(scene());
+    (layout.floors[0] as unknown as { zones: unknown }).zones = { unexpected: true };
+    expect(() => layoutToBackendScene(layout)).toThrow(/本机区域标注/);
+    expect(() => layoutToBackendScene(layout, { planningZonesV1: true })).toThrow();
+    const base = { id: 'keep', name: '区域', color: '#fff', x: 0, z: 0, w: 1, d: 1 };
+    for (const value of [{ ...base, zoneType: 'invalid' }, { ...base, name: '长'.repeat(201) }, { ...base, hidden: 'do not drop' }, { ...base, x: 9 }]) {
+      layout.floors[0]!.zones = [value as never]; expect(() => layoutToBackendScene(layout, { planningZonesV1: true })).toThrow();
+    }
+    const input = { ...scene(), planningZones: { version: 1, zones: [{ id: 'keep', name: '区域', color: '#fff', x: 0, z: 0, width: 1, depth: 1, source: 'confirmed' }] } };
+    expect(() => backendSceneToLayout(input)).toThrow();
+  });
   it('does not silently drop a locally marked rest area on a cloud round trip', () => {
     const original = backendSceneToLayout(scene());
     const zone = { id: 'rest-one', name: '休息区（待核验）', color: '#4A7C59', x: -2, z: -2, w: 2.2, d: 1.6 };

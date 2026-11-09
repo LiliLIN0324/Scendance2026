@@ -11,6 +11,7 @@ import { materialVariantProposalRequestSchema } from "../../supabase/functions/_
 import { briefExtractRequestSchema, briefExtractResponseSchema, briefConversationRequestSchema, briefConversationResponseSchema, parseBriefConversation, type BriefExtractResponse, type BriefConversationResponse } from "../../supabase/functions/_shared/brief-extract-contract";
 import { assistantChatRequestSchema, assistantChatResponseSchema, type AssistantChatResult } from "../../supabase/functions/_shared/assistant-chat-contract";
 import { canonical, sha256, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
+import { parsePlanningZonesCapability, planningZonesWriteEnvelope, type PlanningZonesCapability } from "../../supabase/functions/_shared/planning-zones-contract";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
@@ -1756,10 +1757,28 @@ export class BackendSession {
     }catch(error){if(epoch===this.epoch&&this.isCurrentRequestScope(scope))this.block(error);throw error;}
     finally{this.operationPending=false;}
   }
+  async readPlanningZonesCapability(projectId: string): Promise<PlanningZonesCapability> {
+    const id = uuid.parse(projectId);
+    try {
+      const raw = await this.client.request<unknown>(`/projects/${id}/planning-zones/capabilities`, "GET", undefined, false);
+      return parsePlanningZonesCapability(raw);
+    } catch (error) {
+      if (error instanceof SceneApiError && (error.status === 404 || error.code === "ROUTE_NOT_FOUND" || error.code === "PLANNING_ZONES_UNAVAILABLE")) return { supported: false };
+      throw error;
+    }
+  }
   async saveScene(scene: Scene): Promise<SaveResult> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     const restore=this.lastAppliedReconstruction;
     if(scene.schemaVersion===1&&this.snapshot.project?.scene.schemaVersion===2&&restore?.epoch===this.epoch&&restore.proposal.project_id===this.snapshot.project.id&&canonical(scene)===canonical(restore.proposal.base_scene)&&canonical(this.snapshot.project.scene)===canonical(restore.proposal.candidate))return this.saveReconstructionUndo(scene,restore.proposal);
+    const projectId = this.snapshot.project?.id;
+    let planningZonesEdit: { version: 1; previous: Scene["planningZones"] | null } | undefined;
+    if (scene.planningZones !== undefined || this.snapshot.project?.scene.planningZones !== undefined) {
+      if (!projectId) throw new SceneApiError("PLANNING_ZONES_UNAVAILABLE", 503, null);
+      const capability = await this.readPlanningZonesCapability(projectId);
+      try { planningZonesEdit = planningZonesWriteEnvelope(scene, this.snapshot.project?.scene ?? null, capability).planningZonesEdit; }
+      catch (error) { if (error instanceof Error && error.message === "PLANNING_ZONES_UNAVAILABLE") throw new SceneApiError("PLANNING_ZONES_UNAVAILABLE", 503, null); throw error; }
+    }
     this.setDraft(scene);
     const lease = this.writableLease();
     const draft = this.snapshot.draft!;
@@ -1767,7 +1786,7 @@ export class BackendSession {
     this.operationPending = true;
     this.update({ status: "saving", error: null });
     try {
-      const result = await this.request<SaveResult>(`/projects/${lease.projectId}/scene`, "PUT", { sessionId: lease.sessionId, generation: lease.generation, expectedRevision: this.snapshot.revision, scene: draft });
+      const result = await this.request<SaveResult>(`/projects/${lease.projectId}/scene`, "PUT", { sessionId: lease.sessionId, generation: lease.generation, expectedRevision: this.snapshot.revision, scene: draft, ...(planningZonesEdit ? { planningZonesEdit } : {}) });
       const saved = sceneSchema.parse(result.scene);
       const unchanged = this.snapshot.localRevision === localRevision;
       this.update({ revision: result.revision, lease: { ...(this.snapshot.lease ?? lease), revision: result.revision }, project: { ...this.snapshot.project!, scene: saved, revision: result.revision }, ...(unchanged ? { draft: saved, dirty: false } : {}), ...(!this.snapshot.writeBlocked ? { status: "editing", error: null } : {}) });

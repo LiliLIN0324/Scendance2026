@@ -9,6 +9,8 @@ import { presetModelUrl } from './scene-presets';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import { layoutGeometryScene, canApplyLayoutGeometry, stableMeasurement } from './structural-layout';
 import { pruneVenueSite } from './venue-shell';
+import { isRoomZone, MAX_ZONES } from './zones';
+import { MAX_COLOR_LENGTH, MAX_ID_LENGTH, MAX_NAME_LENGTH } from './schema';
 import type { FurnitureItem, RoomLayout } from './types';
 
 const publicLibraryIds = new Set(Object.values(libraryAssetIds));
@@ -21,16 +23,23 @@ export class SceneAdapterError extends Error {
 }
 
 export const LOCAL_ZONES_CLOUD_MESSAGE = '此云端操作暂不支持本机区域标注。请先备份本机草稿或处理区域标注；现有标注未删除。';
+const hasZoneData = (zones: unknown): boolean => zones !== undefined && (!Array.isArray(zones) || zones.length > 0);
+export function layoutCarriesCloudZones(layout: RoomLayout): boolean {
+  return layout.floors.some(floor => hasZoneData(floor.zones)) || layout.backendSceneV2?.planningZones !== undefined;
+}
 
-/** 区域暂不属于云端契约；包含区域的方案与历史版本均不能静默转换。 */
-export function assertCloudZoneSupport(layout: RoomLayout): void {
-  const pending = [layout];
+/** 未显式开启矩形首版时，当前层和历史版本里的区域都不能静默转换。多边形区域不在首版范围内。 */
+export function assertCloudZoneSupport(layout: RoomLayout, allowRootZones = false): void {
+  if (!allowRootZones && (layout.floors.some(floor => hasZoneData(floor.zones)) || layout.backendSceneV2?.planningZones !== undefined)) {
+    throw new SceneAdapterError('ZONES_NOT_SUPPORTED', LOCAL_ZONES_CLOUD_MESSAGE);
+  }
+  const pending: RoomLayout[] = [...(layout.designBook?.variants.map(variant => variant.layout) ?? [])];
   const seen = new Set<RoomLayout>();
   while (pending.length) {
     const current = pending.pop()!;
     if (seen.has(current)) continue;
     seen.add(current);
-    if (current.floors.some(floor => (floor.zones?.length ?? 0) > 0)) {
+    if (current.backendSceneV2?.planningZones !== undefined || current.floors.some(floor => hasZoneData(floor.zones))) {
       throw new SceneAdapterError('ZONES_NOT_SUPPORTED', LOCAL_ZONES_CLOUD_MESSAGE);
     }
     pending.push(...(current.designBook?.variants.map(variant => variant.layout) ?? []));
@@ -56,7 +65,13 @@ export interface BackendAdapterOptions {
   assetIdMap?: Readonly<Record<string, string>>;
   /** 只给保存用：这些是本机资产号；没出现在 assetIdMap 里说明还没上云，保存要停下来说清状态。 */
   localAssetIds?: ReadonlySet<string>;
+  /** 只有已经核对过服务端 planning_zones v1 能力的调用方可以打开。默认仍阻断。 */
+  planningZonesV1?: true;
 }
+
+// 云端坐标是米，分辨率到 1e-9。其它字段不截断；读不回来的精度直接拒绝。
+const zoneCoordinate = (value: number): number => Math.round(value * 1e9) / 1e9;
+const textWithin = (value: string, max: number) => Array.from(value).length <= max;
 
 function assertSupportedVenue(venue: Scene['venue'], version: number): void {
   if (version === 1 && venue.shape !== 'rectangle') {
@@ -97,6 +112,10 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
   if (!result.success) throw new SceneAdapterError('INVALID_SCENE', '云端场景格式无效，未覆盖当前编辑内容。');
   const scene = result.data;
   assertSupportedVenue(scene.venue, scene.schemaVersion);
+  if (scene.planningZones?.zones.some(zone => zone.x !== zoneCoordinate(zone.x) || zone.z !== zoneCoordinate(zone.z) || zone.width !== zoneCoordinate(zone.width) || zone.depth !== zoneCoordinate(zone.depth) ||
+      !textWithin(zone.id, MAX_ID_LENGTH) || !textWithin(zone.name, MAX_NAME_LENGTH) || !textWithin(zone.color, MAX_COLOR_LENGTH))) {
+    throw new SceneAdapterError('ZONE_PRECISION_NOT_SUPPORTED', '云端区域精度或文字超出本机无损读取范围，未打开项目。');
+  }
   const ids = new Set(scene.objects.map(o => o.id));
   if (scene.venue.entrances.some(e => ids.has(e.id))) {
     throw new SceneAdapterError('ENTRANCE_ID_COLLISION', '出入口与物件编号重复，无法无损打开。');
@@ -147,6 +166,9 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
     floors: [{ id: 'event-floor', name: '活动场地', height: scene.venue.height,
       floorColor: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? scene.design?.palette[0] ?? '#f5f6f7' : '#f5f6f7',
       ...(scene.schemaVersion === 2 && scene.finishes?.floorPattern ? { floorPattern: scene.finishes.floorPattern } : {}), items,
+      ...(scene.planningZones ? { zones: scene.planningZones.zones.map(zone => ({ id: zone.id, name: zone.name, color: zone.color,
+        x: zone.x - scene.venue.width / 2, z: zone.z - scene.venue.depth / 2, w: zone.width, d: zone.depth,
+        ...(zone.zoneType === undefined ? {} : { zoneType: zone.zoneType }) })) } : {}),
       interiorWalls: scene.schemaVersion === 2 ? scene.structure.walls.map(w => ({ id: w.id,
         x1: w.start.x - scene.venue.width / 2, z1: w.start.z - scene.venue.depth / 2,
         x2: w.end.x - scene.venue.width / 2, z2: w.end.z - scene.venue.depth / 2,
@@ -158,9 +180,9 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
   };
 }
 
-export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAdapterOptions,'assetIdMap'|'localAssetIds'> = {}): Scene {
+export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAdapterOptions,'assetIdMap'|'localAssetIds'|'planningZonesV1'> = {}): Scene {
   if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '当前云端版暂不支持保存多层方案。这份方案和修改会保留在本机；请勿删除本地方案。');
-  assertCloudZoneSupport(layout);
+  assertCloudZoneSupport(layout, options.planningZonesV1 === true);
   if (!layout.backendSceneV2 && (layout.floorPlanImage || layout.backendVenue?.floorplanAssetId)) {
     throw new SceneAdapterError('FLOORPLAN_NOT_SUPPORTED', '平面图尚未接入云保存，不能忽略底图后保存。');
   }
@@ -168,6 +190,16 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
     throw new SceneAdapterError('POLYGON_NOT_SUPPORTED', '多边形场地尚未接入此版编辑器，不能改存为矩形。');
   }
   const floor = layout.floors[0]!;
+  const zones = floor.zones;
+  if (options.planningZonesV1 && layout.backendVenue?.shape === 'polygon' && (hasZoneData(zones) || layout.backendSceneV2?.planningZones !== undefined)) {
+    throw new SceneAdapterError('POLYGON_NOT_SUPPORTED', '首版只保存矩形场地里的矩形区域；多边形场地和多边形区域都尚未覆盖，未保存。');
+  }
+  if (options.planningZonesV1 && zones !== undefined && (!Array.isArray(zones) || zones.length > MAX_ZONES || zones.some(zone => !isRoomZone(zone) ||
+    Object.keys(zone).some(key => !['id', 'name', 'color', 'x', 'z', 'w', 'd', 'zoneType'].includes(key)) ||
+    !textWithin(zone.id, MAX_ID_LENGTH) || !textWithin(zone.name, MAX_NAME_LENGTH) || !textWithin(zone.color, MAX_COLOR_LENGTH) ||
+    zone.x < -layout.width / 2 - 1e-9 || zone.z < -layout.height / 2 - 1e-9 || zone.x + zone.w > layout.width / 2 + 1e-9 || zone.z + zone.d > layout.height / 2 + 1e-9))) {
+    throw new SceneAdapterError('INVALID_PLANNING_ZONE', '区域格式或位置无法无损保存，请先核对。');
+  }
   if ((!layout.backendSceneV2 && floor.interiorWalls?.length) || layout.roof && layout.roof.style !== 'none' ||
       layout.terrain && (layout.terrain.frontY !== 0 || layout.terrain.backY !== 0)) {
     throw new SceneAdapterError('STRUCTURE_NOT_SUPPORTED', '此方案含未接入云端的建筑结构，不能忽略这些内容后保存。');
@@ -262,8 +294,9 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
     ...(floor.floorPattern ? { floorPattern: floor.floorPattern } : {}),
     ...(originalFinishes?.wallColors !== undefined || Object.keys(wallColors).length ? { wallColors } : {}),
   };
+  const sceneBase = layout.backendSceneV2 ? (({ planningZones, ...rest }) => rest)(layout.backendSceneV2) : {};
   const candidate = {
-    ...(layout.backendSceneV2 ?? {}),
+    ...sceneBase,
     schemaVersion: layout.backendSceneV2 ? 2 : 1,
     ...(layout.scenePreset ? { scenePreset: layout.scenePreset } : {}),
     venue: { ...(layout.backendVenue ? { ...layout.backendVenue, ...(site ? { site } : { site: undefined }) } : {}), width: layout.width, depth: layout.height, height: floor.height ?? 3, shape: layout.backendVenue?.shape ?? 'rectangle', entrances },
@@ -275,6 +308,9 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
           ? {...r,status:'unmet',reason:'关联物件已被编辑或删除，请重新核对要求。',objectIds:r.objectIds.filter(id=>objects.some(o=>o.id===id))} : r),
       } } : {}),
     } : {}),
+    ...(options.planningZonesV1 && zones?.length ? { planningZones: { version: 1 as const, zones: zones.map(zone => ({
+      id: zone.id, name: zone.name, color: zone.color, x: zoneCoordinate(zone.x + layout.width / 2), z: zoneCoordinate(zone.z + layout.height / 2),
+      width: zoneCoordinate(zone.w), depth: zoneCoordinate(zone.d), ...(zone.zoneType === undefined ? {} : { zoneType: zone.zoneType }), source: 'unverified' as const })) } } : {}),
     objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
   };
   if (geometric && geometric.structure.openings.length !== floor.items.filter(i=>i.structuralOpeningId).length) {

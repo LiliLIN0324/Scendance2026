@@ -16,6 +16,7 @@ import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, rando
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import { CHAT_API_KEY_ENV, chatProfile, chatRequest, generateProposal } from './providers.ts';
+import {modelPreservesPlanningZones,planningZonesEditSchema} from './planning-zones-contract.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefConversation, parseModelBrief, BRIEF_CONVERSATION_PROMPT, BRIEF_EXTRACT_PROMPT, BRIEF_PROVIDER_TIMEOUT_MS } from './brief-extract-contract.ts';
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
@@ -31,7 +32,7 @@ const name=z.string().trim().min(1).max(120);
 const displayName=z.string().trim().min(1).max(80);
 const messageBody=z.string().trim().min(1).max(2000);
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
-const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
+const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema,planningZonesEdit:planningZonesEditSchema.optional()});
 // 数据库行是 snake_case，上传口对客户端固定成 camelCase；storage_path 永不出网。
 const uploadedAssetView=(row:Record<string,unknown>)=>{
   const {storage_path,...rest}=row;
@@ -256,6 +257,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       if(path==='/projects' && method==='GET') return respond(await backend.scene(actor,'projects.list'));
       if(path==='/projects' && method==='POST') {
         const input=z.strictObject({studioId:uuid,name,scene:sceneSchema}).parse(await json());
+        if(input.scene.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_CREATE_REQUIRES_EDIT',422);
         requireOriginalSceneWritable(input.scene);
         if(dimensionConflicts(input.scene).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(input.scene));
         if(input.scene.schemaVersion===2&&structuralViolations(input.scene).length)throw new ApiError('STRUCTURAL_COLLISION',422,structuralViolations(input.scene));
@@ -264,15 +266,28 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       const project=path.match(/^\/projects\/([^/]+)(.*)$/);
       if(project) {
         const projectId=uuid.parse(project[1]), tail=project[2];
+        if(tail==='/planning-zones/capabilities'&&method==='GET'){
+          await backend.scene(actor,'projects.get',{projectId});
+          if(env('PLANNING_ZONES_ENABLED')!=='1')return respond({supported:false});
+          let ready:unknown;
+          try{ready=await backend.scene(actor,'planning_zones.readiness',{projectId});}
+          catch(error){if(error instanceof ApiError&&['PROJECT_NOT_FOUND','UNAUTHENTICATED','FORBIDDEN'].includes(error.code))throw error;return respond({supported:false});}
+          return respond(z.strictObject({capability:z.literal('planning_zones'),version:z.literal(1)}).safeParse(ready).success?{supported:true,version:1}:{supported:false});
+        }
         if(tail==='/agent-runs'&&method==='POST') {
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
           const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;
+          if(!activity&&input.scene.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_GENERATION_UNAVAILABLE',503);
           // Reject before storing a run or contacting a provider. An older
           // worker or legacy workflow must not silently ignore planning marks.
           if(!activity&&input.context.annotationObservation!==undefined&&
             (env('AGENT_ANNOTATION_OBSERVATION_ENABLED')!=='1'||env('DEEPSEEK_AGENT_MODE')==='legacy'))throw new ApiError('AGENT_ANNOTATION_UNAVAILABLE',503);
           if(!activity&&input.selectedIds.some(id=>!input.scene.objects.some(object=>object.id===id)))throw new ApiError('INVALID_SELECTION',422);
-          if(!activity)requireOriginalSceneWritable((await backend.scene(actor,'projects.get',{projectId})).scene);
+          if(!activity){
+            const stored=await backend.scene(actor,'projects.get',{projectId});
+            if(stored.scene?.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_GENERATION_UNAVAILABLE',503);
+            requireOriginalSceneWritable(stored.scene);
+          }
           if(!activity&&input.context.annotationObservation!==undefined){
             let annotationGuard:unknown;
             try{annotationGuard=await backend.scene(actor,'annotations.readiness',{projectId});}
@@ -351,6 +366,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const project=await backend.scene(actor,'projects.get',{projectId});const hash=await sha256(canonical(project.scene));
           if(hash!==input.originalSceneHash)throw new ApiError('ORIGINAL_SCENE_CHANGED',409);
           const prepared=checkedOriginalReview(project.scene,input.candidate);if(!prepared.changes.length)throw new ApiError('ORIGINAL_REVIEW_NO_CHANGES',422);
+          if(!modelPreservesPlanningZones(prepared.base.planningZones,prepared.candidate.planningZones))throw new ApiError('PLANNING_ZONES_WRITE_PROTECTED',409);
           const candidateHash=await sha256(canonical(prepared.candidate));
           const row=await backend.originalSceneReview(actor,'create',{projectId,id:input.reviewId,sessionId:input.sessionId,generation:input.generation,expectedRevision:input.expectedRevision,baseScene:project.scene,baseHash:hash,candidate:prepared.candidate,candidateHash});
           return respond(await publicOriginalReview(row),row.reused?200:201);
@@ -382,10 +398,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const input=reconstructionRequestSchema.parse(await json());
           if(input.sources.some((s,i)=>input.sources.findIndex(x=>x.assetId===s.assetId)!==i))throw new ApiError('DUPLICATE_SOURCE',422);
           if(input.selectedIds.some(id=>!input.scene.objects.some(o=>o.id===id)))throw new ApiError('INVALID_SELECTION',422);
+          const currentProject=await backend.scene(actor,'lease.check',{...input,projectId});
+          if(input.scene.planningZones!==undefined||currentProject.scene?.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_GENERATION_UNAVAILABLE',503);
           required(env,'DEEPSEEK_API_KEY');
           const reserveCents=reserveCost(env,'RECONSTRUCTION_MAX_REQUEST_CENTS');
           if(reserveCents<200)throw new ApiError('BILLING_NOT_CONFIGURED',503,{setting:'RECONSTRUCTION_MAX_REQUEST_CENTS',minimum:200});
-          const currentProject=await backend.scene(actor,'lease.check',{...input,projectId});requireOriginalSceneWritable(currentProject.scene);
+          requireOriginalSceneWritable(currentProject.scene);
           if(input.reviewedJobId){
             await backend.reconstruction(actor,'review.check',{input:{...input,projectId},baseHash:await sceneHash(input.scene)});
             const prior=await backend.reconstruction(actor,'get',{projectId,id:input.reviewedJobId});
@@ -422,6 +440,13 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         }
         if(tail==='/scene' && method==='PUT') {
           const input=savedScene.parse(await json());
+          if(input.scene.planningZones!==undefined||input.planningZonesEdit!==undefined){
+            if(env('PLANNING_ZONES_ENABLED')!=='1')throw new ApiError('PLANNING_ZONES_UNAVAILABLE',503);
+            let ready:unknown;
+            try{ready=await backend.scene(actor,'planning_zones.readiness',{projectId});}
+            catch(error){if(error instanceof ApiError&&['PROJECT_NOT_FOUND','UNAUTHENTICATED','FORBIDDEN'].includes(error.code))throw error;throw new ApiError('PLANNING_ZONES_UNAVAILABLE',503);}
+            if(!z.strictObject({capability:z.literal('planning_zones'),version:z.literal(1)}).safeParse(ready).success)throw new ApiError('PLANNING_ZONES_UNAVAILABLE',503);
+          }
           requireOriginalSceneWritable(input.scene);
           if(dimensionConflicts(input.scene).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(input.scene));
           const previous=await backend.scene(actor,'lease.check',{...input,projectId});
@@ -431,8 +456,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         }
         if(tail==='/proposals' && method==='POST') {
           const input=proposalRequestSchema.parse(projectBody(await json(),projectId));
+          if(input.scene.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_GENERATION_UNAVAILABLE',503);
           if(input.selectedIds.some(id=>!input.scene.objects.some(o=>o.id===id))) throw new ApiError('INVALID_SELECTION',422);
-          const previous=await backend.scene(actor,'lease.check',input);requireOriginalSceneWritable(previous.scene);
+          const previous=await backend.scene(actor,'lease.check',input);
+          if(previous.scene?.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_GENERATION_UNAVAILABLE',503);
+          requireOriginalSceneWritable(previous.scene);
           chatRequest(env,{messages:[]});
           const reserveCents=reserveCost(env,'AI_MAX_REQUEST_CENTS');
           if(reserveCents<40) throw new ApiError('BILLING_NOT_CONFIGURED',503);
@@ -469,6 +497,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             if(safe.state!=='ready'||!safe.proposal||typeof safe.proposal!=='object'||canonical((safe.proposal as {candidate?:unknown}).candidate)!==canonical(proposal.candidate))throw new ApiError('MODEL_TEXT_REVIEW_REQUIRED',422);
           }
           requireOriginalSceneWritable(proposal.candidate);
+          if(!modelPreservesPlanningZones(input.currentScene.planningZones,sceneSchema.parse(proposal.candidate).planningZones))throw new ApiError('PLANNING_ZONES_WRITE_PROTECTED',409);
           if(dimensionConflicts(proposal.candidate).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(proposal.candidate));
           if(!canApplyStructuralChange(input.currentScene,sceneSchema.parse(proposal.candidate)))throw new ApiError('STRUCTURAL_COLLISION',422,structuralViolations(proposal.candidate));
           if(!canApplyConfirmedDoorwayChange(input.currentScene,sceneSchema.parse(proposal.candidate)))throw new ApiError('DOORWAY_BLOCKED',422);
@@ -484,12 +513,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           // client did not review and must not be discarded by restoring base.
           requireOriginalSceneWritable(previous.candidate);
           requireOriginalSceneWritable(previous.base_scene);
+          if(!modelPreservesPlanningZones(sceneSchema.parse(previous.candidate).planningZones,sceneSchema.parse(previous.base_scene).planningZones))throw new ApiError('PLANNING_ZONES_WRITE_PROTECTED',409);
           const restored=await backend.scene(actor,'history.restore',{...input,projectId});
           const projected=projectSceneResponse(restored);const previousScene=projectUnverifiedScene(restored.previousScene as z.infer<typeof sceneSchema>);
           return respond({...projected,previousScene:previousScene.scene,previousProjection:previousScene.projection,warnings:sceneWarnings(sceneSchema.parse(restored.scene))});
         }
         if(tail==='/publish' && method==='POST') {
           const input=z.strictObject({expectedRevision:z.number().int().nonnegative()}).parse(await json());
+          const publishing=await backend.scene(actor,'projects.get',{projectId});
+          if(publishing.scene?.planningZones!==undefined)throw new ApiError('PLANNING_ZONES_SHARING_UNSUPPORTED',422);
           const base=required(env,'PUBLIC_APP_URL');
           const shareToken=randomToken();
           const result=await backend.scene(actor,'publish',{...input,projectId,tokenHash:await sha256(shareToken)});

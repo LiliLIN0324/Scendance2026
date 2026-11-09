@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {planningZonesFitVenue,planningZonesSchema} from './planning-zones-contract.ts';
 import { structuralViolations } from './structural-geometry.ts';
 import presetManifest from './preset-manifest.json' with { type: 'json' };
 
@@ -125,14 +126,16 @@ export const designSchema=z.strictObject({
 const sceneObjectsSchema=z.array(objectSchema).max(500).superRefine((objects,ctx)=>{
   if(duplicateUuidIds(objects.map(object=>object.id)))ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
 });
-const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
+const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool']),planningZones:planningZonesSchema.optional()};
 export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon}).superRefine((s,ctx)=>{
+  if(s.planningZones&&!planningZonesFitVenue(s.planningZones,s.venue))ctx.addIssue({code:'custom',path:['planningZones'],message:'planning zones cannot be verified within venue'});
   if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
   // V1 has no structure layer, so a site block here could only dangle; keep the
   // entrance list as the v1 truth and forbid the v2-only site on it.
   if(s.venue.site)ctx.addIssue({code:'custom',message:'V1 场景不支持 site 信息'});
 });
 export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCommon,structure:structureSchema,sources:z.array(sourceSchema).max(12).default([]),dimensions:z.array(dimensionSchema).max(128).default([]),design:designSchema.optional(),finishes:z.strictObject({floorColor:colorSchema.optional(),floorPattern:z.enum(['solid','wood','tile','carpet','concrete']).optional(),wallColors:z.record(uuid,colorSchema).optional()}).optional()}).superRefine((s,ctx)=>{
+  if(s.planningZones&&!planningZonesFitVenue(s.planningZones,s.venue))ctx.addIssue({code:'custom',path:['planningZones'],message:'planning zones cannot be verified within venue'});
   // Cached V2 entrances may reference openings; only ordinary objects collide.
   if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
   const entityIds=[...s.objects,...s.structure.walls,...s.structure.openings,...s.structure.columns].map(x=>x.id);

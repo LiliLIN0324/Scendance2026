@@ -15,7 +15,8 @@ import { consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/l
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 import {projectUnverifiedScene} from '../../../../supabase/functions/_shared/scene-text-projection';
 import { assetCloudLabel, cloudAssetIdMap, prepareLayoutAssetsForCloud, useAssetCloudRecords } from '../lib/asset-cloud';
-import { assertCloudZoneSupport, backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { assertCloudZoneSupport, backendSceneToLayout, layoutCarriesCloudZones, layoutToBackendScene } from '../lib/backend-adapter';
+import { cloudZoneWriteMode } from '../../../../supabase/functions/_shared/planning-zones-contract';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -383,7 +384,16 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
   async function saveBoundSceneQuiet(): Promise<void> {
     const currentLayout = layoutRef.current;
-    await assertCloudTransition(currentLayout);
+    const projectId = controller.getSnapshot().project?.id;
+    const serverHasZones = controller.getSnapshot().project?.scene.planningZones !== undefined;
+    const carriesZones = layoutCarriesCloudZones(currentLayout) || serverHasZones;
+    const capability = carriesZones && projectId ? await controller.readPlanningZonesCapability(projectId) : { supported: false as const };
+    const zoneMode = cloudZoneWriteMode(carriesZones, capability);
+    if (zoneMode === 'rectangle-v1') {
+      assertCloudZoneSupport(currentLayout, true);
+      await assertNoLocalRecordsCloudTransition(currentLayout);
+      assertCloudZoneSupport(currentLayout, true);
+    } else await assertCloudTransition(currentLayout);
     assertNoLocalHandoffCloudTransition(layoutRef.current);
     if (layoutRef.current !== currentLayout) throw new Error('保存前画布有新改动，当前草稿已保留。请稍后再试。');
     // 先让本机生成的 GLB 上云并拿到 asset_id，再把本机号换成云端号；失败就停下来报状态，不只报「不能做什么」。
@@ -392,11 +402,16 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       const names = prepared.failures.map(failure => `“${failure.name}”（${assetCloudLabel(failure.state)}）`).join('、');
       throw new Error(`本机模型还没上传成功：${names}。${prepared.failures[0]?.message ?? ''} 本机副本保留着，下次保存会继续重试。`);
     }
-    const scene = layoutToBackendScene(currentLayout, { assetIdMap: prepared.assetIdMap, localAssetIds: prepared.localAssetIds });
+    const scene = layoutToBackendScene(currentLayout, { assetIdMap: prepared.assetIdMap, localAssetIds: prepared.localAssetIds, ...(zoneMode === 'rectangle-v1' ? { planningZonesV1: true as const } : {}) });
     const submitted = JSON.stringify(scene);
     const saved = await controller.saveScene(scene);
-    await assertCloudTransition(currentLayout);
-    await assertCloudTransition(layoutRef.current);
+    if (zoneMode === 'rectangle-v1') {
+      assertCloudZoneSupport(currentLayout, true);
+      assertCloudZoneSupport(layoutRef.current, true);
+    } else {
+      await assertCloudTransition(currentLayout);
+      await assertCloudTransition(layoutRef.current);
+    }
     setSavedFingerprint(submitted);
     if (saved.warnings.length) setNotice('已自动保存，请留意场地重叠提示。');
   }
