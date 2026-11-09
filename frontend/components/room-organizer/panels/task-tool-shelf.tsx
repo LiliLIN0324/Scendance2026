@@ -9,6 +9,7 @@ import {
   checkBlockReason,
   handoffBlockReason,
   taskToolNextStep,
+  taskToolOpenGroup,
   type TaskToolGroup,
 } from './task-tool-next';
 import './task-tool-shelf.css';
@@ -42,16 +43,20 @@ export function TaskToolShelf({
 }): JSX.Element {
   const agent = useAgent();
   const studio = useStudioAgent();
-  const [picked, setPicked] = useState(false);
-  const [group, setGroup] = useState<TaskToolGroup>('space');
+  // null 表示人还没点过。数据自己变（放进一件、读出存档）不把眼前的工具换掉。
+  const [manual, setManual] = useState<TaskToolGroup | null>(null);
+  const [seenActivity, setSeenActivity] = useState(activityKey);
+  if (seenActivity !== activityKey) {
+    setSeenActivity(activityKey);
+    setManual(null);
+  }
   const [note, setNote] = useState('');
   // null = 还没在这格里改过。默认 24 是脚手架，不能拿来判断「已经填了」。
   const [entry, setEntry] = useState<{ text: string; committed: boolean } | null>(null);
 
   useEffect(() => {
     if (!groupRequest) return;
-    setPicked(true);
-    setGroup(groupRequest.group);
+    setManual(groupRequest.group);
   }, [groupRequest]);
 
   useEffect(() => {
@@ -67,14 +72,13 @@ export function TaskToolShelf({
   const unconfirmed = agent.state === 'planProposed' || agent.proposal !== null;
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
   const step = taskToolNextStep({ venueReady, peopleStated, itemCount, planShown });
-  const shown: TaskToolGroup = picked ? group : step.group;
+  const shown = manual ?? taskToolOpenGroup({ venueReady, itemCount });
   const checkReason = checkBlockReason({ itemCount, generating, unconfirmed });
   const handoffReason = handoffBlockReason({ itemCount, generating, unconfirmed });
   const peopleText = entry ? entry.text : (!studio || scaffold ? '' : String(studio.brief.guests));
 
   const choose = (next: TaskToolGroup) => {
-    setPicked(true);
-    setGroup(next);
+    setManual(next);
     setNote('');
   };
 
@@ -138,21 +142,12 @@ export function TaskToolShelf({
       </div>
       <div
         className="sc-task-panel"
+        onPointerDown={() => setManual(shown)}
         role="tabpanel"
         id={`task-panel-${shown}`}
         aria-labelledby={`task-tab-${shown}`}
       >
-        {shown === 'space' && (
-          <>
-            <div className="sc-task-actions">
-              <button type="button" className={step.focus === 'venue' ? 'sc-task-primary' : 'sc-task-secondary'} onClick={() => agent.startVenuePicker()}>定场地</button>
-              <button type="button" className="sc-task-secondary" disabled={!agent.callbacks.onOpenReference} onClick={() => agent.callbacks.onOpenReference?.()}>看图纸和照片</button>
-              <a className="sc-task-secondary" href="/guide/capture">用手机拍场地</a>
-            </div>
-            {!agent.callbacks.onOpenReference && <p className="sc-task-reason">图纸入口还没接上。</p>}
-            <div className="sc-task-slot">{spaceSlot}</div>
-          </>
-        )}
+        {shown === 'space' && <div className="sc-task-slot">{spaceSlot}</div>}
         {shown === 'material' && (
           <div className="sc-task-slot">{materialSlot}</div>
         )}

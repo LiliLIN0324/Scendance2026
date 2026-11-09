@@ -135,6 +135,32 @@
 .sc-task-more summary { cursor: pointer; color: #55585f; font-size: 12px; line-height: 20px; }
 .sc-task-more[open] { display: flex; flex-direction: column; gap: 8px; }
 .sc-task-slot { min-width: 0; min-height: 0; }
+.sc-planner { display: flex; flex-direction: column; gap: 10px; }
+.sc-planner-lead { margin: 0; font-weight: 600; }
+.sc-planner-note { margin: 0; color: #55585f; font-size: 12px; line-height: 20px; }
+.sc-planner-size, .sc-planner-choices, .sc-planner-items {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none;
+}
+.sc-planner-size label, .sc-planner-search {
+  display: flex; align-items: center; gap: 6px; color: #141416;
+}
+.sc-planner input {
+  height: 32px; width: 88px; padding: 0 8px;
+  border: 1px solid #e4e4e7; border-radius: 6px; background: #fff; color: #141416; font: inherit;
+}
+.sc-planner-search input { width: 140px; }
+.sc-planner-choices button, .sc-planner-choices a, .sc-planner-items button, .sc-planner-quiet, .sc-planner-confirm button {
+  min-height: 36px; padding: 0 12px; border: 1px solid #e4e4e7; border-radius: 8px;
+  background: #fff; color: #141416; font: inherit; font-weight: 500; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.sc-planner-items button { background: #4A7C59; color: #fff; border-color: #4A7C59; }
+.sc-planner-fold { display: flex; flex-direction: column; gap: 8px; }
+.sc-planner-fold ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sc-planner-fold button { text-align: left; }
+.sc-planner-fold small { display: block; color: #55585f; font-size: 12px; font-weight: 400; }
+.sc-planner-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sc-planner-confirm p { margin: 0; flex-basis: 100%; }
 .sc-task-tools .sc-library.is-card,
 .sc-task-tools .sc-space-panel.is-card {
   display: block;

@@ -50,12 +50,12 @@ function shelf(venueReady = false) {
 }
 
 describe('task tool shelf', () => {
-  it('shows one next step and a real venue button on an empty project', () => {
+  it('opens the space body when there is no venue', () => {
     shelf(false);
     expect(screen.getByRole('status').textContent).toBe('下一步：点「定场地」。');
-    fireEvent.click(screen.getByRole('button', { name: '定场地' }));
-    expect(startVenuePicker).toHaveBeenCalledOnce();
+    expect(screen.getByRole('tab', { name: '空间' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('空间内容')).toBeTruthy();
+    expect(screen.queryByText('物料内容')).toBeNull();
   });
 
   it('opens the library once a venue exists, and keeps check actions in that one body', () => {
@@ -98,6 +98,24 @@ describe('task tool shelf', () => {
     expect(screen.getByRole('status').textContent).toBe('下一步：填写这场来多少人。');
     fireEvent.change(input, { target: { value: '24' } });
     expect(input.value).toBe('24');
+  });
+
+  it('does not jump to another tool when the scene gains objects', () => {
+    const view = shelf(true);
+    fireEvent.click(screen.getByRole('tab', { name: '物料' }));
+    expect(screen.getByRole('tab', { name: '物料' }).getAttribute('aria-selected')).toBe('true');
+    view.rerender(
+      <TaskToolShelf
+        venueReady
+        itemCount={4}
+        groupRequest={null}
+        onOpenChecklist={vi.fn()}
+        spaceSlot={<p>空间内容</p>}
+        materialSlot={<p>物料内容</p>}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: '物料' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: '检查' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('follows an external material request onto the material tab', () => {

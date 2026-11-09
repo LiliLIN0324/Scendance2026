@@ -67,8 +67,8 @@ describe('左栏助手与下方工具', () => {
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');
     expect(source).not.toContain('<VenueLibraryPanel');
-    expect(source).toContain('<SpacePanel variant="card"');
-    expect(source).toContain('<ScendanceLibrary variant="card"');
+    expect(source).toContain('<PlannerSpace');
+    expect(source).toContain('<PlannerMaterials');
     expect(source).toContain("onToggle={() => toggleAgent('door')}");
     expect(source).not.toContain('<MapRailButton');
     expect(source).not.toContain('AgentReopenCard');
