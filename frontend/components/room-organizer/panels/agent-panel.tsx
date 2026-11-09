@@ -23,7 +23,7 @@ import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maxi
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
-import { chipsAfterFulfilled, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
+import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -79,7 +79,7 @@ import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE, SAFETY_CHECKS_UNKNOWN_TEXT, SEATING_ALLOCATION_UNVERIFIED_TEXT, SEATING_HEADCOUNT_UNVERIFIED_TEXT, SEATING_SPECS_UNVERIFIED_TEXT,
   checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutGenerateCommand, mentionsUnsupportedSeating, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutGenerateCommand, lightPlanRail, mentionsUnsupportedSeating, normalizeOralSize, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
   prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type RevisionRequest, type VenueIO,
 } from '../lib/workbench-agent';
@@ -87,6 +87,7 @@ import { proposalDifferences } from '../three/proposal-preview';
 import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
 import { aholoChatStep, planGenerationLine, understandingLine } from '../lib/cloud-tool-connection';
+import { layoutChatHint, revisionRefusalText } from '../lib/layout-feedback';
 import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
@@ -174,7 +175,7 @@ type Scale = { length: number; width: number; origin: ScaleOrigin };
 
 /** 只有整句话都能解释为尺寸调整时，才允许绕过方案预览直接改场地。 */
 function isExplicitSizeOnly(text: string): boolean {
-  const remainder = text.toLowerCase().replace(/\d+(?:\.\d+)?\s*(?:米|m)?\s*[×x*]\s*\d+(?:\.\d+)?\s*(?:米|m)?/g, '')
+  const remainder = normalizeOralSize(text.toLowerCase().replace(/[×X＊✕]/g, 'x')).replace(/\d+(?:\.\d+)?\s*(?:米|m)?\s*[×x*]\s*\d+(?:\.\d+)?\s*(?:米|m)?/g, '')
     .replace(/\d+(?:\.\d+)?\s*(?:平方米|平米|平方公尺|㎡|m²|m2)/g, '')
     .replace(/(?:把|将|场地|场馆|空间|长宽|尺寸|大小|面积|室内|户外|室外|的|改成|改为|调整为|调整成|调成|调为|设为|设置为|换成|变成|是|到|为|请|一下|大约|约|左右)/g, '')
     .replace(/[\s，,。.!！：:；;]/g, '');
@@ -696,10 +697,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
   function clearFulfilledChip(text:string|null):void {
     const id=boundSessionId.current,value=text?.trim()??'';
-    if(!id||!value)return;
+    if(!id)return;
     const current=[...(incompleteDialogueTurns.current.get(id)??[])];
-    if(chipsAfterFulfilled(current,[value]).length===current.length)return;
-    updateDialogueIncomplete(id,value,false);
+    const next=chipsAfterLayoutPreview(current,value?[value]:[]);
+    for(const gone of current) if(!next.includes(gone)) updateDialogueIncomplete(id,gone,false);
   }
   function beginLayoutAttempt(text:string,cloud:boolean):void {
     const value=text.trim();
@@ -1202,12 +1203,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(!matches){say({role:'agent',amber:true,text:'当前画布精度无法准确完成这个旋转角度；请调整后重试，本次没有修改画布。'});return;}
     }
     if (!plan.applied) {
-      const alternative = plan.conflicts.find(conflict => conflict.alternative);
-      const why = plan.conflicts[0]?.message ?? '没找到要改的物件';
-      const alt = alternative?.alternative
-        ? `可放到 (${alternative.alternative.x}, ${alternative.alternative.z})。`
-        : '';
-      say({ role: 'agent', amber: true, text: `这句没改成：${why}。${alt}` });
+      say({ role: 'agent', amber: true, text: revisionRefusalText(plan.conflicts) });
       return;
     }
     if (!pending) {proposalBase.current = structuredClone(live.current);proposalFloor.current=floorToken;}
@@ -1682,9 +1678,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 原因跟着共享账本来，不再只留一个数字。明细仍完整留在下面那张卡。
     const planned = scriptSummaryOf(plan, memoryRef.current);
     const counted = outcomeLines(planView.outcome).filter(line => line.length > 0).join('；');
-    say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
-      ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。`
-      : `${intro}${planned}${counted ? `${counted}。` : ''}${tail}` });
+    const hint = layoutChatHint(plan);
+    say({ role: 'agent', amber: !!planView.blocked || !!hint, text: planView.blocked
+      ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。${hint ? hint : ''}`
+      : `${intro}${planned}${counted ? `${counted}。` : ''}${tail}${hint ? hint : ''}` });
   }
 
   /**
@@ -1950,7 +1947,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     let plan: PlanProposal;
     const anchors = anchorsRef.current;
-    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
+    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
@@ -2779,9 +2776,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     const zoneLine = `${zoneBit ? `${zoneBit}先占位。` : ''}${unspecified.length ? `${unspecified.join('、')}尚未说明，这版暂不包含。` : ''}`;
+    const rail = lightPlanRail(trimmed);
+    const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
     say({ role: 'agent', text: turn.filledScaleAsk
-      ? `记下了：${summary}${carried}。${zoneLine}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
-      : `按这些先出一版：${summary}${carried}。${zoneLine}画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
+      : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}画布上是预览，点「确认布置」才写进画布。${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
     runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }

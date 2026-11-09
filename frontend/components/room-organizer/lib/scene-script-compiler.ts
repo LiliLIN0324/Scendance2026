@@ -3,6 +3,7 @@ import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { DIAGNOSTIC_REASON, mergeDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { floorKeepOut } from './floor-keep-out';
 import { buildFurnitureSet, FURNITURE_SETS, type FurnitureSet } from './furniture-sets';
+import { ringCenters, ringDiningSet } from './ring-seating';
 import { hasCollisions, rotatedHalfExtents, type CollisionContext } from './geometry';
 import { randomSuffix } from './ids';
 import {
@@ -42,6 +43,8 @@ export interface SceneScriptCompileContext {
   floorIndex: number;
   /** Test seam: deterministic ids so two compiles can be compared field by field. */
   makeId?: () => string;
+  /** Round tables on a ring. Omitted keeps the rectangular dining grid. */
+  seatingShape?: 'ring';
 }
 
 /** One line of the ledger: what a role asked for, what landed, what was refused. */
@@ -343,6 +346,7 @@ export function compileSceneScript(script: SceneScript, context: SceneScriptComp
       },
       refusals,
       ledger,
+      ...(context.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}),
     });
     // Several seating zones: the worst one decides. A zone that could not settle must not be
     // hidden by the next zone reporting a clean pass.
@@ -421,6 +425,7 @@ interface SeatingDeps {
   setCurrent: (layout: RoomLayout) => void;
   refusals: SceneScriptRefusal[];
   ledger: (role: SceneScriptZoneRole) => SceneScriptOp;
+  seatingShape?: 'ring';
 }
 
 /**
@@ -442,7 +447,8 @@ type SeatingOutcome = { passes: number; converged: boolean; capacity: number; up
 function fillSeating(script: SceneScript, zone: SceneScriptZone, deps: SeatingDeps): SeatingOutcome {
   const rect = zoneRectOf(zone);
   const mode = script.layoutMode;
-  const set = mode === 'desk-chair' ? null : FURNITURE_SETS.find((entry) => entry.key === 'dining');
+  const ring = deps.seatingShape === 'ring' && mode !== 'desk-chair';
+  const set = mode === 'desk-chair' ? null : ring ? ringDiningSet() : FURNITURE_SETS.find((entry) => entry.key === 'dining');
   const measured = set ? measureSet(set, deps.base, deps.makeId) : measurePair(deps.makeId);
   const asked = zone.count ?? script.guests ?? 0;
   // A build that comes back empty means the set itself cannot exist in this venue (a 2 m
@@ -468,7 +474,7 @@ function fillSeating(script: SceneScript, zone: SceneScriptZone, deps: SeatingDe
     .map((variant) => {
       const live: Vec2[] = [];
       let blocker: { accepted?: boolean; reason?: string; code?: SceneScriptIssue['code'] } = {};
-      for (const center of gridSlots(rect, variant, script.constraints.wallGapM)) {
+      for (const center of seatingSlots(rect, variant, script, ring)) {
         const probe = deps.fitsSet(center, variant);
         if (probe.accepted) live.push(center);
         else if (!blocker.code) blocker = probe;
@@ -488,7 +494,7 @@ function fillSeating(script: SceneScript, zone: SceneScriptZone, deps: SeatingDe
   const usableArea = Math.max(0, rect.w - 2 * script.constraints.wallGapM)
     * Math.max(0, rect.d - 2 * script.constraints.wallGapM);
   const areaSets = cellArea > 0 ? Math.floor(usableArea / cellArea) : 0;
-  const slotCount = gridSlots(rect, oriented, script.constraints.wallGapM).length;
+  const slotCount = seatingSlots(rect, oriented, script, ring).length;
   const upperOf = (alive: number) => Math.max(alive * seatsPerSet, (areaSets - (slotCount - alive)) * seatsPerSet);
   let upper = upperOf(candidates.length);
   if (!candidates.length) {
@@ -671,6 +677,16 @@ function deskChairPair(center: Vec2, pairId: string): FurnitureItem[] {
 }
 
 /** Grid of set centres inside a zone, measured from the set's real footprint. */
+function seatingSlots(rect: ZoneRect, measured: MeasuredSet, script: SceneScript, ring: boolean): Vec2[] {
+  if (!ring) return gridSlots(rect, measured, script.constraints.wallGapM);
+  return ringCenters(
+    { x: rect.x, z: rect.z, w: rect.w, d: rect.d },
+    { halfX: measured.halfX, halfZ: measured.halfZ },
+    script.constraints.wallGapM,
+    script.constraints.aisleMinM,
+  );
+}
+
 function gridSlots(rect: ZoneRect, measured: MeasuredSet, wallGap: number): Vec2[] {
   const usableW = rect.w - 2 * wallGap;
   const usableD = rect.d - 2 * wallGap;

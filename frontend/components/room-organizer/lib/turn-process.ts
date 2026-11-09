@@ -25,3 +25,18 @@ export function chipsAfterFulfilled(chips: readonly string[], fulfilled: readonl
   const done = new Set(fulfilled.map(item => item.trim()).filter(Boolean));
   return chips.filter(item => !done.has(item));
 }
+
+const LAYOUT_CHIP = /围着坐|大家围着|围成|围坐|围一圈|圆桌|布置|摆一下|摆一版|出一版|先出/;
+const EDIT_CHIP = /挪|移动|删除|删掉|旋转|放大|缩小|加一把|加一张|导出|清单/;
+
+/** A layout preview also retires earlier seating chips. Named edits stay. */
+export function chipsAfterLayoutPreview(chips: readonly string[], fulfilled: readonly string[]): string[] {
+  const exact = chipsAfterFulfilled(chips, fulfilled);
+  const layout = fulfilled.some(text => LAYOUT_CHIP.test(text.replace(/\s+/g, '')) || /出方案|摆/.test(text.replace(/\s+/g, '')));
+  if (!layout) return exact;
+  return exact.filter(chip => {
+    const compact = chip.replace(/\s+/g, '');
+    if (EDIT_CHIP.test(compact)) return true;
+    return !LAYOUT_CHIP.test(compact);
+  });
+}

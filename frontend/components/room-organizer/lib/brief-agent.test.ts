@@ -180,6 +180,21 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
     }
   });
 
+  it('想围着坐、围着坐、大家围着走座位，不说没接住', () => {
+    const ready = { ...initialBriefMemory(), headcount: 30, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
+    for (const text of ['想围着坐', '围着坐', '大家围着']) {
+      const turn = parseBriefTurn(text, ready, venueUp);
+      expect(turn.kind, text).toBe('generate');
+      expect(turn.text, text).not.toContain('没接住');
+      expect(turn.memory.layoutMode, text).toBe('dining');
+      expect(turn.memory.seatingShape, text).toBe('ring');
+    }
+    const bareAsk = parseBriefTurn('想围着坐', initialBriefMemory(), bare);
+    expect(bareAsk.kind).toBe('ask');
+    expect(bareAsk.text).not.toContain('没接住');
+    expect(bareAsk.memory.seatingShape).toBe('ring');
+  });
+
   it('沙发围一圈改成圆桌预览，不说没接住', () => {
     const memory = { ...initialBriefMemory(), headcount: 30, venueIO: 'indoor' as const, lengthM: 12, widthM: 9, layoutMode: 'desk-chair' as const, layoutModeConfirmed: true };
     const turn = parseBriefTurn('沙发围成一圈', memory, venueUp);
