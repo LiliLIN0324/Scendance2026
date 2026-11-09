@@ -217,6 +217,8 @@ interface ProposalView extends PendingPlan {
   recolorPreview?: string[];
   candidateArea?: number;
   comparisonOnly?: boolean;
+  /** Zone and seat lines from the script, shown on the card instead of one long bubble. */
+  planNotes?: string[];
   seatWarning?: string;
   annotationWarning?: string;
   functionalWarnings?: string[];
@@ -353,21 +355,12 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
     ...(base && candidate ? {existingChanges:describeExistingChanges(proposalDifferences(base,candidate),base,candidate)} : {}),
     ...(plan.seatingReview ? {seatingReview:plan.seatingReview} : {}),
     ...(candidate ? { candidateArea: venueArea(candidate) } : {}),
+    ...((() => {
+      const planNotes = ((plan as PlanProposal & { summary?: string[] }).summary ?? []).filter(line => line.trim() && !/尚未确认/.test(line));
+      return planNotes.length ? { planNotes } : {};
+    })()),
     ...((plan as PlanProposal & {localDraftDetails?:string[]}).localDraftDetails ? {localDraftDetails:(plan as PlanProposal & {localDraftDetails:string[]}).localDraftDetails} : {}),
   };
-}
-
-/** 脚本那一路会带上「计划读白」：先让人核对计划，再看绿框；旧路径没有计划可念。 */
-function scriptSummaryOf(plan: PlanProposal, memory?: BriefMemory): string {
-  const summary = (plan as PlanProposal & { summary?: string[] }).summary;
-  if (!Array.isArray(summary) || !summary.length) return '';
-  const lines = summary.filter(line => {
-    if (!memory) return true;
-    if (/尚未确认是否需要签到/.test(line) && memory.zoneNeeds.checkin === null && !memory.unresolvedActivityNeeds.includes('checkin')) return false;
-    if (/尚未确认是否需要舞台/.test(line) && memory.zoneNeeds.stage === null && !memory.unresolvedActivityNeeds.includes('stage')) return false;
-    return true;
-  });
-  return lines.length ? `${lines.join(' · ')}。` : '';
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
@@ -1651,7 +1644,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   async function presentProposal(token: number, lead?: string): Promise<void> {
     const plan = proposal.current;
     if (!plan) return;
-    const intro = lead ?? (plan.kind === 'review' ? '这版改法：' : '先出一版可拖的初稿：');
+    const intro = lead ?? (plan.kind === 'review' ? '这版改法。' : '先出一版可拖的初稿。');
     phaseRef.current='generating';setPhase('generating');
     for (let step = shownSteps.current; step < plan.layouts.length; step++) {
       if (!sessionScopeIsCurrent()) return;
@@ -1673,15 +1666,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     phaseRef.current='proposed';setPhase('proposed');
     const planView = viewOfLocalPlan(plan, proposalBase.current ?? undefined);
-    const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
-    // 脚本那一路先把计划念一遍（哪些区、各多大、几座），再报件数与原因；两件都摆不下时
-    // 原因跟着共享账本来，不再只留一个数字。明细仍完整留在下面那张卡。
-    const planned = scriptSummaryOf(plan, memoryRef.current);
-    const counted = outcomeLines(planView.outcome).filter(line => line.length > 0).join('；');
+    const tail = planView.review ? '还没落盘。点「确认布置」才挪。' : '还没落盘，点确认才写进画布。';
     const hint = layoutChatHint(plan);
     say({ role: 'agent', amber: !!planView.blocked || !!hint, text: planView.blocked
-      ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。${hint ? hint : ''}`
-      : `${intro}${planned}${counted ? `${counted}。` : ''}${tail}${hint ? hint : ''}` });
+      ? `这版先看着改。确认先不亮。${hint ? hint : ''}`
+      : `${intro}${tail}${hint ? hint : ''}` });
   }
 
   /**
@@ -2779,8 +2768,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const rail = lightPlanRail(trimmed);
     const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
     say({ role: 'agent', text: turn.filledScaleAsk
-      ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
-      : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出预览，确认后才写入。${suffix}`
+      : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
     runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }
@@ -3175,43 +3164,15 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
-    <p className="ap-small">{REFERENCE_SOURCE_UNVERIFIED}</p>
-    {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
-    {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {plan.recolorPreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.rotationPreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.scalePreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.movementPreview?.map(line => <p className="ap-small" key={line}>{line}</p>)}
-    {plan.restPreview?.map(line => <p className="ap-small" key={line}>{line}；通行和消防条件待核验。</p>)}
+    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
     <div className="ap-outcome" role="note" aria-label="本次结果">
       <p className="ap-outcome-label">本次结果 · {formatArea(plan.candidateArea ?? venueArea(layout))} ㎡</p>
-      {plan.source === 'local' && plan.added > 0 && <p className="ap-small">新增物料由系统规则生成。</p>}
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
     </div>
-    {!!plan.existingChanges?.length && <details open className="ap-existing-changes">
-      <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
-      <p className="ap-small">确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
-      <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
-    </details>}
-    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
-    {/* 一次重排的结果不能证明场地容量上限。 */}
+    {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
+    {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
     {short && !plan.localDraftDetails && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
-    {short && !plan.localDraftDetails && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
-    {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
-    {plan.safetyChecksUnknown && <p className="ap-warn-line">{SAFETY_CHECKS_UNKNOWN_TEXT}</p>}
-    {plan.seatingAllocationUnverified && <p className="ap-warn-line" role="status">{SEATING_ALLOCATION_UNVERIFIED_TEXT}</p>}
-    {plan.seatingHeadcountUnverified && <p className="ap-warn-line" role="status">{SEATING_HEADCOUNT_UNVERIFIED_TEXT}</p>}
-    {plan.seatingSpecsUnverified && <p className="ap-warn-line" role="status">{SEATING_SPECS_UNVERIFIED_TEXT}</p>}
-    {plan.seatingShortfall && <p className="ap-warn-line" role="status">{plan.seatingShortfall}</p>}
-    {plan.seatingReview?.status==='broken' && <p className="ap-warn-line" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
-    {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
-    {plan.localDraftDetails?.map(line=><p className="ap-small" key={line}>{line}</p>)}
-    {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
-    {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
-    {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
-    {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
-    {agent.inventoryWorkspace}
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
@@ -3219,6 +3180,36 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
           {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
         </>}
+    <div className="ap-notes">
+      {plan.source === 'local' && plan.added > 0 && <p>新增物料由系统规则生成。</p>}
+      {plan.planNotes?.map(line => <p key={line}>{line}</p>)}
+      {plan.recolorPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.rotationPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.scalePreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.movementPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.restPreview?.map(line => <p key={line}>{line}；通行和消防条件待核验。</p>)}
+      {short && !plan.localDraftDetails && plan.seatPriority && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+      {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
+      {plan.safetyChecksUnknown && <p className="ap-warn-line">{SAFETY_CHECKS_UNKNOWN_TEXT}</p>}
+      {plan.seatingAllocationUnverified && <p className="ap-warn-line" role="status">{SEATING_ALLOCATION_UNVERIFIED_TEXT}</p>}
+      {plan.seatingHeadcountUnverified && <p className="ap-warn-line" role="status">{SEATING_HEADCOUNT_UNVERIFIED_TEXT}</p>}
+      {plan.seatingSpecsUnverified && <p className="ap-warn-line" role="status">{SEATING_SPECS_UNVERIFIED_TEXT}</p>}
+      {plan.seatingShortfall && <p className="ap-warn-line" role="status">{plan.seatingShortfall}</p>}
+      {plan.seatingReview?.status==='broken' && <p className="ap-warn-line" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
+      {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
+      {plan.localDraftDetails?.map(line=><p key={line}>{line}</p>)}
+      {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
+      {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
+      {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
+      {!!plan.existingChanges?.length && <details className="ap-existing-changes">
+        <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
+        <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
+        <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
+      </details>}
+      <p>{REFERENCE_SOURCE_UNVERIFIED}</p>
+    </div>
+    {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
+    {agent.inventoryWorkspace}
   </div>;
 }
 

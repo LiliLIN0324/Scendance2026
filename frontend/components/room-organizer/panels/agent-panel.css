@@ -82,12 +82,12 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-stage-bar i.is-on { background: var(--ap-deep); }
 
 /* ── 对话流 ── */
-.ap-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ap-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 20px; display: flex; flex-direction: column; gap: 14px; }
 .ap-divider { text-align: center; font-size: var(--fs-cap); color: var(--wk-muted); margin: 0; display: flex; align-items: center; gap: 8px; }
 .ap-divider::before, .ap-divider::after { content: ''; flex: 1; height: 1px; background: var(--wk-hair); }
-/* AI 回话 = 过程块（v2.5 AI-native）：非厚气泡——左侧 2px 发丝竖线 + 无底色，读起来像正在进行的推理记录。 */
-.ap-agent { margin: 0; line-height: 1.6; max-width: 92%; font-size: var(--fs-p1); background: transparent; border: 0; border-left: 2px solid var(--wk-hair); border-radius: 0; padding: 2px 0 2px 12px; }
-.ap-agent.is-amber { border-left-color: var(--warn); }
+/* 回话是短气泡，不是左侧发丝线上的一整段记录。 */
+.ap-agent { margin: 0; line-height: 1.55; max-width: 100%; font-size: 13.5px; color: var(--wk-ink); background: var(--wk-plane); border: 0; border-radius: 14px; padding: 10px 12px; }
+.ap-agent.is-amber { background: #fbf6ef; box-shadow: inset 3px 0 0 var(--warn); }
 /* 清单/文案这类多行回话保留换行结构。 */
 .ap-agent.is-long { white-space: pre-line; }
 /* 消息进场：200ms 淡入上浮（§一.3 动效 token），尊重 reduced-motion。 */
@@ -115,7 +115,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-guide-chip strong { display: block; font-size: var(--fs-p1); font-weight: 500; color: var(--ink); }
 .ap-guide-chip small { display: block; font-size: var(--fs-cap); color: var(--ap-grey); }
 /* 用户行 = 墨色气泡（右上收口）：与 AI 浅灰气泡拉开身份差，聊天气泡感的核心。 */
-.ap-user { align-self: flex-end; max-width: 82%; background: var(--wk-ink); color: #fff; border-radius: 16px 4px 16px 16px; padding: 10px 14px; display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-p1); }
+.ap-user { align-self: flex-end; max-width: 88%; background: var(--wk-ink); color: #fff; border-radius: 14px 14px 4px 14px; padding: 8px 12px; display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; }
 .ap-user strong { font-weight: 500; display: block; word-break: break-all; }
 .ap-user.is-file strong { font-weight: 600; }
 .ap-user small { display: block; font-size: var(--fs-cap); color: rgba(255, 255, 255, .64); }
@@ -124,7 +124,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-user .ap-warn span { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .28); color: #fff; font-size: 10px; font-weight: 700; flex: 0 0 14px; }
 
 /* ── 信息卡 ── */
-.ap-card { border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.ap-card { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .ap-status-card { gap: 8px; padding: 8px 10px; }
 .ap-status-line { margin: 0; font-size: var(--fs-p2); line-height: 1.45; color: var(--wk-ink-soft); }
 .ap-status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -187,7 +187,10 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-outcome-label { font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-outcome-line { font-size: var(--fs-p2); color: var(--wk-ink-soft); font-weight: 600; }
 /* 座位这件事要能一眼对上人数：单独一行，不混在件数里。 */
-.ap-plan .ap-seats { font-size: var(--fs-p2); font-weight: 600; color: var(--wk-ink-soft); }
+.ap-plan .ap-seats { font-size: 16px; line-height: 1.35; font-weight: 600; color: var(--wk-ink); letter-spacing: -0.01em; }
+.ap-notes { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px solid var(--wk-hair); }
+.ap-notes p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--wk-muted); }
+.ap-notes .ap-warn-line { color: var(--warn); font-size: 12px; }
 .ap-plan .ap-seat-fix { margin: -4px 0 0; }
 .ap-ok-line { color: var(--ap-green); font-size: var(--fs-p2); }
 .ap-warn-line { color: var(--warn); font-size: var(--fs-p2); display: flex; align-items: flex-start; gap: 5px; }
