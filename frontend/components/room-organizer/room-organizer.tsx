@@ -11,7 +11,7 @@ import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib
 import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
-import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
+import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
@@ -2727,6 +2727,26 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     initiallyFramed.current = false;
   }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards,flushPendingBeforeSwitch,activitySession.isCurrent,sessionToken]);
 
+  const commitFreshActivityLayout = useCallback((candidate: RoomLayout, clearance: FreshActivityScopeClearance): void => {
+    workspaceWriteGuards?.assertLayoutWrite();
+    if (!activitySession.isCurrent(sessionToken)) throw new Error('活动已变化，未新建活动。');
+    if (controller.getSnapshot().project || new URL(window.location.href).searchParams.has('project')) {
+      throw new Error('当前页面已连接或正在打开云项目，请在本地工作台新建活动。');
+    }
+    const before = layoutStore.getState().layout;
+    if ((before.id ?? null) !== (candidate.id ?? null)) flushPendingBeforeSwitch();
+    if (layoutStore.getState().layout !== before) throw new Error('保存期间活动已变化，未新建活动。');
+    const json = commitFreshLocalActivityLayout(candidate, {
+      current: () => layoutStore.getState().layout,
+      apply: value => actions.applyLayout(value),
+      beforeReplace: () => { workspaceWriteGuards?.assertLayoutWrite(); commitHistoryNow(); snapshotBeforeReplace(before, workspaceWriteGuards?.assertLayoutWrite); workspaceWriteGuards?.assertLayoutWrite(); },
+    }, clearance);
+    const created = layoutStore.getState().layout;
+    acknowledgeRestoredLayout(created, json);
+    clearTransientSelection(); clearHistory(created);
+    initiallyFramed.current = false;
+  }, [actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards, flushPendingBeforeSwitch, activitySession.isCurrent, sessionToken, controller]);
+
   const onApplyCreative = useCallback((next: RoomLayout, options?: { preserveProvenance?: boolean; expectedBase?: RoomLayout; expectedFloor?: FloorSessionToken }) => {
     workspaceWriteGuards?.assertLayoutWrite();
     if(!activitySession.isCurrent(sessionToken))throw new Error('活动已变化，请重新核对方案。');
@@ -3301,7 +3321,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       issues.push(...checkFunctionalRequirements(candidate, activeFloorIndex, { checkin: memory?.zoneNeeds.checkin ?? null, stage: memory?.zoneNeeds.stage ?? null })
         .filter(check => check.status === 'unknown' && memory?.zoneNeeds[check.kind] != null).map(check => check.message));
       return issues.length ? issues.join(' ') : null;
-    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} commitFreshActivityLayout={commitFreshActivityLayout} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
       if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。');
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
