@@ -145,7 +145,7 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
       kind: z.enum(['exterior', 'interior']).optional().parse(w.kind),
       status: z.enum(['detected', 'inferred', 'confirmed']).optional().parse(w.status), color: w.color,
     })),
-    zones: floor.zones?.map(v => ({ id: v.id, name: v.name, color: v.color, x: v.x, z: v.z, w: v.w, d: v.d })),
+    zones: floor.zones?.map(v => ({ id: v.id, name: v.name, color: v.color, ...(v.zoneType===undefined?{}:{zoneType:v.zoneType}), x: v.x, z: v.z, w: v.w, d: v.d })),
     items: floor.items.map(item => ({
       id: item.id, name: item.name, type: item.type, materialId: item.materialId, source: item.source,
       width: item.width, depth: item.depth, height: item.height, color: item.color,

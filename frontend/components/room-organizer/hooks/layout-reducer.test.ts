@@ -1142,6 +1142,24 @@ describe('layoutReducer — room zones (#155)', () => {
     expect(layoutReducer(state, { type: 'addZone', zone: { ...bedroom, id: 'z2', w: Number.NaN } })).toBe(state);
   });
 
+  it('preserves valid semantic edits and rejects malformed zone types without breaking legacy areas',()=>{
+    const initial=stateWith([]);
+    for(const value of ['unknown',null,'__proto__']){
+      const bad={...bedroom,zoneType:value} as unknown as typeof bedroom;
+      expect(layoutReducer(initial,{type:'addZone',zone:bad})).toBe(initial);
+    }
+    const legacy=withZone(),reserved=layoutReducer(legacy,{type:'updateZone',id:'z1',patch:{zoneType:'reserved'}});
+    expect(activeZones(reserved)?.[0]).toMatchObject({zoneType:'reserved'});
+    expect(layoutReducer(reserved,{type:'updateZone',id:'z1',patch:{zoneType:'reserved'}})).toBe(reserved);
+    const renamed=layoutReducer(reserved,{type:'updateZone',id:'z1',patch:{name:'保留空间'}});
+    expect(activeZones(renamed)?.[0]).toMatchObject({name:'保留空间',zoneType:'reserved'});
+    for(const value of ['unknown',null,'__proto__']){
+      const bad={zoneType:value} as unknown as {zoneType:'reserved'};
+      expect(layoutReducer(renamed,{type:'updateZone',id:'z1',patch:bad})).toBe(renamed);
+    }
+    expect(activeZones(legacy)?.[0]).not.toHaveProperty('zoneType');
+  });
+
   it('updateZone renames / recolours / re-fits, keeping identity when nothing changes', () => {
     const state = withZone();
     const renamed = layoutReducer(state, { type: 'updateZone', id: 'z1', patch: { name: 'Study', color: '#f59e0b' } });

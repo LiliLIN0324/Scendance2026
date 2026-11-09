@@ -27,9 +27,10 @@ describe('appendPlanZones', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.addedZones).toHaveLength(2);
-    expect(result.addedZones[0]).toMatchObject({ name: '访客接待（签到区）', color: '#4A7C59', x: -4.2345, z: -3.1234, w: 1.2345, d: 1.3456 });
+    expect(result.addedZones[0]).toMatchObject({ name: '访客接待（签到区）', zoneType:'checkin', color: '#4A7C59', x: -4.2345, z: -3.1234, w: 1.2345, d: 1.3456 });
     expect(result.addedZones[0]!.id).toBe('plan-zone:draft-1:z1:2');
     expect(result.addedZones[1]!.name).toBe('饮水角（普通区域）');
+    expect(result.addedZones[1]).not.toHaveProperty('zoneType');
     expect(result.layout.floors[0]!.zones).toEqual(result.addedZones);
     expect(result.ignoredAnnotationIds).toEqual(['door', 'route']);
     expect(result.remainingDraft?.annotations.map(item => item.id)).toEqual(['door', 'route']);
@@ -37,6 +38,20 @@ describe('appendPlanZones', () => {
     expect(parseStoredLayout(JSON.parse(JSON.stringify(result.layout)))?.floors[0]!.zones).toEqual(result.addedZones);
     expect(input).toEqual(original);
     expect(source).toEqual(originalDraft);
+  });
+
+  it('retains reserved semantics across JSON storage without inferring old names',()=>{
+    const input=scene(), source=draft([{...zone('keep',-3,-3,'留空'),zoneType:'reserved'}]);
+    const result=appendPlanZones(input,0,source);expect(result.ok).toBe(true);if(!result.ok)return;
+    const parsed=parseStoredLayout(JSON.parse(JSON.stringify(result.layout)));
+    expect(parsed?.floors[0]?.zones?.[0]?.zoneType).toBe('reserved');
+    const legacy=scene();legacy.floors[0]!.zones=[{id:'old',name:'预留区',color:'#4A7C59',x:0,z:0,w:1,d:1}];
+    expect(parseStoredLayout(JSON.parse(JSON.stringify(legacy)))?.floors[0]?.zones?.[0]).not.toHaveProperty('zoneType');
+    const needsRepair=JSON.parse(JSON.stringify(result.layout));needsRepair.floors[0].zones[0].unrecognized='discard';
+    const repaired=parseStoredLayout(needsRepair);
+    expect(repaired?.floors[0]?.zones?.[0]?.zoneType).toBe('reserved');
+    expect(repaired?.floors[0]?.zones?.[0]).not.toHaveProperty('unrecognized');
+    needsRepair.floors[0].zones[0].zoneType='fire_exit';expect(parseStoredLayout(needsRepair)).toBeNull();
   });
 
   it('keeps existing areas and other floors without mutating them', () => {

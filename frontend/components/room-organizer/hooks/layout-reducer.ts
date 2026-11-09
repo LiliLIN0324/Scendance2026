@@ -32,7 +32,7 @@ import {
   streetLevel,
 } from '../lib/street';
 import { canApplyLayoutGeometry, isEvidenceProtectedWall, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
-import { MAX_ZONES, clampZoneRect, sameZone } from '../lib/zones';
+import { MAX_ZONES, clampZoneRect, isValidZoneType, sameZone } from '../lib/zones';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type {
@@ -956,7 +956,7 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
     case 'addZone':
       return withActiveFloor(state, (floor) => {
         const zones = floor.zones ?? [];
-        if (zones.length >= MAX_ZONES || zones.some((zone) => zone.id === action.zone.id)) return floor;
+        if (!isValidZoneType(action.zone.zoneType) || zones.length >= MAX_ZONES || zones.some((zone) => zone.id === action.zone.id)) return floor;
         const rect = clampZoneRect(action.zone, state.layout.width, state.layout.height);
         if (!rect) return floor;
         return { ...floor, zones: [...zones, { ...action.zone, ...rect, name: capName(action.zone.name) }] };
@@ -967,6 +967,7 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         const current = floor.zones?.find((zone) => zone.id === action.id);
         if (!current || !floor.zones) return floor;
         const merged: RoomZone = { ...current, ...action.patch, id: current.id };
+        if (!isValidZoneType(merged.zoneType)) return floor;
         merged.name = capName(merged.name);
         const rect = clampZoneRect(merged, state.layout.width, state.layout.height);
         if (!rect) return floor;

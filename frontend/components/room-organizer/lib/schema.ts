@@ -670,7 +670,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
 });
 const VEC2_KEYS = ['x', 'z'] as const;
 const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true, thickness: true, height: true, kind: true, status: true });
-const ZONE_KEYS = keysOf<RoomZone>({ id: true, name: true, color: true, x: true, z: true, w: true, d: true });
+const ZONE_KEYS = keysOf<RoomZone>({ id: true, name: true, color: true, zoneType: true, x: true, z: true, w: true, d: true });
 const ROOF_KEYS = keysOf<RoofSpec>({ style: true, color: true, dormers: true });
 const DORMER_KEYS = keysOf<DormerSpec>({
   id: true,
