@@ -7,18 +7,18 @@ import type { FurnitureItem, RoomLayout } from './types';
  * 智能建造确认护栏（纯函数）。
  *
  * 已接入：
- * - proposal：对话「确认布置」与云端预览确认，候选票据带 candidateId + requirementVersion
+ * - proposal：对话「确认布置」、云端预览确认，以及创意工作室 applyPreview
  * - review：体检改法提案，以及原始场景局部移动确认
- * - rebuild：场地重建草稿勾选后的「确认应用场地修改」
- * - material：物料个性化预览确认
+ * - rebuild：场地草稿「确认应用场地修改」，以及「确认结构并继续设计」的需求版本
+ * - material：物料个性化预览，以及创意工作室 applyMaterial
  * - restore：历史恢复副本确认
  *
- * 冲突（大面板未整文件改写）：
- * - agent-panel 里地图圈地、空白场地、风格历史保存仍各自返回，不在本护栏里重写状态机
- * - creative-studio 的 applyPreview / applyMaterial，以及 room-organizer 的 onApplyCreative，
- *   仍由调用前的确认入口负责票据；这里不改这两份大面板的应用状态机
- * - 重建面板里「确认结构并继续设计」仍走识别任务，不在本次最小接线内
- * - 不改 conversation-api / auth
+ * 仍未改写的大面板状态机：
+ * - room-organizer 的 onApplyCreative 不在确认入口里重绑票据
+ * - agent-panel 的地图圈地、空白场地、风格历史保存仍各自返回
+ * - 「确认结构并继续设计」提交的是识别后的 SceneV2，不是画布 RoomLayout，
+ *   因此只核对候选编号与需求版本；锁定物件的编号、位置和尺寸写进需求摘要，不用件数代替
+ * - 不改 conversation-api / auth，也不另起活动 Agent
  */
 
 export const CONFIRMATION_ENTRIES = ['proposal', 'rebuild', 'material', 'review', 'restore'] as const;
@@ -114,6 +114,49 @@ export function requirementFromText(text: string): RequirementState {
   if (!normalized) return emptyRequirement();
   const digest = requirementDigest(normalized);
   return acceptRequirement(emptyRequirement(), { inputId: digest, text: digest });
+}
+
+export interface MaterialApplyConfirmation {
+  ticket: CandidateTicket;
+  liveText: string;
+}
+
+/** 结构确认的需求正文。锁定物件按编号写入，不用件数。 */
+export function structureConfirmationText(input: {
+  structure: unknown;
+  objects: ReadonlyArray<{ id: string; locked?: boolean; position?: unknown; rotation?: number; size?: unknown }>;
+  width: string;
+  depth: string;
+  height: string;
+  constraints: unknown;
+  adjustment: string;
+  note: string;
+  event: string;
+  guests: number | null;
+  mustHave: string;
+  description: string;
+}): string {
+  const objects = [...input.objects].map(object => ({
+    id: object.id,
+    locked: object.locked === true,
+    position: object.position ?? null,
+    rotation: object.rotation ?? 0,
+    size: object.size ?? null,
+  })).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  return JSON.stringify({
+    structure: input.structure,
+    objects,
+    width: input.width,
+    depth: input.depth,
+    height: input.height,
+    constraints: input.constraints,
+    adjustment: input.adjustment,
+    note: input.note,
+    event: input.event,
+    guests: input.guests,
+    mustHave: input.mustHave,
+    description: input.description,
+  });
 }
 
 /** 问候、停止、确认口令、以及只读问答不算新需求，避免普通问答清掉当前预览。 */

@@ -487,6 +487,30 @@ describe('reconstruction entry',()=>{
   expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
   fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));expect(create.mock.calls[1]![0].reviewedScene?.structure.walls.every(w=>w.status==='confirmed')).toBe(true);
  });
+ it('does not continue a checked structure after the activity requirement changes',async()=>{
+  const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  if(measured.schemaVersion!==2)throw new Error('expected v2');
+  const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[{code:'UNSEEN',message:'核对不可见结构'}]};
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
+  const updateImage=vi.fn(),onApply=vi.fn();
+  const brief={...INITIAL_BRIEF,description:'保留结构，活动布置'};
+  const props={controller,layout,onApply,images:[image],updateImage,brief};
+  const view=render(<Panel {...props}/>);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
+  const summary=screen.queryByText('无平面图？手输长宽（旁路）');if(summary)fireEvent.click(summary);
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3 米'}});
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
+  await screen.findByText('需要人工核验的事项。');
+  fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));
+  view.rerender(<Panel {...props} brief={{...brief,mustHave:'改为 40 人'}}/>);
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));
+  const button=screen.getByRole('button',{name:'确认结构并继续设计'}) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  fireEvent.click(button);
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(document.body.textContent).toContain('上一版候选已失效');
+  expect(onApply).not.toHaveBeenCalled();
+ });
  it('does not offer object geometry edits that the review service would reject',async()=>{
   const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
   if(measured.schemaVersion!==2)throw new Error('expected v2');

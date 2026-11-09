@@ -9,7 +9,7 @@ import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { ScenePreview } from '../../business/scene-preview';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
-import { bindCandidate, captureProtection, confirmEntry, requirementFromText, type CandidateTicket } from '../lib/confirmation-guard';
+import { bindCandidate, captureProtection, confirmEntry, requirementFromText, type CandidateTicket, type MaterialApplyConfirmation } from '../lib/confirmation-guard';
 import { mergeProposalPresentation } from '../lib/creative-brief';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
@@ -21,7 +21,7 @@ export interface MaterialCustomizationSeed {
   objectIds: string[]; name: string; reason: string; materialScope: 'all_materials'|'choose_materials';
   changes?: MaterialChange | undefined; variantAssetId?: string; modelSuggested?: boolean | undefined;
 }
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; seed?: MaterialCustomizationSeed | undefined; active?: boolean }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout, confirmation?: MaterialApplyConfirmation): void; seed?: MaterialCustomizationSeed | undefined; active?: boolean }
 interface Context { scope: string; targetKey: string; base: RoomLayout; projectId: string | null; bindingKey: string; identityEpoch: number; revision: number | null; localRevision: number; generation?: number | undefined; sessionId: string }
 interface Preview { intent: Intent; context: Context; formKey: string; proposal: SceneProposal; before: AuthorizedAssets; after: AuthorizedAssets; confirmation: CandidateTicket }
 interface Intent { customizeId: string; proposalId: string; proposalKey?: string; proposalExpiresAt?: number; proposalApplied?: boolean; variantId?: string }
@@ -216,7 +216,7 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
       const live=requirementFromText(formKey);
       const decision=confirmEntry({entry:'material',ticket:selected.confirmation,claim:{entry:'material',candidateId:selected.intent.proposalId,requirementVersion:selected.confirmation.requirementVersion},live,baseline:captureProtection(selected.context.base),candidate:next});
       if(!decision.ok)throw new Error(decision.message);
-      onApply(next);setPreview(null);setNotice('已应用到选定物件。原版本保留，可在此预览恢复父版本，也可使用画布撤销。');
+      onApply(next,{ticket:selected.confirmation,liveText:formKey});setPreview(null);setNotice('已应用到选定物件。原版本保留，可在此预览恢复父版本，也可使用画布撤销。');
     } catch(error) { if(mounted.current&&token===operation.current)setNotice(assetError(error)); }
     finally { if(token===operation.current){pending.current=false;if(mounted.current)setBusy(false);} }
   }

@@ -45,6 +45,7 @@ import { buildReviewReference } from '../lib/review-copy';
 import { appendAgentRunEvents, appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { setBriefHeadcount } from './brief-headcount-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
+import { bindCandidate, captureProtection, confirmEntry, requirementFromText, type CandidateTicket, type MaterialApplyConfirmation } from '../lib/confirmation-guard';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend, proposalWarningText, seatingShortfallText } from '../lib/workbench-agent';
 import { type WorkbenchMode } from '../lib/workbench-mode';
@@ -100,7 +101,7 @@ export interface VenueSourceGuard {
   subscribeInvalidation(listener:()=>void):()=>void;
 }
 type AnnotationEvidence={observation:NonNullable<AgentRunInput['context']['annotationObservation']>;provenance:readonly AnnotationProof[];projectBinding:AnnotationProjectBinding|null;base:RoomLayout};
-type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string; sessionToken?: ActivitySessionToken | null | undefined; floorToken?:FloorSessionToken|null|undefined; venueBinding?: VenueBinding | null | undefined; seatingCapture?:Extract<SeatingAllocationCapture,{status:'ready'}>|null|undefined; annotationEvidence?:AnnotationEvidence|undefined };
+type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string; sessionToken?: ActivitySessionToken | null | undefined; floorToken?:FloorSessionToken|null|undefined; venueBinding?: VenueBinding | null | undefined; seatingCapture?:Extract<SeatingAllocationCapture,{status:'ready'}>|null|undefined; annotationEvidence?:AnnotationEvidence|undefined; confirmation?: CandidateTicket };
 type CheckinRestoreWrite = { scope: string; before: MaterialCheckinLedger | undefined; attempted: MaterialCheckinLedger | undefined };
 type SourceRestoreWrite = { scope: string; before: SourceScopeSnapshot; attempted: SourceScopeSnapshot };
 type ApplyRecovery = { projectId: string; revision: number; proposalId: string; outcome: 'pending' | 'committed' | 'cleanup_failed'; storageScope?: string; baseRevision?: number; baseHash?: string; candidateHash?: string };
@@ -474,6 +475,10 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   const previewRef=useRef(preview);previewRef.current=preview;
   const trackedPreview=useRef<{owner:Preview;access:PendingCandidateAccess}|null>(null);
   function setTrackedPreview(next:Preview|null):void {
+    if(next&&next.confirmation?.candidateId!==next.proposal.id){
+      const ticket=bindCandidate('proposal',next.proposal.id,requirementFromText(next.briefKey));
+      if(ticket)next.confirmation=ticket;
+    }
     if(next&&pendingCandidates&&!pendingCandidates.register('cloud',next))throw new Error('活动已变化，未保留旧方案预览。');
     if(!next&&trackedPreview.current){trackedPreview.current.access.clear('cloud',trackedPreview.current.owner);trackedPreview.current=null;}
     if(next&&pendingCandidates)trackedPreview.current={owner:next,access:pendingCandidates};
@@ -1785,6 +1790,14 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     if(applyRecoveryRef.current || readApplyRecovery(storageScope) || readApplyRecovery(selected.scope))throw new Error('云端与本地版本尚待核对，请先处理版本差异。');
     await assertCurrentLocalRecords(layoutRef.current);
     if(layoutRef.current!==selected.base || !baseIsCurrent(selected.base) || briefRef.current!==selected.briefKey) throw new Error('场景或需求已变化，请重新生成候选。');
+    const decision=confirmEntry({
+      entry:'proposal',ticket:selected.confirmation,
+      claim:{entry:'proposal',candidateId:selected.proposal.id,requirementVersion:selected.confirmation?.requirementVersion??-1},
+      live:requirementFromText(briefRef.current),
+      baseline:captureProtection(selected.base),
+      candidate:selected.layout,
+    });
+    if(!decision.ok)throw new Error(decision.message);
     if ((selected.base.designBook?.variants.length ?? 0) >= MAX_DESIGNS) throw new Error('请先在图层面板移除不再需要的方案，再确认提案。');
     const prepared=addDesign(selected.base,selected.layout);
     const preparedKey=canonical(prepared);
@@ -2295,7 +2308,15 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     if(docked)resizeWorkspace(true);
   }
   const generationContext:GenerationContext={...(sourceAssetId?{sourceAssetId}:{}),sourceObjectIds:sourceAssetId?selectedItems.map(item=>item.id):[],onVariantReady:variant=>previewMaterial({...variant,objectIds:variant.objectIds??[],name:'纹理新版本',reason:'核对纹理与原模型后，仅替换指定物件。',materialScope:'all_materials',modelSuggested:false})};
-  function applyMaterial(next:RoomLayout):void {
+  function applyMaterial(next:RoomLayout, confirmation?:MaterialApplyConfirmation):void {
+    const decision=confirmEntry({
+      entry:'material',ticket:confirmation?.ticket,
+      claim:{entry:'material',candidateId:confirmation?.ticket.candidateId??'',requirementVersion:confirmation?.ticket.requirementVersion??-1},
+      live:requirementFromText(confirmation?.liveText??''),
+      baseline:captureProtection(studio.layout),
+      candidate:next,
+    });
+    if(!decision.ok)throw new Error(decision.message);
     const changed=next.floors.flatMap(floor=>floor.items).filter(item=>item.assetId&&sceneItems.some(previous=>previous.id===item.id&&previous.assetId!==item.assetId));
     studio.onApply(next);
     if(changed.length&&changed.every(item=>item.assetId===changed[0]!.assetId))previewMaterial({sourceAssetId:changed[0]!.assetId!,objectIds:changed.map(item=>item.id),name:'已更新的物料',reason:'可继续调整或预览恢复父版本。',materialScope:'all_materials',modelSuggested:false});

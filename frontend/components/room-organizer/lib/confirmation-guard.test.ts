@@ -11,6 +11,7 @@ import {
   requirementFromText,
   reviewProtection,
   protectionPolicy,
+  structureConfirmationText,
   type ConfirmationEntry,
   type RequirementState,
 } from './confirmation-guard';
@@ -167,6 +168,27 @@ describe('五个入口共用确认护栏', () => {
     });
     expect(refused.ok).toBe(false);
     if (!refused.ok) expect(refused.ids).toContain('locked-desk');
+  });
+
+  it('结构确认把锁定物件的编号和位置写进需求版本，场景对象不是画布布局', () => {
+    const base = {
+      structure: { walls: [{ id: 'wall-1' }] },
+      objects: [{ id: 'locked-door', locked: true, position: { x: 1, z: 2 }, rotation: 0, size: { width: 1, depth: 0.2, height: 2 } }],
+      width: '12', depth: '8', height: '3', constraints: [], adjustment: '', note: '',
+      event: '讲座', guests: 30, mustHave: '保留原有物件', description: '室内',
+    };
+    const live = requirementFromText(structureConfirmationText(base));
+    const ticket = bindCandidate('rebuild', `structure:${live.digest}`, live)!;
+    const moved = structureConfirmationText({ ...base, objects: [{ ...base.objects[0]!, position: { x: 4, z: 2 } }] });
+    const next = requirementFromText(moved);
+    expect(decideConfirmation(ticket, { entry: 'rebuild', candidateId: ticket.candidateId, requirementVersion: live.version }, next)).toMatchObject({
+      ok: false, code: 'STALE_REQUIREMENT', ids: [ticket.candidateId],
+    });
+    const sameCount = structureConfirmationText({
+      ...base,
+      objects: [{ id: 'other-door', locked: true, position: { x: 1, z: 2 }, rotation: 0, size: { width: 1, depth: 0.2, height: 2 } }],
+    });
+    expect(decideConfirmation(ticket, { entry: 'rebuild', candidateId: ticket.candidateId, requirementVersion: live.version }, requirementFromText(sameCount)).ok).toBe(false);
   });
 
   it('恢复入口拒绝用数量相同的另一批物件换掉锁定编号', () => {

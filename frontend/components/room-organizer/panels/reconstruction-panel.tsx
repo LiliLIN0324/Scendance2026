@@ -15,7 +15,7 @@ import { referenceSceneBasis, referenceStructure, resolveReferenceImage, type Re
 import { containedImagePoint, parseDimensionText, readSourceForm, readSourceRecordSnapshot, storeSourceForm, registerSourceFlush, type ImagePoint, type SourceWriteGuard } from '@/lib/source-storage';
 import { FloorPlanRuler, type RulerConfirmation } from './floor-plan-ruler';
 import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
-import { bindCandidate, captureProtection, confirmEntry, requirementFromText, type CandidateTicket } from '../lib/confirmation-guard';
+import { bindCandidate, captureProtection, confirmEntry, decideConfirmation, requirementFromText, structureConfirmationText, type CandidateTicket } from '../lib/confirmation-guard';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { reconstructionSafetyChecklist } from '../../../../supabase/functions/_shared/reconstruction-safety';
 import { useSelection } from '../contexts';
@@ -105,6 +105,17 @@ interface VenueEditDraft {
   epoch: number; sessionKey: string; width: string; depth: string;
   openings: SceneV2['structure']['openings']; confirmed: boolean;
   confirmation: CandidateTicket | null;
+}
+function structureText(review: SceneV2, form: Form, brief: Props['brief']): string {
+  return structureConfirmationText({
+    structure: review.structure,
+    objects: review.objects,
+    width: form.width, depth: form.depth, height: form.height,
+    constraints: form.constraints, adjustment: form.adjustment, note: form.text,
+    event: brief.eventConfirmed === true ? brief.event : '',
+    guests: brief.guestsConfirmed === true ? brief.guests : null,
+    mustHave: brief.mustHave ?? '', description: brief.description ?? '',
+  });
 }
 function venueRequirement(draft: Pick<VenueEditDraft, 'width' | 'depth' | 'openings'>) {
   return requirementFromText(canonical({
@@ -273,6 +284,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
   const [mode,setMode]=useState<''|'restore'|'redesign'>('');
   const [reidentify,setReidentify]=useState(false);
   const [job,setJob]=useState<ReconstructionJob|null>(null),[review,setReview]=useState<SceneV2|null>(null),[reviewConfirmed,setReviewConfirmed]=useState(false);
+  const structureTicket=useRef<CandidateTicket|null>(null);
   const [scaleLength,setScaleLength]=useState('');
   const [rulerFocusRequest,setRulerFocusRequest]=useState(0);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[pollingPaused,setPollingPaused]=useState(false);
@@ -351,7 +363,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
   useEffect(()=>{
     let cancelled=false;hydratedScope.current=null;setLoaded(false);setLoadError('');
     const writer=drawingWriter.current;let readTicket:object|undefined;try{readTicket=writer?.beginRead();}catch{/* coordinator remains unknown */}
-    formRef.current=EMPTY;setForm(EMPTY);setRevealedDimensions(new Set());setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');setReviewConfirmed(false);
+    formRef.current=EMPTY;setForm(EMPTY);setRevealedDimensions(new Set());setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');structureTicket.current=null;setReviewConfirmed(false);
     formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{
       if(cancelled)return;
       if(saved!==undefined){
@@ -388,8 +400,8 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
   }),[scope,sourceWriteGuard]);
   useEffect(()=>{if(!formReady||referenceSaving.current)return;const taskGuard=sourceWriteGuard;formSaveTimer.current=setTimeout(()=>{if(referenceSaving.current||scopeRef.current!==scope||hydratedScope.current!==scope)return;void saveForm(scope,formRef.current,taskGuard).catch(error=>{if(scopeRef.current===scope)setNotice(errorText(error));});},250);return()=>clearTimeout(formSaveTimer.current);},[form,formReady,scope]); // A new lease alone must not silently replay an old draft.
   useEffect(()=>{if(openReferenceRequest>0)inputDetails.current?.scrollIntoView?.({block:'nearest'});},[openReferenceRequest,formReady]);
-  useEffect(()=>{setReviewConfirmed(false);setScaleLength('');},[review]);
-  useEffect(()=>{setReviewConfirmed(false);},[form.width,form.depth,form.height,form.constraints]);
+  useEffect(()=>{structureTicket.current=null;setReviewConfirmed(false);setScaleLength('');},[review]);
+  useEffect(()=>{structureTicket.current=null;setReviewConfirmed(false);},[form.width,form.depth,form.height,form.constraints]);
   useEffect(()=>{setExpired(false);if(!preview)return;const remaining=Date.parse(preview.proposal.expires_at)-Date.now();if(remaining<=0){setExpired(true);return;}const timer=setTimeout(()=>setExpired(true),Math.min(remaining,2_147_000_000));return()=>clearTimeout(timer);},[preview]);
   useEffect(()=>{onPreview?.(venueEdit?(!venueStale?venueCandidate.layout:null):preview&&!stale?preview.layout:null);},[venueEdit,venueStale,venueCandidate.layout,preview,stale,onPreview]);
   useEffect(()=>()=>onPreview?.(null),[onPreview]);
@@ -546,6 +558,12 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
     if(fixed.some(([, ,value])=>value!==''&&(!Number.isFinite(Number(value))||Number(value)<=0))){setNotice('填写的尺寸须为大于零的米数。');return;}
     if(!(layout.backendSceneV2&&!reidentify&&!sourcesChanged)&&!fixed.some(([kind,,value])=>kind!=='height'&&Number(value)>0)&&!form.constraints.some(d=>d.kind!=='height'&&d.valueMeters>0)&&!hasConfirmedRulerScale){setNotice('请先完成两点标尺，或（无平面图时）手输一项平面尺寸。');return;}
     if(continueReview&&(!review||!reviewConfirmed||reviewStale)){setNotice('请先核对并确认候选结构；场景或要求变化后须重新识别。');return;}
+    if(continueReview&&review){
+      const live=requirementFromText(structureText(review,form,brief));
+      const ticket=structureTicket.current;
+      const decision=decideConfirmation(ticket,{entry:'rebuild',candidateId:ticket?.candidateId??'',requirementVersion:ticket?.requirementVersion??-1},live);
+      if(!decision.ok){setNotice(decision.message);return;}
+    }
     const base=layoutRef.current,submittedInput=inputRef.current,submittedScope=scopeRef.current,epoch=scopeEpoch.current.epoch;
     const expectedIdentity=geometryIdentity(controller,submittedScope),expectedSession=sessionKey;
     const submittedImages=[...sourceImages.current];
@@ -723,7 +741,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
       {review.structure.openings.map((o,index)=><details key={o.id}><summary>{o.kind==='door'?'门':'窗'} {index+1} · 墙 {review.structure.walls.findIndex(w=>w.id===o.wallId)+1} · {o.status==='confirmed'?'已确认':'待核对'}</summary><div className="rc-measures">{(['offset','width','height','sillHeight'] as const).map(key=><NumberField disabled key={key} label={{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'窗台高度'}[key]} value={o[key]} onChange={value=>setReview({...review,structure:{...review.structure,openings:review.structure.openings.map(item=>item.id===o.id?{...item,[key]:value}:item)}})}/>)}</div></details>)}
       {review.structure.columns.map((c,index)=><details key={c.id}><summary>柱子 {index+1} · {c.status==='confirmed'?'已确认':'待核对'}</summary><div className="rc-measures"><NumberField disabled label="中心 X" value={c.position.x} onChange={x=>setReview({...review,structure:{...review.structure,columns:review.structure.columns.map(item=>item.id===c.id?{...item,position:{...item.position,x}}:item)}})}/><NumberField disabled label="中心 Z" value={c.position.z} onChange={z=>setReview({...review,structure:{...review.structure,columns:review.structure.columns.map(item=>item.id===c.id?{...item,position:{...item.position,z}}:item)}})}/>{(['width','depth','height'] as const).map(key=><NumberField disabled key={key} label={{width:'柱宽',depth:'柱深',height:'柱高'}[key]} value={c.size[key]} onChange={value=>setReview({...review,structure:{...review.structure,columns:review.structure.columns.map(item=>item.id===c.id?{...item,size:{...item.size,[key]:value}}:item)}})}/>)}</div></details>)}
       {review.objects.length>0&&<div className="rc-review-objects"><h4>核对识别物件与碰撞</h4><p className="cr-hint">有冲突的物件会标记为「需调整」。当前暂不支持在此修改物件的位置、旋转、尺寸或删除；如需调整，请保留资料并重新识别。</p>{review.objects.map((object,index)=><details key={object.id}><summary>{job.issues.some(issue=>issue.targetId===object.id)?'需调整 · ':''}物件 {index+1} · {object.materialId}{object.locked?' · 已锁定':''}</summary>{object.locked?<p>此物件已锁定，请先在主场景中解锁并重新生成。</p>:<><div className="rc-measures"><NumberField disabled label="位置 X" value={object.position.x} onChange={x=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,x}}:o)})}/><NumberField disabled label="位置 Z" value={object.position.z} onChange={z=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,z}}:o)})}/><NumberField disabled label="旋转角度" value={object.rotation} onChange={rotation=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,rotation}:o)})}/>{(['width','depth','height'] as const).map(key=><NumberField disabled key={key} label={{width:'宽度',depth:'深度',height:'高度'}[key]} value={object.size[key]} onChange={value=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,size:{...o.size,[key]:value}}:o)})}/>)}</div><button type="button" className="rc-secondary" disabled onClick={()=>setReview({...review,objects:review.objects.filter(o=>o.id!==object.id),...(review.design?{design:{...review.design,highlights:review.design.highlights.map(h=>({...h,objectIds:h.objectIds.filter(id=>id!==object.id)})),requirements:review.design.requirements.map(r=>({...r,objectIds:r.objectIds.filter(id=>id!==object.id)}))}}:{})})}>删除误识别物件</button></>}</details>)}</div>}
-      <label className="cr-check"><input type="checkbox" checked={reviewConfirmed} onChange={e=>setReviewConfirmed(e.target.checked)}/><span>我已核对所有墙段、门窗、柱子和不可见区域，确认上述结构与尺寸。</span></label><button className="rc-secondary" type="button" disabled={busy||job.state!=='needs_review'||!reviewConfirmed||reviewStale||!confirmedPlanarDimension} onClick={()=>void generate(true)}>确认结构并继续设计</button>{job.state==='ready'&&<p>原任务无法继续核对，请保留资料并重新识别。</p>}
+      <label className="cr-check"><input type="checkbox" checked={reviewConfirmed} onChange={e=>{const confirmed=e.target.checked;if(!confirmed||!review){structureTicket.current=null;setReviewConfirmed(false);return;}const requirement=requirementFromText(structureText(review,form,brief));structureTicket.current=bindCandidate('rebuild',`structure:${requirement.digest}`,requirement);setReviewConfirmed(true);}}/><span>我已核对所有墙段、门窗、柱子和不可见区域，确认上述结构与尺寸。</span></label><button className="rc-secondary" type="button" disabled={busy||job.state!=='needs_review'||!reviewConfirmed||reviewStale||!confirmedPlanarDimension} onClick={()=>void generate(true)}>确认结构并继续设计</button>{job.state==='ready'&&<p>原任务无法继续核对，请保留资料并重新识别。</p>}
     </div>}
     </section>
     <section className="rc-block" aria-label="结果与确认">

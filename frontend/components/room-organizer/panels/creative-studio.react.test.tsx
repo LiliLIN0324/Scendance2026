@@ -29,6 +29,7 @@ import { eventOperationsSchema } from '../../../../supabase/functions/_shared/ev
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { bindCandidate, requirementFromText } from '../lib/confirmation-guard';
 import { buildBriefReference, INITIAL_BRIEF } from '../lib/creative-brief';
 import {initialBriefMemory} from '../lib/brief-agent';
 import {projectDialogueHandoff} from '../lib/dialogue-handoff';
@@ -73,7 +74,7 @@ vi.mock('@/lib/material-checkin-storage', async original => {
     },
   };
 });
-let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
+let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout, confirmation?: { ticket: NonNullable<ReturnType<typeof bindCandidate>>; liveText: string }):void };
 vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
@@ -1807,10 +1808,31 @@ describe('creative brief and assistant interaction', () => {
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'给椅子换色'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
     { const original=await screen.findByText(suggestion.reason); const disclosure=original.closest('details')!; expect(disclosure.open).toBe(false); fireEvent.click(within(disclosure).getByText('查看模型原文（未经核验）')); }
     fireEvent.click(await screen.findByRole('button',{name:'预览材质调整'}));
-    act(()=>materialProps.onApply({...current,floors:current.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,assetId:variantAssetId}))}))}));
+    const liveText='更换已预览的材质';
+    const live=requirementFromText(liveText);
+    const ticket=bindCandidate('material','material-apply',live)!;
+    act(()=>materialProps.onApply({...current,floors:current.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,assetId:variantAssetId}))}))},{ticket,liveText}));
     expect(materialProps.seed).toMatchObject({sourceAssetId:variantAssetId,objectIds:suggestion.objectIds});
     expect(materialProps.seed!.changes).toBeUndefined();
     fireEvent.click(screen.getByRole('button',{name:'使用当前选中物件'}));expect(materialProps.seed).toBeUndefined();
+  });
+  it('refuses a material apply when the requirement version no longer matches', async () => {
+    connected();
+    const sourceAssetId='50000000-0000-4000-8000-000000000001',variantAssetId='50000000-0000-4000-8000-000000000002';
+    const base:Scene={...candidate,objects:[{...candidate.objects[0]!,materialId:'asset',assetId:sourceAssetId}]};
+    const current=backendSceneToLayout(base,{projectId,name:'材质测试'});
+    const suggestion={objectIds:[base.objects[0]!.id],sourceAssetId,name:'蓝色椅子',reason:'仅选中实例',scope:'all_materials' as const,changes:{baseColor:'#285fad'}};
+    vi.mocked(prepareProposal).mockResolvedValueOnce({...proposal,base_scene:base,candidate:base,materialSuggestions:[suggestion]});
+    const applied=vi.fn();
+    function Harness(){const [value,setValue]=useState(current);return <CreativeStudioProvider controller={controller} layout={value} onApply={next=>{applied(next);setValue(next);}}><CreativeAssistant/></CreativeStudioProvider>;}
+    renderUI(<Harness/>);fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'给椅子换色'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    { const original=await screen.findByText(suggestion.reason); const disclosure=original.closest('details')!; fireEvent.click(within(disclosure).getByText('查看模型原文（未经核验）')); }
+    fireEvent.click(await screen.findByRole('button',{name:'预览材质调整'}));
+    const ticket=bindCandidate('material','material-stale',requirementFromText('旧材质要求'))!;
+    const next={...current,floors:current.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,assetId:variantAssetId}))}))};
+    expect(()=>materialProps.onApply(next,{ticket,liveText:'新的材质要求'})).toThrow(/上一版候选已失效/);
+    expect(applied).not.toHaveBeenCalled();
   });
 
   it('ignores a late suggestion after the signed-in account changes', async () => {
