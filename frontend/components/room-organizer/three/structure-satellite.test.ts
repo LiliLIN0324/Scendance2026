@@ -264,6 +264,30 @@ describe('satellite floor texture', () => {
     expect(Math.max(...xs)).toBeGreaterThan(0.95);
   });
 
+  it('keeps a street basemap clear inside the fence and subdued outside without stretching', () => {
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, makeLayout({
+      satelliteGroundRef: true,
+      floorPlanImage: '/api/amap-static?west=120.53&south=30.40&east=120.54&north=30.41&style=7&x-ref=satellite-ground-ref',
+    }));
+    const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
+    const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
+    const floorMaterial = floor.material as THREE.MeshBasicMaterial;
+    const surroundMaterial = surround.material as THREE.MeshBasicMaterial;
+    expect(floor.userData.groundBasemapStyle).toBe(7);
+    expect(surround.userData.groundBasemapStyle).toBe(7);
+    expect(floorMaterial.opacity).toBeGreaterThan(0.85);
+    expect(surroundMaterial.opacity).toBeLessThan(floorMaterial.opacity);
+    expect(surroundMaterial.opacity).toBeLessThan(0.5);
+    const uv = surround.geometry.getAttribute('uv');
+    const xs = Array.from({ length: uv.count }, (_, index) => uv.getX(index));
+    const ys = Array.from({ length: uv.count }, (_, index) => uv.getY(index));
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(-1e-4);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(1 + 1e-4);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(-1e-4);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(1 + 1e-4);
+  });
+
   it('leaves a plain floor when satellite ground is off', () => {
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, makeLayout({

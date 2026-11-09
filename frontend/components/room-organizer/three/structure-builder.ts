@@ -1,4 +1,5 @@
 import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePadMeters, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
+import { groundBasemapOpacity, groundBasemapStyleOf } from '../lib/ground-basemap';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
@@ -147,18 +148,22 @@ export function buildStructureShell(
     if (imageBounds && frame) writeGeographicUv(THREE, floorMesh.geometry, layout.width, layout.height, frame, imageBounds);
     else writeNormalizedUv(THREE, floorMesh.geometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
     floorMat.dispose();
+    // 卫星：圈内清晰、圈外淡。路网同样一张图，圈内更实、圈外更淡，外沿仍停在照片矩形里。
+    const basemapStyle = groundBasemapStyleOf(layout.floorPlanImage);
+    const basemapFade = groundBasemapOpacity(basemapStyle, layout.floorPlanOpacity);
     const satMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: Math.max(0.65, layout.floorPlanOpacity ?? 0.78),
+      opacity: basemapFade.inside,
       side: THREE.DoubleSide,
       depthWrite: true,
     });
     floorMesh.material = satMat;
     floorMesh.userData.satelliteGroundRef = true;
     floorMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
+    floorMesh.userData.groundBasemapStyle = basemapStyle;
 
-    // 圈外仍是同一张卫星，只是更淡。外沿停在照片矩形上，UV 落在 0..1 里，才能看见周边地貌而不是边缘拉丝。
+    // 圈外仍是同一张底图，只是更淡。外沿停在照片矩形上，UV 落在 0..1 里，才能看见周边地貌而不是边缘拉丝。
     const surroundShape = new THREE.Shape();
     surroundShape.moveTo(photoRect.minX, photoRect.minY);
     surroundShape.lineTo(photoRect.maxX, photoRect.minY);
@@ -182,7 +187,7 @@ export function buildStructureShell(
     const surroundMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.55,
+      opacity: basemapFade.outside,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -194,6 +199,7 @@ export function buildStructureShell(
     surroundMesh.userData.satelliteSurroundFade = true;
     surroundMesh.userData.satelliteGroundRef = true;
     surroundMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
+    surroundMesh.userData.groundBasemapStyle = basemapStyle;
     scene.add(surroundMesh);
     // HTMLImageElement 能解开 jpeg 瓦片和 SVG 占位。createImageBitmap 解不开 SVG，
     // 失败时曾经把地面涂成 0x445544（纯橄榄绿），网络里却是 200 的图。

@@ -250,6 +250,26 @@ describe('satellite ground backfill', () => {
     expect(patch?.floorPlanImage).not.toContain('test-static');
   });
 
+  it('asks the proxy for 高德 street tiles when a ground style is requested', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
+    vi.stubGlobal('window', {});
+    const bytes = new Uint8Array(120);
+    bytes[0] = 0xff;
+    bytes[1] = 0xd8;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon: lShapePolygon(), satelliteGround: false,
+    });
+    const patch = await ensureSatelliteGround(layout, 7);
+    expect(patch?.floorPlanImage).toContain('style=7');
+    expect(patch?.floorPlanImage).toContain('satellite-ground-ref');
+    expect(patch?.floorPlanImage).not.toContain('test-static');
+  });
+
   it('geocodes a legacy map shell that never stored a polygon', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');

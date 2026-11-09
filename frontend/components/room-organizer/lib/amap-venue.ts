@@ -653,8 +653,9 @@ export interface SatelliteGroundPatch {
  * 补齐卫星参考底图。同源或本机代理拉到了就用真图；定位失败或探测失败时退回占位 SVG
  * （带 satellite-ground-ref），不要让地面停在素色。已经是占位且这次仍失败则返回 null，避免来回重贴。
  * 图只写 floorPlanImage，不进采集上传。浏览器不携带高德 Key。
+ * style 缺省仍是卫星（6）。地图类型切到路网时传入 7 或 8，地址里带上 style，服务端据此挑瓦片。
  */
-export async function ensureSatelliteGround(layout: RoomLayout): Promise<SatelliteGroundPatch | null> {
+export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 8): Promise<SatelliteGroundPatch | null> {
   const polygon = await resolveSatellitePolygon(layout);
   const located = polygon && polygon.length >= 3 ? polygon : null;
   if (located) {
@@ -666,7 +667,7 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
     const frame = anchored
       ? registration?.frame
       : layout.mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
-    const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height });
+    const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height }, style);
     if (fetched && frame) {
       return {
         floorPlanImage: fetched,
