@@ -150,18 +150,15 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
         {notice && <p role="status">{notice}</p>}
         <div className="ap-composer-bar">
           <div className="ap-composer-left">
-            <details className="sc-chat-plus" aria-label="监督档位">
-              <summary data-tip="监督档位" style={{ fontSize: 12, cursor: 'pointer', color: '#6b7280' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: COLOR_GREEN, display: 'inline-block' }} aria-hidden="true"/>
-                  监督
-                </span>
+            <details className="ap-supervise" aria-label="监督档位">
+              <summary>
+                <span className="ap-supervise-dot" aria-hidden="true"/>
+                监督
               </summary>
               <div
-                className="sc-chat-plus-menu"
+                className="ap-supervise-menu"
                 role="radiogroup"
                 aria-label="监督档位"
-                style={{ padding: '8px 10px', minWidth: 200 }}
               >
                 {([
                   { value: 'strict' as const, label: '严格', hint: '每件家具摆放前都会问你' },
