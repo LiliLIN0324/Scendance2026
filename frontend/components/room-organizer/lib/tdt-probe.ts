@@ -80,6 +80,60 @@ export function tdtProbeTileUrl(layer: TdtProbeLayer, z: number, x: number, y: n
 /** 底图 + 注记的署名行，与天地图 WMTS 使用政策一致。 */
 export const TDT_PROBE_ATTRIBUTION = '底图 © 天地图（CGCS2000）· 数据来自国家地理信息公共服务平台';
 
+/* ---------------- 公开免费图源（无需 key，探针立即可出真图） ---------------- */
+
+/**
+ * 探针可用的公开图源。天地图走 /api/tdt-tiles 代理（待 key）；
+ * OSM/Carto 是公开标准瓦片，浏览器直连即可，均带必显署名。
+ * 使用边界（规划稿 §5.4）：OSM 官方瓦片受用量政策约束，禁止批量抓取，
+ * 重负载需商用瓦片商或自建——探针轻量使用合规，生产另议。
+ */
+export type ProbePublicSource = 'osm' | 'carto-light' | 'carto-dark';
+
+export const PROBE_PUBLIC_SOURCES: readonly ProbePublicSource[] = ['osm', 'carto-light', 'carto-dark'];
+
+export interface PublicSourceSpec {
+  id: ProbePublicSource;
+  label: string;
+  /** 瓦片 URL 模板：{z}/{x}/{y}。OSM 无子域；Carto 用固定 a.basemaps 单域，避免轮询滥用。 */
+  urlTemplate: string;
+  attribution: string;
+}
+
+export const PUBLIC_SOURCE_SPECS: Record<ProbePublicSource, PublicSourceSpec> = {
+  osm: {
+    id: 'osm',
+    label: 'OSM 街道',
+    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap contributors',
+  },
+  'carto-light': {
+    id: 'carto-light',
+    label: 'Carto 浅色',
+    urlTemplate: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap contributors · © CARTO',
+  },
+  'carto-dark': {
+    id: 'carto-dark',
+    label: 'Carto 深色',
+    urlTemplate: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap contributors · © CARTO',
+  },
+};
+
+/** 公开源单层瓦片地址（自带注记，无需叠加层）。 */
+export function publicSourceTileUrl(source: ProbePublicSource, z: number, x: number, y: number): string {
+  return PUBLIC_SOURCE_SPECS[source].urlTemplate.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
+}
+
+/** 图源署名（随当前图源切换）。天地图沿用 TDT_PROBE_ATTRIBUTION。 */
+export function probeSourceAttribution(source: ProbePublicSource | TdtProbeLayer): string {
+  if ((PROBE_PUBLIC_SOURCES as readonly string[]).includes(source)) {
+    return PUBLIC_SOURCE_SPECS[source as ProbePublicSource].attribution;
+  }
+  return TDT_PROBE_ATTRIBUTION;
+}
+
 /**
  * 兜底占位瓦片：当服务端没有 key / 拉不到真瓦片时，在画布上画一块程序化色块网格，
  * 让「满铺 + 缩放 + 拖拽 + 图层切换」交互仍可被验证。网格颜色随 x/y 与图层变化，

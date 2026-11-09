@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PUBLIC_SOURCE_SPECS,
   TDT_PROBE_ATTRIBUTION,
   TDT_PROBE_DEFAULT,
   TDT_PROBE_MAX_ZOOM,
@@ -7,6 +8,8 @@ import {
   TDT_PROBE_TILE,
   lngLatToTileXY,
   metersPerPixel,
+  probeSourceAttribution,
+  publicSourceTileUrl,
   tdtProbeTileUrl,
   visibleTileGrid,
 } from './tdt-probe';
@@ -58,5 +61,21 @@ describe('tdt probe helpers (H0-b)', () => {
     expect(TDT_PROBE_ATTRIBUTION).toContain('天地图');
     expect(TDT_PROBE_MIN_ZOOM).toBeLessThan(TDT_PROBE_MAX_ZOOM);
     expect(TDT_PROBE_TILE).toBe(256);
+  });
+
+  it('builds public-source tile urls with required attributions', () => {
+    expect(publicSourceTileUrl('osm', 15, 27315, 13489)).toBe('https://tile.openstreetmap.org/15/27315/13489.png');
+    expect(publicSourceTileUrl('carto-light', 15, 27315, 13489)).toContain('basemaps.cartocdn.com/light_all/15/27315/13489.png');
+    expect(publicSourceTileUrl('carto-dark', 15, 27315, 13489)).toContain('dark_all/15/27315/13489.png');
+    // OSM 政策要求署名必显。
+    expect(PUBLIC_SOURCE_SPECS.osm.attribution).toContain('OpenStreetMap contributors');
+    expect(PUBLIC_SOURCE_SPECS['carto-light'].attribution).toContain('CARTO');
+  });
+
+  it('switches attribution per probe source', () => {
+    expect(probeSourceAttribution('osm')).toContain('OpenStreetMap');
+    expect(probeSourceAttribution('carto-dark')).toContain('CARTO');
+    expect(probeSourceAttribution('vec')).toContain('天地图');
+    expect(probeSourceAttribution('img')).toContain('天地图');
   });
 });
