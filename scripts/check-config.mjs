@@ -61,9 +61,41 @@ for(const key of ['SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY']) {
 }
 if(present('GENERATION_WORKER_SECRET')) {
   if(Buffer.byteLength(env.GENERATION_WORKER_SECRET,'utf8')<32) problem('GENERATION_WORKER_SECRET','must contain at least 32 bytes; generate a random token');
-  if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY','DEEPSEEK_API_KEY','TOKENDANCE_API_KEY','HUNYUAN_API_KEY'].some(key=>present(key) && env[key]===env.GENERATION_WORKER_SECRET)) problem('GENERATION_WORKER_SECRET','must be independent from API keys');
+  if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY','DEEPSEEK_API_KEY','TOKENDANCE_API_KEY','HUNYUAN_API_KEY','AGENT_CHAT_KEY','BAILIAN_PRODUCT_KEY'].some(key=>present(key) && env[key]===env.GENERATION_WORKER_SECRET)) problem('GENERATION_WORKER_SECRET','must be independent from API keys');
 }
-const ai=group(['TOKENDANCE_API_KEY','DEEPSEEK_API_KEY','AI_MAX_REQUEST_CENTS'],mode==='full');
+// A custom chat provider and the older reconstruction/gateway integration are
+// separate services. AI_MAX_REQUEST_CENTS is shared, not evidence of either key.
+const productSelector=env.BAILIAN_PRODUCT_ENABLED;
+if(productSelector && !['0','1'].includes(productSelector))problem('BAILIAN_PRODUCT_ENABLED','must be 0 or 1');
+const productBailian=productSelector==='1';
+const chatKeys=['AGENT_CHAT_BASE_URL','AGENT_CHAT_KEY','AGENT_CHAT_MODEL'];
+const chatExplicit=['AGENT_CHAT_PROFILE',...chatKeys].some(key=>typeof env[key]==='string' && env[key].length>0);
+const profile=env.AGENT_CHAT_PROFILE;
+if(profile && !['minimax','bailian-qwen'].includes(profile)) problem('AGENT_CHAT_PROFILE','unsupported provider profile');
+function validateChat(keys,selectedProfile) {
+  keys.forEach(required);
+  const baseKey=keys[0];
+  if(present(baseKey)) {
+    try {
+      const url=new URL(env[baseKey]);
+      const localHttp=url.protocol==='http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+      if((!localHttp && url.protocol!=='https:') || url.username || url.password || url.search || url.hash) throw new Error();
+      if(selectedProfile==='bailian-qwen') {
+        const host=url.hostname.toLowerCase();
+        const standardHost=['dashscope.aliyuncs.com','dashscope-intl.aliyuncs.com','dashscope-us.aliyuncs.com','cn-hongkong.dashscope.aliyuncs.com'].includes(host)
+          || /^[a-z0-9-]+\.(cn-beijing|ap-southeast-1|ap-northeast-1|eu-central-1|us-east-1|cn-hongkong)\.maas\.aliyuncs\.com$/.test(host);
+        if((!localHttp && (!standardHost || host.startsWith('token-plan.'))) || url.pathname.replace(/\/+$/,'')!=='/compatible-mode/v1') throw new Error();
+      }
+    } catch { problem(baseKey,'invalid provider endpoint'); }
+  }
+}
+if(chatExplicit) {
+  if(profile==='minimax' && env.AGENT_CHAT_REASONING_EFFORT && !['low','medium','high','xhigh','max'].includes(env.AGENT_CHAT_REASONING_EFFORT)) problem('AGENT_CHAT_REASONING_EFFORT','unsupported reasoning effort');
+  validateChat(chatKeys,profile);
+}
+if(productBailian)validateChat(['BAILIAN_PRODUCT_BASE_URL','BAILIAN_PRODUCT_KEY','BAILIAN_PRODUCT_MODEL'],'bailian-qwen');
+const legacyAiActive=mode==='full' || present('TOKENDANCE_API_KEY') || present('DEEPSEEK_API_KEY') || (present('AI_MAX_REQUEST_CENTS') && !chatExplicit && !productBailian);
+const ai=legacyAiActive?group(['TOKENDANCE_API_KEY','DEEPSEEK_API_KEY','AI_MAX_REQUEST_CENTS'],true):false;
 const generation=group(['HUNYUAN_API_KEY','GENERATION_MAX_TASK_CENTS','HUNYUAN_TERMS_URL','HUNYUAN_TERMS_REVIEWED_AT'],mode==='full');
 if(present('HUNYUAN_API_MODE') && !['tokenhub','legacy'].includes(env.HUNYUAN_API_MODE)) problem('HUNYUAN_API_MODE','must be tokenhub or legacy');
 // Keep these limits aligned with 20261002060307_scene_jobs.sql.
@@ -98,5 +130,8 @@ if(issues.length) {
   process.exitCode=1;
 } else {
   console.log(`Backend configuration passed (${mode}). AI: ${ai?'configured':'disabled'}; 3D generation: ${generation?'configured':'disabled'}; demo: ${seed?'configured':'not requested'}.`);
+  console.log(`AI above refers to the legacy integration. Agent chat: ${chatExplicit || present('TOKENDANCE_API_KEY') || present('DEEPSEEK_API_KEY')?'configured':'disabled'}; tool availability is not verified.`);
+  console.log(`Brief and read-only assistant: ${productBailian?'separate Bailian configuration':'existing provider configuration'}. Agent tools, activity tasks and legacy proposals use the existing provider.`);
   console.log('Local validation only; credentials, migrations, Auth, Storage, cron and provider access have not been verified online.');
+  console.log('Account balance, quota, model access, and connectivity are not checked.');
 }

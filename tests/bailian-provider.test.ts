@@ -11,6 +11,21 @@ const request = (values: Record<string, string>, body: Record<string, unknown>) 
   chatRequest(key => values[key], body);
 
 describe('Bailian Qwen product-backend adapter', () => {
+  it('uses a separate opt-in namespace and preserves the existing request when disabled',()=>{
+    const old={AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'old-fixture-secret',AGENT_CHAT_MODEL:'old-fixture'};
+    const product={BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'new-fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-example'};
+    const oldRequest=chatRequest(key=>old[key as keyof typeof old],{messages:[]},{purpose:'brief'});
+    const disabled=chatRequest(key=>({...old,...product,BAILIAN_PRODUCT_ENABLED:'0'} as Record<string,string>)[key],{messages:[]},{purpose:'brief'});
+    expect(disabled).toEqual(oldRequest);
+    const active={...old,...product,BAILIAN_PRODUCT_ENABLED:'1'};
+    const selected=chatRequest(key=>(active as Record<string,string>)[key],{messages:[]},{purpose:'brief'});
+    expect(selected.url).toContain('dashscope.aliyuncs.com');expect(selected.init.headers).toMatchObject({Authorization:'Bearer new-fixture-secret'});
+    expect(JSON.parse(String(selected.init.body))).toMatchObject({model:'qwen-example',enable_thinking:false});
+    for(const missing of Object.keys(product)){
+      const incomplete={...active,[missing]:''};expect(()=>chatRequest(key=>(incomplete as Record<string,string>)[key],{messages:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_INCOMPLETE');
+    }
+    expect(()=>chatRequest(key=>({...active,BAILIAN_PRODUCT_ENABLED:'yes'} as Record<string,string>)[key],{messages:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_PROFILE_INVALID');
+  });
   it('uses the configured compatible endpoint and Qwen parameters for chat and JSON', () => {
     const result = request(config, { messages: [], response_format: { type: 'json_object' }, max_tokens: 200 });
     expect(result.url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');

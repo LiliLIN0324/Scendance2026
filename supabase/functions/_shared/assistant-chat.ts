@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {chatRequest} from './providers.ts';
+import {chatProfile,chatRequest} from './providers.ts';
 import {fetchJson,type Env,type Fetcher} from './http.ts';
 import {assistantChatRequestSchema,type AssistantChatResult} from './assistant-chat-contract.ts';
 
@@ -18,13 +18,16 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  if(input.signal?.aborted)return fail('provider_error');
  const timeoutMs=input.timeoutMs??25000;
  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>110000)return fail('invalid');
- const base=input.env('AGENT_CHAT_BASE_URL'),key=input.env('AGENT_CHAT_KEY'),model=input.env('AGENT_CHAT_MODEL');
+ const productSelector=input.env('BAILIAN_PRODUCT_ENABLED');
+ if(productSelector && productSelector!=='0' && productSelector!=='1')return fail('unavailable');
+ const product=productSelector==='1';
+ const base=input.env(product?'BAILIAN_PRODUCT_BASE_URL':'AGENT_CHAT_BASE_URL'),key=input.env(product?'BAILIAN_PRODUCT_KEY':'AGENT_CHAT_KEY'),model=input.env(product?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
  if(base||key||model){
   if(!base?.trim()||!key?.trim()||!model?.trim())return fail('unavailable');
   let url:URL;try{url=new URL(base);}catch{return fail('unavailable');}
   const local=url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname);
   if((!local&&url.protocol!=='https:')||url.username||url.password||url.search||url.hash)return fail('unavailable');
- }else if(!input.env('TOKENDANCE_API_KEY')&&!input.env('DEEPSEEK_API_KEY'))return fail('unavailable');
+ }else if(product||(!input.env('TOKENDANCE_API_KEY')&&!input.env('DEEPSEEK_API_KEY')))return fail('unavailable');
  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
  let reportAbort:(value:AssistantChatResult)=>void=()=>{};
  const cancelled=new Promise<AssistantChatResult>(resolve=>{reportAbort=resolve;});
@@ -34,7 +37,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
   // This branch's existing provider profile forwards token fields unchanged.
   // MiniMax M3.1 uses max_completion_tokens; do not alter the shared provider
   // behavior of existing workflows just to support this read-only request.
-  const tokenLimit=input.env('AGENT_CHAT_PROFILE')==='minimax'?{max_completion_tokens:1024}:{max_tokens:1024};
+  const tokenLimit=chatProfile(input.env,'brief')==='minimax'?{max_completion_tokens:1024}:{max_tokens:1024};
   const {url,init}=chatRequest(input.env,{messages:[{role:'system',content:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
   const operation=(async():Promise<AssistantChatResult>=>{
    try{

@@ -13,6 +13,13 @@ const provider=(value:unknown)=>Response.json({choices:[{finish_reason:'stop',me
 const request=(body:unknown,auth=true)=>new Request('https://fixture.invalid/brief/extract',{method:'POST',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer fixture'}:{})},body:JSON.stringify(body)});
 
 describe('single-call conversation_v1 extraction',()=>{
+ it('uses the product namespace instead of the old MiniMax profile and fails closed if incomplete',async()=>{
+  const config:Record<string,string>={...settings,AGENT_CHAT_PROFILE:'minimax',BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'new-fixture',BAILIAN_PRODUCT_MODEL:'qwen-example'};
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(provider(output));
+  expect(await (await createApi(backend,key=>config[key],fetcher)(request(input))).json()).toMatchObject({enabled:true,...output});
+  const sent=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(sent).toMatchObject({model:'qwen-example',enable_thinking:false,max_tokens:2048});expect(sent.max_completion_tokens).toBeUndefined();
+  delete config.BAILIAN_PRODUCT_KEY;fetcher.mockClear();expect(await (await createApi(backend,key=>config[key],fetcher)(request(input))).json()).toMatchObject({enabled:true,extraction:null,reason:'MODEL_PROVIDER_INCOMPLETE'});expect(fetcher).not.toHaveBeenCalled();
+ });
  it('is authenticated, disabled by default, and does not bypass configured guard',async()=>{
   const fetcher=vi.fn<typeof fetch>();const api=createApi(backend,()=>undefined,fetcher);
   expect((await api(request(input,false))).status).toBe(401);
