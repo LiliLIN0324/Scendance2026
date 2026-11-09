@@ -78,6 +78,17 @@ const readyCheckins = (value = checkinLedger()): BackupMaterialCheckinSnapshot =
   state: 'ready', scope: value.projectId, materialCheckins: { status: 'present', value },
 });
 
+it('preserves a structured reserved zone through backup and rejects invalid semantics',()=>{
+  const original=layout();
+  original.floors[0]!.zones=[{id:'reserved-zone',name:'保留空间',color:'#4A7C59',x:0,z:0,w:1,d:1,zoneType:'reserved'},
+    {id:'legacy-zone',name:'预留区',color:'#4A7C59',x:2,z:0,w:1,d:1}];
+  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(original,ready(),createdAt)).layout;
+  expect(restored.floors[0]!.zones).toEqual(original.floors[0]!.zones);
+  expect(restored.floors[0]!.zones![1]).not.toHaveProperty('zoneType');
+  const invalid=structuredClone(original);(invalid.floors[0]!.zones![0] as unknown as {zoneType:string}).zoneType='unknown';
+  expect(()=>serializeLocalProjectBackup(invalid,ready(),createdAt)).toThrow();
+});
+
 describe('explicit V3 material checkin backup', () => {
   it('keeps the old writer V2 and writes V3 only with an explicit ready ledger snapshot', async () => {
     const base = { ...layout(), productionPlan: plan() };
@@ -746,4 +757,11 @@ describe('V4 optional local source documents', () => {
     const restored = await decodeSourceDocuments(candidate.sourceDocuments, scope);
     expect(restored.form).toEqual({ registration }); expect(restored.sources[0]!.id).toBe(original[0]!.id);
   });
+});
+
+it('round-trips the preserved legacy record without promoting it to a confirmed fact',()=>{
+  const value:CreativeBrief={...brief(),event:'新活动',eventConfirmed:true,guests:60,guestsConfirmed:true,allowIdeas:false,ideasConfirmed:true,
+    legacyBriefRecord:{event:'公益讲座',guests:80,allowIdeas:true}, unconfirmedSavedBrief:{event:'旧自定义活动',guests:75,allowIdeas:false}};
+  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(),ready(value),createdAt));
+  expect(restored.brief).toEqual({status:'present',value});
 });

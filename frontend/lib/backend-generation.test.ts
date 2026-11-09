@@ -290,6 +290,55 @@ describe("single object generation jobs", () => {
     await expect(controller.markGenerationAdded(proposalId, otherProjectId)).rejects.toMatchObject({ code: "ASSET_NOT_IN_SAVED_SCENE" });
     expect(controller.getSnapshot()).toMatchObject({ project: { id: projectId }, writeBlocked: false, status: "editing", error: null });
   });
+  it("marks an explicit other project after server verification without changing the active editor", async () => {
+    await editing(); queue(job({ state: "added", asset_id: assetId }));
+    await expect(controller.markGenerationAdded(proposalId, otherProjectId)).resolves.toMatchObject({ state: "added" });
+    expect(body()).toEqual({ projectId: otherProjectId });
+    expect(controller.getSnapshot()).toMatchObject({ project: { id: projectId }, writeBlocked: false, status: "editing", error: null });
+  });
+  it("rejects a successful other-project result after the editing context changes", async () => {
+    await editing(); const call = pending();
+    const request = controller.markGenerationAdded(proposalId, otherProjectId); await call.ready();
+    await handoff(); call.finish(job({ state: "added", asset_id: assetId }));
+    await expect(request).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    await expectCurrentLeaseStillRenews();
+  });
+  it("rejects a successful other-project result after the account session is disposed", async () => {
+    await editing(); const call = pending();
+    const request = controller.markGenerationAdded(proposalId, otherProjectId); await call.ready();
+    controller.dispose(); call.finish(job({ state: "added", asset_id: assetId }));
+    await expect(request).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+  });
+  it("rejects a delayed result after lease changes A → B → A even if the final identifiers match", async () => {
+    await editing(); const call = pending();
+    const request = controller.markGenerationAdded(proposalId, otherProjectId); await call.ready();
+    await handoff(); await handoff(projectId, 3);
+    call.finish(job({ state: "added", asset_id: assetId }));
+    await expect(request).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    await expectCurrentLeaseStillRenews(projectId, 3);
+  });
+  it("still invalidates authentication if another project's request receives 401", async () => {
+    await editing(); queue({ error: { code: "UNAUTHENTICATED" } }, 401);
+    await expect(controller.markGenerationAdded(proposalId, otherProjectId)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(controller.getSnapshot()).toMatchObject({ user: null, writeBlocked: true, status: "blocked" });
+  });
+  it("does not send a job update when the provider session belongs to a different user", async () => {
+    await editing();
+    const authClient = (controller as unknown as { supabase: { auth: { getSession: () => Promise<unknown> } } }).supabase.auth;
+    vi.spyOn(authClient, 'getSession').mockResolvedValue({ data: { session: { access_token: 'other-token', refresh_token: 'other-refresh', user: { id: otherProjectId } } }, error: null });
+    const previousCalls = fetchMock.mock.calls.length;
+    await expect(controller.markGenerationAdded(proposalId, otherProjectId)).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(fetchMock).toHaveBeenCalledTimes(previousCalls);
+  });
+  it("does not dispatch with a different user's refreshed session", async () => {
+    await editing();
+    const authClient = (controller as unknown as { supabase: { auth: { getSession: () => Promise<unknown>; refreshSession: () => Promise<unknown> } } }).supabase.auth;
+    vi.spyOn(authClient, 'getSession').mockResolvedValue({ data: { session: { access_token: 'old-token', refresh_token: 'old-refresh', user: { id: userId }, expires_at: Math.floor(Date.now()/1000)+1 } }, error: null });
+    vi.spyOn(authClient, 'refreshSession').mockResolvedValue({ data: { session: { access_token: 'other-token', refresh_token: 'other-refresh', user: { id: otherProjectId } } }, error: null });
+    const previousCalls = fetchMock.mock.calls.length;
+    await expect(controller.markGenerationAdded(proposalId, otherProjectId)).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(fetchMock).toHaveBeenCalledTimes(previousCalls);
+  });
   it("uses real task states and requires saving before marking an asset added", async () => {
     await login(); queue(job(), 202);
     await expect(controller.createGenerationJob("  A tent  ", requestId)).resolves.toMatchObject({ state: "queued", asset_id: null });

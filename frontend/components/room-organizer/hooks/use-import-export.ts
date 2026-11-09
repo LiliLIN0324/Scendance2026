@@ -1,4 +1,5 @@
-import { useCallback, type MutableRefObject, type RefObject } from 'react';
+import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
+import { useCallback, useRef, type MutableRefObject, type RefObject } from 'react';
 import { notify } from '../lib/editor-notices';
 import { downloadDataUrlAsPng, readLayoutFromFile } from '../lib/file-io';
 import { downloadTextFile } from '../lib/plan-export/download';
@@ -13,6 +14,8 @@ import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/cont
 export interface UseImportExportParams {
   layout: RoomLayout;
   actions: LayoutActions;
+  /** Optional isolated ordinary-write authority; once supplied removal or replacement fails closed. */
+  localWriteCapability?: LocalWriteCapability | undefined;
   view2D: boolean;
   canvasRef: RefObject<HTMLCanvasElement>;
   canvas2DRef: RefObject<HTMLCanvasElement | null>;
@@ -81,6 +84,7 @@ export interface UseImportExportResult {
 export function useImportExport({
   layout,
   actions,
+  localWriteCapability,
   view2D,
   canvasRef,
   canvas2DRef,
@@ -92,6 +96,17 @@ export function useImportExport({
   paintFrame,
   onImported,
 }: UseImportExportParams): UseImportExportResult {
+  const latestLayout = useRef(layout);
+  latestLayout.current = layout;
+  const lease = useRef<{capability:LocalWriteCapability; revoked:boolean}|null>(null);
+  if (!lease.current && localWriteCapability) lease.current = {capability:localWriteCapability,revoked:false};
+  else if (lease.current && localWriteCapability !== lease.current.capability) lease.current.revoked = true;
+  const assertImportWrite = () => {
+    if (!lease.current) return;
+    if (lease.current.revoked) throw new Error('本机编辑权已变化，导入暂未应用。');
+    try { localWriteCapabilityGuard(lease.current.capability).assertStillHeld(); }
+    catch { lease.current.revoked=true; throw new Error('本机编辑权已失效，导入暂未应用。'); }
+  };
   const captureRenderImage = useCallback(
     async ({ view, scale, resolution }: RenderExportOptions) => {
       if (view2D) {
@@ -205,8 +220,12 @@ export function useImportExport({
     async (file: File) => {
       try {
         const next = await readLayoutFromFile(file);
+        if (lease.current && latestLayout.current !== layout) throw new Error('读取期间场地已变化，请重新核对后导入。');
         if (!confirmReplace(layout, `the imported “${next.name}”`)) return false;
-        snapshotBeforeReplace(layout);
+        assertImportWrite();
+        const capability = lease.current?.capability;
+        if (!snapshotBeforeReplace(layout, lease.current ? assertImportWrite : undefined, capability)) throw new Error('当前方案的恢复点未能确认保存，导入暂未应用。');
+        assertImportWrite();
         actions.applyLayout(next);
         onImported();
         return true;

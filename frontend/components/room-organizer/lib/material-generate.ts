@@ -20,9 +20,9 @@ export interface MaterialCloudLane {
 
 export type MaterialGenerateResult =
   | { ok: true; taskid: string; kind: 'text' | 'image'; lane: 'direct' | 'cloud' }
-  | { ok: false; stub: boolean; message: string };
+  | { ok: false; stub: boolean; message: string; outcome?: 'unknown' };
 
-const NO_CHANNEL = '生成通道没接通：线上需要登录云项目（NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY），本地可启动 tools/aholo/lux3d-dev-proxy.mjs 后重试。';
+const NO_CHANNEL = '物件生成这次还不能提交。请先登录并连接云项目，再到这里用描述或图片生成。';
 
 /** 提交成功的任务号：生成入口在底部对话里，物料卡要看得见同一份。 */
 export interface PendingMaterial {
@@ -138,14 +138,19 @@ function dataUrlToFile(dataUrl: string): File {
   return new File([bytes], 'reference', { type: match[1] });
 }
 
-/** 云端失败说清缺什么：没配 LUX3D_API_KEY 和没开权限是两件事。 */
+const UNKNOWN_SUBMIT = '云端提交结果暂时无法确认，可能已创建任务或产生费用。请先查看生成任务记录并核对，再决定是否重新提交。';
+
+/** 还没发出去的失败说清原因；发出去之后结果不明，不能改口成「没提交」。 */
 function cloudFailure(failure: unknown): string {
+  const code = failure && typeof failure === 'object' && 'code' in failure ? String((failure as { code: unknown }).code) : '';
   const message = failure instanceof Error ? failure.message : '';
-  if (/SERVICE_NOT_CONFIGURED|LUX3D_API_KEY|PROVIDER_NOT_CONFIGURED/i.test(message)) {
-    return '云端没配置 Lux3D（缺少 LUX3D_API_KEY / LUX3D_TERMS_URL / LUX3D_TERMS_REVIEWED_AT），生成暂不可用。';
+  const blob = `${code} ${message}`;
+  if (/SERVICE_NOT_CONFIGURED|LUX3D_API_KEY|PROVIDER_NOT_CONFIGURED|BILLING_NOT_CONFIGURED/.test(blob)) {
+    return '群核生成尚未开通，请联系管理员完成配置后再试。';
   }
-  if (/UNAUTHENTICATED|401/i.test(message)) return '登录已过期，请重新登录云项目后再生成。';
-  return message || '云端没接受这次生成，请稍后再试。';
+  if (/BUDGET_EXCEEDED|DAILY_BUDGET_EXCEEDED/.test(blob)) return '生成额度已用完，请联系管理员核对后再试。';
+  if (/UNAUTHENTICATED|FORBIDDEN|\b401\b|\b403\b/.test(blob)) return '请先登录云项目后再生成。';
+  return UNKNOWN_SUBMIT;
 }
 
 export async function submitMaterialGenerate(input: MaterialGenerateInput, options: MaterialGenerateOptions = {}): Promise<MaterialGenerateResult> {
@@ -153,7 +158,8 @@ export async function submitMaterialGenerate(input: MaterialGenerateInput, optio
   if (input.kind === 'text' && !prompt) return { ok: false, stub: false, message: '先写一句要生成的物料。' };
   if (input.kind === 'image' && !input.imageDataUrl.startsWith('data:image/')) return { ok: false, stub: false, message: '请选择一张 PNG 或 JPEG。' };
 
-  // 先试直连通道（本机代理或部署的中转）——它只是加速，不是唯一通路。
+  // 已开始直连请求后，网络错误/异常响应无法证明供应商没有创建任务。
+  // 不得在结果未知时切换通道，否则可能创建两个收费任务。
   const local = options.localProxy ?? isLux3dLocalProxy();
   if (local) {
     const fetchImpl = options.fetchImpl ?? fetch;
@@ -167,15 +173,11 @@ export async function submitMaterialGenerate(input: MaterialGenerateInput, optio
       });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        const message = body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
-          ? (body as { error: string }).error
-          : `提交没成功（HTTP ${response.status}），没有确认扣费。`;
-        return { ok: false, stub: false, message };
+        return { ok: false, stub: false, outcome:'unknown', message: `直连提交结果暂时无法确认（HTTP ${response.status}），可能已创建任务或产生费用。请先查看生成任务记录并核对，再决定是否重新提交。` };
       }
       return { ok: true, taskid: taskIdOf(body), kind: input.kind, lane: 'direct' };
-    } catch (failure) {
-      // 直连通道打不通（没起代理、网络断）不是终点：有云端队列就接着走。
-      if (!options.cloud) return { ok: false, stub: false, message: failure instanceof Error ? failure.message : '提交没成功，没有确认扣费。' };
+    } catch {
+      return { ok: false, stub: false, outcome:'unknown', message: '直连提交结果暂时无法确认，可能已创建任务或产生费用。请先查看生成任务记录并核对，再决定是否重新提交。' };
     }
   }
 
@@ -189,6 +191,34 @@ export async function submitMaterialGenerate(input: MaterialGenerateInput, optio
     const job = await options.cloud.createJob(prompt, { kind: 'text' });
     return { ok: true, taskid: job.id, kind: 'text', lane: 'cloud' };
   } catch (failure) {
-    return { ok: false, stub: false, message: cloudFailure(failure) };
+    const message=cloudFailure(failure);
+    return { ok: false, stub: false, ...(message.startsWith('云端提交结果暂时无法确认')?{outcome:'unknown' as const}:{}), message };
   }
+}
+
+/** 对话里点名要生成物件时，先把原话送到物料生成框，仍须确认额度才提交。 */
+export interface StagedMaterialGenerate { kind: 'text' | 'image'; prompt: string; nonce: number }
+let stagedMaterial: StagedMaterialGenerate | null = null;
+const stagedListeners = new Set<(request: StagedMaterialGenerate) => void>();
+
+export function stageMaterialGenerate(request: { kind: 'text' | 'image'; prompt: string }): void {
+  const next = { ...request, nonce: Date.now() };
+  stagedMaterial = next;
+  if (!stagedListeners.size) return;
+  for (const listener of [...stagedListeners]) listener(next);
+  stagedMaterial = null;
+}
+
+export function subscribeStagedMaterialGenerate(listener: (request: StagedMaterialGenerate) => void): () => void {
+  stagedListeners.add(listener);
+  if (stagedMaterial) {
+    const request = stagedMaterial;
+    stagedMaterial = null;
+    listener(request);
+  }
+  return () => { stagedListeners.delete(listener); };
+}
+
+export function clearStagedMaterialGenerateForTests(): void {
+  stagedMaterial = null;
 }

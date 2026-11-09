@@ -159,12 +159,9 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
       </dl>
       {candidate.layoutWasRepaired && <p className="sc-project-backup-warning">旧布局经兼容修复，请核对后再替换。</p>}
       {hasExternalModel(candidate.layout) && <p className="sc-project-backup-warning">文件或方案快照含未归档模型引用，模型文件未打包，可能无法跨设备使用。预检没有加载模型。</p>}
-      <p className="sc-note">确认后会替换当前场景、活动安排、物料工作单和制作计划，并覆盖目标项目的活动需求。{candidate.brief.status !== 'present' ? '目标项目原有需求将清除。' : ''}</p>
-      <p className="sc-note">点验记录按原编号合并；旧文件不会清除本机记录。出现内容冲突时保留双方资料并停止恢复。合并后若又新增点验记录，不能直接撤回此前合并。</p>
-      {sourceDocuments?.status === 'present' && <p className="sc-project-backup-warning">确认后会用这份文件的图纸、照片与对应点替换目标项目的原资料。{sourceDocuments.form === undefined ? '文件未含图纸表单，目标项目原表单及对应点将清除。' : ''}</p>}
-      {layout.productionPlan&&!candidate.layout.productionPlan&&<p className="sc-project-backup-warning">待恢复的当前方案未记录制作计划，恢复后当前制作计划将清除。需要时可使用“撤销本次恢复”回退。</p>}
+      <p className="sc-project-backup-warning" role="status">备份恢复暂不可用。请保留备份文件和当前活动，恢复保障完成后再使用；预检不会修改任何资料。</p>
       <div className="sc-project-backup-actions">
-        <button type="button" className="sc-button" disabled={busy} onClick={() => void restore()}>{working === 'restore' ? '正在恢复并核实保存…' : candidate.materialCheckins?.status==='present'?'确认恢复并合并点验':'确认替换布局与活动需求'}</button>
+        <button type="button" className="sc-button" disabled onClick={() => void restore()}>恢复暂不可用</button>
         <button type="button" className="sc-button" disabled={blocking} onClick={cancel}>取消恢复</button>
       </div>
     </div>}

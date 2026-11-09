@@ -58,20 +58,31 @@ export function reviewIssues(scene:SceneV2,input:ReconstructionRequest):Reconstr
   for(let i=0;i<polygon.length;i++){const a=polygon[i],b=polygon[(i+1)%polygon.length];if(!exterior.some(w=>(Math.hypot(w.start.x-a.x,w.start.z-a.z)<0.001&&Math.hypot(w.end.x-b.x,w.end.z-b.z)<0.001)||(Math.hypot(w.end.x-a.x,w.end.z-a.z)<0.001&&Math.hypot(w.start.x-b.x,w.start.z-b.z)<0.001)))issues.push({code:'BOUNDARY_MISMATCH',message:'外墙与地面轮廓不一致，请核对后继续。'});}
   return issues;
 }
-/** Deterministic checks override model claims for explicitly requested inventory. */
+/** Requirement statuses supplied by a model (or an old scene without provenance) are opinions. */
+export function markUnverifiedRequirements(scene:SceneV2){
+  if(!scene.design)return;
+  scene.design.concept='模型设计说明待人工核验。';
+  scene.design.highlights=scene.design.highlights.map(h=>({...h,title:'模型建议（待核验）',description:'模型建议未独立核验，请人工检查。'}));
+  scene.design.requirements=scene.design.requirements.map((r,index)=>({...r,text:`模型要求 ${index+1}（待核验）`,status:'partial' as const,reason:'模型意见未经独立核验，不代表现场或规范验收。'}));
+}
+/** Deterministic counts are limited to objects in the candidate, not a safety or standards review. */
 export function verifyInventoryRequirements(scene:SceneV2,instruction:string){
   if(!scene.design)return;
+  markUnverifiedRequirements(scene);
   const names:Record<string,string>={'座位':'chair','椅子':'chair','椅':'chair','桌子':'table','桌':'table','签到台':'reception','背景板':'backdrop','展架':'display','展示架':'display','隔断':'partition'};
-  const patterns=[/(\d+)\s*(?:把|个|张|座)?\s*(座位|椅子|椅|桌子|桌|签到台|背景板|展示架|展架|隔断)/g,/(座位|椅子|桌子|签到台|背景板|展示架|展架|隔断)\s*[:：]?\s*(\d+)(?![\d.]|\s*(?:米|毫米|厘米|m|cm|mm|×|x))/g];
+  // Only a complete affirmative equality clause is safe to count. Negation, bounds,
+  // alternatives, ranges and descriptive prose remain unverified model opinions.
+  const patterns=[/^(?:安排|需要|配置|放置|摆放|准备|设置)?\s*(\d+)\s*(?:把|个|张|座)?\s*(座位|椅子|椅|桌子|桌|签到台|背景板|展示架|展架|隔断)$/,/^(座位|椅子|桌子|签到台|背景板|展示架|展架|隔断)\s*[:：]\s*(\d+)$/];
   const checked=new Set<string>();
-  for(const [i,pattern]of patterns.entries())for(const match of instruction.matchAll(pattern)){
+  for(const clause of instruction.split(/[，,。；;\n]/).map(s=>s.trim()))for(const [i,pattern]of patterns.entries()){
+    const match=clause.match(pattern);if(!match)continue;
     const amount=Number(match[i===0?1:2]),word=match[i===0?2:1],materialId=names[word],key=`${materialId}:${amount}`;
     if(checked.has(key))continue;checked.add(key);
     const objects=scene.objects.filter(o=>o.materialId===materialId),text=`${amount} 个${word}`;
     const passed=objects.length===amount;
     // Replace overlapping narrative assertions with the actual measured count.
     scene.design.requirements=scene.design.requirements.filter(r=>!(r.text.includes(word)&&/\d/.test(r.text)));
-    scene.design.requirements.unshift({text,status:passed?'satisfied':objects.length?'partial':'unmet',reason:`场景实际有 ${objects.length} 个；要求 ${amount} 个。`,objectIds:objects.map(o=>o.id)});
+    scene.design.requirements.unshift({text,status:passed?'satisfied':objects.length?'partial':'unmet',reason:`场景内计数 ${objects.length} 个；要求 ${amount} 个。仅核对场景物件数量，不代表现场、消防、无障碍或规范验收。`,objectIds:objects.map(o=>o.id)});
   }
   const routeRequirement=/(通道|净宽|动线|疏散|连通性|aisle|clearance|egress|circulation)/i;
   scene.design.requirements=scene.design.requirements.map(requirement=>routeRequirement.test(requirement.text)&&requirement.status==='satisfied'?{...requirement,status:'partial' as const,reason:`已布置，净宽/连通性仍需核对。${requirement.reason}`.slice(0,1000)}:requirement);
@@ -99,7 +110,8 @@ const schemaExample={schemaVersion:2,venue:{shape:'rectangle',width:12,depth:8,h
 export async function processReconstruction(backend:Backend,env:Env,fetcher:Fetcher=fetch){
   const job=await backend.reconstruction(null,'claim');if(!job)return {processed:false};
   const ref={id:job.id,workerToken:job.worker_token},usage:unknown[]=[],providerFiles:string[]=[];
-  const update=(state:string,data:Record<string,unknown>={})=>backend.reconstruction(null,'update',{...ref,state,...data,usage});
+  const privateNotes:{code:string;message:string;raw:unknown}[]=[];
+  const update=(state:string,data:Record<string,unknown>={})=>backend.reconstruction(null,'update',{...ref,state,...data,issues:[...(Array.isArray(data.issues)?data.issues:[]),...privateNotes],usage});
   try{
     const input=reconstructionRequestSchema.parse((({projectId,...rest})=>rest)(job.input));
     // Check lease/revision and source ownership before sending private photos to the provider.
@@ -137,6 +149,11 @@ export async function processReconstruction(backend:Backend,env:Env,fetcher:Fetc
       const hint=typeof recognised==='object'&&recognised!==null&&!Array.isArray(recognised)?unitFromText(String((recognised as Record<string,unknown>).unitBasis??'')):null;
       const normalised=normalizeRecognizedUnits(recognised,hint);
       const parsed=envelope.parse(normalised.value);
+      // Preserve originals in the existing access-controlled job record, not usage accounting.
+      privateNotes.push({code:'MODEL_RAW_NOTE',message:'模型原文仅供授权核对，不是验收结论。',raw:{stage,design:parsed.scene.design??null,issues:parsed.issues,
+        objectNotes:parsed.scene.objects.filter(object=>object.notes).map(object=>({id:object.id,notes:object.notes})),
+        dimensionLabels:parsed.scene.dimensions.map(dimension=>({id:dimension.id,label:dimension.label}))}});
+      parsed.issues=parsed.issues.map(issue=>({code:'MODEL_REVIEW_REQUIRED',message:'模型提出待核验事项，请人工检查。',...(issue.targetId?{targetId:issue.targetId}:{})}));
       if(normalised.report.applied)parsed.issues.push({code:'UNIT_CONVERTED',message:`识别结果按 ${normalised.report.unit} → 米 换算（×${normalised.report.factor}）：图纸标注常为毫米，请核对场地与墙体尺寸。`});
       else if(normalised.report.confidence==='ambiguous'&&normalised.report.samples>0)parsed.issues.push({code:'UNIT_AMBIGUOUS',message:'图纸单位无法唯一判定（毫米/厘米/米 均可能）：请提供一个已知长度后重新识别，避免尺寸相差 100 倍。'});
       return parsed;
@@ -146,13 +163,21 @@ export async function processReconstruction(backend:Backend,env:Env,fetcher:Fetc
     else{
       const recognized=await call('recognition',{...input,schemaExample,catalog},true);candidate=recognized.scene;issues.push(...recognized.issues);candidate.sources=input.sources;
       // Model confidence can never confer confirmation. The human review step owns that transition.
-      for(const d of candidate.dimensions)if(!input.dimensions.some(x=>x.id===d.id))d.status='detected';
+      for(const [index,d] of candidate.dimensions.entries())if(!input.dimensions.some(x=>x.id===d.id)){d.status='detected';d.label=`模型识别尺寸 ${index+1}（待核验）`;}
       for(const item of[...candidate.structure.walls,...candidate.structure.openings,...candidate.structure.columns])if(item.status==='confirmed')item.status='detected';
+      for(const object of candidate.objects)object.notes=input.scene.objects.find(existing=>existing.id===object.id)?.notes??'';
     }
     // Preserve declared/locked existing objects even when recognition omitted them.
     for(const locked of input.scene.objects.filter(o=>o.locked||(input.selectedIds.length&&!input.selectedIds.includes(o.id)))){candidate.objects=candidate.objects.filter(o=>o.id!==locked.id);candidate.objects.push(locked);}
     for(const o of candidate.objects)if(o.assetId&&!input.scene.objects.some(old=>old.id===o.id&&old.assetId===o.assetId))throw new ApiError('AI_UNKNOWN_ASSET',422);
+    const beforeSolve=canonical({venue:candidate.venue,structure:candidate.structure});
     const solve=solveDimensions(candidate,input.dimensions);candidate=sceneSchema.parse(solve.scene) as SceneV2;
+    if(input.reviewedScene?.design)privateNotes.push({code:'MODEL_RAW_NOTE',message:'原方案记录仅供授权核对，不是验收结论。',raw:{stage:'reviewed_design',design:input.reviewedScene.design}});
+    markUnverifiedRequirements(candidate);
+    if(beforeSolve!==canonical({venue:candidate.venue,structure:candidate.structure})){
+      for(const item of [...candidate.structure.walls,...candidate.structure.openings,...candidate.structure.columns])if(item.status==='confirmed')item.status='detected';
+      issues.push({code:'SCALED_STRUCTURE_REVIEW_REQUIRED',message:'尺寸校正改变了场地结构，请核对校正后的墙、门窗与柱子。'});
+    }
     for(const preserved of input.scene.objects.filter(o=>o.locked||(input.selectedIds.length&&!input.selectedIds.includes(o.id)))){candidate.objects=candidate.objects.filter(o=>o.id!==preserved.id);candidate.objects.push(preserved);}
     issues.push(...solve.issues,...reviewIssues(candidate,input));
     if(issues.length){await update('needs_review',{candidate,issues});return {processed:true,id:job.id,state:'needs_review'};}
@@ -163,6 +188,8 @@ export async function processReconstruction(backend:Backend,env:Env,fetcher:Fetc
     for(const o of candidate.objects)if((o.locked||input.mode==='restore'||input.selectedIds.length&&!input.selectedIds.includes(o.id))&&canonical(o)!==canonical(next.objects.find(n=>n.id===o.id)))throw new ApiError('AI_MODIFIED_PRESERVED_OBJECT',422);
     if(input.selectedIds.length&&next.objects.some(o=>!candidate.objects.some(old=>old.id===o.id)))throw new ApiError('AI_MODIFIED_PRESERVED_OBJECT',422);
     for(const o of next.objects)if(o.assetId&&!candidate.objects.some(old=>old.assetId===o.assetId))throw new ApiError('AI_UNKNOWN_ASSET',422);
+    for(const object of next.objects)object.notes=candidate.objects.find(existing=>existing.id===object.id)?.notes??'';
+    markUnverifiedRequirements(next);
     await update('validating',{candidate:next});
     const violations=structuralViolations(next);
     if(!canApplyStructuralChange(candidate,next)||violations.length){await update('needs_review',{candidate:next,issues:violations.map(v=>({code:v.code,message:'生成布局与墙体、柱子或场地边界冲突，请调整或重新生成。',targetId:v.objectId}))});return{processed:true,id:job.id,state:'needs_review'};}
@@ -171,7 +198,6 @@ export async function processReconstruction(backend:Backend,env:Env,fetcher:Fetc
     if(overlaps.length){await update('needs_review',{candidate:next,issues:overlaps.map(w=>({code:'OBJECT_OVERLAP',message:'生成物件互相重叠，请核对布置。',targetId:w.ids[0]}))});return{processed:true,id:job.id,state:'needs_review'};}
     if(planned.issues.length){await update('needs_review',{candidate:next,issues:planned.issues});return {processed:true,id:job.id,state:'needs_review'};}
     if(!next.design)throw new ApiError('AI_MISSING_DESIGN',422);
-    verifyInventoryRequirements(next,input.instruction);
     sceneSchema.parse(next);
     await update('ready',{candidate:next,issues:planned.issues,explanation:next.design.concept,warnings});
     return {processed:true,id:job.id,state:'ready'};

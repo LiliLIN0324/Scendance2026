@@ -90,15 +90,22 @@ describe('editable scene archives', () => {
       expect(encoded).not.toBe('');
       const { state } = JSON.parse(encoded);
       expect(new TextEncoder().encode(encoded).length).toBeLessThan(100000);
-      // 压缩格式（jev comparisonState）：候选只带差异物件，307 个共享件省略进 sharedContext，
-      // UUID 在序列化层替换为 refN 别名；旧 objectRows/objectColumns 行列格式已弃用。
-      expect(state.task).toBe('比较三个新增桌子的位置，保留原体育馆布置');
+      // The bounded request retains every candidate difference and summarizes shared context.
       expect(state.sharedContext.objectCount).toBe(307);
+      expect(state.sharedContext.scenePreset).toBe('gym');
+      expect(state.sharedContext.nearbyObjects.length + state.sharedContext.omittedObjectCount).toBe(307);
+      expect(state.coverage).toContain('cannot establish global circulation or safety');
       expect(state.candidates).toHaveLength(3);
-      for (const candidate of state.candidates) {
+      for (let index = 0; index < state.candidates.length; index++) {
+        const candidate = state.candidates[index];
+        expect(candidate.label).toBe(['A', 'B', 'C'][index]);
         expect(candidate.objectCount).toBe(308);
-        expect(candidate.scene.objects).toHaveLength(1); // 只带各自新增的桌子
+        expect(candidate.scene.objects).toHaveLength(1);
+        const originalAdded = candidates[index].scene.objects[307];
+        expect({ ...candidate.scene.objects[0], id: originalAdded.id }).toEqual(originalAdded);
+        expect(candidate.scene.objects[0].id).toMatch(/^ref\d+$/);
       }
+      expect(state.task).toBe('比较三个新增桌子的位置，保留原体育馆布置');
       expect(encoded).not.toMatch(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/i);
       expect(encoded).toContain('ref0');
       expect(evaluation).toMatchObject({ status: 'complete', choice: 'B', confidence: 0.5, probabilities: { A: 0.2, B: 0.5, C: 0.2, NONE: 0.1 } });

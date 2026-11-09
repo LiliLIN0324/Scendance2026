@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { BootSkeleton, WorkspaceShell } from '@/components/workspace-shell';
 import { AuthProvider } from '@/lib/auth-provider';
+import { RestoreStartupGate } from '@/components/room-organizer/restore-startup-gate';
 import localFont from 'next/font/local';
 import type { Metadata } from 'next';
 import './globals.css';
@@ -75,7 +76,7 @@ const CHUNK_RECOVERY_SCRIPT = `(function(){
     var r=e&&e.reason, m=r?(r.name+' '+r.message):String(r||'');
     if(/ChunkLoadError|Loading chunk|dynamically imported module/i.test(m)) reloadOnce();
   });
-  setTimeout(function(){ if(location.pathname==='/' && !window.__pcReady) reloadOnce(); }, 20000);
+  setTimeout(function(){ if(location.pathname==='/' && !window.__pcReady && !window.__pcRecoveryGateReady) reloadOnce(); }, 20000);
 })();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -86,7 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
-      <body className={`${inter.variable} ${playfair.variable}`}><Suspense fallback={<BootSkeleton />}><AuthProvider><WorkspaceShell>{children}</WorkspaceShell></AuthProvider></Suspense></body>
+      <body className={`${inter.variable} ${playfair.variable}`}><Suspense fallback={<BootSkeleton />}><AuthProvider><RestoreStartupGate><WorkspaceShell>{children}</WorkspaceShell></RestoreStartupGate></AuthProvider></Suspense></body>
     </html>
   );
 }

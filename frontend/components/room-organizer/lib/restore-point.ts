@@ -1,3 +1,4 @@
+import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { INITIAL_LAYOUT } from './initial-layout';
 import { recordSnapshot } from './version-history';
 import type { RoomLayout } from './types';
@@ -65,13 +66,15 @@ export function isUntouched(layout: RoomLayout): boolean {
  * Empty houses are skipped so first-run users don't fill the ring with
  * blanks. Never throws: a failed snapshot must not block the replacement.
  */
-export function snapshotBeforeReplace(outgoing: RoomLayout | null | undefined): void {
-  if (!outgoing) return;
+export function snapshotBeforeReplace(outgoing: RoomLayout | null | undefined, assertWrite?: () => void, capability?: LocalWriteCapability): boolean {
+  if (!outgoing) return true;
   try {
-    if (isUntouched(outgoing)) return;
-    recordSnapshot(outgoing, { force: true });
+    if (isUntouched(outgoing)) return true;
+    const stored = recordSnapshot(outgoing, { force: true, ...(assertWrite ? { assertWrite } : {}), ...(capability ? { capability } : {}) });
+    return capability ? stored : true;
   } catch (error) {
     console.warn('Failed to record a restore point:', error);
+    return !capability;
   }
 }
 

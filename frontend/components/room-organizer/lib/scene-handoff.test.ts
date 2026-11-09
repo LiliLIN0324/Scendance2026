@@ -40,28 +40,29 @@ describe('local execution handoff and reviewable delivery', async () => {
     expect(await effectiveHandoffStatus(changed, id(1))).toBe('needs_review');
     expect((await deliveryExecution(changed))[0]).toMatchObject({ ...patch, status: 'accepted', effectiveStatus: 'needs_review', evidenceNote: original.evidenceNote });
     expect(changed.floors[0].items[0].handoff!.reviewedBasis).toBe(original.reviewedBasis);
-    expect(await effectiveHandoffStatus(layout, id(1))).toBe('accepted');
+    expect(await handoffBasis(changed,id(1),changed.floors[0].items[0].handoff!)).not.toBe(original.reviewedBasis);
+    expect(await effectiveHandoffStatus(layout, id(1))).toBe('needs_review');
   });
   it.each(['width', 'position', 'rotation', 'color'] as const)('requires a new review after changing %s without discarding evidence', async field => {
     const layout = ordinary(); layout.floors[0].items[0].handoff = await reviewed(layout);
     const changed = edit(layout, { [field]: field === 'position' ? { x: -1, z: -1 } : field === 'color' ? '#aaaaaa' : 2 });
     expect(await effectiveHandoffStatus(changed, id(1))).toBe('needs_review');
     expect((await deliveryExecution(changed))[0]).toMatchObject({ status: 'accepted', effectiveStatus: 'needs_review', evidenceNote: '已在现场实测，摆放与尺寸符合条件。' });
-    expect(await effectiveHandoffStatus(layout, id(1))).toBe('accepted');
+    expect(await effectiveHandoffStatus(layout, id(1))).toBe('needs_review');
   });
-  it('reviews again when the venue or acceptance changes, and restores the previous effective state on undo', async () => {
+  it('does not revive prior acceptance when venue or acceptance changes are undone', async () => {
     const layout = ordinary(); layout.floors[0].items[0].handoff = await reviewed(layout);
     expect(await effectiveHandoffStatus({ ...layout, width: 9 }, id(1))).toBe('needs_review');
     const changed = edit(layout, { handoff: { ...layout.floors[0].items[0].handoff!, acceptance: '还要安装固定件' } });
     expect(await effectiveHandoffStatus(changed, id(1))).toBe('needs_review');
-    expect(await effectiveHandoffStatus(layout, id(1))).toBe('accepted');
+    expect(await effectiveHandoffStatus(layout, id(1))).toBe('needs_review');
   });
   it('reviews changed structure at the same venue dimensions while camera and lighting remain unrelated', async () => {
     const layout = createMeasuredRoomLayout(ordinary(), { width: 8, depth: 6, height: 3 });
     layout.floors[0].items[0].handoff = await reviewed(layout);
     const changed = { ...layout, floors: [{ ...layout.floors[0], interiorWalls: layout.floors[0].interiorWalls!.map((wall, index) => index === 0 ? { ...wall, thickness: wall.thickness! + .02 } : wall) }] };
     expect(await effectiveHandoffStatus(changed, id(1))).toBe('needs_review');
-    expect(await effectiveHandoffStatus({ ...layout, backendCamera: 'customer', backendLighting: 'cool' }, id(1))).toBe('accepted');
+    expect(await effectiveHandoffStatus({ ...layout, backendCamera: 'customer', backendLighting: 'cool' }, id(1))).toBe('needs_review');
     expect(await sceneExecutionCsv(changed)).toContain('需复核');
   });
   it('reviews relocated entrances without changing the venue footprint', async () => {
@@ -78,7 +79,7 @@ describe('local execution handoff and reviewable delivery', async () => {
       id: `50000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
       x1: 10 + index % 20 * .05, z1: 10 + Math.floor(index / 20),
       x2: 10 + index % 20 * .05, z2: 12 + Math.floor(index / 20),
-      thickness: .1, height: 3, kind: 'interior' as const, status: 'confirmed' as const,
+      thickness: .1, height: 3, kind: 'interior' as const, status: 'inferred' as const,
     })));
     const scene = layoutToBackendScene(layout);
     expect(scene.schemaVersion).toBe(2);
@@ -87,7 +88,7 @@ describe('local execution handoff and reviewable delivery', async () => {
     expect(handoff.reviewedBasis).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(handoffSchema.safeParse(handoff).success).toBe(true);
     layout.floors[0].items[0].handoff = handoff;
-    expect(await effectiveHandoffStatus(layout, id(1))).toBe('accepted');
+    expect(await effectiveHandoffStatus(layout, id(1))).toBe('needs_review');
   });
   it('keeps independent execution records while procurement still groups identical materials', async () => {
     const layout = ordinary(); for (const [index, item] of layout.floors[0].items.entries()) item.handoff = { ...await reviewed(layout, index + 1), ownerName: index ? '现场乙' : '现场甲' };

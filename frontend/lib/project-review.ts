@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
+import { captureLegacyBriefRecord, captureUnconfirmedSavedBrief } from '../components/room-organizer/lib/legacy-brief';
 import type { DeliverySnapshot } from '../components/room-organizer/lib/scene-delivery';
 import { isRoomLayout } from '../components/room-organizer/lib/schema';
 import { layoutToSvg } from '../components/room-organizer/lib/plan-export/svg';
@@ -61,6 +62,7 @@ type ReviewDesign = NonNullable<NonNullable<RoomLayout['backendSceneV2']>['desig
 interface ReviewLayout {
   name: string; width: number; depth: number; floors: ReviewFloor[];
   scenePreset: RoomLayout['scenePreset'] | null;
+  hasTemplateNodes: boolean;
   roof: RoomLayout['roof'] | null;
   terrain: RoomLayout['terrain'] | null;
   entrance: RoomLayout['entrance'] | null;
@@ -143,7 +145,7 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
       kind: z.enum(['exterior', 'interior']).optional().parse(w.kind),
       status: z.enum(['detected', 'inferred', 'confirmed']).optional().parse(w.status), color: w.color,
     })),
-    zones: floor.zones?.map(v => ({ id: v.id, name: v.name, color: v.color, x: v.x, z: v.z, w: v.w, d: v.d })),
+    zones: floor.zones?.map(v => ({ id: v.id, name: v.name, color: v.color, ...(v.zoneType===undefined?{}:{zoneType:v.zoneType}), x: v.x, z: v.z, w: v.w, d: v.d })),
     items: floor.items.map(item => ({
       id: item.id, name: item.name, type: item.type, materialId: item.materialId, source: item.source,
       width: item.width, depth: item.depth, height: item.height, color: item.color,
@@ -187,6 +189,7 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
   return JSON.parse(JSON.stringify({
     name: layout.name, width: layout.width, depth: layout.height, floors,
     scenePreset: layout.scenePreset ?? null,
+    hasTemplateNodes: layout.floors.some(floor => floor.items.some(item => !!item.glbNode)),
     roof: layout.roof ? { style: layout.roof.style, color: layout.roof.color,
       dormers: layout.roof.dormers?.map(d => ({ id: d.id, side: d.side, width: d.width, offset: d.offset,
         height: d.height, setback: d.setback, window: d.window, balcony: d.balcony, color: d.color,
@@ -215,9 +218,13 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
 }
 
 function reviewBrief(brief: CreativeBrief): CreativeBrief {
+  const legacyBriefRecord = captureLegacyBriefRecord(brief);
+  const unconfirmedSavedBrief = captureUnconfirmedSavedBrief(brief);
   const value = {
-    event: brief.event, guests: brief.guests, description: brief.description, mustHave: brief.mustHave,
-    allowIdeas: brief.allowIdeas, hasFloorplan: brief.hasFloorplan, venueConditions: brief.venueConditions,
+    ...(legacyBriefRecord ? {legacyBriefRecord} : {}),
+    ...(unconfirmedSavedBrief ? {unconfirmedSavedBrief} : {}),
+    event: brief.eventConfirmed === true ? brief.event : '', eventConfirmed: brief.eventConfirmed === true, guests: brief.guestsConfirmed === true ? brief.guests : 0, guestsConfirmed: brief.guestsConfirmed === true, description: brief.description, mustHave: brief.mustHave,
+    allowIdeas: brief.ideasConfirmed === true && brief.allowIdeas, ideasConfirmed: brief.ideasConfirmed === true, hasFloorplan: brief.hasFloorplan, venueConditions: brief.venueConditions,
     style: brief.style, palette: brief.palette, atmosphere: brief.atmosphere,
   };
   if (typeof value.event !== 'string' || !Number.isFinite(value.guests) ||
@@ -372,7 +379,6 @@ const materialLabels: Record<string, string> = {
   'glb-asset': '模型物料',
 };
 const sourceLabels = { builtin: '内置示意', public_library: '公共模型', generated: '生成模型', local_sample: '本地模型' };
-const requirementLabels = { satisfied: '设计记录为满足', partial: '设计记录为部分满足', unmet: '设计记录为未满足' };
 const materialLabel = (item: Pick<ReviewItem, 'materialId' | 'type'>) => materialLabels[item.materialId ?? ''] ?? materialLabels[item.type] ?? '其他示意物料';
 const modelVersions = (layout: ReviewLayout) => [...new Set(layout.floors.flatMap(f => f.items.map(i => i.assetVersionId).filter((id): id is string => !!id)))];
 // The projection omits loading URLs; use its existing model limitation to retain that distinction.
@@ -426,7 +432,7 @@ function renderNote(note: ProjectReviewSnapshot['notes'][number]): string {
 
 function renderLayout(layout: ReviewLayout, heading: string, teamNotes: ProjectReviewSnapshot['notes'], images: ProjectReviewImage[]): string {
   const items = layout.floors.flatMap(f => f.items);
-  const plans = layout.scenePreset || layout.venue.shape !== 'rectangle' || layout.structure
+  const plans = layout.scenePreset || layout.hasTemplateNodes || layout.venue.shape !== 'rectangle' || layout.structure
     ? para('完整场馆或结构没有简化平面示意；可用本次记录的静态画面配合文字评审。')
     : layout.floors.map(floor => {
       const safeFloor: FloorLayout = { ...floor, floorColor: safeColor(floor.floorColor),
@@ -439,12 +445,12 @@ function renderLayout(layout: ReviewLayout, heading: string, teamNotes: ProjectR
       return `<figure class="plan">${layoutToSvg(planLayout, safeFloor)}<figcaption>${escape(floor.name)} · 平面示意，非实测。仅表达平面位置与物件轮廓，不能作为施工图。</figcaption></figure>`;
     }).join('');
   const design = layout.design;
-  const requirements = design ? table(['设计要求', '原设计判断', '理由'], design.requirements.map(r => [
-    r.text, r.objectIds.some(id => design.missingObjectIds.includes(id)) ? `关联有变动，需复核；${requirementLabels[r.status]}` : requirementLabels[r.status], r.reason,
+  const requirements = design ? table(['设计要求', '核验状态', '说明'], design.requirements.map((r,index) => [
+    `原方案要求 ${index+1}`, r.objectIds.some(id => design.missingObjectIds.includes(id)) ? '关联有变动，需复核' : '待人工核验', '原方案自由文字未经独立核验。',
   ])) : '';
   const captures = images.map(image => `<figure><img src="${escape(image.dataUrl)}" alt="${escape(image.caption)}"><figcaption>${escape(image.caption)} · ${image.kind === 'editor-capture' ? '工作台静态画面' : '经允许公开的评审图片'} · 本次内容记录</figcaption></figure>`).join('');
   return `<section class="layout"><h2>${escape(heading)}</h2><p class="caption">${escape(`${number(layout.width)} × ${number(layout.depth)} 米 · ${layout.floors.length} 层 · ${items.filter(i => i.role === 'material').length} 件示意物料`)}</p>${plans}${captures}
-    <h3>设计说明与理由</h3>${design ? para(design.concept) + (design.highlights.length ? `<div class="hl-grid">${design.highlights.map(h => `<article><h4>${escape(h.title)}</h4>${para(h.description)}</article>`).join('')}</div>` : '') + requirements : ''}
+    <h3>设计说明与理由</h3>${design ? '<p>原方案自由文字未经独立验收，不作为消防、无障碍或其他规范结论；请人工核验。</p>' + para('原方案设计说明待人工核验。') + (design.highlights.length ? `<div class="hl-grid">${design.highlights.map((_h,index) => `<article><h4>原方案建议 ${index+1}</h4>${para('建议内容待人工核验。')}</article>`).join('')}</div>` : '') + requirements : ''}
 ${design ? `<p class="fine">以上为原方案设计记录，不是客户意见；现场条件与容量仍须核对。</p>` : ''}
 ${teamNotes.length ? `<h4>团队说明</h4>${teamNotes.map(renderNote).join('')}<p class="fine">团队说明与自查不代替客户确认或现场验收。</p>` : ''}
 ${!design && !teamNotes.length ? para('本次没有可公开的设计理由，待方案团队补充。') : ''}
@@ -465,8 +471,8 @@ ${table(['楼层', '物件／原编号', '类型／来源', '示意规格', '定
       i.assetVersionId ? `${modelLabel(i, versions, false)}\n${i.assetVersionId}` : modelLabel(i, versions, unversioned.has(i.id)),
     ]))}
 ${layout.design ? `<h4>设计与物件对应</h4>${table(['记录', '原状态', '关联原编号'], [
-      ...layout.design.highlights.map(h => [h.title, '设计亮点', h.objectIds.join('、') || '未关联']),
-      ...layout.design.requirements.map(r => [r.text, r.objectIds.some(id => layout.design!.missingObjectIds.includes(id)) ? `需复核；原记录 ${r.status}` : r.status, r.objectIds.join('、') || '未关联']),
+      ...layout.design.highlights.map((h,index) => [`原方案建议 ${index+1}`, '待人工核验', h.objectIds.join('、') || '未关联']),
+      ...layout.design.requirements.map((r,index) => [`原方案要求 ${index+1}`, r.objectIds.some(id => layout.design!.missingObjectIds.includes(id)) ? '关联有变动，需复核' : '待人工核验', r.objectIds.join('、') || '未关联']),
     ])}` : ''}
     <h4>模型交付限制及依据</h4>${para('本包供文字与静态画面评审，不是 Scene JSON 或 GLB。未运行模型授权、载入或文件转换验收；没有列出限制不代表这些验收已通过。')}
 ${layout.limitations.length ? table(['依据', '关联原编号'], layout.limitations.map(l => [l.reason, l.objectIds.join('、') || '场景整体'])) : para('所选字段没有识别到上述范围限制；模型和现场仍须另行核验。')}`;
@@ -493,7 +499,7 @@ export function projectReviewHtml(snapshot: ProjectReviewSnapshot): string {
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"><title>${escape(snapshot.current.layout.name)} · 方案评审包</title>
   <style>body{margin:0;color:#141416;background:#fff;font:15px/1.7 Arial,"Noto Sans SC","Source Han Sans SC","Source Han Sans CN","PingFang SC","Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums;counter-reset:sec}main{max-width:880px;margin:56px auto;padding:0 40px}header{padding:0 0 40px;border-bottom:1px solid #141416}.brand{display:flex;align-items:center;gap:9px;margin-bottom:64px}.brand-mark{position:relative;display:inline-block;width:20px;height:20px;border-radius:6px;background:#141416;flex:0 0 auto}.brand-mark::after{content:'';position:absolute;left:5px;right:5px;bottom:0;height:10px;background:#fff;border-radius:5px 5px 0 0}.brand-mark::before{content:'';position:absolute;left:8px;bottom:3px;width:4px;height:4px;border-radius:50%;background:#4A7C59;z-index:1}.eyebrow{font-size:11px;letter-spacing:.14em;color:#71767E;font-weight:500;margin:0}.state{display:inline-flex;align-items:center;gap:7px;margin-top:20px;font-size:11px;letter-spacing:.08em;color:#55585F}.state::before{content:'';width:6px;height:6px;border-radius:50%;background:#4A7C59}h1{font-size:44px;line-height:1.2;font-weight:600;letter-spacing:.01em;margin:18px 0 12px}h2{font-size:13px;line-height:1.6;font-weight:600;letter-spacing:.1em;color:#141416;margin:56px 0 8px;padding-top:20px;border-top:1px solid #E4E4E7}h2::before{counter-increment:sec;content:counter(sec,decimal-leading-zero);color:#A6AAB2;font-weight:500;font-size:12px;margin-right:14px}h3{font-size:17px;line-height:1.5;font-weight:600;margin:30px 0 10px}h4{font-size:13px;font-weight:600;color:#55585F;margin:18px 0 6px;letter-spacing:.02em}p{margin:10px 0}.text,td{white-space:pre-wrap;overflow-wrap:anywhere}.caption,figcaption{font-size:12px;color:#71767E}.fine{font-size:11px;line-height:1.7;color:#A6AAB2;margin-top:14px}.fine+.fine{margin-top:2px}.notice{margin-top:22px;padding:0;border:0;border-left:3px solid #96651F;border-radius:0;padding-left:14px;font-size:13px;line-height:1.7;color:#55585F}.intro{margin-top:4px}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin:36px 0 8px}.facts dt{font-size:11px;letter-spacing:.08em;color:#71767E;font-weight:500;margin-bottom:6px}.facts dd{margin:0;font-size:30px;line-height:1.25;font-weight:600}.facts small{display:block;font-size:11px;color:#A6AAB2;font-weight:400;margin-top:4px;letter-spacing:.02em}details.doc{margin:18px 0 6px;border-top:1px solid #EFEFF1;border-bottom:1px solid #EFEFF1;padding:4px 0}.doc-toggle{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.doc-summary{cursor:pointer;font-size:13px;font-weight:600;color:#55585F;padding:10px 0;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}.doc-summary::after{content:'＋';color:#A6AAB2;font-weight:400;margin-left:auto;font-size:15px}.doc-toggle:checked~.doc-summary::after{content:'－'}.doc-toggle:focus-visible~.doc-summary{outline:2px solid #55585F;outline-offset:4px}.doc-body{display:none}.doc-toggle:checked~.doc-body{display:block;padding:2px 0 16px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.6;margin:22px 0}th{font-size:11px;font-weight:500;letter-spacing:.08em;color:#71767E;text-align:left;padding:8px 18px 8px 0;border-top:2px solid #141416;border-bottom:1px solid #E4E4E7;vertical-align:bottom}td{padding:12px 18px 12px 0;border-bottom:1px solid #EFEFF1;text-align:left;vertical-align:top}td:first-child{font-weight:600}.materials td:nth-child(2){font-size:17px;font-weight:600}.materials td:nth-child(2) b{font-size:17px;font-weight:600}td .swatch{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid #E4E4E7;vertical-align:-1px;margin-right:6px}figure{margin:26px 0}figure.plan,figure.plan svg{margin:0}figure.plan svg{border:1px solid #EFEFF1;border-radius:10px}figure img{border-radius:10px}svg{display:block;width:100%;max-height:620px}.plan text.label{display:none}svg,img{max-width:100%;height:auto}figcaption{margin-top:10px;overflow-wrap:anywhere}.hl-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 32px;margin:20px 0}.hl-grid article{border-left:2px solid #E4E4E7;padding:2px 0 2px 14px;margin:10px 0}.pending article,.pending .hl-grid article{border-left-color:#96651F}article{border-left:2px solid #E4E4E7;padding:2px 0 2px 16px;margin:16px 0}.appendix{margin-top:64px;border:1px solid #E4E4E7;border-radius:10px;padding:24px 28px}.appendix summary{cursor:pointer;font-size:14px;font-weight:600}.appendix summary:focus-visible{outline:2px solid #55585F;outline-offset:4px}.appendix table{font-size:12px}.appendix-help{margin-top:30px;font-size:11px;letter-spacing:.04em;color:#71767E}footer{margin:64px 0 72px;border-top:1px solid #141416;padding-top:18px;font-size:11px;letter-spacing:.04em;color:#71767E;line-height:2}@media(max-width:640px){main{margin:0;padding:0 20px}h1{font-size:30px}.facts{grid-template-columns:1fr 1fr;gap:24px}.hl-grid{grid-template-columns:1fr}}@page{size:A4;margin:14mm}@media print{body{font-size:11px;background:#fff}main{margin:0;padding:0;max-width:none}h1{font-size:26px}h2{margin-top:30px;padding-top:14px}h3{font-size:13px;margin:18px 0 8px}h4{font-size:11px}table,.appendix table{font-size:9px}td{padding:6px 10px 6px 0}th{padding:6px 10px 6px 0}.table-wrap{overflow:visible}thead{display:table-header-group}tr,figure{break-inside:avoid}h2,h3,h4{break-after:avoid}figure{margin:3mm 0}svg{max-height:100mm;max-width:100%;width:auto;height:auto;margin:0 auto}img{display:block;max-height:95mm;max-width:100%;width:auto;height:auto;object-fit:contain;margin:0 auto}figcaption{margin:2mm 0 0}.hl-grid{grid-template-columns:1fr}.layout{break-before:auto}.layout>.caption,.layout>.caption+p{break-after:avoid}.appendix:not([open]){display:none}.appendix[open]{break-before:page}.appendix-help{display:none}.doc-body{display:none}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><main>
   <header><div class="brand"><span class="brand-mark" aria-hidden="true"></span><p class="eyebrow">幕景 Scendance · 客户方案评审文件</p></div><span class="state">${escape(kindLabels[snapshot.dataKind])} · ${snapshot.dataState === 'saved' ? '已保存资料' : '未保存草稿'}</span><h1>${escape(snapshot.current.layout.name)}</h1><p class="caption">本次内容记录于 ${escape(displayTime(snapshot.snapshot.generatedAt))}（北京时间） · 供方案讨论，假设与待定项仍待确认，布局尺寸为示意非实测</p></header>
-  <section class="intro"><h2>活动目标与场地</h2>${brief ? `<dl class="facts"><div><dt>活动与预计人数</dt><dd>${escape(`${brief.event} / ${brief.guests} 人`)}</dd></div><div><dt>布局中的场地尺寸</dt><dd>${escape(`${number(snapshot.current.layout.width)} × ${number(snapshot.current.layout.depth)}`)}<small>米 · 平面示意</small></dd></div><div><dt>示意物料</dt><dd>${materialCount}<small>件 · 汇总见物料概览</small></dd></div></dl><input type="checkbox" id="doc-brief" class="doc-toggle"><label class="doc-summary" for="doc-brief">活动目标与需求原文</label><div class="doc-body"><h4>需求原文</h4>${para(brief.description)}<h4>必须满足</h4>${para(brief.mustHave)}<h4>现场条件</h4>${para(brief.venueConditions ?? '未记录，待核对。')}<h4>风格与氛围</h4>${para(`风格：${brief.style ?? '未记录'} · 配色：${brief.palette ?? '未记录'} · 氛围：${brief.atmosphere ?? '未记录'}`)}</div>` : para(snapshot.brief.status === 'withheld' ? '需求原文未获准公开，未包含在本次客户文件中。' : '原项目没有已记录的需求；待补。')}</section>
+  <section class="intro"><h2>活动目标与场地</h2>${brief ? `<dl class="facts"><div><dt>活动与预计人数</dt><dd>${escape(`${brief.eventConfirmed === true ? brief.event : '活动类型待确认'} / ${brief.guestsConfirmed === true ? `${brief.guests} 人` : '人数待确认'}`)}</dd></div><div><dt>布局中的场地尺寸</dt><dd>${escape(`${number(snapshot.current.layout.width)} × ${number(snapshot.current.layout.depth)}`)}<small>米 · 平面示意</small></dd></div><div><dt>示意物料</dt><dd>${materialCount}<small>件 · 汇总见物料概览</small></dd></div></dl>${brief.legacyBriefRecord ? para(`来源待确认的旧记录（不代表已确认）：${[brief.legacyBriefRecord.event !== undefined ? `活动：${brief.legacyBriefRecord.event || '空值'}` : null, brief.legacyBriefRecord.guests !== undefined ? `人数：${brief.legacyBriefRecord.guests}` : null, brief.legacyBriefRecord.allowIdeas !== undefined ? `允许扩展创意：${brief.legacyBriefRecord.allowIdeas ? '是' : '否'}` : null].filter(Boolean).join('；')}`) : ''}${brief.unconfirmedSavedBrief ? para(`当前未确认的保存值（可能是默认值，不代表需求）：${[brief.unconfirmedSavedBrief.event !== undefined ? `活动：${brief.unconfirmedSavedBrief.event || '空值'}` : null, brief.unconfirmedSavedBrief.guests !== undefined ? `人数：${brief.unconfirmedSavedBrief.guests}` : null, brief.unconfirmedSavedBrief.allowIdeas !== undefined ? `允许扩展创意：${brief.unconfirmedSavedBrief.allowIdeas ? '是' : '否'}` : null].filter(Boolean).join('；')}`) : ''}<input type="checkbox" id="doc-brief" class="doc-toggle"><label class="doc-summary" for="doc-brief">活动目标与需求原文</label><div class="doc-body"><h4>需求原文</h4>${para(brief.description)}<h4>必须满足</h4>${para(brief.mustHave)}<h4>现场条件</h4>${para(brief.venueConditions ?? '未记录，待核对。')}<h4>风格与氛围</h4>${para(`风格：${brief.style ?? '未记录'} · 配色：${brief.palette ?? '未记录'} · 氛围：${brief.atmosphere ?? '未记录'}`)}</div>` : para(snapshot.brief.status === 'withheld' ? '需求原文未获准公开，未包含在本次客户文件中。' : '原项目没有已记录的需求；待补。')}</section>
 ${renderLayout(snapshot.current.layout, '布局示意与设计说明', teamNotes.filter(n => n.target === 'current'), images.filter(i => i.target === 'current'))}
 ${snapshot.adopted ? renderLayout(snapshot.adopted.layout, '已记录采用布局', teamNotes.filter(n => n.target === 'adopted'), images.filter(i => i.target === 'adopted')) : ''}
   <section class="review-status"><h2>采用与意见状态</h2>${para(`当前讨论方案：${snapshot.current.variantName ?? '当前编辑布局'}`)}${snapshot.adopted ? para(`采用版本：${adoptedName ?? '已记录采用方案（编号见附录）'}\n${kindLabels[snapshot.adopted.record.dataKind]} · ${snapshot.adopted.record.decision === 'team-selection' ? '团队选定，不等于客户确认' : '已提供客户确认记录；不作电子签字'}\n采用依据：${snapshot.adopted.record.basis}`) : para('采用版本：未记录。团队自查与布局应用不代替客户采用记录。')}
@@ -505,7 +511,7 @@ ${renderMaterials(snapshot.current.layout, '当前方案物料概览')}${snapsho
   <details class="appendix"><summary>附录 · 来源、版本与逐件定位</summary>
     <h3>本次文件与资料来源</h3>${para(`来源为项目需求、编辑布局及经允许公开的人工评审记录。仅包含指定白名单，未自动包含原照片、底图、私有模型加载地址、账号、内部工单备注与聊天。\n快照编号：${snapshot.snapshot.id}\n冻结时间：${snapshot.snapshot.generatedAt}\n保存状态：${snapshot.dataState === 'saved' ? '制作者声明已完成保存／读取；本包不证明云端保存' : '未保存草稿'}\n冻结后项目修改不会更新本文件；重用前须由工作台检查来源版本并重新导出。`)}
 ${table(['版本记录', '原编号／依据'], [['当前编辑方案', snapshot.current.variantId ?? '未记录'], ['采用方案', snapshot.adopted?.record.variantId ?? '未记录'], ...(snapshot.adopted ? [['采用记录来源', snapshot.adopted.record.sourceLabel], ['采用记录时间', snapshot.adopted.record.recordedAt]] : [])])}
-${brief ? table(['需求资料标记', '原记录'], [['场地图资料', brief.hasFloorplan === undefined ? '未记录' : brief.hasFloorplan ? '标记有资料，不代表实测或原图已打包' : '标记无资料'], ['允许扩展创意', brief.allowIdeas ? '是，不代表已采用' : '否']]) : ''}
+${brief ? table(['需求资料标记', '原记录'], [['场地图资料', brief.hasFloorplan === undefined ? '未记录' : brief.hasFloorplan ? '标记有资料，不代表实测或原图已打包' : '标记无资料'], ['允许扩展创意', brief.ideasConfirmed !== true ? '待确认' : brief.allowIdeas ? '是，不代表已采用' : '否']]) : ''}
 ${snapshot.notes.length ? `<h3>人工记录来源与关联</h3>${table(['记录性质', '来源／时间', '对应方案', '关联原编号／复核'], snapshot.notes.map(n => [
       `${noteLabels[n.kind]} · ${kindLabels[n.dataKind]}`, `${n.sourceLabel}\n${n.recordedAt}`, n.target === 'current' ? '当前编辑布局' : `采用版本 ${snapshot.adopted?.record.variantId ?? '未记录'}`, `${n.objectIds.join('、') || '整体'}${n.missingObjectIds.length ? `\n需复核：${n.missingObjectIds.join('、')}` : ''}`,
     ]))}` : ''}

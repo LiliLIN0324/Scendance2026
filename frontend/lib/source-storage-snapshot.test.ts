@@ -1,8 +1,22 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as recoveryAuthority from './local-write-lease';
 import {
-  readSourceScopeSnapshot, restoreSourceScopeIfUnchanged, sameSourceScopeSnapshot,
+  readSourceScopeSnapshot, restoreSourceScopeIfUnchanged as secureRestoreSourceScopeIfUnchanged, sameSourceScopeSnapshot,
+  readSourceScopeSnapshotV2, sameSourceScopeSnapshotV2, restoreSourceScopeV2IfUnchanged,
   subscribeSourceChanges, type SourceScopeSnapshot, type StoredSource,
 } from './source-storage';
+
+// Isolate native transaction behavior; authentic scope authorization has separate integration tests.
+const testAbort=new AbortController();
+const testRecoveryGuard={capability:{} as recoveryAuthority.RecoveryCapability,signal:testAbort.signal,assertStillHeld(){}};
+function restoreSourceScopeIfUnchanged(scope:string, expected:SourceScopeSnapshot, desired:SourceScopeSnapshot, check?:()=>void) {
+  return secureRestoreSourceScopeIfUnchanged(scope,expected,desired,check,testRecoveryGuard);
+}
+beforeEach(()=>{
+  vi.spyOn(recoveryAuthority,'assertRecoveryCapability').mockImplementation(()=>{});
+  vi.spyOn(recoveryAuthority,'recoveryCapabilitySignal').mockReturnValue(testAbort.signal);
+  vi.spyOn(recoveryAuthority,'assertRecoveryStorageGrant').mockImplementation(()=>{});
+});
 
 const image = (id = 'image-a', scope = 'activity-a', content = 'pixels'): StoredSource => ({
   id, scope, name: '原图.png', kind: 'floorplan', width: 100, height: 80,
@@ -32,6 +46,7 @@ function database(initial: SourceScopeSnapshot, otherSources: StoredSource[] = [
         return {
           index: () => ({ getAll: (scope: string) => request('getAll', () => [...stagedSources.values()].filter(source => source.scope === scope)) }),
           get: (key: string) => request('get', () => name === 'sources' ? stagedSources.get(key) : stagedForms.get(key)),
+          getKey: (key: string) => request('getKey', () => (name === 'sources' ? stagedSources : stagedForms).has(key) ? key : undefined),
           put: (value: unknown, key?: string) => {
             const copy = structuredClone(value);
             return request(`put:${name}`, () => {
@@ -75,10 +90,11 @@ function database(initial: SourceScopeSnapshot, otherSources: StoredSource[] = [
     queueMicrotask(() => req.onsuccess?.()); return req;
   } });
   return { transactions, close, failCommit: () => { failWriteCommit = true; }, failRead: () => { failRead = true; },
-    images: () => [...sources.values()], form: (scope = initial.scope) => forms.get(scope), hasForm: () => forms.has(initial.scope) };
+    images: () => [...sources.values()], form: (scope = initial.scope) => forms.get(scope), hasForm: () => forms.has(initial.scope),
+    deleteForm:()=>forms.delete(initial.scope), setForm:(value:unknown)=>forms.set(initial.scope,value) };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 describe('drawing scope snapshot comparison', () => {
   it('compares all source metadata and actual equal-size Blob bytes, independent of image order', async () => {
@@ -103,6 +119,48 @@ describe('drawing scope snapshot comparison', () => {
     const cycle: { self?: unknown; future: number } = { future: 1 }; cycle.self = cycle;
     expect(await sameSourceScopeSnapshot(snapshot(cycle), snapshot(structuredClone(cycle)))).toBe(true);
     expect(await sameSourceScopeSnapshot(snapshot({ a: 1, b: 2 }), snapshot({ b: 2, a: 1 }))).toBe(true);
+  });
+});
+
+describe('source-scope v2 existence and transactional CAS',()=>{
+  it('reads absent and present-undefined as distinct snapshots in one transaction',async()=>{
+    const db=database(snapshot(undefined,[]));
+    const present=await readSourceScopeSnapshotV2('activity-a');
+    expect(present.form).toEqual({present:true,value:undefined});
+    db.deleteForm();const absent=await readSourceScopeSnapshotV2('activity-a');
+    expect(absent.form).toEqual({present:false});expect(await sameSourceScopeSnapshotV2(present,absent)).toBe(false);
+    expect(db.transactions.every(tx=>tx.names.join()==='sources,forms'&&tx.mode==='readonly')).toBe(true);
+  });
+  it('atomically applies images and a present-undefined form without dropping either',async()=>{
+    const db=database(snapshot({old:true},[image()])),before=await readSourceScopeSnapshotV2('activity-a');
+    const next={version:2 as const,scope:'activity-a',sources:[image('new','activity-a','newbytes')],form:{present:true as const,value:undefined}};
+    await restoreSourceScopeV2IfUnchanged('activity-a',before,next,testRecoveryGuard);
+    const result=await readSourceScopeSnapshotV2('activity-a');expect(await sameSourceScopeSnapshotV2(result,next)).toBe(true);
+    expect(db.hasForm()).toBe(true);expect(db.images().map(source=>source.id)).toEqual(['new']);
+  });
+  it('deletes a form only when the intended v2 state explicitly says absent',async()=>{
+    const db=database(snapshot(undefined,[])),before=await readSourceScopeSnapshotV2('activity-a');
+    expect(before.form).toEqual({present:true,value:undefined});
+    const next={version:2 as const,scope:'activity-a',sources:[],form:{present:false as const}};
+    await restoreSourceScopeV2IfUnchanged('activity-a',before,next,testRecoveryGuard);
+    expect(db.hasForm()).toBe(false);expect((await readSourceScopeSnapshotV2('activity-a')).form).toEqual({present:false});
+  });
+  it('rejects third-party Blob changes and legacy snapshots before modifying anything',async()=>{
+    const original=snapshot({old:true},[image()]),db=database(snapshot({old:true},[image('image-a','activity-a','Pixels')]));
+    const before={version:2 as const,scope:original.scope,sources:original.sources,form:{present:true as const,value:original.form}};
+    const next={...before,sources:[],form:{present:false as const}};
+    await expect(restoreSourceScopeV2IfUnchanged(original.scope,before,next,testRecoveryGuard)).rejects.toThrow('已有新变化');
+    expect(db.images()).toHaveLength(1);expect(db.form()).toEqual({old:true});
+    await expect(restoreSourceScopeV2IfUnchanged(original.scope,original as unknown as typeof before,next,testRecoveryGuard)).rejects.toThrow('版本');
+  });
+  it('aborts all staged changes if the guard is lost during the transaction',async()=>{
+    const db=database(snapshot({old:true},[image()])),before=await readSourceScopeSnapshotV2('activity-a');
+    const next={version:2 as const,scope:'activity-a',sources:[image('new')],form:{present:false as const}};
+    const abort=new AbortController();
+    vi.mocked(recoveryAuthority.recoveryCapabilitySignal).mockReturnValue(abort.signal);
+    const guard={...testRecoveryGuard,signal:abort.signal,assertStillHeld(){if(db.transactions.at(-1)?.operations.includes('delete:sources'))abort.abort();}};
+    await expect(restoreSourceScopeV2IfUnchanged('activity-a',before,next,guard)).rejects.toThrow();
+    expect(db.images().map(source=>source.id)).toEqual(['image-a']);expect(db.form()).toEqual({old:true});
   });
 });
 

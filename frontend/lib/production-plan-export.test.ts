@@ -300,14 +300,14 @@ describe('internal production-plan handoff HTML', () => {
     finally { vi.unstubAllGlobals(); }
   });
 
-  it('keeps recorded accepted and current effective accepted separate using the actual operation basis and review', async () => {
+  it('retains the recorded acceptance while source and revision remain unverified', async () => {
     const source = await acceptedLayout(); const task = source.eventOperations!.tasks[0];
-    expect((await operationReview(source, task)).status).toBe('accepted');
+    expect((await operationReview(source, task)).status).toBe('needs_review');
     const document = await doc(source); const row = taskRow(document);
     expect(section(document, '明确关联的活动任务').textContent).toContain('记录状态');
     expect(section(document, '明确关联的活动任务').textContent).toContain('有效状态');
-    expect(row.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(2);
-    expect(row.textContent).not.toContain(OPERATION_STATUS_LABELS.needs_review);
+    expect(row.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
+    expect(row.textContent).toContain(OPERATION_STATUS_LABELS.needs_review);
     expect(source.eventOperations!.tasks[0].status).toBe('accepted');
   });
 
@@ -317,7 +317,7 @@ describe('internal production-plan handoff HTML', () => {
     else {
       // The placement case has only production-plan object links, no direct task links.
       task.objectIds = []; task.reviewedBasis = await operationBasis(source, task);
-      expect((await operationReview(source, task)).status).toBe('accepted');
+      expect((await operationReview(source, task)).status).toBe('needs_review');
       source.floors[0].items[0].position = { x: 2, z: 1 };
     }
     expect((await operationReview(source, task)).status).toBe('needs_review');
@@ -351,7 +351,7 @@ describe('internal production-plan handoff HTML', () => {
     if (failure === 'throws') vi.spyOn(operations, 'operationReview').mockRejectedValue(new Error('PRIVATE_REVIEW_ERROR https://private.example/?token=SECRET'));
     else vi.stubGlobal('crypto', undefined);
     const document = await doc(source); const row = taskRow(document);
-    expect(row.textContent).toContain('待核对（复核未完成）');
+    expect(row.textContent).toContain(failure === 'throws' ? '待核对（复核未完成）' : '需复核');
     expect(row.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
     expect(document.body.textContent).not.toContain('PRIVATE_REVIEW_ERROR');
     expect(document.body.textContent).not.toContain('private.example');
@@ -619,9 +619,10 @@ describe('material-checkin facts in internal handoff HTML', () => {
   it('passes the frozen third ledger into real task review and invalidates an earlier acceptance after a related quantity changes', async () => {
     const source = await acceptedLayout(), facts = checkLedger(), task = source.eventOperations!.tasks[0];
     task.reviewedBasis = await operationBasis(source, task, facts);
-    expect((await operationReview(source, task, facts)).status).toBe('accepted');
+    expect((await operationReview(source, task, facts)).status).toBe('needs_review');
     const current = taskRow(await doc(source, facts));
-    expect(current.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(2);
+    expect(current.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
+    expect(current.textContent).toContain(OPERATION_STATUS_LABELS.needs_review);
     const changed = structuredClone(facts); movement(changed.sheets[0], 'receive').quantity = 27;
     expect((await operationReview(source, task, changed)).status).toBe('needs_review');
     const stale = taskRow(await doc(source, changed));
@@ -668,7 +669,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
     const html = await productionPlanHandoffHtml(layout(), snapshot, facts), document = new DOMParser().parseFromString(html, 'text/html');
     expect(document.querySelectorAll('script,img,iframe,object,link,a[href],[onload],[onerror]')).toHaveLength(0);
     expect(document.body.textContent).toContain(payload);
-    expect(document.querySelector('details')!.textContent).toContain('https://evidence.example/void?a=1&b=2');
+    expect(document.querySelector('details')!.textContent).toContain('[私密链接或凭据已隐藏]');
     expect(html).not.toContain('PRIVATE_ITEM_NOTE'); expect(html).not.toContain('PRIVATE_TOKEN');
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -699,6 +700,13 @@ async function acceptedObjectLayout() {
 }
 
 describe('complete internal activity handoff HTML', () => {
+  it('marks missing site and safety coverage prominently in the standalone handoff', async () => {
+    const source=layout();delete source.backendSceneV2;delete source.backendVenue;delete source.entrance;
+    const document=await activityDoc(source);const header=document.querySelector('header')!.textContent!;
+    expect(header).toContain('待核验草案：出口、门洞与场地尺度未核验。');
+    expect(header).toContain('通行、疏散、消防、无障碍及核定人数未核验。');
+    expect(header).not.toMatch(/安全通过|消防通过|无障碍合规/);
+  });
   it.each(['production', 'activity'] as const)('uses neutral task text for an empty object association in %s scope', async scope => {
     const source = layout(); source.eventOperations!.tasks[0].objectIds = [];
     const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, undefined,
@@ -777,7 +785,7 @@ describe('complete internal activity handoff HTML', () => {
     const work = section(await activityDoc(source), '逐件物料工作单');
     expect(work.textContent).toContain('记录状态：已验收\n有效状态：需复核');
     expect(work.textContent).toContain('原现场核对证据');
-    expect(work.textContent).toContain('https://evidence.example/object?a=1&b=2');
+    expect(work.textContent).toContain('[私密链接或凭据已隐藏]');
     expect(item.handoff!.status).toBe('accepted');
   });
 
@@ -848,12 +856,23 @@ describe('complete internal activity handoff HTML', () => {
     }
     expect(section(document, '逐件物料工作单').textContent).toContain(payload);
     const needs = section(document, '活动需求与现场条件');
-    expect(needs.textContent).toContain(payload); expect(needs.textContent).toContain('预计人数0');
+    expect(needs.textContent).toContain(payload); expect(needs.textContent).toContain('预计人数待确认');
     expect(needs.textContent).toContain('照片、原图纸附件和模型文件需另行提供');
     expect(section(document, '逐件物料工作单').textContent).toContain(source.floors[0].items[0].notes!);
     for (const excluded of ['allowIdeas', 'hasFloorplan', 'PRIVATE_TOKEN', 'PRIVATE_ACCOUNT_TOKEN', 'PRIVATE_FUTURE_OBJECT_DATA', 'PRIVATE_NEW_FIELD', '98765', 'sha256:', 'reviewedBasis']) expect(html).not.toContain(excluded);
     if (brief.status === 'present') Object.assign(brief.value, { internalToken: 'PRIVATE_NEW_FIELD' });
     await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief })).rejects.toThrow('活动需求字段无效');
+  });
+
+  it('does not export unconfirmed manual defaults as established activity facts',async()=>{
+    const source=layout();
+    const unconfirmed:BackupBrief={status:'present',value:{event:'品牌快闪',eventConfirmed:false,guests:24,guestsConfirmed:false,description:'',mustHave:'',allowIdeas:false}};
+    const doc=await activityDoc(source,unconfirmed),needs=section(doc,'活动需求与现场条件');
+    expect(needs.textContent).toContain('活动类型待确认');expect(needs.textContent).toContain('预计人数待确认');
+    expect(needs.textContent).not.toContain('品牌快闪');expect(needs.textContent).not.toContain('预计人数24');
+    if(unconfirmed.status==='present'){unconfirmed.value.eventConfirmed=true;unconfirmed.value.guestsConfirmed=true;}
+    const confirmed=section(await activityDoc(source,unconfirmed),'活动需求与现场条件');
+    expect(confirmed.textContent).toContain('活动类型品牌快闪');expect(confirmed.textContent).toContain('预计人数24');
   });
 
   it('retains non-rectangular structure restrictions in activity mode', async () => {
@@ -890,4 +909,14 @@ describe('complete internal activity handoff HTML', () => {
     expect(section(emptyActivity, '逐件物料工作单').textContent).toMatch(/备注[：:]\s*未记录/);
     expect(source).toEqual(before);
   });
+});
+
+it('交接 HTML 隐藏签名和凭据，同时保留普通现场说明及公开链接', async () => {
+  const source=layout();
+  source.eventOperations!.tasks[0]!.evidenceNote='已现场核对\n凭据 token=TOP_SECRET';
+  source.eventOperations!.tasks[0]!.evidenceUrls=['https://example.com/evidence?token=URL_SECRET','https://example.com/public.pdf'];
+  const html=await productionPlanHandoffHtml(source,snapshot,undefined,{scope:'activity'});
+  expect(html).not.toContain('TOP_SECRET'); expect(html).not.toContain('URL_SECRET');
+  expect(html).toContain('已现场核对'); expect(html).toContain('https://example.com/public.pdf');
+  expect(html).toContain('[私密链接或凭据已隐藏]'); expect(html).toContain('不能保证识别全部敏感信息');
 });

@@ -6,6 +6,7 @@ import { ensureActivityCover, saveActivityCover } from '@/lib/activity-cover';
 import { archiveLocalActivity, createLocalActivityBackup, listLocalActivities, readLocalActivity, LOCAL_ACTIVITIES_NAMESPACE,
   type LocalActivityList, type NewLocalActivityMode } from '@/lib/local-activities';
 import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
+import { localRestoreAvailable } from '@/lib/local-project-restore';
 import { subscribeSourceNamespace } from '@/lib/source-storage';
 import { captureStageCover } from '@/lib/stage-cover';
 import { MAX_NAME_LENGTH } from '../lib/schema';
@@ -14,6 +15,7 @@ import { InfoTip } from './info-tip';
 import { PlanThumb } from './plan-thumb';
 import type { LocalProjectBackupActions } from './creative-studio';
 import type { RoomLayout } from '../lib/types';
+import {useLocalActivitySwitchGuard} from '../lib/local-activity-switch-guard';
 import './local-activities-panel.css';
 
 export interface LocalActivitiesPanelProps {
@@ -29,7 +31,7 @@ export interface LocalActivitiesPanelProps {
   onComplete?: (() => void) | undefined;
 }
 type Working = 'prepare' | 'archive' | 'read' | 'restore';
-interface Token { id: number; epoch: number; scope: string; permissionEpoch: number }
+interface Token { id: number; epoch: number; scope: string; permissionEpoch: number; assertSwitchCurrent():void }
 
 /** 画廊卡只放相对时间：今天/昨天/N 天前；超过 29 天退回短日期，坏值原样返回。 */
 function relativeStamp(value: string): string {
@@ -43,6 +45,7 @@ function relativeStamp(value: string): string {
 }
 
 export function LocalActivitiesPanel({ layout, actions, disabled = false, mode = 'all', currentStatus = '', isActivityVisible = () => true, onComplete }: LocalActivitiesPanelProps): JSX.Element {
+  const switchGuard=useLocalActivitySwitchGuard();
   const showCreate = mode !== 'list', showList = mode !== 'create';
   const [name, setName] = useState(''), [activityMode, setActivityMode] = useState<NewLocalActivityMode>('empty');
   // 画廊末尾的「＋新建活动」拼贴卡：就地展开极简命名，不走 create 表单/wizard。
@@ -53,7 +56,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   const [notice, setNotice] = useState<{ scope: string; text: string } | null>(null);
   const [still, setStill] = useState<{ scope: string; dataUrl: string } | null>(null);
   const mounted = useRef(true), listRequest = useRef(0), pending = useRef(false), sectionRef = useRef<HTMLElement>(null);
-  const operation = useRef({ id: 0, stage: null as Working | null, scope: '', target: '' });
+  const operation = useRef({ id: 0, stage: null as Working | null, scope: '', target: '', kind: '' as '' | 'create' | 'open' });
   const baseline = useRef({ layout, scope: layout.id ?? '', disabled, epoch: 0, permissionEpoch: 0 });
   if (baseline.current.layout !== layout || baseline.current.scope !== (layout.id ?? '') || baseline.current.disabled !== disabled) {
     baseline.current = { layout, scope: layout.id ?? '', disabled, epoch: baseline.current.epoch + 1,
@@ -82,7 +85,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   // Archives made before covers existed get one while their canvas is the one on screen.
   useEffect(() => {
     const scope = layout.id;
-    if (!showList || !scope) return undefined;
+    if (!showList || !scope || !localRestoreAvailable()) return undefined;
     const entry = activities.activities.find(activity => activity.projectId === scope);
     if (!entry || entry.cover) return undefined;
     let cancelled = false;
@@ -105,7 +108,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
     if (operation.current.stage === 'restore') return;
     const interrupted = operation.current.stage !== null;
     const sameScope = operation.current.scope === baseline.current.scope;
-    operation.current = { id: operation.current.id + 1, stage: null, scope: '', target: '' };
+    operation.current = { id: operation.current.id + 1, stage: null, scope: '', target: '', kind: '' };
     pending.current = false; setWorking(null);
     setError(interrupted && sameScope ? '当前场景已变化，操作已停止。请重新核对后再试，输入已保留。' : '');
     setNotice(current => current?.scope === baseline.current.scope ? current : null);
@@ -113,12 +116,18 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
 
   const identityMissing = !layout.id?.trim();
   const busy = !!working || actions.backupPending;
-  const locked = disabled || identityMissing || busy;
-  function begin(): Token | null {
+  const paused = !localRestoreAvailable();
+  const createLocked = disabled || identityMissing || busy;
+  const openLocked = createLocked || paused;
+  function begin(kind: 'create' | 'open'): Token | null {
     if (disabled || identityMissing || actions.backupPending || pending.current) return null;
+    if (kind === 'open' && !localRestoreAvailable()) return null;
+    let assertSwitchCurrent:()=>void;
+    try {if(!switchGuard)throw new Error('当前页面无法核对未保存草稿，未切换活动。');assertSwitchCurrent=switchGuard.capture();}
+    catch(error){setError(error instanceof Error?error.message:'未保存草稿无法核对，未切换活动。');return null;}
     const token = { id: operation.current.id + 1, epoch: baseline.current.epoch, scope: baseline.current.scope,
-      permissionEpoch: baseline.current.permissionEpoch };
-    operation.current = { id: token.id, stage: 'prepare', scope: token.scope, target: '' };
+      permissionEpoch: baseline.current.permissionEpoch,assertSwitchCurrent };
+    operation.current = { id: token.id, stage: 'prepare', scope: token.scope, target: '', kind };
     pending.current = true; setWorking('prepare'); setError(''); setNotice(null);
     return token;
   }
@@ -129,6 +138,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
     if (!active(token) || baseline.current.epoch !== token.epoch || baseline.current.disabled || baseline.current.scope !== token.scope) {
       throw new Error('当前活动或场景已变化，未继续切换。输入及原活动已保留，请重新核对。');
     }
+    token.assertSwitchCurrent();
   }
   function stage(token: Token, value: Working): void {
     assertCurrent(token); operation.current.stage = value; setWorking(value);
@@ -137,8 +147,8 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
     // 画廊拼贴卡走 override 传名，避免 setName 同帧闭包取旧值；老 create 表单仍读组件 state。
     const nextName = override?.name ?? name;
     const nextMode = override?.mode ?? activityMode;
-    if (!targetId && !nextName.trim()) { if (!locked) setError('请填写新活动名称。'); return; }
-    const token = begin(); if (!token) return;
+    if (!targetId && !nextName.trim()) { if (!createLocked) setError('请填写新活动名称。'); return; }
+    const token = begin(targetId ? 'open' : 'create'); if (!token) return;
     try {
       const text = await actions.prepareBackup();
       stage(token, 'archive');
@@ -159,7 +169,11 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
       const targetScope = candidate.layout.id;
       if (!targetScope?.trim()) throw new Error('待打开活动缺少有效编号，当前活动未改变。');
       stage(token, 'restore'); operation.current.target = targetScope;
-      await actions.restoreBackup(candidate);
+      if (targetId) await actions.restoreBackup(candidate, token.assertSwitchCurrent);
+      else {
+        if (!actions.createFreshActivity) throw new Error('此工作台尚未开放新建活动。');
+        await actions.createFreshActivity(candidate, token.assertSwitchCurrent);
+      }
       // Provider restore may itself replace the baseline; only its intended activity may receive completion.
       if (active(token) && !baseline.current.disabled && baseline.current.permissionEpoch === token.permissionEpoch &&
           (baseline.current.epoch === token.epoch || baseline.current.scope === targetScope)) {
@@ -190,17 +204,18 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   const currentName = layout.name || '未命名活动';
 
   return <section ref={sectionRef} className="sc-local-activities" aria-label="最近活动">
+    {paused && <p className="sc-handoff-error" role="status">打开已有活动或从备份文件恢复暂不可用。新建会先保存当前活动并进入新活动；已保存的活动在恢复保障完成前不能从列表再打开。你仍可导出本机备份。</p>}
     {identityMissing && <p className="sc-handoff-error" role="alert">请先保存有明确编号的当前活动，再新建或打开其他活动。</p>}
     {showCreate && <div className="sc-activity-group">
       <header className="sc-activity-head">
-        <div className="sc-settings-title"><h3>新建活动</h3><InfoTip label="新建说明"><strong>切换前自动归档</strong><span>新建或打开前，当前活动会自动存档。新活动不带入原需求、任务、制作计划、方案历史或点验账册。</span></InfoTip></div>
+        <div className="sc-settings-title"><h3>新建活动</h3><InfoTip label="新建说明"><strong>切换前自动归档</strong><span>新建前，当前活动会自动存档。新活动不带入原需求、任务、制作计划、方案历史或点验账册。打开已有活动仍等待恢复保障。</span></InfoTip></div>
       </header>
       <form className="sc-activity-form" aria-label="新建活动" onSubmit={create}>
-        <fieldset disabled={locked}>
-          <label className="sc-field"><span>新活动名称</span><input value={name} maxLength={MAX_NAME_LENGTH} placeholder="输入活动名称" onChange={event => { if (!locked && !pending.current) setName(event.currentTarget.value); }}/></label>
+        <fieldset disabled={createLocked}>
+          <label className="sc-field"><span>新活动名称</span><input value={name} maxLength={MAX_NAME_LENGTH} placeholder="输入活动名称" onChange={event => { if (!createLocked && !pending.current) setName(event.currentTarget.value); }}/></label>
           <div className="sc-local-activities-modes">
-            <label><input type="radio" name="new-local-activity-mode" value="empty" checked={activityMode === 'empty'} onChange={() => { if (!locked && !pending.current) setActivityMode('empty'); }}/>空场地（10×8米示例）</label>
-            <label><input type="radio" name="new-local-activity-mode" value="reuse-layout" checked={activityMode === 'reuse-layout'} onChange={() => { if (!locked && !pending.current) setActivityMode('reuse-layout'); }}/>沿用当前布置</label>
+            <label><input type="radio" name="new-local-activity-mode" value="empty" checked={activityMode === 'empty'} onChange={() => { if (!createLocked && !pending.current) setActivityMode('empty'); }}/>空场地（10×8米示例）</label>
+            <label><input type="radio" name="new-local-activity-mode" value="reuse-layout" checked={activityMode === 'reuse-layout'} onChange={() => { if (!createLocked && !pending.current) setActivityMode('reuse-layout'); }}/>沿用当前布置</label>
           </div>
           <button type="submit" className="sc-cloud-primary sc-activity-create">新建活动</button>
         </fieldset>
@@ -229,7 +244,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
         </li>
         {archives.map(activity => <li key={activity.projectId}>
           {/* 整卡就是一颗原生 button：键盘 Enter/Space 与禁用态走浏览器原生行为，li 保留 listitem 语义。 */}
-          <button type="button" className="sc-activity-card-clickable" disabled={locked} aria-label={`打开活动「${activity.name}」`}
+          <button type="button" className="sc-activity-card-clickable" disabled={openLocked} aria-label={`打开活动「${activity.name}」`}
             onClick={() => void switchActivity(activity.projectId)}>
             <div className="sc-activity-thumb">
               {activity.cover
@@ -248,14 +263,14 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
           {tileOpen ? (
             <form className="sc-activity-tile-form" aria-label="画廊内联新建活动" onSubmit={event => { event.preventDefault(); void switchActivity(undefined, { name: tileName, mode: 'empty' }); }}>
               <input value={tileName} maxLength={MAX_NAME_LENGTH} aria-label="画廊新活动名称" placeholder="给新活动起个名" autoFocus
-                onChange={event => { if (!locked) setTileName(event.currentTarget.value); }}/>
+                onChange={event => { if (!createLocked) setTileName(event.currentTarget.value); }}/>
               <div className="sc-activity-tile-actions">
-                <button type="submit" className="sc-cloud-primary" disabled={locked}>创建并打开</button>
-                <button type="button" disabled={locked} onClick={() => { setTileOpen(false); setTileName(''); }}>取消</button>
+                <button type="submit" className="sc-cloud-primary" disabled={createLocked}>创建并打开</button>
+                <button type="button" disabled={createLocked} onClick={() => { setTileOpen(false); setTileName(''); }}>取消</button>
               </div>
             </form>
           ) : (
-            <button type="button" className="sc-activity-tile-add" disabled={locked} aria-label="新建活动，空白画布直接进入工作台" onClick={() => setTileOpen(true)}>
+            <button type="button" className="sc-activity-tile-add" disabled={createLocked} aria-label="新建活动，空白画布直接进入工作台" onClick={() => setTileOpen(true)}>
               <Plus size={18} aria-hidden="true"/><span>新建活动</span>
             </button>
           )}
@@ -263,7 +278,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
       </ul>
       {!listLoading && !archives.length && !listError && <p className="sc-activity-status">还没有其他归档；点「新建活动」开一张空白画布，当前画布会自动存档。</p>}
     </div>}
-    {working && <p className="sc-activity-status" role="status">{working === 'prepare' ? '正在准备当前活动…' : working === 'archive' ? '正在归档并核对当前活动…' : working === 'read' ? '正在读取待打开活动…' : '正在打开并核实保存…'}</p>}
+    {working && <p className="sc-activity-status" role="status">{working === 'prepare' ? '正在准备当前活动…' : working === 'archive' ? '正在归档并核对当前活动…' : working === 'read' ? '正在读取待打开活动…' : operation.current.kind === 'create' ? '正在保存新活动…' : '正在打开并核实保存…'}</p>}
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}
     {notice && notice.scope === layout.id && <p className="sc-activity-status" role="status">{notice.text}</p>}
   </section>;

@@ -1,5 +1,5 @@
 /// <reference path="../../supabase/functions/_shared/vendor.d.ts" />
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createSceneClient } from '../../client/scene-client';
 import { assetRecord } from '../../supabase/functions/_shared/assets';
 import { packGltf } from '../../supabase/functions/_shared/models';
@@ -16,7 +16,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   let server: Awaited<ReturnType<typeof startLocalServer>>;
   const controllers: BackendSession[] = [];
   beforeAll(async () => { server = await startLocalServer(); }, 30_000);
-  afterEach(() => { for (const c of controllers.splice(0)) c.dispose(); clearGlbAssetCache(); });
+  afterEach(() => { for (const c of controllers.splice(0)) c.dispose(); clearGlbAssetCache(); vi.restoreAllMocks(); });
   afterAll(async () => { await server?.close(); });
   function controller() {
     const c = new BackendSession(getBackendConfig({ url: server.url, anonKey: testPublicKey }));
@@ -28,6 +28,16 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     await c.signIn(account.email, account.password);
     return c;
   }
+  // The node test adapter uses one in-memory cookie jar for the whole process.
+  // Pin the session to simulate separate browsers while still using real HTTP,
+  // real login and real migrated PostgreSQL for all subsequent operations.
+  async function isolatedLogin(index = 0) {
+    const c = await login(index);
+    const auth = (c as unknown as { supabase: { auth: { getSession: () => Promise<unknown> } } }).supabase.auth;
+    const session = await auth.getSession();
+    vi.spyOn(auth, 'getSession').mockResolvedValue(session);
+    return c;
+  }
   async function rawClient(index = 0) {
     const account = testAccounts[index]!;
     const auth = await fetch(`${server.url}/auth/v1/token?grant_type=password`, {
@@ -37,7 +47,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     return createSceneClient(`${server.url}/functions/v1/scene-api`, async () => auth.access_token);
   }
 
-  it('round-trips actual editor coordinates, rotation and notes through save and a new login', async () => {
+  it('round-trips actual editor coordinates and rotation through save and a new login', async () => {
     const a = await login();
     expect(await a.listStudios()).toEqual([expect.objectContaining({ id: studio, role: 'owner' })]);
     const initial = layoutToBackendScene(structuredClone(INITIAL_LAYOUT));
@@ -49,11 +59,11 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     object.position = { x: 2.5, z: 1 };
     object.rotation = -Math.PI / 6;
     object.width = 1.8; object.depth = 0.9; object.height = 0.75;
-    object.locked = true; object.notes = '联调私有备注';
+    object.locked = true;
     const submitted = layoutToBackendScene(layout);
     const saved = await a.saveScene(submitted);
     expect(saved.revision).toBe(1);
-    expect(saved.scene.objects[0]).toMatchObject({ position: { x: 7.5, z: 5 }, locked: true, notes: '联调私有备注' });
+    expect(saved.scene.objects[0]).toMatchObject({ position: { x: 7.5, z: 5 }, locked: true });
     expect(saved.scene.objects[0]!.rotation).toBeCloseTo(30, 10);
     await a.renewLease();
     await a.signOut();
@@ -62,8 +72,16 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     expect(reopened.revision).toBe(1);
   });
 
+  it('refuses an ordinary cloud save containing original notes and retains the local draft',async()=>{
+    const a=await login(),p=await a.createProject(studio,'备注待核对',scene());await a.acquireLease(p.id);
+    const draft=scene();draft.objects.push(chair('联调私有备注'));
+    await expect(a.saveScene(draft)).rejects.toMatchObject({code:'ORIGINAL_SCENE_REVIEW_REQUIRED'});
+    expect(a.getSnapshot()).toMatchObject({draft,dirty:true,writeBlocked:true,revision:0});
+    expect((await server.rpc(owner,'projects.get',{projectId:p.id})).scene).toEqual(scene());
+  });
+
   it('enforces two-account and duplicate-tab leases, then hands off the saved scene', async () => {
-    const a = await login(), b = await login(1), duplicate = await login();
+    const a = await isolatedLogin(), b = await isolatedLogin(1), duplicate = await isolatedLogin();
     const p = await a.createProject(studio, '交接验证', scene());
     await a.acquireLease(p.id);
     await b.getProject(p.id);
@@ -92,7 +110,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   });
 
   it('fences an expired editor after a second account takes over', async () => {
-    const a = await login(), b = await login(1), p = await a.createProject(studio, '过期交接', scene());
+    const a = await isolatedLogin(), b = await isolatedLogin(1), p = await a.createProject(studio, '过期交接', scene());
     const first = await a.acquireLease(p.id);
     await server.db.query("update scene_private.projects set lease_expires=now()-interval '1 second' where id=$1", [p.id]);
     const second = await b.acquireLease(p.id);
@@ -101,6 +119,14 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     await expect(a.saveScene(draft)).rejects.toMatchObject({ code: 'LEASE_LOST' });
     expect(a.getSnapshot()).toMatchObject({ draft, dirty: true, writeBlocked: true });
     await b.releaseLease();
+  });
+
+  it('rejects a stale account snapshot after another login replaces the shared cookie', async () => {
+    const a = await login();
+    const b = await login(1);
+    await expect(a.listStudios()).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(a.getSnapshot().user?.id).toBe(owner);
+    expect((await b.listStudios()).some(item => item.id === studio)).toBe(true);
   });
 
   it('authorizes a referenced GLB for a teammate and keeps loading URLs out of persisted scenes', async () => {
@@ -150,7 +176,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     const project = await a.createProject(otherStudio, '公共模型保存', scene());
     await a.acquireLease(project.id);
     const draft = scene();
-    draft.objects.push({ ...chair('模型备注'), materialId: 'asset', assetId: record.id });
+    draft.objects.push({ ...chair(), materialId: 'asset', assetId: record.id });
     const layout = backendSceneToLayout(draft, { assetUrls: { [record.id]: authorized.url }, assetNames: { [record.id]: authorized.name } });
     const saved = await a.saveScene(layoutToBackendScene(layout));
     expect(saved.revision).toBe(1);
@@ -164,7 +190,7 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   });
 
   it('publishes an immutable anonymous snapshot, strips private notes, and revokes it', async () => {
-    const a = await login(), source = scene(); source.objects.push(chair('绝不能公开的内部备注'));
+    const a = await login(), source = scene(); source.objects.push(chair());
     const p = await a.createProject(studio, '分享联调', source), client = await rawClient();
     const share = await client.request<{ token: string; shareId: string }>(`/projects/${p.id}/publish`, 'POST', { expectedRevision: 0 });
     await a.acquireLease(p.id);
@@ -173,6 +199,11 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     const read = await anonymous.readShare(share.token) as { scene: { objects: unknown[] } };
     expect(read.scene.objects).toHaveLength(1);
     expect(JSON.stringify(read)).not.toContain('绝不能公开的内部备注');
+    // Existing projects can contain private text even though new ordinary writes are blocked.
+    const old=scene();old.objects.push(chair('绝不能公开的内部备注'));
+    const legacy=await server.rpc(owner,'projects.create',{studioId:studio,name:'旧版私有备注',scene:old});
+    const legacyShare=await client.request<{token:string}>(`/projects/${legacy.id}/publish`,'POST',{expectedRevision:0});
+    expect(JSON.stringify(await anonymous.readShare(legacyShare.token))).not.toContain('绝不能公开的内部备注');
     await client.request(`/projects/${p.id}/shares/${share.shareId}`, 'DELETE');
     await expect(anonymous.readShare(share.token)).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
     await a.releaseLease();

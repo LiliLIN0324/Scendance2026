@@ -1,3 +1,4 @@
+import {rejectUnprotectedWorkspaceWrite} from '@/lib/workspace-write-fence';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, type AmapPoint } from './amap-venue';
 
 /** 沿场一圈或沿主客流线的一个站位。 */
@@ -819,6 +820,7 @@ export function readSiteCalibration(assetId: string): SiteCalibration | null {
 }
 
 export function writeSiteCalibration(record: SiteCalibration): void {
+  rejectUnprotectedWorkspaceWrite();
   const store = storage();
   if (!store || !record.assetId) return;
   const map = readCalibrationMap();
@@ -831,6 +833,7 @@ export function writeSiteCalibration(record: SiteCalibration): void {
 }
 
 export function clearSiteCalibration(assetId: string): void {
+  rejectUnprotectedWorkspaceWrite();
   const store = storage();
   if (!store || !assetId) return;
   const map = readCalibrationMap();

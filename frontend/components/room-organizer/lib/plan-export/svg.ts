@@ -8,11 +8,14 @@
  * construction drawing.
  */
 
+import { PLAN_SAFETY_DRAFT_LINES } from '@/lib/plan-safety-notice';
 import { planDrawOrder } from '../plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../street';
 import { zoneArea } from '../zones';
 import { planExportVisibility, type PlanExportVisibility } from './export-visibility';
 import {
+  planExportUnsupportedReason,
+  unplacedPlanItems,
   gridLinePositions,
   INTERIOR_WALL_THICKNESS_M,
   isWallHidden,
@@ -69,6 +72,7 @@ export interface SvgSheetSize {
 
 export const DEFAULT_SVG_PX_PER_METRE = 50;
 export const DEFAULT_SVG_MARGIN = 60;
+export const PLAN_SAFETY_NOTICE_HEIGHT = 34;
 
 const DEFAULT_THEME: SvgPlanTheme = {
   background: '#ffffff',
@@ -86,6 +90,15 @@ const DEFAULT_THEME: SvgPlanTheme = {
 /** In-footprint name size. Print maps 1 px to 0.25 mm, so this stays ~2.8 mm. */
 const LABEL_FONT_PX = 11;
 
+export function unplacedWarningLines(floor: FloorLayout): string[] {
+  return unplacedPlanItems(floor).flatMap((item, index) => {
+    const chars = Array.from(`${index + 1}. ${item.name || '未命名物件'}`);
+    const lines: string[] = [];
+    for (let start = 0; start < chars.length; start += 24) lines.push(chars.slice(start, start + 24).join(''));
+    return lines;
+  });
+}
+
 /**
  * Size of the sheet `layoutToSvg` emits for the same layout, floor and
  * options: the plan content (room + every placed item, outdoor ones
@@ -99,7 +112,10 @@ export function planSheetSize(layout: RoomLayout, floor: FloorLayout, options: S
   const bounds = planBounds(layout, floor, margin / scale);
   const widthM = bounds.maxX - bounds.minX;
   const heightM = bounds.maxZ - bounds.minZ;
-  return { widthPx: widthM * scale, heightPx: heightM * scale, widthM, heightM };
+  const missing = unplacedPlanItems(floor);
+  const warningHeight = missing.length ? (unplacedWarningLines(floor).length + 1) * 14 : 0;
+  const widthPx = Math.max(widthM * scale, margin + 270, missing.length ? 2 * margin + 240 : 0);
+  return { widthPx, heightPx: heightM * scale + PLAN_SAFETY_NOTICE_HEIGHT + warningHeight, widthM: widthPx / scale, heightM: heightM + (PLAN_SAFETY_NOTICE_HEIGHT + warningHeight) / scale };
 }
 
 /**
@@ -108,6 +124,8 @@ export function planSheetSize(layout: RoomLayout, floor: FloorLayout, options: S
  * rects with name labels, a scale bar, and the floor name.
  */
 export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: SvgExportOptions = {}): string {
+  const unsupported = planExportUnsupportedReason(layout);
+  if (unsupported) throw new Error(unsupported);
   const scale = options.pxPerMetre ?? DEFAULT_SVG_PX_PER_METRE;
   const margin = options.margin ?? DEFAULT_SVG_MARGIN;
   const theme: SvgPlanTheme = { ...DEFAULT_THEME, ...options.theme };
@@ -122,8 +140,11 @@ export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: Svg
   // origin to where the room sits on the content-fitted sheet, which is a
   // no-op when nothing pokes out past the walls.
   const bounds = planBounds(layout, floor, margin / scale);
-  const totalW = (bounds.maxX - bounds.minX) * scale;
-  const totalH = (bounds.maxZ - bounds.minZ) * scale;
+  const totalW = Math.max((bounds.maxX - bounds.minX) * scale, margin + 270, unplacedPlanItems(floor).length ? 2 * margin + 240 : 0);
+  const baseH = (bounds.maxZ - bounds.minZ) * scale;
+  const missing = unplacedPlanItems(floor);
+  const warningLines = unplacedWarningLines(floor);
+  const totalH = baseH + PLAN_SAFETY_NOTICE_HEIGHT + (missing.length ? (warningLines.length + 1) * 14 : 0);
   const rootX = (-layout.width / 2 - bounds.minX) * scale - margin;
   const rootY = (-layout.height / 2 - bounds.minZ) * scale - margin;
   // World (metres, origin at room centre) → room-coordinate px.
@@ -167,7 +188,10 @@ export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: Svg
     `<text class="plan-title" x="${fmt(margin)}" y="${fmt(titleY)}" font-size="13" font-weight="600" fill="${theme.label}">${escapeXml(title)}</text>`,
     `<line class="plan-mark" x1="${fmt(margin)}" y1="${fmt(markY)}" x2="${fmt(margin + 22)}" y2="${fmt(markY)}" stroke="${theme.accent}" stroke-width="2" stroke-linecap="round"/>`,
     `<text class="plan-dims" x="${fmt(margin)}" y="${fmt(dimsY)}" font-size="11" fill="${theme.muted}">${fmt(layout.width)} × ${fmt(layout.height)} m</text>`,
-    renderScaleBar(layout, margin, scale, totalH, theme),
+    `<text class="door-verification-note" x="${fmt(margin)}" y="${fmt(baseH - 47)}" font-size="10" fill="${theme.label}">门洞与开向待核验</text>`,
+    renderScaleBar(layout, margin, scale, baseH, theme),
+    ...PLAN_SAFETY_DRAFT_LINES.map((line,index)=>`<text class="safety-verification-note" x="${fmt(margin)}" y="${fmt(baseH + 12 + index * 14)}" font-size="10" fill="${theme.label}">${escapeXml(line)}</text>`),
+    ...(missing.length ? [`<text class="unplaced-warning" x="${fmt(margin)}" y="${fmt(baseH + PLAN_SAFETY_NOTICE_HEIGHT + 2)}" font-size="11" fill="${theme.label}">位置待确认 ${missing.length} 件，未绘入平面：</text>`, ...warningLines.map((line, index) => `<text class="unplaced-name" x="${fmt(margin)}" y="${fmt(baseH + PLAN_SAFETY_NOTICE_HEIGHT + 16 + index * 14)}" font-size="10" fill="${theme.label}">${escapeXml(line)}</text>`)] : []),
     `</svg>`,
   ];
   return parts.filter((part) => part !== '').join('\n');
@@ -305,9 +329,7 @@ function renderInteriorWalls(
 }
 
 /**
- * Door: a gap punched through the wall line plus the conventional quarter-arc
- * swing (leaf hinged at one jamb, opening into the room — for wall-snapped
- * rotations the local +Y of the rotated group points into the room).
+ * Door: gap and jamb marks only; the data does not record a verified hinge or swing.
  * Window: a gap with a frame rect and a centre line (double-line symbol).
  */
 function renderOpening(
@@ -328,9 +350,8 @@ function renderOpening(
   );
   if (item.type === 'door') {
     parts.push(
-      `<path d="M ${fmt(-hw)} 0 L ${fmt(-hw)} ${fmt(w)} A ${fmt(w)} ${fmt(w)} 0 0 0 ${fmt(hw)} 0 Z" fill="${theme.opening}" fill-opacity="0.07" stroke="none"/>`,
-      `<line x1="${fmt(-hw)}" y1="0" x2="${fmt(-hw)}" y2="${fmt(w)}" stroke="${theme.opening}" stroke-width="1.25" stroke-linecap="round"/>`,
-      `<path d="M ${fmt(hw)} 0 A ${fmt(w)} ${fmt(w)} 0 0 1 ${fmt(-hw)} ${fmt(w)}" stroke="${theme.opening}" stroke-width="1" fill="none"/>`
+      `<line class="door-jamb" x1="${fmt(-hw)}" y1="${fmt(-gap / 2)}" x2="${fmt(-hw)}" y2="${fmt(gap / 2)}" stroke="${theme.opening}" stroke-width="1"/>`,
+      `<line class="door-jamb" x1="${fmt(hw)}" y1="${fmt(-gap / 2)}" x2="${fmt(hw)}" y2="${fmt(gap / 2)}" stroke="${theme.opening}" stroke-width="1"/>`
     );
   } else {
     parts.push(

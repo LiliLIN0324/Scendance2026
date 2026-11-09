@@ -95,6 +95,14 @@ describe("assistant context composition", () => {
 });
 
 describe('structured Agent context',()=>{
+  it('sends the chosen recent dialogue as role and text, without extra message metadata',()=>{
+    const result = buildAgentContext({ briefInstruction: '30人活动', message: '请出方案',
+      recentMessages: [{ role: 'user', text: '上一条要求', privateMetadata: 'do-not-send' } as { role: 'user'; text: string }] });
+    expect(result.instruction).toBe('请出方案');
+    expect(result.context.brief).toBe('30人活动');
+    expect(result.context.recentMessages).toEqual([{ role: 'user', text: '上一条要求' }]);
+    expect(JSON.stringify(result)).not.toContain('do-not-send');
+  });
   it('keeps a long brief and the latest request in independent fields',()=>{
     const brief='完整需求'.repeat(1000);
     const result=buildAgentContext({briefInstruction:brief,message:'把选中桌子移动一米',confirmedMaterialDecisions:['保留入口通道'],recentMessages:[{role:'assistant',text:'背景'}]});

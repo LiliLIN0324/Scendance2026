@@ -96,20 +96,23 @@ describe('layoutToDxf', () => {
     expect(count(layoutToDxf(two, upper), '90\n8\n70\n1')).toBe(0);
   });
 
-  it('emits LINE work for partitions and openings, plus the door swing ARC', () => {
+  it('emits door jambs at the recorded span without inventing a swing', () => {
     const { layout, floor } = makeFixture();
     const dxf = layoutToDxf(layout, floor);
-    // 1 partition on WALLS + door (2 jamb ticks + leaf) + window (2 ticks + a pair of lines).
-    expect(count(dxf, '0\nLINE')).toBe(8);
-    expect(count(dxf, '0\nARC')).toBe(1);
+    // 1 partition on WALLS + 2 door jambs + 2 window jambs and 2 window lines.
+    expect(count(dxf, '0\nLINE')).toBe(7);
+    expect(count(dxf, '0\nARC')).toBe(0);
     expect(count(dxf, '8\nWALLS')).toBe(2); // shell polyline + partition
-    expect(count(dxf, '8\nDOORS')).toBe(4); // 3 lines + arc
+    expect(count(dxf, '8\nDOORS')).toBe(2); // two jambs
     expect(count(dxf, '8\nWINDOWS')).toBe(4);
     expect(dxf).not.toContain('8\nOPENINGS');
     expect(dxf).not.toContain('8\nINTERIOR');
-    // Door on the north wall (rotation 0): hinge at CAD (3.55, 8), quarter
-    // swing sweeping CCW from 270° back to the closed position at 0°.
-    expect(dxf).toContain('0\nARC\n8\nDOORS\n10\n3.550\n20\n8.000\n40\n0.900\n50\n270.000\n51\n0.000');
+    expect(dxf).toContain('0\nLINE\n8\nDOORS\n10\n3.550');
+    expect(dxf).toContain('0\nLINE\n8\nDOORS\n10\n4.450');
+    expect(dxf).toContain('\\U+95E8\\U+6D1E'); // 门洞位置、尺寸及开向待核验
+    const dxfText = (value:string) => [...value].map(c => c.charCodeAt(0) > 127 ? `\\U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}` : c).join('');
+    expect(dxf).toContain(dxfText('待核验草案：出口、门洞与场地尺度未核验。'));
+    expect(dxf).toContain(dxfText('通行、疏散、消防、无障碍及核定人数未核验。'));
     // Window pair sits ±3 cm off the centreline (CAD x 8 → 7.970 and 8.030).
     expect(dxf).toContain('0\nLINE\n8\nWINDOWS\n10\n7.970\n20\n4.450\n11\n7.970\n21\n3.550');
     expect(dxf).toContain('0\nLINE\n8\nWINDOWS\n10\n8.030\n20\n4.450\n11\n8.030\n21\n3.550');
@@ -118,10 +121,10 @@ describe('layoutToDxf', () => {
   it('puts prop names on FURNITURE, the sheet title on ROOMS, and edge lengths on DIMENSIONS', () => {
     const { layout, floor } = makeFixture();
     const dxf = layoutToDxf(layout, floor);
-    expect(count(dxf, '0\nTEXT')).toBe(5); // 2 prop names + title + width + depth
+    expect(count(dxf, '0\nTEXT')).toBe(8); // door note and two safety-draft lines
     expect(count(dxf, '8\nLABELS')).toBe(0);
     expect(count(dxf, '8\nFURNITURE')).toBe(4); // 2 footprints + 2 names
-    expect(count(dxf, '8\nROOMS')).toBe(1);
+    expect(count(dxf, '8\nROOMS')).toBe(4);
     expect(count(dxf, '8\nDIMENSIONS')).toBe(2);
     expect(dxf).toContain('1\nChair');
     expect(dxf).toContain('1\nSofa');
@@ -238,4 +241,10 @@ describe('layoutToDxf', () => {
     expect(hidden).not.toContain('Bed & Bath');
     expect(hidden).toContain('1\nMy Home - Ground Floor');
   });
+});
+
+it('拒绝将未定位物件导出成看似完整的 DXF', () => {
+  const {position: _position, ...unplaced}=makeItem({name:'待定位椅'});
+  const floor=makeFloor({items:[unplaced]});
+  expect(()=>layoutToDxf(makeLayout({floors:[floor]}),floor)).toThrow('位置待确认');
 });

@@ -26,6 +26,12 @@ function memoryStorage(): Storage {
 }
 
 describe('assistant session bodies', () => {
+  it('round trips the marker for model replies without promoting ordinary status messages',()=>{
+    const raw=JSON.stringify({version:1,byId:{session:[{id:'1',role:'agent',text:'普通状态'},{id:'2',role:'agent',text:'模型回复',modelConversation:true},{id:'3',role:'user',text:'问题',modelConversation:true}]}});
+    const rows=readSessionBubbles(parseAssistantSessionBodies(raw)!,'session');
+    expect(rows[0]?.modelConversation).toBeUndefined();expect(rows[1]?.modelConversation).toBe(true);expect(rows[2]?.modelConversation).toBeUndefined();
+    expect(parseAssistantSessionBodies(JSON.stringify(writeSessionBubbles(emptyAssistantSessionBodies(),'session',rows)))?.byId.session?.[1]?.modelConversation).toBe(true);
+  });
   it('keeps its storage key off the layout draft', () => {
     expect(ASSISTANT_SESSION_BODIES_STORAGE_KEY).not.toBe(STORAGE_KEY);
   });

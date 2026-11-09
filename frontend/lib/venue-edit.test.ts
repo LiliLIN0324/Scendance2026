@@ -4,6 +4,7 @@ import { backendSceneToLayout, layoutToBackendScene } from '../components/room-o
 import { parseStoredLayout } from '../components/room-organizer/lib/schema';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup } from './local-project-backup';
 import { previewVenueEdit, readEditableVenue } from './venue-edit';
+import { extractPlanSizeFacts } from './plan-size-facts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 function fixture(): SceneV2 {
@@ -43,7 +44,8 @@ function preview(scene = fixture(), width = 12, depth = 9) {
 
 describe('manual venue editing with a fixed metre origin', () => {
   it('reads current edited openings and objects instead of the stored scene', () => {
-    const base = layout();
+    const original=fixture();original.dimensions=original.dimensions.filter(dimension=>dimension.targetId!==id(10));
+    const base = layout(original);
     base.floors[0].items.find(item => item.id === id(20))!.notes = '当前编辑备注';
     const door = base.floors[0].items.find(item => item.id === id(10))!;
     door.position = { ...door.position!, x: door.position!.x + 0.3 };
@@ -51,6 +53,12 @@ describe('manual venue editing with a fixed metre origin', () => {
     expect(read.objects[0].notes).toBe('当前编辑备注');
     expect(read.structure.openings[0].offset).toBeCloseTo(2.3, 12);
     expect(base.backendSceneV2!.structure.openings[0].offset).toBe(2);
+  });
+  it('refuses to reuse an edited opening when a confirmed measurement still refers to it',()=>{
+    const base=layout();const door=base.floors[0].items.find(item=>item.id===id(10))!;
+    door.position={...door.position!,x:door.position!.x+.3};const before=structuredClone(base);
+    expect(()=>readEditableVenue(base)).toThrow(/门窗已改变.*重新核对/);
+    expect(base).toEqual(before);expect(base.backendSceneV2!.dimensions.find(dimension=>dimension.id===id(43))?.status).toBe('confirmed');
   });
 
   it('moves only outer wall endpoints and converts centred editor positions without stretching objects', () => {
@@ -65,10 +73,10 @@ describe('manual venue editing with a fixed metre origin', () => {
     expect(wire.structure.columns).toEqual(scene.structure.columns);
     expect(wire.structure.walls.find(wall => wall.id === id(5))).toEqual(scene.structure.walls[4]);
     expect(wire.structure.walls.slice(0, 4)).toMatchObject([
-      { id: id(1), start: { x: 0, z: 0 }, end: { x: 12, z: 0 }, status: 'confirmed' },
-      { id: id(2), start: { x: 12, z: 0 }, end: { x: 12, z: 9 }, status: 'confirmed' },
-      { id: id(3), start: { x: 12, z: 9 }, end: { x: 0, z: 9 }, status: 'confirmed' },
-      { id: id(4), start: { x: 0, z: 9 }, end: { x: 0, z: 0 }, status: 'confirmed' },
+      { id: id(1), start: { x: 0, z: 0 }, end: { x: 12, z: 0 }, status: 'inferred' },
+      { id: id(2), start: { x: 12, z: 0 }, end: { x: 12, z: 9 }, status: 'inferred' },
+      { id: id(3), start: { x: 12, z: 9 }, end: { x: 0, z: 9 }, status: 'inferred' },
+      { id: id(4), start: { x: 0, z: 9 }, end: { x: 0, z: 0 }, status: 'inferred' },
     ]);
     expect(wire.venue.polygon).toEqual([{ x: 0, z: 0 }, { x: 12, z: 0 }, { x: 12, z: 9 }, { x: 0, z: 9 }]);
     expect(next.floors[0].items.find(item => item.id === id(20))).toEqual({ ...table, position: { x: -4, z: -2.5 } });
@@ -78,12 +86,13 @@ describe('manual venue editing with a fixed metre origin', () => {
     expect(base.width).toBe(10); expect(base.floors[0].items[0].position).toEqual(untouched.floors[0].items[0].position);
   });
 
-  it('keeps unedited evidence states and replaces only explicitly changed overall dimensions', () => {
+  it('keeps historical source measurements and invalidates affected confirmations', () => {
     const scene = fixture(), wire = layoutToBackendScene(preview(scene)) as SceneV2;
     expect(wire.structure.openings).toEqual(scene.structure.openings);
     expect(wire.structure.columns).toEqual(scene.structure.columns);
-    expect(wire.dimensions[0]).toEqual({ ...scene.dimensions[0], valueMeters: 12, status: 'confirmed' });
-    expect(wire.dimensions[1]).toEqual({ ...scene.dimensions[1], valueMeters: 9, status: 'confirmed' });
+    expect(wire.dimensions[0]).toEqual({ ...scene.dimensions[0], status: 'inferred' });
+    expect(wire.dimensions[1]).toEqual(scene.dimensions[1]);
+    const facts=extractPlanSizeFacts(preview(scene),0);expect(facts.width.status).toBe('unknown');expect(facts.depth.status).toBe('unknown');
     expect(wire.dimensions.slice(2)).toEqual(scene.dimensions.slice(2));
     const noOp = layoutToBackendScene(preview(scene, 10, 8));
     expect(noOp).toEqual(scene);
@@ -94,10 +103,10 @@ describe('manual venue editing with a fixed metre origin', () => {
     edits[0] = { ...edits[0], offset: 2.5, width: 1.5, height: 2.5, sillHeight: 0.3 };
     edits[1].status = 'confirmed';
     const wire = layoutToBackendScene(previewVenueEdit(layout(scene), { width: 10, depth: 8, openings: edits })) as SceneV2;
-    expect(wire.structure.openings[0]).toEqual({ ...edits[0], status: 'confirmed' });
+    expect(wire.structure.openings[0]).toEqual({ ...edits[0], status: 'inferred' });
     expect(wire.structure.openings[1]).toEqual(scene.structure.openings[1]);
-    expect(wire.dimensions[3]).toEqual({ ...scene.dimensions[3], valueMeters: 1.5, status: 'confirmed' });
-    expect(wire.dimensions[4]).toEqual({ ...scene.dimensions[4], valueMeters: 2.5, status: 'confirmed' });
+    expect(wire.dimensions[3]).toEqual({ ...scene.dimensions[3], valueMeters: 1.5, status: 'inferred' });
+    expect(wire.dimensions[4]).toEqual({ ...scene.dimensions[4], valueMeters: 2.5, status: 'inferred' });
     expect(wire.dimensions.slice(0, 3)).toEqual(scene.dimensions.slice(0, 3));
     expect(wire.structure.walls).toEqual(scene.structure.walls);
   });
@@ -106,8 +115,21 @@ describe('manual venue editing with a fixed metre origin', () => {
     const scene = fixture(); scene.dimensions[3].status = 'inferred';
     const openings = structuredClone(scene.structure.openings); openings[0].offset = 2.5;
     const wire = layoutToBackendScene(previewVenueEdit(layout(scene), { width: 10, depth: 8, openings })) as SceneV2;
-    expect(wire.structure.openings[0].status).toBe('confirmed');
+    expect(wire.structure.openings[0].status).toBe('inferred');
     expect(wire.dimensions).toEqual(scene.dimensions);
+  });
+
+  it.each(['inferred','detected','confirmed'] as const)('总宽改变时 %s 外墙不被升级为已确认', status => {
+    const scene=fixture();scene.structure.walls[0].status=status;
+    const wire=layoutToBackendScene(previewVenueEdit(layout(scene),{width:12,depth:8,openings:scene.structure.openings})) as SceneV2;
+    expect(wire.structure.walls[0]!.status).toBe(status==='confirmed'?'inferred':status);
+    expect(wire.structure.walls[3]!.status).toBe(scene.structure.walls[3]!.status);
+    expect(wire.dimensions[0]).toMatchObject({valueMeters:10,status:'inferred',sourceAssetId:id(30)});
+  });
+  it('移动有确认记录的墙时，附着门的位置也回到待核验',()=>{
+    const scene=fixture();scene.structure.walls[0]!.status='confirmed';scene.structure.openings[0]!.status='confirmed';
+    const wire=layoutToBackendScene(previewVenueEdit(layout(scene),{width:12,depth:8,openings:scene.structure.openings})) as SceneV2;
+    expect(wire.structure.walls[0]!.status).toBe('inferred');expect(wire.structure.openings[0]!.status).toBe('inferred');
   });
 
   it('preserves near-corner wire measurements and evidence status on a no-op', () => {

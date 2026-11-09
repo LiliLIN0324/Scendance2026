@@ -2,7 +2,8 @@ import { listSourceRecords, updateSourceForm } from './source-storage';
 import { captureStageCover } from './stage-cover';
 
 /** Covers live beside the archives, never inside the backup JSON that users export. */
-const COVERS = 'local-activity-cover';
+export const ACTIVITY_COVER_NAMESPACE = 'local-activity-cover';
+const COVERS = ACTIVITY_COVER_NAMESPACE;
 /** A 640×380 JPEG stays far below this; anything larger is not a cover. */
 const MAX_COVER_LENGTH = 400_000;
 export interface ActivityCover { dataUrl: string; capturedAt: string }

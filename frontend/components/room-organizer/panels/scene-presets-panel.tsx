@@ -116,6 +116,21 @@ export function ScenePresetsPanel({ layout, onApply, active }: Props): JSX.Eleme
           <button type="button" onClick={() => setPending(null)}>取消</button></div>
         </div>}
       </div>
+      <div className="sc-preset-tile">
+        <a className="sc-preset-card" href="/review/?example=sharing" target="_blank" rel="noopener noreferrer" aria-label="打开分享会示例预览（新窗口）">
+          <svg viewBox="0 0 120 80" aria-hidden="true" style={{width:'100%',height:'100%',minHeight:0,background:'#F4F5F7'}}>
+            <rect x="67" y="6" width="30" height="5" fill="#4A7C59"/><rect x="74" y="17" width="16" height="6" fill="#C9B89D"/>
+            {[33,45,72,84].flatMap(x=>[32,42,52,62].map(y=><rect key={`${x}-${y}`} x={x} y={y} width="6" height="6" rx="1" fill="#4A7C59"/>))}
+          </svg>
+          <strong>分享会示例</strong>
+        </a>
+      </div>
+      <div className="sc-preset-tile">
+        <a className="sc-preset-card" href="/review/?example=hall-d5" target="_blank" rel="noopener noreferrer" aria-label="打开 Hall D5 尺寸参考预览（新窗口）">
+          <span className="sc-preset-blank" aria-hidden="true"><small>16.5 × 17.2 m · 轮廓示意</small></span>
+          <strong>Hall D5 尺寸参考</strong>
+        </a>
+      </div>
       {(Object.keys(SCENE_PRESETS) as ScenePresetKey[]).map(key => <div className="sc-preset-tile" key={key}>
         <button className={`sc-preset-card${active === key ? ' is-current' : ''}`} type="button" disabled={busy !== null} onClick={() => press(key)}
           aria-label={`载入模板 ${SCENE_PRESETS[key].name}`} aria-current={active === key ? 'true' : undefined} title={SCENE_PRESETS[key].description}>

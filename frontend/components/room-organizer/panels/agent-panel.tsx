@@ -1,5 +1,10 @@
 'use client';
 
+import { validateCandidateApply } from '../lib/candidate-apply-validation';
+import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
+import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
+
 /**
  * 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
  * 一句话开场：敲一句，或在对话里挑活动/场地/人数；客户端解析后铺进预填卡。
@@ -16,56 +21,86 @@
  */
 import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { resolveBriefTurn } from '../../../lib/agent-resolver';
+import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
+import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
+import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
+import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
+import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
+import { chatUserHistory } from '../lib/chat-user-history';
+import { MaterialCandidatesPanel } from './material-candidates-panel';
+import { CandidateInventoryPanel } from './candidate-inventory-panel';
+import { checkCandidateInventory, type CandidateInventory } from '../lib/candidate-inventory';
+import {captureOriginalPreservation,isStandalonePreservationInstruction,preservationIntent,reviewOriginalPreservation} from '../lib/original-preservation';
+import { ModelTextDisclosure } from './model-text-disclosure';
+import { hasMixedUtilityCommand } from '../lib/utility-shortcut-boundary';
+import {reviewLocalRoutes,type LocalRouteInput,type LocalRouteReview} from '../../../lib/local-route-review';
+import { applyLayoutCommand, applyLayoutCommandWithRefusals, completeLayoutError } from '../../../lib/build-command';
 import {
   extractProposedZoneTypes,
   hasZoneApplyProposal,
   isAffirmativeIntent,
 } from '../../../lib/auto-zone-apply';
-import type { ZoneSemanticType } from '../../../lib/plan-annotation';
+import type { LayoutPlanDraft, ZoneSemanticType } from '../../../lib/plan-annotation';
+import type {UserRouteProvenance} from '../hooks/use-plan-annotations';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { localPlanKey } from '../../review-share-page/load-plan';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
-import { proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
+import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
+import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
+import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
+import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
+import { mergeSeatingAllocation } from '../lib/seating-allocation';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
 import { createPresetResearchArea, createResearchArea, lookupPlace, matchResearchCommand, XIHU_SCENIC_PRESET } from '../lib/research-area';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
-import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
-import { INITIAL_BRIEF } from '../lib/creative-brief';
+import { cloudBriefMessage, cloudSeatingAllocation, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { type PlanDiagnostic } from '../lib/diagnostics';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { localPlan } from '../lib/local-plan';
+import { readBriefMemory, writeBriefMemory } from '../lib/assistant-brief-memory';
+import { isVenueScaleCurrent, venueDimensionsMismatch, venueScaleBasis } from '../lib/venue-scale-basis';
+import { useVenueFactTracker } from '../lib/venue-fact-epoch';
+import {useFloorSessionTracker,type FloorSessionToken} from '../lib/floor-session-epoch';
+import { checkRequiredSeats, checkRestArea, countSingleSeats } from '../lib/seat-requirement';
 import { sameLayoutContent } from '../lib/persistence';
+import { layoutStore } from '../hooks/use-layout-store';
 import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicable } from '../lib/plan-artifact';
 import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
 import { clearLaneActivity, setLaneActivity } from '../lib/lane-status';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
-import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
+import { canApplyLayoutGeometry, isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
-  describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
-  checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, pendingPlanOf,
+  describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE, SAFETY_CHECKS_UNKNOWN_TEXT, SEATING_ALLOCATION_UNVERIFIED_TEXT, SEATING_HEADCOUNT_UNVERIFIED_TEXT, SEATING_SPECS_UNVERIFIED_TEXT,
+  checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutGenerateCommand, lightPlanRail, mentionsUnsupportedSeating, normalizeOralSize, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
   prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type RevisionRequest, type VenueIO,
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
-import { useStudioAgent } from './creative-studio';
+import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
+import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
+import { aholoChatStep, planGenerationLine, understandingLine } from '../lib/cloud-tool-connection';
+import { layoutChatHint, revisionRefusalText } from '../lib/layout-feedback';
+import { isLux3dLocalProxy } from '../lib/aholo-assets';
+import { stageMaterialGenerate } from '../lib/material-generate';
+import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
-import { AgentRunPanel, useAgentRun } from './agent-run-panel';
+import { failOpenLocalStep, finishLocalLayoutRun, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
 import { AGENT_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, STYLE_RUNS_KEY, type StyleBundle } from '../lib/style-bundles';
 import { editorItemLimit } from '../lib/scene-presets';
-import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, type StyleBundle } from '../lib/style-bundles';
 import {
   readSessionBubbles,
   writeSessionBubbles,
@@ -74,13 +109,13 @@ import {
 import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
 import {
   assistantSessionExists,
+  subscribeActiveAssistantSession, getActiveAssistantSessionId,
   getAssistantSessionBodies,
   replaceAssistantSessionBodies,
-  useAssistantSessions,
+  useAssistantSessions, scopedAssistantStorage,
 } from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay } from './session-history-panel';
 import { RailAvatar, type RailForm } from './rail-avatar';
-import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
@@ -98,6 +133,9 @@ const forceFail = () => process.env.NODE_ENV !== 'production' && typeof window !
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
 export type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
+  /** Only model-authored conversation may be used as model history. */
+  modelConversation?: boolean;
+  materialQueries?: readonly string[];
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
   /** 选进来的图纸/照片：跟这条消息一起留在聊天区，不是只把文件名当一行字。 */
@@ -116,7 +154,7 @@ export type Bubble = {
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
   // zoneApply 是闭包，落盘时丢掉；翻回话文字还在，按钮不重现。
-  return bubbles.map(({ id, role, text, meta, warn, amber, long, image }) => {
+  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, materialQueries }) => {
     return {
       id, role, text,
       ...(meta !== undefined ? { meta } : {}),
@@ -124,6 +162,8 @@ function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
       ...(amber ? { amber: true } : {}),
       ...(long ? { long: true } : {}),
       ...(image !== undefined ? { image } : {}),
+      ...(role === 'agent' && modelConversation === true ? { modelConversation: true } : {}),
+      ...(role === 'agent' && materialQueries?.length ? { materialQueries } : {}),
     } satisfies StoredAssistantBubble;
   });
 }
@@ -133,6 +173,15 @@ function fromStoredBubbles(rows: readonly StoredAssistantBubble[]): Bubble[] {
 }
 /** 这一版要按哪组尺度摆：origin 记下米数是谁定的，只有人说过的才敢当事实念出来。 */
 type Scale = { length: number; width: number; origin: ScaleOrigin };
+
+/** 只有整句话都能解释为尺寸调整时，才允许绕过方案预览直接改场地。 */
+function isExplicitSizeOnly(text: string): boolean {
+  const remainder = normalizeOralSize(text.toLowerCase().replace(/[×X＊✕]/g, 'x')).replace(/\d+(?:\.\d+)?\s*(?:米|m)?\s*[×x*]\s*\d+(?:\.\d+)?\s*(?:米|m)?/g, '')
+    .replace(/\d+(?:\.\d+)?\s*(?:平方米|平米|平方公尺|㎡|m²|m2)/g, '')
+    .replace(/(?:把|将|场地|场馆|空间|长宽|尺寸|大小|面积|室内|户外|室外|的|改成|改为|调整为|调整成|调成|调为|设为|设置为|换成|变成|是|到|为|请|一下|大约|约|左右)/g, '')
+    .replace(/[\s，,。.!！：:；;]/g, '');
+  return remainder.length === 0;
+}
 
 /**
  * 待确认的那一版布置。本地候选和云端 AI 提案在右栏共用同一张卡、同一颗绿钮：
@@ -160,31 +209,173 @@ interface ProposalView extends PendingPlan {
   skipped?: string[];
   /** 没放进去的件数与原因；有它就按条说，不再只报一个总数。 */
   diagnostics?: PlanDiagnostic[];
+  venueChange?: string;
+  removedZones?: number;
+  restPreview?: string[];
+  movementPreview?: string[];
+  scalePreview?: string[];
+  rotationPreview?: string[];
+  recolorPreview?: string[];
+  candidateArea?: number;
+  comparisonOnly?: boolean;
+  /** Zone and seat lines from the script, shown on the card instead of one long bubble. */
+  planNotes?: string[];
+  seatWarning?: string;
+  annotationWarning?: string;
+  functionalWarnings?: string[];
+  modelExplanation?: string;
+  localDraftDetails?: string[];
+  seatingReview?:LocalSeatingReview;
+  existingChanges?: ExistingChangeDescription[];
+}
+
+function seatRequirement(layout: RoomLayout | undefined, floorIndex: number, memory: BriefMemory): { blocked: string | null; warning: string | null } {
+  const deskSelected=memory.layoutModeConfirmed === true && memory.layoutMode === 'desk-chair';
+  const allocation=memory.localSeatingAllocation;
+  const allocationNote=allocation?.status==='one_per_desk'?'用户选择每人一桌，实际桌椅配套仍需核验。'
+    :allocation?.status==='shared_desk'?`用户要求每桌 ${allocation.peoplePerDesk} 人，实际桌椅配比仍需核验。`
+    :'每桌人数尚未确认，实际桌椅配比仍需核验。';
+  if (memory.allGuestsSeated !== true) {
+    if (!deskSelected) return { blocked: null, warning: null };
+    if (memory.allGuestsSeated === false) return { blocked: null, warning: `已说明不要求人人入座。${allocationNote}` };
+    if (!Number.isSafeInteger(memory.headcount) || !memory.headcount || memory.headcount < 1) return { blocked: null, warning: `人数尚未确认；${allocationNote}` };
+    const seats=countSingleSeats(layout,floorIndex),target=memory.headcountMode === 'must' ? `${memory.headcount} 人` : `约 ${memory.headcount} 人`;
+    if (seats === null) return { blocked: null, warning: `按 ${target} 规划课桌椅，候选场地或楼层信息不完整，座席数量待核验。${allocationNote}` };
+    const remaining=seats < memory.headcount ? `是否满足 ${target} 的座席需求尚未核对。` : '单人椅数量已达到规划人数，实际用途仍需核对。';
+    return { blocked: null, warning: `按 ${target} 规划课桌椅，当前仅识别到 ${seats} 把单人椅。${remaining}其他家具容量、课桌数量和现场条件仍需核验。${allocationNote}` };
+  }
+  if (!Number.isSafeInteger(memory.headcount) || !memory.headcount || memory.headcount < 1)
+    return { blocked: '已要求所有人入座，请先确认人数。', warning: null };
+  const check = checkRequiredSeats(layout, floorIndex, memory.headcount, true);
+  return { blocked: check.status === 'unknown' ? check.message : null,
+    warning: check.status === 'quantity_met' ? `${check.message ?? ''}${memory.headcountMode !== 'must' ? '人数可能变化，请在活动前重新核对座席需求。' : ''}${deskSelected?allocationNote:''}` : null };
+}
+
+/** A local object command cannot safely stand in for the unparsed activity requirements in the same utterance. */
+function hasMixedActivityRequirements(text: string): boolean {
+  const brief = parseBriefSentence(text);
+  return brief.headcount !== null || brief.venueIO !== null || brief.lengthM !== null || brief.widthM !== null || brief.areaM2 !== null || brief.event !== null ||
+    /(?:\d+|[零〇一二两三四五六七八九十百千]+)\s*(?:人|位|名)/.test(text) ||
+    /人数.{0,8}(?:\d+|[零〇一二两三四五六七八九十百千]+)/.test(text) ||
+    /(?:需要|不需要|不要|不用|不设|取消|保留|设置|待定|是否|要不要).{0,8}(?:签到|接待|舞台|休息区)/.test(text) ||
+    /(?:每人|人人|所有人|全部人).{0,8}(?:坐|入座|座位)/.test(text);
+}
+
+/** Only a standalone, unambiguous action confirms the current visible proposal. */
+function isExplicitProposalConfirmation(text:string):boolean {
+  return /^(?:请|帮我)?(?:确认布置|确认这版(?:方案|布置)?|确认该方案|应用这版(?:方案|布置)?|应用该方案)[。！!]*$/.test(text.replace(/\s+/g,''));
+}
+
+/** These local parsers cannot safely interpret negation or a batch of different additions. */
+function needsMaterialCommandClarification(text: string, hasRevision: boolean, hasMaterial: boolean): boolean {
+  if (!/(?:加|添|放|摆|补|再来)/.test(text)) return false;
+  if (/(?:不|没|无|别|勿|暂缓|暂且|可能|也许|或|是否|待定|看情况|[?？])/.test(text)) return true;
+  if (hasRevision && hasMaterial) return true;
+  const start = text.search(/(?:加|添|放|摆|补|再来)/);
+  const additions = text.slice(start).match(/椅子|座椅|餐椅|椅|桌子|餐桌|圆桌|桌|签到台|签到处|接待台|背景板|背景墙|背景|展架|展板|展示架|展台|隔断|屏风|地毯|地垫|装饰道具|绿植|植物|花艺|盆栽|花|落地灯|吊灯|路灯|庭院灯|灯光|射灯|灯|绿树|树/g) ?? [];
+  return additions.length > 1;
+}
+
+function explicitAdditionCount(text: string): number | null {
+  const hit = text.match(/(?:加|添|再放|再来|补|多放|多来)\s*(\d+|[零〇一二两三四五六七八九十百千]+)\s*(?:把|张|个|块|组|盆|件|面|套|排|对|盏|台|支|座|棵)/);
+  if (!hit) return null;
+  if (/^\d+$/.test(hit[1]!)) return Number(hit[1]);
+  const digits: Record<string, number> = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  let total = 0, digit = 0;
+  for (const char of hit[1]!) {
+    if (char in digits) digit = digits[char]!;
+    else { total += (digit || 1) * (char === '十' ? 10 : char === '百' ? 100 : 1000); digit = 0; }
+  }
+  return total + digit;
+}
+
+function cloudRecoveryMessage(recovery: { revision: number; outcome?: 'pending' | 'committed' | 'cleanup_failed' }): string {
+  if (recovery.outcome === 'committed') return `云端已提交第 ${recovery.revision} 版，本机应用结果未能确认。请保留本地草稿并核对版本差异。`;
+  if (recovery.outcome === 'cleanup_failed') return '本机核对记录未能清除，请核对云端与本地版本后解除提醒。';
+  return '云端提交结果尚不明确，未重复提交。请保留本地草稿并只读核对云端版本。';
 }
 
 /** 本地候选那份读数直接搬到卡片上（生成器已经算好了件数与重叠）。 */
-function viewOfLocalPlan(plan: PlanProposal): ProposalView {
+function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
+  const candidate = plan.layouts.at(-1);
+  const venueChange = base && candidate && (Math.abs(base.width - candidate.width) > 1e-6 || Math.abs(base.height - candidate.height) > 1e-6)
+    ? `场地将从 ${formatArea(base.width)} × ${formatArea(base.height)} m 改为 ${formatArea(candidate.width)} × ${formatArea(candidate.height)} m`
+    : undefined;
+  const candidateZoneIds = new Set(candidate?.floors.flatMap(floor => (floor.zones ?? []).map(zone => zone.id)) ?? []);
+  const removedZones = base && candidate ? base.floors.flatMap(floor => floor.zones ?? []).filter(zone => !candidateZoneIds.has(zone.id)).length : 0;
+  const originalZones = new Set(base?.floors.flatMap(floor => (floor.zones ?? []).map(zone => zone.id)) ?? []);
+  const restPreview = base && candidate ? candidate.floors.flatMap(floor => (floor.zones ?? [])
+    .filter(zone => !originalZones.has(zone.id) && zone.name.includes('休息'))
+    .map(zone => {
+      const bench = floor.items.find(item => item.name === '休息长椅（示意）' && item.position
+        && item.position.x >= zone.x && item.position.x <= zone.x + zone.w
+        && item.position.z >= zone.z && item.position.z <= zone.z + zone.d);
+      return `${zone.name}：${formatArea(zone.w)} × ${formatArea(zone.d)} m，中心坐标 (${formatArea(zone.x + zone.w / 2)}, ${formatArea(zone.z + zone.d / 2)}) m（以场地中心为原点）${bench ? `；示意长椅 ${formatArea(bench.width)} × ${formatArea(bench.depth)} m` : ''}`;
+    })) : [];
+  const movementPreview = base && candidate ? base.floors.flatMap((floor, floorIndex) => floor.items.flatMap(item => {
+    const next = candidate.floors[floorIndex]?.items.find(value => value.id === item.id);
+    if (!item.position || !next?.position) return [];
+    const dx = next.position.x - item.position.x, dz = next.position.z - item.position.z;
+    if (Math.abs(dx) < 1e-7 && Math.abs(dz) < 1e-7) return [];
+    return [`${item.name}：${dx ? `${dx > 0 ? '右' : '左'}移 ${Math.abs(Number(dx.toFixed(3)))} 米` : ''}${dx && dz ? '，' : ''}${dz ? `${dz > 0 ? '南' : '北'}移 ${Math.abs(Number(dz.toFixed(3)))} 米` : ''}`];
+  })) : [];
+  const scaleFactor = (plan as PlanProposal & { scaleFactor?: number }).scaleFactor;
+  const scalePreview = scaleFactor !== undefined && base && candidate ? base.floors.flatMap((floor, index) => floor.items.flatMap(item => {
+    const next = candidate.floors[index]?.items.find(value => value.id === item.id);
+    if (!next || (next.width === item.width && next.depth === item.depth && next.height === item.height)) return [];
+    const precise = (n: number) => String(Number(n.toFixed(3)));
+    const dims = (value: typeof item) => `${precise(value.width)} × ${precise(value.depth)} × ${precise(value.height ?? 0)} 米`;
+    return [`${item.name}：缩放 ${scaleFactor} 倍，${dims(item)} → ${dims(next)}`];
+  })) : [];
+  const rotationOnly = (plan as PlanProposal & { rotationOnly?: boolean }).rotationOnly;
+  const rotationPreview = rotationOnly && base && candidate ? base.floors.flatMap((floor,index) => floor.items.flatMap(item => {
+    const next=candidate.floors[index]?.items.find(value=>value.id===item.id);
+    if(!next || Math.abs((next.rotation??0)-(item.rotation??0))<1e-12)return [];
+    const degrees=(rad:number)=>Number((rad*180/Math.PI).toFixed(3));
+    return [`${item.name}：旋转角度 ${degrees(item.rotation??0)}° → ${degrees(next.rotation??0)}°`];
+  })) : [];
+  const recolorOnly = (plan as PlanProposal & { recolorOnly?: boolean }).recolorOnly;
+  const recolorPreview = recolorOnly && base && candidate ? base.floors.flatMap((floor,index) => floor.items.flatMap(item => {
+    const next=candidate.floors[index]?.items.find(value=>value.id===item.id);
+    return next && item.color!==next.color ? [`${item.name}：颜色 ${item.color} → ${next.color}`] : [];
+  })) : [];
+  const originalOutcome = outcomeOfPlan(plan);
+  const outcome = scaleFactor !== undefined || rotationOnly || recolorOnly ? {...originalOutcome,moved:0,empty:null} : originalOutcome;
   return {
     added: plan.added, removing: plan.removing, changed: plan.moved ?? 0, lockedTouched: 0,
-    overlapCount: plan.overlapCount, overlapNames: plan.overlapNames, outcome: outcomeOfPlan(plan),
+    overlapCount: plan.overlapCount, overlapNames: plan.overlapNames, outcome: venueChange && outcome.empty ? { ...outcome, empty: null } : outcome,
     source: 'local', keptLocked: plan.keptLocked, dropped: plan.dropped, blocked: plan.blocked,
     guests: plan.guests ?? null, seats: plan.seats ?? 0, seatPriority: !!plan.seatPriority,
     review: plan.kind === 'review', skipped: plan.skipped ?? [], diagnostics: plan.diagnostics ?? [],
+    ...(venueChange ? { venueChange } : {}), ...(removedZones ? { removedZones } : {}),
+    ...(restPreview.length ? { restPreview } : {}),
+    ...(movementPreview.length ? { movementPreview } : {}),
+    ...(scalePreview.length ? { scalePreview } : {}),
+    ...(rotationPreview.length ? { rotationPreview } : {}),
+    ...(recolorPreview.length ? { recolorPreview } : {}),
+    ...(base && candidate ? {existingChanges:describeExistingChanges(proposalDifferences(base,candidate),base,candidate)} : {}),
+    ...(plan.seatingReview ? {seatingReview:plan.seatingReview} : {}),
+    ...(candidate ? { candidateArea: venueArea(candidate) } : {}),
+    ...((() => {
+      const planNotes = ((plan as PlanProposal & { summary?: string[] }).summary ?? []).filter(line => line.trim() && !/尚未确认/.test(line));
+      return planNotes.length ? { planNotes } : {};
+    })()),
+    ...((plan as PlanProposal & {localDraftDetails?:string[]}).localDraftDetails ? {localDraftDetails:(plan as PlanProposal & {localDraftDetails:string[]}).localDraftDetails} : {}),
   };
-}
-
-/** 脚本那一路会带上「计划读白」：先让人核对计划，再看绿框；旧路径没有计划可念。 */
-function scriptSummaryOf(plan: PlanProposal): string {
-  const summary = (plan as PlanProposal & { summary?: string[] }).summary;
-  return Array.isArray(summary) && summary.length ? `${summary.join(' · ')}。` : '';
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
 function withPlanArtifact(plan: PlanProposal, base: RoomLayout): PlanProposal {
-  const candidate = plan.layouts[plan.layouts.length - 1];
+  const existingIds = new Set(base.floors.flatMap(floor => floor.items.map(item => item.id)));
+  const opId = `procedural-${uid()}`;
+  const layouts = plan.layouts.map(layout => ({ ...layout, floors: layout.floors.map(floor => ({ ...floor,
+    items: floor.items.map(item => existingIds.has(item.id) || item.provenance?.source === 'procedural'
+      ? item : { ...item, provenance: { source: 'procedural' as const, opId } }),
+  })) }));
+  const candidate = layouts[layouts.length - 1];
   if (!candidate) return plan;
   return {
-    ...plan,
+    ...plan, layouts,
     artifact: makePlanArtifact({
       base, candidate,
       counts: {
@@ -212,7 +403,7 @@ export interface LayoutAgentCallbacks {
   onOpenReview(): void;
   onOpenDelivery(): void;
   /** S2-2 发送钉评链接：生成 /review/#layout= 评审链接，URL 回给面板气泡。 */
-  onIssueReviewLink?(): Promise<string | null>;
+  onIssueReviewLink?(): Promise<string | {url:string;isCurrent:()=>boolean} | null>;
   onFit(): void;
   /** 活动简报（完善需求） */
   onOpenBrief?(): void;
@@ -227,6 +418,25 @@ export interface LayoutAgentCallbacks {
 }
 
 interface AgentValue {
+  sessionScope: string;
+  isSessionCurrent(): boolean;
+  historyReviewRequired: boolean;
+  reviewDialogueHistory(): void;
+  acceptFreshSession(id:string):void;
+  retainedOtherSessionProposal:boolean;
+  withdrawRetainedOtherSessionProposal():void;
+  unresolvedDialogue: readonly string[];
+  withdrawUnresolvedDialogue(text:string): void;
+  withdrawAllUnresolved(): void;
+  briefBusy: boolean;
+  toolPending: boolean;
+  processFailed: ProcessFailure | null;
+  assertSessionWrite: () => void;
+  sessionSaveFailed: boolean;
+  understanding: boolean; isUnderstanding(text?:string): boolean; cancelUnderstanding(): void;
+  /** A bridge must not clear text when the main conversation cannot accept it. */
+  canForward(text:string):boolean;
+  cancelledInput: {id:number;text:string}|null; retryUncertain: string|null; confirmUncertainRetry(): void; dismissUncertainRetry(): void; generationQueued:number;
   callbacks: LayoutAgentCallbacks;
   state: AgentState; venueIO: VenueIO; setVenueIO(value: VenueIO): void;
 
@@ -240,6 +450,7 @@ interface AgentValue {
   retry(): void; stop(): void; resume(): void; regenerate(label?: string): void;
   /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
+  inventoryWorkspace: ReactNode; inventoryBlocked: boolean; inventoryInvalid: boolean;
   /** 左栏简报的空地文字链：不用先开物料库，一键立 12×8 空壳。 */
   startBlankVenue(): void;
   /** 左轨常驻的地图入口：场地立起来也进得来，返回 null = 场地已换成圈画这块，否则是挡路的原因。 */
@@ -265,7 +476,7 @@ interface AgentValue {
   /** 座位不够时的一点击改法：按同一份需求补座重排，仍然只出预览。 */
   addSeats(): void;
   /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
-  exportPreview: boolean; previewExport(): void; confirmExport(): void; dismissExport(): void;
+  exportPreview: boolean; previewExport(): void; confirmExport(): void; confirmCloudMaterialDraft(): void; dismissExport(): void;
   /** S2-1：几何体检按钮直达（此前唯一入口是口令）。 */
   reviewNow(): void;
   /** S2-2：一键生成钉评链接，气泡回链。离线导出降级为分享菜单次选项。 */
@@ -284,15 +495,68 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 /** 面板可能单独渲染（测试、工作台抽屉）：没有 Agent 上下文时返回 null，不炸。 */
 export function useAgentOptional(): AgentValue | null { return useContext(AgentContext); }
 
+function hasInvalidRetainedZones(layout:RoomLayout):boolean {
+  return layout.floors.some(floor=>(floor.zones??[]).some(zone=>
+    ![zone.x,zone.z,zone.w,zone.d,layout.width,layout.height].every(Number.isFinite)||zone.w<=0||zone.d<=0||layout.width<=0||layout.height<=0||
+    zone.x < -layout.width/2 || zone.z < -layout.height/2 || zone.x+zone.w > layout.width/2 || zone.z+zone.d > layout.height/2));
+}
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+// Keep unsaved requirements in memory per activity when a write guard prevents persistence.
+const volatileSessionMemories = new Map<string, Map<string, BriefMemory>>();
+const volatileComposerDrafts = new Map<string, string>();
+/** Read-only copy of unsent text in this activity; never clears the live composer. */
+export function readonlyComposerDrafts(scope:string):{sessionId:string|null;text:string}[] {
+  const result:{sessionId:string|null;text:string}[]=[];
+  for(const [key,text] of volatileComposerDrafts){try{const value:unknown=JSON.parse(key);if(Array.isArray(value)&&value[0]===scope&&typeof text==='string'&&text.length)
+    result.push({sessionId:typeof value[1]==='string'?value[1]:null,text});}catch{/* unrelated invalid keys are not exported */}}
+  return result;
+}
+export function resetVolatileAssistantMemoriesForTests(): void { volatileSessionMemories.clear(); volatileComposerDrafts.clear(); }
+function volatileMemoriesFor(scope: string): Map<string, BriefMemory> {
+  let values=volatileSessionMemories.get(scope);
+  if(!values){values=new Map();volatileSessionMemories.set(scope,values);}
+  return values;
+}
+/** No recorded brief and no dialogue yet: there is no prior plan for the history gate to protect. */
+function layoutMemoryIsBlank(memory: BriefMemory): boolean {
+  return memory.headcount === null && memory.event === null && memory.lengthM === null && memory.widthM === null && memory.areaM2 === null
+    && memory.layoutModeConfirmed !== true && !memory.layoutModeUnresolved && memory.pendingActivityNeeds.length === 0 && memory.unresolvedActivityNeeds.length === 0
+    && !(memory.pendingBasicFacts?.length) && !(memory.reportedInventory?.length) && !memory.pendingGeneration;
+}
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 「调研」底图的落盘：走 docs/19 的专用路径（store 现取布局 + 场景锚点），不走 onApply 的整张覆盖。 */ onApplyResearchArea(area: NonNullable<RoomLayout['researchArea']>): void; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
-  const { layout, activeFloor, activeFloorIndex, actions, history, view, setView, collidingIds } = useRoomEditor();
+export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, onDialogueHistoryReview, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; onDialogueHistoryReview?: ((sessionId:string)=>boolean)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
+  const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
-  const assistantSessions = useAssistantSessions();
+  const venueFacts = useVenueFactTracker(layoutStore);
+  const sessionCurrentRef = useRef(isSessionCurrent); sessionCurrentRef.current = isSessionCurrent;
+  const sessionGuardRef = useRef(assertSessionWrite);
+  const sessionGuardRequired = useRef(!!assertSessionWrite);
+  if (assertSessionWrite) sessionGuardRequired.current = true;
+  sessionGuardRef.current = assertSessionWrite;
+  const requireSessionWrite = useCallback(() => {
+    if (sessionCurrentRef.current && !sessionCurrentRef.current()) throw new Error('活动会话已切换。');
+    if (sessionGuardRef.current) sessionGuardRef.current();
+    else if (sessionGuardRequired.current) throw new Error('本机写入凭证已失效。');
+  }, []);
+  const [sessionSaveFailed, setSessionSaveFailed] = useState(false);
+  const assistantSessions = useAssistantSessions(requireSessionWrite, sessionScope);
+  const confirmVenueSourceRef = useRef(confirmVenueSource); confirmVenueSourceRef.current = confirmVenueSource;
+  const sourceAuthorityRequired = useRef(!!confirmVenueSource); if (confirmVenueSource) sourceAuthorityRequired.current = true;
+  const sessionScopeIsCurrent = () => {
+    try { if (sessionCurrentRef.current && !sessionCurrentRef.current()) return false; } catch { return false; }
+    if (sessionScope === 'legacy') return true;
+    const id = layoutStore.getState().layout.id;
+    return sessionScope === (id ? `activity:${id}` : 'draft:unidentified');
+  };
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
   const studioRef = useRef(studio); studioRef.current = studio;
+  const suppressCancelledCloudPreview=useRef(false);
+  const lastStudioBusy=useRef(!!studio?.busy);
+  useEffect(()=>{
+    if(studio?.busy&&!lastStudioBusy.current)suppressCancelledCloudPreview.current=false;
+    lastStudioBusy.current=!!studio?.busy;
+  },[studio?.busy]);
   /** 这一次出方案是谁算的：撤回、停一下、换一版都按它分流。 */
   const lastSource = useRef<'local' | 'cloud'>('local');
   /** 云端确认是异步的：`applyPreview` 里清预览的时机不在我们 await 的那一帧，所以等预览变化再播报。 */
@@ -317,8 +581,9 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const briefRef = useRef(brief); briefRef.current = brief;
   // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
   const memoryRef = useRef<BriefMemory>(initialBriefMemory());
-  /** 这一句要不要舞台/签到。缺省跟旧行为：放舞台、不放签到。 */
-  const anchorsRef = useRef({ stage: true, checkin: false });
+  const memoryRevision = useRef(0);
+  /** 未明确时不擅自添加舞台或签到。 */
+  const anchorsRef = useRef({ stage: false, checkin: false });
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
@@ -328,13 +593,150 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const [exportPreview, setExportPreview] = useState(false);
   // 提案只活在这里：layout 一个字节都不动，所以自动存档、撤销栈、别人的选中态都不受影响。
   const proposal = useRef<PlanProposal | null>(null);
+  const proposalSessionRef=useRef<string|null>(null);
+  function setLocalProposal(next:PlanProposal|null):void {
+    const previous=proposal.current;
+    if(next&&pendingCandidates&&!pendingCandidates.register('local',next))throw new Error('活动已变化，未保留旧方案预览。');
+    if(!next&&previous)pendingCandidates?.clear('local',previous);
+    proposal.current=next;
+    proposalSessionRef.current=next?boundSessionId.current:null;
+  }
+  function withCurrentSeatingReview<T extends PlanProposal>(plan:T,previous:PlanProposal|null):T {
+    const relevant=!!previous&&Object.hasOwn(previous,'seatingWitness')||memoryRef.current.layoutModeConfirmed===true&&memoryRef.current.layoutMode==='desk-chair';
+    if(!relevant)return plan;
+    const witness=previous?.seatingWitness??null;
+    return Object.assign(plan,{seatingWitness:witness,seatingReview:reviewLocalSeatingWitness(witness,plan.layouts.at(-1))});
+  }
+  useEffect(()=>()=>{const current=proposal.current;if(current)pendingCandidates?.clear('local',current);},[pendingCandidates]);
+  const localDraftOwner = useRef<{owner:NonNullable<typeof studio>['controller'];actor:string|null;sessionId:string|null;apiUrl:string|null;version:string;annotationRevision:number;annotationSignature:string;annotationReader:()=>{draft:LayoutPlanDraft|null;revision:number};routeReader:((id:string)=>UserRouteProvenance|null)|null;routeSignature:string} | null>(null);
+  const annotationSnapshotRef=useRef(getPlanAnnotationSnapshot);annotationSnapshotRef.current=getPlanAnnotationSnapshot;
+  const routeProvenanceRef=useRef(getUserRouteProvenance);routeProvenanceRef.current=getUserRouteProvenance;
+  const inventoryInput=useRef<{owner:object;scope:string;sessionId:string|null;sequence:number;floorIndex:number;revision:number;candidate:RoomLayout;value:CandidateInventory|undefined}|null>(null);
+  const inventoryOwner=useRef<{owner:object|null;serial:number}>({owner:null,serial:0});
+  const [,setInventoryRevision]=useState(0);
   const proposalBase = useRef<RoomLayout | null>(null);
+  const proposalFloor = useRef<FloorSessionToken|null>(null);
+  const floorSession=useFloorSessionTracker(layoutStore);
+  function captureFloor(index:number):FloorSessionToken|null {const token=floorSession.capture();return token?.floorIndex===index&&floorSession.isCurrent(token)?token:null;}
+  function floorStillCurrent(value:FloorSessionToken|null):boolean {return floorSession.isCurrent(value);}
+  function checkProposalFloor():boolean {if(floorStillCurrent(proposalFloor.current))return true;say({role:'agent',amber:true,text:'当前楼层已经切换，这版候选暂保留，请回原楼层重新生成并核对。'});return false;}
+  const styleProposal = useRef<{ key: string; memoryRevision: number; draftRevision: number; floorIndex: number; sessionId: string | null } | null>(null);
   const shownSteps = useRef(0);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const bubblesRef = useRef<Bubble[]>([]);
   bubblesRef.current = bubbles;
   /** 当前气泡所绑定的方案会话；切场时先把旧场正文落盘再换。 */
   const boundSessionId = useRef<string | null>(null);
+  const sessionMemories = useRef(volatileMemoriesFor(sessionScope));
+  const briefTurnSequence = useRef(0);
+  const briefTurnTail = useRef<Promise<void>>(Promise.resolve());
+  const generationWait = useRef<{promise:Promise<void>;cancel:()=>void}|null>(null);
+  const generationFollowups = useRef<Promise<void>>(Promise.resolve());
+  const [generationQueued,setGenerationQueued] = useState(0);
+  const generationQueuedRef = useRef(0);
+  const sendLatest = useRef<(text:string,allowUncertainRetry?:boolean,queued?:boolean,attachment?:{file:File;url:string}|null,history?:Array<{role:'user'|'assistant';text:string}>)=>Promise<void>>(async()=>{});
+  const briefRequest = useRef<{controller:AbortController;text:string}|null>(null);
+  const researchRequest = useRef<AbortController | null>(null);
+  const uncertainInputs = useRef(new Set<string>());
+  const pendingModelInputs = useRef(new Set<string>());
+  const [understanding,setUnderstanding]=useState(false);
+  const [briefBusy,setBriefBusy]=useState(false);
+  const [toolPending,setToolPending]=useState(false);
+  const [processFailed,setProcessFailed]=useState<ProcessFailure|null>(null);
+  const layoutAttempt=useRef(false);
+  const cloudAttempt=useRef(false);
+  const previewUtterance=useRef<string|null>(null);
+  const [cancelledInput,setCancelledInput]=useState<{id:number;text:string}|null>(null);
+  const [retryUncertain,setRetryUncertain]=useState<string|null>(null);
+  const dialogueTurnStartRef=useRef(onDialogueTurnStart);dialogueTurnStartRef.current=onDialogueTurnStart;
+  const dialogueIncompleteRef=useRef(onDialogueIncompleteChange);dialogueIncompleteRef.current=onDialogueIncompleteChange;
+  const incompleteDialogueTurns=useRef(new Map<string,Set<string>>());
+  const [unresolvedDialogue,setUnresolvedDialogue]=useState<readonly string[]>([]);
+  const [,setReviewedHistorySession]=useState<string|null>(null);
+  const reviewedHistorySessionRef=useRef<string|null>(null);
+  const setReviewedHistory=(id:string|null)=>{reviewedHistorySessionRef.current=id;setReviewedHistorySession(id);};
+  const freshSessionProof=useRef<string|null>(null);
+  const isHistoryReviewRequired=()=>!!onDialogueHistoryReview && (!boundSessionId.current||getActiveAssistantSessionId(sessionScope)!==boundSessionId.current||reviewedHistorySessionRef.current!==boundSessionId.current);
+  const historyReviewRequired=isHistoryReviewRequired();
+  function acceptFreshSession(id:string):void {
+    if(sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===id&&!sessionMemories.current.has(id))freshSessionProof.current=id;
+  }
+  function reviewDialogueHistory():void {
+    const id=boundSessionId.current;
+    if(!id||!sessionScopeIsCurrent()||getActiveAssistantSessionId(sessionScope)!==id||(incompleteDialogueTurns.current.get(id)?.size??0)>0)return;
+    if(studioRef.current?.recoverable||studioRef.current?.applyRecovery||studioRef.current?.reviewingApplyRecovery){say({role:'agent',amber:true,text:'请先查询原任务或核对已提交结果，保留原任务记录后再重新开始。'});return;}
+    if(briefRequest.current||generationWait.current||generationQueuedRef.current||studioRef.current?.busy){say({role:'agent',amber:true,text:'当前任务仍在处理，请等待或取消后再重新开始。'});return;}
+    if(studioRef.current&&!studioRef.current.discardPreviewForHistoryReview()){say({role:'agent',amber:true,text:'原任务记录或本机存储尚未核对，请先查询原任务或核对已提交结果；旧记录已保留。'});return;}
+    runToken.current++;briefTurnSequence.current++;pendingCandidates?.invalidate();dropProposal();
+    if(!onDialogueHistoryReview?.(id)){say({role:'agent',amber:true,text:'当前活动或会话正在变化，请稍后重新核对。'});return;}
+    setReviewedHistory(id);phaseRef.current='idle';setPhase('idle');setProgress(0);
+    say({role:'agent',text:'已按当前记录重新开始；旧预览已收回，请重新生成并核对方案。'});
+  }
+  const updateDialogueIncomplete=(sessionId:string|null,text:string,incomplete:boolean,provenUnhandled=false)=>{
+    const value=text.trim();if(!sessionId||!value||(incomplete&&!provenUnhandled&&isGeneralActivityQuestion(value)))return;
+    const entries=incompleteDialogueTurns.current.get(sessionId)??new Set<string>(),was=entries.size>0;
+    if(incomplete)entries.add(value);else entries.delete(value);
+    if(entries.size)incompleteDialogueTurns.current.set(sessionId,entries);else incompleteDialogueTurns.current.delete(sessionId);
+    if(boundSessionId.current===sessionId)setUnresolvedDialogue([...entries]);
+    if(was!==(entries.size>0))dialogueIncompleteRef.current?.(sessionId,entries.size>0);
+  };
+  const withdrawUnresolvedDialogue=(text:string)=>{
+    const id=boundSessionId.current;
+    if(!id||!sessionScopeIsCurrent()||getActiveAssistantSessionId(sessionScope)!==id||!incompleteDialogueTurns.current.get(id)?.has(text))return;
+    updateDialogueIncomplete(id,text,false);
+    say({role:'agent',text:'已撤回这项尚未处理的要求。其他要求仍然保留；如需方案，请重新生成并核对。'});
+  };
+  const withdrawAllUnresolved=()=>{
+    const id=boundSessionId.current;
+    if(!id||!sessionScopeIsCurrent()||getActiveAssistantSessionId(sessionScope)!==id)return;
+    const items=[...(incompleteDialogueTurns.current.get(id)??[])];
+    for(const text of items)updateDialogueIncomplete(id,text,false);
+    if(items.length)say({role:'agent',text:'已撤回这些尚未处理的要求。如需方案，请重新生成并核对。'});
+  };
+  function clearFulfilledChip(text:string|null):void {
+    const id=boundSessionId.current,value=text?.trim()??'';
+    if(!id)return;
+    const current=[...(incompleteDialogueTurns.current.get(id)??[])];
+    const next=chipsAfterLayoutPreview(current,value?[value]:[]);
+    for(const gone of current) if(!next.includes(gone)) updateDialogueIncomplete(id,gone,false);
+  }
+  function beginLayoutAttempt(text:string,cloud:boolean):void {
+    const value=text.trim();
+    if(value)previewUtterance.current=value;
+    cloudAttempt.current=cloud;
+    layoutAttempt.current=true;
+    setToolPending(cloud);
+    setProcessFailed(null);
+  }
+  function finishLayoutAttempt(ok:boolean):void {
+    if(!layoutAttempt.current)return;
+    layoutAttempt.current=false;
+    const cloud=cloudAttempt.current;
+    setToolPending(false);
+    if(ok){setProcessFailed(null);clearFulfilledChip(previewUtterance.current);}
+    else setProcessFailed(cloud?'cloud_tool':'preview');
+  }
+  useEffect(()=>{
+    if(phase==='failed')finishLayoutAttempt(false);
+    if(phase==='proposed'||phase==='ready')finishLayoutAttempt(true);
+  },[phase]);
+  function markUnresolvedModification(text:string):void {
+    updateDialogueIncomplete(boundSessionId.current,text,true);
+    if(phaseRef.current==='proposed'||phaseRef.current==='paused'||studioRef.current?.preview){
+      dropProposal();discardCloudPreview();phaseRef.current='idle';setPhase('idle');setProgress(0);
+    }
+  }
+  const dialogueTurnReleases=useRef(new Map<()=>void,{sessionId:string|null;text:string}>());
+  useEffect(()=>()=>{for(const [release,pending] of [...dialogueTurnReleases.current]){updateDialogueIncomplete(pending.sessionId,pending.text,true);release();}},[]);
+  function cancelUnderstanding():void {
+    const request=briefRequest.current;if(!request)return;
+    updateDialogueIncomplete(boundSessionId.current,request.text,true);
+    uncertainInputs.current.add(request.text);request.controller.abort();
+    setCancelledInput({id:Date.now(),text:request.text});
+    say({role:'agent',amber:true,text:'已停止等待，本次需求未写入。服务商可能仍在处理或计费；再次发送前请确认。'});
+  }
+  useEffect(() => () => { briefTurnSequence.current++; runToken.current++; generationWait.current?.cancel();briefRequest.current?.controller.abort();researchRequest.current?.abort(); resetAgentRun(); }, []);
+  const briefFallbackNotified = useRef(false);
   const touchActiveSessionRef = useRef(assistantSessions.touchActiveSession);
   touchActiveSessionRef.current = assistantSessions.touchActiveSession;
   const lastFile = useRef<File | null>(null);
@@ -346,6 +748,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const colliding = useRef(collidingIds); colliding.current = collidingIds;
   const live = useRef(layout); live.current = layout;
   const floorIndexRef = useRef(activeFloorIndex); floorIndexRef.current = activeFloorIndex;
+  const zoneDraftRevisionRef = useRef(zoneDraftRevision); zoneDraftRevisionRef.current = zoneDraftRevision;
   const dragDepth = useRef(0);
 
   const lengthCheck = checkDim(lengthText, '长度');
@@ -354,35 +757,107 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const hasBase = baseName !== null;
 
   const persistBubbles = useCallback((sessionId: string | null, next: readonly Bubble[]) => {
-    if (!sessionId) return;
-    const written = writeSessionBubbles(getAssistantSessionBodies(), sessionId, toStoredBubbles(next));
-    replaceAssistantSessionBodies(written);
-  }, []);
+    if (!sessionId || !sessionScopeIsCurrent()) return;
+    const written = writeSessionBubbles(getAssistantSessionBodies(sessionScope), sessionId, toStoredBubbles(next));
+    if (!replaceAssistantSessionBodies(written, requireSessionWrite, sessionScope)) setSessionSaveFailed(true);
+  }, [requireSessionWrite, sessionScope]);
 
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => {
+    if (!sessionScopeIsCurrent()) return;
     // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
+    const text = foldConflictBubble(bubble.text);
     const prev = bubblesRef.current;
-    const next = [...prev.slice(-30), { id: uid(), ...bubble }];
+    const last = prev.at(-1);
+    // One click was posting the same overlap refusal twice. A second identical refusal stays one bubble.
+    if (last?.role === 'agent' && last.text === text && text.includes('件没写上')) return;
+    const next = [...prev.slice(-30), { id: uid(), ...bubble, text }];
     bubblesRef.current = next;
     setBubbles(next);
     persistBubbles(boundSessionId.current, next);
     touchActiveSessionRef.current();
   }, [persistBubbles]);
 
+  useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
+    if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
+    pendingCandidates?.invalidate();
+    briefTurnSequence.current++;runToken.current++;
+    researchRequest.current?.abort();
+    if(nextId!==boundSessionId.current&&proposal.current){hidePreview();phaseRef.current='idle';setPhase('idle');setProgress(0);}
+    if(generationWait.current||localDraftOwner.current){suppressCancelledCloudPreview.current=true;generationWait.current?.cancel();dropProposal();phaseRef.current='idle';setPhase('idle');setProgress(0);}
+  }),[sessionScope,pendingCandidates]);
+  useEffect(()=>{
+    const controller=studioRef.current?.controller;
+    if(!controller?.getSnapshot||!controller.subscribe)return;
+    let actor=controller.getSnapshot().user?.id??null;
+    return controller.subscribe(()=>{
+      const next=controller.getSnapshot().user?.id??null;if(next===actor)return;actor=next;
+      pendingCandidates?.invalidate();
+      briefTurnSequence.current++;runToken.current++;
+      researchRequest.current?.abort();
+      if(generationWait.current||localDraftOwner.current){suppressCancelledCloudPreview.current=true;generationWait.current?.cancel();dropProposal();phaseRef.current='idle';setPhase('idle');setProgress(0);}
+      if(briefRequest.current){updateDialogueIncomplete(boundSessionId.current,briefRequest.current.text,true);uncertainInputs.current.add(briefRequest.current.text);briefRequest.current.controller.abort();}
+    });
+  },[studio?.controller,pendingCandidates]);
+
+  function saveMemory(memory: BriefMemory): boolean {
+    if (!sessionScopeIsCurrent()) return false;
+    if (JSON.stringify({ ...memoryRef.current, askedScale: false }) !== JSON.stringify({ ...memory, askedScale: false })) memoryRevision.current++;
+    memoryRef.current = memory;
+    onBriefMemoryChange?.(memory,boundSessionId.current);
+    const id = boundSessionId.current;
+    if (id) sessionMemories.current.set(id, memory);
+    const saved = !!id && writeBriefMemory(id, memory, scopedAssistantStorage(sessionScope), requireSessionWrite);
+    if (id && !saved) say({ role: 'agent', amber: true, text: '这次需求暂时无法保存在本机，当前输入保留在页面中，请先备份。' });
+    return saved;
+  }
+
   // 点历史 / 新开会话：换 activeId 时把气泡切到对应正文；新场没有正文就是空对话。
+  function grantEmptyLayoutReview(sessionId: string | null, dialogue: readonly { id: string }[], memory: BriefMemory): void {
+    if (!sessionId || !onDialogueHistoryReview || reviewedHistorySessionRef.current === sessionId) return;
+    if (dialogue.length || !layoutMemoryIsBlank(memory) || (incompleteDialogueTurns.current.get(sessionId)?.size ?? 0) > 0) return;
+    const cloud = studioRef.current;
+    if (cloud?.preview || cloud?.recoverable || cloud?.applyRecovery || cloud?.busy || cloud?.reviewingApplyRecovery) return;
+    if (!sessionScopeIsCurrent() || getActiveAssistantSessionId(sessionScope) !== sessionId) return;
+    // Nothing old to withdraw. A stored run marker still refuses, and the gate stays up.
+    if (cloud && !cloud.discardPreviewForHistoryReview()) return;
+    if (!onDialogueHistoryReview(sessionId)) return;
+    setReviewedHistory(sessionId);
+  }
+  const studioReviewReady = !studio?.preview && !studio?.recoverable && !studio?.applyRecovery && !studio?.busy && !studio?.reviewingApplyRecovery;
   useEffect(() => {
-    if (!assistantSessions.ready) return;
+    if (!assistantSessions.ready || !sessionScopeIsCurrent()) return;
     const nextId = assistantSessions.activeId;
     const prevId = boundSessionId.current;
-    if (prevId === nextId) return;
-    if (prevId && assistantSessionExists(prevId)) persistBubbles(prevId, bubblesRef.current);
+    if (prevId === nextId) { grantEmptyLayoutReview(nextId, bubblesRef.current, memoryRef.current); return; }
+    setReviewedHistory(null);
+    briefTurnSequence.current += 1;
+    if(briefRequest.current){updateDialogueIncomplete(prevId,briefRequest.current.text,true);uncertainInputs.current.add(briefRequest.current.text);briefRequest.current.controller.abort();say({role:'agent',amber:true,text:'切换会话后已停止等待；服务商可能仍在处理或计费。'});}
+    setCancelledInput(null);setRetryUncertain(null);
+    briefFallbackNotified.current = false;
+    if (prevId && assistantSessionExists(prevId, sessionScope)) persistBubbles(prevId, bubblesRef.current);
+    if (prevId && assistantSessionExists(prevId, sessionScope)) sessionMemories.current.set(prevId, {...memoryRef.current,pendingGeneration:undefined});
     boundSessionId.current = nextId;
+    setUnresolvedDialogue(nextId?[...(incompleteDialogueTurns.current.get(nextId)??[])]:[]);
+    const nextMemory = (nextId && (sessionMemories.current.get(nextId) ?? readBriefMemory(nextId, scopedAssistantStorage(sessionScope)))) || initialBriefMemory();
+    memoryRef.current = nextMemory;
+    onBriefMemoryChange?.(nextMemory,nextId);
+    if(nextId&&freshSessionProof.current===nextId){
+      freshSessionProof.current=null;
+      // A fresh conversation must not inherit a previous conversation's cloud
+      // candidate or discard an unknown run while granting its exemption.
+      if((!studioRef.current||studioRef.current.discardPreviewForHistoryReview())&&onDialogueHistoryReview?.(nextId))setReviewedHistory(nextId);
+    } else freshSessionProof.current=null;
+    const nextBrief = { event: nextMemory.event, guests: nextMemory.headcount, layoutMode: nextMemory.layoutMode };
+    briefRef.current = nextBrief;
+    setBrief(nextBrief);
+    anchorsRef.current = { stage: nextMemory.zoneNeeds.stage === true, checkin: nextMemory.zoneNeeds.checkin === true };
     const loaded = nextId
-      ? fromStoredBubbles(readSessionBubbles(getAssistantSessionBodies(), nextId))
+      ? fromStoredBubbles(readSessionBubbles(getAssistantSessionBodies(sessionScope), nextId))
       : [];
     bubblesRef.current = loaded;
     setBubbles(loaded);
-  }, [assistantSessions.ready, assistantSessions.activeId, persistBubbles]);
+    grantEmptyLayoutReview(nextId, loaded, nextMemory);
+  }, [assistantSessions.ready, assistantSessions.activeId, persistBubbles, studioReviewReady]);
 
   /** 对话记忆 → 右栏回放与生成条件共用的那份真相（人数/活动名/布置形态）。 */
   function syncMemory(memory: BriefMemory): void {
@@ -390,6 +865,30 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     briefRef.current = next;
     setBrief(next);
   }
+
+  function factScaleBound(memory: BriefMemory): boolean {
+    if (sessionScope === 'legacy' || (memory.lengthM === null && memory.widthM === null && memory.areaM2 === null)) return true;
+    return venueFacts.isCurrent(memory.venueFactToken);
+  }
+  function sourceScaleBound(memory: BriefMemory): boolean {
+    if (!sourceAuthorityRequired.current || (memory.lengthM === null && memory.widthM === null && memory.areaM2 === null)) return true;
+    const rawScope=layoutStore.getState().layout.id;
+    return !!confirmVenueSourceRef.current && !!rawScope && memory.venueSourceScope === rawScope && typeof memory.venueSourceDigest === 'string' && /^[0-9a-f]{64}$/i.test(memory.venueSourceDigest);
+  }
+
+  // A venue change invalidates the associated scale even before the next message.
+  useEffect(() => {
+    if (sessionScope === 'legacy' || !sessionScopeIsCurrent()) return;
+    const old=memoryRef.current;
+    if (old.scaleNeedsReconfirmation || (isVenueScaleCurrent(old,layout) && sourceScaleBound(old) && factScaleBound(old))) return;
+    const previousVenueScale=old.previousVenueScale ?? {lengthM:old.lengthM,widthM:old.widthM,areaM2:old.areaM2};
+    const stale={...old,lengthM:null,widthM:null,areaM2:null,scaleNeedsReconfirmation:true,previousVenueScale};
+    saveMemory(stale);syncMemory(stale);setLengthRaw('');setWidthRaw('');setScaleOrigin('canvas');
+    runToken.current++;
+    if (proposal.current) { dropProposal(); setPhase('idle'); }
+    const prior=previousVenueScale.lengthM !== null && previousVenueScale.widthM !== null ? `${formatArea(previousVenueScale.lengthM)} × ${formatArea(previousVenueScale.widthM)} 米` : previousVenueScale.areaM2 !== null ? `${formatArea(previousVenueScale.areaM2)} 平方米` : '未记录';
+    say({role:'agent',amber:true,text:`场地已变化，旧场地记录为 ${prior}，不能自动沿用。请重新说明当前场地尺寸。`});
+  }, [layout,sessionScope,venueFacts.token]);
 
   /**
    * 对话里说的人数/活动名也写进左栏「活动需求」：那边不再是生成入口，但还得能回看、保存。
@@ -403,8 +902,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const inRange = guests !== null && guests >= 1 && guests <= HEADCOUNT_MAX;
     apply(current => ({
       ...current,
-      ...(extraction.event ? { event: extraction.event } : {}),
-      ...(inRange && guests !== null ? { guests } : {}),
+      ...(extraction.event ? { event: extraction.event, eventConfirmed: true } : {}),
+      ...(inRange && guests !== null ? { guests, guestsConfirmed: true } : {}),
     }));
     return guests !== null && !inRange ? `人数超出左栏范围（1–${HEADCOUNT_MAX}），这个数先留在右栏，左边没改。` : null;
   }
@@ -474,8 +973,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
   /** 「写段文案」：用已收集的活动名/人数/场地/物料起一份草稿，只在对话里，不写进任何资料。 */
   function replyDraft(): void {
-    const event = briefRef.current.event ?? studioRef.current?.brief.event ?? '这场活动';
-    const guests = briefRef.current.guests ?? studioRef.current?.brief.guests ?? null;
+    const event = briefRef.current.event ?? (studioRef.current?.brief.eventConfirmed === true ? studioRef.current.brief.event : null) ?? '这场活动';
+    const guests = briefRef.current.guests ?? (studioRef.current?.brief.guestsConfirmed === true ? studioRef.current.brief.guests : null) ?? null;
     const pendingPlan = proposal.current;
     const source = pendingPlan ? pendingPlan.layouts[pendingPlan.layouts.length - 1]! : live.current;
     const { rows, total } = floorRows(source);
@@ -514,7 +1013,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     const notes = report.notes.length ? `\n${report.notes.join('\n')}` : '';
     if (report.clean) {
-      say({ role: 'agent', review: true, long: true, text: `看完了 ${report.checked} 件：没有互相挤、压墙柱、出界或拉不开的地方。这是几何体检，不是合规审查。${notes}` });
+      say({ role: 'agent', review: true, long: true, text: `检查了 ${report.checked} 件：本次未发现这些几何问题。检查只覆盖已建模物件，不代表现场安全或规范验收。${notes}` });
       return;
     }
     say({ role: 'agent', review: true, long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
@@ -527,14 +1026,25 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   /** S2-2：审校台「发送钉评链接」。生成 /review/#layout= 链接并由气泡回链，甲方钉评与回执沿既有 share-pins/review-return 回到审校台。 */
+  const reviewLinkPending=useRef(false);
   async function issueReviewLink(): Promise<void> {
+    if(reviewLinkPending.current)return;
     if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，链接要冻结落盘后的这一版。' }); return; }
+    const floor=floorSession.capture(),start=layoutStore.getState();
+    if(!sessionScopeIsCurrent()||!floorSession.isCurrent(floor)){say({role:'agent',review:true,amber:true,text:'活动或楼层正在切换，请重新准备评审链接。'});return;}
+    let baseline:RoomLayout;try{baseline=structuredClone(start.layout);}catch{say({role:'agent',review:true,amber:true,text:'当前方案无法完整核对，未准备链接。'});return;}
+    const stillCurrent=()=>{try{const now=layoutStore.getState();return sessionScopeIsCurrent()&&floorSession.isCurrent(floor)&&now.revision===start.revision&&sameRecoveryFormValue(now.layout,baseline);}catch{return false;}};
+    reviewLinkPending.current=true;
     try {
-      const url = await callbacks.onIssueReviewLink?.() ?? null;
-      if (!url) { say({ role: 'agent', amber: true, text: '钉评链接没生成出来，先开分享菜单手动发一次。' }); return; }
-      // 链接是 1.6KB 压缩快照：成熟做法是链接住独立分享卡、不进聊天。已有「甲方评审记录」卡带复制钮，这里只留一句指路。
-      say({ role: 'agent', review: true, text: '钉评链接已准备好。下面「甲方评审记录」里点「复制甲方链接」发给客户就行；客户在 3D 画布上钉的评和回执会回到这张审校台。' });
-    } catch { say({ role: 'agent', amber: true, text: '钉评链接没生成出来，先开分享菜单手动发一次。' }); }
+      const result=await callbacks.onIssueReviewLink?.()??null;
+      if(!sessionScopeIsCurrent())return;
+      if(!result){say({role:'agent',review:true,amber:true,text:'评审链接未准备好，未复制；请核对本机评审记录。'});return;}
+      if(typeof result==='string'||typeof result.url!=='string'||!result.url.trim()||!stillCurrent()||typeof result.isCurrent!=='function'||!result.isCurrent()){
+        say({role:'agent',review:true,amber:true,text:'活动或方案已变化，或当前版本无法核对；旧评审记录如已写入会保留，链接未复制。'});return;
+      }
+      say({ role: 'agent', review: true, text: '评审链接已准备好。请在下方「本机评审记录」复制链接发给对方；对方的意见仅保存在对方浏览器，不会自动回到这里，请另行收集。' });
+    } catch { if(sessionScopeIsCurrent())say({role:'agent',review:true,amber:true,text:'评审链接结果暂时无法核对；旧评审记录如已写入会保留，链接未复制。'}); }
+    finally{reviewLinkPending.current=false;}
   }
 
   /**
@@ -546,6 +1056,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再试下一条。' }); return; }
     const base = live.current;
     const index = floorIndexRef.current;
+    const floor=captureFloor(index);if(!floor){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});return;}
     const freshReport = reviewLayout(base, index);
     const fresh = freshReport.issues.find(candidate => candidate.id === issue.id)
       ?? freshReport.issues.find(candidate => candidate.kind === issue.kind && candidate.itemIds.some(id => issue.itemIds.includes(id)));
@@ -558,8 +1069,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', amber: true, long: true, text: `这条没改成：${why || '附近找不到不压墙、不碰别的物料的落点'}。${locked ? '锁着的先解锁再试，或自己拖一下。' : '先自己拖一下，或把周围腾一点空间。'}` });
       return;
     }
-    const floor = result.layout.floors[Math.min(index, result.layout.floors.length - 1)];
-    const byId = new Map((floor?.items ?? []).map(item => [item.id, item] as const));
+    const resultFloor = result.layout.floors[Math.min(index, result.layout.floors.length - 1)];
+    const byId = new Map((resultFloor?.items ?? []).map(item => [item.id, item] as const));
     const remainingOverlapIds = new Set(result.remaining.filter(item => item.kind === 'overlap').flatMap(item => item.itemIds));
     const plan: PlanProposal = {
       layouts: [base, result.layout],
@@ -572,15 +1083,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       kind: 'review',
       skipped: [...new Set(result.skipped.map(skip => skip.name))],
     };
-    proposal.current = withPlanArtifact(plan, base); proposalBase.current = base;
+    proposalFloor.current=floor;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), base)); proposalBase.current = structuredClone(base);
     // 画布本来就是改之前的样子，省掉基线那一帧，直接看挪完的结果。
     shownSteps.current = 1;
     lastSource.current = 'local';
     const rest = result.remaining.length ? `（改完还剩 ${result.remaining.length} 条要处理）` : '';
-    void presentProposal(++runToken.current, `按这条改：${fresh.fix.label}${rest}。`);
+    trackGeneration(presentProposal(++runToken.current, `按这条改：${fresh.fix.label}${rest}。`));
   }
 
-  /** 「按奶油会客配一套」：整组落盘，记进风格历史；与物料库旧入口共用 buildStyleBundleItems。 */
+  /** 风格套先构造完整候选，确认前不修改画布。 */
   function placeStyleBundleNow(bundle: StyleBundle): void {
     if (phase === 'generating') {
       say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再配一套。' });
@@ -590,21 +1101,30 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再配一套。' });
       return;
     }
-    const built = buildStyleBundleItems(bundle, { width: live.current.width, depth: live.current.height });
-    if (!built.ok) {
-      say({ role: 'agent', amber: true, text: built.message });
-      return;
+    const base = live.current;
+    const floorIndex = floorIndexRef.current;
+    const floorToken=captureFloor(floorIndex);if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});return;}
+    const floor = base.floors[floorIndex];
+    if (!floor) { say({ role: 'agent', amber: true, text: '当前楼层不可用，本次没有修改画布。' }); return; }
+    const built = buildStyleBundleItems(bundle, { width: base.width, depth: base.height });
+    if (!built.ok) { say({ role: 'agent', amber: true, text: built.message }); return; }
+    if (materialCount(floor.items) + built.items.length > editorItemLimit(base)) {
+      say({ role: 'agent', amber: true, text: '这一套超过当前物料数量上限，本次没有修改画布。' }); return;
     }
-    const limit = editorItemLimit(live.current);
-    if (materialCount(activeFloor.items) + built.items.length > limit) {
-      say({ role: 'agent', amber: true, text: `再放这一套会超过 ${limit} 件上限，先收几件物料再试。` });
-      return;
-    }
-    history.commitNow();
-    actions.addItems(built.items);
-    saveStyleRun(bundle.key, window.localStorage);
+    const candidate: RoomLayout = { ...base, floors: base.floors.map((item, index) => index === floorIndex ? { ...item, items: [...item.items, ...built.items] } : item) };
+    if (!canApplyLayoutGeometry(base, candidate)) { say({ role: 'agent', amber: true, text: '这一套与场地或现有物料冲突，本次没有修改画布。' }); return; }
+    const checked = applyLayoutCommandWithRefusals(applyLayoutCommand({ layout: candidate }), { layout: base });
+    const error = completeLayoutError(checked);
+    if (error) { say({ role: 'agent', amber: true, text: `${error} 本次没有修改画布。` }); return; }
+    const plan: PlanProposal = { layouts: [base, checked.nextLayout], added: built.items.length, removing: 0,
+      keptLocked: floor.items.filter(item => item.locked && !isStructuralMarker(item)).length,
+      dropped: 0, overlapCount: 0, overlapNames: [], blocked: null };
+    proposalBase.current = structuredClone(base);proposalFloor.current=floorToken;
+    setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), base));
+    styleProposal.current = { key: bundle.key, memoryRevision: memoryRevision.current, draftRevision: zoneDraftRevisionRef.current, floorIndex, sessionId: boundSessionId.current };
+    shownSteps.current = 1;
     setStylePickerOpen(false);
-    say({ role: 'agent', text: `按「${bundle.name}」放了一套：${bundle.note}。不满意可以说「换一版」，或再点别的风格。` });
+    trackGeneration(presentProposal(++runToken.current, `「${bundle.name}」的候选：新增 ${built.items.length} 件，原有物件保留；`));
   }
 
   /**
@@ -612,12 +1132,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 已经有一版本地预览时，就接在这一版上继续加，不再让人先确认一遍。
    */
   function addMaterials(request: MaterialRequest): void {
-    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再加物料。' }); return; }
+    if (phaseRef.current === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再加物料。' }); return; }
     if (proposal.current === null && studioRef.current?.preview) {
       say({ role: 'agent', amber: true, text: '云端这一版还没确认：先点「确认布置」或「撤回」，我再往上加。' });
       return;
     }
     const pending = proposal.current;
+    if(pending&&!checkProposalFloor())return;
+    const floorToken=pending?proposalFloor.current:captureFloor(activeFloorIndex);
+    if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});return;}
     const base = pending ? pending.layouts[pending.layouts.length - 1]! : live.current;
     let plan: AdditionProposal;
     try { plan = proposeAddition({ base, floorIndex: activeFloorIndex, requests: [request] }); }
@@ -630,14 +1153,14 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', amber: true, text: `画布上没有能放下${request.name}的空位（${request.count} 件都没放下）。先收几件，或者说「换一版」留出空地，我再加。` });
       return;
     }
-    if (!pending) proposalBase.current = live.current;
-    proposal.current = withPlanArtifact(plan, proposalBase.current ?? live.current);
+    if (!pending) {proposalBase.current = structuredClone(live.current);proposalFloor.current=floorToken;}
+    setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,pending), proposalBase.current ?? live.current));
     // 画布本来就是「加之前」的样子：省掉基线那一帧，直接看加上之后的结果。
     shownSteps.current = 1;
     const lead = placed < request.count
       ? `按你说的加 ${request.count} 件${request.name}，只放得下 ${placed} 件：`
       : pending ? `在这版上又加了${request.name}：` : `按你说的加了${request.name}：`;
-    void presentProposal(++runToken.current, lead);
+    trackGeneration(presentProposal(++runToken.current, lead));
   }
 
   /**
@@ -645,39 +1168,67 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 确认前不写画布，确认后仍是一次 applyLayout（撤销一步整步退回）。
    */
   function reviseMaterials(request: RevisionRequest): void {
-    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再改。' }); return; }
+    if (phaseRef.current === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再改。' }); return; }
     if (proposal.current === null && studioRef.current?.preview) {
       say({ role: 'agent', amber: true, text: '云端这一版还没确认：先点「确认布置」或「撤回」，我再改。' });
       return;
     }
     const pending = proposal.current;
+    if(pending&&!checkProposalFloor())return;
+    const floorToken=pending?proposalFloor.current:captureFloor(activeFloorIndex);
+    if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});return;}
     const base = pending ? pending.layouts[pending.layouts.length - 1]! : live.current;
     let plan: RevisionProposal;
-    try { plan = revisePlan({ base, floorIndex: activeFloorIndex, ops: request.ops, bands: request.bands }); }
+    const reviewSeating=!!pending&&Object.hasOwn(pending,'seatingWitness')||memoryRef.current.layoutModeConfirmed===true&&memoryRef.current.layoutMode==='desk-chair';
+    pushLocalLayoutStep('revise', 'running');
+    try { plan = revisePlan({ base, floorIndex: activeFloorIndex, ops: request.ops, bands: request.bands, ...(reviewSeating?{seatingWitness:pending?.seatingWitness??null}:{}) }); }
     catch (error) {
+      pushLocalLayoutStep('revise', 'error', '这版改不动');
+      finishLocalLayoutRun();
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版改不动，先说一下场地长宽或挪开锁着的物件。' });
       return;
     }
+    if (request.ops.length === 1 && request.ops[0]?.kind === 'move' && request.ops[0].delta && plan.applied) {
+      const finalFloor = plan.layouts.at(-1)?.floors[activeFloorIndex];
+      const beforeFloor = base.floors[activeFloorIndex];
+      const requested = request.ops[0].delta;
+      const matches = beforeFloor?.items.some(before => {
+        const after = finalFloor?.items.find(item => item.id === before.id);
+        return before.position && after?.position &&
+          Math.abs(after.position.x - before.position.x - requested.x) < 1e-7 &&
+          Math.abs(after.position.z - before.position.z - requested.z) < 1e-7;
+      });
+      if (!matches) { say({role:'agent',amber:true,text:'当前画布精度无法准确完成这个移动距离，请改用厘米整数或手动核对；本次没有修改画布。'}); return; }
+    }
+    if (request.ops.length === 1 && request.ops[0]?.kind === 'rotate' && plan.applied) {
+      const finalFloor=plan.layouts.at(-1)?.floors[activeFloorIndex], beforeFloor=base.floors[activeFloorIndex];
+      const radians=request.ops[0].deltaDeg*Math.PI/180;
+      const matches=beforeFloor?.items.some(before=>{const after=finalFloor?.items.find(item=>item.id===before.id);
+        return after && Math.abs((after.rotation??0)-(before.rotation??0)-radians)<1e-9;});
+      if(!matches){say({role:'agent',amber:true,text:'当前画布精度无法准确完成这个旋转角度；请调整后重试，本次没有修改画布。'});return;}
+    }
     if (!plan.applied) {
-      const alternative = plan.conflicts.find(conflict => conflict.alternative);
-      const why = plan.conflicts[0]?.message ?? '没找到要改的物件';
-      const alt = alternative?.alternative
-        ? `可放到 (${alternative.alternative.x}, ${alternative.alternative.z})。`
-        : '';
-      say({ role: 'agent', amber: true, text: `这句没改成：${why}。${alt}` });
+      pushLocalLayoutStep('revise', 'error', '这步没改成');
+      finishLocalLayoutRun();
+      say({ role: 'agent', amber: true, text: revisionRefusalText(plan.conflicts) });
       return;
     }
-    if (!pending) proposalBase.current = live.current;
-    proposal.current = withPlanArtifact(plan, proposalBase.current ?? live.current);
+    pushLocalLayoutStep('revise', 'done');
+    finishLocalLayoutRun();
+    if (!pending) {proposalBase.current = structuredClone(live.current);proposalFloor.current=floorToken;}
+    const scaleOnly = request.ops.length === 1 && request.ops[0]?.kind === 'scale' ? request.ops[0].factor : undefined;
+    const rotationOnly = request.ops.length === 1 && request.ops[0]?.kind === 'rotate';
+    const recolorOnly = request.ops.length === 1 && request.ops[0]?.kind === 'recolor';
+    setLocalProposal(withPlanArtifact(Object.assign(plan,scaleOnly !== undefined ? {scaleFactor:scaleOnly} : rotationOnly ? {rotationOnly:true} : recolorOnly ? {recolorOnly:true} : {}), proposalBase.current ?? live.current));
     // 画布本来就是「改之前」的样子：省掉基线那一帧，直接看改完的结果。
     shownSteps.current = 1;
     const bits = [
-      plan.moved ? `挪/转 ${plan.moved} 件` : '',
+      plan.moved ? `${scaleOnly !== undefined ? '缩放' : rotationOnly ? '旋转' : recolorOnly ? '改色' : '挪/转'} ${plan.moved} 件` : '',
       plan.added ? `加了 ${plan.added} 件` : '',
       plan.removing ? `删了 ${plan.removing} 件` : '',
     ].filter(Boolean);
     const miss = plan.conflicts.length ? `；${plan.conflicts.length} 处没落：${plan.conflicts.map(conflict => conflict.message).join('、')}` : '';
-    void presentProposal(++runToken.current, `按你说的改了 ${bits.join('，')}${miss}，只动了这几件：`);
+    trackGeneration(presentProposal(++runToken.current, `按你说的改了 ${bits.join('，')}${miss}，只动了这几件：`));
   }
 
   // 长宽只在生成时由壳体那一步写进场地。以前这里还会跟着输入框把 layout 改一遍，
@@ -755,24 +1306,95 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', text: '调研哪一片？说个地名就行，比如「调研西湖」。' });
       return;
     }
+    // Only the latest request can replace this activity's single reference map.
+    researchRequest.current?.abort();
+    if (!onApplyResearchArea) { say({role:'agent',amber:true,text:'当前工作台暂不支持应用调研底图。'}); return; }
+    const researchSession = getActiveAssistantSessionId(sessionScope);
+    const researchToken = runToken.current;
     say({ role: 'agent', text: `正在查「${query}」的位置…` });
-    const place = await lookupPlace(query);
-    if (!place) {
-      say({ role: 'agent', amber: true, text: `没查到「${query}」。换个更准的地名再试，或点「地图选址」手动圈一块。` });
+    const controller = new AbortController();
+    researchRequest.current = controller;
+    const current = () => researchRequest.current === controller && researchToken === runToken.current && sessionScopeIsCurrent() && getActiveAssistantSessionId(sessionScope) === researchSession;
+    let timeout: number | undefined;
+    let removeAbortListener = () => {};
+    let unsubscribeMap = () => {};
+    try {
+      // Track the venue identity/geometry as well as map placement, while the
+      // shared venue basis excludes ordinary furniture. Compare the potentially
+      // large floor-plan image separately rather than serializing it on every
+      // store event. The monotonic flag catches A→B→A.
+      const mapKey = (value: RoomLayout) => {
+        const {floorPlanImage:_image,...withoutImage}=value;
+        return JSON.stringify({venue:venueScaleBasis(withoutImage),researchArea:value.researchArea ?? null,sceneAnchor:value.sceneAnchor ?? null,
+          mapGroundPolygon:value.mapGroundPolygon ?? null,mapLngLat:value.mapLngLat ?? null,mapGroundFrame:value.mapGroundFrame ?? null,
+          satelliteGroundRef:value.satelliteGroundRef ?? null,floorPlanFitMode:value.floorPlanFitMode ?? null});
+      };
+      const initialLayout = layoutStore.getState().layout;
+      const baseline = mapKey(initialLayout), baselineImage = initialLayout.floorPlanImage ?? null;
+      let mapChanged = false;
+      const matchesMap = (value: RoomLayout) => (value.floorPlanImage ?? null) === baselineImage && mapKey(value) === baseline;
+      unsubscribeMap = layoutStore.subscribe(state => {
+        try { if(!mapChanged && !matchesMap(state.layout))mapChanged = true; }
+        catch { mapChanged = true; }
+      });
+      const mapCurrent = () => {
+        try { return !mapChanged && matchesMap(layoutStore.getState().layout); }
+        catch { return false; }
+      };
+      // Include script loading in the bound; its own timeout begins only after
+      // the map SDK has loaded. A late response must never apply a map.
+      const result = await Promise.race([
+        lookupPlace(query, controller.signal).then(value => ({ kind: 'result' as const, value })),
+        new Promise<{kind:'timeout'}>(resolve => { timeout = window.setTimeout(() => resolve({kind:'timeout'}), 12_000); }),
+        new Promise<{kind:'cancelled'}>(resolve => {
+          const cancelled=()=>resolve({kind:'cancelled'});
+          if(controller.signal.aborted)cancelled();
+          else { controller.signal.addEventListener('abort',cancelled,{once:true});removeAbortListener=()=>controller.signal.removeEventListener('abort',cancelled); }
+        }),
+      ]);
+      if (!current()) return;
+      if (result.kind === 'cancelled') return;
+      if (result.kind === 'timeout') {
+        controller.abort();
+        say({role:'agent',amber:true,text:'调研查询超时，本次没有铺设底图；请稍后重试或手动选址。'});
+        return;
+      }
+      const place = result.value;
+      if (!place) {
+        say({ role: 'agent', amber: true, text: `没查到「${query}」。换个更准的地名再试，或点「地图选址」手动圈一块。` });
+        return;
+      }
+      if (!mapCurrent()) {
+        say({role:'agent',amber:true,text:'场地、底图或场景锚点已变化，本次调研结果未覆盖当前选择；请重新调研。'});
+        return;
+      }
+      const area = createResearchArea(place);
+      // 落盘走专用路径，从 store 现取布局；不覆盖查询期间新选择的底图或锚点。
+      try {
+        requireSessionWrite();
+        if (!current()) return;
+        if (!mapCurrent()) {
+          say({role:'agent',amber:true,text:'场地、底图或场景锚点已变化，本次调研结果未覆盖当前选择；请重新调研。'});
+          return;
+        }
+        onApplyResearchArea(area);
+      } catch { say({role:'agent',amber:true,text:'当前活动无法写入调研底图，请检查编辑权后重试。'}); return; }
+      setView(current => ({ ...current, view2D: false }));
+      say({
+        role: 'agent',
+        image: area.imageUrl,
+        meta: '参考底图 · 不可作重建素材',
+        text: `调研底图铺好了：${area.name}${area.address ? `（${area.address}）` : ''}。中心 ${area.center.lng.toFixed(5)}, ${area.center.lat.toFixed(5)}，半径 ${area.radiusM} m、约 ${area.widthM}×${area.depthM} m。3D 地面上那张图和这里贴的是同一张，可以直接在上面定点圈场地。`,
+      });
+    } catch {
+      if (current()) say({role:'agent',amber:true,text:'调研查询暂时不可用，本次没有铺设底图；请稍后重试或手动选址。'});
       return;
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      removeAbortListener();
+      unsubscribeMap();
+      if(researchRequest.current === controller)researchRequest.current = null;
     }
-    const area = createResearchArea(place);
-    // 落盘走 docs/19 的专用路径：从 store 现取布局再叠底图并设场景锚点。
-    // 不能整张覆盖 live 快照——查询等待期间挂载的场地（venueScan/sceneAnchor）会被旧快照冲掉。
-    onApplyResearchArea(area);
-    // 旧路径经 onApplyCreative 收尾时会把画布切回 3D；专用路径不管视图，这里自己切。
-    setView(current => ({ ...current, view2D: false }));
-    say({
-      role: 'agent',
-      image: area.imageUrl,
-      meta: '参考底图 · 不可作重建素材',
-      text: `调研底图铺好了：${area.name}${area.address ? `（${area.address}）` : ''}。中心 ${area.center.lng.toFixed(5)}, ${area.center.lat.toFixed(5)}，半径 ${area.radiusM} m、约 ${area.widthM}×${area.depthM} m。3D 地面上那张图和这里贴的是同一张，可以直接在上面定点圈场地。`,
-    });
   }
 
   // 画布上有墙体/场地真相 = 第 ① 步已经过了；撤回或作废不会把它拆掉，进度和尺寸读数都靠它。
@@ -803,29 +1425,103 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const cloudViewOf = useCallback((preview: NonNullable<typeof studio>['preview']): ProposalView | null => {
     if (!preview) return null;
     const byId = new Map(preview.layout.floors.flatMap(floor => floor.items.map(item => [item.id, item] as const)));
+    const differences=proposalDifferences(preview.base,preview.layout);
     const plan = pendingPlanOf(
-      proposalDifferences(preview.base, preview.layout).map(change => ({
+      differences.map(change => ({
         kind: change.kind,
-        locked: change.after?.item.locked ?? change.before?.item.locked ?? false,
+        locked: !!(change.before?.item.locked || change.after?.item.locked),
       })),
       preview.proposal.warnings,
       id => byId.get(id)?.name ?? '物件',
     );
     const current = studioRef.current;
-    const blocked = current?.expired ? '这版已经过期了，重新出一版再看。'
+    const memory = memoryRef.current;
+    const seatCheck = seatRequirement(preview.layout, activeFloorIndex, memory);
+    const restCheck = checkRestArea(preview.layout, activeFloorIndex, memory.zoneNeeds.rest === true);
+    const requirementError = current?.candidateRequirementError?.(preview.base, preview.layout);
+    const annotationWarning = current?.candidateAnnotationAdvisory?.(preview);
+    const comparisonOnly=isUnchangedProposal(preview.proposal);
+    const blocked = current?.applyRecovery ? cloudRecoveryMessage(current.applyRecovery)
+      : current?.expired ? '这版已经过期了，重新出一版再看。'
       : current?.stale ? CLOUD_STALE
+      : comparisonOnly ? '这版未改变场景，仅供对照；可选择其他方案或重新生成。'
       : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料：我不改锁着的东西，先解锁或换一版。`
+      : requirementError ? requirementError
+      : seatCheck.blocked ? seatCheck.blocked
+      : restCheck.status === 'unknown' ? restCheck.message
       : null;
     return {
-      ...plan, source: 'cloud', keptLocked: 0, dropped: 0, blocked,
-      outcome: buildOutcome({
+      ...plan, source: 'cloud', keptLocked: 0, dropped: 0, blocked, comparisonOnly, candidateArea: venueArea(preview.layout),
+      existingChanges:describeExistingChanges(differences,preview.base,preview.layout),
+      ...(typeof preview.proposal.explanation==='string'&&preview.proposal.explanation.trim()?{modelExplanation:preview.proposal.explanation}:{}),
+      ...(seatCheck.warning ? { seatWarning: seatCheck.warning } : {}),
+      ...(annotationWarning && annotationWarning!==blocked ? { annotationWarning } : {}),
+      outcome: {...buildOutcome({
         added: plan.added, removing: plan.removing, changed: plan.changed, keptLocked: 0, dropped: 0,
-        blocked, lockedTouched: plan.lockedTouched,
-      }),
+        blocked, lockedTouched: plan.lockedTouched,changedLabel:'调整',
+      }),...(comparisonOnly?{empty:'这版未改变场景，仅供对照。'}:{})},
     };
-  }, []);
-  const cloudProposal = useMemo(() => cloudViewOf(studio?.preview ?? null), [cloudViewOf, studio?.preview, studio?.stale, studio?.expired]);
-  const activeProposal: ProposalView | null = proposal.current ? viewOfLocalPlan(proposal.current) : cloudProposal;
+  }, [activeFloorIndex]);
+  const cloudProposal = useMemo(() => cloudViewOf(studio?.preview ?? null), [cloudViewOf, studio?.preview, studio?.stale, studio?.expired, studio?.applyRecovery, brief]);
+  const localProposal = proposal.current ? viewOfLocalPlan(proposal.current, proposalBase.current ?? undefined) : null;
+  const localSeats = proposal.current ? seatRequirement(proposal.current.layouts.at(-1), activeFloorIndex, memoryRef.current) : null;
+  const localPreservation = proposal.current ? reviewOriginalPreservation(memoryRef.current.originalPreservation,proposal.current.layouts.at(-1)) : null;
+  const cloudPreservation = !proposal.current && studio?.preview ? reviewOriginalPreservation(memoryRef.current.originalPreservation,studio.preview.layout) : null;
+  const pendingProposal: ProposalView | null = localProposal ? { ...localProposal,
+    blocked: localProposal.blocked ?? localSeats?.blocked ?? (localPreservation?.status==='violated'||localPreservation?.status==='unknown'?localPreservation.message:null),
+    ...(localSeats?.warning ? { seatWarning: localSeats.warning } : {}) } : cloudProposal ? {...cloudProposal,
+      blocked:cloudProposal.blocked ?? (cloudPreservation?.status==='violated'||cloudPreservation?.status==='unknown'?cloudPreservation.message:null)} : null;
+  const activeProposal: ProposalView | null = pendingProposal ? { ...pendingProposal,
+    functionalWarnings: [memoryRef.current.zoneNeeds.checkin === null || memoryRef.current.unresolvedActivityNeeds.includes('checkin') ? '签到需求尚未确认。' : null,
+      memoryRef.current.unresolvedActivityNeeds.includes('rest') ? '休息区需求尚未确认。' : null,
+      memoryRef.current.zoneNeeds.stage === null || memoryRef.current.unresolvedActivityNeeds.includes('stage') ? '舞台需求尚未确认。' : null,
+      memoryRef.current.unresolvedActivityNeeds.includes('all_seated') ? '是否所有人入座尚未确认。' : null].filter((value): value is string => value !== null),
+  } : null;
+
+  // The inventory input belongs to one concrete local or cloud candidate, not to a model name.
+  function inventoryTarget():{owner:object;candidate:RoomLayout}|null {
+    const local=proposal.current;
+    if(local){const candidate=local.layouts.at(-1);return candidate?{owner:local,candidate}:null;}
+    const cloud=studioRef.current?.preview;
+    return cloud?{owner:cloud,candidate:cloud.layout}:null;
+  }
+  function inventoryFor(target:{owner:object;candidate:RoomLayout}):CandidateInventory|undefined {
+    const stored=inventoryInput.current,current=layoutStore.getState();
+    if(stored&&stored.owner===target.owner&&stored.scope===sessionScope&&stored.sessionId===boundSessionId.current&&stored.sequence===briefTurnSequence.current&&
+      getActiveAssistantSessionId(sessionScope)===stored.sessionId&&stored.floorIndex===current.activeFloorIndex&&stored.revision===current.revision){
+      try{if(sameRecoveryFormValue(stored.candidate,target.candidate))return stored.value;}catch{return undefined;}
+    }
+    const cloud=studioRef.current?.preview;
+    if(cloud&&target.owner===cloud){const bound=studioRef.current?.getBoundCandidateInventory?.(cloud);if(bound)return bound;}
+    return studioRef.current?.getSessionInventory?.(target.candidate,sessionScope,boundSessionId.current);
+  }
+  const inventoryTargetForRender=phase==='proposed'?inventoryTarget():null;
+  if(inventoryOwner.current.owner!==(inventoryTargetForRender?.owner??null))inventoryOwner.current={owner:inventoryTargetForRender?.owner??null,serial:inventoryOwner.current.serial+1};
+  const inventoryState=layoutStore.getState(),inventorySerial=inventoryOwner.current.serial;
+  const inventorySession=boundSessionId.current,inventorySequence=briefTurnSequence.current;
+  let inventorySnapshot:RoomLayout|null=null;
+  try{if(inventoryTargetForRender)inventorySnapshot=structuredClone(inventoryTargetForRender.candidate);}catch{/* uncopyable candidate cannot accept a bound count */}
+  const inventoryCheck=inventoryTargetForRender?checkCandidateInventory(inventoryTargetForRender.candidate,inventoryFor(inventoryTargetForRender)):null;
+  const inventoryWorkspace:ReactNode=inventoryTargetForRender&&inventorySnapshot?<CandidateInventoryPanel
+    key={inventorySerial}
+    candidate={inventoryTargetForRender.candidate}
+    initialInventory={inventoryFor(inventoryTargetForRender)}
+    sessionMemory={!!studioRef.current?.canRememberSessionInventory?.(sessionScope,inventorySession)}
+    scope={JSON.stringify([sessionScope,inventorySession,inventoryState.activeFloorIndex,inventoryState.revision,inventorySerial])}
+    onChange={value=>{
+      const current=layoutStore.getState(),target=inventoryTarget();
+      if(!target||target.owner!==inventoryTargetForRender.owner||inventoryOwner.current.serial!==inventorySerial||!sessionScopeIsCurrent()||
+        boundSessionId.current!==inventorySession||briefTurnSequence.current!==inventorySequence||getActiveAssistantSessionId(sessionScope)!==inventorySession||
+        current.activeFloorIndex!==inventoryState.activeFloorIndex||current.revision!==inventoryState.revision||!inventorySnapshot)return;
+      try{if(!sameRecoveryFormValue(inventorySnapshot,target.candidate))return;}
+      catch{return;}
+      inventoryInput.current=value?{owner:target.owner,scope:sessionScope,sessionId:inventorySession,sequence:inventorySequence,floorIndex:current.activeFloorIndex,revision:current.revision,candidate:inventorySnapshot,value:structuredClone(value)}:null;
+      const cloud=studioRef.current?.preview;
+      const bound=!(cloud&&target.owner===cloud)||!!studioRef.current?.setCandidateInventory?.(cloud,value,sessionScope,inventorySession);
+      if(!bound&&value)say({role:'agent',amber:true,text:'物料数量未能绑定当前候选，请重新核对后确认。'});
+      if(bound)studioRef.current?.rememberSessionInventory?.(target.candidate,value,sessionScope,inventorySession);
+      setInventoryRevision(n=>n+1);
+    }}/>:null;
 
   async function acceptFile(file: File): Promise<void> {
     lastFile.current = file;
@@ -902,13 +1598,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (!pendingPhase) return;
     const plan = proposal.current;
     if (!plan) return;
+    if (proposalBase.current && (proposalBase.current.id !== live.current.id || !sameLayoutContent(proposalBase.current, live.current))) {
+      invalidateProposal('场景在这期间改过了'); return;
+    }
     if (plan.artifact) {
       const check = planIsApplicable(plan.artifact, live.current);
       if (!check.ok) invalidateProposal(PLAN_OBSOLETE_COPY[check.reason]);
       return;
     }
-    if (!proposalBase.current || live.current === proposalBase.current) return;
-    invalidateProposal('画布在这期间被改过了');
+    if (!proposalBase.current) return;
   }, [layout, pendingPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // T-UI：确认后的「这一版布置」卡只代表确认那一帧的画布。人点撤销或手动拖改后，
@@ -927,31 +1625,17 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }, [layout, planShownPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** 第 1 步的壳体播报：尺寸、墙与门、层高来源，一句一句照实说。 */
-  function shellNote(scene: SceneV2, cleared: number): string {
-    const venue = scene.venue;
-    const notes = [`${formatArea(venue.width)} × ${formatArea(venue.depth)} m`];
-    notes.push(venue.site?.indoorOutdoor === 'outdoor'
-      ? '户外场地，这一版先不砌墙也不开门'
-      : '室内壳子，四面外墙、正面留了一个主入口，门位标的是待确认');
-    notes.push(venue.heightSource === 'default' ? `层高没听你说，先按默认 ${formatArea(venue.height)} m` : `层高 ${formatArea(venue.height)} m`);
-    if (venue.site?.scale?.confidence === 'low') notes.push('尺寸是我沿用画布当前的空地，不对就说一句「12×9」这样告诉我');
-    if (cleared) notes.push(`画布上原来 ${cleared} 件物料放不下这个新壳体，我先撤了`);
-    return `场地立起来了：${notes.join('，')}。`;
-  }
-
   /** 模板是固定 GLB 外壳：改尺寸时明说已经离开模板，别让人以为只是把体育馆拉长了。 */
   function presetShellNote(venue: VenuePlan): string {
     const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
-    const dropped = venue.cleared ? `，另有 ${venue.cleared} 件自有物料放不下先撤了` : '';
-    return `已离开模板：模板物件已撤，自有物料能留的都留了，按新尺寸 ${size} 立了矩形壳${dropped}。`;
+    return `已离开模板，按新尺寸 ${size} 立了矩形场地。`;
   }
 
   /** 纯改尺寸只动壳：一句短的，不拉着人再确认一遍布置。 */
   function sizeOnlyNote(venue: VenuePlan, leavingPreset: boolean): string {
     if (leavingPreset) return presetShellNote(venue);
     const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
-    const dropped = venue.cleared ? `，${venue.cleared} 件物料放不下先撤了` : '';
-    return `场地改成 ${size}${dropped}。`;
+    return `场地改成 ${size}。`;
   }
 
   /** 预览收回：画布退回确认前的样子，提案本身留着，还能接着摆。 */
@@ -959,7 +1643,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
   function dropProposal(): void {
     hidePreview();
-    proposal.current = null; proposalBase.current = null; shownSteps.current = 0;
+    setLocalProposal(null); proposalBase.current = null; proposalFloor.current=null; styleProposal.current = null; shownSteps.current = 0;
+    localDraftOwner.current = null;
   }
 
   /** 云端那一版也不要留：撤回/改需求之后，画布上不该还挂着上一版的绿框。 */
@@ -975,25 +1660,41 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   async function presentProposal(token: number, lead?: string): Promise<void> {
     const plan = proposal.current;
     if (!plan) return;
-    const intro = lead ?? (plan.kind === 'review' ? '这版改法：' : '先出一版可拖的初稿：');
-    setPhase('generating');
+    const intro = lead ?? (plan.kind === 'review' ? '这版改法。' : '先出一版可拖的初稿。');
+    if (plan.kind === 'review') pushLocalLayoutStep('revise', 'running');
+    phaseRef.current='generating';setPhase('generating');
     for (let step = shownSteps.current; step < plan.layouts.length; step++) {
+      if (!sessionScopeIsCurrent()) return;
+      if(localDraftOwner.current&&!localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
+        dropProposal();failOpenLocalStep('这版没出成');phaseRef.current='failed';setPhase('failed');
+        say({role:'agent',amber:true,text:'云端连接或本机活动状态已变化，本地草案预览已收回；画布未改。'});return;
+      }
+      if(!checkProposalFloor()){failOpenLocalStep('这版没出成');setPhase('proposed');return;}
       onPreview(plan.layouts[step]!);
       setProgress(step + 1);
       shownSteps.current = step + 1;
       await wait(step === plan.layouts.length - 1 ? 120 : STEP_DELAY_MS);
-      if (token !== runToken.current) return;
+      if (token !== runToken.current || !sessionScopeIsCurrent()) return;
+      if(localDraftOwner.current&&!localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
+        dropProposal();failOpenLocalStep('这版没出成');phaseRef.current='failed';setPhase('failed');
+        say({role:'agent',amber:true,text:'云端连接或本机活动状态已变化，本地草案预览已收回；画布未改。'});return;
+      }
+      if(!checkProposalFloor()){failOpenLocalStep('这版没出成');setPhase('proposed');return;}
     }
-    setPhase('proposed');
-    const planView = viewOfLocalPlan(plan);
-    const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
-    // 脚本那一路先把计划念一遍（哪些区、各多大、几座），再报件数与原因；两件都摆不下时
-    // 原因跟着共享账本来，不再只留一个数字。明细仍完整留在下面那张卡。
-    const planned = scriptSummaryOf(plan);
-    const counted = outcomeLines(planView.outcome).filter(line => line.length > 0).join('；');
-    say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
-      ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。`
-      : `${intro}${planned}${counted ? `${counted}。` : ''}${tail}` });
+    pushLocalLayoutStep(plan.kind === 'review' ? 'revise' : 'preview', 'done');
+    pushLocalLayoutStep('validate', 'running');
+    await wait(120);
+    if (token !== runToken.current || !sessionScopeIsCurrent()) return;
+    const overlapNote = plan.overlapCount > 0 ? '有物料叠在一起' : undefined;
+    pushLocalLayoutStep('validate', plan.overlapCount > 0 || plan.blocked ? 'error' : 'done', overlapNote);
+    finishLocalLayoutRun();
+    phaseRef.current='proposed';setPhase('proposed');
+    const planView = viewOfLocalPlan(plan, proposalBase.current ?? undefined);
+    const tail = planView.review ? '还没落盘。点「确认布置」才挪。' : '还没落盘，点确认才写进画布。';
+    const hint = layoutChatHint(plan);
+    say({ role: 'agent', amber: !!planView.blocked || !!hint, text: planView.blocked
+      ? `这版先看着改。确认先不亮。${hint ? hint : ''}`
+      : `${intro}${tail}${hint ? hint : ''}` });
   }
 
   /**
@@ -1009,8 +1710,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 纯改尺寸：只落壳，不开进度、预览卡或绿钮。场地一变，旧提案就不再代表画布，
    * 这里静默收回（不另发「预览作废」的恐吓条），由用户自己的改尺寸动作说了算。
    */
-  function resizeVenueOnly(scale: Scale, indoorOutdoor: VenueIO = venueIO): void {
-    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再改场地尺寸。' }); return; }
+  function resizeVenueOnly(scale: Scale, indoorOutdoor: VenueIO = venueIO, previousMemory?: BriefMemory): void {
+    const rejectResize = (message: string) => {
+      revertScaleToCanvas();
+      if (previousMemory) { saveMemory(previousMemory); syncMemory(previousMemory); }
+      say({ role: 'agent', amber: true, text: message });
+    };
+    if (phase === 'generating') { rejectResize('还在出这一版：先停一下，再改场地尺寸。'); return; }
     const before = live.current;
     const size = `${formatArea(scale.length)} × ${formatArea(scale.width)} m`;
     if (Math.abs(before.width - scale.length) < 1e-6 && Math.abs(before.height - scale.width) < 1e-6) {
@@ -1027,23 +1733,31 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     try {
       venue = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
     } catch (error) {
-      revertScaleToCanvas();
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
+      rejectResize(error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。');
       return;
     }
     if (!venue) {
-      revertScaleToCanvas();
-      say({ role: 'agent', amber: true, text: '这个场地是导入或生成的复杂结构，不能只改外框；要换尺寸得先重新立一块矩形空地。' });
+      rejectResize('这个场地是导入或生成的复杂结构，不能只改外框；要换尺寸得先重新立一块矩形空地。');
+      return;
+    }
+    if(hasInvalidRetainedZones(venue.layout)){rejectResize('现有区域超出新场地范围或坐标不完整，场地没有更改。请先调整区域，再修改尺寸。');return;}
+    const survivingItems = new Set(venue.layout.floors.flatMap(floor => floor.items.map(item => item.id)));
+    const lostItems = before.floors.flatMap(floor => floor.items).filter(item => !isStructuralMarker(item) && !survivingItems.has(item.id));
+    const survivingZones = new Set(venue.layout.floors.flatMap(floor => (floor.zones ?? []).map(zone => zone.id)));
+    const lostZones = before.floors.flatMap(floor => floor.zones ?? []).filter(zone => !survivingZones.has(zone.id));
+    if (lostItems.length || lostZones.length) {
+      const lost = [lostItems.length ? `${lostItems.length} 件已有物料` : null, lostZones.length ? `${lostZones.length} 个已有区域` : null].filter(Boolean).join('和');
+      rejectResize(`改成 ${size} 会移除 ${lost}，场地没有更改。请先调整物料或区域，再修改尺寸。`);
       return;
     }
     // 落盘走同一个确认回调（撤销/存快照都在里面），但只改外框不该把人从 2D 拽回 3D。
     const was2D = view.view2D;
     try { onApply(venue.layout); }
     catch (error) {
-      revertScaleToCanvas();
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
+      rejectResize(error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。');
       return;
     }
+    if (sessionScope !== 'legacy' && (memoryRef.current.lengthM !== null || memoryRef.current.areaM2 !== null)) saveMemory({...memoryRef.current,venueScaleBasis:venueScaleBasis(venue.layout),venueFactToken:venueFacts.capture() ?? undefined,scaleNeedsReconfirmation:false});
     if (was2D) setView(current => ({ ...current, view2D: true }));
     say({ role: 'agent', text: sizeOnlyNote(venue, !!before.scenePreset) });
   }
@@ -1051,6 +1765,21 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   /** 左栏简报的「空白场地」文字链：和模板轨首卡同一块 12×8 空壳，不用先开物料库。 */
   function startBlankVenue(): void {
     if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再换空地。' }); return; }
+    const before = live.current;
+    const materialCount = before.floors.reduce((count, floor) => count + floor.items.filter(item => !isStructuralMarker(item)).length, 0);
+    const zoneCount = before.floors.reduce((count, floor) => count + (floor.zones?.length ?? 0), 0);
+    const recordedVenue = !!(before.scenePreset || before.venueScan || before.floorPlanImage || before.researchArea || before.sceneAnchor ||
+      (before.backendVenue && !before.backendSceneV2) ||
+      before.floors.length > 1 || before.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind !== 'exterior')) ||
+      (before.backendSceneV2 && (before.backendSceneV2.sources.length || before.backendSceneV2.structure.columns.length ||
+        before.backendSceneV2.structure.walls.some(wall => wall.status !== 'inferred') ||
+        before.backendSceneV2.structure.openings.some(opening => opening.status !== 'inferred'))));
+    if (materialCount || zoneCount || recordedVenue) {
+      const details = [materialCount ? `${materialCount} 件物料` : null, zoneCount ? `${zoneCount} 个区域` : null,
+        recordedVenue ? '已有场地资料' : null].filter(Boolean).join('、');
+      say({ role: 'agent', amber: true, text: `当前场景包含${details}，直接换成空白空间会丢失这些内容，本次没有更改。请先备份并另建场景。` });
+      return;
+    }
     runToken.current++;
     if (proposal.current) dropProposal();
     discardCloudPreview();
@@ -1065,9 +1794,143 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
   }
 
-  /** 出方案 = 先立 T-01 的场地真相，再在立好的壳体上算一份候选。确认前 objects 不落盘。 */
-  async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false): Promise<void> {
+  function readLocalDraftAnnotations():{revision:number;signature:string;hasUnmodelled:boolean;hasDoor:boolean;routes:LocalRouteInput[];routeSignature:string;routeReader:((id:string)=>UserRouteProvenance|null)|null;reader:()=>{draft:LayoutPlanDraft|null;revision:number}}|null {
+    const reader=annotationSnapshotRef.current;if(!reader)return null;
+    try{
+      const snapshot=reader();if(!snapshot||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<0)return null;
+      const draft=snapshot.draft;
+      if(draft!==null&&(!draft||!Array.isArray(draft.annotations)||!Array.isArray(draft.stages)||!sameRecoveryFormValue(draft,draft)))return null;
+      if(draft?.annotations.some(annotation=>!annotation||!['zone','route','measure','door'].includes(annotation.kind)||!annotation.geometry||
+        ({zone:'rect',route:'polyline',measure:'measure',door:'door'} as const)[annotation.kind]!==annotation.geometry.kind))return null;
+      const signature=JSON.stringify(draft);if(typeof signature!=='string')return null;
+      const routeReader=routeProvenanceRef.current??null;
+      const routes:LocalRouteInput[]=(draft?.annotations??[]).filter(annotation=>annotation.kind==='route').map(annotation=>{
+        const provenance=routeReader?.(annotation.id);
+        return provenance?.source==='user'&&provenance.sourceBasis==='unknown'&&typeof provenance.floorId==='string'&&!!provenance.floorId.trim()
+          ?{annotation,source:'user',floorId:provenance.floorId}:{annotation,source:'unknown',floorId:null};
+      });
+      const routeSignature=JSON.stringify(routes.map(route=>({id:route.annotation.id,source:route.source,floorId:route.floorId})));
+      return {revision:snapshot.revision,signature,hasUnmodelled:!!draft?.annotations.some(annotation=>annotation.kind==='zone')||!!draft?.stages.length,
+        hasDoor:!!draft?.annotations.some(annotation=>annotation.kind==='door'),routes,routeSignature,routeReader,reader};
+    }catch{return null;}
+  }
+  function localDraftAnnotationsCurrent(authority:{annotationRevision:number;annotationSignature:string;annotationReader:()=>{draft:LayoutPlanDraft|null;revision:number};routeReader:((id:string)=>UserRouteProvenance|null)|null;routeSignature:string}):boolean {
+    const current=readLocalDraftAnnotations();
+    return !!current&&current.reader===authority.annotationReader&&current.revision===authority.annotationRevision&&current.signature===authority.annotationSignature&&current.routeReader===authority.routeReader&&current.routeSignature===authority.routeSignature;
+  }
+  function assessLocalDraftRoutes(base:RoomLayout,candidate:RoomLayout,annotations:NonNullable<ReturnType<typeof readLocalDraftAnnotations>>,floorIndex:number):LocalRouteReview {
+    return reviewLocalRoutes(base,candidate,annotations.routes,base.floors[floorIndex]?.id??null);
+  }
+  function localDraftRouteBlock(review:LocalRouteReview):string|null {
+    if(review.violations.length)return `路线中心线与 ${review.violations.length} 处模型包围占地新增或加重相交，请调整后重新生成。${review.centerlineCoverage==='incomplete'?'其他路线或物件信息仍未完整核对。':''}`;
+    if(review.centerlineCoverage==='incomplete')return '当前版本尚未将已有路线、区域或阶段纳入组团计算，暂只能预览。';
+    return null;
+  }
+  function localDraftAllowed(owner: NonNullable<typeof studio>['controller'],authority?:{actor:string|null;sessionId:string|null;apiUrl:string|null;version:string;annotationRevision:number;annotationSignature:string;annotationReader:()=>{draft:LayoutPlanDraft|null;revision:number};routeReader:((id:string)=>UserRouteProvenance|null)|null;routeSignature:string}): boolean {
+    const current=studioRef.current;
+    try {
+      const snapshot=owner.getSnapshot();
+      return sessionScope.startsWith('activity:') && sessionScopeIsCurrent() && current?.controller===owner &&
+        current.connection!=='项目已连接' && !current.busy && !current.recoverable && !current.applyRecovery &&
+        isLocalActivityWorkspace(owner) && owner.canCreateUnboundLocalDraft() && (!authority || (()=>{
+          return (snapshot.user?.id??null)===authority.actor && (snapshot.sessionId??null)===authority.sessionId && (owner.config?.apiUrl??null)===authority.apiUrl && owner.localDraftAuthorityVersion()===authority.version &&
+            localDraftAnnotationsCurrent(authority);
+        })());
+    } catch { return false; }
+  }
+
+  /** An explicit local-only candidate never enters the cloud scene contract. */
+  async function runLocalSeatingDraft(token:number,scale:Scale,note:string):Promise<void> {
+    const owner=studioRef.current?.controller,base=live.current;
+    if(!owner||!localDraftAllowed(owner)) { say({role:'agent',amber:true,text:'本地草案需要独立的本机活动；请先结束云端连接或等待正在进行的云端操作，原场景未改。'});setPhase('failed');return; }
+    const annotations=readLocalDraftAnnotations();
+    if(!annotations){say({role:'agent',amber:true,text:'当前路线与区域标注无法完整读取，本地草案暂不能生成；原场景未改。'});setPhase('failed');return;}
+    const initial=owner.getSnapshot(),authority={owner,actor:initial.user?.id??null,sessionId:initial.sessionId??null,apiUrl:owner.config?.apiUrl??null,version:owner.localDraftAuthorityVersion(),annotationRevision:annotations.revision,annotationSignature:annotations.signature,annotationReader:annotations.reader,routeReader:annotations.routeReader,routeSignature:annotations.routeSignature};
+    if(memoryRef.current.layoutModeConfirmed!==true||memoryRef.current.layoutMode!=='desk-chair'||!memoryRef.current.headcount){say({role:'agent',amber:true,text:'请先明确人数并选择课桌椅布置，再生成本地草案。'});setPhase('failed');return;}
+    const allocation=memoryRef.current.localSeatingAllocation;
+    if(allocation?.status==='shared_desk'&&allocation.peoplePerDesk!==2){
+      say({role:'agent',amber:true,text:`已记下每桌 ${allocation.peoplePerDesk} 人；当前本地一人一桌工具暂不支持这种组团，本次没有生成。可继续探索共桌方案，或明确选择每人一桌。`});setPhase('failed');return;
+    }
+    if(allocation?.status==='unknown'){
+      say({role:'agent',amber:true,text:'每桌人数尚不明确，请说明是每人一桌还是多人共桌；本次没有按一人一桌生成。'});setPhase('failed');return;
+    }
+    if(memoryRef.current.zoneNeeds.stage===true||memoryRef.current.zoneNeeds.checkin===true||memoryRef.current.zoneNeeds.rest===true||memoryRef.current.mobilityRequirement?.decision==='needed'){
+      say({role:'agent',amber:true,text:'本地课桌椅草案暂不能同时满足已提出的舞台、签到、休息或行动辅助要求，请先调整需求或采用其他方案。'});setPhase('failed');return;
+    }
+    if(Math.abs(base.width-scale.length)>1e-6||Math.abs(base.height-scale.width)>1e-6){say({role:'agent',amber:true,text:'本地草案不会改变已有场地；请先核对并调整当前场地尺寸。'});setPhase('failed');return;}
+    void note;
+    const dimensions=(facts:SeatingItemFacts|undefined,inventory:SeatingItemFacts|undefined,defaultChosen:boolean,defaults:{width:number;depth:number;height:number})=>{
+      const result={...defaults},unknown:SeatingAxis[]=[],unselected:SeatingAxis[]=[];
+      for(const axis of ['width','depth','height'] as const){const fact=facts?.[axis];if(!fact){if(inventory?.[axis]&&!defaultChosen)unselected.push(axis);continue;}
+        if(fact.status!=='reported'||typeof fact.valueM!=='number'||!Number.isFinite(fact.valueM)||fact.valueM<=0){unknown.push(axis);continue;}
+        result[axis]=fact.valueM;
+      }
+      return {value:result,unknown,unselected};
+    };
+    const shared=allocation?.status==='shared_desk'&&allocation.peoplePerDesk===2;
+    const saved=memoryRef.current.localSeatingSpecs,desk=dimensions(saved?.desk,saved?.unselected?.desk,!!saved?.defaults?.desk,{width:shared?1.2:.6,depth:.45,height:.75}),chair=dimensions(saved?.chair,saved?.unselected?.chair,!!saved?.defaults?.chair,{width:.49,depth:.57,height:.9});
+    const axisLabel:Record<SeatingAxis,string>={width:'宽度',depth:'深度',height:'高度'};
+    if(desk.unknown.length||chair.unknown.length||desk.unselected.length||chair.unselected.length){
+      const missing=[...desk.unknown.map(axis=>`桌子${axisLabel[axis]}`),...chair.unknown.map(axis=>`椅子${axisLabel[axis]}`)];
+      const waiting=[...desk.unselected.map(axis=>`桌子${axisLabel[axis]}`),...chair.unselected.map(axis=>`椅子${axisLabel[axis]}`)];
+      const waitingTarget=desk.unselected.length?'桌子':'椅子',waitingAxis=desk.unselected[0]??chair.unselected[0];
+      const waitingFact=waitingAxis?(desk.unselected.length?saved?.unselected?.desk?.[waitingAxis]:saved?.unselected?.chair?.[waitingAxis]):undefined;
+      const choose=waitingFact?.status==='reported'&&waitingFact.valueM!==null&&waitingAxis
+        ?`可以说“使用现有${waitingTarget}${axisLabel[waitingAxis]}${waitingFact.valueM}米”，或说“${waitingTarget}按默认规格”。`
+        :`请带单位明确选用规格，或说“${waitingTarget}按默认规格”。`;
+      say({role:'agent',amber:true,text:`${missing.length?`${missing.join('、')}尚未明确，请带单位重新说明。`:''}${waiting.length?`${waiting.join('、')}只记录为现有物料线索，尚未选择用于这版方案；${choose}`:''}本次没有按默认规格生成。`});setPhase('failed');return;
+    }
+    const floorToken=captureFloor(activeFloorIndex);if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
+    try {
+      const input={floorIndex:activeFloorIndex,mode:'one_desk_one_chair' as const,count:memoryRef.current.headcount,
+        desk:desk.value,chair:chair.value,
+        deskChairGap:.1,columnGap:.3,rowGap:.5,edgeClearance:.3,
+        assumptions:{count:'user' as const,deskSize:('width' in (saved?.desk??{})&&'depth' in (saved?.desk??{})&&'height' in (saved?.desk??{})?'user' as const:'assumption' as const),chairSize:('width' in (saved?.chair??{})&&'depth' in (saved?.chair??{})&&'height' in (saved?.chair??{})?'user' as const:'assumption' as const),deskChairGap:'assumption' as const,columnGap:'assumption' as const,rowGap:'assumption' as const,edgeClearance:'assumption' as const}};
+      const result=shared?planLocalSharedDeskDraft(base,{...input,mode:'two_people_per_desk',chairGap:.1,assumptions:{...input.assumptions,chairGap:'assumption'}},uid):planLocalDeskChairDraft(base,input,uid);
+      const placedTables='placedTables' in result?result.placedTables:result.placed;
+      const requestedTables='requestedTables' in result?result.requestedTables:result.requested;
+      if(!result.placed){
+        const reason=result.limitReason==='object_limit'?'本机场景物件已达上限':result.limitReason==='no_placement'?'当前排布没有找到可放位置':result.limitReason==='scan_limit'?'本次搜索达到计算上限':result.limitReason==='preset_unverified'?'预设或扫描结构尚未核对':'场地几何待核验';
+        say({role:'agent',amber:true,text:`本地草案暂未生成：${reason}，场景未改；${shared?`需求 ${result.requested} 人、${requestedTables} 桌，已排 0 人、0 桌，尚缺 ${result.shortfall} 人；`:''}${result.unknown.join('、')}仍需核验。`});setPhase('failed');return;
+      }
+      if(token!==runToken.current||!localDraftAllowed(owner,authority)||!floorStillCurrent(floorToken)||!sameLayoutContent(base,live.current)){
+        say({role:'agent',amber:true,text:'活动、云端连接或场景已变化，本地草案未应用。'});setPhase('failed');return;
+      }
+      const overlaps=countOverlaps(result.layout,activeFloorIndex);
+      const markedDoor=!!base.entrance&&base.entrance.door!==false||!!base.backendVenue?.entrances.length||
+        !!base.backendSceneV2?.venue.entrances.length||!!base.backendSceneV2?.structure.openings.some(opening=>opening.kind==='door')||
+        base.floors.some(floor=>floor.items.some(item=>item.type==='door'||!!item.venueEntranceId));
+      const routeReview=assessLocalDraftRoutes(base,result.layout,annotations,activeFloorIndex);
+      const limitations=[annotations.hasUnmodelled?'当前版本尚未将已有路线、区域或阶段纳入组团计算，暂只能预览。':null,localDraftRouteBlock(routeReview)].filter((item,index,items):item is string=>!!item&&items.indexOf(item)===index);
+      const routeNotices=annotations.routes.length?[
+        '仅核对手绘路线中心线与数字模型包围占地；图纸原件、路线净宽、门、疏散、消防、无障碍和现场条件仍需核验。',
+        ...(routeReview.existing.length?[`原场景已有 ${routeReview.existing.length} 处路线与模型包围占地相交，不归因于本次新增；仍需核对。`]:[]),
+        ...(routeReview.contacts.length?['路线与模型包围占地边缘接触，实际净宽仍需核对。']:[]),
+      ]:[];
+      const doorNotice=markedDoor||annotations.hasDoor?'图中门洞或入口未纳入本次组团净空检查；门位、宽度和开启情况仍需核验，本版只是探索草案，不代表安全通过或可交付。':null;
+      const dimensionLine=(name:string,size:{width:number;depth:number;height:number},facts:SeatingItemFacts|undefined)=>`${name} ${(['width','depth','height'] as const).map(axis=>`${size[axis]}（${facts?.[axis]?.status==='reported'?'用户提供':'假设'}）`).join(' × ')} 米`;
+      const localDraftDetails=[shared?`本机草案：需求 ${result.requested} 人、${requestedTables} 桌；本次排了 ${result.placed} 人、${placedTables} 桌、${result.placed} 把椅子，尚缺 ${result.shortfall} 人；未同步云端，也未确认本机持久化。`:`本机草案：本次排了 ${result.placed} / ${result.requested} 套，尚缺 ${result.shortfall} 套；未同步云端，也未确认本机持久化。`,
+        shared?'每桌 2 人：用户明确选择；实际桌椅仍需核验。':allocation?.status==='one_per_desk'?'每人一桌：用户明确选择；实际桌椅仍需核验。':'每人一桌：本次探索假设，用户尚未指定，可随时修改。',
+        `示意尺寸：${dimensionLine(shared?'双人桌':'单人桌',desk.value,saved?.desk)}；${dimensionLine('椅子',chair.value,saved?.chair)}；实物待核验。`,
+        `示意间距：桌椅 0.1 米、${shared?'椅间 0.1 米、':''}列间 0.3 米、排间 0.5 米、距边 0.3 米，均为假设；不代表通行或规范结论。`,
+        ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，不代表场地最大容量。`]:[]),
+        `${result.unknown.join('、')}仍需核验。`,...(doorNotice?[doorNotice]:[]),...routeNotices,...limitations];
+      const plan:PlanProposal & {localDraftDetails:string[]}={layouts:[result.layout],added:result.placed+placedTables,removing:0,
+        keptLocked:base.floors[activeFloorIndex]?.items.filter(item=>item.locked&&!isStructuralMarker(item)).length??0,
+        dropped:result.shortfall+(requestedTables-placedTables),overlapCount:overlaps.count,overlapNames:overlaps.names,blocked:limitations.join(' ')||null,
+        guests:result.requested,seats:result.placed,localDraftDetails,seatingWitness:result.seatingWitness,seatingReview:reviewLocalSeatingWitness(result.seatingWitness,result.layout)};
+      proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(plan,base));proposalBase.current=structuredClone(base);
+      localDraftOwner.current=authority;shownSteps.current=0;
+      await presentProposal(token,'先看本机课桌椅草案：');
+    }catch(error){say({role:'agent',amber:true,text:error instanceof Error?error.message:'本地草案暂不能生成，原场景未改。'});setPhase('failed');}
+  }
+
+  /** 场地和布置都先在内存中生成，确认时连同物料变化一次应用。 */
+  async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false, localDraftNote?:string): Promise<void> {
+    if(localDraftNote!==undefined){await runLocalSeatingDraft(token,scale,localDraftNote);return;}
+    pushLocalLayoutStep('preview', 'running');
     const before = live.current;
+    const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
     // 模板是固定 GLB 外壳，拉伸它只会看起来「什么都没变」：尺寸一变就卸模板、按新尺寸立矩形空壳。
     const resized = Math.abs(before.width - scale.length) > 1e-6 || Math.abs(before.height - scale.width) > 1e-6;
@@ -1076,65 +1939,142 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     try { venue = (resized ? replaceVenueWithShell(input) : null) ?? raiseVenue(input); }
     catch (error) {
       revertScaleToCanvas();
+      failOpenLocalStep('这版没出成');
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
     }
+    if (!venue && resized) {
+      revertScaleToCanvas();
+      failOpenLocalStep('这版没出成');
+      say({ role: 'agent', amber: true, text: '当前场地结构不能只改外框，请先确认场地尺寸或重新建立场地。' });
+      setPhase('failed'); return;
+    }
+    if(venue && hasInvalidRetainedZones(venue.layout)){revertScaleToCanvas();failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'现有区域超出新场地范围或坐标不完整，请先调整区域再生成。'});setPhase('failed');return;}
+    const candidateBase = venue?.layout ?? before;
     if (venue) {
-      // 场地是 T-01 已经确认过的真相：改的是墙体尺寸，不是物料，所以先落它，预览才对得上墙。
-      // 落盘走 provider 的 onApply：提交撤销历史、存快照都在里面，直接 applyLayout 会绕过撤销。
-      try { onApply(venue.layout); }
-      catch (error) {
-        revertScaleToCanvas();
-        say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
+      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '场地按这个尺寸准备好了。';
+      say({ role: 'agent', text: `${shellSummary}确认后才写入。` });
+      await wait(STEP_DELAY_MS); if (token !== runToken.current || !sessionScopeIsCurrent()) return;
+      if (!floorStillCurrent(floorToken)) {failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
+      if (!sameLayoutContent(before, live.current)) {
+        failOpenLocalStep('这版没出成');
+        say({ role: 'agent', amber: true, text: '场景在准备期间发生变化，这版没有应用；请按当前场景重新生成。' });
         setPhase('failed'); return;
-      }
-      say({ role: 'agent', text: leavingPreset ? presetShellNote(venue) : shellNote(venue.scene, venue.cleared) });
-      await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
-    } else {
-      // 预设/云端场景不重搭壳体，但这次的尺度就是布置边界：先把长宽对齐再算候选，
-      // 否则按新尺度摆的桌椅会被旧边界判成放不下。等一帧再读 live，基线才包含这次的对齐。
-      const current = live.current;
-      if (Math.abs(current.width - scale.length) > 1e-6 || Math.abs(current.height - scale.width) > 1e-6) {
-        try { onApply({ ...current, width: scale.length, height: scale.width }); }
-        catch (error) {
-          revertScaleToCanvas();
-          say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
-          setPhase('failed'); return;
-        }
-        await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
       }
     }
     let plan: PlanProposal;
     const anchors = anchorsRef.current;
-    try { plan = localPlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, stage: anchors.stage, checkin: anchors.checkin }); }
+    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
+      functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
+      failOpenLocalStep('这版没出成');
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
     }
-    proposal.current = withPlanArtifact(plan, live.current); proposalBase.current = live.current; shownSteps.current = 0;
+    const final = plan.layouts.at(-1);
+    if (!final) { failOpenLocalStep('这版没出成'); setPhase('failed'); say({ role: 'agent', amber: true, text: '这次没有生成可审阅的方案，场景没有改变。' }); return; }
+    const differences = proposalDifferences(before, final);
+    const removing = differences.filter(change => change.kind === 'removed' && change.before && !isStructuralMarker(change.before.item)).length;
+    const added = differences.filter(change => change.kind === 'added' && change.after && !isStructuralMarker(change.after.item)).length;
+    const lockedChanged = differences.filter(change => change.before?.item.locked && !isStructuralMarker(change.before.item)).length;
+    plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}) };
+    if(!floorStillCurrent(floorToken)){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
+    proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before)); proposalBase.current = structuredClone(before); shownSteps.current = 0;
     await presentProposal(token);
   }
 
   /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
   function confirmProposal(): void {
+    if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求并重新生成，再确认布置。'});return;}
+    const sessionId=boundSessionId.current;
+    if(proposal.current&&proposalSessionRef.current!==sessionId){say({role:'agent',amber:true,text:'这版来自其他会话，不能在当前会话确认；请先撤回旧方案并重新生成。'});return;}
+    if(sessionId&&(incompleteDialogueTurns.current.get(sessionId)?.size??0)>0){
+      say({role:'agent',amber:true,text:'还有尚未处理的要求，请逐项核对后再生成和确认。'});return;
+    }
+    if(generationQueuedRef.current>0||generationWait.current||briefRequest.current||pendingModelInputs.current.size>0){
+      say({role:'agent',amber:true,text:'还有消息或方案正在处理，请等当前要求处理完成后再确认。'});return;
+    }
+    if(localDraftOwner.current&&!localDraftAnnotationsCurrent(localDraftOwner.current)){
+      say({role:'agent',amber:true,text:'路线、区域或门标注已变化或无法核对，本地草案未应用；请重新生成。'});return;
+    }
+    if(localDraftOwner.current && !localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
+      say({role:'agent',amber:true,text:'云端连接或本机活动状态已变化，本地草案未应用；请重新核对。'});return;
+    }
+    if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { say({role:'agent',amber:true,text:'场地已变化，旧场地尺寸需要重新说明后才能确认。'}); return; }
+    if (!sessionScopeIsCurrent()) { say({role:'agent',amber:true,text:'活动已切换，请在当前活动重新核对方案。'}); return; }
     if (callbacks.workbenchMode !== 'layout') {
       say({ role: 'agent', text: '现在不改布置。这一版先留着，回到布置对话再确认。' });
       return;
     }
+    if(proposal.current&&!checkProposalFloor())return;
+    if ((proposal.current?.kind !== 'review' && !styleProposal.current && memoryRef.current.layoutModeConfirmed !== true) || memoryRef.current.pendingBasicFacts?.length || memoryRef.current.layoutModeUnresolved || memoryRef.current.pendingActivityNeeds.length || memoryRef.current.unresolvedActivityNeeds.length || memoryRef.current.mobilityNeedsClarification || memoryRef.current.mobilityRequirement?.decision==='unknown') {
+      say({ role: 'agent', amber: true, text: '还有需求待确认，请先核对后再确认布置。' });
+      return;
+    }
+    const inventoryCandidate=inventoryTarget();
+    if(inventoryCandidate){
+      const check=checkCandidateInventory(inventoryCandidate.candidate,inventoryFor(inventoryCandidate));
+      if(check.status==='violated'||inventoryFor(inventoryCandidate)?.invalidInput){say({role:'agent',amber:true,text:check.message});return;}
+    }
     const plan = proposal.current;
-    if (!plan) { confirmCloud(); return; }
+    if (!plan) {
+      const preservation=reviewOriginalPreservation(memoryRef.current.originalPreservation,studioRef.current?.preview?.layout);
+      if(preservation.status==='violated'||preservation.status==='unknown'){say({role:'agent',amber:true,text:preservation.message ?? '原物保留要求尚未核对。'});return;}
+      confirmCloud(); return;
+    }
+    const currentState = layoutStore.getState();
+    const currentLayout = currentState.layout;
+    const expectedBase = proposalBase.current;
+    if (!expectedBase || expectedBase.id !== currentLayout.id || !sameLayoutContent(expectedBase, currentLayout)) {
+      invalidateProposal('场景在这期间改过了'); return;
+    }
+    const style = styleProposal.current;
+    if (style && (style.memoryRevision !== memoryRevision.current || style.draftRevision !== zoneDraftRevisionRef.current || style.floorIndex !== currentState.activeFloorIndex || style.sessionId !== boundSessionId.current)) {
+      invalidateProposal('活动需求、区域草案或楼层已经变化'); return;
+    }
     if (plan.blocked) { say({ role: 'agent', amber: true, text: plan.blocked }); return; }
     const final = plan.layouts[plan.layouts.length - 1];
     if (!final) { invalidateProposal('这一版没有可落盘的候选'); return; }
+    const preservation=reviewOriginalPreservation(memoryRef.current.originalPreservation,final);
+    if(preservation.status==='violated'||preservation.status==='unknown'){say({role:'agent',amber:true,text:preservation.message ?? '原物保留要求尚未核对。'});return;}
+    const seatCheck = seatRequirement(final, activeFloorIndex, memoryRef.current);
+    if (seatCheck.blocked) { say({ role: 'agent', amber: true, text: seatCheck.blocked }); return; }
     if (plan.artifact) {
-      const check = planIsApplicable(plan.artifact, live.current);
+      const check = planIsApplicable(plan.artifact, currentLayout);
       if (!check.ok) { invalidateProposal(PLAN_OBSOLETE_COPY[check.reason]); return; }
       if (!planCoversLayout(plan.artifact, final)) { invalidateProposal(PLAN_OBSOLETE_COPY['layout-mismatch']); return; }
-    } else if (proposalBase.current && live.current !== proposalBase.current) { invalidateProposal('场景在这期间改过了'); return; }
-    try { onApply(final); }
+    }
+    const floor=proposalFloor.current!;
+    // No asynchronous work may separate this final fence from the local apply.
+    if(localDraftOwner.current && !localDraftAllowed(localDraftOwner.current.owner,localDraftOwner.current)){
+      say({role:'agent',amber:true,text:'云端连接或本机活动状态已变化，本地草案未应用；请重新核对。'});return;
+    }
+    if(localDraftOwner.current){
+      const annotations=readLocalDraftAnnotations();
+      if(!annotations){say({role:'agent',amber:true,text:'路线资料无法核对，本地草案未应用。'});return;}
+      const routeBlock=localDraftRouteBlock(assessLocalDraftRoutes(currentLayout,final,annotations,currentState.activeFloorIndex));
+      if(routeBlock){say({role:'agent',amber:true,text:routeBlock});return;}
+    }
+    pushLocalLayoutStep('confirm', 'running');
+    try { onApply(final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
     catch (error) {
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。' });
+      const raw = error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。';
+      pushLocalLayoutStep('confirm', 'error', /包围盒重叠|件物料存在冲突/.test(raw) ? '椅子和圆桌叠在一起' : '这版没写上');
+      finishLocalLayoutRun();
+      say({ role: 'agent', amber: true, text: raw });
       return;
+    }
+    pushLocalLayoutStep('confirm', 'done');
+    pushLocalLayoutStep('applied', 'done');
+    finishLocalLayoutRun();
+    if (sessionScope !== 'legacy' && (memoryRef.current.lengthM !== null || memoryRef.current.areaM2 !== null)) saveMemory({...memoryRef.current,venueScaleBasis:venueScaleBasis(final),venueFactToken:venueFacts.capture() ?? undefined,scaleNeedsReconfirmation:false});
+    let styleHistoryFailed = false;
+    if (style) {
+      try {
+        const storage = window.localStorage;
+        const saved = saveStyleRun(style.key, storage);
+        styleHistoryFailed = storage.getItem(STYLE_RUNS_KEY) !== JSON.stringify(saved);
+      } catch { styleHistoryFailed = true; }
     }
     const added = plan.added;
     const finalFloor = final.floors[Math.min(activeFloorIndex, final.floors.length - 1)];
@@ -1142,11 +2082,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const review = plan.kind === 'review';
     const moved = plan.moved ?? 0;
     const skipped = plan.skipped?.length ?? 0;
+    const localExploration=!!localDraftOwner.current;
     dropProposal();
+    clearFulfilledChip(previewUtterance.current);
     setPhase('ready'); setProgress(GEN_STEPS.length);
     say({ role: 'agent', text: review
       ? `确认了：${moved} 件换了位置，其他没动${skipped ? `；还有 ${skipped} 件没动（锁着或没找到落点）` : ''}。不想要就撤销一步，整体退回原位。`
+      : localExploration ? `已写入本机画布：这一版一共 ${total} 件物料，可撤销；尚未确认本机持久化，也未同步云端。门、路线、消防、无障碍和现场条件仍需核验，这只是探索草案，不代表安全通过或可交付。`
       : `写进画布了：这一版一共 ${total} 件物料，都能直接拖；不想要就撤销一步，整体退回来。` });
+    if (styleHistoryFailed) say({ role: 'agent', amber: true, text: '布置已应用，但风格历史未能保存。' });
     callbacks.onFit();
   }
 
@@ -1157,7 +2101,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   function confirmCloud(): void {
     const current = studioRef.current;
     if (!current?.preview) { say({ role: 'agent', amber: true, text: '这版已经不在预览里了，重新出一版再确认。' }); return; }
+    if (confirmPending.current) { say({role:'agent',text:'这版正在确认，请稍候；不会重复提交。'}); return; }
     if (current.stale || current.expired) { say({ role: 'agent', amber: true, text: CLOUD_STALE }); return; }
+    const check = cloudViewOf(current.preview);
+    if (check?.blocked) { say({ role: 'agent', amber: true, text: check.blocked }); return; }
     // 云端还在写、或上一版还在恢复：最后一帧没稳，按下确认不会有回音。
     if (current.busy || current.recoverable) { say({ role: 'agent', text: '这一版还没稳，等它停住再点确认。' }); return; }
     confirmPending.current = true;
@@ -1169,23 +2116,30 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const current = studioRef.current;
     if (!current || current.busy) return;
     confirmPending.current = false;
+    if (current.applyRecovery) {
+      setPhase('idle'); setProgress(0);
+      say({ role: 'agent', amber: true, text: cloudRecoveryMessage(current.applyRecovery) });
+      return;
+    }
     if (current.preview) {
       say({ role: 'agent', amber: true, text: current.notice ? `没写进画布：${current.notice}` : '这版没写进画布，画布还是你确认前的样子。改一下场地或重新出一版。' });
       return;
     }
+    clearFulfilledChip(previewUtterance.current);
     setPhase('ready'); setProgress(GEN_STEPS.length);
     say({ role: 'agent', amber: !!current.notice, text: `写进画布了，物料都能直接拖；不想要就撤销一步，整体退回来。${current.notice ? ` ${current.notice}。` : ''}` });
     callbacks.onFit();
-  }, [studio?.preview, studio?.busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studio?.preview, studio?.busy, studio?.applyRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 深工具（活动需求表）走出的云预览也要落到这张卡上，否则画布有预览、右栏没有唯一的确认。
   useEffect(() => {
     const preview = studio?.preview ?? null;
     if (!preview) { announcedPreview.current = null; return; }
-    if (phase === 'generating' || phase === 'paused') return;
+    if(suppressCancelledCloudPreview.current)return;
+    if (phase === 'paused' || (phase === 'generating' && (lastSource.current !== 'cloud' || studio?.busy || studio?.recoverable))) return;
     if (proposal.current) return;
     adoptCloudProposal();
-  }, [studio?.preview, studio?.stale, studio?.expired, studio?.busy, studio?.recoverable, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studio?.preview, studio?.stale, studio?.expired, studio?.busy, studio?.recoverable, studio?.applyRecovery, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function withdrawProposal(): void {
     const cloud = proposal.current === null && !!studioRef.current?.preview;
@@ -1205,6 +2159,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
   /** 云端算完这一趟，把它的预览接到右栏这张卡上；没有可确认的一版就返回 false。 */
   function adoptCloudProposal(): boolean {
+    if(suppressCancelledCloudPreview.current)return false;
     const preview = studioRef.current?.preview ?? null;
     const view = cloudViewOf(preview);
     if (!view) return false;
@@ -1219,68 +2174,123 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   /** 把需求原话说给云端，并要它只回一份待确认的提案（requirePreview：确认前 objects 不落盘）。 */
-  async function cloudRun(note: string, scale: Scale): Promise<void> {
+  async function cloudRun(note: string): Promise<UnchangedRunResult|void> {
     const current = studioRef.current;
     if (!current) return;
-    const event = briefRef.current.event ?? current.brief.event ?? '这场活动';
-    const guests = briefRef.current.guests ?? current.brief.guests;
-    const size = `${venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(scale.length * scale.width)} ㎡`;
-    const mode = briefRef.current.layoutMode === 'desk-chair' ? ' · 一人一套课桌椅' : '';
-    await current.generate(`${note ? `${note}：` : ''}${event}${guests ? ` · ${guests} 人` : ''} · ${size}${mode}，请出布置方案`, { requirePreview: true });
+    const allocation=cloudSeatingAllocation(memoryRef.current);
+    const specs=cloudSeatingSpecs(memoryRef.current);
+    return await current.generate(cloudBriefMessage(note || '请出布置方案', memoryRef.current), { requirePreview: true,...(allocation?{seatingAllocation:allocation}:{}),...(specs?{seatingSpecs:specs}:{}) });
+  }
+
+  function cloudScaleMatches(scale:Scale):boolean {
+    const current=layoutStore.getState().layout;
+    const memory=memoryRef.current;
+    const mismatch=venueDimensionsMismatch(memory,current);
+    if(mismatch){say({role:'agent',amber:true,text:mismatch});return false;}
+    // Area-derived dimensions are only a preview convention, not the user's requested shape.
+    if(scale.origin==='area'){
+      if(memory.areaM2!==null)return true;
+      say({role:'agent',amber:true,text:'场地面积暂时无法核对，请先重新说明活动面积。'});return false;
+    }
+    if(Math.abs(current.width-scale.length)<=1e-6&&Math.abs(current.height-scale.width)<=1e-6)return true;
+    say({role:'agent',amber:true,text:`你要求按 ${formatArea(scale.length)} × ${formatArea(scale.width)} 米布置，但当前场地是 ${formatArea(current.width)} × ${formatArea(current.height)} 米。本次没有提交生成，请先在空间中调整或重新确认场地尺寸。`});
+    return false;
   }
 
   /** 出方案：连着云项目就让云端真 AI 算这一版，否则本地算候选。两条都停在「这版还在预览」。 */
   async function startGeneration(token: number, variant: number, note: string, scale: Scale, seatPriority = false): Promise<void> {
-    const timeout = window.setTimeout(() => { if (token === runToken.current && phaseRef.current === 'generating') { runToken.current++; setPhase('failed'); } }, 60_000);
+    if(isHistoryReviewRequired()){say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});setPhase('failed');return;}
+    if (memoryRef.current.layoutModeConfirmed !== true || memoryRef.current.pendingBasicFacts?.length || memoryRef.current.layoutModeUnresolved || memoryRef.current.pendingActivityNeeds.length || memoryRef.current.unresolvedActivityNeeds.some(kind=>!(memoryRef.current.deferredActivityNeeds??[]).includes(kind)) || memoryRef.current.mobilityNeedsClarification || memoryRef.current.mobilityRequirement?.decision==='unknown') {
+      say({ role: 'agent', amber: true, text: '还有需求待确认，请先核对后再生成方案。' });
+      setPhase('failed'); return;
+    }
     try {
       if (forceFail()) throw new Error('forced');
+      if(/(?:本地|本机)草案/.test(note)) {
+        lastSource.current='local';
+        await runLocal(token,variant,scale,seatPriority,note);
+        return;
+      }
       if (studioRef.current?.connection === '项目已连接') {
+        if(!cloudScaleMatches(scale)){setPhase('failed');return;}
+        suppressCancelledCloudPreview.current=false;
         lastSource.current = 'cloud'; setProgress(1);
-        await cloudRun(note, scale);
-        if (token === runToken.current && !adoptCloudProposal()) setPhase('failed');
+        const conversationId=getActiveAssistantSessionId(sessionScope),boundId=boundSessionId.current;
+        const result=await cloudRun(note);
+        if(token===runToken.current&&sessionScopeIsCurrent()&&boundSessionId.current===boundId&&getActiveAssistantSessionId(sessionScope)===conversationId){
+          if(result?.kind==='unchanged'){setPhase('idle');setProgress(0);say({role:'agent',amber:true,text:result.message});}
+          else if(!adoptCloudProposal())setPhase('failed');
+        }
         return;
       }
       lastSource.current = 'local';
       await runLocal(token, variant, scale, seatPriority);
     }
-    catch { if (token === runToken.current) setPhase('failed'); }
-    finally { window.clearTimeout(timeout); }
+    catch { if (token === runToken.current) { failOpenLocalStep('这版没出成'); setPhase('failed'); } }
+  }
+
+  /** Wait only for the current run; an unresponsive provider must not block chat forever. */
+  function trackGeneration(task:Promise<void>):void {
+    generationWait.current?.cancel();
+    const token=runToken.current;let release!:()=>void;
+    const interrupted=new Promise<void>(resolve=>{release=resolve;});
+    // Cloud tasks have a 90-second server deadline; let their status settle before cancelling.
+    const waitMs=studioRef.current?.connection==='项目已连接'?100_000:60_000;
+    const timer=window.setTimeout(()=>{
+      if(token===runToken.current){runToken.current++;setPhase('failed');if(lastSource.current==='cloud')void studioRef.current?.cancelRun();say({role:'agent',amber:true,text:'这次生成等待超时，画布未自动应用；服务商可能仍在处理，请核对后再试。'});}
+      release();
+    },waitMs);
+    const entry={promise:Promise.resolve(),cancel:release};
+    entry.promise=Promise.race([task,interrupted]).catch(()=>{if(token===runToken.current){setPhase('failed');say({role:'agent',amber:true,text:'这次生成未完成，请核对后重试。'});}}).finally(()=>{window.clearTimeout(timer);if(generationWait.current===entry)generationWait.current=null;});
+    generationWait.current=entry;
+  }
+  async function waitForGeneration():Promise<void> {
+    for(;;){const current=generationWait.current;if(!current)return;await current.promise;}
   }
 
   /** 生成只有一次触发：对话。这里是被认可后真正跑那一趟的唯一入口，画布上只出预览。 */
+  const localDraftIntent = useRef<string|null>(null);
   function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
+    if (!sessionScopeIsCurrent()) return;
+    if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { finishLayoutAttempt(false); say({role:'agent',amber:true,text:'场地已变化，请重新说明当前场地尺寸。'}); return; }
+    beginLayoutAttempt(previewUtterance.current || note || label || '', studioRef.current?.connection === '项目已连接');
+    localDraftIntent.current=/(?:本地|本机)草案/.test(note)?note:null;
     const token = ++runToken.current;
     if (label) say({ role: 'user', text: label });
-    setIssue(null); dropProposal(); discardCloudPreview(); setExportPreview(false); setPhase('generating'); setProgress(0);
-    void startGeneration(token, variant, note, scale, seatPriority);
+    setIssue(null); dropProposal(); discardCloudPreview(); setExportPreview(false); phaseRef.current='generating';setPhase('generating'); setProgress(0);
+    trackGeneration(startGeneration(token, variant, note, scale, seatPriority));
   }
 
   /** 「这次没出成」那张卡上的重试：拿现在的读数再跑一遍，不另算一个入口。 */
-  function retry(): void { runGeneration('重试', seed.current, '', readScale()); }
+  function retry(): void { runGeneration('重试', seed.current, localDraftIntent.current??'', readScale()); }
   /** 停一下：只收预览，画布退回确认前状态；提案留着，「接着摆」能续上。 */
   function stop(): void {
-    if (phase !== 'generating') return;
+    if (phaseRef.current !== 'generating' && !generationWait.current) return;
+    if (lastSource.current === 'cloud') requestAgentStop();
+    layoutAttempt.current=false;setToolPending(false);
     runToken.current++;
+    generationWait.current?.cancel();
     const current = studioRef.current;
-    if (lastSource.current === 'cloud' && current?.busy) {
+    if (lastSource.current === 'cloud' && current) {
+      suppressCancelledCloudPreview.current=true;
       void current.cancelRun();
-      setPhase('idle'); setProgress(0);
-      say({ role: 'agent', text: '停了，云端任务取消，画布没动。要再出一版就说一句。' });
+      phaseRef.current='idle';setPhase('idle'); setProgress(0);
+      say({ role: 'agent', text: '已请求停止云端任务，画布没动；服务商可能仍在处理或计费，请核对状态。' });
       return;
     }
     const local = proposal.current !== null;
     if (local) hidePreview();
-    setPhase('paused');
+    phaseRef.current='paused';setPhase('paused');
     say({ role: 'agent', text: local ? '先停在这儿了，预览收回、画布没动。要接着看就点「接着摆」。' : '先停在这儿了，画布没动。' });
   }
   function resume(): void {
     if (phase !== 'paused') return;
-    if (proposal.current) { void presentProposal(++runToken.current).catch(() => setPhase('failed')); return; }
+    if (proposal.current) { trackGeneration(presentProposal(++runToken.current)); return; }
     regenerate('接着摆');
   }
   function regenerate(label = '换一版'): void {
     seed.current += 1;
-    runGeneration(label, seed.current, label === '换一版' ? '换一版不同的布局' : '', readScale());
+    runGeneration(label, seed.current, localDraftIntent.current??(label === '换一版' ? '换一版不同的布局' : ''), readScale());
   }
   /** 座位不够时的一点击改法：同一份需求按座位优先重排，仍然只出预览，确认前不落盘。 */
   function addSeats(): void {
@@ -1296,28 +2306,54 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     return !!(current?.preview && (current.stale || current.expired));
   }
 
+  /** Export reads the applied layout; a visible candidate is a different version. */
+  function pendingCandidateBlocksExport(): boolean {
+    return proposal.current !== null || !!studioRef.current?.preview;
+  }
+
+  function refusePendingCandidateExport(): boolean {
+    if (!pendingCandidateBlocksExport()) return false;
+    setExportPreview(false);
+    say({ role: 'agent', amber: true, text: '当前有尚未应用的方案预览；导出读取的是原场景。请先确认布置或撤回预览，再导出。' });
+    return true;
+  }
+
   function proposeExport(): void {
+    if (refusePendingCandidateExport()) return;
     if (previewUnsettled()) {
       say({ role: 'agent', amber: true, text: '这一版还没稳，确认先不亮。等预览停住再说导出。' });
       return;
     }
     setExportPreview(true);
-    say({ role: 'agent', text: '完整活动交接包含需求、物料、制作和点验，只在这台机器上生成。' });
+    say({ role: 'agent', text: '执行资料草案使用执行页已保存的手工需求、物料、制作和点验，不完整包含本次对话需求。请对照当前对话及现场条件核对后再交付。' });
   }
 
   function confirmExport(): void {
+    if (refusePendingCandidateExport()) return;
+    if (previewUnsettled()) { setExportPreview(false); say({role:'agent',amber:true,text:'当前方案仍在处理，请完成后再导出。'}); return; }
     setExportPreview(false);
     const studio = studioRef.current;
     if (!studio?.exportActivity) {
       say({ role: 'agent', amber: true, text: '导出入口还没就绪，稍后再试。' });
       return;
     }
-    say({ role: 'agent', text: '好，我在本机生成完整活动交接。' });
+    say({ role: 'agent', text: '好，我在本机生成执行资料草案。' });
     void studio.exportActivity().then(() => {
-      say({ role: 'agent', text: '交接文件已下载，可离线打开与打印；只在这台机器上生成，由你交给搭建方。' });
+      say({ role: 'agent', text: '执行资料草案已发起下载，可离线打开与打印。请核对手工需求与当前对话；出口、尺度、通行、消防和无障碍等条件仍需核验。' });
     }).catch(error => {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '导出没成，资料都还在，再试一次。' });
     });
+  }
+
+  function confirmCloudMaterialDraft(): void {
+    if(refusePendingCandidateExport())return;
+    if(previewUnsettled()){say({role:'agent',amber:true,text:'这一版还没稳，请先处理预览再导出草案。'});return;}
+    const studio=studioRef.current;
+    if(!studio?.cloudMaterialDraftAvailable || !studio.exportCloudMaterialDraft){say({role:'agent',amber:true,text:'当前没有可导出的云项目物料草案。'});return;}
+    void studio.exportCloudMaterialDraft().then(()=>{
+      if(!sessionScopeIsCurrent())return;
+      setExportPreview(false);say({role:'agent',text:'当前场景物料清单草案已发起下载。文件未冻结，不包含完整活动需求与点验；模型、实物和现场条件仍需核验。'});
+    }).catch(error=>{if(sessionScopeIsCurrent())say({role:'agent',amber:true,text:error instanceof Error?error.message:'物料草案未导出，请核对当前项目后重试。'});});
   }
 
   function dismissExport(): void {
@@ -1332,24 +2368,117 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (handoffExportRequest > 0) proposeExport();
   }, [handoffExportRequest]);
 
-  async function send(text: string): Promise<void> {
+  /** Read-only questions share the existing turn queue; they never mutate the brief or scene. */
+  async function answerGeneralQuestion(text:string):Promise<void> {
+    const controller=studioRef.current?.controller;
+    if(!controller || typeof controller.assistantChat!=='function') {say({role:'agent',amber:true,text:'活动问答暂未连接，问题已保留。'});return;}
+    const request={controller:new AbortController(),text};
+    const session=boundSessionId.current,sequence=briefTurnSequence.current,prior=briefTurnTail.current;
+    if(!session||getActiveAssistantSessionId(sessionScope)!==session){say({role:'agent',amber:true,text:'会话正在切换，请在当前会话重新发送。'});return;}
+    const history=chatUserHistory(bubblesRef.current.slice(0,-1),text);
+    pendingModelInputs.current.add(text);
+    let release!:()=>void;
+    briefTurnTail.current=new Promise<void>(resolve=>{release=resolve;});
+    const current=()=>!request.controller.signal.aborted&&sessionScopeIsCurrent()&&boundSessionId.current===session&&getActiveAssistantSessionId(sessionScope)===session&&briefTurnSequence.current===sequence;
+    try {
+      await prior;await waitForGeneration();if(!current())return;
+      briefRequest.current=request;setUnderstanding(true);
+      const cancelled=new Promise<never>((_,reject)=>request.controller.signal.addEventListener('abort',()=>reject(new DOMException('已停止等待','AbortError')),{once:true}));
+      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal),cancelled]);
+      if(!current())return;
+      if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
+      else {
+        if(result.status==='timeout'||result.status==='provider_error')uncertainInputs.current.add(text);
+        const message=result.status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':result.status==='disabled'||result.status==='unavailable'?'活动问答暂未启用，问题已保留。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
+        say({role:'agent',amber:true,text:message});
+      }
+    } catch {
+      if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。'});}
+    } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}release();}
+  }
+
+  async function sendCore(text: string, allowUncertainRetry=false, queued=false, queuedAttachment?:{file:File;url:string}|null, queuedHistory?:Array<{role:'user'|'assistant';text:string}>): Promise<void> {
+    if (pendingModelInputs.current.has(text.trim())) return;
+    if (!allowUncertainRetry && uncertainInputs.current.has(text.trim())) {setRetryUncertain(text.trim());return;}
+    if (!sessionScopeIsCurrent()) { say({role:'agent',amber:true,text:'活动已切换，请在当前活动重新发送。'}); return; }
     // 图纸/照片先在输入框里等：这一句发出去时才算读过、才铺底图；纯发文件也算一步。
-    const attachment = pendingFile;
+    const attachment = queued ? queuedAttachment??null : pendingFile;
     if (attachment) setPendingFile(null);
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
+    if (!attachment && isExplicitProposalConfirmation(trimmed)) {
+      if(!queued)say({role:'user',text:trimmed});
+      if(queued||briefRequest.current||pendingModelInputs.current.size>0||generationWait.current){
+        say({role:'agent',amber:true,text:'当前还有请求在处理，请等当前预览稳定后重新确认；本次没有应用。'});return;
+      }
+      const memory=memoryRef.current;
+      if(memory.pendingBasicFacts?.length||memory.pendingActivityNeeds.length||memory.unresolvedActivityNeeds.length||memory.layoutModeUnresolved||memory.mobilityNeedsClarification||memory.mobilityRequirement?.decision==='unknown'){
+        say({role:'agent',amber:true,text:'还有需求待确认，请先核对后再确认布置。'});return;
+      }
+      if(phaseRef.current!=='proposed'||(!proposal.current&&!studioRef.current?.preview)){
+        say({role:'agent',amber:true,text:'当前没有可确认的布置预览。说一下想怎么摆，我再出一版给你确认。'});return;
+      }
+      confirmProposal();return;
+    }
+    if(memoryRef.current.pendingGeneration && !/^(对|是|确认|没错|是的|好的|可以)$/.test(trimmed)){
+      saveMemory({...memoryRef.current,pendingGeneration:undefined});
+    }
+    if(!queued&&generationWait.current&&isStopCommand(trimmed)){
+      say({role:'user',text:trimmed});stop();return;
+    }
+    if(!queued && researchRequest.current && isStopCommand(trimmed)){
+      say({role:'user',text:trimmed});researchRequest.current.abort();say({role:'agent',text:'已停止调研，本次没有铺设底图。'});return;
+    }
+    if(!queued&&generationWait.current){
+      if(trimmed)say({role:'user',text:trimmed});
+      const history=chatUserHistory(bubblesRef.current.slice(0,-1),trimmed);
+      const session=boundSessionId.current,sequence=briefTurnSequence.current,floor=floorSession.capture();
+      generationQueuedRef.current++;
+      setGenerationQueued(value=>value+1);
+      const work=async()=>{
+        try{
+          await waitForGeneration();
+          await briefTurnTail.current;
+          if(!sessionScopeIsCurrent()||session!==boundSessionId.current||sequence!==briefTurnSequence.current||!floorSession.isCurrent(floor))return;
+          await sendLatest.current(trimmed,allowUncertainRetry,true,attachment,history);
+          await waitForGeneration();
+        }finally{generationQueuedRef.current=Math.max(0,generationQueuedRef.current-1);setGenerationQueued(value=>Math.max(0,value-1));}
+      };
+      const next=generationFollowups.current.then(work,work);generationFollowups.current=next.catch(()=>{});return next;
+    }
     if (attachment) {
       await acceptFile(attachment.file);
-      if (!trimmed) return;
+      if (!sessionScopeIsCurrent() || !trimmed) return;
     }
     // 「停一下」是命令，不是需求：正在摆就停手，摆好了还没确认就撤回，别把它当成一句话记进简报。
     if (isStopCommand(trimmed) && (phase === 'generating' || phase === 'proposed' || phase === 'paused')) {
-      say({ role: 'user', text: trimmed });
+      if(!queued)say({ role: 'user', text: trimmed });
       if (phase === 'generating') stop(); else withdrawProposal();
       return;
     }
-    say({ role: 'user', text: trimmed });
+    if(!queued)say({ role: 'user', text: trimmed });
+    if(isPureGreeting(trimmed)){say({role:'agent',text:'你好，我可以帮你梳理活动需求、查看方案或准备布置。'});return;}
+    const keepOriginals=preservationIntent(trimmed);
+    if(keepOriginals){
+      if(keepOriginals.keepAll){
+        const requirement=captureOriginalPreservation(layoutStore.getState().layout,trimmed,keepOriginals.keepPositions);
+        if(!requirement){say({role:'agent',amber:true,text:'当前活动或原物身份无法核对，请先保存活动后重新说明保留要求。'});return;}
+        saveMemory({...memoryRef.current,originalPreservation:requirement});syncMemory(memoryRef.current);
+        say({role:'agent',text:keepOriginals.keepPositions?'已记录：保留当前原有物件，且位置和方向不变。':'已记录：保留当前原有物件，不删除；是否移动仍按你的后续要求处理。'});
+      }else{
+        const {originalPreservation:_removed,...rest}=memoryRef.current;
+        saveMemory(rest);syncMemory(memoryRef.current);
+        say({role:'agent',text:'已取消此前的全部原物保留要求；这不会自动删除物件。'});
+      }
+      if(isStandalonePreservationInstruction(trimmed))return;
+    }
+    const unifiedConversation=process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1';
+    const turnHistory=queued?(queuedHistory??[]):chatUserHistory(bubblesRef.current.slice(0,-1),trimmed);
+    if(!unifiedConversation && process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1' && !attachment && isGeneralActivityQuestion(trimmed)) {await answerGeneralQuestion(trimmed);return;}
+    const mixedUtility=hasMixedUtilityCommand(trimmed);
+    if(mixedUtility)updateDialogueIncomplete(boundSessionId.current,trimmed,true);
     if (callbacks.workbenchMode !== 'layout') {
+      if(mixedUtility){say({role:'agent',amber:true,text:'这句话包含多项要求，请回到活动对话继续；原话已保留，本次没有执行。'});return;}
       if (isClientReviewCommand(trimmed)) {
         callbacks.onOpenReview();
         say({ role: 'agent', text: '评审页在左边开了：离线 HTML 或云端只读链接，都由你发。' });
@@ -1360,49 +2489,88 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回到布置对话再说。' });
       return;
     }
+    if(mixedUtility)say({role:'agent',amber:true,text:'我先理解这句话中的活动需求；清单、检查、评审或导出操作暂未执行。'});
+    if(!mixedUtility){
     // 「回好自动落区」：用户直接说「好 / 可以 / 圈吧」时，若上一条 agent 给过「要不要帮你圈出来」提议，
     // 就在这里把默认 zone 矩形落到 2D 草案，不再走 brief-agent 解析。非 layout 模式不触发，避免误动画布。
     if (isAffirmativeIntent(trimmed)) {
       const lastAgent = [...bubblesRef.current].reverse().find(b => b.role === 'agent');
       if (lastAgent && hasZoneApplyProposal(lastAgent.text)) {
-        const zones = extractProposedZoneTypes(lastAgent.text);
-        const labels = onApplyZoneRects?.(zones) ?? null;
-        if (labels) {
-          say({ role: 'agent', text: `已经在 2D 上圈好${labels}，去画布看一眼？` });
-          return;
-        }
+        if (lastAgent.zoneApply) lastAgent.zoneApply.run();
+        else say({ role: 'agent', amber: true, text: '这条区域建议已过期，请重新说明需要的区域。' });
+        return;
       }
     }
     // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
     if (isEstimateCommand(trimmed)) {
       // 「300 平米，按图纸估」是一句话里的两件事：这句的面积要先记进记忆，估算才不会退回画布上的旧尺寸。
       const statedArea = parseBriefSentence(trimmed).areaM2;
-      if (statedArea !== null) memoryRef.current = { ...memoryRef.current, areaM2: statedArea };
+      if (statedArea !== null) saveMemory({ ...memoryRef.current, areaM2: statedArea });
       estimateAndGenerate();
       return;
     }
     // 「调研西湖」：先把地名换成坐标，查到的参考底图铺进 3D，同一张图也贴进对话。
     const researchQuery = matchResearchCommand(trimmed);
     if (researchQuery) {
-      void runResearchCommand(researchQuery);
+      await runResearchCommand(researchQuery);
       return;
     }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
     const aholo = prepareAholoAsk(trimmed);
     if (aholo) {
-      say({
-        role: 'agent',
-        text: aholo.kind === 'world'
-          ? '空间生成属于空间 Agent；切到「空间」后用生成引擎生成 3D 重建空间。'
-          : `要生成${aholo.title}，请切到物料 Agent 的「生成物料」入口；Bingo 只负责布置与方案。`,
-      });
+      const step = aholoChatStep(aholo.kind, {
+        spaceEntry: Boolean(callbacks.luxToolsVisible && callbacks.onOpenLux3d),
+        materialReady: studioRef.current?.connection === '项目已连接' || isLux3dLocalProxy(),
+      }, aholo.title === '图片物件');
+      if (step.start === 'space-world') callbacks.onOpenLux3d?.('world', aholo.prompt);
+      else if (step.start === 'space-recon') callbacks.onOpenLux3d?.('recon', aholo.prompt);
+      else if (step.start === 'material') {
+        stageMaterialGenerate({ kind: aholo.title === '图片物件' ? 'image' : 'text', prompt: aholo.prompt });
+        callbacks.onOpenMaterials();
+      }
+      say({ role: 'agent', text: step.text });
       return;
     }
     // 按对象改（挪舞台/加灯/删除）走增量命令；普通「加两把椅子」仍走下面的物料请求。
-    const revision = parseRevisionRequest(trimmed);
-    if (revision) { reviseMaterials(revision); return; }
+    const mentionsRecolor=/(?:换成|改成|变成|换为|改为|涂成|刷成)[^，。；,;]{1,16}色|(?:涂成|刷成)/.test(trimmed.replace(/\s+/g,''));
+    const safeRecolor=mentionsRecolor?parseSafeRecolor(trimmed):null;
+    if(mentionsRecolor&&!safeRecolor){markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'颜色或要求不明确，请单独说明物件和要改成的颜色；本次没有修改画布。'});return;}
+    const mentionsRotation=/(?:旋转|转动|顺时针|逆时针|(?:把|将).{1,20}转\d)/.test(trimmed.replace(/\s+/g,''));
+    const safeRotation=mentionsRotation?parseSafeRotation(trimmed):null;
+    if(mentionsRotation&&!safeRotation){markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'旋转方向、角度或要求不明确，请单独说明物件、顺时针或逆时针和准确角度；本次没有修改画布。'});return;}
+    const directionalMove = /(?:往|向|朝)(?:东|西|南|北|左|右|前|后)(?:边|侧|方)?(?:挪|移动|平移|移|搬)|(?:挪|移动|平移|移|搬)(?:到|至)?(?:东|西|南|北|左|右|前|后)/.test(trimmed.replace(/\s+/g,''));
+    const safeMove = directionalMove ? parseSafeDirectionalMove(trimmed) : null;
+    if (directionalMove && !safeMove && hasMixedActivityRequirements(trimmed)) {
+      markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。'}); return;
+    }
+    if (directionalMove && !safeMove) {
+      markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'移动距离或要求不明确，请单独说明物件、方向和准确距离（米、厘米或毫米）；本次没有修改画布。'}); return;
+    }
+    const revision = safeMove ? {ops:[safeMove],bands:[]} : safeRotation ? {ops:[safeRotation],bands:[]} : safeRecolor ? {ops:[safeRecolor],bands:[]} : parseRevisionRequest(trimmed);
+    if (/(?:放大|缩小|缩放|变大|变小)/.test(trimmed)) {
+      const scale = revision?.ops.length === 1 && revision.ops[0]?.kind === 'scale' ? revision.ops[0] : null;
+      if (!scale || /(?:不要|不用|别|勿|暂不|暂时|不确定|可能|也许|是否|待定|看情况|[?？，,；;])/.test(trimmed) ||
+        (/缩小|变小/.test(trimmed) && scale.factor >= 1) || (/放大|变大/.test(trimmed) && scale.factor <= 1)) {
+        markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'缩放倍数或要求不明确，请单独说明物件与准确倍数或百分比；本次没有修改画布。'}); return;
+      }
+    }
     const request = parseMaterialRequest(trimmed);
-    if (request) { addMaterials(request); return; }
+    const count = explicitAdditionCount(trimmed);
+    const additionLimit = revision?.ops.some(op => op.kind === 'add') ? 20 : 50;
+    if ((revision || request) && count !== null && (!Number.isSafeInteger(count) || count < 1 || count > additionLimit)) {
+      markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: `你要求添加 ${count} 件，单次支持 1 至 ${additionLimit} 件；请调整数量后重试，本次没有修改画布。` }); return;
+    }
+    if ((revision || request) && needsMaterialCommandClarification(trimmed, !!revision, !!request)) {
+      markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '物料增减的意思尚不明确，请逐件说明要加什么；本次没有修改画布。' }); return;
+    }
+    if (revision) {
+      if (hasMixedActivityRequirements(trimmed)) { markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
+      reviseMaterials(revision); return;
+    }
+    if (request) {
+      if (hasMixedActivityRequirements(trimmed)) { markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
+      addMaterials(request); return;
+    }
     const styleCmd = matchStyleBundleCommand(trimmed, window.localStorage);
     if (styleCmd === 'open') {
       setStylePickerOpen(true);
@@ -1426,47 +2594,174 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     // 导出/交接：先出预览卡，不直接下载（T-UI §4-5）。
     if (isExportCommand(trimmed)) { proposeExport(); return; }
-    const command = isGenerateCommand(trimmed);
-    // 话锋一变，上一版预览就不再代表这次的要求：先收掉，别让两张卡同屏打架。
-    if (phase === 'proposed' || phase === 'paused') { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
+    }
+    const command = mixedUtility ? null : isGenerateCommand(trimmed);
+    // 布置跟进先留着当前预览。生成开始才会换成新的一版；还差事实时确认入口还在。
+    const relatedLayout = !mixedUtility && layoutGenerateCommand(trimmed) !== null;
+    if (!unifiedConversation && !relatedLayout && (phase === 'proposed' || phase === 'paused')) { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
     // 对话核心：真模型（scene-api /brief/extract，key 在 Supabase secrets）优先提槽位，
     // 失败/未配置自动回退规则版；记忆合并、防复读、出方案闸门都在 brief-agent 状态机里。
-    const turn = await resolveBriefTurn(trimmed, memoryRef.current, {
-      venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
-    }, studioRef.current?.controller ?? null);
-    memoryRef.current = turn.memory;
+    if(pendingModelInputs.current.has(trimmed)){say({role:'agent',amber:true,text:'这句需求仍在处理中，请等待结果。'});return;}
+    const activeRequest={controller:new AbortController(),text:trimmed};
+    const trackModel=!!(modelEnabled() && studioRef.current?.controller);if(trackModel)pendingModelInputs.current.add(trimmed);
+    if(trackModel && !briefRequest.current){briefRequest.current=activeRequest;setUnderstanding(true);}
+    const turnSessionId = boundSessionId.current;
+    const turnSequence = briefTurnSequence.current;
+    const priorTurn = briefTurnTail.current;
+    let releaseTurn!: () => void;
+    briefTurnTail.current = new Promise<void>((resolve) => { releaseTurn = () => {setBriefBusy(false);if(trackModel)pendingModelInputs.current.delete(trimmed);if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}resolve();}; });
+    setBriefBusy(true);
+    setProcessFailed(null);
+    await priorTurn;
+    await waitForGeneration();
+    if (activeRequest.controller.signal.aborted || !sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence) { releaseTurn(); return; }
+    if(modelEnabled() && studioRef.current?.controller && !briefRequest.current){briefRequest.current=activeRequest;setUnderstanding(true);}
+    const beforeSpecs=memoryRef.current;
+    const nextSpecs=mergeLocalSeatingSpecs(beforeSpecs.localSeatingSpecs,trimmed);
+    const nextAllocation=mergeSeatingAllocation(beforeSpecs.localSeatingAllocation,trimmed);
+    const previousMemory=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation};
+    if(previousMemory!==beforeSpecs){
+      if(phaseRef.current==='proposed'||phaseRef.current==='paused'){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
+      saveMemory(previousMemory);syncMemory(previousMemory);
+    }
+    const turnVenueBasis = venueScaleBasis(layoutStore.getState().layout);
+    const turnVenueFact=venueFacts.capture();
+    if(sessionScope !== 'legacy' && !turnVenueFact){say({role:'agent',amber:true,text:'场地状态正在核对，请稍后重试。'});releaseTurn();return;}
+    const staleScale = sessionScope !== 'legacy' && (!isVenueScaleCurrent(previousMemory,layoutStore.getState().layout) || !sourceScaleBound(previousMemory) || !factScaleBound(previousMemory));
+    const previousVenueScale = previousMemory.previousVenueScale ?? {lengthM:previousMemory.lengthM,widthM:previousMemory.widthM,areaM2:previousMemory.areaM2};
+    const resolverMemory = staleScale ? {...previousMemory,lengthM:null,widthM:null,areaM2:null,scaleNeedsReconfirmation:true,previousVenueScale,pendingGeneration:undefined} : previousMemory;
+    let turn: Awaited<ReturnType<typeof resolveBriefTurn>>;
+    try {
+      turn = await resolveBriefTurn(trimmed, resolverMemory, {
+        venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
+      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined);
+      if(turn.modelNotice?.includes('可能仍会计费'))uncertainInputs.current.add(trimmed);
+      if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
+    } catch (error) { setProcessFailed('understanding'); releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
+    if (!sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence) { releaseTurn(); return; }
+    const outcome=resolvedTurnOutcome(turn,previousMemory,mixedUtility,trimmed);
+    if(outcome.kind==='failed')setProcessFailed('understanding');
+    const incompleteUpdate=incompleteUpdateForOutcome(outcome);
+    const unhandledRequirement=turn.unhandled?.some(item=>(item.kind==='action'||item.kind==='other')&&!!item.evidence&&trimmed.includes(item.evidence))??false;
+    if(incompleteUpdate==='mark')updateDialogueIncomplete(turnSessionId,trimmed,true,unhandledRequirement);
+    if(unifiedConversation&&unhandledRequirement&&(phaseRef.current==='proposed'||phaseRef.current==='paused')){
+      dropProposal();discardCloudPreview();phaseRef.current='idle';setPhase('idle');setProgress(0);
+      say({role:'agent',amber:true,text:'这项操作尚未执行，旧方案预览已收回。请带上这项要求重新生成，再核对修改。'});
+    }
+    if(turn.readOnlyReply){
+      if(turn.unhandled?.length&&!sofaOnlyUnhandled(turn,trimmed))say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});
+      say({role:'agent',text:turn.text,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:{})});releaseTurn();return;
+    }
+    if (sessionScope !== 'legacy' && (turnVenueBasis !== venueScaleBasis(layoutStore.getState().layout) || !venueFacts.isCurrent(turnVenueFact))) {
+      say({role:'agent',amber:true,text:'场地在理解需求期间发生变化，请重新说明当前场地尺寸。'});releaseTurn();return;
+    }
+    const scaleRestated = (turn.extraction.lengthM !== null && turn.extraction.widthM !== null) || turn.extraction.areaM2 !== null;
+    const scalePending = turn.memory.pendingBasicFacts?.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2');
+    let sourceProof: {scope:string;digest:string}|undefined;
+    if(sessionScope !== 'legacy' && scaleRestated && !scalePending && sourceAuthorityRequired.current && !confirmVenueSourceRef.current){
+      say({role:'agent',amber:true,text:'场地来源暂时无法核对，请核对来源后重新说明尺寸；原需求未修改。'});releaseTurn();return;
+    }
+    if(sessionScope !== 'legacy' && scaleRestated && !scalePending && confirmVenueSourceRef.current){
+      const sourceRevision=zoneDraftRevisionRef.current, authority=confirmVenueSourceRef.current, rawSourceScope=layoutStore.getState().layout.id;
+      if(!rawSourceScope){say({role:'agent',amber:true,text:'场地来源尚无明确活动标识，请先保存活动后重新说明尺寸。'});releaseTurn();return;}
+      let sourceTimeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const observed=await Promise.race([authority(rawSourceScope),new Promise<never>((_,reject)=>{sourceTimeout=setTimeout(()=>reject(new Error('来源核对超时')),12000);})]);
+        if (!sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence ||
+            turnVenueBasis !== venueScaleBasis(layoutStore.getState().layout) || !venueFacts.isCurrent(turnVenueFact) || layoutStore.getState().layout.id !== rawSourceScope || sourceRevision !== zoneDraftRevisionRef.current || authority !== confirmVenueSourceRef.current) { releaseTurn(); return; }
+        if(observed.status!=='observed' || observed.scope!==rawSourceScope || !/^[0-9a-f]{64}$/i.test(observed.digest)) {
+          say({role:'agent',amber:true,text:'场地来源暂时无法核对，请核对来源后重新说明尺寸；原需求未修改。'});releaseTurn();return;
+        }
+        sourceProof={scope:observed.scope,digest:observed.digest};
+      } catch {
+        if(sessionScopeIsCurrent() && boundSessionId.current===turnSessionId && briefTurnSequence.current===turnSequence)
+          say({role:'agent',amber:true,text:'场地来源暂时无法核对，请核对来源后重新说明尺寸；原需求未修改。'});
+        releaseTurn(); return;
+      } finally { if(sourceTimeout !== undefined) clearTimeout(sourceTimeout); }
+    }
+    if(sessionScope !== 'legacy' && scaleRestated && !scalePending){
+      const {previousVenueScale:_old,...rest}=turn.memory;
+      turn={...turn,memory:{...rest,venueScaleBasis:turnVenueBasis,venueFactToken:turnVenueFact ?? undefined,scaleNeedsReconfirmation:false,...(sourceProof?{venueSourceScope:sourceProof.scope,venueSourceDigest:sourceProof.digest}:{})}};
+    } else if(staleScale){
+      turn={...turn,memory:{...turn.memory,scaleNeedsReconfirmation:true,previousVenueScale}};
+      saveMemory(turn.memory);syncMemory(turn.memory);
+      const old=previousVenueScale.lengthM !== null && previousVenueScale.widthM !== null ? `${formatArea(previousVenueScale.lengthM)} × ${formatArea(previousVenueScale.widthM)} 米` : previousVenueScale.areaM2 !== null ? `${formatArea(previousVenueScale.areaM2)} 平方米` : '未记录';
+      say({role:'agent',amber:true,text:`场地已变化，旧场地记录为 ${old}，不能自动沿用。请重新说明当前场地尺寸。`});releaseTurn();return;
+    }
+    if ((turn.modelNotice?.includes('可能仍会计费') || !briefFallbackNotified.current) && (turn.resolution === 'failed' || turn.resolution === 'unavailable' || turn.resolution === 'not_connected')) {
+      briefFallbackNotified.current = true;
+      say({ role: 'agent', amber: true, text: turn.modelNotice ?? '这次暂时只能识别基本信息，复杂要求请核对后再出方案。' });
+    }
+    const memorySaved=saveMemory(turn.memory);
+    releaseTurn();
+    if(unifiedConversation && (phaseRef.current==='proposed'||phaseRef.current==='paused') && !sameRecoveryFormValue({...previousMemory,askedScale:false},{...turn.memory,askedScale:false})) {dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
     const extraction = turn.extraction;
     const merged = memoryExtraction(turn.memory);
     // 人数 / 类型 / 室内外 / 长宽先写进左栏简报，再决定出不出预览。云端忙也不能把这句漏掉。
     applyExtraction(extraction);
     syncMemory(turn.memory);
+    // The model result is only eligible to clear an old item after the venue
+    // fences, the memory write, and a readback of the fact all succeeded.
+    if(incompleteUpdate==='clear_current' && memorySaved && turnSessionId && sessionScopeIsCurrent() &&
+      boundSessionId.current===turnSessionId && briefTurnSequence.current===turnSequence &&
+      (sessionScope==='legacy' || (turnVenueBasis===venueScaleBasis(layoutStore.getState().layout) && venueFacts.isCurrent(turnVenueFact))) &&
+      samePersistedHeadcount(readBriefMemory(turnSessionId,scopedAssistantStorage(sessionScope)),turn.memory))
+      updateDialogueIncomplete(turnSessionId,trimmed,false);
     const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
-    const anchors = layoutAnchors(trimmed, turn.memory.event, turn.memory.layoutMode);
+    const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
     anchorsRef.current = anchors;
     const scale = scaleFrom(merged);
     const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
+    const mentionedZone = (kind: 'stage' | 'checkin', word: RegExp) => turn.memory.unresolvedActivityNeeds.includes(kind) || word.test(trimmed);
+    const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
+      turn.memory.zoneNeeds.checkin === null && !anchors.checkin && mentionedZone('checkin', /签到/) ? '签到区' : null].filter(Boolean);
     const summary = `${describeExtraction(merged, scale)}${scale.fromVenue ? ' · 按现在的场地' : ''}`;
-    const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
+    const carried = extraction.headcount === null && turn.memory.headcount !== null && !summary.includes(String(turn.memory.headcount))
+      ? ` · 沿用 ${turn.memory.headcount} 人` : '';
+    const mentionedNewMaterial=(turn.memory.reportedInventory??[]).some(item=>!(previousMemory.reportedInventory??[]).some(old=>old.evidence===item.evidence));
+    if (mentionsUnsupportedSeating(trimmed) && !turn.readOnlyReply) say({ role: 'agent', text: CIRCLE_SEATING_NOTE });
+    if(turn.modelReply && turn.modelReply!==turn.text)say({role:'agent',text:`建议：${turn.modelReply}`,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});
+    const sofaAsk=sofaOnlyUnhandled(turn,trimmed);
+    if(sofaAsk&&turn.kind==='generate'){say({role:'agent',text:'沙发不是可选的布置方式。请选择圆桌或课桌椅；其他摆法需要说明，可能需要人工调整。'});return;}
+    if(turn.unhandled?.length&&!sofaAsk){say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});if(turn.kind==='generate')return;}
+    if(mixedUtility){say({role:'agent',text:turn.text||'活动需求已记录，请核对；其他操作尚未执行。',...(turn.usesModelText?{modelConversation:true}:{}),...(turn.usesModelText&&turn.materialQueries?.length?{materialQueries:turn.materialQueries}:turn.usesModelText&&mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{})});return;}
     // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
     // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
-    if (!command && !turn.filledScaleAsk && isVenueSizeOnly(extraction)) {
-      resizeVenueOnly(scaleFrom(extraction), extraction.venueIO ?? turn.memory.venueIO ?? venueIO);
+    if (!command && !turn.filledScaleAsk && isVenueSizeOnly(extraction) && isExplicitSizeOnly(trimmed)) {
+      resizeVenueOnly(scaleFrom(extraction), extraction.venueIO ?? turn.memory.venueIO ?? venueIO, previousMemory);
       return;
     }
     if (turn.kind !== 'generate') {
       // AI 回复末尾问「要不要我帮你圈出来」时，挂一张绿描边提议卡；点按钮等价于用户回「好」。
       const zoneProposal = hasZoneApplyProposal(turn.text);
+      const proposalLayout = live.current;
+      const proposalLayoutRevision = layoutStore.getState().revision;
+      const proposalMemoryRevision = memoryRevision.current;
+      const proposalDraftRevision = zoneDraftRevisionRef.current;
+      let proposalConsumed = false;
+      const proposalFloorIndex = floorIndexRef.current;
+      const proposalSessionId = boundSessionId.current;
       say({
         role: 'agent',
         text: turn.text,
+        ...(turn.usesModelText?{modelConversation:true}:{}),
+        ...(turn.usesModelText&&turn.materialQueries?.length?{materialQueries:turn.materialQueries}:turn.usesModelText&&mentionedNewMaterial?{action:{label:'查看物料库',run:callbacks.onOpenMaterials}}:{}),
         ...(zoneProposal
           ? {
               zoneApply: {
                 run: () => {
-                  const zones = extractProposedZoneTypes(turn.text);
+                  if (proposalConsumed || zoneDraftRevisionRef.current !== proposalDraftRevision ||
+                      layoutStore.getState().revision !== proposalLayoutRevision || memoryRevision.current !== proposalMemoryRevision ||
+                      proposalFloorIndex !== floorIndexRef.current || proposalSessionId !== boundSessionId.current ||
+                      proposalLayout.id !== live.current.id || !sameLayoutContent(proposalLayout, live.current)) {
+                    say({ role: 'agent', amber: true, text: '场地或需求已变化，这条区域建议已过期，请重新说明需要的区域。' });
+                    return;
+                  }
+                  const zones = extractProposedZoneTypes(turn.text).filter((zone) => (zone !== 'checkin' && zone !== 'rest') || memoryRef.current.zoneNeeds[zone] !== false);
                   const labels = onApplyZoneRects?.(zones) ?? null;
-                  if (labels) say({ role: 'agent', text: `已经在 2D 上圈好${labels}，去画布看一眼？` });
+                  if (labels) { proposalConsumed = true; say({ role: 'agent', text: `已经在 2D 上圈好${labels}，去画布看一眼？` }); }
+                  else say({ role: 'agent', amber: true, text: '这次没有圈区，请核对场地和需求后重新生成区域建议。' });
                 },
               },
             }
@@ -1474,29 +2769,65 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       });
       return;
     }
+    beginLayoutAttempt(trimmed, studioRef.current?.connection === '项目已连接');
+    if(isHistoryReviewRequired()){finishLayoutAttempt(false);say({role:'agent',amber:true,text:'请先核对历史需求，再重新生成方案。'});return;}
+    const originalRequest=turn.resumeInstruction??trimmed;
+    if(/(?:本地|本机)草案/.test(originalRequest)){
+      const variant=command==='again'?(seed.current+=1,seed.current):seed.current;
+      runGeneration(null,variant,originalRequest,scale);
+      return;
+    }
     const cloud = studioRef.current;
     if (cloud?.connection === '项目已连接') {
       // 连着云就只走云预览。忙或恢复中若退回本地生成，会在云端还没稳时亮一颗确认。
       if (cloud.busy || cloud.recoverable) {
-        say({ role: 'agent', amber: true, text: `记下了：${summary}${carried}。云端还在处理上一版，确认先不亮。${suffix}` });
+        finishLayoutAttempt(false);
+        say({ role: 'agent', amber: true, text: '正在调用云端工具未完成：上一版仍在处理，确认先不亮。' });
         return;
       }
+      if(!cloudScaleMatches(scale)){finishLayoutAttempt(false);return;}
       if (briefNote) say({ role: 'agent', text: briefNote });
       const token = ++runToken.current;
-      setExportPreview(false);
-      void cloud.generate(command === 'again' ? '换一版不同的布局' : trimmed, { requirePreview: true }).then(() => {
-        if (token !== runToken.current) return;
-        if (!adoptCloudProposal()) setPhase(current => (current === 'ready' ? 'edited' : current));
-      });
+      suppressCancelledCloudPreview.current=false;
+      lastSource.current='cloud';phaseRef.current='generating';setPhase('generating');setExportPreview(false);
+      const seatingAllocation=cloudSeatingAllocation(turn.memory);
+      const seatingSpecs=cloudSeatingSpecs(turn.memory);
+      const conversationId=getActiveAssistantSessionId(sessionScope),boundId=boundSessionId.current;
+      beginLayoutAttempt(trimmed, true);
+      trackGeneration(cloud.generate(cloudBriefMessage(turn.resumeInstruction ?? (command === 'again' ? '换一版不同的布局' : trimmed), turn.memory), { requirePreview: true,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}) }).then(result => {
+        if(token!==runToken.current||!sessionScopeIsCurrent()||boundSessionId.current!==boundId||getActiveAssistantSessionId(sessionScope)!==conversationId){finishLayoutAttempt(false);return;}
+        if(result?.kind==='unchanged'){finishLayoutAttempt(false);setPhase('idle');setProgress(0);say({role:'agent',amber:true,text:result.message});}
+        else if (!adoptCloudProposal()) setPhase(current => (current === 'generating' ? 'failed' : current === 'ready' ? 'edited' : current));
+      }));
       return;
     }
-    const zoneLine = zoneBit ? `${zoneBit}先占位。` : '';
+    const zoneLine = `${zoneBit ? `${zoneBit}先占位。` : ''}${unspecified.length ? `${unspecified.join('、')}尚未说明，这版暂不包含。` : ''}`;
+    const rail = lightPlanRail(trimmed);
+    const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
     say({ role: 'agent', text: turn.filledScaleAsk
-      ? `记下了：${summary}${carried}。${zoneLine}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
-      : `按这些先出一版：${summary}${carried}。${zoneLine}画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出预览，确认后才写入。${suffix}`
+      : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
     runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }
+  /** The fence starts synchronously on submit, including turns waiting in the queue. */
+  async function send(text:string,allowUncertainRetry=false,queued=false,queuedAttachment?:{file:File;url:string}|null,queuedHistory?:Array<{role:'user'|'assistant';text:string}>):Promise<void>{
+    let finish=()=>{};
+    if(text.trim()||(queued?queuedAttachment:pendingFile)){
+      try{
+        const begin=dialogueTurnStartRef.current;
+        if(begin){
+          const release=begin();if(typeof release!=='function')throw new Error('invalid dialogue fence');
+          finish=()=>{if(dialogueTurnReleases.current.delete(finish))release();};
+          dialogueTurnReleases.current.set(finish,{sessionId:boundSessionId.current,text});
+        }
+      }catch{updateDialogueIncomplete(boundSessionId.current,text,true);if(!queued&&text.trim())say({role:'user',text:text.trim()});say({role:'agent',amber:true,text:'对话状态暂时无法核对，请稍后重试。'});return;}
+    }
+    const turnSession=boundSessionId.current;
+    try{await sendCore(text,allowUncertainRetry,queued,queuedAttachment,queuedHistory);await waitForGeneration();}
+    catch(error){updateDialogueIncomplete(turnSession,text,true);throw error;}finally{finish();}
+  }
+  sendLatest.current=send;
 
   // 提案态的重叠算在候选上；落盘之后才算画布上的（编辑器那份 collidingIds 这时候还是旧的）。
   const overlapCount = phase === 'proposed' ? activeProposal?.overlapCount ?? 0
@@ -1506,11 +2837,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   // 简报不能还写「尺寸还没定」，两处对不上会让人以为场地没立起来。
   // 面积折算与图纸估算是推出来的，后缀必须跟着走，不能静态数字装成场地真相。
   const stated = lengthCheck.ok && widthCheck.ok ? `${formatArea(lengthCheck.value)} × ${formatArea(widthCheck.value)} m` : null;
-  // 没保存过的表单默认值（品牌快闪 / 24 人）不是对话意图，不能冒充简报；改过一项就是她填的，左栏动、右栏跟着回显。
-  const formBrief = studio && (studio.hasSavedBrief || studio.brief.event !== INITIAL_BRIEF.event || studio.brief.guests !== INITIAL_BRIEF.guests) ? studio.brief : null;
-  const guests = brief.guests ?? formBrief?.guests ?? null;
+  // Each field has independent provenance; saving another field does not confirm a default.
+  const formBrief = studio?.brief;
+  const guests = brief.guests ?? (formBrief?.guestsConfirmed === true ? formBrief.guests : null);
   const recap = {
-    event: brief.event ?? formBrief?.event ?? null,
+    event: brief.event ?? (formBrief?.eventConfirmed === true ? formBrief.event : null),
     guests: guests ? `${guests} 人` : null,
     dims: `${venueIO === 'indoor' ? '室内' : '户外'} · ${stated
       ? `${stated}${scaleOrigin === 'area' ? ' 折算' : scaleOrigin === 'plan' ? ' 估的' : ''}`
@@ -1519,11 +2850,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   };
 
   const value: AgentValue = {
-    callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
+    sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,withdrawUnresolvedDialogue,withdrawAllUnresolved,briefBusy,toolPending,processFailed,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
+    canForward:(text)=>{const value=text.trim(),session=boundSessionId.current;return !!value&&!!session&&sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===session&&!pendingModelInputs.current.has(value)&&!uncertainInputs.current.has(value);},cancelUnderstanding,
+    cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
-    proposal: phase === 'proposed' ? activeProposal : null,
+    proposal: phase === 'proposed' ? activeProposal : null, inventoryWorkspace, inventoryBlocked: inventoryCheck?.status==='violated'||!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput), inventoryInvalid:!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput),
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
     cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
@@ -1534,19 +2867,24 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     placeStyleBundle: placeStyleBundleNow,
     applyMapVenuePick: pick => {
       if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
-      runToken.current++;
-      if (proposal.current) dropProposal();
-      discardCloudPreview();
-      setPhase('idle'); setProgress(0);
       const was2D = view.view2D;
       try {
-        const { layout, cleared } = createVenueFromPick(live.current, pick);
+        const base = layoutStore.getState().layout;
+        if (base.floors.length !== 1) throw new Error('当前方案有多个楼层，圈场地会丢失已有内容；请保留原方案并先核对。');
+        const { layout, cleared } = createVenueFromPick(base, pick);
+        const preservation = validateCandidateApply(base, layout, activeFloorIndex);
+        if (!preservation.ok) throw new Error(preservation.reason);
+        for (const floor of base.floors) for (const item of floor.items) {
+          const candidate = layout.floors.find(value => value.id === floor.id)?.items.find(value => value.id === item.id);
+          if (!candidate || !sameRecoveryFormValue(item, candidate)) throw new Error(`圈场地会改变或移除「${item.name}」，本次未应用；请先保留原方案并核对。`);
+        }
         const { west, east, south, north } = XIHU_SCENIC_PRESET.bounds;
         const withinWestLake = pick.polygon.every(({ lng, lat }) => lng >= west && lng <= east && lat >= south && lat <= north);
         const researchArea = withinWestLake
           ? layout.researchArea?.presetId === 'xihu-scenic' ? layout.researchArea : createPresetResearchArea()
           : layout.researchArea;
-        onApply(researchArea ? { ...layout, researchArea } : layout);
+        onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
+        runToken.current++; if (proposal.current) dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0);
         setVenueIO('outdoor');
         onVenueIOChange?.('outdoor');
         if (was2D) setView(current => ({ ...current, view2D: true }));
@@ -1571,7 +2909,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
         return reason;
       }
     },
-    exportPreview, previewExport: proposeExport, confirmExport, dismissExport, reviewNow, issueReviewLink,
+    exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
     removePendingFile: () => setPendingFile(null),
@@ -1825,6 +3163,37 @@ export function VenuePickerOverlay(): JSX.Element | null {
   </div>;
 }
 
+function ToolCallTrace({ line, rows, understanding, onStop }: {
+  line: string | null;
+  rows: ReturnType<typeof toolTraceRows>;
+  understanding: boolean;
+  onStop(): void;
+}): JSX.Element | null {
+  const status = toolChipStatus(line);
+  const running = rows.some(row => row.status === 'running') || status === 'running';
+  const failed = [...rows].reverse().find(row => row.status === 'error');
+  const [opened, setOpened] = useState(running);
+  useEffect(() => { setOpened(running); }, [running]);
+  if (!line && rows.length === 0 && !failed) return null;
+  return <section className="ap-tools" aria-label="工具调用">
+    {line && status && <p role="status" className={`ap-tool-chip is-${status}`}>
+      <span className="ap-tool-state">{toolStatusWord(status)}</span>
+      <span>{line}</span>
+      {understanding && line === '正在理解活动需求…' && <button type="button" onClick={onStop}>停止等待</button>}
+    </p>}
+    {!line && failed && <p role="status" className="ap-tool-chip is-error">
+      <span className="ap-tool-state">未完成</span>
+      <button type="button" onClick={() => setOpened(value => !value)}>{failed.result || failed.name}</button>
+    </p>}
+    {rows.length > 0 && <details open={opened} onToggle={event => setOpened(event.currentTarget.open)}>
+      <summary>执行过程</summary>
+      <ol className="ap-tool-rows">
+        {rows.map(row => <li key={row.id}><span>{row.name}</span><span>{toolStatusWord(row.status)}</span><span>{row.result}</span></li>)}
+      </ol>
+    </details>}
+  </section>;
+}
+
 function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?: boolean }): JSX.Element {
   const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
   return <>{list.map(bubble => {
@@ -1833,42 +3202,41 @@ function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?
     : <div key={bubble.id} className="ap-turn"><p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
       {bubble.zoneApply && (
         <div className="ap-zone-proposal">
-          <p className="ap-zone-proposal__hint">要不要直接在 2D 上把这两个区圈出来？</p>
+          <p className="ap-zone-proposal__hint">要不要直接在 2D 上把提议的区域圈出来？</p>
           <button type="button" className="ap-zone-proposal__btn" onClick={bubble.zoneApply.run}>好，帮我圈</button>
         </div>
       )}
       {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
+      {bubble.materialQueries?.map(query=><MaterialCandidatesPanel key={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}:${bubble.id}:${query}`} query={query} onOpenLibrary={()=>agent.callbacks.onOpenMaterials()}/>)}
     </div>;
   })}</>;
 }
 
 function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: boolean; hidden?: boolean }): JSX.Element | null {
-  const { layout } = useRoomEditor();
-  const n = Math.max(1, agent.progress);
   // 真实步骤时间线在场时，这套写死的步骤条让位——不同时摆两套进度。
   if (hidden) return null;
   return <div className="ap-card" id="gen-progress">
-    <div className={`ap-bar${paused ? ' is-paused' : ''}`} role="progressbar" aria-label="排布进度"
-      aria-valuemin={1} aria-valuemax={GEN_STEPS.length} aria-valuenow={Math.min(n, GEN_STEPS.length)}>
-      <i style={{ width: `${Math.min(100, Math.round(n / GEN_STEPS.length * 100))}%` }}/>
-    </div>
-    <ol className="ap-steps">{GEN_STEPS.map((step, index) => {
-      const done = agent.progress > index + 1;
-      const current = !paused && index + 1 === n;
-      return <li key={step} className={done ? 'is-done' : current ? 'is-current' : ''}>{done ? <Check size={12} aria-hidden="true"/> : current ? <Loader2 size={12} className="cr-spin" aria-hidden="true"/> : <span className="ap-dot" aria-hidden="true"/>}<span>{step}</span>{index === 0 && done && <small>{formatArea(layout.width)} × {formatArea(layout.height)} m</small>}</li>;
-    })}</ol>
+    <p>{paused ? '布置预览已暂停' : '正在准备布置预览'}</p>
     <p id="cta-hint">{paused
-      ? <>停在第 {n} 步 · <button type="button" className="ap-link" onClick={agent.resume}>接着摆</button> · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>不要了</button></>
-      : <>正在{GEN_STEPS[n - 1]} · <button type="button" className="ap-link" onClick={agent.stop}>停一下</button></>}</p>
+      ? <><button type="button" className="ap-link" onClick={agent.resume}>接着摆</button> · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>不要了</button></>
+      : <button type="button" className="ap-link" onClick={agent.stop}>停一下</button>}</p>
   </div>;
+}
+
+/** One overlap refusal, not the long double sentence confirm used to paste twice. */
+function foldConflictBubble(text: string): string {
+  const count = text.match(/有 (\d+) 件物料存在冲突/);
+  if (!count) return text;
+  const why = text.match(/落点不合法：(.+)$/);
+  const reason = (why?.[1] ?? '和旁边的物料叠在一起').replace(/。$/, '');
+  return `${count[1]} 件没写上。${reason}。这次没有写入。`;
 }
 
 /** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
 function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
-  const { layout, activeFloor } = useRoomEditor();
+  const { layout } = useRoomEditor();
   const plan = agent.proposal;
   if (!plan) return null;
-  const items = materialCount(activeFloor.items);
   const names = plan.overlapNames.slice(0, 3).join('、');
   const review = !!plan.review;
   const guests = plan.guests && plan.guests > 0 ? plan.guests : 0;
@@ -1877,39 +3245,59 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
-    <div className="ap-card-head">
-      <strong>{review ? '改法预览' : '这版还在预览'}</strong>
-      <span className={`ap-card-state${hold ? '' : plan.blocked || plan.overlapCount > 0 ? ' is-warn' : ' is-ok'}`}>
-        {hold ? '整理中' : plan.blocked ? '要先处理' : plan.overlapCount > 0 ? '有冲突' : '可以确认'}
-      </span>
-    </div>
-    <div className="ap-stats">
-      <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>平方米</span></div>
-      <div className="ap-stat"><b>{seats || '—'}</b><span>{guests > 0 ? `座位 / 需 ${guests}` : '座位'}</span></div>
-      <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
-    </div>
+    <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
+    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
     <div className="ap-outcome" role="note" aria-label="本次结果">
-      <p className="ap-outcome-label">本次结果</p>
+      <p className="ap-outcome-label">本次结果 · {formatArea(plan.candidateArea ?? venueArea(layout))} ㎡</p>
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
     </div>
-    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `按 ${guests} 人摆了 ${seats} 座`}</p>}
-    {/* 座位缺口先给改法：点「加座」才换更密的排法。两条排法都到顶了才下结论，说的是这一版排到几座，不是这块地最多几座。 */}
-    {short && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
-    {short && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">这一版排到 {seats} 座就是头；要再多人，得换更大的场地或按站立留空。</p>}
-    {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
+    {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
+    {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
+    {short && !plan.localDraftDetails && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
+    {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
       : <>
-          {!plan.blocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
+          {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
         </>}
+    <div className="ap-notes">
+      {plan.source === 'local' && plan.added > 0 && <p>新增物料由系统规则生成。</p>}
+      {plan.planNotes?.map(line => <p key={line}>{line}</p>)}
+      {plan.recolorPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.rotationPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.scalePreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.movementPreview?.map(line => <p key={line}>{line}</p>)}
+      {plan.restPreview?.map(line => <p key={line}>{line}；通行和消防条件待核验。</p>)}
+      {short && !plan.localDraftDetails && plan.seatPriority && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+      {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
+      {plan.safetyChecksUnknown && <p className="ap-warn-line">{SAFETY_CHECKS_UNKNOWN_TEXT}</p>}
+      {plan.seatingAllocationUnverified && <p className="ap-warn-line" role="status">{SEATING_ALLOCATION_UNVERIFIED_TEXT}</p>}
+      {plan.seatingHeadcountUnverified && <p className="ap-warn-line" role="status">{SEATING_HEADCOUNT_UNVERIFIED_TEXT}</p>}
+      {plan.seatingSpecsUnverified && <p className="ap-warn-line" role="status">{SEATING_SPECS_UNVERIFIED_TEXT}</p>}
+      {plan.seatingShortfall && <p className="ap-warn-line" role="status">{plan.seatingShortfall}</p>}
+      {plan.seatingReview?.status==='broken' && <p className="ap-warn-line" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
+      {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
+      {plan.localDraftDetails?.map(line=><p key={line}>{line}</p>)}
+      {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
+      {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
+      {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
+      {!!plan.existingChanges?.length && <details className="ap-existing-changes">
+        <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
+        <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
+        <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
+      </details>}
+      <p>{REFERENCE_SOURCE_UNVERIFIED}</p>
+    </div>
+    {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
+    {agent.inventoryWorkspace}
   </div>;
 }
 
 /**
- * 左轨四格就是四个 agent：活动（内部 id 沿用 'door'，计划 S4 统一重命名）、Bingo 审校、空间、物料。
- * S1 起「活动」是唯一对话与布置生成入口；旧的活动假分派已拆除，不做真多智能体调度台。
+ * 左轨四个工作入口：活动（内部 id 沿用 'door'）、Bingo 审校、空间、物料。
+ * 活动是唯一的 Agent；其他入口同时提供人工操作与可逐步接入的工具能力。
  */
 export type AgentId = 'door' | 'bingo' | 'space' | 'material';
 
@@ -1936,11 +3324,17 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   chatSlot?: ReactNode;
 } = {}): JSX.Element {
   const agent = useAgent();
-  const assistantSessions = useAssistantSessions();
+  const studio = useStudioAgent();
+  const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
   const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
-  const [draft, setDraft] = useState('');
+  const draftKey=JSON.stringify([agent.sessionScope,assistantSessions.activeId]);
+  const [draftState,setDraftState]=useState(()=>({key:draftKey,value:volatileComposerDrafts.get(draftKey)??''}));
+  const draft=draftState.key===draftKey ? draftState.value : volatileComposerDrafts.get(draftKey)??'';
+  const setDraft=(value:string)=>{ if(value)volatileComposerDrafts.set(draftKey,value);else volatileComposerDrafts.delete(draftKey);setDraftState({key:draftKey,value}); };
+  const restoredCancellation=useRef<number|null>(null);
+  useEffect(()=>{const cancelled=agent.cancelledInput;if(!cancelled||restoredCancellation.current===cancelled.id)return;restoredCancellation.current=cancelled.id;if(!draft.trim())setDraft(cancelled.text);},[agent.cancelledInput]);
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const demo = isDemoBackend();
@@ -1953,6 +3347,18 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
+  const localStageLine = runState.scope === 'layout'
+    ? runState.stepLog.find(step => step.outcome === 'running')?.thought ?? null
+    : null;
+  const processText = composeProcessStrip({
+    understanding: agent.understanding || agent.briefBusy,
+    generating,
+    cloudRunning: runState.scope === 'layout' && runState.isRunning && runState.eventLog.length > 0,
+    cloudRound: runState.thoughtCount,
+    cloudTool: agent.toolPending,
+    failed: generating || agent.understanding || agent.briefBusy ? null : agent.processFailed,
+    stageLine: agent.toolPending ? null : localStageLine,
+  });
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   const suggestion = useSuggestion(AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
@@ -2013,7 +3419,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           className="ap-icon-btn"
           aria-label="新开会话"
           title="新开会话"
-          onClick={() => { assistantSessions.openSession(); setShowHistory(false); inputRef.current?.focus(); }}
+          onClick={() => { const created=assistantSessions.openSession(); if(created?.verifiedFresh)agent.acceptFreshSession(created.id); setShowHistory(false); inputRef.current?.focus(); }}
         >
           <MessageCirclePlus size={18} aria-hidden="true" />
         </button>
@@ -2026,27 +3432,43 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       </div>
     </header>
     <div className="ap-body">
-      {activity && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
+      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
-      {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成；生成能力尚未连接服务商，在设置里填入自定义服务商地址和密钥后即可开始。</p>}
+      {demo && <p className="ap-demo-note" role="note">本机试用 · {modelEnabled() && studio?.controller ? '可尝试智能对话，是否可用以实际运行结果为准。' : '当前对话使用本机规则理解，其他能力以实际运行结果为准。'}</p>}
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
       {/* T2：空态话术按脸分——活动脸是布置引导，Bingo 脸是审校引导，不再共用「先说一句」。 */}
       {mode === 'layout' && agent.state !== 'generating' && (bingo ? agent.bubbles.filter(b => b.review).length === 0 : agent.bubbles.length === 0) && <div className="ap-lead">
         <p className="ap-lead-title">{bingo ? '这边只管审校' : '先说一句就行'}</p>
-        <p className="ap-lead-body">{bingo ? '点上面「立即体检」查一遍，或「发送钉评链接」叫客户看。客户在图上留的话，会回到这里。' : '点一句例子，或自己说；听懂了会回显，确认后才写进画布。'}</p>
+        <p className="ap-lead-body">{bingo ? '点「立即体检」查看几何问题，或准备客户评审。对方的意见保存在对方浏览器，不会自动回到这里。' : '点一句例子，或自己说；听懂了会回显，确认后才写进画布。'}</p>
       </div>}
       {activity && mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null) && (
         <PlanHome
           draft={draft}
           onPickExample={sentence => { setDraft(sentence); requestAnimationFrame(() => inputRef.current?.focus()); }}
-          onGenerate={sentence => { setDraft(''); void agent.send(sentence); }}
+          onGenerate={sentence => { if (!agent.isSessionCurrent()) return; setDraft(''); void agent.send(sentence); }}
         />
       )}
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo}/>
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' ? toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog }) : []} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
+      {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card" aria-label="历史需求待核对">
+        <p className="ap-status-line">当前记录还未核对。</p>
+        <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
+      </section>}
+      {activity && agent.retainedOtherSessionProposal && <section className="ap-card" aria-label="其他会话的旧方案">
+        <p>其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
+        <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
+      </section>}
+      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-pending" aria-label="尚未处理的要求">
+        <span className="ap-pending-label">待处理</span>
+        <ul className="ap-pending-chips">
+          {agent.unresolvedDialogue.map(text => <li key={text}><span title={text}>{text}</span><button type="button" className="ap-pending-x" aria-label={`撤回：${text}`} onClick={() => agent.withdrawUnresolvedDialogue(text)}>×</button></li>)}
+        </ul>
+        <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
+      </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
       {bingo && <div className="ap-card" aria-label="审校状态台">
         <p className="ap-small">审校状态</p>
@@ -2056,45 +3478,55 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           <button type="button" className="chip btn-outline" onClick={() => agent.issueReviewLink()}>发送钉评链接</button>
         </div>
       </div>}
-      {bingo && <BingoAuditCard/>}
+      {bingo && <BingoAuditCard scopeKey={agent.sessionScope} isCurrent={agent.isSessionCurrent}/>}
       {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}
       {activity && mode === 'layout' && <>
+        {studio?.applyRecovery && <div className="ap-card" role="alert">
+          <p>{cloudRecoveryMessage(studio.applyRecovery)}</p>
+          <button type="button" className="ap-link" disabled={studio.busy || studio.reviewingApplyRecovery} onClick={() => void studio.reviewApplyRecovery()}>
+            {studio.reviewingApplyRecovery ? '正在只读核对…' : '只读核对云端版本'}
+          </button>
+          {studio.applyRecoveryReview && <><p>{studio.applyRecoveryReview.message}</p>
+            <button type="button" className="ap-link" disabled={studio.busy || studio.reviewingApplyRecovery} onClick={() => void studio.acknowledgeApplyRecovery()}>
+              {studio.applyRecoveryReview.status === 'unknown' ? '我已手动核对，解除提醒' : '已查看核对结果，解除提醒'}
+            </button></>}
+        </div>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
             没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
-        <AgentRunPanel scope="layout" controls={false}/>
-        {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.stepLog.length > 0}/>}
+        {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
-          <p><span aria-hidden="true">!</span>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</p>
+          <p><span aria-hidden="true">!</span>这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
           <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={16} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>
         </div>}
         {proposed && <ProposalCard agent={agent}/>}
         {planShown && <>
           <div className="ap-card ap-plan" id="plan-summary">
-            <div className="ap-card-head">
-              <strong>这一版布置</strong>
-              <span className={`ap-card-state${agent.overlapCount > 0 ? ' is-warn' : ' is-ok'}`}>{agent.overlapCount > 0 ? '有冲突' : '已就位'}</span>
-            </div>
-            <div className="ap-stats">
-              <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>平方米</span></div>
-              <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
-              <div className="ap-stat"><b>{agent.overlapCount}</b><span>件重叠</span></div>
-            </div>
-            {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">没有重叠，也没超出场地。</p>}
+            <strong>这一版布置</strong>
+            <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
+            {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">当前检查未发现物料重叠；场地和通行仍需核对。</p>}
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
               <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
+              <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>导出与交接</button>
             </div>
           </div>
         </>}
       </>}
       {agent.exportPreview && <div className="ap-card" id="export-preview">
-        <strong>导出完整活动交接</strong>
-        <p className="ap-small">活动需求、物料工作单、制作计划、数量点验 · 本机生成</p>
-        {generating || paused || agent.cloudBusy || agent.recovering || agent.cloudStale
+        <strong>导出执行资料草案</strong>
+        <p className="ap-small">包含执行页已保存的手工需求、物料工作单、制作计划和数量点验；不完整包含对话需求，交付前请逐项核对。</p>
+        {agent.proposal || !!studio?.preview
+          ? <p className="ap-small" role="status">当前有尚未应用的方案预览；请先确认布置或撤回预览，再导出。</p>
+          : generating || paused || agent.cloudBusy || agent.recovering || agent.cloudStale || !!studio?.applyRecovery
           ? <p className="ap-small" role="status">这一版还没稳，确认先不亮。</p>
+          : studio?.cloudMaterialDraftAvailable ? <p className="ap-small">云项目暂不支持此执行资料草案，可先导出下方物料草案。</p>
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
+        {studio?.cloudMaterialDraftAvailable && !agent.proposal && !studio.preview && !generating && !paused && !agent.cloudBusy && !agent.recovering && !agent.cloudStale && !studio.applyRecovery && <>
+          <button type="button" className="chip" onClick={agent.confirmCloudMaterialDraft}>导出当前场景物料清单草案</button>
+          <p className="ap-small">本机快照，未冻结；不含完整需求、点验及场地方确认。模型与实物库存、现场条件均需核验。</p>
+        </>}
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>
@@ -2115,7 +3547,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           />
         )}
         {mode === 'layout' && activity && <AgentCapabilityPrompts/>}
-        <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
+        <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         {agent.pendingFile && <div className="sc-chat-file">
           <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
@@ -2124,14 +3556,23 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
-          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void agent.send(draft); setDraft(''); }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
         }}/>
         </div>
+        {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
+        {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
+        <p className="ap-foot">
+          <span id="ap-data-notice">{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
+          {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span>近期对话也会发给模型。</span>}
+          <span id="ap-plan-notice" role="status">{planGenerationLine(studio?.connection)}</span>
+        </p>
+        {!!draft && <p className="ap-small">未发送内容仅暂存在当前页面；刷新或关闭后会丢失。</p>}
+        {agent.sessionSaveFailed && <p role="status" className="ap-small">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
         <div className="ap-composer-bar">
-          <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim() && !agent.pendingFile}><ArrowUp size={18}/></button>
+          <button type="submit" className="ap-send" aria-label="发送" disabled={agent.isUnderstanding(draft) || (!draft.trim() && !agent.pendingFile)}><ArrowUp size={18}/></button>
         </div>
       </form>
       </>}
@@ -2265,7 +3706,7 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   return <div className="ap-canvas-layer" aria-live="polite">
     {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={24} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={16} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]}</div>}
+    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={16} className="cr-spin" aria-hidden="true"/> 正在准备布置预览</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
     {s === 'planProposed' && agent.proposal && agent.proposal.overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 这版里 {agent.proposal.overlapCount} 件挤了或压墙：{agent.proposal.overlapNames.slice(0, 4).join('、')}{agent.proposal.overlapNames.length > 4 ? ' 等' : ''}</div>}
     {(s === 'planReady' || s === 'planEdited') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}

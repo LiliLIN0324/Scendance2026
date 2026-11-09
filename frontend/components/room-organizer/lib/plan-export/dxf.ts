@@ -13,7 +13,7 @@
  *   100/AcDbEntity + 100/AcDbPolyline subclass markers — without either, a
  *   strict parser mis-reads the layer/closed flag or refuses the entity
  *   (verified against ezdxf: parses with zero audit errors as emitted).
- * - Doors are LINE jamb ticks + the leaf, plus the swing ARC, on DOORS.
+ * - Doors are LINE jamb ticks on DOORS; an unrecorded swing is not drawn.
  *   Windows are jamb ticks plus two lines ±3 cm off the centreline, on WINDOWS
  *   (openPlan3D's parallel-line window; the old single centre line is gone).
  * - Prop names are TEXT on FURNITURE. The sheet title and zone name/area are
@@ -22,6 +22,7 @@
  *   Item names stay horizontal; only the depth label is rotated.
  */
 
+import { PLAN_SAFETY_DRAFT_LINES } from '@/lib/plan-safety-notice';
 import { planDrawOrder } from '../plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../street';
 import { zoneArea } from '../zones';
@@ -34,6 +35,8 @@ import {
 } from './export-visibility';
 import {
   itemWorldCorners,
+  planExportUnsupportedReason,
+  unplacedPlanItems,
   openingAxes,
   splitPlanItems,
   stairArrow,
@@ -69,6 +72,10 @@ export function layoutToDxf(
   floor: FloorLayout,
   visibility: Partial<PlanExportVisibility> = {}
 ): string {
+  const unsupported = planExportUnsupportedReason(layout);
+  if (unsupported) throw new Error(unsupported);
+  const unplaced = unplacedPlanItems(floor);
+  if (unplaced.length) throw new Error(`有 ${unplaced.length} 件物件位置待确认，不能导出完整平面 DXF，请先定位。`);
   const layers = planExportVisibility(visibility);
   const lines: string[] = [];
   const put = (code: number, value: string | number): void => {
@@ -206,7 +213,7 @@ export function layoutToDxf(
   const { openings, furniture } = splitPlanItems(planDrawOrder(floor.items));
 
   for (const item of openings) {
-    if (item.type === 'door' ? layers.doors : layers.windows) emitOpening(item, cx, cy, line, put);
+    if (item.type === 'door' ? layers.doors : layers.windows) emitOpening(item, cx, cy, line);
   }
 
   for (const item of furniture) {
@@ -248,6 +255,8 @@ export function layoutToDxf(
   // Sheet title. The print title block owns this on paper; DXF has no title
   // block, so the same string is TEXT on ROOMS and is not gated by roomLabels.
   text('ROOMS', fmt(0), fmt(layout.height + 0.5), TITLE_TEXT_HEIGHT, `${layout.name} - ${floor.name}`, false);
+  text('ROOMS', fmt(0), fmt(layout.height + 0.1), LABEL_TEXT_HEIGHT, '门洞位置、尺寸及开向待核验', false);
+  PLAN_SAFETY_DRAFT_LINES.forEach((line, index) => text('ROOMS', fmt(0), fmt(layout.height + 0.8 + index * 0.2), LABEL_TEXT_HEIGHT, line, false));
 
   put(0, 'ENDSEC');
   put(0, 'EOF');
@@ -307,8 +316,7 @@ function emitOpening(
   item: PlacedItem,
   cx: (x: number) => string,
   cy: (z: number) => string,
-  line: (layer: string, x1: string, y1: string, x2: string, y2: string) => void,
-  put: (code: number, value: string | number) => void
+  line: (layer: string, x1: string, y1: string, x2: string, y2: string) => void
 ): void {
   const { along, into } = openingAxes(item);
   const half = item.width / 2;
@@ -329,21 +337,7 @@ function emitOpening(
     );
   }
 
-  if (item.type === 'door') {
-    // Swing: leaf hinged at endA, opened perpendicular into the room, plus the
-    // quarter arc from the closed to the open position. In CAD coords `along`
-    // sits at angle θ and `into` at θ − 90°, so the CCW arc runs θ−90 → θ.
-    const leafTip = { x: endA.x + into.x * item.width, z: endA.z + into.z * item.width };
-    line('DOORS', cx(endA.x), cy(endA.z), cx(leafTip.x), cy(leafTip.z));
-    const thetaDeg = ((item.rotation ?? 0) * 180) / Math.PI;
-    put(0, 'ARC');
-    put(8, 'DOORS');
-    put(10, cx(endA.x));
-    put(20, cy(endA.z));
-    put(40, fmt(item.width));
-    put(50, fmt(normalizeDeg(thetaDeg - 90)));
-    put(51, fmt(normalizeDeg(thetaDeg)));
-  } else {
+  if (item.type !== 'door') {
     // Two lines ±3 cm off the centreline. No centre line.
     for (const sign of [-1, 1]) {
       const ox = into.x * WINDOW_PAIR_OFFSET_M * sign;
@@ -351,10 +345,6 @@ function emitOpening(
       line(layer, cx(endA.x + ox), cy(endA.z + oz), cx(endB.x + ox), cy(endB.z + oz));
     }
   }
-}
-
-function normalizeDeg(deg: number): number {
-  return ((deg % 360) + 360) % 360;
 }
 
 /** Fixed 3-dp precision, never "-0.000". */

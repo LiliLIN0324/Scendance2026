@@ -124,6 +124,13 @@ export interface ResearchPlace {
   lat: number;
 }
 
+function coordinate(value: unknown, limit: number): number | null {
+  // Do not coerce null, empty values, booleans or objects into the valid value 0.
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()))) return null;
+  const result = typeof value === 'number' ? value : Number(value.trim());
+  return Number.isFinite(result) && Math.abs(result) <= limit ? result : null;
+}
+
 /**
  * 地名 → 地点。走前端 JSAPI 的 PlaceSearch：与地图选址弹窗同一条路，
  * 本机由 3199 代理代发（/_AMapService），线上直连；Web 服务 REST Key 不参与。
@@ -143,22 +150,29 @@ export async function lookupPlace(keywords: string, signal?: AbortSignal): Promi
   return new Promise<ResearchPlace | null>((resolve) => {
     if (signal?.aborted) { resolve(null); return; }
     const timer = window.setTimeout(() => resolve(null), 9000);
-    const search = new PlaceSearch({ pageSize: 1, pageIndex: 1, extensions: 'all' });
-    search.search(query, (status, result) => {
-      window.clearTimeout(timer);
-      if (signal?.aborted || status !== 'complete') { resolve(null); return; }
-      const pois = (result as { poiList?: { pois?: { name?: string; address?: unknown; location?: { lng?: number; lat?: number } }[] } } | null)?.poiList?.pois ?? [];
-      const first = pois[0];
-      const lng = Number(first?.location?.lng);
-      const lat = Number(first?.location?.lat);
-      if (!first || !Number.isFinite(lng) || !Number.isFinite(lat)) { resolve(null); return; }
-      resolve({
-        name: (first.name ?? '').trim() || query,
-        address: Array.isArray(first.address) ? first.address.join('') : typeof first.address === 'string' ? first.address : '',
-        lng,
-        lat,
+    try {
+      const search = new PlaceSearch({ pageSize: 1, pageIndex: 1, extensions: 'all' });
+      search.search(query, (status, result) => {
+        window.clearTimeout(timer);
+        try {
+          if (signal?.aborted || status !== 'complete') { resolve(null); return; }
+          const pois = (result as { poiList?: { pois?: unknown } } | null)?.poiList?.pois;
+          const first = Array.isArray(pois) ? pois[0] as { name?: unknown; address?: unknown; location?: { lng?: unknown; lat?: unknown } } | undefined : undefined;
+          const lng = coordinate(first?.location?.lng, 180);
+          const lat = coordinate(first?.location?.lat, 90);
+          if (!first || lng === null || lat === null) { resolve(null); return; }
+          resolve({
+            name: (typeof first.name === 'string' ? first.name.trim() : '') || query,
+            address: Array.isArray(first.address) ? first.address.join('') : typeof first.address === 'string' ? first.address : '',
+            lng,
+            lat,
+          });
+        } catch { resolve(null); }
       });
-    });
+    } catch {
+      window.clearTimeout(timer);
+      resolve(null);
+    }
   });
 }
 

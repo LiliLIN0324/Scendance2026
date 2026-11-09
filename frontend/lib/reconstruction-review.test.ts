@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {sceneSchema} from '../../supabase/functions/_shared/domain';
 import {backendSceneToLayout,createMeasuredRoomLayout,layoutToBackendScene} from '../components/room-organizer/lib/backend-adapter';
-import {imageRegistration,imageToWorldRegistration,openingLine,updateReviewedWall,mergeRecognizedDimensions} from './reconstruction-review';
+import {imageRegistration,imageToWorldRegistration,openingLine,updateReviewedWall,reviewedWallMoveBlocked,mergeRecognizedDimensions} from './reconstruction-review';
 const base=backendSceneToLayout({schemaVersion:1,venue:{width:12,depth:8,height:3,shape:'rectangle',entrances:[]},objects:[],camera:'overview',lighting:'neutral'});
 describe('structure review',()=>{
  it('retains detected calibration associations without replacing measured user values',()=>{
@@ -13,9 +13,21 @@ describe('structure review',()=>{
 
  it('moves shared endpoints and venue vertices together',()=>{
   const s=layoutToBackendScene(createMeasuredRoomLayout(base,{width:12,depth:8,height:3}));if(s.schemaVersion!==2)throw new Error('v2');
+  s.dimensions=[];s.structure.walls=s.structure.walls.map(w=>({...w,status:'detected'}));
   const wall=s.structure.walls[0]!;const old=wall.end;const point={x:old.x-.4,z:old.z+.5};const next=updateReviewedWall(s,wall.id,{end:point});
   expect(next.structure.walls.filter(w=>w.start.x===point.x&&w.start.z===point.z||w.end.x===point.x&&w.end.z===point.z)).toHaveLength(2);
   expect(next.venue.polygon).toContainEqual(point);expect(sceneSchema.safeParse(next).success).toBe(true);
+ });
+ it('refuses to move a wall whose shared geometry is backed by confirmed dimensions or image evidence',()=>{
+  const s=layoutToBackendScene(createMeasuredRoomLayout(base,{width:12,depth:8,height:3}));if(s.schemaVersion!==2)throw new Error('v2');
+  const wall=s.structure.walls[0]!, patch={end:{x:wall.end.x-1,z:wall.end.z}};
+  const before=structuredClone(s);
+  expect(reviewedWallMoveBlocked(s,wall.id,patch)).toBe(true);
+  expect(updateReviewedWall(s,wall.id,patch)).toEqual(before);
+  s.dimensions=[];s.structure.walls=s.structure.walls.map(w=>({...w,status:'detected'}));
+  s.structure.walls[1]!.evidence=[{sourceAssetId:crypto.randomUUID(),start:{x:0,z:0},end:{x:1,z:0}}];
+  expect(reviewedWallMoveBlocked(s,wall.id,patch)).toBe(true);
+  expect(updateReviewedWall(s,wall.id,patch)).toBe(s);
  });
  it('requires non-collinear correspondences to overlay an image',()=>{
   expect(imageRegistration([{x:0,z:0},{x:10,z:10},{x:20,z:20}],12,8)).toBeNull();

@@ -12,7 +12,7 @@ export const studio='20000000-0000-4000-8000-000000000001';
 export const session='30000000-0000-4000-8000-000000000001';
 export function scene():Scene {return sceneSchema.parse({schemaVersion:1,venue:{shape:'rectangle',width:12,depth:10,height:3,entrances:[]},objects:[],camera:'overview',lighting:'neutral'});}
 export function chair(notes='') {return {id:crypto.randomUUID(),materialId:'chair' as const,position:{x:3,z:3},rotation:0,size:{width:0.5,depth:0.5,height:0.85},color:'#ffffff',locked:false,notes};}
-export async function database(dataDir?: string) {
+export async function database(dataDir?: string, options?:{excludeMigrations?:readonly string[]}) {
   const db=new PGlite(dataDir);
   const initialized = await db.query<{ present: boolean }>("select to_regnamespace('auth') is not null as present");
   if (!initialized.rows[0].present) await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
@@ -24,7 +24,7 @@ export async function database(dataDir?: string) {
   await db.exec('alter table auth.users add column if not exists email text');
   await db.exec('create table if not exists public.local_fixture_migrations(name text primary key, checksum text not null)');
   const migrations = new URL('../supabase/migrations/', import.meta.url);
-  for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')).sort()) {
+  for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')&&!options?.excludeMigrations?.includes(f)).sort()) {
     const sql = readFileSync(new URL(file,migrations),'utf8');
     const checksum = createHash('sha256').update(sql).digest('hex');
     const existing = await db.query<{ checksum: string }>('select checksum from public.local_fixture_migrations where name=$1',[file]);
@@ -53,6 +53,7 @@ export async function database(dataDir?: string) {
   };
   const core=call('scene_rpc'),studios=call('studio_rpc'),jobs=call('job_rpc'),reconstruction=call('reconstruction_rpc');
   const sceneRpc:Rpc=(actor,action,data)=>(action.startsWith('studios.')?studios:core)(actor,action,data);
-  const backend:Backend={scene:sceneRpc,jobs,reconstruction,agent:call('agent_rpc'),user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},upload:async()=>{},sign:async path=>`https://storage.example/signed/${path}`};
+  const rawAgent=call('agent_rpc'),guardedAgent=call('agent_steering_guard_rpc');
+  const backend:Backend={scene:sceneRpc,jobs,reconstruction,originalSceneReview:call('original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:rawAgent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:call('agent_run_events_rpc'),user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},upload:async()=>{},sign:async path=>`https://storage.example/signed/${path}`};
   return {db,rpc:sceneRpc,jobs,reconstruction,backend};
 }

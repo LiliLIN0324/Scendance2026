@@ -4,12 +4,13 @@
  * 设计红线：
  * - 纯函数、不可变、不接 React、不读 layoutStore；
  * - 对同一批 zone 标注跑三档密度（松/适中/密），每版独立打分；
- * - 打分公式：capacitySeats - 2*skipped.length - 3*outOfBounds + flowPenalty - overlapPenalty；
- * - 三版必须真拉开：sparse 主动删一桌、dense 通道修正、reasons 每版差异化；
+ * - 排序使用座位与已识别冲突；真实通行条件未知，不给动线分；
+ * - 布局和检查完全相同的候选合并，分数相同但布局不同的候选保留；
  * - 不引新依赖；UI 文案中文简体，禁「高斯/WorldGen」。
  */
 
 import type { PlanAnnotation } from './plan-annotation';
+import type { PlanSizeFacts } from './plan-size-facts';
 import { withDefaultDoor } from './plan-annotation';
 import {
   planZones,
@@ -31,6 +32,8 @@ export type PlanVariantId = 'sparse' | 'balanced' | 'dense';
 export interface RoomSize {
   width: number;
   height: number;
+  /** 宽和深分别记录来源与确认状态；缺失不等于确认。 */
+  facts?: PlanSizeFacts;
 }
 
 /** 某类家具的库存缺口条目（placements 需求 > 可用库存）。 */
@@ -66,13 +69,13 @@ export interface BillOfMaterialLine {
 export interface ScoringOptions {
   /** 场地尺寸；提供后越界判定会把「落到场地外」的件数计入 outOfBounds。 */
   roomSize?: RoomSize;
-  /** 用户要求的目标人数；当实际可坐座位明显不足时，reasons 给人话降容建议，不硬凑。 */
+  /** 当前区域要安排的目标座位数；不足时只报告候选结果，不推断场地最大容量。 */
   targetCapacity?: number;
   /**
    * 可选库存清单：key=furniture type，value=可用件数。
-   * 缺省=不限（不做库存核验）。
+   * 缺省或缺少类型表示库存未知，不表示不限。
    * 若 placements 里某 type 数量 > inventory[type]，placements 不静默截断，
-   * 而是在 shortage / reasons 里显式列出「缺 N 把{中文家具名}」。
+   * 而是在 shortage / reasons 里报告仅对候选的比较；其他楼层和既有物料未计入。
    */
   inventory?: Record<string, number>;
   /**
@@ -106,27 +109,21 @@ export interface ScoredPlan {
   subScores: {
     /** 容量：每座 5 分，20 座封顶 100。 */
     capacity: number;
-    /** 动线：100 - 通道扣分项绝对值 * 10，不低于 0。 */
-    flow: number;
-    /** 人体：100 - hard violation 数 * 10，不低于 0。 */
-    ergonomics: number;
+    /** 缺真实通道和使用者轮廓时不能计算动线分。 */
+    flow: number | null;
+    /** 未覆盖完整人体工学要求，不能计算通过分。 */
+    ergonomics: number | null;
   };
-  /**
-   * 方案可信度：用户在画布上真实画了门才是 verified；
-   * 门由 withDefaultDoor 推测合成时为 draft_unverified，
-   * reasons 会带「门位置未确认，本方案为待核验草案」。
-   */
+  /** 当前检查尚不覆盖完整的出口、门扇及适用规则，方案均为待核验草案。 */
   assurance: 'verified' | 'draft_unverified';
   /**
-   * 可行性否决：凡有 hard violation（ZONE_UNREACHABLE / BBOX_OVERLAP /
-   * DOOR_SWEEP_BLOCKED / ZONE_ENTRANCE_BLOCKED / ZONE_PAIR_DISCONNECTED /
-   * KEEP_OUT_INTRUDED / ROUTE_BLOCKED 等）
-   * → feasible=false，不参与推荐排序，不能被座位容量加分盖过。
+   * 没有已检出的硬冲突时为 true，可作为草案排序；不代表安全已确认。
+   * 已检出的硬冲突使其为 false，不能被座位容量加分盖过。
    */
   feasible: boolean;
   /**
    * 三态可行性：
-   * - FEASIBLE：无 hard violation，可推荐；
+   * - FEASIBLE：已运行的必需检查无硬冲突且无未知；
    * - INFEASIBLE：有依据证明冲突（hard violation 存在）；
    * - INSUFFICIENT_INPUT：缺房间尺寸/门数据等无法判断；
    * - SEARCH_TIMEOUT：求解预算耗尽（本批为占位，未启用真实超时枚举）。
@@ -138,6 +135,8 @@ export interface ScoredPlan {
    * 未传 inventory 时为 undefined（旧调用兼容）。
    */
   shortage?: FurnitureShortage[] | undefined;
+  /** 仅本次候选与所填库存的比较，既有家具与其他楼层不在范围内。 */
+  inventoryNotes?: string[];
   /**
    * 交付清单（BOM）：按 placements 的 furniture type 聚合成中文明细。
    * 同 type 合并一行；size 从 furniture-catalog 取（圆桌写 ØØm，其他写 w×d m）。
@@ -154,8 +153,6 @@ const OUT_OF_BOUNDS_PAD = 0.05;
 const ZONE_OVERLAP_RATIO = 0.3;
 /** zone 内 placements 越界率超过此比例 → 整块 zone 标 skipped。 */
 const ZONE_OFFSITE_RATIO = 0.5;
-/** dense 版在有签到区时通道修正量（米）：模拟密档通道更窄。 */
-const DENSE_AISLE_SQUEEZE = 0.3;
 /** 家具 footprint AABB 容差（米）：两件边距 ≤ 此值仍视为压住。 */
 export const BBOX_OVERLAP_TOLERANCE_M = 0.02;
 
@@ -176,14 +173,16 @@ const TIE_PRIORITY: Record<PlanVariantId, number> = {
 /**
  * 对同一批 zone 标注生成三版布置（松/适中/密），每版独立打分。
  * 返回顺序固定为 [sparse, balanced, dense] 的子集——若两版算出来
- * score / capacitySeats / subScores 完全相同，合并为一版（组内优先保留 balanced）。
+ * 布置与检查结果都相同，才合并为一版（组内优先保留 balanced）。
  * 空 annotations / 极小场地可能只返回 1 版，杜绝假差异。
  */
 export function generateScoredPlans(
   annotations: readonly PlanAnnotation[],
   opts?: ScoringOptions,
 ): ScoredPlan[] {
-  const roomSize = opts?.roomSize;
+  const candidateSize = opts?.roomSize;
+  const roomSize = candidateSize && Number.isFinite(candidateSize.width) && Number.isFinite(candidateSize.height)
+    && candidateSize.width > 0 && candidateSize.height > 0 ? candidateSize : undefined;
   const targetCapacity = opts?.targetCapacity;
   const inventory = opts?.inventory;
   const style = opts?.style;
@@ -193,10 +192,14 @@ export function generateScoredPlans(
   return dedupePlans(all);
 }
 
-/** 合并 score+capacitySeats+subScores 完全相同的版本；同组优先保留 balanced > sparse > dense。 */
+/** 分数相同不代表布置或冲突相同；只合并结果完全相同的候选。 */
 function dedupePlans(plans: readonly ScoredPlan[]): ScoredPlan[] {
-  const keyOf = (p: ScoredPlan) =>
-    [p.score, p.capacitySeats, p.subScores.capacity, p.subScores.flow, p.subScores.ergonomics].join('|');
+  const keyOf = (p: ScoredPlan) => JSON.stringify({
+    score: p.score, capacitySeats: p.capacitySeats, subScores: p.subScores, feasible: p.feasible,
+    placements: p.placements.map(v => [v.zoneId, v.spec.type, v.spec.width, v.spec.depth, v.x, v.z, v.rotation]).sort(),
+    violations: p.violations.map(v => [v.code, v.severity, v.status ?? null, v.zoneId ?? null, v.message]).sort(),
+    skipped: p.skipped.map(v => [v.zoneId, v.reason]).sort(),
+  });
   const groups = new Map<string, ScoredPlan[]>();
   for (const p of plans) {
     const k = keyOf(p);
@@ -220,14 +223,14 @@ function dedupePlans(plans: readonly ScoredPlan[]): ScoredPlan[] {
 
 /**
  * 从候选方案里挑推荐版：
- * - 只在 feasible=true 的集合里选（hard violation 方案直接否决，不能被座位容量加分盖过）；
- * - feasible 集合为空时返回 null（不 throw、不硬出三版），调用方应展示「无可行方案」并列出硬冲突；
+ * - 只推荐没有硬冲突、实际生成物料且没有跳过物料的候选；
+ * - 没有可推荐的候选时返回 null，不推断整个场地无解；
  * - 同分并列时优先 balanced > sparse > dense。
  * 不修改输入数组。
  */
 export function pickRecommendedPlan(plans: readonly ScoredPlan[]): ScoredPlan | null {
   if (plans.length === 0) return null;
-  const feasiblePlans = plans.filter((p) => p.feasible);
+  const feasiblePlans = plans.filter(isScoredPlanApplicable);
   if (feasiblePlans.length === 0) return null;
 
   let best = feasiblePlans[0]!;
@@ -241,6 +244,12 @@ export function pickRecommendedPlan(plans: readonly ScoredPlan[]): ScoredPlan | 
     }
   }
   return best;
+}
+
+/** 这里只判断本次候选是否完整可审阅；不代表现场安全、规范或库存已经通过。 */
+export function isScoredPlanApplicable(plan: ScoredPlan): boolean {
+  return plan.feasible === true && Array.isArray(plan.placements) && plan.placements.length > 0
+    && Array.isArray(plan.skipped) && plan.skipped.length === 0;
 }
 
 /* ---------- 内部打分辅助 ---------- */
@@ -265,18 +274,12 @@ function scoreVariant(
   }
 
   // 墙退距后处理：有 roomSize 时把越界家具内移，移不动的进 skipped。
-  if (roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height)) {
+  if (roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height) && roomSize.width > 0 && roomSize.height > 0) {
     const walled = applyWallClearance(placements, roomSize);
     placements = walled.placements;
     if (walled.skipped.length > 0) {
       skipped = [...skipped, ...walled.skipped];
     }
-  }
-
-  // 计算 flow：dense 版在 evaluateFlow 之后做通道 -0.3m 修正。
-  let flow = evaluateFlow(placements, annotations);
-  if (variantId === 'dense' && hasCheckinZone(annotations) && Number.isFinite(flow.aisleWidthM)) {
-    flow = applyDenseAisleSqueeze(flow);
   }
 
   // 场地越界 + 整块 zone offsite 跳过。
@@ -285,10 +288,10 @@ function scoreVariant(
     skipped = [...skipped, ...offsite.skipped];
     placements = placements.filter((p) => !offsite.removedZoneIds.has(p.zoneId));
   }
+  const flow = evaluateFlow(placements, annotations);
 
   const capacitySeats = computeCapacitySeats(placements);
   const outOfBounds = computeOutOfBounds(placements, annotations, roomSize);
-  const flowPenalty = computeFlowPenalty(flow);
   const overlap = detectZoneOverlap(annotations);
   const overlapPenalty = overlap.count > 0 ? -3 * overlap.count : 0;
 
@@ -320,7 +323,7 @@ function scoreVariant(
     ...routeViolations,
   ];
   // 缺场地尺寸 → soft unknown violation，绝不当成合规 pass。
-  const hasRoomSize = !!roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height);
+  const hasRoomSize = !!roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height) && roomSize.width > 0 && roomSize.height > 0;
   if (!hasRoomSize) {
     violations.push({
       code: 'ROOM_SIZE_UNKNOWN',
@@ -328,6 +331,10 @@ function scoreVariant(
       status: 'unknown',
       message: '缺少房间宽度/深度，墙退距与可达性未核验',
     });
+  } else if (!roomSize?.facts || roomSize.facts.width.status !== 'confirmed' || roomSize.facts.depth.status !== 'confirmed'
+      || roomSize.facts.width.valueMeters !== roomSize.width || roomSize.facts.depth.valueMeters !== roomSize.height) {
+    violations.push({ code: 'ROOM_SIZE_UNKNOWN', severity: 'soft', status: 'unknown',
+      message: '场地图中宽深的来源或确认状态尚不完整，现场尺寸仍需核对。' });
   }
   // 缺真实门数据（用的是推测门）→ soft unknown violation 提示。
   if (!hasRealDoor) {
@@ -340,15 +347,16 @@ function scoreVariant(
   }
 
   // hard violation → 方案不可行；缺关键数据 → INSUFFICIENT_INPUT。
-  const hardViolations = violations.filter((v) => v.severity === 'hard' && v.status !== 'unknown');
+  const hardViolations = violations.filter((v) => v.severity === 'hard' && (v.status === undefined || v.status === 'violated'));
   const feasible = hardViolations.length === 0;
   const feasibilityStatus: ScoredPlan['feasibilityStatus'] = !hasRoomSize
     ? 'INSUFFICIENT_INPUT'
-    : feasible
-      ? 'FEASIBLE'
-      : 'INFEASIBLE';
-  const hfPenalty = violations.reduce((sum, v) => {
-    if (v.severity !== 'hard') return sum;
+    : !feasible
+    ? 'INFEASIBLE'
+    : (flow.status === 'unknown' || violations.some(v => v.status === 'unknown'))
+      ? 'INSUFFICIENT_INPUT'
+      : 'FEASIBLE';
+  const hfPenalty = hardViolations.reduce((sum, v) => {
     if (v.code === 'CHAIR_GAP') return sum - 1;
     if (v.code === 'AISLE_CLEARANCE') return sum - 2;
     if (v.code === 'ZONE_UNREACHABLE') return sum - 5;
@@ -361,7 +369,7 @@ function scoreVariant(
     return sum;
   }, 0);
 
-  const score = capacitySeats - 2 * skipped.length - 3 * outOfBounds + flowPenalty + overlapPenalty + hfPenalty;
+  const score = capacitySeats - 2 * skipped.length - 3 * outOfBounds + overlapPenalty + hfPenalty;
 
   const reasons = buildReasons(
     variantId,
@@ -387,46 +395,48 @@ function scoreVariant(
   }
   // 把 violation 人话补到 reasons 末尾：soft 全推（提示不扣分），hard 最多推 2 条。
   for (const v of violations) {
-    if (v.severity === 'soft') reasons.push(v.message);
+    if (v.severity === 'soft' || v.status === 'unknown') reasons.push(v.message);
   }
   let hardCount = 0;
-  for (const v of violations) {
-    if (v.severity !== 'hard') continue;
+  for (const v of hardViolations) {
     reasons.push(v.message);
     hardCount += 1;
     if (hardCount >= 2) break;
   }
 
-  // 容量不足人话建议：用户要的人数明显摆不下时，给具体数字建议，不硬凑也不默默减椅子。
-  if (targetCapacity && Number.isFinite(targetCapacity) && capacitySeats < targetCapacity * 0.9) {
-    const suggested = Math.max(10, Math.floor(capacitySeats / 10) * 10);
-    // 圆桌区的可达容量被配方钉死（单区最多 MAX_TABLES_PER_ZONE 桌 × 每桌椅数），
-    // 装不下时把「配方上限」说破，别让人误以为换小一点的数字就能装进这块区。
-    const hasRoundtable = placements.some((p) => p.spec.type === 'dining-table');
-    const recipeCap = hasRoundtable
-      ? `（圆桌区按当前配方一区最多 ${MAX_TABLES_PER_ZONE} 桌 × ${(getCatalogByType('dining-table')?.chairsPerTable ?? 4)} 椅）`
+  if (targetCapacity && Number.isFinite(targetCapacity) && capacitySeats < targetCapacity) {
+    const recipeCap = placements.some((p) => p.spec.type === 'dining-table')
+      ? `圆桌区当前配方每区最多 ${MAX_TABLES_PER_ZONE} 桌、每桌 ${getCatalogByType('dining-table')?.chairsPerTable ?? 4} 椅。`
       : '';
     reasons.push(
-      `这里最多约可坐 ${capacitySeats} 座${recipeCap}，装不下 ${targetCapacity} 人；建议把人数降到约 ${suggested} 人，或换更大的场地`,
+      `当前这些区域估算 ${capacitySeats} 座，距目标 ${targetCapacity} 座还差约 ${targetCapacity - capacitySeats} 座；${recipeCap}可调整区域、摆法或目标人数。`,
     );
   }
 
-  // 库存缺口：placements 不静默截断，显式列出缺几件（人话进 reasons）。
-  // 未传 inventory → shortage 字段缺省（undefined），保持向后兼容。
+  // 比较范围仅是这次生成的物料，不能推断整个项目的实际缺口。
   const shortage = inventory ? computeShortage(placements, inventory) : undefined;
-  for (const s of shortage ?? []) {
-    reasons.push(`缺 ${s.missing} ${pluralUnit(s.name)}${s.name}（需要 ${s.needed}、库存 ${s.available}）`);
+  const inventoryNotes = placements.length ? [
+    '库存仅比较本次候选物料，既有家具及其他楼层未计入；全项目库存与实际缺口待核验。',
+  ] : [];
+  const unknownTypes = new Map<string, string>();
+  for (const { spec } of placements) {
+    const count = inventory?.[spec.type];
+    if (!Number.isSafeInteger(count) || count! < 0) unknownTypes.set(spec.type, spec.name);
   }
+  for (const name of unknownTypes.values()) inventoryNotes.push(`${name}库存未知，请核验。`);
+  for (const s of shortage ?? []) {
+    inventoryNotes.push(`本次候选需要 ${s.needed} ${pluralUnit(s.name)}${s.name}，比所填库存 ${s.available} 多 ${s.missing}；实际缺口待核验。`);
+  }
+  reasons.push(...inventoryNotes);
 
   // 交付清单（BOM）：按 type 聚合，推荐版必然填。
   const billOfMaterials = buildBillOfMaterials(placements);
 
   // 0-100 三维子分：容量按座位数线性、动线按通道扣分绝对值、人体按 hard 条数。
-  const hardTotal = violations.filter((v) => v.severity === 'hard').length;
   const subScores = {
     capacity: Math.min(100, capacitySeats * 5),
-    flow: Math.max(0, 100 + flowPenalty * 10),
-    ergonomics: Math.max(0, 100 - hardTotal * 10),
+    flow: null,
+    ergonomics: null,
   };
 
   return {
@@ -442,10 +452,11 @@ function scoreVariant(
     reasons,
     violations,
     subScores,
-    assurance: hasRealDoor ? 'verified' as const : 'draft_unverified' as const,
+    assurance: 'draft_unverified' as const,
     feasible,
     feasibilityStatus,
     shortage,
+    inventoryNotes,
     billOfMaterials,
   };
 }
@@ -469,8 +480,9 @@ function computeShortage(
   }
   const out: FurnitureShortage[] = [];
   for (const [type, agg] of neededByType) {
-    if (!(type in inventory)) continue;
+    if (!Object.hasOwn(inventory, type)) continue;
     const available = inventory[type]!;
+    if (!Number.isSafeInteger(available) || available < 0) continue;
     if (agg.needed <= available) continue;
     out.push({
       type,
@@ -600,28 +612,6 @@ function dropFarthestRoundtable(
 }
 
 /**
- * dense 版通道修正：aisleWidthM -= 0.3。
- * 修正后 <1.2m → 追加「密版签到台前通道只剩 X.Xm」violation（纯几何数字，不带受众文案）。
- * 受众相关的轮椅/行人能否过的人话判定只在 suggestions 层。
- */
-function applyDenseAisleSqueeze(flow: FlowEvaluation): FlowEvaluation {
-  const squeezed = Math.max(0, flow.aisleWidthM - DENSE_AISLE_SQUEEZE);
-  const wheelChairPassable = squeezed >= 1.5 - EPS;
-  const normalPassable = squeezed >= 1.2 - EPS;
-  const violations = [...flow.violations];
-  if (squeezed < 1.2 - EPS) {
-    violations.push(`密版签到台前通道只剩 ${squeezed.toFixed(1)}m`);
-  }
-  return { ...flow, aisleWidthM: squeezed, wheelChairPassable, normalPassable, violations };
-}
-
-function hasCheckinZone(annotations: readonly PlanAnnotation[]): boolean {
-  return annotations.some(
-    (a) => a.kind === 'zone' && a.zoneType === 'checkin' && a.geometry.kind === 'rect',
-  );
-}
-
-/**
  * 场地越界判定：
  * - 单件判定：placement 中心超出 [−w/2, w/2] × [−d/2, d/2] 计入 outOfBounds（在 computeOutOfBounds 里）。
  * - 整块 zone offsite：某 zone 内 placements 越界率 ≥ 50% → 整块 skipped「zone 越出场地边界」。
@@ -714,23 +704,6 @@ function computeOutOfBounds(
     if (outside) count += 1;
   }
   return count;
-}
-
-/**
- * 动线扣分：
- * - violations 每条含「轮椅过不去」且 normalPassable=false → -5；
- * - violations 每条含「轮椅过不去」但 normalPassable=true → -2；
- * - checkinBlocked → -8。
- */
-function computeFlowPenalty(flow: FlowEvaluation): number {
-  let penalty = 0;
-  for (const v of flow.violations) {
-    if (v.includes('轮椅过不去')) {
-      penalty += flow.normalPassable ? -2 : -5;
-    }
-  }
-  if (flow.checkinBlocked) penalty += -8;
-  return penalty;
 }
 
 /**
@@ -835,7 +808,7 @@ function buildReasons(
   if (placements.length === 0) {
     reasons.push(`${prefix}本版没有可摆的家具`);
   } else {
-    reasons.push(`${prefix}可坐 ${capacitySeats} 座（${placements.length} 件家具）`);
+    reasons.push(`${prefix}估算 ${capacitySeats} 座（${placements.length} 件家具），仍需核对实际座位`);
   }
   if (skipped.length > 0) {
     // skipped 里既有整块区（越界/太小）也有单件家具（墙退距放不下），
@@ -850,15 +823,7 @@ function buildReasons(
   }
   if (flow.violations.length > 0) {
     reasons.push(flow.violations[0]);
-  } else if (Number.isFinite(flow.aisleWidthM) && flow.aisleWidthM > 0) {
-    if (flow.wheelChairPassable) {
-      reasons.push(`通道 ${flow.aisleWidthM.toFixed(1)}m，轮椅可过`);
-    } else {
-      reasons.push(`通道 ${flow.aisleWidthM.toFixed(1)}m，行人能过`);
-    }
-  } else if (placements.length > 0 && skipped.length === 0) {
-    reasons.push('主通道宽敞，不约束');
-  }
+  } else reasons.push('真实入口和通行条件待核验');
   if (reasons.length < 2) {
     reasons.push('本版按密度旋钮生成，未触发任何扣分项');
   }

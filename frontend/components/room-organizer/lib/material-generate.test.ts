@@ -22,7 +22,8 @@ describe('submitMaterialGenerate', () => {
     const fetchImpl = vi.fn();
     const text = await submitMaterialGenerate({ kind: 'text', prompt: '一把沙滩折叠椅' }, { localProxy: false, fetchImpl });
     expect(text).toMatchObject({ ok: false, stub: true });
-    expect(String((text as { message: string }).message)).toContain('NEXT_PUBLIC_SUPABASE_URL');
+    expect(String((text as { message: string }).message)).toContain('登录并连接云项目');
+    expect(String((text as { message: string }).message)).not.toMatch(/NEXT_PUBLIC|API_KEY/);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -57,17 +58,54 @@ describe('submitMaterialGenerate', () => {
     expect(cloud.jobs).toEqual([{ prompt: '环形装置', options: { kind: 'image', referenceImageAssetId: 'ref-1' } }]);
   });
 
-  it('直连通道打不通时自动落到云端队列，不把用户卡在 3199', async () => {
+  it('直连请求抛出网络错误时视为结果未知，绝不自动转云端', async () => {
     const cloud = cloudLane();
-    const fetchImpl = vi.fn(async () => { throw new TypeError('fetch failed'); });
+    const fetchImpl = vi.fn(async () => { throw new TypeError('private network detail'); });
     const result = await submitMaterialGenerate({ kind: 'text', prompt: '金属台' }, { localProxy: true, fetchImpl, cloud: cloud.lane });
-    expect(result).toMatchObject({ ok: true, lane: 'cloud', taskid: '7f3c9a5e-job' });
+    expect(result).toMatchObject({ ok: false, stub: false, outcome:'unknown' });
+    expect(!result.ok && result.message).toMatch(/结果暂时无法确认.*可能已创建任务或产生费用/);
+    expect(!result.ok && result.message).not.toContain('private network detail');
+    expect(fetchImpl).toHaveBeenCalledOnce();expect(cloud.jobs).toHaveLength(0);expect(cloud.uploads).toHaveLength(0);
   });
 
-  it('云端缺凭证时说清缺哪个变量', async () => {
-    const cloud = cloudLane({ createJob: async () => { throw new Error('SERVICE_NOT_CONFIGURED'); } });
-    const result = await submitMaterialGenerate({ kind: 'text', prompt: '金属台' }, { localProxy: false, cloud: cloud.lane });
-    expect(result).toMatchObject({ ok: false, stub: false });
-    expect(String((result as { message: string }).message)).toContain('LUX3D_API_KEY');
+  it.each([
+    ['响应丢失任务号',()=>new Response(JSON.stringify({}),{status:200})],
+    ['响应不是 JSON',()=>new Response('bad json',{status:200})],
+    ['上游 500',()=>new Response(JSON.stringify({error:'private failure'}),{status:500})],
+    ['上游 400',()=>new Response(JSON.stringify({error:'rejected'}),{status:400})],
+  ])('直连%s时不自动提交云端，保留不确定提示',async(_name,response)=>{
+    const cloud=cloudLane();const fetchImpl=vi.fn(async()=>response());
+    const result=await submitMaterialGenerate({kind:'text',prompt:'金属台'},{localProxy:true,fetchImpl,cloud:cloud.lane});
+    expect(result).toMatchObject({ok:false,outcome:'unknown'});expect(!result.ok&&result.message).toContain('先查看生成任务记录');
+    expect(cloud.jobs).toHaveLength(0);expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('图片直连响应丢失时不上传参考图或创建第二个云端任务',async()=>{
+    const cloud=cloudLane();const fetchImpl=vi.fn(async()=>{throw Error('connection lost after dispatch');});
+    const result=await submitMaterialGenerate({kind:'image',imageDataUrl:PNG},{localProxy:true,fetchImpl,cloud:cloud.lane});
+    expect(result).toMatchObject({ok:false,outcome:'unknown'});expect(cloud.uploads).toHaveLength(0);expect(cloud.jobs).toHaveLength(0);
+  });
+
+  it('云端生成请求断线时不冒称未提交，也不暴露错误内容',async()=>{
+    const cloud=cloudLane({createJob:async()=>{throw Error('private request details');}});
+    const result=await submitMaterialGenerate({kind:'text',prompt:'金属台'},{localProxy:false,cloud:cloud.lane});
+    expect(result).toMatchObject({ok:false,outcome:'unknown'});expect(!result.ok&&result.message).toMatch(/结果暂时无法确认.*可能已创建任务或产生费用/);
+    expect(!result.ok&&result.message).not.toContain('private request details');
+  });
+
+  it('云端未开通、未登录或额度用完时各说一条原因，不暴露变量名', async () => {
+    const cases: Array<[string, string]> = [
+      ['SERVICE_NOT_CONFIGURED', '尚未开通'],
+      ['BILLING_NOT_CONFIGURED', '尚未开通'],
+      ['UNAUTHENTICATED', '请先登录'],
+      ['BUDGET_EXCEEDED', '额度已用完'],
+    ];
+    for (const [code, snippet] of cases) {
+      const cloud = cloudLane({ createJob: async () => { throw Object.assign(new Error('hidden'), { code }); } });
+      const result = await submitMaterialGenerate({ kind: 'text', prompt: '金属台' }, { localProxy: false, cloud: cloud.lane });
+      expect(result).toMatchObject({ ok: false, stub: false });
+      expect(!result.ok && result.message).toContain(snippet);
+      expect(!result.ok && result.message).not.toMatch(/LUX3D_API_KEY|NEXT_PUBLIC|hidden/);
+    }
   });
 });

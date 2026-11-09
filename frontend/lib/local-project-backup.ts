@@ -26,12 +26,14 @@ export const LOCAL_PROJECT_BACKUP_V4_COVERAGE = { ...LOCAL_PROJECT_BACKUP_V3_COV
 // Local forms can save empty text, 0, fractions and counts beyond the AI service's
 // limit. Preserve these values; generation validation belongs to briefInstruction.
 const briefShape = {
-  event: z.string(), guests: z.number(), description: z.string(), mustHave: z.string(),
-  allowIdeas: z.boolean(), hasFloorplan: z.boolean().optional(),
+  legacyBriefRecord: z.strictObject({event:z.string().optional(),guests:z.number().finite().optional(),allowIdeas:z.boolean().optional()}).optional(),
+  unconfirmedSavedBrief: z.strictObject({event:z.string().optional(),guests:z.number().finite().optional(),allowIdeas:z.boolean().optional()}).optional(),
+  event: z.string(), eventConfirmed: z.boolean().optional(), guests: z.number(), guestsConfirmed: z.boolean().optional(), description: z.string(), mustHave: z.string(),
+  allowIdeas: z.boolean(), ideasConfirmed: z.boolean().optional(), hasFloorplan: z.boolean().optional(),
   venueConditions: z.string().optional(), style: z.string().optional(),
   palette: z.string().optional(), atmosphere: z.string().optional(),
 } satisfies Record<keyof CreativeBrief, z.ZodType>;
-const briefSchema = z.strictObject(briefShape);
+export const briefSchema = z.strictObject(briefShape);
 const backupBriefSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('present'), value: briefSchema }),
   z.strictObject({ status: z.literal('absent') }),

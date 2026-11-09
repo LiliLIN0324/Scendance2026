@@ -1,3 +1,7 @@
+import {captureWorkspaceWriteFence,rejectUnprotectedWorkspaceWrite} from '@/lib/workspace-write-fence';
+import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
+import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
+import { classifyStorageError } from './storage-errors';
 import type { FurnitureItem } from './types';
 
 /**
@@ -40,9 +44,9 @@ function isStoredEnvironment(value: unknown): value is StoredEnvironment {
     (entry.floorIndex === undefined || (Number.isInteger(entry.floorIndex) && (entry.floorIndex as number) >= 0 && (entry.floorIndex as number) < 8));
 }
 
-type EnvironmentChoice = StoredEnvironment | StoredEnvironment[] | null;
+export type EnvironmentChoice = StoredEnvironment | StoredEnvironment[] | null;
 
-function isEnvironmentList(value: unknown): value is StoredEnvironment[] {
+export function isEnvironmentList(value: unknown): value is StoredEnvironment[] {
   return Array.isArray(value) && value.length <= 24 && value.every(isStoredEnvironment);
 }
 
@@ -60,6 +64,7 @@ function readAll(): Record<string, EnvironmentChoice> {
 
 function writeAll(all: Record<string, EnvironmentChoice>): void {
   if (typeof window === 'undefined') return;
+  rejectUnprotectedWorkspaceWrite();
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
   } catch {
@@ -110,4 +115,111 @@ export function clearEnvironment(layoutId: string | undefined): void {
   // Keep a tombstone so an explicitly cleared project does not get the default scene back on reload.
   all[key] = null;
   writeAll(all);
+}
+
+
+export type EnvironmentStrictWriteResult =
+  | { ok: true; json: string }
+  | { ok: false; reason: 'lease-invalid' | 'invalid-data' | 'invalid-scope' | 'conflict' | 'quota' | 'blocked' | 'unknown' | 'readback-mismatch'; writeStatus: 'not-attempted' | 'unknown' };
+
+/** Explicit guarded path; legacy best-effort APIs remain separate until the workspace migrates. */
+function strictEnvironmentUpdate(layoutId: string | undefined, values: readonly StoredEnvironment[] | null, capability: LocalWriteCapability, options?: {expectedRaw: string | null}): EnvironmentStrictWriteResult {
+  let guard: ReturnType<typeof localWriteCapabilityGuard>;
+  try { const fence=captureWorkspaceWriteFence(capability);fence?.();guard = localWriteCapabilityGuard(capability); }
+  catch { return {ok:false,reason:'lease-invalid',writeStatus:'not-attempted'}; }
+  let attempted=false;
+  class LeaseFailure extends Error {}
+  class Conflict extends Error {}
+  class InvalidData extends Error {}
+  class ReadbackMismatch extends Error {}
+  const fence=captureWorkspaceWriteFence(capability);
+  const check = () => { try { fence?.();guard.assertStillHeld(); if (guard.signal.aborted) throw new Error(); } catch { throw new LeaseFailure(); } };
+  try {
+    check();
+    if (layoutId !== undefined && (!layoutId.trim() || layoutId.length > 128 || layoutId === 'draft')) return {ok:false,reason:'invalid-scope',writeStatus:'not-attempted'};
+    if (typeof window === 'undefined' || !window.localStorage) return {ok:false,reason:'blocked',writeStatus:'not-attempted'};
+    const storage=window.localStorage;
+    const raw=storage.getItem(STORAGE_KEY);
+    check();
+    if (options && raw !== options.expectedRaw) throw new Conflict();
+    let all:unknown;
+    try { all=raw===null?{}:JSON.parse(raw); } catch { throw new InvalidData(); }
+    if (!all || typeof all!=='object' || Array.isArray(all)) throw new InvalidData();
+    const source=all as Record<string,unknown>;
+    if (Object.keys(source).length>MAX_ENTRIES || !Object.values(source).every(value=>value===null || isStoredEnvironment(value) || isEnvironmentList(value))) throw new InvalidData();
+    try { if (values!==null && (values.length>24 || !sameRecoveryFormValue(values,values) || !isEnvironmentList(values))) throw new InvalidData(); }
+    catch { throw new InvalidData(); }
+    const key=environmentPreferenceKey(layoutId);
+    const next={...source,[key]:values===null?null:[...values]};
+    if (Object.keys(next).length>MAX_ENTRIES) throw new InvalidData();
+    const json=JSON.stringify(next);
+    // Refuse values that JSON would silently alter or omit.
+    try { if (!sameRecoveryFormValue(next,JSON.parse(json))) throw new InvalidData(); } catch { throw new InvalidData(); }
+    check();
+    if (storage.getItem(STORAGE_KEY)!==raw) throw new Conflict();
+    check();attempted=true;
+    storage.setItem(STORAGE_KEY,json);
+    check();
+    if (storage.getItem(STORAGE_KEY)!==json) throw new ReadbackMismatch();
+    check();
+    return {ok:true,json};
+  } catch(error) {
+    const writeStatus=attempted?'unknown':'not-attempted';
+    if (error instanceof LeaseFailure) return {ok:false,reason:'lease-invalid',writeStatus};
+    if (error instanceof InvalidData) return {ok:false,reason:'invalid-data',writeStatus};
+    if (error instanceof Conflict) return {ok:false,reason:'conflict',writeStatus};
+    if (error instanceof ReadbackMismatch) return {ok:false,reason:'readback-mismatch',writeStatus};
+    return {ok:false,reason:classifyStorageError(error),writeStatus};
+  }
+}
+
+export function writeEnvironmentsStrict(layoutId: string | undefined, values: readonly StoredEnvironment[], capability: LocalWriteCapability, options?: {expectedRaw: string | null}): EnvironmentStrictWriteResult {
+  return strictEnvironmentUpdate(layoutId,values,capability,options);
+}
+export function clearEnvironmentStrict(layoutId: string | undefined, capability: LocalWriteCapability, options?: {expectedRaw: string | null}): EnvironmentStrictWriteResult {
+  return strictEnvironmentUpdate(layoutId,null,capability,options);
+}
+
+
+/** Explicit scopes prevent a real project named `draft` from aliasing anonymous draft data. */
+export type EnvironmentScope = { kind: 'draft' } | { kind: 'project'; id: string };
+export interface EnvironmentReadSnapshot {
+  scope: EnvironmentScope; key: string; raw: string | null; present: boolean; value: EnvironmentChoice;
+}
+export type EnvironmentStrictReadResult = { ok: true; snapshot: EnvironmentReadSnapshot } | { ok: false; reason: 'lease-invalid' | 'invalid-scope' | 'invalid-data' | 'blocked' | 'quota' | 'unknown' };
+
+export function environmentScopeKey(scope: EnvironmentScope): string | null {
+  if (!scope || typeof scope !== 'object') return null;
+  if (scope.kind === 'draft' && Object.keys(scope).length === 1) return 'draft';
+  if (scope.kind === 'project' && Object.keys(scope).length === 2 && typeof scope.id === 'string' && scope.id.trim() && scope.id.length <= 128 && scope.id !== 'draft') return scope.id;
+  return null;
+}
+
+/** No fallback to empty or default on parse, storage, scope or lease failure. */
+export function readEnvironmentsStrict(scope: EnvironmentScope, capability: LocalWriteCapability): EnvironmentStrictReadResult {
+  const key=environmentScopeKey(scope);
+  if (key===null) return {ok:false,reason:'invalid-scope'};
+  let guard: ReturnType<typeof localWriteCapabilityGuard>;
+  try { guard=localWriteCapabilityGuard(capability); } catch { return {ok:false,reason:'lease-invalid'}; }
+  class LeaseFailure extends Error {}
+  const check=()=>{try{guard.assertStillHeld();if(guard.signal.aborted)throw new Error();}catch{throw new LeaseFailure();}};
+  try {
+    check();
+    if(typeof window==='undefined'||!window.localStorage)return {ok:false,reason:'blocked'};
+    const raw=window.localStorage.getItem(STORAGE_KEY);
+    check();
+    let parsed:unknown;
+    try {parsed=raw===null?{}:JSON.parse(raw);} catch {return {ok:false,reason:'invalid-data'};}
+    if(!parsed || typeof parsed!=='object' || Array.isArray(parsed))return {ok:false,reason:'invalid-data'};
+    const map=parsed as Record<string,unknown>;
+    try {
+      if (Object.keys(map).length>MAX_ENTRIES || !sameRecoveryFormValue(map,map) || !Object.values(map).every(value=>value===null || isStoredEnvironment(value) || isEnvironmentList(value))) return {ok:false,reason:'invalid-data'};
+    } catch {return {ok:false,reason:'invalid-data'};}
+    const present=Object.hasOwn(map,key),value=present ? map[key] as EnvironmentChoice : null;
+    check();
+    return {ok:true,snapshot:{scope:structuredClone(scope),key,raw,present,value:structuredClone(value)}};
+  } catch(error) {
+    if(error instanceof LeaseFailure)return {ok:false,reason:'lease-invalid'};
+    return {ok:false,reason:classifyStorageError(error)};
+  }
 }

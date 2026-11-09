@@ -70,6 +70,8 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
       ownerName: task.ownerName.trim(), contractorName: task.contractorName.trim(), acceptance: task.acceptance.trim(),
       objectIds: [...task.objectIds].sort() },
     venue: { width: layout.width, depth: layout.height, scenePreset: layout.scenePreset ?? null,
+      venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null, mapGroundPolygon: layout.mapGroundPolygon ?? null,
+      floorPlanImage: layout.floorPlanImage ?? null, sources: layout.backendSceneV2?.sources ?? null, dimensions: layout.backendSceneV2?.dimensions ?? null,
       backendVenue: layout.backendVenue ?? null, storedStructure: layout.backendSceneV2?.structure ?? null,
       entrance: layout.entrance ?? null, terrain: layout.terrain ?? null, roof: layout.roof ?? null,
       floors: layout.floors.map(floor => ({ id: floor.id, height: floor.height ?? 3,
@@ -92,9 +94,11 @@ export async function operationReview(layout: RoomLayout, task: EventOperationTa
   status: EventOperationTask['status'] | 'needs_review'; missingObjectIds: string[];
   ambiguousObjectIds?:string[]; missingProductionObjectIds?:string[]; ambiguousProductionObjectIds?:string[];
 }> {
+  void checkins;
   const review = operationObjectReview(layout,task);
   const previousReview = task.status === 'accepted' || task.status === 'review' && !!task.reviewedBasis;
-  const needsReview = Object.values(review).some(ids=>ids.length>0) || previousReview && task.reviewedBasis !== await operationBasis(layout, task, checkins);
+  // Hash equality is insufficient to prove the current source or a non-reverted revision.
+  const needsReview = Object.values(review).some(ids=>ids.length>0) || previousReview;
   return { status: needsReview ? 'needs_review' : task.status, missingObjectIds:review.missingObjectIds,
     ...(review.ambiguousObjectIds.length?{ambiguousObjectIds:review.ambiguousObjectIds}:{}),
     ...(review.missingProductionObjectIds.length?{missingProductionObjectIds:review.missingProductionObjectIds}:{}),
