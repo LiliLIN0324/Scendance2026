@@ -29,6 +29,12 @@ vi.mock('../three/glb-assets', async importOriginal => ({
   ensureGlbAsset: vi.fn(),
 }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
+// jsdom 里没有真实 canvas/图片解码，自绘贴地底图必然拿不到瓦片；这里固定成「拿不到」，
+// 让贴地逻辑走它本来就有的高德兜底分支（自绘本身的投影/拼图在 plan-ground-capture.test.ts 里测）。
+vi.mock('../lib/plan-ground-capture', async importOriginal => ({
+  ...(await importOriginal<typeof import('../lib/plan-ground-capture')>()),
+  capturePlanGround: vi.fn().mockResolvedValue(null),
+}));
 
 const MODELS: OnlineModel[] = Array.from({ length: 30 }, (_, index) => ({
   slug: `rehearsal-${index}`, name: `Rehearsal Model ${index}`, bucket: 'seating',
@@ -625,8 +631,9 @@ describe('ScendanceViewTools satellite ground', () => {
       expect(applied.researchArea?.imageUrl).toContain('style=7');
       expect(applied.researchArea?.imageUrl).toContain('x-ref=map-basemap');
     });
-    expect(String(fetchMock.mock.calls.at(-1)?.[0] ?? '')).toContain('style=7');
-    expect(String(fetchMock.mock.calls.at(-1)?.[0] ?? '')).toContain('satellite-ground-ref');
+    // 多次补图是并发的（进场补图可能比人点选更晚返回），只要确实用 style=7 的档位拉过图即可。
+    const requested = fetchMock.mock.calls.map(call => String(call[0] ?? ''));
+    expect(requested.some(url => url.includes('style=7') && url.includes('satellite-ground-ref'))).toBe(true);
   });
 
   it('keeps the previous ground when a basemap layer cannot be fetched', async () => {
