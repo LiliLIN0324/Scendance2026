@@ -1487,6 +1487,10 @@ body {
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
   background: var(--wk-paper); border-color: var(--wk-green, #4A7C59); color: var(--wk-green-deep, #35624A);
 }
+/* P2-e：户外工具排里的导出钮（toolbar 变体）直接走主产品圆钮规则（无内联样式冲突）。 */
+.sc-workbench .sc-tool-column [data-testid="outdoor-export-host"] button {
+  font-size: 14px;
+}
 /* 选择工具是开关，不是禁用：关掉后按钮还在，只用虚线描边示意「画布只浏览、不抓物料」。 */
 .sc-workbench .sc-tool-column > #tool-select.is-off {
   border-style: dashed;

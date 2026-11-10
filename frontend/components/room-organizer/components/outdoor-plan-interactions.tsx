@@ -77,7 +77,7 @@ export interface ExportMenuProps {
   enableExports?: boolean;
 }
 
-export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
+export function ExportMenu({ onPick, enableExports = false, variant = 'default' }: ExportMenuProps & { variant?: 'default' | 'toolbar' }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -92,8 +92,18 @@ export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
 
   return (
     <div ref={rootRef} style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setOpen(value => !value)} style={secondaryButtonStyle} aria-expanded={open} aria-haspopup="menu">
-        导出/分享
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        {...(variant === 'toolbar'
+          ? { 'aria-label': '导出/分享', 'data-tip': '导出 / 分享' }
+          : { style: secondaryButtonStyle })}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        {variant === 'toolbar'
+          ? <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>⤓</span>
+          : '导出/分享'}
       </button>
       {open && (
         <div role="menu" aria-label="导出菜单" style={{
