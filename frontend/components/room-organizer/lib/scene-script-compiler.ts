@@ -19,6 +19,7 @@ import {
   type SceneScriptVenue,
 } from './scene-script';
 import { canApplyLayoutGeometry, isStructuralMarker } from './structural-layout';
+import { DESK_TABLE_DEPTH_M, DESK_TABLE_WIDTH_M } from '../../../lib/plan-approve';
 import type { CatalogItem, FurnitureItem, RoomLayout, Vec2 } from './types';
 import type { ZoneRect } from './zones';
 import type {
@@ -51,6 +52,8 @@ export interface SceneScriptCompileContext {
   furnishing?: MaterializedFurnishing;
   /** Size and seats already decided. The compiler places this set and does not pick another count. */
   tablePlan?: TableArrangement;
+  /** 课桌式每桌坐几人（1–3，官方参考 3；来自记忆的「每桌坐3人」「一人一套」）。 */
+  peoplePerDesk?: number;
 }
 
 /** One line of the ledger: what a role asked for, what landed, what was refused. */
@@ -355,6 +358,7 @@ export function compileSceneScript(script: SceneScript, context: SceneScriptComp
       ...(context.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}),
       ...(context.tablePlan ? { tablePlan: context.tablePlan } : {}),
       ...(context.furnishing ? { furnishing: context.furnishing } : {}),
+      ...(context.peoplePerDesk ? { peoplePerDesk: context.peoplePerDesk } : {}),
     });
     // Several seating zones: the worst one decides. A zone that could not settle must not be
     // hidden by the next zone reporting a clean pass.
@@ -427,6 +431,8 @@ interface SeatingDeps {
   floorIndex: number;
   start: RoomLayout;
   makeId: () => string;
+  /** 课桌式每桌坐几人（1–3）。 */
+  peoplePerDesk?: number;
   acceptBatch: (items: readonly FurnitureItem[]) => { accepted: boolean; reason?: string };
   /** 空跑一组：摆得进吗？上限靠它逐格探出来，探的时候画布一个字节都不动。 */
   fitsSet: (center: Vec2, variant: MeasuredSet) => { accepted: boolean; reason?: string; code?: SceneScriptIssue['code'] };
@@ -471,7 +477,7 @@ function fillSeating(script: SceneScript, zone: SceneScriptZone, deps: SeatingDe
         : planned?.shape === 'rect'
           ? rectDiningSet({ width: planned.width, depth: planned.depth })
           : FURNITURE_SETS.find((entry) => entry.key === 'dining');
-  const measured = set ? measureSet(set, deps.base, deps.makeId) : measurePair(deps.makeId);
+  const measured = set ? measureSet(set, deps.base, deps.makeId) : measurePair(deps.makeId, deps.peoplePerDesk);
   const asked = zone.count ?? script.guests ?? 0;
   // A build that comes back empty means the set itself cannot exist in this venue (a 2 m
   // wide room has no 2.5 m table-and-chairs footprint). Measuring its empty box would
@@ -675,9 +681,9 @@ function seatCountIn(items: readonly FurnitureItem[]): number {
   return items.filter((item) => item.type === 'chair' || item.type === 'dining-chair').length;
 }
 
-/** Rows of desk + chair, measured the same way a dining set is. */
-function measurePair(makeId: () => string): MeasuredSet {
-  const probe = deskChairPair({ x: 0, z: 0 }, 'measure-pair');
+/** Rows of desk + chairs, measured the same way a dining set is. 官方课桌规格：1.8×0.6 桌、每桌 chairsPerDesk 椅沿桌长三等分（对齐 plan-approve 与 Hall D5 参考图）。 */
+function measurePair(makeId: () => string, chairsPerDesk?: number): MeasuredSet {
+  const probe = deskChairPair({ x: 0, z: 0 }, 'measure-pair', chairsPerDesk);
   let halfX = 0;
   let halfZ = 0;
   for (const item of probe) {
@@ -685,17 +691,28 @@ function measurePair(makeId: () => string): MeasuredSet {
     halfX = Math.max(halfX, Math.abs(item.position?.x ?? 0) + halfW);
     halfZ = Math.max(halfZ, Math.abs(item.position?.z ?? 0) + halfD);
   }
-  return { halfX, halfZ, count: probe.length, seats: seatCountIn(probe), build: (center) => deskChairPair(center, `pair-${makeId()}`) };
+  return { halfX, halfZ, count: probe.length, seats: seatCountIn(probe), build: (center) => deskChairPair(center, `pair-${makeId()}`, chairsPerDesk) };
 }
 
-function deskChairPair(center: Vec2, pairId: string): FurnitureItem[] {
+function deskChairPair(center: Vec2, pairId: string, chairsPerDesk?: number): FurnitureItem[] {
   const desk = FURNITURE_CATALOG.find((entry) => entry.type === 'desk');
   const chair = FURNITURE_CATALOG.find((entry) => entry.type === 'chair');
   if (!desk || !chair) return [];
-  return [
-    { ...desk, id: `${pairId}-desk`, position: { x: center.x, z: center.z - 0.3 }, rotation: 0 },
-    { ...chair, id: `${pairId}-chair`, position: { x: center.x, z: center.z + 0.5 }, rotation: Math.PI },
+  // 缺省一人一套（catalog 课桌原尺寸）；「每桌坐N人」N≥2 才切官方 1.8m 课桌规格。
+  const perDesk = Math.min(3, Math.max(1, Math.trunc(chairsPerDesk ?? 1) || 1));
+  const official = perDesk >= 2;
+  const deskW = official ? DESK_TABLE_WIDTH_M : desk.width;
+  const deskD = official ? DESK_TABLE_DEPTH_M : desk.depth;
+  const items: FurnitureItem[] = [
+    { ...desk, width: deskW, depth: deskD, id: `${pairId}-desk`, position: { x: center.x, z: center.z - 0.3 }, rotation: 0 },
   ];
+  // 椅沿桌长三等分（同 gridDeskRows 的偏移算法），椅心在桌前沿外 0.5。
+  const chairZ = center.z + 0.5;
+  for (let k = 0; k < perDesk; k++) {
+    const offset = perDesk === 1 ? 0 : (k - (perDesk - 1) / 2) * (deskW / perDesk);
+    items.push({ ...chair, id: `${pairId}-chair-${k}`, position: { x: center.x + offset, z: chairZ }, rotation: Math.PI });
+  }
+  return items;
 }
 
 /** Grid of set centres inside a zone, measured from the set's real footprint. */

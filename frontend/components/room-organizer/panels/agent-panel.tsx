@@ -60,8 +60,9 @@ import { createPresetResearchArea, createResearchArea, lookupPlace, matchResearc
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
-import { cloudBriefMessage, cloudSeatingAllocation, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
+import { cloudBriefMessage, cloudSeatingAllocation, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, splitConfirmationLead, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { type PlanDiagnostic } from '../lib/diagnostics';
+import { checkEntranceBlocks } from '../lib/entrance-block-check';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { localPlan } from '../lib/local-plan';
@@ -228,6 +229,10 @@ interface ProposalView extends PendingPlan {
   /** Zone and seat lines from the script, shown on the card instead of one long bubble. */
   planNotes?: string[];
   seatWarning?: string;
+  /** 课桌式官方规格下的诚实上限：按这版排法最多 N 座（要 X）。 */
+  seatCeilingNote?: string;
+  /** 门口净区被家具压住的警告（来自 entrance-block-check，只提示不拦截）。 */
+  entranceWarning?: string;
   annotationWarning?: string;
   functionalWarnings?: string[];
   modelExplanation?: string;
@@ -372,6 +377,7 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
     ...(recolorPreview.length ? { recolorPreview } : {}),
     ...(base && candidate ? {existingChanges:describeExistingChanges(proposalDifferences(base,candidate),base,candidate)} : {}),
     ...(plan.seatingReview ? {seatingReview:plan.seatingReview} : {}),
+    ...(plan.seatCeilingNote ? { seatCeilingNote: plan.seatCeilingNote } : {}),
     ...(candidate ? { candidateArea: venueArea(candidate) } : {}),
     ...((() => {
       const planNotes = ((plan as PlanProposal & { summary?: string[] }).summary ?? []).filter(line => line.trim() && !/尚未确认/.test(line));
@@ -726,6 +732,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const current=[...(incompleteDialogueTurns.current.get(id)??[])];
     const next=chipsAfterLayoutPreview(current,value?[value]:[]);
     for(const gone of current) if(!next.includes(gone)) updateDialogueIncomplete(id,gone,false);
+  }
+  /** 确认轮次落地后，队列里以答复词开头的旧条目已被这轮消化，一并移除，不再挡「确认布置」。 */
+  function sweepFulfilledConfirmationChips():void {
+    const id=boundSessionId.current;
+    if(!id)return;
+    for(const text of [...(incompleteDialogueTurns.current.get(id)??[])]){
+      if(splitConfirmationLead(text))updateDialogueIncomplete(id,text,false);
+    }
   }
   function beginLayoutAttempt(text:string,cloud:boolean):void {
     const value=text.trim();
@@ -1496,10 +1510,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const localSeats = proposal.current ? seatRequirement(proposal.current.layouts.at(-1), activeFloorIndex, memoryRef.current) : null;
   const localPreservation = proposal.current ? reviewOriginalPreservation(memoryRef.current.originalPreservation,proposal.current.layouts.at(-1)) : null;
   const cloudPreservation = !proposal.current && studio?.preview ? reviewOriginalPreservation(memoryRef.current.originalPreservation,studio.preview.layout) : null;
+  const localEntrance = proposal.current?.layouts.at(-1) ? checkEntranceBlocks(proposal.current.layouts.at(-1)!) : null;
+  const cloudEntrance = !proposal.current && studio?.preview ? checkEntranceBlocks(studio.preview.layout) : null;
   const pendingProposal: ProposalView | null = localProposal ? { ...localProposal,
     blocked: localProposal.blocked ?? localSeats?.blocked ?? (localPreservation?.status==='violated'||localPreservation?.status==='unknown'?localPreservation.message:null),
-    ...(localSeats?.warning ? { seatWarning: localSeats.warning } : {}) } : cloudProposal ? {...cloudProposal,
-      blocked:cloudProposal.blocked ?? (cloudPreservation?.status==='violated'||cloudPreservation?.status==='unknown'?cloudPreservation.message:null)} : null;
+    ...(localSeats?.warning ? { seatWarning: localSeats.warning } : {}),
+    ...(localEntrance?.message ? { entranceWarning: localEntrance.message } : {}) } : cloudProposal ? {...cloudProposal,
+      blocked:cloudProposal.blocked ?? (cloudPreservation?.status==='violated'||cloudPreservation?.status==='unknown'?cloudPreservation.message:null),
+      ...(cloudEntrance?.message ? { entranceWarning: cloudEntrance.message } : {})} : null;
   const activeProposal: ProposalView | null = pendingProposal ? { ...pendingProposal,
     functionalWarnings: [memoryRef.current.zoneNeeds.checkin === null || memoryRef.current.unresolvedActivityNeeds.includes('checkin') ? '签到需求尚未确认。' : null,
       memoryRef.current.unresolvedActivityNeeds.includes('rest') ? '休息区需求尚未确认。' : null,
@@ -1997,7 +2015,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     let plan: PlanProposal;
     const anchors = anchorsRef.current;
     const banquet=memoryRef.current.banquetTable;
-    const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
+    const perTable=banquet?.peoplePerTable??((memoryRef.current.seatingShape==='ring'||memoryRef.current.layoutMode==='desk-chair')&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
     const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
     const furnishing=layoutFurnishing(memoryRef.current.furnishing, banquet);
     const priorBanquetSeats = furnishing && seatPriority ? priorCardSeats.current : null;
@@ -2768,6 +2786,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       (sessionScope==='legacy' || (turnVenueBasis===venueScaleBasis(layoutStore.getState().layout) && venueFacts.isCurrent(turnVenueFact))) &&
       samePersistedHeadcount(readBriefMemory(turnSessionId,scopedAssistantStorage(sessionScope)),turn.memory))
       updateDialogueIncomplete(turnSessionId,trimmed,false);
+    if(turn.resolution==='confirmation' && memorySaved && turnSessionId && sessionScopeIsCurrent() && boundSessionId.current===turnSessionId)
+      sweepFulfilledConfirmationChips();
     const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
     const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
@@ -3379,6 +3399,8 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
       {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
       {plan.localDraftDetails?.map(line=><p key={line}>{line}</p>)}
       {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
+      {plan.seatCeilingNote && <p className="ap-warn-line" role="status">{plan.seatCeilingNote}</p>}
+      {plan.entranceWarning && <p className="ap-warn-line" role="status"><span aria-hidden="true">!</span>{plan.entranceWarning}</p>}
       {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
       {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
       {!!plan.existingChanges?.length && <details className="ap-existing-changes">

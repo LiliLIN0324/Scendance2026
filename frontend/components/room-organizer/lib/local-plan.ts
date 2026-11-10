@@ -384,6 +384,7 @@ function fallbackPlan(input: LocalPlanInput, arrangement?: TableArrangement, pla
     ...(placed ? { furnishing: placed } : {}),
     ...(input.stage !== undefined ? { stage: input.stage } : {}),
     ...(input.checkin !== undefined ? { checkin: input.checkin } : {}),
+    ...(input.layoutMode === 'desk-chair' && input.table?.peoplePerTable ? { peoplePerDesk: input.table.peoplePerTable } : {}),
   });
 }
 
@@ -437,6 +438,7 @@ function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement, pl
       ...(input.seatingShape === 'ring' && arrangement?.shape !== 'rect' ? { seatingShape: 'ring' as const } : {}),
       ...(arrangement ? { tablePlan: arrangement } : {}),
       ...(placed ? { furnishing: placed } : {}),
+      ...(input.layoutMode === 'desk-chair' && input.table?.peoplePerTable ? { peoplePerDesk: input.table.peoplePerTable } : {}),
     });
   } catch {
     return null;
