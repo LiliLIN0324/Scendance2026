@@ -4,7 +4,12 @@
 
 > 先读HANDOFF.md。
 
-2026-11-11 二十六轮 · 扫查 P1 修复 + 推送部署（`66ba3b36` 已上 origin/main，Cloudflare Pages 自动构建）：
+2026-11-11 二十七轮 · 云端模型理解诊断+修复（**根因：`BRIEF_CONVERSATION_ENABLED` 从未设置**）：
+- 用户问「为什么我的 API 不能很好理解需求」。实测定位：①单发模式 `/brief/extract` 一直正常（9.9s 返回完美抽取，逐字证据全对）；②UI 聊天走 conversation_v1 模式，服务端 `api.ts:167` 要求 `BRIEF_CONVERSATION_ENABLED==='1'`，该 secret **从未设置** → 962ms 返回 `enabled:false` → 客户端「智能理解服务尚未配置」降级本地规则罐头回答。③已 `supabase secrets set BRIEF_CONVERSATION_ENABLED=1`（project wkhfvnzgopjdzxlmycks，CLI 已登录），复测 `enabled:true` + 真模型回复 4.2s。
+- 顺带确认：客户端超时 115s 不是瓶颈；契约的逐字证据校验（`message.includes(evidence)`）仍是偶发「未通过校验」的来源，后续可考虑规范化匹配；`AGENT_CHAT_MODEL` 已配置（供应商走 Tokendance 网关 → DeepSeek 官方链）。
+- 上轮（二十六轮）：
+
+
 - **交付链路三 P1 修复**：①「导出交接」/到场清单「导出」——`agent-panel.confirmExport` 现在先按「按当前记录重新开始」同一套判定**静默补对话核对冻结**（`freezeDialogueForExport`），不再报「当前对话或活动无法核对」；判定不过时给人话指引。②「打开资料」——`openMaterialsFromShare` 从误点 `.sc-cloud-trigger`（账户中心）改为 `setWorkbenchMode('layout')+showAgent('material')`，与对话侧 onOpenMaterials 同一去处。③**课桌 desk 进云端契约**——`domain.ts` materialIds+catalog 加 `desk`（1.8×0.6×0.75），`backend-adapter` rendererTypes/icons 补映射，`material-capabilities` 补课桌别名；此前所有课桌式活动都因 MATERIAL_NOT_SUPPORTED 永远「仅本机」。**注意：supabase functions 需另行 `deploy` 才能让后端认识 desk**（前端先上无回归：旧后端拒绝行为与现状相同）。
 - **归因备注**：root 套件的 config/hunyuan/guard 测试失败为并行抖动（单独跑全绿，两次运行失败集合不同），已在干净基线与本改动之间对照确认。
 - 验证：tsc 0 错；适配器+物料能力 63 例、根套件抽样全绿；已推送，线上复验见下一轮。
@@ -38,7 +43,7 @@
 
 2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-11（二十六轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-11（二十七轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
