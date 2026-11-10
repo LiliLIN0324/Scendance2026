@@ -75,9 +75,11 @@ export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss
 
 export interface ExportMenuProps {
   onPick?: (id: ExportItemId) => void;
+  /** H5-a：PNG/CSV 已可导出。为 true 时对应菜单项可点（否则仍是「即将上线」禁用）。 */
+  enableExports?: boolean;
 }
 
-export function ExportMenu({ onPick }: ExportMenuProps) {
+export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -113,7 +115,10 @@ export function ExportMenu({ onPick }: ExportMenuProps) {
         }}>
           {EXPORT_MENU_ITEMS.map(item => {
             // 只读分享在 H4-b 即可预览毛玻璃弹窗形态；其余三项实现归 H5，如实标「即将上线」。
-            const enabled = item.id === 'share';
+            // H5-a：PNG/CSV 真导出 + 分享弹窗形态；GeoJSON 归 H5-c，如实标「即将上线」。
+            const enabled = enableExports
+              ? (item.id === 'png' || item.id === 'csv' || item.id === 'share')
+              : item.id === 'share';
             return (
               <button
                 key={item.id}
@@ -296,3 +301,6 @@ const iconButtonStyle: React.CSSProperties = {
   lineHeight: 1,
   cursor: 'pointer',
 };
+
+
+
