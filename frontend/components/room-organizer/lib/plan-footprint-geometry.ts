@@ -128,10 +128,62 @@ export interface PlanFootprintMarkerShape {
   label: string;
 }
 
+/** 2D 设施模板 → 3D 里立起来的物件类型（同一份数据，两个视图里是同一个东西）。 */
+export type PlanPropKind =
+  | 'tent'
+  | 'stage'
+  | 'kiosk'
+  | 'foodTruck'
+  | 'toilet'
+  | 'post'
+  | 'bin'
+  | 'misc';
+
+export interface PlanPropShape {
+  id: string;
+  templateId: string;
+  kind: PlanPropKind;
+  label: string;
+  /** 占地中心（壳体坐标）。 */
+  center: ShellPoint;
+  /** 占地尺寸（壳体米，已按平面比例缩放）。 */
+  width: number;
+  depth: number;
+  rotationDeg: number;
+}
+
+const PROP_KIND_BY_TEMPLATE: Record<string, PlanPropKind> = {
+  'booth-2x2': 'kiosk',
+  'tent-3x3': 'tent',
+  'medical-tent-4x3': 'tent',
+  'food-truck-6x2.5': 'foodTruck',
+  'stage-platform-8x6': 'stage',
+  'toilet-2.4x1.2': 'toilet',
+  'security-post-1.5x1.5': 'post',
+  'trash-point-1.2x1.2': 'bin',
+};
+
+/** 模板名兜底：自定义模板也能按关键词落到合适的 3D 物件，而不是一律灰盒子。 */
+export function planPropKind(templateId: string): PlanPropKind {
+  const known = PROP_KIND_BY_TEMPLATE[templateId];
+  if (known) return known;
+  const key = templateId.toLowerCase();
+  if (key.includes('tent') || key.includes('marquee') || key.includes('canopy')) return 'tent';
+  if (key.includes('stage') || key.includes('deck') || key.includes('platform')) return 'stage';
+  if (key.includes('toilet') || key.includes('restroom') || key.includes('wc')) return 'toilet';
+  if (key.includes('truck') || key.includes('van') || key.includes('trailer')) return 'foodTruck';
+  if (key.includes('booth') || key.includes('stall') || key.includes('kiosk')) return 'kiosk';
+  if (key.includes('post') || key.includes('guard') || key.includes('security')) return 'post';
+  if (key.includes('trash') || key.includes('bin') || key.includes('waste')) return 'bin';
+  return 'misc';
+}
+
 export interface PlanFootprintShapes {
   boundary: ShellPoint[];
   zones: PlanFootprintZonesShape[];
   facilities: PlanFootprintFacilityShape[];
+  /** 需要真正立起来的 3D 物件（与 facilities 一一对应，尺寸/朝向已换算到壳体）。 */
+  props: PlanPropShape[];
   routes: PlanFootprintRouteShape[];
   nodes: PlanFootprintMarkerShape[];
   workers: PlanFootprintMarkerShape[];
@@ -165,6 +217,28 @@ export function facilityFootprint(
   }));
 }
 
+/**
+ * 设施在 3D 里的落地形态：中心点 + 缩放后的占地 + 朝向。
+ *
+ * 尺寸给一个下限（0.6 m）：2D 里可以画一个很小的占位，但 3D 立一个 20 cm 的帐篷
+ * 没有任何信息量，不如按「最小可辨认物件」画。
+ */
+export function facilityProp(
+  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size'>,
+  frame: PlanShellFrame,
+): PlanPropShape {
+  return {
+    id: facility.id,
+    templateId: facility.templateId,
+    kind: planPropKind(facility.templateId),
+    label: facility.name,
+    center: frame.toShell(facility.position),
+    width: Math.max(0.6, facility.size.width * frame.scaleX),
+    depth: Math.max(0.6, facility.size.depth * frame.scaleZ),
+    rotationDeg: facility.rotationDeg,
+  };
+}
+
 /** 把一整份平面规划摊成 3D 地面上的图形（纯数据，供 three 层直接消费）。 */
 export function planFootprintShapes(
   plan: Pick<SitePlanData, 'boundary' | 'zones' | 'facilities' | 'routes' | 'nodes' | 'workers'>,
@@ -188,6 +262,7 @@ export function planFootprintShapes(
       color: facility.color ?? FACILITY_FALLBACK_COLOR,
       label: facility.name,
     })),
+    props: plan.facilities.map(facility => facilityProp(facility, frame)),
     routes: plan.routes.map(route => ({
       id: route.id,
       points: route.points.map(point => frame.toShell(point)),

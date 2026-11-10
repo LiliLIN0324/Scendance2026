@@ -1,5 +1,6 @@
-import { ROOM_OBJECT_TAGS } from './room-builder';
+﻿import { ROOM_OBJECT_TAGS } from './room-builder';
 import { planFootprintShapes, type ShellPoint } from '../lib/plan-footprint-geometry';
+import { buildGroundLabel, buildPlanPropObject } from './plan-props-builder';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type * as ThreeNS from 'three';
 
@@ -22,6 +23,7 @@ const ELEVATION = {
   facility: 0.035,
   route: 0.045,
   marker: 0.055,
+  label: 0.07,
 } as const;
 
 const MARKER_RADIUS = 0.9;
@@ -80,6 +82,38 @@ function borderLine(
   return line;
 }
 
+/** 分区语义 → 地面标签文字（与 2D 图例同一套中文口径）。 */
+const ZONE_LABELS: Record<string, string> = {
+  stage: '舞台区',
+  audience: '观众区',
+  parking: '停车区',
+  loading: '后勤装卸',
+  checkin: '签到区',
+  queue: '排队区',
+  medical: '医疗点',
+  vip: '贵宾区',
+  reserved: '预留区',
+};
+
+function boundsOf(points: readonly ShellPoint[]): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.z < minZ) minZ = point.z;
+    if (point.z > maxZ) maxZ = point.z;
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
+function centroidOf(points: readonly ShellPoint[]): ShellPoint {
+  const sum = points.reduce((acc, point) => ({ x: acc.x + point.x, z: acc.z + point.z }), { x: 0, z: 0 });
+  return { x: sum.x / points.length, z: sum.z / points.length };
+}
+
 export interface PlanFootprintMetrics {
   width: number;
   depth: number;
@@ -125,6 +159,19 @@ export function buildPlanFootprint(
     group.add(borderLine(THREE, facility.points, metrics, facility.color, 0.95, ELEVATION.facility + 0.001));
   }
 
+  // 设施实体：同一份 2D 数据在 3D 里立起来（帐篷/舞台/餐车/厕位/摊位/岗亭/垃圾桶）。
+  // 位置与朝向都来自 2D 占地，所以两个视图里是同一个物件，不是各画一套。
+  for (const prop of shapes.props) {
+    const object = buildPlanPropObject(THREE, prop);
+    if (!object.children.length) continue;
+    object.position.set(prop.center.x - metrics.width / 2, 0, prop.center.z - metrics.depth / 2);
+    // 2D 画布顺时针为正；three 绕 Y 正向是逆时针，所以取负。
+    object.rotation.y = -(prop.rotationDeg * Math.PI) / 180;
+    object.userData.planPropId = prop.id;
+    object.name = `plan-prop-${prop.kind}`;
+    group.add(object);
+  }
+
   // 动线：折线直接压在设施之上，颜色区分人行/车辆/后勤。
   for (const route of shapes.routes) {
     if (route.points.length < 2) continue;
@@ -163,6 +210,38 @@ export function buildPlanFootprint(
     mesh.position.y = ELEVATION.marker;
     mesh.userData.planWorkerId = worker.id;
     group.add(mesh);
+  }
+
+  // 地面文字：分区名写在区块中心，设施名写在占位南侧（OnePlan 那种「区块带名字」的读图感）。
+  // 浏览器里才有 canvas；SSR/单测环境跳过，不影响图形本身。
+  for (const zone of shapes.zones) {
+    if (zone.points.length < 3) continue;
+    const bounds = boundsOf(zone.points);
+    const widthM = Math.min(7, Math.max(2.2, (bounds.maxX - bounds.minX) * 0.55));
+    const label = buildGroundLabel(
+      THREE,
+      ZONE_LABELS[zone.semantic] ?? zone.semantic,
+      centroidOf(zone.points),
+      metrics,
+      { widthM, y: ELEVATION.label, color: '#ffffff', bold: true },
+    );
+    if (label) {
+      label.userData.planZoneLabel = zone.id;
+      group.add(label);
+    }
+  }
+  for (const prop of shapes.props) {
+    const label = buildGroundLabel(
+      THREE,
+      prop.label,
+      { x: prop.center.x, z: prop.center.z + prop.depth * 0.5 + 0.75 },
+      metrics,
+      { widthM: Math.min(5, Math.max(1.8, prop.width * 0.85)), y: ELEVATION.label, color: '#eef3f8' },
+    );
+    if (label) {
+      label.userData.planPropLabel = prop.id;
+      group.add(label);
+    }
   }
 
   // 场地轮廓最后画，压在最高层，方便一眼看出 2D 画的边界在哪。

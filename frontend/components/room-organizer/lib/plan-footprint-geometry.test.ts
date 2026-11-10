@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { facilityFootprint, planFootprintShapes, planShellFrame } from './plan-footprint-geometry';
+import { facilityFootprint, facilityProp, planFootprintShapes, planPropKind, planShellFrame } from './plan-footprint-geometry';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /**
@@ -148,5 +148,76 @@ describe('planFootprintShapes', () => {
 
   it('边界退化时整份图形返回 null', () => {
     expect(planFootprintShapes(makePlan({ boundary: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }] }), { width: 10, depth: 10 })).toBeNull();
+  });
+});
+
+describe('设施 → 3D 物件（planPropKind / facilityProp）', () => {
+  it('八个内置模板各自落到对的 3D 物件类型', () => {
+    const cases: Array<[string, string]> = [
+      ['booth-2x2', 'kiosk'],
+      ['tent-3x3', 'tent'],
+      ['medical-tent-4x3', 'tent'],
+      ['food-truck-6x2.5', 'foodTruck'],
+      ['stage-platform-8x6', 'stage'],
+      ['toilet-2.4x1.2', 'toilet'],
+      ['security-post-1.5x1.5', 'post'],
+      ['trash-point-1.2x1.2', 'bin'],
+    ];
+    for (const [templateId, kind] of cases) {
+      expect(planPropKind(templateId)).toBe(kind);
+    }
+  });
+
+  it('自定义模板按关键词归类，完全不认识的落到 misc', () => {
+    expect(planPropKind('marquee-5x5')).toBe('tent');
+    expect(planPropKind('main-stage-deck')).toBe('stage');
+    expect(planPropKind('wc-block')).toBe('toilet');
+    expect(planPropKind('catering-trailer')).toBe('foodTruck');
+    expect(planPropKind('waste-bay')).toBe('bin');
+    expect(planPropKind('mystery-box')).toBe('misc');
+  });
+
+  it('尺寸与朝向换算到壳体，且底面积给最小可辨认尺度', () => {
+    const frame = planShellFrame(square, { width: 20, depth: 10 })!; // 正好 1:1
+    const prop = facilityProp({
+      id: 'f1',
+      templateId: 'stage-platform-8x6',
+      name: '主舞台',
+      position: { x: 6, y: 8 },
+      rotationDeg: 15,
+      size: { width: 8, depth: 6 },
+    }, frame);
+    expect(prop.kind).toBe('stage');
+    expect(prop.label).toBe('主舞台');
+    expect(prop.width).toBeCloseTo(8, 5);
+    expect(prop.depth).toBeCloseTo(6, 5);
+    expect(prop.rotationDeg).toBe(15);
+    // 西北角 (0,10) 是壳体原点，所以 (6,8) → x=6、z=2。
+    expect(prop.center.x).toBeCloseTo(6, 5);
+    expect(prop.center.z).toBeCloseTo(2, 5);
+
+    const tiny = facilityProp({
+      id: 'f2',
+      templateId: 'trash-point-1.2x1.2',
+      name: '垃圾桶',
+      position: { x: 1, y: 1 },
+      rotationDeg: 0,
+      size: { width: 0.2, depth: 0.2 },
+    }, frame);
+    expect(tiny.width).toBe(0.6);
+    expect(tiny.depth).toBe(0.6);
+  });
+
+  it('planFootprintShapes 同时给出占地图形与 3D 物件，且一一对应', () => {
+    const shapes = planFootprintShapes(makePlan({
+      facilities: [
+        { id: 'f1', templateId: 'tent-3x3', name: '后勤帐篷', position: { x: 5, y: 5 }, rotationDeg: 90, size: { width: 3, depth: 3 }, notes: '' },
+        { id: 'f2', templateId: 'toilet-2.4x1.2', name: '移动洗手间', position: { x: 12, y: 4 }, rotationDeg: 0, size: { width: 2.4, depth: 1.2 }, notes: '' },
+      ],
+    } as unknown as SitePlanData), { width: 20, depth: 10 })!;
+    expect(shapes.props.map(prop => prop.id)).toEqual(['f1', 'f2']);
+    expect(shapes.props.map(prop => prop.kind)).toEqual(['tent', 'toilet']);
+    expect(shapes.props[0]!.rotationDeg).toBe(90);
+    expect(shapes.facilities.map(facility => facility.id)).toEqual(shapes.props.map(prop => prop.id));
   });
 });
