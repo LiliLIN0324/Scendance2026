@@ -32,9 +32,9 @@ describe('SpacePanel', () => {
     let runNew: (() => void) | undefined;
     render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onRegisterNew={run => { runNew = run; }}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
-    expect(screen.getByText('用手机拍一段场地')).toBeTruthy();
-    const capture = screen.getByText('拍摄场地') as HTMLAnchorElement;
-    expect(capture.getAttribute('href')).toBe('/guide/capture');
+    // 面板打开即自动登记云端扫描库（索引 8 套实景），空库提示只在真没数据时出现
+    expect(screen.getByText(/\d+ 套已扫描/)).toBeTruthy();
+    expect(screen.queryByText('用手机拍一段场地')).toBeNull();
     expect(screen.getByText('场景模板').closest('details')?.open).toBe(false);
     // 新建空间已收进输入框的 ＋ 菜单，由 chat 栏调用注册进来的动作。
     runNew?.();

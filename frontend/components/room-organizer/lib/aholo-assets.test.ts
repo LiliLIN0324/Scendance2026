@@ -11,6 +11,7 @@ import {
   rememberAholoAsset,
   resolveAholoAssetUrl,
 } from './aholo-assets';
+import { CLOUD_ASSETS_BASE } from './cloud-assets';
 
 const ID = '4165e104-e2c1-4f5e-b2a4-46602bf9f932';
 const OTHER = '00000000-0000-4000-8000-000000000000';
@@ -145,5 +146,18 @@ describe('Aholo 资产注册表', () => {
     });
     expect(backfilled.geo).toEqual({ lng: 120.121358, lat: 30.222692, source: 'lookup' });
     expect(findAholoAssetByTask('3FO4K4RKIQ9S')?.geo?.lat).toBe(30.222692);
+  });
+
+  it('云端资产的稳定地址走云端资产库，lodUrl 只收站内路径或云端地址', () => {
+    expect(rememberAholoAsset({
+      assetId: ID, kind: 'spz', name: '云端高斯', bytes: 1, savedAt: 1, origin: 'cloud',
+      lodUrl: `${CLOUD_ASSETS_BASE}/scans/tearoom-130/lod-meta.json`,
+    })).toMatchObject({ origin: 'cloud' });
+    expect(resolveAholoAssetUrl(ID)).toBe(`${CLOUD_ASSETS_BASE}/scans/${ID}.spz`);
+    // 非云端主机的绝对 lodUrl 不收，注册表不能被塞进任意地址
+    expect(rememberAholoAsset({
+      assetId: OTHER, kind: 'spz', name: '坏 lod', bytes: 1, savedAt: 2,
+      lodUrl: 'https://evil.example.test/scans/x/lod-meta.json',
+    })?.lodUrl).toBeUndefined();
   });
 });
