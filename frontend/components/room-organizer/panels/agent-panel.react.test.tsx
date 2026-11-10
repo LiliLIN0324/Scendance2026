@@ -4533,7 +4533,10 @@ describe('event layout generation path', () => {
     const id = (n: number) => `00000000-0000-4000-8000-${String(200 + n).padStart(12, '0')}`;
     const layout = backendSceneToLayout({
       schemaVersion: 2,
-      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
       objects: [],
       camera: 'overview',
       lighting: 'neutral',
@@ -4550,7 +4553,8 @@ describe('event layout generation path', () => {
       sources: [],
       dimensions: [],
     }, { name: '西湖·平湖秋月', projectId: 'pinghu-shell' });
-    layout.floors[0]!.interiorWalls = [];
+    expect(layout.backendVenue?.polygon).toHaveLength(4);
+    expect(layout.floors[0]?.interiorWalls).toHaveLength(4);
     state.layout = layout;
     render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('圆桌直径2.2米，80人，20米乘15米');

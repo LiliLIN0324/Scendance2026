@@ -408,7 +408,10 @@ function memoryBox(): Storage {
     const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
     const hall = backendSceneToLayout({
       schemaVersion: 2,
-      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
       objects: [],
       camera: 'overview',
       lighting: 'neutral',
@@ -425,7 +428,8 @@ function memoryBox(): Storage {
       sources: [],
       dimensions: [],
     }, { name: '西湖·平湖秋月', projectId: 'pinghu-shell' });
-    hall.floors[0]!.interiorWalls = [];
+    expect(hall.backendVenue?.polygon).toHaveLength(4);
+    expect(hall.floors[0]?.interiorWalls).toHaveLength(4);
     const input = {
       base: hall, floorIndex: 0, widthM: 23.8, depthM: 16.1, variant: 0, guests: 80,
       layoutMode: 'dining' as const, seatingShape: 'ring' as const,

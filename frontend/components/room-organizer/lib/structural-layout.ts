@@ -12,6 +12,15 @@ export function stableMeasurement(value: number, original?: number): number {
 
 type ShellPoint = { x: number; z: number };
 
+function ringArea(points: readonly ShellPoint[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index]!, b = points[(index + 1) % points.length]!;
+    area += a.x * b.z - b.x * a.z;
+  }
+  return Math.abs(area) / 2;
+}
+
 /** A closed exterior shell smaller than the activity frame. Endpoints are world metres. */
 function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kind?: string }[], width: number, depth: number): ShellPoint[] | null {
   const exterior = walls.filter(wall => wall.kind === 'exterior');
@@ -30,12 +39,7 @@ function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kin
     loop.push(next);
   }
   if (pending.length || loop.length < 3) return null;
-  let area = 0;
-  for (let index = 0; index < loop.length; index++) {
-    const a = loop[index]!, b = loop[(index + 1) % loop.length]!;
-    area += a.x * b.z - b.x * a.z;
-  }
-  area = Math.abs(area) / 2;
+  const area = ringArea(loop);
   // Walls sitting on the activity frame are the frame itself. An inset shell is the usable room.
   if (!(area > 1) || area > width * depth * 0.98) return null;
   return loop.map(point => ({
@@ -56,7 +60,10 @@ export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2
     height: w.height ?? floor?.height ?? 3, thickness: w.thickness ?? 0.16,
     kind: w.kind ?? 'interior', status: w.status ?? 'inferred',
   })) : (stored?.structure?.walls ?? []).map(wall => ({ ...wall }));
-  const shell = layout.backendVenue?.polygon ? null : shellInterior(walls, layout.width, layout.height);
+  const shell = shellInterior(walls, layout.width, layout.height);
+  const recorded = layout.backendVenue?.polygon;
+  // A map pick stores the outer activity outline. A tighter wall loop is the room people can sit in.
+  const useShell = !!shell && ringArea(shell) < (recorded ? ringArea(recorded) : layout.width * layout.height) * 0.98;
   const openings: SceneV2['structure']['openings'] = [];
   for (const item of floor?.items ?? []) {
     if (!item.position || (item.type !== 'door' && item.type !== 'window')) continue;
@@ -94,7 +101,7 @@ export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2
   return {
     schemaVersion: 2, venue: { ...(layout.backendVenue ?? { entrances: [], shape: 'rectangle' as const }),
       width: layout.width, depth: layout.height, height: floor?.height ?? 3,
-      ...(shell ? { shape: 'polygon' as const, polygon: shell } : {}) },
+      ...(useShell && shell ? { shape: 'polygon' as const, polygon: shell } : {}) },
     objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
     structure: { walls, openings, columns }, sources: stored?.sources ?? [], dimensions: stored?.dimensions ?? [],
     ...(stored?.design ? { design: stored.design } : {}),
