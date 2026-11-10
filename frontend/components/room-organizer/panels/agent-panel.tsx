@@ -3308,7 +3308,7 @@ export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: s
   material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
 };
 
-export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, chatSlot }: {
+export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, bingoSlot, chatSlot }: {
   onClose?(): void;
   /** 顶栏头像位置：飞入动画从这里起飞/降落。 */
   headerAvatarRef?: RefObject<HTMLSpanElement>;
@@ -3320,6 +3320,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   spaceSlot?: ReactNode;
   /** 物料卡片：物料库与生成。 */
   materialSlot?: ReactNode;
+  /** Bingo 卡片：规划信息（统计/清单/问题/图例）合入审校台，不再单占左轨。 */
+  bingoSlot?: ReactNode;
   /** 活动/空间/物料各自的对话区（Bingo 用自带的真对话，不传）。 */
   chatSlot?: ReactNode;
 } = {}): JSX.Element {
@@ -3534,6 +3536,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activeAgent === 'space' && spaceSlot}
       {activeAgent === 'material' && materialSlot}
     </div>}
+    {activeAgent === 'bingo' && bingoSlot}
     {!conversation && chatSlot}
     </div>
     {/* T2：输入条、风格套与能力提示只属于活动脸；Bingo 脸纯审校台，无输入框。 */}

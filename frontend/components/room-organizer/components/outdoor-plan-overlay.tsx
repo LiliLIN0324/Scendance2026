@@ -38,8 +38,8 @@ const SOURCE_CYCLE: { id: CanvasBasemapSource; short: string; label: string }[] 
   { id: 'osm', short: 'OSM', label: 'OSM 街道' },
   { id: 'carto-light', short: 'C浅', label: 'Carto 浅色' },
   { id: 'carto-dark', short: 'C深', label: 'Carto 深色' },
-  { id: 'vec', short: '天矢', label: '天地图矢量（待 key）' },
-  { id: 'img', short: '天影', label: '天地图影像（待 key）' },
+  { id: 'vec', short: '天矢', label: '天地图矢量' },
+  { id: 'img', short: '天影', label: '天地图影像' },
 ];
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
@@ -226,6 +226,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           ref={canvasApiRef}
           plan={plan}
           source={source}
+          // P4-b：有地理锚点就是真地图；没有锚点（室内房间/模板场景）走纸面平面底，
+          // 室内「标注区」与户外地图从此共用同一张画布。
+          base={plan.anchor ? 'map' : 'floor'}
           onPlanChange={setPlan}
           {...(onHistoryChange ? { onHistoryChange } : {})}
           panelsHostId="outdoor-panel-host-layers"
@@ -327,7 +330,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
               );
             })}
             <div style={{ fontSize: 11, lineHeight: 1.4, opacity: 0.62, color: PLANNING_SURFACE.panelText, padding: '2px 4px 0' }}>
-              天地图两档要配 key；没配时自动回落 OSM 街道。
+              天地图两档由服务端注入 key（TDT_KEY）；本机未配时瓦片回落灰色占位，可先切 OSM 街道。
             </div>
           </div>
         )}
