@@ -2744,10 +2744,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const spokenLength = turn.extraction.lengthM;
       const spokenWidth = turn.extraction.widthM;
       const spokenArea = turn.memory.agentVenue ? null : turn.memory.areaM2;
+      const boundFact = venueFacts.capture();
       const keptMemory = {
         ...turn.memory,
         lengthM: chosenScale.length,
         widthM: chosenScale.width,
+        venueScaleBasis: venueScaleBasis(layoutStore.getState().layout),
+        scaleNeedsReconfirmation: false,
+        ...(boundFact ? { venueFactToken: boundFact } : {}),
         ...(shellIO ? { venueIO: shellIO } : {}),
       };
       delete keptMemory.agentVenue;

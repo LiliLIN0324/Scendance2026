@@ -4180,7 +4180,7 @@ describe('event layout generation path', () => {
     });
     layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
     state.layout = layout;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
     send('圆桌直径2.2米，80人，20米乘15米');
     expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
     expect(screen.queryByText(/不能只改外框/)).toBeNull();
@@ -4231,14 +4231,68 @@ describe('event layout generation path', () => {
     });
     layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
     state.layout = layout;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
     send('想办个八十人圆桌宴');
     expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
     const stored = onMemory.mock.calls.at(-1)?.[0];
     expect(stored.venueIO).toBe('outdoor');
     expect(stored.agentVenue).toBeUndefined();
     expect(stored.lengthM).toBeCloseTo(23.8);
     expect(stored.widthM).toBeCloseTo(16.1);
+    expect(typeof stored.venueScaleBasis).toBe('string');
+    expect(stored.venueFactToken?.generation).toEqual(expect.any(String));
     expect(screen.queryByText(/室内 20×15/)).toBeNull();
+    send('出一版');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
+  }, 20000);
+
+  it('previews an unstated banquet on an activity-scoped standing hall', async () => {
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-unstated',
+      name: '西湖·平湖秋月',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    expect(screen.queryByText(/不能只改外框/)).toBeNull();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+    expect(preview.floors[0]!.items.some(item => item.name === '圆桌')).toBe(true);
+    expect(onApply).not.toHaveBeenCalled();
+    send('出一版');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
+  }, 20000);
+
+  it('answers headcount on an activity-scoped standing hall without asking for the size again', async () => {
+    const onApply = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-headcount',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('我想办个生日宴');
+    expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    send('80个人');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
   }, 20000);
 });
