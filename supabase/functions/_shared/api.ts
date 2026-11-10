@@ -165,6 +165,9 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const conversation='responseMode' in input;
         const emptyConversation={reply:null,unhandled:[],factEvidence:[]} as const;
         if(conversation && env('BRIEF_CONVERSATION_ENABLED')!=='1')return respond({enabled:false,extraction:null,...emptyConversation});
+        // 2026-11-11 用户拍板：brief 理解只走百炼大模型（qwen3.8-max），小模型/网关/DeepSeek 一律不回退；
+        // 没开百炼就如实报未配置，不静默降级到小模型。
+        if(env('BAILIAN_PRODUCT_ENABLED')!=='1')return respond({enabled:false,extraction:null,...(conversation?emptyConversation:{})});
         // 与 agent-runner 共用 chatRequest（自定义 OpenAI 兼容供应商 → Tokendance 网关 → DeepSeek 官方）；三路都缺才如实说未启用。
         if((!env('BAILIAN_PRODUCT_ENABLED') || env('BAILIAN_PRODUCT_ENABLED')==='0') && !env(CHAT_API_KEY_ENV) && !env('DEEPSEEK_API_KEY') && !env('AGENT_CHAT_KEY') && !env('AGENT_CHAT_BASE_URL') && !env('AGENT_CHAT_MODEL') && !env('AGENT_CHAT_PROFILE')) return respond({enabled:false,extraction:null,...(conversation?emptyConversation:{})});
         try {
