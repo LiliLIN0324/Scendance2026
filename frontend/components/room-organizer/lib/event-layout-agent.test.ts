@@ -481,7 +481,33 @@ function memoryBox(): Storage {
     expect(structuralItemCollides(near, withNear, 0)).toBe(false);
     const withoutNear = omitUnlandedBanquetItems(withNear, 0, new Set());
     expect(withoutNear.floors[0]!.items.some(item => item.id === 'near-chair')).toBe(false);
-    expect(plan.seats).toBe(withoutNear.floors[0]!.items.filter(item => item.type === 'dining-chair' && item.id !== 'near-chair').length);
+    // Past the green floor, and in its last 12 cm: the live top view billed both.
+    // Neither may remain in the preview, and the receipt must equal only the chairs left.
+    const pastEdge = makeItem({
+      id: 'past-edge-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
+      position: { x: 0, z: 13.075 - 8.05 },
+    });
+    const band = makeItem({
+      id: 'band-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
+      position: { x: 0, z: 12.365 - 8.05 },
+    });
+    const emptyTable = makeItem({
+      id: 'empty-outline-table', type: 'dining-table', name: '圆桌', width: 1.2, depth: 1.2, height: 0.75,
+      position: { x: 5.5 - 11.9, z: 4.5 - 8.05 },
+    });
+    const withOutlines = {
+      ...candidate,
+      floors: candidate.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, pastEdge, band, emptyTable] }),
+    };
+    expect(structuralItemCollides(band, withOutlines, 0)).toBe(false);
+    const kept = omitUnlandedBanquetItems(withOutlines, 0, new Set());
+    const keptIds = kept.floors[0]!.items.map(item => item.id);
+    expect(keptIds).not.toContain('past-edge-chair');
+    expect(keptIds).not.toContain('band-chair');
+    expect(keptIds).not.toContain('empty-outline-table');
+    const keptChairs = kept.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    expect(plan.seats).toBe(keptChairs.length);
+    expect(plan.layouts.at(-1)!.floors[0]!.items.filter(item => item.type === 'dining-chair').length).toBe(plan.seats);
     expect(plan.blocked).not.toContain('每桌 15');
     expect(plan.blocked).toContain('这间厅按');
     const quoted = plan.blocked?.match(/换成 Ø(\d+\.\d+) 米，同一间室内可以落下 (\d+) 座/);
