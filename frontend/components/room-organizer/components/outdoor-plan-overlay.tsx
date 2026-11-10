@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * 户外 2D 规划覆盖层（P2-e · 融进 3D 页面框架）：**本组件只负责画布本体**——
@@ -11,7 +11,7 @@
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -61,6 +61,11 @@ export interface OutdoorPlanOverlayProps {
   /** P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动用；含初次载入的那一帧）。 */
   onPlanChange?: (plan: SitePlanData) => void;
   /**
+   * P4-c：交付簇里的「发布」槽位。发布卡片由 room-organizer 传进来（ShareMenu variant="canvas"），
+   * 卡片本体只实现一次——用户反馈「导出 分享 发布 应该是一起的」。
+   */
+  deliverySlot?: ReactNode;
+  /**
    * P2-g 反向播种：3D 已圈好的场地（`layout.backendVenue`）投影成的起步平面。
    * 只在**该槽位还没有户外草稿**时使用；有草稿时草稿优先（用户自己画过的东西不覆盖）。
    */
@@ -86,6 +91,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onSaveStateChange,
   onHistoryChange,
   onPlanChange,
+  deliverySlot,
   seedPlan,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
@@ -256,6 +262,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         >
           分享
         </button>
+        {/* P4-c：发布卡片由 room-organizer 传进来，和导出/分享同排同位置。 */}
+        {deliverySlot}
       </div>
       {/* 右下：底图选择（OnePlan 的 Select a map）+ 重看引导。 */}
       <div

@@ -245,6 +245,11 @@ interface ViewToolsProps {
   shareActions?: ShareMenuActions;
   /** 旧评审入口改道时递增。 */
   shareOpenRequest?: number;
+  /**
+   * P4-c 交付簇合并：户外平面画布打开时，发布钮已经和「导出/分享」一起摆在画布右上，
+   * 工具轨这一份隐藏，避免同一个动作两个入口（用户反馈「导出 分享 发布 应该是一起的」）。
+   */
+  publishHidden?: boolean;
   /** 进出漫游的唯一入口（room-organizer 的 startWalk）；不传时退回本组件的开关。 */
   onToggleWalkthrough?(on: boolean): void;
   /**
@@ -315,7 +320,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, onToggleWalkthrough, outdoorActions = null }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给 2D 画布；室内历史/相机一概不动。
   const outdoor = outdoorActions;
   const sceneMoveActive = sceneMoveMode !== 'off';
@@ -616,7 +621,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
           </button>
         </div>
       </div>
-      <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} openRequest={shareOpenRequest} closeSignal={shareClose}/>
+      {publishHidden ? null : <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} openRequest={shareOpenRequest} closeSignal={shareClose}/>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       {sceneMoveEnabled && <button type="button" id="tool-move-scene" data-tip={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '移动整体场景 · 坐标轴 · 再点切无轴' : '移动整体场景 · 无轴 · 再点完成'} aria-label={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '切换到无轴移动' : '完成移动整体场景'} aria-pressed={sceneMoveActive} className={sceneMoveActive ? 'is-active' : ''} onClick={() => onSceneMoveModeChange?.(sceneMoveMode === 'off' ? 'gizmo' : sceneMoveMode === 'gizmo' ? 'numeric' : 'off')}>
         <MoveSceneIcon />
