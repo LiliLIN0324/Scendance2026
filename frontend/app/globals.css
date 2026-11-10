@@ -1040,7 +1040,8 @@ body {
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-bottom-bar { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 4; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 1; }
+/* 左栏永远压在画布之上：户外地图覆盖层 z-index:30 只在自己的画布栏里，窄屏或动画过渡时也不能盖住左栏。 */
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 31; }
 .sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { display: none; }
 .sc-left-column {
   position: relative; min-width: 0; min-height: 0; height: 100%;

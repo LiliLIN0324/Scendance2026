@@ -479,7 +479,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
   const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');
   const captureOpen = capturePanel === 'open';
-  const columnExpanded = navExpanded || personChat || captureOpen;
   const capturePanelRef = useRef<HTMLElement>(null);
   const captureReturnFocusRef = useRef<HTMLElement | null>(null);
   const openCapturePanel = () => {
@@ -500,6 +499,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 保存态经覆盖层上报后在左轨 foot（主产品保存态原位）显示。
   const [outdoor2DOpen, setOutdoor2DOpen] = useState(false);
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('layers');
+  // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
+  // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
+  const columnExpanded = navExpanded || personChat || captureOpen || (outdoor2DOpen && outdoorPanel !== null);
   const [outdoorSaveFoot, setOutdoorSaveFoot] = useState<{ state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null>(null);
   const handleOutdoorSaveState = useCallback((next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => setOutdoorSaveFoot(next), []);
   // P2-g 数据打通：室内工具排通用钮（撤销/重做/缩放/导出）在户外模式下转发给 2D 画布，
