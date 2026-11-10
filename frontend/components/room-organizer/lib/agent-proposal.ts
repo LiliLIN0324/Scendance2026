@@ -102,6 +102,8 @@ export interface PlanProposal {
   capacity?: number;
   /** 这版已经按「加座」重排过：仍不够就直接说这一版排到几座，不再暗示再点一次就行。 */
   seatPriority?: boolean;
+  /** Banquet preview: the card is a short receipt. Audit copy stays off the dialogue. */
+  receipt?: 'banquet';
   /** 体检改法真正挪了多少件（只挪位置，不新增不删除）。 */
   moved?: number;
   /** 这版来自「看看哪里有问题」的体检，不是重新生成。 */
