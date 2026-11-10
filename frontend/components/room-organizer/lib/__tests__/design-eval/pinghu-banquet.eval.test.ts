@@ -5,7 +5,8 @@ import { initialBriefMemory, parseBriefTurn } from '../../brief-agent';
 import { eventPreviewScale, isRoundResizeUtterance } from '../../event-layout-agent';
 import { selectFurnishing } from '../../furnishing-select';
 import { localPlan } from '../../local-plan';
-import { evaluateBanquet } from './index';
+import { canvasFloor } from '../../floor-reading';
+import { countChairsOnCanvasFloor, evaluateBanquet } from './index';
 
 const bare = { venueUp: false, scaleTyped: false, hasBase: false, command: null };
 
@@ -15,11 +16,24 @@ const bare = { venueUp: false, scaleTyped: false, hasBase: false, command: null 
  * not tagged exterior, which is why a shell-only filter still billed chairs
  * that sit past the line into the open side.
  */
-function pinghuHall() {
+function pinghuWalls(extraFirst = false, dropLast = false) {
   const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const wall = (n: number, start: { x: number; z: number }, end: { x: number; z: number }) => ({
     id: id(n), start, end, thickness: 0.2, height: 3, kind: 'interior' as const, status: 'confirmed' as const,
   });
+  const loop = [
+    wall(1, { x: 4, z: 4 }, { x: 19, z: 4 }),
+    wall(2, { x: 19, z: 4 }, { x: 19, z: 9 }),
+    wall(3, { x: 19, z: 9 }, { x: 15.2, z: 9 }),
+    wall(4, { x: 15.2, z: 9 }, { x: 15.2, z: 13 }),
+    wall(5, { x: 15.2, z: 13 }, { x: 4, z: 13 }),
+    wall(6, { x: 4, z: 13 }, { x: 4, z: 4 }),
+  ];
+  const walls = dropLast ? loop.slice(0, -1) : loop;
+  return extraFirst ? [wall(9, { x: 1, z: 1 }, { x: 2, z: 1 }), ...walls] : walls;
+}
+
+function pinghuHall(options: { extraFirst?: boolean; dropLast?: boolean } = {}) {
   return backendSceneToLayout({
     schemaVersion: 2,
     venue: {
@@ -28,21 +42,14 @@ function pinghuHall() {
     },
     objects: [], camera: 'overview', lighting: 'neutral',
     structure: {
-      walls: [
-        wall(1, { x: 4, z: 4 }, { x: 19, z: 4 }),
-        wall(2, { x: 19, z: 4 }, { x: 19, z: 9 }),
-        wall(3, { x: 19, z: 9 }, { x: 15.2, z: 9 }),
-        wall(4, { x: 15.2, z: 9 }, { x: 15.2, z: 13 }),
-        wall(5, { x: 15.2, z: 13 }, { x: 4, z: 13 }),
-        wall(6, { x: 4, z: 13 }, { x: 4, z: 4 }),
-      ],
+      walls: pinghuWalls(options.extraFirst, options.dropLast),
       openings: [], columns: [],
     },
     sources: [], dimensions: [],
   }, { name: '西湖·平湖秋月', projectId: '108da110-50cd-4445-a45a-de309a6f5359' });
 }
 
-function banquetInput(hall: ReturnType<typeof pinghuHall>, diameter: number, seatPriority = false) {
+function banquetInput(hall: ReturnType<typeof pinghuHall>, diameter: number, seatPriority = false, drawnRoomCheck = true) {
   const choice = selectFurnishing({
     occasion: '圆桌宴', notes: `圆桌直径${diameter}米`, statedShape: 'round', statedWidth: diameter,
   });
@@ -52,6 +59,7 @@ function banquetInput(hall: ReturnType<typeof pinghuHall>, diameter: number, sea
     table: { shape: 'round' as const, width: diameter, depth: diameter },
     furnishing: choice, stage: false, checkin: false,
     ...(seatPriority ? { seatPriority: true } : {}),
+    ...(drawnRoomCheck ? {} : { drawnRoomCheck: false }),
   };
 }
 
@@ -79,17 +87,25 @@ describe('平湖秋月 banquet design eval', () => {
       { length: 23.8, width: 16.1 },
     )).toMatchObject({ length: 23.8, width: 16.1, keptHall: true });
 
+    const unchecked = localPlan(banquetInput(hall, 2.2, false, false));
+    const uncheckedPreview = unchecked.layouts.at(-1)!;
+    const uncheckedCount = countChairsOnCanvasFloor(uncheckedPreview, 0, baseIds);
+    expect(uncheckedCount.crossing).toBe(15);
+    expect(evaluateBanquet(uncheckedPreview, 0, baseIds, unchecked.seats ?? -1).pass).toBe(false);
+
     const plan = localPlan(banquetInput(hall, 2.2));
     const preview = plan.layouts.at(-1)!;
     expect(preview.width).toBeCloseTo(23.8);
     expect(preview.height).toBeCloseTo(16.1);
+    const counted = countChairsOnCanvasFloor(preview, 0, baseIds);
     const ledger = evaluateBanquet(preview, 0, baseIds, plan.seats ?? -1);
-    expect(ledger.room.tighterThanFrame).toBe(true);
-    expect(ledger.noCrossing).toEqual({ pass: true, chairs: 0 });
-    expect(ledger.noChairlessTables).toEqual({ pass: true, tables: 0 });
-    expect(ledger.seatsMatch).toEqual({ pass: true, card: plan.seats, inRoom: ledger.seatsMatch.inRoom });
-    expect(plan.seats).toBe(ledger.seatsMatch.inRoom);
-    expect(plan.seats ?? 0).toBeGreaterThan(0);
+    expect(counted.recovered).toBe(true);
+    expect(counted.crossing).toBe(0);
+    expect(counted.chairless).toBe(0);
+    expect(counted.inRoom).toBeGreaterThan(0);
+    expect(plan.seats).toBe(counted.inRoom);
+    expect(ledger.seatsMatch).toEqual({ pass: true, card: counted.inRoom, inRoom: counted.inRoom });
+    expect(ledger.pass).toBe(true);
     expect(preview.floors[0]!.items.filter(item => item.type === 'dining-table').length).toBeGreaterThan(0);
     expect(plan.seats ?? 0).toBeLessThan(80);
     expect(plan.blocked).toBeTruthy();
@@ -99,14 +115,18 @@ describe('平湖秋月 banquet design eval', () => {
     const smaller = localPlan(banquetInput(hall, 1.6));
     const smallerPreview = smaller.layouts.at(-1)!;
     expect(smallerPreview.width).toBeCloseTo(23.8);
+    const smallerCount = countChairsOnCanvasFloor(smallerPreview, 0, baseIds);
     const smallerLedger = evaluateBanquet(smallerPreview, 0, baseIds, smaller.seats ?? -1);
+    expect(smallerCount.crossing).toBe(0);
+    expect(smaller.seats).toBe(smallerCount.inRoom);
     expect(smallerLedger.pass).toBe(true);
     expect(smaller.seats ?? 0).toBeGreaterThan(0);
-    expect(smaller.seats).toBe(smallerLedger.seatsMatch.inRoom);
     expect(smaller.blocked ?? '').not.toContain('没接住');
 
     const added = localPlan(banquetInput(hall, 2.2, true));
+    const addedCount = countChairsOnCanvasFloor(added.layouts.at(-1)!, 0, baseIds);
     const addedLedger = evaluateBanquet(added.layouts.at(-1)!, 0, baseIds, added.seats ?? -1);
+    expect(added.seats).toBe(addedCount.inRoom);
     expect(addedLedger.pass).toBe(true);
     expect(added.layouts.at(-1)!.width).toBeCloseTo(23.8);
     const beforeTables = preview.floors[0]!.items.filter(item => item.type === 'dining-table').length;
@@ -116,5 +136,26 @@ describe('平湖秋月 banquet design eval', () => {
       expect(added.seats ?? 0).toBeLessThan(80);
       expect(added.blocked).toBeTruthy();
     }
+  });
+
+  it('still reads the room when the first wall is a stub, and fails when the loop does not close', () => {
+    const stubbed = pinghuHall({ extraFirst: true });
+    expect(canvasFloor(stubbed, 0).recovered).toBe(true);
+    const baseIds = new Set(stubbed.floors[0]!.items.map(item => item.id));
+    const plan = localPlan(banquetInput(stubbed, 2.2));
+    const counted = countChairsOnCanvasFloor(plan.layouts.at(-1)!, 0, baseIds);
+    expect(counted.recovered).toBe(true);
+    expect(plan.seats).toBe(counted.inRoom);
+    expect(evaluateBanquet(plan.layouts.at(-1)!, 0, baseIds, plan.seats ?? -1).pass).toBe(true);
+
+    const open = pinghuHall({ dropLast: true });
+    expect(canvasFloor(open, 0).recovered).toBe(false);
+    expect(canvasFloor(open, 0).floor).toBeNull();
+    const openIds = new Set(open.floors[0]!.items.map(item => item.id));
+    const openPlan = localPlan(banquetInput(open, 2.2));
+    const openCount = countChairsOnCanvasFloor(openPlan.layouts.at(-1)!, 0, openIds);
+    expect(openCount.recovered).toBe(false);
+    expect(openCount.inRoom).toBe(0);
+    expect(evaluateBanquet(openPlan.layouts.at(-1)!, 0, openIds, openPlan.seats ?? 0).pass).toBe(false);
   });
 });

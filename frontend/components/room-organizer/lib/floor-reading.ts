@@ -3,18 +3,20 @@ import { layoutGeometryScene } from './structural-layout';
 import type { FurnitureItem, RoomLayout } from './types';
 
 /**
- * The indoor floor and wall polylines the canvas draws.
- * This module imports no layout generator. The receipt and the design eval
- * both read a finished preview through here, so a chair past the drawn wall
- * cannot be billed just because a looser exterior shell still contains it.
+ * Polygon the structure shell's floor mesh uses. This module imports no
+ * layout generator. The receipt may use `outsideDrawnRoom`. The design eval
+ * must not: it reads `canvasFloor` and counts chairs with its own test.
  */
 export interface FloorPoint { x: number; z: number }
 
-export interface DrawnRoom {
-  /** World metres. The tighter of the drawn venue polygon and a closed wall loop. */
-  floor: FloorPoint[];
-  /** True when that floor is smaller than the activity frame. */
-  tighterThanFrame: boolean;
+export interface CanvasFloor {
+  /**
+   * False when walls are drawn but do not close into a room.
+   * The 23.8×16.1 frame is not used in place of that room.
+   */
+  recovered: boolean;
+  /** World-metre polygon the floor mesh uses. Null when the room cannot be recovered. */
+  floor: FloorPoint[] | null;
 }
 
 function ringArea(points: readonly FloorPoint[]): number {
@@ -63,12 +65,13 @@ function insetLoop(loop: readonly FloorPoint[], distance: number): FloorPoint[] 
 
 interface ChainWall { start: FloorPoint; end: FloorPoint; thickness: number }
 
-/** Close one wall polyline. Leftover partitions do not throw the room away. */
-function chainLoop(walls: readonly ChainWall[]): { loop: FloorPoint[]; thickness: number } | null {
-  if (walls.length < 3) return null;
+/** Close one loop starting at any wall. A stray first segment must not hide the room. */
+function chainFrom(walls: readonly ChainWall[], start: number): { loop: FloorPoint[]; thickness: number } | null {
+  if (walls.length < 3 || start < 0 || start >= walls.length) return null;
   const key = (point: FloorPoint) => `${point.x.toFixed(3)},${point.z.toFixed(3)}`;
   const pending = walls.map(wall => ({ ...wall }));
-  const first = pending.shift()!;
+  const first = pending.splice(start, 1)[0];
+  if (!first) return null;
   const loop = [first.start, first.end];
   const used = [first];
   let closed = false;
@@ -86,14 +89,28 @@ function chainLoop(walls: readonly ChainWall[]): { loop: FloorPoint[]; thickness
   return { loop, thickness: Math.max(0, ...used.map(wall => wall.thickness)) };
 }
 
-function tighter(frame: number, loops: FloorPoint[][]): FloorPoint[] | null {
-  const usable = loops.filter(loop => loop.length >= 3 && ringArea(loop) > 1 && ringArea(loop) < frame * 0.98);
-  if (!usable.length) return null;
-  return usable.reduce((best, loop) => ringArea(loop) < ringArea(best) ? loop : best);
+function closedLoops(walls: readonly ChainWall[]): { loop: FloorPoint[]; thickness: number; area: number }[] {
+  const found: { loop: FloorPoint[]; thickness: number; area: number }[] = [];
+  const seen = new Set<string>();
+  for (let start = 0; start < walls.length; start++) {
+    const chained = chainFrom(walls, start);
+    if (!chained) continue;
+    const area = ringArea(chained.loop);
+    if (!(area > 1)) continue;
+    const id = chained.loop.map(point => `${point.x.toFixed(2)},${point.z.toFixed(2)}`).sort().join('|');
+    if (seen.has(id)) continue;
+    seen.add(id);
+    found.push({ ...chained, area });
+  }
+  return found;
 }
 
-/** Floor and walls `buildStructureShell` draws, in world metres. */
-export function drawnRoom(layout: RoomLayout, floorIndex = 0): DrawnRoom {
+/**
+ * Polygon the structure shell's floor mesh is built from.
+ * A closed wall loop, of any kind, is that floor. Walls that do not close
+ * do not fall back to the activity frame.
+ */
+export function canvasFloor(layout: RoomLayout, floorIndex = 0): CanvasFloor {
   const scene = layoutGeometryScene(layout, floorIndex);
   const frame = layout.width * layout.height;
   const venue = (scene.venue.polygon ?? [
@@ -105,11 +122,14 @@ export function drawnRoom(layout: RoomLayout, floorIndex = 0): DrawnRoom {
     end: { x: wall.end.x, z: wall.end.z },
     thickness: wall.thickness ?? 0.16,
   }));
-  const exterior = walls.filter((_, index) => scene.structure.walls[index]?.kind === 'exterior');
-  const chained = chainLoop(exterior.length >= 3 ? exterior : walls) ?? (exterior.length >= 3 ? chainLoop(walls) : null);
-  const inner = chained ? insetLoop(chained.loop, chained.thickness / 2) ?? chained.loop : null;
-  const floor = tighter(frame, [venue, ...(inner ? [inner] : [])]) ?? venue;
-  return { floor, tighterThanFrame: ringArea(floor) < frame * 0.98 };
+  if (!walls.length) return { recovered: true, floor: venue };
+  const loops = closedLoops(walls);
+  if (!loops.length) return { recovered: false, floor: null };
+  const tighter = loops.filter(loop => loop.area < frame * 0.98);
+  const pool = tighter.length ? tighter : loops;
+  const chosen = pool.reduce((best, loop) => loop.area < best.area ? loop : best);
+  const inner = insetLoop(chosen.loop, chosen.thickness / 2) ?? chosen.loop;
+  return { recovered: true, floor: inner };
 }
 
 function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
@@ -147,16 +167,16 @@ function wallBox(wall: { start: { x: number; z: number }; end: { x: number; z: n
 export function outsideDrawnRoom(item: FurnitureItem, layout: RoomLayout, floorIndex = 0): boolean {
   if (!item.position) return false;
   const scene = layoutGeometryScene(layout, floorIndex);
-  const room = drawnRoom(layout, floorIndex);
+  const room = canvasFloor(layout, floorIndex);
   const corners = itemCorners(item, layout);
   if (!corners.length) return false;
-  if (room.tighterThanFrame) {
-    for (const corner of corners) {
-      if (!pointInPolygon(corner, room.floor)) return true;
-      for (let index = 0; index < room.floor.length; index++) {
-        const a = room.floor[index]!, b = room.floor[(index + 1) % room.floor.length]!;
-        if (distanceToSegment(corner.x, corner.z, a.x, a.z, b.x, b.z) < 0.02) return true;
-      }
+  // An unclosed wall polyline is not the activity frame. Do not bill the chair.
+  if (!room.recovered || !room.floor) return true;
+  for (const corner of corners) {
+    if (!pointInPolygon(corner, room.floor)) return true;
+    for (let index = 0; index < room.floor.length; index++) {
+      const a = room.floor[index]!, b = room.floor[(index + 1) % room.floor.length]!;
+      if (distanceToSegment(corner.x, corner.z, a.x, a.z, b.x, b.z) < 0.02) return true;
     }
   }
   const chair = corners;

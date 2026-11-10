@@ -42,6 +42,11 @@ export interface LocalPlanInput {
   /** 用户确认的功能要求，不能用生成开关的默认值替代。 */
   functionalNeeds?: FunctionalNeeds;
   seatPriority?: boolean;
+  /**
+   * When false, chairs past the drawn floor stay in the preview. The design
+   * eval uses this to prove it still rejects them. Production leaves it on.
+   */
+  drawnRoomCheck?: boolean;
   layoutMode?: 'dining' | 'desk-chair';
   /** ring = round tables on a loop. Omitted keeps the existing dining grid. */
   seatingShape?: 'ring' | 'grid';
@@ -185,7 +190,7 @@ function isBanquetSeat(item: FurnitureItem): boolean {
   return item.type === 'dining-chair' || item.type === 'chair' || item.type === 'desk-chair';
 }
 
-export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number, baseIds: ReadonlySet<string>): RoomLayout {
+export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number, baseIds: ReadonlySet<string>, drawnRoomCheck = true): RoomLayout {
   const floor = layout.floors[floorIndex];
   if (!floor) return layout;
   const kept: FurnitureItem[] = [];
@@ -195,7 +200,7 @@ export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number,
     const seat = isBanquetSeat(item);
     const table = item.type === 'dining-table';
     if (!seat && !table) { kept.push(item); continue; }
-    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex) || missesUsableFloor(item, layout, floorIndex) || outsideDrawnRoom(item, layout, floorIndex)) continue;
+    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex) || missesUsableFloor(item, layout, floorIndex) || (drawnRoomCheck && outsideDrawnRoom(item, layout, floorIndex))) continue;
     if (seat) pendingSeats.push(item);
     else kept.push(item);
   }
@@ -210,8 +215,8 @@ export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number,
   return { ...layout, floors: layout.floors.map((entry, index) => index === floorIndex ? { ...entry, items } : entry) };
 }
 
-function landedChairCount(layout: RoomLayout | undefined, floorIndex: number, baseIds: ReadonlySet<string>): number {
-  const cleaned = layout ? omitUnlandedBanquetItems(layout, floorIndex, baseIds) : undefined;
+function landedChairCount(layout: RoomLayout | undefined, floorIndex: number, baseIds: ReadonlySet<string>, drawnRoomCheck = true): number {
+  const cleaned = layout ? omitUnlandedBanquetItems(layout, floorIndex, baseIds, drawnRoomCheck) : undefined;
   return cleaned?.floors[floorIndex]?.items.filter(item => isBanquetSeat(item) && !baseIds.has(item.id)).length ?? 0;
 }
 
@@ -238,7 +243,7 @@ function probeSmallerRound(input: LocalPlanInput, current: number): { diameter: 
   for (const diameter of [2, 1.8, 1.6, 1.4, 1.2]) {
     if (diameter >= choice.width - 0.05) continue;
     const preview = previewAtDiameter(input, diameter);
-    const seats = landedChairCount(preview?.layouts.at(-1), input.floorIndex, baseIds);
+    const seats = landedChairCount(preview?.layouts.at(-1), input.floorIndex, baseIds, input.drawnRoomCheck !== false);
     if (seats > current && (!best || seats > best.seats)) best = { diameter, seats };
   }
   return best;
@@ -249,8 +254,9 @@ function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): Loc
   if (!input.furnishing || guests <= 0) return result;
   const baseItems = input.base.floors[input.floorIndex]?.items ?? [];
   const baseIds = new Set(baseItems.map(item => item.id));
-  const layouts = result.layouts.map(layout => omitUnlandedBanquetItems(layout, input.floorIndex, baseIds));
-  const landed = landedChairCount(layouts.at(-1), input.floorIndex, baseIds);
+  const drawnRoomCheck = input.drawnRoomCheck !== false;
+  const layouts = result.layouts.map(layout => omitUnlandedBanquetItems(layout, input.floorIndex, baseIds, drawnRoomCheck));
+  const landed = landedChairCount(layouts.at(-1), input.floorIndex, baseIds, drawnRoomCheck);
   const next = { ...result, layouts, seats: landed };
   if (landed >= guests) return next;
   const candidate = layouts.at(-1);
@@ -290,7 +296,7 @@ function withArrangement<T extends PlanProposal>(result: T, arrangement: TableAr
 function landedSeatScore(input: LocalPlanInput, proposal: { layouts: RoomLayout[]; seats?: number | null }): number {
   if (!input.furnishing) return proposal.seats ?? 0;
   const baseIds = new Set((input.base.floors[input.floorIndex]?.items ?? []).map(item => item.id));
-  return landedChairCount(proposal.layouts.at(-1), input.floorIndex, baseIds);
+  return landedChairCount(proposal.layouts.at(-1), input.floorIndex, baseIds, input.drawnRoomCheck !== false);
 }
 
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {

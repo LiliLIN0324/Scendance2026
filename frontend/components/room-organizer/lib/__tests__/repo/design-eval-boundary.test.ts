@@ -48,6 +48,12 @@ describe('banquet design-eval boundary', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('the ledger does not call the generator filter', () => {
+    const scorecard = readFileSync(join(ROOT, 'components/room-organizer/lib/__tests__/design-eval/scorecard.ts'), 'utf8');
+    expect(scorecard).not.toContain('outsideDrawnRoom');
+    expect(scorecard).not.toContain('omitUnlandedBanquetItems');
+  });
+
   it('the floor reading imports no generator', () => {
     const reading = join(ROOT, 'components/room-organizer/lib/floor-reading.ts');
     const offenders = specifiers(reading).filter(spec => GENERATORS.some(generator => spec.includes(generator.replace(/^components\/room-organizer\/lib\//, '').replace(/\.ts$/, ''))));
