@@ -4,7 +4,13 @@
 
 > 先读HANDOFF.md。
 
-2026-11-11 三十三轮 · **「未通过校验」根治 + 可插拔兜底链**（用户户外音乐节实测再挂→定位→修）：
+2026-11-11 三十四轮 · 大模型体验复测报告落地 + 咨询误路由修复：
+- 复测报告（大模型体验测试活动，qwen3.8-max）：**耳朵已换好**——复杂需求六要素一次全中（模糊词留证待核）、250人冲突给有人味提示+两个方向、增量修改带上下文不推翻预览、身份对话正常。**双手仍旧**——12座天花板复现（用户没说每桌人数→默认一人一套 1.2m 桌）、「往左挪一点」相对位移被拒（要求报米数）、确认按钮被「座位缺口+1件没放下」永远藏住、咨询句被误路由成重排、三处自相矛盾文案。
+- 本轮已修（`general-activity-question.ts`+`workbench-agent.ts`+`local-plan.ts`）：①意见/风险类提问（你觉得/怎么看/有什么风险…）不再被 classifyLocalLayout 误判成布置命令，走模型 readOnly 回答（「你觉得我这场布置还有什么风险」实测句钉住）；②备用排法成功时脚本失败原因降级为过程说明，不再当这版的结论（「这块地摆不下一组桌椅」头条 vs 放进25件矛盾）。
+- **待用户拍板的卡**：①「没说每桌人数」时的默认——保持一人一套（2026-10-27 语义，但 40人96㎡ 只出12座体验差）vs 默认官方课桌规格每桌3人（40人可达）——建议：默认改官方规格、要一人一套明说；②相对位移指令（「往左一点」→ 0.5m 步进+碰撞避让）实现卡；③「尚未识别签到台」vs 卡上有签到台的检查器盲区（`functional-requirements.ts:65` zoneMatches 看不到脚本签到区，需现场追踪）。
+- 上轮（三十三轮）：
+
+
 - 用户实测「都站着 搭建舞台和签到区」仍报未通过校验。线上复现抓因：**间歇性**（同句有时成功）——根因是逐字证据校验对空白/全半角零容忍（模型吞空格即整句作废）+「都站着」不认成 all_seated（校验器要求 crowds 词+否定词，站者表达两头都不沾）。
 - 修复（`brief-extract-contract.ts`）：①`normalizedIncludes`——证据匹配规范化（空白/全半角/大小写不作数，其余仍须逐字），activityNeeds/inventoryMentions/factEvidence/unhandled/materialQueries/seatingClauses 全部换用；②「都站着/站着/站立」纳入 all_seated 识别（crowds 词加「都」，not_needed 认「站着/站立」）；③两段提示词教模型「全员站立= all_seated not_needed」。④`api.ts` brief 处理器重写为**可插拔兜底链**（用户拍板修订：不是锁死百炼，而是百炼→AGENT_CHAT_*自定义端点→Tokendance→DeepSeek 有序回退，前级失败自动切下一级，客户端取消不重试，全失败报首选原因）——接新大模型=配一组 OpenAI 兼容端点即入链。
 - 线上复测：同句连打 3/3 成功；三需求全提取（all_seated not_needed「都站着」+stage+checkin）；两函数已部署。测试 41 例全绿（含欠费兜底/全失败如实报/吞空格/都站着四个新回归）。
@@ -77,7 +83,7 @@
 
 2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-11（三十三轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-11（三十四轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
