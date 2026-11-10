@@ -15,7 +15,7 @@ import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
-import { CHAT_API_KEY_ENV, chatModelName, chatProfile, chatRequest, generateProposal } from './providers.ts';
+import { chatModelName, chatProfile, chatRequest, generateProposal } from './providers.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefConversation, parseModelBrief, BRIEF_CONVERSATION_PROMPT, BRIEF_EXTRACT_PROMPT, BRIEF_PROVIDER_TIMEOUT_MS } from './brief-extract-contract.ts';
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
@@ -165,56 +165,74 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const conversation='responseMode' in input;
         const emptyConversation={reply:null,unhandled:[],factEvidence:[]} as const;
         if(conversation && env('BRIEF_CONVERSATION_ENABLED')!=='1')return respond({enabled:false,extraction:null,...emptyConversation});
-        // 2026-11-11 用户拍板：brief 理解只走百炼大模型（qwen3.8-max），小模型/网关/DeepSeek 一律不回退；
-        // 没开百炼就如实报未配置，不静默降级到小模型。
-        if(env('BAILIAN_PRODUCT_ENABLED')!=='1')return respond({enabled:false,extraction:null,...(conversation?emptyConversation:{})});
-        // 与 agent-runner 共用 chatRequest（自定义 OpenAI 兼容供应商 → Tokendance 网关 → DeepSeek 官方）；三路都缺才如实说未启用。
-        if((!env('BAILIAN_PRODUCT_ENABLED') || env('BAILIAN_PRODUCT_ENABLED')==='0') && !env(CHAT_API_KEY_ENV) && !env('DEEPSEEK_API_KEY') && !env('AGENT_CHAT_KEY') && !env('AGENT_CHAT_BASE_URL') && !env('AGENT_CHAT_MODEL') && !env('AGENT_CHAT_PROFILE')) return respond({enabled:false,extraction:null,...(conversation?emptyConversation:{})});
-        try {
-          const userContent='history' in input?JSON.stringify({message:input.message,history:input.history}):input.message;
-          // The existing MiniMax profile forwards token fields unchanged. Keep
-          // legacy payloads byte-compatible while bounding the new mode.
-          const tokenLimit=conversation&&chatProfile(env,'brief')==='minimax'?{max_completion_tokens:2048}:{max_tokens:2048};
-          // 把实际运行的模型名注入系统提示，模型被问「你是什么模型」时能自报准确型号。
-          const selfModel=chatModelName(env,{purpose:'brief'});
-          const systemPrompt=(conversation?BRIEF_CONVERSATION_PROMPT:BRIEF_EXTRACT_PROMPT)+`
-你当前实际运行的模型是「${selfModel}」；用户问你是什么模型时，如实报告这个名字并保持简短。`;
-          const { url, init } = chatRequest(env, { messages: [
-            { role:'system', content: systemPrompt },
-            { role:'user', content: userContent },
-          ], temperature: 0, ...tokenLimit, response_format: { type: 'json_object' } }, { purpose: 'brief' });
-          // 推理模型可能长思考，超时 110s；仍超时说明该供应商当前不可用，reason 会透出。
-          const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,BRIEF_PROVIDER_TIMEOUT_MS);
-          if(conversation){
-            const checked=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({message:z.object({tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(providerResponse);
-            // qwen3.8-max compatible responses set these to null when no tool ran.
-            // Null is not a tool call; an array or object still is.
-            const invoked=(value:unknown)=>value!==undefined&&value!==null;
-            if((checked.base_resp&&checked.base_resp.status_code!==0)||invoked(checked.choices[0]!.message.tool_calls)||invoked(checked.choices[0]!.message.function_call))throw new ApiError('MODEL_INVALID_RESPONSE',502);
+        // 2026-11-11 用户拍板（三十三轮修订）：可插拔多云端大模型 + 兜底链——
+        // 尝试顺序：百炼(启用时) → 自定义兼容端点(AGENT_CHAT_*) → Tokendance 网关 → DeepSeek 官方。
+        // 前一级失败（欠费/限流/超时/输出坏/证据不匹配）自动切下一级；客户端主动取消不重试；
+        // 全部失败如实报「首选供应商的失败原因」，绝不静默无模型。
+        const briefViews: Array<Record<string,string>> = [];
+        if(env('BAILIAN_PRODUCT_ENABLED')==='1')briefViews.push({BAILIAN_PRODUCT_ENABLED:'1'});
+        briefViews.push({BAILIAN_PRODUCT_ENABLED:'0'});
+        const briefReasons:string[]=[];
+        let briefReply:Response|null=null;
+        const briefFailure=(error:unknown):string=>{
+          if(error instanceof ApiError){
+            const details=error.details;
+            const status=details&&typeof details==='object'&&'status' in details?details.status:undefined;
+            if(error.code==='PROVIDER_HTTP_ERROR'&&typeof status==='number'&&Number.isInteger(status)&&status>=100&&status<=599)return `PROVIDER_HTTP_ERROR:${status}`;
+            if(['MODEL_PROVIDER_INCOMPLETE','MODEL_PROVIDER_URL_INVALID','MODEL_PROVIDER_PROFILE_INVALID','MODEL_PROVIDER_UNSUPPORTED_WORKFLOW','MODEL_INCOMPLETE_OUTPUT','MODEL_INVALID_RESPONSE','SERVICE_NOT_CONFIGURED','PROVIDER_INVALID_JSON','FILE_TOO_LARGE','EMPTY_BODY'].includes(error.code))return error.code;
+            return 'MODEL_REQUEST_FAILED';
           }
-          const reply=z.object({choices:z.array(z.object({finish_reason:z.string().nullish(),message:z.object({content:z.string().nullish()})})).min(1)}).parse(providerResponse);
-          const choice = reply.choices[0];
-          if (choice.finish_reason !== 'stop') throw new ApiError('MODEL_INCOMPLETE_OUTPUT', 502);
-          const content = choice.message.content;
-          if (!content || /<\/?think>/i.test(content)) throw new ApiError('MODEL_INVALID_RESPONSE', 502);
-          const model=parseBriefModelJson(content);
-          if(conversation)return respond({enabled:true,...parseBriefConversation(model,input.message)});
-          return respond({enabled:true,extraction:parseModelBrief(model,input.message)});
-        } catch (error) {
-          // 模型失败不阻塞对话，但根因要可见（欠费 402/限流/网关错误），否则只能瞎猜。
-          let reason = 'MODEL_REQUEST_FAILED';
-          if (error instanceof ApiError) {
-            const details = error.details;
-            const status = details && typeof details === 'object' && 'status' in details ? details.status : undefined;
-            if (error.code === 'PROVIDER_HTTP_ERROR' && typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) reason = `PROVIDER_HTTP_ERROR:${status}`;
-            else if (['MODEL_PROVIDER_INCOMPLETE', 'MODEL_PROVIDER_URL_INVALID', 'MODEL_PROVIDER_PROFILE_INVALID', 'MODEL_PROVIDER_UNSUPPORTED_WORKFLOW', 'MODEL_INCOMPLETE_OUTPUT', 'MODEL_INVALID_RESPONSE', 'SERVICE_NOT_CONFIGURED', 'PROVIDER_INVALID_JSON', 'FILE_TOO_LARGE', 'EMPTY_BODY'].includes(error.code)) reason = error.code;
-          } else if (error instanceof SyntaxError) reason = 'MODEL_INVALID_JSON';
-          else if (error instanceof z.ZodError) reason = 'MODEL_INVALID_RESPONSE';
-          else if (error instanceof Error && error.message === 'MODEL_EVIDENCE_MISMATCH') reason = 'MODEL_EVIDENCE_MISMATCH';
-          else if (error instanceof Error && error.message === 'MODEL_INVALID_RESPONSE') reason = 'MODEL_INVALID_RESPONSE';
-          else if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)) reason = 'MODEL_TIMEOUT';
-          return respond({enabled:true,extraction:null,...(conversation?emptyConversation:{}),reason});
+          if(error instanceof SyntaxError)return 'MODEL_INVALID_JSON';
+          if(error instanceof z.ZodError)return 'MODEL_INVALID_RESPONSE';
+          if(error instanceof Error&&error.message==='MODEL_EVIDENCE_MISMATCH')return 'MODEL_EVIDENCE_MISMATCH';
+          if(error instanceof Error&&error.message==='MODEL_INVALID_RESPONSE')return 'MODEL_INVALID_RESPONSE';
+          if(error instanceof Error&&['TimeoutError','AbortError'].includes(error.name))return 'MODEL_TIMEOUT';
+          return 'MODEL_REQUEST_FAILED';
+        };
+        for(const view of briefViews){
+          const viewEnv=(key:Parameters<typeof env>[0]):string|undefined=>{
+            const override=(view as Record<string,unknown>)[key];
+            return override===undefined?env(key):override as string;
+          };
+          try{
+            const userContent='history' in input?JSON.stringify({message:input.message,history:input.history}):input.message;
+            // The existing MiniMax profile forwards token fields unchanged. Keep
+            // legacy payloads byte-compatible while bounding the new mode.
+            const tokenLimit=conversation&&chatProfile(viewEnv,'brief')==='minimax'?{max_completion_tokens:2048}:{max_tokens:2048};
+            // 把该次尝试实际运行的模型名注入系统提示，模型被问「你是什么模型」时能自报准确型号。
+            const selfModel=chatModelName(viewEnv,{purpose:'brief'});
+            const systemPrompt=(conversation?BRIEF_CONVERSATION_PROMPT:BRIEF_EXTRACT_PROMPT)+`
+你当前实际运行的模型是「${selfModel}」；用户问你是什么模型时，如实报告这个名字并保持简短。`;
+            const { url, init } = chatRequest(viewEnv, { messages: [
+              { role:'system', content: systemPrompt },
+              { role:'user', content: userContent },
+            ], temperature: 0, ...tokenLimit, response_format: { type: 'json_object' } }, { purpose: 'brief' });
+            // 推理模型可能长思考，超时 110s；仍超时说明该供应商当前不可用，切下一级。
+            const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,BRIEF_PROVIDER_TIMEOUT_MS);
+            if(conversation){
+              const checked=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({message:z.object({tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(providerResponse);
+              // qwen3.8-max compatible responses set these to null when no tool ran.
+              // Null is not a tool call; an array or object still is.
+              const invoked=(value:unknown)=>value!==undefined&&value!==null;
+              if((checked.base_resp&&checked.base_resp.status_code!==0)||invoked(checked.choices[0]!.message.tool_calls)||invoked(checked.choices[0]!.message.function_call))throw new ApiError('MODEL_INVALID_RESPONSE',502);
+            }
+            const reply=z.object({choices:z.array(z.object({finish_reason:z.string().nullish(),message:z.object({content:z.string().nullish()})})).min(1)}).parse(providerResponse);
+            const choice = reply.choices[0];
+            if (choice.finish_reason !== 'stop') throw new ApiError('MODEL_INCOMPLETE_OUTPUT', 502);
+            const content = choice.message.content;
+            if (!content || /<\/?think>/i.test(content)) throw new ApiError('MODEL_INVALID_RESPONSE', 502);
+            const model=parseBriefModelJson(content);
+            briefReply=respond({enabled:true,...(conversation?parseBriefConversation(model,input.message):{extraction:parseModelBrief(model,input.message)})});
+            break;
+          }catch(error){
+            briefReasons.push(briefFailure(error));
+            // 客户端主动取消：换供应商没有意义，立即返回。
+            if(request.signal&&request.signal.aborted)break;
+            continue;
+          }
         }
+        if(briefReply)return briefReply;
+        return respond({enabled:true,extraction:null,...(conversation?emptyConversation:{}),reason:briefReasons[0]??'MODEL_REQUEST_FAILED'});
       }
       if(['/assets/import','/assets/floorplan','/assets/glb','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));

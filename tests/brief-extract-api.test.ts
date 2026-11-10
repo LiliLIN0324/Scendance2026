@@ -90,14 +90,67 @@ describe('activity needs over the authenticated extraction API', () => {
     expect(body.extraction.activityNeeds).toHaveLength(1);
   });
 
-  it('百炼未启用时如实报未配置，不回退小模型/网关/DeepSeek', async () => {
+  it('主模型欠费(402)时自动兜底到备用供应商并成功', async () => {
+    const settings: Record<string, string> = { ...bailianSettings, AGENT_CHAT_BASE_URL: 'https://custom.example/v1', AGENT_CHAT_KEY: 'backup-key', AGENT_CHAT_MODEL: 'backup-model' };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('quota exhausted', { status: 402 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"event":"讲座"}' } }] })));
+    const api = createApi(fixture.backend, key => settings[key], fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '讲座' }),
+    }));
+    expect(await response.json()).toMatchObject({ enabled: true, extraction: { event: '讲座' } });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[0]![0])).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
+    expect(String(fetcher.mock.calls[1]![0])).toBe('https://custom.example/v1/chat/completions');
+    expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body)).model).toBe('backup-model');
+  });
+
+  it('证据吞空格不再整句作废（2026-11-11 线上事故：「都站着 搭建舞台和签到区」）', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+      activityNeeds: [
+        { kind: 'all_seated', decision: 'not_needed', evidence: '都站着搭建舞台和签到区' },
+        { kind: 'stage', decision: 'needed', evidence: '搭建舞台' },
+        { kind: 'checkin', decision: 'needed', evidence: '签到区' },
+      ],
+    }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '都站着 搭建舞台和签到区' }),
+    }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.extraction.activityNeeds).toEqual(expect.arrayContaining([
+      { kind: 'all_seated', decision: 'not_needed', evidence: '都站着搭建舞台和签到区' },
+      { kind: 'stage', decision: 'needed', evidence: '搭建舞台' },
+      { kind: 'checkin', decision: 'needed', evidence: '签到区' },
+    ]));
+  });
+
+  it('「都站着」识别为全员落座 not_needed（不再要求 crowds 词）', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+      activityNeeds: [{ kind: 'all_seated', decision: 'not_needed', evidence: '都站着' }],
+    }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '都站着' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ enabled: true, extraction: { activityNeeds: [
+      { kind: 'all_seated', decision: 'not_needed', evidence: '都站着' },
+    ] } });
+  });
+
+  it('没有可用供应商时如实报首选供应商的失败原因，不静默', async () => {
     const fetcher = vi.fn<typeof fetch>();
     const settings: Record<string, string> = { AGENT_CHAT_BASE_URL: 'https://custom.example/v1', TOKENDANCE_API_KEY: 'other-provider-key' };
     const api = createApi(fixture.backend, key => settings[key], fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '测试活动' }),
     }));
-    expect(await response.json()).toEqual({ enabled: false, extraction: null });
+    expect(await response.json()).toEqual({ enabled: true, extraction: null, reason: 'MODEL_PROVIDER_INCOMPLETE' });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
