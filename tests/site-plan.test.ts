@@ -198,4 +198,28 @@ describe('site plan contract', () => {
     (negative.zones[0] as { opacity?: number }).opacity = -0.1;
     expect(sitePlanDataSchema.safeParse(negative).success).toBe(false);
   });
+
+  it('keeps route node references optional and round-trips them when present (H2-d)', () => {
+    // 旧数据不带端点引用：解析成功且不虚构字段（与 opacity 同口径）。
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.routes[0].startNodeId).toBeUndefined();
+    expect(legacy.routes[0].endNodeId).toBeUndefined();
+
+    // 带端点引用且节点存在：往返逐字段保留。
+    const linked = samplePlan();
+    (linked.routes[0] as { startNodeId?: string }).startNodeId = '44444444-4444-4444-8444-444444444444';
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(linked)));
+    expect(restored.routes[0].startNodeId).toBe('44444444-4444-4444-8444-444444444444');
+    expect(restored.routes[0].endNodeId).toBeUndefined();
+  });
+
+  it('rejects route endpoint references to missing nodes (H2-d)', () => {
+    const danglingStart = samplePlan();
+    (danglingStart.routes[0] as { startNodeId?: string }).startNodeId = '66666666-6666-4666-8666-666666666666';
+    expect(sitePlanDataSchema.safeParse(danglingStart).success).toBe(false);
+
+    const danglingEnd = samplePlan();
+    (danglingEnd.routes[0] as { endNodeId?: string }).endNodeId = '66666666-6666-4666-8666-666666666666';
+    expect(sitePlanDataSchema.safeParse(danglingEnd).success).toBe(false);
+  });
 });

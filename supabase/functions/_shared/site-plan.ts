@@ -83,6 +83,10 @@ export const planRouteSchema = z.strictObject({
   points: z.array(planPointSchema).min(2).max(128),
   oneWay: z.boolean().default(false),
   widthM: z.number().positive().max(30).optional(),
+  /** 起点引用的出入口节点（H2-d，可选）：节点是动线的唯一端点来源，旧数据不带该字段照常解析。 */
+  startNodeId: z.uuid().optional(),
+  /** 终点引用的出入口节点（H2-d，可选）：移动节点后引用路线端点随动（编辑层 movePlanNode）。 */
+  endNodeId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
 });
 export type PlanRoute = z.infer<typeof planRouteSchema>;
@@ -143,7 +147,14 @@ export const sitePlanDataSchema = z.strictObject({
       ctx.addIssue({ code: 'custom', message: `人员 ${worker.role} 的归属分区不存在` });
     }
   }
+  const nodeIds = new Set(plan.nodes.map(node => node.id.toLowerCase()));
   for (const route of plan.routes) {
+    if (route.startNodeId && !nodeIds.has(route.startNodeId.toLowerCase())) {
+      ctx.addIssue({ code: 'custom', message: `路线 ${route.name} 的起点节点引用不存在` });
+    }
+    if (route.endNodeId && !nodeIds.has(route.endNodeId.toLowerCase())) {
+      ctx.addIssue({ code: 'custom', message: `路线 ${route.name} 的终点节点引用不存在` });
+    }
     for (let i = 1; i < route.points.length; i++) {
       if (route.points[i].x === route.points[i - 1].x && route.points[i].y === route.points[i - 1].y) {
         ctx.addIssue({ code: 'custom', message: `路线 ${route.name} 存在相邻重复顶点` });

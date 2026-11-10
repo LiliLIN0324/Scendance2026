@@ -36,6 +36,18 @@ export const PLANNING_LAYER_COLORS = {
 export type PlanningLayerKind = keyof typeof PLANNING_LAYER_COLORS;
 
 /**
+ * 三类动线专属配色（H2-d）：人行蓝 / 车辆紫 / 后勤金，线型另有实线/长划/点划区分。
+ * route 主色沿用图层色；三类色互异且都与图层色不同名，图例可辨。全为 #rrggbb 小写。
+ */
+export const PLANNING_ROUTE_KIND_COLORS = {
+  pedestrian: '#4a6fa3',
+  vehicle: '#8a6fa8',
+  service: '#c9a22c',
+} as const;
+
+export type PlanningRouteKind = keyof typeof PLANNING_ROUTE_KIND_COLORS;
+
+/**
  * 分区语义默认色（H2-b）。覆盖 SitePlan 契约全部九类语义（含卡片「六类」主语义），
  * 分区未显式指定 color 时按语义取默认；医疗红取警示语义，舞台沿用设施暖色系。
  * 全为 #rrggbb 小写，符合 SitePlan 颜色约束。
@@ -89,13 +101,16 @@ export const PLANNING_LABELS = {
   worker: '人员',
 } as const;
 
-/** H2-b/H2-c 画布编辑模式文案（面板工具行）。 */
+/** H2-b/H2-c/H2-d 画布编辑模式文案（面板工具行）。 */
 export const PLANNING_EDIT_MODE_LABELS = {
   view: '浏览',
   boundary: '画边界',
   'boundary-vertex': '编辑边界',
   zone: '画分区',
   facility: '放设施',
+  route: '画动线',
+  node: '放节点',
+  worker: '布人员',
 } as const;
 
 export type PlanningEditMode = keyof typeof PLANNING_EDIT_MODE_LABELS;

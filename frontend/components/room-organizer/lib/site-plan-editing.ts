@@ -29,7 +29,7 @@ const EPS = 1e-9;
 
 /** 编辑问题：可定位（at 为问题点的 ENU 坐标，可选）。 */
 export interface PlanEditIssue {
-  code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index' | 'out-of-range' | 'unknown-template';
+  code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index' | 'out-of-range' | 'unknown-template' | 'unknown-node' | 'unknown-zone' | 'unconnected-node';
   message: string;
   at?: PlanPoint;
 }

@@ -4,6 +4,7 @@ import {
   PLANNING_ICONS,
   PLANNING_LAYER_COLORS,
   PLANNING_RADIUS,
+  PLANNING_ROUTE_KIND_COLORS,
   PLANNING_SPACING,
   PLANNING_ZONE_COLORS,
   PLANNING_ZONE_OPACITY,
@@ -65,9 +66,22 @@ describe('outdoor 2D planning tokens (H1-c)', () => {
     expect(PLANNING_ZONE_OPACITY.max).toBeLessThan(1);
   });
 
-  it('labels all five canvas edit modes (H2-b/H2-c)', () => {
-    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'facility', 'view', 'zone']);
+  it('labels all eight canvas edit modes (H2-b/H2-c/H2-d)', () => {
+    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'facility', 'node', 'route', 'view', 'worker', 'zone']);
     expect(PLANNING_EDIT_MODE_LABELS['boundary-vertex']).toBe('编辑边界');
     expect(PLANNING_EDIT_MODE_LABELS['facility']).toBe('放设施');
+    expect(PLANNING_EDIT_MODE_LABELS['route']).toBe('画动线');
+    expect(PLANNING_EDIT_MODE_LABELS['node']).toBe('放节点');
+    expect(PLANNING_EDIT_MODE_LABELS['worker']).toBe('布人员');
+  });
+
+  it('gives the three route kinds distinct lowercase colours (H2-d)', () => {
+    const kinds = Object.keys(PLANNING_ROUTE_KIND_COLORS) as (keyof typeof PLANNING_ROUTE_KIND_COLORS)[];
+    expect(kinds.sort()).toEqual(['pedestrian', 'service', 'vehicle']);
+    for (const value of Object.values(PLANNING_ROUTE_KIND_COLORS)) {
+      expect(value).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    // 三类色互异：图例可辨。
+    expect(new Set(Object.values(PLANNING_ROUTE_KIND_COLORS)).size).toBe(3);
   });
 });
