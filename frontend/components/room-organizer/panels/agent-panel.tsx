@@ -1989,6 +1989,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}) };
     if(!floorStillCurrent(floorToken)){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
     proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before)); proposalBase.current = structuredClone(before); shownSteps.current = 0;
+    const askedGuests = briefRef.current.guests ?? 0;
+    if (furnishing && askedGuests > 0 && (plan.seats ?? 0) < askedGuests && plan.blocked) {
+      say({ role: 'agent', text: plan.blocked });
+    }
     await presentProposal(token);
   }
 

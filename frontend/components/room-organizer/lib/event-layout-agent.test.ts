@@ -258,41 +258,55 @@ function memoryBox(): Storage {
     expect(second.memory.headcount).toBe(80);
     expect(second.memory.furnishing?.source).toBe('select_furnishing');
     expect(second.text).not.toContain('已记下你确认的信息');
-    const asked = await resolveBriefTurn('80个人', first.memory, context, {
+    const sticky = await resolveBriefTurn('我想办个生日宴', prior, context, {
       briefExtract: vi.fn(),
-      briefConversation: vi.fn().mockResolvedValue({ enabled: true, extraction: { event: '发布会', headcount: 80 }, reply: '请核对。', unhandled: [], factEvidence: [] }),
+      briefConversation: vi.fn().mockResolvedValue({ enabled: true, extraction: { event: '发布会', venueIO: 'indoor' }, reply: '继续这场发布会。', unhandled: [], factEvidence: [] }),
     }, undefined, { history: [] });
-    expect(asked.kind).toBe('ask');
-    expect(asked.text).toContain('这样对吗');
-    expect(asked.text).toContain('发布会');
-    expect(asked.memory.headcount).toBe(80);
-    const confirmed = await resolveBriefTurn('确认', asked.memory, context);
-    expect(confirmed.kind).toBe('generate');
-    expect(confirmed.text).not.toContain('已记下你确认的信息');
-    expect(confirmed.memory.event).toBe('生日宴');
-    expect(confirmed.memory.headcount).toBe(80);
-    expect(confirmed.layoutTools?.some(call => call.tool === 'select_furnishing')).toBe(true);
+    expect(sticky.kind).toBe('ask');
+    expect(sticky.text).toBe('这场生日宴大概多少人？');
+    expect(sticky.text).not.toContain('已记下你确认的信息');
+    expect(sticky.memory.event).toBe('生日宴');
+    expect(sticky.memory.eventIntent?.occasion).toBe('生日宴');
+    const confirmedSticky = await resolveBriefTurn('确认', {
+      ...sticky.memory,
+      pendingBasicFacts: [
+        { key: 'event', value: '发布会', requiresRestatement: false },
+        { key: 'venueIO', value: 'indoor', requiresRestatement: false },
+      ],
+    }, context);
+    expect(confirmedSticky.text).not.toContain('已记下你确认的信息');
+    expect(confirmedSticky.kind).toBe('ask');
+    expect(confirmedSticky.text).toContain('这场生日宴大概多少人');
+    expect(confirmedSticky.memory.event).toBe('生日宴');
+    const counted = await resolveBriefTurn('80个人', confirmedSticky.memory, context, {
+      briefExtract: vi.fn(),
+      briefConversation: vi.fn().mockResolvedValue({ enabled: true, extraction: { event: '发布会', venueIO: 'indoor', headcount: 80 }, reply: '请核对。', unhandled: [], factEvidence: [] }),
+    }, undefined, { history: [] });
+    expect(counted.kind).toBe('generate');
+    expect(counted.memory.event).toBe('生日宴');
+    expect(counted.memory.headcount).toBe(80);
+    expect(counted.layoutTools?.some(call => call.tool === 'select_furnishing')).toBe(true);
   });
 
-  it('seats 80 at Ø2.2 on a 23.8×16.1 hall and refuses a short plan as a full banquet', () => {
+  it('seats 80 at Ø2.2 on a 23.8×16.1 map shell and does not confirm a partial plan', () => {
     const choice = selectFurnishing({ occasion: '圆桌宴', notes: '圆桌直径2.2米', statedShape: 'round', statedWidth: 2.2 });
-    const full = localPlan({
-      base: makeLayout({ id: 'pinghu', width: 23.8, height: 16.1 }),
-      floorIndex: 0, widthM: 23.8, depthM: 16.1, variant: 0, guests: 80,
+    const hall = makeLayout({ id: 'pinghu', name: '西湖·平湖秋月', width: 23.8, height: 16.1, roof: { style: 'hipped', color: '#8a8a8a' } });
+    hall.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<typeof hall.backendSceneV2>;
+    const plan = (width: number, height: number, base = makeLayout({ width, height })) => localPlan({
+      base, floorIndex: 0, widthM: width, depthM: height, variant: 0, guests: 80,
       layoutMode: 'dining', seatingShape: 'ring',
       table: { shape: 'round', width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
     });
+    const full = plan(23.8, 16.1, hall);
     const chairs = full.layouts.at(-1)!.floors[0]!.items.filter(item => item.type === 'dining-chair');
     expect(chairs.length).toBeGreaterThanOrEqual(80);
     expect(full.blocked ?? null).toBeNull();
-    const tight = localPlan({
-      base: makeLayout({ width: 8, height: 6 }),
-      floorIndex: 0, widthM: 8, depthM: 6, variant: 0, guests: 80,
-      layoutMode: 'dining', seatingShape: 'ring',
-      table: { shape: 'round', width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
-    });
-    expect(tight.seats ?? 0).toBeLessThan(40);
-    expect(tight.blocked).toContain('不能把这版当成满员方案确认');
+    expect(full.summary?.some(line => /约 \d+ 桌/.test(line))).toBe(true);
+    const partial = plan(14, 12);
+    expect(partial.seats ?? 0).toBeGreaterThanOrEqual(40);
+    expect(partial.seats ?? 0).toBeLessThan(80);
+    expect(partial.blocked).toContain('没有按满员桌数确认');
+    expect(partial.summary?.some(line => /约 \d+ 桌/.test(line))).toBe(false);
   });
 
   it('accepts 个人 and a per-table count, and still plans from an area or a 发布会', () => {
