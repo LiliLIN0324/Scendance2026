@@ -93,10 +93,14 @@ import {
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
 import {
+  FACILITY_HANDLE_PX,
   PLAN_FACILITY_TEMPLATES,
   buildFacility,
   facilityContainsPoint,
   facilityFootprintRing,
+  facilityHandleAt,
+  facilityHandles,
+  facilityHandlesUsable,
   facilityPlacementIssues,
   findFacilityTemplate,
   planFacilityIssues,
@@ -335,6 +339,126 @@ const ROUTE_HIT_PX = 8;
 /** undo 栈深度上限（评审稿「撤销和恢复均保留有效引用」；快照体积小，30 步足够）。 */
 const UNDO_LIMIT = 30;
 
+/* ---------------- P2-i 摆设手感：设施手柄 / 图层锁定 / 比例尺指北针 ---------------- */
+
+/** 设施尺寸可编辑区间（米）：与面板输入/契约同口径，拖动不会被拖成 0 或无限大。 */
+const FACILITY_MIN_SIZE_M = 0.5;
+const FACILITY_MAX_SIZE_M = 100;
+
+/** P2-i：图层锁定表（key 缺省 = 未锁；只锁可编辑的业务层）。 */
+type LockedLayerMap = Partial<Record<PlanningLayerKind, boolean>>;
+
+/** P2-i：设施画布直接操作的拖拽会话（move=拖本体；rotate=拖旋转柄；resize=拖角柄）。 */
+interface FacilityDragState {
+  id: string;
+  kind: 'move' | 'rotate' | 'resize';
+  /** resize 时的角柄序号（对应 facilityFootprintRing 角序 SW→SE→NE→NW）。 */
+  corner: number;
+  startPt: PlanPoint;
+  startPx: { x: number; y: number };
+  startFacility: PlanFacility;
+  moved: boolean;
+  /** 拖拽中的预览（仅绘制用；松手才提交，避免每帧进 undo 栈）。 */
+  preview: PlanFacility;
+}
+
+/** P2-i：画选中设施的编辑手柄（虚线占地框 + 四角改尺寸方柄 + 顶部旋转圆柄）。 */
+function drawFacilityHandles(ctx: CanvasRenderingContext2D, viewport: PlanViewport, facility: PlanFacility) {
+  if (!facilityHandlesUsable(facility, viewport)) return;
+  const handles = facilityHandles(facility, viewport);
+  ctx.save();
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  handles.corners.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+  ctx.closePath();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(handles.topMid.x, handles.topMid.y);
+  ctx.lineTo(handles.rotate.x, handles.rotate.y);
+  ctx.stroke();
+  const half = FACILITY_HANDLE_PX / 2;
+  ctx.fillStyle = 'rgba(24, 26, 32, 0.88)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  for (const pt of handles.corners) {
+    ctx.fillRect(pt.x - half, pt.y - half, FACILITY_HANDLE_PX, FACILITY_HANDLE_PX);
+    ctx.strokeRect(pt.x - half, pt.y - half, FACILITY_HANDLE_PX, FACILITY_HANDLE_PX);
+  }
+  ctx.beginPath();
+  ctx.arc(handles.rotate.x, handles.rotate.y, FACILITY_HANDLE_PX, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 比例尺「好读数」候选（1/2/5×10^n）：挑最接近目标像素长度的米数。 */
+const SCALE_NICE_METERS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000];
+
+function niceScaleMeters(metersPerPx: number, targetPx: number): { meters: number; px: number } {
+  const targetM = Math.max(1e-6, metersPerPx * targetPx);
+  let meters = SCALE_NICE_METERS[0]!;
+  for (const candidate of SCALE_NICE_METERS) {
+    if (Math.abs(Math.log(candidate / targetM)) < Math.abs(Math.log(meters / targetM))) meters = candidate;
+  }
+  return { meters, px: meters / metersPerPx };
+}
+
+/**
+ * P2-i：画布左下角常驻比例尺 + 指北针。
+ * 与导出 PNG（site-plan-png 的 scaleBarMeters/northArrowGeometry）同口径：比例尺按当前缩放级
+ * 真实换算，指北针固定「地图北向上」；瓦片底图与纸面底图都画，隐藏项由图层栈控制时不影响。
+ */
+function drawScaleAndNorth(ctx: CanvasRenderingContext2D, viewport: PlanViewport, cssW: number, cssH: number) {
+  const mPerPx = planMetersPerPixel(viewport);
+  if (!Number.isFinite(mPerPx) || mPerPx <= 0) return;
+  const { meters } = niceScaleMeters(mPerPx, 96);
+  const barPx = Math.max(24, Math.min(meters / mPerPx, Math.max(24, cssW - 170)));
+  const label = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+  const left = 14;
+  const barY = cssH - 16;
+  const boxW = barPx + 66;
+  const boxH = 38;
+  const boxX = left - 6;
+  const boxY = barY - boxH + 6;
+  ctx.save();
+  ctx.font = '10px system-ui, -apple-system, "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(18, 20, 26, 0.66)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left, barY);
+  ctx.lineTo(left + barPx, barY);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(left, barY - 4);
+  ctx.lineTo(left, barY + 4);
+  ctx.moveTo(left + barPx, barY - 4);
+  ctx.lineTo(left + barPx, barY + 4);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, left, barY - 8);
+  const nx = left + barPx + 30;
+  const ny = barY - 12;
+  ctx.beginPath();
+  ctx.moveTo(nx, ny - 12);
+  ctx.lineTo(nx - 6, ny + 2);
+  ctx.lineTo(nx + 6, ny + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', nx, barY + 2);
+  ctx.restore();
+}
+
 /** H3-c 规划信息面板页签（顺序固定：总览/清单/问题/图例）。 */
 const INFO_TABS = ['overview', 'inventory', 'issues', 'legend'] as const;
 const INFO_TAB_LABELS: Record<(typeof INFO_TABS)[number], string> = {
@@ -524,10 +648,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const measureCursorRef = useRef<PlanPoint | null>(null);
   // H3-b 冲突/缺失：可定位标记（规则检查输出，恒在业务层之上）。
   const conflictIssuesRef = useRef<PlanConflictIssue[]>([]);
+  /**
+   * P2-i 设施直接操作：画布上拖动 / 拖旋转柄 / 拖四角改尺寸的会话状态。
+   * preview 只在绘制里用，松手才 commitPlan（拖拽过程不写 undo 栈）。
+   */
+  const facilityDragRef = useRef<FacilityDragState | null>(null);
+  /** P2-i 图层锁定：锁定层不参与命中与编辑（显示、统计、图例口径不变）。 */
+  const lockedLayersRef = useRef<LockedLayerMap>({});
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
   const [layerState, setLayerState] = useState<LayerVisibility>(visibility ?? defaultLayerVisibility());
+  /** P2-i 图层锁定（UI 状态；命中过滤读 lockedLayersRef，避免闭包过期）。 */
+  const [lockedLayers, setLockedLayers] = useState<LockedLayerMap>({});
   const [panelOpen, setPanelOpen] = useState(true);
   const [mode, setModeState] = useState<PlanningEditMode>('view');
   const [zoneSemantic, setZoneSemantic] = useState<PlanningZoneSemantic>('audience');
@@ -824,16 +957,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const warningFacilityIds = new Set(
         facilityIssuesRef.current.filter(i => i.issue.code === 'out-of-boundary').map(i => i.facilityId),
       );
+      // P2-i：拖拽中的预览只替换原设施（其余设施/警示/选中态照旧）；松手才提交。
+      const dragPreview = facilityDragRef.current?.preview ?? null;
+      const drawnFacilities = dragPreview
+        ? current.facilities.map(f => (f.id === dragPreview.id ? dragPreview : f))
+        : current.facilities;
       drawFacilityLayer(
         { ctx: planCtx, viewport },
-        current.facilities.map(f => ({ ...f, warning: warningFacilityIds.has(f.id) })),
+        drawnFacilities.map(f => ({ ...f, warning: warningFacilityIds.has(f.id) })),
         { selectedId: selectedFacilityRef.current },
       );
       // H4-b：设施贴纸。scale 类按米制占地矩形拉伸（真实尺度，底形 + 前景线稿，旋转矩阵同
       // drawFacilityLayer）；点位类（医疗/安保/垃圾）在占地中心画符号。不改变命中矩形与选中态
       // （白色选中外圈画在矩形外侧，贴纸不覆盖）。
       const metersPerPx = planMetersPerPixel(viewport);
-      for (const facility of current.facilities) {
+      for (const facility of drawnFacilities) {
         // P2-h：物件库来的设施带 `oneplan:` 前缀，用库里的真贴纸；8 个内置模板仍走原映射。
         const sticker = libraryStickerFor(facility.templateId) ?? facilitySticker(facility.templateId);
         if (!sticker) continue;
@@ -850,6 +988,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const size = Math.max(16, Math.min(28, Math.min(fw, fh) * 0.9));
           drawOneplanSticker(planCtx, sticker, pt.x, pt.y, size, { alpha: 0.95 });
         }
+      }
+      // P2-i：选中设施的可直接拖拽手柄（四角改尺寸 + 顶部旋转）；锁定设施层或非浏览模式不画。
+      const selectedForHandles = selectedFacilityRef.current
+        ? drawnFacilities.find(f => f.id === selectedFacilityRef.current) ?? null
+        : null;
+      if (selectedForHandles && !lockedLayersRef.current.facility && modeRef.current === 'view' && onPlanChange) {
+        drawFacilityHandles(planCtx, viewport, selectedForHandles);
       }
     }
     if (isLayerVisible(vis, 'route')) {
@@ -960,6 +1105,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         drawFacilityGhost({ ctx: planCtx, viewport }, template, ghostPointRef.current, { invalid });
       }
     }
+
+    // 6) P2-i：常驻比例尺 + 指北针（画在最上层，任何底图/图层组合下都在同一位置）。
+    drawScaleAndNorth(planCtx, viewport, cssW, cssH);
+
+    // 本机验收桥：把 viewport 与选中设施的手柄坐标暴露出来（只读，生产构建没有），
+    // 这样 Playwright 脚本能精确点到手柄，而不用靠猜像素。
+    if (process.env.NODE_ENV !== 'production') {
+      const selectedNow = selectedFacilityRef.current
+        ? current.facilities.find(f => f.id === selectedFacilityRef.current) ?? null
+        : null;
+      (window as unknown as { __scendancePlanDebug?: unknown }).__scendancePlanDebug = {
+        viewport: { zoom: viewport.zoom, metersPerPixel: planMetersPerPixel(viewport) },
+        canvas: { width: cssW, height: cssH },
+        selected: selectedNow
+          ? {
+              id: selectedNow.id,
+              handles: facilityHandlesUsable(selectedNow, viewport)
+                ? facilityHandles(selectedNow, viewport)
+                : null,
+            }
+          : null,
+      };
+    }
   }, []);
 
   // 瓦片加载完成后的异步重绘走 ref，避免 onDirty 依赖整份 draw 造成互相引用。
@@ -1060,6 +1228,63 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // P2-i 选中实体的键盘操作：Delete/Backspace 删除、Ctrl/Cmd+D 复制设施、方向键微调设施
+  // （1 m，Shift=10 m）。输入框内不拦截；只读画布不响应。
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!onPlanChange) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      const facilityId = selectedFacilityRef.current;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+        if (!facilityId) return;
+        event.preventDefault();
+        duplicateFacility(facilityId);
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (facilityId) {
+          event.preventDefault();
+          deleteFacility(facilityId);
+          return;
+        }
+        const routeId = selectedRouteRef.current;
+        if (routeId) {
+          event.preventDefault();
+          deleteRoute(routeId);
+          return;
+        }
+        const nodeId = selectedNodeRef.current;
+        if (nodeId) {
+          event.preventDefault();
+          deleteNode(nodeId);
+          return;
+        }
+        const workerId = selectedWorkerRef.current;
+        if (workerId) {
+          event.preventDefault();
+          deleteWorker(workerId);
+        }
+        return;
+      }
+      if (!facilityId) return;
+      const step = event.shiftKey ? 10 : 1;
+      const delta: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, step],
+        ArrowDown: [0, -step],
+      };
+      const move = delta[event.key];
+      if (!move) return;
+      event.preventDefault();
+      nudgeFacility(facilityId, move[0], move[1]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   function currentViewport(): PlanViewport {
     const stage = stageRef.current;
     const anchor = planRef.current.anchor;
@@ -1136,6 +1361,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     layerStateRef.current = next;
     onVisibilityChange?.(next);
     draw();
+  }
+
+  /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁设施层时顺手清选中。 */
+  function setLayerLocked(kind: PlanningLayerKind, locked: boolean) {
+    const next: LockedLayerMap = { ...lockedLayersRef.current, [kind]: locked };
+    lockedLayersRef.current = next;
+    setLockedLayers(next);
+    if (locked && kind === 'facility') selectFacility(null);
+    draw();
+  }
+
+  /** P2-i：设施能否在画布上直接操作——浏览模式 + 设施层未锁定。 */
+  function facilityDirectEditable(): boolean {
+    return modeRef.current === 'view' && !layerLocked('facility');
+  }
+
+  /** P2-i：某图层是否锁定（缺省 false；锁定层不参与点选/拖动，显示与统计照旧）。 */
+  function layerLocked(kind: PlanningLayerKind): boolean {
+    return lockedLayersRef.current[kind] === true;
   }
 
   /* ---------------- H2-b 编辑交互 ---------------- */
@@ -1301,11 +1545,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`已放置「${result.value.name}」，继续单击放置或 Esc 结束${hint}`);
   }
 
-  function updateFacility(id: string, patch: Partial<Pick<PlanFacility, 'name' | 'notes'>>) {
+  /**
+   * P2-i：设施改名/备注之外，接旋转（度）与尺寸（宽×深，米）——面板输入与画布手柄共用，
+   * 尺寸按 FACILITY_MIN/MAX 夹紧，旋转归一化到 [0,360)；全部走 commitPlan（可撤销）。
+   */
+  function updateFacility(
+    id: string,
+    patch: Partial<Pick<PlanFacility, 'name' | 'notes' | 'rotationDeg'>> & { size?: { width: number; depth: number } },
+  ) {
     // 空名会让 plan 过不了契约校验：改名时忽略空值。
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
     const current = planRef.current;
-    commitPlan({ ...current, facilities: current.facilities.map(f => (f.id === id ? { ...f, ...patch } : f)) });
+    const facilities = current.facilities.map(f => {
+      if (f.id !== id) return f;
+      const size = patch.size
+        ? {
+            width: clamp(patch.size.width, FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M),
+            depth: clamp(patch.size.depth, FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M),
+          }
+        : f.size;
+      const rotationDeg = patch.rotationDeg !== undefined ? ((patch.rotationDeg % 360) + 360) % 360 : f.rotationDeg;
+      return { ...f, ...patch, size, rotationDeg };
+    });
+    commitPlan({ ...current, facilities });
   }
 
   function deleteFacility(id: string) {
@@ -1313,6 +1575,119 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) });
     selectFacility(null);
     setEditMessage('设施已删除。');
+  }
+
+  /** P2-i：方向键微调选中设施（1 m，Shift=10 m），共用一条 undo 记录。 */
+  function nudgeFacility(id: string, dx: number, dy: number) {
+    const current = planRef.current;
+    if (!current.facilities.some(f => f.id === id)) return;
+    commitPlan({
+      ...current,
+      facilities: current.facilities.map(f =>
+        f.id === id ? { ...f, position: { x: f.position.x + dx, y: f.position.y + dy } } : f,
+      ),
+    });
+  }
+
+  /** P2-i Ctrl+D：复制选中设施（同模板/尺寸/旋转，偏移 2 m，名称加「副本」），复制件成为新选中。 */
+  function duplicateFacility(id: string) {
+    const facility = planRef.current.facilities.find(f => f.id === id);
+    if (!facility) return;
+    const copy: PlanFacility = {
+      ...facility,
+      id: crypto.randomUUID(),
+      name: `${facility.name} 副本`,
+      position: { x: facility.position.x + 2, y: facility.position.y + 2 },
+    };
+    commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, copy] });
+    selectFacility(copy.id);
+    setEditMessage(`已复制「${facility.name}」，可直接拖动或用面板改尺寸/旋转。`);
+  }
+
+  /* ---------------- P2-i 设施画布直接操作（拖/旋转/改尺寸） ---------------- */
+
+  function newFacilityDrag(
+    facility: PlanFacility,
+    kind: FacilityDragState['kind'],
+    corner: number,
+    pt: PlanPoint,
+    px: { x: number; y: number },
+  ): FacilityDragState {
+    return { id: facility.id, kind, corner, startPt: pt, startPx: px, startFacility: facility, moved: false, preview: facility };
+  }
+
+  /**
+   * 按下时的命中顺序：选中设施的旋转柄 → 四角改尺寸柄 → 任意设施本体（命中即选中并准备拖动）。
+   * 返回 true 表示这次按下被设施接管（不再走节点拖动/平移）。
+   */
+  function startFacilityDrag(px: { x: number; y: number }, pt: PlanPoint): boolean {
+    if (!facilityDirectEditable()) return false;
+    const current = planRef.current;
+    const viewport = currentViewport();
+    const selected = selectedFacilityRef.current
+      ? current.facilities.find(f => f.id === selectedFacilityRef.current) ?? null
+      : null;
+    if (selected) {
+      const handle = facilityHandleAt(selected, viewport, px);
+      if (handle) {
+        facilityDragRef.current = newFacilityDrag(
+          selected,
+          handle.kind,
+          handle.kind === 'resize' ? handle.corner : -1,
+          pt,
+          px,
+        );
+        return true;
+      }
+    }
+    const hitFacility = [...current.facilities].reverse().find(f => facilityContainsPoint(pt, f));
+    if (!hitFacility) return false;
+    selectFacility(hitFacility.id);
+    facilityDragRef.current = newFacilityDrag(hitFacility, 'move', -1, pt, px);
+    return true;
+  }
+
+  /** 拖拽预览：移动=整体平移；旋转=绕中心跟指针角度（Shift 吸附 15°）；改尺寸=对角点固定。 */
+  function facilityDragPreview(drag: FacilityDragState, pt: PlanPoint, snapRotation: boolean): PlanFacility {
+    const start = drag.startFacility;
+    if (drag.kind === 'move') {
+      return {
+        ...start,
+        position: { x: start.position.x + (pt.x - drag.startPt.x), y: start.position.y + (pt.y - drag.startPt.y) },
+      };
+    }
+    if (drag.kind === 'rotate') {
+      const center = start.position;
+      const from = Math.atan2(drag.startPt.y - center.y, drag.startPt.x - center.x);
+      const to = Math.atan2(pt.y - center.y, pt.x - center.x);
+      const deg = start.rotationDeg + ((to - from) * 180) / Math.PI;
+      const snapped = snapRotation ? Math.round(deg / 15) * 15 : deg;
+      return { ...start, rotationDeg: ((snapped % 360) + 360) % 360 };
+    }
+    // resize：对角点固定，指针投影到本地方向得到新宽深，中心按新尺寸回推。
+    const theta = (start.rotationDeg * Math.PI) / 180;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const signX = drag.corner === 1 || drag.corner === 2 ? 1 : -1;
+    const signY = drag.corner >= 2 ? 1 : -1;
+    const halfW = start.size.width / 2;
+    const halfD = start.size.depth / 2;
+    const oppX = start.position.x - signX * halfW * cos + signY * halfD * sin;
+    const oppY = start.position.y - signX * halfW * sin - signY * halfD * cos;
+    const dx = pt.x - oppX;
+    const dy = pt.y - oppY;
+    const localX = dx * cos + dy * sin;
+    const localY = -dx * sin + dy * cos;
+    const width = clamp(Math.abs(localX), FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M);
+    const depth = clamp(Math.abs(localY), FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M);
+    return {
+      ...start,
+      position: {
+        x: oppX + signX * (width / 2) * cos - signY * (depth / 2) * sin,
+        y: oppY + signX * (width / 2) * sin + signY * (depth / 2) * cos,
+      },
+      size: { width, depth },
+    };
   }
 
   /* ---------------- H2-d 动线 / 节点 / 人员 ---------------- */
@@ -1686,8 +2061,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
     if (activeMode === 'view') {
-      // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移。
-      if (hit) {
+      // P2-i：设施手柄/本体优先接管（旋转、改尺寸、整体拖动），其次才落到节点与平移。
+      if (hit && onPlanChange && startFacilityDrag(hit.px, hit.pt)) {
+        downPxRef.current = hit.px;
+        setDragging(true);
+        return;
+      }
+      // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移（锁定层不响应）。
+      if (hit && !layerLocked('node')) {
         const nodeId = nearestNodeIdAt(hit.px);
         if (nodeId) {
           dragNodeRef.current = { id: nodeId, moved: false };
@@ -1704,13 +2085,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!hit) return;
     downPxRef.current = hit.px;
     if (activeMode === 'boundary-vertex') {
-      dragVertexRef.current = nearestBoundaryVertexIndex(hit.px);
+      // P2-i：边界层锁定时顶点不可拖动。
+      dragVertexRef.current = layerLocked('boundary') ? null : nearestBoundaryVertexIndex(hit.px);
     }
   }
 
   function handleStageMouseMove(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     if (activeMode === 'view') {
+      // P2-i：设施拖拽预览（移动/旋转/改尺寸）；松手才 commitPlan，拖拽过程不进 undo 栈。
+      const facilityDrag = facilityDragRef.current;
+      if (facilityDrag) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        if (Math.hypot(hit.px.x - facilityDrag.startPx.x, hit.px.y - facilityDrag.startPx.y) > CLICK_MAX_MOVE_PX) {
+          facilityDrag.moved = true;
+        }
+        if (facilityDrag.moved) {
+          facilityDrag.preview = facilityDragPreview(facilityDrag, hit.pt, event.shiftKey);
+          setEditMessage(null);
+          draw();
+        }
+        return;
+      }
       // H2-d：拖动出入口节点 → 引用路线端点随动预览（松手提交）。
       if (dragNodeRef.current) {
         const hit = eventPlanPoint(event);
@@ -1794,6 +2191,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       downPxRef.current = null;
       panRef.current = undefined;
       setDragging(false);
+      // P2-i：设施拖拽松手——确实拖动过 → 提交预览（移动/旋转/改尺寸一条 undo）；
+      // 没拖动则当单击，继续走下面的既有选中顺序。
+      const facilityDrag = facilityDragRef.current;
+      if (facilityDrag) {
+        facilityDragRef.current = null;
+        if (facilityDrag.moved && onPlanChange) {
+          const preview = facilityDrag.preview;
+          const current = planRef.current;
+          commitPlan({ ...current, facilities: current.facilities.map(f => (f.id === preview.id ? preview : f)) });
+          selectFacility(preview.id);
+          setInfoTab('inventory');
+          setEditMessage(
+            facilityDrag.kind === 'move'
+              ? `「${preview.name}」已移动。`
+              : facilityDrag.kind === 'rotate'
+                ? `「${preview.name}」已旋转到 ${Math.round(preview.rotationDeg)}°。`
+                : `「${preview.name}」尺寸改为 ${preview.size.width.toFixed(1)} × ${preview.size.depth.toFixed(1)} m。`,
+          );
+          return;
+        }
+      }
       // H2-d：拖动节点松手：确实拖动过 → 提交随动结果；否则视为点选该节点。
       if (dragNodeRef.current) {
         const drag = dragNodeRef.current;
@@ -1831,13 +2249,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             setInfoTab('inventory');
             return;
           }
-          const hitNode = nearestNodeIdAt(hit.px);
+          const hitNode = layerLocked('node') ? null : nearestNodeIdAt(hit.px);
           if (hitNode) { selectNode(hitNode); setInfoTab('inventory'); return; }
-          const hitWorker = nearestWorkerIdAt(hit.px);
+          const hitWorker = layerLocked('worker') ? null : nearestWorkerIdAt(hit.px);
           if (hitWorker) { selectWorker(hitWorker); setInfoTab('inventory'); return; }
-          const hitRoute = nearestRouteIdAt(hit.px);
+          const hitRoute = layerLocked('route') ? null : nearestRouteIdAt(hit.px);
           if (hitRoute) { selectRoute(hitRoute); setInfoTab('inventory'); return; }
-          const hitFacility = [...planRef.current.facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
+          const hitFacility = layerLocked('facility')
+            ? null
+            : [...planRef.current.facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
           selectFacility(hitFacility ? hitFacility.id : null);
           if (hitFacility) setInfoTab('inventory');
         }
@@ -1875,6 +2295,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 节点拖动中离开画布：预览不提交，回弹原位。
     dragNodeRef.current = null;
     nodeDragPreviewRef.current = null;
+    // P2-i：设施拖拽中离开画布同样丢弃预览（不提交）。
+    facilityDragRef.current = null;
     draw();
   }
 
@@ -2348,17 +2770,33 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <>
             {LAYER_ORDER.map(kind => {
               const LayerIcon = planningIcon(PLANNING_LAYER_ICONS[kind]);
+              const locked = lockedLayers[kind] === true;
+              const LockIcon = planningIcon(locked ? 'lock' : 'lock-open');
               return (
-                <label key={kind} style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={layerState[kind]}
-                    onChange={event => setLayerVisible(kind, event.target.checked)}
-                  />
-                  <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: PLANNING_LAYER_COLORS[kind], display: 'inline-block' }} />
-                  <LayerIcon size={PLANNING_ICON_SIZES.tool} color={PLANNING_LAYER_COLORS[kind]} aria-hidden />
-                  {PLANNING_LABELS[kind]}
-                </label>
+                <div key={kind} style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, cursor: 'pointer', flex: 1, minWidth: 0, opacity: locked ? 0.7 : 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={layerState[kind]}
+                      onChange={event => setLayerVisible(kind, event.target.checked)}
+                    />
+                    <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: PLANNING_LAYER_COLORS[kind], display: 'inline-block' }} />
+                    <LayerIcon size={PLANNING_ICON_SIZES.tool} color={PLANNING_LAYER_COLORS[kind]} aria-hidden />
+                    {PLANNING_LABELS[kind]}
+                  </label>
+                  {/* P2-i 图层锁定：锁定后该层不参与点选/拖动（显示与统计不变）。 */}
+                  <button
+                    type="button"
+                    data-testid={`layer-lock-${kind}`}
+                    aria-label={`${locked ? '解锁' : '锁定'}${PLANNING_LABELS[kind]}图层`}
+                    aria-pressed={locked}
+                    title={locked ? '解锁图层（恢复可编辑）' : '锁定图层（只读，不可选中或拖动）'}
+                    onClick={() => setLayerLocked(kind, !locked)}
+                    style={{ all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', padding: 2, borderRadius: PLANNING_RADIUS.sm, color: locked ? PLANNING_SURFACE.warnText : PLANNING_SURFACE.panelText, opacity: locked ? 1 : 0.4 }}
+                  >
+                    <LockIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+                  </button>
+                </div>
               );
             })}
 
@@ -2642,8 +3080,53 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </div>
-                    <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
-                      {selectedFacility.size.width}×{selectedFacility.size.depth} m · 旋转 {Math.round(selectedFacility.rotationDeg)}° · {selectedFacility.templateId}
+                    {/* P2-i：尺寸/旋转从只读文本变成可编辑（与画布手柄同一套规则与夹紧区间）。 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', gap: PLANNING_SPACING.xs, alignItems: 'center', marginTop: PLANNING_SPACING.xs }}>
+                      <span style={{ opacity: 0.75 }}>宽</span>
+                      <input
+                        aria-label="选中设施宽度（米）"
+                        type="number"
+                        min={FACILITY_MIN_SIZE_M}
+                        max={FACILITY_MAX_SIZE_M}
+                        step={0.5}
+                        value={Number(selectedFacility.size.width.toFixed(1))}
+                        onChange={event => {
+                          const width = Number(event.target.value);
+                          if (Number.isFinite(width)) updateFacility(selectedFacility.id, { size: { width, depth: selectedFacility.size.depth } });
+                        }}
+                        style={{ minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
+                      />
+                      <span style={{ opacity: 0.75 }}>深</span>
+                      <input
+                        aria-label="选中设施深度（米）"
+                        type="number"
+                        min={FACILITY_MIN_SIZE_M}
+                        max={FACILITY_MAX_SIZE_M}
+                        step={0.5}
+                        value={Number(selectedFacility.size.depth.toFixed(1))}
+                        onChange={event => {
+                          const depth = Number(event.target.value);
+                          if (Number.isFinite(depth)) updateFacility(selectedFacility.id, { size: { width: selectedFacility.size.width, depth } });
+                        }}
+                        style={{ minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
+                      />
+                    </div>
+                    <label style={zoneRowStyle}>
+                      <span style={{ opacity: 0.75, whiteSpace: 'nowrap' }}>旋转</span>
+                      <input
+                        aria-label="选中设施旋转（度）"
+                        type="range"
+                        min={0}
+                        max={359}
+                        step={1}
+                        value={Math.round(selectedFacility.rotationDeg)}
+                        onChange={event => updateFacility(selectedFacility.id, { rotationDeg: Number(event.target.value) })}
+                        style={{ flex: 1 }}
+                      />
+                      <span style={{ width: 34, textAlign: 'right', opacity: 0.8 }}>{Math.round(selectedFacility.rotationDeg)}°</span>
+                    </label>
+                    <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.6 }}>
+                      拖四角改尺寸 · 拖顶部圆柄旋转（Shift 吸附 15°）· 方向键微调 · Ctrl+D 复制 · Delete 删除 · {selectedFacility.templateId}
                     </div>
                     <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
                       <button
@@ -2653,6 +3136,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         onClick={() => deleteFacility(selectedFacility.id)}
                       >
                         删除设施
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="facility-duplicate"
+                        style={modeButtonStyle(false)}
+                        onClick={() => duplicateFacility(selectedFacility.id)}
+                      >
+                        复制设施
                       </button>
                       <button type="button" style={modeButtonStyle(false)} onClick={() => selectFacility(null)}>
                         取消选择
@@ -2955,4 +3446,3 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 });
 
 export default OutdoorPlanCanvasImpl;
-

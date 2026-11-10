@@ -10,6 +10,7 @@
  */
 
 import {
+  Copy,
   DoorOpen,
   Download,
   Hand,
@@ -19,10 +20,13 @@ import {
   Layers,
   LayoutGrid,
   List,
+  Lock,
+  LockOpen,
   MapPin,
   Move,
   PenTool,
   Redo2,
+  RotateCw,
   Route as RouteIcon,
   Ruler,
   Shapes,
@@ -62,6 +66,10 @@ export const PLANNING_ICON_COMPONENTS: Record<PlanningIconName, LucideIcon> = {
   'redo-2': Redo2,
   'map-pin': MapPin,
   download: Download,
+  lock: Lock,
+  'lock-open': LockOpen,
+  'rotate-cw': RotateCw,
+  copy: Copy,
 };
 
 /** 取图标组件：类型上不会越界，回落 shapes 仅作运行时防御。 */
