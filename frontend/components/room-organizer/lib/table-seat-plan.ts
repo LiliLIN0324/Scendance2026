@@ -218,7 +218,7 @@ export function mergeBanquetTable(previous: BanquetTableRequest | undefined, raw
 }
 
 export function readTableRequest(raw: string): { shape?: 'round' | 'rect'; width?: number; depth?: number; peoplePerTable?: number } | undefined {
-  const text = raw.normalize('NFKC');
+  const text = raw.normalize('NFKC').replace(/[ØΦφ⌀]/g, '直径');
   const clauses = text.split(/[，,；;。！？!?\n]/).map(clause => clause.trim()).filter(clause => clause && !/去年|上次|上一场|以前|之前|历史/.test(clause));
   const whole = clauses.join('').replace(/\s+/g, '');
   const mentionsRound = /圆桌|围着坐|围坐/.test(whole);

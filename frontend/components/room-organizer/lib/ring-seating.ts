@@ -31,11 +31,12 @@ export function ringChairRadius(sideM = RING_TABLE_SIDE_M): number {
   return roundSeatLayout(sideM).radius;
 }
 
-/** Round table with as many chairs as the diameter can clear. */
-export function ringDiningSet(spec?: { sideM?: number }): FurnitureSet {
-  const side = spec?.sideM && spec.sideM > 0 ? spec.sideM : RING_TABLE_SIDE_M;
-  const table = roundTableSnapshot(side);
-  const chair = diningChair();
+/** Round table with as many chairs as the diameter can clear. A provided table is placed as chosen. */
+export function ringDiningSet(spec?: { sideM?: number; table?: SetItemSnapshot; chair?: SetItemSnapshot }): FurnitureSet {
+  const chosen = spec?.table;
+  const side = chosen && chosen.width > 0 ? chosen.width : spec?.sideM && spec.sideM > 0 ? spec.sideM : RING_TABLE_SIDE_M;
+  const table = chosen ? { ...chosen, width: side, depth: side, tableShape: 'round' as const } : roundTableSnapshot(side);
+  const chair = spec?.chair ?? diningChair();
   const layout = roundSeatLayout(side);
   const items: FurnitureSetItem[] = [];
   if (table) {
@@ -54,11 +55,11 @@ export function ringDiningSet(spec?: { sideM?: number }): FurnitureSet {
   return { key: 'dining-ring', label: '圆桌围坐', icon: '🍽️', description: '圆桌围坐', items };
 }
 
-/** Rectangular banquet table. Seat count follows the length and width. */
-export function rectDiningSet(size: { width: number; depth: number }): FurnitureSet {
-  const catalog = FURNITURE_CATALOG.find(entry => entry.type === 'dining-table' && entry.name === 'Dining Table')
-    ?? FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
-  const chair = diningChair();
+/** Rectangular banquet table. Seat count follows the length and width. A provided table is placed as chosen. */
+export function rectDiningSet(size: { width: number; depth: number; table?: SetItemSnapshot; chair?: SetItemSnapshot }): FurnitureSet {
+  const catalog = size.table ?? (FURNITURE_CATALOG.find(entry => entry.type === 'dining-table' && entry.name === 'Dining Table')
+    ?? FURNITURE_CATALOG.find(entry => entry.type === 'dining-table'));
+  const chair = size.chair ?? diningChair();
   const layout = rectSeatLayout(size.width, size.depth);
   const square = Math.abs(size.width - size.depth) < 0.15;
   const items: FurnitureSetItem[] = [];
@@ -66,7 +67,7 @@ export function rectDiningSet(size: { width: number; depth: number }): Furniture
     items.push({
       type: 'dining-table',
       offset: { x: 0, z: 0 },
-      snapshot: { ...catalog, width: size.width, depth: size.depth, name: square ? '方桌' : '长桌', tableShape: 'rect' },
+      snapshot: { ...catalog, width: size.width, depth: size.depth, name: size.table?.name ?? (square ? '方桌' : '长桌'), tableShape: 'rect' },
     });
   }
   if (chair) {

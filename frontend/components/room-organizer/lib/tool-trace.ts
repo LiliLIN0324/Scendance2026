@@ -50,6 +50,7 @@ const TOOL_NAMES: Readonly<Record<string, string>> = {
   set_annotation: '标注规划',
   update_plan: '标注规划',
   audit_settle: '巡场体检',
+  select_furnishing: '选择桌椅',
   local_preview: '出预览',
   local_validate: '核对重叠',
   local_revise: '修改布置',

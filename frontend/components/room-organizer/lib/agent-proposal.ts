@@ -5,13 +5,14 @@ import { backendSceneToLayout } from './backend-adapter';
 import { mergeDiagnostics, rejectedDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
 import { layoutRoleFromAssetName, layoutRoleFromNote, layoutRoleNote } from './layout-role';
+import type { MaterializedFurnishing } from './furnishing-select';
 import { rectDiningSet, ringCenters, ringDiningSet, setFootprint } from './ring-seating';
 import type { TableArrangement } from './table-seat-plan';
 import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
 import { presetModelUrl } from './scene-presets';
-import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides } from './structural-layout';
+import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides, usableSeatingRect } from './structural-layout';
 import type { FurnitureItem, RoomLayout, Vec2 } from './types';
 import { buildVenueShell, type ScaleOrigin } from './venue-shell';
 import type { PlanArtifact } from './plan-artifact';
@@ -69,6 +70,8 @@ export interface PlanInput {
   seatingShape?: 'ring' | 'grid';
   /** Already resolved size and seat count. Placement uses it and does not assume 4 or 8. */
   tablePlan?: TableArrangement;
+  /** Asset already chosen by select_furnishing. Placement does not pick another table. */
+  furnishing?: MaterializedFurnishing;
   /** 缺省仍放舞台背景板。显式 false 才跳过（课室、或人说不要舞台）。 */
   stage?: boolean;
   /** 缺省不放签到台。发布会等活动或人点了签到才放，放不下就丢这一件。 */
@@ -99,6 +102,8 @@ export interface PlanProposal {
   capacity?: number;
   /** 这版已经按「加座」重排过：仍不够就直接说这一版排到几座，不再暗示再点一次就行。 */
   seatPriority?: boolean;
+  /** Banquet preview: the card is a short receipt. Audit copy stays off the dialogue. */
+  receipt?: 'banquet';
   /** 体检改法真正挪了多少件（只挪位置，不新增不删除）。 */
   moved?: number;
   /** 这版来自「看看哪里有问题」的体检，不是重新生成。 */
@@ -221,7 +226,7 @@ export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
  * 一批一批试：`addItems` 在 reducer 里是**整批**几何否决，一批中有一件穿墙就整批消失
  * （换一版曾经清空桌子）。这里先整批试，被拒再逐件试，越界的只丢它自己。
  */
-function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items: FurnitureItem[]): {
+function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items: FurnitureItem[], options?: { atomic?: boolean }): {
   layout: RoomLayout;
   accepted: number;
   dropped: number;
@@ -230,6 +235,14 @@ function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items
   const existing = current.floors[floorIndex]?.items ?? [];
   const batch = withItems(current, floorIndex, [...existing, ...items]);
   if (canApplyLayoutGeometry(base, batch)) return { layout: batch, accepted: items.length, dropped: 0, rejected: [] };
+  // A banquet table and its chairs are one group. A chair that clears the wall must not
+  // stay behind after the table, or the other way around.
+  if (options?.atomic) {
+    return {
+      layout: current, accepted: 0, dropped: items.length,
+      rejected: items.map(item => ({ name: item.name, code: 'STRUCTURAL_COLLISION' as const })),
+    };
+  }
   let layout = current;
   let accepted = 0;
   const rejected: Array<{ name: string; code: 'STRUCTURAL_COLLISION' | 'OUT_OF_BOUNDS' }> = [];
@@ -398,35 +411,47 @@ export function proposePlan(input: PlanInput): PlanProposal {
         if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
       }
     }
-  } else if (input.seatingShape === 'ring' || input.tablePlan?.shape === 'round') {
-    const sideM = input.tablePlan?.shape === 'round' ? input.tablePlan.width : undefined;
-    const dining = sideM === undefined ? ringDiningSet() : ringDiningSet({ sideM });
+  } else if (input.furnishing?.table.tableShape === 'round' || (!input.furnishing && (input.seatingShape === 'ring' || input.tablePlan?.shape === 'round'))) {
+    const sideM = input.furnishing?.table.width ?? (input.tablePlan?.shape === 'round' ? input.tablePlan.width : undefined);
+    const dining = input.furnishing
+      ? ringDiningSet({ sideM: input.furnishing.table.width, table: input.furnishing.table, chair: input.furnishing.chair })
+      : sideM === undefined ? ringDiningSet() : ringDiningSet({ sideM });
     const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'ring-measure' });
     if (sample.length) {
       const footprint = setFootprint(sample);
       const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan?.seatsPerTable || 1;
-      const centers = ringCenters({ x: -widthM / 2, z: -depthM / 2, w: widthM, d: depthM }, footprint, 0.6, 1.2);
-      const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
+      const interior = usableSeatingRect(base, floorIndex);
+      const room = interior ?? { x: -widthM / 2, z: -depthM / 2, w: widthM, d: depthM };
+      // The rect is already the inner face, so a second large wall gap would throw away a whole table.
+      const centers = ringCenters(room, footprint, interior ? (seatPriority ? 0.1 : 0.2) : 0.6, seatPriority ? 0.4 : 0.6);
+      const areaSets = Math.max(1, Math.floor((room.w * room.d) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(centers.length, wantedSets));
       for (const center of centers.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-        accept(tryAdd(base, current, floorIndex, items));
+        accept(tryAdd(base, current, floorIndex, items, { atomic: true }));
       }
     }
-  } else if (input.tablePlan?.shape === 'rect') {
-    const dining = rectDiningSet({ width: input.tablePlan.width, depth: input.tablePlan.depth });
+  } else if (input.furnishing?.table.tableShape === 'rect' || (!input.furnishing && input.tablePlan?.shape === 'rect')) {
+    const width = input.furnishing?.table.width ?? input.tablePlan?.width ?? 0;
+    const depth = input.furnishing?.table.depth ?? input.tablePlan?.depth ?? 0;
+    const dining = input.furnishing
+      ? rectDiningSet({ width, depth, table: input.furnishing.table, chair: input.furnishing.chair })
+      : rectDiningSet({ width, depth });
     const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'rect-measure' });
     if (sample.length) {
       const stageSouth = backdrop ? -depthM / 2 + backdrop.depth + 0.4 : -depthM / 2;
-      const slots = setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
-      const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan.seatsPerTable || 1;
+      const interior = usableSeatingRect(base, floorIndex);
+      const slots = interior
+        ? ringCenters(interior, setFootprint(sample), seatPriority ? 0.1 : 0.2, seatPriority ? 0.4 : 0.6)
+        : setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
+      const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan?.seatsPerTable || 1;
       const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
       for (const center of slots.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-        accept(tryAdd(base, current, floorIndex, items));
+        accept(tryAdd(base, current, floorIndex, items, { atomic: true }));
       }
     }
   } else {
@@ -495,11 +520,12 @@ function findAdditionSpot(layout: RoomLayout, floorIndex: number, item: Furnitur
   const keepOut = floorKeepOut(layout, floorIndex);
   const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
   const inset = 0.25;
+  const room = usableSeatingRect(layout, floorIndex) ?? { x: -layout.width / 2, z: -layout.height / 2, w: layout.width, d: layout.height };
   const step = Math.max(1, Math.ceil(Math.max(item.width, item.depth)));
   const xs: number[] = [];
   const zs: number[] = [];
-  for (let x = -layout.width / 2 + inset + item.width / 2; x <= layout.width / 2 - inset - item.width / 2 + 1e-9; x += step) xs.push(Math.round(x * 100) / 100);
-  for (let z = -layout.height / 2 + inset + item.depth / 2; z <= layout.height / 2 - inset - item.depth / 2 + 1e-9; z += step) zs.push(Math.round(z * 100) / 100);
+  for (let x = room.x + inset + item.width / 2; x <= room.x + room.w - inset - item.width / 2 + 1e-9; x += step) xs.push(Math.round(x * 100) / 100);
+  for (let z = room.z + inset + item.depth / 2; z <= room.z + room.d - inset - item.depth / 2 + 1e-9; z += step) zs.push(Math.round(z * 100) / 100);
   if (xs.length === 0 || zs.length === 0) return null;
   const bias = placementBias(item);
   const slots = xs.flatMap(x => zs.map(z => ({

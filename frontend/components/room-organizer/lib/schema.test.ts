@@ -762,6 +762,7 @@ describe('persisted-field whitelist and bounds (#350)', () => {
       cameraBracket: true,
       sofaShape: 'standard',
       tableShape: 'rect',
+      tableFinish: 'linen',
       locked: true,
       mirrored: true,
       stairsShape: 'winder',

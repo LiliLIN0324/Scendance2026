@@ -38,4 +38,20 @@ describe('banquet round table mesh', () => {
     expect(size.y).toBeCloseTo(0.7, 2);
     expect(new THREE.Box3().setFromObject(model).min.y).toBeCloseTo(0, 2);
   });
+
+  it('draws linen only when the selection asked for it', () => {
+    const linen = createFurnitureModel(THREE, place({
+      type: 'dining-table', name: '圆桌', width: 1.4, depth: 1.4, height: 0.75, color: '#A0522D', icon: '🍽️', tableShape: 'round',
+    }), false);
+    const bare = createFurnitureModel(THREE, { ...place({
+      type: 'dining-table', name: '圆桌', width: 1.4, depth: 1.4, height: 0.75, color: '#8D6E63', icon: '🍽️', tableShape: 'round',
+    }), tableFinish: 'bare' }, false);
+    const parts = (model: THREE.Object3D) => {
+      const found: string[] = [];
+      model.traverse(node => { if (node.userData.part) found.push(String(node.userData.part)); });
+      return found;
+    };
+    expect(parts(linen)).toContain('banquet-cloth');
+    expect(parts(bare)).not.toContain('banquet-cloth');
+  });
 });

@@ -68,14 +68,16 @@ function buildRoundBanquetTable({ THREE, item, hasCollision, baseColor, opacity 
   top.userData.part = 'round-top';
   group.add(top);
 
-  const cloth = mesh(
-    THREE,
-    new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, clothH, 48),
-    material(THREE, hasCollision ? baseColor : BANQUET_CLOTH, hasCollision, opacity, { roughness: 0.94, metalness: 0 }),
-  );
-  cloth.position.y = item.height - clothH / 2;
-  cloth.userData.part = 'banquet-cloth';
-  group.add(cloth);
+  if (item.tableFinish !== 'bare') {
+    const cloth = mesh(
+      THREE,
+      new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, clothH, 48),
+      material(THREE, hasCollision ? baseColor : BANQUET_CLOTH, hasCollision, opacity, { roughness: 0.94, metalness: 0 }),
+    );
+    cloth.position.y = item.height - clothH / 2;
+    cloth.userData.part = 'banquet-cloth';
+    group.add(cloth);
+  }
 
   const pedestalMat = material(THREE, hasCollision ? baseColor : lightenHex(wood, -0.28), hasCollision, opacity, { roughness: 0.7, metalness: 0.05 });
   const foot = mesh(THREE, new THREE.CylinderGeometry(radius * 0.28, radius * 0.32, baseH, 24), pedestalMat);

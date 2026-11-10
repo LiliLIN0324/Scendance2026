@@ -14,6 +14,9 @@ function prefersStill(): boolean {
  * 每格只说它自己那一层的事，句子短到一行放得下；生成条另有自己的清单。
  * S1 起布置生成例句归活动脸；Bingo 的审校引导留待 S2 重排。
  */
+/** Once this session is a banquet, the composer must not keep offering the launch-party example. */
+export const BANQUET_INPUT_SUGGESTIONS = ['加座，再排一版', '圆桌再小一号', '换一版'] as const;
+
 export const AGENT_INPUT_SUGGESTIONS: Record<ChatAgent, readonly string[]> = {
   door: ['80 人发布会，室内 12×9，安排签到和主舞台', '按奶油会客配一套', '这场活动的目标和限制是……'],
   bingo: ['80 人发布会，室内 12×9，安排签到和主舞台', '按墨金发布配一套', '按奶油会客配一套'],
