@@ -171,7 +171,7 @@ describe('autoDeskSpec — 课桌规格可调（2026-11-11 用户拍板）', () 
   it('没说每桌人数且一人一套摆不下时，自动升级官方 1.8m×3人规格到够座', () => {
     const plan = localPlan({ base: room(12, 8), floorIndex: 0, widthM: 12, depthM: 8, variant: 1, guests: 40, layoutMode: 'desk-chair' });
     expect(plan.seats ?? 0).toBeGreaterThanOrEqual(40);
-    expect(plan.summary.join(' ')).toContain('官方课桌规格');
+    expect((plan.summary ?? []).join(' ')).toContain('官方课桌规格');
   });
 
   it('人少摆得下时保持一人一套，不越权升级', () => {
@@ -184,6 +184,6 @@ describe('autoDeskSpec — 课桌规格可调（2026-11-11 用户拍板）', () 
   it('用户明说每桌人数时不越权（每桌1人摆不下就如实报上限）', () => {
     const plan = localPlan({ base: room(5, 4), floorIndex: 0, widthM: 5, depthM: 4, variant: 1, guests: 45, layoutMode: 'desk-chair', table: { peoplePerTable: 1 } });
     expect(plan.seats ?? 0).toBeLessThan(45);
-    expect(plan.summary.join(' ')).not.toContain('官方课桌规格');
+    expect((plan.summary ?? []).join(' ')).not.toContain('官方课桌规格');
   });
 });
