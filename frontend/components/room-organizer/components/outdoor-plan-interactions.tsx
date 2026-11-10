@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * 户外 2D 规划交互层 UI（H4-b）：渐进引导气泡、导出菜单、毛玻璃分享弹窗。
@@ -77,7 +77,7 @@ export interface ExportMenuProps {
   enableExports?: boolean;
 }
 
-export function ExportMenu({ onPick, enableExports = false, variant = 'default' }: ExportMenuProps & { variant?: 'default' | 'toolbar' }) {
+export function ExportMenu({ onPick, enableExports = false, variant = 'default' }: ExportMenuProps & { variant?: 'default' | 'toolbar' | 'canvas' }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -97,13 +97,36 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default' 
         onClick={() => setOpen(value => !value)}
         {...(variant === 'toolbar'
           ? { 'aria-label': '导出/分享', 'data-tip': '导出 / 分享' }
-          : { style: secondaryButtonStyle })}
+          : variant === 'canvas'
+            ? {
+              'aria-label': '导出平面图',
+              'data-tip': '导出平面图',
+              style: {
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 34,
+                padding: '0 14px',
+                borderRadius: 999,
+                border: '1px solid #e4e4e7',
+                background: '#ffffff',
+                color: '#141416',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
+                fontFamily: 'inherit',
+              } as const,
+            }
+            : { style: secondaryButtonStyle })}
         aria-expanded={open}
         aria-haspopup="menu"
       >
         {variant === 'toolbar'
           ? <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>⤓</span>
-          : '导出/分享'}
+          : variant === 'canvas'
+            ? <span aria-hidden style={{ fontSize: 12 }}>导出</span>
+            : '导出/分享'}
       </button>
       {open && (
         <div role="menu" aria-label="导出菜单" style={{
