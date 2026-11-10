@@ -76,7 +76,7 @@ export interface LocalPlanResult extends PlanProposal {
 
 export function localPlan(input: LocalPlanInput): LocalPlanResult {
   if (!Number.isSafeInteger(input.guests) || !input.guests || input.guests < 1 || input.guests > HEADCOUNT_MAX) return {layouts:[input.base],added:0,removing:0,keptLocked:0,dropped:0,overlapCount:0,overlapNames:[],blocked:'请先说明本场预计人数，再生成布置方案。',guests:null,via:'fallback'};
-  let result = buildLocalPlan(input);
+  let result = autoDeskSpec(input, buildLocalPlan(input));
   const issues = result.blocked ? [result.blocked] : [];
   const candidate = result.layouts.at(-1);
   let restFailure = false;
@@ -304,6 +304,24 @@ function landedSeatScore(input: LocalPlanInput, proposal: { layouts: RoomLayout[
   if (!input.furnishing) return proposal.seats ?? 0;
   const baseIds = new Set((input.base.floors[input.floorIndex]?.items ?? []).map(item => item.id));
   return landedChairCount(proposal.layouts.at(-1), input.floorIndex, baseIds, input.drawnRoomCheck !== false);
+}
+
+/**
+ * 2026-11-11 用户拍板：课桌规格可调——一人一套摆不下时自动试官方 1.8m×3 人规格并在卡上说明；
+ * 用户明说了每桌人数（table.peoplePerTable）就不越权。一人的老语义在摆得下时保持不变。
+ */
+function autoDeskSpec(input: LocalPlanInput, result: LocalPlanResult): LocalPlanResult {
+  const guests = input.guests ?? 0;
+  if (input.layoutMode !== 'desk-chair' || guests <= 0 || input.table?.peoplePerTable) return result;
+  if ((result.seats ?? 0) >= guests) return result;
+  const official = fallbackPlan({ ...input, table: { ...(input.table ?? {}), peoplePerTable: 3 } }, undefined, undefined);
+  const landed = landedSeatScore(input, official);
+  if (landed <= (result.seats ?? 0)) return result;
+  return {
+    ...official,
+    via: 'fallback',
+    summary: ['一人一套摆不下，已按官方课桌规格（1.8m 长桌、每桌 3 人）排布；要一人一套请说明，会换小桌并如实报座位上限。'],
+  };
 }
 
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
