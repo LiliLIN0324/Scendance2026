@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
+import { cloudPeopleUrl } from '../lib/cloud-assets';
 import { normalizeGlbRoot } from '../lib/glb-normalize';
 import { isGlbUrl } from '../lib/glb-url';
 import { personIsAnimated, registerPersonAnim } from './people-anim';
@@ -87,7 +88,8 @@ async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffe
   if (!isGlbUrl(url)) throw new Error('模型地址无效。');
   const localTrial = process.env.NODE_ENV === 'development'
     && LOCAL_WALK_ASSET_IDS.some(assetId => url === `http://127.0.0.1:3199/asset/${assetId}.glb`);
-  const maxBytes = localTrial ? LOCAL_WALK_MAX_FILE_BYTES : GLB_MAX_FILE_BYTES;
+  const cloudTrial = LOCAL_WALK_ASSET_IDS.some(assetId => url === cloudPeopleUrl(assetId));
+  const maxBytes = localTrial || cloudTrial ? LOCAL_WALK_MAX_FILE_BYTES : GLB_MAX_FILE_BYTES;
   const tooLarge = () => new Error(`GLB 超过 ${maxBytes / (1024 * 1024)} MB，未载入。`);
   const response = await fetch(url, { signal, credentials: 'omit' });
   if (!response.ok) throw new Error(`模型下载失败（HTTP ${response.status}）。`);
