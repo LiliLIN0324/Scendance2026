@@ -634,8 +634,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setHandoffExportRequest(value => value + 1);
   }, []);
   const openMaterialsFromShare = useCallback(() => {
-    document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
-  }, []);
+    // 「打开资料」= 执行页的资料（物料库/制作/点验），不是账户中心；与对话里的 onOpenMaterials 同一去处。
+    setWorkbenchMode('layout');
+    showAgent('material');
+  }, [showAgent]);
   const closeBingo = useCallback(() => {
     setAgentClosing(true);
     window.setTimeout(() => {
