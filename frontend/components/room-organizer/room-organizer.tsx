@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Box, Globe, Layers, LayoutGrid, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Box, Globe, LayoutGrid, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -3786,19 +3786,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   <Globe size={26} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
-                {outdoor2DOpen && (<>
-                  <button
-                    type="button"
-                    className={`sc-rail-tool sc-rail-disc${outdoorPanel ? ' is-active' : ''}`}
-                    aria-pressed={outdoorPanel === 'layers'}
-                    aria-label="图层：图层开关与编辑模式"
-                    data-tip="图层 · 开关与编辑模式"
-                    onClick={() => { if (agentPanelOpen) closeBingo(); setOutdoorPanel('layers'); }}
-                  >
-                    <Layers size={26} aria-hidden="true" />
-                    <span className="sc-rail-label" aria-hidden="true">图层</span>
-                  </button>
-                  </>)}
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
