@@ -65,9 +65,10 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
   const [toolsDock, setToolsDock] = useState<HTMLElement | null>(null);
   const guide = useGuide(GUIDE_STORAGE_KEY);
 
-  // 主产品右侧工具排锚点（room-organizer 户外模式下渲染的空 dock）。
+  // 主产品室内工具排容器（room-organizer 的 #tool-column）：户外钮段追加在其尾部，
+  // 与撤销/缩放/截图等室内通用钮同排共存（P2-f：功能兼容、不隐藏）。
   useEffect(() => {
-    setToolsDock(document.getElementById('outdoor-tools-dock'));
+    setToolsDock(document.getElementById('tool-column'));
     return () => setToolsDock(null);
   }, []);
 
@@ -168,7 +169,7 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
           {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
         />
       )}
-      {/* 右侧工具排：portal 进主产品 sc-editor-dock 内的户外锚点（同款框架，主产品原位）。 */}
+      {/* 右侧工具段：portal 进主产品室内工具排尾部（#tool-column）——通用钮共存，户外钮舒展并入。 */}
       {toolsDock && createPortal(
         <>
           <button
