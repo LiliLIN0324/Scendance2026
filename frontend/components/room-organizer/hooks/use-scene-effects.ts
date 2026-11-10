@@ -41,9 +41,11 @@ import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache
 import { createPresetStructure } from '../three/scene-presets';
 import { addSignalOverlays } from '../three/signal-overlay';
 import { buildStructureShell } from '../three/structure-builder';
+import { buildPlanFootprint } from '../three/plan-footprint-builder';
 import { computeFloorOpenings, computeWallOpenings } from '../three/wall-openings';
 import { useGlbAssets } from './use-glb-assets';
 import type { FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
 import type * as ThreeNS from 'three';
 
@@ -162,6 +164,11 @@ export interface UseSceneEffectsParams {
   showIso?: boolean;
   showBasemap?: boolean;
   onIsoStatus?: (status: IsoBasemapStatus) => void;
+  /**
+   * 户外 2D 规划（P2-g）：有值时把分区/设施/动线/点位摊到 3D 地面上，
+   * 与 `layout.width/height` 同一个壳体口径；为 null 时清掉该图层。
+   */
+  outdoorPlan?: SitePlanData | null;
 }
 
 export function useSceneEffects({
@@ -192,6 +199,7 @@ export function useSceneEffects({
   showIso = true,
   showBasemap = true,
   onIsoStatus,
+  outdoorPlan = null,
 }: UseSceneEffectsParams): void {
   const showIsoRef = useRef(showIso);
   showIsoRef.current = showIso;
@@ -431,6 +439,23 @@ export function useSceneEffects({
     view.showReferenceImage, view.referenceImageOpacity,
     activeFloorIndex,
   ]);
+
+  // 户外 2D 规划 → 3D 地面（P2-g 数据打通）：整层打 PlanFootprint 标记，平面内容或
+  // 场地尺寸一变就重建（数量在几十个 mesh 量级，比增量维护更不容易残留）。
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!THREE || !scene) return;
+    removeTagged(scene, ROOM_OBJECT_TAGS.PlanFootprint);
+    if (!outdoorPlan) return;
+    if (buildPlanFootprint(THREE, scene, outdoorPlan, { width: layout.width, depth: layout.height })) {
+      requestShadowUpdate();
+    }
+    invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height]);
 
   useEffect(() => {
     const scene = sceneRef.current;

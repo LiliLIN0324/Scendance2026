@@ -247,6 +247,19 @@ interface ViewToolsProps {
   shareOpenRequest?: number;
   /** 进出漫游的唯一入口（room-organizer 的 startWalk）；不传时退回本组件的开关。 */
   onToggleWalkthrough?(on: boolean): void;
+  /**
+   * P2-g 户外 2D 画布接管：非空时，撤销/重做/缩放/导出四组通用钮改由户外画布执行
+   * （室内 3D 的布局历史与相机原样保活，关掉户外即恢复）。null/缺省＝纯室内行为。
+   */
+  outdoorActions?: {
+    canUndo: boolean;
+    canRedo: boolean;
+    undo(): void;
+    redo(): void;
+    zoomBy(direction: 1 | -1): void;
+    /** 导出 PNG：户外走 2D 规划快照（不抓 3D 帧），无 plan 时返回 false。 */
+    exportPng?(): boolean;
+  } | null;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -302,7 +315,9 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, onToggleWalkthrough }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, onToggleWalkthrough, outdoorActions = null }: ViewToolsProps): JSX.Element {
+  // P2-g：户外模式＝这四组通用钮改派给 2D 画布；室内历史/相机一概不动。
+  const outdoor = outdoorActions;
   const sceneMoveActive = sceneMoveMode !== 'off';
   const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
@@ -551,10 +566,12 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       }
       return;
     }
-    if (!onExportImage) return;
+    if (!onExportImage && !outdoor?.exportPng) return;
     setExporting(true);
     try {
-      await onExportImage({ view: exportView, scale: exportScale });
+      // P2-g：户外模式导出走 2D 规划快照（底图+业务层+图例的 plan PNG），不抓 3D 帧。
+      if (outdoor?.exportPng) outdoor.exportPng();
+      else if (onExportImage) await onExportImage({ view: exportView, scale: exportScale });
     } finally {
       setExporting(false);
       setExportOpen(false);
@@ -661,17 +678,17 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         <MaterialSymbol name="satellite" />
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-undo" data-tip="撤销" aria-label="撤销" disabled={layoutLocked || !history.canUndo} onClick={history.undo}>
+      <button type="button" id="tool-undo" data-tip={outdoor ? '撤销（平面编辑）' : '撤销'} aria-label="撤销" disabled={outdoor ? !outdoor.canUndo : (layoutLocked || !history.canUndo)} onClick={outdoor ? () => outdoor.undo() : history.undo}>
         <MaterialSymbol name="undo" />
       </button>
-      <button type="button" id="tool-redo" data-tip="重做" aria-label="重做" disabled={layoutLocked || !history.canRedo} onClick={history.redo}>
+      <button type="button" id="tool-redo" data-tip={outdoor ? '重做（平面编辑）' : '重做'} aria-label="重做" disabled={outdoor ? !outdoor.canRedo : (layoutLocked || !history.canRedo)} onClick={outdoor ? () => outdoor.redo() : history.redo}>
         <MaterialSymbol name="redo" />
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={view.view2D} onClick={() => onZoom('-')}>
+      <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={outdoor ? false : view.view2D} onClick={() => (outdoor ? outdoor.zoomBy(-1) : onZoom('-'))}>
         <MaterialSymbol name="iconpark_zoom_out_solid" />
       </button>
-      <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={view.view2D} onClick={() => onZoom('+')}>
+      <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={outdoor ? false : view.view2D} onClick={() => (outdoor ? outdoor.zoomBy(1) : onZoom('+'))}>
         <MaterialSymbol name="iconpark_zoom_in_solid" />
       </button>
       {onExportImage && <div className="sc-tool-menu" ref={exportMenuRef}>

@@ -48,7 +48,7 @@
  * 分区颜色/透明度/命名可在面板内直接编辑（契约可选字段 opacity，0.05–0.6 区间）。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   defaultLayerVisibility,
@@ -220,6 +220,11 @@ export interface OutdoorPlanCanvasProps {
   panelsHostId?: string;
   /** P2-d：规划信息浮窗的独立宿主 id（两张卡分属左栏两个容器、显隐独立）。缺省跟随 panelsHostId。 */
   infoPanelHostId?: string;
+  /**
+   * P2-g：undo/redo 可用态上报（室内工具排的撤销/重做钮据此启用）。
+   * 变化时才触发，父级用 useState 落盘即可。
+   */
+  onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
 }
 
 const TILE = 256;
@@ -318,7 +323,22 @@ function PanelPortal({ host, children }: { host: HTMLElement | null; children: R
   return createPortal(children, host);
 }
 
-export default function OutdoorPlanCanvas({
+/** P2-g：室外画布对外命令句柄（室内工具排通用钮转发：撤销/重做/缩放/截图）。 */
+export interface OutdoorPlanCanvasHandle {
+  /** 缩放一档（+/-1）与滚轮同源。 */
+  zoomBy(direction: 1 | -1): void;
+  /** 当前业务层画布截图 dataURL（无 canvas 时 null）。 */
+  captureImage(): string | null;
+  /** 撤销（与画布顶部「撤销」钮、Ctrl+Z 同源）。 */
+  undo(): void;
+  /** 重做（撤销的反向；新编辑会清空重做栈）。 */
+  redo(): void;
+  /** 撤销/重做可用态（工具排按钮 disabled 用）。 */
+  canUndo(): boolean;
+  canRedo(): boolean;
+}
+
+export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, OutdoorPlanCanvasProps>(function OutdoorPlanCanvas({
   plan,
   source = 'osm',
   initialView,
@@ -328,7 +348,8 @@ export default function OutdoorPlanCanvas({
   onPlanChange,
   panelsHostId,
   infoPanelHostId,
-}: OutdoorPlanCanvasProps) {
+  onHistoryChange,
+}: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
   // 查不到（左栏收起/未渲染）时 PanelPortal 自动回落画布内浮窗。
   // 两卡分属两个容器：图层栈跟 panelsHostId，规划信息跟 infoPanelHostId（缺省同前）。
@@ -382,6 +403,8 @@ export default function OutdoorPlanCanvas({
   const dragNodeRef = useRef<{ id: string; moved: boolean } | null>(null);
   const nodeDragPreviewRef = useRef<{ node: PlanNode; routes: PlanRoute[] } | null>(null);
   const historyRef = useRef<SitePlanData[]>([]);
+  /** P2-g 重做栈：撤销时把当前快照推进来，任何新编辑清空（与 historyRef 对称，同样 30 步）。 */
+  const redoRef = useRef<SitePlanData[]>([]);
   // H3-a 测量：类型、草稿、指针（临时读数）。
   const measureKindRef = useRef<PlanMeasureKind>('distance');
   const measureDraftRef = useRef<PlanPoint[]>([]);
@@ -412,6 +435,8 @@ export default function OutdoorPlanCanvas({
   const [nodeIssues, setNodeIssues] = useState<PlanNodeIssue[]>([]);
   const [workerIssues, setWorkerIssues] = useState<PlanWorkerIssue[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
+  /** P2-g 重做栈深度（state 供工具排 disabled，ref 供命令句柄即时查询）。 */
+  const [redoCount, setRedoCount] = useState(0);
   const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
   const [conflictIssues, setConflictIssues] = useState<PlanConflictIssue[]>([]);
@@ -461,6 +486,11 @@ export default function OutdoorPlanCanvas({
     historyRef.current.push(planRef.current);
     if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
     setHistoryCount(historyRef.current.length);
+    // 新编辑分叉历史：重做栈作废（与编辑器通例一致）。
+    if (redoRef.current.length > 0) {
+      redoRef.current = [];
+      setRedoCount(0);
+    }
     planRef.current = next;
     onPlanChange?.(next);
   }
@@ -469,6 +499,9 @@ export default function OutdoorPlanCanvas({
   function undoPlan() {
     const prev = historyRef.current.pop();
     if (!prev) return;
+    redoRef.current.push(planRef.current);
+    if (redoRef.current.length > UNDO_LIMIT) redoRef.current.shift();
+    setRedoCount(redoRef.current.length);
     setHistoryCount(historyRef.current.length);
     selectFacility(null);
     selectRoute(null);
@@ -479,6 +512,29 @@ export default function OutdoorPlanCanvas({
     setEditMessage('已撤销上一步。');
     draw();
   }
+
+  /** P2-g 重做：把刚撤销的快照放回去（不新增历史项，避免与 undo 打乒乓）。 */
+  function redoPlan() {
+    const next = redoRef.current.pop();
+    if (!next) return;
+    historyRef.current.push(planRef.current);
+    if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
+    selectFacility(null);
+    selectRoute(null);
+    selectNode(null);
+    selectWorker(null);
+    planRef.current = next;
+    onPlanChange?.(next);
+    setEditMessage('已重做。');
+    draw();
+  }
+
+  // P2-g：undo/redo 可用态上报（室内工具排撤销/重做钮的 disabled 与点击都走这里）。
+  useEffect(() => {
+    onHistoryChange?.({ canUndo: historyCount > 0, canRedo: redoCount > 0 });
+  }, [historyCount, redoCount, onHistoryChange]);
 
   useEffect(() => {
     planRef.current = plan;
@@ -801,6 +857,13 @@ export default function OutdoorPlanCanvas({
         undoPlan();
         return;
       }
+      // P2-g：Ctrl/Cmd+Shift+Z 重做（与工具排重做钮同源）。
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'z') {
+        if (inField || !onPlanChange) return;
+        event.preventDefault();
+        redoPlan();
+        return;
+      }
       if (event.key !== 'Escape') return;
       if (modeRef.current === 'view') return;
       setMode('view');
@@ -857,6 +920,17 @@ export default function OutdoorPlanCanvas({
     const v = viewRef.current;
     commitView({ ...v, zoom: clamp(v.zoom + dir, 3, 18) });
   }
+
+  // P2-g：对外命令句柄（室内工具排通用钮转发：撤销/重做/缩放/截图）。
+  // 不写依赖数组：每次渲染重建，句柄永远拿到当帧的闭包（这些函数都读 ref，成本可忽略）。
+  useImperativeHandle(ref, () => ({
+    zoomBy: (direction: 1 | -1) => zoomBy(direction),
+    captureImage: () => planCanvasRef.current?.toDataURL('image/png') ?? null,
+    undo: () => undoPlan(),
+    redo: () => redoPlan(),
+    canUndo: () => historyRef.current.length > 0,
+    canRedo: () => redoRef.current.length > 0,
+  }));
 
   /** 图层栈开关：切换某层可见并回传（受控/非受控均生效）。 */
   function setLayerVisible(kind: PlanningLayerKind, visible: boolean) {
@@ -2533,5 +2607,7 @@ export default function OutdoorPlanCanvas({
       </PanelPortal>
     </div>
   );
-}
+});
+
+export default OutdoorPlanCanvasImpl;
 

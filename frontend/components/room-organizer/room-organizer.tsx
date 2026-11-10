@@ -144,6 +144,13 @@ import { isVenueScaleCurrent, venueDimensionsMismatch } from './lib/venue-scale-
 import { extractPlanSizeFacts } from '@/lib/plan-size-facts';
 import { readAgentAnnotationObservation } from '@/lib/agent-annotation-observation';
 import { agentAnnotationObservationSchema } from '../../../supabase/functions/_shared/agent-contract';
+import type { SitePlanData } from '../../../supabase/functions/_shared/site-plan';
+import {
+  nextOutdoorBoundarySync,
+  seededPlanFromLayout,
+  shellVenuePatchFromPlanBoundary,
+  type OutdoorBoundarySyncState,
+} from './lib/outdoor-venue-sync';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
 import { useActivitySessionTracker, type ActivitySessionToken } from './lib/activity-session-epoch';
@@ -159,7 +166,7 @@ import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
-import OutdoorPlanOverlay from './components/outdoor-plan-overlay';
+import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
 type OutdoorPanelKind = 'layers' | 'info';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
@@ -495,6 +502,32 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('layers');
   const [outdoorSaveFoot, setOutdoorSaveFoot] = useState<{ state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null>(null);
   const handleOutdoorSaveState = useCallback((next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => setOutdoorSaveFoot(next), []);
+  // P2-g 数据打通：室内工具排通用钮（撤销/重做/缩放/导出）在户外模式下转发给 2D 画布，
+  // 3D 侧状态原样保活；关掉户外即恢复原来的 3D 行为。
+  const outdoorOverlayRef = useRef<OutdoorPlanOverlayHandle | null>(null);
+  // P2-g 对位：平面数据在 2D 画布内部编辑，这里镜像一份最新快照给 3D 地面图层用
+  // （分区色块/设施占地/动线/点位），所以 2D 改到哪儿 3D 里就在哪儿。
+  // 带 projectId：换活动后旧项目的平面不能接着盖在新场地上。
+  const [outdoorPlanState, setOutdoorPlanState] = useState<{ projectId: string | null; plan: SitePlanData } | null>(null);
+  const [outdoorHistory, setOutdoorHistory] = useState<{ canUndo: boolean; canRedo: boolean }>({ canUndo: false, canRedo: false });
+  const handleOutdoorHistory = useCallback((next: { canUndo: boolean; canRedo: boolean }) => {
+    setOutdoorHistory(current => (current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next));
+  }, []);
+  const outdoorActions = useMemo(() => (outdoor2DOpen ? {
+    canUndo: outdoorHistory.canUndo,
+    canRedo: outdoorHistory.canRedo,
+    undo: () => outdoorOverlayRef.current?.undo(),
+    redo: () => outdoorOverlayRef.current?.redo(),
+    zoomBy: (direction: 1 | -1) => outdoorOverlayRef.current?.zoomBy(direction),
+    exportPng: () => outdoorOverlayRef.current?.exportPng() ?? false,
+  } : null), [outdoor2DOpen, outdoorHistory]);
+  // P2-g 反向播种：3D 已经圈好的场地直接成为 2D 平面的起步边界（同一个场地的两个视图）。
+  // 只在覆盖层没有既有草稿时生效；锚点取活动点位，2D 边界才落得回真实经纬度。
+  // 模板场景没有 backendVenue，但 layout.width/height 就是 3D 壳体的权威尺寸。
+  const outdoorSeedPlan = useMemo(
+    () => seededPlanFromLayout(layout),
+    [layout],
+  );
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -1312,6 +1345,31 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // The stable callbacks, so the wrappers below don't change identity every
   // time canUndo/canRedo flips.
   const { commitNow: commitHistoryNow, clear: clearHistory } = history;
+
+  // P2-g 数据打通：2D 边界 → 3D 壳体。
+  // 只写 backendVenue.polygon + width/height（layoutGeometryScene 靠这两个字段长地面与外墙），
+  // 不走 createVenueFromPick（那会清空已有的物料）。初次载入只记基线，绝不覆盖用户在 3D 里圈好的场地。
+  const outdoorBoundarySyncRef = useRef<OutdoorBoundarySyncState>({ baseline: null });
+  const handleOutdoorPlanChange = useCallback((plan: SitePlanData) => {
+    // 先镜像给 3D 地面图层：即使边界没变（只挪了设施/改分区），3D 里也要跟着动。
+    // 收在户外视图里也保留这份快照——切回 3D 才看得见平面在哪儿。
+    setOutdoorPlanState({ projectId: layoutStore.getState().layout.id ?? null, plan });
+    const step = nextOutdoorBoundarySync(outdoorBoundarySyncRef.current, plan);
+    outdoorBoundarySyncRef.current = step.state;
+    if (!step.apply) return;
+    try { workspaceWriteGuards?.assertLayoutWrite(); } catch { notify('本机编辑权已失效，平面边界未同步到 3D。', 'error'); return; }
+    const base = layoutStore.getState().layout;
+    const patch = shellVenuePatchFromPlanBoundary(base, plan.boundary);
+    if (!patch) return;
+    commitHistoryNow();
+    actions.applyLayout({ ...base, ...patch });
+    if (patch.scaled) notify('平面边界超过 200 m，已按比例缩到壳体可承载的尺寸。', 'info');
+  }, [actions, commitHistoryNow, notify, workspaceWriteGuards]);
+  /** 切回 3D 也保留平面图层（这才是「2D 策划的东西 3D 里也在」）；只丢掉别的活动的残留。 */
+  const outdoorPlan = useMemo(
+    () => (outdoorPlanState && outdoorPlanState.projectId === (layout.id ?? null) ? outdoorPlanState.plan : null),
+    [layout.id, outdoorPlanState],
+  );
 
   // Wrap layout actions with the side-effect of clearing the selection when
   // the targeted item disappears. Discrete actions (delete, duplicate, add,
@@ -2361,6 +2419,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     isoRetry,
     showIso,
     onIsoStatus: setIsoStatus,
+    outdoorPlan,
     isReady,
     peopleModelReady,
     invalidate,
@@ -3842,10 +3901,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
           }}>
           {outdoor2DOpen && (
             <OutdoorPlanOverlay
+              ref={outdoorOverlayRef}
               projectId={layout.id ?? null}
               anchor={layout.sceneAnchor ?? layout.mapLngLat ?? null}
               activityName={layout.name}
               onSaveStateChange={handleOutdoorSaveState}
+              onHistoryChange={handleOutdoorHistory}
+              onPlanChange={handleOutdoorPlanChange}
+              seedPlan={outdoorSeedPlan}
             />
           )}
       <div className="sc-scene-viewport"><Viewport
@@ -4161,7 +4224,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
