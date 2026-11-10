@@ -94,6 +94,14 @@ export function enuToLngLat(x: number, y: number, anchorLng: number, anchorLat: 
   };
 }
 
+/** 经纬度 → ENU 米（enuToLngLat 的逆映射；搜地点后定位用）。 */
+export function lngLatToEnu(lng: number, lat: number, anchorLng: number, anchorLat: number): PlanPoint {
+  return {
+    x: (lng - anchorLng) * metersPerDegreeLng(anchorLat),
+    y: (lat - anchorLat) * 111132.92,
+  };
+}
+
 /** 图层可见性：隐藏的层整层跳过，不影响全案统计（评审稿 §4 口径）。 */
 export type LayerVisibility = Record<PlanningLayerKind, boolean>;
 
@@ -704,6 +712,52 @@ export function drawConflictMarkers(
     ctx.fillStyle = '#ffffff';
     ctx.fillText('!', pt.x, pt.y + 0.5);
   }
+}
+
+/* ---------------- 搜地点定位钉（B：地图搜索落点） ---------------- */
+
+/**
+ * 搜地点定位钉：深色圆头 + 白描边 + 针脚 + 名称标签（白底深字，深浅底图都读得清）。
+ * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
+ */
+export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; label: string }): void {
+  const { ctx, viewport } = c;
+  const pt = planPointToPixel(pin.point, viewport);
+  ctx.save();
+  // 针脚
+  ctx.beginPath();
+  ctx.moveTo(pt.x, pt.y + 18);
+  ctx.lineTo(pt.x - 6, pt.y + 6);
+  ctx.lineTo(pt.x + 6, pt.y + 6);
+  ctx.closePath();
+  ctx.fillStyle = '#141416';
+  ctx.fill();
+  // 圆头
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
+  ctx.fillStyle = '#141416';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, 2.4, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  // 名称标签：按字数估宽（不依赖 measureText），深色底衬保证亮底图上也醒目。
+  const text = pin.label;
+  const width = Math.min(260, Math.max(28, text.length * 7 + 12));
+  const labelY = pt.y - 16;
+  ctx.fillStyle = 'rgba(20, 20, 22, 0.86)';
+  ctx.beginPath();
+  ctx.roundRect(pt.x - width / 2, labelY - 18, width, 18, 9);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text.length * 7 + 12 > 260 ? `${text.slice(0, 34)}…` : text, pt.x, labelY - 9);
+  ctx.restore();
 }
 
 /* ---------------- 内部工具 ---------------- */

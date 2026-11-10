@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
@@ -105,21 +105,93 @@ describe('VenuePicker（换场地 / 新建）', () => {
     expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '春夏市集', expect.objectContaining({ schemaVersion: 1 }));
   });
 
-  it('从地图开始：建云项目 → 写本机户外标记（含起步边界），按钮转「开始规划」', async () => {
+  it('从地图开始：选活动地点（天地图检索）→ 建云项目 → 本机户外标记带锚点', async () => {
     // Location 是 webidl [Unforgeable]，assign 无法 mock——整页跳转契约由
     // resolveOutdoorProjectId 单测（start=outdoor 命中）+ 浏览器实测覆盖，
-    // 这里钉住跳转前的两件事：云端建项目 + 本机户外标记落盘。
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
-    fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
-    fireEvent.change(screen.getByLabelText('活动名称'), { target: { value: '西湖市集' } });
-    fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
-    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '西湖市集', expect.objectContaining({ schemaVersion: 1 })));
-    expect(mocks.push).not.toHaveBeenCalled();
-    const raw = localStorage.getItem('scendance-outdoor-plan-v1:p-new');
-    expect(raw).toBeTruthy();
-    const record = JSON.parse(raw!) as { name: string; plan: { boundary: unknown[] } };
-    expect(record.name).toBe('西湖市集');
-    expect(record.plan.boundary).toHaveLength(4);
+    // 这里钉住跳转前的三件事：地点检索、云端建项目、本机户外标记落盘（含 anchor）。
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      places: [{ id: 'poi-1', name: '西湖十景(平湖秋月)', address: '西湖北部孤山南麓东端滨湖地带', lng: 120.146169, lat: 30.252176 }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+      fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
+      fireEvent.change(screen.getByLabelText('活动名称'), { target: { value: '西湖市集' } });
+      fireEvent.change(screen.getByLabelText('活动地点'), { target: { value: '浙江省杭州 平湖秋月' } });
+      const option = await screen.findByRole('option', { name: /平湖秋月/ }, { timeout: 3000 });
+      fireEvent.click(option);
+      expect(await screen.findByTestId('venue-place-picked')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
+      await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '西湖市集', expect.objectContaining({ schemaVersion: 1 })));
+      expect(mocks.push).not.toHaveBeenCalled();
+      const raw = localStorage.getItem('scendance-outdoor-plan-v1:p-new');
+      expect(raw).toBeTruthy();
+      const record = JSON.parse(raw!) as {
+        name: string;
+        plan: { boundary: unknown[]; anchor?: { lng: number; lat: number; crs: string; source: string } };
+      };
+      expect(record.name).toBe('西湖市集');
+      expect(record.plan.boundary).toHaveLength(4);
+      expect(record.plan.anchor).toEqual({ lng: 120.146169, lat: 30.252176, crs: 'gcj-02', source: 'picker' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('模糊建议栏：最近选过的地点先给建议，键盘 ↑↓ + Enter 选中', async () => {
+    localStorage.setItem('scendance-place-recent-v1', JSON.stringify([
+      { id: 'recent-1', name: '平湖秋月', address: '西湖北部孤山南麓', lng: 120.141439, lat: 30.254484 },
+      { id: 'recent-2', name: '杭州大剧院', address: '上城区之江路', lng: 120.215334, lat: 30.244534 },
+    ]));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ places: [] }), { status: 404, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+      fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
+      const input = screen.getByLabelText('活动地点') as HTMLInputElement;
+      fireEvent.focus(input);
+      const options = await screen.findAllByRole('option');
+      expect(options.map(option => option.textContent)).toEqual([
+        expect.stringContaining('平湖秋月'),
+        expect.stringContaining('杭州大剧院'),
+      ]);
+      expect(screen.getAllByText('最近')).toHaveLength(2);
+      // ↓ 落到第一条，再 ↓ 落到第二条，Enter 选中
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const picked = await screen.findByTestId('venue-place-picked');
+      expect(picked.textContent).toContain('杭州大剧院');
+      expect(input.value).toBe('杭州大剧院');
+      // 选中后写回最近列表，且新的排最前
+      const recent = JSON.parse(localStorage.getItem('scendance-place-recent-v1')!) as { id: string }[];
+      expect(recent.map(item => item.id)).toEqual(['recent-2', 'recent-1']);
+      // Esc 收起建议栏（不关弹层）
+      fireEvent.change(input, { target: { value: '杭州' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryAllByRole('option')).toHaveLength(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('模糊建议栏：输入只命中一部分时按相关度排，完全命中的在前', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      places: [
+        { id: 'far', name: '杭州大剧院', address: '上城区之江路', lng: 120.215334, lat: 30.244534 },
+        { id: 'near', name: '平湖秋月', address: '西湖北部孤山南麓', lng: 120.141439, lat: 30.254484 },
+      ],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+      fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
+      fireEvent.change(screen.getByLabelText('活动地点'), { target: { value: '平湖秋月' } });
+      const options = await screen.findAllByRole('option', {}, { timeout: 3000 });
+      expect(options[0]?.textContent).toContain('平湖秋月');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('访客看不到「从地图开始」（云就绪才显示）', () => {

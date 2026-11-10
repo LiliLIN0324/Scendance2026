@@ -25,6 +25,7 @@ import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib
 import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
+import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
@@ -106,6 +107,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
   // 不再把「OSM」这种图源缩写塞进室内工具排里让人猜。
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
+
+  // 搜地点（用户 m04938 / m05472）：左上角「和地图 App 一样」的搜索框，组件本体在
+  // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
+  // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
+  const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
@@ -228,13 +234,29 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           source={source}
           // P4-b：有地理锚点就是真地图；没有锚点（室内房间/模板场景）走纸面平面底，
           // 室内「标注区」与户外地图从此共用同一张画布。
-          base={plan.anchor ? 'map' : 'floor'}
+          // 注意：草稿里的 plan.anchor 可能为空，但场地/活动本身带 sceneAnchor/mapLngLat，
+          // 这种「有地理位置、草稿还没落锚点」的情况必须继续走地图，否则真场地会变成
+          // 一张空白纸面（看起来就像「底图加载不出来」）。
+          base={plan.anchor || anchor ? 'map' : 'floor'}
           onPlanChange={setPlan}
           {...(onHistoryChange ? { onHistoryChange } : {})}
           panelsHostId="outdoor-panel-host-layers"
           infoPanelHostId="outdoor-panel-host-info"
           libraryPanelHostId="outdoor-panel-host-library"
+          {...(placePin ? { searchPin: placePin } : {})}
           {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
+        />
+      )}
+      {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
+          选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。 */}
+      {plan && (
+        <PlanPlaceSearch
+          testIdPrefix="outdoor-place-search"
+          onPick={place => {
+            setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
+            canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
+          }}
+          onClear={() => setPlacePin(null)}
         />
       )}
       {/* 右上：分享 + 导出（对齐 OnePlan 画布右上交付区）；这两枚钮不再挂在室内工具排上。

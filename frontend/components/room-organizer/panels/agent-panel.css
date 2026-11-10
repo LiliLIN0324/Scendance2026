@@ -344,6 +344,17 @@ button.ap-ghost {
 .sc-venue-preview .vp-object { fill: var(--wk-ink-soft); opacity: .55; }
 .sc-venue-picker-name { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-p2); color: var(--wk-muted); }
 .sc-venue-picker-name input { height: 32px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p1); }
+/* 活动地点建议（创建流程第 1 步）：一条一个地点，名字为主、地址为副。 */
+.sc-venue-place-list { flex: 0 0 auto; max-height: 148px; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); }
+.sc-venue-place { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--wk-ink); text-align: left; cursor: pointer; }
+.sc-venue-place:hover { background: var(--wk-plane); }
+.sc-venue-place.is-on { background: var(--wk-plane); outline: 1px solid var(--wk-ink-soft); }
+/* 键盘 ↑↓ 落点高亮：比 hover 更明确（模糊建议栏用键盘也能看出选的是哪条）。 */
+.sc-venue-place.is-active { background: var(--wk-plane); outline: 1px solid var(--wk-ink); }
+.sc-venue-place-title { display: flex; align-items: center; gap: 6px; }
+.sc-venue-place-tag { flex: 0 0 auto; padding: 0 5px; border-radius: 999px; background: var(--wk-plane); color: var(--wk-muted); font-size: 10px; line-height: 15px; }
+.sc-venue-place strong { font-size: var(--fs-p1); font-weight: 500; }
+.sc-venue-place small { font-size: var(--fs-p2); color: var(--wk-muted); }
 .sc-venue-picker-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--wk-hair); }
 .sc-venue-picker-foot .sc-venue-picker-note { flex: 1 1 auto; margin: 0; }
 .sc-venue-picker-go { border: 0; border-radius: var(--r-sm); height: 34px; padding: 0 18px; background: var(--ink); color: #fff; font-weight: 500; font-size: var(--fs-c1); cursor: pointer; }

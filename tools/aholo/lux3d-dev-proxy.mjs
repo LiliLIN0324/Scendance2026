@@ -736,6 +736,10 @@ export function createServer({
         });
         res.end(tile.bytes);
         return;
+      } else if (req.method === 'GET' && url.pathname === '/api/tdt-search') {
+        // 天地图地名搜索（dev-only，对齐 functions/api/tdt-search.ts）。
+        // 本机 next dev 没有 Pages Functions，创建活动时的「活动地点」检索走这条口子。
+        result = await fetchTdtSearch(url.searchParams);
       } else if (req.method === 'GET' && url.pathname === '/health') {
         result = { ok: true, keyConfigured: Boolean(key), base, worldBase };
       } else if (req.method === 'GET' && url.pathname === '/meta') {
@@ -878,6 +882,153 @@ async function fetchTdtTile(searchParams) {
     }
   }
   return { bytes: Buffer.from(TDT_PLACEHOLDER_SVG), type: 'image/svg+xml', fallback: true };
+}
+
+/* 天地图地名搜索（dev-only，对齐 functions/api/tdt-search.ts） */
+const TDT_KEYWORD_MIN = 2;
+const TDT_KEYWORD_MAX = 80;
+/** 天地图 v2 搜索只在小范围 mapBound 内出结果：窄 → 中 → 宽 三档围着 geocoder 中心试探。 */
+const TDT_BOUND_STEPS = [
+  [0.16, 0.12],
+  [0.35, 0.26],
+  [0.7, 0.5],
+];
+
+function tdtGcjOffsetRegion(lng, lat) {
+  return lng >= 72.004 && lng <= 137.8347 && lat >= 0.8293 && lat <= 55.8271;
+}
+
+function tdtTransformLat(x, y) {
+  let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(y * Math.PI) + 40.0 * Math.sin(y / 3.0 * Math.PI)) * 2.0 / 3.0;
+  ret += (160.0 * Math.sin(y / 12.0 * Math.PI) + 320 * Math.sin(y * Math.PI / 30.0)) * 2.0 / 3.0;
+  return ret;
+}
+
+function tdtTransformLng(x, y) {
+  let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(x * Math.PI) + 40.0 * Math.sin(x / 3.0 * Math.PI)) * 2.0 / 3.0;
+  ret += (150.0 * Math.sin(x / 12.0 * Math.PI) + 300.0 * Math.sin(x / 30.0 * Math.PI)) * 2.0 / 3.0;
+  return ret;
+}
+
+/** CGCS2000/天地图 → GCJ-02（写进 SitePlanData.anchor 前必须转）。 */
+function tdtWgs84ToGcj02(lng, lat) {
+  if (!tdtGcjOffsetRegion(lng, lat)) return { lng, lat };
+  const ee = 0.00669342162296594323;
+  const major = 6378245.0;
+  let dLat = tdtTransformLat(lng - 105.0, lat - 35.0);
+  let dLng = tdtTransformLng(lng - 105.0, lat - 35.0);
+  const radLat = (lat / 180.0) * Math.PI;
+  let magic = Math.sin(radLat);
+  magic = 1 - ee * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat = (dLat * 180.0) / (((major * (1 - ee)) / (magic * sqrtMagic)) * Math.PI);
+  dLng = (dLng * 180.0) / ((major / sqrtMagic) * Math.cos(radLat) * Math.PI);
+  return { lng: lng + dLng, lat: lat + dLat };
+}
+
+function parseTdtLonLat(raw) {
+  if (typeof raw !== 'string') return null;
+  const [lngRaw, latRaw] = raw.split(',');
+  const lng = Number(lngRaw);
+  const lat = Number(latRaw);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  if (Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+  return { lng, lat };
+}
+
+async function fetchTdtSearch(searchParams) {
+  const keywords = (searchParams.get('keywords') ?? searchParams.get('keyword') ?? '').trim();
+  if (keywords.length < TDT_KEYWORD_MIN || keywords.length > TDT_KEYWORD_MAX) throw new HttpError(400, 'keywords invalid');
+  const rawLimit = Number(searchParams.get('limit'));
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(10, Math.max(1, Math.round(rawLimit))) : 6;
+  const key = await resolveTdtKey();
+  if (!key) throw new HttpError(503, '本机缺少 TDT_KEY（仓库根 .env.local 或前端 .env.local）');
+
+  // 1) geocoder 拿中心点（顺带拿天地图回填的规范名与命中级别）。
+  let center = null;
+  try {
+    const geocoder = new URL('https://api.tianditu.gov.cn/geocoder');
+    geocoder.searchParams.set('ds', JSON.stringify({ keyWord: keywords }));
+    geocoder.searchParams.set('tk', key);
+    const res = await fetch(geocoder, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceDevProxy/2.2.0' } });
+    if (res.ok) {
+      const body = await res.json();
+      const lng = Number(body?.location?.lon);
+      const lat = Number(body?.location?.lat);
+      if (Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lng) <= 180 && Math.abs(lat) <= 90) {
+        center = {
+          lng,
+          lat,
+          level: typeof body?.location?.level === 'string' ? body.location.level : '',
+          keyWord: typeof body?.location?.keyWord === 'string' && body.location.keyWord.trim() ? body.location.keyWord.trim() : keywords,
+        };
+      }
+    }
+  } catch {
+    // 没有中心点就无从收窄，按没找到处理。
+  }
+  if (!center) throw new HttpError(404, 'no place');
+
+  // 2) 窄 → 中 → 宽 三档 mapBound 试探，第一档有结果就回。
+  for (const [spanLng, spanLat] of TDT_BOUND_STEPS) {
+    const bound = `${(center.lng - spanLng).toFixed(6)},${(center.lat - spanLat).toFixed(6)},${(center.lng + spanLng).toFixed(6)},${(center.lat + spanLat).toFixed(6)}`;
+    const places = await searchTdtPlaces(keywords, key, bound, limit);
+    if (places.length > 0) return { places };
+  }
+
+  // 3) 三档都空：把 geocoder 那个点回成一条建议，用户至少能落到该地点。
+  const gcj = tdtWgs84ToGcj02(center.lng, center.lat);
+  return {
+    places: [
+      {
+        id: `${gcj.lng.toFixed(6)},${gcj.lat.toFixed(6)}`,
+        name: center.keyWord,
+        address: center.level ? `天地图定位：${center.level}` : '',
+        lng: Number(gcj.lng.toFixed(6)),
+        lat: Number(gcj.lat.toFixed(6)),
+      },
+    ],
+  };
+}
+
+/** 单档天地图 v2 地名搜索：超时/网络错重试一次，空结果回 []。 */
+async function searchTdtPlaces(keywords, key, bound, limit) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const upstream = new URL('https://api.tianditu.gov.cn/v2/search');
+    upstream.searchParams.set('postStr', JSON.stringify({ keyWord: keywords, level: 12, mapBound: bound, queryType: 1, start: 0, count: limit }));
+    upstream.searchParams.set('type', 'query');
+    upstream.searchParams.set('tk', key);
+    try {
+      const response = await fetch(upstream, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceDevProxy/2.2.0' } });
+      if (!response.ok) continue;
+      const body = await response.json();
+      const pois = Array.isArray(body?.pois) ? body.pois : [];
+      const places = [];
+      for (const poi of pois) {
+        const name = typeof poi?.name === 'string' ? poi.name.trim() : '';
+        const point = parseTdtLonLat(poi?.lonlat);
+        if (!name || !point) continue;
+        const gcj = tdtWgs84ToGcj02(point.lng, point.lat);
+        places.push({
+          id: typeof poi?.hotPointID === 'string' && poi.hotPointID ? poi.hotPointID : `${gcj.lng},${gcj.lat}`,
+          name,
+          address: typeof poi?.address === 'string' ? poi.address.trim() : '',
+          lng: Number(gcj.lng.toFixed(6)),
+          lat: Number(gcj.lat.toFixed(6)),
+        });
+        if (places.length >= limit) break;
+      }
+      if (places.length > 0) return places;
+      return [];
+    } catch {
+      // 超时/网络错：重试一次。
+    }
+  }
+  return [];
 }
 
 async function readEnvFile(name, fileUrl) {
