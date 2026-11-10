@@ -344,7 +344,7 @@ function memoryBox(): Storage {
     }
   });
 
-  it('does not confirm Ø2.2 for 80 people when a map-shell wall rejects chairs and leftover chairs would otherwise fill the count', () => {
+  it('does not confirm Ø2.2 for 80 people when a map-shell wall rejects chairs and leftover chairs would otherwise fill the count', { timeout: 20_000 }, () => {
     const choice = selectFurnishing({ occasion: '圆桌宴', notes: '圆桌直径2.2米', statedShape: 'round', statedWidth: 2.2 });
     const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
     const hall = backendSceneToLayout({

@@ -162,26 +162,15 @@ describe('平湖秋月 banquet design eval', () => {
   }, 20_000);
 
   it('does not bill the all-cyan southeast table or the chairs a Ø1.60 ring leaves past the wall', () => {
-    // 2×3 rings on the 23.8×16.1 frame. The closed interior loop's southeast
-    // edge cuts TR and BC through the chair ring and leaves BR entirely outside.
-    const n = Math.SQRT1_2;
-    const inside = { x: -n, z: n };
-    const along = { x: n, z: n };
-    const tr = { x: 16, z: 12 };
-    const bc = { x: 11.5, z: 7.5 };
-    const cut = 1.4;
-    const onWall = (point: { x: number; z: number }) => ({ x: point.x - inside.x * cut, z: point.z - inside.z * cut });
-    const wallBC = onWall(bc);
-    const wallTR = onWall(tr);
-    const wallSW = { x: wallBC.x - along.x * 6, z: wallBC.z - along.z * 6 };
-    const wallNE = { x: wallTR.x + along.x * 4, z: wallTR.z + along.z * 4 };
+    // The live floor mesh covers both sides of the southeast wall. The brown
+    // seat is hidden because the wall stands between it and the landed tables,
+    // not because the chair is outside the floor polygon.
     const id = (k: number) => `00000000-0000-4000-8000-${String(k).padStart(12, '0')}`;
     const edge = (k: number, start: { x: number; z: number }, end: { x: number; z: number }) => ({
       id: id(k), start, end, thickness: 0.2, height: 3, kind: 'interior' as const, status: 'confirmed' as const,
     });
-    const north = { x: wallNE.x, z: 15.5 };
-    const nw = { x: 2.5, z: 15.5 };
-    const sw = { x: 2.5, z: wallSW.z };
+    const wallA = { x: 13, z: 2.2 };
+    const wallB = { x: 20.7, z: 11.5 };
     const hall = backendSceneToLayout({
       schemaVersion: 2,
       venue: {
@@ -191,11 +180,11 @@ describe('平湖秋月 banquet design eval', () => {
       objects: [], camera: 'overview', lighting: 'neutral',
       structure: {
         walls: [
-          edge(1, wallSW, wallNE),
-          edge(2, wallNE, north),
-          edge(3, north, nw),
-          edge(4, nw, sw),
-          edge(5, sw, wallSW),
+          edge(1, { x: 2.5, z: 2 }, { x: 21, z: 2 }),
+          edge(2, { x: 21, z: 2 }, { x: 21, z: 14.5 }),
+          edge(3, { x: 21, z: 14.5 }, { x: 2.5, z: 14.5 }),
+          edge(4, { x: 2.5, z: 14.5 }, { x: 2.5, z: 2 }),
+          edge(5, wallA, wallB),
         ],
         openings: [], columns: [],
       },
@@ -203,19 +192,25 @@ describe('平湖秋月 banquet design eval', () => {
     }, { name: '西湖·平湖秋月', projectId: 'pinghu-se-cut' });
     expect(hall.width).toBeCloseTo(23.8);
     expect(hall.height).toBeCloseTo(16.1);
-    expect(canvasFloor(hall, 0).recovered).toBe(true);
+    const drawn = canvasFloor(hall, 0);
+    expect(drawn.recovered).toBe(true);
+    expect(drawn.floor).toHaveLength(4);
 
-    const dx = wallNE.x - wallSW.x, dz = wallNE.z - wallSW.z;
+    const dx = wallB.x - wallA.x, dz = wallB.z - wallA.z;
     const span = Math.hypot(dx, dz);
-    const signed = (x: number, z: number) => (dx * (z - wallSW.z) - dz * (x - wallSW.x)) / span;
+    const signed = (x: number, z: number) => (dx * (z - wallA.z) - dz * (x - wallA.x)) / span;
+    const along = (t: number, side: number) => {
+      const nx = -dz / span, nz = dx / span;
+      return { x: wallA.x + dx * t + nx * side, z: wallA.z + dz * t + nz * side };
+    };
     const ring = roundSeatLayout(1.6);
     const centers = {
-      tl: { x: 7, z: 12 },
-      tc: { x: 11.5, z: 12 },
-      tr,
-      bl: { x: 7, z: 7.5 },
-      bc,
-      br: { x: 16, z: 7.5 },
+      tl: { x: 6.5, z: 11.5 },
+      tc: { x: 11, z: 11 },
+      tr: along(0.72, 1.5),
+      bl: { x: 6.2, z: 6 },
+      bc: along(0.28, 1.5),
+      br: along(0.55, -2.2),
     };
     const toLayout = (point: { x: number; z: number }) => ({ x: point.x - 11.9, z: point.z - 8.05 });
     const items = Object.entries(centers).flatMap(([name, center]) => {
@@ -232,19 +227,67 @@ describe('平湖秋月 banquet design eval', () => {
     });
     const preview = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, ...items] }) };
     const baseIds = new Set(hall.floors[0]!.items.map(item => item.id));
-    const cornersOf = (item: { position?: { x: number; z: number }; width: number; depth: number; rotation?: number }) => {
-      const rotation = item.rotation ?? 0;
-      const cos = Math.cos(rotation), sin = Math.sin(rotation);
-      const cx = item.position!.x + 11.9, cz = item.position!.z + 8.05;
-      return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sz]) => ({
-        x: cx + sx * item.width / 2 * cos - sz * item.depth / 2 * sin,
-        z: cz + sx * item.width / 2 * sin + sz * item.depth / 2 * cos,
-      }));
+    const contains = (x: number, z: number) => {
+      const poly = drawn.floor!;
+      let hit = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const a = poly[i]!, b = poly[j]!;
+        if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) hit = !hit;
+      }
+      return hit;
     };
-    // Independent of the ledger: a solid chair is one whose box clears the cut.
-    const solid = items.filter(item => item.type === 'dining-chair' && cornersOf(item).every(corner => (
-      signed(corner.x, corner.z) >= 0.21 && corner.x > 3 && corner.x < 19.4 && corner.z > 2.6 && corner.z < 15.1
-    )));
+    expect(contains(centers.br.x, centers.br.z)).toBe(true);
+    expect(contains(centers.tr.x, centers.tr.z)).toBe(true);
+    const worldOf = (item: { position?: { x: number; z: number } }) => ({ x: item.position!.x + 11.9, z: item.position!.z + 8.05 });
+    const cross = (ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number) => {
+      const abx = bx - ax, abz = bz - az, cdx = dx - cx, cdz = dz - cz;
+      const denom = abx * cdz - abz * cdx;
+      if (Math.abs(denom) < 1e-8) return false;
+      const t = ((cx - ax) * cdz - (cz - az) * cdx) / denom;
+      const u = ((cx - ax) * abz - (cz - az) * abx) / denom;
+      return t > 1e-8 && t < 1 - 1e-8 && u > 1e-8 && u < 1 - 1e-8;
+    };
+    const wallBox = (() => {
+      const len = span || 1;
+      const nx = -dz / len, nz = dx / len;
+      const half = 0.1;
+      const corners = [
+        { x: wallA.x + nx * half, z: wallA.z + nz * half },
+        { x: wallB.x + nx * half, z: wallB.z + nz * half },
+        { x: wallB.x - nx * half, z: wallB.z - nz * half },
+        { x: wallA.x - nx * half, z: wallA.z - nz * half },
+      ];
+      return corners;
+    })();
+    const hitsCut = (from: { x: number; z: number }, to: { x: number; z: number }) => {
+      for (let index = 0; index < wallBox.length; index++) {
+        const a = wallBox[index]!, b = wallBox[(index + 1) % wallBox.length]!;
+        if (cross(from.x, from.z, to.x, to.z, a.x, a.z, b.x, b.z)) return true;
+      }
+      return false;
+    };
+    const tables = items.filter(item => item.type === 'dining-table');
+    const nearTables = tables.filter(table => signed(worldOf(table).x, worldOf(table).z) > 0.8);
+    const distanceToCut = (x: number, z: number) => {
+      const length = dx * dx + dz * dz;
+      const t = length > 0 ? Math.max(0, Math.min(1, ((x - wallA.x) * dx + (z - wallA.z) * dz) / length)) : 0;
+      return Math.hypot(x - wallA.x - dx * t, z - wallA.z - dz * t);
+    };
+    // A solid chair reaches its nearest near-side table without cutting the partition,
+    // and its box clears the wall face the canvas uses to hide a brown seat.
+    const solid = items.filter(item => {
+      if (item.type !== 'dining-chair') return false;
+      const chair = worldOf(item);
+      if (distanceToCut(chair.x, chair.z) < 0.2 + 0.225) return false;
+      let home: { x: number; z: number; distance: number } | null = null;
+      for (const table of nearTables) {
+        const point = worldOf(table);
+        const distance = Math.hypot(point.x - chair.x, point.z - chair.z);
+        if (distance > 1.6 / 2 + 2.5) continue;
+        if (!home || distance < home.distance) home = { ...point, distance };
+      }
+      return !!home && !hitsCut(chair, home);
+    });
     const billedChairs = items.filter(item => item.type === 'dining-chair');
     expect(billedChairs.length).toBe(66);
     expect(billedChairs.length).toBeGreaterThan(solid.length);

@@ -1,4 +1,4 @@
-import { beyondDrawnWall, canvasFloor, centerOffDrawnFloor, type CanvasFloor, type FloorPoint } from '../../floor-reading';
+import { beyondDrawnWall, canvasFloor, canvasWalls, centerOffDrawnFloor, type CanvasFloor, type FloorPoint } from '../../floor-reading';
 import type { FurnitureItem, RoomLayout } from '../../types';
 
 /**
@@ -82,7 +82,12 @@ export function countChairsOnCanvasFloor(
       return segmentDistance(corner.x, corner.z, a.x, a.z, b.x, b.z) < 0.02;
     }));
   };
-  const outside = (item: FurnitureItem): boolean => offFloor(item) || beyondDrawnWall(item, layout, floorIndex);
+  const walls = canvasWalls(layout, floorIndex);
+  const againstWall = (item: FurnitureItem): boolean => {
+    const corners = cornersOf(item, layout);
+    return walls.some(wall => corners.some(corner => segmentDistance(corner.x, corner.z, wall.x1, wall.z1, wall.x2, wall.z2) < wall.thickness / 2 + 0.1));
+  };
+  const outside = (item: FurnitureItem): boolean => offFloor(item) || againstWall(item) || beyondDrawnWall(item, layout, floorIndex);
   const crossing = seats.filter(outside);
   const inRoom = seats.filter(item => !outside(item));
   // A clipped round top whose centre is still on the floor is a placed table.

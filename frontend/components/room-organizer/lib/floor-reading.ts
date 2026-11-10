@@ -240,9 +240,30 @@ export function beyondDrawnWall(item: FurnitureItem, layout: RoomLayout, floorIn
   const here = worldPoint(item, layout);
   const floor = layout.floors[floorIndex];
   if (!here || !floor) return false;
-  const walls = canvasWalls(layout, floorIndex);
+  const barriers = canvasWalls(layout, floorIndex).map(wall => wallBox({
+    start: { x: wall.x1, z: wall.z1 }, end: { x: wall.x2, z: wall.z2 }, thickness: wall.thickness,
+  })).filter(box => box.length >= 3);
   const tables = floor.items.filter(other => other.type === 'dining-table' && other.position);
-  const crosses = (from: FloorPoint, to: FloorPoint) => walls.some(wall => segmentsCross(from.x, from.z, to.x, to.z, wall.x1, wall.z1, wall.x2, wall.z2));
+  const crosses = (from: FloorPoint, to: FloorPoint) => barriers.some(box => {
+    if (pointInPolygon(from, box) || pointInPolygon(to, box)) return true;
+    for (let index = 0; index < box.length; index++) {
+      const a = box[index]!, b = box[(index + 1) % box.length]!;
+      if (segmentsCross(from.x, from.z, to.x, to.z, a.x, a.z, b.x, b.z)) return true;
+    }
+    return false;
+  });
+  const reach = (table: FurnitureItem) => table.width / 2 + 2.5;
+  const nearest = (from: FloorPoint) => {
+    let best: { table: FurnitureItem; point: FloorPoint; distance: number } | null = null;
+    for (const table of tables) {
+      const point = worldPoint(table, layout);
+      if (!point) continue;
+      const distance = Math.hypot(point.x - from.x, point.z - from.z);
+      if (distance > reach(table)) continue;
+      if (!best || distance < best.distance) best = { table, point, distance };
+    }
+    return best;
+  };
   const parent = new Map<string, string>();
   const find = (id: string): string => {
     const next = parent.get(id) ?? id;
@@ -269,23 +290,16 @@ export function beyondDrawnWall(item: FurnitureItem, layout: RoomLayout, floorIn
     if (other.type !== 'dining-chair' && other.type !== 'chair' && other.type !== 'desk-chair') continue;
     const chair = worldPoint(other, layout);
     if (!chair) continue;
-    for (const table of tables) {
-      const point = worldPoint(table, layout);
-      if (!point || Math.hypot(point.x - chair.x, point.z - chair.z) > table.width / 2 + 2.5 || crosses(chair, point)) continue;
-      const root = find(table.id);
-      score.set(root, (score.get(root) ?? 0) + 1);
-      break;
-    }
+    const home = nearest(chair);
+    if (!home || crosses(chair, home.point)) continue;
+    const root = find(home.table.id);
+    score.set(root, (score.get(root) ?? 0) + 1);
   }
   let best = '';
   let bestScore = -1;
   for (const [root, value] of score) if (value > bestScore) { best = root; bestScore = value; }
   if (item.type === 'dining-table') return best !== '' && find(item.id) !== best;
   if (!best) return tables.length > 0;
-  for (const table of tables) {
-    if (find(table.id) !== best) continue;
-    const point = worldPoint(table, layout);
-    if (point && Math.hypot(point.x - here.x, point.z - here.z) <= table.width / 2 + 2.5 && !crosses(here, point)) return false;
-  }
-  return true;
+  const home = nearest(here);
+  return !home || find(home.table.id) !== best || crosses(here, home.point);
 }
