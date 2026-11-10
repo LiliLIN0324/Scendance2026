@@ -286,6 +286,25 @@ function memoryBox(): Storage {
     expect(counted.memory.event).toBe('生日宴');
     expect(counted.memory.headcount).toBe(80);
     expect(counted.layoutTools?.some(call => call.tool === 'select_furnishing')).toBe(true);
+    const sized = await resolveBriefTurn('确认', {
+      ...counted.memory,
+      lengthM: null,
+      widthM: null,
+      areaM2: null,
+      pendingBasicFacts: [
+        { key: 'lengthM', value: 20, requiresRestatement: false },
+        { key: 'widthM', value: 15, requiresRestatement: false },
+        { key: 'timeOfDay', value: 18, requiresRestatement: false },
+      ],
+    }, context);
+    expect(sized.kind).toBe('generate');
+    expect(sized.text).not.toContain('已记下你确认的信息');
+    expect(sized.memory.event).toBe('生日宴');
+    expect(sized.memory.headcount).toBe(80);
+    expect(sized.memory.lengthM).toBeNull();
+    expect(sized.memory.widthM).toBeNull();
+    expect(sized.extraction.lengthM).toBeNull();
+    expect(sized.extraction.widthM).toBeNull();
   });
 
   it('seats 80 at Ø2.2 on a 23.8×16.1 map shell and does not confirm a partial plan', () => {
@@ -307,6 +326,18 @@ function memoryBox(): Storage {
     expect(partial.seats ?? 0).toBeLessThan(80);
     expect(partial.blocked).toContain('没有按满员桌数确认');
     expect(partial.summary?.some(line => /约 \d+ 桌/.test(line))).toBe(false);
+    const added = localPlan({
+      base: makeLayout({ width: 14, height: 12 }),
+      floorIndex: 0, widthM: 14, depthM: 12, variant: 0, guests: 80, seatPriority: true,
+      layoutMode: 'dining', seatingShape: 'ring',
+      table: { shape: 'round', width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
+    });
+    if ((added.seats ?? 0) < 80) {
+      expect(added.blocked).toContain('没有按满员桌数确认');
+      expect(added.seats ?? 0).toBeGreaterThanOrEqual(40);
+    } else {
+      expect(added.blocked ?? null).toBeNull();
+    }
   });
 
   it('accepts 个人 and a per-table count, and still plans from an area or a 发布会', () => {

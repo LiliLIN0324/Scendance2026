@@ -107,15 +107,15 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
         }
         else if (fact.key === 'headcount' && typeof fact.value === 'number') { memory.headcount = fact.value; memory.headcountMode = null; }
         else if (fact.key === 'venueIO' && (fact.value === 'indoor' || fact.value === 'outdoor') && !memory.eventIntent) memory.venueIO = fact.value;
-        else if (fact.key === 'lengthM' && typeof fact.value === 'number') memory.lengthM = fact.value;
-        else if (fact.key === 'widthM' && typeof fact.value === 'number') memory.widthM = fact.value;
-        else if (fact.key === 'areaM2' && typeof fact.value === 'number') memory.areaM2 = fact.value;
+        else if (fact.key === 'lengthM' && typeof fact.value === 'number' && !memory.eventIntent) memory.lengthM = fact.value;
+        else if (fact.key === 'widthM' && typeof fact.value === 'number' && !memory.eventIntent) memory.widthM = fact.value;
+        else if (fact.key === 'areaM2' && typeof fact.value === 'number' && !memory.eventIntent) memory.areaM2 = fact.value;
         else if (fact.key === 'layoutMode' && (fact.value === 'dining' || fact.value === 'desk-chair') && !memory.eventIntent) { memory.layoutMode = fact.value; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
       }
       const turn = parseBriefTurn('', memory, { ...context, command: pendingGeneration?.command??null });
       const time = previous.pendingBasicFacts.find(fact => fact.key === 'timeOfDay' && typeof fact.value === 'number');
       if (time && typeof time.value === 'number') turn.extraction.timeOfDay = time.value;
-      if(previous.pendingBasicFacts.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2')){
+      if(!memory.eventIntent && previous.pendingBasicFacts.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2')){
         turn.extraction.lengthM=memory.lengthM;turn.extraction.widthM=memory.widthM;turn.extraction.areaM2=memory.areaM2;
       }
       if(pendingGeneration)return {...turn,resolution:'confirmation',...(turn.kind==='generate'?{resumeInstruction:pendingGeneration.instruction}:{})};
@@ -288,12 +288,11 @@ function dropHeldRestatements(raw: string, memory: BriefMemory, facts: PendingBa
   });
 }
 
-/** 「确认」 of a sticky label continues the birthday. A size confirmation does not. */
+/** 「确认」 continues a held banquet. Leftover size or time must not stall it or replace the hall. */
 function continueHeldEvent(pending: PendingBasicFact[] | undefined, memory: BriefMemory, extraction: BriefTurn['extraction']): BriefTurn | null {
   const intent = memory.eventIntent;
   if (!intent || !pending?.length) return null;
-  const carried = new Set(['headcount', 'event', 'venueIO', 'layoutMode']);
-  if (!pending.every(fact => fact.requiresRestatement === false && carried.has(fact.key))) return null;
+  if (pending.some(fact => fact.requiresRestatement !== false)) return null;
   const restored = { ...memory, event: intent.occasion };
   if (restored.headcount === null) {
     const asked = planHeldEvent(`我想办个${intent.occasion}`, restored, extraction);

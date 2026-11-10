@@ -4408,5 +4408,22 @@ describe('event layout generation path', () => {
     expect(preview.height).toBeCloseTo(12);
     expect(onApply).not.toHaveBeenCalled();
     expect(studioMock.generate).not.toHaveBeenCalled();
+    const beforeAdd = onPreview.mock.calls.length;
+    fireEvent.click(await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 }));
+    await waitFor(() => {
+      expect(onPreview.mock.calls.length).toBeGreaterThan(beforeAdd);
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      const count = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' || item.type === 'chair').length ?? 0;
+      expect(count).toBeGreaterThan(0);
+    }, { timeout: 15000 });
+    const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const seated = after.floors[0]!.items.filter(item => item.type === 'dining-chair' || item.type === 'chair').length;
+    if (seated < 80) {
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      expect(screen.getAllByText(/没有按满员桌数确认/).length).toBeGreaterThan(0);
+    }
+    expect(onApply).not.toHaveBeenCalled();
+    expect(after.width).toBeCloseTo(14);
+    expect(after.height).toBeCloseTo(12);
   }, 20000);
 });

@@ -146,9 +146,11 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
         .sort((left, right) => (right.proposal.seats ?? 0) - (left.proposal.seats ?? 0));
       const best = options[0];
       if (best && (best.proposal.seats ?? 0) > seats) {
-        return best.via === 'script'
+        const chosen: LocalPlanResult = best.via === 'script'
           ? { ...best.proposal, via: 'script', summary: fill!.summary, guests: input.guests }
           : { ...best.proposal, via: 'fallback', fallbackReason: `脚本这一版只排到 ${seats} 座，改用了更密的排法。`, guests: input.guests };
+        if (input.furnishing && (chosen.seats ?? 0) < input.guests) return recoverBanquetSeats(input, arrangement, placed, chosen);
+        return chosen;
       }
     }
     // A script that seats nobody while people were asked for is a worse answer than the
