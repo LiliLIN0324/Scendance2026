@@ -16,6 +16,7 @@
 
 import {
   sitePlanDataSchema,
+  type PlanAnchor,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -139,13 +140,15 @@ export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorag
 }
 
 /**
- * 起步规划：100 × 60 m 矩形场地（中心在原点），其余实体为空、锚点缺省
- * （选址/编辑锚点后才有地理位置）。boundary 契约必填 3–64 点，起步矩形
- * 让用户打开即可拖顶点改边界，而不是面对空画布无从下手。
+ * 起步规划：100 × 60 m 矩形场地（中心在原点），其余实体为空。
+ * 传 anchor（创建活动时选的地点）则带上地理锚点，2D 一打开就是该地点的地图；
+ * 不传则锚点缺省，画布走纸面格网（室内/未选地点）。boundary 契约必填 3–64 点，
+ * 起步矩形让用户打开即可拖顶点改边界，而不是面对空画布无从下手。
  */
-export function createStarterOutdoorPlan(): SitePlanData {
+export function createStarterOutdoorPlan(anchor?: PlanAnchor): SitePlanData {
   return {
     schemaVersion: 1,
+    ...(anchor ? { anchor } : {}),
     boundary: [
       { x: -50, y: -30 },
       { x: 50, y: -30 },

@@ -10,11 +10,12 @@
  */
 import { Check, FolderOpen, Globe, Loader2, Plus, SquareDashed } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from '../../../lib/auth-provider';
 import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { matchRecentPlaces, rememberPlace, searchPlaces, type PlaceSuggestion } from '../lib/place-search';
 import { BLANK_VENUE } from '../lib/blank-venue';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 
@@ -79,6 +80,14 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
   const [name, setName] = useState(NEW_PROJECT_DEFAULT);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  // 「从地图开始」的活动地点：输入 → 高德 POI 建议 → 选中拿坐标（写进 plan.anchor）。
+  const [placeQuery, setPlaceQuery] = useState('');
+  const [place, setPlace] = useState<PlaceSuggestion | null>(null);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [searchingPlace, setSearchingPlace] = useState(false);
+  // 模糊建议栏：最近选过的地点优先展示；键盘 ↑↓ 选、Enter 落定、Esc 收起。
+  const [recentMatches, setRecentMatches] = useState<PlaceSuggestion[]>([]);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   // 列工作室 → 没有就静默建「个人工作室」→ 列项目。访客跳过整段，只留「从空白开始」。
   useEffect(() => {
@@ -115,12 +124,86 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
     return () => { active = false; };
   }, [controller, cloud]);
 
+  // 地点建议：输入停顿 350ms 再搜；选中后就不再搜（避免把已选地名又拿去搜一遍）。
+  useEffect(() => {
+    if (selection.kind !== 'map') return;
+    const query = placeQuery.trim();
+    if (place || query.length < 2) { setSuggestions([]); setSearchingPlace(false); setActiveIndex(-1); return; }
+    const controller = new AbortController();
+    setSearchingPlace(true);
+    const timer = window.setTimeout(() => {
+      void searchPlaces(query, { signal: controller.signal })
+        .then(found => {
+          if (controller.signal.aborted) return;
+          setSuggestions(found);
+          setSearchingPlace(false);
+          setActiveIndex(-1);
+        })
+        .catch(() => { if (!controller.signal.aborted) { setSuggestions([]); setSearchingPlace(false); } });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [placeQuery, place, selection.kind]);
+
+  // 最近选过的地点：输入为空也先给建议（刚建过一次活动，下次多半还是常去的那个场地）。
+  useEffect(() => {
+    if (selection.kind !== 'map' || place) { setRecentMatches([]); return; }
+    setRecentMatches(matchRecentPlaces(placeQuery));
+  }, [placeQuery, place, selection.kind]);
+
+  // 建议栏 = 最近命中（带「最近」标记）+ 搜索结果（按相关度排好，去重）。
+  const placeOptions: { place: PlaceSuggestion; recent: boolean }[] = [
+    ...recentMatches.map(item => ({ place: item, recent: true })),
+    ...suggestions
+      .filter(item => !recentMatches.some(recent => recent.id === item.id))
+      .map(item => ({ place: item, recent: false })),
+  ];
+  const showPlaceList = selection.kind === 'map' && !place
+    && (searchingPlace || placeOptions.length > 0 || placeQuery.trim().length >= 2);
+
+  function choosePlace(item: PlaceSuggestion): void {
+    setPlace(item);
+    setPlaceQuery(item.name);
+    setSuggestions([]);
+    setRecentMatches([]);
+    setActiveIndex(-1);
+    rememberPlace(item);
+  }
+
+  function onPlaceKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (!showPlaceList) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!placeOptions.length) return;
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      setActiveIndex(index => {
+        const base = index < 0 ? (step > 0 ? -1 : 0) : index;
+        return (base + step + placeOptions.length) % placeOptions.length;
+      });
+      return;
+    }
+    if (event.key === 'Enter' && activeIndex >= 0 && placeOptions[activeIndex]) {
+      event.preventDefault();
+      choosePlace(placeOptions[activeIndex].place);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      setSuggestions([]);
+      setRecentMatches([]);
+      setActiveIndex(-1);
+    }
+  }
+
   const projects = cloud.status === 'ready' ? cloud.projects : [];
   const selectedProjectId = selection.kind === 'project' ? selection.id : '';
   const selectedProject = projects.find(project => project.id === selectedProjectId);
-  const canStart = !busy && (selection.kind === 'blank'
+  const nameReady = !!name.trim() && cloud.status === 'ready';
+  const canStart = !busy && (
+    selection.kind === 'blank'
     || (selection.kind === 'project' && !!selectedProject)
-    || ((selection.kind === 'new' || selection.kind === 'map') && !!name.trim() && cloud.status === 'ready'));
+    || (selection.kind === 'new' && nameReady)
+    || (selection.kind === 'map' && nameReady && !!place)
+  );
 
   function confirm(): void {
     if (!canStart) return;
@@ -130,7 +213,9 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
     const studioId = cloud.studioId;
     setBusy(true); setNotice('');
     if (selection.kind === 'map') {
-      // 从地图开始（P2-a）：建云项目 → 写本机户外标记（含起步边界）→ 整页跳进 2D 规划。
+      // 从地图开始（P2-a + 创建流程第 1 步）：建云项目 → 本机户外记录带上活动地点锚点
+      // → 整页跳进 2D 规划；锚点在起步 plan 里，进 2D 就是该地点的真地图。
+      const anchor = place ? { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'picker' as const } : null;
       void controller.createProject(studioId, name.trim(), emptyProjectScene())
         .then(created => {
           const now = new Date().toISOString();
@@ -140,7 +225,7 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
             name: name.trim() || '户外规划',
             createdAt: now,
             updatedAt: now,
-            plan: createStarterOutdoorPlan(),
+            plan: createStarterOutdoorPlan(anchor ?? undefined),
           });
           window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&start=outdoor`);
         })
@@ -158,7 +243,7 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
         visual={<SquareDashed size={32} />} title="从空白开始" meta={`${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m · 立刻开工`} />
       {cloud.status === 'ready' && (
         <Card selected={selection.kind === 'map'} onSelect={() => setSelection({ kind: 'map' })}
-          visual={<Globe size={32} />} title="从地图开始" meta="户外活动 · 直接在地图上规划" />
+          visual={<Globe size={32} />} title="从地图开始" meta="户外活动 · 选地点后直接进 2D 规划" />
       )}
       {projects.map(project => {
         const scene = previews[project.id];
@@ -183,11 +268,46 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
         <input autoFocus value={name} maxLength={120} onChange={event => setName(event.target.value)} placeholder={NEW_PROJECT_DEFAULT} />
       </label>
     )}
-    {selection.kind === 'map' && (
+    {selection.kind === 'map' && (<>
       <label className="sc-venue-picker-name">活动名称
         <input autoFocus value={name} maxLength={120} onChange={event => setName(event.target.value)} placeholder={NEW_PROJECT_DEFAULT} />
       </label>
-    )}
+      <label className="sc-venue-picker-name">活动地点
+        <input value={placeQuery} maxLength={80} aria-label="活动地点"
+          role="combobox" aria-expanded={showPlaceList} aria-controls="sc-venue-place-options"
+          aria-autocomplete="list" aria-activedescendant={activeIndex >= 0 ? `sc-venue-place-opt-${activeIndex}` : undefined}
+          onKeyDown={onPlaceKeyDown}
+          onFocus={() => { if (!place) setRecentMatches(matchRecentPlaces(placeQuery)); }}
+          onChange={event => { setPlaceQuery(event.target.value); setActiveIndex(-1); if (place) setPlace(null); }}
+          placeholder="输入城市 / 场馆 / 地址，如：浙江省杭州 平湖秋月" />
+      </label>
+      {showPlaceList && (
+        <div className="sc-venue-place-list" role="listbox" id="sc-venue-place-options" aria-label="活动地点候选">
+          {searchingPlace && <p className="sc-venue-picker-note"><Loader2 size={14} className="cr-spin" aria-hidden="true" /> 正在搜地点…</p>}
+          {!searchingPlace && placeOptions.length === 0 && placeQuery.trim().length >= 2 && (
+            <p className="sc-venue-picker-note" role="status">没搜到，换个说法试试（先城市再场馆名更好搜）。</p>
+          )}
+          {placeOptions.map((option, index) => (
+            <button key={option.place.id} type="button" role="option" id={`sc-venue-place-opt-${index}`}
+              aria-selected={activeIndex === index}
+              className={`sc-venue-place${activeIndex === index ? ' is-active' : ''}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => choosePlace(option.place)}>
+              <span className="sc-venue-place-title">
+                <strong>{option.place.name}</strong>
+                {option.recent && <small className="sc-venue-place-tag">最近</small>}
+              </span>
+              {option.place.address && <small>{option.place.address}</small>}
+            </button>
+          ))}
+        </div>
+      )}
+      {place && (
+        <p className="sc-venue-picker-note" role="status" data-testid="venue-place-picked">
+          已定位：{place.name}{place.address ? ` · ${place.address}` : ''}
+        </p>
+      )}
+    </>)}
     <div className="sc-venue-picker-foot">
       <p className="sc-venue-picker-note" role="status">{notice}</p>
       <button type="button" className="sc-button" onClick={onClose} disabled={busy}>取消</button>

@@ -64,10 +64,12 @@ import {
   drawNodeGhost,
   drawRouteDraft,
   drawRouteLayer,
+  drawSearchPin,
   drawWorkerLayer,
   drawZoneLayer,
   enuToLngLat,
   isLayerVisible,
+  lngLatToEnu,
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
@@ -172,7 +174,7 @@ import {
   zoneSticker,
 } from '../lib/oneplan-stickers';
 import {
-  groupLibraryEntries,
+
   libraryEntries,
   libraryFacilityTemplate,
   libraryStickerFor,
@@ -180,6 +182,18 @@ import {
   type LibraryEntry,
   type OneplanManifest,
 } from '../lib/oneplan-library';
+import {
+  AREA_ROW_LABEL,
+  EXTRA_ROW_LABEL,
+  INFRA_CATEGORY_ORDER,
+  INFRA_ROW_LABEL,
+  LABOR_ROLES,
+  LABOR_ROW_LABEL,
+  entranceIconItems,
+  extraBucket,
+  groupCatalogResults,
+  infraBuckets,
+} from '../lib/oneplan-catalog';
 import {
   PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_ICONS,
@@ -260,6 +274,11 @@ export interface OutdoorPlanCanvasProps {
    * 变化时才触发，父级用 useState 落盘即可。
    */
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
+  /**
+   * B：搜地点落点（纯视图辅助，不写进 plan）。有值时在对应经纬度画一枚定位钉 +
+   * 名称标签；换地点/清空即重画，不参与统计、交付或冲突判定。
+   */
+  searchPin?: { lng: number; lat: number; label: string } | null;
 }
 
 const TILE = 256;
@@ -558,6 +577,8 @@ export interface OutdoorPlanCanvasHandle {
   /** 撤销/重做可用态（工具排按钮 disabled 用）。 */
   canUndo(): boolean;
   canRedo(): boolean;
+  /** P2-k：飞到某个经纬度（可带 zoom）；只动视图，不改 plan/anchor。 */
+  focusLngLat(lng: number, lat: number, zoom?: number): void;
 }
 
 export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, OutdoorPlanCanvasProps>(function OutdoorPlanCanvas({
@@ -573,6 +594,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   infoPanelHostId,
   libraryPanelHostId,
   onHistoryChange,
+  searchPin,
 }: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
   // 查不到（左栏收起/未渲染）时 PanelPortal 自动回落画布内浮窗。
@@ -619,6 +641,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // P4-b：底图形态放 ref 里，draw 才能在不重建回调的前提下切纸面/瓦片。
   const baseModeRef = useRef<'map' | 'floor'>(base);
   const drawRef = useRef<() => void>(() => {});
+  // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
+  const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
@@ -686,8 +710,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [libraryAll, setLibraryAll] = useState<LibraryEntry[]>([]);
   const [libraryQuery, setLibraryQuery] = useState('');
   const [libraryStatus, setLibraryStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
-  const [libraryOpenGroups, setLibraryOpenGroups] = useState<Record<string, boolean>>({});
+  
+  /**
+   * P2-k 目录（用户 m05190）：进户外规划就是三段行——区域、路线及交通 / 基础设施 / 劳动力。
+   * `librarySection` 展开哪一段，`libraryCategory` 在基础设施里选中哪一类（展开该类物件）。
+   */
+  const [librarySection, setLibrarySection] = useState<'areas' | 'infra' | 'labor' | 'extra' | null>('areas');
+  const [libraryCategory, setLibraryCategory] = useState<string | null>(null);
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
+  /** P2-l 右键层级菜单（用户 m05344）：上移一层 / 置于顶层 / 下移一层 / 置于底层。 */
+  const [facilityMenu, setFacilityMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [facilityIssues, setFacilityIssues] = useState<PlanFacilityIssue[]>([]);
   const [routeKind, setRouteKind] = useState<PlanningRouteKind>('pedestrian');
   const [routeOneWay, setRouteOneWay] = useState(false);
@@ -1157,6 +1189,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 6) P2-i：常驻比例尺 + 指北针（画在最上层，任何底图/图层组合下都在同一位置）。
     drawScaleAndNorth(planCtx, viewport, cssW, cssH);
 
+    // 7) P2-k：搜地点落钉（纯视图辅助，不进 plan、不参与统计与冲突）。
+    const pin = searchPinRef.current;
+    if (pin) {
+      const pinPoint = lngLatToEnu(
+        pin.lng,
+        pin.lat,
+        current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
+        current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+      );
+      drawSearchPin({ ctx: planCtx, viewport }, { point: pinPoint, label: pin.label });
+    }
+
     // 本机验收桥：把 viewport 与选中设施的手柄坐标暴露出来（只读，生产构建没有），
     // 这样 Playwright 脚本能精确点到手柄，而不用靠猜像素。
     if (process.env.NODE_ENV !== 'production') {
@@ -1186,6 +1230,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   useEffect(() => {
     drawRef.current = draw;
   }, [draw]);
+
+  // P2-k：搜地点落钉变化（含清空）立即重绘一次；不改 draw 依赖。
+  useEffect(() => {
+    searchPinRef.current = searchPin ?? null;
+    drawRef.current();
+  }, [searchPin]);
 
   // P4-b：底图形态切换（纸面 ↔ 瓦片）立即重绘一次；不改 draw 依赖，免得重建回调。
   useEffect(() => {
@@ -1223,10 +1273,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return () => { cancelled = true; };
   }, [libraryPanelHostId]);
 
-  const libraryGroups = useMemo(
-    () => groupLibraryEntries(searchLibraryEntries(libraryAll, libraryQuery)),
+  // P2-k 目录：搜索结果按用户目录分组；三段各自的桶（只在有库面板时才算）。
+  const librarySearchResults = useMemo(
+    () => (libraryQuery.trim() ? groupCatalogResults(searchLibraryEntries(libraryAll, libraryQuery)) : []),
     [libraryAll, libraryQuery],
   );
+  const libraryInfra = useMemo(() => infraBuckets(libraryAll), [libraryAll]);
+  const libraryEntranceIcons = useMemo(() => entranceIconItems(libraryAll), [libraryAll]);
+  const libraryExtra = useMemo(() => extraBucket(libraryAll), [libraryAll]);
   const libraryTotal = libraryAll.length;
   // 物件库模板 id → 模板对象（拖动进画布时 pickFacilityTemplate 只拿到 id，靠这张表还原尺寸）。
   const libraryTemplatesRef = useRef<Map<string, PlanFacilityTemplate>>(new Map());
@@ -1404,6 +1458,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     redo: () => redoPlan(),
     canUndo: () => historyRef.current.length > 0,
     canRedo: () => redoRef.current.length > 0,
+    focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
   }));
 
   /** 图层栈开关：切换某层可见并回传（受控/非受控均生效）。 */
@@ -1578,6 +1633,39 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
   }
 
+  /* ---------------- P2-l 设施层级（右键菜单）---------------- */
+
+  /**
+   * 用户 m05344：物件放在场地之后可以右键「上移一层 / 置于顶层 / 下移一层 / 置于底层」。
+   * 层级就存在 `plan.facilities` 数组顺序里（契约是 strictObject，不能加 zIndex 字段）：
+   * 数组越靠后画得越上，所以重排数组即可，草稿/导出/3D 都自动跟着变。
+   */
+  function reorderFacility(id: string, action: 'up' | 'top' | 'down' | 'bottom') {
+    const current = planRef.current;
+    const index = current.facilities.findIndex(item => item.id === id);
+    if (index < 0) return;
+    const next = [...current.facilities];
+    const [moved] = next.splice(index, 1);
+    if (action === 'top') next.push(moved);
+    else if (action === 'bottom') next.unshift(moved);
+    else {
+      const target = action === 'up' ? Math.min(next.length, index + 1) : Math.max(0, index - 1);
+      next.splice(target, 0, moved);
+    }
+    if (next.every((item, i) => item.id === current.facilities[i]?.id)) {
+      setFacilityMenu(null);
+      return;
+    }
+    commitPlan({ ...current, facilities: next });
+    const label = action === 'up' ? '上移一层' : action === 'top' ? '置于顶层' : action === 'down' ? '下移一层' : '置于底层';
+    const at = next.findIndex(item => item.id === id) + 1;
+    setEditMessage(`「${moved.name}」${label}（第 ${at} / ${next.length} 层）。`);
+    setSelectedFacilityId(id);
+    selectedFacilityRef.current = id;
+    setFacilityMenu(null);
+    draw();
+  }
+
   /* ---------------- P2-j 分区选中与顶点改形 ---------------- */
 
   function selectZone(id: string | null) {
@@ -1647,6 +1735,158 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setFacilityTemplateId(template.templateId);
     setEditMessage(`已选「${entry.nameZh}」（${template.width}×${template.depth} m），在地图上单击放置；Esc 结束。`);
     draw();
+  }
+
+  /**
+   * P2-k 第一段工具：区域（圈分区）/ 入口和通道图标（上面列出图标，点了按设施放）/
+   * 路线（画动线）。都是已有编辑模式的入口，这里只是把按钮接到 setMode。
+   */
+  function startAreaTool(tool: 'zone' | 'node' | 'route') {
+    if (!onPlanChange) return;
+    selectFacility(null);
+    setSelectedZoneId(null);
+    setMode(tool);
+    if (tool === 'zone') {
+      setEditMessage('画区域：在场地内单击加顶点，双击或靠近首点闭合；Esc 结束。');
+    } else if (tool === 'node') {
+      setEditMessage('放入口/出口：单击地图落一个节点，可连续放；Esc 结束。');
+    } else {
+      setEditMessage('画路线：单击加路径点，双击完成；Esc 结束。');
+    }
+  }
+
+  /** P2-k 第三段：劳动力按钮 → 直接进「布人员」模式，岗位名就是按钮名。 */
+  function startLaborRole(role: string) {
+    if (!onPlanChange) return;
+    workerRoleRef.current = role;
+    setWorkerRole(role);
+    setMode('worker');
+    setEditMessage(`布「${role}」：单击地图落一个点位，可连续放；Esc 结束。`);
+  }
+
+  /** P2-k：物件格子（搜索、基础设施分类、入口图标三处共用同一套外观）。 */
+  function renderLibraryItems(items: readonly LibraryEntry[]) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginTop: 4 }}>
+        {items.map(entry => {
+          const template = libraryFacilityTemplate(entry);
+          const active = facilityTemplateId === template.templateId;
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              data-testid={`library-item-${entry.kind}-${entry.slug}`}
+              aria-pressed={active}
+              title={`${entry.nameZh} / ${entry.nameEn}（默认 ${entry.width}×${entry.depth} m）`}
+              onClick={() => pickLibraryEntry(entry)}
+              draggable
+              onDragStart={event => {
+                // 与内置模板同一条拖放通道：画布 onDrop 读 text/plain 后落模板。
+                event.dataTransfer.setData('text/plain', template.templateId);
+                event.dataTransfer.effectAllowed = 'copy';
+              }}
+              style={{
+                all: 'unset',
+                cursor: 'pointer',
+                boxSizing: 'border-box',
+                padding: 4,
+                borderRadius: PLANNING_RADIUS.sm,
+                border: `1px solid ${active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
+                background: active ? PLANNING_SURFACE.selectedBg : 'transparent',
+                textAlign: 'center',
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 34,
+                  height: 34,
+                  margin: '0 auto',
+                  borderRadius: PLANNING_RADIUS.sm,
+                  // icon 类是白色字形（配深底）、scale/area 是深色线稿（配浅底）。
+                  background: entry.kind === 'icon' ? '#23252c' : '#eef1f4',
+                }}
+              >
+                <img src={oneplanStickerSrc(entry.sticker)} alt="" width={26} height={26} loading="lazy" style={{ display: 'block' }} />
+              </span>
+              <span style={{ display: 'block', marginTop: 2, fontSize: 11, lineHeight: 1.25, wordBreak: 'break-all' }}>{entry.nameZh}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  /** P2-k：一段的标题行（区域、路线及交通 / 基础设施 / 劳动力 / 活动包与图元）。 */
+  function renderCatalogSectionHeader(input: {
+    id: 'areas' | 'infra' | 'labor' | 'extra';
+    label: string;
+    count: number;
+  }) {
+    const open = librarySection === input.id;
+    return (
+      <button
+        type="button"
+        data-testid={`catalog-section-${input.id}`}
+        aria-expanded={open}
+        onClick={() => setLibrarySection(prev => (prev === input.id ? null : input.id))}
+        style={{
+          all: 'unset',
+          cursor: 'pointer',
+          display: 'flex',
+          width: '100%',
+          gap: PLANNING_SPACING.xs,
+          padding: '5px 2px',
+          fontSize: PLANNING_TYPOGRAPHY.hint,
+          fontWeight: 600,
+          borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+        }}
+      >
+        <span aria-hidden>{open ? '▾' : '▸'}</span>
+        <span style={{ flex: 1 }}>{input.label}</span>
+        <span style={{ opacity: 0.7, fontWeight: 400 }}>{input.count}</span>
+      </button>
+    );
+  }
+
+  /** P2-k：目录里的小按钮（3 列网格里的一格）。 */
+  function renderCatalogButton(input: {
+    label: string;
+    count?: number;
+    active?: boolean;
+    testId: string;
+    onClick: () => void;
+  }) {
+    return (
+      <button
+        key={input.testId}
+        type="button"
+        data-testid={input.testId}
+        aria-pressed={input.active === true}
+        onClick={input.onClick}
+        style={{
+          all: 'unset',
+          cursor: 'pointer',
+          boxSizing: 'border-box',
+          padding: '6px 8px',
+          borderRadius: PLANNING_RADIUS.sm,
+          border: `1px solid ${input.active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
+          background: input.active ? PLANNING_SURFACE.selectedBg : 'transparent',
+          fontSize: PLANNING_TYPOGRAPHY.hint,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 6,
+        }}
+      >
+        <span style={{ flex: 1 }}>{input.label}</span>
+        {typeof input.count === 'number' && (
+          <span style={{ opacity: 0.7, fontSize: 11 }}>{input.count}</span>
+        )}
+      </button>
+    );
   }
 
   /** 待放模板的统一解析：库模板优先，其次内置目录。 */
@@ -2155,6 +2395,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       lng: clamp(geo.lng, -180, 180),
       lat: clamp(geo.lat, -85, 85),
       zoom: viewRef.current.zoom,
+    });
+  }
+
+  /**
+   * P2-k 搜地点：把视图飞到某个经纬度（可指定 zoom，缺省保持当前级别）。
+   * 只动视图，不改 plan / anchor —— 搜地点是「看一眼这块地」，不是重新标定。
+   */
+  function focusLngLat(lng: number, lat: number, zoom?: number) {
+    const floor = baseModeRef.current === 'floor';
+    commitView({
+      lng: clamp(lng, -180, 180),
+      lat: clamp(lat, -85, 85),
+      zoom: clamp(
+        zoom ?? viewRef.current.zoom,
+        floor ? FLOOR_MIN_ZOOM : MAP_MIN_ZOOM,
+        floor ? FLOOR_MAX_ZOOM : MAP_MAX_ZOOM,
+      ),
     });
   }
 
@@ -2709,6 +2966,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       onMouseUp={handleStageMouseUp}
       onMouseLeave={handleStageMouseLeave}
       onDoubleClick={event => {
+        // P2-l（用户 m05374）：画区域/边界时双击左键 = 完成绘制（少于 3 点不闭合）。
+        if (modeRef.current === 'zone' || modeRef.current === 'boundary') {
+          event.preventDefault();
+          if (draftRef.current.length >= 3) closeDraft();
+          else setEditMessage(`至少要 3 个节点才能闭合（当前 ${draftRef.current.length} 个）。`);
+          return;
+        }
         // H2-d：画动线模式下双击提交；H3-a：测量模式下双击提交（面积/路径）。
         if (modeRef.current === 'route') {
           event.preventDefault();
@@ -2729,6 +2993,36 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           if (vertex !== null) removeBoundaryVertexAt(vertex);
           else insertBoundaryVertexAt(hit.px);
         }
+      }}
+      onContextMenu={event => {
+        // P2-l（用户 m05374）：画区域/边界时右键 = 移除上一个节点；其余模式右键点中设施 = 层级菜单。
+        if (modeRef.current === 'zone' || modeRef.current === 'boundary' || modeRef.current === 'route') {
+          const draft = draftRef.current;
+          if (draft.length === 0) return;
+          event.preventDefault();
+          const next = draft.slice(0, -1);
+          setDraft(next);
+          setEditMessage(
+            next.length === 0
+              ? '已移除全部节点；自己按 Esc 退出绘制。'
+              : `已移除上一个节点（还剩 ${next.length} 个）；双击左键完成绘制。`,
+          );
+          return;
+        }
+        if (modeRef.current !== 'view') return;
+        const hit = eventPlanPoint(event);
+        if (!hit) {
+          setFacilityMenu(null);
+          return;
+        }
+        const target = [...planRef.current.facilities].reverse().find(item => facilityContainsPoint(hit.pt, item));
+        if (!target) {
+          setFacilityMenu(null);
+          return;
+        }
+        event.preventDefault();
+        if (!layerLocked('facility')) selectFacility(target.id);
+        setFacilityMenu({ x: event.clientX, y: event.clientY, id: target.id });
       }}
       onWheel={e => {
         // React 合成 wheel 在部分浏览器为 passive 监听，preventDefault 会告警；
@@ -2769,6 +3063,58 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {/* P2-l 右键层级菜单（用户 m05344）：只动数组顺序，草稿/导出/3D 一起跟着变。 */}
+      {facilityMenu && (
+        <div
+          data-testid="facility-context-menu"
+          role="menu"
+          aria-label="设施层级"
+          style={{
+            position: 'fixed',
+            left: Math.min(facilityMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 172),
+            top: Math.min(facilityMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 900) - 152),
+            zIndex: 60,
+            minWidth: 156,
+            padding: 4,
+            borderRadius: 10,
+            background: PLANNING_SURFACE.panelBg,
+            border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+            boxShadow: '0 12px 32px rgba(20, 20, 22, 0.28)',
+          }}
+          onMouseDown={stopPanelMouse}
+          onContextMenu={event => event.preventDefault()}
+        >
+          {(
+            [
+              ['up', '上移一层'],
+              ['top', '置于顶层'],
+              ['down', '下移一层'],
+              ['bottom', '置于底层'],
+            ] as const
+          ).map(([action, label]) => (
+            <button
+              key={action}
+              type="button"
+              role="menuitem"
+              data-testid={`facility-order-${action}`}
+              onClick={() => reorderFacility(facilityMenu.id, action)}
+              style={{
+                all: 'unset',
+                display: 'block',
+                boxSizing: 'border-box',
+                width: '100%',
+                padding: '6px 10px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                color: PLANNING_SURFACE.panelText,
+                fontSize: PLANNING_TYPOGRAPHY.row,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* P2-f 编辑工具舒展：规划模式钮直接铺在画布顶部（像室内标注区那样可见可用），
           不再收在左栏卡片里；模式伴随选项/模板/选中实体编辑仍在左栏卡片。 */}
@@ -3063,9 +3409,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   </label>
                 )}
                 <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, lineHeight: 1.5 }}>
-                  {mode === 'boundary' && '单击加顶点，点回起点或再点首点闭合；Esc 取消。'}
+                  {mode === 'boundary' && '单击左键加顶点（也可点回起点闭合）；右键移除上一个节点；双击左键完成；Esc 取消。'}
                   {mode === 'boundary-vertex' && '拖动绿色手柄调整顶点；非法位置自动吸附回去。'}
-                  {mode === 'zone' && '圈出分区后点回起点闭合，自交会被拒绝。'}
+                  {mode === 'zone' && '单击左键加节点；右键移除上一个节点；双击左键完成绘制；Esc 取消（自交会被拒绝）。'}
+                  {mode === 'view' && '拖拽平移，滚轮缩放；单击选中设施（可拖手柄改大小/旋转，右键调层级）；双击边界插点/顶点删点；Esc 取消当前操作。'}
                   {mode === 'facility' && (facilityTemplateId ? '画布上移动鼠标预览占地，单击放置；也可直接拖模板进来；Esc 取消。' : '先点选下方模板，或直接把模板拖到画布上。')}
                   {mode === 'route' && '单击加路径点，双击或点「完成动线」提交；端点靠近出入口会自动连接；Esc 取消。'}
                   {mode === 'measure' && (measureKind === 'distance'
@@ -3075,7 +3422,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       : '单击加路径点，双击或点「完成测量」提交；Esc 取消。')}
                   {mode === 'node' && '单击放置出入口节点，可连续放置；Esc 取消。'}
                   {mode === 'worker' && '单击布置人员点位，落点在分区内会自动归属；Esc 取消。'}
-                  {mode === 'view' && '拖拽平移，滚轮缩放；单击冲突标记/出入口/人员/动线/设施可定位或选中；拖动出入口，关联动线端点随动。'}
                 </div>
 
                 {mode === 'route' && (
@@ -3583,14 +3929,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       </div>
       </PanelPortal>
 
-      {/* P2-h 物件库（左栏第三个页签）：549 件 OnePlan 贴纸在界面上被看见、被搜索、被点选放置。 */}
-      {libraryPanelHostId && (
+      {/* P2-h 物件库（左栏第三个页签）：549 件 OnePlan 贴纸在界面上被看见、被搜索、被点选放置。
+          没有宿主 id 时（独立演示页 /outdoor-plan）也直接内联渲染，否则演示页里根本看不到目录。 */}
+      {(!libraryPanelHostId || libraryPanelHost) && (
         <PanelPortal host={libraryPanelHost}>
           <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} data-testid="outdoor-library-panel">
-            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'baseline', gap: PLANNING_SPACING.xs }}>
+<div style={{ fontWeight: 600, display: 'flex', alignItems: 'baseline', gap: PLANNING_SPACING.xs }}>
               <span>物件库</span>
               <span style={{ opacity: 0.7, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-                {libraryStatus === 'ready' ? `${libraryTotal} 件 · ${libraryGroups.length} 组` : libraryStatus === 'loading' ? '载入中…' : ''}
+                {libraryStatus === 'ready' ? `${libraryTotal} 件` : libraryStatus === 'loading' ? '载入中…' : ''}
               </span>
             </div>
             <input
@@ -3610,83 +3957,121 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               }}
             />
             <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-              点一件物件 → 地图上单击放置；再点可连续放；Esc 结束。
+              先点分类，再点物件 → 地图上单击放置；连续放；Esc 结束。
             </div>
             {libraryStatus === 'failed' && (
               <div style={{ marginTop: PLANNING_SPACING.xs, color: PLANNING_SURFACE.dangerText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
                 物件库清单加载失败（/oneplan-icons/manifest.json），刷新页面重试。
               </div>
             )}
-            {libraryStatus === 'ready' && libraryGroups.length === 0 && (
-              <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>没有匹配「{libraryQuery}」的物件。</div>
-            )}
-            <div style={{ marginTop: PLANNING_SPACING.xs, maxHeight: 330, overflowY: 'auto', paddingRight: 2 }}>
-              {libraryGroups.map((group, index) => {
-                // 缺省展开前两组（面域类 + 件数最多那组），其余折叠——549 件一次铺开会淹没面板。
-                const open = libraryOpenGroups[group.category] ?? index < 2;
-                return (
-                  <div key={group.category} style={{ marginTop: PLANNING_SPACING.xs }}>
-                    <button
-                      type="button"
-                      onClick={() => setLibraryOpenGroups(prev => ({ ...prev, [group.category]: !open }))}
-                      aria-expanded={open}
-                      style={{ all: 'unset', cursor: 'pointer', display: 'flex', width: '100%', gap: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600 }}
-                    >
-                      <span aria-hidden>{open ? '▾' : '▸'}</span>
-                      <span style={{ flex: 1 }}>{group.category}</span>
-                      <span style={{ opacity: 0.7, fontWeight: 400 }}>{group.items.length}</span>
-                    </button>
-                    {open && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginTop: 4 }}>
-                        {group.items.map(entry => (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            data-testid={`library-item-${entry.kind}-${entry.slug}`}
-                            aria-pressed={facilityTemplateId === libraryFacilityTemplate(entry).templateId}
-                            title={`${entry.nameZh} / ${entry.nameEn}（默认 ${entry.width}×${entry.depth} m）`}
-                            onClick={() => pickLibraryEntry(entry)}
-                            draggable
-                            onDragStart={event => {
-                              // 与内置模板同一条拖放通道：画布 onDrop 读 text/plain 后落模板。
-                              event.dataTransfer.setData('text/plain', libraryFacilityTemplate(entry).templateId);
-                              event.dataTransfer.effectAllowed = 'copy';
-                            }}
-                            style={{
-                              all: 'unset',
-                              cursor: 'pointer',
-                              boxSizing: 'border-box',
-                              padding: 4,
-                              borderRadius: PLANNING_RADIUS.sm,
-                              border: `1px solid ${facilityTemplateId === libraryFacilityTemplate(entry).templateId ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
-                              background: facilityTemplateId === libraryFacilityTemplate(entry).templateId ? PLANNING_SURFACE.selectedBg : 'transparent',
-                              textAlign: 'center',
-                            }}
-                          >
-                            <span
-                              aria-hidden
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 34,
-                                height: 34,
-                                margin: '0 auto',
-                                borderRadius: PLANNING_RADIUS.sm,
-                                // icon 类是白色字形（配深底）、scale/area 是深色线稿（配浅底）。
-                                background: entry.kind === 'icon' ? '#23252c' : '#eef1f4',
-                              }}
-                            >
-                              <img src={oneplanStickerSrc(entry.sticker)} alt="" width={26} height={26} loading="lazy" style={{ display: 'block' }} />
-                            </span>
-                            <span style={{ display: 'block', marginTop: 2, fontSize: 11, lineHeight: 1.25, wordBreak: 'break-all' }}>{entry.nameZh}</span>
-                          </button>
-                        ))}
+            <div style={{ marginTop: PLANNING_SPACING.xs, maxHeight: 430, overflowY: 'auto', paddingRight: 2 }}>
+              {libraryQuery.trim() !== '' ? (
+                /* 搜索态：跨三段的结果，按用户目录分组（不再走 17 类折叠）。 */
+                librarySearchResults.length === 0 ? (
+                  <div style={{ opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>没有匹配「{libraryQuery}」的物件。</div>
+                ) : (
+                  librarySearchResults.map(bucket => (
+                    <div key={bucket.label} style={{ marginTop: PLANNING_SPACING.xs }}>
+                      <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600 }}>
+                        <span style={{ flex: 1 }}>{bucket.label}</span>
+                        <span style={{ opacity: 0.7, fontWeight: 400 }}>{bucket.items.length}</span>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                      {renderLibraryItems(bucket.items)}
+                    </div>
+                  ))
+                )
+              ) : (
+                <>
+                  {/* 1. 区域、路线及交通 → 区域 / 入口和通道图标 / 路线 */}
+                  {renderCatalogSectionHeader({ id: 'areas', label: AREA_ROW_LABEL, count: 3 })}
+                  {librarySection === 'areas' && (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+                        {renderCatalogButton({
+                          label: '区域',
+                          testId: 'catalog-area-zone',
+                          active: mode === 'zone',
+                          onClick: () => startAreaTool('zone'),
+                        })}
+                        {renderCatalogButton({
+                          label: '入口和通道图标',
+                          count: libraryEntranceIcons.length,
+                          testId: 'catalog-area-entry',
+                          active: libraryCategory === '入口和通道图标',
+                          onClick: () => setLibraryCategory(prev => (prev === '入口和通道图标' ? null : '入口和通道图标')),
+                        })}
+                        {renderCatalogButton({
+                          label: '路线',
+                          testId: 'catalog-area-route',
+                          active: mode === 'route',
+                          onClick: () => startAreaTool('route'),
+                        })}
+                        {renderCatalogButton({
+                          label: '出入口节点',
+                          testId: 'catalog-area-node',
+                          active: mode === 'node',
+                          onClick: () => startAreaTool('node'),
+                        })}
+                      </div>
+                      {libraryCategory === '入口和通道图标' && libraryEntranceIcons.length > 0 && renderLibraryItems(libraryEntranceIcons)}
+                    </>
+                  )}
+
+                  {/* 2. 基础设施 → 17 类，点一类展开该类物件 */}
+                  {renderCatalogSectionHeader({
+                    id: 'infra',
+                    label: INFRA_ROW_LABEL,
+                    count: libraryInfra.reduce((sum, bucket) => sum + bucket.items.length, 0),
+                  })}
+                  {librarySection === 'infra' && (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+                        {libraryInfra.map(bucket => renderCatalogButton({
+                          label: bucket.label,
+                          count: bucket.items.length,
+                          testId: `catalog-infra-${bucket.label}`,
+                          active: libraryCategory === bucket.label,
+                          onClick: () => setLibraryCategory(prev => (prev === bucket.label ? null : bucket.label)),
+                        }))}
+                      </div>
+                      {INFRA_CATEGORY_ORDER
+                        .filter(label => label === libraryCategory)
+                        .map(label => {
+                          const bucket = libraryInfra.find(item => item.label === label);
+                          return bucket ? <div key={label}>{renderLibraryItems(bucket.items)}</div> : null;
+                        })}
+                      {libraryInfra.length === 0 && (
+                        <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>物件库还没有载入完成。</div>
+                      )}
+                    </>
+                  )}
+
+                  {/* 3. 劳动力 → 9 个岗位，点了直接进「布人员」 */}
+                  {renderCatalogSectionHeader({ id: 'labor', label: LABOR_ROW_LABEL, count: LABOR_ROLES.length })}
+                  {librarySection === 'labor' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+                      {LABOR_ROLES.map(role => renderCatalogButton({
+                        label: role,
+                        testId: `catalog-labor-${role}`,
+                        active: mode === 'worker' && workerRole === role,
+                        onClick: () => startLaborRole(role),
+                      }))}
+                    </div>
+                  )}
+
+                  {/* 4. 活动包与图元：抓取包里多出来的扩展包，单独一栏，不混进基础设施。 */}
+                  {libraryExtra.length > 0 && (
+                    <>
+                      {renderCatalogSectionHeader({
+                        id: 'extra',
+                        label: EXTRA_ROW_LABEL,
+                        count: libraryExtra[0]?.items.length ?? 0,
+                      })}
+                      {librarySection === 'extra' && libraryExtra[0] && renderLibraryItems(libraryExtra[0].items)}
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </PanelPortal>

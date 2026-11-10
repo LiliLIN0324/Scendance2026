@@ -18,7 +18,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import OutdoorPlanCanvas, { type CanvasBasemapSource } from '@/components/room-organizer/components/outdoor-plan-canvas';
+import OutdoorPlanCanvas, {
+  type CanvasBasemapSource,
+  type OutdoorPlanCanvasHandle,
+} from '@/components/room-organizer/components/outdoor-plan-canvas';
+import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
+import OutdoorPlan3D from '@/components/room-organizer/components/outdoor-plan-3d';
 import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
 import { formatLengthM, planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
@@ -76,6 +81,11 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [shareOpen, setShareOpen] = useState(false);
+  // P2-k：进来先是 2D 地图，右侧「视角」钮才切 3D（卫星底图三维效果 + 低模草图）。
+  const [view, setView] = useState<'2d' | '3d'>('2d');
+  // 左上角搜地点（用户 m05472）：只动视图 + 落定位钉，不改 plan / anchor。
+  const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
+  const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
   // H4-b 引导与演示页共用一个 key：看过的人进工作台不再弹。
   const guide = useGuide(GUIDE_STORAGE_KEY);
 
@@ -255,7 +265,66 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
               onDismiss={guide.dismiss}
             />
           )}
-          {plan && <OutdoorPlanCanvas plan={plan} source={source} onPlanChange={setPlan} />}
+                  {plan && view === '2d' && (
+          <OutdoorPlanCanvas
+            ref={canvasApiRef}
+            plan={plan}
+            source={source}
+            onPlanChange={setPlan}
+            {...(placePin ? { searchPin: placePin } : {})}
+          />
+        )}
+        {plan && view === '2d' && (
+          <PlanPlaceSearch
+            testIdPrefix="workspace-place-search"
+            onPick={place => {
+              setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
+              canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
+            }}
+            onClear={() => setPlacePin(null)}
+          />
+        )}
+          {plan && view === '3d' && <OutdoorPlan3D plan={plan} />}
+          {/* 右侧视角开关：2D 地图 ↔ 3D 卫星底图低模（用户口径 m05067）。 */}
+          <button
+            type="button"
+            data-testid="outdoor-view-toggle"
+            aria-pressed={view === '3d'}
+            aria-label={view === '3d' ? '切回 2D 平面' : '切到 3D 视角'}
+            onClick={() => setView(current => (current === '2d' ? '3d' : '2d'))}
+            style={{
+              position: 'absolute',
+              right: 80,
+              top: 80,
+              zIndex: 5,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: '1px solid var(--sc-line, #e4e4e7)',
+              background: 'rgba(255, 255, 255, 0.94)',
+              color: 'var(--sc-ink, #141416)',
+              fontSize: 13,
+              lineHeight: '18px',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: '0 2px 10px rgba(16, 18, 24, 0.12)',
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                width: 14,
+                height: 14,
+                borderRadius: 3,
+                background: view === '3d' ? 'var(--sc-green, #4a7c59)' : 'transparent',
+                border: '1.5px solid var(--sc-ink, #141416)',
+                display: 'inline-block',
+              }}
+            />
+            {view === '3d' ? '视角 · 3D' : '视角 · 2D'}
+          </button>
         </div>
       </main>
       {plan && stats && (
