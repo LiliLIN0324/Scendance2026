@@ -28,6 +28,8 @@ import { sitePlanDataSchema, type SitePlanData } from '../../../supabase/functio
 import { formatLengthM, planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
 import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
+import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
+import { downloadPlanPng } from '@/components/room-organizer/lib/site-plan-png';
 
 /** 样例：平湖秋月周边 200×120 m 市集（锚点 GCJ-02，来自既有 XIHU_LOCAL_CENTER）。 */
 const SAMPLE_PLAN: SitePlanData = {
@@ -266,7 +268,19 @@ export default function OutdoorPlanPage() {
           >
             {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-          <ExportMenu onPick={id => { if (id === 'share') setShareOpen(true); }} />
+          <ExportMenu
+            enableExports
+            onPick={id => {
+              if (id === 'share') { setShareOpen(true); return; }
+              if (id === 'csv') { downloadPlanCsv(plan, 'pinghu-market'); return; }
+              if (id === 'png') {
+                // PNG 快照复用画布当前渲染的业务层 canvas（画布组件第二个 canvas）。
+                const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
+                const planCanvas = canvases[canvases.length - 1];
+                if (planCanvas) downloadPlanPng({ plan, planCanvas, revision: 1, dpi: 300 });
+              }
+            }}
+          />
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -293,5 +307,7 @@ export default function OutdoorPlanPage() {
     </main>
   );
 }
+
+
 
 
