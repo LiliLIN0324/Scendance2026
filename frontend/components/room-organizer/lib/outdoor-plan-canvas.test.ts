@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   PLAN_LAYER_STACK,
   defaultLayerVisibility,
+  drawAccessLayer,
   drawFacilityGhost,
   drawFacilityLayer,
+  drawNodeGhost,
+  drawRouteDraft,
+  drawRouteLayer,
+  drawWorkerLayer,
   enuToLngLat,
   hexWithAlpha,
   isLayerVisible,
@@ -14,7 +19,7 @@ import {
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
-import { PLANNING_LAYER_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
@@ -95,10 +100,11 @@ interface CtxCapture {
   dash: number[][];
   texts: string[];
   strokes: string[];
+  fills: string[];
 }
 
 function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
-  const cap: CtxCapture = { rects: [], dash: [], texts: [], strokes: [] };
+  const cap: CtxCapture = { rects: [], dash: [], texts: [], strokes: [], fills: [] };
   const ctx = {
     save: () => {},
     restore: () => {},
@@ -117,7 +123,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
     fillText: (t: string) => cap.texts.push(t),
   } as unknown as CanvasRenderingContext2D;
   Object.defineProperty(ctx, 'strokeStyle', { set: (v: string) => cap.strokes.push(v), get: () => '' });
-  Object.defineProperty(ctx, 'fillStyle', { set: () => {}, get: () => '' });
+  Object.defineProperty(ctx, 'fillStyle', { set: (v: string) => cap.fills.push(v), get: () => '' });
   Object.defineProperty(ctx, 'lineWidth', { set: () => {}, get: () => 1 });
   Object.defineProperty(ctx, 'font', { set: () => {}, get: () => '' });
   Object.defineProperty(ctx, 'textAlign', { set: () => {}, get: () => 'left' });
@@ -166,5 +172,89 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     );
     expect(cap.strokes).toContain('#c0392b');
     expect(cap.dash).toContainEqual([6, 4]);
+  });
+});
+
+/* ---------------- H2-d 动线 / 节点 / 人员绘制 ---------------- */
+
+describe('route / node / worker drawing (H2-d)', () => {
+  it('paints each route kind in its own token colour with oneWay arrows along segments', () => {
+    const points = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }];
+    for (const kind of ['pedestrian', 'vehicle', 'service'] as const) {
+      const { ctx, cap } = makeCtx();
+      drawRouteLayer({ ctx, viewport: view } as PlanCanvasContext, [{ kind, points, oneWay: true }]);
+      expect(cap.strokes).toContain(PLANNING_ROUTE_KIND_COLORS[kind]);
+    }
+    // oneWay：每段一个方向箭头（两点一段、三点两段；箭头是 fill 填充，见 stub fills 记录）。
+    const { ctx, cap } = makeCtx();
+    drawRouteLayer({ ctx, viewport: view } as PlanCanvasContext, [{ kind: 'pedestrian', points, oneWay: true }]);
+    const arrowFills = cap.fills.filter(s => s === PLANNING_ROUTE_KIND_COLORS.pedestrian);
+    expect(arrowFills).toHaveLength(2);
+    const noArrow = makeCtx();
+    drawRouteLayer({ ctx: noArrow.ctx, viewport: view } as PlanCanvasContext, [{ kind: 'pedestrian', points, oneWay: false }]);
+    expect(noArrow.cap.fills.filter(s => s === PLANNING_ROUTE_KIND_COLORS.pedestrian)).toHaveLength(0);
+  });
+
+  it('highlights the selected route with a white overlay and a name label', () => {
+    const { ctx, cap } = makeCtx();
+    drawRouteLayer(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ kind: 'vehicle', points: [{ x: 0, y: 0 }, { x: 20, y: 0 }], oneWay: false, name: '装卸动线', selected: true }],
+    );
+    expect(cap.strokes).toContain('#ffffff');
+    expect(cap.texts).toContain('装卸动线');
+  });
+
+  it('draws the route draft with rubber band and cursor cross when a cursor point is given', () => {
+    const { ctx, cap } = makeCtx();
+    drawRouteDraft(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ x: 0, y: 0 }, { x: 10, y: 5 }],
+      'service',
+      { x: 20, y: 10 },
+    );
+    expect(cap.dash).toContainEqual([8, 5]); // 已收点虚线
+    expect(cap.dash).toContainEqual([4, 4]); // 橡皮筋虚线
+    expect(cap.rects.filter(r => r.startsWith('fill:'))).toHaveLength(2); // 两个顶点方块
+    // 空草稿 + 指针：只画指针十字，无顶点方块。
+    const empty = makeCtx();
+    drawRouteDraft({ ctx: empty.ctx, viewport: view } as PlanCanvasContext, [], 'pedestrian', { x: 0, y: 0 });
+    expect(empty.cap.rects.filter(r => r.startsWith('fill:'))).toHaveLength(0);
+  });
+
+  it('marks the selected access node with a white halo and unconnected nodes with a red dot', () => {
+    const node = { id: 'n1', kind: 'entry' as const, position: { x: 0, y: 0 }, name: '西门' };
+    const selected = makeCtx();
+    drawAccessLayer({ ctx: selected.ctx, viewport: view } as PlanCanvasContext, [{ ...node, selected: true }]);
+    expect(selected.cap.strokes).toContain('#ffffff');
+
+    const lonely = makeCtx();
+    drawAccessLayer({ ctx: lonely.ctx, viewport: view } as PlanCanvasContext, [{ ...node, unconnected: true }]);
+    // 未连接红点是 fill 圆点。
+    expect(lonely.cap.fills).toContain('#c0392b');
+  });
+
+  it('labels workers with role and count and halos the selected one', () => {
+    const worker = { id: 'w1', role: '安保', count: 2, position: { x: 3, y: 57 } };
+    const plain = makeCtx();
+    drawWorkerLayer({ ctx: plain.ctx, viewport: view } as PlanCanvasContext, [worker]);
+    expect(plain.cap.texts).toContain('安保 ×2');
+
+    const selected = makeCtx();
+    drawWorkerLayer({ ctx: selected.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, selected: true }]);
+    expect(selected.cap.strokes).toContain('#ffffff');
+
+    const warned = makeCtx();
+    drawWorkerLayer({ ctx: warned.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, warning: true }]);
+    expect(warned.cap.strokes).toContain('#c0392b');
+  });
+
+  it('previews node placement with a translucent diamond and name label', () => {
+    const { ctx, cap } = makeCtx();
+    drawNodeGhost({ ctx, viewport: view } as PlanCanvasContext, 'entry', '西门 2', { x: 0, y: 60 });
+    expect(cap.rects.some(r => r.startsWith('stroke:'))).toBe(true);
+    expect(cap.texts).toContain('西门 2');
+    // 幽灵菱形是 0.9 透明度的入口蓝 fill。
+    expect(cap.fills).toContain(hexWithAlpha(PLANNING_LAYER_COLORS.access, 0.9));
   });
 });

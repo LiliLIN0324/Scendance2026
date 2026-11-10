@@ -12,7 +12,7 @@
  * - 派生量（面积/长度）仍从 site-plan 的米制几何现算，画布只做投影不产生真值。
  */
 
-import { PLANNING_LAYER_COLORS, type PlanningLayerKind } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
 import { planZoneFillAlpha } from './site-plan-editing';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
@@ -290,7 +290,11 @@ export function drawFacilityGhost(
   ctx.fillText(`${template.name} ${template.width}×${template.depth}m`, center.x, center.y + Math.max(h / 2, 6) + 3);
 }
 
-/** 路线：折线 + 终点箭头；人行/车辆/后勤用不同线型（实线/长划/点划）。 */
+/**
+ * 路线：折线 + 方向箭头；三类动线各有专属色（人行蓝/车辆紫/后勤金）与线型
+ * （实线/长划/点划）。oneWay 沿线逐段画箭头表达方向；选中路线画白描边高亮
+ * + 名称标注（H2-d）。
+ */
 export function drawRouteLayer(
   c: PlanCanvasContext,
   routes: readonly {
@@ -298,27 +302,55 @@ export function drawRouteLayer(
     points: readonly PlanPoint[];
     oneWay: boolean;
     name?: string;
+    selected?: boolean;
   }[],
 ): void {
   const { ctx } = c;
-  const color = PLANNING_LAYER_COLORS.route;
   for (const r of routes) {
     if (r.points.length < 2) continue;
+    const color = PLANNING_ROUTE_KIND_COLORS[r.kind as PlanningRouteKind];
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = r.kind === 'vehicle' ? 3 : 2;
+    if (r.selected) ctx.lineWidth += 1.5;
     ctx.setLineDash(r.kind === 'service' ? [10, 6] : r.kind === 'vehicle' ? [14, 5] : []);
     tracePolyline(c, r.points);
     ctx.stroke();
     ctx.restore();
-    if (r.oneWay) drawArrowAt(c, r.points[r.points.length - 2], r.points[r.points.length - 1], color);
+    if (r.selected) {
+      ctx.save();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      tracePolyline(c, r.points);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // 方向：oneWay 沿每段终点画箭头（首段起终都画），双向往返语义不画箭头。
+    if (r.oneWay) {
+      for (let i = 1; i < r.points.length; i++) {
+        drawArrowAt(c, r.points[i - 1]!, r.points[i]!, color);
+      }
+    }
+    if (r.selected && r.name) {
+      const label = polylineLabelPixel(c, r.points);
+      if (label) {
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fillText(r.name, label.x, label.y - 4);
+      }
+    }
   }
 }
 
-/** 人员：圆形点位 + 数量标注，人员色。 */
+/**
+ * 人员：圆形点位 + 角色名与数量标注，人员色；选中画白圈（H2-d）。
+ * warning 为 true 时改红描边（点位越界警示，数据本身保留）。
+ */
 export function drawWorkerLayer(
   c: PlanCanvasContext,
-  workers: readonly { position: PlanPoint; count: number; role: string }[],
+  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean }[],
 ): void {
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.worker;
@@ -328,23 +360,31 @@ export function drawWorkerLayer(
     ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
     ctx.fillStyle = hexWithAlpha(color, 0.85);
     ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = w.warning ? '#c0392b' : '#fff';
+    ctx.lineWidth = w.warning ? 1.6 : 1;
     ctx.stroke();
-    if (w.count > 1) {
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = color;
-      ctx.fillText(`×${w.count}`, pt.x + 6, pt.y);
+    if (w.selected) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 8.5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
     }
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(15,22,32,0.85)';
+    ctx.fillText(w.count > 1 ? `${w.role} ×${w.count}` : w.role, pt.x + 6, pt.y - 2);
   }
 }
 
-/** 出入口节点：菱形标记 + 入/出口语义色。 */
+/**
+ * 出入口节点：菱形标记 + 入/出口语义色；选中画白圈；unconnected 为 true 时
+ * 画红色警示点（未连接任何动线，H2-d）。
+ */
 export function drawAccessLayer(
   c: PlanCanvasContext,
-  nodes: readonly { kind: 'entry' | 'exit' | 'both'; position: PlanPoint; name: string }[],
+  nodes: readonly { id?: string; kind: 'entry' | 'exit' | 'both'; position: PlanPoint; name: string; selected?: boolean; unconnected?: boolean }[],
 ): void {
   const { ctx, viewport } = c;
   for (const n of nodes) {
@@ -359,6 +399,19 @@ export function drawAccessLayer(
     ctx.lineWidth = 1;
     ctx.strokeRect(-4.5, -4.5, 9, 9);
     ctx.restore();
+    if (n.selected) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 9.5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+    if (n.unconnected) {
+      ctx.beginPath();
+      ctx.arc(pt.x + 6, pt.y - 6, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#c0392b';
+      ctx.fill();
+    }
     ctx.font = '10px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
@@ -406,6 +459,90 @@ export function drawDraftLayer(
   });
 }
 
+/* ---------------- 动线/节点/人员放置草稿（H2-d） ---------------- */
+
+/**
+ * 动线草稿（画动线模式）：已收点虚线折线 + 顶点方块 + 指针橡皮筋线；
+ * cursorPoint 缺省时不画橡皮筋。draftPoints 为空时只画指针小十字。
+ */
+export function drawRouteDraft(
+  c: PlanCanvasContext,
+  draftPoints: readonly PlanPoint[],
+  kind: 'pedestrian' | 'vehicle' | 'service',
+  cursorPoint?: PlanPoint,
+): void {
+  const { ctx, viewport } = c;
+  const color = PLANNING_ROUTE_KIND_COLORS[kind as PlanningRouteKind];
+  if (draftPoints.length >= 2) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    tracePolyline(c, draftPoints);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (cursorPoint && draftPoints.length >= 1) {
+    const last = planPointToPixel(draftPoints[draftPoints.length - 1]!, viewport);
+    const cursor = planPointToPixel(cursorPoint, viewport);
+    ctx.save();
+    ctx.strokeStyle = hexWithAlpha(color, 0.55);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(cursor.x, cursor.y);
+    ctx.stroke();
+    ctx.restore();
+    drawArrowAt(c, draftPoints[draftPoints.length - 1]!, cursorPoint, color);
+  }
+  for (const p of draftPoints) {
+    const pt = planPointToPixel(p, viewport);
+    ctx.fillStyle = color;
+    ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+  }
+  if (cursorPoint) {
+    const cursor = planPointToPixel(cursorPoint, viewport);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cursor.x - 6, cursor.y);
+    ctx.lineTo(cursor.x + 6, cursor.y);
+    ctx.moveTo(cursor.x, cursor.y - 6);
+    ctx.lineTo(cursor.x, cursor.y + 6);
+    ctx.stroke();
+  }
+}
+
+/**
+ * 出入口节点放置幽灵：跟随指针的菱形预览 + 语义色 + 名称标签。
+ */
+export function drawNodeGhost(
+  c: PlanCanvasContext,
+  kind: 'entry' | 'exit' | 'both',
+  name: string,
+  position: PlanPoint,
+): void {
+  const { ctx, viewport } = c;
+  const color = kind === 'exit' ? PLANNING_LAYER_COLORS.node : PLANNING_LAYER_COLORS.access;
+  const pt = planPointToPixel(position, viewport);
+  ctx.save();
+  ctx.globalAlpha = 0.65;
+  ctx.translate(pt.x, pt.y);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = hexWithAlpha(color, 0.9);
+  ctx.fillRect(-4.5, -4.5, 9, 9);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-4.5, -4.5, 9, 9);
+  ctx.restore();
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'rgba(15,22,32,0.85)';
+  ctx.fillText(name, pt.x + 7, pt.y - 2);
+}
+
 /* ---------------- 内部工具 ---------------- */
 
 function traceRing(c: PlanCanvasContext, ring: readonly PlanPoint[]): void {
@@ -438,6 +575,16 @@ function zoneLabelPixel(
   const a = planPointToPixel(polygon[0], c.viewport);
   const b = planPointToPixel(polygon[1], c.viewport);
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/** 折线标注锚点：中点顶点的像素位置（选中路线的名称标注用）。 */
+function polylineLabelPixel(
+  c: PlanCanvasContext,
+  points: readonly PlanPoint[],
+): { x: number; y: number } | null {
+  if (points.length < 2) return null;
+  const mid = points[Math.floor(points.length / 2)]!;
+  return planPointToPixel(mid, c.viewport);
 }
 
 function drawArrowAt(c: PlanCanvasContext, from: PlanPoint, to: PlanPoint, color: string): void {

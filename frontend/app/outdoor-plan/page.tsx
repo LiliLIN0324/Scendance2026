@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示）。
+ * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员）。
  *
  * 独立路由：不动主工作台（`/editor`）与探针页（`/tdt-probe`）。
- * 内置一份「平湖秋月市集」样例 SitePlanData（符合 site-plan 契约），
- * 消费 OutdoorPlanCanvas 组件：OSM 真瓦片底图 + 六类业务图层 + 图层栈开关。
+ * 内置一份「平湖秋月市集」样例 SitePlanData（符合 site-plan 契约，样例动线
+ * 已接端点节点引用），消费 OutdoorPlanCanvas 组件：OSM 真瓦片底图 + 六类业务图层 + 图层栈开关。
  *
  * H2-b：plan 状态提升到本页，编辑（画边界/拖顶点/画分区/改样式）经 onPlanChange
  * 回写；草稿按 schema 校验后存 localStorage——**刷新重开保留点列**（验收口径），
@@ -108,6 +108,7 @@ const SAMPLE_PLAN: SitePlanData = {
         { x: 55, y: 30 },
       ],
       oneWay: true,
+      startNodeId: 'd4000000-0000-4000-8000-000000000001',
       notes: '',
     },
     {
@@ -120,6 +121,7 @@ const SAMPLE_PLAN: SitePlanData = {
         { x: 160, y: 95 },
       ],
       oneWay: false,
+      startNodeId: 'd4000000-0000-4000-8000-000000000002',
       notes: '',
     },
   ],
@@ -199,8 +201,8 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H2-c）</h1>
-        <small style={{ color: '#93a4bc' }}>边界绘制 · 语义分区 · 设施模板拖放 · 刷新保留草稿</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H2-d）</h1>
+        <small style={{ color: '#93a4bc' }}>三类动线 · 出入口节点 · 人员布点汇总 · 刷新保留草稿</small>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="draft-saved">
           {savedAt ? `草稿已存 ${savedAt}` : ''}
         </span>

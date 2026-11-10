@@ -1,10 +1,24 @@
 'use client';
 
 /**
- * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互）。
+ * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
  *
  * 组合方式：底图（公开源/天地图瓦片，复用 tdt-probe 工具）+ 六类业务图层
  * （outdoor-plan-canvas 纯函数）+ 内嵌图层栈开关与编辑面板。独立组件，不动 `room-organizer.tsx`。
+ *
+ * H2-d 动线/节点/人员（规则在 site-plan-routes 纯函数层，组件只做接线）：
+ * - 画动线：选类型（人行/车辆/后勤，三类三色）+ 可选单向，单击加路径点、双击或
+ *   「完成动线」提交；端点靠近出入口自动吸附并记录 nodeId 引用（节点是唯一端点来源）；
+ * - 放节点：入口/出口/两用，单击连续放置；浏览模式拖动节点 → 引用路线端点随动
+ *   （movePlanNode 预览，松手提交）；删除节点自动剥离动线引用但保留几何；
+ * - 布人员：面板填岗位/人数，单击放置；落点在分区内自动归属（inferWorkerZoneId）；
+ * - 选中互斥（动线/节点/人员/设施四类），面板可改名/改类型/改归属/反转方向/删除；
+ * - undo 栈（commitPlan 快照，Ctrl+Z 或面板「撤销」，上限 30 步）。
+ *
+ * H2-c 设施模板拖放（放置规则在 site-plan-facilities 纯函数层）：
+ * - 「放设施」模式下面板出模板目录；点选模板后幽灵占地跟随鼠标（占地预览，越界变红），
+ *   单击提交、可连续放置；从模板按钮拖拽（HTML5 DnD）到画布 dragover/drop 同样生效；
+ * - Esc 取消放置回浏览；放置即选中（白圈高亮 + 面板改名/删除），越界设施出红虚线警示与问题条目。
  *
  * H2-b 编辑模式（编辑规则全部在 site-plan-editing 纯函数层，组件只做接线）：
  * - 浏览：拖拽平移、滚轮缩放；单击设施命中即选中，空白处点击取消选中。
@@ -12,11 +26,6 @@
  * - 编辑边界：拖动顶点实时校验，非法移动吸附回上一个合法位置，松手提交。
  * - 画分区：选语义后圈区提交（语义默认色/透明度）；自交/退化阻止提交，越界与重叠放行但出提示。
  * 分区颜色/透明度/命名可在面板内直接编辑（契约可选字段 opacity，0.05–0.6 区间）。
- *
- * H2-c 设施模板拖放（放置规则在 site-plan-facilities 纯函数层）：
- * - 「放设施」模式下面板出模板目录；点选模板后幽灵占地跟随鼠标（占地预览，越界变红），
- *   单击提交、可连续放置；从模板按钮拖拽（HTML5 DnD）到画布 dragover/drop 同样生效；
- * - Esc 取消放置回浏览；放置即选中（白圈高亮 + 面板改名/删除），越界设施出红虚线警示与问题条目。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,10 +36,13 @@ import {
   drawDraftLayer,
   drawFacilityGhost,
   drawFacilityLayer,
+  drawNodeGhost,
+  drawRouteDraft,
   drawRouteLayer,
   drawWorkerLayer,
   drawZoneLayer,
   isLayerVisible,
+  planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
   type LayerVisibility,
@@ -60,6 +72,21 @@ import {
   type PlanFacilityIssue,
 } from '../lib/site-plan-facilities';
 import {
+  PLAN_ROUTE_MAX_VERTICES,
+  buildRoute,
+  buildWorker,
+  detachNodeFromRoutes,
+  movePlanNode,
+  nodeRouteRefs,
+  planNodeIssues,
+  planWorkerIssues,
+  reverseRoute,
+  workerRoleSummary,
+  workerZoneSummary,
+  type PlanNodeIssue,
+  type PlanWorkerIssue,
+} from '../lib/site-plan-routes';
+import {
   publicSourceTileUrl,
   tdtProbeTileUrl,
   visibleTileGrid,
@@ -71,18 +98,25 @@ import {
   PLANNING_LABELS,
   PLANNING_LAYER_COLORS,
   PLANNING_RADIUS,
+  PLANNING_ROUTE_KIND_COLORS,
   PLANNING_SPACING,
   PLANNING_ZONE_COLORS,
   PLANNING_ZONE_OPACITY,
   type PlanningEditMode,
   type PlanningLayerKind,
+  type PlanningRouteKind,
   type PlanningZoneSemantic,
 } from '@/lib/outdoor-plan-tokens';
 import {
+  planRouteKindLabels,
+  planRouteKinds,
   planZoneSemanticLabels,
   planZoneSemantics,
   type PlanFacility,
+  type PlanNode,
   type PlanPoint,
+  type PlanRoute,
+  type PlanWorker,
   type PlanZone,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
@@ -120,6 +154,14 @@ const VERTEX_HANDLE_HIT_PX = 10;
 const DRAFT_CLOSE_HIT_PX = 10;
 /** 区分「单击加顶点」与「拖拽平移」的位移阈值（CSS px）。 */
 const CLICK_MAX_MOVE_PX = 4;
+/** 出入口节点命中/吸附半径（CSS px）：点选与动线端点吸附共用。 */
+const NODE_HIT_PX = 11;
+/** 人员点位命中半径（CSS px）。 */
+const WORKER_HIT_PX = 9;
+/** 路线折线命中半径（CSS px）：点到段距离。 */
+const ROUTE_HIT_PX = 8;
+/** undo 栈深度上限（评审稿「撤销和恢复均保留有效引用」；快照体积小，30 步足够）。 */
+const UNDO_LIMIT = 30;
 
 export default function OutdoorPlanCanvas({
   plan,
@@ -155,6 +197,23 @@ export default function OutdoorPlanCanvas({
   const ghostPointRef = useRef<PlanPoint | null>(null);
   const selectedFacilityRef = useRef<string | null>(null);
   const facilityIssuesRef = useRef<PlanFacilityIssue[]>([]);
+  // H2-d 动线/节点/人员：绘制草稿、语义选择、选中实体、问题清单、undo。
+  const routeKindRef = useRef<PlanningRouteKind>('pedestrian');
+  const routeDraftRef = useRef<PlanPoint[]>([]);
+  const routeCursorRef = useRef<PlanPoint | null>(null);
+  const routeOneWayRef = useRef(false);
+  const nodeKindRef = useRef<PlanNode['kind']>('entry');
+  const nodeGhostRef = useRef<PlanPoint | null>(null);
+  const workerRoleRef = useRef('安保');
+  const workerCountRef = useRef(1);
+  const selectedRouteRef = useRef<string | null>(null);
+  const selectedNodeRef = useRef<string | null>(null);
+  const selectedWorkerRef = useRef<string | null>(null);
+  const nodeIssuesRef = useRef<PlanNodeIssue[]>([]);
+  const workerIssuesRef = useRef<PlanWorkerIssue[]>([]);
+  const dragNodeRef = useRef<{ id: string; moved: boolean } | null>(null);
+  const nodeDragPreviewRef = useRef<{ node: PlanNode; routes: PlanRoute[] } | null>(null);
+  const historyRef = useRef<SitePlanData[]>([]);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
@@ -167,6 +226,18 @@ export default function OutdoorPlanCanvas({
   const [facilityTemplateId, setFacilityTemplateId] = useState<string | null>(null);
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
   const [facilityIssues, setFacilityIssues] = useState<PlanFacilityIssue[]>([]);
+  const [routeKind, setRouteKind] = useState<PlanningRouteKind>('pedestrian');
+  const [routeOneWay, setRouteOneWay] = useState(false);
+  const [routeDraftCount, setRouteDraftCount] = useState(0);
+  const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('entry');
+  const [workerRole, setWorkerRole] = useState('安保');
+  const [workerCount, setWorkerCount] = useState(1);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [nodeIssues, setNodeIssues] = useState<PlanNodeIssue[]>([]);
+  const [workerIssues, setWorkerIssues] = useState<PlanWorkerIssue[]>([]);
+  const [historyCount, setHistoryCount] = useState(0);
 
   function setMode(next: PlanningEditMode) {
     modeRef.current = next;
@@ -176,6 +247,12 @@ export default function OutdoorPlanCanvas({
     facilityTemplateRef.current = null;
     ghostPointRef.current = null;
     setFacilityTemplateId(null);
+    routeDraftRef.current = [];
+    routeCursorRef.current = null;
+    nodeGhostRef.current = null;
+    dragNodeRef.current = null;
+    nodeDragPreviewRef.current = null;
+    setRouteDraftCount(0);
     setModeState(next);
     setEditMessage(null);
     draw();
@@ -191,10 +268,28 @@ export default function OutdoorPlanCanvas({
     draw();
   }
 
-  /** 编辑提交：先同步 ref（连续操作读现值），再回传父级。 */
+  /** 编辑提交：undo 栈推入旧快照（上限 UNDO_LIMIT），再同步 ref 与父级。 */
   function commitPlan(next: SitePlanData) {
+    historyRef.current.push(planRef.current);
+    if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
+    setHistoryCount(historyRef.current.length);
     planRef.current = next;
     onPlanChange?.(next);
+  }
+
+  /** 撤销（Ctrl+Z / 面板按钮）：弹出栈顶恢复；选中实体可能随撤销消失，全清选中。 */
+  function undoPlan() {
+    const prev = historyRef.current.pop();
+    if (!prev) return;
+    setHistoryCount(historyRef.current.length);
+    selectFacility(null);
+    selectRoute(null);
+    selectNode(null);
+    selectWorker(null);
+    planRef.current = prev;
+    onPlanChange?.(prev);
+    setEditMessage('已撤销上一步。');
+    draw();
   }
 
   useEffect(() => {
@@ -203,10 +298,26 @@ export default function OutdoorPlanCanvas({
     setIssues(issuesRef.current);
     facilityIssuesRef.current = planFacilityIssues(plan);
     setFacilityIssues(facilityIssuesRef.current);
-    // 选中设施被外层删掉时静默取消选中，避免面板悬挂引用。
+    nodeIssuesRef.current = planNodeIssues(plan);
+    setNodeIssues(nodeIssuesRef.current);
+    workerIssuesRef.current = planWorkerIssues(plan);
+    setWorkerIssues(workerIssuesRef.current);
+    // 选中实体被外层删掉时静默取消选中，避免面板悬挂引用。
     if (selectedFacilityRef.current && !plan.facilities.some(f => f.id === selectedFacilityRef.current)) {
       selectedFacilityRef.current = null;
       setSelectedFacilityId(null);
+    }
+    if (selectedNodeRef.current && !plan.nodes.some(n => n.id === selectedNodeRef.current)) {
+      selectedNodeRef.current = null;
+      setSelectedNodeId(null);
+    }
+    if (selectedRouteRef.current && !plan.routes.some(r => r.id === selectedRouteRef.current)) {
+      selectedRouteRef.current = null;
+      setSelectedRouteId(null);
+    }
+    if (selectedWorkerRef.current && !plan.workers.some(w => w.id === selectedWorkerRef.current)) {
+      selectedWorkerRef.current = null;
+      setSelectedWorkerId(null);
     }
     draw();
   }, [plan]);
@@ -276,6 +387,14 @@ export default function OutdoorPlanCanvas({
 
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
     //    底图瓦片异步返回时不会覆盖业务层。
+    // 节点拖动预览：被拖节点与受影响路线端点随动预览（未 commit 前仅绘制）。
+    const nodeDragPreview = nodeDragPreviewRef.current;
+    const nodes = nodeDragPreview
+      ? current.nodes.map(n => (n.id === nodeDragPreview.node.id ? nodeDragPreview.node : n))
+      : current.nodes;
+    const routes = nodeDragPreview
+      ? current.routes.map(r => nodeDragPreview.routes.find(rr => rr.id === r.id) ?? r)
+      : current.routes;
     const editingBoundary = modeRef.current === 'boundary-vertex';
     const boundary = previewRingRef.current ?? current.boundary;
     if (isLayerVisible(vis, 'boundary')) drawBoundaryLayer({ ctx: planCtx, viewport }, boundary, { vertexHandles: editingBoundary });
@@ -300,9 +419,36 @@ export default function OutdoorPlanCanvas({
         { selectedId: selectedFacilityRef.current },
       );
     }
-    if (isLayerVisible(vis, 'route')) drawRouteLayer({ ctx: planCtx, viewport }, current.routes);
-    if (isLayerVisible(vis, 'worker')) drawWorkerLayer({ ctx: planCtx, viewport }, current.workers);
-    if (isLayerVisible(vis, 'access')) drawAccessLayer({ ctx: planCtx, viewport }, current.nodes);
+    if (isLayerVisible(vis, 'route')) {
+      drawRouteLayer(
+        { ctx: planCtx, viewport },
+        routes.map(r => ({ ...r, selected: r.id === selectedRouteRef.current })),
+      );
+    }
+    if (isLayerVisible(vis, 'worker')) {
+      const warningWorkerIds = new Set(
+        workerIssuesRef.current.filter(i => i.issue.code === 'out-of-boundary').map(i => i.workerId),
+      );
+      drawWorkerLayer(
+        { ctx: planCtx, viewport },
+        current.workers.map(w => ({
+          ...w,
+          selected: w.id === selectedWorkerRef.current,
+          warning: warningWorkerIds.has(w.id),
+        })),
+      );
+    }
+    if (isLayerVisible(vis, 'access')) {
+      const unconnectedIds = new Set(nodeIssuesRef.current.map(i => i.nodeId));
+      drawAccessLayer(
+        { ctx: planCtx, viewport },
+        nodes.map(n => ({
+          ...n,
+          selected: n.id === selectedNodeRef.current,
+          unconnected: unconnectedIds.has(n.id),
+        })),
+      );
+    }
 
     // 3) 绘制草稿（画边界/画分区）：≥3 点后闭合预览；形状非法（自交）画红色。
     const activeMode = modeRef.current;
@@ -315,7 +461,16 @@ export default function OutdoorPlanCanvas({
       }
     }
 
-    // 4) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；叠加在所有图层之上。
+    // 4) H2-d 动线草稿与节点放置幽灵。
+    if (activeMode === 'route') {
+      drawRouteDraft({ ctx: planCtx, viewport }, routeDraftRef.current, routeKindRef.current, routeCursorRef.current ?? undefined);
+    }
+    if (activeMode === 'node' && nodeGhostRef.current) {
+      const names = { entry: '入口', exit: '出口', both: '出入口' } as const;
+      drawNodeGhost({ ctx: planCtx, viewport }, nodeKindRef.current, names[nodeKindRef.current], nodeGhostRef.current);
+    }
+
+    // 5) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；叠加在所有图层之上。
     if (activeMode === 'facility' && ghostPointRef.current && facilityTemplateRef.current) {
       const template = findFacilityTemplate(facilityTemplateRef.current);
       if (template) {
@@ -344,8 +499,18 @@ export default function OutdoorPlanCanvas({
   }, [draw]);
 
   // Esc 取消：清草稿、退回浏览模式（评审稿「Esc 取消无历史项」口径）。
+  // Ctrl+Z / Cmd+Z 撤销（H2-d）：焦点在输入控件内时不拦截；只读画布不响应。
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const inField = tag === 'input' || tag === 'textarea' || tag === 'select';
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+        if (inField || !onPlanChange) return;
+        event.preventDefault();
+        undoPlan();
+        return;
+      }
       if (event.key !== 'Escape') return;
       if (modeRef.current === 'view') return;
       setMode('view');
@@ -424,6 +589,19 @@ export default function OutdoorPlanCanvas({
     // H2-c：放设施模式单击提交（可连续放置）。
     if (modeRef.current === 'facility') {
       placeFacilityAt(pt);
+      return;
+    }
+    // H2-d：画动线加点 / 放节点 / 布人员（均连续放置或收集）。
+    if (modeRef.current === 'route') {
+      addRoutePoint(pt);
+      return;
+    }
+    if (modeRef.current === 'node') {
+      placeNodeAt(pt);
+      return;
+    }
+    if (modeRef.current === 'worker') {
+      placeWorkerAt(pt);
       return;
     }
     const draftPoints = draftRef.current;
@@ -536,16 +714,258 @@ export default function OutdoorPlanCanvas({
     setEditMessage('设施已删除。');
   }
 
+  /* ---------------- H2-d 动线 / 节点 / 人员 ---------------- */
+
+  function selectRoute(id: string | null) {
+    selectedRouteRef.current = id;
+    setSelectedRouteId(id);
+    if (id !== null) {
+      selectFacility(null); selectNode(null); selectWorker(null);
+    }
+    draw();
+  }
+
+  function selectNode(id: string | null) {
+    selectedNodeRef.current = id;
+    setSelectedNodeId(id);
+    if (id !== null) {
+      selectFacility(null); selectRoute(null); selectWorker(null);
+    }
+    draw();
+  }
+
+  function selectWorker(id: string | null) {
+    selectedWorkerRef.current = id;
+    setSelectedWorkerId(id);
+    if (id !== null) {
+      selectFacility(null); selectRoute(null); selectNode(null);
+    }
+    draw();
+  }
+
+  /** 像素点到线段的最短距离（点选路线用）。 */
+  function pointSegmentDistancePx(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+
+  /** 命中检测：最近的出入口节点（NODE_HIT_PX 内），无则 null。 */
+  function nearestNodeIdAt(px: { x: number; y: number }): string | null {
+    let best: { id: string; d: number } | null = null;
+    for (const n of planRef.current.nodes) {
+      const pt = planPointToPixel(n.position, currentViewport());
+      const d = Math.hypot(pt.x - px.x, pt.y - px.y);
+      if (d <= NODE_HIT_PX && (best === null || d < best.d)) best = { id: n.id, d };
+    }
+    return best?.id ?? null;
+  }
+
+  /** 命中检测：最近的人员点位（WORKER_HIT_PX 内），无则 null。 */
+  function nearestWorkerIdAt(px: { x: number; y: number }): string | null {
+    let best: { id: string; d: number } | null = null;
+    for (const w of planRef.current.workers) {
+      const pt = planPointToPixel(w.position, currentViewport());
+      const d = Math.hypot(pt.x - px.x, pt.y - px.y);
+      if (d <= WORKER_HIT_PX && (best === null || d < best.d)) best = { id: w.id, d };
+    }
+    return best?.id ?? null;
+  }
+
+  /** 命中检测：最近的路线折线（ROUTE_HIT_PX 内的点到段距离），无则 null。 */
+  function nearestRouteIdAt(px: { x: number; y: number }): string | null {
+    let best: { id: string; d: number } | null = null;
+    for (const r of planRef.current.routes) {
+      for (let i = 1; i < r.points.length; i++) {
+        const a = planPointToPixel(r.points[i - 1]!, currentViewport());
+        const b = planPointToPixel(r.points[i]!, currentViewport());
+        const d = pointSegmentDistancePx(px, a, b);
+        if (d <= ROUTE_HIT_PX && (best === null || d < best.d)) best = { id: r.id, d };
+      }
+    }
+    return best?.id ?? null;
+  }
+
+  /** 动线端点吸附：SNAP 距离内的最近节点，返回 {nodeId, position} 或 null。 */
+  function snapNodeAt(pt: PlanPoint): { nodeId: string; position: PlanPoint } | null {
+    const vp = currentViewport();
+    const metersPerPx = planMetersPerPixel(vp);
+    const snapM = NODE_HIT_PX * metersPerPx;
+    let best: { nodeId: string; position: PlanPoint; d: number } | null = null;
+    for (const n of planRef.current.nodes) {
+      const d = planPointDistanceM(n.position, pt);
+      if (d <= snapM && (best === null || d < best.d)) best = { nodeId: n.id, position: n.position, d };
+    }
+    return best ? { nodeId: best.nodeId, position: best.position } : null;
+  }
+
+  /** 画动线模式单击加点（近已有点忽略；上限 128）。 */
+  function addRoutePoint(pt: PlanPoint) {
+    const draftPoints = routeDraftRef.current;
+    if (draftPoints.length >= PLAN_ROUTE_MAX_VERTICES) {
+      setEditMessage(`动线顶点已达上限 ${PLAN_ROUTE_MAX_VERTICES} 个，先完成或按 Esc 取消。`);
+      return;
+    }
+    for (const existing of draftPoints) {
+      if (planPointDistanceM(existing, pt) < PLAN_MIN_VERTEX_GAP_M) {
+        setEditMessage('离已有的点太近（<0.5 m），当作重复点击忽略。');
+        return;
+      }
+    }
+    routeDraftRef.current = [...draftPoints, { x: pt.x, y: pt.y }];
+    setRouteDraftCount(routeDraftRef.current.length);
+    setEditMessage(null);
+    draw();
+  }
+
+  /** 完成/提交动线：端点吸附节点（唯一端点来源），buildRoute 校验后提交；可连续画下一条。 */
+  function finishRoute() {
+    const draftPoints = routeDraftRef.current;
+    if (draftPoints.length < 2) {
+      setEditMessage('动线至少要 2 个点：单击加路径点，完成后点「完成动线」。');
+      return;
+    }
+    const current = planRef.current;
+    const startSnap = snapNodeAt(draftPoints[0]!);
+    const endSnap = snapNodeAt(draftPoints[draftPoints.length - 1]!);
+    const points = draftPoints.map((p, i) => {
+      if (i === 0 && startSnap) return startSnap.position;
+      if (i === draftPoints.length - 1 && endSnap && endSnap.nodeId !== startSnap?.nodeId) return endSnap.position;
+      return p;
+    });
+    const result = buildRoute(
+      {
+        kind: routeKindRef.current,
+        name: `${planRouteKindLabels[routeKindRef.current]}动线 ${current.routes.length + 1}`,
+        points,
+        oneWay: routeOneWayRef.current,
+        ...(startSnap ? { startNodeId: startSnap.nodeId } : {}),
+        ...(endSnap && endSnap.nodeId !== startSnap?.nodeId ? { endNodeId: endSnap.nodeId } : {}),
+      },
+      current.nodes,
+    );
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    commitPlan({ ...current, routes: [...current.routes, result.value] });
+    routeDraftRef.current = [];
+    routeCursorRef.current = null;
+    setRouteDraftCount(0);
+    selectRoute(result.value.id);
+    const snapHint = startSnap || endSnap ? '，端点已连接到出入口节点' : '';
+    setEditMessage(`动线「${result.value.name}」已添加${snapHint}；继续画下一条或 Esc 结束。`);
+  }
+
+  /** 放节点模式单击：自动编号命名，连续放置。 */
+  function placeNodeAt(pt: PlanPoint) {
+    const current = planRef.current;
+    const names = { entry: '入口', exit: '出口', both: '出入口' } as const;
+    const node: PlanNode = {
+      id: crypto.randomUUID(),
+      kind: nodeKindRef.current,
+      name: `${names[nodeKindRef.current]} ${current.nodes.length + 1}`,
+      position: { x: pt.x, y: pt.y },
+      notes: '',
+    };
+    commitPlan({ ...current, nodes: [...current.nodes, node] });
+    selectNode(node.id);
+    setEditMessage(`已放置「${node.name}」，继续单击放置或 Esc 结束。`);
+  }
+
+  /** 布人员模式单击：岗位/人数取面板值，落点自动归属分区；连续放置。 */
+  function placeWorkerAt(pt: PlanPoint) {
+    const current = planRef.current;
+    const result = buildWorker(
+      { role: workerRoleRef.current, count: workerCountRef.current, position: pt },
+      current.boundary,
+      current.zones,
+    );
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    commitPlan({ ...current, workers: [...current.workers, result.value] });
+    selectWorker(result.value.id);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
+    setEditMessage(`已布「${result.value.role} ×${result.value.count}」${hint}；继续单击放置或 Esc 结束。`);
+  }
+
+  function updateRoute(id: string, patch: Partial<Pick<PlanRoute, 'name' | 'kind' | 'oneWay'>>) {
+    const current = planRef.current;
+    if (patch.name !== undefined && patch.name.trim().length === 0) return;
+    commitPlan({ ...current, routes: current.routes.map(r => (r.id === id ? { ...r, ...patch } : r)) });
+  }
+
+  function reverseSelectedRoute(id: string) {
+    const current = planRef.current;
+    const route = current.routes.find(r => r.id === id);
+    if (!route) return;
+    commitPlan({ ...current, routes: current.routes.map(r => (r.id === id ? reverseRoute(r) : r)) });
+    setEditMessage('动线方向已反转（起终点引用已互换）。');
+  }
+
+  function deleteRoute(id: string) {
+    const current = planRef.current;
+    commitPlan({ ...current, routes: current.routes.filter(r => r.id !== id) });
+    selectRoute(null);
+    setEditMessage('动线已删除。');
+  }
+
+  function updateNode(id: string, patch: Partial<Pick<PlanNode, 'name' | 'kind'>>) {
+    const current = planRef.current;
+    if (patch.name !== undefined && patch.name.trim().length === 0) return;
+    commitPlan({ ...current, nodes: current.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)) });
+  }
+
+  function deleteNode(id: string) {
+    const current = planRef.current;
+    // 引用该节点的动线剥离 nodeId 引用但保留几何（评审稿「删除关联保留有效引用」）。
+    commitPlan({
+      ...current,
+      nodes: current.nodes.filter(n => n.id !== id),
+      routes: detachNodeFromRoutes(id, current.routes),
+    });
+    selectNode(null);
+    setEditMessage('出入口已删除；关联动线保留几何、引用已解除。');
+  }
+
+  function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId'>>) {
+    const current = planRef.current;
+    if (patch.role !== undefined && patch.role.trim().length === 0) return;
+    if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1)) return;
+    commitPlan({ ...current, workers: current.workers.map(w => (w.id === id ? { ...w, ...patch } : w)) });
+  }
+
+  function deleteWorker(id: string) {
+    const current = planRef.current;
+    commitPlan({ ...current, workers: current.workers.filter(w => w.id !== id) });
+    selectWorker(null);
+    setEditMessage('人员点位已删除。');
+  }
+
   function handleStageMouseDown(event: React.MouseEvent) {
     const activeMode = modeRef.current;
+    const hit = eventPlanPoint(event);
     if (activeMode === 'view') {
+      // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移。
+      if (hit) {
+        const nodeId = nearestNodeIdAt(hit.px);
+        if (nodeId) {
+          dragNodeRef.current = { id: nodeId, moved: false };
+          downPxRef.current = hit.px;
+          setDragging(true);
+          return;
+        }
+      }
       panRef.current = { x: event.clientX, y: event.clientY };
-      const hit = eventPlanPoint(event);
       downPxRef.current = hit ? hit.px : null;
       setDragging(true);
       return;
     }
-    const hit = eventPlanPoint(event);
     if (!hit) return;
     downPxRef.current = hit.px;
     if (activeMode === 'boundary-vertex') {
@@ -556,6 +976,26 @@ export default function OutdoorPlanCanvas({
   function handleStageMouseMove(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     if (activeMode === 'view') {
+      // H2-d：拖动出入口节点 → 引用路线端点随动预览（松手提交）。
+      if (dragNodeRef.current) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        const down = downPxRef.current;
+        if (down && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) > CLICK_MAX_MOVE_PX) {
+          dragNodeRef.current.moved = true;
+        }
+        const node = planRef.current.nodes.find(n => n.id === dragNodeRef.current?.id);
+        if (!node) return;
+        const result = movePlanNode(node, hit.pt, planRef.current.routes);
+        if (result.ok) {
+          nodeDragPreviewRef.current = result.value;
+          setEditMessage(null);
+          draw();
+        } else {
+          setEditMessage(result.issue.message);
+        }
+        return;
+      }
       if (!panRef.current) return;
       pan(event.clientX - panRef.current.x, event.clientY - panRef.current.y);
       panRef.current = { x: event.clientX, y: event.clientY };
@@ -583,6 +1023,24 @@ export default function OutdoorPlanCanvas({
         ghostPointRef.current = hit.pt;
         draw();
       }
+      return;
+    }
+    // H2-d：画动线橡皮筋 / 放节点幽灵跟随鼠标。
+    if (activeMode === 'route') {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      routeCursorRef.current = hit.pt;
+      draw();
+      return;
+    }
+    if (activeMode === 'node') {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      const ghost = nodeGhostRef.current;
+      if (!ghost || ghost.x !== hit.pt.x || ghost.y !== hit.pt.y) {
+        nodeGhostRef.current = hit.pt;
+        draw();
+      }
     }
   }
 
@@ -593,10 +1051,36 @@ export default function OutdoorPlanCanvas({
       downPxRef.current = null;
       panRef.current = undefined;
       setDragging(false);
-      // H2-c：浏览模式单击命中设施即选中，空白处点击取消选中。
+      // H2-d：拖动节点松手：确实拖动过 → 提交随动结果；否则视为点选该节点。
+      if (dragNodeRef.current) {
+        const drag = dragNodeRef.current;
+        const preview = nodeDragPreviewRef.current;
+        dragNodeRef.current = null;
+        nodeDragPreviewRef.current = null;
+        if (drag.moved && preview) {
+          const current = planRef.current;
+          commitPlan({
+            ...current,
+            nodes: current.nodes.map(n => (n.id === preview.node.id ? preview.node : n)),
+            routes: current.routes.map(r => preview.routes.find(rr => rr.id === r.id) ?? r),
+          });
+          selectNode(preview.node.id);
+          setEditMessage(`出入口已移动；引用它的动线端点已随动。`);
+          return;
+        }
+        selectNode(drag.id);
+        return;
+      }
+      // H2-c/H2-d：浏览模式单击命中即选中（节点 > 人员 > 路线 > 设施），空白取消全部选中。
       if (down && onPlanChange) {
         const hit = eventPlanPoint(event);
         if (hit && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) <= CLICK_MAX_MOVE_PX) {
+          const hitNode = nearestNodeIdAt(hit.px);
+          if (hitNode) { selectNode(hitNode); return; }
+          const hitWorker = nearestWorkerIdAt(hit.px);
+          if (hitWorker) { selectWorker(hitWorker); return; }
+          const hitRoute = nearestRouteIdAt(hit.px);
+          if (hitRoute) { selectRoute(hitRoute); return; }
           const hitFacility = [...planRef.current.facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
           selectFacility(hitFacility ? hitFacility.id : null);
         }
@@ -628,16 +1112,30 @@ export default function OutdoorPlanCanvas({
     dragVertexRef.current = null;
     setPreviewRing(null);
     ghostPointRef.current = null;
+    routeCursorRef.current = null;
+    nodeGhostRef.current = null;
+    // 节点拖动中离开画布：预览不提交，回弹原位。
+    dragNodeRef.current = null;
+    nodeDragPreviewRef.current = null;
     draw();
   }
 
   const readOnly = !onPlanChange;
-  // H2-c：分区问题 + 设施问题合并成一张可读清单（各自有序，合计限量展示）。
+  // H2-c/H2-d：分区 + 设施 + 节点（未连接）+ 人员（越界）问题合并成一张可读清单。
   const combinedIssues = [
     ...issues.map((item, i) => ({ key: `z-${item.zoneId}-${item.issue.code}-${i}`, text: `${item.zoneName}：${item.issue.message}` })),
     ...facilityIssues.map((item, i) => ({ key: `f-${item.facilityId}-${i}`, text: `${item.facilityName}：${item.issue.message}` })),
+    ...nodeIssues.map((item, i) => ({ key: `n-${item.nodeId}-${i}`, text: `出入口「${item.nodeName}」：${item.issue.message}` })),
+    ...workerIssues.map((item, i) => ({ key: `w-${item.workerId}-${i}`, text: `人员「${item.workerRole}」：${item.issue.message}` })),
   ];
   const selectedFacility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) ?? null : null;
+  const selectedRoute = selectedRouteId ? plan.routes.find(r => r.id === selectedRouteId) ?? null : null;
+  const selectedNode = selectedNodeId ? plan.nodes.find(n => n.id === selectedNodeId) ?? null : null;
+  const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
+  const zoneSummaryRows = workerZoneSummary(plan);
+  const roleSummaryRows = workerRoleSummary(plan);
+  // 面板内点击不再冒泡到画布（否则勾选/选模板/点按钮会在面板对应画布位置误加草稿点或放置实体）。
+  const stopPanelMouse = (event: React.MouseEvent) => event.stopPropagation();
   const panelStyle: React.CSSProperties = {
     position: 'absolute',
     right: PLANNING_SPACING.sm,
@@ -667,6 +1165,7 @@ export default function OutdoorPlanCanvas({
     fontSize: 11,
   });
   const zoneRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs };
+  const selectStyle: React.CSSProperties = { background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' };
 
   return (
     <div
@@ -679,6 +1178,13 @@ export default function OutdoorPlanCanvas({
       onMouseMove={handleStageMouseMove}
       onMouseUp={handleStageMouseUp}
       onMouseLeave={handleStageMouseLeave}
+      onDoubleClick={event => {
+        // H2-d：画动线模式下双击提交（评审稿「三类路线有方向与用途」的快捷收尾）。
+        if (modeRef.current === 'route') {
+          event.preventDefault();
+          finishRoute();
+        }
+      }}
       onWheel={e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }}
       onDragOver={event => {
         // H2-c：拖模板到画布 → 幽灵占地跟随（占地预览）。
@@ -708,7 +1214,7 @@ export default function OutdoorPlanCanvas({
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
 
-      <div style={panelStyle}>
+      <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
         <button
           type="button"
           onClick={() => setPanelOpen(open => !open)}
@@ -731,6 +1237,23 @@ export default function OutdoorPlanCanvas({
               </label>
             ))}
 
+            {/* H2-d 人员汇总（评审稿「自动汇总」）：只读也可查；隐藏人员层不影响这里的统计。 */}
+            {plan.workers.length > 0 && (
+              <>
+                <div style={sectionTitle}>人员汇总（共 {plan.workers.reduce((s, w) => s + w.count, 0)} 人 / {plan.workers.length} 点）</div>
+                <div data-testid="worker-zone-summary" style={{ lineHeight: 1.6 }}>
+                  {zoneSummaryRows.map(row => (
+                    <div key={row.zoneId ?? '__orphan__'}>{row.zoneName}：{row.total} 人 · {row.posts} 点</div>
+                  ))}
+                </div>
+                <div data-testid="worker-role-summary" style={{ lineHeight: 1.6, opacity: 0.85 }}>
+                  {roleSummaryRows.map(row => (
+                    <div key={row.role}>{row.role} {row.total} 人（{row.posts} 点）</div>
+                  ))}
+                </div>
+              </>
+            )}
+
             {!readOnly && (
               <>
                 <div style={sectionTitle}>编辑</div>
@@ -746,6 +1269,16 @@ export default function OutdoorPlanCanvas({
                       {PLANNING_EDIT_MODE_LABELS[m]}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    data-testid="plan-undo"
+                    aria-label="撤销上一步"
+                    disabled={historyCount === 0}
+                    style={{ ...modeButtonStyle(false), opacity: historyCount === 0 ? 0.5 : 1 }}
+                    onClick={() => undoPlan()}
+                  >
+                    撤销
+                  </button>
                 </div>
                 {mode === 'zone' && (
                   <label style={{ ...zoneRowStyle, justifyContent: 'space-between' }}>
@@ -767,8 +1300,103 @@ export default function OutdoorPlanCanvas({
                   {mode === 'boundary-vertex' && '拖动绿色手柄调整顶点；非法位置自动吸附回去。'}
                   {mode === 'zone' && '圈出分区后点回起点闭合，自交会被拒绝。'}
                   {mode === 'facility' && (facilityTemplateId ? '画布上移动鼠标预览占地，单击放置；也可直接拖模板进来；Esc 取消。' : '先点选下方模板，或直接把模板拖到画布上。')}
-                  {mode === 'view' && '拖拽平移，滚轮缩放；单击设施可选中。'}
+                  {mode === 'route' && '单击加路径点，双击或点「完成动线」提交；端点靠近出入口会自动连接；Esc 取消。'}
+                  {mode === 'node' && '单击放置出入口节点，可连续放置；Esc 取消。'}
+                  {mode === 'worker' && '单击布置人员点位，落点在分区内会自动归属；Esc 取消。'}
+                  {mode === 'view' && '拖拽平移，滚轮缩放；单击出入口/人员/动线/设施可选中；拖动出入口，关联动线端点随动。'}
                 </div>
+
+                {mode === 'route' && (
+                  <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <label style={zoneRowStyle}>
+                      动线类型
+                      <select
+                        aria-label="动线类型"
+                        value={routeKind}
+                        onChange={event => {
+                          routeKindRef.current = event.target.value as PlanningRouteKind;
+                          setRouteKind(routeKindRef.current);
+                          draw();
+                        }}
+                        style={selectStyle}
+                      >
+                        {planRouteKinds.map(k => (
+                          <option key={k} value={k}>{planRouteKindLabels[k]}</option>
+                        ))}
+                      </select>
+                      <span aria-hidden style={{ width: 10, height: 4, borderRadius: 2, background: PLANNING_ROUTE_KIND_COLORS[routeKind], display: 'inline-block' }} />
+                    </label>
+                    <label style={zoneRowStyle}>
+                      <input
+                        type="checkbox"
+                        aria-label="单向动线"
+                        checked={routeOneWay}
+                        onChange={event => {
+                          routeOneWayRef.current = event.target.checked;
+                          setRouteOneWay(event.target.checked);
+                        }}
+                      />
+                      单向（沿线画方向箭头）
+                    </label>
+                    <button
+                      type="button"
+                      data-testid="route-finish"
+                      disabled={routeDraftCount < 2}
+                      style={{ ...modeButtonStyle(false), marginTop: PLANNING_SPACING.xs, opacity: routeDraftCount < 2 ? 0.5 : 1 }}
+                      onClick={() => finishRoute()}
+                    >
+                      完成动线（{routeDraftCount} 点）
+                    </button>
+                  </div>
+                )}
+
+                {mode === 'node' && (
+                  <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <div style={{ ...sectionTitle, marginTop: 0 }}>节点类型</div>
+                    {(['entry', 'exit', 'both'] as const).map(k => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={nodeKind === k}
+                        style={{ ...modeButtonStyle(nodeKind === k), display: 'block', width: '100%', textAlign: 'left', marginTop: PLANNING_SPACING.xs }}
+                        onClick={() => { nodeKindRef.current = k; setNodeKind(k); }}
+                      >
+                        {k === 'entry' ? '入口' : k === 'exit' ? '出口' : '出入口（两用）'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {mode === 'worker' && (
+                  <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <label style={zoneRowStyle}>
+                      岗位
+                      <input
+                        aria-label="人员岗位"
+                        value={workerRole}
+                        maxLength={60}
+                        onChange={event => { workerRoleRef.current = event.target.value; setWorkerRole(event.target.value); }}
+                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                      />
+                    </label>
+                    <label style={zoneRowStyle}>
+                      人数
+                      <input
+                        aria-label="人员人数"
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={workerCount}
+                        onChange={event => {
+                          const next = Math.max(1, Math.min(9999, Math.floor(Number(event.target.value) || 1)));
+                          workerCountRef.current = next;
+                          setWorkerCount(next);
+                        }}
+                        style={{ width: 64, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                      />
+                    </label>
+                  </div>
+                )}
 
                 {mode === 'facility' && (
                   <div style={{ marginTop: PLANNING_SPACING.xs }}>
@@ -860,6 +1488,163 @@ export default function OutdoorPlanCanvas({
                         删除设施
                       </button>
                       <button type="button" style={modeButtonStyle(false)} onClick={() => selectFacility(null)}>
+                        取消选择
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {selectedRoute && (
+                  <>
+                    <div style={sectionTitle}>已选中动线</div>
+                    <div style={zoneRowStyle}>
+                      <input
+                        aria-label="选中动线名称"
+                        value={selectedRoute.name}
+                        maxLength={60}
+                        onChange={event => updateRoute(selectedRoute.id, { name: event.target.value })}
+                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                      />
+                    </div>
+                    <label style={zoneRowStyle}>
+                      类型
+                      <select
+                        aria-label="选中动线类型"
+                        value={selectedRoute.kind}
+                        onChange={event => updateRoute(selectedRoute.id, { kind: event.target.value as PlanRoute['kind'] })}
+                        style={selectStyle}
+                      >
+                        {planRouteKinds.map(k => <option key={k} value={k}>{planRouteKindLabels[k]}</option>)}
+                      </select>
+                    </label>
+                    <label style={zoneRowStyle}>
+                      <input
+                        type="checkbox"
+                        aria-label="选中动线单向"
+                        checked={selectedRoute.oneWay}
+                        onChange={event => updateRoute(selectedRoute.id, { oneWay: event.target.checked })}
+                      />
+                      单向（沿线方向箭头）
+                    </label>
+                    <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
+                      {selectedRoute.points.length} 点 · {selectedRoute.startNodeId ? '起点已连节点' : '起点自由'} · {selectedRoute.endNodeId ? '终点已连节点' : '终点自由'}
+                    </div>
+                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        data-testid="route-reverse"
+                        style={modeButtonStyle(false)}
+                        onClick={() => reverseSelectedRoute(selectedRoute.id)}
+                      >
+                        反转方向
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="route-delete"
+                        style={modeButtonStyle(false)}
+                        onClick={() => deleteRoute(selectedRoute.id)}
+                      >
+                        删除动线
+                      </button>
+                      <button type="button" style={modeButtonStyle(false)} onClick={() => selectRoute(null)}>
+                        取消选择
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {selectedNode && (() => {
+                  const refs = nodeRouteRefs(selectedNode.id, plan.routes);
+                  return (
+                    <>
+                      <div style={sectionTitle}>已选中出入口</div>
+                      <div style={zoneRowStyle}>
+                        <input
+                          aria-label="选中出入口名称"
+                          value={selectedNode.name}
+                          maxLength={60}
+                          onChange={event => updateNode(selectedNode.id, { name: event.target.value })}
+                          style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        />
+                      </div>
+                      <label style={zoneRowStyle}>
+                        类型
+                        <select
+                          aria-label="选中出入口类型"
+                          value={selectedNode.kind}
+                          onChange={event => updateNode(selectedNode.id, { kind: event.target.value as PlanNode['kind'] })}
+                          style={selectStyle}
+                        >
+                          <option value="entry">入口</option>
+                          <option value="exit">出口</option>
+                          <option value="both">出入口（两用）</option>
+                        </select>
+                      </label>
+                      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
+                        {refs.startRoutes.length === 0 && refs.endRoutes.length === 0
+                          ? '未连接任何动线（红点警示）。'
+                          : `关联动线 ${refs.startRoutes.length + refs.endRoutes.length} 条（起点 ${refs.startRoutes.length} / 终点 ${refs.endRoutes.length}）`}
+                      </div>
+                      <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          data-testid="node-delete"
+                          style={modeButtonStyle(false)}
+                          onClick={() => deleteNode(selectedNode.id)}
+                        >
+                          删除出入口
+                        </button>
+                        <button type="button" style={modeButtonStyle(false)} onClick={() => selectNode(null)}>
+                          取消选择
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {selectedWorker && (
+                  <>
+                    <div style={sectionTitle}>已选中人员点位</div>
+                    <div style={zoneRowStyle}>
+                      <input
+                        aria-label="选中人员岗位"
+                        value={selectedWorker.role}
+                        maxLength={60}
+                        onChange={event => updateWorker(selectedWorker.id, { role: event.target.value })}
+                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                      />
+                      <input
+                        aria-label="选中人员人数"
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={selectedWorker.count}
+                        onChange={event => updateWorker(selectedWorker.id, { count: Math.max(1, Math.min(9999, Math.floor(Number(event.target.value) || 1))) })}
+                        style={{ width: 56, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                      />
+                    </div>
+                    <label style={zoneRowStyle}>
+                      归属分区
+                      <select
+                        aria-label="选中人员归属分区"
+                        value={selectedWorker.zoneId ?? ''}
+                        onChange={event => updateWorker(selectedWorker.id, { zoneId: event.target.value || undefined })}
+                        style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                      >
+                        <option value="">（自动 / 无）</option>
+                        {plan.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                      </select>
+                    </label>
+                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+                      <button
+                        type="button"
+                        data-testid="worker-delete"
+                        style={modeButtonStyle(false)}
+                        onClick={() => deleteWorker(selectedWorker.id)}
+                      >
+                        删除点位
+                      </button>
+                      <button type="button" style={modeButtonStyle(false)} onClick={() => selectWorker(null)}>
                         取消选择
                       </button>
                     </div>
