@@ -1,4 +1,5 @@
 import { isGlbUrl } from './glb-url';
+import { CLOUD_ASSETS_BASE, cloudAssetUrl } from './cloud-assets';
 
 /**
  * 直连生成通道地址：默认是本机 lux3d-dev-proxy，也可在构建时用
@@ -84,14 +85,17 @@ export type AholoAsset = {
   meters?: { width: number; depth: number; height: number };
   /** 场景资产的拍摄位置；物件模型没有。 */
   geo?: AholoAssetGeo;
-  /** 可选：本地派生 LOD 的元数据（站内路径，如 /scans/<id>/lod-meta.json）。 */
+  /** 可选：本地派生 LOD 的元数据（站内路径，如 /scans/<id>/lod-meta.json，或云端地址）。 */
   lodUrl?: string;
+  /** 缺省 = 本机代理落盘；'cloud' = 文件在云端资产库，地址按云端规则推出。 */
+  origin?: 'cloud';
 };
 
 const LOD_URL_PATTERN = /^\/scans\/[A-Za-z0-9_-]{1,48}\/lod-meta\.json$/;
 
 function validLodUrl(value: unknown): value is string {
-  return typeof value === 'string' && LOD_URL_PATTERN.test(value);
+  if (typeof value !== 'string') return false;
+  return LOD_URL_PATTERN.test(value) || value.startsWith(`${CLOUD_ASSETS_BASE}/scans/`);
 }
 
 function validMeters(value: unknown): value is { width: number; depth: number; height: number } {
@@ -109,6 +113,7 @@ function isValidAsset(value: unknown): value is AholoAsset {
     (asset.meters === undefined || validMeters(asset.meters)) &&
     (asset.geo === undefined || validGeo(asset.geo)) &&
     (asset.lodUrl === undefined || validLodUrl(asset.lodUrl)) &&
+    (asset.origin === undefined || asset.origin === 'cloud') &&
     Boolean(aholoAssetUrl(asset));
 }
 
@@ -143,7 +148,9 @@ function writeRegistry(storage: Storage | null, assets: AholoAsset[]): void {
 /** 落盘文件名就是资产号，所以稳定地址可由记录本身推出，不必把链接存进图纸。 */
 export function aholoAssetUrl(asset: AholoAsset | undefined): string | undefined {
   if (!asset) return undefined;
-  const url = `${DIRECT_BASE}/asset/${asset.assetId}.${asset.kind}`;
+  const url = asset.origin === 'cloud'
+    ? cloudAssetUrl(asset.assetId, asset.kind)
+    : `${DIRECT_BASE}/asset/${asset.assetId}.${asset.kind}`;
   return asset.kind === 'glb' && !isGlbUrl(url) ? undefined : url;
 }
 
@@ -179,6 +186,7 @@ export function rememberAholoAsset(asset: AholoAsset): AholoAsset | undefined {
     ...(validMeters(asset.meters) ? { meters: asset.meters } : {}),
     ...(validGeo(asset.geo) ? { geo: asset.geo } : {}),
     ...(validLodUrl(asset.lodUrl) ? { lodUrl: asset.lodUrl } : {}),
+    ...(asset.origin === 'cloud' ? { origin: 'cloud' as const } : {}),
   };
   if (!isValidAsset(record)) return undefined;
   const storage = currentStorage();

@@ -63,3 +63,33 @@ describe('本机扫描登记', () => {
     expect(listAholoAssets()).toHaveLength(9);
   });
 });
+
+describe('云端扫描登记', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('没有本机代理也登记：部署站靠云端副本找回这批实景，地址走云端资产库', async () => {
+    const { registerCloudScans } = await loadWithProxy(REMOTE_RELAY);
+    const { CLOUD_ASSETS_BASE } = await import('./cloud-assets');
+    const { listAholoAssets, resolveAholoAssetUrl } = await import('./aholo-assets');
+    expect(registerCloudScans()).toBe(8);
+    const westLake = listAholoAssets().find(asset => asset.assetId === WEST_LAKE_FAST);
+    expect(westLake?.origin).toBe('cloud');
+    expect(westLake?.name).toBe('西湖 0233 · 极速档');
+    expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}.spz`);
+    // 「本机高斯」在云端语境改名，不再误导访客
+    const gauss = listAholoAssets().find(asset => asset.assetId === TEAROOM);
+    expect(gauss?.name).not.toContain('本机');
+  });
+
+  it('本机副本优先：能直连本机文件时云端登记只补缺、不覆盖', async () => {
+    const { registerLocalScans, registerCloudScans } = await loadWithProxy(LOCAL_PROXY);
+    const { resolveAholoAssetUrl } = await import('./aholo-assets');
+    expect(registerLocalScans()).toBe(8);
+    expect(registerCloudScans()).toBe(0);
+    expect(resolveAholoAssetUrl(TEAROOM)).toBe(`${LOCAL_PROXY}/asset/${TEAROOM}.spz`);
+  });
+});
