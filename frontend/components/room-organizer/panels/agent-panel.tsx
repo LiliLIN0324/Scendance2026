@@ -2745,7 +2745,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({role:'agent',amber:true,text:'这项操作尚未执行，旧方案预览已收回。请带上这项要求重新生成，再核对修改。'});
     }
     if(turn.readOnlyReply){
-      if(turn.unhandled?.length&&!sofaOnlyUnhandled(turn,trimmed))say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});
+      // 模型已作答的纯提问不再挂「尚未执行」黄条：回答本身就是处理结果；
+      // 只有夹带动作/其他未执行项时才提醒。
+      const allQuestionsAnswered=!!turn.text&&!!turn.unhandled?.length&&turn.unhandled.every(item=>item.kind==='question');
+      if(turn.unhandled?.length&&!allQuestionsAnswered&&!sofaOnlyUnhandled(turn,trimmed))say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});
       say({role:'agent',text:turn.text,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:{})});releaseTurn();return;
     }
     if (sessionScope !== 'legacy' && (turnVenueBasis !== venueScaleBasis(layoutStore.getState().layout) || !venueFacts.isCurrent(turnVenueFact))) {

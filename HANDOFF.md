@@ -4,7 +4,13 @@
 
 > 先读HANDOFF.md。
 
-2026-11-11 二十八轮 · 两路代理线上复验**全部通过**（详见走查报告复验节）+ 两个 P3 收尾：
+2026-11-11 二十九轮 · 模型身份问答修复 + **supabase functions 已部署**：
+- 用户要模型自报身份（如 qwen3.8-max）。①`BRIEF_CONVERSATION_PROMPT` 加身份问答规则：知道模型名就直说（不编造未接入型号）；线上复测「你是什么模型」→「我是 Qwen（通义千问）」2.8s。②前端：readOnlyReply 的 unhandled 全是 question 且模型已作答时不再挂「尚未执行」黄条（`agent-panel.tsx`）。
+- **`scene-api`+`conversation-api` 已部署**（`--use-api` 云端打包；本地 bundler 因 Deno 走 IPv6 被 registry 拒连，代理 env 不生效，绕过方式见此）。desk 契约后端自此生效，课桌活动可上云保存。
+- 踩坑记录：`.env.local` 开头有 BOM 会让 supabase CLI 报 failed to parse environment file（已去 BOM）；`HTTP_PROXY=127.0.0.1:7897` 活着但 CLI bundler 不认 env 代理；npmmirror/npmjs 对 Deno 均 IPv6 拒连（curl 可 IPv4 回落）。
+- 上轮（二十八轮）：
+
+
 - 复验 10 项全绿：确认循环/45座/堵门警告/确认布置/高斯退场/打开资料/导出交接（download 触发）/到场清单导出/账户中心 Desk 报错消失/云端模型理解（conversation 返回真回复）。模型对「完全堵门」主动安全拒绝（消防疏散理由）——正确方向。
 - 新增待排卡：①到场清单「导出」会把左栏切到物料视图，确认卡不可见（可用性）；②云端理解间歇性「未通过校验」（逐字证据契约，可做规范化匹配）；③编辑锁竞争挡多会话操作。
 - 前端已推 `15e9c807`；**supabase functions 待用户 deploy**（desk 契约后端生效）。
@@ -49,7 +55,7 @@
 
 2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-11（二十八轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-11（二十九轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
