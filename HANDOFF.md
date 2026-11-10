@@ -801,3 +801,44 @@ $env:NEXT_DIST_DIR = '.next-ci'; npm run build    # 跑完记得 Remove-Item Env
 
 
 
+
+---
+
+## 2026-11-10 深夜 · 户外 2D 规划（prod 验证会话）交接 — 提交 `f5b691a`
+
+**本轮完成并已提交（`feat/outdoor-2d`，未 push）**：`feat(outdoor-2d) 2D 规划接上三段目录/选中层级/区域绘制手势/3D 视角/左上角搜地点；创建活动支持选地点（天地图检索）`
+
+1. **物件库按用户指定三段目录重做**（新文件 `frontend/components/room-organizer/lib/oneplan-catalog.ts`）：
+   - 区域、路线及交通（区域 / 入口和通道图标 / 路线 / 出入口节点）
+   - 基础设施 17 类（视听设备…供水和卫生设施，顺序严格按用户原文；`infraCategoryOf` 先 slug 正则再 categoryZh 映射）
+   - 劳动力 9 岗位（自定义点/消防/经理/医务人员/警察/保安/管理员/主管/志愿者）
+   - 搜索态跨段分组（`groupCatalogResults`）；面板内联渲染条件放宽为 `{(!libraryPanelHostId || libraryPanelHost) && (`，所以 `/outdoor-plan` 演示页也能看到目录（此前那页只有画布）。
+2. **设施选中 + 右键层级**：白虚线框 + 四角手柄（拖角改宽/深）+ 顶部圆柄旋转；右键菜单「上移一层 / 置于顶层 / 下移一层 / 置于底层」（`data-testid="facility-context-menu"`）。**层级 = `plan.facilities` 数组顺序**——`planFacilitySchema` 是 `z.strictObject`，不能加 zIndex；重排数组后草稿/导出/3D 自动同步。
+3. **画区域手势**：左键加节点 / 右键移除上一个节点 / Esc 取消 / 双击左键闭合（<3 点提示「至少要 3 个节点才能闭合」）。
+4. **3D 视角**：新文件 `frontend/components/room-organizer/components/outdoor-plan-3d.tsx`（three + OrbitControls）：地面 = 离屏拼**天地图影像**（`planGroundTiles` + `/api/tdt-tiles?layer=img_w`）做贴图，失败回落纸面网格；低模 = 边界矮墙（1.1 m × 0.35 m）+ 分区色块 + 设施方块（按模板给高度）+ 动线地面线 + 节点/人员小圆柱；卸载 dispose 全部资源。`outdoor-plan-workspace.tsx` 右上 `data-testid="outdoor-view-toggle"` 切 2D/3D，默认 2D。
+5. **左上角搜地点（用户 m05472「要和地图一样的搜索在左上角的」）**：新共用组件 `frontend/components/room-organizer/components/plan-place-search.tsx`——深色胶囊搜索框，位置 `left:16 / top:16`，最近地点 + 天地图模糊匹配建议栏，↑↓/Enter/Esc，选中只「视图飞过去 + 落定位钉」（不改 `plan.anchor`）。接入两处：编辑器内嵌覆盖层（`testIdPrefix="outdoor-place-search"`）与户外工作台（`testIdPrefix="workspace-place-search"`）。
+6. **创建活动可选活动地点**：`venue-picker.tsx` 的「从地图开始」加 活动名称 + 活动地点；检索走天地图（高德 key 已失效，见下）；`createStarterOutdoorPlan(anchor)` 带 `{lng,lat,crs:'gcj-02',source:'picker'}` → 建完直接进 `/editor/?project=<id>&start=outdoor`，2D 一开就是该地点地图。
+7. **天地图检索后端**：`functions/api/tdt-search.ts`（geocoder 求中心 → v2/search 三级扩框 `BOUND_STEPS=[[0.16,0.12],[0.35,0.26],[0.7,0.5]]`；三档皆空回落中心点单条；无中心 404）+ `functions/api/geo-gcj.ts`（CGCS2000 → GCJ-02）；本机 `tools/aholo/lux3d-dev-proxy.mjs` 同路径 `/api/tdt-search`（本机没有 Pages Functions）。
+8. **模糊建议排序/最近地点**：`lib/place-search.ts` 的 `placeRelevance`（全等 100 / 前缀 88 / 包含 76 / 地址 52）+ `rankPlaces` + `rememberPlace`（最多 5 条，`scendance-place-recent-v1`）。
+
+**实测（8783 dev，Chrome + playwright-core）**：
+- 目录：三段都在（`▾区域、路线及交通3` / `▸基础设施265` / `▸劳动力9`），基础设施 17 类标签与用户清单逐项一致；「卫生间」展开 6 件，点一件 + 画布单击 → 已放置。
+- 区域绘制：3 左键 → 右键「已移除上一个节点（还剩 2 个）」→ 再左键 + 双击「分区「观众区 1」已添加」。
+- 搜地点：覆盖层路径 — 输入「杭州大剧院」出 6 条建议，选中后输入框回填；工作台路径（`/editor?project=demo-outdoor&start=outdoor`）— 搜索框 box `{x:80,y:16,w:320,h:38}`、建议 1 条、选中回填、`outdoor-view-toggle` 存在、0 报错。
+- `npx tsc --noEmit` = 0；`place-search.test.ts` 14 + `venue-picker.react.test.tsx` 11 = 25 条全绿。
+
+**已知未收口（下次接着做）**
+- 右键层级菜单在「刚放完设施、仍在连续放置模式」时不会弹（必须先 Esc 退到 view 模式）；建议放置后右键也能弹或自动切 view。
+- 搜索建议栏在编辑器内嵌路径偶发被顶层浮层挡点击（Playwright 报 `edit-mode-zone` intercepts pointer events）；工作台路径正常。
+- `/outdoor-plan` 演示页仍是独立画布（无搜索框/视角钮/目录浮层样式统一性未复核）。
+- 3D 视角只做了低模草图（用户明确定调「先低模，以后要改的」）；未做 3D→2D 点选联动、未做 2D 设施进 `layout.floors[].items`。
+
+**环境/坑（本轮新增）**
+- **高德 key 已失效**：`frontend/.env.local` 只有 `NEXT_PUBLIC_AMAP_STATIC_KEY`/`SECURITY_CODE`，`restapi.amap.com` 的 place/staticmap 全返回 `INVALID_USER_SIGNATURE`（10007），浏览器 JS API 也 `status:'error'`；仓库根 `.env.local` 的 **`TDT_KEY` 可用**，地点检索/影像瓦片都走天地图。
+- 天地图 v2/search **必须带 `mapBound`**，且大框（≥4°）`count 0`，只有 ~1.3°×0.8° 有结果；连续快打会 429 → 必须 geocoder 先求中心再小框、必要时退避。
+- 图标默认改浅色：`outdoor-plan-icons.ts` / `oneplan-stickers.tsx` 默认 `#ffffff`；`PLANNING_ICONS`（`frontend/lib/outdoor-plan-tokens.ts`）与 `outdoor-plan-icons.ts` 的 `Record<PlanningIconName, LucideIcon>` 必须两处同改（闭环测试断言键集相等）。
+- 户外草稿键 `outdoor-plan-h2b-draft-v1`（演示页）/ 按项目 key；验收脚本读草稿断言时注意 `facilities[].position{x,y}` + `size{width,depth}` + `rotationDeg`。
+- 本机 pwsh 是 5.1：含反引号/`$` 的 JS 一律用 write/edit 落盘，不要用双引号字符串拼（曾把 `next dev` 写成换行+`ext dev` 搞坏 `frontend/next.config.mjs`）。
+- 工作区里他人的未提交改动（`docs/evidence/*` 增删、`lib/tdt-probe.ts`）本轮**未动未提交**。
+
+下一步建议顺序：① 修右键层级在放置模式可用；② 修搜索建议栏遮挡；③ `/outdoor-plan` 演示页与工作台样式/交互对齐；④ 第3批数据打通（设施进 `layout.floors[].items` + `lib/plan-unify.ts` + 3D 点选）。
