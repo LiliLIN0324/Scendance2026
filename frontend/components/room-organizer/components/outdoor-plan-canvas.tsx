@@ -50,6 +50,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { BasemapTileCache, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
 import {
   defaultLayerVisibility,
   drawAccessLayer,
@@ -228,6 +229,13 @@ export interface OutdoorPlanCanvasProps {
 }
 
 const TILE = 256;
+/**
+ * 规划地图的缩放区间（用户实测反馈：活动场地最起码在一个城市里，
+ * 缩到省/国家/世界级对做活动毫无意义，只会让「场地」变成看不见的一个点；
+ * 上限放到 19 是为了贴到单棵树/斑马线的粒度）。
+ */
+const MAP_MIN_ZOOM = 12;
+const MAP_MAX_ZOOM = 19;
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const isTdt = (s: CanvasBasemapSource): s is TdtProbeLayer => s === 'vec' || s === 'img';
 
@@ -373,6 +381,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const planRef = useRef<SitePlanData>(plan);
   const panRef = useRef<{ x: number; y: number }>();
   const layerStateRef = useRef<LayerVisibility>(visibility ?? defaultLayerVisibility());
+  // 底图瓦片缓存：同一 URL 只加载一次，缺当前层级时用上一级兜底 —— 缩放不再一闪一闪。
+  const basemapCacheRef = useRef<BasemapTileCache | null>(null);
+  const tileRedrawRafRef = useRef(0);
+  const drawRef = useRef<() => void>(() => {});
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
@@ -634,22 +646,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const latRad = v.lat * Math.PI / 180;
     const centerPy = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * world;
     const grid = visibleTileGrid(v.lng, v.lat, v.zoom, cssW, cssH);
-    grid.tiles.forEach(({ x, y }) => {
-      const left = x * TILE - centerPx + cssW / 2;
-      const top = y * TILE - centerPy + cssH / 2;
-      const drawTile = (url: string) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => baseCtx.drawImage(img, left, top, TILE, TILE);
-        img.src = url;
-      };
-      if (isTdt(activeSource)) {
-        const pair = tdtProbeTileUrl(activeSource, v.zoom, x, y);
-        drawTile(pair.base);
-        drawTile(pair.annotation);
-      } else {
-        drawTile(publicSourceTileUrl(activeSource, v.zoom, x, y));
-      }
+    if (!basemapCacheRef.current) basemapCacheRef.current = new BasemapTileCache();
+    paintBasemapTiles({
+      ctx: baseCtx,
+      cache: basemapCacheRef.current,
+      zoom: v.zoom,
+      centerPx,
+      centerPy,
+      cssW,
+      cssH,
+      tileSize: TILE,
+      tiles: grid.tiles,
+      urlsFor: (z, x, y) => {
+        if (isTdt(activeSource)) {
+          const pair = tdtProbeTileUrl(activeSource, z, x, y);
+          return [pair.base, pair.annotation];
+        }
+        return [publicSourceTileUrl(activeSource, z, x, y)];
+      },
+      onDirty: () => {
+        // 新瓦片到位：合并成一帧重绘，别一张图触发一次 draw。
+        if (tileRedrawRafRef.current) return;
+        tileRedrawRafRef.current = requestAnimationFrame(() => {
+          tileRedrawRafRef.current = 0;
+          drawRef.current();
+        });
+      },
     });
 
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
@@ -823,6 +845,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
   }, []);
 
+  // 瓦片加载完成后的异步重绘走 ref，避免 onDirty 依赖整份 draw 造成互相引用。
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
+
   // H4-b：OnePlan 贴纸是异步图片——加载完成/失败后补一次重绘，避免首帧缺图标后不再补画。
   useEffect(() => subscribeOneplanStickerLoads(() => draw()), [draw]);
 
@@ -918,7 +945,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function zoomBy(dir: number) {
     const v = viewRef.current;
-    commitView({ ...v, zoom: clamp(v.zoom + dir, 3, 18) });
+    commitView({ ...v, zoom: clamp(v.zoom + dir, MAP_MIN_ZOOM, MAP_MAX_ZOOM) });
   }
 
   // P2-g：对外命令句柄（室内工具排通用钮转发：撤销/重做/缩放/截图）。

@@ -1039,7 +1039,9 @@ body {
 /* T-VISUAL-CHROME-2：底素材条为应用级全宽收起条（对照 04-final-flat.jpg），跨全部列。 */
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-bottom-bar { display: none; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 4; }
+/* 左轨悬停提示（data-tip）要能压过左栏与画布覆盖层：提示是 ::after 子元素，
+   父级 z-index 太低时会被左栏（z-index:31）整体裁掉——用户实测反馈「左侧的 hover 层级太低」。 */
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 40; }
 /* 左栏永远压在画布之上：户外地图覆盖层 z-index:30 只在自己的画布栏里，窄屏或动画过渡时也不能盖住左栏。 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 31; }
 .sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { display: none; }
@@ -1058,7 +1060,7 @@ body {
 }
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
-  display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 8;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 40;
   flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 10px 4px; box-sizing: border-box;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
   overflow: visible;
