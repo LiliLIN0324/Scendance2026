@@ -223,7 +223,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   };
 
   return <div className="sc-tool-menu" ref={rootRef}>
-    <button type="button" id="tool-share" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
+    <button type="button" id="tool-share" data-tour="publish" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
       <MaterialSymbol name="ios_share" />
     </button>
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="发布">

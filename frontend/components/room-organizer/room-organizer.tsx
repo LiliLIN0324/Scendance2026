@@ -107,6 +107,8 @@ import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
 import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
 import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
+import { TourReel } from './onboarding/tour-reel';
+import { onboardingSteps } from './onboarding/onboarding-steps';
 import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import type { ScannedVenue } from './lib/venue-scans';
@@ -3687,6 +3689,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   aria-expanded={isLaneOpen('material')}
                   aria-controls="agent-panel"
                   aria-label="物料"
+                  data-tour="nav-material"
                   data-tip="物料"
                   onClick={() => toggleAgent('material')}
                 >
@@ -4107,6 +4110,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             )}
           </div>
             <div className="sc-editor-dock">
+            <TourReel steps={onboardingSteps} storageKey="scendance:tour:v1" />
             <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
