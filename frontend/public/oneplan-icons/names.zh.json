@@ -1,0 +1,4989 @@
+{
+  "generated_at": "2026-11-10T08:10:22.142Z",
+  "note": "slug → 中英文名 + 分类 + 该 slug 现有文件。name_source: taxonomy = 来自物件库名称表；curated = 按语义补充命名。",
+  "counts": {
+    "slugs": 395,
+    "files": 549,
+    "named": 549
+  },
+  "slugs": {
+    "crowd": {
+      "en": "Crowd area pattern",
+      "zh": "人群区底纹",
+      "name_source": "curated",
+      "category_en": "Areas, Routes & Access",
+      "category_zh": "活动区域·流线与通行",
+      "files": {
+        "area": "/oneplan-icons/area/crowd.svg"
+      }
+    },
+    "generic": {
+      "en": "Generic area footprint",
+      "zh": "通用区底形",
+      "name_source": "curated",
+      "category_en": "Areas, Routes & Access",
+      "category_zh": "活动区域·流线与通行",
+      "files": {
+        "area": "/oneplan-icons/area/generic.svg"
+      }
+    },
+    "parking": {
+      "en": "Parking",
+      "zh": "停车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "area": "/oneplan-icons/area/parking.svg",
+        "icon": "/oneplan-icons/icon/parking.svg"
+      }
+    },
+    "areas-routes-access": {
+      "en": "Areas, Routes & Access (category icon)",
+      "zh": "活动区域·流线与通行（分类图标）",
+      "name_source": "curated",
+      "category_en": "Category icons",
+      "category_zh": "分类图标",
+      "files": {
+        "categories": "/oneplan-icons/categories/areas-routes-access.svg"
+      }
+    },
+    "infrastructure": {
+      "en": "Infrastructure (category icon)",
+      "zh": "基础设施（分类图标）",
+      "name_source": "curated",
+      "category_en": "Category icons",
+      "category_zh": "分类图标",
+      "files": {
+        "categories": "/oneplan-icons/categories/infrastructure.svg"
+      }
+    },
+    "workforce": {
+      "en": "Workforce (category icon)",
+      "zh": "工作人员（分类图标）",
+      "name_source": "curated",
+      "category_en": "Category icons",
+      "category_zh": "分类图标",
+      "files": {
+        "categories": "/oneplan-icons/categories/workforce.svg"
+      }
+    },
+    "360-security-camera": {
+      "en": "360 Security Camera",
+      "zh": "360° 安防摄像头",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/360-security-camera.svg"
+      }
+    },
+    "accessible-parking": {
+      "en": "Accessible Parking",
+      "zh": "无障碍停车",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/accessible-parking.svg"
+      }
+    },
+    "accessible-ramp": {
+      "en": "Accessible Ramp",
+      "zh": "无障碍坡道",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/accessible-ramp.svg"
+      }
+    },
+    "accessible-toilet": {
+      "en": "Accessible Toilet",
+      "zh": "无障碍卫生间",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Toilets",
+      "category_zh": "设施物料 / 卫生间",
+      "files": {
+        "icon": "/oneplan-icons/icon/accessible-toilet.svg"
+      }
+    },
+    "accessible-viewing-platform": {
+      "en": "Accessible Viewing Platform",
+      "zh": "无障碍观景台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/accessible-viewing-platform.svg"
+      }
+    },
+    "accreditation": {
+      "en": "Accreditation",
+      "zh": "证件认证/通行证核验",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/accreditation.svg"
+      }
+    },
+    "agricultural-competition": {
+      "en": "Agricultural Competition",
+      "zh": "农业竞赛",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/agricultural-competition.svg"
+      }
+    },
+    "aid-station-electrolyte": {
+      "en": "Aid Station - Electrolyte",
+      "zh": "补给站-电解质",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/aid-station-electrolyte.svg"
+      }
+    },
+    "airport": {
+      "en": "Airport",
+      "zh": "机场",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/airport.svg"
+      }
+    },
+    "arts-and-crafts": {
+      "en": "Arts and crafts",
+      "zh": "手工艺",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/arts-and-crafts.svg"
+      }
+    },
+    "atm": {
+      "en": "ATM",
+      "zh": "ATM 取款机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/atm.svg"
+      }
+    },
+    "baby-change": {
+      "en": "Baby Change",
+      "zh": "母婴更衣台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Toilets",
+      "category_zh": "设施物料 / 卫生间",
+      "files": {
+        "icon": "/oneplan-icons/icon/baby-change.svg"
+      }
+    },
+    "balloon-arch": {
+      "en": "Balloon arch",
+      "zh": "气球拱门",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/balloon-arch.svg"
+      }
+    },
+    "balloons": {
+      "en": "Balloons",
+      "zh": "气球",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/balloons.svg"
+      }
+    },
+    "bar": {
+      "en": "Bar",
+      "zh": "吧台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/bar.svg"
+      }
+    },
+    "barbeque": {
+      "en": "Barbeque",
+      "zh": "烧烤",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/barbeque.svg"
+      }
+    },
+    "barrel-racing": {
+      "en": "Barrel Racing",
+      "zh": "绕桶赛马",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/barrel-racing.svg"
+      }
+    },
+    "beer": {
+      "en": "Beer",
+      "zh": "啤酒",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/beer.svg"
+      }
+    },
+    "bike-in": {
+      "en": "Bike In",
+      "zh": "骑行入口",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/bike-in.svg"
+      }
+    },
+    "bike-mechanic": {
+      "en": "Bike Mechanic",
+      "zh": "自行车技师",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/bike-mechanic.svg"
+      }
+    },
+    "bike-out": {
+      "en": "Bike Out",
+      "zh": "骑行出口",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/bike-out.svg"
+      }
+    },
+    "bike-pump-drop-off": {
+      "en": "Bike Pump Drop Off",
+      "zh": "打气筒投放点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/bike-pump-drop-off.svg"
+      }
+    },
+    "boat": {
+      "en": "Boat",
+      "zh": "船只",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/boat.svg"
+      }
+    },
+    "bollard": {
+      "en": "Bollard",
+      "zh": "防撞柱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/bollard.svg"
+      }
+    },
+    "bouncy-castle": {
+      "en": "Bouncy castle",
+      "zh": "充气城堡",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/bouncy-castle.svg"
+      }
+    },
+    "bratwurst": {
+      "en": "Bratwurst",
+      "zh": "德式香肠",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/bratwurst.svg"
+      }
+    },
+    "bull-riding": {
+      "en": "Bull Riding",
+      "zh": "骑牛",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/bull-riding.svg"
+      }
+    },
+    "bumps": {
+      "en": "Bumps",
+      "zh": "减速带",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/bumps.svg"
+      }
+    },
+    "buoy": {
+      "en": "Buoy",
+      "zh": "浮标",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/buoy.svg"
+      }
+    },
+    "bus-coach-station": {
+      "en": "Bus/Coach Station",
+      "zh": "公交/大巴站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/bus-coach-station.svg"
+      }
+    },
+    "bus-stop": {
+      "en": "Bus Stop",
+      "zh": "公交站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/bus-stop.svg"
+      }
+    },
+    "camera-boat": {
+      "en": "Camera Boat",
+      "zh": "摄像船",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-boat.svg"
+      }
+    },
+    "camera-crane": {
+      "en": "Camera Crane",
+      "zh": "摄像摇臂",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-crane.svg"
+      }
+    },
+    "camera-drone": {
+      "en": "Camera Drone",
+      "zh": "航拍无人机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-drone.svg"
+      }
+    },
+    "camera-fixed": {
+      "en": "Camera Fixed",
+      "zh": "固定机位",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-fixed.svg"
+      }
+    },
+    "camera-handheld": {
+      "en": "Camera Handheld",
+      "zh": "手持机位",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-handheld.svg"
+      }
+    },
+    "camera-jimmy": {
+      "en": "Camera Jimmy",
+      "zh": "Jimmy 摄像车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-jimmy.svg"
+      }
+    },
+    "camera-platform": {
+      "en": "Camera Platform",
+      "zh": "摄像平台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-platform.svg"
+      }
+    },
+    "camera-tripod": {
+      "en": "Camera Tripod",
+      "zh": "三脚架机位",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/camera-tripod.svg"
+      }
+    },
+    "camping": {
+      "en": "Camping",
+      "zh": "露营",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/camping.svg"
+      }
+    },
+    "candied-fruits": {
+      "en": "Candied Fruits",
+      "zh": "糖渍水果",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/candied-fruits.svg"
+      }
+    },
+    "candy": {
+      "en": "Candy",
+      "zh": "糖果",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/candy.svg"
+      }
+    },
+    "carnival": {
+      "en": "Carnival",
+      "zh": "嘉年华",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/carnival.svg"
+      }
+    },
+    "cctv-camera": {
+      "en": "CCTV Camera",
+      "zh": "监控摄像头",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/cctv-camera.svg"
+      }
+    },
+    "changing-places-toilet": {
+      "en": "Changing Places Toilet",
+      "zh": "无障碍更衣卫生间",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Toilets",
+      "category_zh": "设施物料 / 卫生间",
+      "files": {
+        "icon": "/oneplan-icons/icon/changing-places-toilet.svg"
+      }
+    },
+    "changing-room": {
+      "en": "Changing Room",
+      "zh": "更衣室",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/changing-room.svg"
+      }
+    },
+    "charity": {
+      "en": "Charity",
+      "zh": "慈善",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/charity.svg"
+      }
+    },
+    "christmas-garland": {
+      "en": "Christmas Garland",
+      "zh": "圣诞花环",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/christmas-garland.svg"
+      }
+    },
+    "christmas-tree": {
+      "en": "Christmas tree",
+      "zh": "圣诞树",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/christmas-tree.svg"
+      }
+    },
+    "chuck-wagon": {
+      "en": "Chuck Wagon",
+      "zh": "牛仔餐车",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/chuck-wagon.svg"
+      }
+    },
+    "circle": {
+      "en": "Circle sticker base",
+      "zh": "圆点底衬",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/circle.svg"
+      }
+    },
+    "clay-pigeon-shooting": {
+      "en": "Clay Pigeon Shooting",
+      "zh": "飞碟射击",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/clay-pigeon-shooting.svg"
+      }
+    },
+    "cocktail-bar": {
+      "en": "Cocktail Bar",
+      "zh": "鸡尾酒吧",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/cocktail-bar.svg"
+      }
+    },
+    "computer": {
+      "en": "Computer",
+      "zh": "电脑",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/computer.svg"
+      }
+    },
+    "cone": {
+      "en": "Cone",
+      "zh": "锥桶",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/cone.svg"
+      }
+    },
+    "cookies": {
+      "en": "Cookies",
+      "zh": "曲奇/饼干",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/cookies.svg"
+      }
+    },
+    "crokicurl": {
+      "en": "Crokicurl",
+      "zh": "Crokicurl",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/crokicurl.svg"
+      }
+    },
+    "crossing-point": {
+      "en": "Crossing Point",
+      "zh": "人行过街点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/crossing-point.svg",
+        "scale-bg": "/oneplan-icons/scale-bg/crossing-point.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/crossing-point.svg"
+      }
+    },
+    "cycle-parking": {
+      "en": "Cycle Parking",
+      "zh": "自行车停车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/cycle-parking.svg"
+      }
+    },
+    "defibrillator": {
+      "en": "Defibrillator",
+      "zh": "除颤仪 AED",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/defibrillator.svg"
+      }
+    },
+    "dj-location": {
+      "en": "DJ Location",
+      "zh": "DJ 位",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Audio Visual",
+      "category_zh": "设施物料 / 视听设备",
+      "files": {
+        "icon": "/oneplan-icons/icon/dj-location.svg"
+      }
+    },
+    "draft-horses": {
+      "en": "Draft Horses",
+      "zh": "挽马",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/draft-horses.svg"
+      }
+    },
+    "drinks-station": {
+      "en": "Drinks station",
+      "zh": "饮水补给站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/drinks-station.svg"
+      }
+    },
+    "duck-pond-booth": {
+      "en": "Duck Pond Booth",
+      "zh": "捞鸭游戏摊",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/duck-pond-booth.svg"
+      }
+    },
+    "elevator": {
+      "en": "Elevator",
+      "zh": "电梯",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/elevator.svg"
+      }
+    },
+    "elf": {
+      "en": "Elf",
+      "zh": "精灵",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/elf.svg"
+      }
+    },
+    "emergency-access-point": {
+      "en": "Emergency Access Point",
+      "zh": "应急通道入口",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/emergency-access-point.svg"
+      }
+    },
+    "emergency-exit": {
+      "en": "Emergency Exit",
+      "zh": "紧急出口",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/emergency-exit.svg"
+      }
+    },
+    "entry-gate": {
+      "en": "Entry Gate",
+      "zh": "入口闸门",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/entry-gate.svg"
+      }
+    },
+    "esky": {
+      "en": "Esky",
+      "zh": "保温箱/冷藏箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/esky.svg"
+      }
+    },
+    "ethernet": {
+      "en": "Ethernet",
+      "zh": "网线/以太网",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/ethernet.svg"
+      }
+    },
+    "ev-charge-point": {
+      "en": "EV Charge Point",
+      "zh": "电动车充电桩",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/ev-charge-point.svg"
+      }
+    },
+    "evacuation-chair": {
+      "en": "Evacuation chair",
+      "zh": "疏散椅",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/evacuation-chair.svg"
+      }
+    },
+    "evacuation-meeting-point": {
+      "en": "Evacuation Meeting Point",
+      "zh": "疏散集合点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/evacuation-meeting-point.svg"
+      }
+    },
+    "event-control": {
+      "en": "Event Control",
+      "zh": "活动指挥中心",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/event-control.svg"
+      }
+    },
+    "event-management-office": {
+      "en": "Event Management Office",
+      "zh": "活动管理办公室",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/event-management-office.svg"
+      }
+    },
+    "exit-gate": {
+      "en": "Exit Gate",
+      "zh": "出口闸门",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/exit-gate.svg"
+      }
+    },
+    "fan": {
+      "en": "Fan",
+      "zh": "风扇",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/fan.svg"
+      }
+    },
+    "fast-food": {
+      "en": "Fast Food",
+      "zh": "快餐",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/fast-food.svg"
+      }
+    },
+    "feather-flag": {
+      "en": "Feather Flag",
+      "zh": "刀旗/羽毛旗",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Branding and Signage",
+      "category_zh": "设施物料 / 品牌与导视",
+      "files": {
+        "icon": "/oneplan-icons/icon/feather-flag.svg"
+      }
+    },
+    "feed-station": {
+      "en": "Feed Station",
+      "zh": "补给站",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/feed-station.svg"
+      }
+    },
+    "film": {
+      "en": "Film",
+      "zh": "影视/放映",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/film.svg"
+      }
+    },
+    "fire-extinguisher": {
+      "en": "Fire Extinguisher",
+      "zh": "灭火器",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/fire-extinguisher.svg"
+      }
+    },
+    "fire-hydrant": {
+      "en": "Fire Hydrant",
+      "zh": "消防栓",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/fire-hydrant.svg"
+      }
+    },
+    "fire-pit": {
+      "en": "Fire Pit",
+      "zh": "篝火坑",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/fire-pit.svg"
+      }
+    },
+    "fire-towers": {
+      "en": "Fire towers",
+      "zh": "消防瞭望塔",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/fire-towers.svg"
+      }
+    },
+    "firewall": {
+      "en": "Firewall",
+      "zh": "防火墙",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/firewall.svg"
+      }
+    },
+    "fireworks": {
+      "en": "Fireworks",
+      "zh": "烟花",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/fireworks.svg"
+      }
+    },
+    "first-aid-point": {
+      "en": "First Aid Point",
+      "zh": "急救点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/first-aid-point.svg"
+      }
+    },
+    "flood": {
+      "en": "Flood",
+      "zh": "积水/洪水",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/flood.svg"
+      }
+    },
+    "floriculture": {
+      "en": "Floriculture",
+      "zh": "花卉园艺",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/floriculture.svg"
+      }
+    },
+    "fondue": {
+      "en": "Fondue",
+      "zh": "火锅/芝士火锅",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/fondue.svg"
+      }
+    },
+    "food-trader": {
+      "en": "Food trader",
+      "zh": "食品摊贩",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "icon": "/oneplan-icons/icon/food-trader.svg"
+      }
+    },
+    "freezer": {
+      "en": "Freezer",
+      "zh": "冷冻柜",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/freezer.svg"
+      }
+    },
+    "fridge": {
+      "en": "Fridge",
+      "zh": "冰箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/fridge.svg"
+      }
+    },
+    "gender-neutral-toilet": {
+      "en": "Gender neutral toilet",
+      "zh": "中性卫生间",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Toilets",
+      "category_zh": "设施物料 / 卫生间",
+      "files": {
+        "icon": "/oneplan-icons/icon/gender-neutral-toilet.svg"
+      }
+    },
+    "generator-point": {
+      "en": "Generator Point",
+      "zh": "发电机位",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/generator-point.svg"
+      }
+    },
+    "gifts": {
+      "en": "Gifts",
+      "zh": "礼品",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/gifts.svg"
+      }
+    },
+    "go": {
+      "en": "Go",
+      "zh": "通行/Go",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/go.svg"
+      }
+    },
+    "hand-wash-station": {
+      "en": "Hand wash station",
+      "zh": "洗手站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/hand-wash-station.svg"
+      }
+    },
+    "hazard": {
+      "en": "Hazard",
+      "zh": "危险路段",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/hazard.svg"
+      }
+    },
+    "heater": {
+      "en": "Heater",
+      "zh": "取暖器",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/heater.svg"
+      }
+    },
+    "hedgelaying": {
+      "en": "Hedgelaying",
+      "zh": "树篱修剪技艺",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/hedgelaying.svg"
+      }
+    },
+    "helipad": {
+      "en": "Helipad",
+      "zh": "直升机停机坪",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/helipad.svg"
+      }
+    },
+    "horse-racing": {
+      "en": "Horse Racing",
+      "zh": "赛马",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/horse-racing.svg"
+      }
+    },
+    "horticulture": {
+      "en": "Horticulture",
+      "zh": "园艺",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/horticulture.svg"
+      }
+    },
+    "hospital": {
+      "en": "Hospital",
+      "zh": "医院",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/hospital.svg"
+      }
+    },
+    "hot-chocolate": {
+      "en": "Hot Chocolate",
+      "zh": "热巧克力",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/hot-chocolate.svg"
+      }
+    },
+    "hot-drinks": {
+      "en": "Hot Drinks",
+      "zh": "热饮",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/hot-drinks.svg"
+      }
+    },
+    "ice-cream": {
+      "en": "Ice cream",
+      "zh": "冰淇淋",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/ice-cream.svg"
+      }
+    },
+    "ice-sculpture": {
+      "en": "Ice Sculpture",
+      "zh": "冰雕",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/ice-sculpture.svg"
+      }
+    },
+    "ice-skating": {
+      "en": "Ice Skating",
+      "zh": "滑冰",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/ice-skating.svg"
+      }
+    },
+    "inflatable-santa": {
+      "en": "Inflatable Santa",
+      "zh": "充气圣诞老人",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/inflatable-santa.svg"
+      }
+    },
+    "information-point": {
+      "en": "Information Point",
+      "zh": "问询处",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/information-point.svg"
+      }
+    },
+    "kayak": {
+      "en": "Kayak",
+      "zh": "皮划艇",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/kayak.svg"
+      }
+    },
+    "km-marker": {
+      "en": "KM Marker",
+      "zh": "公里标志",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/km-marker.svg"
+      }
+    },
+    "lamp-post-banner": {
+      "en": "Lamp Post Banner",
+      "zh": "灯杆旗",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Branding and Signage",
+      "category_zh": "设施物料 / 品牌与导视",
+      "files": {
+        "icon": "/oneplan-icons/icon/lamp-post-banner.svg"
+      }
+    },
+    "lan-socket": {
+      "en": "Lan Socket",
+      "zh": "局域网插座",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/lan-socket.svg"
+      }
+    },
+    "lifeguard-jet-ski": {
+      "en": "Lifeguard jet ski",
+      "zh": "救生摩托艇",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/lifeguard-jet-ski.svg"
+      }
+    },
+    "lifeguard-kayak": {
+      "en": "Lifeguard Kayak",
+      "zh": "救生皮划艇",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/lifeguard-kayak.svg"
+      }
+    },
+    "lifeguard-surfboard": {
+      "en": "Lifeguard Surfboard",
+      "zh": "救生冲浪板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/lifeguard-surfboard.svg"
+      }
+    },
+    "liferaft-ring": {
+      "en": "Liferaft Ring",
+      "zh": "救生圈",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/liferaft-ring.svg"
+      }
+    },
+    "load-zone": {
+      "en": "Load Zone",
+      "zh": "装卸区",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/load-zone.svg"
+      }
+    },
+    "lockers": {
+      "en": "Lockers",
+      "zh": "储物柜",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/lockers.svg"
+      }
+    },
+    "lollypop-crossing": {
+      "en": "Lollypop crossing",
+      "zh": "手持停牌过街",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/lollypop-crossing.svg"
+      }
+    },
+    "lost-property": {
+      "en": "Lost Property",
+      "zh": "失物招领",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/lost-property.svg"
+      }
+    },
+    "market-stall": {
+      "en": "Market Stall",
+      "zh": "市集摊位",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/market-stall.svg",
+        "scale-bg": "/oneplan-icons/scale-bg/market-stall.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/market-stall.svg"
+      }
+    },
+    "medal": {
+      "en": "Medal",
+      "zh": "奖牌点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/medal.svg"
+      }
+    },
+    "medical-boat": {
+      "en": "Medical Boat",
+      "zh": "医疗船",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/medical-boat.svg"
+      }
+    },
+    "merchandise": {
+      "en": "Merchandise",
+      "zh": "周边商品",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/merchandise.svg"
+      }
+    },
+    "merge": {
+      "en": "Merge",
+      "zh": "合流",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/merge.svg"
+      }
+    },
+    "milk-bottle-toss": {
+      "en": "Milk Bottle Toss",
+      "zh": "牛奶瓶投掷游戏",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/milk-bottle-toss.svg"
+      }
+    },
+    "mirror-maze": {
+      "en": "Mirror Maze",
+      "zh": "镜子迷宫",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/mirror-maze.svg"
+      }
+    },
+    "missing-persons-point": {
+      "en": "Missing Persons Point",
+      "zh": "走失人员点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/missing-persons-point.svg"
+      }
+    },
+    "mixed-relay-zone": {
+      "en": "Mixed Relay Zone",
+      "zh": "混合接力区",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/mixed-relay-zone.svg"
+      }
+    },
+    "motorbike": {
+      "en": "Motorbike",
+      "zh": "摩托车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/motorbike.svg"
+      }
+    },
+    "mulled-wine": {
+      "en": "Mulled Wine",
+      "zh": "热红酒",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/mulled-wine.svg"
+      }
+    },
+    "multi-faith-room": {
+      "en": "Multi faith room",
+      "zh": "多信仰静室",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/multi-faith-room.svg"
+      }
+    },
+    "national-speed-limit": {
+      "en": "National Speed Limit",
+      "zh": "国家限速",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/national-speed-limit.svg"
+      }
+    },
+    "nativity-scene": {
+      "en": "Nativity Scene",
+      "zh": "耶稣诞生场景",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/nativity-scene.svg"
+      }
+    },
+    "no-entry": {
+      "en": "No entry",
+      "zh": "禁止驶入",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/no-entry.svg",
+        "scale-bg": "/oneplan-icons/scale-bg/no-entry.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/no-entry.svg"
+      }
+    },
+    "no-u-turn": {
+      "en": "No U-Turn",
+      "zh": "禁止掉头",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/no-u-turn.svg"
+      }
+    },
+    "overlayimage": {
+      "en": "Overlay image",
+      "zh": "叠加图层",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/overlayimage.svg"
+      }
+    },
+    "p1": {
+      "en": "P1",
+      "zh": "P1",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/p1.svg"
+      }
+    },
+    "p2": {
+      "en": "P2",
+      "zh": "P2",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/p2.svg"
+      }
+    },
+    "p3": {
+      "en": "P3",
+      "zh": "P3",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/p3.svg"
+      }
+    },
+    "p4": {
+      "en": "P4",
+      "zh": "P4",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/p4.svg"
+      }
+    },
+    "pa-speakers": {
+      "en": "PA Speakers",
+      "zh": "扩声音箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Audio Visual",
+      "category_zh": "设施物料 / 视听设备",
+      "files": {
+        "icon": "/oneplan-icons/icon/pa-speakers.svg"
+      }
+    },
+    "paramedic-motorbike": {
+      "en": "Paramedic Motorbike",
+      "zh": "急救摩托车",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/paramedic-motorbike.svg"
+      }
+    },
+    "park-and-ride": {
+      "en": "Park and Ride",
+      "zh": "停车换乘",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/park-and-ride.svg"
+      }
+    },
+    "pedestrian-access": {
+      "en": "Pedestrian Access",
+      "zh": "步行通道",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/pedestrian-access.svg"
+      }
+    },
+    "penalty-box": {
+      "en": "Penalty Box",
+      "zh": "罚时区",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/penalty-box.svg"
+      }
+    },
+    "permanent-lighting-tower": {
+      "en": "Lighting tower (permanent)",
+      "zh": "照明塔（固定）",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "icon": "/oneplan-icons/icon/permanent-lighting-tower.svg"
+      }
+    },
+    "permanent-power": {
+      "en": "Permanent Power",
+      "zh": "永久供电",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/permanent-power.svg"
+      }
+    },
+    "photo-point": {
+      "en": "Photo Point",
+      "zh": "拍照点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/photo-point.svg"
+      }
+    },
+    "plant": {
+      "en": "Plant",
+      "zh": "绿植",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/plant.svg"
+      }
+    },
+    "ploughing": {
+      "en": "Ploughing",
+      "zh": "犁地表演",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/ploughing.svg"
+      }
+    },
+    "podium": {
+      "en": "Podium",
+      "zh": "领奖台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/podium.svg"
+      }
+    },
+    "police": {
+      "en": "Police",
+      "zh": "警察",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/police.svg"
+      }
+    },
+    "portable-static-tank": {
+      "en": "Portable static tank",
+      "zh": "便携固定水箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/portable-static-tank.svg"
+      }
+    },
+    "printer": {
+      "en": "Printer",
+      "zh": "打印机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/printer.svg"
+      }
+    },
+    "prosecco-bar": {
+      "en": "Prosecco Bar",
+      "zh": "起泡酒吧",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/prosecco-bar.svg"
+      }
+    },
+    "pull-up-banner": {
+      "en": "Pull up banner",
+      "zh": "易拉宝",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Branding and Signage",
+      "category_zh": "设施物料 / 品牌与导视",
+      "files": {
+        "icon": "/oneplan-icons/icon/pull-up-banner.svg"
+      }
+    },
+    "queues": {
+      "en": "Queues",
+      "zh": "排队",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/queues.svg"
+      }
+    },
+    "radio-tower": {
+      "en": "Radio Tower",
+      "zh": "无线电塔",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/radio-tower.svg"
+      }
+    },
+    "relax-zone": {
+      "en": "Relax Zone",
+      "zh": "休息区",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/relax-zone.svg"
+      }
+    },
+    "relay-handover": {
+      "en": "Relay Handover",
+      "zh": "接力交接",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/relay-handover.svg"
+      }
+    },
+    "replay-screen": {
+      "en": "Replay Screen",
+      "zh": "回放大屏",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/replay-screen.svg"
+      }
+    },
+    "ring-toss": {
+      "en": "Ring Toss",
+      "zh": "套圈",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/ring-toss.svg"
+      }
+    },
+    "risk-assessment-pin": {
+      "en": "Risk assessment pin",
+      "zh": "风险评估标记",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/risk-assessment-pin.svg"
+      }
+    },
+    "road-narrows": {
+      "en": "Road Narrows",
+      "zh": "道路变窄",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/road-narrows.svg"
+      }
+    },
+    "roadworks": {
+      "en": "Roadworks",
+      "zh": "道路施工",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/roadworks.svg"
+      }
+    },
+    "roasted-chestnuts": {
+      "en": "Roasted Chestnuts",
+      "zh": "烤栗子",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/roasted-chestnuts.svg"
+      }
+    },
+    "rodeo-clown": {
+      "en": "Rodeo Clown",
+      "zh": "牛仔竞技小丑",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/rodeo-clown.svg"
+      }
+    },
+    "route-dash": {
+      "en": "Route — dashed line",
+      "zh": "动线·虚线",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/route-dash.svg"
+      }
+    },
+    "route-dot": {
+      "en": "Route — dotted line",
+      "zh": "动线·点线",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/route-dot.svg"
+      }
+    },
+    "route-solid": {
+      "en": "Route — solid line",
+      "zh": "动线·实线",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/route-solid.svg"
+      }
+    },
+    "run-out": {
+      "en": "Run Out",
+      "zh": "跑步出口",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/run-out.svg"
+      }
+    },
+    "school-children": {
+      "en": "School Children",
+      "zh": "注意学生",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/school-children.svg"
+      }
+    },
+    "scuba": {
+      "en": "Scuba",
+      "zh": "潜水装备",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/scuba.svg"
+      }
+    },
+    "security-checkpoint": {
+      "en": "Security Checkpoint",
+      "zh": "安检点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Safety and Security",
+      "category_zh": "设施物料 / 安全与安防",
+      "files": {
+        "icon": "/oneplan-icons/icon/security-checkpoint.svg"
+      }
+    },
+    "shooting-racks": {
+      "en": "Shooting Racks",
+      "zh": "射击枪架",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/shooting-racks.svg"
+      }
+    },
+    "shower": {
+      "en": "Shower",
+      "zh": "淋浴",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/shower.svg"
+      }
+    },
+    "sign": {
+      "en": "Sign",
+      "zh": "指示牌",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Branding and Signage",
+      "category_zh": "设施物料 / 品牌与导视",
+      "files": {
+        "icon": "/oneplan-icons/icon/sign.svg"
+      }
+    },
+    "sink": {
+      "en": "Sink",
+      "zh": "水槽",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/sink.svg"
+      }
+    },
+    "ski-cameras": {
+      "en": "Ski Cameras",
+      "zh": "滑雪摄像",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/ski-cameras.svg"
+      }
+    },
+    "ski-paramedic": {
+      "en": "Ski Paramedic",
+      "zh": "滑雪急救员",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/ski-paramedic.svg"
+      }
+    },
+    "skycam": {
+      "en": "Skycam",
+      "zh": "Skycam",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Broadcast",
+      "category_zh": "设施物料 / 转播摄像",
+      "files": {
+        "icon": "/oneplan-icons/icon/skycam.svg"
+      }
+    },
+    "sledding": {
+      "en": "Sledding",
+      "zh": "滑雪橇",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/sledding.svg"
+      }
+    },
+    "slide": {
+      "en": "Slide",
+      "zh": "滑梯",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/slide.svg"
+      }
+    },
+    "slippery": {
+      "en": "Slippery",
+      "zh": "路面湿滑",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/slippery.svg"
+      }
+    },
+    "slips": {
+      "en": "Slips",
+      "zh": "滑垒机位",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/slips.svg"
+      }
+    },
+    "stage": {
+      "en": "Stage",
+      "zh": "舞台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/stage.svg",
+        "scale-bg": "/oneplan-icons/scale-bg/stage.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/stage.svg"
+      }
+    },
+    "stanchion": {
+      "en": "Stanchion",
+      "zh": "栏杆柱/一米线立柱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Branding and Signage",
+      "category_zh": "设施物料 / 品牌与导视",
+      "files": {
+        "icon": "/oneplan-icons/icon/stanchion.svg"
+      }
+    },
+    "star": {
+      "en": "Star",
+      "zh": "星星",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/star.svg"
+      }
+    },
+    "stickmakers-guild": {
+      "en": "Stickmakers Guild",
+      "zh": "手杖工匠行会",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/stickmakers-guild.svg"
+      }
+    },
+    "stop": {
+      "en": "Stop",
+      "zh": "停止",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/stop.svg"
+      }
+    },
+    "street-lamp": {
+      "en": "Street lamp",
+      "zh": "路灯",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/street-lamp.svg"
+      }
+    },
+    "stroller-storage": {
+      "en": "Stroller Storage",
+      "zh": "婴儿车存放",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/stroller-storage.svg"
+      }
+    },
+    "stuffed-toys": {
+      "en": "Stuffed Toys",
+      "zh": "毛绒玩具",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/stuffed-toys.svg"
+      }
+    },
+    "swim-evacuation-point": {
+      "en": "Swim Evacuation Point",
+      "zh": "游泳疏散点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/swim-evacuation-point.svg"
+      }
+    },
+    "swim-in": {
+      "en": "Swim in",
+      "zh": "游泳入口",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/swim-in.svg"
+      }
+    },
+    "swim-out": {
+      "en": "Swim out",
+      "zh": "游泳出口",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/swim-out.svg"
+      }
+    },
+    "taxi": {
+      "en": "Taxi",
+      "zh": "出租车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/taxi.svg"
+      }
+    },
+    "temporary-lighting-tower": {
+      "en": "Lighting tower (temporary)",
+      "zh": "照明塔（临时）",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "icon": "/oneplan-icons/icon/temporary-lighting-tower.svg"
+      }
+    },
+    "temporary-power": {
+      "en": "Temporary Power",
+      "zh": "临时供电",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/temporary-power.svg"
+      }
+    },
+    "textbox": {
+      "en": "Text box",
+      "zh": "文本框",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/textbox.svg"
+      }
+    },
+    "themepark": {
+      "en": "Themepark",
+      "zh": "主题乐园",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/themepark.svg"
+      }
+    },
+    "ticket-check": {
+      "en": "Ticket Check",
+      "zh": "验票点",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/ticket-check.svg"
+      }
+    },
+    "ticket-office": {
+      "en": "Ticket Office",
+      "zh": "售票处",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/ticket-office.svg"
+      }
+    },
+    "timing-point": {
+      "en": "Timing Point",
+      "zh": "计时点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/timing-point.svg"
+      }
+    },
+    "toilets-permanent": {
+      "en": "Toilets (Permanent)",
+      "zh": "卫生间（永久）",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Toilets",
+      "category_zh": "设施物料 / 卫生间",
+      "files": {
+        "icon": "/oneplan-icons/icon/toilets-permanent.svg"
+      }
+    },
+    "toilets-temporary": {
+      "en": "Toilets (Temporary)",
+      "zh": "卫生间（临时）",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Toilets",
+      "category_zh": "设施物料 / 卫生间",
+      "files": {
+        "icon": "/oneplan-icons/icon/toilets-temporary.svg"
+      }
+    },
+    "towaway": {
+      "en": "Towaway",
+      "zh": "违停拖移",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/towaway.svg"
+      }
+    },
+    "traffic-lights": {
+      "en": "Traffic Lights",
+      "zh": "红绿灯",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/traffic-lights.svg"
+      }
+    },
+    "train-station": {
+      "en": "Train Station",
+      "zh": "火车站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/train-station.svg"
+      }
+    },
+    "tram": {
+      "en": "Tram",
+      "zh": "有轨电车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/tram.svg"
+      }
+    },
+    "transition-zone": {
+      "en": "Transition Zone",
+      "zh": "转换区",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/transition-zone.svg"
+      }
+    },
+    "transparent": {
+      "en": "Transparent sticker base",
+      "zh": "透明底衬",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "icon": "/oneplan-icons/icon/transparent.svg"
+      }
+    },
+    "transport-desk": {
+      "en": "Transport Desk",
+      "zh": "交通服务台",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Transport",
+      "category_zh": "设施物料 / 交通接驳",
+      "files": {
+        "icon": "/oneplan-icons/icon/transport-desk.svg"
+      }
+    },
+    "tunnel-entry-exit": {
+      "en": "Tunnel Entry/Exit",
+      "zh": "隧道出入口",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/tunnel-entry-exit.svg"
+      }
+    },
+    "turnstile": {
+      "en": "Turnstile",
+      "zh": "闸机",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/turnstile.svg"
+      }
+    },
+    "tv-boat": {
+      "en": "TV Boat",
+      "zh": "电视转播船",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/tv-boat.svg"
+      }
+    },
+    "vehicle-access": {
+      "en": "Vehicle Access",
+      "zh": "车辆通道",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/vehicle-access.svg"
+      }
+    },
+    "vintage-display": {
+      "en": "Vintage display",
+      "zh": "复古展示",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/vintage-display.svg"
+      }
+    },
+    "vip": {
+      "en": "VIP",
+      "zh": "VIP",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/vip.svg"
+      }
+    },
+    "vms-fixed": {
+      "en": "VMS Fixed",
+      "zh": "固定式可变情报板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/vms-fixed.svg"
+      }
+    },
+    "vms-mobile": {
+      "en": "VMS Mobile",
+      "zh": "移动式可变情报板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "icon": "/oneplan-icons/icon/vms-mobile.svg"
+      }
+    },
+    "warming-dome": {
+      "en": "Warming Dome",
+      "zh": "取暖穹顶",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/warming-dome.svg"
+      }
+    },
+    "waste-and-recycling-point": {
+      "en": "Waste and Recycling Point",
+      "zh": "垃圾与回收点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Waste",
+      "category_zh": "设施物料 / 垃圾与回收",
+      "files": {
+        "icon": "/oneplan-icons/icon/waste-and-recycling-point.svg"
+      }
+    },
+    "waste-container": {
+      "en": "Waste container",
+      "zh": "垃圾桶",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "icon": "/oneplan-icons/icon/waste-container.svg"
+      }
+    },
+    "water-connection-point": {
+      "en": "Water connection point",
+      "zh": "供水接口",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/water-connection-point.svg"
+      }
+    },
+    "water-fountain": {
+      "en": "Water Fountain",
+      "zh": "饮水喷泉",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/water-fountain.svg"
+      }
+    },
+    "water-pool": {
+      "en": "Water Pool",
+      "zh": "水池",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/water-pool.svg"
+      }
+    },
+    "water-pump": {
+      "en": "Water pump",
+      "zh": "水泵",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/water-pump.svg"
+      }
+    },
+    "water-refill-point": {
+      "en": "Water Refill Point",
+      "zh": "补水点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "icon": "/oneplan-icons/icon/water-refill-point.svg"
+      }
+    },
+    "welfare-point": {
+      "en": "Welfare Point",
+      "zh": "福利/关怀点",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/welfare-point.svg"
+      }
+    },
+    "wheel-station": {
+      "en": "Wheel station",
+      "zh": "换轮站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/wheel-station.svg"
+      }
+    },
+    "wifi": {
+      "en": "WiFi",
+      "zh": "WiFi",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "icon": "/oneplan-icons/icon/wifi.svg"
+      }
+    },
+    "wine-bar": {
+      "en": "Wine Bar",
+      "zh": "酒吧/葡萄酒吧",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Food and Beverage",
+      "category_zh": "设施物料 / 餐饮",
+      "files": {
+        "icon": "/oneplan-icons/icon/wine-bar.svg"
+      }
+    },
+    "wooden-rudolf": {
+      "en": "Wooden Rudolf",
+      "zh": "木制驯鹿 Rudolf",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "icon": "/oneplan-icons/icon/wooden-rudolf.svg"
+      }
+    },
+    "wristband-collection": {
+      "en": "Wristband Collection",
+      "zh": "手环领取点",
+      "name_source": "taxonomy",
+      "category_en": "Areas Routes & Access / Entry and Access Icons",
+      "category_zh": "活动区域·流线与通行 / 出入口与通行图标",
+      "files": {
+        "icon": "/oneplan-icons/icon/wristband-collection.svg"
+      }
+    },
+    "young-farmers-club": {
+      "en": "Young Farmers Club",
+      "zh": "青年农夫俱乐部",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "icon": "/oneplan-icons/icon/young-farmers-club.svg"
+      }
+    },
+    "zoo": {
+      "en": "Zoo",
+      "zh": "动物园",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Points of Interest",
+      "category_zh": "设施物料 / 兴趣点/功能点",
+      "files": {
+        "icon": "/oneplan-icons/icon/zoo.svg"
+      }
+    },
+    "5km": {
+      "en": "5km",
+      "zh": "5 公里",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/5km.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/5km.svg"
+      }
+    },
+    "accessible-portable-toilet": {
+      "en": "Accessible portable toilet",
+      "zh": "无障碍便携厕所",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/accessible-portable-toilet.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/accessible-portable-toilet.svg"
+      }
+    },
+    "ada-low-profile-cable-matting": {
+      "en": "ADA Low profile Cable Matting",
+      "zh": "无障碍低矮过线垫",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ada-low-profile-cable-matting.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ada-low-profile-cable-matting.svg"
+      }
+    },
+    "aid-station-200m": {
+      "en": "Aid Station 200m",
+      "zh": "补给站（200m）",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/aid-station-200m.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/aid-station-200m.svg"
+      }
+    },
+    "alternate-wickets": {
+      "en": "Alternate Wickets",
+      "zh": "备用三柱门",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/alternate-wickets.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/alternate-wickets.svg"
+      }
+    },
+    "aluminum-trackway": {
+      "en": "Aluminum Trackway",
+      "zh": "铝制铺道板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Ground and Trackway",
+      "category_zh": "设施物料 / 地面与铺道板",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/aluminum-trackway.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/aluminum-trackway.svg"
+      }
+    },
+    "ambulance-rotated": {
+      "en": "Ambulance (rotated)",
+      "zh": "救护车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ambulance-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ambulance-rotated.svg"
+      }
+    },
+    "ambulance": {
+      "en": "Ambulance",
+      "zh": "救护车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ambulance.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ambulance.svg"
+      }
+    },
+    "bar-table-and-bench": {
+      "en": "Bar Table and Bench",
+      "zh": "吧桌与长凳",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bar-table-and-bench.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bar-table-and-bench.svg"
+      }
+    },
+    "battery-energy-storage-system": {
+      "en": "Battery Energy Storage System",
+      "zh": "电池储能系统",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/battery-energy-storage-system.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/battery-energy-storage-system.svg"
+      }
+    },
+    "beanbag": {
+      "en": "Beanbag",
+      "zh": "懒人沙发",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/beanbag.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/beanbag.svg"
+      }
+    },
+    "bell-tent": {
+      "en": "Bell Tent",
+      "zh": "钟形帐篷",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bell-tent.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bell-tent.svg"
+      }
+    },
+    "bench": {
+      "en": "Bench",
+      "zh": "长凳",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bench.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bench.svg"
+      }
+    },
+    "bike-rack": {
+      "en": "Bike Rack",
+      "zh": "自行车架",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bike-rack.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bike-rack.svg"
+      }
+    },
+    "boundary-calculator-men": {
+      "en": "Boundary Calculator Men",
+      "zh": "边界计算器（男）",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/boundary-calculator-men.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/boundary-calculator-men.svg"
+      }
+    },
+    "boundary-calculator-women": {
+      "en": "Boundary Calculator Women",
+      "zh": "边界计算器（女）",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/boundary-calculator-women.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/boundary-calculator-women.svg"
+      }
+    },
+    "bungee-trampoline": {
+      "en": "Bungee Trampoline",
+      "zh": "蹦极蹦床",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bungee-trampoline.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bungee-trampoline.svg"
+      }
+    },
+    "bus-rotated": {
+      "en": "Bus (rotated)",
+      "zh": "巴士（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bus-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bus-rotated.svg"
+      }
+    },
+    "bus": {
+      "en": "Bus",
+      "zh": "巴士",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/bus.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/bus.svg"
+      }
+    },
+    "cable-matting": {
+      "en": "Cable Matting",
+      "zh": "过线垫",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/cable-matting.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/cable-matting.svg"
+      }
+    },
+    "car-park-closed": {
+      "en": "Car Park Closed",
+      "zh": "停车场关闭",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/car-park-closed.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/car-park-closed.svg"
+      }
+    },
+    "car-rotated": {
+      "en": "Car (rotated)",
+      "zh": "轿车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/car-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/car-rotated.svg"
+      }
+    },
+    "car": {
+      "en": "Car",
+      "zh": "轿车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/car.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/car.svg"
+      }
+    },
+    "caravan": {
+      "en": "Caravan",
+      "zh": "房车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/caravan.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/caravan.svg"
+      }
+    },
+    "carousel": {
+      "en": "Carousel",
+      "zh": "旋转木马",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/carousel.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/carousel.svg"
+      }
+    },
+    "chair-o-planes": {
+      "en": "Chair-O-Planes",
+      "zh": "旋转飞椅",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/chair-o-planes.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/chair-o-planes.svg"
+      }
+    },
+    "chair": {
+      "en": "Chair",
+      "zh": "椅子",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/chair.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/chair.svg"
+      }
+    },
+    "chequered-circ": {
+      "en": "Chequered circle",
+      "zh": "方格圆底",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/chequered-circ.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/chequered-circ.svg"
+      }
+    },
+    "chequered-rect": {
+      "en": "Chequered rectangle",
+      "zh": "方格矩形底",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/chequered-rect.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/chequered-rect.svg"
+      }
+    },
+    "coach": {
+      "en": "Coach",
+      "zh": "大巴",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/coach.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/coach.svg"
+      }
+    },
+    "concrete-block": {
+      "en": "Concrete Block",
+      "zh": "混凝土墩",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Ground and Trackway",
+      "category_zh": "设施物料 / 地面与铺道板",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/concrete-block.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/concrete-block.svg"
+      }
+    },
+    "course-crossroad-a": {
+      "en": "Course Crossroad A",
+      "zh": "赛道交叉口 A",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/course-crossroad-a.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/course-crossroad-a.svg"
+      }
+    },
+    "course-crossroad-b": {
+      "en": "Course Crossroad B",
+      "zh": "赛道交叉口 B",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/course-crossroad-b.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/course-crossroad-b.svg"
+      }
+    },
+    "danger": {
+      "en": "Danger",
+      "zh": "危险",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/danger.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/danger.svg"
+      }
+    },
+    "deck-chair": {
+      "en": "Deck chair",
+      "zh": "沙滩躺椅",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/deck-chair.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/deck-chair.svg"
+      }
+    },
+    "detour": {
+      "en": "Detour",
+      "zh": "绕行",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/detour.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/detour.svg"
+      }
+    },
+    "dinghy": {
+      "en": "Dinghy",
+      "zh": "橡皮艇/小艇",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/dinghy.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/dinghy.svg"
+      }
+    },
+    "distribution-board": {
+      "en": "Distribution Board",
+      "zh": "配电箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/distribution-board.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/distribution-board.svg"
+      }
+    },
+    "diversion": {
+      "en": "Diversion",
+      "zh": "分流/改道",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/diversion.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/diversion.svg"
+      }
+    },
+    "dugout": {
+      "en": "Dugout",
+      "zh": "球员休息席/防空洞式掩体",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/dugout.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/dugout.svg"
+      }
+    },
+    "ellipse": {
+      "en": "Ellipse footprint",
+      "zh": "椭圆底面",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ellipse.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ellipse.svg"
+      }
+    },
+    "enclosed-trailer": {
+      "en": "Enclosed Trailer",
+      "zh": "封闭拖车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/enclosed-trailer.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/enclosed-trailer.svg"
+      }
+    },
+    "ferris-wheel": {
+      "en": "Ferris Wheel",
+      "zh": "摩天轮",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Christmas pack",
+      "category_zh": "物件库扩展包 / 圣诞活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ferris-wheel.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ferris-wheel.svg"
+      }
+    },
+    "finish": {
+      "en": "Finish",
+      "zh": "终点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/finish.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/finish.svg"
+      }
+    },
+    "fire-engine-rotated": {
+      "en": "Fire engine (rotated)",
+      "zh": "消防车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/fire-engine-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/fire-engine-rotated.svg"
+      }
+    },
+    "fire-engine": {
+      "en": "Fire engine",
+      "zh": "消防车",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/fire-engine.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/fire-engine.svg"
+      }
+    },
+    "folding-chair": {
+      "en": "Folding Chair",
+      "zh": "折叠椅",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/folding-chair.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/folding-chair.svg"
+      }
+    },
+    "food-trailer-rotated": {
+      "en": "Food trailer (rotated)",
+      "zh": "食品拖车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/food-trailer-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/food-trailer-rotated.svg"
+      }
+    },
+    "food-trailer": {
+      "en": "Food Trailer",
+      "zh": "餐饮拖车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/food-trailer.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/food-trailer.svg"
+      }
+    },
+    "forklift": {
+      "en": "Forklift",
+      "zh": "叉车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/forklift.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/forklift.svg"
+      }
+    },
+    "fuel-cube": {
+      "en": "Fuel Cube",
+      "zh": "油箱/燃料箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/fuel-cube.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/fuel-cube.svg"
+      }
+    },
+    "gantry": {
+      "en": "Gantry",
+      "zh": "龙门架",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/gantry.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/gantry.svg"
+      }
+    },
+    "generator": {
+      "en": "Generator",
+      "zh": "发电机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Electrical",
+      "category_zh": "设施物料 / 电力与弱电",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/generator.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/generator.svg"
+      }
+    },
+    "golf-cart-rotated": {
+      "en": "Golf cart (rotated)",
+      "zh": "高尔夫球车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/golf-cart-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/golf-cart-rotated.svg"
+      }
+    },
+    "golf-cart": {
+      "en": "Golf Cart",
+      "zh": "高尔夫球车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/golf-cart.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/golf-cart.svg"
+      }
+    },
+    "ground-protection-mats": {
+      "en": "Ground Protection Mats",
+      "zh": "地面保护垫",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Ground and Trackway",
+      "category_zh": "设施物料 / 地面与铺道板",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ground-protection-mats.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ground-protection-mats.svg"
+      }
+    },
+    "hay-bale": {
+      "en": "Hay bale",
+      "zh": "草捆",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/hay-bale.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/hay-bale.svg"
+      }
+    },
+    "hb-van": {
+      "en": "HB Van",
+      "zh": "HB 转播车",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/hb-van.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/hb-van.svg"
+      }
+    },
+    "heavy-roller": {
+      "en": "Heavy Roller",
+      "zh": "重型压路机",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/heavy-roller.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/heavy-roller.svg"
+      }
+    },
+    "helicopter": {
+      "en": "Helicopter",
+      "zh": "直升机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/helicopter.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/helicopter.svg"
+      }
+    },
+    "hgv-rotated": {
+      "en": "HGV (rotated)",
+      "zh": "重型货车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/hgv-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/hgv-rotated.svg"
+      }
+    },
+    "hgv": {
+      "en": "HGV / semi-truck",
+      "zh": "重型货车",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/hgv.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/hgv.svg"
+      }
+    },
+    "inflatable-arch": {
+      "en": "Inflatable Arch",
+      "zh": "充气拱门",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/inflatable-arch.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/inflatable-arch.svg"
+      }
+    },
+    "large-screen-truck-rotated": {
+      "en": "Large screen truck (rotated)",
+      "zh": "大屏转播车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/large-screen-truck-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/large-screen-truck-rotated.svg"
+      }
+    },
+    "large-screen-truck": {
+      "en": "Large Screen Truck",
+      "zh": "大屏车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/large-screen-truck.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/large-screen-truck.svg"
+      }
+    },
+    "large-screen": {
+      "en": "Large Screen",
+      "zh": "大屏",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Audio Visual",
+      "category_zh": "设施物料 / 视听设备",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/large-screen.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/large-screen.svg"
+      }
+    },
+    "large-waste-container": {
+      "en": "Large waste container",
+      "zh": "大型垃圾箱",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/large-waste-container.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/large-waste-container.svg"
+      }
+    },
+    "light-roller": {
+      "en": "Light roller",
+      "zh": "轻型压路机",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/light-roller.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/light-roller.svg"
+      }
+    },
+    "littering-end": {
+      "en": "Littering End",
+      "zh": "可扔垃圾区终点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/littering-end.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/littering-end.svg"
+      }
+    },
+    "littering-start": {
+      "en": "Littering Start",
+      "zh": "可扔垃圾区起点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/littering-start.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/littering-start.svg"
+      }
+    },
+    "mens-urinal-pod": {
+      "en": "Men's urinal pod",
+      "zh": "男用小便舱",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/mens-urinal-pod.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/mens-urinal-pod.svg"
+      }
+    },
+    "metal-trackway": {
+      "en": "Metal Trackway",
+      "zh": "金属铺道板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Ground and Trackway",
+      "category_zh": "设施物料 / 地面与铺道板",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/metal-trackway.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/metal-trackway.svg"
+      }
+    },
+    "motor-boat": {
+      "en": "Motor Boat",
+      "zh": "摩托艇",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/motor-boat.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/motor-boat.svg"
+      }
+    },
+    "motorcycle": {
+      "en": "Motorcycle",
+      "zh": "摩托车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/motorcycle.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/motorcycle.svg"
+      }
+    },
+    "no-aero-end": {
+      "en": "No Aero End",
+      "zh": "禁止气动姿势终点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/no-aero-end.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/no-aero-end.svg"
+      }
+    },
+    "no-aero-start": {
+      "en": "No Aero Start",
+      "zh": "禁止气动姿势起点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/no-aero-start.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/no-aero-start.svg"
+      }
+    },
+    "no-draft-end": {
+      "en": "No Draft End",
+      "zh": "禁止跟骑终点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/no-draft-end.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/no-draft-end.svg"
+      }
+    },
+    "no-draft-start": {
+      "en": "No Draft Start",
+      "zh": "禁止跟骑起点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/no-draft-start.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/no-draft-start.svg"
+      }
+    },
+    "no-parking": {
+      "en": "No Parking",
+      "zh": "禁止停车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/no-parking.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/no-parking.svg"
+      }
+    },
+    "ob-truck": {
+      "en": "OB Truck",
+      "zh": "OB 转播车",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ob-truck.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ob-truck.svg"
+      }
+    },
+    "outside-broadcast-truck": {
+      "en": "Outside broadcast truck",
+      "zh": "转播车",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/outside-broadcast-truck.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/outside-broadcast-truck.svg"
+      }
+    },
+    "pallet": {
+      "en": "Pallet",
+      "zh": "托盘/卡板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/pallet.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/pallet.svg"
+      }
+    },
+    "paratrooper": {
+      "en": "Paratrooper",
+      "zh": "伞兵游乐设施",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Fairs, Shows & Markets pack",
+      "category_zh": "物件库扩展包 / 集市·展会·市集包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/paratrooper.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/paratrooper.svg"
+      }
+    },
+    "pedestrian-bridge": {
+      "en": "Pedestrian Bridge",
+      "zh": "人行天桥",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/pedestrian-bridge.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/pedestrian-bridge.svg"
+      }
+    },
+    "penalty-box-200m": {
+      "en": "Penalty Box 200m",
+      "zh": "罚时区（200m）",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/penalty-box-200m.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/penalty-box-200m.svg"
+      }
+    },
+    "pickup-truck": {
+      "en": "Pickup Truck",
+      "zh": "皮卡",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/pickup-truck.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/pickup-truck.svg"
+      }
+    },
+    "picnic-table": {
+      "en": "Picnic Table",
+      "zh": "野餐桌",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/picnic-table.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/picnic-table.svg"
+      }
+    },
+    "piston-aircraft": {
+      "en": "Piston Aircraft",
+      "zh": "活塞式飞机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/piston-aircraft.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/piston-aircraft.svg"
+      }
+    },
+    "plastic-trackway": {
+      "en": "Plastic Trackway",
+      "zh": "塑料铺道板",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Ground and Trackway",
+      "category_zh": "设施物料 / 地面与铺道板",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/plastic-trackway.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/plastic-trackway.svg"
+      }
+    },
+    "police-car-rotated": {
+      "en": "Police car (rotated)",
+      "zh": "警车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/police-car-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/police-car-rotated.svg"
+      }
+    },
+    "police-car": {
+      "en": "Police car",
+      "zh": "警车",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/police-car.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/police-car.svg"
+      }
+    },
+    "pontoon": {
+      "en": "Pontoon",
+      "zh": "浮桥/趸船",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/pontoon.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/pontoon.svg"
+      }
+    },
+    "pop-up-tent": {
+      "en": "Pop-up Tent",
+      "zh": "快搭帐篷",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/pop-up-tent.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/pop-up-tent.svg"
+      }
+    },
+    "portable-cabin": {
+      "en": "Portable cabin",
+      "zh": "便携舱房",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/portable-cabin.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/portable-cabin.svg"
+      }
+    },
+    "portable-toilet": {
+      "en": "Portable toilet",
+      "zh": "便携厕所",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/portable-toilet.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/portable-toilet.svg"
+      }
+    },
+    "ramp-turning": {
+      "en": "Ramp Turning",
+      "zh": "转弯坡道",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ramp-turning.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ramp-turning.svg"
+      }
+    },
+    "ramp": {
+      "en": "Ramp",
+      "zh": "坡道",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/ramp.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/ramp.svg"
+      }
+    },
+    "rectangle": {
+      "en": "Rectangle footprint",
+      "zh": "矩形底面",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/rectangle.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/rectangle.svg"
+      }
+    },
+    "reduce-speed-now": {
+      "en": "Reduce Speed Now",
+      "zh": "请减速",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/reduce-speed-now.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/reduce-speed-now.svg"
+      }
+    },
+    "repair-200m": {
+      "en": "Repair 200m",
+      "zh": "维修点（200m）",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/repair-200m.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/repair-200m.svg"
+      }
+    },
+    "repair": {
+      "en": "Repair",
+      "zh": "维修点",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/repair.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/repair.svg"
+      }
+    },
+    "road-ahead-closed": {
+      "en": "Road Ahead Closed",
+      "zh": "前方道路封闭",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/road-ahead-closed.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/road-ahead-closed.svg"
+      }
+    },
+    "road-closed": {
+      "en": "Road Closed",
+      "zh": "道路封闭",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/road-closed.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/road-closed.svg"
+      }
+    },
+    "round-table-and-chairs": {
+      "en": "Round Table and Chairs",
+      "zh": "圆桌与椅",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/round-table-and-chairs.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/round-table-and-chairs.svg"
+      }
+    },
+    "round-table": {
+      "en": "Round Table",
+      "zh": "圆桌",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/round-table.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/round-table.svg"
+      }
+    },
+    "satellite-van": {
+      "en": "Satellite Van",
+      "zh": "卫星转播车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/satellite-van.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/satellite-van.svg"
+      }
+    },
+    "scaffold-tower": {
+      "en": "Scaffold Tower",
+      "zh": "脚手架塔",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/scaffold-tower.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/scaffold-tower.svg"
+      }
+    },
+    "scissor-lift": {
+      "en": "Scissor lift",
+      "zh": "剪叉升降车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/scissor-lift.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/scissor-lift.svg"
+      }
+    },
+    "shipping-container": {
+      "en": "Shipping Container",
+      "zh": "集装箱",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/shipping-container.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/shipping-container.svg"
+      }
+    },
+    "shooting-range": {
+      "en": "Shooting range",
+      "zh": "射击场",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/shooting-range.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/shooting-range.svg"
+      }
+    },
+    "sight-screen": {
+      "en": "Sight Screen",
+      "zh": "视线挡板",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/sight-screen.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/sight-screen.svg"
+      }
+    },
+    "signage-frame-2": {
+      "en": "Signage frame — 2 sides",
+      "zh": "指示牌架·双面",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/signage-frame-2.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/signage-frame-2.svg"
+      }
+    },
+    "signage-frame-4": {
+      "en": "Signage frame — 4 sides",
+      "zh": "指示牌架·四面",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/signage-frame-4.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/signage-frame-4.svg"
+      }
+    },
+    "sofa": {
+      "en": "Sofa",
+      "zh": "沙发",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/sofa.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/sofa.svg"
+      }
+    },
+    "special-needs": {
+      "en": "Special Needs",
+      "zh": "特殊需求区",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/special-needs.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/special-needs.svg"
+      }
+    },
+    "spitfire-aircraft": {
+      "en": "Spitfire Aircraft",
+      "zh": "Spitfire 战机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/spitfire-aircraft.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/spitfire-aircraft.svg"
+      }
+    },
+    "stairs": {
+      "en": "Stairs",
+      "zh": "楼梯",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/stairs.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/stairs.svg"
+      }
+    },
+    "straight": {
+      "en": "Straight",
+      "zh": "直行",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/straight.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/straight.svg"
+      }
+    },
+    "stretch-tent": {
+      "en": "Stretch tent",
+      "zh": "拉伸棚",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/stretch-tent.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/stretch-tent.svg"
+      }
+    },
+    "swat-police-vehicle": {
+      "en": "SWAT Police Vehicle",
+      "zh": "特警车辆",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/swat-police-vehicle.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/swat-police-vehicle.svg"
+      }
+    },
+    "switch-back-ramp": {
+      "en": "Switch Back Ramp",
+      "zh": "折返坡道",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/switch-back-ramp.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/switch-back-ramp.svg"
+      }
+    },
+    "table-and-chairs": {
+      "en": "Table and Chairs",
+      "zh": "桌椅组合",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/table-and-chairs.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/table-and-chairs.svg"
+      }
+    },
+    "table": {
+      "en": "Table",
+      "zh": "桌子",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Furniture",
+      "category_zh": "设施物料 / 家具",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/table.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/table.svg"
+      }
+    },
+    "targets-control": {
+      "en": "Targets Control",
+      "zh": "靶标控制",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/targets-control.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/targets-control.svg"
+      }
+    },
+    "team-wax-truck": {
+      "en": "Team Wax Truck",
+      "zh": "队伍打蜡车",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Biathlon pack",
+      "category_zh": "物件库扩展包 / 冬季两项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/team-wax-truck.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/team-wax-truck.svg"
+      }
+    },
+    "telehandler": {
+      "en": "Telehandler",
+      "zh": "伸缩臂叉装车",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/telehandler.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/telehandler.svg"
+      }
+    },
+    "tent": {
+      "en": "Tent",
+      "zh": "帐篷",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/tent.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/tent.svg"
+      }
+    },
+    "time-trial-ramp": {
+      "en": "Time Trial Ramp",
+      "zh": "计时赛坡道",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/time-trial-ramp.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/time-trial-ramp.svg"
+      }
+    },
+    "toilet-trailer": {
+      "en": "Toilet trailer",
+      "zh": "厕所拖车",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/toilet-trailer.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/toilet-trailer.svg"
+      }
+    },
+    "tractor": {
+      "en": "Tractor",
+      "zh": "拖拉机",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Vehicles",
+      "category_zh": "设施物料 / 车辆",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/tractor.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/tractor.svg"
+      }
+    },
+    "traffic-lights-ahead": {
+      "en": "Traffic Lights Ahead",
+      "zh": "前方红绿灯",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/traffic-lights-ahead.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/traffic-lights-ahead.svg"
+      }
+    },
+    "training-wickets": {
+      "en": "Training Wickets",
+      "zh": "训练三柱门",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/training-wickets.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/training-wickets.svg"
+      }
+    },
+    "triangle-equilateral": {
+      "en": "Equilateral triangle footprint",
+      "zh": "等边三角形底面",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/triangle-equilateral.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/triangle-equilateral.svg"
+      }
+    },
+    "triangle": {
+      "en": "Triangle footprint",
+      "zh": "三角形底面",
+      "name_source": "curated",
+      "category_en": "Primitives",
+      "category_zh": "图元与底衬",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/triangle.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/triangle.svg"
+      }
+    },
+    "truss-arch": {
+      "en": "Truss Arch",
+      "zh": "桁架拱门",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/truss-arch.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/truss-arch.svg"
+      }
+    },
+    "turn-left": {
+      "en": "Turn Left",
+      "zh": "左转",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/turn-left.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/turn-left.svg"
+      }
+    },
+    "turn-right": {
+      "en": "Turn Right",
+      "zh": "右转",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Traffic Management",
+      "category_zh": "设施物料 / 交通管理",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/turn-right.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/turn-right.svg"
+      }
+    },
+    "van-rotated": {
+      "en": "Van (rotated)",
+      "zh": "厢式货车（斜置）",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/van-rotated.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/van-rotated.svg"
+      }
+    },
+    "van": {
+      "en": "Van",
+      "zh": "厢式货车",
+      "name_source": "curated",
+      "category_en": "Vehicles & Trailers",
+      "category_zh": "车辆与拖车",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/van.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/van.svg"
+      }
+    },
+    "viewing-platform": {
+      "en": "Viewing platform",
+      "zh": "观景平台",
+      "name_source": "curated",
+      "category_en": "Structures & Facilities",
+      "category_zh": "设施与构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/viewing-platform.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/viewing-platform.svg"
+      }
+    },
+    "water-crossing": {
+      "en": "Water Crossing",
+      "zh": "涉水穿越",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Race pack",
+      "category_zh": "物件库扩展包 / 路跑/铁人三项活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/water-crossing.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/water-crossing.svg"
+      }
+    },
+    "water-refill-station": {
+      "en": "Water Refill Station",
+      "zh": "补水站",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Water and Sanitation",
+      "category_zh": "设施物料 / 供水与卫生",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/water-refill-station.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/water-refill-station.svg"
+      }
+    },
+    "wicket-covers": {
+      "en": "Wicket Covers",
+      "zh": "三柱门罩布",
+      "name_source": "taxonomy",
+      "category_en": "Object library packs / Cricket pack",
+      "category_zh": "物件库扩展包 / 板球活动包",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/wicket-covers.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/wicket-covers.svg"
+      }
+    },
+    "wooden-chalet": {
+      "en": "Wooden Chalet",
+      "zh": "木屋小屋",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/wooden-chalet.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/wooden-chalet.svg"
+      }
+    },
+    "yurt": {
+      "en": "Yurt",
+      "zh": "蒙古包",
+      "name_source": "taxonomy",
+      "category_en": "Infrastructure / Structures",
+      "category_zh": "设施物料 / 构筑物",
+      "files": {
+        "scale-bg": "/oneplan-icons/scale-bg/yurt.svg",
+        "scale-fg": "/oneplan-icons/scale-fg/yurt.svg"
+      }
+    }
+  },
+  "missing_taxonomy_names": [
+    {
+      "slug": "camping-area",
+      "en": "Camping Area",
+      "zh": "露营区",
+      "pack": "Areas",
+      "alias": "area/generic",
+      "alias_exists": true
+    },
+    {
+      "slug": "crowd-area",
+      "en": "Crowd Area",
+      "zh": "人群聚集区",
+      "pack": "Areas",
+      "alias": "area/crowd",
+      "alias_exists": true
+    },
+    {
+      "slug": "generic-area",
+      "en": "Generic Area",
+      "zh": "通用区域",
+      "pack": "Areas",
+      "alias": "area/generic",
+      "alias_exists": true
+    },
+    {
+      "slug": "parking-area",
+      "en": "Parking Area",
+      "zh": "停车区",
+      "pack": "Areas",
+      "alias": "area/parking",
+      "alias_exists": true
+    },
+    {
+      "slug": "pedestrian-route",
+      "en": "Pedestrian Route",
+      "zh": "步行流线",
+      "pack": "Routes",
+      "alias": "icon/route-solid",
+      "alias_exists": true
+    },
+    {
+      "slug": "vehicle-route",
+      "en": "Vehicle Route",
+      "zh": "车辆流线",
+      "pack": "Routes",
+      "alias": "icon/route-solid",
+      "alias_exists": true
+    },
+    {
+      "slug": "cone-line",
+      "en": "Cone Line",
+      "zh": "锥桶线",
+      "pack": "Barriers",
+      "alias": "icon/route-dash",
+      "alias_exists": true
+    },
+    {
+      "slug": "crowd-control-barrier",
+      "en": "Crowd Control Barrier",
+      "zh": "人群管制护栏",
+      "pack": "Barriers",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "front-of-stage-barrier",
+      "en": "Front of Stage Barrier",
+      "zh": "舞台前护栏",
+      "pack": "Barriers",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "high-perimeter-fence",
+      "en": "High Perimeter Fence",
+      "zh": "高围挡",
+      "pack": "Barriers",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "mesh-fence",
+      "en": "Mesh Fence",
+      "zh": "网状围栏",
+      "pack": "Barriers",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "signage-frame-2-sides",
+      "en": "Signage Frame 2 Sides",
+      "zh": "双面导视架",
+      "pack": "Branding and Signage",
+      "alias": "scale-fg/signage-frame-2",
+      "alias_exists": true
+    },
+    {
+      "slug": "signage-frame-4-sides",
+      "en": "Signage Frame 4 Sides",
+      "zh": "四面导视架",
+      "pack": "Branding and Signage",
+      "alias": "scale-fg/signage-frame-4",
+      "alias_exists": true
+    },
+    {
+      "slug": "lighting-tower-permanent",
+      "en": "Lighting Tower (Permanent)",
+      "zh": "照明塔（永久）",
+      "pack": "Electrical",
+      "alias": "icon/permanent-lighting-tower",
+      "alias_exists": true
+    },
+    {
+      "slug": "lighting-tower-temporary",
+      "en": "Lighting Tower (Temporary)",
+      "zh": "照明塔（临时）",
+      "pack": "Electrical",
+      "alias": "icon/temporary-lighting-tower",
+      "alias_exists": true
+    },
+    {
+      "slug": "food-vendor",
+      "en": "Food Vendor",
+      "zh": "食品摊位",
+      "pack": "Food and Beverage",
+      "alias": "icon/food-trader",
+      "alias_exists": true
+    },
+    {
+      "slug": "beach-chair",
+      "en": "Beach Chair",
+      "zh": "沙滩椅",
+      "pack": "Furniture",
+      "alias": "scale-fg/deck-chair",
+      "alias_exists": true
+    },
+    {
+      "slug": "ada-viewing-platform",
+      "en": "ADA Viewing Platform",
+      "zh": "无障碍观景台（ADA）",
+      "pack": "Structures",
+      "alias": "scale-fg/viewing-platform",
+      "alias_exists": true
+    },
+    {
+      "slug": "canopy-tent",
+      "en": "Canopy Tent",
+      "zh": "篷顶帐篷",
+      "pack": "Structures",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "office-trailer",
+      "en": "Office Trailer",
+      "zh": "办公拖车房",
+      "pack": "Structures",
+      "alias": "scale-fg/portable-cabin",
+      "alias_exists": true
+    },
+    {
+      "slug": "ada-restroom",
+      "en": "ADA Restroom",
+      "zh": "ADA 无障碍卫生间",
+      "pack": "Toilets",
+      "alias": "scale-fg/accessible-portable-toilet",
+      "alias_exists": true
+    },
+    {
+      "slug": "mens-urinal",
+      "en": "Men's Urinal",
+      "zh": "男厕小便池",
+      "pack": "Toilets",
+      "alias": "scale-fg/mens-urinal-pod",
+      "alias_exists": true
+    },
+    {
+      "slug": "portable-restroom",
+      "en": "Portable Restroom",
+      "zh": "移动卫生间",
+      "pack": "Toilets",
+      "alias": "scale-fg/portable-toilet",
+      "alias_exists": true
+    },
+    {
+      "slug": "restroom-trailer",
+      "en": "Restroom Trailer",
+      "zh": "卫生间拖车",
+      "pack": "Toilets",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "broadcast-truck",
+      "en": "Broadcast Truck",
+      "zh": "转播车",
+      "pack": "Vehicles",
+      "alias": "scale-fg/outside-broadcast-truck",
+      "alias_exists": true
+    },
+    {
+      "slug": "cargo-van",
+      "en": "Cargo Van",
+      "zh": "货运面包车",
+      "pack": "Vehicles",
+      "alias": "scale-fg/van",
+      "alias_exists": true
+    },
+    {
+      "slug": "city-bus",
+      "en": "City Bus",
+      "zh": "城市公交",
+      "pack": "Vehicles",
+      "alias": "scale-fg/bus",
+      "alias_exists": true
+    },
+    {
+      "slug": "fire-truck",
+      "en": "Fire Truck",
+      "zh": "消防车",
+      "pack": "Vehicles",
+      "alias": "scale-bg/fire-engine",
+      "alias_exists": true
+    },
+    {
+      "slug": "police-patrol-car",
+      "en": "Police Patrol Car",
+      "zh": "巡逻警车",
+      "pack": "Vehicles",
+      "alias": "scale-fg/police-car",
+      "alias_exists": true
+    },
+    {
+      "slug": "semi-truck",
+      "en": "Semi-Truck",
+      "zh": "半挂卡车",
+      "pack": "Vehicles",
+      "alias": "scale-fg/hgv",
+      "alias_exists": true
+    },
+    {
+      "slug": "dumpster",
+      "en": "Dumpster",
+      "zh": "大型垃圾箱",
+      "pack": "Waste",
+      "alias": "scale-fg/large-waste-container",
+      "alias_exists": true
+    },
+    {
+      "slug": "trash",
+      "en": "Trash",
+      "zh": "垃圾桶",
+      "pack": "Waste",
+      "alias": "icon/waste-container",
+      "alias_exists": true
+    },
+    {
+      "slug": "custom-dot",
+      "en": "Custom Dot",
+      "zh": "自定义点位",
+      "pack": "Workforce",
+      "alias": "icon/circle",
+      "alias_exists": true
+    },
+    {
+      "slug": "fire",
+      "en": "Fire",
+      "zh": "消防人员",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "manager",
+      "en": "Manager",
+      "zh": "经理/负责人",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "medical",
+      "en": "Medical",
+      "zh": "医护人员",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "security",
+      "en": "Security",
+      "zh": "安保",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "steward",
+      "en": "Steward",
+      "zh": "场务",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "supervisor",
+      "en": "Supervisor",
+      "zh": "主管",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "volunteer",
+      "en": "Volunteer",
+      "zh": "志愿者",
+      "pack": "Workforce",
+      "alias": "icon/transparent",
+      "alias_exists": true
+    },
+    {
+      "slug": "accreditation-manager",
+      "en": "Accreditation Manager",
+      "zh": "证件认证经理",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "boundary-advertising-leds",
+      "en": "Boundary Advertising/LEDS",
+      "zh": "边界广告/LED",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "boundary-rope-and-toblerones",
+      "en": "Boundary Rope and Toblerones",
+      "zh": "边界绳与三角墩",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "broadcast-manager",
+      "en": "Broadcast Manager",
+      "zh": "转播经理",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "cricket-operations-manager",
+      "en": "Cricket Operations Manager",
+      "zh": "板球运营经理",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "dj",
+      "en": "DJ",
+      "zh": "DJ",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "doping-control-officer",
+      "en": "Doping Control Officer",
+      "zh": "反兴奋剂官",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "field-of-play-access",
+      "en": "Field of Play Access",
+      "zh": "赛场通道",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "flood-light",
+      "en": "Flood Light",
+      "zh": "泛光灯",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "groundsperson",
+      "en": "Groundsperson",
+      "zh": "场地管理员",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "high-45",
+      "en": "High 45",
+      "zh": "High 45 机位",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "hospitality-manager",
+      "en": "Hospitality Manager",
+      "zh": "接待经理",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "led-operator",
+      "en": "LED Operator",
+      "zh": "LED 操作员",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "match-officials",
+      "en": "Match Officials",
+      "zh": "赛事裁判官员",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "media",
+      "en": "Media",
+      "zh": "媒体",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "media-operations-manager",
+      "en": "Media Operations Manager",
+      "zh": "媒体运营经理",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "mid-reverse-wicket",
+      "en": "Mid Reverse Wicket",
+      "zh": "中路反向三柱门机位",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "mid-wicket",
+      "en": "Mid Wicket",
+      "zh": "中路三柱门机位",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "net-bowler",
+      "en": "Net Bowler",
+      "zh": "网前投球手位",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "perimeter-fence",
+      "en": "Perimeter Fence",
+      "zh": "围界护栏",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "player-and-match-officials",
+      "en": "Player & Match Officials",
+      "zh": "球员与裁判官员",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "press-box-scorer",
+      "en": "Press Box Scorer",
+      "zh": "记者席记分员",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "reverse-slips",
+      "en": "Reverse Slips",
+      "zh": "反向滑垒机位",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "roaming",
+      "en": "Roaming",
+      "zh": "游动机位",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "scoreboard-operator",
+      "en": "Scoreboard Operator",
+      "zh": "记分牌操作员",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "spectator-services",
+      "en": "Spectator Services",
+      "zh": "观众服务",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "sponsorship-manager",
+      "en": "Sponsorship Manager",
+      "zh": "赞助经理",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "stump-cam",
+      "en": "Stump Cam",
+      "zh": "三柱门摄像头",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "taxi-loadzone",
+      "en": "Taxi Loadzone",
+      "zh": "出租车上下客区",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "ultra-motion",
+      "en": "Ultra Motion",
+      "zh": "超高速摄影",
+      "pack": "Cricket pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "access-control",
+      "en": "Access Control",
+      "zh": "门禁控制",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "access-point-vehicle-main",
+      "en": "Access Point Vehicle Main",
+      "zh": "车辆主入口",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "access-point-vehicle-secondary",
+      "en": "Access Point Vehicle Secondary",
+      "zh": "车辆次入口",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "aed-defibrillator",
+      "en": "AED Defibrillator",
+      "zh": "AED 除颤仪",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "badge-scanning",
+      "en": "Badge Scanning",
+      "zh": "证件扫描",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "camera-crane-left",
+      "en": "Camera Crane Left",
+      "zh": "摄像摇臂（左）",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "camera-crane-right",
+      "en": "Camera Crane Right",
+      "zh": "摄像摇臂（右）",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "doping-control",
+      "en": "Doping Control",
+      "zh": "反兴奋剂检查",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "electrical-cable",
+      "en": "Electrical Cable",
+      "zh": "电缆",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "finish-line",
+      "en": "Finish Line",
+      "zh": "终点线",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "intermediate-on-course",
+      "en": "Intermediate on Course",
+      "zh": "赛道中间点",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "led-screen",
+      "en": "LED Screen",
+      "zh": "LED 屏",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "paramedic",
+      "en": "Paramedic",
+      "zh": "急救员",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "power",
+      "en": "Power",
+      "zh": "电力点",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "referee",
+      "en": "Referee",
+      "zh": "裁判",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "setup",
+      "en": "Setup",
+      "zh": "搭建/布置点",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "shooting-range-inc-safety-zone",
+      "en": "Shooting Range (Inc Safety Zone)",
+      "zh": "射击靶场（含安全区）",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "start-line",
+      "en": "Start Line",
+      "zh": "起跑线",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "tv-tripod-left",
+      "en": "TV Tripod Left",
+      "zh": "电视三脚架（左）",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "tv-tripod-right",
+      "en": "TV Tripod Right",
+      "zh": "电视三脚架（右）",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "visual-check",
+      "en": "Visual Check",
+      "zh": "目视检查点",
+      "pack": "Biathlon pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "barrier-concord",
+      "en": "Barrier Concord",
+      "zh": "康科德护栏",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "bike-course",
+      "en": "Bike Course",
+      "zh": "骑行赛道",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "bike-racks-double-sided",
+      "en": "Bike Racks: Double-sided",
+      "zh": "自行车架（双面）",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "bike-racks-single-sided",
+      "en": "Bike Racks: Single-sided",
+      "zh": "自行车架（单面）",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "dismount-area",
+      "en": "Dismount Area",
+      "zh": "下车区",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "dismount-line",
+      "en": "Dismount Line",
+      "zh": "下车线",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "mount-area",
+      "en": "Mount Area",
+      "zh": "上车区",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "mount-line",
+      "en": "Mount Line",
+      "zh": "上车线",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "pin-and-tape",
+      "en": "Pin And Tape",
+      "zh": "别针与胶带",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "run-course",
+      "en": "Run Course",
+      "zh": "跑步赛道",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "swim-course",
+      "en": "Swim Course",
+      "zh": "游泳赛道",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "timing-mat",
+      "en": "Timing Mat",
+      "zh": "计时毯",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "transition-racks-double-sided",
+      "en": "Transition racks: Double-sided",
+      "zh": "转换区车架（双面）",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "transition-racks-single-sided",
+      "en": "Transition racks: Single-sided",
+      "zh": "转换区车架（单面）",
+      "pack": "Race pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "maintenance",
+      "en": "Maintenance",
+      "zh": "维保",
+      "pack": "Fairs, Shows & Markets pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "performer",
+      "en": "Performer",
+      "zh": "表演者",
+      "pack": "Fairs, Shows & Markets pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "traffic-marshall",
+      "en": "Traffic Marshall",
+      "zh": "交通指挥员",
+      "pack": "Fairs, Shows & Markets pack",
+      "alias": null,
+      "alias_exists": false
+    },
+    {
+      "slug": "vendor-seller",
+      "en": "Vendor Seller",
+      "zh": "摊主/商贩",
+      "pack": "Fairs, Shows & Markets pack",
+      "alias": null,
+      "alias_exists": false
+    }
+  ]
+}
