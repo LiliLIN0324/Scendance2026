@@ -4,6 +4,7 @@ import { sceneScriptFromBrief } from './scene-script';
 import { compileSceneScript, type SceneScriptCompileResult } from './scene-script-compiler';
 import { itemsOverlap, isLowProfile } from './geometry';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
+import { outsideDrawnRoom } from './floor-reading';
 import { isStructuralMarker, structuralItemCollides, usableFloorPolygon, usableSeatingRect } from './structural-layout';
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
@@ -194,7 +195,7 @@ export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number,
     const seat = isBanquetSeat(item);
     const table = item.type === 'dining-table';
     if (!seat && !table) { kept.push(item); continue; }
-    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex) || missesUsableFloor(item, layout, floorIndex)) continue;
+    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex) || missesUsableFloor(item, layout, floorIndex) || outsideDrawnRoom(item, layout, floorIndex)) continue;
     if (seat) pendingSeats.push(item);
     else kept.push(item);
   }
