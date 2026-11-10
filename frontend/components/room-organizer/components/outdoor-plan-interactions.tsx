@@ -146,9 +146,13 @@ export interface ShareDialogProps {
   open: boolean;
   onClose: () => void;
   content: { title: string; lines: string[] };
+  /** H5-b：本地分享链接（可复制）；生产换 token。 */
+  shareLink?: string;
+  /** H5-b：PDF 演示稿打印入口。 */
+  onPrintDeck?: () => void;
 }
 
-export function ShareDialog({ open, onClose, content }: ShareDialogProps) {
+export function ShareDialog({ open, onClose, content, shareLink, onPrintDeck }: ShareDialogProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -156,6 +160,7 @@ export function ShareDialog({ open, onClose, content }: ShareDialogProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  const [copied, setCopied] = useState(false);
   if (!open) return null;
   return (
     <div
@@ -198,7 +203,24 @@ export function ShareDialog({ open, onClose, content }: ShareDialogProps) {
             {line}
           </p>
         ))}
+        {shareLink && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, margin: `${PLANNING_SPACING.md}px 0 0`, padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`, background: 'rgba(127, 182, 154, 0.08)', border: '1px solid rgba(127, 182, 154, 0.3)', borderRadius: 8 }}>
+            <input
+              readOnly
+              value={shareLink.length > 72 ? shareLink.slice(0, 48) + '…' + shareLink.slice(-12) : shareLink}
+              aria-label="分享链接"
+              style={{ flex: 1, background: 'transparent', border: 'none', color: '#cdd9ea', fontSize: 11, fontFamily: 'ui-monospace, monospace', outline: 'none', minWidth: 0 }}
+              onFocus={event => event.currentTarget.select()}
+            />
+            <button type="button" onClick={() => { void navigator.clipboard?.writeText(shareLink); setCopied(true); }} style={primaryButtonStyle}>
+              {copied ? '已复制' : '复制链接'}
+            </button>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.lg }}>
+          {onPrintDeck && (
+            <button type="button" onClick={onPrintDeck} style={secondaryButtonStyle}>打印 PDF 演示稿</button>
+          )}
           <button type="button" onClick={onClose} style={secondaryButtonStyle}>知道了</button>
         </div>
       </div>
@@ -301,6 +323,8 @@ const iconButtonStyle: React.CSSProperties = {
   lineHeight: 1,
   cursor: 'pointer',
 };
+
+
 
 
 

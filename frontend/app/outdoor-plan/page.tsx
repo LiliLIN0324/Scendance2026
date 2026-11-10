@@ -29,7 +29,9 @@ import { formatLengthM, planOverviewStats } from '@/components/room-organizer/li
 import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
-import { downloadPlanPng } from '@/components/room-organizer/lib/site-plan-png';
+import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
+import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
+import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 
 /** 样例：平湖秋月周边 200×120 m 市集（锚点 GCJ-02，来自既有 XIHU_LOCAL_CENTER）。 */
 const SAMPLE_PLAN: SitePlanData = {
@@ -216,6 +218,12 @@ export default function OutdoorPlanPage() {
   const [plan, setPlan] = useState<SitePlanData>(loadDraftPlan);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  // H5-b：本地分享链接（快照 base64url 进 hash；生产接线归 B 换 token）。
+  const shareLink = buildShareLink(
+    { planId: '99999999-9999-4999-8999-999999999999', projectId: '88888888-8888-4888-8888-888888888888', revision: 1, updatedAt: new Date().toISOString(), data: plan },
+    typeof window === 'undefined' ? '' : window.location.origin,
+    '/plan-share',
+  );
   // H4-b：首次开图渐进引导（localStorage 持久化，跳过/完成后二刷不打扰）。
   const guide = useGuide('outdoor-plan-guide-v1');
   // H3-a：全案派生统计（现算不落盘；隐藏图层不改变这里的数字）。
@@ -303,10 +311,26 @@ export default function OutdoorPlanPage() {
           updatedAt: savedAt ?? new Date().toLocaleString('zh-CN', { hour12: false }),
           counts: { zones: stats.zoneCount, facilities: stats.facilityCount, routes: plan.routes.length, workers: stats.workerTotalCount },
         })}
+        shareLink={shareLink}
+        onPrintDeck={() => {
+          // PDF 演示稿：合成快照图（72 DPI 嵌封面）+ 打印管线（另存为 PDF 本地下载）。
+          const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
+          const planCanvas = canvases[canvases.length - 1];
+          const pngCanvas = planCanvas
+            ? composePlanPng({ plan, planCanvas, revision: 1, dpi: 72 })
+            : undefined;
+          printPlanDeck(
+            { planId: '99999999-9999-4999-8999-999999999999', projectId: '88888888-8888-4888-8888-888888888888', revision: 1, updatedAt: new Date().toISOString(), data: plan },
+            pngCanvas?.toDataURL('image/png'),
+          );
+        }}
       />
     </main>
   );
 }
+
+
+
 
 
 
