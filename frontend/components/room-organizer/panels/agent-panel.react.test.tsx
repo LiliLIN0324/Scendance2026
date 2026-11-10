@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { backendSceneToLayout } from '../lib/backend-adapter';
 import { STORAGE_KEY } from '../lib/constants';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
@@ -4425,5 +4426,79 @@ describe('event layout generation path', () => {
     expect(onApply).not.toHaveBeenCalled();
     expect(after.width).toBeCloseTo(14);
     expect(after.height).toBeCloseTo(12);
+  }, 20000);
+
+  it('hides confirm when a 23.8×16.1 map shell rejects Ø2.2 chairs and leftover chairs would make the count look full', async () => {
+    studioMock.connection = '项目已连接';
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const layout = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      objects: [],
+      camera: 'overview',
+      lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 0, z: 0 }, end: { x: 23.8, z: 0 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 23.8, z: 0 }, end: { x: 23.8, z: 16.1 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 23.8, z: 16.1 }, end: { x: 0, z: 16.1 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 0, z: 16.1 }, end: { x: 0, z: 0 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(5), start: { x: 0.4, z: 6.2 }, end: { x: 23.4, z: 6.2 }, thickness: 2, height: 3, kind: 'interior', status: 'confirmed' },
+        ],
+        openings: [],
+        columns: [],
+      },
+      sources: [],
+      dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-columns' });
+    const kept = Array.from({ length: 12 }, (_, index) => makeItem({
+      id: `kept-chair-${index}`,
+      type: 'dining-chair',
+      name: '餐椅',
+      width: 0.45,
+      depth: 0.45,
+      height: 0.9,
+      locked: true,
+      position: { x: -10 + (index % 6) * 0.7, z: 6.5 + Math.floor(index / 6) * 0.7 },
+    }));
+    layout.floors[0]!.items.push(...kept);
+    const keptIds = new Set(kept.map(item => item.id));
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌直径2.2米，80人，20米乘15米');
+    expect(await screen.findByText(/你说的 20×15 米这次不改场地/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText(/没有按满员桌数确认/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/识别到 80 把单人椅/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    await waitFor(() => {
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      expect(latest?.width).toBeCloseTo(23.8);
+      expect(latest?.height).toBeCloseTo(16.1);
+      const landed = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id)).length ?? 0;
+      expect(landed).toBeGreaterThan(0);
+      expect(landed).toBeLessThan(80);
+    }, { timeout: 15000 });
+    expect(screen.queryByText(/场地已变化/)).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    const beforeAdd = onPreview.mock.calls.length;
+    fireEvent.click(await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 }));
+    await waitFor(() => {
+      expect(onPreview.mock.calls.length).toBeGreaterThan(beforeAdd);
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      const landed = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id)).length ?? 0;
+      expect(landed).toBeGreaterThan(0);
+    }, { timeout: 15000 });
+    const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const seated = after.floors[0]!.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id)).length;
+    if (seated < 80) {
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      expect(screen.getAllByText(/没有按满员桌数确认/).length).toBeGreaterThan(0);
+    }
+    expect(onApply).not.toHaveBeenCalled();
+    expect(after.width).toBeCloseTo(23.8);
+    expect(after.height).toBeCloseTo(16.1);
   }, 20000);
 });

@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveBriefTurn } from '@/lib/agent-resolver';
 import { collectViolations } from '../../../lib/placement-rules';
-import { makeFloor, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { readBriefMemory, writeBriefMemory } from './assistant-brief-memory';
 import { initialBriefMemory, parseBriefTurn } from './brief-agent';
 import { eventPreviewInput, eventPreviewScale, planHeldEvent, spokenHeadcount } from './event-layout-agent';
 import { materializeFurnishing, selectFurnishing } from './furnishing-select';
+import { backendSceneToLayout } from './backend-adapter';
 import { localPlan } from './local-plan';
+import { countSingleSeats } from './seat-requirement';
 import { ringDiningSet } from './ring-seating';
 import { resolveTableArrangement } from './table-seat-plan';
 
@@ -338,6 +340,66 @@ function memoryBox(): Storage {
     } else {
       expect(added.blocked ?? null).toBeNull();
     }
+  });
+
+  it('does not confirm Ø2.2 for 80 people when a map-shell wall rejects chairs and leftover chairs would otherwise fill the count', () => {
+    const choice = selectFurnishing({ occasion: '圆桌宴', notes: '圆桌直径2.2米', statedShape: 'round', statedWidth: 2.2 });
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const hall = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      objects: [],
+      camera: 'overview',
+      lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 0, z: 0 }, end: { x: 23.8, z: 0 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 23.8, z: 0 }, end: { x: 23.8, z: 16.1 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 23.8, z: 16.1 }, end: { x: 0, z: 16.1 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 0, z: 16.1 }, end: { x: 0, z: 0 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(5), start: { x: 0.4, z: 6.2 }, end: { x: 23.4, z: 6.2 }, thickness: 2, height: 3, kind: 'interior', status: 'confirmed' },
+        ],
+        openings: [],
+        columns: [],
+      },
+      sources: [],
+      dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-columns' });
+    const kept = Array.from({ length: 12 }, (_, index) => makeItem({
+      id: `kept-chair-${index}`,
+      type: 'dining-chair',
+      name: '餐椅',
+      width: 0.45,
+      depth: 0.45,
+      height: 0.9,
+      locked: true,
+      position: { x: -10 + (index % 6) * 0.7, z: 6.5 + Math.floor(index / 6) * 0.7 },
+    }));
+    hall.floors[0]!.items.push(...kept);
+    const input = {
+      base: hall, floorIndex: 0, widthM: 23.8, depthM: 16.1, variant: 0, guests: 80,
+      layoutMode: 'dining' as const, seatingShape: 'ring' as const,
+      table: { shape: 'round' as const, width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
+    };
+    const plan = localPlan(input);
+    const floor = plan.layouts.at(-1)!.floors[0]!;
+    const keptIds = new Set(kept.map(item => item.id));
+    const landed = floor.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id));
+    expect(landed.length).toBeGreaterThan(0);
+    expect(landed.length).toBeLessThan(80);
+    expect(plan.seats).toBe(landed.length);
+    expect(plan.seats ?? 0).toBeLessThan(80);
+    expect(countSingleSeats(plan.layouts.at(-1), 0)).toBeGreaterThanOrEqual(80);
+    expect(plan.blocked).toContain('没有按满员桌数确认');
+    expect(plan.blocked).toContain(`${landed.length} 座`);
+    expect(plan.summary?.some(line => /约 \d+ 桌/.test(line))).toBe(false);
+    expect(plan.diagnostics?.some(item => item.code === 'STRUCTURAL_COLLISION' && item.count > 0)).toBe(true);
+    expect(plan.layouts.at(-1)!.width).toBeCloseTo(23.8);
+    expect(plan.layouts.at(-1)!.height).toBeCloseTo(16.1);
+    const denser = localPlan({ ...input, seatPriority: true });
+    expect(denser.seats ?? 0).toBeLessThan(80);
+    expect(denser.blocked).toContain('没有按满员桌数确认');
+    expect(denser.layouts.at(-1)!.width).toBeCloseTo(23.8);
   });
 
   it('accepts 个人 and a per-table count, and still plans from an area or a 发布会', () => {

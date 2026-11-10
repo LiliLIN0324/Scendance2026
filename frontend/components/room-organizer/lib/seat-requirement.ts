@@ -1,12 +1,13 @@
 import { hasCollisions, itemsOverlap, isLowProfile } from './geometry';
-import { isStructuralMarker } from './structural-layout';
+import { isStructuralMarker, structuralItemCollides } from './structural-layout';
 import type { RoomLayout } from './types';
 
 /** 统一读取实际候选中的单人椅数量；不推断长椅或组合家具容量。 */
-export function countSingleSeats(layout: RoomLayout | undefined, floorIndex: number): number | null {
+export function countSingleSeats(layout: RoomLayout | undefined, floorIndex: number, excludeIds?: ReadonlySet<string>): number | null {
   const floor = layout?.floors[floorIndex];
   if (!floor || !Number.isFinite(layout?.width) || !Number.isFinite(layout?.height) || layout!.width <= 0 || layout!.height <= 0) return null;
   return floor.items.filter(item => {
+    if (excludeIds?.has(item.id)) return false;
     if (isStructuralMarker(item) || !['chair', 'dining-chair', 'desk-chair'].includes(item.type)) return false;
     if (/(工作人员|员工|供应商|主持人|讲师|演讲人|嘉宾专用)/.test(`${item.name} ${item.notes ?? ''}`)) return false;
     const { position, width, depth } = item;
@@ -18,7 +19,7 @@ export function countSingleSeats(layout: RoomLayout | undefined, floorIndex: num
     const halfDepth = (width * sin + depth * cos) / 2;
     const within = Math.abs(position.x) + halfWidth <= layout!.width / 2 + 1e-9 &&
       Math.abs(position.z) + halfDepth <= layout!.height / 2 + 1e-9;
-    if (!within || hasCollisions(item, floor.items.filter(other => !other.position || (Number.isFinite(other.position.x) && Number.isFinite(other.position.z))), layout!.width, layout!.height, { interiorWalls: floor.interiorWalls })) return false;
+    if (!within || structuralItemCollides(item, layout!, floorIndex) || hasCollisions(item, floor.items.filter(other => !other.position || (Number.isFinite(other.position.x) && Number.isFinite(other.position.z))), layout!.width, layout!.height, { interiorWalls: floor.interiorWalls })) return false;
     return !floor.items.some(other => other !== item && other.position && Number.isFinite(other.position.x) && Number.isFinite(other.position.z) &&
       Number.isFinite(other.width) && other.width > 0 && Number.isFinite(other.depth) && other.depth > 0 &&
       Number.isFinite(other.rotation ?? 0) && Number.isFinite(other.height) && !isLowProfile(other) && itemsOverlap(item, other));

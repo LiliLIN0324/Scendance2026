@@ -98,7 +98,26 @@ export function localPlan(input: LocalPlanInput): LocalPlanResult {
   if (actualSeats !== null) result = { ...result, seats: actualSeats,
     ...(result.summary ? { summary: result.summary.map(line => /^座位\s/.test(line)
       ? `${line.split('，')[0]}，候选共识别 ${actualSeats} 把单人椅` : line) } : {}) };
-  return issues.length ? { ...result, blocked: [...new Set(issues)].join('；') } : result;
+  result = banquetLandedSeats(input, result);
+  return issues.length ? { ...result, blocked: result.blocked ?? [...new Set(issues)].join('；') } : result;
+}
+
+/**
+ * A banquet confirm counts chairs this pass actually landed. Chairs already in the
+ * room, and chairs the wall or a column refused, do not fill the headcount.
+ */
+function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): LocalPlanResult {
+  const guests = input.guests ?? 0;
+  if (!input.furnishing || guests <= 0) return result;
+  const baseItems = input.base.floors[input.floorIndex]?.items ?? [];
+  const baseIds = new Set(baseItems.map(item => item.id));
+  const landed = countSingleSeats(result.layouts.at(-1), input.floorIndex, baseIds);
+  if (landed === null) return result;
+  if (landed >= guests) return { ...result, seats: landed };
+  const floor = result.layouts.at(-1)?.floors[input.floorIndex];
+  const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id)).length ?? 0;
+  const short = `这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
+  return { ...result, seats: landed, blocked: short, summary: [short] };
 }
 
 function arrangementFor(input: LocalPlanInput): TableArrangement | undefined {
