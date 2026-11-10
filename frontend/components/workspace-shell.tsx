@@ -7,6 +7,7 @@ import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
+import { resolveOutdoorProjectId } from '@/components/room-organizer/lib/outdoor-project-store';
 import { useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
@@ -32,6 +33,16 @@ const RoomOrganizer = dynamic(
         }
         throw err; // persistent failure → error boundary (offers a reset)
       }),
+  { ssr: false, loading: () => <BootSkeleton /> }
+);
+
+/**
+ * 户外规划工作台（P2-a）：户外项目**完全不挂**室内 RoomOrganizer，
+ * 不初始化 three 场景。是否户外由 resolveOutdoorProjectId 判定
+ * （?start=outdoor 硬跳 / 本机有该项目的户外草稿），见 outdoor-project-store。
+ */
+const OutdoorPlanWorkspace = dynamic(
+  () => import('@/components/room-organizer/components/outdoor-plan-workspace'),
   { ssr: false, loading: () => <BootSkeleton /> }
 );
 
@@ -81,13 +92,16 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   const [editorStarted, setEditorStarted] = useState(false);
   const workspacePath = pathname === '/' || pathname.replace(/\/$/, '') === '/editor';
   const entered = workspacePath && ready;
+  // 户外项目判定（P2-a）：与 editorStarted 同批同步判定，户外命中时不挂 RoomOrganizer。
+  const [outdoorProjectId, setOutdoorProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
-    if (!workspacePath || !ready) return;
+    if (!workspacePath || !ready) { setOutdoorProjectId(null); return; }
+    setOutdoorProjectId(resolveOutdoorProjectId(window.location.search));
     setEditorStarted(true);
-  }, [workspacePath, ready]);
+  }, [workspacePath, ready, pathname]);
 
   useEffect(() => {
     if (entered) window.dispatchEvent(new Event('resize'));
@@ -98,8 +112,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     {process.env.NEXT_PUBLIC_LOCAL_FIXTURE === '1' && <aside role="status" style={{position:'fixed',top:17,left:'50%',transform:'translateX(-50%)',zIndex:10000,padding:'3px 9px',borderRadius:6,background:'#283f36',color:'#fff',fontSize:11,pointerEvents:'none'}}>独立本地预览 · 测试账号与本地数据库</aside>}
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
-    {editorStarted && <div hidden={!entered}>
-      <RoomOrganizer isActive={entered} controller={controller} />
-    </div>}
+    {editorStarted && (outdoorProjectId !== null
+      ? <OutdoorPlanWorkspace projectId={outdoorProjectId} controller={controller} />
+      : <div hidden={!entered}>
+        <RoomOrganizer isActive={entered} controller={controller} />
+      </div>)}
   </>;
 }

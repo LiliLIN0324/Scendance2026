@@ -105,6 +105,29 @@ describe('VenuePicker（换场地 / 新建）', () => {
     expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '春夏市集', expect.objectContaining({ schemaVersion: 1 }));
   });
 
+  it('从地图开始：建云项目 → 写本机户外标记（含起步边界），按钮转「开始规划」', async () => {
+    // Location 是 webidl [Unforgeable]，assign 无法 mock——整页跳转契约由
+    // resolveOutdoorProjectId 单测（start=outdoor 命中）+ 浏览器实测覆盖，
+    // 这里钉住跳转前的两件事：云端建项目 + 本机户外标记落盘。
+    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
+    fireEvent.change(screen.getByLabelText('活动名称'), { target: { value: '西湖市集' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
+    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '西湖市集', expect.objectContaining({ schemaVersion: 1 })));
+    expect(mocks.push).not.toHaveBeenCalled();
+    const raw = localStorage.getItem('scendance-outdoor-plan-v1:p-new');
+    expect(raw).toBeTruthy();
+    const record = JSON.parse(raw!) as { name: string; plan: { boundary: unknown[] } };
+    expect(record.name).toBe('西湖市集');
+    expect(record.plan.boundary).toHaveLength(4);
+  });
+
+  it('访客看不到「从地图开始」（云就绪才显示）', () => {
+    snapshot.user = null;
+    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+    expect(screen.queryByRole('button', { name: /从地图开始/ })).toBeNull();
+  });
+
   it('没有工作室时静默建「个人工作室」再列项目', async () => {
     mocks.listStudios.mockResolvedValue([]);
     mocks.businessRequest.mockImplementation((path: string, method?: string) => Promise.resolve(

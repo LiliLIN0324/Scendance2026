@@ -2,19 +2,23 @@
 
 /**
  * 「换场地 / 新建」弹层本体：卡片栅格（设计规范 v2.5.2 §二.4——选择器一律 icon 优先 + 卡片视觉）。
- * 「从空白开始」走现有立壳链；项目卡带俯视缩略预览，选中同标签 router.push（认证在 sessionStorage，新标签会变访客）；
+ * 「从空白开始」走现有立壳链；「从地图开始」（P2-a）建云项目后写本机户外标记并整页跳
+ * `/editor/?project=<id>&start=outdoor`——workspace-shell 据此直接进 2D 规划，不挂室内工作台
+ * （硬跳避免与已挂载画布的深链/租约状态打架；室内未保存草稿照旧留在本地存储，可回）。
+ * 项目卡带俯视缩略预览，选中同标签 router.push（认证在 sessionStorage，新标签会变访客）；
  * 新建只输名字——没有工作室时静默建「个人工作室」。「云」一词不面向用户（§二.4 默认在云上）。模板与导入在下一期。
  */
-import { Check, FolderOpen, Loader2, Plus, SquareDashed } from '@/components/solid-icons';
+import { Check, FolderOpen, Globe, Loader2, Plus, SquareDashed } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../../../lib/auth-provider';
 import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
+import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { BLANK_VENUE } from '../lib/blank-venue';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 
-type Selection = { kind: 'blank' } | { kind: 'new' } | { kind: 'project'; id: string };
+type Selection = { kind: 'blank' } | { kind: 'map' } | { kind: 'new' } | { kind: 'project'; id: string };
 
 type CloudState =
   | { status: 'guest' }
@@ -116,7 +120,7 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
   const selectedProject = projects.find(project => project.id === selectedProjectId);
   const canStart = !busy && (selection.kind === 'blank'
     || (selection.kind === 'project' && !!selectedProject)
-    || (selection.kind === 'new' && !!name.trim() && cloud.status === 'ready'));
+    || ((selection.kind === 'new' || selection.kind === 'map') && !!name.trim() && cloud.status === 'ready'));
 
   function confirm(): void {
     if (!canStart) return;
@@ -125,6 +129,24 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
     if (cloud.status !== 'ready') return;
     const studioId = cloud.studioId;
     setBusy(true); setNotice('');
+    if (selection.kind === 'map') {
+      // 从地图开始（P2-a）：建云项目 → 写本机户外标记（含起步边界）→ 整页跳进 2D 规划。
+      void controller.createProject(studioId, name.trim(), emptyProjectScene())
+        .then(created => {
+          const now = new Date().toISOString();
+          saveOutdoorProjectRecord({
+            v: 1,
+            projectId: created.id,
+            name: name.trim() || '户外规划',
+            createdAt: now,
+            updatedAt: now,
+            plan: createStarterOutdoorPlan(),
+          });
+          window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&start=outdoor`);
+        })
+        .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
+      return;
+    }
     void controller.createProject(studioId, name.trim(), emptyProjectScene())
       .then(created => router.push(`/editor/?project=${encodeURIComponent(created.id)}`))
       .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
@@ -134,6 +156,10 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
     <div className="sc-venue-picker-grid" role="group" aria-label="从哪开始">
       <Card selected={selection.kind === 'blank'} onSelect={() => setSelection({ kind: 'blank' })}
         visual={<SquareDashed size={32} />} title="从空白开始" meta={`${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m · 立刻开工`} />
+      {cloud.status === 'ready' && (
+        <Card selected={selection.kind === 'map'} onSelect={() => setSelection({ kind: 'map' })}
+          visual={<Globe size={32} />} title="从地图开始" meta="户外活动 · 直接在地图上规划" />
+      )}
       {projects.map(project => {
         const scene = previews[project.id];
         const loaded = scene && scene !== 'failed' ? scene : null;
@@ -157,10 +183,15 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
         <input autoFocus value={name} maxLength={120} onChange={event => setName(event.target.value)} placeholder={NEW_PROJECT_DEFAULT} />
       </label>
     )}
+    {selection.kind === 'map' && (
+      <label className="sc-venue-picker-name">活动名称
+        <input autoFocus value={name} maxLength={120} onChange={event => setName(event.target.value)} placeholder={NEW_PROJECT_DEFAULT} />
+      </label>
+    )}
     <div className="sc-venue-picker-foot">
       <p className="sc-venue-picker-note" role="status">{notice}</p>
       <button type="button" className="sc-button" onClick={onClose} disabled={busy}>取消</button>
-      <button type="button" className="sc-venue-picker-go" onClick={confirm} disabled={!canStart}>{busy ? '创建中…' : '开始布置'}</button>
+      <button type="button" className="sc-venue-picker-go" onClick={confirm} disabled={!canStart}>{busy ? '创建中…' : selection.kind === 'map' ? '开始规划' : '开始布置'}</button>
     </div>
   </div>;
 }
