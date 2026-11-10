@@ -356,11 +356,15 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     return scriptWrapped;
   }
 
+  const fallbackBase = fallbackPlan(input, arrangement, placed);
   const fallback = withArrangement({
-    ...fallbackPlan(input, arrangement, placed),
+    ...fallbackBase,
     via: 'fallback' as const,
     summary: [] as string[],
-    ...(scriptPlan?.blocked ? { fallbackReason: scriptPlan.blocked } : {}),
+    // 备用排法成功落座时，脚本失败的原因降级为过程说明，不当成这版的结论。
+    ...(scriptPlan?.blocked && (fallbackBase.seats ?? 0) > 0
+      ? { fallbackReason: `脚本排法没摆下（${scriptPlan.blocked}），已改用备用排法。` }
+      : scriptPlan?.blocked ? { fallbackReason: scriptPlan.blocked } : {}),
   }, arrangement);
   if (input.furnishing && seated && (fallback.seats ?? 0) < (input.guests ?? 0)) {
     return recoverBanquetSeats(input, arrangement, placed, fallback);
