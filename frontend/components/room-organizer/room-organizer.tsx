@@ -2197,6 +2197,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     environmentsRef.current = defaults;
     setEnvironments(defaults);
   }, [environmentKey, hasMapVenue, layout.id, stopSplat, workspaceWriteGuards]);
+  // 对话里立了明确尺寸的场地后，样例高斯背景就不作数了：场地事实换了空间，
+  // 宴会厅样例不再是这间厅的观感参照（与 hasMapVenue 同一待遇）。只摘样例，
+  // 不动用户自己在场景库选的环境；刷新重挂时 venueScaleRef 为 null，不误摘。
+  const venueScale = `${layout.width}×${layout.height}`;
+  const venueScaleRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = venueScaleRef.current;
+    venueScaleRef.current = venueScale;
+    if (previous === null || previous === venueScale) return;
+    const current = environmentsRef.current;
+    if (!current.some(entry => entry.assetId === DEMO_WORLD_SCENE_ID)) return;
+    const kept = current.filter(entry => entry.assetId !== DEMO_WORLD_SCENE_ID);
+    writeEnvironments(layout.id, kept);
+    environmentsRef.current = kept;
+    setEnvironments(kept);
+    if (!kept.length) stopSplat();
+  }, [layout.id, venueScale, stopSplat]);
   // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
   // 第 3 步：整景区视距（>200 m）下不解码点云，先挂锚点 POI；等到 <100 m 再补挂。
   // 等 splatLodMeasured 才判断，避免相机/控件尚未就绪时把「还没量」误当成近景。
