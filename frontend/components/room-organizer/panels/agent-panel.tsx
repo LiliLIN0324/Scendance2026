@@ -49,6 +49,7 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
 import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
+import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
 import { mergeSeatingAllocation } from '../lib/seating-allocation';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
@@ -1964,7 +1965,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     let plan: PlanProposal;
     const anchors = anchorsRef.current;
-    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
+    const banquet=memoryRef.current.banquetTable;
+    const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
+    const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
+    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
       failOpenLocalStep('这版没出成');
@@ -2619,7 +2623,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const beforeSpecs=memoryRef.current;
     const nextSpecs=mergeLocalSeatingSpecs(beforeSpecs.localSeatingSpecs,trimmed);
     const nextAllocation=mergeSeatingAllocation(beforeSpecs.localSeatingAllocation,trimmed);
-    const previousMemory=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation};
+    const nextBanquet=mergeBanquetTable(beforeSpecs.banquetTable,trimmed);
+    const specsUnchanged=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)&&JSON.stringify(nextBanquet)===JSON.stringify(beforeSpecs.banquetTable);
+    const previousMemory=specsUnchanged?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation,...(nextBanquet?{banquetTable:nextBanquet}:{})};
     if(previousMemory!==beforeSpecs){
       if(phaseRef.current==='proposed'||phaseRef.current==='paused'){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
       saveMemory(previousMemory);syncMemory(previousMemory);

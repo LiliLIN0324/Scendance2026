@@ -126,6 +126,29 @@ describe('proposal render overlay', () => {
     expect(disposeOriginal).not.toHaveBeenCalled();
   });
 
+  it('draws a circular preview outline for a banquet round table', () => {
+    const round = { ...item, id: 'round-table', type: 'dining-table', name: '圆桌', tableShape: 'round' as const, width: 1.4, depth: 1.4, height: 0.75, position: { x: 0, z: 0 } };
+    const square = { ...round, tableShape: 'rect' as const };
+    expect(proposalDifferences(layout([square]), layout([round]))).toMatchObject([{ id: round.id, kind: 'changed' }]);
+    const scene = new THREE.Scene();
+    const preview = createProposalPreview(THREE, scene, layout([]), layout([round]));
+    const root = scene.getObjectByName(PROPOSAL_PREVIEW_TAG)!;
+    const outline = root.children.find(object => object.userData.previewRole === 'added')!;
+    const line = outline.children[0] as THREE.LineSegments;
+    expect(line.geometry.getAttribute('position').count).toBeGreaterThan(24);
+    const size = new THREE.Box3().setFromObject(line).getSize(new THREE.Vector3());
+    expect(size.x).toBeCloseTo(size.z, 2);
+    expect(size.x).toBeCloseTo(1.42, 2);
+    const candidate = root.children.find(object => object.userData.previewRole === 'candidate')!;
+    let cylinder = false;
+    candidate.traverse(node => {
+      const mesh = node as THREE.Mesh;
+      if (mesh.isMesh && mesh.userData.part === 'round-top' && mesh.geometry.type === 'CylinderGeometry') cylinder = true;
+    });
+    expect(cylinder).toBe(true);
+    preview.dispose();
+  });
+
   it('refreshes after the editor rebuilds an affected mesh, and restores its original visibility on cancel', () => {
     const scene = new THREE.Scene();
     const preview = createProposalPreview(THREE, scene, layout([item]), layout([]));

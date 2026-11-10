@@ -18,6 +18,7 @@ import { disposeObject, removeAndDispose } from '../three/builder-utils';
 import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
 import { buildEntrance } from '../three/entrance';
+import { footprintEdges } from '../three/footprint-outline';
 import { createFurnitureModel } from '../three/furniture-builders';
 import { personWalkBounds, routeIsLoop } from '../lib/person-route';
 import { buildWalkColliders } from '../lib/walk-collision';
@@ -756,9 +757,7 @@ export function useSceneEffects({
       // Around the built mesh, not floor-to-height: a painting hangs at 0.8 m
       // and a window starts at its sill (#376).
       const band = mountBand(item.structuralOpeningId ? item : itemForStorey(item, activeFloor));
-      const geometry = new THREE.BoxGeometry(item.width, band.top - band.bottom, item.depth);
-      const edges = new THREE.EdgesGeometry(geometry);
-      geometry.dispose();
+      const edges = footprintEdges(THREE, item, item.width, band.top - band.bottom, item.depth);
       const outline = new THREE.LineSegments(
         edges,
         new THREE.LineBasicMaterial({ color: accent, linewidth: 2 })

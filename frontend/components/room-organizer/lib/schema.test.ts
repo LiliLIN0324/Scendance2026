@@ -39,6 +39,14 @@ describe('isFurnitureItem', () => {
     expect(isFurnitureItem(value)).toBe(false);
   });
 
+  it('keeps a round banquet table and rejects an unknown table shape', () => {
+    const item = makeItem({ type: 'dining-table', name: '圆桌', tableShape: 'round', width: 1.4, depth: 1.4 });
+    expect(isFurnitureItem(item)).toBe(true);
+    expect(isFurnitureItem({ ...item, tableShape: 'oval' as never })).toBe(false);
+    const layout = makeLayout({ floors: [makeFloor({ items: [item] })] });
+    expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
+  });
+
   it('accepts valid enum/range fields (#121)', () => {
     expect(
       isFurnitureItem(
