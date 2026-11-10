@@ -6,7 +6,7 @@
  * brief-agent 规则版——对话永不因模型抖动中断。决策（记忆/防复读/出方案）始终在前端状态机。
  */
 import { hasNonPersonQuantity, isActivityNeedsAnswer, isUnresolvedNeedsAnswer, parseBriefTurn, type BriefMemory, type BriefTurn, type BriefTurnContext, type LayoutMode, type PendingBasicFact } from '@/components/room-organizer/lib/brief-agent';
-import { occasionFrom, planHeldEvent, spokenHeadcount } from '@/components/room-organizer/lib/event-layout-agent';
+import { isRoundResizeUtterance, occasionFrom, planHeldEvent, spokenHeadcount } from '@/components/room-organizer/lib/event-layout-agent';
 import { HEADCOUNT_MAX, isBriefFactUtterance, isLayoutOnlyUtterance, layoutGenerateCommand, omitHandledLayoutActions, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
 import { BRIEF_CLIENT_TIMEOUT_MS, type BriefSlots, type BriefConversationResponse } from '../../supabase/functions/_shared/brief-extract-contract';
 import { SceneApiError } from '../../client/scene-client';
@@ -162,6 +162,10 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       if (response.enabled && response.extraction) {
         const { extraction, pending } = validateModelFacts(raw, sanitizeModelNeeds(raw,response.extraction));
         const turn = parseBriefTurn(raw, previous, context, toExtraction(extraction));
+        // A accepted smaller table is a relayout, not an inventory question and not 没接住.
+        if (turn.kind === 'generate' && isRoundResizeUtterance(raw, previous) && turn.layoutTools?.some(call => call.tool === 'layout_preview')) {
+          return { ...turn, resolution: 'model' };
+        }
         const pendingFacts = dropHeldRestatements(raw, turn.memory, [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending]);
         const rawModelReply='reply' in response && typeof response.reply==='string'?response.reply:undefined;
         const modelReply=isGeneralActivityQuestion(raw)?rawModelReply:reconcileHeadcountReply(rawModelReply,turn.memory,pendingFacts);

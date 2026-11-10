@@ -87,6 +87,15 @@ function isHold(raw: string): boolean {
   return occasionFrom(compact) !== null;
 }
 
+/** 「换成 Ø1.60 米」 accepts the suggested table on the banquet already in progress. */
+export function isRoundResizeUtterance(raw: string, memory: { furnishing?: { shape?: string } | undefined; headcount: number | null }): boolean {
+  if (!memory.furnishing || memory.furnishing.shape !== 'round' || memory.headcount === null) return false;
+  const compact = raw.replace(/\s+/g, '');
+  if (!/(?:换成|改为|改成|直径|[ØΦφ⌀])/.test(compact) || /(?:库存|现有|已有|我们有|手头有)/.test(compact)) return false;
+  if (spokenHeadcount(raw) !== null) return false;
+  return readTableRequest(raw)?.width !== undefined;
+}
+
 /** A banquet sentence, before the turn has been saved. Used so the composer can switch during the wait. */
 export function isBanquetUtterance(raw: string): boolean {
   const occasion = occasionFrom(raw);

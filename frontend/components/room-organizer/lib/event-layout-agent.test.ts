@@ -4,7 +4,7 @@ import { collectViolations } from '../../../lib/placement-rules';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { readBriefMemory, writeBriefMemory } from './assistant-brief-memory';
 import { initialBriefMemory, parseBriefTurn } from './brief-agent';
-import { eventPreviewInput, eventPreviewScale, isBanquetUtterance, planHeldEvent, spokenHeadcount } from './event-layout-agent';
+import { eventPreviewInput, eventPreviewScale, isBanquetUtterance, isRoundResizeUtterance, planHeldEvent, spokenHeadcount } from './event-layout-agent';
 import { materializeFurnishing, selectFurnishing } from './furnishing-select';
 import { backendSceneToLayout } from './backend-adapter';
 import { localPlan, omitUnlandedBanquetItems } from './local-plan';
@@ -536,6 +536,37 @@ function memoryBox(): Storage {
     const layout = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [beside] }) };
     expect(structuralItemCollides(beside, layout, 0)).toBe(false);
     expect(omitUnlandedBanquetItems(layout, 0, new Set()).floors[0]!.items.some(item => item.id === 'partition-chair')).toBe(false);
+  });
+
+  it('换成 Ø1.60 米 relayouts the banquet instead of dropping the preview', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    const first = parseBriefTurn('圆桌直径2.2米，80人，20米乘15米', initialBriefMemory(), bare);
+    expect(isRoundResizeUtterance('换成 Ø1.60 米', first.memory)).toBe(true);
+    const local = parseBriefTurn('换成 Ø1.60 米', first.memory, { ...bare, venueUp: true, hasBase: true });
+    expect(local.kind).toBe('generate');
+    expect(local.text).not.toContain('没接住');
+    expect(local.memory.furnishing?.width).toBeCloseTo(1.6);
+    expect(local.memory.headcount).toBe(80);
+    expect(eventPreviewScale(
+      { length: local.memory.lengthM ?? 20, width: local.memory.widthM ?? 15, origin: 'stated', fromVenue: false },
+      local.memory,
+      { length: 23.8, width: 16.1 },
+    ).keptHall).toBe(true);
+    const cloud = await resolveBriefTurn('换成 Ø1.60 米', first.memory, { venueUp: true, scaleTyped: false, hasBase: true, command: null }, {
+      briefExtract: vi.fn(),
+      briefConversation: vi.fn().mockResolvedValue({
+        enabled: true,
+        extraction: {},
+        reply: '1.60米圆桌通常适合坐8人左右。请确认这些桌子是否已入库。',
+        unhandled: [],
+        factEvidence: [],
+      }),
+    }, undefined, { history: [] });
+    expect(cloud.kind).toBe('generate');
+    expect(cloud.text).not.toContain('没接住');
+    expect(cloud.readOnlyReply).toBeFalsy();
+    expect(cloud.memory.furnishing?.width).toBeCloseTo(1.6);
+    vi.unstubAllEnvs();
   });
 
   it('keeps a short add-seats pass blocked when the tighter shell cannot hold 80', () => {

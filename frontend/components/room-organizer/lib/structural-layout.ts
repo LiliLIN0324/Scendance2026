@@ -95,11 +95,11 @@ export interface SeatingRect { x: number; z: number; w: number; d: number }
  * A tighter exterior loop uses its inner face. No such loop means the activity
  * frame itself is the floor — callers must not invent a smaller room.
  */
-export function usableSeatingRect(layout: RoomLayout, floorIndex = 0): SeatingRect | null {
+function exteriorWalls(layout: RoomLayout, floorIndex: number) {
   const floor = layout.floors[floorIndex];
   const stored = layout.backendSceneV2;
   const floorWalls = floor?.interiorWalls ?? [];
-  const walls = floorWalls.length
+  return floorWalls.length
     ? floorWalls.map(wall => ({
         start: { x: wall.x1 + layout.width / 2, z: wall.z1 + layout.height / 2 },
         end: { x: wall.x2 + layout.width / 2, z: wall.z2 + layout.height / 2 },
@@ -111,7 +111,23 @@ export function usableSeatingRect(layout: RoomLayout, floorIndex = 0): SeatingRe
         ...(wall.kind ? { kind: wall.kind } : {}),
         ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}),
       }));
-  const shell = shellInterior(walls, layout.width, layout.height);
+}
+
+/** World-metre polygon the floor is actually drawn from, when it is tighter than the frame. */
+export function usableFloorPolygon(layout: RoomLayout, floorIndex = 0): ShellPoint[] | null {
+  const shell = shellInterior(exteriorWalls(layout, floorIndex), layout.width, layout.height);
+  const recorded = layout.backendVenue?.polygon;
+  const frame = layout.width * layout.height;
+  const shellOk = !!shell && ringArea(shell) < (recorded ? ringArea(recorded) : frame) * 0.98;
+  const recordedOk = !!recorded && ringArea(recorded) < frame * 0.98;
+  if (shellOk && recordedOk && recorded && shell && ringArea(recorded) < ringArea(shell)) return recorded.map(point => ({ x: point.x, z: point.z }));
+  if (shellOk && shell) return shell;
+  if (recordedOk && recorded) return recorded.map(point => ({ x: point.x, z: point.z }));
+  return null;
+}
+
+export function usableSeatingRect(layout: RoomLayout, floorIndex = 0): SeatingRect | null {
+  const shell = shellInterior(exteriorWalls(layout, floorIndex), layout.width, layout.height);
   if (!shell) return null;
   const recorded = layout.backendVenue?.polygon;
   if (!(ringArea(shell) < (recorded ? ringArea(recorded) : layout.width * layout.height) * 0.98)) return null;

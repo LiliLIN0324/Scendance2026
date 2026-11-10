@@ -49,7 +49,7 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
 import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
-import { eventPreviewScale, isBanquetUtterance, leadOnStandingHall } from '../lib/event-layout-agent';
+import { eventPreviewScale, isBanquetUtterance, isRoundResizeUtterance, leadOnStandingHall } from '../lib/event-layout-agent';
 import { layoutFurnishing } from '../lib/furnishing-select';
 import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
@@ -2673,7 +2673,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const specsUnchanged=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)&&JSON.stringify(nextBanquet)===JSON.stringify(beforeSpecs.banquetTable);
     const previousMemory=specsUnchanged?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation,...(nextBanquet?{banquetTable:nextBanquet}:{})};
     if(previousMemory!==beforeSpecs){
-      if(phaseRef.current==='proposed'||phaseRef.current==='paused'){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
+      // Keep the current banquet preview up until a diameter change has a new one.
+      if(!isRoundResizeUtterance(trimmed, beforeSpecs) && (phaseRef.current==='proposed'||phaseRef.current==='paused')){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
       saveMemory(previousMemory);syncMemory(previousMemory);
     }
     const turnVenueBasis = venueScaleBasis(layoutStore.getState().layout);
@@ -2746,7 +2747,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     const memorySaved=saveMemory(turn.memory);
     releaseTurn();
-    if(unifiedConversation && (phaseRef.current==='proposed'||phaseRef.current==='paused') && !sameRecoveryFormValue({...previousMemory,askedScale:false},{...turn.memory,askedScale:false})) {dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
+    if(unifiedConversation && turn.kind !== 'generate' && (phaseRef.current==='proposed'||phaseRef.current==='paused') && !sameRecoveryFormValue({...previousMemory,askedScale:false},{...turn.memory,askedScale:false})) {dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
     const extraction = turn.extraction;
     const merged = memoryExtraction(turn.memory);
     // 人数 / 类型 / 室内外 / 长宽先写进左栏简报，再决定出不出预览。云端忙也不能把这句漏掉。

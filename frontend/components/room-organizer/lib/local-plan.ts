@@ -4,7 +4,7 @@ import { sceneScriptFromBrief } from './scene-script';
 import { compileSceneScript, type SceneScriptCompileResult } from './scene-script-compiler';
 import { itemsOverlap, isLowProfile } from './geometry';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
-import { isStructuralMarker, structuralItemCollides, usableSeatingRect } from './structural-layout';
+import { isStructuralMarker, structuralItemCollides, usableFloorPolygon, usableSeatingRect } from './structural-layout';
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
@@ -143,6 +143,43 @@ function grazesWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number)
   return false;
 }
 
+function pointInRing(x: number, z: number, poly: readonly { x: number; z: number }[]): boolean {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!, b = poly[j]!;
+    const onEdge = Math.abs((b.x - a.x) * (z - a.z) - (x - a.x) * (b.z - a.z)) <= 1e-6
+      && x >= Math.min(a.x, b.x) - 1e-6 && x <= Math.max(a.x, b.x) + 1e-6
+      && z >= Math.min(a.z, b.z) - 1e-6 && z <= Math.max(a.z, b.z) + 1e-6;
+    if (onEdge) return true;
+    if ((a.z > z) !== (b.z > z) && x < (b.x - a.x) * (z - a.z) / (b.z - a.z) + a.x) hit = !hit;
+  }
+  return hit;
+}
+
+/** Outside the drawn floor, or in the last 12 cm of it, the mesh reads as an outline. */
+function missesUsableFloor(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
+  const poly = usableFloorPolygon(layout, floorIndex);
+  if (!poly || !item.position) return false;
+  const rotation = item.rotation ?? 0;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const halfW = item.width / 2, halfD = item.depth / 2;
+  const cx = item.position.x + layout.width / 2;
+  const cz = item.position.z + layout.height / 2;
+  const corners = [[-halfW, -halfD], [halfW, -halfD], [halfW, halfD], [-halfW, halfD]].map(([x, z]) => ({
+    x: cx + x * cos - z * sin,
+    z: cz + x * sin + z * cos,
+  }));
+  const margin = 0.12;
+  for (const corner of corners) {
+    if (!pointInRing(corner.x, corner.z, poly)) return true;
+    for (let index = 0; index < poly.length; index++) {
+      const a = poly[index]!, b = poly[(index + 1) % poly.length]!;
+      if (distanceToSegment(corner.x, corner.z, a.x, a.z, b.x, b.z) < margin) return true;
+    }
+  }
+  return false;
+}
+
 function isBanquetSeat(item: FurnitureItem): boolean {
   return item.type === 'dining-chair' || item.type === 'chair' || item.type === 'desk-chair';
 }
@@ -157,7 +194,7 @@ export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number,
     const seat = isBanquetSeat(item);
     const table = item.type === 'dining-table';
     if (!seat && !table) { kept.push(item); continue; }
-    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex)) continue;
+    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex) || missesUsableFloor(item, layout, floorIndex)) continue;
     if (seat) pendingSeats.push(item);
     else kept.push(item);
   }
@@ -165,8 +202,11 @@ export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number,
     if (kept.some(other => other.position && !isLowProfile(other) && itemsOverlap(item, other))) continue;
     kept.push(item);
   }
-  if (kept.length === floor.items.length) return layout;
-  return { ...layout, floors: layout.floors.map((entry, index) => index === floorIndex ? { ...entry, items: kept } : entry) };
+  const seated = kept.filter(item => isBanquetSeat(item) && item.position);
+  const lonely = new Set(kept.filter(item => item.type === 'dining-table' && !baseIds.has(item.id) && item.position && !seated.some(chair => Math.hypot(chair.position!.x - item.position!.x, chair.position!.z - item.position!.z) < item.width + 0.8)).map(item => item.id));
+  const items = lonely.size ? kept.filter(item => !lonely.has(item.id)) : kept;
+  if (items.length === floor.items.length) return layout;
+  return { ...layout, floors: layout.floors.map((entry, index) => index === floorIndex ? { ...entry, items } : entry) };
 }
 
 function landedChairCount(layout: RoomLayout | undefined, floorIndex: number, baseIds: ReadonlySet<string>): number {
