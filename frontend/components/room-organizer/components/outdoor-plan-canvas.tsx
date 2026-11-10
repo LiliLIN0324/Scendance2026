@@ -1958,7 +1958,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     || (row.kind === 'worker' && row.id === selectedWorkerId);
   // 面板内点击不再冒泡到画布（否则勾选/选模板/点按钮会在面板对应画布位置误加草稿点或放置实体）。
   const stopPanelMouse = (event: React.MouseEvent) => event.stopPropagation();
-  const panelInline = !!(layerPanelHost || infoPanelHost);
+  // 两张卡各有宿主：图层卡看 layerPanelHost，规划信息卡看 infoPanelHost——
+  // 之前共用一个开关，规划信息的宿主（Bingo 里）缺席时会用「外挂态」样式却渲染在画布流里，拉成顶部横条。
+  const panelInline = !!layerPanelHost;
+  const infoPanelInline = !!infoPanelHost;
   const panelStyle: React.CSSProperties = panelInline ? {
     position: 'relative',
     zIndex: 3,
@@ -1988,7 +1991,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     overflowY: 'auto',
   };
   const sectionTitle: React.CSSProperties = { marginTop: PLANNING_SPACING.sm, marginBottom: PLANNING_SPACING.xs, fontWeight: 600, opacity: 0.9 };
-  const infoPanelStyle: React.CSSProperties = panelInline ? {
+  const infoPanelStyle: React.CSSProperties = infoPanelInline ? {
     position: 'relative',
     zIndex: 3,
     background: PLANNING_SURFACE.panelBg,
@@ -2162,9 +2165,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         </div>
       )}
 
-      {/* H3-c 规划信息面板（左栏常驻）：总览 / 清单 / 问题 / 图例，只读也可用。 */}
-      {/* H3-c 规划信息面板：浮窗在画布内；传 infoPanelHostId 且宿主存在时移到外部（左栏卡片）。 */}
-      <PanelPortal host={infoPanelHost}>
+      {/* H3-c 规划信息面板：宿主在 Bingo 面板里；Bingo 收起时整块不渲染（不再在画布顶部拉成横条）。 */}
+      {!(infoPanelHostId && !infoPanelHost) && <PanelPortal host={infoPanelHost}>
       <div ref={infoPanelRef} style={infoPanelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
         <button
           type="button"
@@ -2330,7 +2332,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           </>
         )}
       </div>
-      </PanelPortal>
+      </PanelPortal>}
 
       <PanelPortal host={layerPanelHost}>
       <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
