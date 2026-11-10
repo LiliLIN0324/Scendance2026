@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Globe, Info, Layers, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Globe, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -160,7 +160,7 @@ import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay from './components/outdoor-plan-overlay';
-import type { OutdoorPanelKind } from './components/outdoor-plan-overlay';
+type OutdoorPanelKind = 'layers' | 'info';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -489,9 +489,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   useEffect(() => { if (captureOpen) capturePanelRef.current?.focus(); }, [captureOpen]);
   // 户外 2D 规划覆盖层（P2-c）：同一页面内的户外面——开启后满幅盖在 3D 画布上，关闭即回。
   // 数据同态：草稿按 layout.id 存本机（outdoor-project-store），底图定位继承活动点位。
-  // P2-d：左栏卡片（图层/信息）由左轨钮切换，浮窗经 panelsHostId portal 进左栏。
+  // P2-e：左栏户外卡片（图层/信息两页签）由左轨「户外规划」开关控制；
+  // 保存态经覆盖层上报后在左轨 foot（主产品保存态原位）显示。
   const [outdoor2DOpen, setOutdoor2DOpen] = useState(false);
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('layers');
+  const [outdoorSaveFoot, setOutdoorSaveFoot] = useState<{ state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null>(null);
+  const handleOutdoorSaveState = useCallback((next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => setOutdoorSaveFoot(next), []);
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -3650,7 +3653,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
             <div className="sc-rail-head">
               <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
-              <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、空间、物料">
+              <nav className="sc-mode-rail-primary" aria-label={outdoor2DOpen ? '户外规划' : '活动、Bingo、空间、物料'}>
+                {!outdoor2DOpen && (<>
                 <BingoRailButton open={isLaneOpen('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
                 <button
                   type="button"
@@ -3695,6 +3699,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   </svg>
                   <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
                 </button>
+                </>)}
                 <button
                   type="button"
                   className={`sc-rail-tool sc-rail-disc${outdoor2DOpen ? ' is-active' : ''}`}
@@ -3703,45 +3708,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   data-tip="户外规划 · 地图上画边界分区动线"
                   onClick={() => setOutdoor2DOpen(current => {
                     const next = !current;
-                    if (next) setOutdoorPanel(current1 => current1 ?? 'layers'); // 开启默认亮图层卡（浮窗进左栏）。
+                    if (next) setOutdoorPanel('layers'); // 开启时左栏默认亮图层栈页签。
                     return next;
                   })}
                 >
                   <Globe size={26} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
-                {outdoor2DOpen && (
-                  <>
-                    <button
-                      type="button"
-                      className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'layers' ? ' is-active' : ''}`}
-                      aria-pressed={outdoorPanel === 'layers'}
-                      aria-label="图层：图层开关与编辑模式"
-                      data-tip="图层 · 开关与编辑模式"
-                      onClick={() => setOutdoorPanel(current2 => current2 === 'layers' ? null : 'layers')}
-                    >
-                      <Layers size={26} aria-hidden="true" />
-                      <span className="sc-rail-label" aria-hidden="true">图层</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'info' ? ' is-active' : ''}`}
-                      aria-pressed={outdoorPanel === 'info'}
-                      aria-label="规划信息：统计清单问题图例"
-                      data-tip="规划信息 · 统计/清单/问题"
-                      onClick={() => setOutdoorPanel(current3 => current3 === 'info' ? null : 'info')}
-                    >
-                      <Info size={26} aria-hidden="true" />
-                      <span className="sc-rail-label" aria-hidden="true">信息</span>
-                    </button>
-                  </>
-                )}
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
-              {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
-              <button
+              {outdoor2DOpen
+                ? <p role="status" className={`sc-rail-draft${outdoorSaveFoot?.state === 'saving' ? '' : ''}`} data-testid="outdoor-save-foot" title="户外规划草稿保存在本机；云端规划表接线后自动同步">
+                  {outdoorSaveFoot?.state === 'saving' ? '户外草稿保存中…' : outdoorSaveFoot?.savedAt ? `户外草稿 · 已存 ${outdoorSaveFoot.savedAt}` : '户外草稿待保存'}
+                </p>
+                : draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
+              {!outdoor2DOpen && (<button
                 type="button"
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
                 aria-label={planAnnot.drawMode === 'off' ? '规划活动区域' : '结束规划绘制'}
@@ -3764,7 +3747,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                 {planAnnot.drawMode === 'fire-route' && <span className="sc-annotation-toggle__suffix">·疏散</span>}
                 {planAnnot.drawMode === 'measure' && <span className="sc-annotation-toggle__suffix">·距</span>}
                 {planAnnot.drawMode === 'door' && <span className="sc-annotation-toggle__suffix">·门</span>}
-              </button>
+              </button>)}
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
               <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
@@ -3811,7 +3794,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {!captureOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+          {outdoor2DOpen && (
+            <aside className="sc-left-drawer sc-float-layer" data-testid="outdoor-left-card" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div className="sc-left-heading"><nav className="sc-left-context" aria-label="户外规划面板">
+                <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>图层栈</button>
+                <button type="button" aria-pressed={outdoorPanel === 'info'} onClick={() => setOutdoorPanel('info')}>规划信息</button>
+              </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><PanelLeftClose size={20}/></button></div>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+                <div id="outdoor-panel-host-layers" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'layers' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+                <div id="outdoor-panel-host-info" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'info' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+              </div>
+            </aside>
+          )}
+          {!outdoor2DOpen && !captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -3828,8 +3823,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               projectId={layout.id ?? null}
               anchor={layout.sceneAnchor ?? layout.mapLngLat ?? null}
               activityName={layout.name}
-              activePanel={outdoorPanel}
-              onClose={() => setOutdoor2DOpen(false)}
+              onSaveStateChange={handleOutdoorSaveState}
             />
           )}
       <div className="sc-scene-viewport"><Viewport
@@ -4145,13 +4139,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            {!outdoor2DOpen ? (<ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
               zoomCamera(camera, controls, direction);
               invalidate();
-            }}/>
+            }}/>) : <div id="outdoor-tools-dock" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="户外规划工具" onWheel={event => event.stopPropagation()} />}
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             </div>
           </div>
