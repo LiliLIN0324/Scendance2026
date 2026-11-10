@@ -18,6 +18,7 @@ import {
   type PlanFacility,
   type PlanPoint,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { planMetersPerPixel, planPointToPixel, type PlanViewport } from './outdoor-plan-canvas';
 import {
   planPointInRing,
   planRingSelfIntersects,
@@ -247,6 +248,91 @@ export function facilityTemplatesValid(
 /** 放置结果应能原样通过契约校验（含 notes 默认值与 UUID 形态）。 */
 export function facilityPassesContract(facility: PlanFacility): boolean {
   return planFacilitySchema.safeParse(facility).success;
+}
+
+/* ---------------- P2-i：画布编辑手柄（纯函数，画布与测试共用） ---------------- */
+
+/** 选中设施的手柄视觉半径（CSS px）：四角方柄边长、旋转圆柄直径同值。 */
+export const FACILITY_HANDLE_PX = 8;
+/** 手柄命中半径（CSS px）比视觉大一圈，方便鼠标抓取。 */
+export const FACILITY_HANDLE_HIT_PX = 12;
+/** 旋转柄离占地顶边的距离（CSS px，屏幕上恒定）：设施缩小时不会被压进本体。 */
+export const FACILITY_ROTATE_GAP_PX = 26;
+/** 占地最大边小于这个像素时不挂手柄：此时手柄会盖满本体，直接拖本体移动更顺手。 */
+export const FACILITY_HANDLE_MIN_FOOTPRINT_PX = 34;
+
+/** 屏幕像素坐标（CSS px）。 */
+export type PlanPixelPoint = { x: number; y: number };
+
+export type FacilityHandles = {
+  /** 占地四角（CSS px，顺序同 facilityFootprintRing：SW→SE→NE→NW）。 */
+  corners: PlanPixelPoint[];
+  /** 顶边（北侧边）中点：旋转柄连线的起点（CSS px）。 */
+  topMid: PlanPixelPoint;
+  /** 旋转柄圆心（顶边中点沿北向法线外推 FACILITY_ROTATE_GAP_PX，CSS px）。 */
+  rotate: PlanPixelPoint;
+};
+
+/** 设施在屏幕上够大才挂手柄（够小时手柄会盖住本体，反而不如直接拖动）。 */
+export function facilityHandlesUsable(
+  facility: { size: { width: number; depth: number } },
+  viewport: PlanViewport,
+): boolean {
+  const mpp = planMetersPerPixel(viewport);
+  if (!Number.isFinite(mpp) || mpp <= 0) return false;
+  return Math.max(facility.size.width, facility.size.depth) / mpp >= FACILITY_HANDLE_MIN_FOOTPRINT_PX;
+}
+
+/**
+ * 选中设施的编辑手柄坐标（CSS px）：四角=改尺寸，北侧边中点外推=旋转。
+ *
+ * 方向口径：旋转柄必须和 topMid（NE/NW 中点，即北侧边）落在同一侧，
+ * 否则连线会横穿本体、鼠标永远抓不到（P2-i 实测 bug 的根因）。
+ * 北向单位向量在 plan 系里是 (0, +1)，按占地同一套旋转矩阵得到 (-sinθ, +cosθ)。
+ */
+export function facilityHandles(
+  facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
+  viewport: PlanViewport,
+): FacilityHandles {
+  const ring = facilityFootprintRing(facility);
+  const theta = (facility.rotationDeg * Math.PI) / 180;
+  // 旋转柄间距用屏幕像素折算成米：放大时柄跟着走远，缩小时也不至于落到本体上。
+  const gap = facility.size.depth / 2 + FACILITY_ROTATE_GAP_PX * planMetersPerPixel(viewport);
+  const rotatePt = {
+    x: facility.position.x - gap * Math.sin(theta),
+    y: facility.position.y + gap * Math.cos(theta),
+  };
+  const corners = ring.map(pt => planPointToPixel(pt, viewport));
+  return {
+    corners,
+    topMid: { x: (corners[2]!.x + corners[3]!.x) / 2, y: (corners[2]!.y + corners[3]!.y) / 2 },
+    rotate: planPointToPixel(rotatePt, viewport),
+  };
+}
+
+export type FacilityHandleHit = { kind: 'rotate'; corner: null } | { kind: 'resize'; corner: number };
+
+/**
+ * 命中判定：先旋转柄、再四角改尺寸柄；拿到即返回，屏幕外/手柄不挂时返回 null。
+ * 与画布 mousedown 的接管顺序保持一致（旋转 > 改尺寸 > 拖本体）。
+ */
+export function facilityHandleAt(
+  facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
+  viewport: PlanViewport,
+  px: PlanPixelPoint,
+): FacilityHandleHit | null {
+  if (!facilityHandlesUsable(facility, viewport)) return null;
+  const handles = facilityHandles(facility, viewport);
+  if (Math.hypot(px.x - handles.rotate.x, px.y - handles.rotate.y) <= FACILITY_HANDLE_HIT_PX) {
+    return { kind: 'rotate', corner: null };
+  }
+  for (let i = 0; i < handles.corners.length; i += 1) {
+    const corner = handles.corners[i]!;
+    if (Math.hypot(px.x - corner.x, px.y - corner.y) <= FACILITY_HANDLE_HIT_PX) {
+      return { kind: 'resize', corner: i };
+    }
+  }
+  return null;
 }
 
 /** 占地环自检：面积恒等于宽深乘积、永不自交（任意旋转角）。 */

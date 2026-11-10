@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 户外 2D 规划视觉 tokens（H1-c 基础 + H4-a 全量）。建立 2D 规划层与既有品牌收口的单一视觉契约：
  * - 主色沿用品牌幕景绿（`globals.css` 的 `--green-deep: #35624A`，与 `lib/brand-tokens.test.ts` 同口径），不另立新绿。
  * - 间距 / 圆角为紧凑、一致的比例尺，供 H2/H4 的 2D 画布与面板使用。
@@ -183,6 +183,10 @@ export const PLANNING_ICONS = [
   'redo-2', // 重做
   'map-pin', // 回到场地
   'download', // 导出
+  'lock', // 图层锁定
+  'lock-open', // 图层解锁
+  'rotate-cw', // 设施旋转
+  'copy', // 设施复制
 ] as const;
 
 export type PlanningIconName = (typeof PLANNING_ICONS)[number];

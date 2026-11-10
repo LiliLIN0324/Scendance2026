@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FACILITY_ROTATE_GAP_PX,
   PLAN_FACILITY_TEMPLATES,
   buildFacility,
   facilityContainsPoint,
   facilityFootprintRing,
+  facilityHandleAt,
+  facilityHandles,
+  facilityHandlesUsable,
   facilityLocalPoint,
   facilityPassesContract,
   facilityPlacementIssues,
@@ -13,6 +17,7 @@ import {
   nextFacilityName,
   planFacilityIssues,
 } from './site-plan-facilities';
+import { planMetersPerPixel } from './outdoor-plan-canvas';
 import { planRingSelfIntersects } from './site-plan-editing';
 import { planFacilitySchema, planRingAreaM2 } from '../../../../supabase/functions/_shared/site-plan';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
@@ -187,5 +192,51 @@ describe('footprint vs ring self-intersection guard', () => {
   it('ring self-intersection helper stays available for facility footprints', () => {
     const ring = facilityFootprintRing({ position: { x: 0, y: 0 }, rotationDeg: 15, size: { width: 6, depth: 2.5 } });
     expect(planRingSelfIntersects(ring)).toBe(false);
+  });
+});
+
+/* ---------------- P2-i：设施编辑手柄（北侧旋转柄 + 命中判定） ---------------- */
+
+const HANDLE_VIEWPORT = { lng: 120.146, lat: 30.252, zoom: 19, canvasW: 1000, canvasH: 700 };
+const HANDLE_CENTER = { x: HANDLE_VIEWPORT.canvasW / 2, y: HANDLE_VIEWPORT.canvasH / 2 };
+
+function handleFacility(rotationDeg = 0, width = 12, depth = 12) {
+  return { position: { x: 0, y: 0 }, rotationDeg, size: { width, depth } };
+}
+
+describe('facility edit handles', () => {
+  it('旋转柄在北侧（与顶边中点同侧），间距 = 半深 + 26px 折算', () => {
+    const facility = handleFacility();
+    const viewport = HANDLE_VIEWPORT;
+    const handles = facilityHandles(facility, viewport);
+    const mpp = planMetersPerPixel(viewport);
+    const gapPx = (facility.size.depth / 2 + FACILITY_ROTATE_GAP_PX * mpp) / mpp;
+    expect(handles.rotate.x).toBeCloseTo(HANDLE_CENTER.x, 3);
+    expect(handles.rotate.y).toBeCloseTo(HANDLE_CENTER.y - gapPx, 3);
+    expect(handles.rotate.y).toBeLessThan(handles.topMid.y);
+    expect(handles.topMid.y).toBeLessThan(HANDLE_CENTER.y);
+  });
+
+  it('旋转 90° 后旋转柄转到西侧（北向单位向量随占地一起转）', () => {
+    const handles = facilityHandles(handleFacility(90), HANDLE_VIEWPORT);
+    expect(handles.rotate.x).toBeLessThan(HANDLE_CENTER.x - 10);
+    expect(handles.rotate.y).toBeCloseTo(HANDLE_CENTER.y, 3);
+  });
+
+  it('命中判定：旋转柄 → rotate，四角 → resize，本体中心 → null', () => {
+    const facility = handleFacility(15);
+    const viewport = HANDLE_VIEWPORT;
+    const handles = facilityHandles(facility, viewport);
+    expect(facilityHandleAt(facility, viewport, handles.rotate)).toEqual({ kind: 'rotate', corner: null });
+    handles.corners.forEach((corner, i) => {
+      expect(facilityHandleAt(facility, viewport, corner)).toEqual({ kind: 'resize', corner: i });
+    });
+    expect(facilityHandleAt(facility, viewport, HANDLE_CENTER)).toBeNull();
+  });
+
+  it('占地太小（屏幕 < 34px）时不挂手柄：宁可拖本体也不误触', () => {
+    const tiny = handleFacility(0, 1, 1);
+    expect(facilityHandlesUsable(tiny, HANDLE_VIEWPORT)).toBe(false);
+    expect(facilityHandleAt(tiny, HANDLE_VIEWPORT, HANDLE_CENTER)).toBeNull();
   });
 });
