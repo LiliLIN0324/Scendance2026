@@ -175,13 +175,37 @@ export function eventPreviewInput(memory: BriefMemory): {
 export function eventPreviewScale(
   stated: { length: number; width: number; origin: ScaleOrigin; fromVenue: boolean },
   memory: Pick<BriefMemory, 'agentVenue' | 'lengthM' | 'widthM' | 'areaM2'>,
-): { length: number; width: number; origin: ScaleOrigin; assumed: boolean } {
+  standing?: { length: number; width: number } | null,
+): { length: number; width: number; origin: ScaleOrigin; assumed: boolean; keptHall: boolean } {
+  if (standing && standing.length > 0 && standing.width > 0) {
+    return { length: standing.length, width: standing.width, origin: 'canvas', assumed: false, keptHall: true };
+  }
   const hall = memory.agentVenue;
   const noUserSize = memory.lengthM === null && memory.widthM === null && memory.areaM2 === null;
   if (hall && noUserSize && !stated.fromVenue) {
-    return { length: hall.lengthM, width: hall.widthM, origin: 'canvas', assumed: true };
+    return { length: hall.lengthM, width: hall.widthM, origin: 'canvas', assumed: true, keptHall: false };
   }
-  return { length: stated.length, width: stated.width, origin: stated.origin, assumed: false };
+  return { length: stated.length, width: stated.width, origin: stated.origin, assumed: false, keptHall: false };
+}
+
+/** Spoken size or a stored area does not replace a hall that is already standing. */
+export function leadOnStandingHall(
+  lead: string,
+  hall: { length: number; width: number },
+  spoken: { length: number | null; width: number | null; area: number | null },
+): string {
+  const here = `按现在的场地 ${formatArea(hall.length)}×${formatArea(hall.width)} 米`;
+  const different = spoken.length !== null && spoken.width !== null
+    && (Math.abs(spoken.length - hall.length) > 0.05 || Math.abs(spoken.width - hall.width) > 0.05);
+  const phrase = different
+    ? `你说的 ${formatArea(spoken.length!)}×${formatArea(spoken.width!)} 米这次不改场地，${here}`
+    : spoken.area !== null && spoken.length === null
+      ? `面积先不折成新场地，${here}`
+      : here;
+  return lead
+    .replace(/场地没说，我先按(?:室内|户外) \S+ 米/, phrase)
+    .replace(/按你说的 \S+ 米/, phrase)
+    .replace(/按 [\d.]+ ㎡ 折成 \S+ 米/, phrase);
 }
 
 export function planHeldEvent(raw: string, memory: BriefMemory, extraction: BriefExtraction): BriefTurn | null {
@@ -190,13 +214,17 @@ export function planHeldEvent(raw: string, memory: BriefMemory, extraction: Brie
   if (isQuestion(raw)) {
     if (!hold && !fact) return null;
     const occasion = occasionFrom(raw) ?? memory.eventIntent?.occasion;
-    const next: BriefMemory = { ...memory, askedScale: false };
-    if (occasion) next.event = occasion;
+    const count = spokenHeadcount(raw) ?? bareCount(raw);
+    const next: BriefMemory = { ...memory, askedScale: false, ...(count !== null ? { headcount: count, headcountMode: null } : {}) };
+    if (occasion) {
+      next.event = occasion;
+      next.eventIntent = count !== null ? { occasion } : { occasion, awaiting: 'headcount' };
+    }
     delete next.furnishing;
     return {
       kind: 'ask',
       memory: next,
-      extraction: occasion ? { ...extraction, event: occasion } : extraction,
+      extraction: { ...extraction, ...(occasion ? { event: occasion } : {}), ...(count !== null ? { headcount: count } : {}) },
       filledScaleAsk: false,
       text: occasion ? `要按这场${occasion}出预览吗？要的话直接说人数，或说「出一版」。` : '要我按这个出一版预览吗？',
     };
@@ -207,7 +235,10 @@ export function planHeldEvent(raw: string, memory: BriefMemory, extraction: Brie
   const table = readTableRequest(raw);
   const perTable = perTableCount(raw);
   const resizing = !!memory.furnishing && ((table?.width !== undefined) || perTable !== undefined || (!!table?.shape && table.shape !== (memory.furnishing.shape === 'round' ? 'round' : 'rect')));
-  if (!hold && !fact && !(awaiting && statedCount !== null) && !resizing) {
+  const compact = raw.replace(/\s+/g, '');
+  const voicedGo = /出一版|出方案|先出一版|摆一版/.test(compact);
+  const continuePlan = !!memory.eventIntent && !isQuestion(raw) && (statedCount !== null || (voicedGo && memory.headcount !== null));
+  if (!hold && !fact && !(awaiting && statedCount !== null) && !resizing && !continuePlan) {
     if (awaiting && statedCount === null && /出方案|出一版|摆一版|先出/.test(raw.replace(/\s+/g, ''))) {
       const occasion = memory.eventIntent?.occasion;
       if (occasion) return ask(memory, extraction, occasion);

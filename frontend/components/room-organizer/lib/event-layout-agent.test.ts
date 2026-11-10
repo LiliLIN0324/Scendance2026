@@ -224,6 +224,17 @@ function memoryBox(): Storage {
     expect(asked.kind).toBe('ask');
     expect(asked.text).toContain('预览');
     expect(asked.memory.furnishing).toBeUndefined();
+    expect(asked.memory.headcount).toBe(80);
+    expect(asked.memory.eventIntent).toEqual({ occasion: '生日宴' });
+    const again = parseBriefTurn('出一版', asked.memory, bare);
+    expect(again.kind).toBe('generate');
+    expect(again.memory.furnishing?.source).toBe('select_furnishing');
+    const bareAsk = parseBriefTurn('能办个生日宴吗', initialBriefMemory(), bare);
+    expect(bareAsk.kind).toBe('ask');
+    expect(bareAsk.memory.eventIntent).toEqual({ occasion: '生日宴', awaiting: 'headcount' });
+    const answered = parseBriefTurn('80个人', bareAsk.memory, bare);
+    expect(answered.kind).toBe('generate');
+    expect(answered.memory.headcount).toBe(80);
     expect(planHeldEvent('你好', initialBriefMemory(), blank)).toBeNull();
   });
 
@@ -274,10 +285,15 @@ function memoryBox(): Storage {
     expect(eventPreviewScale(
       { length: 18, width: 10, origin: 'typed', fromVenue: true },
       { agentVenue: { lengthM: 20, widthM: 15 }, lengthM: null, widthM: null, areaM2: null },
-    )).toEqual({ length: 18, width: 10, origin: 'typed', assumed: false });
+    )).toEqual({ length: 18, width: 10, origin: 'typed', assumed: false, keptHall: false });
     expect(eventPreviewScale(
       { length: 12, width: 8, origin: 'canvas', fromVenue: false },
       { agentVenue: { lengthM: 20, widthM: 15 }, lengthM: null, widthM: null, areaM2: null },
-    )).toEqual({ length: 20, width: 15, origin: 'canvas', assumed: true });
+    )).toEqual({ length: 20, width: 15, origin: 'canvas', assumed: true, keptHall: false });
+    expect(eventPreviewScale(
+      { length: 20, width: 15, origin: 'stated', fromVenue: false },
+      { agentVenue: undefined, lengthM: 20, widthM: 15, areaM2: null },
+      { length: 23.8, width: 16.1 },
+    )).toEqual({ length: 23.8, width: 16.1, origin: 'canvas', assumed: false, keptHall: true });
   });
 });

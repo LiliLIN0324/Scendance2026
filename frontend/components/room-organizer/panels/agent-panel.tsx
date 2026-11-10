@@ -49,7 +49,7 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
 import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
-import { eventPreviewScale } from '../lib/event-layout-agent';
+import { eventPreviewScale, leadOnStandingHall } from '../lib/event-layout-agent';
 import { layoutFurnishing } from '../lib/furnishing-select';
 import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
@@ -2271,9 +2271,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   /** 「这次没出成」那张卡上的重试：拿现在的读数再跑一遍，不另算一个入口。 */
+  function standingHall(): { length: number; width: number } | null {
+    if (!venueIsUp()) return null;
+    return { length: live.current.width, width: live.current.height };
+  }
+  function shellVenueIO(layout: RoomLayout): 'indoor' | 'outdoor' | null {
+    const value = layout.backendSceneV2?.venue?.site?.indoorOutdoor;
+    return value === 'indoor' || value === 'outdoor' ? value : null;
+  }
   function followUpScale(): Scale {
     const canvas = readScale();
-    const picked = eventPreviewScale({ ...canvas, fromVenue: venueIsUp() }, memoryRef.current);
+    const picked = eventPreviewScale({ ...canvas, fromVenue: venueIsUp() }, memoryRef.current, standingHall());
     return { length: picked.length, width: picked.width, origin: picked.origin };
   }
   function retry(): void { runGeneration('重试', seed.current, localDraftIntent.current??'', followUpScale()); }
@@ -2728,11 +2736,34 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
     anchorsRef.current = anchors;
     const statedScale = scaleFrom(merged);
-    const chosenScale = eventPreviewScale(statedScale, turn.memory);
-    const scale = { ...statedScale, length: chosenScale.length, width: chosenScale.width, origin: chosenScale.origin };
-    const previewLead = turn.previewLead && !chosenScale.assumed && /场地没说/.test(turn.previewLead)
-      ? turn.previewLead.replace(/场地没说，我先按(?:室内|户外) \S+ 米/, `按现在的场地 ${formatArea(chosenScale.length)}×${formatArea(chosenScale.width)} 米`)
-      : turn.previewLead;
+    const chosenScale = eventPreviewScale(statedScale, turn.memory, turn.memory.furnishing ? standingHall() : null);
+    const scale = { ...statedScale, length: chosenScale.length, width: chosenScale.width, origin: chosenScale.origin, fromVenue: chosenScale.keptHall || statedScale.fromVenue };
+    let previewLead = turn.previewLead;
+    if (chosenScale.keptHall && previewLead) {
+      const shellIO = shellVenueIO(live.current);
+      const spokenLength = turn.extraction.lengthM;
+      const spokenWidth = turn.extraction.widthM;
+      const spokenArea = turn.memory.agentVenue ? null : turn.memory.areaM2;
+      const keptMemory = {
+        ...turn.memory,
+        lengthM: chosenScale.length,
+        widthM: chosenScale.width,
+        ...(shellIO ? { venueIO: shellIO } : {}),
+      };
+      delete keptMemory.agentVenue;
+      turn = { ...turn, memory: keptMemory };
+      saveMemory(keptMemory);
+      syncMemory(keptMemory);
+      if (shellIO) { setVenueIO(shellIO); onVenueIOChange?.(shellIO); }
+      setLengthRaw(''); setWidthRaw(''); setDimsTouched(false); setScaleOrigin('canvas');
+      previewLead = leadOnStandingHall(previewLead, { length: chosenScale.length, width: chosenScale.width }, {
+        length: spokenLength,
+        width: spokenWidth,
+        area: spokenArea,
+      });
+    } else if (previewLead && !chosenScale.assumed && /场地没说/.test(previewLead)) {
+      previewLead = previewLead.replace(/场地没说，我先按(?:室内|户外) \S+ 米/, `按现在的场地 ${formatArea(chosenScale.length)}×${formatArea(chosenScale.width)} 米`);
+    }
     const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
     const mentionedZone = (kind: 'stage' | 'checkin', word: RegExp) => turn.memory.unresolvedActivityNeeds.includes(kind) || word.test(trimmed);
     const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
