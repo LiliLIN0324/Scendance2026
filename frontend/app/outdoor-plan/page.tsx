@@ -32,6 +32,7 @@ import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
 import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
+import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 
 /** 样例：平湖秋月周边 200×120 m 市集（锚点 GCJ-02，来自既有 XIHU_LOCAL_CENTER）。 */
 const SAMPLE_PLAN: SitePlanData = {
@@ -281,6 +282,7 @@ export default function OutdoorPlanPage() {
             onPick={id => {
               if (id === 'share') { setShareOpen(true); return; }
               if (id === 'csv') { downloadPlanCsv(plan, 'pinghu-market'); return; }
+              if (id === 'geojson') { downloadPlanGeoJson(plan, 'pinghu-market'); return; }
               if (id === 'png') {
                 // PNG 快照复用画布当前渲染的业务层 canvas（画布组件第二个 canvas）。
                 const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
@@ -328,6 +330,7 @@ export default function OutdoorPlanPage() {
     </main>
   );
 }
+
 
 
 
