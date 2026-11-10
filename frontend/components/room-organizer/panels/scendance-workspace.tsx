@@ -7,16 +7,19 @@ import {
   SATELLITE_GROUND_LABEL,
   applySatelliteGroundPatch,
   basemapCoversGroundPlane,
+  ensurePlanGround,
   ensureSatelliteGround,
   hideSatelliteGround,
   isMapOutdoorLayout,
   isPlaceholderSatellite,
+  isPlanGroundImage,
   isSatelliteGroundImage,
   readAmapKeys,
   satelliteGroundWanted,
   satelliteImageAligned,
   satelliteMissReason,
 } from '../lib/amap-venue';
+import { readPlanGroundSource } from '../lib/plan-basemap-source';
 import {
   GROUND_BASEMAP_LAYERS,
   activeGroundBasemap,
@@ -388,7 +391,16 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     } else {
       setSatelliteBusy(false);
     }
-    void ensureSatelliteGround(source, wanted).then(patch => {
+    void (async () => {
+      // P4-d：三维地面优先铺二维那张地图（OSM / Carto，跟随平面右下角的底图选择）。
+      // 只有「自动补图 / 贴地开关」这条无 style 的路径才换自绘图；人显式点「地图类型」
+      // 选高德街道/卫星档位时，仍按档位去拉高德静态图。
+      if (style === undefined) {
+        const planGround = await ensurePlanGround(source, readPlanGroundSource());
+        if (planGround) return planGround;
+      }
+      return ensureSatelliteGround(source, wanted);
+    })().then(patch => {
       if (mine !== satelliteRequest.current) return;
       const current = layoutRef.current;
       if ((current.id ?? '') !== startedId || current.name !== startedName || current.satelliteGroundRef === false) return;
@@ -421,7 +433,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     if (!satelliteOn || (satelliteImageAligned(layout.floorPlanImage) && basemapCoversGroundPlane(layout))) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
     // 旧的 location/zoom 卫星图没有经纬度范围，要重拉，否则贴地会对不齐。
-    if (layout.floorPlanImage && !isSatelliteGroundImage(layout.floorPlanImage)) return undefined;
+    if (layout.floorPlanImage && !isSatelliteGroundImage(layout.floorPlanImage) && !isPlanGroundImage(layout.floorPlanImage)) return undefined;
     const token = `${layout.id ?? ''}|${layout.name}|${layout.floorPlanImage ?? ''}|${layout.mapGroundPolygon?.length ?? 0}`;
     if (satelliteAttempt.current === token) return undefined;
     satelliteAttempt.current = token;

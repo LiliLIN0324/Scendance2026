@@ -2,6 +2,8 @@ import { outdoorGroundSize } from './site';
 import type { RoomLayout, SceneAnchor } from './types';
 import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
+import { capturePlanGround, type PlanGroundSource } from './plan-ground-capture';
+import { publicSourceTileUrl } from './tdt-probe';
 import { RECON_MATERIAL_BAN } from './site-recon-mock';
 
 export type AmapPoint = { lng: number; lat: number };
@@ -104,6 +106,37 @@ export const SATELLITE_GROUND_MARK = 'satellite-ground-ref';
 /** 调研底图（图层用路网）的地址标记。与卫星贴地同属「地图参考图」，同样不可作重建素材。 */
 export const MAP_BASEMAP_MARK = 'map-basemap';
 
+/**
+ * P4-d：自绘底图的标记。用户要求三维地面直接铺二维那张地图（OSM / Carto），
+ * 不再另拉高德卫星（m02033）。自绘图是 data URL，地理范围记在这里的缓存里，
+ * 刷新后缓存空了就重拼一张——瓦片本来就该重取。
+ */
+export const PLAN_GROUND_MARK = 'plan-ground-ref';
+
+const planGroundBounds = new Map<string, { west: number; south: number; east: number; north: number }>();
+
+export function rememberPlanGroundBounds(
+  dataUrl: string,
+  bounds: { west: number; south: number; east: number; north: number },
+): void {
+  if (!dataUrl) return;
+  planGroundBounds.set(dataUrl, bounds);
+  // 只留最近几张，别把内存当仓库。
+  if (planGroundBounds.size > 4) {
+    const oldest = planGroundBounds.keys().next().value;
+    if (oldest) planGroundBounds.delete(oldest);
+  }
+}
+
+export function planGroundBoundsOf(url: string | undefined | null) {
+  return url ? planGroundBounds.get(url) ?? null : null;
+}
+
+/** 这张图是不是我们自绘的平面底图（不是高德卫星、也不是占位 SVG）。 */
+export function isPlanGroundImage(url: string | undefined | null): boolean {
+  return !!url && url.startsWith('data:image/') && planGroundBounds.has(url);
+}
+
 export function isSatelliteGroundImage(url: string | undefined | null): boolean {
   return !!url && url.includes(SATELLITE_GROUND_MARK);
 }
@@ -113,7 +146,8 @@ export function isSatelliteGroundImage(url: string | undefined | null): boolean 
  * 这类图只是观感参考，和 RECON_MATERIAL_BAN 同一条禁令：不得进入 Aholo 上传/重建素材。
  */
 export function isMapReferenceImage(url: string | undefined | null): boolean {
-  return !!url && (url.includes(SATELLITE_GROUND_MARK) || url.includes(MAP_BASEMAP_MARK));
+  return !!url
+    && (url.includes(SATELLITE_GROUND_MARK) || url.includes(MAP_BASEMAP_MARK) || isPlanGroundImage(url));
 }
 
 /**
@@ -271,7 +305,9 @@ export function satelliteBoundsForFrame(
 /** 现有贴地地址是否已经盖住整片户外地面。窄边旧图返回 false，调用方再拉一张对齐的图。 */
 export function basemapCoversGroundPlane(layout: Pick<RoomLayout, 'floorPlanImage' | 'mapGroundFrame' | 'width' | 'height'>): boolean {
   const frame = layout.mapGroundFrame;
-  const bounds = parseSatelliteImageBounds(layout.floorPlanImage ?? '');
+  const url = layout.floorPlanImage ?? '';
+  // 自绘底图：范围记在内存缓存里，拿不到就当没盖住，重拼一张即可。
+  const bounds = isPlanGroundImage(url) ? planGroundBoundsOf(url) : parseSatelliteImageBounds(url);
   if (!frame || !bounds || !(layout.width > 0) || !(layout.height > 0)) return false;
   const needed = satelliteBoundsForFrame([], frame, layout.width, layout.height);
   const slop = 1e-5;
@@ -592,6 +628,8 @@ export function hasFetchedSatellite(url: string | undefined | null): boolean {
  * 旧的 location/zoom 方形瓦片没有这个范围，不能当成已经贴准。
  */
 export function satelliteImageAligned(url: string | undefined | null): boolean {
+  // P4-d 自绘底图的范围记在内存里，不走 URL 里的 bounds 参数。
+  if (isPlanGroundImage(url)) return true;
   return !!url && hasFetchedSatellite(url) && parseSatelliteImageBounds(url) !== null;
 }
 
@@ -711,6 +749,49 @@ export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 
     floorPlanOpacity: 0.78,
     satelliteGroundRef: true,
     ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located), ...(layout.mapGroundFrame ? { mapGroundFrame: layout.mapGroundFrame } : {}) } : {}),
+  };
+}
+
+/**
+ * P4-d：用二维那张地图当三维地面底图（用户 m02033）。
+ *
+ * 与 `ensureSatelliteGround` 同一套贴地帧/锚点口径，只是图源换成平面画布用的公开瓦片
+ * （OSM / Carto 浅色 / Carto 深色），所以平面切深色底图后三维地面是同一张深色图。
+ * 拿不到瓦片、没有圈画点、或不在浏览器里时返回 null —— 调用方继续退回高德静态图。
+ */
+export async function ensurePlanGround(
+  layout: RoomLayout,
+  source: PlanGroundSource = 'carto-light',
+): Promise<SatelliteGroundPatch | null> {
+  if (typeof document === 'undefined') return null;
+  const polygon = await resolveSatellitePolygon(layout);
+  if (!polygon || polygon.length < 3) return null;
+  const registration = groundRegistration(polygon);
+  const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
+  const anchored = !!layout.researchArea && !!layout.sceneAnchor;
+  const frame = anchored
+    ? registration?.frame
+    : layout.mapGroundFrame ?? frameForExistingShell(polygon, shell) ?? registration?.frame;
+  if (!frame) return null;
+  const bounds = satelliteBoundsForFrame(polygon, frame, layout.width, layout.height);
+  // 768 px：3D 地面在屏幕上一般不超过这个尺寸，再大只是把 data URL 撑进 localStorage。
+  const capture = await capturePlanGround({
+    bounds,
+    source,
+    size: 768,
+    urlFor: (src, z, x, y) => publicSourceTileUrl(src, z, x, y),
+  });
+  if (!capture) return null;
+  rememberPlanGroundBounds(capture.dataUrl, capture.bounds);
+  return {
+    floorPlanImage: capture.dataUrl,
+    floorPlanOpacity: 0.94,
+    satelliteGroundRef: true,
+    mapGroundPolygon: polygon,
+    mapLngLat: centroid(polygon),
+    ...(anchored
+      ? {}
+      : { mapGroundFrame: frame, sceneAnchor: { ...anchorFromMapFrame(frame, layout.width, layout.height), source: 'picker' } }),
   };
 }
 
