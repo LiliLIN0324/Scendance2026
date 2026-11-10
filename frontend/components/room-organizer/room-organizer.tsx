@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Globe, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -159,6 +159,7 @@ import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
+import OutdoorPlanOverlay from './components/outdoor-plan-overlay';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -485,6 +486,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     });
   };
   useEffect(() => { if (captureOpen) capturePanelRef.current?.focus(); }, [captureOpen]);
+  // 户外 2D 规划覆盖层（P2-c）：同一页面内的户外面——开启后满幅盖在 3D 画布上，关闭即回。
+  // 数据同态：草稿按 layout.id 存本机（outdoor-project-store），底图定位继承活动点位。
+  const [outdoor2DOpen, setOutdoor2DOpen] = useState(false);
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -3688,6 +3692,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   </svg>
                   <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
                 </button>
+                <button
+                  type="button"
+                  className={`sc-rail-tool sc-rail-disc${outdoor2DOpen ? ' is-active' : ''}`}
+                  aria-pressed={outdoor2DOpen}
+                  aria-label="户外规划：在地图上画边界分区动线"
+                  data-tip="户外规划 · 地图上画边界分区动线"
+                  onClick={() => setOutdoor2DOpen(current => !current)}
+                >
+                  <Globe size={26} aria-hidden="true" />
+                  <span className="sc-rail-label" aria-hidden="true">户外规划</span>
+                </button>
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -3775,6 +3790,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             const id = placeDiscrete(pendingCatalog,point);
             if (id) selectOnly(id, { keepPanel: true });
           }}>
+          {outdoor2DOpen && (
+            <OutdoorPlanOverlay
+              projectId={layout.id ?? null}
+              anchor={layout.sceneAnchor ?? layout.mapLngLat ?? null}
+              activityName={layout.name}
+              onClose={() => setOutdoor2DOpen(false)}
+            />
+          )}
       <div className="sc-scene-viewport"><Viewport
         isReady={isReady}
         error={error}
