@@ -399,7 +399,8 @@ export function proposePlan(input: PlanInput): PlanProposal {
       }
     }
   } else if (input.seatingShape === 'ring' || input.tablePlan?.shape === 'round') {
-    const dining = ringDiningSet({ sideM: input.tablePlan?.shape === 'round' ? input.tablePlan.width : undefined });
+    const sideM = input.tablePlan?.shape === 'round' ? input.tablePlan.width : undefined;
+    const dining = sideM === undefined ? ringDiningSet() : ringDiningSet({ sideM });
     const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'ring-measure' });
     if (sample.length) {
       const footprint = setFootprint(sample);
