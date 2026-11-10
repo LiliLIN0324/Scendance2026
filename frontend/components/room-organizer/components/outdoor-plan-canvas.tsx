@@ -82,14 +82,22 @@ import {
 import {
   PLAN_ISSUE_LIST_LIMIT,
   PLAN_MIN_VERTEX_GAP_M,
+  PLAN_MIN_ZONE_AREA_M2,
   PLAN_RING_MAX_VERTICES,
   buildZone,
   checkBoundaryRing,
+  checkPlanRing,
   defaultZoneColor,
+  insertRingVertex,
   moveRingVertex,
   planPointDistanceM,
+  planPointInRing,
   planRingSelfIntersects,
+  planZonesOverlap,
   planZoneIssues,
+  removeRingVertex,
+  zoneOutsideBoundaryIssue,
+  type PlanEditIssue,
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
 import {
@@ -122,6 +130,7 @@ import {
   type PlanNodeIssue,
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
+import { nearestRingEdge, planGridStepM, snapPointToGrid } from '../lib/site-plan-snap';
 import {
   PLAN_MEASURE_MAX_VERTICES,
   buildMeasurement,
@@ -326,6 +335,8 @@ const LAYER_ORDER: readonly ['boundary', 'zone', 'facility', 'route', 'worker', 
 
 /** 顶点手柄的命中半径（CSS px），与 drawBoundaryLayer 的手柄绘制半径一致。 */
 const VERTEX_HANDLE_HIT_PX = 10;
+/** P2-j：双击加点的「离边界线」命中半径（CSS px）：比拖动顶点更宽松，方便插点。 */
+const VERTEX_EDGE_HIT_PX = 14;
 /** 首顶点闭合热区半径（CSS px），与 drawDraftLayer 的闭合圆圈一致。 */
 const DRAFT_CLOSE_HIT_PX = 10;
 /** 区分「单击加顶点」与「拖拽平移」的位移阈值（CSS px）。 */
@@ -655,6 +666,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const facilityDragRef = useRef<FacilityDragState | null>(null);
   /** P2-i 图层锁定：锁定层不参与命中与编辑（显示、统计、图例口径不变）。 */
   const lockedLayersRef = useRef<LockedLayerMap>({});
+  /** P2-j 分区选中与顶点改形：选中的分区 id + 正在拖的顶点 + 拖动预览多边形。 */
+  const selectedZoneRef = useRef<string | null>(null);
+  const dragZoneVertexRef = useRef<{ zoneId: string; index: number } | null>(null);
+  const zoneDragPreviewRef = useRef<{ zoneId: string; polygon: PlanPoint[] } | null>(null);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
@@ -683,6 +698,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  /** P2-j：选中的分区（画布上画顶点手柄，拖顶点改形）。 */
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [nodeIssues, setNodeIssues] = useState<PlanNodeIssue[]>([]);
   const [workerIssues, setWorkerIssues] = useState<PlanWorkerIssue[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
@@ -938,10 +955,41 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       issuesRef.current.filter(i => i.issue.code === 'out-of-boundary' || i.issue.code === 'zones-overlap').map(i => i.zoneId),
     );
     if (isLayerVisible(vis, 'zone')) {
+      // P2-j：拖动分区顶点时用预览多边形替换原分区（松手才提交）。
+      const zonePreview = zoneDragPreviewRef.current;
+      const drawnZones = zonePreview
+        ? current.zones.map(zone => (zone.id === zonePreview.zoneId ? { ...zone, polygon: zonePreview.polygon } : zone))
+        : current.zones;
       drawZoneLayer(
         { ctx: planCtx, viewport },
-        current.zones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
+        drawnZones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
       );
+      // P2-j：选中的分区画顶点手柄（与边界顶点同一套视觉/命中半径）。
+      const selectedZone = selectedZoneRef.current
+        ? drawnZones.find(zone => zone.id === selectedZoneRef.current) ?? null
+        : null;
+      if (selectedZone && selectedZone.polygon.length >= 3 && modeRef.current === 'view' && !layerLocked('zone')) {
+        const px = selectedZone.polygon.map(pt => planPointToPixel(pt, viewport));
+        planCtx.save();
+        planCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+        planCtx.lineWidth = 1.5;
+        planCtx.setLineDash([5, 4]);
+        planCtx.beginPath();
+        px.forEach((p, i) => (i === 0 ? planCtx.moveTo(p.x, p.y) : planCtx.lineTo(p.x, p.y)));
+        planCtx.closePath();
+        planCtx.stroke();
+        planCtx.setLineDash([]);
+        for (const p of px) {
+          planCtx.fillStyle = 'rgba(18,20,26,0.9)';
+          planCtx.strokeStyle = '#ffffff';
+          planCtx.lineWidth = 2;
+          planCtx.beginPath();
+          planCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          planCtx.fill();
+          planCtx.stroke();
+        }
+        planCtx.restore();
+      }
       // H4-b：分区语义贴纸（OnePlan 地图符号/面域底形）画在名称上方，不压名称文本；
       // 命中测试仍按多边形判定（drawZoneLayer 之外无改动）。
       for (const zone of current.zones) {
@@ -1118,6 +1166,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       (window as unknown as { __scendancePlanDebug?: unknown }).__scendancePlanDebug = {
         viewport: { zoom: viewport.zoom, metersPerPixel: planMetersPerPixel(viewport) },
         canvas: { width: cssW, height: cssH },
+        /** 当前吸附网格步长（米），验收脚本用它判断顶点是否真的落在网格上。 */
+        gridStepM: planGridStepM(viewport),
+        /** ENU 米 → 画布 CSS 像素（验收脚本用它把边界顶点/分区顶点换到鼠标坐标）。 */
+        project: (pt: PlanPoint) => planPointToPixel(pt, viewport),
         selected: selectedNow
           ? {
               id: selectedNow.id,
@@ -1395,6 +1447,47 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return best === null ? null : (best as { index: number }).index;
   }
 
+  /** P2-j：双击边界 → 在最近那条边上插一个顶点（投影点吸网格），面积不足/自交则拒绝。 */
+  function insertBoundaryVertexAt(px: { x: number; y: number }) {
+    const current = planRef.current;
+    const viewport = currentViewport();
+    const edge = nearestRingEdge(current.boundary, px, viewport);
+    if (!edge || edge.distPx > VERTEX_EDGE_HIT_PX) {
+      setEditMessage('双击边界线上才能加点（离边太远）。');
+      return;
+    }
+    const snapped = snapPointToGrid(edge.point, viewport);
+    const result = insertRingVertex(current.boundary, edge.index, snapped);
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    const check = checkBoundaryRing(result.value);
+    if (!check.ok) {
+      setEditMessage(check.issue.message);
+      return;
+    }
+    commitPlan({ ...current, boundary: result.value });
+    setEditMessage(`边界已插入顶点（约 ${Math.round(check.areaM2)} m²）。`);
+  }
+
+  /** P2-j：双击边界顶点 → 删掉它（最少 3 点、面积下限由 checkBoundaryRing 把关）。 */
+  function removeBoundaryVertexAt(index: number) {
+    const current = planRef.current;
+    const result = removeRingVertex(current.boundary, index);
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    const check = checkBoundaryRing(result.value);
+    if (!check.ok) {
+      setEditMessage(check.issue.message);
+      return;
+    }
+    commitPlan({ ...current, boundary: result.value });
+    setEditMessage(`边界已删除顶点（约 ${Math.round(check.areaM2)} m²）。`);
+  }
+
   function handleDrawClick(px: { x: number; y: number }, pt: PlanPoint) {
     // H2-c：放设施模式单击提交（可连续放置）。
     if (modeRef.current === 'facility') {
@@ -1481,7 +1574,51 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function selectFacility(id: string | null) {
     selectedFacilityRef.current = id;
     setSelectedFacilityId(id);
+    if (id) selectZone(null);
     draw();
+  }
+
+  /* ---------------- P2-j 分区选中与顶点改形 ---------------- */
+
+  function selectZone(id: string | null) {
+    selectedZoneRef.current = id;
+    setSelectedZoneId(id);
+    if (id) {
+      selectedFacilityRef.current = null;
+      setSelectedFacilityId(null);
+    }
+    draw();
+  }
+
+  /** 分区顶点手柄：选中的分区在屏幕上画小方块，命中半径与边界顶点一致。 */
+  function nearestZoneVertexIndex(zone: PlanZone, px: { x: number; y: number }): number | null {
+    const viewport = currentViewport();
+    let hitIndex: number | null = null;
+    let hitDist = VERTEX_HANDLE_HIT_PX;
+    for (let index = 0; index < zone.polygon.length; index += 1) {
+      const p = planPointToPixel(zone.polygon[index]!, viewport);
+      const distPx = Math.hypot(px.x - p.x, px.y - p.y);
+      if (distPx <= hitDist) {
+        hitIndex = index;
+        hitDist = distPx;
+      }
+    }
+    return hitIndex;
+  }
+
+  /** 分区多边形改完要守住三条：形状合法、仍在场地边界内、不与别的分区重叠。 */
+  function zonePolygonIssue(zone: PlanZone, polygon: PlanPoint[], current: SitePlanData): PlanEditIssue | null {
+    const ring = checkPlanRing(polygon, PLAN_MIN_ZONE_AREA_M2, `分区「${zone.name}」`);
+    if (!ring.ok) return ring.issue;
+    const outside = zoneOutsideBoundaryIssue(polygon, current.boundary);
+    if (outside) return outside;
+    for (const other of current.zones) {
+      if (other.id === zone.id) continue;
+      if (planZonesOverlap(polygon, other.polygon)) {
+        return { code: 'zones-overlap', message: `会和「${other.name}」重叠，换个位置。` } as PlanEditIssue;
+      }
+    }
+    return null;
   }
 
   /** 在面板点选模板（也可直接拖拽到画布）：记录待放模板，幽灵随鼠标。 */
@@ -2067,6 +2204,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setDragging(true);
         return;
       }
+      // P2-j：选中分区后按住它的顶点即改形（优先于平移）。
+      if (hit && onPlanChange && !layerLocked('zone')) {
+        const zoneId = selectedZoneRef.current;
+        const zone = zoneId ? planRef.current.zones.find(z => z.id === zoneId) ?? null : null;
+        if (zone) {
+          const index = nearestZoneVertexIndex(zone, hit.px);
+          if (index !== null) {
+            dragZoneVertexRef.current = { zoneId: zone.id, index };
+            zoneDragPreviewRef.current = { zoneId: zone.id, polygon: zone.polygon };
+            downPxRef.current = hit.px;
+            setDragging(true);
+            return;
+          }
+        }
+      }
       // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移（锁定层不响应）。
       if (hit && !layerLocked('node')) {
         const nodeId = nearestNodeIdAt(hit.px);
@@ -2109,6 +2261,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       // H2-d：拖动出入口节点 → 引用路线端点随动预览（松手提交）。
+      if (dragZoneVertexRef.current) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        const drag = dragZoneVertexRef.current;
+        const base = zoneDragPreviewRef.current?.polygon ?? planRef.current.zones.find(z => z.id === drag.zoneId)?.polygon;
+        if (!base) return;
+        const result = moveRingVertex(base, drag.index, snapPointToGrid(hit.pt, currentViewport()));
+        if (result.ok) {
+          zoneDragPreviewRef.current = { zoneId: drag.zoneId, polygon: result.value };
+          setEditMessage(null);
+          draw();
+        } else {
+          setEditMessage(result.issue.message);
+        }
+        return;
+      }
       if (dragNodeRef.current) {
         const hit = eventPlanPoint(event);
         if (!hit) return;
@@ -2136,7 +2304,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (activeMode === 'boundary-vertex' && dragVertexRef.current !== null) {
       const hit = eventPlanPoint(event);
       if (!hit) return;
-      const result = moveRingVertex(previewRingRef.current ?? planRef.current.boundary, dragVertexRef.current, hit.pt);
+      const result = moveRingVertex(
+        previewRingRef.current ?? planRef.current.boundary,
+        dragVertexRef.current,
+        snapPointToGrid(hit.pt, currentViewport()),
+      );
       if (result.ok) {
         setPreviewRing(result.value);
         setEditMessage(null);
@@ -2212,6 +2384,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           return;
         }
       }
+      // P2-j：分区顶点拖动松手——有预览才提交（一条 undo），否则视为未改动。
+      const zoneDrag = dragZoneVertexRef.current;
+      if (zoneDrag) {
+        dragZoneVertexRef.current = null;
+        const preview = zoneDragPreviewRef.current;
+        zoneDragPreviewRef.current = null;
+        if (preview && onPlanChange) {
+          const current = planRef.current;
+          const zone = current.zones.find(z => z.id === preview.zoneId);
+          if (zone) {
+            const issue = zonePolygonIssue(zone, preview.polygon, current);
+            if (issue) {
+              setEditMessage(issue.message);
+            } else {
+              commitPlan({
+                ...current,
+                zones: current.zones.map(z => (z.id === zone.id ? { ...z, polygon: preview.polygon } : z)),
+              });
+              selectZone(zone.id);
+              setEditMessage(`「${zone.name}」形状已更新。`);
+            }
+            draw();
+          }
+        }
+        return;
+      }
       // H2-d：拖动节点松手：确实拖动过 → 提交随动结果；否则视为点选该节点。
       if (dragNodeRef.current) {
         const drag = dragNodeRef.current;
@@ -2258,8 +2456,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const hitFacility = layerLocked('facility')
             ? null
             : [...planRef.current.facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
-          selectFacility(hitFacility ? hitFacility.id : null);
-          if (hitFacility) setInfoTab('inventory');
+          if (hitFacility) {
+            selectFacility(hitFacility.id);
+            setInfoTab('inventory');
+            return;
+          }
+          // P2-j：设施没命中再看分区（点中分区体 → 选中，之后可拖它的顶点改形）。
+          const hitZone = layerLocked('zone')
+            ? null
+            : [...planRef.current.zones].reverse().find(z => planPointInRing(hit.pt, z.polygon));
+          if (hitZone) {
+            selectZone(hitZone.id);
+            setEditMessage(`已选中分区「${hitZone.name}」：拖白色顶点改形状。`);
+            setInfoTab('inventory');
+            return;
+          }
+          selectFacility(null);
+          selectZone(null);
         }
       }
       return;
@@ -2297,6 +2510,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     nodeDragPreviewRef.current = null;
     // P2-i：设施拖拽中离开画布同样丢弃预览（不提交）。
     facilityDragRef.current = null;
+    // P2-j：分区顶点拖动中离开画布同样丢弃预览。
+    dragZoneVertexRef.current = null;
+    zoneDragPreviewRef.current = null;
     draw();
   }
 
@@ -2500,6 +2716,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         } else if (modeRef.current === 'measure') {
           event.preventDefault();
           finishMeasure();
+        } else if (modeRef.current === 'view') {
+          // P2-j：双击顶点删点、双击边界线插点（两下都是「改几何」，不进其它手势）。
+          const hit = eventPlanPoint(event);
+          if (!hit || !onPlanChange || !facilityDirectEditable()) return;
+          if (layerLocked('boundary')) {
+            setEditMessage('边界图层已锁定，先解锁再改。');
+            return;
+          }
+          event.preventDefault();
+          const vertex = nearestBoundaryVertexIndex(hit.px);
+          if (vertex !== null) removeBoundaryVertexAt(vertex);
+          else insertBoundaryVertexAt(hit.px);
         }
       }}
       onWheel={e => {
@@ -3032,8 +3260,30 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   <>
                     <div style={sectionTitle}>分区样式</div>
                     {plan.zones.map(zone => (
-                      <div key={zone.id} style={{ marginTop: PLANNING_SPACING.xs, borderTop: `1px solid ${PLANNING_SURFACE.fieldBg}`, paddingTop: PLANNING_SPACING.xs }}>
+                      <div
+                        key={zone.id}
+                        data-testid={`zone-row-${zone.id}`}
+                        data-selected={selectedZoneId === zone.id ? 'true' : 'false'}
+                        style={{
+                          marginTop: PLANNING_SPACING.xs,
+                          borderTop: `1px solid ${PLANNING_SURFACE.fieldBg}`,
+                          paddingTop: PLANNING_SPACING.xs,
+                          ...(selectedZoneId === zone.id
+                            ? { outline: `1px solid ${PLANNING_SURFACE.warnText}`, outlineOffset: 2, borderRadius: PLANNING_RADIUS.sm }
+                            : {}),
+                        }}
+                      >
                         <div style={zoneRowStyle}>
+                          <button
+                            type="button"
+                            aria-pressed={selectedZoneId === zone.id}
+                            data-testid={`zone-select-${zone.id}`}
+                            onClick={() => selectZone(selectedZoneId === zone.id ? null : zone.id)}
+                            style={{ ...zoneRowStyle, gap: 4, flex: '0 0 auto', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            title="选中后在画布上拖白色顶点改形状"
+                          >
+                            选中
+                          </button>
                           <input
                             aria-label={`分区「${zone.name}」颜色`}
                             type="color"
