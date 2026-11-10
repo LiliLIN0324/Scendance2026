@@ -95,6 +95,8 @@ export interface FurnitureSpec {
   height: number;
   color: string;
   icon: string;
+  /** 圆台面。缺省按矩形板画。width×depth 仍是碰撞方框。 */
+  tableShape?: 'round';
 }
 
 /** 一件待放家具的描述（世界坐标，未挂 id / 资产）。 */

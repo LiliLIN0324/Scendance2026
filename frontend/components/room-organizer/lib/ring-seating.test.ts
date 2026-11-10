@@ -1,12 +1,44 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { applyLayoutCommand, applyLayoutCommandWithRefusals, completeLayoutError } from '../../../lib/build-command';
 import { collectViolations } from '../../../lib/placement-rules';
+import { createFurnitureModel } from '../three/furniture-builders';
 import { makeFloor, makeLayout } from './__testfixtures__/fixtures';
+import { FURNITURE_CATALOG } from './constants';
 import { itemsOverlap } from './geometry';
 import { buildFurnitureSet } from './furniture-sets';
 import { localPlan } from './local-plan';
-import { RING_SEATS, ringCenters, ringDiningSet } from './ring-seating';
+import { RING_SEATS, RING_TABLE_SIDE_M, ringCenters, ringDiningSet } from './ring-seating';
+import type { FurnitureItem } from './types';
 import { parseSafeDirectionalMove } from './workbench-agent';
+
+function roundTopOf(item: FurnitureItem): THREE.Mesh {
+  const model = createFurnitureModel(THREE, item, false);
+  model.updateMatrixWorld(true);
+  let top: THREE.Mesh | undefined;
+  model.traverse(node => {
+    const mesh = node as THREE.Mesh;
+    if (mesh.isMesh && mesh.userData.part === 'round-top') top = mesh;
+  });
+  expect(top, item.name).toBeDefined();
+  const size = new THREE.Box3().setFromObject(top!).getSize(new THREE.Vector3());
+  expect(size.x).toBeCloseTo(item.width, 2);
+  expect(size.z).toBeCloseTo(item.depth, 2);
+  const geometry = top!.geometry as THREE.CylinderGeometry;
+  expect(geometry.type).toBe('CylinderGeometry');
+  expect(geometry.parameters.radiusTop).toBeCloseTo(item.width / 2, 3);
+  expect(geometry.parameters.radiusBottom).toBeCloseTo(geometry.parameters.radiusTop, 5);
+  // The square corner of the collision box sits outside the disc.
+  expect(geometry.parameters.radiusTop * Math.SQRT2).toBeGreaterThan(item.width / 2 + 0.05);
+  model.traverse(node => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh || mesh.geometry.type !== 'BoxGeometry') return;
+    const box = mesh.geometry as THREE.BoxGeometry;
+    expect(box.parameters.width).toBeLessThan(item.width * 0.5);
+    expect(box.parameters.depth).toBeLessThan(item.depth * 0.5);
+  });
+  return top!;
+}
 
 describe('round-table ring', () => {
   it('puts chairs on one circle facing the table, clear of the table box', () => {
@@ -14,6 +46,11 @@ describe('round-table ring', () => {
     const table = items.find(item => item.type === 'dining-table');
     const chairs = items.filter(item => item.type === 'dining-chair');
     expect(table?.name).toBe('圆桌');
+    expect(table?.tableShape).toBe('round');
+    expect(table?.width).toBe(RING_TABLE_SIDE_M);
+    expect(table?.depth).toBe(table?.width);
+    expect(FURNITURE_CATALOG.find(entry => entry.name === '圆桌')?.tableShape).toBe('round');
+    roundTopOf(table!);
     expect(chairs.length).toBe(RING_SEATS);
     const radii = chairs.map(item => Math.hypot(item.position?.x ?? 0, item.position?.z ?? 0));
     expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.05);
@@ -63,8 +100,10 @@ describe('round-table ring', () => {
     const layout = plan.layouts.at(-1)!;
     const chairs = layout.floors[0]!.items.filter(item => item.name === '餐椅');
     const tables = layout.floors[0]!.items.filter(item => item.name === '圆桌');
-    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.length).toBeGreaterThanOrEqual(10);
+    expect(tables.every(item => item.name === '圆桌' && item.tableShape === 'round' && item.width === item.depth)).toBe(true);
     expect(chairs.length).toBe(tables.length * RING_SEATS);
+    roundTopOf(tables[0]!);
     expect(plan.seats).toBe(80);
     const overlaps = collectViolations(layout).filter(violation => violation.code === 'BBOX_OVERLAP');
     expect(overlaps.filter(violation => /圆桌|餐椅/.test(violation.detail))).toEqual([]);

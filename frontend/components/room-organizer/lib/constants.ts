@@ -78,6 +78,8 @@ export const FURNITURE_CATALOG = [
   // Tables
   { type: 'table', category: 'tables', name: 'Table', width: 1.5, depth: 0.8, height: 0.75, color: '#CD853F', icon: '🟫', price: 220 },
   { type: 'dining-table', category: 'tables', name: 'Dining Table', width: 1.8, depth: 1.0, height: 0.75, color: '#A0522D', icon: '🟫', price: 420 },
+  // Banquet round table. width/depth are the collision square of a circular top (see ring-seating RING_TABLE_SIDE_M).
+  { type: 'dining-table', category: 'tables', name: '圆桌', width: 1.4, depth: 1.4, height: 0.75, color: '#A0522D', icon: '🍽️', price: 480, tableShape: 'round' },
   { type: 'coffee-table', category: 'tables', name: 'Coffee Table', width: 1.2, depth: 0.6, height: 0.4, color: '#CD853F', icon: '🟫', price: 180 },
   { type: 'side-table', category: 'tables', name: 'Side Table', width: 0.5, depth: 0.5, height: 0.55, color: '#8B4513', icon: '🟫', price: 90 },
   { type: 'desk', category: 'tables', name: 'Desk', width: 1.2, depth: 0.6, height: 0.75, color: '#8B4513', icon: '🖥️', price: 320 },

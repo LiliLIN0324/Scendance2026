@@ -345,13 +345,20 @@ function PlanPreviewItem({ item, width, depth, unit }: { item: FurnitureItem; wi
   const cut = isPlanCut(item);
   const symbol = planSymbol(item);
   const ink = cut ? '#4f554f' : '#7d837d';
+  const round = symbol === 'round-table';
+  const fill = cut ? '#c3c7c2' : item.color || '#9aa39c';
+  const fillOpacity = cut ? 1 : symbol === 'rug' ? 0.1 : 0.14;
+  const stroke = cut ? '#5f655f' : '#7d837d';
+  const strokeWidth = cut ? unit * 1.4 : unit;
   return <g transform={turn ? `rotate(${-turn} ${cx} ${cy})` : undefined}>
-    {symbol !== 'opening' && <rect x={cx - w / 2} y={cy - d / 2} width={w} height={d}
-      fill={cut ? '#c3c7c2' : item.color || '#9aa39c'}
-      fillOpacity={cut ? 1 : symbol === 'rug' ? 0.1 : 0.14}/>}
-    <rect x={cx - w / 2} y={cy - d / 2} width={w} height={d} fill="none"
-      stroke={cut ? '#5f655f' : '#7d837d'} strokeWidth={cut ? unit * 1.4 : unit}
-      {...(symbol === 'rug' ? { strokeDasharray: `${unit * 5} ${unit * 3}` } : {})}/>
+    {symbol !== 'opening' && (round
+      ? <ellipse cx={cx} cy={cy} rx={w / 2} ry={d / 2} fill={fill} fillOpacity={fillOpacity}/>
+      : <rect x={cx - w / 2} y={cy - d / 2} width={w} height={d} fill={fill} fillOpacity={fillOpacity}/>)}
+    {round
+      ? <ellipse cx={cx} cy={cy} rx={w / 2} ry={d / 2} fill="none" stroke={stroke} strokeWidth={strokeWidth}/>
+      : <rect x={cx - w / 2} y={cy - d / 2} width={w} height={d} fill="none"
+        stroke={stroke} strokeWidth={strokeWidth}
+        {...(symbol === 'rug' ? { strokeDasharray: `${unit * 5} ${unit * 3}` } : {})}/>}
     <g transform={`translate(${cx} ${cy})`}>
       <PlanPreviewSymbol kind={symbol} w={w} d={d} unit={unit} ink={ink}/>
     </g>
@@ -377,6 +384,8 @@ function PlanPreviewSymbol({ kind, w, d, unit, ink }: { kind: PlanSymbol; w: num
       return <path {...stroke} d={`M${-halfW + inset} ${-halfD + inset}H${halfW - inset}M${-halfW + inset} ${-halfD + inset * 2}H${halfW - inset}M0 ${-halfD + inset * 2}V${halfD - inset}`}/>;
     case 'table':
       return <rect {...stroke} x={-halfW + inset} y={-halfD + inset} width={w - inset * 2} height={d - inset * 2}/>;
+    case 'round-table':
+      return <circle {...stroke} cx={0} cy={0} r={Math.max(unit * 2, Math.min(w, d) / 2 - inset)}/>;
     case 'bed':
       return <path {...stroke} d={`M${-halfW + inset} ${-halfD + inset}h${w - inset * 2}v${d * 0.26}h${-(w - inset * 2)}zM${-halfW + inset} ${-halfD + d * 0.34}H${halfW - inset}`}/>;
     case 'plant':

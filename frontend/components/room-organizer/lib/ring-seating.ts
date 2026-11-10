@@ -1,27 +1,35 @@
 import { FURNITURE_CATALOG } from './constants';
 import { itemsOverlap, rotatedHalfExtents } from './geometry';
-import type { FurnitureSet, FurnitureSetItem } from './furniture-sets';
+import type { FurnitureSet, FurnitureSetItem, SetItemSnapshot } from './furniture-sets';
 import type { FurnitureItem, Vec2 } from './types';
 
 export interface RingRect { x: number; z: number; w: number; d: number }
 
-/** Square footprint of the round-table mesh. Chairs must clear this box, not a circle. */
+/**
+ * Side of the round table's collision square. The mesh is a cylinder of this
+ * diameter, so chairs must clear the box (confirm treats a touching box as
+ * overlap) and therefore also clear the disc.
+ */
 export const RING_TABLE_SIDE_M = 1.4;
 /** Eight seats is a normal banquet ring; six left a 20×15 room far short of 80. */
 export const RING_SEATS = 8;
 /** Air the footprints must keep. Confirm treats a touching box as overlap. */
 const CLEARANCE_M = 0.05;
 
+function roundTableSnapshot(): SetItemSnapshot | undefined {
+  const table = FURNITURE_CATALOG.find(entry => entry.name === '圆桌' && entry.tableShape === 'round')
+    ?? FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
+  if (!table) return undefined;
+  return { ...table, width: RING_TABLE_SIDE_M, depth: RING_TABLE_SIDE_M, name: '圆桌', tableShape: 'round' };
+}
+
 function ringItems(radius: number): FurnitureItem[] {
-  const table = FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
+  const table = roundTableSnapshot();
   const chair = FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
   if (!table || !chair) return [];
   const items: FurnitureItem[] = [{
     ...table,
     id: 'ring-table',
-    width: RING_TABLE_SIDE_M,
-    depth: RING_TABLE_SIDE_M,
-    name: '圆桌',
     position: { x: 0, z: 0 },
     rotation: 0,
   }];
@@ -56,7 +64,7 @@ function ringClears(radius: number): boolean {
   return true;
 }
 
-/** Smallest radius whose chair boxes stay off the square table. Cached. */
+/** Smallest radius whose chair boxes stay off the round table's collision square. Cached. */
 export function ringChairRadius(): number {
   let lo = RING_TABLE_SIDE_M / 2;
   let hi = 2.2;
@@ -73,7 +81,7 @@ export function ringChairRadius(): number {
 
 /** Round table with chairs on one circle, facing inward. Not the 4-corner dining grid. */
 export function ringDiningSet(): FurnitureSet {
-  const table = FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
+  const table = roundTableSnapshot();
   const chair = FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
   const radius = ringChairRadius();
   const items: FurnitureSetItem[] = [];
@@ -81,7 +89,7 @@ export function ringDiningSet(): FurnitureSet {
     items.push({
       type: 'dining-table',
       offset: { x: 0, z: 0 },
-      snapshot: { ...table, width: RING_TABLE_SIDE_M, depth: RING_TABLE_SIDE_M, name: '圆桌' },
+      snapshot: table,
     });
   }
   if (chair) {

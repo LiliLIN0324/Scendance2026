@@ -86,6 +86,9 @@ export type FurnitureType =
 
 export type SofaShape = 'standard' | 'L-shape' | 'U-shape';
 
+/** Round banquet top versus a rectangular slab. Absent means rectangular. */
+export type TableShape = 'round' | 'rect';
+
 /** 'winder': a half-turn dog-leg with a fan of winders (#205). */
 export type StairsShape = 'straight' | 'winder';
 
@@ -200,6 +203,11 @@ export interface FurnitureItem {
    */
   cameraBracket?: boolean;
   sofaShape?: SofaShape;
+  /**
+   * Round banquet tables use a circular top whose diameter is the square
+   * footprint (width === depth). Collision stays the axis-aligned box.
+   */
+  tableShape?: TableShape;
   locked?: boolean;
   mirrored?: boolean;
   /** Straight flight (default) or half-turn winder (#205). */
