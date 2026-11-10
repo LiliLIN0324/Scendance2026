@@ -208,6 +208,8 @@ export interface FurnitureItem {
    * footprint (width === depth). Collision stays the axis-aligned box.
    */
   tableShape?: TableShape;
+  /** Cloth chosen by the selection tool. Absent keeps the existing linen banquet top. */
+  tableFinish?: 'linen' | 'bare';
   locked?: boolean;
   mirrored?: boolean;
   /** Straight flight (default) or half-turn winder (#205). */

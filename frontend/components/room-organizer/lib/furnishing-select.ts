@@ -69,7 +69,10 @@ export function selectFurnishing(input: FurnishingRequest): FurnishingChoice {
   }
   const top: 'linen' | 'bare' = party || shape === 'round' ? 'linen' : 'bare';
   const assetName = shape === 'round' ? '圆桌' : 'Dining Table';
-  const label = shape === 'round' ? `圆桌，直径 ${width.toFixed(2)} 米，木边、亚麻面` : `${shape === 'long' ? '长桌' : '方桌'} ${width.toFixed(2)}×${depth.toFixed(2)} 米，木面`;
+  const finish = top === 'linen' ? '木边、亚麻面' : '木面';
+  const label = shape === 'round'
+    ? `圆桌，直径 ${width.toFixed(2)} 米，${finish}`
+    : `${shape === 'long' ? '长桌' : '方桌'} ${width.toFixed(2)}×${depth.toFixed(2)} 米，${finish}`;
   const reason = `${input.occasion ? `${input.occasion}，` : ''}选用${label}。`.slice(0, 200);
   return {
     source: SELECT_FURNISHING_TOOL,
@@ -79,9 +82,22 @@ export function selectFurnishing(input: FurnishingRequest): FurnishingChoice {
     material: { rim: 'wood', top },
     assetName,
     chairName: 'Dining Chair',
-    color: '#A0522D',
+    color: top === 'linen' ? '#A0522D' : '#8D6E63',
     reason,
   };
+}
+
+/** Drop a saved selection when a later sentence names a different size or shape. */
+export function layoutFurnishing(
+  choice: FurnishingChoice | undefined,
+  table?: { shape?: 'round' | 'rect' | undefined; width?: number | undefined; depth?: number | undefined },
+): FurnishingChoice | undefined {
+  if (!choice) return undefined;
+  if (table?.width !== undefined && Math.abs(table.width - choice.width) > 0.02) return undefined;
+  if (table?.depth !== undefined && Math.abs(table.depth - choice.depth) > 0.02) return undefined;
+  if (table?.shape === 'round' && choice.shape !== 'round') return undefined;
+  if (table?.shape === 'rect' && choice.shape === 'round') return undefined;
+  return choice;
 }
 
 /** Turn a selection into catalog snapshots. Unknown names are refused, not replaced. */
@@ -92,7 +108,7 @@ export function materializeFurnishing(choice: FurnishingChoice): MaterializedFur
   const tableShape = choice.shape === 'round' ? 'round' as const : 'rect' as const;
   const name = choice.shape === 'round' ? '圆桌' : choice.shape === 'long' ? '长桌' : '方桌';
   return {
-    table: { ...tableEntry, name, width: choice.width, depth: choice.depth, color: choice.color, tableShape },
+    table: { ...tableEntry, name, width: choice.width, depth: choice.depth, color: choice.color, tableShape, tableFinish: choice.material.top },
     chair: { ...chairEntry, name: '餐椅' },
   };
 }

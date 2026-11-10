@@ -230,6 +230,7 @@ export function cloudBriefMessage(raw: string, memory: BriefMemory): string {
   else if (memory.agentVenue) facts.push(`场地尺寸未给定，暂按 ${formatArea(memory.agentVenue.lengthM)} × ${formatArea(memory.agentVenue.widthM)} 米出预览，待确认`);
   else if (memory.areaM2 !== null) facts.push(`面积：${formatArea(memory.areaM2)} 平方米（长宽未确认）`);
   if (memory.layoutModeConfirmed === true) facts.push(memory.layoutMode === 'desk-chair' ? '布置：课桌配椅' : memory.seatingShape === 'ring' ? '布置：圆桌围坐，沿环形或扇形摆，椅子绕桌，不要排成方格，中间留过道' : '布置：圆桌');
+  if (memory.furnishing) facts.push(`已选桌：${memory.furnishing.reason}`);
   if (memory.layoutMode !== 'desk-chair' && (memory.seatingShape === 'ring' || memory.banquetTable?.shape)) {
     const people = memory.banquetTable?.peoplePerTable ?? (memory.localSeatingAllocation?.status === 'shared_desk' ? memory.localSeatingAllocation.peoplePerDesk : null);
     const plan = resolveTableArrangement({

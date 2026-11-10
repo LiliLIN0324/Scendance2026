@@ -4,7 +4,7 @@ import { collectViolations } from '../../../lib/placement-rules';
 import { makeFloor, makeLayout } from './__testfixtures__/fixtures';
 import { readBriefMemory, writeBriefMemory } from './assistant-brief-memory';
 import { initialBriefMemory, parseBriefTurn } from './brief-agent';
-import { eventPreviewInput, planHeldEvent } from './event-layout-agent';
+import { eventPreviewInput, eventPreviewScale, planHeldEvent, spokenHeadcount } from './event-layout-agent';
 import { materializeFurnishing, selectFurnishing } from './furnishing-select';
 import { localPlan } from './local-plan';
 import { ringDiningSet } from './ring-seating';
@@ -210,5 +210,74 @@ function memoryBox(): Storage {
     expect(set.items[0]?.snapshot?.color).toBe('#336699');
     expect(set.items[0]?.snapshot?.width).toBe(1.6);
     expect(planHeldEvent('你好', initialBriefMemory(), { event: null, headcount: null, areaM2: null, lengthM: null, widthM: null, venueIO: null, timeOfDay: null })).toBeNull();
+  });
+
+  it('does not treat 办 inside another word as a banquet, and a 吗 question does not preview', () => {
+    const blank = { event: null, headcount: null, areaM2: null, lengthM: null, widthM: null, venueIO: null, timeOfDay: null };
+    for (const text of ['办公室年会80人', '跟主办方说年会80人', '这个办法不适合生日宴']) {
+      const turn = parseBriefTurn(text, initialBriefMemory(), bare);
+      expect(turn.kind, text).not.toBe('generate');
+      expect(turn.text, text).not.toBe('这场生日宴大概多少人？');
+      expect(turn.memory.furnishing, text).toBeUndefined();
+    }
+    const asked = parseBriefTurn('能办个八十人的生日宴吗', initialBriefMemory(), bare);
+    expect(asked.kind).toBe('ask');
+    expect(asked.text).toContain('预览');
+    expect(asked.memory.furnishing).toBeUndefined();
+    expect(planHeldEvent('你好', initialBriefMemory(), blank)).toBeNull();
+  });
+
+  it('accepts 个人 and a per-table count, and still plans from an area or a 发布会', () => {
+    expect(spokenHeadcount('大概80个人')).toBe(80);
+    expect(spokenHeadcount('八十个人')).toBe(80);
+    expect(spokenHeadcount('80人，每桌10人')).toBe(80);
+    const counted = parseBriefTurn('我想办个生日宴', initialBriefMemory(), bare);
+    const people = parseBriefTurn('80个人', counted.memory, bare);
+    expect(people.kind).toBe('generate');
+    expect(people.memory.headcount).toBe(80);
+    const perTable = parseBriefTurn('想办个八十人圆桌宴，每桌12人', initialBriefMemory(), bare);
+    expect(perTable.kind).toBe('generate');
+    expect(perTable.memory.banquetTable?.peoplePerTable).toBe(12);
+    expect(perTable.memory.furnishing?.width ?? 0).toBeGreaterThan(1.4);
+    expect(perTable.layoutTools?.[1]?.summary).toMatch(/每桌 1[2-6] 人/);
+    const area = parseBriefTurn('300平', initialBriefMemory(), bare);
+    const banquet = parseBriefTurn('想办个八十人圆桌宴', area.memory, bare);
+    expect(banquet.kind).toBe('generate');
+    expect(banquet.memory.furnishing?.source).toBe('select_furnishing');
+    expect(banquet.memory.agentVenue).toBeUndefined();
+    expect(banquet.memory.areaM2).toBe(300);
+    expect(banquet.previewLead).toContain('折成');
+    const launch = parseBriefTurn('我想办个发布会', initialBriefMemory(), bare);
+    expect(launch.kind).toBe('ask');
+    expect(launch.text).toBe('这场发布会大概多少人？');
+    expect(launch.text).not.toContain('场地');
+  });
+
+  it('replaces a saved table when the user states a new diameter, and does not preview an unrelated turn after a model failure', async () => {
+    const first = parseBriefTurn('想办个八十人圆桌宴', initialBriefMemory(), bare);
+    expect(first.memory.furnishing?.width).toBe(1.4);
+    const next = parseBriefTurn('圆桌直径2.2米', first.memory, bare);
+    expect(next.kind).toBe('generate');
+    expect(next.memory.furnishing?.width).toBe(2.2);
+    expect(next.memory.banquetTable?.width).toBe(2.2);
+    expect(next.layoutTools?.[0]?.tool).toBe('select_furnishing');
+    expect(next.previewLead).toContain('2.20');
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    const kept = { ...first.memory, lengthM: 20 as number, widthM: 15 as number };
+    delete kept.agentVenue;
+    const unrelated = await resolveBriefTurn('改到室内', kept, { ...bare, venueUp: true }, {
+      briefExtract: async () => ({ enabled: false, extraction: null, reason: 'SERVICE_NOT_CONFIGURED' }),
+    });
+    expect(unrelated.layoutTools).toBeUndefined();
+    expect(unrelated.kind).not.toBe('generate');
+    vi.unstubAllEnvs();
+    expect(eventPreviewScale(
+      { length: 18, width: 10, origin: 'typed', fromVenue: true },
+      { agentVenue: { lengthM: 20, widthM: 15 }, lengthM: null, widthM: null, areaM2: null },
+    )).toEqual({ length: 18, width: 10, origin: 'typed', assumed: false });
+    expect(eventPreviewScale(
+      { length: 12, width: 8, origin: 'canvas', fromVenue: false },
+      { agentVenue: { lengthM: 20, widthM: 15 }, lengthM: null, widthM: null, areaM2: null },
+    )).toEqual({ length: 20, width: 15, origin: 'canvas', assumed: true });
   });
 });

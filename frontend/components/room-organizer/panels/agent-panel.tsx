@@ -49,6 +49,8 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
 import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
+import { eventPreviewScale } from '../lib/event-layout-agent';
+import { layoutFurnishing } from '../lib/furnishing-select';
 import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
 import { mergeSeatingAllocation } from '../lib/seating-allocation';
@@ -1930,7 +1932,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false, localDraftNote?:string): Promise<void> {
     if(localDraftNote!==undefined){await runLocalSeatingDraft(token,scale,localDraftNote);return;}
     pushLocalLayoutStep('preview', 'running');
-    const chosen = memoryRef.current.furnishing;
+    const chosen = layoutFurnishing(memoryRef.current.furnishing, memoryRef.current.banquetTable);
     if (chosen) notePriorLayoutTool('select_furnishing', chosen.reason);
     const before = live.current;
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
@@ -1970,7 +1972,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const banquet=memoryRef.current.banquetTable;
     const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
     const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
-    const furnishing=memoryRef.current.furnishing;
+    const furnishing=layoutFurnishing(memoryRef.current.furnishing, banquet);
     try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), ...(furnishing ? { furnishing } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
@@ -2218,7 +2220,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         await runLocal(token,variant,scale,seatPriority,note);
         return;
       }
-      if (studioRef.current?.connection === '项目已连接') {
+      if (studioRef.current?.connection === '项目已连接' && memoryRef.current.furnishing?.source !== 'select_furnishing') {
         if(!cloudScaleMatches(scale)){setPhase('failed');return;}
         suppressCancelledCloudPreview.current=false;
         lastSource.current = 'cloud'; setProgress(1);
@@ -2260,7 +2262,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
     if (!sessionScopeIsCurrent()) return;
     if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { finishLayoutAttempt(false); say({role:'agent',amber:true,text:'场地已变化，请重新说明当前场地尺寸。'}); return; }
-    beginLayoutAttempt(previewUtterance.current || note || label || '', studioRef.current?.connection === '项目已连接');
+    beginLayoutAttempt(previewUtterance.current || note || label || '', memoryRef.current.furnishing?.source !== 'select_furnishing' && studioRef.current?.connection === '项目已连接');
     localDraftIntent.current=/(?:本地|本机)草案/.test(note)?note:null;
     const token = ++runToken.current;
     if (label) say({ role: 'user', text: label });
@@ -2269,7 +2271,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   /** 「这次没出成」那张卡上的重试：拿现在的读数再跑一遍，不另算一个入口。 */
-  function retry(): void { runGeneration('重试', seed.current, localDraftIntent.current??'', readScale()); }
+  function followUpScale(): Scale {
+    const canvas = readScale();
+    const picked = eventPreviewScale({ ...canvas, fromVenue: venueIsUp() }, memoryRef.current);
+    return { length: picked.length, width: picked.width, origin: picked.origin };
+  }
+  function retry(): void { runGeneration('重试', seed.current, localDraftIntent.current??'', followUpScale()); }
   /** 停一下：只收预览，画布退回确认前状态；提案留着，「接着摆」能续上。 */
   function stop(): void {
     if (phaseRef.current !== 'generating' && !generationWait.current) return;
@@ -2297,11 +2304,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
   function regenerate(label = '换一版'): void {
     seed.current += 1;
-    runGeneration(label, seed.current, localDraftIntent.current??(label === '换一版' ? '换一版不同的布局' : ''), readScale());
+    runGeneration(label, seed.current, localDraftIntent.current??(label === '换一版' ? '换一版不同的布局' : ''), followUpScale());
   }
   /** 座位不够时的一点击改法：同一份需求按座位优先重排，仍然只出预览，确认前不落盘。 */
   function addSeats(): void {
-    runGeneration('加座，再排一版', seed.current, '', readScale(), true);
+    runGeneration('加座，再排一版', seed.current, '', followUpScale(), true);
   }
 
   /** T-UI §4-5：导出/交接意图先落预览卡，确认后才在本机直接生成；不跳执行页。 */
@@ -2721,10 +2728,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
     anchorsRef.current = anchors;
     const statedScale = scaleFrom(merged);
-    const assumedHall = turn.memory.agentVenue;
-    const scale = assumedHall && turn.memory.lengthM === null && turn.memory.widthM === null
-      ? { ...statedScale, length: assumedHall.lengthM, width: assumedHall.widthM }
-      : statedScale;
+    const chosenScale = eventPreviewScale(statedScale, turn.memory);
+    const scale = { ...statedScale, length: chosenScale.length, width: chosenScale.width, origin: chosenScale.origin };
+    const previewLead = turn.previewLead && !chosenScale.assumed && /场地没说/.test(turn.previewLead)
+      ? turn.previewLead.replace(/场地没说，我先按(?:室内|户外) \S+ 米/, `按现在的场地 ${formatArea(chosenScale.length)}×${formatArea(chosenScale.width)} 米`)
+      : turn.previewLead;
     const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
     const mentionedZone = (kind: 'stage' | 'checkin', word: RegExp) => turn.memory.unresolvedActivityNeeds.includes(kind) || word.test(trimmed);
     const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
@@ -2817,8 +2825,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const zoneLine = `${zoneBit ? `${zoneBit}先占位。` : ''}${unspecified.length ? `${unspecified.join('、')}尚未说明，这版暂不包含。` : ''}`;
     const rail = lightPlanRail(trimmed);
     const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
-    say({ role: 'agent', text: turn.previewLead
-      ? turn.previewLead
+    say({ role: 'agent', text: previewLead
+      ? previewLead
       : turn.filledScaleAsk
       ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出预览，确认后才写入。${suffix}`
       : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}${suffix}` });

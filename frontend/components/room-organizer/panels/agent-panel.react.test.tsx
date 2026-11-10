@@ -4101,3 +4101,68 @@ describe('S2 Bingo 审校台：三钮状态台直达', () => {
     expect(screen.queryByRole('button', { name: '复制评审链接' })).toBeNull();
   });
 });
+
+describe('event layout generation path', () => {
+  it('previews the selected tables locally when a project is connected and the hall is not 20×15', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    render(ui(makeLayout({ id: 'blank-hall', width: 12, height: 8 }), onApply, onPreview));
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(screen.queryByText(/本次没有提交生成/)).toBeNull();
+    expect(screen.getByText(/场地没说/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const tables = preview.floors[0]!.items.filter(item => item.name === '圆桌');
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(item => item.tableShape === 'round' && item.width === 1.4 && item.tableFinish === 'linen')).toBe(true);
+    expect(preview.width).toBeCloseTo(20);
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('keeps a real hall and still places the selected tables', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    const layout = makeLayout({
+      id: 'walled-hall',
+      width: 18,
+      height: 10,
+      floors: [makeFloor({ interiorWalls: [{ id: 'wall-1', x1: -8, z1: -4, x2: 8, z2: -4 }] })],
+    });
+    render(ui(layout, onApply, onPreview));
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/不能只改外框/)).toBeNull();
+    expect(screen.queryByText(/本次没有提交生成/)).toBeNull();
+    expect(screen.queryByText(/场地没说/)).toBeNull();
+    expect(screen.getByText(/按现在的场地 18×10 米/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(18);
+    expect(preview.height).toBeCloseTo(10);
+    expect(preview.floors[0]!.items.some(item => item.name === '圆桌' && item.tableFinish === 'linen')).toBe(true);
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('rebuilds the table when a later diameter follows the headcount answer', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    render(ui(makeLayout({ id: 'follow-size', width: 20, height: 15 }), vi.fn(), onPreview));
+    send('我想办个生日宴');
+    expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    send('80个人');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    onPreview.mockClear();
+    send('圆桌直径2.2米');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const tables = preview.floors[0]!.items.filter(item => item.name === '圆桌');
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(item => item.width === 2.2)).toBe(true);
+    expect(screen.getAllByText(/Ø2\.20/).length).toBeGreaterThan(0);
+    expect(onPreview).toHaveBeenCalled();
+  }, 20000);
+});
