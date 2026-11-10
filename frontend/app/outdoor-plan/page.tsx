@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则 + H3-c 规划信息面板/图例 + H4-a 视觉复刻）。
@@ -194,8 +194,8 @@ const SOURCES: { id: CanvasBasemapSource; label: string }[] = [
   { id: 'osm', label: 'OSM 街道' },
   { id: 'carto-light', label: 'Carto 浅色' },
   { id: 'carto-dark', label: 'Carto 深色' },
-  { id: 'vec', label: '天地图矢量（待 key）' },
-  { id: 'img', label: '天地图影像（待 key）' },
+  { id: 'vec', label: '天地图矢量' },
+  { id: 'img', label: '天地图影像' },
 ];
 
 const DRAFT_STORAGE_KEY = 'outdoor-plan-h2b-draft-v1';

@@ -722,6 +722,20 @@ export function createServer({
         });
         res.end(bytes);
         return;
+      } else if (req.method === 'GET' && url.pathname === '/api/tdt-tiles') {
+        // 天地图瓦片代理（dev-only）：本地 next dev 没有 Pages Functions，这里补一条同源可用的口子。
+        // key 只从本机 .env.local 读，上游 URL 不出服务端，响应里不带 tk。
+        const tile = await fetchTdtTile(url.searchParams);
+        res.writeHead(200, {
+          'Content-Type': tile.type,
+          'Content-Length': String(tile.bytes.length),
+          'Cache-Control': tile.fallback ? 'no-store' : 'public, max-age=86400',
+          ...(tile.fallback ? { 'X-Tdt-Fallback': 'placeholder' } : {}),
+          Vary: 'Origin',
+          ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
+        });
+        res.end(tile.bytes);
+        return;
       } else if (req.method === 'GET' && url.pathname === '/health') {
         result = { ok: true, keyConfigured: Boolean(key), base, worldBase };
       } else if (req.method === 'GET' && url.pathname === '/meta') {
@@ -804,6 +818,66 @@ export function createServer({
       }
     }
   });
+}
+
+/* ---------------- 天地图瓦片代理（dev-only，对齐 functions/api/tdt-tiles.ts） ---------------- */
+const TDT_TILE_LAYERS = ['vec_w', 'cva_w', 'img_w', 'cia_w'];
+const TDT_PLACEHOLDER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#EEF1F4"/></svg>';
+
+/** 本机 key：优先仓库根 .env.local 的 TDT_KEY，其次前端 .env.local 的两个名字。 */
+async function resolveTdtKey() {
+  const candidates = [
+    ['TDT_KEY', new URL('../../.env.local', import.meta.url)],
+    ['NEXT_PUBLIC_TDT_KEY', new URL('../../.env.local', import.meta.url)],
+    ['TDT_KEY', new URL('../../frontend/.env.local', import.meta.url)],
+    ['NEXT_PUBLIC_TDT_KEY', new URL('../../frontend/.env.local', import.meta.url)],
+  ];
+  for (const [name, fileUrl] of candidates) {
+    const value = await readEnvFile(name, fileUrl);
+    if (value) return value;
+  }
+  return '';
+}
+
+async function fetchTdtTile(searchParams) {
+  const layer = searchParams.get('layer') ?? '';
+  if (!TDT_TILE_LAYERS.includes(layer)) throw new HttpError(400, 'layer invalid');
+  const z = Number(searchParams.get('z'));
+  const x = Number(searchParams.get('x'));
+  const y = Number(searchParams.get('y'));
+  if (!Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y)) throw new HttpError(400, 'coords invalid');
+  if (z < 3 || z > 18) throw new HttpError(400, 'coords invalid');
+  const span = 2 ** z;
+  if (x < 0 || y < 0 || x >= span || y >= span) throw new HttpError(400, 'coords invalid');
+  const key = await resolveTdtKey();
+  if (!key) throw new HttpError(503, '本机缺少 TDT_KEY（仓库根 .env.local 或前端 .env.local）');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const tileHost = (x + y + attempt) % 8;
+    const upstream = new URL(`https://t${tileHost}.tianditu.gov.cn/${layer}/wmts`);
+    upstream.searchParams.set('SERVICE', 'WMTS');
+    upstream.searchParams.set('REQUEST', 'GetTile');
+    upstream.searchParams.set('VERSION', '1.0.0');
+    upstream.searchParams.set('LAYER', layer.slice(0, -2));
+    upstream.searchParams.set('STYLE', 'default');
+    upstream.searchParams.set('TILEMATRIXSET', 'w');
+    upstream.searchParams.set('FORMAT', 'tiles');
+    upstream.searchParams.set('TILECOL', String(x));
+    upstream.searchParams.set('TILEROW', String(y));
+    upstream.searchParams.set('TILEMATRIX', String(z));
+    upstream.searchParams.set('tk', key);
+    try {
+      const response = await fetch(upstream, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceDevProxy/2.2.0' } });
+      if (!response.ok) continue;
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length < 100) continue;
+      const raw = response.headers.get('content-type') ?? '';
+      const type = raw.toLowerCase().startsWith('image/') ? (raw.split(';')[0] || 'image/png') : 'image/png';
+      return { bytes, type, fallback: false };
+    } catch {
+      // 超时/网络错：换一台主机再试一次。
+    }
+  }
+  return { bytes: Buffer.from(TDT_PLACEHOLDER_SVG), type: 'image/svg+xml', fallback: true };
 }
 
 async function readEnvFile(name, fileUrl) {

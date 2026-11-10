@@ -29,6 +29,11 @@ const nextConfig = {
     return [
       { source: '/introduction', destination: '/introduction.html' },
       { source: '/guide', destination: '/guide.html' },
+      // 天地图瓦片：线上由 Cloudflare Pages Functions（functions/api/tdt-tiles.ts）处理；
+      // 本机 next dev 没有 Functions，转发到 3199 本机代理，见 tools/aholo/lux3d-dev-proxy.mjs。
+      ...(process.env.NODE_ENV === 'development'
+        ? [{ source: '/api/tdt-tiles', destination: 'http://127.0.0.1:3199/api/tdt-tiles' }]
+        : []),
     ];
   },
 };
