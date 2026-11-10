@@ -1,4 +1,4 @@
-import { beyondDrawnWall, canvasFloor, type CanvasFloor, type FloorPoint } from '../../floor-reading';
+import { beyondDrawnWall, canvasFloor, centerOffDrawnFloor, type CanvasFloor, type FloorPoint } from '../../floor-reading';
 import type { FurnitureItem, RoomLayout } from '../../types';
 
 /**
@@ -85,8 +85,11 @@ export function countChairsOnCanvasFloor(
   const outside = (item: FurnitureItem): boolean => offFloor(item) || beyondDrawnWall(item, layout, floorIndex);
   const crossing = seats.filter(outside);
   const inRoom = seats.filter(item => !outside(item));
+  // A clipped round top whose centre is still on the floor is a placed table.
+  // A centre past the floor, or a top with no solid chair, is the cyan table.
   const chairless = fresh.filter(item => item.type === 'dining-table' && (
-    outside(item)
+    centerOffDrawnFloor(item, layout, floorIndex)
+    || beyondDrawnWall(item, layout, floorIndex)
     || !inRoom.some(chair => Math.hypot(chair.position!.x - item.position!.x, chair.position!.z - item.position!.z) < item.width + 0.8)
   ));
   return { recovered: true, inRoom: inRoom.length, crossing: crossing.length, chairless: chairless.length };

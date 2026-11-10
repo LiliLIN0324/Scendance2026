@@ -4,8 +4,10 @@ import { backendSceneToLayout } from '../../backend-adapter';
 import { initialBriefMemory, parseBriefTurn } from '../../brief-agent';
 import { eventPreviewScale, isRoundResizeUtterance } from '../../event-layout-agent';
 import { selectFurnishing } from '../../furnishing-select';
-import { localPlan } from '../../local-plan';
+import { localPlan, omitUnlandedBanquetItems } from '../../local-plan';
 import { canvasFloor } from '../../floor-reading';
+import { roundSeatLayout } from '../../table-seat-plan';
+import { structuralItemCollides } from '../../structural-layout';
 import { countChairsOnCanvasFloor, evaluateBanquet } from './index';
 
 const bare = { venueUp: false, scaleTyped: false, hasBase: false, command: null };
@@ -136,7 +138,7 @@ describe('平湖秋月 banquet design eval', () => {
       expect(added.seats ?? 0).toBeLessThan(80);
       expect(added.blocked).toBeTruthy();
     }
-  });
+  }, 20_000);
 
   it('still reads the room when the first wall is a stub, and fails when the loop does not close', () => {
     const stubbed = pinghuHall({ extraFirst: true });
@@ -157,7 +159,133 @@ describe('平湖秋月 banquet design eval', () => {
     expect(openCount.recovered).toBe(false);
     expect(openCount.inRoom).toBe(0);
     expect(evaluateBanquet(openPlan.layouts.at(-1)!, 0, openIds, openPlan.seats ?? 0).pass).toBe(false);
-  });
+  }, 20_000);
+
+  it('does not bill the all-cyan southeast table or the chairs a Ø1.60 ring leaves past the wall', () => {
+    // 2×3 rings on the 23.8×16.1 frame. The closed interior loop's southeast
+    // edge cuts TR and BC through the chair ring and leaves BR entirely outside.
+    const n = Math.SQRT1_2;
+    const inside = { x: -n, z: n };
+    const along = { x: n, z: n };
+    const tr = { x: 16, z: 12 };
+    const bc = { x: 11.5, z: 7.5 };
+    const cut = 1.4;
+    const onWall = (point: { x: number; z: number }) => ({ x: point.x - inside.x * cut, z: point.z - inside.z * cut });
+    const wallBC = onWall(bc);
+    const wallTR = onWall(tr);
+    const wallSW = { x: wallBC.x - along.x * 6, z: wallBC.z - along.z * 6 };
+    const wallNE = { x: wallTR.x + along.x * 4, z: wallTR.z + along.z * 4 };
+    const id = (k: number) => `00000000-0000-4000-8000-${String(k).padStart(12, '0')}`;
+    const edge = (k: number, start: { x: number; z: number }, end: { x: number; z: number }) => ({
+      id: id(k), start, end, thickness: 0.2, height: 3, kind: 'interior' as const, status: 'confirmed' as const,
+    });
+    const north = { x: wallNE.x, z: 15.5 };
+    const nw = { x: 2.5, z: 15.5 };
+    const sw = { x: 2.5, z: wallSW.z };
+    const hall = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
+      objects: [], camera: 'overview', lighting: 'neutral',
+      structure: {
+        walls: [
+          edge(1, wallSW, wallNE),
+          edge(2, wallNE, north),
+          edge(3, north, nw),
+          edge(4, nw, sw),
+          edge(5, sw, wallSW),
+        ],
+        openings: [], columns: [],
+      },
+      sources: [], dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-se-cut' });
+    expect(hall.width).toBeCloseTo(23.8);
+    expect(hall.height).toBeCloseTo(16.1);
+    expect(canvasFloor(hall, 0).recovered).toBe(true);
+
+    const dx = wallNE.x - wallSW.x, dz = wallNE.z - wallSW.z;
+    const span = Math.hypot(dx, dz);
+    const signed = (x: number, z: number) => (dx * (z - wallSW.z) - dz * (x - wallSW.x)) / span;
+    const ring = roundSeatLayout(1.6);
+    const centers = {
+      tl: { x: 7, z: 12 },
+      tc: { x: 11.5, z: 12 },
+      tr,
+      bl: { x: 7, z: 7.5 },
+      bc,
+      br: { x: 16, z: 7.5 },
+    };
+    const toLayout = (point: { x: number; z: number }) => ({ x: point.x - 11.9, z: point.z - 8.05 });
+    const items = Object.entries(centers).flatMap(([name, center]) => {
+      const table = makeItem({
+        id: name, type: 'dining-table', name: '圆桌', width: 1.6, depth: 1.6, height: 0.75,
+        position: toLayout(center),
+      });
+      const chairs = ring.chairs.map((place, index) => makeItem({
+        id: `${name}-c${index}`, type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
+        position: toLayout({ x: center.x + place.x, z: center.z + place.z }),
+        rotation: place.rotation,
+      }));
+      return [table, ...chairs];
+    });
+    const preview = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, ...items] }) };
+    const baseIds = new Set(hall.floors[0]!.items.map(item => item.id));
+    const cornersOf = (item: { position?: { x: number; z: number }; width: number; depth: number; rotation?: number }) => {
+      const rotation = item.rotation ?? 0;
+      const cos = Math.cos(rotation), sin = Math.sin(rotation);
+      const cx = item.position!.x + 11.9, cz = item.position!.z + 8.05;
+      return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sz]) => ({
+        x: cx + sx * item.width / 2 * cos - sz * item.depth / 2 * sin,
+        z: cz + sx * item.width / 2 * sin + sz * item.depth / 2 * cos,
+      }));
+    };
+    // Independent of the ledger: a solid chair is one whose box clears the cut.
+    const solid = items.filter(item => item.type === 'dining-chair' && cornersOf(item).every(corner => (
+      signed(corner.x, corner.z) >= 0.21 && corner.x > 3 && corner.x < 19.4 && corner.z > 2.6 && corner.z < 15.1
+    )));
+    const billedChairs = items.filter(item => item.type === 'dining-chair');
+    expect(billedChairs.length).toBe(66);
+    expect(billedChairs.length).toBeGreaterThan(solid.length);
+    expect(solid.length).toBeGreaterThan(0);
+    expect(items.filter(item => item.type === 'dining-table')).toHaveLength(6);
+
+    const raw = countChairsOnCanvasFloor(preview, 0, baseIds);
+    expect(raw.inRoom).toBe(solid.length);
+    expect(raw.crossing).toBe(billedChairs.length - solid.length);
+    expect(raw.chairless).toBe(1);
+    const billedAll = evaluateBanquet(preview, 0, baseIds, billedChairs.length);
+    expect(billedAll.pass).toBe(false);
+    expect(billedAll.seatsMatch.pass).toBe(false);
+    // Rewriting the card to the solid walk still fails while the cyan table is in the preview.
+    const billedSolid = evaluateBanquet(preview, 0, baseIds, solid.length);
+    expect(billedSolid.pass).toBe(false);
+    expect(billedSolid.noChairlessTables.pass).toBe(false);
+    expect(billedSolid.noChairlessTables.tables).toBeGreaterThan(0);
+    expect(evaluateBanquet(preview, 0, baseIds, 66).pass).toBe(false);
+
+    const cleaned = omitUnlandedBanquetItems(preview, 0, baseIds);
+    const cleanedTables = cleaned.floors[0]!.items.filter(item => item.type === 'dining-table');
+    expect(cleanedTables.map(item => item.id).sort()).toEqual(['bc', 'bl', 'tc', 'tl', 'tr']);
+    expect(cleanedTables.every(item => !structuralItemCollides(item, cleaned, 0))).toBe(true);
+    const cleanedChairs = cleaned.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    expect(cleanedChairs).toHaveLength(solid.length);
+    const landed = countChairsOnCanvasFloor(cleaned, 0, baseIds);
+    expect(landed.inRoom).toBe(solid.length);
+    expect(landed.crossing).toBe(0);
+    expect(landed.chairless).toBe(0);
+    expect(evaluateBanquet(cleaned, 0, baseIds, solid.length).pass).toBe(true);
+
+    const plan = localPlan(banquetInput(hall, 1.6));
+    const generated = countChairsOnCanvasFloor(plan.layouts.at(-1)!, 0, baseIds);
+    expect(plan.seats).toBe(generated.inRoom);
+    expect(generated.crossing).toBe(0);
+    expect(generated.chairless).toBe(0);
+    expect(evaluateBanquet(plan.layouts.at(-1)!, 0, baseIds, plan.seats ?? -1).pass).toBe(true);
+    expect(plan.layouts.at(-1)!.width).toBeCloseTo(23.8);
+    expect(plan.layouts.at(-1)!.height).toBeCloseTo(16.1);
+  }, 20_000);
 
   it('does not bill chairs whose seat is on the far side of a drawn wall', () => {
     const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;

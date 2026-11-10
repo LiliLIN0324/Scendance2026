@@ -217,6 +217,24 @@ function worldPoint(item: FurnitureItem, layout: RoomLayout): FloorPoint | null 
   return { x: item.position.x + layout.width / 2, z: item.position.z + layout.height / 2 };
 }
 
+/**
+ * Table centre off the floor mesh the canvas draws.
+ * A round top the wall only clips can still seat the chairs that stay inside.
+ * A centre past that mesh is the all-cyan table and is not a placed table.
+ */
+export function centerOffDrawnFloor(item: FurnitureItem, layout: RoomLayout, floorIndex = 0): boolean {
+  const here = worldPoint(item, layout);
+  if (!here) return true;
+  const room = canvasFloor(layout, floorIndex);
+  if (!room.recovered || !room.floor) return true;
+  if (!pointInPolygon(here, room.floor)) return true;
+  for (let index = 0; index < room.floor.length; index++) {
+    const a = room.floor[index]!, b = room.floor[(index + 1) % room.floor.length]!;
+    if (distanceToSegment(here.x, here.z, a.x, a.z, b.x, b.z) < 0.02) return true;
+  }
+  return false;
+}
+
 /** A chair or table whose path to the landed group crosses a drawn wall. */
 export function beyondDrawnWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
   const here = worldPoint(item, layout);
