@@ -4,7 +4,13 @@
 
 > 先读HANDOFF.md。
 
-2026-11-11 二十九轮 · 模型身份问答修复 + **supabase functions 已部署**：
+2026-11-11 三十轮 · **线上 brief 链路切到 qwen3.8-max**（8B 小模型一直顶替大模型在跑）：
+- 身份注入实测暴露真相：模型自报「Qwen/Qwen3-8B」——`AGENT_CHAT_MODEL` 配的是 8B 小模型，而百炼大模型线（`BAILIAN_PRODUCT_MODEL=qwen3.8-max`，docs/plans/2026-11-09-production-conversation.md 已验证）因 `BAILIAN_PRODUCT_ENABLED` 未设置从未启用。这就是「模型不能很好理解需求」的完整根因：对话开关缺失（二十七轮）+ 大模型开关缺失（本轮）。
+- 已 `supabase secrets set BAILIAN_PRODUCT_ENABLED=1`，复测：自报「qwen3.8-max」✓；长者讲座困难样本（30人/80把椅子/签到未定）回复质量显著优于 8B——正确保留签到未知、不再把椅子推成课桌布局、无障碍提示人工核验。**百炼按量计费已生效**（用户此前授权）；想切回小模型：`supabase secrets set BAILIAN_PRODUCT_ENABLED=0`。
+- 代码：`providers.ts` 新增 `chatModelName()`（解析实际模型 id），`api.ts` 把它注入 system prompt（模型被问身份能自报准确型号，不编造）；scene-api 已部署。前端未动。
+- 上轮（二十九轮）：
+
+
 - 用户要模型自报身份（如 qwen3.8-max）。①`BRIEF_CONVERSATION_PROMPT` 加身份问答规则：知道模型名就直说（不编造未接入型号）；线上复测「你是什么模型」→「我是 Qwen（通义千问）」2.8s。②前端：readOnlyReply 的 unhandled 全是 question 且模型已作答时不再挂「尚未执行」黄条（`agent-panel.tsx`）。
 - **`scene-api`+`conversation-api` 已部署**（`--use-api` 云端打包；本地 bundler 因 Deno 走 IPv6 被 registry 拒连，代理 env 不生效，绕过方式见此）。desk 契约后端自此生效，课桌活动可上云保存。
 - 踩坑记录：`.env.local` 开头有 BOM 会让 supabase CLI 报 failed to parse environment file（已去 BOM）；`HTTP_PROXY=127.0.0.1:7897` 活着但 CLI bundler 不认 env 代理；npmmirror/npmjs 对 Deno 均 IPv6 拒连（curl 可 IPv4 回落）。
@@ -55,7 +61,7 @@
 
 2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-11（二十九轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-11（三十轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 

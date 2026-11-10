@@ -109,6 +109,16 @@ export function chatUsageProvider(env: Env): 'minimax' | 'custom' | 'deepseek' {
   if (chatProfile(env) === 'minimax') return 'minimax';
   return env('AGENT_CHAT_BASE_URL') ? 'custom' : 'deepseek';
 }
+/** The exact model id this request will run on, for honest self-identification. */
+export function chatModelName(env: Env, options?: { purpose?: 'brief' | 'agent' }): string {
+  const productBailian=options?.purpose==='brief' && env('BAILIAN_PRODUCT_ENABLED')==='1';
+  const customModel = env(productBailian?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
+  if (customModel?.trim()) return customModel.trim();
+  if (env('TOKENDANCE_API_KEY')) return CHAT_MODEL;
+  if (env('DEEPSEEK_API_KEY')) return OFFICIAL_CHAT_MODEL;
+  return '未配置';
+}
+
 /**
  * OpenAI-compatible chat request. Priority: any OpenAI-compatible provider
  * (`AGENT_CHAT_BASE_URL` + `AGENT_CHAT_KEY` + `AGENT_CHAT_MODEL`) → Tokendance gateway →

@@ -15,7 +15,7 @@ import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
-import { CHAT_API_KEY_ENV, chatProfile, chatRequest, generateProposal } from './providers.ts';
+import { CHAT_API_KEY_ENV, chatModelName, chatProfile, chatRequest, generateProposal } from './providers.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefConversation, parseModelBrief, BRIEF_CONVERSATION_PROMPT, BRIEF_EXTRACT_PROMPT, BRIEF_PROVIDER_TIMEOUT_MS } from './brief-extract-contract.ts';
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
@@ -172,8 +172,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           // The existing MiniMax profile forwards token fields unchanged. Keep
           // legacy payloads byte-compatible while bounding the new mode.
           const tokenLimit=conversation&&chatProfile(env,'brief')==='minimax'?{max_completion_tokens:2048}:{max_tokens:2048};
+          // 把实际运行的模型名注入系统提示，模型被问「你是什么模型」时能自报准确型号。
+          const selfModel=chatModelName(env,{purpose:'brief'});
+          const systemPrompt=(conversation?BRIEF_CONVERSATION_PROMPT:BRIEF_EXTRACT_PROMPT)+`
+你当前实际运行的模型是「${selfModel}」；用户问你是什么模型时，如实报告这个名字并保持简短。`;
           const { url, init } = chatRequest(env, { messages: [
-            { role:'system', content: conversation?BRIEF_CONVERSATION_PROMPT:BRIEF_EXTRACT_PROMPT },
+            { role:'system', content: systemPrompt },
             { role:'user', content: userContent },
           ], temperature: 0, ...tokenLimit, response_format: { type: 'json_object' } }, { purpose: 'brief' });
           // 推理模型可能长思考，超时 110s；仍超时说明该供应商当前不可用，reason 会透出。
