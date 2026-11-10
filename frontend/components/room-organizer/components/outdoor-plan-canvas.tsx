@@ -1809,6 +1809,51 @@ export default function OutdoorPlanCanvas({
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
 
+      {/* P2-f 编辑工具舒展：规划模式钮直接铺在画布顶部（像室内标注区那样可见可用），
+          不再收在左栏卡片里；模式伴随选项/模板/选中实体编辑仍在左栏卡片。 */}
+      {!readOnly && (
+        <div
+          role="toolbar"
+          aria-label="户外规划编辑模式"
+          data-testid="outdoor-edit-toolbar"
+          style={{
+            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 4,
+            display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, maxWidth: 'calc(100% - 24px)',
+            background: PLANNING_SURFACE.panelBg, border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+            borderRadius: PLANNING_RADIUS.md, padding: 6, pointerEvents: 'auto',
+            boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
+          }}
+        >
+          {(Object.keys(PLANNING_EDIT_MODE_LABELS) as PlanningEditMode[]).map(m => {
+            const ModeIcon = planningIcon(PLANNING_EDIT_MODE_ICONS[m]);
+            return (
+              <button
+                key={m}
+                type="button"
+                style={modeButtonStyle(mode === m)}
+                aria-pressed={mode === m}
+                data-testid={`edit-mode-${m}`}
+                onClick={() => setMode(m)}
+              >
+                <ModeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+                {PLANNING_EDIT_MODE_LABELS[m]}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            data-testid="plan-undo"
+            aria-label="撤销上一步"
+            disabled={historyCount === 0}
+            style={{ ...modeButtonStyle(false), opacity: historyCount === 0 ? 0.5 : 1 }}
+            onClick={() => undoPlan()}
+          >
+            <UndoIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+            撤销
+          </button>
+        </div>
+      )}
+
       {/* H3-c 规划信息面板（左栏常驻）：总览 / 清单 / 问题 / 图例，只读也可用。 */}
       {/* H3-c 规划信息面板：浮窗在画布内；传 infoPanelHostId 且宿主存在时移到外部（左栏卡片）。 */}
       <PanelPortal host={infoPanelHost}>
@@ -2026,35 +2071,6 @@ export default function OutdoorPlanCanvas({
 
             {!readOnly && (
               <>
-                <div style={sectionTitle}>编辑</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs }}>
-                  {(Object.keys(PLANNING_EDIT_MODE_LABELS) as PlanningEditMode[]).map(m => {
-                    const ModeIcon = planningIcon(PLANNING_EDIT_MODE_ICONS[m]);
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        style={modeButtonStyle(mode === m)}
-                        aria-pressed={mode === m}
-                        onClick={() => setMode(m)}
-                      >
-                        <ModeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                        {PLANNING_EDIT_MODE_LABELS[m]}
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    data-testid="plan-undo"
-                    aria-label="撤销上一步"
-                    disabled={historyCount === 0}
-                    style={{ ...modeButtonStyle(false), opacity: historyCount === 0 ? 0.5 : 1 }}
-                    onClick={() => undoPlan()}
-                  >
-                    <UndoIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                    撤销
-                  </button>
-                </div>
                 {mode === 'zone' && (
                   <label style={{ ...zoneRowStyle, justifyContent: 'space-between' }}>
                     分区语义
