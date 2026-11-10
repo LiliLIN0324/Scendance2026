@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="assessible-viewing-platform" xmlns="http://www.w3.org/2000/svg" width="24" height="24" version="1.1" viewBox="0 0 24 24">
+  <!-- Generator: Adobe Illustrator 29.5.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 141)  -->
+  <path id="icon" d="M14.253,6.276h-4.506c-.552,0-1,.436-1,.972v9.976c0,.276.224.5.5.5s.5-.224.5-.5v-1.49h4.506v1.49c0,.276.224.5.5.5s.5-.224.5-.5V7.248c0-.536-.448-.972-1-.972ZM14.253,14.733h-4.506v-1.132h4.506v1.132ZM14.253,12.602h-4.506v-1.132h4.506v1.132ZM14.253,10.469h-4.506v-1.131h4.506v1.131ZM14.253,8.338h-4.506v-1.062l4.506-.028v1.09Z" fill="#fff"/>
+  <path id="circle" d="M12,0C5.373,0,0,5.373,0,12s5.373,12,12,12,12-5.373,12-12S18.627,0,12,0ZM12,23c-6.065,0-11-4.935-11-11S5.935,1,12,1s11,4.935,11,11-4.935,11-11,11Z" fill="#fff"/>
+</svg>
