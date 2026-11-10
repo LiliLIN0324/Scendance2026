@@ -81,10 +81,11 @@ describe('activity operations references and review', () => {
   });
   it.each([
     { stairsShape: 'winder' as const }, { stairsLeadIn: 2 }, { sofaShape: 'L-shape' as const },
+    { tableShape: 'round' as const },
     { cameraBracket: true }, { wallRotation: Math.PI / 2 },
   ])('requires review after a same-instance physical shape change: %j', async patch => {
     const layout = venue();
-    layout.floors[0].items[0].type = 'sofaShape' in patch ? 'sofa' : 'stairsShape' in patch || 'stairsLeadIn' in patch ? 'stairs' : 'security-camera';
+    layout.floors[0].items[0].type = 'tableShape' in patch ? 'dining-table' : 'sofaShape' in patch ? 'sofa' : 'stairsShape' in patch || 'stairsLeadIn' in patch ? 'stairs' : 'security-camera';
     delete layout.floors[0].items[0].materialId;
     const task = await accepted(layout, [objectId]);
     const changed = { ...layout, floors: [{ ...layout.floors[0], items: [{ ...layout.floors[0].items[0], ...patch }] }] };

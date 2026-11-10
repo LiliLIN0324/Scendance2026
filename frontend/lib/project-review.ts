@@ -50,7 +50,7 @@ export interface ProjectReviewInput {
 
 type ReviewItem = Pick<FurnitureItem, 'id' | 'name' | 'type' | 'materialId' | 'source' |
   'width' | 'depth' | 'height' | 'color' | 'position' | 'rotation' | 'elevation' |
-  'mirrored' | 'sofaShape' | 'stairsShape' | 'stairsLeadIn' | 'sillHeight'> & {
+  'mirrored' | 'sofaShape' | 'tableShape' | 'stairsShape' | 'stairsLeadIn' | 'sillHeight'> & {
   assetVersionId: string | null;
   role: 'material' | 'fixed-structure';
 };
@@ -151,7 +151,7 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
       width: item.width, depth: item.depth, height: item.height, color: item.color,
       position: item.position ? { x: item.position.x, z: item.position.z } : undefined,
       rotation: item.rotation, elevation: item.elevation,
-      mirrored: item.mirrored, sofaShape: item.sofaShape, stairsShape: item.stairsShape,
+      mirrored: item.mirrored, sofaShape: item.sofaShape, tableShape: item.tableShape, stairsShape: item.stairsShape,
       stairsLeadIn: item.stairsLeadIn, sillHeight: item.sillHeight, assetVersionId: item.assetId ?? null,
       role: item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId
         ? 'fixed-structure' as const : 'material' as const,
@@ -392,6 +392,7 @@ const modelLabel = (item: { assetVersionId: string | null; source?: string }, ve
   : unversioned ? `${item.source && item.source !== 'builtin' ? (sourceLabels as Record<string, string>)[item.source] : '模型物料'} · 版本未记录`
   : item.source ? (sourceLabels as Record<string, string>)[item.source] : '示意物料';
 const shapeLabel = (item: ReviewItem) => [
+  item.tableShape === 'round' ? '圆台面' : '',
   item.sofaShape ? ({ standard: '标准沙发', 'L-shape': 'L形沙发', 'U-shape': 'U形沙发' })[item.sofaShape] : '',
   item.stairsShape ? ({ straight: '直梯', winder: '转角梯' })[item.stairsShape] : '',
   item.stairsLeadIn === undefined ? '' : `起始台阶 ${number(item.stairsLeadIn)}`,
@@ -410,7 +411,7 @@ function reviewInventory(layout: ReviewLayout): { rows: CustomerInventoryRow[]; 
       width: item.width, depth: item.depth, height: item.height, color: item.color,
       zoneId: null, zoneName: null, locked: false,
       variant: JSON.stringify([item.materialId, item.type, item.source, item.mirrored,
-        item.sofaShape, item.stairsShape, item.stairsLeadIn, item.sillHeight, unversioned.has(item.id) ? item.id : null]),
+        item.sofaShape, item.tableShape, item.stairsShape, item.stairsLeadIn, item.sillHeight, unversioned.has(item.id) ? item.id : null]),
       note: shapeLabel(item),
     })));
   return { rows: customerInventory(groupInventory(items, { acrossFloors: true })), versions: modelVersions(layout), unversioned };

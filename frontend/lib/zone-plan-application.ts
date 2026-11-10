@@ -114,6 +114,7 @@ export function prepareZonePlan(input: PrepareZonePlanInput): PreparedZonePlan {
       items.push({ id, type: placement.spec.type, name: placement.spec.name, width: placement.spec.width,
         depth: placement.spec.depth, height: placement.spec.height, color: placement.spec.color, icon: placement.spec.icon,
         category: placement.spec.category, position: { x: placement.x, z: placement.z }, rotation: placement.rotation,
+        ...(placement.spec.tableShape ? { tableShape: placement.spec.tableShape } : {}),
         source: 'builtin' } as FurnitureItem);
     }
     const candidate: RoomLayout = { ...zones.layout, floors: zones.layout.floors.map((floor, index) => index === floorIndex

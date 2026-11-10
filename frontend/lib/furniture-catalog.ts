@@ -44,6 +44,8 @@ export interface CatalogFurniture {
    * 仅圆桌配方读取；椅子条目本身不需要此字段。
    */
   chairsPerTable?: number;
+  /** 圆台面。缺省是矩形板。碰撞仍用 width×depth 的轴对齐盒。 */
+  tableShape?: 'round';
 }
 
 /**
@@ -56,9 +58,11 @@ export const FURNITURE_CATALOG: readonly CatalogFurniture[] = [
     type: 'dining-table',
     name: '圆桌',
     category: 'table',
-    // 官方宴会圆桌 Ø1.8m（东京国际论坛 Hall D5），按正方形 footprint 记 1.8×1.8。
+    // 官方宴会圆桌 Ø1.8m（东京国际论坛 Hall D5）。1.8×1.8 是圆台面的碰撞方框，
+    // 画布 mesh / 顶视按这个直径画圆柱，不再用方盒冒充。
     width: 1.8,
     depth: 1.8,
+    tableShape: 'round',
     height: 0.7,
     color: '#A0522D',
     icon: '🟫',
