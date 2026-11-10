@@ -185,6 +185,7 @@ import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
+import { ShareMenu, type ShareMenuActions } from './panels/share-menu';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
@@ -3596,6 +3597,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   }),[planAnnot.getSnapshot,activitySession.isCurrent,sessionToken,sessionScope,flushPendingBeforeSwitch]);
   if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
 
+  // P4-c：发布卡片只实现一次；3D 工具轨与 2D 画布右上交付簇各自挂一份触发钮，
+  // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
+  const shareActions: ShareMenuActions = {
+    onIssueReviewLink: issueReviewLink,
+    onPublish: publishVersion,
+    onExportHandoff: exportHandoff,
+    onGenerateShareLink: handleShareLink,
+    onOpenMaterials: openMaterialsFromShare,
+    onOpenChecklist: () => setChecklistOpen(true),
+  };
+
   return (
     <LocalActivitySwitchGuardProvider guard={localSwitchGuard}>
     <RoomEditorProvider value={roomEditorValue}>
@@ -3923,6 +3935,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               onSaveStateChange={handleOutdoorSaveState}
               onHistoryChange={handleOutdoorHistory}
               onPlanChange={handleOutdoorPlanChange}
+              deliverySlot={<ShareMenu variant="canvas" actions={shareActions} layout={layout} />}
               seedPlan={outdoorSeedPlan}
             />
           )}
@@ -4239,7 +4252,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools outdoorActions={outdoorActions} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} publishHidden={outdoor2DOpen} shareActions={shareActions} onExportImage={handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

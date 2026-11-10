@@ -69,7 +69,7 @@ export function planOutline(layout: RoomLayout): PlanOutline {
   };
 }
 
-export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }: {
+export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0, variant = 'rail' }: {
   actions?: ShareMenuActions;
   /** 画布当前方案，用来画预览和大纲。 */
   layout?: RoomLayout;
@@ -77,6 +77,11 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   openRequest?: number;
   /** 别的工具菜单打开时递增，用来把发布收起。 */
   closeSignal?: number;
+  /**
+   * P4-c：同一份发布卡片在两种位置复用——工具轨（图标钮）与户外画布右上交付簇（文字胶囊）。
+   * 只改触发钮外观与 id，卡片本体与动作完全一致。
+   */
+  variant?: 'rail' | 'canvas';
 }): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -223,9 +228,40 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   };
 
   return <div className="sc-tool-menu" ref={rootRef}>
-    <button type="button" id="tool-share" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
-      <MaterialSymbol name="ios_share" />
-    </button>
+    {variant === 'canvas' ? (
+      <button
+        type="button"
+        id="tool-outdoor-publish"
+        data-testid="outdoor-publish"
+        data-tip="发布这版方案"
+        aria-label="发布这版方案"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls="tool-share-menu"
+        className={open ? 'is-active' : ''}
+        onClick={() => setOpen(current => !current)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          height: 34,
+          padding: '0 16px',
+          borderRadius: 999,
+          border: '1px solid rgba(20, 20, 22, 0.16)',
+          background: '#ffffff',
+          color: '#141416',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        发布
+      </button>
+    ) : (
+      <button type="button" id="tool-share" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
+        <MaterialSymbol name="ios_share" />
+      </button>
+    )}
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="发布">
       <header className="sc-publish-head">
         <span className="sc-publish-name">{titleOf(layout)}</span>
