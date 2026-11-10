@@ -55,8 +55,46 @@ describe('buildPlanFootprint', () => {
     expect(box.max.x).toBeLessThanOrEqual(metrics.width / 2 + markerSlack);
     expect(box.min.z).toBeGreaterThanOrEqual(-metrics.depth / 2 - markerSlack);
     expect(box.max.z).toBeLessThanOrEqual(metrics.depth / 2 + markerSlack);
-    // 贴地：整层高度在一个很小的抬升范围内，不是立起来的墙。
-    expect(box.max.y - box.min.y).toBeLessThan(0.2);
+    // 地面图形本身是贴地的：只取没有 planPropId 的那批（分区/设施地贴/动线/点位），
+    // 它们必须都挤在几厘米的抬升范围内，而不是立起来的墙。
+    const flat = layer.children.filter(child => !child.userData.planPropId);
+    const flatBox = new THREE.Box3();
+    for (const child of flat) flatBox.expandByObject(child);
+    expect(flatBox.max.y - flatBox.min.y).toBeLessThan(0.2);
+  });
+
+  it('每个设施在 3D 里立起对应物件，且高度是「能认出来」的尺度而不是地贴', () => {
+    const scene = new THREE.Scene();
+    buildPlanFootprint(THREE, scene, makePlan(), metrics);
+    const layer = findLayer(scene)!;
+    layer.updateMatrixWorld(true);
+    const props = layer.children.filter(child => child.userData.planPropId);
+    expect(props).toHaveLength(1); // 只有一个设施
+    const prop = props[0]!;
+    expect(prop.name).toBe('plan-prop-tent');
+    // planPropId 记的是 2D 设施 id，两个视图靠它对齐同一件物料。
+    expect(prop.userData.planPropId).toBe('f1');
+    const box = new THREE.Box3().setFromObject(prop);
+    expect(box.min.y).toBeGreaterThanOrEqual(-0.01);
+    expect(box.max.y).toBeGreaterThan(2); // 帐篷是有高度的实体
+    expect(box.max.y).toBeLessThan(6);
+    // 占地不超出 2D 给的 4×4（含少量出檐）。
+    expect(box.max.x - box.min.x).toBeLessThan(4.6);
+    expect(box.max.z - box.min.z).toBeLessThan(4.6);
+  });
+
+  it('未知模板也立一块可辨认的低块，不会静默消失', () => {
+    const scene = new THREE.Scene();
+    const plan = makePlan();
+    (plan as unknown as { facilities: unknown[] }).facilities = [
+      { id: 'f9', templateId: 'mystery-box', name: '神秘物件', position: { x: 5, y: 5 }, rotationDeg: 30, size: { width: 2, depth: 1.4 }, notes: '' },
+    ];
+    expect(buildPlanFootprint(THREE, scene, plan, metrics)).toBe(true);
+    const prop = findLayer(scene)!.children.find(child => child.userData.planPropId === 'f9');
+    expect(prop).toBeDefined();
+    const box = new THREE.Box3().setFromObject(prop!);
+    expect(box.max.y).toBeGreaterThan(0.8);
+    expect(box.max.y).toBeLessThan(2);
   });
 
   it('平面为空/边界退化时返回 false 且不挂空图层', () => {
