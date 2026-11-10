@@ -333,7 +333,7 @@ export function planHeldEvent(raw: string, memory: BriefMemory, extraction: Brie
   const tableWords = fitted.shape === 'round'
     ? `Ø${fitted.width.toFixed(2)} 米圆桌（${finish}）`
     : `${fitted.shape === 'long' ? '长桌' : '方桌'} ${fitted.width.toFixed(2)}×${fitted.depth.toFixed(2)} 米（${finish}）`;
-  const previewLead = `${who}。${place}，${tableWords}，每桌 ${arrangement.seatsPerTable} 人。先出预览，放得下几桌以这版为准，确认后才写入。`;
+  const previewLead = `${who}。${place}，${tableWords}。先出预览，每桌实际几把椅子以这版落下的为准，确认后才写入。`;
   const layoutTools: LayoutToolCall[] = [
     { tool: 'select_furnishing', summary: fitted.reason },
     { tool: 'layout_preview', summary: arrangement.explanation },

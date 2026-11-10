@@ -117,6 +117,7 @@ function memoryBox(): Storage {
     expect(turn.layoutTools?.[1]?.summary).toContain('6 桌');
     expect(turn.previewLead).toContain('按你说的');
     expect(turn.previewLead).not.toContain('围着坐');
+    expect(turn.previewLead).not.toContain('每桌 15');
     expect(resolveTableArrangement({ shape: 'round', guests: 80, width: 2.2, depth: 2.2 }).seatsPerTable).toBe(15);
 
     const base = makeLayout({ width: 20, height: 15, floors: [makeFloor()] });
@@ -472,6 +473,18 @@ function memoryBox(): Storage {
     expect(chairs.every(item => !structuralItemCollides(item, candidate, 0))).toBe(true);
     expect(plan.seats ?? 0).toBeGreaterThan(0);
     expect(plan.seats ?? 0).toBeLessThan(80);
+    const near = makeItem({
+      id: 'near-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
+      position: { x: 0, z: 12.425 - 8.05 },
+    });
+    const withNear = { ...candidate, floors: candidate.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, near] }) };
+    expect(structuralItemCollides(near, withNear, 0)).toBe(false);
+    const withoutNear = omitUnlandedBanquetItems(withNear, 0, new Set());
+    expect(withoutNear.floors[0]!.items.some(item => item.id === 'near-chair')).toBe(false);
+    expect(plan.seats).toBe(withoutNear.floors[0]!.items.filter(item => item.type === 'dining-chair' && item.id !== 'near-chair').length);
+    expect(plan.blocked).not.toContain('每桌 15');
+    expect(plan.blocked).toContain('这间厅按');
+    expect(plan.blocked).toMatch(/换成 Ø\d+\.\d+ 米，同一间室内可以落下 \d+ 座/);
     expect(plan.blocked).toContain('没有按满员桌数确认');
     expect(plan.blocked).toContain(`${plan.seats} 座`);
     expect(candidate.width).toBeCloseTo(23.8);

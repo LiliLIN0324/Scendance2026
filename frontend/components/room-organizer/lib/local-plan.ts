@@ -2,6 +2,7 @@ import { HEADCOUNT_MAX } from './workbench-agent';
 import { proposePlan, type PlanProposal } from './agent-proposal';
 import { sceneScriptFromBrief } from './scene-script';
 import { compileSceneScript, type SceneScriptCompileResult } from './scene-script-compiler';
+import { itemsOverlap, isLowProfile } from './geometry';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
 import { isStructuralMarker, structuralItemCollides, usableSeatingRect } from './structural-layout';
 import { proposeRestArea } from './rest-area-plan';
@@ -9,7 +10,7 @@ import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
 import { materializeFurnishing, type FurnishingChoice, type MaterializedFurnishing } from './furnishing-select';
 import { resolveTableArrangement, type TableArrangement } from './table-seat-plan';
-import type { RoomLayout } from './types';
+import type { FurnitureItem, RoomLayout } from './types';
 
 /**
  * The local generation door. One call, two implementations behind it:
@@ -110,18 +111,96 @@ export function localPlan(input: LocalPlanInput): LocalPlanResult {
  * preview. A wall-grazing or out-of-shell footprint is drawn as a dashed outline and
  * must not be counted as a landed seat. Chairs already in the room do not fill the headcount.
  */
+/** A chair box that merely misses the wall volume can still sit in the wall the eye sees. */
+const WALL_FACE_MARGIN_M = 0.1;
+
+function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax, dz = bz - az;
+  const length = dx * dx + dz * dz;
+  const t = length > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / length)) : 0;
+  return Math.hypot(px - ax - dx * t, pz - az - dz * t);
+}
+
+function grazesExteriorWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
+  if (!item.position) return false;
+  const walls = (layout.floors[floorIndex]?.interiorWalls ?? []).filter(wall => wall.kind === 'exterior');
+  if (!walls.length) return false;
+  const rotation = item.rotation ?? 0;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const halfW = item.width / 2, halfD = item.depth / 2;
+  const cx = item.position.x + layout.width / 2;
+  const cz = item.position.z + layout.height / 2;
+  const corners = [[-halfW, -halfD], [halfW, -halfD], [halfW, halfD], [-halfW, halfD]].map(([x, z]) => ({
+    x: cx + x * cos - z * sin,
+    z: cz + x * sin + z * cos,
+  }));
+  for (const wall of walls) {
+    const limit = (wall.thickness ?? 0.16) / 2 + WALL_FACE_MARGIN_M;
+    const ax = wall.x1 + layout.width / 2, az = wall.z1 + layout.height / 2;
+    const bx = wall.x2 + layout.width / 2, bz = wall.z2 + layout.height / 2;
+    if (corners.some(corner => distanceToSegment(corner.x, corner.z, ax, az, bx, bz) < limit)) return true;
+  }
+  return false;
+}
+
+function isBanquetSeat(item: FurnitureItem): boolean {
+  return item.type === 'dining-chair' || item.type === 'chair' || item.type === 'desk-chair';
+}
+
 export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number, baseIds: ReadonlySet<string>): RoomLayout {
   const floor = layout.floors[floorIndex];
   if (!floor) return layout;
-  const items = floor.items.filter(item => {
-    if (baseIds.has(item.id) || isStructuralMarker(item)) return true;
-    const seat = item.type === 'dining-chair' || item.type === 'chair' || item.type === 'desk-chair';
+  const kept: FurnitureItem[] = [];
+  const pendingSeats: FurnitureItem[] = [];
+  for (const item of floor.items) {
+    if (baseIds.has(item.id) || isStructuralMarker(item)) { kept.push(item); continue; }
+    const seat = isBanquetSeat(item);
     const table = item.type === 'dining-table';
-    if (!seat && !table) return true;
-    return !structuralItemCollides(item, layout, floorIndex);
-  });
-  if (items.length === floor.items.length) return layout;
-  return { ...layout, floors: layout.floors.map((entry, index) => index === floorIndex ? { ...entry, items } : entry) };
+    if (!seat && !table) { kept.push(item); continue; }
+    if (structuralItemCollides(item, layout, floorIndex) || grazesExteriorWall(item, layout, floorIndex)) continue;
+    if (seat) pendingSeats.push(item);
+    else kept.push(item);
+  }
+  for (const item of pendingSeats) {
+    if (kept.some(other => other.position && !isLowProfile(other) && itemsOverlap(item, other))) continue;
+    kept.push(item);
+  }
+  if (kept.length === floor.items.length) return layout;
+  return { ...layout, floors: layout.floors.map((entry, index) => index === floorIndex ? { ...entry, items: kept } : entry) };
+}
+
+function landedChairCount(layout: RoomLayout | undefined, floorIndex: number, baseIds: ReadonlySet<string>): number {
+  const cleaned = layout ? omitUnlandedBanquetItems(layout, floorIndex, baseIds) : undefined;
+  return cleaned?.floors[floorIndex]?.items.filter(item => isBanquetSeat(item) && !baseIds.has(item.id)).length ?? 0;
+}
+
+/** Place the same round banquet at a smaller diameter and keep a count this room actually lands. */
+function probeSmallerRound(input: LocalPlanInput, current: number): { diameter: number; seats: number } | null {
+  const choice = input.furnishing;
+  if (!choice || choice.shape !== 'round' || !(choice.width > 1.2)) return null;
+  const baseIds = new Set((input.base.floors[input.floorIndex]?.items ?? []).map(item => item.id));
+  let best: { diameter: number; seats: number } | null = null;
+  for (const diameter of [2, 1.8, 1.6, 1.4, 1.2]) {
+    if (diameter >= choice.width - 0.05) continue;
+    const placed = materializeFurnishing({ ...choice, width: diameter, depth: diameter });
+    if (!placed) continue;
+    const plan = proposePlan({
+      base: input.base,
+      floorIndex: input.floorIndex,
+      widthM: input.widthM,
+      depthM: input.depthM,
+      variant: input.variant,
+      guests: input.guests ?? null,
+      ...(input.layoutMode ? { layoutMode: input.layoutMode } : {}),
+      seatingShape: 'ring',
+      furnishing: placed,
+      stage: input.stage ?? false,
+      checkin: false,
+    });
+    const seats = landedChairCount(plan.layouts.at(-1), input.floorIndex, baseIds);
+    if (seats > current && (!best || seats > best.seats)) best = { diameter, seats };
+  }
+  return best;
 }
 
 function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): LocalPlanResult {
@@ -130,16 +209,21 @@ function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): Loc
   const baseItems = input.base.floors[input.floorIndex]?.items ?? [];
   const baseIds = new Set(baseItems.map(item => item.id));
   const layouts = result.layouts.map(layout => omitUnlandedBanquetItems(layout, input.floorIndex, baseIds));
-  const landed = countSingleSeats(layouts.at(-1), input.floorIndex, baseIds);
-  if (landed === null) return result;
+  const landed = landedChairCount(layouts.at(-1), input.floorIndex, baseIds);
   const next = { ...result, layouts, seats: landed };
   if (landed >= guests) return next;
   const candidate = layouts.at(-1);
   const floor = candidate?.floors[input.floorIndex];
-  const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id) && !(candidate && structuralItemCollides(item, candidate, input.floorIndex))).length ?? 0;
+  const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id)).length ?? 0;
+  const width = input.furnishing.shape === 'round' ? input.furnishing.width : undefined;
+  const alternative = probeSmallerRound(input, landed);
+  const capacity = width
+    ? `这间厅按 Ø${width.toFixed(2)} 米这版坐下 ${landed} 人${alternative ? `。换成 Ø${alternative.diameter.toFixed(2)} 米，同一间室内可以落下 ${alternative.seats} 座` : ''}`
+    : `这间厅按这版桌型最多坐下 ${landed} 人`;
+  const placed = `放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。`;
   const short = result.interiorFull
-    ? `室内已经排满，这版加不进更多整桌。这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。`
-    : `这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
+    ? `室内已经排满，这版加不进更多整桌。${capacity}。${placed}`
+    : `${capacity}。${placed}`;
   return { ...next, blocked: short, summary: [short] };
 }
 
@@ -165,8 +249,7 @@ function withArrangement<T extends PlanProposal>(result: T, arrangement: TableAr
 function landedSeatScore(input: LocalPlanInput, proposal: { layouts: RoomLayout[]; seats?: number | null }): number {
   if (!input.furnishing) return proposal.seats ?? 0;
   const baseIds = new Set((input.base.floors[input.floorIndex]?.items ?? []).map(item => item.id));
-  const cleaned = omitUnlandedBanquetItems(proposal.layouts.at(-1) ?? input.base, input.floorIndex, baseIds);
-  return countSingleSeats(cleaned, input.floorIndex, baseIds) ?? 0;
+  return landedChairCount(proposal.layouts.at(-1), input.floorIndex, baseIds);
 }
 
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
