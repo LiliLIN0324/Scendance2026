@@ -11,9 +11,12 @@
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import OutdoorPlanCanvas, { type CanvasBasemapSource } from '@/components/room-organizer/components/outdoor-plan-canvas';
+import OutdoorPlanCanvas, {
+  type CanvasBasemapSource,
+  type OutdoorPlanCanvasHandle,
+} from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
@@ -53,9 +56,39 @@ export interface OutdoorPlanOverlayProps {
   activityName?: string | null;
   /** 保存态上报：room-organizer 据此在左轨 foot（主产品保存态原位）显示户外草稿状态。 */
   onSaveStateChange?: (next: OutdoorSaveState) => void;
+  /** P2-g：undo/redo 可用态上报（室内工具排撤销/重做钮启用态）。 */
+  onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
+  /** P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动用；含初次载入的那一帧）。 */
+  onPlanChange?: (plan: SitePlanData) => void;
+  /**
+   * P2-g 反向播种：3D 已圈好的场地（`layout.backendVenue`）投影成的起步平面。
+   * 只在**该槽位还没有户外草稿**时使用；有草稿时草稿优先（用户自己画过的东西不覆盖）。
+   */
+  seedPlan?: SitePlanData | null;
 }
 
-export default function OutdoorPlanOverlay({ projectId, anchor, activityName, onSaveStateChange }: OutdoorPlanOverlayProps): JSX.Element {
+/** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
+export interface OutdoorPlanOverlayHandle {
+  /** 缩放一档（与滚轮同源）。 */
+  zoomBy(direction: 1 | -1): void;
+  /** 业务层画布截图 dataURL（无画布时 null）。 */
+  captureImage(): string | null;
+  /** 按当前 plan 导出 PNG（与右侧导出菜单的 PNG 同一口径）；无 plan 时返回 false。 */
+  exportPng(): boolean;
+  undo(): void;
+  redo(): void;
+}
+
+const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
+  projectId,
+  anchor,
+  activityName,
+  onSaveStateChange,
+  onHistoryChange,
+  onPlanChange,
+  seedPlan,
+}: OutdoorPlanOverlayProps, ref): JSX.Element {
+  const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
   const [source, setSource] = useState<CanvasBasemapSource>('osm');
   const [plan, setPlan] = useState<SitePlanData | null>(null);
@@ -73,9 +106,12 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
   }, []);
 
   // 载入本机草稿：室内活动第一次开户外面用起步矩形（同户外项目口径）。
+  // P2-g：没有草稿但有 3D 场地时，按 3D 壳体的轮廓起稿（同一个场地的两个视图）。
+  const seedPlanRef = useRef<SitePlanData | null | undefined>(seedPlan);
+  seedPlanRef.current = seedPlan;
   useEffect(() => {
     const record = readOutdoorProjectRecord(slotId);
-    setPlan(record?.plan ?? createStarterOutdoorPlan());
+    setPlan(record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotId]);
 
@@ -126,6 +162,31 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
     )
     : '';
 
+  function exportPlanPng(): boolean {
+    const current = planRef.current;
+    if (!current) return false;
+    const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
+    const planCanvas = canvases[canvases.length - 1];
+    if (!planCanvas) return false;
+    downloadPlanPng({ plan: current, planCanvas, revision: 1, dpi: 300 });
+    return true;
+  }
+
+  // P2-g：对外命令句柄（室内工具排的撤销/重做/缩放/导出转发到这里）。
+  // 不写依赖数组：每帧重建，句柄永远拿到当帧闭包（内部读的都是 ref/最新 state）。
+  useImperativeHandle(ref, () => ({
+    zoomBy: (direction: 1 | -1) => canvasApiRef.current?.zoomBy(direction),
+    captureImage: () => canvasApiRef.current?.captureImage() ?? null,
+    exportPng: () => exportPlanPng(),
+    undo: () => canvasApiRef.current?.undo(),
+    redo: () => canvasApiRef.current?.redo(),
+  }));
+
+  // P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动的入口；初次载入也报一次）。
+  useEffect(() => {
+    if (plan) onPlanChange?.(plan);
+  }, [plan, onPlanChange]);
+
   function pickExport(id: string): void {
     if (!plan) return;
     const stem = activityName?.trim() || 'outdoor-plan';
@@ -133,9 +194,7 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
     if (id === 'csv') { downloadPlanCsv(plan, stem); return; }
     if (id === 'geojson') { downloadPlanGeoJson(plan, stem); return; }
     if (id === 'png') {
-      const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
-      const planCanvas = canvases[canvases.length - 1];
-      if (planCanvas) downloadPlanPng({ plan, planCanvas, revision: 1, dpi: 300 });
+      exportPlanPng();
     }
   }
 
@@ -161,9 +220,11 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
       )}
       {plan && (
         <OutdoorPlanCanvas
+          ref={canvasApiRef}
           plan={plan}
           source={source}
           onPlanChange={setPlan}
+          {...(onHistoryChange ? { onHistoryChange } : {})}
           panelsHostId="outdoor-panel-host-layers"
           infoPanelHostId="outdoor-panel-host-info"
           {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
@@ -229,5 +290,7 @@ export default function OutdoorPlanOverlay({ projectId, anchor, activityName, on
       )}
     </div>
   );
-}
+});
+
+export default OutdoorPlanOverlay;
 

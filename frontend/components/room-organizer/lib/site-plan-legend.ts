@@ -29,6 +29,14 @@ import {
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 import { findFacilityTemplate } from './site-plan-facilities';
+import {
+  facilitySticker,
+  nodeSticker,
+  routeSticker,
+  workerSticker,
+  zoneSticker,
+  type OneplanStickerDescriptor,
+} from './oneplan-stickers';
 import { formatAreaM2, formatLengthM, measureValue } from './site-plan-measure';
 
 /** 图例单条：「图标 + 名称 + 数量」（+ 可选汇总 detail，如总长/总面积）。 */
@@ -41,6 +49,11 @@ export interface PlanLegendEntry {
   count: number;
   /** 汇总口径（如 '共 85 m' / '共 2400 m²' / '共 6 人'）；无汇总为 ''。 */
   detail: string;
+  /**
+   * OnePlan 贴纸（H4-b，可选）：图例渲染优先用它，缺省/加载失败时回落 `icon`（Lucide）。
+   * 只影响视觉，不参与数量/汇总口径；PNG/PDF 图例可忽略本字段。
+   */
+  sticker?: OneplanStickerDescriptor | null;
 }
 
 export interface PlanLegendGroup {
@@ -106,6 +119,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
       label: planZoneSemanticLabels[semantic],
       count: zones.length,
       detail: `共 ${formatAreaM2(areaM2)}`,
+      sticker: zoneSticker(semantic),
     });
   }
   if (zoneEntries.length > 0) groups.push({ title: '功能分区', entries: zoneEntries });
@@ -136,6 +150,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
           label: templateName,
           count: bucket.count,
           detail: sizes.length === 1 ? `${sizes[0]!} m` : `${sizes.length} 种尺寸`,
+          sticker: facilitySticker(templateId),
         };
       }),
     });
@@ -153,6 +168,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
       label: `${planRouteKindLabels[kind]}动线`,
       count: routes.length,
       detail: `共 ${formatLengthM(lengthM)}`,
+      sticker: routeSticker(kind),
     });
   }
   if (routeEntries.length > 0) groups.push({ title: '动线', entries: routeEntries });
@@ -168,6 +184,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
       label,
       count: nodes.length,
       detail: '',
+      sticker: nodeSticker(kind),
     });
   }
   if (nodeEntries.length > 0) groups.push({ title: '出入口', entries: nodeEntries });
@@ -195,6 +212,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
           label: role,
           count: bucket.people,
           detail: `${bucket.posts} 个点位`,
+          sticker: workerSticker(role),
         };
       }),
     });

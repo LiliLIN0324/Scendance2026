@@ -31,6 +31,8 @@ export const ROOM_OBJECT_TAGS = {
   CameraVision: 'camera-vision',
   /** 人物行走路线的可视化（折线 + 路点标记），纯装饰不参与拾取（PEOPLE-04）。 */
   PersonRoute: 'person-route',
+  /** 户外 2D 规划在 3D 地面的投影图层（分区色块/设施占地/动线/点位，P2-g）。 */
+  PlanFootprint: 'plan-footprint',
 } as const;
 
 export type RoomObjectTag = (typeof ROOM_OBJECT_TAGS)[keyof typeof ROOM_OBJECT_TAGS];
