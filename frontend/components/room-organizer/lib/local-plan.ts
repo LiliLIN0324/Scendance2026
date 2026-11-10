@@ -102,16 +102,17 @@ function arrangementFor(input: LocalPlanInput): TableArrangement | undefined {
   if (!shape) return undefined;
   return resolveTableArrangement({
     shape,
-    guests: input.guests,
-    width: input.table?.width,
-    depth: input.table?.depth,
-    peoplePerTable: input.table?.peoplePerTable,
+    ...(input.guests !== undefined ? { guests: input.guests } : {}),
+    ...(input.table?.width !== undefined ? { width: input.table.width } : {}),
+    ...(input.table?.depth !== undefined ? { depth: input.table.depth } : {}),
+    ...(input.table?.peoplePerTable !== undefined ? { peoplePerTable: input.table.peoplePerTable } : {}),
   });
 }
 
-function withArrangement<T extends { summary?: string[] | undefined }>(result: T, arrangement: TableArrangement | undefined): T {
+function withArrangement<T extends PlanProposal>(result: T, arrangement: TableArrangement | undefined): T {
   if (!arrangement) return result;
-  return { ...result, summary: [arrangement.explanation, ...(result.summary ?? [])] };
+  const previous = 'summary' in result && Array.isArray(result.summary) ? result.summary : [];
+  return { ...result, summary: [arrangement.explanation, ...previous] };
 }
 
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
@@ -132,7 +133,7 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
       const options = [
         fill && !fill.blocked ? { via: 'script' as const, proposal: withArrangement(fill, arrangement) } : null,
         dense.blocked ? null : { via: 'fallback' as const, proposal: withArrangement(dense, arrangement) },
-      ].filter((entry): entry is { via: 'script' | 'fallback'; proposal: PlanProposal } => !!entry)
+      ].flatMap(entry => entry ? [entry] : [])
         .sort((left, right) => (right.proposal.seats ?? 0) - (left.proposal.seats ?? 0));
       const best = options[0];
       if (best && (best.proposal.seats ?? 0) > seats) {

@@ -56,7 +56,7 @@ export function ringDiningSet(spec?: { sideM?: number }): FurnitureSet {
 
 /** Rectangular banquet table. Seat count follows the length and width. */
 export function rectDiningSet(size: { width: number; depth: number }): FurnitureSet {
-  const catalog = FURNITURE_CATALOG.find(entry => entry.type === 'dining-table' && entry.tableShape !== 'round')
+  const catalog = FURNITURE_CATALOG.find(entry => entry.type === 'dining-table' && entry.name === 'Dining Table')
     ?? FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
   const chair = diningChair();
   const layout = rectSeatLayout(size.width, size.depth);
