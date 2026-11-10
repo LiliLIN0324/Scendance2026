@@ -653,3 +653,5 @@ button.ap-ghost {
 .sc-chat-plus-menu button { display:flex; align-items:center; gap:6px; width:100%; padding:5px 6px; border:none; border-radius:6px; background:transparent; color:var(--wk-ink); font-size:var(--fs-cap); text-align:left; white-space:nowrap; }
 .sc-chat-plus-menu button > span:first-child { flex:0 0 auto; }
 .sc-chat-plus-menu button:hover { background:var(--wk-plane); }
+.ap-foot-info { border: none; background: transparent; color: var(--wk-muted); cursor: pointer; display: inline-flex; padding: 0 2px; flex: none; }
+.ap-foot-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

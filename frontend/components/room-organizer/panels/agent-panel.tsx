@@ -19,7 +19,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
+import { ArrowUp, Check, Clock, FileImage, Info, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
@@ -3380,7 +3380,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   const banquet = plan.receipt === 'banquet';
     // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
     const hold = agent.cloudBusy || agent.recovering;
-  return <div className="ap-card ap-plan" id="plan-proposal">
+  return <div className="ap-card ap-plan" id="plan-proposal" data-tour="proposal-card">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
     {guests > 0 && <p className="ap-seats" id="plan-seats">{banquet
       ? `放下 ${plan.placedTables ?? 0} 桌 · 座位 ${seats} / ${guests}${short ? ` · 还差 ${guests - seats}` : ' · 够了'}`
@@ -3397,7 +3397,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
       : <>
-          {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
+          {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" data-tour="confirm-plan" onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
         </>}
     {!banquet && <div className="ap-notes">
@@ -3472,6 +3472,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const mode = agent.callbacks.workbenchMode;
   const draftKey=JSON.stringify([agent.sessionScope,assistantSessions.activeId]);
   const [draftState,setDraftState]=useState(()=>({key:draftKey,value:volatileComposerDrafts.get(draftKey)??''}));
+  const [footDetailOpen,setFootDetailOpen]=useState(false);
   const draft=draftState.key===draftKey ? draftState.value : volatileComposerDrafts.get(draftKey)??'';
   const setDraft=(value:string)=>{ if(value)volatileComposerDrafts.set(draftKey,value);else volatileComposerDrafts.delete(draftKey);setDraftState({key:draftKey,value}); };
   const restoredCancellation=useRef<number|null>(null);
@@ -3697,7 +3698,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : agent.banquetChat ? '说一句，比如「加座，再排一版」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : agent.banquetChat ? '说一句，比如「加座，再排一版」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
@@ -3706,14 +3707,15 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         <p className="ap-foot">
-          <span id="ap-data-notice">{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
-          {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span>近期对话也会发给模型。</span>}
           <span id="ap-plan-notice" role="status">{planGenerationLine(studio?.connection)}</span>
+          <button type="button" className="ap-foot-info" aria-expanded={footDetailOpen} aria-label="数据与隐私说明" onClick={() => setFootDetailOpen(current => !current)}><Info size={12} aria-hidden="true"/></button>
+          <span id="ap-data-notice" className="ap-foot-detail" hidden={!footDetailOpen}>{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
+          {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span className="ap-foot-detail" hidden={!footDetailOpen}>近期对话也会发给模型。</span>}
         </p>
         {!!draft && <p className="ap-small">未发送内容仅暂存在当前页面；刷新或关闭后会丢失。</p>}
         {agent.sessionSaveFailed && <p role="status" className="ap-small">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
         <div className="ap-composer-bar">
-          <button type="submit" className="ap-send" aria-label="发送" disabled={agent.isUnderstanding(draft) || (!draft.trim() && !agent.pendingFile)}><ArrowUp size={18}/></button>
+          <button type="submit" className="ap-send" aria-label="发送" data-tour="chat-send" disabled={agent.isUnderstanding(draft) || (!draft.trim() && !agent.pendingFile)}><ArrowUp size={18}/></button>
         </div>
       </form>
       </>}
