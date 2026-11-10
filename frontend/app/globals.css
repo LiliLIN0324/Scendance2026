@@ -1415,6 +1415,8 @@ body {
 /* 顶栏只留视图种类（3D 场景 / 2D 平面），不暴露场地宽深数字。 */
 /* 设计稿：左栏面板内不再重复顶部分类签、流程提示卡与折叠标题 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-left-context { display: none; }
+/* 户外卡例外：图层 / 物件库 两个页签必须留在卡头（物件库已合入图层卡）。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.is-outdoor-card .sc-left-context { display: flex; }
 /* 参考图气质：抽屉内工具行图标去绿。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-brief-pane svg { color:inherit; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-brief-tool-list button { color:var(--wk-ink-soft, #71717a); }

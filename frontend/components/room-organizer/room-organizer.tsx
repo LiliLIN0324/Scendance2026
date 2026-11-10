@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Box, Boxes, Globe, Info, Layers, LayoutGrid, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Box, Globe, Layers, LayoutGrid, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -166,8 +166,8 @@ import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
-/** 户外左栏卡片的三个页签：图层栈 / 规划信息 / 物件库（P2-h 加了物件库）。 */
-type OutdoorPanelKind = 'layers' | 'info' | 'library';
+/** 户外左栏卡片只剩两个页签：图层栈 / 物件库（物件库合入图层卡，规划信息改挂 Bingo 面板）。 */
+type OutdoorPanelKind = 'layers' | 'library';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -3789,7 +3789,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                 {outdoor2DOpen && (<>
                   <button
                     type="button"
-                    className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'layers' ? ' is-active' : ''}`}
+                    className={`sc-rail-tool sc-rail-disc${outdoorPanel ? ' is-active' : ''}`}
                     aria-pressed={outdoorPanel === 'layers'}
                     aria-label="图层：图层开关与编辑模式"
                     data-tip="图层 · 开关与编辑模式"
@@ -3798,29 +3798,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                     <Layers size={26} aria-hidden="true" />
                     <span className="sc-rail-label" aria-hidden="true">图层</span>
                   </button>
-                  <button
-                    type="button"
-                    className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'info' ? ' is-active' : ''}`}
-                    aria-pressed={outdoorPanel === 'info'}
-                    aria-label="规划信息：统计清单问题图例"
-                    data-tip="规划信息 · 统计/清单/问题"
-                    onClick={() => { if (agentPanelOpen) closeBingo(); setOutdoorPanel('info'); }}
-                  >
-                    <Info size={26} aria-hidden="true" />
-                    <span className="sc-rail-label" aria-hidden="true">信息</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'library' ? ' is-active' : ''}`}
-                    aria-pressed={outdoorPanel === 'library'}
-                    aria-label="物件库：549 件活动物件，点选后放到图上"
-                    data-tip="物件库 · 549 件物件，点选放置"
-                    onClick={() => { if (agentPanelOpen) closeBingo(); setOutdoorPanel('library'); }}
-                  >
-                    <Boxes size={26} aria-hidden="true" />
-                    <span className="sc-rail-label" aria-hidden="true">物件库</span>
-                  </button>
-                </>)}
+                  </>)}
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -3901,20 +3879,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
           </div>
           {!captureOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
           {outdoor2DOpen && !agentPanelOpen && (
-            <aside className="sc-left-drawer sc-float-layer" data-testid="outdoor-left-card" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <aside className="sc-left-drawer sc-float-layer is-outdoor-card" data-testid="outdoor-left-card" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="sc-left-heading"><nav className="sc-left-context" aria-label="户外规划面板">
-                <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>图层栈</button>
-                <button type="button" aria-pressed={outdoorPanel === 'info'} onClick={() => setOutdoorPanel('info')}>规划信息</button>
+                <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>图层</button>
                 <button type="button" aria-pressed={outdoorPanel === 'library'} onClick={() => setOutdoorPanel('library')}>物件库</button>
               </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><PanelLeftClose size={20}/></button></div>
               <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
                 <div id="outdoor-panel-host-layers" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'layers' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
-                <div id="outdoor-panel-host-info" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'info' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+                
                 <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
               </div>
             </aside>
           )}
-          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ position: 'relative', maxHeight: '46vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>

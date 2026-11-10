@@ -238,6 +238,11 @@ export interface OutdoorPlanCanvasProps {
    */
   libraryPanelHostId?: string;
   /**
+   * P4-b：底图形态。`map`（缺省）走瓦片地图；`floor` 是室内平面底——不请求任何瓦片，
+   * 只画纸面与米制网格，好让室内「标注区」和户外地图共用同一张画布与同一套工具。
+   */
+  base?: 'map' | 'floor';
+  /**
    * P2-g：undo/redo 可用态上报（室内工具排的撤销/重做钮据此启用）。
    * 变化时才触发，父级用 useState 落盘即可。
    */
@@ -252,6 +257,64 @@ const TILE = 256;
  */
 const MAP_MIN_ZOOM = 12;
 const MAP_MAX_ZOOM = 19;
+/**
+ * P4-b：室内平面底（`base='floor'`）的缩放区间。没有瓦片，zoom 只当米/像素的标尺用：
+ * 18 ≈ 0.5 m/px（一眼看整间屋子），23 ≈ 0.02 m/px（看单个桌面）。
+ */
+const FLOOR_MIN_ZOOM = 18;
+const FLOOR_MAX_ZOOM = 23;
+/** 纸面底与网格色（与三维场景的冷灰地面区分开，避免和物料抢视线）。 */
+const FLOOR_PAPER = '#f6f4ef';
+const FLOOR_GRID_MINOR = 'rgba(23, 26, 31, 0.07)';
+const FLOOR_GRID_MAJOR = 'rgba(23, 26, 31, 0.16)';
+
+/**
+ * P4-b：室内平面底。不请求任何瓦片，只把「一张纸 + 米制网格」铺出来；
+ * 场地轮廓/分区/设施/动线由业务层照常叠上来，于是室内与户外共用同一套画布代码。
+ * 网格间距随缩放自适应（1 m / 5 m / 20 m），原点对齐 plan 的 (0,0)，
+ * 且 plan 的 y 轴向北 → 屏幕 y 递减。
+ */
+function paintFloorGrid(
+  ctx: CanvasRenderingContext2D,
+  viewport: PlanViewport,
+  cssW: number,
+  cssH: number,
+): void {
+  ctx.save();
+  ctx.fillStyle = FLOOR_PAPER;
+  ctx.fillRect(0, 0, cssW, cssH);
+  const metersPerPx = planMetersPerPixel(viewport);
+  if (Number.isFinite(metersPerPx) && metersPerPx > 0) {
+    const pxPerMeter = 1 / metersPerPx;
+    const stepM = pxPerMeter >= 24 ? 1 : pxPerMeter >= 8 ? 5 : 20;
+    const spacing = stepM * pxPerMeter;
+    if (spacing >= 4) {
+      const origin = planPointToPixel({ x: 0, y: 0 }, viewport);
+      const fromCol = Math.floor((0 - origin.x) / spacing) - 1;
+      const toCol = Math.ceil((cssW - origin.x) / spacing) + 1;
+      ctx.lineWidth = 1;
+      for (let col = fromCol; col <= toCol; col += 1) {
+        ctx.strokeStyle = col % 5 === 0 ? FLOOR_GRID_MAJOR : FLOOR_GRID_MINOR;
+        const x = Math.round(origin.x + col * spacing) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, cssH);
+        ctx.stroke();
+      }
+      const fromRow = Math.floor((origin.y - cssH) / spacing) - 1;
+      const toRow = Math.ceil(origin.y / spacing) + 1;
+      for (let row = fromRow; row <= toRow; row += 1) {
+        ctx.strokeStyle = row % 5 === 0 ? FLOOR_GRID_MAJOR : FLOOR_GRID_MINOR;
+        const y = Math.round(origin.y - row * spacing) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(cssW, y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const isTdt = (s: CanvasBasemapSource): s is TdtProbeLayer => s === 'vec' || s === 'img';
 
@@ -365,6 +428,7 @@ export interface OutdoorPlanCanvasHandle {
 export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, OutdoorPlanCanvasProps>(function OutdoorPlanCanvas({
   plan,
   source = 'osm',
+  base = 'map',
   initialView,
   visibility,
   onVisibilityChange,
@@ -383,10 +447,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [libraryPanelHost, setLibraryPanelHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (!panelsHostId && !infoPanelHostId && !libraryPanelHostId) return undefined;
-    setLayerPanelHost(panelsHostId ? document.getElementById(panelsHostId) : null);
-    setInfoPanelHost((infoPanelHostId ?? panelsHostId) ? document.getElementById(infoPanelHostId ?? panelsHostId ?? '') : null);
-    setLibraryPanelHost(libraryPanelHostId ? document.getElementById(libraryPanelHostId) : null);
-    return () => { setLayerPanelHost(null); setInfoPanelHost(null); setLibraryPanelHost(null); };
+    let alive = true;
+    const current = { layers: null as HTMLElement | null, info: null as HTMLElement | null, library: null as HTMLElement | null };
+    const resolve = () => {
+      if (!alive) return;
+      const next = {
+        layers: panelsHostId ? document.getElementById(panelsHostId) : null,
+        info: (infoPanelHostId ?? panelsHostId) ? document.getElementById(infoPanelHostId ?? panelsHostId ?? '') : null,
+        library: libraryPanelHostId ? document.getElementById(libraryPanelHostId) : null,
+      };
+      if (next.layers !== current.layers) { current.layers = next.layers; setLayerPanelHost(next.layers); }
+      if (next.info !== current.info) { current.info = next.info; setInfoPanelHost(next.info); }
+      if (next.library !== current.library) { current.library = next.library; setLibraryPanelHost(next.library); }
+    };
+    resolve();
+    // 规划信息的宿主现在挂在 Bingo 面板里：Bingo 开/关会让宿主晚出现或消失，靠观察器补解析。
+    const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => resolve());
+    observer?.observe(document.body, { childList: true, subtree: true });
+    return () => { alive = false; observer?.disconnect(); setLayerPanelHost(null); setInfoPanelHost(null); setLibraryPanelHost(null); };
   }, [panelsHostId, infoPanelHostId, libraryPanelHostId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -394,7 +472,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const viewRef = useRef<View>({
     lng: initialView?.lng ?? (plan.anchor?.lng ?? 120.141306),
     lat: initialView?.lat ?? (plan.anchor?.lat ?? 30.2545),
-    zoom: initialView?.zoom ?? 16,
+    zoom: initialView?.zoom ?? (base === 'floor' ? 20 : 16),
   });
   const sourceRef = useRef<CanvasBasemapSource>(source);
   const planRef = useRef<SitePlanData>(plan);
@@ -403,6 +481,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 底图瓦片缓存：同一 URL 只加载一次，缺当前层级时用上一级兜底 —— 缩放不再一闪一闪。
   const basemapCacheRef = useRef<BasemapTileCache | null>(null);
   const tileRedrawRafRef = useRef(0);
+  // P4-b：底图形态放 ref 里，draw 才能在不重建回调的前提下切纸面/瓦片。
+  const baseModeRef = useRef<'map' | 'floor'>(base);
   const drawRef = useRef<() => void>(() => {});
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
@@ -671,6 +751,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const centerPx = (v.lng + 180) / 360 * world;
     const latRad = v.lat * Math.PI / 180;
     const centerPy = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * world;
+    if (baseModeRef.current === 'floor') {
+      // P4-b：室内平面底——不请求任何瓦片，只铺纸面 + 米制网格。
+      // 场地轮廓/分区/设施/动线由下面的业务层照常叠上来，所以室内外是同一套画布代码。
+      paintFloorGrid(baseCtx, viewport, cssW, cssH);
+    } else {
     const grid = visibleTileGrid(v.lng, v.lat, v.zoom, cssW, cssH);
     if (!basemapCacheRef.current) basemapCacheRef.current = new BasemapTileCache();
     paintBasemapTiles({
@@ -699,6 +784,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         });
       },
     });
+    }
 
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
     //    底图瓦片异步返回时不会覆盖业务层。
@@ -881,6 +967,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     drawRef.current = draw;
   }, [draw]);
 
+  // P4-b：底图形态切换（纸面 ↔ 瓦片）立即重绘一次；不改 draw 依赖，免得重建回调。
+  useEffect(() => {
+    baseModeRef.current = base;
+    drawRef.current();
+  }, [base]);
+
   // H4-b：OnePlan 贴纸是异步图片——加载完成/失败后补一次重绘，避免首帧缺图标后不再补画。
   useEffect(() => subscribeOneplanStickerLoads(() => draw()), [draw]);
 
@@ -1014,7 +1106,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function zoomBy(dir: number) {
     const v = viewRef.current;
-    commitView({ ...v, zoom: clamp(v.zoom + dir, MAP_MIN_ZOOM, MAP_MAX_ZOOM) });
+    // P4-b：室内平面底没有瓦片，zoom 只当米/像素标尺，区间比地图更贴近家具尺度。
+    const floor = baseModeRef.current === 'floor';
+    commitView({
+      ...v,
+      zoom: clamp(
+        v.zoom + dir,
+        floor ? FLOOR_MIN_ZOOM : MAP_MIN_ZOOM,
+        floor ? FLOOR_MAX_ZOOM : MAP_MAX_ZOOM,
+      ),
+    });
   }
 
   // P2-g：对外命令句柄（室内工具排通用钮转发：撤销/重做/缩放/截图）。
