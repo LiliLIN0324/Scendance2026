@@ -1,0 +1,2 @@
+ts	phase	decision	why	evidence	result
+2026-11-10T12:04:53Z	handoff	引入交接冻结器 handoff-freeze 与决策账本	把 HANDOFF 文档承诺升级为可核验档案（哈希可重算，交接被改可追）	PR #109	open
