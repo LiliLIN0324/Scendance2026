@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 /**
  * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
@@ -1646,7 +1646,11 @@ export default function OutdoorPlanCanvas({
           finishMeasure();
         }
       }}
-      onWheel={e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }}
+      onWheel={e => {
+        // React 合成 wheel 在部分浏览器为 passive 监听，preventDefault 会告警；
+        // 缩放改走原生非 passive 监听（挂载时注册、卸载时移除）。
+        if (!e.nativeEvent.defaultPrevented) zoomBy(e.deltaY < 0 ? 1 : -1);
+      }}
       onDragOver={event => {
         // H2-c：拖模板到画布 → 幽灵占地跟随（占地预览）。
         if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return;
@@ -2374,3 +2378,4 @@ export default function OutdoorPlanCanvas({
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 /**
  * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则 + H3-c 规划信息面板/图例 + H4-a 视觉复刻）。
@@ -26,6 +26,8 @@ import { useEffect, useState } from 'react';
 import OutdoorPlanCanvas, { type CanvasBasemapSource } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { sitePlanDataSchema, type SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import { formatLengthM, planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
+import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
+import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
 
 /** 样例：平湖秋月周边 200×120 m 市集（锚点 GCJ-02，来自既有 XIHU_LOCAL_CENTER）。 */
 const SAMPLE_PLAN: SitePlanData = {
@@ -206,10 +208,14 @@ function loadDraftPlan(): SitePlanData {
   }
 }
 
+
 export default function OutdoorPlanPage() {
   const [source, setSource] = useState<CanvasBasemapSource>('osm');
   const [plan, setPlan] = useState<SitePlanData>(loadDraftPlan);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  // H4-b：首次开图渐进引导（localStorage 持久化，跳过/完成后二刷不打扰）。
+  const guide = useGuide('outdoor-plan-guide-v1');
   // H3-a：全案派生统计（现算不落盘；隐藏图层不改变这里的数字）。
   const stats = planOverviewStats(plan);
 
@@ -226,8 +232,8 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H4-a）</h1>
-        <small style={{ color: '#93a4bc' }}>视觉复刻 · design tokens 全量 · 类型胶囊/图层/工具图标（Lucide 自绘）</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H4-b）</h1>
+        <small style={{ color: '#93a4bc' }}>交互复刻 · 渐进引导 · 导出菜单 · 毛玻璃分享</small>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="plan-overview-stats">
           场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount} · <span data-testid="conflict-count" style={{ color: stats.conflictCount > 0 ? '#e8a3a3' : '#7fb69a' }}>冲突/缺失 {stats.conflictCount}</span>
         </span>
@@ -235,6 +241,16 @@ export default function OutdoorPlanPage() {
           {savedAt ? `草稿已存 ${savedAt}` : ''}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          {guide.activeStep === null && (
+            <button
+              type="button"
+              onClick={guide.restart}
+              title="重看首次开图引导"
+              style={{ background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
+            >
+              重看引导
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setPlan(SAMPLE_PLAN)}
@@ -250,11 +266,32 @@ export default function OutdoorPlanPage() {
           >
             {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+          <ExportMenu onPick={id => { if (id === 'share') setShareOpen(true); }} />
         </div>
       </header>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {guide.activeStep && (
+          <GuideBubble
+            step={guide.activeStep}
+            stepIndex={GUIDE_STEPS.indexOf(guide.activeStep)}
+            totalSteps={GUIDE_STEPS.length}
+            onComplete={() => guide.complete(guide.activeStep as (typeof GUIDE_STEPS)[number])}
+            onDismiss={guide.dismiss}
+          />
+        )}
         <OutdoorPlanCanvas plan={plan} source={source} onPlanChange={setPlan} />
       </div>
+      <ShareDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        content={shareDialogContent({
+          revision: 1,
+          updatedAt: savedAt ?? new Date().toLocaleString('zh-CN', { hour12: false }),
+          counts: { zones: stats.zoneCount, facilities: stats.facilityCount, routes: plan.routes.length, workers: stats.workerTotalCount },
+        })}
+      />
     </main>
   );
 }
+
+
