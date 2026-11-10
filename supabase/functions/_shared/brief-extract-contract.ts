@@ -59,21 +59,44 @@ function normalizeBriefMobility(input:unknown):unknown {
   return remaining;
 }
 
+/**
+ * 证据逐字校验的规范化：空白与全半角/大小写差异不作数，其余仍须逐字。
+ * 模型经常吞掉空格或把全角逗号写成半角；这些不影响「引用了原话」的事实，
+ * 整句作废只会制造间歇性失败（2026-11-11 线上事故：「都站着 搭建舞台和签到区」吞空格即挂）。
+ */
+function normalizedIncludes(message: string, evidence: string): boolean {
+  const norm = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/[，､,]/g, ',')
+    .replace(/[。．]/g, '.')
+    .replace(/[：﹕:]/g, ':')
+    .replace(/[；﹔;]/g, ';')
+    .replace(/[！﹗!]/g, '!')
+    .replace(/[？﹖?]/g, '?')
+    .replace(/[（﹙(]/g, '(')
+    .replace(/[）﹚)]/g, ')')
+    .replace(/[“”〝〞＂"'′″]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .toLowerCase();
+  return norm(message).includes(norm(evidence));
+}
+
 /** 模型输出必须保留原文证据；这只验证引用，不代表内容已经被用户确认。 */
 function parseReferencedModelBrief(input: unknown, message: string): BriefSlots {
   // 老模型有时用 null 表示「未提及」；输出时仍省略该可选布尔字段，兼容旧客户端。
   const normalized = normalizeBriefMobility(input);
   const slots = briefSlotSchema.parse(normalized);
-  if (slots.activityNeeds?.some(need => !message.includes(need.evidence))) {
+  if (slots.activityNeeds?.some(need => !normalizedIncludes(message, need.evidence))) {
     throw new Error('MODEL_EVIDENCE_MISMATCH');
   }
-  if(slots.inventoryMentions?.some(item=>!message.includes(item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
+  if(slots.inventoryMentions?.some(item=>!normalizedIncludes(message, item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
   return slots;
 }
 
 /** Narrow evidence guard, not a general natural-language verifier. */
 function seatingClauses(message:string,evidence:string):string[] {
-  const clauses=message.split(/[，,；;。！？!?\n]/u).filter(part=>part.includes(evidence)).map(part=>{
+  // 子句匹配也走规范化：证据吞空格/全半角差异不作数（与 normalizedIncludes 同一口径）。
+  const clauses=message.split(/[，,；;。！？!?\n]/u).filter(part=>normalizedIncludes(part,evidence)).map(part=>{
     const before=part.slice(0,part.indexOf(evidence));
     const correction=[...before.matchAll(/改用|改为|改成|转为/gu)].at(-1);
     return correction?.index===undefined?part:part.slice(correction.index);
@@ -102,12 +125,13 @@ function hasExplicitLayout(message:string,evidence:string,mode:NonNullable<Brief
   return selected;
 }
 function hasExplicitAllSeated(message:string,need:NonNullable<BriefSlots['activityNeeds']>[number]):boolean {
-  if(!/(?:全员|所有人|每个人|每一位|人人|全部人|大家)/u.test(need.evidence)||!/(?:坐|入座|落座|座位|有座)/u.test(need.evidence))return false;
+  if(!/(?:全员|所有人|每个人|每一位|人人|全部人|大家|都)/u.test(need.evidence)||!/(?:坐|入座|落座|座位|有座|站着|站立)/u.test(need.evidence))return false;
   const clauses=seatingClauses(message,need.evidence);
   return clauses.length>0&&clauses.every(clause=>{
     const uncertain=/(?:不一定|未定|没定|未决定|没决定|不确定|是否|能否|要不要|不清楚|待定|或者|也许|可能|如果)/u.test(clause);
     const negative=/(?:不要|不安排|不需要|不用|不必|无需|不要求|未要求|不保证|不能|无法|不是|未必)/u.test(clause);
-    const explicitNotRequired=/(?:不要|不安排|不需要|不用|不必|无需|不要求)/u.test(clause);
+    // 「都站着/站立式」是全员落座 not_needed 的明确表达，等同「不需要安排座位」。
+    const explicitNotRequired=/(?:不要|不安排|不需要|不用|不必|无需|不要求|站着|站立)/u.test(clause);
     return need.decision==='unknown'?uncertain:need.decision==='not_needed'?explicitNotRequired&&!uncertain:!negative&&!uncertain;
   });
 }
@@ -198,7 +222,7 @@ export function parseBriefConversation(input:unknown,message:string):{extraction
   const inferredArea=typeof candidate.areaM2==='number'&&typeof candidate.lengthM==='number'&&typeof candidate.widthM==='number'
     && !result.factEvidence.some(row=>row.key==='areaM2')
     && Math.abs(candidate.areaM2-candidate.lengthM*candidate.widthM)<1e-8
-    && (['lengthM','widthM'] as const).every(key=>result.factEvidence.some(row=>row.key===key&&message.includes(row.evidence)));
+    && (['lengthM','widthM'] as const).every(key=>result.factEvidence.some(row=>row.key===key&&normalizedIncludes(message, row.evidence)));
   if(inferredArea){
     delete candidate.areaM2;
     if(candidate.requirements)candidate.requirements=candidate.requirements.filter(item=>item.key!=='areaM2');
@@ -206,7 +230,7 @@ export function parseBriefConversation(input:unknown,message:string):{extraction
   const extraction=parseReferencedModelBrief(candidate,message);
   const seen=new Set<string>();
   for(const row of result.factEvidence){
-    if(seen.has(row.key)||!message.includes(row.evidence))throw new Error('MODEL_EVIDENCE_MISMATCH');
+    if(seen.has(row.key)||!normalizedIncludes(message, row.evidence))throw new Error('MODEL_EVIDENCE_MISMATCH');
     seen.add(row.key);
     const value=extraction[row.key];
     if(value===undefined||value===null||(Array.isArray(value)&&!value.length))throw new Error('MODEL_EVIDENCE_MISMATCH');
@@ -215,8 +239,8 @@ export function parseBriefConversation(input:unknown,message:string):{extraction
   for(const key of ['event','headcount','venueIO','lengthM','widthM','areaM2','layoutMode','timeOfDay','mobilityAssistance','audienceTags'] as const){
     const value=extraction[key];if(value!==undefined&&value!==null&&(!Array.isArray(value)||value.length>0)&&!seen.has(key))throw new Error('MODEL_EVIDENCE_MISMATCH');
   }
-  if(result.unhandled.some(item=>!message.includes(item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
-  if(result.materialQueries?.some(item=>!message.includes(item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
+  if(result.unhandled.some(item=>!normalizedIncludes(message, item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
+  if(result.materialQueries?.some(item=>!normalizedIncludes(message, item.evidence)))throw new Error('MODEL_EVIDENCE_MISMATCH');
   if(extraction.requirements?.some(item=>!seen.has(item.key)||extraction[item.key]!==item.value))throw new Error('MODEL_EVIDENCE_MISMATCH');
   const safeExtraction=retainExplicitSeating(extraction,message,result.factEvidence.find(row=>row.key==='layoutMode')?.evidence);
   const factEvidence=safeExtraction.layoutMode===undefined?result.factEvidence.filter(row=>row.key!=='layoutMode'):result.factEvidence;
@@ -253,7 +277,7 @@ export const BRIEF_EXTRACT_PROMPT = `你是活动布置简报的槽位提取器�
 - mobilityAssistance(可选布尔)：明确肯定需要行动辅助时为 true，明确否定时为 false；未提及、仅提受众标签或无法确定时省略此字段，不要输出 null。
 - proactiveReply(字符串|null)：你基于这句话给用户的一段中文人话建议。
 - requirements(数组，元素 {key, value, mode})：需求强度标记，key 只能是 "headcount"|"lengthM"|"widthM"|"areaM2"|"venueIO"|"layoutMode"|"event"|"timeOfDay" 之一；value 是对应槽位的值；mode 只能是 "must"|"prefer"。
-- activityNeeds(数组，元素 {kind, decision, evidence})：kind 为 "checkin"（签到或接待）、"rest"（休息区）、"stage"（舞台或讲台）、"all_seated"（所有人入座）；decision 为 "needed"、"not_needed" 或 "unknown"。evidence 必须是本句中逐字连续的原文，不超过 200 字，应包含表达肯定、否定或疑问所需的上下文，不能只摘关键词；不能翻译、改写或补造。每种 kind 至多一条，同一需求有相互冲突的说法时用 unknown。未提及则空数组。不能因为商务、讲座、长者等标签推断需求。例：「不设接待台，大家到场后自行入座」可以提取签到 not_needed，证据为「不设接待台」，但不能推断所有人必须有座；「每个人都要坐下」提取 all_seated needed；「签到要不要还没定」提取 checkin unknown。
+- activityNeeds(数组，元素 {kind, decision, evidence})：kind 为 "checkin"（签到或接待）、"rest"（休息区）、"stage"（舞台或讲台）、"all_seated"（所有人入座）；decision 为 "needed"、"not_needed" 或 "unknown"。evidence 必须是本句中逐字连续的原文，不超过 200 字，应包含表达肯定、否定或疑问所需的上下文，不能只摘关键词；不能翻译、改写或补造。每种 kind 至多一条，同一需求有相互冲突的说法时用 unknown。未提及则空数组。不能因为商务、讲座、长者等标签推断需求。用户表达全员站立（如「都站着」「站立式」「不用安排座位」「不坐」）时，提取 all_seated not_needed，证据逐字摘录该表达；不要漏记。例：「不设接待台，大家到场后自行入座」可以提取签到 not_needed，证据为「不设接待台」，但不能推断所有人必须有座；「每个人都要坐下」提取 all_seated needed；「签到要不要还没定」提取 checkin unknown。
 - inventoryMentions：仅对本句明确已有的物料数量输出 [{"evidence":"逐字原文"}]，包含数量、单位和物料名称；不可从历史或“需要采购”推断库存，不能猜规格或可用性。未提及则省略。
 
 受众识别规则（关键词映射，允许同义/错字/中英混排）：
@@ -291,7 +315,7 @@ export const BRIEF_CONVERSATION_PROMPT=`你是幕景活动策划助手。用户�
 extraction 只提取本句明确表达的内容，不从 history 补当前事实：event 活动形式字符串，headcount 本场人数整数，venueIO indoor/outdoor，lengthM、widthM、areaM2 数字，layoutMode dining/desk-chair，timeOfDay 0-23，audienceTags 可含 elderly/family/business/student/vip，mobilityAssistance 为明确肯定或否定行动辅助需求时的布尔值。未知、未提及、冲突或仅人数身份不能推断的字段省略。已有物料数量不是人数，活动类型或拥有家具不是布置选择。不要将老年推断为轮椅需求。
 extraction 只允许以下键：event、headcount、venueIO、lengthM、widthM、areaM2、layoutMode、timeOfDay、audienceTags、mobilityAssistance、proactiveReply、requirements、inventoryMentions、activityNeeds。禁止创建任何其他键，也不要把预算、出口约束或其他未支持的要求改写成新字段。对于无法表达的原话，在 unhandled 中逐字保留，绝不可丢失；本轮无法完整理解时向用户说明需要核对。
 例如 message 为「30人，预算不能超过1万」，可返回 {"extraction":{"headcount":30},"reply":"已记下人数；预算要求还需核对。","unhandled":[{"kind":"other","evidence":"预算不能超过1万"}],"factEvidence":[{"key":"headcount","evidence":"30人"}]}；不能在 extraction 添加 budget 键。
-activityNeeds 为数组，元素 {kind,decision,evidence}：kind 只能是 checkin/rest/stage/all_seated，decision 只能是 needed/not_needed/unknown，evidence 是本句包含肯定、否定或疑问上下文的逐字原文。requirements 可为数组 {key,value,mode}，key/value 与对应已提取字段一致，mode 为 must 或 prefer，不得擅自升级。
+activityNeeds 为数组，元素 {kind,decision,evidence}：kind 只能是 checkin/rest/stage/all_seated，decision 只能是 needed/not_needed/unknown，evidence 是本句包含肯定、否定或疑问上下文的逐字原文。用户表达全员站立（如「都站着」「站立式」「不坐」）时提取 all_seated not_needed，证据逐字摘录。requirements 可为数组 {key,value,mode}，key/value 与对应已提取字段一致，mode 为 must 或 prefer，不得擅自升级。
 讲座、长者、预计人数或已有椅子都不是全员落座或课桌椅布局的证据；只有用户明确表达才提取对应字段。可以在 reply 里把课桌椅或全员入座作为可选择建议，但不要把建议写进 extraction、requirements 或 factEvidence。
 inventoryMentions 为数组 {evidence}：仅记录本句明确已有的物料数量，逐字摘录包含数量、单位和名称的原文；不推断真实库存、规格或可用性，未提及则省略。
 materialQueries 可选数组，最多三项 {query,evidence}，仅提取本句明确提到且适合查模型库的物料名称；evidence 是包含该名称的本句连续原文，query 必须是 evidence 的原样子串。不要从历史补词、编造型号或把查询当作已放置、实物库存/价格；未知或没有明确物料则省略，不重复同一名称。

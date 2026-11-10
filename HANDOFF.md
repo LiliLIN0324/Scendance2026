@@ -4,7 +4,14 @@
 
 > 先读HANDOFF.md。
 
-2026-11-11 三十二轮 · 新增运维 skill `scendance-model-ops`（C:/Users/endTree/.agents/skills/）：把本轮后端配模型的全套经验固化——架构图（UI 走 conversation-api 不是 scene-api）/三个致命开关/诊断流程（浏览器会话直打接口看 reason）/部署大坑（--use-api、BOM、IPv6）/契约要点。以后「模型没接上/要换模型」直接调它，不用重新考古。
+2026-11-11 三十三轮 · **「未通过校验」根治 + 可插拔兜底链**（用户户外音乐节实测再挂→定位→修）：
+- 用户实测「都站着 搭建舞台和签到区」仍报未通过校验。线上复现抓因：**间歇性**（同句有时成功）——根因是逐字证据校验对空白/全半角零容忍（模型吞空格即整句作废）+「都站着」不认成 all_seated（校验器要求 crowds 词+否定词，站者表达两头都不沾）。
+- 修复（`brief-extract-contract.ts`）：①`normalizedIncludes`——证据匹配规范化（空白/全半角/大小写不作数，其余仍须逐字），activityNeeds/inventoryMentions/factEvidence/unhandled/materialQueries/seatingClauses 全部换用；②「都站着/站着/站立」纳入 all_seated 识别（crowds 词加「都」，not_needed 认「站着/站立」）；③两段提示词教模型「全员站立= all_seated not_needed」。④`api.ts` brief 处理器重写为**可插拔兜底链**（用户拍板修订：不是锁死百炼，而是百炼→AGENT_CHAT_*自定义端点→Tokendance→DeepSeek 有序回退，前级失败自动切下一级，客户端取消不重试，全失败报首选原因）——接新大模型=配一组 OpenAI 兼容端点即入链。
+- 线上复测：同句连打 3/3 成功；三需求全提取（all_seated not_needed「都站着」+stage+checkin）；两函数已部署。测试 41 例全绿（含欠费兜底/全失败如实报/吞空格/都站着四个新回归）。
+- 运维 skill `scendance-model-ops` 已同步兜底链语义。
+- 上轮（三十二轮）：
+
+
 - 上轮（三十一轮）：
 
 
@@ -70,7 +77,7 @@
 
 2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-11（三十二轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-11（三十三轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
