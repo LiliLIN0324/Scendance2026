@@ -115,10 +115,8 @@ export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
         }}>
           {EXPORT_MENU_ITEMS.map(item => {
             // 只读分享在 H4-b 即可预览毛玻璃弹窗形态；其余三项实现归 H5，如实标「即将上线」。
-            // H5-a：PNG/CSV 真导出 + 分享弹窗形态；GeoJSON 归 H5-c，如实标「即将上线」。
-            const enabled = enableExports
-              ? (item.id === 'png' || item.id === 'csv' || item.id === 'share')
-              : item.id === 'share';
+            // H5-c：四项全部真导出（PNG/CSV/GeoJSON/分享）。
+            const enabled = enableExports ? true : item.id === 'share';
             return (
               <button
                 key={item.id}
@@ -323,6 +321,7 @@ const iconButtonStyle: React.CSSProperties = {
   lineHeight: 1,
   cursor: 'pointer',
 };
+
 
 
 
