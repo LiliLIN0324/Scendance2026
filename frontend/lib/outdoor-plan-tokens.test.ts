@@ -1,97 +1,84 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PLANNING_EDIT_MODE_ICONS,
   PLANNING_EDIT_MODE_LABELS,
+  PLANNING_ICON_SIZES,
+  PLANNING_INFO_TAB_ICONS,
   PLANNING_ICONS,
-  PLANNING_LABELS,
   PLANNING_LAYER_COLORS,
-  PLANNING_RADIUS,
-  PLANNING_ROUTE_KIND_COLORS,
-  PLANNING_SPACING,
-  PLANNING_ZONE_COLORS,
-  PLANNING_ZONE_OPACITY,
+  PLANNING_LAYER_ICONS,
+  PLANNING_SURFACE,
+  PLANNING_TYPOGRAPHY,
+  withAlphaHex,
 } from './outdoor-plan-tokens';
 
-describe('outdoor 2D planning tokens (H1-c)', () => {
-  it('uses the single brand deep green as the primary colour (no new green)', () => {
-    expect(PLANNING_LAYER_COLORS.boundary).toBe('#35624A');
-    expect(PLANNING_LAYER_COLORS.boundary.toLowerCase()).toBe('#35624a');
+describe('outdoor 2D planning visual tokens (H4-a)', () => {
+  it('keeps typography a compact three-step scale', () => {
+    expect(PLANNING_TYPOGRAPHY.panel).toBeGreaterThan(PLANNING_TYPOGRAPHY.row);
+    expect(PLANNING_TYPOGRAPHY.row).toBeGreaterThan(PLANNING_TYPOGRAPHY.hint);
+    expect(PLANNING_TYPOGRAPHY.panel).toBeLessThanOrEqual(14);
   });
 
-  it('keeps spacing strictly increasing and on a small, compact scale', () => {
-    const s = PLANNING_SPACING;
-    const vals = [s.xs, s.sm, s.md, s.lg, s.xl];
-    for (let i = 1; i < vals.length; i++) expect(vals[i]!).toBeGreaterThan(vals[i - 1]!);
-    expect(s.xl).toBeLessThanOrEqual(24);
-  });
-
-  it('keeps radius positive and small', () => {
-    expect(PLANNING_RADIUS.md).toBeGreaterThan(PLANNING_RADIUS.sm);
-    expect(PLANNING_RADIUS.lg).toBeGreaterThan(PLANNING_RADIUS.md);
-    expect(PLANNING_RADIUS.lg).toBeLessThanOrEqual(14);
-  });
-
-  it('uses lowercase #rrggbb for every layer colour', () => {
-    for (const value of Object.values(PLANNING_LAYER_COLORS)) {
-      expect(value).toMatch(/^#[0-9a-fA-F]{6}$/);
+  it('sources every panel surface colour from tokens (hex or translucent rgba)', () => {
+    for (const value of Object.values(PLANNING_SURFACE)) {
+      expect(value).toMatch(/^(#[0-9a-f]{6}|rgba\(\d+, \d+, \d+, (0|\d?\.\d+)\))$/);
     }
+    // 选中态描边沿用分区绿系（与画布选中高亮同源，不另立色）。
+    expect(PLANNING_SURFACE.selectedBorder).toBe('#7fb69a');
   });
 
-  it('registers a non-empty set of kebab-case lucide icon names', () => {
-    expect(PLANNING_ICONS.length).toBeGreaterThan(5);
+  it('derives rgba from hex via withAlphaHex without inventing new colours', () => {
+    expect(withAlphaHex('#c98a2c', 0.14)).toBe('rgba(201, 138, 44, 0.14)');
+    expect(withAlphaHex(PLANNING_LAYER_COLORS.boundary, 0.5)).toBe('rgba(53, 98, 74, 0.5)');
+    // 非法输入原样返回（不抛错）。
+    expect(withAlphaHex('nope', 0.5)).toBe('nope');
+  });
+
+  it('keeps icon sizes small and ordered for compact panels', () => {
+    expect(PLANNING_ICON_SIZES.capsule).toBeLessThanOrEqual(PLANNING_ICON_SIZES.legend);
+    expect(PLANNING_ICON_SIZES.tool).toBeLessThanOrEqual(13);
+    expect(PLANNING_ICON_SIZES.legend).toBeGreaterThanOrEqual(11);
+  });
+
+  it('registers resolvable kebab-case icon names only (layer-group was unresolvable)', () => {
     for (const name of PLANNING_ICONS) expect(name).toMatch(/^[a-z][a-z0-9-]*$/);
     expect(new Set(PLANNING_ICONS).size).toBe(PLANNING_ICONS.length);
-  });
-
-  it('gives every zone semantic a lowercase #rrggbb default colour (H2-b)', () => {
-    const semantics = Object.keys(PLANNING_ZONE_COLORS) as (keyof typeof PLANNING_ZONE_COLORS)[];
-    // 契约九类语义全量；卡片「六类」主语义（观众/停车/装卸/签到/医疗/排队）必须在内。
-    expect(semantics).toContain('audience');
-    expect(semantics).toContain('parking');
-    expect(semantics).toContain('loading');
-    expect(semantics).toContain('checkin');
-    expect(semantics).toContain('medical');
-    expect(semantics).toContain('queue');
-    expect(semantics.length).toBe(9);
-    for (const value of Object.values(PLANNING_ZONE_COLORS)) {
-      expect(value).toMatch(/^#[0-9a-f]{6}$/);
+    // lucide-react 1.48 没有 LayerGroup 导出：死名不得回流注册表。
+    expect(PLANNING_ICONS).not.toContain('layer-group');
+    expect(PLANNING_ICONS).toContain('layers');
+    // H4-a 新增的图层/工具/页签词汇全部在册。
+    for (const required of ['hexagon', 'tent', 'hand', 'pen-tool', 'move', 'lasso', 'user-plus', 'layout-grid', 'list', 'triangle-alert', 'info'] as const) {
+      expect(PLANNING_ICONS).toContain(required);
     }
-    // 主语义色互异，图例可辨。
-    const mainSix = ['audience', 'parking', 'loading', 'checkin', 'medical', 'queue'] as const;
-    expect(new Set(mainSix.map(s => PLANNING_ZONE_COLORS[s])).size).toBe(6);
   });
 
-  it('keeps zone opacity in a sane editable band (H2-b)', () => {
-    expect(PLANNING_ZONE_OPACITY.min).toBeGreaterThan(0);
-    expect(PLANNING_ZONE_OPACITY.default).toBeGreaterThanOrEqual(PLANNING_ZONE_OPACITY.min);
-    expect(PLANNING_ZONE_OPACITY.default).toBeLessThanOrEqual(PLANNING_ZONE_OPACITY.max);
-    expect(PLANNING_ZONE_OPACITY.max).toBeLessThan(1);
-  });
-
-  it('labels all nine canvas edit modes (H2-b/H2-c/H2-d/H3-a)', () => {
-    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'facility', 'measure', 'node', 'route', 'view', 'worker', 'zone']);
-    expect(PLANNING_EDIT_MODE_LABELS['boundary-vertex']).toBe('编辑边界');
-    expect(PLANNING_EDIT_MODE_LABELS['facility']).toBe('放设施');
-    expect(PLANNING_EDIT_MODE_LABELS['route']).toBe('画动线');
-    expect(PLANNING_EDIT_MODE_LABELS['node']).toBe('放节点');
-    expect(PLANNING_EDIT_MODE_LABELS['worker']).toBe('布人员');
-    expect(PLANNING_EDIT_MODE_LABELS['measure']).toBe('测量');
-  });
-
-  it('gives the measurement layer a distinct lowercase colour and label (H3-a)', () => {
-    expect(PLANNING_LAYER_COLORS.measure).toMatch(/^#[0-9a-f]{6}$/);
-    // 测量色与其余图层色互异（图例可辨）。
-    const others = Object.entries(PLANNING_LAYER_COLORS).filter(([kind]) => kind !== 'measure');
-    expect(others.every(([, value]) => value !== PLANNING_LAYER_COLORS.measure)).toBe(true);
-    expect(PLANNING_LABELS.measure).toBe('测量');
-  });
-
-  it('gives the three route kinds distinct lowercase colours (H2-d)', () => {
-    const kinds = Object.keys(PLANNING_ROUTE_KIND_COLORS) as (keyof typeof PLANNING_ROUTE_KIND_COLORS)[];
-    expect(kinds.sort()).toEqual(['pedestrian', 'service', 'vehicle']);
-    for (const value of Object.values(PLANNING_ROUTE_KIND_COLORS)) {
-      expect(value).toMatch(/^#[0-9a-f]{6}$/);
+  it('maps every planning layer kind to a registered icon', () => {
+    const kinds = Object.keys(PLANNING_LAYER_COLORS) as (keyof typeof PLANNING_LAYER_COLORS)[];
+    expect(Object.keys(PLANNING_LAYER_ICONS).sort()).toEqual([...kinds].sort());
+    for (const [kind, icon] of Object.entries(PLANNING_LAYER_ICONS)) {
+      expect(PLANNING_ICONS).toContain(icon);
+      expect(PLANNING_LAYER_ICONS[kind as keyof typeof PLANNING_LAYER_ICONS]).toBe(icon);
     }
-    // 三类色互异：图例可辨。
-    expect(new Set(Object.values(PLANNING_ROUTE_KIND_COLORS)).size).toBe(3);
+    // 边界/分区图标可辨（六边形 vs 形状组）。
+    expect(PLANNING_LAYER_ICONS.boundary).not.toBe(PLANNING_LAYER_ICONS.zone);
+  });
+
+  it('maps all nine edit modes to registered tool icons', () => {
+    expect(Object.keys(PLANNING_EDIT_MODE_ICONS).sort()).toEqual(Object.keys(PLANNING_EDIT_MODE_LABELS).sort());
+    for (const icon of Object.values(PLANNING_EDIT_MODE_ICONS)) {
+      expect(PLANNING_ICONS).toContain(icon);
+    }
+    expect(PLANNING_EDIT_MODE_ICONS.view).toBe('hand');
+    expect(PLANNING_EDIT_MODE_ICONS.boundary).toBe('pen-tool');
+    expect(PLANNING_EDIT_MODE_ICONS['boundary-vertex']).toBe('move');
+    expect(PLANNING_EDIT_MODE_ICONS.zone).toBe('lasso');
+    expect(PLANNING_EDIT_MODE_ICONS.worker).toBe('user-plus');
+  });
+
+  it('maps the four info tabs to registered icons', () => {
+    expect(Object.keys(PLANNING_INFO_TAB_ICONS).sort()).toEqual(['inventory', 'issues', 'legend', 'overview']);
+    for (const icon of Object.values(PLANNING_INFO_TAB_ICONS)) {
+      expect(PLANNING_ICONS).toContain(icon);
+    }
   });
 });

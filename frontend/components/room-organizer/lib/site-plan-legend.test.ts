@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlanLegend, polylineHalfLengthPoint } from './site-plan-legend';
-import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 复用演示页「平湖秋月市集」同构的迷你样例（3 分区 / 2 摊位 + 1 帐篷 / 3 动线 / 2 节点 / 2 人员 / 2 测量）。 */
@@ -228,6 +228,23 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     const zones = buildPlanLegend(plan).find(g => g.title === '功能分区')!;
     // 观众区组在契约枚举序下是第 2 条。
     expect(zones.entries[1]!.swatch).toBe('#3d8fa8');
+  });
+
+  it('pins the legend icon contract to registered lucide names (H4-a)', () => {
+    const groups = buildPlanLegend(samplePlan());
+    const iconsOf = (title: string) => groups.find(g => g.title === title)!.entries.map(e => e.icon);
+    // 每组图标与图层图标映射同源（H4-a：truck→tent，摊位/帐篷语义更贴设施组）。
+    expect(iconsOf('场地边界')).toEqual(['hexagon']);
+    expect(iconsOf('功能分区')).toEqual(['shapes', 'shapes']);
+    expect(iconsOf('设施')).toEqual(['tent', 'tent', 'tent']);
+    expect(iconsOf('动线')).toEqual(['route', 'route']);
+    expect(iconsOf('出入口')).toEqual(['door-open', 'door-open']);
+    expect(iconsOf('人员')).toEqual(['users', 'users']);
+    expect(iconsOf('测量')).toEqual(['ruler', 'ruler']);
+    // 全部图标都在 tokens 注册表内（图例渲染层 planningIcon 可解析）。
+    for (const group of groups) {
+      for (const entry of group.entries) expect(PLANNING_ICONS).toContain(entry.icon);
+    }
   });
 });
 
