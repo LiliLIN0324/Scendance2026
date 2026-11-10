@@ -71,6 +71,7 @@ function toolCategory(tool:string):'venue'|'material'|'position'|'check'|'candid
 }
 const CATEGORY_ICONS={venue:MapPin,material:Box,position:Map,check:ShieldCheck,candidate:ClipboardCheck,generation:Sparkles};
 const LOCAL_STEP_LABEL: Record<string, string> = {
+  select_furnishing: '选择桌椅',
   local_preview: '出预览',
   local_validate: '核对重叠',
   local_revise: '修改布置',

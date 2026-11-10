@@ -254,7 +254,8 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   const scaleReady = (turn.memory.lengthM !== null && turn.memory.widthM !== null) || turn.memory.areaM2 !== null || context.venueUp || context.scaleTyped;
   const briefReady = turn.kind === 'generate' && turn.memory.layoutModeConfirmed === true && turn.memory.headcount !== null && scaleReady;
   const continuesLayout = layoutOnly || layoutGenerateCommand(raw) !== null || isBriefFactUtterance(raw);
-  if (!allowAutomaticGeneration && turn.kind === 'generate' && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  const selectedLayout = turn.kind === 'generate' && turn.memory.furnishing?.source === 'select_furnishing';
+  if (!allowAutomaticGeneration && turn.kind === 'generate' && !selectedLayout && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
 }

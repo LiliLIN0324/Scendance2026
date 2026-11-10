@@ -6,6 +6,7 @@ import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requ
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
+import { materializeFurnishing, type FurnishingChoice, type MaterializedFurnishing } from './furnishing-select';
 import { resolveTableArrangement, type TableArrangement } from './table-seat-plan';
 import type { RoomLayout } from './types';
 
@@ -46,6 +47,8 @@ export interface LocalPlanInput {
    * still resolves the default diameter; the compiler does not invent a count.
    */
   table?: { shape?: 'round' | 'rect'; width?: number | null; depth?: number | null; peoplePerTable?: number | null };
+  /** Selection-tool result. The layout materializes this asset and does not choose another. */
+  furnishing?: FurnishingChoice;
   stage?: boolean;
   checkin?: boolean;
 }
@@ -116,8 +119,12 @@ function withArrangement<T extends PlanProposal>(result: T, arrangement: TableAr
 }
 
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
+  const placed = input.furnishing ? materializeFurnishing(input.furnishing) ?? undefined : undefined;
+  if (input.furnishing && !placed) {
+    return { layouts: [input.base], added: 0, removing: 0, keptLocked: 0, dropped: 0, overlapCount: 0, overlapNames: [], blocked: '没有选中可用的桌椅，这版没有摆。', guests: input.guests ?? null, via: 'fallback' };
+  }
   const arrangement = arrangementFor(input);
-  const scriptPlan = scriptAttempt(input, arrangement);
+  const scriptPlan = scriptAttempt(input, arrangement, placed);
   const seated = (input.guests ?? 0) > 0;
 
   if (scriptPlan && !scriptPlan.blocked) {
@@ -128,8 +135,8 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     // denser. Run both, keep the one that seats more: a button that cannot change the result
     // must not be offered.
     if (input.seatPriority && input.guests) {
-      const fill = scriptAttempt({ ...input, guests: null }, arrangement);
-      const dense = fallbackPlan(input, arrangement);
+      const fill = scriptAttempt({ ...input, guests: null }, arrangement, placed);
+      const dense = fallbackPlan(input, arrangement, placed);
       const options = [
         fill && !fill.blocked ? { via: 'script' as const, proposal: withArrangement(fill, arrangement) } : null,
         dense.blocked ? null : { via: 'fallback' as const, proposal: withArrangement(dense, arrangement) },
@@ -146,7 +153,7 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     // slot heuristic's. Compare instead of assuming the newer door is always better: a room
     // too shallow for a table set (8 × 6 with a stage) still deserves chairs.
     if (seated && seats === 0) {
-      const heuristic = fallbackPlan(input, arrangement);
+      const heuristic = fallbackPlan(input, arrangement, placed);
       if ((heuristic.seats ?? 0) > 0) {
         return { ...heuristic, via: 'fallback', fallbackReason: '脚本这一版一个座位都没排出来，改用了原来的摆放方式。' };
       }
@@ -154,7 +161,7 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     return withArrangement({ ...scriptPlan, via: 'script', summary: scriptPlan.summary }, arrangement);
   }
 
-  const fallback = fallbackPlan(input, arrangement);
+  const fallback = fallbackPlan(input, arrangement, placed);
   return withArrangement({
     ...fallback,
     via: 'fallback',
@@ -163,7 +170,7 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
 }
 
 /** The original slot heuristic, kept whole behind one name. */
-function fallbackPlan(input: LocalPlanInput, arrangement?: TableArrangement): PlanProposal {
+function fallbackPlan(input: LocalPlanInput, arrangement?: TableArrangement, placed?: MaterializedFurnishing): PlanProposal {
   return proposePlan({
     base: input.base,
     floorIndex: input.floorIndex,
@@ -175,13 +182,14 @@ function fallbackPlan(input: LocalPlanInput, arrangement?: TableArrangement): Pl
     ...(input.layoutMode ? { layoutMode: input.layoutMode } : {}),
     ...(input.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}),
     ...(arrangement ? { tablePlan: arrangement } : {}),
+    ...(placed ? { furnishing: placed } : {}),
     ...(input.stage !== undefined ? { stage: input.stage } : {}),
     ...(input.checkin !== undefined ? { checkin: input.checkin } : {}),
   });
 }
 
 /** The script door, isolated so a compiler refusal can never take down generation. */
-function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement): SceneScriptCompileResult | null {
+function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement, placed?: MaterializedFurnishing): SceneScriptCompileResult | null {
   try {
     const script = sceneScriptFromBrief({
       widthM: input.widthM,
@@ -197,6 +205,7 @@ function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement): S
       floorIndex: input.floorIndex,
       ...(input.seatingShape === 'ring' && arrangement?.shape !== 'rect' ? { seatingShape: 'ring' as const } : {}),
       ...(arrangement ? { tablePlan: arrangement } : {}),
+      ...(placed ? { furnishing: placed } : {}),
     });
   } catch {
     return null;

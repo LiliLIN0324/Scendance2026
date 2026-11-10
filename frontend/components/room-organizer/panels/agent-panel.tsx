@@ -94,7 +94,7 @@ import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
-import { failOpenLocalStep, finishLocalLayoutRun, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { failOpenLocalStep, finishLocalLayoutRun, notePriorLayoutTool, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
@@ -1930,6 +1930,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false, localDraftNote?:string): Promise<void> {
     if(localDraftNote!==undefined){await runLocalSeatingDraft(token,scale,localDraftNote);return;}
     pushLocalLayoutStep('preview', 'running');
+    const chosen = memoryRef.current.furnishing;
+    if (chosen) notePriorLayoutTool('select_furnishing', chosen.reason);
     const before = live.current;
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
@@ -1968,7 +1970,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const banquet=memoryRef.current.banquetTable;
     const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
     const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
-    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
+    const furnishing=memoryRef.current.furnishing;
+    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), ...(furnishing ? { furnishing } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
       failOpenLocalStep('这版没出成');
@@ -2717,7 +2720,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const suffix = briefNote ? ` ${briefNote}` : '';
     const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
     anchorsRef.current = anchors;
-    const scale = scaleFrom(merged);
+    const statedScale = scaleFrom(merged);
+    const assumedHall = turn.memory.agentVenue;
+    const scale = assumedHall && turn.memory.lengthM === null && turn.memory.widthM === null
+      ? { ...statedScale, length: assumedHall.lengthM, width: assumedHall.widthM }
+      : statedScale;
     const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
     const mentionedZone = (kind: 'stage' | 'checkin', word: RegExp) => turn.memory.unresolvedActivityNeeds.includes(kind) || word.test(trimmed);
     const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
@@ -2784,7 +2791,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     const cloud = studioRef.current;
-    if (cloud?.connection === '项目已连接') {
+    if (!turn.memory.furnishing && cloud?.connection === '项目已连接') {
       // 连着云就只走云预览。忙或恢复中若退回本地生成，会在云端还没稳时亮一颗确认。
       if (cloud.busy || cloud.recoverable) {
         finishLayoutAttempt(false);
@@ -2810,7 +2817,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const zoneLine = `${zoneBit ? `${zoneBit}先占位。` : ''}${unspecified.length ? `${unspecified.join('、')}尚未说明，这版暂不包含。` : ''}`;
     const rail = lightPlanRail(trimmed);
     const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
-    say({ role: 'agent', text: turn.filledScaleAsk
+    say({ role: 'agent', text: turn.previewLead
+      ? turn.previewLead
+      : turn.filledScaleAsk
       ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出预览，确认后才写入。${suffix}`
       : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;

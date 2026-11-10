@@ -5,6 +5,7 @@ import { backendSceneToLayout } from './backend-adapter';
 import { mergeDiagnostics, rejectedDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
 import { layoutRoleFromAssetName, layoutRoleFromNote, layoutRoleNote } from './layout-role';
+import type { MaterializedFurnishing } from './furnishing-select';
 import { rectDiningSet, ringCenters, ringDiningSet, setFootprint } from './ring-seating';
 import type { TableArrangement } from './table-seat-plan';
 import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
@@ -69,6 +70,8 @@ export interface PlanInput {
   seatingShape?: 'ring' | 'grid';
   /** Already resolved size and seat count. Placement uses it and does not assume 4 or 8. */
   tablePlan?: TableArrangement;
+  /** Asset already chosen by select_furnishing. Placement does not pick another table. */
+  furnishing?: MaterializedFurnishing;
   /** 缺省仍放舞台背景板。显式 false 才跳过（课室、或人说不要舞台）。 */
   stage?: boolean;
   /** 缺省不放签到台。发布会等活动或人点了签到才放，放不下就丢这一件。 */
@@ -398,9 +401,11 @@ export function proposePlan(input: PlanInput): PlanProposal {
         if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
       }
     }
-  } else if (input.seatingShape === 'ring' || input.tablePlan?.shape === 'round') {
-    const sideM = input.tablePlan?.shape === 'round' ? input.tablePlan.width : undefined;
-    const dining = sideM === undefined ? ringDiningSet() : ringDiningSet({ sideM });
+  } else if (input.furnishing?.table.tableShape === 'round' || (!input.furnishing && (input.seatingShape === 'ring' || input.tablePlan?.shape === 'round'))) {
+    const sideM = input.furnishing?.table.width ?? (input.tablePlan?.shape === 'round' ? input.tablePlan.width : undefined);
+    const dining = input.furnishing
+      ? ringDiningSet({ sideM: input.furnishing.table.width, table: input.furnishing.table, chair: input.furnishing.chair })
+      : sideM === undefined ? ringDiningSet() : ringDiningSet({ sideM });
     const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'ring-measure' });
     if (sample.length) {
       const footprint = setFootprint(sample);
@@ -414,13 +419,17 @@ export function proposePlan(input: PlanInput): PlanProposal {
         accept(tryAdd(base, current, floorIndex, items));
       }
     }
-  } else if (input.tablePlan?.shape === 'rect') {
-    const dining = rectDiningSet({ width: input.tablePlan.width, depth: input.tablePlan.depth });
+  } else if (input.furnishing?.table.tableShape === 'rect' || (!input.furnishing && input.tablePlan?.shape === 'rect')) {
+    const width = input.furnishing?.table.width ?? input.tablePlan?.width ?? 0;
+    const depth = input.furnishing?.table.depth ?? input.tablePlan?.depth ?? 0;
+    const dining = input.furnishing
+      ? rectDiningSet({ width, depth, table: input.furnishing.table, chair: input.furnishing.chair })
+      : rectDiningSet({ width, depth });
     const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'rect-measure' });
     if (sample.length) {
       const stageSouth = backdrop ? -depthM / 2 + backdrop.depth + 0.4 : -depthM / 2;
       const slots = setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
-      const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan.seatsPerTable || 1;
+      const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan?.seatsPerTable || 1;
       const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
