@@ -59,7 +59,7 @@ export interface BriefMemory {
   /** ring = 圆桌沿环/扇形摆；grid = 课桌行列。缺省沿用原方格餐桌。 */
   seatingShape?: 'ring' | 'grid' | undefined;
   /** Table size or per-table headcount the user stated. The layout uses the derived seat count. */
-  banquetTable?: { shape?: 'round' | 'rect'; width?: number; depth?: number; peoplePerTable?: number; evidence: string } | undefined;
+  banquetTable?: { shape?: 'round' | 'rect' | undefined; width?: number | undefined; depth?: number | undefined; peoplePerTable?: number | undefined; evidence: string } | undefined;
   /** 只有用户明确选择或确认后，才能把布局方式用于生成。 */
   layoutModeConfirmed?: boolean | undefined;
   /** 用户否定或尚未决定布置方式时，等待明确指定替代方式。 */

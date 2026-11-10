@@ -203,10 +203,10 @@ function metres(value: string, unit: string): number | null {
  * unless they sit next to 圆桌 / 方桌 / 长桌.
  */
 export interface BanquetTableRequest {
-  shape?: 'round' | 'rect';
-  width?: number;
-  depth?: number;
-  peoplePerTable?: number;
+  shape?: 'round' | 'rect' | undefined;
+  width?: number | undefined;
+  depth?: number | undefined;
+  peoplePerTable?: number | undefined;
   evidence: string;
 }
 
