@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Globe, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Globe, Info, Layers, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -160,6 +160,7 @@ import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay from './components/outdoor-plan-overlay';
+import type { OutdoorPanelKind } from './components/outdoor-plan-overlay';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -488,7 +489,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   useEffect(() => { if (captureOpen) capturePanelRef.current?.focus(); }, [captureOpen]);
   // 户外 2D 规划覆盖层（P2-c）：同一页面内的户外面——开启后满幅盖在 3D 画布上，关闭即回。
   // 数据同态：草稿按 layout.id 存本机（outdoor-project-store），底图定位继承活动点位。
+  // P2-d：左栏卡片（图层/信息）由左轨钮切换，浮窗经 panelsHostId portal 进左栏。
   const [outdoor2DOpen, setOutdoor2DOpen] = useState(false);
+  const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('layers');
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -3698,11 +3701,41 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   aria-pressed={outdoor2DOpen}
                   aria-label="户外规划：在地图上画边界分区动线"
                   data-tip="户外规划 · 地图上画边界分区动线"
-                  onClick={() => setOutdoor2DOpen(current => !current)}
+                  onClick={() => setOutdoor2DOpen(current => {
+                    const next = !current;
+                    if (next) setOutdoorPanel(current1 => current1 ?? 'layers'); // 开启默认亮图层卡（浮窗进左栏）。
+                    return next;
+                  })}
                 >
                   <Globe size={26} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
+                {outdoor2DOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'layers' ? ' is-active' : ''}`}
+                      aria-pressed={outdoorPanel === 'layers'}
+                      aria-label="图层：图层开关与编辑模式"
+                      data-tip="图层 · 开关与编辑模式"
+                      onClick={() => setOutdoorPanel(current2 => current2 === 'layers' ? null : 'layers')}
+                    >
+                      <Layers size={26} aria-hidden="true" />
+                      <span className="sc-rail-label" aria-hidden="true">图层</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'info' ? ' is-active' : ''}`}
+                      aria-pressed={outdoorPanel === 'info'}
+                      aria-label="规划信息：统计清单问题图例"
+                      data-tip="规划信息 · 统计/清单/问题"
+                      onClick={() => setOutdoorPanel(current3 => current3 === 'info' ? null : 'info')}
+                    >
+                      <Info size={26} aria-hidden="true" />
+                      <span className="sc-rail-label" aria-hidden="true">信息</span>
+                    </button>
+                  </>
+                )}
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -3795,6 +3828,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               projectId={layout.id ?? null}
               anchor={layout.sceneAnchor ?? layout.mapLngLat ?? null}
               activityName={layout.name}
+              activePanel={outdoorPanel}
               onClose={() => setOutdoor2DOpen(false)}
             />
           )}
