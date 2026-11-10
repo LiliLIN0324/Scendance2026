@@ -78,24 +78,24 @@ export default function PlanSharePage() {
 
   if (!snapshot || !stats) {
     return (
-      <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
+      <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#ffffff', color: '#141416', fontFamily: 'inherit' }}>
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: 18 }}>分享不存在或已失效</h1>
-          <p style={{ color: '#93a4bc', fontSize: 13 }}>快照缺失或校验未通过。链接可能已被发布方撤销。</p>
+          <p style={{ color: '#71767e', fontSize: 13 }}>快照缺失或校验未通过。链接可能已被发布方撤销。</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
+    <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#ffffff', color: '#141416', fontFamily: 'inherit' }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#ffffff', borderBottom: '1px solid #e4e4e7' }}>
         <h1 style={{ fontSize: 15, margin: 0 }}>只读规划分享</h1>
-        <small style={{ color: '#93a4bc' }}>
+        <small style={{ color: '#71767e' }}>
           快照 r{snapshot.revision} · {new Date(snapshot.updatedAt).toLocaleString('zh-CN', { hour12: false })}
           {isDemo && ' · 演示快照'}
         </small>
-        <span style={{ color: '#7fb69a', fontSize: 12 }}>
+        <span style={{ color: '#55585f', fontSize: 12 }}>
           场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -103,7 +103,7 @@ export default function PlanSharePage() {
             aria-label="底图图源"
             value={source}
             onChange={event => setSource(event.target.value as CanvasBasemapSource)}
-            style={{ background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: 6, padding: '5px 10px' }}
+            style={{ background: '#f4f5f7', color: '#141416', border: '1px solid #e4e4e7', borderRadius: 10, padding: '5px 10px' }}
           >
             {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
@@ -113,7 +113,7 @@ export default function PlanSharePage() {
         {/* 只读：不传 onPlanChange——画布无编辑入口；图层面板仍可用（查看需要）。 */}
         <OutdoorPlanCanvas plan={snapshot.data} source={source} />
       </div>
-      <footer style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '8px 14px', background: '#182433', borderTop: '1px solid #24334a', fontSize: 12, color: '#93a4bc', flexWrap: 'wrap' }}>
+      <footer style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '8px 14px', background: '#ffffff', borderTop: '1px solid #e4e4e7', fontSize: 12, color: '#71767e', flexWrap: 'wrap' }}>
         {legend.map(group => (
           <span key={group.title} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             {group.entries.map(entry => (
@@ -129,6 +129,7 @@ export default function PlanSharePage() {
     </main>
   );
 }
+
 
 
 

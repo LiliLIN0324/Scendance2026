@@ -48,21 +48,19 @@ export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss
         width: 340,
         maxWidth: 'calc(100% - 32px)',
         padding: PLANNING_SPACING.lg,
-        borderRadius: 12,
-        background: 'rgba(24, 34, 48, 0.88)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(127, 182, 154, 0.35)',
-        boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
-        color: '#e7edf5',
-        fontFamily: 'system-ui, sans-serif',
+        borderRadius: 14,
+        background: '#ffffff',
+        border: '1px solid #e4e4e7',
+        boxShadow: '0 6px 18px rgba(20, 20, 22, 0.10)',
+        color: '#141416',
+        fontFamily: 'inherit',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: PLANNING_SPACING.sm }}>
         <strong style={{ fontSize: 14 }}>{content.title}</strong>
-        <span style={{ fontSize: 11, color: '#93a4bc' }}>{stepIndex + 1}/{totalSteps}</span>
+        <span style={{ fontSize: 11, color: '#71767e' }}>{stepIndex + 1}/{totalSteps}</span>
       </div>
-      <p style={{ margin: `0 0 ${PLANNING_SPACING.md}px`, fontSize: 12.5, lineHeight: 1.6, color: '#cdd9ea' }}>{content.body}</p>
+      <p style={{ margin: `0 0 ${PLANNING_SPACING.md}px`, fontSize: 12, lineHeight: '20px', color: '#55585f' }}>{content.body}</p>
       <div style={{ display: 'flex', gap: PLANNING_SPACING.sm, justifyContent: 'flex-end' }}>
         <button type="button" onClick={onDismiss} style={secondaryButtonStyle}>跳过引导</button>
         <button type="button" onClick={onComplete} autoFocus style={primaryButtonStyle}>{content.cta}</button>
@@ -94,7 +92,7 @@ export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
 
   return (
     <div ref={rootRef} style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setOpen(value => !value)} style={primaryButtonStyle} aria-expanded={open} aria-haspopup="menu">
+      <button type="button" onClick={() => setOpen(value => !value)} style={secondaryButtonStyle} aria-expanded={open} aria-haspopup="menu">
         导出/分享
       </button>
       {open && (
@@ -104,14 +102,12 @@ export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
           top: 'calc(100% + 6px)',
           zIndex: 40,
           minWidth: 220,
-          borderRadius: 10,
-          background: 'rgba(24, 34, 48, 0.92)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          border: '1px solid rgba(127, 182, 154, 0.3)',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          borderRadius: 14,
+          background: '#ffffff',
+          border: '1px solid #e4e4e7',
+          boxShadow: '0 6px 18px rgba(20, 20, 22, 0.10)',
           padding: PLANNING_SPACING.xs,
-          fontFamily: 'system-ui, sans-serif',
+          fontFamily: 'inherit',
         }}>
           {EXPORT_MENU_ITEMS.map(item => {
             // 只读分享在 H4-b 即可预览毛玻璃弹窗形态；其余三项实现归 H5，如实标「即将上线」。
@@ -128,7 +124,7 @@ export function ExportMenu({ onPick, enableExports = false }: ExportMenuProps) {
                 style={enabled ? menuItemEnabledStyle : menuItemStyle}
               >
                 <span style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>{item.label}</span>
-                <span style={{ display: 'block', fontSize: 11, color: '#93a4bc', marginTop: 2 }}>{item.hint}{enabled ? '' : ' · 即将上线'}</span>
+                <span style={{ display: 'block', fontSize: 11, color: '#71767e', marginTop: 2 }}>{item.hint}{enabled ? '' : ' · 即将上线'}</span>
               </button>
             );
           })}
@@ -173,41 +169,38 @@ export function ShareDialog({ open, onClose, content, shareLink, onPrintDeck }: 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(10, 15, 22, 0.45)',
-        fontFamily: 'system-ui, sans-serif',
+        background: 'rgba(20, 20, 22, 0.32)',
+        fontFamily: 'inherit',
       }}
     >
       <div
         onClick={event => event.stopPropagation()}
         style={{
-          width: 360,
-          maxWidth: 'calc(100vw - 48px)',
-          padding: PLANNING_SPACING.xl,
-          borderRadius: 14,
-          background: 'rgba(28, 39, 54, 0.82)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid rgba(127, 182, 154, 0.35)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
-          color: '#e7edf5',
+          width: 'min(560px, calc(100vw - 32px))',
+          padding: 24,
+          borderRadius: 18,
+          background: '#ffffff',
+          border: '1px solid #e4e4e7',
+          boxShadow: '0 16px 48px rgba(20, 20, 22, 0.18)',
+          color: '#141416',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: PLANNING_SPACING.md }}>
-          <strong style={{ fontSize: 15 }}>{content.title}</strong>
+          <strong style={{ fontSize: 20, lineHeight: '28px', fontWeight: 600 }}>{content.title}</strong>
           <button type="button" onClick={onClose} aria-label="关闭" style={iconButtonStyle}>×</button>
         </div>
         {content.lines.map((line, index) => (
-          <p key={index} style={{ margin: `0 0 ${PLANNING_SPACING.sm}px`, fontSize: 12.5, lineHeight: 1.6, color: index === 0 ? '#e7edf5' : '#cdd9ea' }}>
+          <p key={index} style={{ margin: `0 0 ${PLANNING_SPACING.sm}px`, fontSize: 12, lineHeight: '20px', color: index === 0 ? '#141416' : '#55585f' }}>
             {line}
           </p>
         ))}
         {shareLink && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, margin: `${PLANNING_SPACING.md}px 0 0`, padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`, background: 'rgba(127, 182, 154, 0.08)', border: '1px solid rgba(127, 182, 154, 0.3)', borderRadius: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, margin: `${PLANNING_SPACING.md}px 0 0`, padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`, background: '#f4f5f7', border: '1px solid #e4e4e7', borderRadius: 10 }}>
             <input
               readOnly
               value={shareLink.length > 72 ? shareLink.slice(0, 48) + '…' + shareLink.slice(-12) : shareLink}
               aria-label="分享链接"
-              style={{ flex: 1, background: 'transparent', border: 'none', color: '#cdd9ea', fontSize: 11, fontFamily: 'ui-monospace, monospace', outline: 'none', minWidth: 0 }}
+              style={{ flex: 1, background: 'transparent', border: 'none', color: '#141416', fontSize: 11, fontFamily: 'ui-monospace, monospace', outline: 'none', minWidth: 0 }}
               onFocus={event => event.currentTarget.select()}
             />
             <button type="button" onClick={() => { void navigator.clipboard?.writeText(shareLink); setCopied(true); }} style={primaryButtonStyle}>
@@ -260,37 +253,42 @@ export function useGuide(storageKey: string) {
 /* ---------------- 共享样式（品牌绿强调，白字 AA 对比度） ---------------- */
 
 const primaryButtonStyle: React.CSSProperties = {
+  // 冷石规范：主按钮 = 墨底白字（--primary ink），绿不占主钮位。
   padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-  borderRadius: 8,
-  border: '1px solid #35624A',
-  background: '#35624A',
-  color: '#fff',
+  borderRadius: 10,
+  border: '1px solid #141416',
+  background: '#141416',
+  color: '#ffffff',
   fontWeight: 600,
-  fontSize: 12.5,
+  fontSize: 12,
+  lineHeight: '20px',
   cursor: 'pointer',
   font: 'inherit',
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
+  // ghost 次钮：透明底 + 发丝线 + 墨字。
   padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-  borderRadius: 8,
-  border: '1px solid #35485f',
+  borderRadius: 10,
+  border: '1px solid #e4e4e7',
   background: 'transparent',
-  color: '#cdd9ea',
-  fontSize: 12.5,
+  color: '#141416',
+  fontSize: 12,
+  lineHeight: '20px',
   cursor: 'pointer',
   font: 'inherit',
 };
 
 const menuItemEnabledStyle: React.CSSProperties = {
+  // 绿仅点睛：可导出项 = 绿淡底 + 绿描边 + 墨字（激活语义）。
   display: 'block',
   width: '100%',
   textAlign: 'left',
   padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-  borderRadius: 8,
-  border: '1px solid rgba(127, 182, 154, 0.45)',
-  background: 'rgba(127, 182, 154, 0.12)',
-  color: '#e7edf5',
+  borderRadius: 10,
+  border: '1px solid #4a7c59',
+  background: 'rgba(74, 124, 89, 0.12)',
+  color: '#141416',
   cursor: 'pointer',
   font: 'inherit',
   marginBottom: PLANNING_SPACING.xs,
@@ -301,26 +299,31 @@ const menuItemStyle: React.CSSProperties = {
   width: '100%',
   textAlign: 'left',
   padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-  borderRadius: 8,
+  borderRadius: 10,
   border: 'none',
   background: 'transparent',
-  color: '#cdd9ea',
+  color: '#71767e',
   cursor: 'not-allowed',
   opacity: 0.75,
   font: 'inherit',
 };
 
 const iconButtonStyle: React.CSSProperties = {
+  // ghost 关闭钮：透明底 + 发丝线 + 墨字（模态规范）。
   width: 28,
   height: 28,
-  borderRadius: 6,
-  border: '1px solid #35485f',
+  borderRadius: 10,
+  border: '1px solid #e4e4e7',
   background: 'transparent',
-  color: '#cdd9ea',
+  color: '#141416',
   fontSize: 16,
   lineHeight: 1,
   cursor: 'pointer',
 };
+
+
+
+
 
 
 
