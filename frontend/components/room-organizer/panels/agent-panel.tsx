@@ -2000,7 +2000,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
     const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
     const furnishing=layoutFurnishing(memoryRef.current.furnishing, banquet);
-    const priorBanquetSeats = furnishing && seatPriority ? (proposal.current?.seats ?? null) : null;
+    const priorBanquetSeats = furnishing && seatPriority ? priorCardSeats.current : null;
     try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), ...(furnishing ? { furnishing } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
@@ -2291,9 +2291,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 生成只有一次触发：对话。这里是被认可后真正跑那一趟的唯一入口，画布上只出预览。 */
   const localDraftIntent = useRef<string|null>(null);
+  /** Seat count on the card before add-seats clears it. `dropProposal` runs first otherwise. */
+  const priorCardSeats = useRef<number | null>(null);
   function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
     if (!sessionScopeIsCurrent()) return;
     if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { finishLayoutAttempt(false); say({role:'agent',amber:true,text:'场地已变化，请重新说明当前场地尺寸。'}); return; }
+    priorCardSeats.current = seatPriority && typeof proposal.current?.seats === 'number' ? proposal.current.seats : null;
     beginLayoutAttempt(previewUtterance.current || note || label || '', memoryRef.current.furnishing?.source !== 'select_furnishing' && studioRef.current?.connection === '项目已连接');
     localDraftIntent.current=/(?:本地|本机)草案/.test(note)?note:null;
     const token = ++runToken.current;

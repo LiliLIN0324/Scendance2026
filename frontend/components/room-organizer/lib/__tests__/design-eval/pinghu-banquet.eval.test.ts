@@ -181,15 +181,18 @@ describe('平湖秋月 banquet design eval', () => {
       sources: [], dimensions: [],
     }, { name: '西湖·平湖秋月', projectId: 'pinghu-diagonal' });
     const at = (x: number, z: number) => ({ x: x - 11.9, z: z - 8.05 });
-    const table = makeItem({ id: 'near-table', type: 'dining-table', name: '圆桌', width: 2.2, depth: 2.2, height: 0.75, position: at(8, 8) });
-    const solid = makeItem({ id: 'solid-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(6, 8) });
-    const wire = makeItem({ id: 'wire-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(16, 8) });
-    const preview = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, table, solid, wire] }) };
+    const table = makeItem({ id: 'near-table', type: 'dining-table', name: '圆桌', width: 2.2, depth: 2.2, height: 0.75, position: at(10, 8) });
+    const solid = makeItem({ id: 'solid-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(8, 8) });
+    const wire = makeItem({ id: 'wire-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(13, 8) });
+    const farTable = makeItem({ id: 'far-table', type: 'dining-table', name: '圆桌', width: 1.6, depth: 1.6, height: 0.75, position: at(17, 10) });
+    const farChair = makeItem({ id: 'far-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(17, 11.2) });
+    const preview = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, table, solid, wire, farTable, farChair] }) };
     const baseIds = new Set(hall.floors[0]!.items.map(item => item.id));
     const counted = countChairsOnCanvasFloor(preview, 0, baseIds);
     expect(counted.inRoom).toBe(1);
-    expect(counted.crossing).toBe(1);
-    expect(evaluateBanquet(preview, 0, baseIds, 2).pass).toBe(false);
+    expect(counted.crossing).toBe(2);
+    expect(counted.chairless).toBeGreaterThanOrEqual(1);
+    expect(evaluateBanquet(preview, 0, baseIds, 3).pass).toBe(false);
 
     const plan = localPlan(banquetInput(hall, 2.2));
     const landed = countChairsOnCanvasFloor(plan.layouts.at(-1)!, 0, baseIds);

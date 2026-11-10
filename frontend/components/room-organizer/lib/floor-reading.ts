@@ -208,7 +208,7 @@ export function outsideDrawnRoom(item: FurnitureItem, layout: RoomLayout, floorI
   }
   // A chair on the far side of a wall still draws a cyan outline through the
   // wall, while the seat mesh stays hidden. It is not a landed seat.
-  if (seatCutOffByWall(item, layout, floorIndex)) return true;
+  if (beyondDrawnWall(item, layout, floorIndex)) return true;
   return false;
 }
 
@@ -217,7 +217,8 @@ function worldPoint(item: FurnitureItem, layout: RoomLayout): FloorPoint | null 
   return { x: item.position.x + layout.width / 2, z: item.position.z + layout.height / 2 };
 }
 
-function seatCutOffByWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
+/** A chair or table whose path to the landed group crosses a drawn wall. */
+export function beyondDrawnWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
   const here = worldPoint(item, layout);
   const floor = layout.floors[floorIndex];
   if (!here || !floor) return false;

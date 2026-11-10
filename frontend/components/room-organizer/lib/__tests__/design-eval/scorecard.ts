@@ -1,4 +1,4 @@
-import { canvasFloor, canvasWalls, segmentsCross, type CanvasFloor, type FloorPoint, type WallSegment } from '../../floor-reading';
+import { beyondDrawnWall, canvasFloor, type CanvasFloor, type FloorPoint } from '../../floor-reading';
 import type { FurnitureItem, RoomLayout } from '../../types';
 
 /**
@@ -20,15 +20,6 @@ const SEAT = new Set(['dining-chair', 'chair', 'desk-chair']);
 
 function isSeat(item: FurnitureItem): boolean {
   return SEAT.has(item.type);
-}
-
-function worldOf(item: FurnitureItem, layout: RoomLayout): FloorPoint | null {
-  if (!item.position) return null;
-  return { x: item.position.x + layout.width / 2, z: item.position.z + layout.height / 2 };
-}
-
-function crossesAny(from: FloorPoint, to: FloorPoint, walls: readonly WallSegment[]): boolean {
-  return walls.some(wall => segmentsCross(from.x, from.z, to.x, to.z, wall.x1, wall.z1, wall.x2, wall.z2));
 }
 
 function ringContains(x: number, z: number, poly: readonly FloorPoint[]): boolean {
@@ -83,40 +74,6 @@ export function countChairsOnCanvasFloor(
     return { recovered: false, inRoom: 0, crossing: seats.length, chairless: fresh.filter(item => item.type === 'dining-table').length };
   }
   const floor = room.floor;
-  const walls = canvasWalls(layout, floorIndex);
-  const tables = fresh.filter(item => item.type === 'dining-table');
-  const parent = new Map<string, string>();
-  const find = (id: string): string => {
-    const next = parent.get(id) ?? id;
-    if (next === id) return id;
-    const root = find(next);
-    parent.set(id, root);
-    return root;
-  };
-  for (const table of tables) parent.set(table.id, table.id);
-  for (let i = 0; i < tables.length; i++) {
-    const a = worldOf(tables[i]!, layout);
-    if (!a) continue;
-    for (let j = i + 1; j < tables.length; j++) {
-      const b = worldOf(tables[j]!, layout);
-      if (b && !crossesAny(a, b, walls)) parent.set(find(tables[i]!.id), find(tables[j]!.id));
-    }
-  }
-  const score = new Map<string, number>();
-  for (const chair of seats) {
-    const here = worldOf(chair, layout);
-    if (!here) continue;
-    for (const table of tables) {
-      const point = worldOf(table, layout);
-      if (!point || Math.hypot(point.x - here.x, point.z - here.z) > table.width / 2 + 2.5 || crossesAny(here, point, walls)) continue;
-      const root = find(table.id);
-      score.set(root, (score.get(root) ?? 0) + 1);
-      break;
-    }
-  }
-  let kept = '';
-  let keptScore = -1;
-  for (const [root, value] of score) if (value > keptScore) { kept = root; keptScore = value; }
   const offFloor = (item: FurnitureItem): boolean => {
     const corners = cornersOf(item, layout);
     if (!corners.length) return true;
@@ -125,18 +82,7 @@ export function countChairsOnCanvasFloor(
       return segmentDistance(corner.x, corner.z, a.x, a.z, b.x, b.z) < 0.02;
     }));
   };
-  const outside = (item: FurnitureItem): boolean => {
-    if (offFloor(item)) return true;
-    const here = worldOf(item, layout);
-    if (!here) return true;
-    if (item.type === 'dining-table') return kept !== '' && find(item.id) !== kept;
-    if (!kept) return tables.length > 0;
-    return !tables.some(table => {
-      if (find(table.id) !== kept) return false;
-      const point = worldOf(table, layout);
-      return !!point && Math.hypot(point.x - here.x, point.z - here.z) <= table.width / 2 + 2.5 && !crossesAny(here, point, walls);
-    });
-  };
+  const outside = (item: FurnitureItem): boolean => offFloor(item) || beyondDrawnWall(item, layout, floorIndex);
   const crossing = seats.filter(outside);
   const inRoom = seats.filter(item => !outside(item));
   const chairless = fresh.filter(item => item.type === 'dining-table' && (

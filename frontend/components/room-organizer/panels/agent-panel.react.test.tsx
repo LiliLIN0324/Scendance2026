@@ -4597,4 +4597,53 @@ describe('event layout generation path', () => {
     expect(after.width).toBeCloseTo(23.8);
     expect(onApply).not.toHaveBeenCalled();
   }, 20000);
+
+  it('says the hall is full when the add-seats button cannot raise the seat count', async () => {
+    studioMock.connection = '项目已连接';
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const id = (n: number) => `00000000-0000-4000-8000-${String(300 + n).padStart(12, '0')}`;
+    const layout = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
+      objects: [], camera: 'overview', lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 9, z: 6 }, end: { x: 15, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 15, z: 6 }, end: { x: 15, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 15, z: 11 }, end: { x: 9, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 9, z: 11 }, end: { x: 9, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+        ],
+        openings: [], columns: [],
+      },
+      sources: [], dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-full' });
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌直径2.2米，80人，20米乘15米');
+    const card = await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 });
+    const before = document.getElementById('plan-proposal')?.textContent ?? '';
+    const beforeSeats = Number(before.match(/座位 (\d+) \/ 80/)?.[1]);
+    expect(beforeSeats).toBeGreaterThan(0);
+    expect(beforeSeats).toBeLessThan(80);
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    fireEvent.click(card);
+    await waitFor(() => {
+      const text = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(text).toContain('室内已经排满，这版加不进更多整桌');
+    }, { timeout: 15000 });
+    const after = document.getElementById('plan-proposal')?.textContent ?? '';
+    const afterSeats = Number(after.match(/座位 (\d+) \/ 80/)?.[1]);
+    expect(afterSeats).toBe(beforeSeats);
+    expect(after).not.toContain('可尝试调整物料规格');
+    expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+  }, 20000);
 });
