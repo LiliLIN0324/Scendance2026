@@ -4,7 +4,13 @@
 
 > 先读HANDOFF.md。
 
-2026-11-11 二十五轮 · 走查修复落地（P0×2+P1×2，`e1929bfe` 未推送）+ 多代理扫查 8 新发现：
+2026-11-11 二十六轮 · 扫查 P1 修复 + 推送部署（`66ba3b36` 已上 origin/main，Cloudflare Pages 自动构建）：
+- **交付链路三 P1 修复**：①「导出交接」/到场清单「导出」——`agent-panel.confirmExport` 现在先按「按当前记录重新开始」同一套判定**静默补对话核对冻结**（`freezeDialogueForExport`），不再报「当前对话或活动无法核对」；判定不过时给人话指引。②「打开资料」——`openMaterialsFromShare` 从误点 `.sc-cloud-trigger`（账户中心）改为 `setWorkbenchMode('layout')+showAgent('material')`，与对话侧 onOpenMaterials 同一去处。③**课桌 desk 进云端契约**——`domain.ts` materialIds+catalog 加 `desk`（1.8×0.6×0.75），`backend-adapter` rendererTypes/icons 补映射，`material-capabilities` 补课桌别名；此前所有课桌式活动都因 MATERIAL_NOT_SUPPORTED 永远「仅本机」。**注意：supabase functions 需另行 `deploy` 才能让后端认识 desk**（前端先上无回归：旧后端拒绝行为与现状相同）。
+- **归因备注**：root 套件的 config/hunyuan/guard 测试失败为并行抖动（单独跑全绿，两次运行失败集合不同），已在干净基线与本改动之间对照确认。
+- 验证：tsc 0 错；适配器+物料能力 63 例、根套件抽样全绿；已推送，线上复验见下一轮。
+- 上轮（二十五轮）：
+
+
 - **修复四件**（报告见 [docs/research/2026-11-11-线上走查-广州45人切片.md](docs/research/2026-11-11-线上走查-广州45人切片.md) 补充节）：①确认循环死锁——`brief-agent.ts` 新增 `splitConfirmationLead`，带内容确认（「确认，45人，每桌3人」）先答 pending 再理解剩余要求；agent-panel 确认轮次后清扫滞留队列。②门口净区检查——新增 `entrance-block-check.ts`，候选卡 `entranceWarning`（本地+云端候选，只提示不拦截）。③课桌式「每桌坐N人」N≥2 切官方 1.8m 桌/排距1.4/三桌一块（fallback+script 双路 plumbing，**缺省保持一人一套**），课桌式签到带宽 1.6→1.0m，缺口给「按这版排法最多 N 座（要 X）」；广州 12.9×7.1+45人每桌3人=15桌45座测试钉住。④场地尺寸变化后「宴会厅 A」样例高斯自动退场（只摘样例不摘用户自选）。
 - **验证**：tsc 0 错；12 套 389 例全绿。agent-panel.react 411 例失败在干净上游副本（`C:/mujing/upstream-pristine` worktree @7a9c8053，保留供归因）完全复现=既有 jsdom/WebGL 环境问题。
 - **多代理扫查新发现（未修，待排卡）**：交付链路三个 P1——「导出交接」/到场清单「导出」两段确认后不产出文件（「当前对话或活动无法核对，未生成交接文件」）；「打开资料」弹的是账户中心（绑定错面板）+账户中心报「物料"Desk"不在活动目录中，无法保存」；件数口径 25/26 不一致（门洞计否，疑与 Desk 目录登记同源）。P2/P3：活动恢复禁用（已知降级）、漫游角色加载超时、评审反馈 -0.00 显示与 Bingo 计数不同步、Esc 实际能关发布框（更正旧口径）。无异常：Bingo 体检能抓「过道偏窄0.50m」、评审落钉导出全流程、手机视口无溢出。
@@ -32,7 +38,7 @@
 
 2026-11-10 满铺底图与地图类型移植：把 PR#100（分支 cursor/map-type-switcher-dd23，e2788a3 + fa461de，13 文件 +562/−55）整体移植进本地工作区，与 11-09 未提交改动手工合流（scendance-workspace.tsx / amap-venue.test / room-builder / structure-builder / globals.css / 两个测试文件），新增 lib/ground-basemap.ts(.test)。顺手修掉 PR 上 4 个未决 Bugbot Medium：① style=8 不再当完整路网单独铺，两个拼图器（functions/api/amap-static.ts + tools/aholo/lux3d-dev-proxy.mjs）都改为 7 打底、8 叠透明注记；② 换层失败回退占位 SVG 不再算成功——已有对齐真图或人工换层时留旧图并亮「这一层暂时拉不到」（isPlaceholderSatellite 判定）；③ 「卫星贴地」开关加 basemapCoversGroundPlane 检查，窄边旧图可通过手动切换重试；④ 瓦片预算 3×12s 收成 2×8s，与客户端 25s abort 对齐。验证：6 个测试文件 73/73 通过（amap-venue 24 / workspace.react 26 / structure-satellite 8 / amap-pages-static 7 / room-builder 5 / ground-basemap 3）、typecheck 0 错；3199 代理杀旧重启后跑新代码（单例自动重启机制生效）。浏览器实测（西湖·平湖秋月 23.8×16.1m 场地）：地图类型菜单三源齐全；选卫星后贴地 URL 为 155m×155m 方片（=outdoorGroundSize，非窄边），切街道 1 同范围 style=7；style=8 合成路径代理直打 200。截图接口 busy 没存成图。PR#100 本身仍 Open 未合并、endtree 未 review；「合流方案另行执行」→ **已执行、销案**（见顶部 2026-11-10 二十三轮：03b0696 合流落本地 main、tag v4.9.0，gate 全绿后 15 提交已推 origin/main）。
 
-最后更新：2026-11-11（二十五轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-11（二十六轮 · 仓库同步收口+线上走查9发现；上一轮：二十三轮 · 户外 2D 规划评审稿定稿并拍板为下一版本；41 提交合流销案，gate 全绿后 15 提交已推 origin/main，tag v4.9.0 未推待确认；每日 09:00 自动化轮次定时任务已挂）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
