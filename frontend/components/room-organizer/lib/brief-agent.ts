@@ -13,6 +13,7 @@
  * 模型化路径：turn 函数是唯一接缝，后续接 Vercel AI SDK（选型见 docs/plans/agent-reference-study.md）
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
+import { resolveTableArrangement } from './table-seat-plan';
 import { classifyLocalLayout, formatArea, HEADCOUNT_MAX, layoutGenerateCommand, mentionsCircleSeating, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
 import type { LocalSeatingSpecs } from './local-seating-specs';
 import type { SeatingAllocation } from './seating-allocation';
@@ -57,6 +58,8 @@ export interface BriefMemory {
   layoutMode: LayoutMode;
   /** ring = 圆桌沿环/扇形摆；grid = 课桌行列。缺省沿用原方格餐桌。 */
   seatingShape?: 'ring' | 'grid' | undefined;
+  /** Table size or per-table headcount the user stated. The layout uses the derived seat count. */
+  banquetTable?: { shape?: 'round' | 'rect'; width?: number; depth?: number; peoplePerTable?: number; evidence: string } | undefined;
   /** 只有用户明确选择或确认后，才能把布局方式用于生成。 */
   layoutModeConfirmed?: boolean | undefined;
   /** 用户否定或尚未决定布置方式时，等待明确指定替代方式。 */
@@ -214,6 +217,17 @@ export function cloudBriefMessage(raw: string, memory: BriefMemory): string {
   if (memory.lengthM !== null && memory.widthM !== null) facts.push(`尺寸：${formatArea(memory.lengthM)} × ${formatArea(memory.widthM)} 米`);
   else if (memory.areaM2 !== null) facts.push(`面积：${formatArea(memory.areaM2)} 平方米（长宽未确认）`);
   if (memory.layoutModeConfirmed === true) facts.push(memory.layoutMode === 'desk-chair' ? '布置：课桌配椅' : memory.seatingShape === 'ring' ? '布置：圆桌围坐，沿环形或扇形摆，椅子绕桌，不要排成方格，中间留过道' : '布置：圆桌');
+  if (memory.layoutMode !== 'desk-chair' && (memory.seatingShape === 'ring' || memory.banquetTable?.shape)) {
+    const people = memory.banquetTable?.peoplePerTable ?? (memory.localSeatingAllocation?.status === 'shared_desk' ? memory.localSeatingAllocation.peoplePerDesk : null);
+    const plan = resolveTableArrangement({
+      shape: memory.banquetTable?.shape ?? 'round',
+      guests: memory.headcount,
+      width: memory.banquetTable?.width ?? null,
+      depth: memory.banquetTable?.depth ?? null,
+      peoplePerTable: people,
+    });
+    facts.push(plan.explanation);
+  }
   if(memory.localSeatingAllocation)facts.push(`桌椅人数关系的用户原话：${JSON.stringify(memory.localSeatingAllocation.evidence)}；${memory.localSeatingAllocation.status==='unknown'?'关系尚未确定，不能擅自改写。':'仅作用户需求，仍需检查方案。'}`);
   const specs=cloudSeatingSpecs(memory);
   if(specs){

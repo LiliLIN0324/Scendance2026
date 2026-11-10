@@ -100,15 +100,36 @@ describe('round-table ring', () => {
     const layout = plan.layouts.at(-1)!;
     const chairs = layout.floors[0]!.items.filter(item => item.name === '餐椅');
     const tables = layout.floors[0]!.items.filter(item => item.name === '圆桌');
-    expect(tables.length).toBeGreaterThanOrEqual(10);
-    expect(tables.every(item => item.name === '圆桌' && item.tableShape === 'round' && item.width === item.depth)).toBe(true);
+    expect(tables.every(item => item.name === '圆桌' && item.tableShape === 'round' && item.width === RING_TABLE_SIDE_M && item.depth === item.width)).toBe(true);
     expect(chairs.length).toBe(tables.length * RING_SEATS);
     roundTopOf(tables[0]!);
-    expect(plan.seats).toBe(80);
+    expect(plan.seats).toBe(chairs.length);
+    expect(plan.seats ?? 0).toBeGreaterThanOrEqual(80);
+    expect((plan.seats ?? 0) - RING_SEATS).toBeLessThan(80);
     const overlaps = collectViolations(layout).filter(violation => violation.code === 'BBOX_OVERLAP');
     expect(overlaps.filter(violation => /圆桌|餐椅/.test(violation.detail))).toEqual([]);
     const applied = applyLayoutCommandWithRefusals(applyLayoutCommand({ layout }), { layout: base });
     expect(completeLayoutError(applied)).toBeNull();
+    const wide = localPlan({
+      base,
+      floorIndex: 0,
+      widthM: 20,
+      depthM: 15,
+      variant: 0,
+      guests: 80,
+      layoutMode: 'dining',
+      seatingShape: 'ring',
+      table: { shape: 'round', width: 2.2 },
+      stage: false,
+      checkin: false,
+    });
+    const wideTables = wide.layouts.at(-1)!.floors[0]!.items.filter(item => item.name === '圆桌');
+    const wideChairs = wide.layouts.at(-1)!.floors[0]!.items.filter(item => item.name === '餐椅');
+    expect(wideTables[0]?.width).toBe(2.2);
+    expect(wideChairs.length / wideTables.length).toBeGreaterThan(RING_SEATS);
+    expect(wideTables.length).toBeLessThan(tables.length);
+    expect(collectViolations(wide.layouts.at(-1)!).filter(violation => violation.code === 'BBOX_OVERLAP' && /圆桌|餐椅/.test(violation.detail))).toEqual([]);
+    expect(completeLayoutError(applyLayoutCommandWithRefusals(applyLayoutCommand({ layout: wide.layouts.at(-1)! }), { layout: base }))).toBeNull();
   });
 });
 

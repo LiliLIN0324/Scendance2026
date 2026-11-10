@@ -1,7 +1,8 @@
 import { FURNITURE_CATALOG } from './constants';
-import { itemsOverlap, rotatedHalfExtents } from './geometry';
+import { rotatedHalfExtents } from './geometry';
 import type { FurnitureSet, FurnitureSetItem, SetItemSnapshot } from './furniture-sets';
-import type { FurnitureItem, Vec2 } from './types';
+import { DEFAULT_ROUND_DIAMETER_M, rectSeatLayout, roundSeatLayout } from './table-seat-plan';
+import type { Vec2 } from './types';
 
 export interface RingRect { x: number; z: number; w: number; d: number }
 
@@ -10,100 +11,75 @@ export interface RingRect { x: number; z: number; w: number; d: number }
  * diameter, so chairs must clear the box (confirm treats a touching box as
  * overlap) and therefore also clear the disc.
  */
-export const RING_TABLE_SIDE_M = 1.4;
-/** Eight seats is a normal banquet ring; six left a 20×15 room far short of 80. */
-export const RING_SEATS = 8;
-/** Air the footprints must keep. Confirm treats a touching box as overlap. */
-const CLEARANCE_M = 0.05;
+export const RING_TABLE_SIDE_M = DEFAULT_ROUND_DIAMETER_M;
+/** Seats the default 1.4 m round table can clear. Derived, not a fixed 8. */
+export const RING_SEATS = roundSeatLayout(RING_TABLE_SIDE_M).seats;
 
-function roundTableSnapshot(): SetItemSnapshot | undefined {
+function roundTableSnapshot(sideM: number): SetItemSnapshot | undefined {
   const table = FURNITURE_CATALOG.find(entry => entry.name === '圆桌' && entry.tableShape === 'round')
     ?? FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
   if (!table) return undefined;
-  return { ...table, width: RING_TABLE_SIDE_M, depth: RING_TABLE_SIDE_M, name: '圆桌', tableShape: 'round' };
+  return { ...table, width: sideM, depth: sideM, name: '圆桌', tableShape: 'round' };
 }
 
-function ringItems(radius: number): FurnitureItem[] {
-  const table = roundTableSnapshot();
-  const chair = FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
-  if (!table || !chair) return [];
-  const items: FurnitureItem[] = [{
-    ...table,
-    id: 'ring-table',
-    position: { x: 0, z: 0 },
-    rotation: 0,
-  }];
-  for (let index = 0; index < RING_SEATS; index++) {
-    const angle = -Math.PI / 2 + (2 * Math.PI * index) / RING_SEATS;
-    items.push({
-      ...chair,
-      id: `ring-chair-${index}`,
-      name: '餐椅',
-      position: { x: radius * Math.cos(angle), z: radius * Math.sin(angle) },
-      rotation: Math.atan2(-Math.cos(angle), -Math.sin(angle)),
-    });
-  }
-  return items;
+function diningChair() {
+  return FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
 }
 
-/** True when every chair box clears the table box and its neighbours, with air. */
-function ringClears(radius: number): boolean {
-  const items = ringItems(radius);
-  const table = items[0];
-  if (!table) return false;
-  const fatTable: FurnitureItem = { ...table, width: table.width + CLEARANCE_M * 2, depth: table.depth + CLEARANCE_M * 2 };
-  const chairs = items.slice(1);
-  for (let index = 0; index < chairs.length; index++) {
-    const chair = chairs[index]!;
-    if (itemsOverlap(fatTable, chair)) return false;
-    const fatChair: FurnitureItem = { ...chair, width: chair.width + CLEARANCE_M, depth: chair.depth + CLEARANCE_M };
-    for (let other = index + 1; other < chairs.length; other++) {
-      if (itemsOverlap(fatChair, chairs[other]!)) return false;
-    }
-  }
-  return true;
+/** Smallest radius whose chair boxes stay off this round table's collision square. */
+export function ringChairRadius(sideM = RING_TABLE_SIDE_M): number {
+  return roundSeatLayout(sideM).radius;
 }
 
-/** Smallest radius whose chair boxes stay off the round table's collision square. Cached. */
-export function ringChairRadius(): number {
-  let lo = RING_TABLE_SIDE_M / 2;
-  let hi = 2.2;
-  if (!ringClears(hi)) return hi;
-  for (let step = 0; step < 18; step++) {
-    const mid = (lo + hi) / 2;
-    if (ringClears(mid)) hi = mid;
-    else lo = mid;
-  }
-  let radius = Math.ceil(hi * 100) / 100;
-  while (radius < 2.4 && !ringClears(radius)) radius = Math.round((radius + 0.01) * 100) / 100;
-  return radius;
-}
-
-/** Round table with chairs on one circle, facing inward. Not the 4-corner dining grid. */
-export function ringDiningSet(): FurnitureSet {
-  const table = roundTableSnapshot();
-  const chair = FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
-  const radius = ringChairRadius();
+/** Round table with as many chairs as the diameter can clear. */
+export function ringDiningSet(spec?: { sideM?: number }): FurnitureSet {
+  const side = spec?.sideM && spec.sideM > 0 ? spec.sideM : RING_TABLE_SIDE_M;
+  const table = roundTableSnapshot(side);
+  const chair = diningChair();
+  const layout = roundSeatLayout(side);
   const items: FurnitureSetItem[] = [];
   if (table) {
-    items.push({
-      type: 'dining-table',
-      offset: { x: 0, z: 0 },
-      snapshot: table,
-    });
+    items.push({ type: 'dining-table', offset: { x: 0, z: 0 }, snapshot: table });
   }
   if (chair) {
-    for (let index = 0; index < RING_SEATS; index++) {
-      const angle = -Math.PI / 2 + (2 * Math.PI * index) / RING_SEATS;
+    for (const place of layout.chairs) {
       items.push({
         type: 'dining-chair',
-        offset: { x: radius * Math.cos(angle), z: radius * Math.sin(angle) },
-        rotation: Math.atan2(-Math.cos(angle), -Math.sin(angle)),
+        offset: { x: place.x, z: place.z },
+        rotation: place.rotation,
         snapshot: { ...chair, name: '餐椅' },
       });
     }
   }
   return { key: 'dining-ring', label: '圆桌围坐', icon: '🍽️', description: '圆桌围坐', items };
+}
+
+/** Rectangular banquet table. Seat count follows the length and width. */
+export function rectDiningSet(size: { width: number; depth: number }): FurnitureSet {
+  const catalog = FURNITURE_CATALOG.find(entry => entry.type === 'dining-table' && entry.tableShape !== 'round')
+    ?? FURNITURE_CATALOG.find(entry => entry.type === 'dining-table');
+  const chair = diningChair();
+  const layout = rectSeatLayout(size.width, size.depth);
+  const square = Math.abs(size.width - size.depth) < 0.15;
+  const items: FurnitureSetItem[] = [];
+  if (catalog) {
+    items.push({
+      type: 'dining-table',
+      offset: { x: 0, z: 0 },
+      snapshot: { ...catalog, width: size.width, depth: size.depth, name: square ? '方桌' : '长桌', tableShape: 'rect' },
+    });
+  }
+  if (chair) {
+    for (const place of layout.chairs) {
+      items.push({
+        type: 'dining-chair',
+        offset: { x: place.x, z: place.z },
+        rotation: place.rotation,
+        snapshot: { ...chair, name: '餐椅' },
+      });
+    }
+  }
+  return { key: 'dining-rect', label: square ? '方桌' : '长桌', icon: '🍽️', description: square ? '方桌' : '长桌', items };
 }
 
 export function setFootprint(items: readonly { position?: Vec2 | undefined; width: number; depth: number; rotation?: number | undefined }[]): { halfX: number; halfZ: number } {

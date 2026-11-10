@@ -6,6 +6,7 @@ import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requ
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
+import { resolveTableArrangement, type TableArrangement } from './table-seat-plan';
 import type { RoomLayout } from './types';
 
 /**
@@ -40,6 +41,11 @@ export interface LocalPlanInput {
   layoutMode?: 'dining' | 'desk-chair';
   /** ring = round tables on a loop. Omitted keeps the existing dining grid. */
   seatingShape?: 'ring' | 'grid';
+  /**
+   * Table size or people-per-table from the brief. Absent on a ring brief
+   * still resolves the default diameter; the compiler does not invent a count.
+   */
+  table?: { shape?: 'round' | 'rect'; width?: number | null; depth?: number | null; peoplePerTable?: number | null };
   stage?: boolean;
   checkin?: boolean;
 }
@@ -90,8 +96,27 @@ export function localPlan(input: LocalPlanInput): LocalPlanResult {
   return issues.length ? { ...result, blocked: [...new Set(issues)].join('；') } : result;
 }
 
+function arrangementFor(input: LocalPlanInput): TableArrangement | undefined {
+  if (input.layoutMode === 'desk-chair') return undefined;
+  const shape = input.table?.shape ?? (input.seatingShape === 'ring' ? 'round' : undefined);
+  if (!shape) return undefined;
+  return resolveTableArrangement({
+    shape,
+    guests: input.guests,
+    width: input.table?.width,
+    depth: input.table?.depth,
+    peoplePerTable: input.table?.peoplePerTable,
+  });
+}
+
+function withArrangement<T extends { summary?: string[] | undefined }>(result: T, arrangement: TableArrangement | undefined): T {
+  if (!arrangement) return result;
+  return { ...result, summary: [arrangement.explanation, ...(result.summary ?? [])] };
+}
+
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
-  const scriptPlan = scriptAttempt(input);
+  const arrangement = arrangementFor(input);
+  const scriptPlan = scriptAttempt(input, arrangement);
   const seated = (input.guests ?? 0) > 0;
 
   if (scriptPlan && !scriptPlan.blocked) {
@@ -102,11 +127,11 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     // denser. Run both, keep the one that seats more: a button that cannot change the result
     // must not be offered.
     if (input.seatPriority && input.guests) {
-      const fill = scriptAttempt({ ...input, guests: null });
-      const dense = fallbackPlan(input);
+      const fill = scriptAttempt({ ...input, guests: null }, arrangement);
+      const dense = fallbackPlan(input, arrangement);
       const options = [
-        fill && !fill.blocked ? { via: 'script' as const, proposal: fill as PlanProposal } : null,
-        dense.blocked ? null : { via: 'fallback' as const, proposal: dense },
+        fill && !fill.blocked ? { via: 'script' as const, proposal: withArrangement(fill, arrangement) } : null,
+        dense.blocked ? null : { via: 'fallback' as const, proposal: withArrangement(dense, arrangement) },
       ].filter((entry): entry is { via: 'script' | 'fallback'; proposal: PlanProposal } => !!entry)
         .sort((left, right) => (right.proposal.seats ?? 0) - (left.proposal.seats ?? 0));
       const best = options[0];
@@ -120,24 +145,24 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     // slot heuristic's. Compare instead of assuming the newer door is always better: a room
     // too shallow for a table set (8 × 6 with a stage) still deserves chairs.
     if (seated && seats === 0) {
-      const heuristic = fallbackPlan(input);
+      const heuristic = fallbackPlan(input, arrangement);
       if ((heuristic.seats ?? 0) > 0) {
         return { ...heuristic, via: 'fallback', fallbackReason: '脚本这一版一个座位都没排出来，改用了原来的摆放方式。' };
       }
     }
-    return { ...scriptPlan, via: 'script', summary: scriptPlan.summary };
+    return withArrangement({ ...scriptPlan, via: 'script', summary: scriptPlan.summary }, arrangement);
   }
 
-  const fallback = fallbackPlan(input);
-  return {
+  const fallback = fallbackPlan(input, arrangement);
+  return withArrangement({
     ...fallback,
     via: 'fallback',
     ...(scriptPlan?.blocked ? { fallbackReason: scriptPlan.blocked } : {}),
-  };
+  }, arrangement);
 }
 
 /** The original slot heuristic, kept whole behind one name. */
-function fallbackPlan(input: LocalPlanInput): PlanProposal {
+function fallbackPlan(input: LocalPlanInput, arrangement?: TableArrangement): PlanProposal {
   return proposePlan({
     base: input.base,
     floorIndex: input.floorIndex,
@@ -148,13 +173,14 @@ function fallbackPlan(input: LocalPlanInput): PlanProposal {
     ...(input.seatPriority !== undefined ? { seatPriority: input.seatPriority } : {}),
     ...(input.layoutMode ? { layoutMode: input.layoutMode } : {}),
     ...(input.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}),
+    ...(arrangement ? { tablePlan: arrangement } : {}),
     ...(input.stage !== undefined ? { stage: input.stage } : {}),
     ...(input.checkin !== undefined ? { checkin: input.checkin } : {}),
   });
 }
 
 /** The script door, isolated so a compiler refusal can never take down generation. */
-function scriptAttempt(input: LocalPlanInput): SceneScriptCompileResult | null {
+function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement): SceneScriptCompileResult | null {
   try {
     const script = sceneScriptFromBrief({
       widthM: input.widthM,
@@ -165,7 +191,12 @@ function scriptAttempt(input: LocalPlanInput): SceneScriptCompileResult | null {
       checkin: input.checkin ?? false,
       seed: input.variant >>> 0,
     });
-    return compileSceneScript(script, { base: input.base, floorIndex: input.floorIndex, ...(input.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}) });
+    return compileSceneScript(script, {
+      base: input.base,
+      floorIndex: input.floorIndex,
+      ...(input.seatingShape === 'ring' && arrangement?.shape !== 'rect' ? { seatingShape: 'ring' as const } : {}),
+      ...(arrangement ? { tablePlan: arrangement } : {}),
+    });
   } catch {
     return null;
   }
