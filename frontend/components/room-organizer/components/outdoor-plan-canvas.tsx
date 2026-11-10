@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
@@ -49,6 +49,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   defaultLayerVisibility,
   drawAccessLayer,
@@ -141,6 +142,19 @@ import {
   type TdtProbeLayer,
 } from '../lib/tdt-probe';
 import { planningIcon } from './outdoor-plan-icons';
+import { OneplanSticker } from './oneplan-stickers';
+import {
+  drawOneplanScaleSticker,
+  drawOneplanSticker,
+  facilitySticker,
+  nodeSticker,
+  planStickerDescriptors,
+  preloadOneplanStickers,
+  routeSticker,
+  subscribeOneplanStickerLoads,
+  workerSticker,
+  zoneSticker,
+} from '../lib/oneplan-stickers';
 import {
   PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_ICONS,
@@ -199,6 +213,13 @@ export interface OutdoorPlanCanvasProps {
   onViewChange?: (next: View) => void;
   /** H2-b：编辑提交回调（边界更新/顶点移动/新增分区/分区样式）。不传则只读浏览。 */
   onPlanChange?: (plan: SitePlanData) => void;
+  /**
+   * P2-c：图层栈与编辑浮窗的外挂宿主元素 id（左栏卡片）。传了则 portal 过去
+   * （inline 卡片样式，宿主不存在时自动回落画布内浮窗）；缺省浮窗留在画布内。
+   */
+  panelsHostId?: string;
+  /** P2-d：规划信息浮窗的独立宿主 id（两张卡分属左栏两个容器、显隐独立）。缺省跟随 panelsHostId。 */
+  infoPanelHostId?: string;
 }
 
 const TILE = 256;
@@ -291,6 +312,12 @@ interface PlanLocatableIssue {
   workerId?: string;
 }
 
+/** 浮窗宿主包装：宿主存在时 portal 过去（DOM 位置换到外部容器），否则原地渲染。 */
+function PanelPortal({ host, children }: { host: HTMLElement | null; children: React.ReactNode }): JSX.Element {
+  if (!host) return <>{children}</>;
+  return createPortal(children, host);
+}
+
 export default function OutdoorPlanCanvas({
   plan,
   source = 'osm',
@@ -299,7 +326,20 @@ export default function OutdoorPlanCanvas({
   onVisibilityChange,
   onViewChange,
   onPlanChange,
+  panelsHostId,
+  infoPanelHostId,
 }: OutdoorPlanCanvasProps) {
+  // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
+  // 查不到（左栏收起/未渲染）时 PanelPortal 自动回落画布内浮窗。
+  // 两卡分属两个容器：图层栈跟 panelsHostId，规划信息跟 infoPanelHostId（缺省同前）。
+  const [layerPanelHost, setLayerPanelHost] = useState<HTMLElement | null>(null);
+  const [infoPanelHost, setInfoPanelHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!panelsHostId && !infoPanelHostId) return undefined;
+    setLayerPanelHost(panelsHostId ? document.getElementById(panelsHostId) : null);
+    setInfoPanelHost((infoPanelHostId ?? panelsHostId) ? document.getElementById(infoPanelHostId ?? panelsHostId ?? '') : null);
+    return () => { setLayerPanelHost(null); setInfoPanelHost(null); };
+  }, [panelsHostId, infoPanelHostId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
   const planCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -579,6 +619,16 @@ export default function OutdoorPlanCanvas({
         { ctx: planCtx, viewport },
         current.zones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
       );
+      // H4-b：分区语义贴纸（OnePlan 地图符号/面域底形）画在名称上方，不压名称文本；
+      // 命中测试仍按多边形判定（drawZoneLayer 之外无改动）。
+      for (const zone of current.zones) {
+        if (zone.polygon.length < 2) continue;
+        const sticker = zoneSticker(zone.semantic);
+        if (!sticker) continue;
+        const a = planPointToPixel(zone.polygon[0]!, viewport);
+        const b = planPointToPixel(zone.polygon[1]!, viewport);
+        drawOneplanSticker(planCtx, sticker, (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, 16, { alpha: 0.95 });
+      }
     }
     if (isLayerVisible(vis, 'facility')) {
       const warningFacilityIds = new Set(
@@ -589,12 +639,41 @@ export default function OutdoorPlanCanvas({
         current.facilities.map(f => ({ ...f, warning: warningFacilityIds.has(f.id) })),
         { selectedId: selectedFacilityRef.current },
       );
+      // H4-b：设施贴纸。scale 类按米制占地矩形拉伸（真实尺度，底形 + 前景线稿，旋转矩阵同
+      // drawFacilityLayer）；点位类（医疗/安保/垃圾）在占地中心画符号。不改变命中矩形与选中态
+      // （白色选中外圈画在矩形外侧，贴纸不覆盖）。
+      const metersPerPx = planMetersPerPixel(viewport);
+      for (const facility of current.facilities) {
+        const sticker = facilitySticker(facility.templateId);
+        if (!sticker) continue;
+        const pt = planPointToPixel(facility.position, viewport);
+        const fw = Math.max(4, facility.size.width / metersPerPx);
+        const fh = Math.max(4, facility.size.depth / metersPerPx);
+        if (sticker.kind === 'scale') {
+          // 最小 12px 保证贴纸可辨（与 drawFacilityLayer 的 4px 下限同思路，只为视觉兜底）。
+          drawOneplanScaleSticker(
+            planCtx, sticker.slug, pt.x, pt.y,
+            Math.max(fw, 12), Math.max(fh, 12), facility.rotationDeg, { alpha: 0.9 },
+          );
+        } else {
+          const size = Math.max(16, Math.min(28, Math.min(fw, fh) * 0.9));
+          drawOneplanSticker(planCtx, sticker, pt.x, pt.y, size, { alpha: 0.95 });
+        }
+      }
     }
     if (isLayerVisible(vis, 'route')) {
       drawRouteLayer(
         { ctx: planCtx, viewport },
         routes.map(r => ({ ...r, selected: r.id === selectedRouteRef.current })),
       );
+      // H4-b：动线类型徽标（画在中点顶点下方；线型/箭头/选中白描边仍由 drawRouteLayer 负责）。
+      for (const route of routes) {
+        if (route.points.length < 2) continue;
+        const sticker = routeSticker(route.kind);
+        if (!sticker) continue;
+        const mid = planPointToPixel(route.points[Math.floor(route.points.length / 2)]!, viewport);
+        drawOneplanSticker(planCtx, sticker, mid.x, mid.y + 15, 13, { alpha: 0.95 });
+      }
     }
     if (isLayerVisible(vis, 'worker')) {
       const warningWorkerIds = new Set(
@@ -608,6 +687,13 @@ export default function OutdoorPlanCanvas({
           warning: warningWorkerIds.has(w.id),
         })),
       );
+      // H4-b：人员岗位贴纸（画在圆点上方，避开圆点与「岗位 ×人数」文本）。
+      for (const worker of current.workers) {
+        const sticker = workerSticker(worker.role);
+        if (!sticker) continue;
+        const pt = planPointToPixel(worker.position, viewport);
+        drawOneplanSticker(planCtx, sticker, pt.x, pt.y - 13, 14, { alpha: 0.95 });
+      }
     }
     if (isLayerVisible(vis, 'access')) {
       const unconnectedIds = new Set(nodeIssuesRef.current.map(i => i.nodeId));
@@ -619,6 +705,20 @@ export default function OutdoorPlanCanvas({
           unconnected: unconnectedIds.has(n.id),
         })),
       );
+      // H4-b：出入口贴纸居中替换菱形符号；未连接警示点在贴纸之后补画（视觉提示不被盖住），
+      // 选中白圈半径 9.5 > 贴纸半宽 7，仍可见。
+      for (const node of nodes) {
+        const sticker = nodeSticker(node.kind);
+        if (!sticker) continue;
+        const pt = planPointToPixel(node.position, viewport);
+        drawOneplanSticker(planCtx, sticker, pt.x, pt.y, 14, { alpha: 0.95 });
+        if (unconnectedIds.has(node.id)) {
+          planCtx.beginPath();
+          planCtx.arc(pt.x + 6, pt.y - 6, 3, 0, Math.PI * 2);
+          planCtx.fillStyle = '#c0392b';
+          planCtx.fill();
+        }
+      }
     }
     // H3-a 固定测量标注（测量图层在最上层；隐藏测量层不影响数据与统计）。
     if (isLayerVisible(vis, 'measure')) {
@@ -666,6 +766,14 @@ export default function OutdoorPlanCanvas({
       }
     }
   }, []);
+
+  // H4-b：OnePlan 贴纸是异步图片——加载完成/失败后补一次重绘，避免首帧缺图标后不再补画。
+  useEffect(() => subscribeOneplanStickerLoads(() => draw()), [draw]);
+
+  // H4-b：规划变化时预取本屏用到的贴纸（失败静默，绘制时回落到既有 Lucide 图标）。
+  useEffect(() => {
+    preloadOneplanStickers(planStickerDescriptors(plan));
+  }, [plan]);
 
   // zoneSemantic 同步给稳定 draw()：单独 ref，避免把语义塞进 draw 依赖。
   const zoneSemanticRef = useRef<PlanningZoneSemantic>(zoneSemantic);
@@ -1549,7 +1657,19 @@ export default function OutdoorPlanCanvas({
     || (row.kind === 'worker' && row.id === selectedWorkerId);
   // 面板内点击不再冒泡到画布（否则勾选/选模板/点按钮会在面板对应画布位置误加草稿点或放置实体）。
   const stopPanelMouse = (event: React.MouseEvent) => event.stopPropagation();
-  const panelStyle: React.CSSProperties = {
+  const panelInline = !!(layerPanelHost || infoPanelHost);
+  const panelStyle: React.CSSProperties = panelInline ? {
+    position: 'relative',
+    zIndex: 3,
+    background: PLANNING_SURFACE.panelBg,
+    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+    borderRadius: PLANNING_RADIUS.md,
+    padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
+    color: PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.panel,
+    minWidth: 0,
+    pointerEvents: 'auto',
+  } : {
     position: 'absolute',
     right: PLANNING_SPACING.sm,
     top: PLANNING_SPACING.sm,
@@ -1567,8 +1687,18 @@ export default function OutdoorPlanCanvas({
     overflowY: 'auto',
   };
   const sectionTitle: React.CSSProperties = { marginTop: PLANNING_SPACING.sm, marginBottom: PLANNING_SPACING.xs, fontWeight: 600, opacity: 0.9 };
-  // H3-c 规划信息面板（左栏常驻）：与右栏编辑面板同源样式，互不遮挡。
-  const infoPanelStyle: React.CSSProperties = {
+  const infoPanelStyle: React.CSSProperties = panelInline ? {
+    position: 'relative',
+    zIndex: 3,
+    background: PLANNING_SURFACE.panelBg,
+    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+    borderRadius: PLANNING_RADIUS.md,
+    padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
+    color: PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.panel,
+    minWidth: 0,
+    pointerEvents: 'auto',
+  } : {
     position: 'absolute',
     left: PLANNING_SPACING.sm,
     top: PLANNING_SPACING.sm,
@@ -1680,6 +1810,8 @@ export default function OutdoorPlanCanvas({
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
 
       {/* H3-c 规划信息面板（左栏常驻）：总览 / 清单 / 问题 / 图例，只读也可用。 */}
+      {/* H3-c 规划信息面板：浮窗在画布内；传 infoPanelHostId 且宿主存在时移到外部（左栏卡片）。 */}
+      <PanelPortal host={infoPanelHost}>
       <div ref={infoPanelRef} style={infoPanelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
         <button
           type="button"
@@ -1818,10 +1950,15 @@ export default function OutdoorPlanCanvas({
                   <div key={group.title}>
                     <div style={sectionTitle}>{group.title}</div>
                     {group.entries.map(entry => {
-                      const Icon = planningIcon(entry.icon);
                       return (
                         <div key={entry.label} data-testid="legend-entry" style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: 2 }}>
-                          <Icon size={PLANNING_ICON_SIZES.legend} color={entry.swatch} strokeWidth={2} />
+                          {/* H4-b：能对上 OnePlan 贴纸的条目用真实 SVG，其余/缺图回落 Lucide（entry.icon）。 */}
+                          <OneplanSticker
+                            sticker={entry.sticker ?? null}
+                            fallbackIcon={entry.icon}
+                            color={entry.swatch}
+                            title={entry.label}
+                          />
                           <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: entry.swatch, display: 'inline-block' }} />
                           <span style={{ flex: 1 }}>{entry.label}</span>
                           <span>× {entry.count}</span>
@@ -1840,7 +1977,9 @@ export default function OutdoorPlanCanvas({
           </>
         )}
       </div>
+      </PanelPortal>
 
+      <PanelPortal host={layerPanelHost}>
       <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
         <button
           type="button"
@@ -2375,6 +2514,7 @@ export default function OutdoorPlanCanvas({
           </>
         )}
       </div>
+      </PanelPortal>
     </div>
   );
 }
