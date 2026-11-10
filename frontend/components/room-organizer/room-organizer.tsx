@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Boxes, Globe, Info, Layers, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Box, Boxes, Globe, Info, Layers, LayoutGrid, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -164,7 +164,6 @@ import { AgentChatBridge } from './panels/agent-chat-bridge';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
-import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
 /** 户外左栏卡片的三个页签：图层栈 / 规划信息 / 物件库（P2-h 加了物件库）。 */
@@ -3728,7 +3727,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   data-tip="空间"
                   onClick={() => toggleAgent('space')}
                 >
-                  <RailAvatar form="cube" size={28} />
+                  <LayoutGrid size={26} aria-hidden="true" />
                   <RailLaneDot lane="space" open={isLaneOpen('space')}/>
                   <span className="sc-rail-label" aria-hidden="true">空间</span>
                 </button>
@@ -3743,7 +3742,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                   data-tip="物料"
                   onClick={() => toggleAgent('material')}
                 >
-                  <RailAvatar form="pyramid" size={28} />
+                  <Box size={26} aria-hidden="true" />
                   <RailLaneDot lane="material" open={isLaneOpen('material')}/>
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
