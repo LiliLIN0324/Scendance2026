@@ -97,6 +97,54 @@ describe('outdoor plan canvas core (H2-a)', () => {
   });
 });
 
+/* ---------------- H3-c 锚点投影（真实锚点 ≠ 视口中心） ---------------- */
+
+describe('plan viewport anchor projection (H3-c 修复)', () => {
+  /** 锚点在视口中心西南约 500 m / 256 m：规划层应整体偏移而不是钉死在中心。 */
+  const anchored: PlanViewport = {
+    lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800,
+    anchorLng: 120.1460368, anchorLat: 30.2521924,
+  };
+
+  it('offsets the ENU origin by the anchor-vs-center mercator delta', () => {
+    const origin = planPointToPixel({ x: 0, y: 0 }, anchored);
+    // 锚点在视口中心以东 → 原点渲染在中心右侧；锚点更南 → 原点渲染在中心下方。
+    expect(origin.x).toBeGreaterThan(anchored.canvasW / 2);
+    expect(origin.y).toBeGreaterThan(anchored.canvasH / 2);
+  });
+
+  it('keeps meters-per-pixel scaling unaffected by the anchor offset', () => {
+    const metersPerPx = planMetersPerPixel(anchored);
+    const east = planPointToPixel({ x: metersPerPx * 10, y: 0 }, anchored);
+    const origin = planPointToPixel({ x: 0, y: 0 }, anchored);
+    expect(east.x - origin.x).toBeCloseTo(10, 6);
+  });
+
+  it('round-trips pixels back to ENU metres with the anchor offset applied', () => {
+    const p = { x: 64.25, y: -30.5 };
+    const px = planPointToPixel(p, anchored);
+    const back = planPixelToPoint(px, anchored);
+    expect(back.x).toBeCloseTo(p.x, 6);
+    expect(back.y).toBeCloseTo(p.y, 6);
+  });
+
+  it('renders identical output to the legacy behavior when the view center equals the anchor', () => {
+    const same: PlanViewport = {
+      lng: 120.1460368, lat: 30.2521924, zoom: 16, canvasW: 1200, canvasH: 800,
+      anchorLng: 120.1460368, anchorLat: 30.2521924,
+    };
+    const pt = planPointToPixel({ x: 12.5, y: 8 }, same);
+    expect(pt.x).toBeCloseTo(same.canvasW / 2 + 12.5 / planMetersPerPixel(same), 6);
+    expect(pt.y).toBeCloseTo(same.canvasH / 2 - 8 / planMetersPerPixel(same), 6);
+  });
+
+  it('stays backward compatible when anchor fields are omitted (旧调用方)', () => {
+    const legacy = planPointToPixel({ x: 0, y: 0 }, view);
+    expect(legacy.x).toBeCloseTo(view.canvasW / 2, 3);
+    expect(legacy.y).toBeCloseTo(view.canvasH / 2, 3);
+  });
+});
+
 /* ---------------- H2-c 设施放置绘制（stub ctx 捕获调用） ---------------- */
 
 interface CtxCapture {

@@ -9,6 +9,9 @@
  * - 2D 平面北向上：ENU(x 东, y 北) → 屏幕 (x, -y)（屏幕 y 向下）。
  * - 底图是 EPSG:3857 墨卡托：锚点经纬度先转墨卡托像素，ENU 米按该纬度
  *   每像素米数换算成像素偏移，两者相加即实体屏幕位置。
+ * - 视口中心是「相机」，ENU 原点（plan.anchor）是「图纸钉」：PlanViewport.anchorLng/
+ *   anchorLat 传真实锚点后，平移/定位真实移动规划层（H3-c 修复：旧版把视口中心
+ *   当锚点，原点恒钉在画布中心，平移只滑底图；视口=锚点时两种口径渲染逐像素一致）。
  * - 派生量（面积/长度）仍从 site-plan 的米制几何现算，画布只做投影不产生真值。
  */
 
@@ -30,6 +33,13 @@ export interface PlanViewport {
   zoom: number;
   canvasW: number;
   canvasH: number;
+  /**
+   * ENU 原点（plan.anchor）的地理位置（H3-c）：缺省按视口中心处理（旧调用方兼容，
+   * 行为不变）。传入后平移/定位才会真实移动规划层——修复 H2-a 以来「原点恒钉在
+   * 画布中心、平移只滑底图」的投影缺陷（视口中心=锚点时渲染逐像素不变）。
+   */
+  anchorLng?: number;
+  anchorLat?: number;
 }
 
 /** ENU 米制点 → 画布 CSS 像素点（含 y 轴翻转：北向上）。 */
@@ -52,15 +62,17 @@ export function planPixelToPoint(px: { x: number; y: number }, viewport: PlanVie
   };
 }
 
-/** 锚点（ENU 原点）的画布像素位置：中心像素 + (0,0) 相对中心的偏移。 */
+/** 锚点（ENU 原点）的画布像素位置：锚点墨卡托像素 - 视口中心墨卡托像素 + 中心偏移。 */
 function planAnchorPixel(viewport: PlanViewport): { x: number; y: number } {
   const world = 2 ** viewport.zoom * 256;
   const centerPx = (viewport.lng + 180) / 360 * world;
   const latRad = viewport.lat * Math.PI / 180;
   const centerPy = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * world;
-  const anchor = enuToLngLat(0, 0, viewport.lng, viewport.lat);
-  const anchorPx = (anchor.lng + 180) / 360 * world;
-  const anchorLatRad = anchor.lat * Math.PI / 180;
+  // H3-c：优先用真实锚点（plan.anchor）；缺省回落视口中心（旧调用方行为不变）。
+  const anchorLng = viewport.anchorLng ?? viewport.lng;
+  const anchorLat = viewport.anchorLat ?? viewport.lat;
+  const anchorPx = (anchorLng + 180) / 360 * world;
+  const anchorLatRad = anchorLat * Math.PI / 180;
   const anchorPy = (1 - Math.log(Math.tan(anchorLatRad) + 1 / Math.cos(anchorLatRad)) / Math.PI) / 2 * world;
   return {
     x: anchorPx - centerPx + viewport.canvasW / 2,
