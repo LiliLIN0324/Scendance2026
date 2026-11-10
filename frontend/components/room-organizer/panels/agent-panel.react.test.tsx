@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import * as localPlanModule from '../lib/local-plan';
 import { STORAGE_KEY } from '../lib/constants';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
@@ -4598,11 +4599,17 @@ describe('event layout generation path', () => {
     expect(onApply).not.toHaveBeenCalled();
   }, 20000);
 
-  it('says the hall is full when the add-seats button cannot raise the seat count', async () => {
+  it('adds the full-hall sentence from the card snapshot when the planner repeats 66 seats', async () => {
+    // The planner reply never contains the full-hall sentence and does not set interiorFull.
+    // The sentence can only be prepended in runLocal from the seat count snapshotted in
+    // runGeneration before dropProposal. Ignoring that snapshot leaves the materials line
+    // and the add-seats button on the card.
     studioMock.connection = '项目已连接';
+    const plannerText = '这间厅按 Ø1.60 米这版坐下 66 人。放下 6 桌、66 座，离 80 人还差 14。没有按满员桌数确认。';
+    expect(plannerText).not.toContain('室内已经排满');
+    expect(plannerText).not.toContain('加不进更多');
     const onApply = vi.fn();
     const onPreview = vi.fn();
-    const id = (n: number) => `00000000-0000-4000-8000-${String(300 + n).padStart(12, '0')}`;
     const layout = backendSceneToLayout({
       schemaVersion: 2,
       venue: {
@@ -4610,40 +4617,47 @@ describe('event layout generation path', () => {
         polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
       },
       objects: [], camera: 'overview', lighting: 'neutral',
-      structure: {
-        walls: [
-          { id: id(1), start: { x: 9, z: 6 }, end: { x: 15, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-          { id: id(2), start: { x: 15, z: 6 }, end: { x: 15, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-          { id: id(3), start: { x: 15, z: 11 }, end: { x: 9, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-          { id: id(4), start: { x: 9, z: 11 }, end: { x: 9, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-        ],
-        openings: [], columns: [],
-      },
+      structure: { walls: [], openings: [], columns: [] },
       sources: [], dimensions: [],
-    }, { name: '西湖·平湖秋月', projectId: 'pinghu-full' });
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-66' });
+    const spy = vi.spyOn(localPlanModule, 'localPlan').mockImplementation(input => ({
+      layouts: [input.base],
+      added: 0, removing: 0, keptLocked: 0, dropped: 0,
+      overlapCount: 0, overlapNames: [],
+      blocked: plannerText,
+      guests: 80,
+      seats: 66,
+      via: 'fallback',
+      ...(input.seatPriority ? { seatPriority: true } : {}),
+    }));
     state.layout = layout;
-    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
-    send('圆桌直径2.2米，80人，20米乘15米');
-    const card = await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 });
-    const before = document.getElementById('plan-proposal')?.textContent ?? '';
-    const beforeSeats = Number(before.match(/座位 (\d+) \/ 80/)?.[1]);
-    expect(beforeSeats).toBeGreaterThan(0);
-    expect(beforeSeats).toBeLessThan(80);
-    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
-    fireEvent.click(card);
-    await waitFor(() => {
-      const text = document.getElementById('plan-proposal')?.textContent ?? '';
-      expect(text).toContain('室内已经排满，这版加不进更多整桌');
-    }, { timeout: 15000 });
-    const after = document.getElementById('plan-proposal')?.textContent ?? '';
-    const afterSeats = Number(after.match(/座位 (\d+) \/ 80/)?.[1]);
-    expect(afterSeats).toBe(beforeSeats);
-    expect(after).not.toContain('可尝试调整物料规格');
-    expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
-    expect(onApply).not.toHaveBeenCalled();
-    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
-    expect(preview.width).toBeCloseTo(23.8);
-    expect(preview.height).toBeCloseTo(16.1);
+    try {
+      render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+      send('圆桌直径2.2米，80人，20米乘15米');
+      const add = await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 });
+      const before = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(before).toContain('座位 66 / 80');
+      expect(before).not.toContain('室内已经排满');
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      fireEvent.click(add);
+      await waitFor(() => {
+        expect(document.getElementById('plan-proposal')?.textContent ?? '').toContain('室内已经排满，这版加不进更多整桌');
+      }, { timeout: 15000 });
+      const after = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(after).toContain('座位 66 / 80');
+      expect(after).not.toContain('可尝试调整物料规格');
+      expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      expect(onApply).not.toHaveBeenCalled();
+      const seatPass = spy.mock.calls.find(call => call[0]?.seatPriority === true);
+      expect(seatPass).toBeTruthy();
+      expect(spy.mock.results.at(-1)?.value.blocked).toBe(plannerText);
+      expect(spy.mock.results.at(-1)?.value.interiorFull).toBeUndefined();
+      const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+      expect(preview.width).toBeCloseTo(23.8);
+      expect(preview.height).toBeCloseTo(16.1);
+    } finally {
+      spy.mockRestore();
+    }
   }, 20000);
 });
