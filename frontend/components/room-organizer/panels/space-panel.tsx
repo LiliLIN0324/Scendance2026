@@ -6,7 +6,7 @@ import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { isUntouched } from '../lib/restore-point';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
-import { registerLocalScans } from '../lib/local-scans';
+import { registerCloudScans, registerLocalScans } from '../lib/local-scans';
 import { EnvironmentPreview } from './environment-preview';
 import { LibraryChat } from './library-chat';
 import { SceneChat } from './scene-chat';
@@ -118,11 +118,11 @@ export function SpacePanel({
     else setConfirm(true);
   };
   const card = variant === 'card';
-  // 本机扫描登记在浏览器的来源隔离存储里（127.0.0.1 与 localhost 各存各的），换来源就丢；
-  // 文件才是本机的事实，所以每次开面板按文件索引重新登记一次。
+  // 扫描登记在浏览器的来源隔离存储里（127.0.0.1 与 localhost 各存各的），换来源就丢；
+  // 文件才是事实，所以每次开面板先登记本机文件、再用云端副本补缺，两边都不漏。
   const [, refreshScanList] = useState(0);
   useEffect(() => {
-    if (registerLocalScans() > 0) refreshScanList(value => value + 1);
+    if (registerLocalScans() + registerCloudScans() > 0) refreshScanList(value => value + 1);
   }, []);
   // 真实场地 = 扫描库里已重建好的这一场；每次渲染重读，刚重建完的场立刻出现。
   const scans = listScannedVenues();
@@ -193,7 +193,7 @@ export function SpacePanel({
               <button type="button" aria-pressed={source === 'project'} onClick={() => setSource('project')}>本活动</button>
               <button type="button" aria-pressed={source === 'samples'} onClick={() => setSource('samples')}>示例</button>
               <button type="button" aria-pressed={source === 'templates'} onClick={() => setSource('templates')}>模板</button>
-              <button type="button" aria-pressed={source === 'scans'} onClick={() => setSource('scans')}>本机扫描</button>
+              <button type="button" aria-pressed={source === 'scans'} onClick={() => setSource('scans')}>实景扫描</button>
             </nav>
             {source === 'project' && <p className="sc-space-source-note">{hasBoundary || layout.researchArea ? '场景可单独预览，地图位置未校准' : '这个活动已加入的场景'}</p>}
             {source === 'scans' && <p className="sc-space-source-note">这台电脑上的扫描，可加入不同活动</p>}
@@ -203,7 +203,7 @@ export function SpacePanel({
             {(card || scans.length > 0) && <ScanList className={card ? 'sc-space-library-details' : 'sc-scan-options'}
               {...(card ? { 'data-space-source': 'scans', open: source === 'scans', hidden: source !== 'scans' } : {})}>
                 {card && <summary>我的实景扫描 · {scans.length}</summary>}
-                {scans.length === 0 && <p className="sc-note">本机还没有实景扫描。拍摄后可在这里查看。</p>}
+                {scans.length === 0 && <p className="sc-note">还没有实景扫描。拍摄后可在这里查看。</p>}
                 {/* 画面优先：截过止帧的排成大图，还没打开过的收成一行行索引，不拿同一句话填满每张卡。 */}
                 {framedScans.length > 0 && <ul className="sc-scan-frames" aria-label="有画面的真实场地">
                   {framedScans.map(venue => {
@@ -229,8 +229,8 @@ export function SpacePanel({
                   })}
                 </ul>}
                 {plainScans.length > 0 && <div className="sc-scan-plain">
-                  {framedScans.length > 0 && <p className="sc-scan-plain-label">其它本机扫描 · {plainScans.length}</p>}
-                  <ul aria-label="其它本机扫描">
+                  {framedScans.length > 0 && <p className="sc-scan-plain-label">其它实景扫描 · {plainScans.length}</p>}
+                  <ul aria-label="其它实景扫描">
                     {plainScans.map(venue => {
                       const active = venue.assetId === currentScanId;
                       const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
