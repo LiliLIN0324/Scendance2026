@@ -49,6 +49,18 @@ export const PLANNING_ROUTE_KIND_COLORS = {
 export type PlanningRouteKind = keyof typeof PLANNING_ROUTE_KIND_COLORS;
 
 /**
+ * 冲突/缺失标记色（H3-b）：冲突红 / 缺失橙 / 待核实灰。画布可定位标记与面板
+ * 问题清单共用同一组色，与既有警示红 #c0392b 同源。全为 #rrggbb 小写。
+ */
+export const PLANNING_CONFLICT_COLORS = {
+  conflict: '#c0392b',
+  missing: '#e67e22',
+  unverified: '#8b9aa6',
+} as const;
+
+export type PlanningConflictStatus = keyof typeof PLANNING_CONFLICT_COLORS;
+
+/**
  * 分区语义默认色（H2-b）。覆盖 SitePlan 契约全部九类语义（含卡片「六类」主语义），
  * 分区未显式指定 color 时按语义取默认；医疗红取警示语义，舞台沿用设施暖色系。
  * 全为 #rrggbb 小写，符合 SitePlan 颜色约束。

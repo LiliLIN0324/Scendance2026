@@ -40,6 +40,7 @@ import {
   defaultLayerVisibility,
   drawAccessLayer,
   drawBoundaryLayer,
+  drawConflictMarkers,
   drawDraftLayer,
   drawFacilityGhost,
   drawFacilityLayer,
@@ -57,6 +58,11 @@ import {
   type LayerVisibility,
   type PlanViewport,
 } from '../lib/outdoor-plan-canvas';
+import {
+  PLAN_CONFLICT_CATEGORY_LABELS,
+  planConflictIssues,
+  type PlanConflictIssue,
+} from '../lib/site-plan-conflicts';
 import {
   PLAN_ISSUE_LIST_LIMIT,
   PLAN_MIN_VERTEX_GAP_M,
@@ -111,6 +117,7 @@ import {
   type TdtProbeLayer,
 } from '../lib/tdt-probe';
 import {
+  PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_LABELS,
   PLANNING_LABELS,
   PLANNING_LAYER_COLORS,
@@ -237,6 +244,8 @@ export default function OutdoorPlanCanvas({
   const measureKindRef = useRef<PlanMeasureKind>('distance');
   const measureDraftRef = useRef<PlanPoint[]>([]);
   const measureCursorRef = useRef<PlanPoint | null>(null);
+  // H3-b 冲突/缺失：可定位标记（规则检查输出，恒在业务层之上）。
+  const conflictIssuesRef = useRef<PlanConflictIssue[]>([]);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
@@ -263,6 +272,7 @@ export default function OutdoorPlanCanvas({
   const [historyCount, setHistoryCount] = useState(0);
   const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
+  const [conflictIssues, setConflictIssues] = useState<PlanConflictIssue[]>([]);
 
   function setMode(next: PlanningEditMode) {
     modeRef.current = next;
@@ -330,6 +340,8 @@ export default function OutdoorPlanCanvas({
     setNodeIssues(nodeIssuesRef.current);
     workerIssuesRef.current = planWorkerIssues(plan);
     setWorkerIssues(workerIssuesRef.current);
+    conflictIssuesRef.current = planConflictIssues(plan);
+    setConflictIssues(conflictIssuesRef.current);
     // 选中实体被外层删掉时静默取消选中，避免面板悬挂引用。
     if (selectedFacilityRef.current && !plan.facilities.some(f => f.id === selectedFacilityRef.current)) {
       selectedFacilityRef.current = null;
@@ -481,6 +493,10 @@ export default function OutdoorPlanCanvas({
     if (isLayerVisible(vis, 'measure')) {
       drawMeasureLayer({ ctx: planCtx, viewport }, current.measurements ?? []);
     }
+
+    // H3-b 冲突/缺失可定位标记：规则检查输出，恒画在业务层之上（不随图层隐藏），
+    // 点击命中判定由组件按同半径处理（定位到关联动线）。
+    drawConflictMarkers({ ctx: planCtx, viewport }, conflictIssuesRef.current);
 
     // 3) 绘制草稿（画边界/画分区）：≥3 点后闭合预览；形状非法（自交）画红色。
     const activeMode = modeRef.current;
@@ -827,6 +843,17 @@ export default function OutdoorPlanCanvas({
       }
     }
     return best?.id ?? null;
+  }
+
+  /** H3-b 命中检测：最近的冲突/缺失标记（与绘制半径一致，标记恒在业务层之上）。 */
+  function nearestConflictAt(px: { x: number; y: number }): PlanConflictIssue | null {
+    let best: { issue: PlanConflictIssue; d: number } | null = null;
+    for (const issue of conflictIssuesRef.current) {
+      const pt = planPointToPixel(issue.at, currentViewport());
+      const d = Math.hypot(pt.x - px.x, pt.y - px.y);
+      if (d <= 10 && (best === null || d < best.d)) best = { issue, d };
+    }
+    return best?.issue ?? null;
   }
 
   /** 动线端点吸附：SNAP 距离内的最近节点，返回 {nodeId, position} 或 null。 */
@@ -1193,10 +1220,22 @@ export default function OutdoorPlanCanvas({
         selectNode(drag.id);
         return;
       }
-      // H2-c/H2-d：浏览模式单击命中即选中（节点 > 人员 > 路线 > 设施），空白取消全部选中。
+      // H2-c/H2-d：浏览模式单击命中即选中（冲突标记 > 节点 > 人员 > 路线 > 设施），空白取消全部选中。
       if (down && onPlanChange) {
         const hit = eventPlanPoint(event);
         if (hit && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) <= CLICK_MAX_MOVE_PX) {
+          // H3-b：冲突/缺失标记恒在业务层之上，先于实体命中；点击定位到关联动线。
+          const conflict = nearestConflictAt(hit.px);
+          if (conflict) {
+            const related = conflict.routeIds[0];
+            if (related) {
+              selectRoute(related);
+              setEditMessage(`已定位「${PLAN_CONFLICT_CATEGORY_LABELS[conflict.category]}」：${conflict.message}`);
+            } else {
+              setEditMessage(`${PLAN_CONFLICT_CATEGORY_LABELS[conflict.category]}：${conflict.message}`);
+            }
+            return;
+          }
           const hitNode = nearestNodeIdAt(hit.px);
           if (hitNode) { selectNode(hitNode); return; }
           const hitWorker = nearestWorkerIdAt(hit.px);
@@ -1244,9 +1283,20 @@ export default function OutdoorPlanCanvas({
   }
 
   const readOnly = !onPlanChange;
-  // H2-c/H2-d：分区 + 设施 + 节点（未连接）+ 人员（越界）问题合并成一张可读清单。
-  const combinedIssues = [
-    ...issues.map((item, i) => ({ key: `z-${item.zoneId}-${item.issue.code}-${i}`, text: `${item.zoneName}：${item.issue.message}` })),
+  // H2-c/H2-d/H3-b：冲突标记 + 分区 + 设施 + 节点（未连接）+ 人员（越界）问题合并成一张可读清单。
+  // 冲突条目按状态着色（冲突红/缺失橙/待核实灰，tokens 同源），其余实体问题沿用默认色。
+  const conflictTextColors: Record<PlanConflictIssue['status'], string> = {
+    conflict: PLANNING_CONFLICT_COLORS.conflict,
+    missing: PLANNING_CONFLICT_COLORS.missing,
+    unverified: PLANNING_CONFLICT_COLORS.unverified,
+  };
+  const combinedIssues: { key: string; text: string; color?: string }[] = [
+    ...conflictIssues.map(item => ({
+      key: `c-${item.key}`,
+      text: `${item.status === 'conflict' ? '⚠' : item.status === 'missing' ? '缺' : '核'} ${PLAN_CONFLICT_CATEGORY_LABELS[item.category]}：${item.message}`,
+      color: conflictTextColors[item.status],
+    })),
+    ...issues.map((item, i) => ({ key: `z-${item.zoneId}-${item.issue.code}-${i}`, text: `${item.zoneName}：${item.issue.message}`, color: undefined })),
     ...facilityIssues.map((item, i) => ({ key: `f-${item.facilityId}-${i}`, text: `${item.facilityName}：${item.issue.message}` })),
     ...nodeIssues.map((item, i) => ({ key: `n-${item.nodeId}-${i}`, text: `出入口「${item.nodeName}」：${item.issue.message}` })),
     ...workerIssues.map((item, i) => ({ key: `w-${item.workerId}-${i}`, text: `人员「${item.workerRole}」：${item.issue.message}` })),
@@ -1434,7 +1484,7 @@ export default function OutdoorPlanCanvas({
                       : '单击加路径点，双击或点「完成测量」提交；Esc 取消。')}
                   {mode === 'node' && '单击放置出入口节点，可连续放置；Esc 取消。'}
                   {mode === 'worker' && '单击布置人员点位，落点在分区内会自动归属；Esc 取消。'}
-                  {mode === 'view' && '拖拽平移，滚轮缩放；单击出入口/人员/动线/设施可选中；拖动出入口，关联动线端点随动。'}
+                  {mode === 'view' && '拖拽平移，滚轮缩放；单击冲突标记/出入口/人员/动线/设施可定位或选中；拖动出入口，关联动线端点随动。'}
                 </div>
 
                 {mode === 'route' && (
@@ -1848,7 +1898,7 @@ export default function OutdoorPlanCanvas({
                     <div style={{ ...sectionTitle, color: '#e8a3a3' }}>问题提示（{combinedIssues.length} 条）</div>
                     <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.6 }}>
                       {combinedIssues.slice(0, PLAN_ISSUE_LIST_LIMIT).map(item => (
-                        <li key={item.key}>{item.text}</li>
+                        <li key={item.key} style={item.color ? { color: item.color } : undefined}>{item.text}</li>
                       ))}
                     </ul>
                     {combinedIssues.length > PLAN_ISSUE_LIST_LIMIT && <div style={{ opacity: 0.7 }}>其余 {combinedIssues.length - PLAN_ISSUE_LIST_LIMIT} 条从略。</div>}

@@ -12,7 +12,7 @@
  * - 派生量（面积/长度）仍从 site-plan 的米制几何现算，画布只做投影不产生真值。
  */
 
-import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
 import { planZoneFillAlpha } from './site-plan-editing';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
@@ -657,6 +657,40 @@ export function drawMeasureDraft(
     const anchor = cursorPoint ?? draft[draft.length - 1]!;
     const pt = planPointToPixel(anchor, c.viewport);
     drawMeasureLabel(c, readout, pt.x + 12, pt.y - 14);
+  }
+}
+
+/* ---------------- 冲突/缺失可定位标记（H3-b） ---------------- */
+
+/**
+ * 冲突与缺失标记（H3-b）：在每个可定位问题点上画「白圈 + 状态色圆点 + 感叹号」徽章。
+ * 颜色按状态取 tokens（冲突红/缺失橙/待核实灰）；标记是规则检查输出，
+ * 恒在业务层之上（不随业务图层隐藏），点击命中判定由组件按同半径做。
+ */
+export function drawConflictMarkers(
+  c: PlanCanvasContext,
+  conflicts: readonly { key: string; status: 'conflict' | 'missing' | 'unverified'; at: PlanPoint }[],
+  opts: { highlightKey?: string | null } = {},
+): void {
+  const { ctx, viewport } = c;
+  for (const conflict of conflicts) {
+    const pt = planPointToPixel(conflict.at, viewport);
+    const color = PLANNING_CONFLICT_COLORS[conflict.status];
+    const highlighted = opts.highlightKey === conflict.key;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, highlighted ? 10 : 8, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = highlighted ? 2 : 1.4;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('!', pt.x, pt.y + 0.5);
   }
 }
 
