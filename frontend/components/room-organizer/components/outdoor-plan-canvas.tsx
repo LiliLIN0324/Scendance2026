@@ -48,7 +48,7 @@
  * 分区颜色/透明度/命名可在面板内直接编辑（契约可选字段 opacity，0.05–0.6 区间）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BasemapTileCache, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
 import {
@@ -101,6 +101,7 @@ import {
   findFacilityTemplate,
   planFacilityIssues,
   type PlanFacilityIssue,
+  type PlanFacilityTemplate,
 } from '../lib/site-plan-facilities';
 import {
   PLAN_ROUTE_MAX_VERTICES,
@@ -149,6 +150,7 @@ import {
   drawOneplanSticker,
   facilitySticker,
   nodeSticker,
+  oneplanStickerSrc,
   planStickerDescriptors,
   preloadOneplanStickers,
   routeSticker,
@@ -156,6 +158,15 @@ import {
   workerSticker,
   zoneSticker,
 } from '../lib/oneplan-stickers';
+import {
+  groupLibraryEntries,
+  libraryEntries,
+  libraryFacilityTemplate,
+  libraryStickerFor,
+  searchLibraryEntries,
+  type LibraryEntry,
+  type OneplanManifest,
+} from '../lib/oneplan-library';
 import {
   PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_ICONS,
@@ -221,6 +232,11 @@ export interface OutdoorPlanCanvasProps {
   panelsHostId?: string;
   /** P2-d：规划信息浮窗的独立宿主 id（两张卡分属左栏两个容器、显隐独立）。缺省跟随 panelsHostId。 */
   infoPanelHostId?: string;
+  /**
+   * P2-h：物件库面板的宿主 id（左栏第三个页签）。549 件 OnePlan 贴纸在这里被看见、
+   * 被搜索、被点选后进入放置模式；缺省时物件库面板留在画布内浮窗。
+   */
+  libraryPanelHostId?: string;
   /**
    * P2-g：undo/redo 可用态上报（室内工具排的撤销/重做钮据此启用）。
    * 变化时才触发，父级用 useState 落盘即可。
@@ -356,6 +372,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onPlanChange,
   panelsHostId,
   infoPanelHostId,
+  libraryPanelHostId,
   onHistoryChange,
 }: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
@@ -363,12 +380,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 两卡分属两个容器：图层栈跟 panelsHostId，规划信息跟 infoPanelHostId（缺省同前）。
   const [layerPanelHost, setLayerPanelHost] = useState<HTMLElement | null>(null);
   const [infoPanelHost, setInfoPanelHost] = useState<HTMLElement | null>(null);
+  const [libraryPanelHost, setLibraryPanelHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    if (!panelsHostId && !infoPanelHostId) return undefined;
+    if (!panelsHostId && !infoPanelHostId && !libraryPanelHostId) return undefined;
     setLayerPanelHost(panelsHostId ? document.getElementById(panelsHostId) : null);
     setInfoPanelHost((infoPanelHostId ?? panelsHostId) ? document.getElementById(infoPanelHostId ?? panelsHostId ?? '') : null);
-    return () => { setLayerPanelHost(null); setInfoPanelHost(null); };
-  }, [panelsHostId, infoPanelHostId]);
+    setLibraryPanelHost(libraryPanelHostId ? document.getElementById(libraryPanelHostId) : null);
+    return () => { setLayerPanelHost(null); setInfoPanelHost(null); setLibraryPanelHost(null); };
+  }, [panelsHostId, infoPanelHostId, libraryPanelHostId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
   const planCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -394,7 +413,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const downPxRef = useRef<{ x: number; y: number } | null>(null);
   const issuesRef = useRef<PlanZoneIssue[]>([]);
   // H2-c 设施放置：待放模板、幽灵位置、选中设施。
+  // P2-h：物件库里的物件不是 8 个内置模板之一，所以额外记一份模板对象（尺寸/名称来自库条目）。
   const facilityTemplateRef = useRef<string | null>(null);
+  const facilityTemplateObjRef = useRef<PlanFacilityTemplate | null>(null);
   const ghostPointRef = useRef<PlanPoint | null>(null);
   const selectedFacilityRef = useRef<string | null>(null);
   const facilityIssuesRef = useRef<PlanFacilityIssue[]>([]);
@@ -433,6 +454,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [editMessage, setEditMessage] = useState<string | null>(null);
   const [issues, setIssues] = useState<PlanZoneIssue[]>([]);
   const [facilityTemplateId, setFacilityTemplateId] = useState<string | null>(null);
+  // P2-h 物件库：549 件 OnePlan 贴纸（左栏第三个页签）。清单 440 KB，只在挂载时拉一次。
+  const [libraryAll, setLibraryAll] = useState<LibraryEntry[]>([]);
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [libraryStatus, setLibraryStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+  const [libraryOpenGroups, setLibraryOpenGroups] = useState<Record<string, boolean>>({});
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
   const [facilityIssues, setFacilityIssues] = useState<PlanFacilityIssue[]>([]);
   const [routeKind, setRouteKind] = useState<PlanningRouteKind>('pedestrian');
@@ -722,7 +748,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // （白色选中外圈画在矩形外侧，贴纸不覆盖）。
       const metersPerPx = planMetersPerPixel(viewport);
       for (const facility of current.facilities) {
-        const sticker = facilitySticker(facility.templateId);
+        // P2-h：物件库来的设施带 `oneplan:` 前缀，用库里的真贴纸；8 个内置模板仍走原映射。
+        const sticker = libraryStickerFor(facility.templateId) ?? facilitySticker(facility.templateId);
         if (!sticker) continue;
         const pt = planPointToPixel(facility.position, viewport);
         const fw = Math.max(4, facility.size.width / metersPerPx);
@@ -832,7 +859,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
     // 5) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；叠加在所有图层之上。
     if (activeMode === 'facility' && ghostPointRef.current && facilityTemplateRef.current) {
-      const template = findFacilityTemplate(facilityTemplateRef.current);
+      const pendingId = facilityTemplateRef.current;
+      const override = facilityTemplateObjRef.current;
+      const template = override && override.templateId === pendingId
+        ? override
+        : findFacilityTemplate(pendingId);
       if (template) {
         const footprint = facilityFootprintRing({
           position: ghostPointRef.current,
@@ -855,8 +886,46 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   // H4-b：规划变化时预取本屏用到的贴纸（失败静默，绘制时回落到既有 Lucide 图标）。
   useEffect(() => {
-    preloadOneplanStickers(planStickerDescriptors(plan));
+    const descriptors = planStickerDescriptors(plan);
+    // P2-h：物件库放的设施带 `oneplan:` 前缀，映射表里没有，单独补它的贴纸。
+    for (const facility of plan.facilities) {
+      const sticker = libraryStickerFor(facility.templateId);
+      if (sticker) descriptors.push(sticker);
+    }
+    preloadOneplanStickers(descriptors);
   }, [plan]);
+
+  // P2-h 物件库清单：只在有库面板宿主时才拉（440 KB 不该拖慢其它用法）。
+  useEffect(() => {
+    if (!libraryPanelHostId) return undefined;
+    let cancelled = false;
+    setLibraryStatus('loading');
+    fetch('/oneplan-icons/manifest.json')
+      .then(response => (response.ok ? (response.json() as Promise<OneplanManifest>) : Promise.reject(new Error(String(response.status)))))
+      .then((manifest) => {
+        if (cancelled) return;
+        setLibraryAll(libraryEntries(manifest.assets ?? []));
+        setLibraryStatus('ready');
+      })
+      .catch(() => { if (!cancelled) setLibraryStatus('failed'); });
+    return () => { cancelled = true; };
+  }, [libraryPanelHostId]);
+
+  const libraryGroups = useMemo(
+    () => groupLibraryEntries(searchLibraryEntries(libraryAll, libraryQuery)),
+    [libraryAll, libraryQuery],
+  );
+  const libraryTotal = libraryAll.length;
+  // 物件库模板 id → 模板对象（拖动进画布时 pickFacilityTemplate 只拿到 id，靠这张表还原尺寸）。
+  const libraryTemplatesRef = useRef<Map<string, PlanFacilityTemplate>>(new Map());
+  useEffect(() => {
+    const map = new Map<string, PlanFacilityTemplate>();
+    for (const entry of libraryAll) {
+      const template = libraryFacilityTemplate(entry);
+      map.set(template.templateId, template);
+    }
+    libraryTemplatesRef.current = map;
+  }, [libraryAll]);
 
   // zoneSemantic 同步给稳定 draw()：单独 ref，避免把语义塞进 draw 依赖。
   const zoneSemanticRef = useRef<PlanningZoneSemantic>(zoneSemantic);
@@ -1073,9 +1142,39 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** 在面板点选模板（也可直接拖拽到画布）：记录待放模板，幽灵随鼠标。 */
   function pickFacilityTemplate(templateId: string) {
     facilityTemplateRef.current = templateId;
+    const builtin = findFacilityTemplate(templateId);
+    // P2-h：`oneplan:` 模板不在内置目录里，从物件库映射表取（拖动/键盘选择也走这里）。
+    facilityTemplateObjRef.current = builtin && builtin.templateId === templateId
+      ? builtin
+      : libraryTemplatesRef.current.get(templateId) ?? null;
     setFacilityTemplateId(templateId);
     setEditMessage(null);
     draw();
+  }
+
+  /**
+   * P2-h：物件库里点选一件物件。库条目的 templateId 形如 `oneplan:icon:tent`，
+   * 不在 8 个内置模板里，所以把「模板对象」本身记下来，放置与幽灵预览都读它。
+   */
+  function pickLibraryEntry(entry: LibraryEntry) {
+    const template = libraryFacilityTemplate(entry);
+    // 顺序要紧：setMode 会清空待放模板（切模式即重置草稿），所以先切模式再落模板。
+    setMode('facility');
+    facilityTemplateRef.current = template.templateId;
+    facilityTemplateObjRef.current = template;
+    setFacilityTemplateId(template.templateId);
+    setEditMessage(`已选「${entry.nameZh}」（${template.width}×${template.depth} m），在地图上单击放置；Esc 结束。`);
+    draw();
+  }
+
+  /** 待放模板的统一解析：库模板优先，其次内置目录。 */
+  function resolvePendingTemplate(): PlanFacilityTemplate | null {
+    const id = facilityTemplateRef.current;
+    if (!id) return null;
+    const override = facilityTemplateObjRef.current;
+    if (override && override.templateId === id) return override;
+    const builtin = findFacilityTemplate(id);
+    return builtin && builtin.templateId === id ? builtin : null;
   }
 
   function placeFacilityAt(pt: PlanPoint) {
@@ -1084,13 +1183,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage('先在面板点选一个设施模板。');
       return;
     }
-    const template = findFacilityTemplate(templateId);
+    const template = resolvePendingTemplate();
     if (!template) {
       setEditMessage(`设施模板「${templateId}」不存在。`);
       return;
     }
     const current = planRef.current;
-    const result = buildFacility({ templateId, position: pt }, current.boundary, current.facilities);
+    const result = buildFacility({ templateId, template, position: pt }, current.boundary, current.facilities);
     if (!result.ok) {
       setEditMessage(result.issue.message);
       return;
@@ -1900,8 +1999,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }}
       onDrop={event => {
         // H2-c：拖放提交（与单击提交同一入口 placeFacilityAt）。
-        if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return;
         event.preventDefault();
+        // P2-h：从物件库直接拖进来的模板，画布上还没有「待放模板」，先按拖动的 id 落模板。
+        const dragged = event.dataTransfer.getData('text/plain');
+        if (dragged) {
+          // setMode 会清空待放模板，所以先切模式、再按拖动的 id 落模板。
+          if (modeRef.current !== 'facility') setMode('facility');
+          pickFacilityTemplate(dragged);
+        }
+        if (!facilityTemplateRef.current) return;
         const hit = eventPlanPoint(event);
         if (!hit) return;
         placeFacilityAt(hit.pt);
@@ -2632,6 +2738,115 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         )}
       </div>
       </PanelPortal>
+
+      {/* P2-h 物件库（左栏第三个页签）：549 件 OnePlan 贴纸在界面上被看见、被搜索、被点选放置。 */}
+      {libraryPanelHostId && (
+        <PanelPortal host={libraryPanelHost}>
+          <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} data-testid="outdoor-library-panel">
+            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'baseline', gap: PLANNING_SPACING.xs }}>
+              <span>物件库</span>
+              <span style={{ opacity: 0.7, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                {libraryStatus === 'ready' ? `${libraryTotal} 件 · ${libraryGroups.length} 组` : libraryStatus === 'loading' ? '载入中…' : ''}
+              </span>
+            </div>
+            <input
+              value={libraryQuery}
+              onChange={event => setLibraryQuery(event.target.value)}
+              placeholder="搜索物件（中文 / English / slug）"
+              aria-label="搜索物件"
+              style={{
+                width: '100%',
+                marginTop: PLANNING_SPACING.xs,
+                padding: '4px 6px',
+                borderRadius: PLANNING_RADIUS.sm,
+                border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+                background: PLANNING_SURFACE.fieldBg,
+                color: 'inherit',
+                fontSize: PLANNING_TYPOGRAPHY.hint,
+              }}
+            />
+            <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+              点一件物件 → 地图上单击放置；再点可连续放；Esc 结束。
+            </div>
+            {libraryStatus === 'failed' && (
+              <div style={{ marginTop: PLANNING_SPACING.xs, color: PLANNING_SURFACE.dangerText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                物件库清单加载失败（/oneplan-icons/manifest.json），刷新页面重试。
+              </div>
+            )}
+            {libraryStatus === 'ready' && libraryGroups.length === 0 && (
+              <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>没有匹配「{libraryQuery}」的物件。</div>
+            )}
+            <div style={{ marginTop: PLANNING_SPACING.xs, maxHeight: 330, overflowY: 'auto', paddingRight: 2 }}>
+              {libraryGroups.map((group, index) => {
+                // 缺省展开前两组（面域类 + 件数最多那组），其余折叠——549 件一次铺开会淹没面板。
+                const open = libraryOpenGroups[group.category] ?? index < 2;
+                return (
+                  <div key={group.category} style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <button
+                      type="button"
+                      onClick={() => setLibraryOpenGroups(prev => ({ ...prev, [group.category]: !open }))}
+                      aria-expanded={open}
+                      style={{ all: 'unset', cursor: 'pointer', display: 'flex', width: '100%', gap: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600 }}
+                    >
+                      <span aria-hidden>{open ? '▾' : '▸'}</span>
+                      <span style={{ flex: 1 }}>{group.category}</span>
+                      <span style={{ opacity: 0.7, fontWeight: 400 }}>{group.items.length}</span>
+                    </button>
+                    {open && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginTop: 4 }}>
+                        {group.items.map(entry => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            data-testid={`library-item-${entry.kind}-${entry.slug}`}
+                            aria-pressed={facilityTemplateId === libraryFacilityTemplate(entry).templateId}
+                            title={`${entry.nameZh} / ${entry.nameEn}（默认 ${entry.width}×${entry.depth} m）`}
+                            onClick={() => pickLibraryEntry(entry)}
+                            draggable
+                            onDragStart={event => {
+                              // 与内置模板同一条拖放通道：画布 onDrop 读 text/plain 后落模板。
+                              event.dataTransfer.setData('text/plain', libraryFacilityTemplate(entry).templateId);
+                              event.dataTransfer.effectAllowed = 'copy';
+                            }}
+                            style={{
+                              all: 'unset',
+                              cursor: 'pointer',
+                              boxSizing: 'border-box',
+                              padding: 4,
+                              borderRadius: PLANNING_RADIUS.sm,
+                              border: `1px solid ${facilityTemplateId === libraryFacilityTemplate(entry).templateId ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
+                              background: facilityTemplateId === libraryFacilityTemplate(entry).templateId ? PLANNING_SURFACE.selectedBg : 'transparent',
+                              textAlign: 'center',
+                            }}
+                          >
+                            <span
+                              aria-hidden
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 34,
+                                height: 34,
+                                margin: '0 auto',
+                                borderRadius: PLANNING_RADIUS.sm,
+                                // icon 类是白色字形（配深底）、scale/area 是深色线稿（配浅底）。
+                                background: entry.kind === 'icon' ? '#23252c' : '#eef1f4',
+                              }}
+                            >
+                              <img src={oneplanStickerSrc(entry.sticker)} alt="" width={26} height={26} loading="lazy" style={{ display: 'block' }} />
+                            </span>
+                            <span style={{ display: 'block', marginTop: 2, fontSize: 11, lineHeight: 1.25, wordBreak: 'break-all' }}>{entry.nameZh}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </PanelPortal>
+      )}
     </div>
   );
 });

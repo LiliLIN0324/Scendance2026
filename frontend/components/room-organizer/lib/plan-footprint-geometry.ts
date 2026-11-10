@@ -167,7 +167,8 @@ const PROP_KIND_BY_TEMPLATE: Record<string, PlanPropKind> = {
 export function planPropKind(templateId: string): PlanPropKind {
   const known = PROP_KIND_BY_TEMPLATE[templateId];
   if (known) return known;
-  const key = templateId.toLowerCase();
+  // P2-h：物件库模板 id 形如 `oneplan:icon:tent`，关键词只看 slug 段，避免 kind 段干扰。
+  const key = templateId.toLowerCase().replace(/^oneplan:(icon|scale|area):/, '');
   if (key.includes('tent') || key.includes('marquee') || key.includes('canopy')) return 'tent';
   if (key.includes('stage') || key.includes('deck') || key.includes('platform')) return 'stage';
   if (key.includes('toilet') || key.includes('restroom') || key.includes('wc')) return 'toilet';

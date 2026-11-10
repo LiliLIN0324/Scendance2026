@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Globe, Info, Layers, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { Boxes, Globe, Info, Layers, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -167,7 +167,8 @@ import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
-type OutdoorPanelKind = 'layers' | 'info';
+/** 户外左栏卡片的三个页签：图层栈 / 规划信息 / 物件库（P2-h 加了物件库）。 */
+type OutdoorPanelKind = 'layers' | 'info' | 'library';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -3797,6 +3798,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                     <Info size={26} aria-hidden="true" />
                     <span className="sc-rail-label" aria-hidden="true">信息</span>
                   </button>
+                  <button
+                    type="button"
+                    className={`sc-rail-tool sc-rail-disc${outdoorPanel === 'library' ? ' is-active' : ''}`}
+                    aria-pressed={outdoorPanel === 'library'}
+                    aria-label="物件库：549 件活动物件，点选后放到图上"
+                    data-tip="物件库 · 549 件物件，点选放置"
+                    onClick={() => { if (agentPanelOpen) closeBingo(); setOutdoorPanel('library'); }}
+                  >
+                    <Boxes size={26} aria-hidden="true" />
+                    <span className="sc-rail-label" aria-hidden="true">物件库</span>
+                  </button>
                 </>)}
               </nav>
             </div>
@@ -3882,10 +3894,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               <div className="sc-left-heading"><nav className="sc-left-context" aria-label="户外规划面板">
                 <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>图层栈</button>
                 <button type="button" aria-pressed={outdoorPanel === 'info'} onClick={() => setOutdoorPanel('info')}>规划信息</button>
+                <button type="button" aria-pressed={outdoorPanel === 'library'} onClick={() => setOutdoorPanel('library')}>物件库</button>
               </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><PanelLeftClose size={20}/></button></div>
               <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
                 <div id="outdoor-panel-host-layers" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'layers' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
                 <div id="outdoor-panel-host-info" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'info' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+                <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
               </div>
             </aside>
           )}

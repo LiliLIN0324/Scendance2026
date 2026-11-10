@@ -227,6 +227,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           {...(onHistoryChange ? { onHistoryChange } : {})}
           panelsHostId="outdoor-panel-host-layers"
           infoPanelHostId="outdoor-panel-host-info"
+          libraryPanelHostId="outdoor-panel-host-library"
           {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
         />
       )}
