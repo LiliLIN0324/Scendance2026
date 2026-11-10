@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import {
   PLANNING_EDIT_MODE_ICONS,
   PLANNING_EDIT_MODE_LABELS,
@@ -23,8 +23,8 @@ describe('outdoor 2D planning visual tokens (H4-a)', () => {
     for (const value of Object.values(PLANNING_SURFACE)) {
       expect(value).toMatch(/^(#[0-9a-f]{6}|rgba\(\d+, \d+, \d+, (0|\d?\.\d+)\))$/);
     }
-    // 选中态描边沿用分区绿系（与画布选中高亮同源，不另立色）。
-    expect(PLANNING_SURFACE.selectedBorder).toBe('#7fb69a');
+    // 冷石画廊白（v5 收敛）：选中描边 = 品牌绿 --green #4A7C59（绿仅点睛）。
+    expect(PLANNING_SURFACE.selectedBorder).toBe('#4a7c59');
   });
 
   it('derives rgba from hex via withAlphaHex without inventing new colours', () => {
@@ -82,3 +82,4 @@ describe('outdoor 2D planning visual tokens (H4-a)', () => {
     }
   });
 });
+

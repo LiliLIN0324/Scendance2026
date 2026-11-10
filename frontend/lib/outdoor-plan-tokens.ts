@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 户外 2D 规划视觉 tokens（H1-c 基础 + H4-a 全量）。建立 2D 规划层与既有品牌收口的单一视觉契约：
  * - 主色沿用品牌幕景绿（`globals.css` 的 `--green-deep: #35624A`，与 `lib/brand-tokens.test.ts` 同口径），不另立新绿。
  * - 间距 / 圆角为紧凑、一致的比例尺，供 H2/H4 的 2D 画布与面板使用。
@@ -96,20 +96,40 @@ export const PLANNING_TYPOGRAPHY = {
 } as const;
 
 /**
- * 面板表面色（H4-a）：画布左右面板 / 输入控件 / 激活态 / 选中态 / 状态文案的
- * 唯一来源。原先散在 `outdoor-plan-canvas.tsx` 的内联 hex 在 H4-a 收敛到这里，
- * 保证「面板样式改一处生效两栏」。rgba 允许（毛玻璃面板底），hex 一律小写。
+ * 面板表面色（H4-a 建立，v5 收敛冷石画廊白）：画布左右面板 / 输入控件 / 激活态 /
+ * 选中态 / 状态文案的唯一来源。值对齐主产品设计规范 docs/05-设计规范.md §一.1
+ * 与 globals.css 的 CSS 变量（--paper/--hair/--ink/--plane/--green/--warn/--err），
+ * 户外规划不再是独立深色产品——视觉完全服从主产品「冷石画廊白」：
+ * 纯白纸面、发丝线分区、近黑墨字、品牌绿仅点睛（选中/激活）。
+ * rgba 允许（面板底/选中底），hex 一律小写。
  */
 export const PLANNING_SURFACE = {
-  panelBg: 'rgba(24, 34, 48, 0.92)',
-  panelBorder: '#35485f',
-  panelText: '#e7edf5',
-  fieldBg: '#24334a',
-  activeBg: '#2f4a3c',
-  selectedBorder: '#7fb69a',
-  selectedBg: 'rgba(127, 182, 154, 0.18)',
-  warnText: '#ffd88a',
-  dangerText: '#e8a3a3',
+  /** 面板底 = --paper 纯白（发丝线分区，不用深色底）。 */
+  panelBg: '#ffffff',
+  /** 面板描边 = --hair #E4E4E7 发丝线。 */
+  panelBorder: '#e4e4e7',
+  /** 面板正文 = --ink #141416 近黑墨字。 */
+  panelText: '#141416',
+  /** 输入控件底 = --plane #F4F5F7。 */
+  fieldBg: '#f4f5f7',
+  /** 激活态底 = --green-pale #EEF3EF（绿仅点睛：激活/选中/确认）。 */
+  activeBg: '#eef3ef',
+  /** 选中描边 = --green #4A7C59。 */
+  selectedBorder: '#4a7c59',
+  /** 选中底 = 品牌绿 12% 透明。 */
+  selectedBg: 'rgba(74, 124, 89, 0.12)',
+  /** 警示文字 = --warn #96651F。 */
+  warnText: '#96651f',
+  /** 危险文字 = --err #B4443C。 */
+  dangerText: '#b4443c',
+} as const;
+
+/** 冷石画廊白文字层级（v5 新增）：面板内次级文字 / 弱化说明，对齐 --ink-soft / --muted。 */
+export const PLANNING_TEXT = {
+  /** 次级文字 = --ink-soft #55585F。 */
+  soft: '#55585f',
+  /** 弱化说明 = --muted #71767E。 */
+  muted: '#71767e',
 } as const;
 
 /** 图标尺寸（H4-a）：图例条目 / 类型胶囊 / 工具按钮三档（px）。 */

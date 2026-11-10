@@ -241,14 +241,14 @@ export default function OutdoorPlanPage() {
   }, [plan]);
 
   return (
-    <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
+    <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#ffffff', color: '#141416', fontFamily: 'inherit' }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#ffffff', borderBottom: '1px solid #e4e4e7' }}>
         <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H4-b）</h1>
-        <small style={{ color: '#93a4bc' }}>交互复刻 · 渐进引导 · 导出菜单 · 毛玻璃分享</small>
-        <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="plan-overview-stats">
-          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount} · <span data-testid="conflict-count" style={{ color: stats.conflictCount > 0 ? '#e8a3a3' : '#7fb69a' }}>冲突/缺失 {stats.conflictCount}</span>
+        <small style={{ color: '#71767e' }}>交互复刻 · 渐进引导 · 导出菜单 · 毛玻璃分享</small>
+        <span style={{ color: '#55585f', fontSize: 12 }} data-testid="plan-overview-stats">
+          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount} · <span data-testid="conflict-count" style={{ color: stats.conflictCount > 0 ? '#b4443c' : '#4a7c59' }}>冲突/缺失 {stats.conflictCount}</span>
         </span>
-        <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="draft-saved">
+        <span style={{ color: '#55585f', fontSize: 12 }} data-testid="draft-saved">
           {savedAt ? `草稿已存 ${savedAt}` : ''}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -257,7 +257,7 @@ export default function OutdoorPlanPage() {
               type="button"
               onClick={guide.restart}
               title="重看首次开图引导"
-              style={{ background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
+              style={{ background: 'transparent', color: '#141416', border: '1px solid #e4e4e7', borderRadius: 10, padding: '5px 10px', cursor: 'pointer' }}
             >
               重看引导
             </button>
@@ -265,7 +265,7 @@ export default function OutdoorPlanPage() {
           <button
             type="button"
             onClick={() => setPlan(SAMPLE_PLAN)}
-            style={{ background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}
+            style={{ background: 'transparent', color: '#141416', border: '1px solid #e4e4e7', borderRadius: 10, padding: '5px 10px', cursor: 'pointer' }}
           >
             重置样例
           </button>
@@ -273,7 +273,7 @@ export default function OutdoorPlanPage() {
             aria-label="底图图源"
             value={source}
             onChange={event => setSource(event.target.value as CanvasBasemapSource)}
-            style={{ background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: 6, padding: '5px 10px' }}
+            style={{ background: '#f4f5f7', color: '#141416', border: '1px solid #e4e4e7', borderRadius: 10, padding: '5px 10px' }}
           >
             {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
@@ -330,6 +330,7 @@ export default function OutdoorPlanPage() {
     </main>
   );
 }
+
 
 
 
