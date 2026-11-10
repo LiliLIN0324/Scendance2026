@@ -53,3 +53,31 @@ export function registerLocalScans(): number {
   }
   return added;
 }
+
+/** 索引名按本机语境起（「本机高斯」）；云端登记改叫「云端」，访客看了不误导。 */
+function cloudScanName(name: string): string {
+  return name.replace(/^本机/, '云端');
+}
+
+/**
+ * 把云端资产库副本登记进注册表：不挑来源、不挑构建，线上站点也能找回这批实景。
+ * 必须在 registerLocalScans 之后调用——本机能直连文件时优先本机副本，云端只补缺。
+ */
+export function registerCloudScans(): number {
+  let added = 0;
+  for (const entry of localScanIndex()) {
+    if (findAholoAsset(entry.assetId)) continue;
+    const meters = metersFromForwardBox(entry.forwardBox);
+    const saved = rememberAholoAsset({
+      assetId: entry.assetId,
+      kind: entry.kind,
+      name: cloudScanName(entry.name),
+      bytes: entry.bytes,
+      savedAt: entry.savedAt,
+      ...(meters ? { meters } : {}),
+      origin: 'cloud',
+    });
+    if (saved) added += 1;
+  }
+  return added;
+}
