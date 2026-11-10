@@ -705,6 +705,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setReviewedHistory(id);phaseRef.current='idle';setPhase('idle');setProgress(0);
     say({role:'agent',text:'已按当前记录重新开始；旧预览已收回，请重新生成并核对方案。'});
   }
+  /** 导出对话交接前的静默核对：与「按当前记录重新开始」同一套判定，只是不出声、不重置进度。 */
+  function freezeDialogueForExport(): boolean {
+    const id = boundSessionId.current;
+    if (!id || !sessionScopeIsCurrent() || getActiveAssistantSessionId(sessionScope) !== id || (incompleteDialogueTurns.current.get(id)?.size ?? 0) > 0) return false;
+    if (studioRef.current?.recoverable || studioRef.current?.applyRecovery || studioRef.current?.reviewingApplyRecovery) return false;
+    if (briefRequest.current || generationWait.current || generationQueuedRef.current || studioRef.current?.busy) return false;
+    if (studioRef.current && !studioRef.current.discardPreviewForHistoryReview()) return false;
+    if (!onDialogueHistoryReview?.(id)) return false;
+    setReviewedHistory(id);
+    return true;
+  }
   const updateDialogueIncomplete=(sessionId:string|null,text:string,incomplete:boolean,provenUnhandled=false)=>{
     const value=text.trim();if(!sessionId||!value||(incomplete&&!provenUnhandled&&isGeneralActivityQuestion(value)))return;
     const entries=incompleteDialogueTurns.current.get(sessionId)??new Set<string>(),was=entries.size>0;
@@ -2410,6 +2421,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const studio = studioRef.current;
     if (!studio?.exportActivity) {
       say({ role: 'agent', amber: true, text: '导出入口还没就绪，稍后再试。' });
+      return;
+    }
+    // 对话交接要求「按当前记录核对过」的冻结标记；「确认导出」本身就是核对动作，
+    // 先按同一套判定补上这一步再生成，而不是让导出吃一条无法理解的报错。
+    if (isHistoryReviewRequired() && !freezeDialogueForExport()) {
+      say({ role: 'agent', amber: true, text: '对话记录还没核对完成（有待处理的要求或任务进行中），未生成交接文件。处理完再导出。' });
       return;
     }
     say({ role: 'agent', text: '好，我在本机生成执行资料草案。' });
