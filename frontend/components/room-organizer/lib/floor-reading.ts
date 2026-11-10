@@ -9,6 +9,8 @@ import type { FurnitureItem, RoomLayout } from './types';
  */
 export interface FloorPoint { x: number; z: number }
 
+export interface WallSegment { x1: number; z1: number; x2: number; z2: number; thickness: number }
+
 export interface CanvasFloor {
   /**
    * False when walls are drawn but do not close into a room.
@@ -132,6 +134,26 @@ export function canvasFloor(layout: RoomLayout, floorIndex = 0): CanvasFloor {
   return { recovered: true, floor: inner };
 }
 
+/** Wall centerlines the structure shell extrudes. World metres. */
+export function canvasWalls(layout: RoomLayout, floorIndex = 0): WallSegment[] {
+  const scene = layoutGeometryScene(layout, floorIndex);
+  return scene.structure.walls.map(wall => ({
+    x1: wall.start.x, z1: wall.start.z, x2: wall.end.x, z2: wall.end.z,
+    thickness: wall.thickness ?? 0.16,
+  }));
+}
+
+/** True when the open segments cross. Touching an endpoint does not count. */
+export function segmentsCross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): boolean {
+  const eps = 1e-8;
+  const abx = bx - ax, abz = bz - az, cdx = dx - cx, cdz = dz - cz;
+  const denom = abx * cdz - abz * cdx;
+  if (Math.abs(denom) < eps) return false;
+  const t = ((cx - ax) * cdz - (cz - az) * cdx) / denom;
+  const u = ((cx - ax) * abz - (cz - az) * abx) / denom;
+  return t > eps && t < 1 - eps && u > eps && u < 1 - eps;
+}
+
 function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
   const dx = bx - ax, dz = bz - az;
   const length = dx * dx + dz * dz;
@@ -184,5 +206,67 @@ export function outsideDrawnRoom(item: FurnitureItem, layout: RoomLayout, floorI
     const box = wallBox(wall);
     if (box.length >= 3 && footprintsIntersect(chair, box)) return true;
   }
+  // A chair on the far side of a wall still draws a cyan outline through the
+  // wall, while the seat mesh stays hidden. It is not a landed seat.
+  if (seatCutOffByWall(item, layout, floorIndex)) return true;
   return false;
+}
+
+function worldPoint(item: FurnitureItem, layout: RoomLayout): FloorPoint | null {
+  if (!item.position) return null;
+  return { x: item.position.x + layout.width / 2, z: item.position.z + layout.height / 2 };
+}
+
+function seatCutOffByWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
+  const here = worldPoint(item, layout);
+  const floor = layout.floors[floorIndex];
+  if (!here || !floor) return false;
+  const walls = canvasWalls(layout, floorIndex);
+  const tables = floor.items.filter(other => other.type === 'dining-table' && other.position);
+  const crosses = (from: FloorPoint, to: FloorPoint) => walls.some(wall => segmentsCross(from.x, from.z, to.x, to.z, wall.x1, wall.z1, wall.x2, wall.z2));
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const next = parent.get(id) ?? id;
+    if (next === id) return id;
+    const root = find(next);
+    parent.set(id, root);
+    return root;
+  };
+  const unite = (a: string, b: string) => {
+    const left = find(a), right = find(b);
+    if (left !== right) parent.set(left, right);
+  };
+  for (const table of tables) parent.set(table.id, table.id);
+  for (let i = 0; i < tables.length; i++) {
+    const a = worldPoint(tables[i]!, layout);
+    if (!a) continue;
+    for (let j = i + 1; j < tables.length; j++) {
+      const b = worldPoint(tables[j]!, layout);
+      if (b && !crosses(a, b)) unite(tables[i]!.id, tables[j]!.id);
+    }
+  }
+  const score = new Map<string, number>();
+  for (const other of floor.items) {
+    if (other.type !== 'dining-chair' && other.type !== 'chair' && other.type !== 'desk-chair') continue;
+    const chair = worldPoint(other, layout);
+    if (!chair) continue;
+    for (const table of tables) {
+      const point = worldPoint(table, layout);
+      if (!point || Math.hypot(point.x - chair.x, point.z - chair.z) > table.width / 2 + 2.5 || crosses(chair, point)) continue;
+      const root = find(table.id);
+      score.set(root, (score.get(root) ?? 0) + 1);
+      break;
+    }
+  }
+  let best = '';
+  let bestScore = -1;
+  for (const [root, value] of score) if (value > bestScore) { best = root; bestScore = value; }
+  if (item.type === 'dining-table') return best !== '' && find(item.id) !== best;
+  if (!best) return tables.length > 0;
+  for (const table of tables) {
+    if (find(table.id) !== best) continue;
+    const point = worldPoint(table, layout);
+    if (point && Math.hypot(point.x - here.x, point.z - here.z) <= table.width / 2 + 2.5 && !crosses(here, point)) return false;
+  }
+  return true;
 }

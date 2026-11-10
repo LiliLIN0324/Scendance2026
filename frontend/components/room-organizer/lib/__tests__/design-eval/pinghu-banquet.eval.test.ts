@@ -158,4 +158,43 @@ describe('平湖秋月 banquet design eval', () => {
     expect(openCount.inRoom).toBe(0);
     expect(evaluateBanquet(openPlan.layouts.at(-1)!, 0, openIds, openPlan.seats ?? 0).pass).toBe(false);
   });
+
+  it('does not bill chairs whose seat is on the far side of a drawn wall', () => {
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const hall = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
+      objects: [], camera: 'overview', lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 4, z: 3 }, end: { x: 20, z: 3 }, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+          { id: id(2), start: { x: 20, z: 3 }, end: { x: 20, z: 13 }, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+          { id: id(3), start: { x: 20, z: 13 }, end: { x: 4, z: 13 }, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+          { id: id(4), start: { x: 4, z: 13 }, end: { x: 4, z: 3 }, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+          { id: id(5), start: { x: 6, z: 3 }, end: { x: 18, z: 13 }, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+        ],
+        openings: [], columns: [],
+      },
+      sources: [], dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-diagonal' });
+    const at = (x: number, z: number) => ({ x: x - 11.9, z: z - 8.05 });
+    const table = makeItem({ id: 'near-table', type: 'dining-table', name: '圆桌', width: 2.2, depth: 2.2, height: 0.75, position: at(8, 8) });
+    const solid = makeItem({ id: 'solid-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(6, 8) });
+    const wire = makeItem({ id: 'wire-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9, position: at(16, 8) });
+    const preview = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, table, solid, wire] }) };
+    const baseIds = new Set(hall.floors[0]!.items.map(item => item.id));
+    const counted = countChairsOnCanvasFloor(preview, 0, baseIds);
+    expect(counted.inRoom).toBe(1);
+    expect(counted.crossing).toBe(1);
+    expect(evaluateBanquet(preview, 0, baseIds, 2).pass).toBe(false);
+
+    const plan = localPlan(banquetInput(hall, 2.2));
+    const landed = countChairsOnCanvasFloor(plan.layouts.at(-1)!, 0, baseIds);
+    expect(landed.crossing).toBe(0);
+    expect(plan.seats).toBe(landed.inRoom);
+    expect(evaluateBanquet(plan.layouts.at(-1)!, 0, baseIds, plan.seats ?? -1).pass).toBe(true);
+  });
 });

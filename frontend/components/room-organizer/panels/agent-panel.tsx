@@ -2000,6 +2000,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
     const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
     const furnishing=layoutFurnishing(memoryRef.current.furnishing, banquet);
+    const priorBanquetSeats = furnishing && seatPriority ? (proposal.current?.seats ?? null) : null;
     try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), ...(furnishing ? { furnishing } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
@@ -2014,6 +2015,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const added = differences.filter(change => change.kind === 'added' && change.after && !isStructuralMarker(change.after.item)).length;
     const lockedChanged = differences.filter(change => change.before?.item.locked && !isStructuralMarker(change.before.item)).length;
     plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}), ...(furnishing ? { receipt: 'banquet' as const } : {}) };
+    if (priorBanquetSeats !== null && (plan.seats ?? 0) <= priorBanquetSeats && !lockedChanged) {
+      const honest = '室内已经排满，这版加不进更多整桌。';
+      plan = { ...plan, seatPriority: true, blocked: plan.blocked?.includes('加不进更多') ? plan.blocked : `${honest}${plan.blocked ?? ''}` };
+    }
     if(!floorStillCurrent(floorToken)){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
     proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before)); proposalBase.current = structuredClone(before); shownSteps.current = 0;
     await presentProposal(token);
@@ -3380,7 +3385,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
       </details>}
       <p>{REFERENCE_SOURCE_UNVERIFIED}</p>
     </div>}
-    {banquet && short && !plan.localDraftDetails && plan.seatPriority && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+    {banquet && short && !plan.localDraftDetails && plan.seatPriority && !/加不进更多/.test(plan.blocked ?? '') && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
     {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
     {!banquet && agent.inventoryWorkspace}
   </div>;
