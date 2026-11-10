@@ -88,6 +88,42 @@ function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kin
   }));
 }
 
+export interface SeatingRect { x: number; z: number; w: number; d: number }
+
+/**
+ * The room people can sit in, in layout coordinates (origin at the frame centre).
+ * A tighter exterior loop uses its inner face. No such loop means the activity
+ * frame itself is the floor — callers must not invent a smaller room.
+ */
+export function usableSeatingRect(layout: RoomLayout, floorIndex = 0): SeatingRect | null {
+  const floor = layout.floors[floorIndex];
+  const stored = layout.backendSceneV2;
+  const floorWalls = floor?.interiorWalls ?? [];
+  const walls = floorWalls.length
+    ? floorWalls.map(wall => ({
+        start: { x: wall.x1 + layout.width / 2, z: wall.z1 + layout.height / 2 },
+        end: { x: wall.x2 + layout.width / 2, z: wall.z2 + layout.height / 2 },
+        ...(wall.kind ? { kind: wall.kind } : {}),
+        ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}),
+      }))
+    : (stored?.structure?.walls ?? []).map(wall => ({
+        start: wall.start, end: wall.end,
+        ...(wall.kind ? { kind: wall.kind } : {}),
+        ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}),
+      }));
+  const shell = shellInterior(walls, layout.width, layout.height);
+  if (!shell) return null;
+  const recorded = layout.backendVenue?.polygon;
+  if (!(ringArea(shell) < (recorded ? ringArea(recorded) : layout.width * layout.height) * 0.98)) return null;
+  const xs = shell.map(point => point.x);
+  const zs = shell.map(point => point.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const w = maxX - minX, d = maxZ - minZ;
+  if (!(w > 1) || !(d > 1)) return null;
+  return { x: minX - layout.width / 2, z: minZ - layout.height / 2, w, d };
+}
+
 /** Geometry-only conversion. No asset IDs are invented and this is never persisted. */
 export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2 {
   const floor = layout.floors[floorIndex];

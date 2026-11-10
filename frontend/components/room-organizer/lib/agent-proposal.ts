@@ -12,7 +12,7 @@ import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
 import { presetModelUrl } from './scene-presets';
-import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides } from './structural-layout';
+import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides, usableSeatingRect } from './structural-layout';
 import type { FurnitureItem, RoomLayout, Vec2 } from './types';
 import { buildVenueShell, type ScaleOrigin } from './venue-shell';
 import type { PlanArtifact } from './plan-artifact';
@@ -226,7 +226,7 @@ export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
  * 一批一批试：`addItems` 在 reducer 里是**整批**几何否决，一批中有一件穿墙就整批消失
  * （换一版曾经清空桌子）。这里先整批试，被拒再逐件试，越界的只丢它自己。
  */
-function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items: FurnitureItem[]): {
+function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items: FurnitureItem[], options?: { atomic?: boolean }): {
   layout: RoomLayout;
   accepted: number;
   dropped: number;
@@ -235,6 +235,14 @@ function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items
   const existing = current.floors[floorIndex]?.items ?? [];
   const batch = withItems(current, floorIndex, [...existing, ...items]);
   if (canApplyLayoutGeometry(base, batch)) return { layout: batch, accepted: items.length, dropped: 0, rejected: [] };
+  // A banquet table and its chairs are one group. A chair that clears the wall must not
+  // stay behind after the table, or the other way around.
+  if (options?.atomic) {
+    return {
+      layout: current, accepted: 0, dropped: items.length,
+      rejected: items.map(item => ({ name: item.name, code: 'STRUCTURAL_COLLISION' as const })),
+    };
+  }
   let layout = current;
   let accepted = 0;
   const rejected: Array<{ name: string; code: 'STRUCTURAL_COLLISION' | 'OUT_OF_BOUNDS' }> = [];
@@ -412,19 +420,16 @@ export function proposePlan(input: PlanInput): PlanProposal {
     if (sample.length) {
       const footprint = setFootprint(sample);
       const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan?.seatsPerTable || 1;
-      const centers = ringCenters({ x: -widthM / 2, z: -depthM / 2, w: widthM, d: depthM }, footprint, 0.6, 1.2);
-      const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
+      const interior = usableSeatingRect(base, floorIndex);
+      const room = interior ?? { x: -widthM / 2, z: -depthM / 2, w: widthM, d: depthM };
+      // The rect is already the inner face, so a second large wall gap would throw away a whole table.
+      const centers = ringCenters(room, footprint, interior ? (seatPriority ? 0.1 : 0.2) : 0.6, seatPriority ? 0.4 : 0.6);
+      const areaSets = Math.max(1, Math.floor((room.w * room.d) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(centers.length, wantedSets));
-      const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
       for (const center of centers.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-        accept(tryAdd(base, current, floorIndex, items));
-      }
-      if (seatPriority && (input.guests ?? 0) > 0) {
-        const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
-        const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
-        if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
+        accept(tryAdd(base, current, floorIndex, items, { atomic: true }));
       }
     }
   } else if (input.furnishing?.table.tableShape === 'rect' || (!input.furnishing && input.tablePlan?.shape === 'rect')) {
@@ -436,20 +441,17 @@ export function proposePlan(input: PlanInput): PlanProposal {
     const sample = buildFurnitureSet(dining, { roomWidth: widthM, roomDepth: depthM, idPrefix: 'rect-measure' });
     if (sample.length) {
       const stageSouth = backdrop ? -depthM / 2 + backdrop.depth + 0.4 : -depthM / 2;
-      const slots = setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
+      const interior = usableSeatingRect(base, floorIndex);
+      const slots = interior
+        ? ringCenters(interior, setFootprint(sample), seatPriority ? 0.1 : 0.2, seatPriority ? 0.4 : 0.6)
+        : setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
       const seatsEach = sample.filter(item => item.type === 'dining-chair' || item.type === 'chair').length || input.tablePlan?.seatsPerTable || 1;
       const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
-      const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
       for (const center of slots.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-        accept(tryAdd(base, current, floorIndex, items));
-      }
-      if (seatPriority && (input.guests ?? 0) > 0) {
-        const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
-        const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
-        if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
+        accept(tryAdd(base, current, floorIndex, items, { atomic: true }));
       }
     }
   } else {
@@ -518,11 +520,12 @@ function findAdditionSpot(layout: RoomLayout, floorIndex: number, item: Furnitur
   const keepOut = floorKeepOut(layout, floorIndex);
   const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
   const inset = 0.25;
+  const room = usableSeatingRect(layout, floorIndex) ?? { x: -layout.width / 2, z: -layout.height / 2, w: layout.width, d: layout.height };
   const step = Math.max(1, Math.ceil(Math.max(item.width, item.depth)));
   const xs: number[] = [];
   const zs: number[] = [];
-  for (let x = -layout.width / 2 + inset + item.width / 2; x <= layout.width / 2 - inset - item.width / 2 + 1e-9; x += step) xs.push(Math.round(x * 100) / 100);
-  for (let z = -layout.height / 2 + inset + item.depth / 2; z <= layout.height / 2 - inset - item.depth / 2 + 1e-9; z += step) zs.push(Math.round(z * 100) / 100);
+  for (let x = room.x + inset + item.width / 2; x <= room.x + room.w - inset - item.width / 2 + 1e-9; x += step) xs.push(Math.round(x * 100) / 100);
+  for (let z = room.z + inset + item.depth / 2; z <= room.z + room.d - inset - item.depth / 2 + 1e-9; z += step) zs.push(Math.round(z * 100) / 100);
   if (xs.length === 0 || zs.length === 0) return null;
   const bias = placementBias(item);
   const slots = xs.flatMap(x => zs.map(z => ({

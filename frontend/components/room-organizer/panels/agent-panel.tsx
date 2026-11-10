@@ -3342,7 +3342,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     </div>}
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {short && !plan.localDraftDetails && (!plan.seatPriority || banquet) && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
+    {short && !plan.localDraftDetails && (!plan.seatPriority || (banquet && !/加不进更多/.test(plan.blocked ?? ''))) && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold

@@ -9,7 +9,7 @@ import { materializeFurnishing, selectFurnishing } from './furnishing-select';
 import { backendSceneToLayout } from './backend-adapter';
 import { localPlan, omitUnlandedBanquetItems } from './local-plan';
 import { countSingleSeats } from './seat-requirement';
-import { structuralItemCollides } from './structural-layout';
+import { structuralItemCollides, usableSeatingRect } from './structural-layout';
 import { ringDiningSet } from './ring-seating';
 import { resolveTableArrangement } from './table-seat-plan';
 
@@ -390,11 +390,12 @@ function memoryBox(): Storage {
     expect(landed.length).toBeLessThan(80);
     expect(plan.seats).toBe(landed.length);
     expect(plan.seats ?? 0).toBeLessThan(80);
-    expect(countSingleSeats(plan.layouts.at(-1), 0)).toBeGreaterThanOrEqual(80);
+    // Locked chairs still sit in the room, but they must not pad this pass's receipt.
+    expect(countSingleSeats(plan.layouts.at(-1), 0)).toBeGreaterThan(plan.seats ?? 0);
     expect(plan.blocked).toContain('没有按满员桌数确认');
     expect(plan.blocked).toContain(`${landed.length} 座`);
     expect(plan.summary?.some(line => /约 \d+ 桌/.test(line))).toBe(false);
-    expect(plan.diagnostics?.some(item => item.code === 'STRUCTURAL_COLLISION' && item.count > 0)).toBe(true);
+    expect(landed.length % 15).toBe(0);
     expect(plan.layouts.at(-1)!.width).toBeCloseTo(23.8);
     expect(plan.layouts.at(-1)!.height).toBeCloseTo(16.1);
     const denser = localPlan({ ...input, seatPriority: true });
@@ -438,6 +439,19 @@ function memoryBox(): Storage {
     const plan = localPlan(input);
     const candidate = plan.layouts.at(-1)!;
     const chairs = candidate.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    const tables = candidate.floors[0]!.items.filter(item => item.type === 'dining-table');
+    const room = usableSeatingRect(hall, 0);
+    expect(room).not.toBeNull();
+    expect(room!.w * room!.d).toBeLessThan(23.8 * 16.1);
+    expect(tables.length).toBeGreaterThanOrEqual(2);
+    expect(chairs.length).toBe(tables.length * 15);
+    expect(plan.seats).toBe(chairs.length);
+    for (const chair of chairs) {
+      expect(chair.position!.x).toBeGreaterThan(room!.x);
+      expect(chair.position!.x).toBeLessThan(room!.x + room!.w);
+      expect(chair.position!.z).toBeGreaterThan(room!.z);
+      expect(chair.position!.z).toBeLessThan(room!.z + room!.d);
+    }
     const lawn = makeItem({
       id: 'lawn-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
       position: { x: 1 - 11.9, z: 1 - 8.05 },
@@ -502,9 +516,14 @@ function memoryBox(): Storage {
     const denser = localPlan({ ...input, seatPriority: true });
     expect(plan.seats ?? 0).toBeGreaterThan(0);
     expect(plan.seats).toBe(countSingleSeats(plan.layouts.at(-1), 0));
+    const tightChairs = plan.layouts.at(-1)!.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    const tightTables = plan.layouts.at(-1)!.floors[0]!.items.filter(item => item.type === 'dining-table');
+    expect(tightChairs.length).toBe(tightTables.length * 15);
+    expect(plan.seats).toBe(tightChairs.length);
     expect(denser.seats ?? 0).toBeGreaterThanOrEqual(plan.seats ?? 0);
     expect(denser.seats ?? 0).toBeLessThan(80);
     expect(denser.blocked).toContain('没有按满员桌数确认');
+    if ((denser.seats ?? 0) === (plan.seats ?? 0)) expect(denser.blocked).toContain('加不进更多整桌');
     expect(denser.layouts.at(-1)!.width).toBeCloseTo(23.8);
   });
 

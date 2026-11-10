@@ -3,7 +3,7 @@ import { proposePlan, type PlanProposal } from './agent-proposal';
 import { sceneScriptFromBrief } from './scene-script';
 import { compileSceneScript, type SceneScriptCompileResult } from './scene-script-compiler';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
-import { isStructuralMarker, structuralItemCollides } from './structural-layout';
+import { isStructuralMarker, structuralItemCollides, usableSeatingRect } from './structural-layout';
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
@@ -63,6 +63,8 @@ export interface LocalPlanResult extends PlanProposal {
   fallbackReason?: string;
   /** The plan read back in words, when the script door ran. */
   summary?: string[];
+  /** The add-seats pass could not place another whole table in the usable interior. */
+  interiorFull?: boolean;
 }
 
 export function localPlan(input: LocalPlanInput): LocalPlanResult {
@@ -135,7 +137,9 @@ function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): Loc
   const candidate = layouts.at(-1);
   const floor = candidate?.floors[input.floorIndex];
   const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id) && !(candidate && structuralItemCollides(item, candidate, input.floorIndex))).length ?? 0;
-  const short = `这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
+  const short = result.interiorFull
+    ? `室内已经排满，这版加不进更多整桌。这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。`
+    : `这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
   return { ...next, blocked: short, summary: [short] };
 }
 
@@ -158,6 +162,13 @@ function withArrangement<T extends PlanProposal>(result: T, arrangement: TableAr
   return { ...result, summary: [arrangement.explanation, ...previous] };
 }
 
+function landedSeatScore(input: LocalPlanInput, proposal: { layouts: RoomLayout[]; seats?: number | null }): number {
+  if (!input.furnishing) return proposal.seats ?? 0;
+  const baseIds = new Set((input.base.floors[input.floorIndex]?.items ?? []).map(item => item.id));
+  const cleaned = omitUnlandedBanquetItems(proposal.layouts.at(-1) ?? input.base, input.floorIndex, baseIds);
+  return countSingleSeats(cleaned, input.floorIndex, baseIds) ?? 0;
+}
+
 function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
   const placed = input.furnishing ? materializeFurnishing(input.furnishing) ?? undefined : undefined;
   if (input.furnishing && !placed) {
@@ -168,28 +179,29 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
   const seated = (input.guests ?? 0) > 0;
 
   if (scriptPlan && !scriptPlan.blocked) {
-    const seats = scriptPlan.seats ?? 0;
-    // "加座，再排一版" has to actually re-plan, and it has to be able to seat more. The script
-    // door tops out at one row of whole sets (filling the zone with guests:null changes nothing
-    // once the ask already exceeded the probed ceiling), while the original arrangement gets
-    // denser. Run both, keep the one that seats more: a button that cannot change the result
-    // must not be offered.
+    const scriptWrappedEarly = withArrangement({ ...scriptPlan, via: 'script' as const, summary: scriptPlan.summary }, arrangement);
+    const seats = landedSeatScore(input, scriptWrappedEarly);
+    // "加座，再排一版" replans on a tighter grid inside the same interior. Keep the
+    // pass that lands more real seats, not the one whose raw chair count is higher.
     if (input.seatPriority && input.guests) {
-      const fill = scriptAttempt({ ...input, guests: null }, arrangement, placed);
+      const fill = scriptAttempt({ ...input, guests: null, aisle: false }, arrangement, placed);
       const dense = fallbackPlan(input, arrangement, placed);
       const options = [
+        { via: 'script' as const, proposal: scriptWrappedEarly },
         fill && !fill.blocked ? { via: 'script' as const, proposal: withArrangement(fill, arrangement) } : null,
         dense.blocked ? null : { via: 'fallback' as const, proposal: withArrangement(dense, arrangement) },
       ].flatMap(entry => entry ? [entry] : [])
-        .sort((left, right) => (right.proposal.seats ?? 0) - (left.proposal.seats ?? 0));
+        .sort((left, right) => landedSeatScore(input, right.proposal) - landedSeatScore(input, left.proposal));
       const best = options[0];
-      if (best && (best.proposal.seats ?? 0) > seats) {
+      const bestSeats = best ? landedSeatScore(input, best.proposal) : seats;
+      if (best && bestSeats > seats) {
         const chosen: LocalPlanResult = best.via === 'script'
-          ? { ...best.proposal, via: 'script', summary: fill!.summary, guests: input.guests }
-          : { ...best.proposal, via: 'fallback', fallbackReason: `脚本这一版只排到 ${seats} 座，改用了更密的排法。`, guests: input.guests };
-        if (input.furnishing && (chosen.seats ?? 0) < input.guests) return recoverBanquetSeats(input, arrangement, placed, chosen);
+          ? { ...best.proposal, via: 'script', summary: best.proposal.summary ?? [], guests: input.guests, seatPriority: true }
+          : { ...best.proposal, via: 'fallback', fallbackReason: `脚本这一版只排到 ${seats} 座，改用了更密的排法。`, guests: input.guests, seatPriority: true };
+        if (input.furnishing && bestSeats < input.guests) return recoverBanquetSeats(input, arrangement, placed, chosen);
         return chosen;
       }
+      if (input.furnishing) return { ...recoverBanquetSeats(input, arrangement, placed, { ...scriptWrappedEarly, seatPriority: true }), interiorFull: true, seatPriority: true };
     }
     // A script that seats nobody while people were asked for is a worse answer than the
     // slot heuristic's. Compare instead of assuming the newer door is always better: a room
@@ -201,7 +213,7 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
       }
     }
     const scriptWrapped = withArrangement({ ...scriptPlan, via: 'script' as const, summary: scriptPlan.summary }, arrangement);
-    if (input.furnishing && seated && (scriptWrapped.seats ?? 0) < (input.guests ?? 0)) {
+    if (input.furnishing && seated && landedSeatScore(input, scriptWrapped) < (input.guests ?? 0)) {
       return recoverBanquetSeats(input, arrangement, placed, scriptWrapped);
     }
     return scriptWrapped;
@@ -253,9 +265,9 @@ function recoverBanquetSeats(
     opened && !opened.blocked ? withArrangement({ ...opened, via: 'script' as const, summary: opened.summary }, arrangement) : null,
     heuristic.blocked ? null : withArrangement({ ...heuristic, via: 'fallback' as const, summary: [] }, arrangement),
   ].flatMap(entry => entry ? [entry] : []);
-  options.sort((left, right) => (right.seats ?? 0) - (left.seats ?? 0));
+  options.sort((left, right) => landedSeatScore(input, right) - landedSeatScore(input, left));
   const best = options[0] ?? current;
-  const seats = best.seats ?? 0;
+  const seats = landedSeatScore(input, best);
   if (seats >= guests) {
     return best.via === 'script' && best !== current
       ? { ...best, fallbackReason: '前侧预留带放不下这些圆桌，改用了整间场地。' }
@@ -268,6 +280,7 @@ function recoverBanquetSeats(
 
 function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement, placed?: MaterializedFurnishing): SceneScriptCompileResult | null {
   try {
+    const floor = usableSeatingRect(input.base, input.floorIndex);
     const script = sceneScriptFromBrief({
       widthM: input.widthM,
       depthM: input.depthM,
@@ -276,7 +289,10 @@ function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement, pl
       stage: input.stage ?? true,
       checkin: input.checkin ?? false,
       seed: input.variant >>> 0,
-      ...(input.aisle === false ? { aisle: false } : {}),
+      ...(floor ? { floor } : {}),
+      // A tighter shell is already the room. A front aisle on that small floor
+      // leaves one lucky table and throws the rest of the interior away.
+      ...(input.aisle === false || (floor && input.stage !== true) ? { aisle: false } : {}),
     });
     return compileSceneScript(script, {
       base: input.base,

@@ -4586,10 +4586,14 @@ describe('event layout generation path', () => {
       expect(text).toContain('没有按满员桌数确认');
     }, { timeout: 15000 });
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
-    expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+    const afterText = document.getElementById('plan-proposal')?.textContent ?? '';
     const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
     const afterChairs = after.floors[0]!.items.filter(item => item.type === 'dining-chair');
-    expect(afterChairs.length).toBeGreaterThanOrEqual(landed.length);
+    if (/加不进更多/.test(afterText)) expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
+    else {
+      expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+      expect(afterChairs.length).toBeGreaterThan(landed.length);
+    }
     expect(after.width).toBeCloseTo(23.8);
     expect(onApply).not.toHaveBeenCalled();
   }, 20000);
