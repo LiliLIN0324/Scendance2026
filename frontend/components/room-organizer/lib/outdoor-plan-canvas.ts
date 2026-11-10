@@ -14,12 +14,13 @@
 
 import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
 import { planZoneFillAlpha } from './site-plan-editing';
+import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
-/** 图层栈从底到顶的绘制顺序（底图由画布组件先铺，业务层依此序叠加）。 */
+/** 图层栈从底到顶的绘制顺序（底图由画布组件先铺，业务层依此序叠加；测量标注在最上层）。 */
 export const PLAN_LAYER_STACK: readonly PlanningLayerKind[] = [
-  'boundary', 'zone', 'facility', 'route', 'worker', 'access',
+  'boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure',
 ];
 
 /** 视口：中心经纬度 + 缩放级 + 画布 CSS 尺寸。 */
@@ -93,6 +94,7 @@ export function defaultLayerVisibility(): LayerVisibility {
     access: true,
     worker: true,
     node: true,
+    measure: true,
   };
 }
 
@@ -543,6 +545,121 @@ export function drawNodeGhost(
   ctx.fillText(name, pt.x + 7, pt.y - 2);
 }
 
+/* ---------------- 测量标注（H3-a） ---------------- */
+
+/**
+ * 固定测量标注：距离 = 虚线段 + 段长标注；路径 = 虚线折线 + 总长标注；
+ * 面积 = 半透明填充环 + 面积标注。读数一律从米制几何现算（measureValue），
+ * 缩放不影响数值——「缩放后结果一致」的验收口径。
+ */
+export function drawMeasureLayer(
+  c: PlanCanvasContext,
+  measurements: readonly {
+    id?: string;
+    kind: 'distance' | 'area' | 'path';
+    points: readonly PlanPoint[];
+    selected?: boolean;
+  }[],
+): void {
+  const { ctx } = c;
+  const color = PLANNING_LAYER_COLORS.measure;
+  for (const m of measurements) {
+    if (m.points.length < 2) continue;
+    if (m.kind === 'area' && m.points.length < 3) continue;
+    if (m.kind === 'area') {
+      traceRing(c, m.points);
+      ctx.fillStyle = hexWithAlpha(color, 0.12);
+      ctx.fill();
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.restore();
+      const label = zoneLabelPixel(c, m.points);
+      if (label) drawMeasureLabel(c, formatAreaM2(measureValue(m)), label.x, label.y);
+    } else {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 5]);
+      tracePolyline(c, m.points);
+      ctx.stroke();
+      ctx.restore();
+      // 端点小方块（起点/终点）。
+      for (const p of [m.points[0]!, m.points[m.points.length - 1]!]) {
+        const pt = planPointToPixel(p, c.viewport);
+        ctx.fillStyle = color;
+        ctx.fillRect(pt.x - 2.5, pt.y - 2.5, 5, 5);
+      }
+      const label = measureLabelPixel(c, m.points);
+      if (label) drawMeasureLabel(c, formatLengthM(measureValue(m)), label.x, label.y);
+    }
+  }
+}
+
+/**
+ * 测量草稿（临时测量）：已收点虚线 + 顶点方块 + 指针橡皮筋，随指针画实时读数
+ * （距离=当前段长、路径=累计总长、面积=按当前点闭合的预览面积）；面积 ≥3 点时
+ * 首点画闭合热区圆圈提示。
+ */
+export function drawMeasureDraft(
+  c: PlanCanvasContext,
+  draft: readonly PlanPoint[],
+  kind: PlanMeasureKind,
+  cursorPoint?: PlanPoint,
+): void {
+  const { ctx } = c;
+  const color = PLANNING_LAYER_COLORS.measure;
+  if (draft.length >= 2) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    if (kind === 'area' && draft.length >= 3) {
+      traceRing(c, draft);
+    } else {
+      tracePolyline(c, draft);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (cursorPoint && draft.length >= 1) {
+    const last = planPointToPixel(draft[draft.length - 1]!, c.viewport);
+    const cursor = planPointToPixel(cursorPoint, c.viewport);
+    ctx.save();
+    ctx.strokeStyle = hexWithAlpha(color, 0.55);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(cursor.x, cursor.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+  for (const p of draft) {
+    const pt = planPointToPixel(p, c.viewport);
+    ctx.fillStyle = color;
+    ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+  }
+  if (kind === 'area' && draft.length >= 2 && (cursorPoint || draft.length >= 3)) {
+    // 面积闭合提示：首点画圆圈（与边界/分区草稿同口径）。
+    const first = planPointToPixel(draft[0]!, c.viewport);
+    ctx.beginPath();
+    ctx.arc(first.x, first.y, 9, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  const readout = measureDraftReadout(kind, draft, cursorPoint);
+  if (readout) {
+    // 读数跟指针（有指针时）或最后一个已收点，深色底衬保证在瓦片上可读。
+    const anchor = cursorPoint ?? draft[draft.length - 1]!;
+    const pt = planPointToPixel(anchor, c.viewport);
+    drawMeasureLabel(c, readout, pt.x + 12, pt.y - 14);
+  }
+}
+
 /* ---------------- 内部工具 ---------------- */
 
 function traceRing(c: PlanCanvasContext, ring: readonly PlanPoint[]): void {
@@ -585,6 +702,32 @@ function polylineLabelPixel(
   if (points.length < 2) return null;
   const mid = points[Math.floor(points.length / 2)]!;
   return planPointToPixel(mid, c.viewport);
+}
+
+/** 测量标注锚点：两点取段中点，多点取中点顶点（与折线标注同口径）。 */
+function measureLabelPixel(
+  c: PlanCanvasContext,
+  points: readonly PlanPoint[],
+): { x: number; y: number } | null {
+  if (points.length === 2) {
+    const a = planPointToPixel(points[0]!, c.viewport);
+    const b = planPointToPixel(points[1]!, c.viewport);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  return polylineLabelPixel(c, points);
+}
+
+/** 测量读数标签：深色半透明底衬 + 青色文字（宽按文本长度估算，不依赖 measureText）。 */
+function drawMeasureLabel(c: PlanCanvasContext, text: string, x: number, y: number): void {
+  const { ctx } = c;
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = text.length * 7 + 10;
+  ctx.fillStyle = 'rgba(15,22,32,0.78)';
+  ctx.fillRect(x - w / 2, y - 9, w, 18);
+  ctx.fillStyle = PLANNING_LAYER_COLORS.measure;
+  ctx.fillText(text, x, y);
 }
 
 function drawArrowAt(c: PlanCanvasContext, from: PlanPoint, to: PlanPoint, color: string): void {

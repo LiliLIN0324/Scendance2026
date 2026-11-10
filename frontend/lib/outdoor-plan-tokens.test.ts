@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PLANNING_EDIT_MODE_LABELS,
   PLANNING_ICONS,
+  PLANNING_LABELS,
   PLANNING_LAYER_COLORS,
   PLANNING_RADIUS,
   PLANNING_ROUTE_KIND_COLORS,
@@ -66,13 +67,22 @@ describe('outdoor 2D planning tokens (H1-c)', () => {
     expect(PLANNING_ZONE_OPACITY.max).toBeLessThan(1);
   });
 
-  it('labels all eight canvas edit modes (H2-b/H2-c/H2-d)', () => {
-    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'facility', 'node', 'route', 'view', 'worker', 'zone']);
+  it('labels all nine canvas edit modes (H2-b/H2-c/H2-d/H3-a)', () => {
+    expect(Object.keys(PLANNING_EDIT_MODE_LABELS).sort()).toEqual(['boundary', 'boundary-vertex', 'facility', 'measure', 'node', 'route', 'view', 'worker', 'zone']);
     expect(PLANNING_EDIT_MODE_LABELS['boundary-vertex']).toBe('编辑边界');
     expect(PLANNING_EDIT_MODE_LABELS['facility']).toBe('放设施');
     expect(PLANNING_EDIT_MODE_LABELS['route']).toBe('画动线');
     expect(PLANNING_EDIT_MODE_LABELS['node']).toBe('放节点');
     expect(PLANNING_EDIT_MODE_LABELS['worker']).toBe('布人员');
+    expect(PLANNING_EDIT_MODE_LABELS['measure']).toBe('测量');
+  });
+
+  it('gives the measurement layer a distinct lowercase colour and label (H3-a)', () => {
+    expect(PLANNING_LAYER_COLORS.measure).toMatch(/^#[0-9a-f]{6}$/);
+    // 测量色与其余图层色互异（图例可辨）。
+    const others = Object.entries(PLANNING_LAYER_COLORS).filter(([kind]) => kind !== 'measure');
+    expect(others.every(([, value]) => value !== PLANNING_LAYER_COLORS.measure)).toBe(true);
+    expect(PLANNING_LABELS.measure).toBe('测量');
   });
 
   it('gives the three route kinds distinct lowercase colours (H2-d)', () => {

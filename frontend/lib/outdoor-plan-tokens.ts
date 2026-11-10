@@ -2,7 +2,7 @@
  * 户外 2D 规划视觉 tokens（H1-c）。建立 2D 规划层与既有品牌收口的单一视觉契约：
  * - 主色沿用品牌幕景绿（`globals.css` 的 `--green-deep: #35624A`，与 `lib/brand-tokens.test.ts` 同口径），不另立新绿。
  * - 间距 / 圆角为紧凑、一致的比例尺，供 H2/H4 的 2D 画布与面板使用。
- * - 图层色板区分边界 / 分区 / 设施 / 动线 / 人员 / 节点，H2-b 画区、H2-d 动线、H3-c 图例直接消费。
+ * - 图层色板区分边界 / 分区 / 设施 / 动线 / 人员 / 节点 / 测量，H2-b 画区、H2-d 动线、H3-a 测量、H3-c 图例直接消费。
  * - Lucide 图标集：H4-a 的类型胶囊 / 图层 / 工具图标从 lucide-react 取，这里登记本层用到的图标名（kebab-case）。
  */
 
@@ -31,6 +31,7 @@ export const PLANNING_LAYER_COLORS = {
   access: '#3D6FA8',
   worker: '#B3628C',
   node: '#6B6B6B',
+  measure: '#2fa8b5', // 测量标注（H3-a）：青色，与其他图层色互异
 } as const;
 
 export type PlanningLayerKind = keyof typeof PLANNING_LAYER_COLORS;
@@ -91,7 +92,7 @@ export const PLANNING_ICONS = [
 
 export type PlanningIconName = (typeof PLANNING_ICONS)[number];
 
-/** 类型胶囊的语义文案（H2-b 分区 + H2-c 设施 + H2-d 人员）。 */
+/** 类型胶囊的语义文案（H2-b 分区 + H2-c 设施 + H2-d 人员 + H3-a 测量）。 */
 export const PLANNING_LABELS = {
   boundary: '场地边界',
   zone: '功能分区',
@@ -99,9 +100,10 @@ export const PLANNING_LABELS = {
   route: '动线',
   access: '出入口',
   worker: '人员',
+  measure: '测量',
 } as const;
 
-/** H2-b/H2-c/H2-d 画布编辑模式文案（面板工具行）。 */
+/** H2-b/H2-c/H2-d/H3-a 画布编辑模式文案（面板工具行）。 */
 export const PLANNING_EDIT_MODE_LABELS = {
   view: '浏览',
   boundary: '画边界',
@@ -111,6 +113,7 @@ export const PLANNING_EDIT_MODE_LABELS = {
   route: '画动线',
   node: '放节点',
   worker: '布人员',
+  measure: '测量',
 } as const;
 
 export type PlanningEditMode = keyof typeof PLANNING_EDIT_MODE_LABELS;

@@ -1,20 +1,23 @@
 'use client';
 
 /**
- * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员）。
+ * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计）。
  *
  * 独立路由：不动主工作台（`/editor`）与探针页（`/tdt-probe`）。
  * 内置一份「平湖秋月市集」样例 SitePlanData（符合 site-plan 契约，样例动线
- * 已接端点节点引用），消费 OutdoorPlanCanvas 组件：OSM 真瓦片底图 + 六类业务图层 + 图层栈开关。
+ * 已接端点节点引用），消费 OutdoorPlanCanvas 组件：OSM 真瓦片底图 + 业务图层 + 图层栈开关。
  *
- * H2-b：plan 状态提升到本页，编辑（画边界/拖顶点/画分区/改样式）经 onPlanChange
- * 回写；草稿按 schema 校验后存 localStorage——**刷新重开保留点列**（验收口径），
- * 「重置样例」一键回到初始样例。云端版本化存储接线仍归 H1-b/H2-c 后续卡。
+ * H2-b：plan 状态提升到本页，编辑经 onPlanChange 回写；草稿按 schema 校验后存
+ * localStorage——**刷新重开保留点列**（验收口径），「重置样例」一键回到初始样例。
+ *
+ * H3-a：顶栏常驻派生统计（场地面积/分区/设施/动线全长/人员/固定测量，planOverviewStats
+ * 现算，隐藏图层不改变统计）；测量在画布「测量」模式内进行（临时读数 + 固定测量落盘）。
  */
 
 import { useEffect, useState } from 'react';
 import OutdoorPlanCanvas, { type CanvasBasemapSource } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { sitePlanDataSchema, type SitePlanData } from '../../../supabase/functions/_shared/site-plan';
+import { formatLengthM, planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
 
 /** 样例：平湖秋月周边 200×120 m 市集（锚点 GCJ-02，来自既有 XIHU_LOCAL_CENTER）。 */
 const SAMPLE_PLAN: SitePlanData = {
@@ -187,6 +190,8 @@ export default function OutdoorPlanPage() {
   const [source, setSource] = useState<CanvasBasemapSource>('osm');
   const [plan, setPlan] = useState<SitePlanData>(loadDraftPlan);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // H3-a：全案派生统计（现算不落盘；隐藏图层不改变这里的数字）。
+  const stats = planOverviewStats(plan);
 
   // 刷新重开保留点列：每次编辑后把整份 plan 落 localStorage（带 schema 校验回读）。
   useEffect(() => {
@@ -201,8 +206,11 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H2-d）</h1>
-        <small style={{ color: '#93a4bc' }}>三类动线 · 出入口节点 · 人员布点汇总 · 刷新保留草稿</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H3-a）</h1>
+        <small style={{ color: '#93a4bc' }}>米制测量 · 派生统计 · 刷新保留草稿</small>
+        <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="plan-overview-stats">
+          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount}
+        </span>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="draft-saved">
           {savedAt ? `草稿已存 ${savedAt}` : ''}
         </span>
