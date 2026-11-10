@@ -113,7 +113,28 @@ export const planWorkerSchema = z.strictObject({
 });
 export type PlanWorker = z.infer<typeof planWorkerSchema>;
 
-/** 一份规划数据：边界 + 五类实体，全部带 UUID。 */
+/** 测量标注三类：距离（2 点段长）/ 面积（≥3 点闭合环）/ 路径（≥2 点折线）。 */
+export const planMeasurementKinds = ['distance', 'area', 'path'] as const;
+export const planMeasurementKindLabels: Record<(typeof planMeasurementKinds)[number], string> = {
+  distance: '距离',
+  area: '面积',
+  path: '路径',
+};
+/**
+ * 测量标注（H3-a）：固定测量是标注不是实体——不参与冲突判定，读数一律从几何现算。
+ * 可选字段（与 opacity / startNodeId 同口径）：旧快照不带 measurements 照常解析，不虚构字段。
+ */
+export const planMeasurementSchema = z.strictObject({
+  id: z.uuid(),
+  kind: z.enum(planMeasurementKinds),
+  name: z.string().min(1).max(60),
+  /** 距离恰好 2 点、面积 3–64 点、路径 2–64 点；几何约束见 superRefine。 */
+  points: z.array(planPointSchema).min(2).max(64),
+  notes: z.string().max(500).default(''),
+});
+export type PlanMeasurement = z.infer<typeof planMeasurementSchema>;
+
+/** 一份规划数据：边界 + 五类实体 + 测量标注，全部带 UUID。 */
 export const sitePlanDataSchema = z.strictObject({
   schemaVersion: z.literal(1),
   anchor: planAnchorSchema.optional(),
@@ -123,13 +144,15 @@ export const sitePlanDataSchema = z.strictObject({
   routes: z.array(planRouteSchema).max(200),
   nodes: z.array(planNodeSchema).max(100),
   workers: z.array(planWorkerSchema).max(500),
+  /** 固定测量标注（H3-a，可选）：旧数据不带该字段照常解析。 */
+  measurements: z.array(planMeasurementSchema).max(200).optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
-    ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'],
+    ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['measurements', '测量'],
   ];
   const seen = new Set<string>();
   for (const [key, label] of collections) {
-    const items = plan[key] as { id: string }[];
+    const items = (plan[key] as { id: string }[] | undefined) ?? [];
     for (const item of items) {
       const id = item.id.toLowerCase();
       if (seen.has(id)) ctx.addIssue({ code: 'custom', message: `${label}实体 ID 与其他实体重复` });
@@ -158,6 +181,19 @@ export const sitePlanDataSchema = z.strictObject({
     for (let i = 1; i < route.points.length; i++) {
       if (route.points[i].x === route.points[i - 1].x && route.points[i].y === route.points[i - 1].y) {
         ctx.addIssue({ code: 'custom', message: `路线 ${route.name} 存在相邻重复顶点` });
+      }
+    }
+  }
+  for (const measurement of plan.measurements ?? []) {
+    if (measurement.kind === 'distance' && measurement.points.length !== 2) {
+      ctx.addIssue({ code: 'custom', message: `测量 ${measurement.name} 的距离口径是恰好 2 个点` });
+    }
+    if (measurement.kind === 'area' && measurement.points.length < 3) {
+      ctx.addIssue({ code: 'custom', message: `测量 ${measurement.name} 的面积口径是至少 3 个点闭合环` });
+    }
+    for (let i = 1; i < measurement.points.length; i++) {
+      if (measurement.points[i].x === measurement.points[i - 1].x && measurement.points[i].y === measurement.points[i - 1].y) {
+        ctx.addIssue({ code: 'custom', message: `测量 ${measurement.name} 存在相邻重复顶点` });
       }
     }
   }

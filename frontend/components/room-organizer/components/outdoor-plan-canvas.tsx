@@ -3,8 +3,15 @@
 /**
  * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
  *
- * 组合方式：底图（公开源/天地图瓦片，复用 tdt-probe 工具）+ 六类业务图层
+ * 组合方式：底图（公开源/天地图瓦片，复用 tdt-probe 工具）+ 业务图层
  * （outdoor-plan-canvas 纯函数）+ 内嵌图层栈开关与编辑面板。独立组件，不动 `room-organizer.tsx`。
+ *
+ * H3-a 米制测量与派生统计（规则在 site-plan-measure 纯函数层）：
+ * - 测量模式三类型：距离（两点自动固定）/ 面积（近首点闭合或「完成测量」）/
+ *   路径（双击或「完成测量」提交）；草稿期实时读数跟指针（临时测量，Esc 丢弃）；
+ * - 固定测量进 plan.measurements（契约可选字段），面板列出读数与删除；
+ *   读数一律从米制 ENU 几何现算，缩放不影响数值；
+ * - 测量为图层栈最上层（可隐藏），选中动线面板显示全长。
  *
  * H2-d 动线/节点/人员（规则在 site-plan-routes 纯函数层，组件只做接线）：
  * - 画动线：选类型（人行/车辆/后勤，三类三色）+ 可选单向，单击加路径点、双击或
@@ -36,6 +43,8 @@ import {
   drawDraftLayer,
   drawFacilityGhost,
   drawFacilityLayer,
+  drawMeasureDraft,
+  drawMeasureLayer,
   drawNodeGhost,
   drawRouteDraft,
   drawRouteLayer,
@@ -87,6 +96,14 @@ import {
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
 import {
+  PLAN_MEASURE_MAX_VERTICES,
+  buildMeasurement,
+  formatAreaM2,
+  formatLengthM,
+  measureValue,
+  type PlanMeasureKind,
+} from '../lib/site-plan-measure';
+import {
   publicSourceTileUrl,
   tdtProbeTileUrl,
   visibleTileGrid,
@@ -108,8 +125,10 @@ import {
   type PlanningZoneSemantic,
 } from '@/lib/outdoor-plan-tokens';
 import {
+  planMeasurementKindLabels,
   planRouteKindLabels,
   planRouteKinds,
+  planRouteLengthM,
   planZoneSemanticLabels,
   planZoneSemantics,
   type PlanFacility,
@@ -146,7 +165,7 @@ const TILE = 256;
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const isTdt = (s: CanvasBasemapSource): s is TdtProbeLayer => s === 'vec' || s === 'img';
 
-const LAYER_ORDER: readonly ['boundary', 'zone', 'facility', 'route', 'worker', 'access'] = ['boundary', 'zone', 'facility', 'route', 'worker', 'access'];
+const LAYER_ORDER: readonly ['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure'] = ['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure'];
 
 /** 顶点手柄的命中半径（CSS px），与 drawBoundaryLayer 的手柄绘制半径一致。 */
 const VERTEX_HANDLE_HIT_PX = 10;
@@ -214,6 +233,10 @@ export default function OutdoorPlanCanvas({
   const dragNodeRef = useRef<{ id: string; moved: boolean } | null>(null);
   const nodeDragPreviewRef = useRef<{ node: PlanNode; routes: PlanRoute[] } | null>(null);
   const historyRef = useRef<SitePlanData[]>([]);
+  // H3-a 测量：类型、草稿、指针（临时读数）。
+  const measureKindRef = useRef<PlanMeasureKind>('distance');
+  const measureDraftRef = useRef<PlanPoint[]>([]);
+  const measureCursorRef = useRef<PlanPoint | null>(null);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
@@ -238,6 +261,8 @@ export default function OutdoorPlanCanvas({
   const [nodeIssues, setNodeIssues] = useState<PlanNodeIssue[]>([]);
   const [workerIssues, setWorkerIssues] = useState<PlanWorkerIssue[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
+  const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
+  const [measureDraftCount, setMeasureDraftCount] = useState(0);
 
   function setMode(next: PlanningEditMode) {
     modeRef.current = next;
@@ -250,9 +275,12 @@ export default function OutdoorPlanCanvas({
     routeDraftRef.current = [];
     routeCursorRef.current = null;
     nodeGhostRef.current = null;
+    measureDraftRef.current = [];
+    measureCursorRef.current = null;
     dragNodeRef.current = null;
     nodeDragPreviewRef.current = null;
     setRouteDraftCount(0);
+    setMeasureDraftCount(0);
     setModeState(next);
     setEditMessage(null);
     draw();
@@ -449,6 +477,10 @@ export default function OutdoorPlanCanvas({
         })),
       );
     }
+    // H3-a 固定测量标注（测量图层在最上层；隐藏测量层不影响数据与统计）。
+    if (isLayerVisible(vis, 'measure')) {
+      drawMeasureLayer({ ctx: planCtx, viewport }, current.measurements ?? []);
+    }
 
     // 3) 绘制草稿（画边界/画分区）：≥3 点后闭合预览；形状非法（自交）画红色。
     const activeMode = modeRef.current;
@@ -461,9 +493,12 @@ export default function OutdoorPlanCanvas({
       }
     }
 
-    // 4) H2-d 动线草稿与节点放置幽灵。
+    // 4) H2-d 动线草稿与节点放置幽灵；H3-a 测量草稿（临时读数跟指针）。
     if (activeMode === 'route') {
       drawRouteDraft({ ctx: planCtx, viewport }, routeDraftRef.current, routeKindRef.current, routeCursorRef.current ?? undefined);
+    }
+    if (activeMode === 'measure') {
+      drawMeasureDraft({ ctx: planCtx, viewport }, measureDraftRef.current, measureKindRef.current, measureCursorRef.current ?? undefined);
     }
     if (activeMode === 'node' && nodeGhostRef.current) {
       const names = { entry: '入口', exit: '出口', both: '出入口' } as const;
@@ -602,6 +637,11 @@ export default function OutdoorPlanCanvas({
     }
     if (modeRef.current === 'worker') {
       placeWorkerAt(pt);
+      return;
+    }
+    // H3-a：测量收点（距离第 2 点自动提交；面积近首点闭合）。
+    if (modeRef.current === 'measure') {
+      addMeasurePoint(px, pt);
       return;
     }
     const draftPoints = draftRef.current;
@@ -947,6 +987,80 @@ export default function OutdoorPlanCanvas({
     setEditMessage('人员点位已删除。');
   }
 
+  /* ---------------- H3-a 测量（临时读数 + 固定测量） ---------------- */
+
+  /** 测量模式单击收点：面积近首点闭合；距离第 2 点自动提交；其余累积。
+   *  近已有点（<0.5 m）忽略；顶点上限与契约一致。 */
+  function addMeasurePoint(px: { x: number; y: number }, pt: PlanPoint) {
+    const kind = measureKindRef.current;
+    const draft = measureDraftRef.current;
+    if (kind === 'area' && draft.length >= 3) {
+      const firstPx = planPointToPixel(draft[0]!, currentViewport());
+      if (Math.hypot(firstPx.x - px.x, firstPx.y - px.y) <= DRAFT_CLOSE_HIT_PX) {
+        finishMeasure();
+        return;
+      }
+    }
+    if (draft.length >= PLAN_MEASURE_MAX_VERTICES) {
+      setEditMessage(`测量顶点已达上限 ${PLAN_MEASURE_MAX_VERTICES} 个，先提交或按 Esc 取消。`);
+      return;
+    }
+    for (const existing of draft) {
+      if (planPointDistanceM(existing, pt) < PLAN_MIN_VERTEX_GAP_M) {
+        setEditMessage('离已有的点太近（<0.5 m），当作重复点击忽略。');
+        return;
+      }
+    }
+    measureDraftRef.current = [...draft, { x: pt.x, y: pt.y }];
+    setMeasureDraftCount(measureDraftRef.current.length);
+    setEditMessage(null);
+    if (kind === 'distance' && measureDraftRef.current.length >= 2) {
+      finishMeasure();
+      return;
+    }
+    draw();
+  }
+
+  /** 提交并固定测量：buildMeasurement 校验后 commitPlan；清草稿可连续测量。 */
+  function finishMeasure() {
+    const kind = measureKindRef.current;
+    const draft = measureDraftRef.current;
+    if (draft.length < (kind === 'area' ? 3 : 2)) {
+      setEditMessage(kind === 'area'
+        ? '面积测量至少要 3 个点：单击加顶点，点回起点或点「完成测量」闭合。'
+        : kind === 'distance'
+          ? '距离测量需要 2 个点。'
+          : '路径测量至少要 2 个点：单击加路径点，双击或点「完成测量」提交。');
+      return;
+    }
+    const current = planRef.current;
+    const existing = current.measurements ?? [];
+    const result = buildMeasurement({
+      kind,
+      name: `${planMeasurementKindLabels[kind]} ${existing.length + 1}`,
+      points: draft,
+    });
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    commitPlan({ ...current, measurements: [...existing, result.value] });
+    measureDraftRef.current = [];
+    measureCursorRef.current = null;
+    setMeasureDraftCount(0);
+    const valueText = result.value.kind === 'area'
+      ? formatAreaM2(measureValue(result.value))
+      : formatLengthM(measureValue(result.value));
+    setEditMessage(`已固定测量「${result.value.name}」= ${valueText}；继续测量或 Esc 结束。`);
+  }
+
+  /** 删除固定测量标注（测量不是实体，删了就没了；不参与冲突判定，无需剥离引用）。 */
+  function deleteMeasurement(id: string) {
+    const current = planRef.current;
+    commitPlan({ ...current, measurements: (current.measurements ?? []).filter(m => m.id !== id) });
+    setEditMessage('测量标注已删除。');
+  }
+
   function handleStageMouseDown(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
@@ -1033,6 +1147,14 @@ export default function OutdoorPlanCanvas({
       draw();
       return;
     }
+    // H3-a：测量临时读数跟指针。
+    if (activeMode === 'measure') {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      measureCursorRef.current = hit.pt;
+      draw();
+      return;
+    }
     if (activeMode === 'node') {
       const hit = eventPlanPoint(event);
       if (!hit) return;
@@ -1114,6 +1236,7 @@ export default function OutdoorPlanCanvas({
     ghostPointRef.current = null;
     routeCursorRef.current = null;
     nodeGhostRef.current = null;
+    measureCursorRef.current = null;
     // 节点拖动中离开画布：预览不提交，回弹原位。
     dragNodeRef.current = null;
     nodeDragPreviewRef.current = null;
@@ -1179,10 +1302,13 @@ export default function OutdoorPlanCanvas({
       onMouseUp={handleStageMouseUp}
       onMouseLeave={handleStageMouseLeave}
       onDoubleClick={event => {
-        // H2-d：画动线模式下双击提交（评审稿「三类路线有方向与用途」的快捷收尾）。
+        // H2-d：画动线模式下双击提交；H3-a：测量模式下双击提交（面积/路径）。
         if (modeRef.current === 'route') {
           event.preventDefault();
           finishRoute();
+        } else if (modeRef.current === 'measure') {
+          event.preventDefault();
+          finishMeasure();
         }
       }}
       onWheel={e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }}
@@ -1301,6 +1427,11 @@ export default function OutdoorPlanCanvas({
                   {mode === 'zone' && '圈出分区后点回起点闭合，自交会被拒绝。'}
                   {mode === 'facility' && (facilityTemplateId ? '画布上移动鼠标预览占地，单击放置；也可直接拖模板进来；Esc 取消。' : '先点选下方模板，或直接把模板拖到画布上。')}
                   {mode === 'route' && '单击加路径点，双击或点「完成动线」提交；端点靠近出入口会自动连接；Esc 取消。'}
+                  {mode === 'measure' && (measureKind === 'distance'
+                    ? '单击两点，第 2 点自动固定距离；读数跟指针；Esc 取消。'
+                    : measureKind === 'area'
+                      ? '圈出区域后点回起点或点「完成测量」闭合固定面积；Esc 取消。'
+                      : '单击加路径点，双击或点「完成测量」提交；Esc 取消。')}
                   {mode === 'node' && '单击放置出入口节点，可连续放置；Esc 取消。'}
                   {mode === 'worker' && '单击布置人员点位，落点在分区内会自动归属；Esc 取消。'}
                   {mode === 'view' && '拖拽平移，滚轮缩放；单击出入口/人员/动线/设施可选中；拖动出入口，关联动线端点随动。'}
@@ -1395,6 +1526,67 @@ export default function OutdoorPlanCanvas({
                         style={{ width: 64, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
                       />
                     </label>
+                  </div>
+                )}
+
+                {mode === 'measure' && (
+                  <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <div style={{ ...sectionTitle, marginTop: 0 }}>测量类型</div>
+                    {(['distance', 'area', 'path'] as const).map(k => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={measureKind === k}
+                        style={{ ...modeButtonStyle(measureKind === k), display: 'block', width: '100%', textAlign: 'left', marginTop: PLANNING_SPACING.xs }}
+                        onClick={() => {
+                          measureKindRef.current = k;
+                          setMeasureKind(k);
+                          // 换类型清草稿：距离/面积/路径点数口径不同，不跨类型续用。
+                          measureDraftRef.current = [];
+                          measureCursorRef.current = null;
+                          setMeasureDraftCount(0);
+                          setEditMessage(null);
+                          draw();
+                        }}
+                      >
+                        {planMeasurementKindLabels[k]}
+                      </button>
+                    ))}
+                    {measureKind !== 'distance' && (
+                      <button
+                        type="button"
+                        data-testid="measure-finish"
+                        disabled={measureKind === 'area' ? measureDraftCount < 3 : measureDraftCount < 2}
+                        style={{
+                          ...modeButtonStyle(false),
+                          marginTop: PLANNING_SPACING.xs,
+                          opacity: (measureKind === 'area' ? measureDraftCount < 3 : measureDraftCount < 2) ? 0.5 : 1,
+                        }}
+                        onClick={() => finishMeasure()}
+                      >
+                        完成测量（{measureDraftCount} 点）
+                      </button>
+                    )}
+                    {(plan.measurements?.length ?? 0) > 0 && (
+                      <>
+                        <div style={sectionTitle}>固定测量（{plan.measurements!.length}）</div>
+                        {plan.measurements!.map(m => (
+                          <div key={m.id} data-testid="measure-list-item" style={{ ...zoneRowStyle, justifyContent: 'space-between' }}>
+                            <span style={{ flex: 1, minWidth: 0, opacity: 0.9 }}>
+                              {m.name} = {m.kind === 'area' ? formatAreaM2(measureValue(m)) : formatLengthM(measureValue(m))}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`删除测量「${m.name}」`}
+                              style={modeButtonStyle(false)}
+                              onClick={() => deleteMeasurement(m.id)}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -1527,7 +1719,7 @@ export default function OutdoorPlanCanvas({
                       单向（沿线方向箭头）
                     </label>
                     <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
-                      {selectedRoute.points.length} 点 · {selectedRoute.startNodeId ? '起点已连节点' : '起点自由'} · {selectedRoute.endNodeId ? '终点已连节点' : '终点自由'}
+                      {selectedRoute.points.length} 点 · 全长 {formatLengthM(planRouteLengthM(selectedRoute.points))} · {selectedRoute.startNodeId ? '起点已连节点' : '起点自由'} · {selectedRoute.endNodeId ? '终点已连节点' : '终点自由'}
                     </div>
                     <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, flexWrap: 'wrap' }}>
                       <button

@@ -222,4 +222,63 @@ describe('site plan contract', () => {
     (danglingEnd.routes[0] as { endNodeId?: string }).endNodeId = '66666666-6666-4666-8666-666666666666';
     expect(sitePlanDataSchema.safeParse(danglingEnd).success).toBe(false);
   });
+
+  it('keeps measurements optional and round-trips them when present (H3-a)', () => {
+    // 旧数据不带 measurements：解析成功且不虚构字段（与 opacity / startNodeId 同口径）。
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.measurements).toBeUndefined();
+
+    // 带固定测量：往返逐字段保留。
+    const measured = samplePlan() as ReturnType<typeof samplePlan> & { measurements?: unknown };
+    measured.measurements = [
+      {
+        id: '66666666-6666-4666-8666-666666666661',
+        kind: 'distance',
+        name: '距离 1',
+        points: [{ x: 0, y: 0 }, { x: 3, y: 4 }],
+        notes: '',
+      },
+      {
+        id: '66666666-6666-4666-8666-666666666662',
+        kind: 'area',
+        name: '面积 1',
+        points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }],
+        notes: '',
+      },
+    ];
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(measured)));
+    expect(restored.measurements).toHaveLength(2);
+    expect(restored.measurements![0].points).toEqual([{ x: 0, y: 0 }, { x: 3, y: 4 }]);
+    expect(restored.measurements![1].kind).toBe('area');
+  });
+
+  it('rejects malformed measurement geometry (H3-a)', () => {
+    function withMeasurement(points: { x: number; y: number }[], kind: 'distance' | 'area' | 'path') {
+      const data = samplePlan() as ReturnType<typeof samplePlan> & { measurements?: unknown };
+      data.measurements = [{
+        id: '66666666-6666-4666-8666-666666666663',
+        kind,
+        name: '测量 1',
+        points,
+        notes: '',
+      }];
+      return data;
+    }
+
+    // 距离口径是恰好 2 点。
+    expect(sitePlanDataSchema.safeParse(withMeasurement([{ x: 0, y: 0 }], 'distance')).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse(withMeasurement(
+      [{ x: 0, y: 0 }, { x: 3, y: 4 }, { x: 6, y: 8 }],
+      'distance',
+    )).success).toBe(false);
+
+    // 面积口径是至少 3 点闭合环。
+    expect(sitePlanDataSchema.safeParse(withMeasurement([{ x: 0, y: 0 }, { x: 10, y: 0 }], 'area')).success).toBe(false);
+
+    // 相邻重复顶点拒绝（与动线/边界同口径）。
+    expect(sitePlanDataSchema.safeParse(withMeasurement(
+      [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 5, y: 0 }],
+      'path',
+    )).success).toBe(false);
+  });
 });

@@ -5,6 +5,8 @@ import {
   drawAccessLayer,
   drawFacilityGhost,
   drawFacilityLayer,
+  drawMeasureDraft,
+  drawMeasureLayer,
   drawNodeGhost,
   drawRouteDraft,
   drawRouteLayer,
@@ -49,8 +51,8 @@ describe('outdoor plan canvas core (H2-a)', () => {
     expect(backY).toBeCloseTo(p.y, 1);
   });
 
-  it('orders the layer stack bottom-up with all six business layers', () => {
-    expect(PLAN_LAYER_STACK).toEqual(['boundary', 'zone', 'facility', 'route', 'worker', 'access']);
+  it('orders the layer stack bottom-up with the business layers plus measure on top (H3-a)', () => {
+    expect(PLAN_LAYER_STACK).toEqual(['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure']);
   });
 
   it('filters visible layers without changing the stack order', () => {
@@ -58,6 +60,7 @@ describe('outdoor plan canvas core (H2-a)', () => {
     expect(visiblePlanLayers(vis)).toEqual([...PLAN_LAYER_STACK]);
     vis.facility = false;
     vis.zone = false;
+    vis.measure = false;
     expect(visiblePlanLayers(vis)).toEqual(['boundary', 'route', 'worker', 'access']);
     expect(isLayerVisible(vis, 'facility')).toBe(false);
     // 全案数据不受可见性影响——这里只校验过滤函数本身的口径。
@@ -256,5 +259,58 @@ describe('route / node / worker drawing (H2-d)', () => {
     expect(cap.texts).toContain('西门 2');
     // 幽灵菱形是 0.9 透明度的入口蓝 fill。
     expect(cap.fills).toContain(hexWithAlpha(PLANNING_LAYER_COLORS.access, 0.9));
+  });
+});
+
+/* ---------------- H3-a 测量标注绘制 ---------------- */
+
+describe('measurement drawing (H3-a)', () => {
+  it('draws a fixed distance measurement as a dashed segment with a 5 m label', () => {
+    const { ctx, cap } = makeCtx();
+    drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm1', kind: 'distance', points: [{ x: 0, y: 0 }, { x: 3, y: 4 }] },
+    ]);
+    expect(cap.dash).toContainEqual([8, 5]);
+    expect(cap.texts).toContain('5 m');
+    expect(cap.strokes).toContain(PLANNING_LAYER_COLORS.measure);
+    // 深色底衬（标签可读性）也在 fill 记录里。
+    expect(cap.fills.some(f => f.startsWith('rgba(15,22,32'))).toBe(true);
+  });
+
+  it('draws a fixed 10×10 area measurement as a filled ring with a 100 m² label', () => {
+    const { ctx, cap } = makeCtx();
+    drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm2', kind: 'area', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] },
+    ]);
+    expect(cap.dash).toContainEqual([6, 4]);
+    expect(cap.fills).toContain(hexWithAlpha(PLANNING_LAYER_COLORS.measure, 0.12));
+    expect(cap.texts).toContain('100 m²');
+  });
+
+  it('draws a fixed two-segment 10 m path with a 20 m total label', () => {
+    const { ctx, cap } = makeCtx();
+    drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm3', kind: 'path', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] },
+    ]);
+    expect(cap.texts).toContain('20 m');
+  });
+
+  it('draws the measure draft with rubber band and a live readout near the cursor', () => {
+    const { ctx, cap } = makeCtx();
+    drawMeasureDraft({ ctx, viewport: view } as PlanCanvasContext, [{ x: 0, y: 0 }], 'distance', { x: 3, y: 4 });
+    expect(cap.dash).toContainEqual([4, 4]); // 橡皮筋
+    // 一个顶点方块 + 读数底衬 = 2 个 fill 矩形。
+    expect(cap.rects.filter(r => r.startsWith('fill:'))).toHaveLength(2);
+    expect(cap.texts).toContain('5 m'); // 实时读数
+
+    // 面积草稿：3 点 + 指针闭合 10×10 → 100 m²。
+    const area = makeCtx();
+    drawMeasureDraft(
+      { ctx: area.ctx, viewport: view } as PlanCanvasContext,
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }],
+      'area',
+      { x: 0, y: 10 },
+    );
+    expect(area.cap.texts).toContain('100 m²');
   });
 });
