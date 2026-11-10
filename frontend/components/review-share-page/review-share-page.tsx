@@ -8,6 +8,7 @@ import {
   type ReviewPinDraft,
 } from '../room-organizer/lib/review-pins';
 import { floorElevation } from '../room-organizer/lib/storeys';
+import { isStructuralMarker } from '../room-organizer/lib/structural-layout';
 import {
   loadReviewPlan,
   readLocalReviewLayout,
@@ -349,7 +350,8 @@ function versionedReturnStorage(storage:Storage,planKey:string):Pick<Storage,'ge
 }
 
 function placedCount(items: readonly FurnitureItem[]): number {
-  return items.filter((item) => item.position).length;
+  // 与工作台 materialCount 同一口径：门/柱/出入口是场地真相，不计物料件数。
+  return items.filter((item) => item.position && !isStructuralMarker(item)).length;
 }
 
 function itemLegend(items: readonly FurnitureItem[]): { rows: { name: string; color: string; count: number }[]; hidden: number } {
