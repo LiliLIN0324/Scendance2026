@@ -159,6 +159,11 @@ export interface BuildFacilityInput {
   color?: string;
   notes?: string;
   id?: string;
+  /**
+   * P2-h：物件库来的「动态模板」——清单里 549 件贴纸不是 8 个内置模板之一，
+   * 尺寸/名称由库条目给定。不传仍走 `findFacilityTemplate`（语义不变）。
+   */
+  template?: PlanFacilityTemplate;
 }
 
 /**
@@ -170,7 +175,7 @@ export function buildFacility(
   boundary: readonly PlanPoint[],
   existing: readonly { templateId: string }[] = [],
 ): PlanEditResult<PlanFacility> {
-  const template = findFacilityTemplate(input.templateId);
+  const template = input.template ?? findFacilityTemplate(input.templateId);
   if (!template) {
     return { ok: false, issue: { code: 'unknown-template', message: `设施模板「${input.templateId}」不存在。` } };
   }

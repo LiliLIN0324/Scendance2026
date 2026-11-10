@@ -177,6 +177,16 @@ describe('设施 → 3D 物件（planPropKind / facilityProp）', () => {
     expect(planPropKind('mystery-box')).toBe('misc');
   });
 
+  it('物件库模板 id（oneplan:kind:slug）只看 slug 段判种类，不被 kind 段干扰', () => {
+    // kind 段里含 'icon'/'scale'，slug 段才是物件名；不能被前缀字母带偏。
+    expect(planPropKind('oneplan:icon:toilet')).toBe('toilet');
+    expect(planPropKind('oneplan:scale:tent')).toBe('tent');
+    expect(planPropKind('oneplan:scale:stage')).toBe('stage');
+    expect(planPropKind('oneplan:icon:food-truck')).toBe('foodTruck');
+    // 库里没有对应实体的纯图形对象，按兜底低块处理。
+    expect(planPropKind('oneplan:icon:parking')).toBe('misc');
+  });
+
   it('尺寸与朝向换算到壳体，且底面积给最小可辨认尺度', () => {
     const frame = planShellFrame(square, { width: 20, depth: 10 })!; // 正好 1:1
     const prop = facilityProp({
