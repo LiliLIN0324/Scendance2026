@@ -82,11 +82,11 @@ export function polylineHalfLengthPoint(points: readonly PlanPoint[]): PlanPoint
 export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
   const groups: PlanLegendGroup[] = [];
 
-  // 1) 场地边界（恒有一组：边界是全案基底）。
+  // 1) 场地边界（恒有一组：边界是全案基底）。图标与图层图标映射同源（H4-a：hexagon）。
   groups.push({
     title: '场地边界',
     entries: [{
-      icon: iconOf('shapes'),
+      icon: iconOf('hexagon'),
       swatch: PLANNING_LAYER_COLORS.boundary,
       label: '场地边界',
       count: 1,
@@ -131,7 +131,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
         const templateName = findFacilityTemplate(templateId)?.name ?? templateId;
         const sizes = [...bucket.sizes];
         return {
-          icon: iconOf('truck'),
+          icon: iconOf('tent'),
           swatch: bucket.color ?? PLANNING_LAYER_COLORS.facility,
           label: templateName,
           count: bucket.count,

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则 + H3-c 规划信息面板/图例）。
+ * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则 + H3-c 规划信息面板/图例 + H4-a 视觉复刻）。
  *
  * 独立路由：不动主工作台（`/editor`）与探针页（`/tdt-probe`）。
  * 内置一份「平湖秋月市集」样例 SitePlanData（符合 site-plan 契约，样例动线
@@ -226,8 +226,8 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H3-c）</h1>
-        <small style={{ color: '#93a4bc' }}>规划信息面板 · 图例生成器 · 双向定位 · 冲突规则</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H4-a）</h1>
+        <small style={{ color: '#93a4bc' }}>视觉复刻 · design tokens 全量 · 类型胶囊/图层/工具图标（Lucide 自绘）</small>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="plan-overview-stats">
           场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount} · <span data-testid="conflict-count" style={{ color: stats.conflictCount > 0 ? '#e8a3a3' : '#7fb69a' }}>冲突/缺失 {stats.conflictCount}</span>
         </span>

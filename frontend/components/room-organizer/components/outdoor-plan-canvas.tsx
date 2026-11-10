@@ -3,6 +3,12 @@
 /**
  * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
  *
+ * H4-a 视觉复刻（design tokens 全量 + 图标体系）：
+ * - 面板表面色/排版字号/图标尺寸全部消费 `outdoor-plan-tokens`（原内联 hex 已收敛）；
+ * - 编辑工具按钮、图层栈开关、信息页签、撤销按钮各配 Lucide 线条图标（自绘同风格，
+ *   经 outdoor-plan-icons 的编译期闭环映射）；
+ * - 清单行加类型胶囊（图标+类型名药丸，色从图层色派生，与图例/图层栈同源）。
+ *
  * 组合方式：底图（公开源/天地图瓦片，复用 tdt-probe 工具）+ 业务图层
  * （outdoor-plan-canvas 纯函数）+ 内嵌图层栈开关与编辑面板。独立组件，不动 `room-organizer.tsx`。
  *
@@ -134,17 +140,24 @@ import {
   type ProbePublicSource,
   type TdtProbeLayer,
 } from '../lib/tdt-probe';
-import { DoorOpen, Route as RouteIcon, Ruler, Shapes, Truck, Users, type LucideIcon } from 'lucide-react';
+import { planningIcon } from './outdoor-plan-icons';
 import {
   PLANNING_CONFLICT_COLORS,
+  PLANNING_EDIT_MODE_ICONS,
   PLANNING_EDIT_MODE_LABELS,
+  PLANNING_INFO_TAB_ICONS,
+  PLANNING_ICON_SIZES,
   PLANNING_LABELS,
   PLANNING_LAYER_COLORS,
+  PLANNING_LAYER_ICONS,
   PLANNING_RADIUS,
   PLANNING_ROUTE_KIND_COLORS,
   PLANNING_SPACING,
+  PLANNING_SURFACE,
+  PLANNING_TYPOGRAPHY,
   PLANNING_ZONE_COLORS,
   PLANNING_ZONE_OPACITY,
+  withAlphaHex,
   type PlanningEditMode,
   type PlanningIconName,
   type PlanningLayerKind,
@@ -223,15 +236,48 @@ const PLAN_INFO_LIST_LIMIT = 40;
 const DEFAULT_ANCHOR_LNG = 120.141306;
 const DEFAULT_ANCHOR_LAT = 30.2545;
 
-/** 图例图标映射（tokens PLANNING_ICONS 子集；未命中回落 Shapes）。 */
-const LEGEND_ICON_COMPONENTS: Partial<Record<PlanningIconName, LucideIcon>> = {
-  shapes: Shapes,
-  ruler: Ruler,
-  route: RouteIcon,
-  users: Users,
-  truck: Truck,
-  'door-open': DoorOpen,
+/** H4-a 清单六类的类型胶囊：图标与图层图标映射同源，色用图层色。 */
+const INVENTORY_KIND_ICONS: Record<PlanInventoryKind, PlanningIconName> = {
+  zone: PLANNING_LAYER_ICONS.zone,
+  facility: PLANNING_LAYER_ICONS.facility,
+  route: PLANNING_LAYER_ICONS.route,
+  node: PLANNING_LAYER_ICONS.node,
+  worker: PLANNING_LAYER_ICONS.worker,
+  measurement: PLANNING_LAYER_ICONS.measure,
 };
+const INVENTORY_KIND_COLORS: Record<PlanInventoryKind, string> = {
+  zone: PLANNING_LAYER_COLORS.zone,
+  facility: PLANNING_LAYER_COLORS.facility,
+  route: PLANNING_LAYER_COLORS.route,
+  node: PLANNING_LAYER_COLORS.node,
+  worker: PLANNING_LAYER_COLORS.worker,
+  measurement: PLANNING_LAYER_COLORS.measure,
+};
+
+/** H4-a 类型胶囊：清单行的「图标+类型」药丸，色从图层色派生（withAlphaHex），不另立色值。 */
+function TypeCapsule({ kind, label }: { kind: PlanInventoryKind; label: string }) {
+  const Icon = planningIcon(INVENTORY_KIND_ICONS[kind]);
+  const color = INVENTORY_KIND_COLORS[kind];
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        padding: '0 6px',
+        borderRadius: 999,
+        border: `1px solid ${withAlphaHex(color, 0.55)}`,
+        background: withAlphaHex(color, 0.14),
+        fontSize: PLANNING_TYPOGRAPHY.hint,
+        lineHeight: '16px',
+        color: PLANNING_SURFACE.panelText,
+      }}
+    >
+      <Icon size={PLANNING_ICON_SIZES.capsule} color={color} aria-hidden />
+      {label}
+    </span>
+  );
+}
 
 /** 问题页签的可定位条目：文本 + 状态色 + 锚点 + 关联实体（点条目选中并居中）。 */
 interface PlanLocatableIssue {
@@ -1508,12 +1554,12 @@ export default function OutdoorPlanCanvas({
     right: PLANNING_SPACING.sm,
     top: PLANNING_SPACING.sm,
     zIndex: 3,
-    background: 'rgba(24, 34, 48, 0.92)',
-    border: '1px solid #35485f',
+    background: PLANNING_SURFACE.panelBg,
+    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
     borderRadius: PLANNING_RADIUS.md,
     padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-    color: '#e7edf5',
-    fontSize: 12,
+    color: PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.panel,
     minWidth: 168,
     maxWidth: 240,
     pointerEvents: 'auto',
@@ -1527,12 +1573,12 @@ export default function OutdoorPlanCanvas({
     left: PLANNING_SPACING.sm,
     top: PLANNING_SPACING.sm,
     zIndex: 3,
-    background: 'rgba(24, 34, 48, 0.92)',
-    border: '1px solid #35485f',
+    background: PLANNING_SURFACE.panelBg,
+    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
     borderRadius: PLANNING_RADIUS.md,
     padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-    color: '#e7edf5',
-    fontSize: 12,
+    color: PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.panel,
     minWidth: 200,
     maxWidth: 260,
     pointerEvents: 'auto',
@@ -1544,36 +1590,40 @@ export default function OutdoorPlanCanvas({
     cursor: 'pointer',
     display: 'flex',
     flexWrap: 'wrap',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: PLANNING_SPACING.xs,
     width: '100%',
     padding: '3px 4px',
     marginTop: 2,
     borderRadius: PLANNING_RADIUS.sm,
-    border: selected ? '1px solid #7fb69a' : '1px solid transparent',
-    background: selected ? 'rgba(127, 182, 154, 0.18)' : 'transparent',
-    color: '#e7edf5',
-    fontSize: 11,
+    border: selected ? `1px solid ${PLANNING_SURFACE.selectedBorder}` : '1px solid transparent',
+    background: selected ? PLANNING_SURFACE.selectedBg : 'transparent',
+    color: PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.row,
     textAlign: 'left',
   });
   const issueButtonStyle = (color?: string): React.CSSProperties => ({
     all: 'unset',
     cursor: 'pointer',
-    color: color ?? '#e7edf5',
-    fontSize: 11,
+    color: color ?? PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.row,
   });
   const modeButtonStyle = (active: boolean): React.CSSProperties => ({
     all: 'unset',
     cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
     padding: '3px 7px',
     borderRadius: PLANNING_RADIUS.sm,
-    border: '1px solid #35485f',
-    background: active ? '#2f4a3c' : 'transparent',
-    color: '#e7edf5',
-    fontSize: 11,
+    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+    background: active ? PLANNING_SURFACE.activeBg : 'transparent',
+    color: PLANNING_SURFACE.panelText,
+    fontSize: PLANNING_TYPOGRAPHY.row,
   });
   const zoneRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs };
-  const selectStyle: React.CSSProperties = { background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' };
+  const selectStyle: React.CSSProperties = { background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' };
+  const UndoIcon = planningIcon('undo-2');
 
   return (
     <div
@@ -1639,19 +1689,23 @@ export default function OutdoorPlanCanvas({
         {infoOpen && (
           <>
             <div role="tablist" aria-label="规划信息页签" style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
-              {INFO_TABS.map(tab => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={infoTab === tab}
-                  data-testid={`info-tab-${tab}`}
-                  style={modeButtonStyle(infoTab === tab)}
-                  onClick={() => setInfoTab(tab)}
-                >
-                  {INFO_TAB_LABELS[tab]}
-                </button>
-              ))}
+              {INFO_TABS.map(tab => {
+                const TabIcon = planningIcon(PLANNING_INFO_TAB_ICONS[tab]);
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={infoTab === tab}
+                    data-testid={`info-tab-${tab}`}
+                    style={modeButtonStyle(infoTab === tab)}
+                    onClick={() => setInfoTab(tab)}
+                  >
+                    <TabIcon size={PLANNING_ICON_SIZES.capsule} aria-hidden />
+                    {INFO_TAB_LABELS[tab]}
+                  </button>
+                );
+              })}
             </div>
 
             {infoTab === 'overview' && (
@@ -1715,7 +1769,8 @@ export default function OutdoorPlanCanvas({
                         <button type="button" onClick={() => locateRow(row)} style={inventoryRowButtonStyle(selected)} title="点击定位到地图">
                           {row.hasIssue && <span style={{ color: PLANNING_CONFLICT_COLORS.conflict }} title="命中问题/冲突清单">⚠</span>}
                           <span style={{ fontWeight: 600 }}>{row.name}</span>
-                          <span style={{ opacity: 0.8 }}>{row.typeLabel}{row.zoneName ? ` · ${row.zoneName}` : ''}</span>
+                          <TypeCapsule kind={row.kind} label={row.typeLabel} />
+                          {row.zoneName && <span style={{ opacity: 0.8 }}>{row.zoneName}</span>}
                           <span style={{ opacity: 0.85 }}>{row.metric}</span>
                         </button>
                       </li>
@@ -1759,10 +1814,10 @@ export default function OutdoorPlanCanvas({
                   <div key={group.title}>
                     <div style={sectionTitle}>{group.title}</div>
                     {group.entries.map(entry => {
-                      const Icon = LEGEND_ICON_COMPONENTS[entry.icon] ?? Shapes;
+                      const Icon = planningIcon(entry.icon);
                       return (
                         <div key={entry.label} data-testid="legend-entry" style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: 2 }}>
-                          <Icon size={11} color={entry.swatch} strokeWidth={2} />
+                          <Icon size={PLANNING_ICON_SIZES.legend} color={entry.swatch} strokeWidth={2} />
                           <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: entry.swatch, display: 'inline-block' }} />
                           <span style={{ flex: 1 }}>{entry.label}</span>
                           <span>× {entry.count}</span>
@@ -1775,7 +1830,7 @@ export default function OutdoorPlanCanvas({
               </div>
             )}
 
-            <div role="status" aria-live="polite" style={{ marginTop: PLANNING_SPACING.sm, minHeight: 16, color: infoMessage ? '#ffd88a' : 'transparent' }}>
+            <div role="status" aria-live="polite" style={{ marginTop: PLANNING_SPACING.sm, minHeight: 16, color: infoMessage ? PLANNING_SURFACE.warnText : 'transparent' }}>
               {infoMessage ?? '·'}
             </div>
           </>
@@ -1793,17 +1848,21 @@ export default function OutdoorPlanCanvas({
         </button>
         {panelOpen && (
           <>
-            {LAYER_ORDER.map(kind => (
-              <label key={kind} style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={layerState[kind]}
-                  onChange={event => setLayerVisible(kind, event.target.checked)}
-                />
-                <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: PLANNING_LAYER_COLORS[kind], display: 'inline-block' }} />
-                {PLANNING_LABELS[kind]}
-              </label>
-            ))}
+            {LAYER_ORDER.map(kind => {
+              const LayerIcon = planningIcon(PLANNING_LAYER_ICONS[kind]);
+              return (
+                <label key={kind} style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={layerState[kind]}
+                    onChange={event => setLayerVisible(kind, event.target.checked)}
+                  />
+                  <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: PLANNING_LAYER_COLORS[kind], display: 'inline-block' }} />
+                  <LayerIcon size={PLANNING_ICON_SIZES.tool} color={PLANNING_LAYER_COLORS[kind]} aria-hidden />
+                  {PLANNING_LABELS[kind]}
+                </label>
+              );
+            })}
 
             {/* H2-d 人员汇总（评审稿「自动汇总」）：只读也可查；隐藏人员层不影响这里的统计。 */}
             {plan.workers.length > 0 && (
@@ -1826,17 +1885,21 @@ export default function OutdoorPlanCanvas({
               <>
                 <div style={sectionTitle}>编辑</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs }}>
-                  {(Object.keys(PLANNING_EDIT_MODE_LABELS) as PlanningEditMode[]).map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      style={modeButtonStyle(mode === m)}
-                      aria-pressed={mode === m}
-                      onClick={() => setMode(m)}
-                    >
-                      {PLANNING_EDIT_MODE_LABELS[m]}
-                    </button>
-                  ))}
+                  {(Object.keys(PLANNING_EDIT_MODE_LABELS) as PlanningEditMode[]).map(m => {
+                    const ModeIcon = planningIcon(PLANNING_EDIT_MODE_ICONS[m]);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        style={modeButtonStyle(mode === m)}
+                        aria-pressed={mode === m}
+                        onClick={() => setMode(m)}
+                      >
+                        <ModeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+                        {PLANNING_EDIT_MODE_LABELS[m]}
+                      </button>
+                    );
+                  })}
                   <button
                     type="button"
                     data-testid="plan-undo"
@@ -1845,6 +1908,7 @@ export default function OutdoorPlanCanvas({
                     style={{ ...modeButtonStyle(false), opacity: historyCount === 0 ? 0.5 : 1 }}
                     onClick={() => undoPlan()}
                   >
+                    <UndoIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
                     撤销
                   </button>
                 </div>
@@ -1855,7 +1919,7 @@ export default function OutdoorPlanCanvas({
                       aria-label="分区语义"
                       value={zoneSemantic}
                       onChange={event => setZoneSemantic(event.target.value as PlanningZoneSemantic)}
-                      style={{ background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11 }}
+                      style={selectStyle}
                     >
                       {planZoneSemantics.map(s => (
                         <option key={s} value={s}>{planZoneSemanticLabels[s]}</option>
@@ -1949,7 +2013,7 @@ export default function OutdoorPlanCanvas({
                         value={workerRole}
                         maxLength={60}
                         onChange={event => { workerRoleRef.current = event.target.value; setWorkerRole(event.target.value); }}
-                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </label>
                     <label style={zoneRowStyle}>
@@ -1965,7 +2029,7 @@ export default function OutdoorPlanCanvas({
                           workerCountRef.current = next;
                           setWorkerCount(next);
                         }}
-                        style={{ width: 64, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        style={{ width: 64, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </label>
                   </div>
@@ -2061,7 +2125,7 @@ export default function OutdoorPlanCanvas({
                   <>
                     <div style={sectionTitle}>分区样式</div>
                     {plan.zones.map(zone => (
-                      <div key={zone.id} style={{ marginTop: PLANNING_SPACING.xs, borderTop: '1px solid #24334a', paddingTop: PLANNING_SPACING.xs }}>
+                      <div key={zone.id} style={{ marginTop: PLANNING_SPACING.xs, borderTop: `1px solid ${PLANNING_SURFACE.fieldBg}`, paddingTop: PLANNING_SPACING.xs }}>
                         <div style={zoneRowStyle}>
                           <input
                             aria-label={`分区「${zone.name}」颜色`}
@@ -2075,7 +2139,7 @@ export default function OutdoorPlanCanvas({
                             value={zone.name}
                             maxLength={60}
                             onChange={event => updateZone(zone.id, { name: event.target.value })}
-                            style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                            style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                           />
                         </div>
                         <label style={zoneRowStyle}>
@@ -2106,7 +2170,7 @@ export default function OutdoorPlanCanvas({
                         value={selectedFacility.name}
                         maxLength={60}
                         onChange={event => updateFacility(selectedFacility.id, { name: event.target.value })}
-                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </div>
                     <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
@@ -2137,7 +2201,7 @@ export default function OutdoorPlanCanvas({
                         value={selectedRoute.name}
                         maxLength={60}
                         onChange={event => updateRoute(selectedRoute.id, { name: event.target.value })}
-                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </div>
                     <label style={zoneRowStyle}>
@@ -2198,7 +2262,7 @@ export default function OutdoorPlanCanvas({
                           value={selectedNode.name}
                           maxLength={60}
                           onChange={event => updateNode(selectedNode.id, { name: event.target.value })}
-                          style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                          style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                         />
                       </div>
                       <label style={zoneRowStyle}>
@@ -2245,7 +2309,7 @@ export default function OutdoorPlanCanvas({
                         value={selectedWorker.role}
                         maxLength={60}
                         onChange={event => updateWorker(selectedWorker.id, { role: event.target.value })}
-                        style={{ flex: 1, minWidth: 0, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                       <input
                         aria-label="选中人员人数"
@@ -2254,7 +2318,7 @@ export default function OutdoorPlanCanvas({
                         max={9999}
                         value={selectedWorker.count}
                         onChange={event => updateWorker(selectedWorker.id, { count: Math.max(1, Math.min(9999, Math.floor(Number(event.target.value) || 1))) })}
-                        style={{ width: 56, background: '#24334a', color: '#e7edf5', border: '1px solid #35485f', borderRadius: PLANNING_RADIUS.sm, fontSize: 11, padding: '2px 4px' }}
+                        style={{ width: 56, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </div>
                     <label style={zoneRowStyle}>
@@ -2287,7 +2351,7 @@ export default function OutdoorPlanCanvas({
 
                 {combinedIssues.length > 0 && (
                   <>
-                    <div style={{ ...sectionTitle, color: '#e8a3a3' }}>问题提示（{combinedIssues.length} 条）</div>
+                    <div style={{ ...sectionTitle, color: PLANNING_SURFACE.dangerText }}>问题提示（{combinedIssues.length} 条）</div>
                     <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.6 }}>
                       {combinedIssues.slice(0, PLAN_ISSUE_LIST_LIMIT).map(item => (
                         <li key={item.key} style={item.color ? { color: item.color } : undefined}>{item.text}</li>
@@ -2297,13 +2361,13 @@ export default function OutdoorPlanCanvas({
                   </>
                 )}
 
-                <div role="status" aria-live="polite" style={{ marginTop: PLANNING_SPACING.sm, minHeight: 16, color: editMessage ? '#ffd88a' : 'transparent' }}>
+                <div role="status" aria-live="polite" style={{ marginTop: PLANNING_SPACING.sm, minHeight: 16, color: editMessage ? PLANNING_SURFACE.warnText : 'transparent' }}>
                   {editMessage ?? '·'}
                 </div>
               </>
             )}
 
-            <div style={{ marginTop: PLANNING_SPACING.sm, opacity: 0.75 }}>缩放 z{view.zoom}{readOnly ? ' · 只读浏览' : ''}</div>
+            <div style={{ marginTop: PLANNING_SPACING.sm, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>缩放 z{view.zoom}{readOnly ? ' · 只读浏览' : ''}</div>
           </>
         )}
       </div>
