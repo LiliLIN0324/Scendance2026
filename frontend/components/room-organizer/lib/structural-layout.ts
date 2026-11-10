@@ -10,17 +10,53 @@ export function stableMeasurement(value: number, original?: number): number {
   return original !== undefined && Math.abs(value - original) <= 1e-12 ? original : value;
 }
 
+type ShellPoint = { x: number; z: number };
+
+/** A closed exterior shell smaller than the activity frame. Endpoints are world metres. */
+function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kind?: string }[], width: number, depth: number): ShellPoint[] | null {
+  const exterior = walls.filter(wall => wall.kind === 'exterior');
+  if (exterior.length < 3 || !(width > 0) || !(depth > 0)) return null;
+  const key = (point: ShellPoint) => `${point.x.toFixed(3)},${point.z.toFixed(3)}`;
+  const pending = exterior.map(wall => ({ start: wall.start, end: wall.end }));
+  const loop = [pending[0]!.start, pending[0]!.end];
+  pending.shift();
+  while (pending.length) {
+    const end = loop[loop.length - 1]!;
+    const index = pending.findIndex(wall => key(wall.start) === key(end) || key(wall.end) === key(end));
+    if (index < 0) return null;
+    const wall = pending.splice(index, 1)[0]!;
+    const next = key(wall.start) === key(end) ? wall.end : wall.start;
+    if (key(next) === key(loop[0]!)) break;
+    loop.push(next);
+  }
+  if (pending.length || loop.length < 3) return null;
+  let area = 0;
+  for (let index = 0; index < loop.length; index++) {
+    const a = loop[index]!, b = loop[(index + 1) % loop.length]!;
+    area += a.x * b.z - b.x * a.z;
+  }
+  area = Math.abs(area) / 2;
+  // Walls sitting on the activity frame are the frame itself. An inset shell is the usable room.
+  if (!(area > 1) || area > width * depth * 0.98) return null;
+  return loop.map(point => ({
+    x: Math.min(width, Math.max(0, point.x)),
+    z: Math.min(depth, Math.max(0, point.z)),
+  }));
+}
+
 /** Geometry-only conversion. No asset IDs are invented and this is never persisted. */
 export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2 {
   const floor = layout.floors[floorIndex];
   const world = (p: { x: number; z: number }, original?: {x:number;z:number}) => ({ x: stableMeasurement(p.x + layout.width / 2, original?.x), z: stableMeasurement(p.z + layout.height / 2, original?.z) });
   const stored = layout.backendSceneV2;
-  const walls = (floor?.interiorWalls ?? []).map(w => ({
+  const floorWalls = floor?.interiorWalls ?? [];
+  const walls = floorWalls.length ? floorWalls.map(w => ({
     ...stored?.structure.walls.find(original => original.id === w.id),
     id: w.id, start: world({ x: w.x1, z: w.z1 }, stored?.structure.walls.find(o=>o.id===w.id)?.start), end: world({ x: w.x2, z: w.z2 }, stored?.structure.walls.find(o=>o.id===w.id)?.end),
     height: w.height ?? floor?.height ?? 3, thickness: w.thickness ?? 0.16,
     kind: w.kind ?? 'interior', status: w.status ?? 'inferred',
-  }));
+  })) : (stored?.structure?.walls ?? []).map(wall => ({ ...wall }));
+  const shell = layout.backendVenue?.polygon ? null : shellInterior(walls, layout.width, layout.height);
   const openings: SceneV2['structure']['openings'] = [];
   for (const item of floor?.items ?? []) {
     if (!item.position || (item.type !== 'door' && item.type !== 'window')) continue;
@@ -56,8 +92,9 @@ export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2
     ...(i.wallId ? { wallId: i.wallId } : isWallHung(i.type) ? { wallId: nearestWallId(i, walls, layout.width, layout.height) } : {}),
   }));
   return {
-    schemaVersion: 2, venue: { ...(layout.backendVenue ?? { entrances: [], shape: 'rectangle' }),
-      width: layout.width, depth: layout.height, height: floor?.height ?? 3 },
+    schemaVersion: 2, venue: { ...(layout.backendVenue ?? { entrances: [], shape: 'rectangle' as const }),
+      width: layout.width, depth: layout.height, height: floor?.height ?? 3,
+      ...(shell ? { shape: 'polygon' as const, polygon: shell } : {}) },
     objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
     structure: { walls, openings, columns }, sources: stored?.sources ?? [], dimensions: stored?.dimensions ?? [],
     ...(stored?.design ? { design: stored.design } : {}),

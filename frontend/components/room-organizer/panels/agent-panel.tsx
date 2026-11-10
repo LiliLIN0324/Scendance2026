@@ -76,7 +76,7 @@ import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicabl
 import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
 import { clearLaneActivity, setLaneActivity } from '../lib/lane-status';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
-import { canApplyLayoutGeometry, isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
+import { canApplyLayoutGeometry, isStructuralMarker, materialCount, structuralItemCollides, venueArea } from '../lib/structural-layout';
 import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
@@ -383,7 +383,7 @@ function placedBanquetTables(plan: PlanProposal, base?: RoomLayout): number {
   const candidate = plan.layouts.at(-1);
   if (!candidate) return 0;
   const baseIds = new Set(base?.floors.flatMap(floor => floor.items.map(item => item.id)) ?? []);
-  return candidate.floors.reduce((sum, floor) => sum + floor.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id)).length, 0);
+  return candidate.floors.reduce((sum, floor, index) => sum + floor.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id) && !structuralItemCollides(item, candidate, index)).length, 0);
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */

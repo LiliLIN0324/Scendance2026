@@ -4525,4 +4525,48 @@ describe('event layout generation path', () => {
     expect(after.width).toBeCloseTo(23.8);
     expect(after.height).toBeCloseTo(16.1);
   }, 20000);
+
+  it('does not confirm Ø2.2 seats that land outside a smaller shell inside the 23.8×16.1 frame', async () => {
+    studioMock.connection = '项目已连接';
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const id = (n: number) => `00000000-0000-4000-8000-${String(200 + n).padStart(12, '0')}`;
+    const layout = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      objects: [],
+      camera: 'overview',
+      lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 4, z: 3.2 }, end: { x: 19.8, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 19.8, z: 3.2 }, end: { x: 19.8, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 19.8, z: 12.9 }, end: { x: 4, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 4, z: 12.9 }, end: { x: 4, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+        ],
+        openings: [],
+        columns: [],
+      },
+      sources: [],
+      dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-shell' });
+    layout.floors[0]!.interiorWalls = [];
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌直径2.2米，80人，20米乘15米');
+    await waitFor(() => {
+      const text = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(text).toMatch(/放下 \d+ 桌 · 座位 (?!80 \/ 80)\d+ \/ 80 · 还差 \d+/);
+      expect(text).not.toContain('识别到');
+      expect(text).toContain('没有按满员桌数确认');
+    }, { timeout: 15000 });
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+    expect(screen.getByText(/你说的 20×15 米这次不改场地/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+  }, 20000);
 });

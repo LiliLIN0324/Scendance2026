@@ -3,6 +3,7 @@ import { proposePlan, type PlanProposal } from './agent-proposal';
 import { sceneScriptFromBrief } from './scene-script';
 import { compileSceneScript, type SceneScriptCompileResult } from './scene-script-compiler';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
+import { structuralItemCollides } from './structural-layout';
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
@@ -114,8 +115,9 @@ function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): Loc
   const landed = countSingleSeats(result.layouts.at(-1), input.floorIndex, baseIds);
   if (landed === null) return result;
   if (landed >= guests) return { ...result, seats: landed };
-  const floor = result.layouts.at(-1)?.floors[input.floorIndex];
-  const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id)).length ?? 0;
+  const candidate = result.layouts.at(-1);
+  const floor = candidate?.floors[input.floorIndex];
+  const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id) && !(candidate && structuralItemCollides(item, candidate, input.floorIndex))).length ?? 0;
   const short = `这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
   return { ...result, seats: landed, blocked: short, summary: [short] };
 }

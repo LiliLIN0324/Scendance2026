@@ -9,6 +9,7 @@ import { materializeFurnishing, selectFurnishing } from './furnishing-select';
 import { backendSceneToLayout } from './backend-adapter';
 import { localPlan } from './local-plan';
 import { countSingleSeats } from './seat-requirement';
+import { structuralItemCollides } from './structural-layout';
 import { ringDiningSet } from './ring-seating';
 import { resolveTableArrangement } from './table-seat-plan';
 
@@ -400,6 +401,54 @@ function memoryBox(): Storage {
     expect(denser.seats ?? 0).toBeLessThan(80);
     expect(denser.blocked).toContain('没有按满员桌数确认');
     expect(denser.layouts.at(-1)!.width).toBeCloseTo(23.8);
+  });
+
+  it('does not count Ø2.2 chairs outside a shell that sits inside the 23.8×16.1 frame', () => {
+    const choice = selectFurnishing({ occasion: '圆桌宴', notes: '圆桌直径2.2米', statedShape: 'round', statedWidth: 2.2 });
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const hall = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      objects: [],
+      camera: 'overview',
+      lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 4, z: 3.2 }, end: { x: 19.8, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 19.8, z: 3.2 }, end: { x: 19.8, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 19.8, z: 12.9 }, end: { x: 4, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 4, z: 12.9 }, end: { x: 4, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+        ],
+        openings: [],
+        columns: [],
+      },
+      sources: [],
+      dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-shell' });
+    hall.floors[0]!.interiorWalls = [];
+    const input = {
+      base: hall, floorIndex: 0, widthM: 23.8, depthM: 16.1, variant: 0, guests: 80,
+      layoutMode: 'dining' as const, seatingShape: 'ring' as const,
+      table: { shape: 'round' as const, width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
+    };
+    const plan = localPlan(input);
+    const candidate = plan.layouts.at(-1)!;
+    const lawn = makeItem({
+      id: 'lawn-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
+      position: { x: 1 - 11.9, z: 1 - 8.05 },
+    });
+    const withLawn = { ...candidate, floors: candidate.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, lawn] }) };
+    expect(structuralItemCollides(lawn, withLawn, 0)).toBe(true);
+    expect(countSingleSeats(withLawn, 0)).toBe(countSingleSeats(candidate, 0));
+    expect(plan.seats ?? 0).toBeGreaterThan(0);
+    expect(plan.seats ?? 0).toBeLessThan(80);
+    expect(plan.blocked).toContain('没有按满员桌数确认');
+    expect(plan.blocked).toContain(`${plan.seats} 座`);
+    expect(candidate.width).toBeCloseTo(23.8);
+    expect(candidate.height).toBeCloseTo(16.1);
+    const denser = localPlan({ ...input, seatPriority: true });
+    expect(denser.seats ?? 0).toBeLessThan(80);
+    expect(denser.blocked).toContain('没有按满员桌数确认');
   });
 
   it('accepts 个人 and a per-table count, and still plans from an area or a 发布会', () => {
