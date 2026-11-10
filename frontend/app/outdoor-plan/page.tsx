@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则）。
+ * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则 + H3-c 规划信息面板/图例）。
  *
  * 独立路由：不动主工作台（`/editor`）与探针页（`/tdt-probe`）。
  * 内置一份「平湖秋月市集」样例 SitePlanData（符合 site-plan 契约，样例动线
@@ -16,6 +16,10 @@
  *
  * H3-a：顶栏常驻派生统计（场地面积/分区/设施/动线全长/人员/固定测量，planOverviewStats
  * 现算，隐藏图层不改变统计）；测量在画布「测量」模式内进行（临时读数 + 固定测量落盘）。
+ *
+ * H3-c：画布左栏「规划信息」面板（总览/清单/问题/图例四页签）：清单支持
+ * 类型 × 所属区 × 只看问题筛选，点行/问题条定位地图、点地图对象同步聚焦清单；
+ * 图例由 site-plan-legend 生成器按实体类型自动生成（图标+名称+数量）。
  */
 
 import { useEffect, useState } from 'react';
@@ -222,8 +226,8 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H3-b）</h1>
-        <small style={{ color: '#93a4bc' }}>冲突规则 · 可定位标记 · 米制测量 · 派生统计</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H3-c）</h1>
+        <small style={{ color: '#93a4bc' }}>规划信息面板 · 图例生成器 · 双向定位 · 冲突规则</small>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="plan-overview-stats">
           场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount} · <span data-testid="conflict-count" style={{ color: stats.conflictCount > 0 ? '#e8a3a3' : '#7fb69a' }}>冲突/缺失 {stats.conflictCount}</span>
         </span>

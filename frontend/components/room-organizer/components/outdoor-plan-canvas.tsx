@@ -13,6 +13,13 @@
  *   读数一律从米制 ENU 几何现算，缩放不影响数值；
  * - 测量为图层栈最上层（可隐藏），选中动线面板显示全长。
  *
+ * H3-c 规划信息面板（左栏常驻，规则在 site-plan-legend / site-plan-inventory 纯函数层）：
+ * - 四页签：总览（全案派生统计 + 当前可见统计分开显示）/ 清单（六类实体，
+ *   支持类型 × 所属区 × 只看问题筛选）/ 问题（可定位问题清单）/ 图例（生成器输出）；
+ * - 双向定位：点清单行/问题条 → 选中实体并平移视图居中；点地图对象 →
+ *   清单行高亮并滚动到可见（同步聚焦清单）；
+ * - 隐藏图层不改变全案统计与图例（与 H3-a 同口径）。
+ *
  * H2-d 动线/节点/人员（规则在 site-plan-routes 纯函数层，组件只做接线）：
  * - 画动线：选类型（人行/车辆/后勤，三类三色）+ 可选单向，单击加路径点、双击或
  *   「完成动线」提交；端点靠近出入口自动吸附并记录 nodeId 引用（节点是唯一端点来源）；
@@ -51,6 +58,7 @@ import {
   drawRouteLayer,
   drawWorkerLayer,
   drawZoneLayer,
+  enuToLngLat,
   isLayerVisible,
   planMetersPerPixel,
   planPixelToPoint,
@@ -107,8 +115,18 @@ import {
   formatAreaM2,
   formatLengthM,
   measureValue,
+  planOverviewStats,
   type PlanMeasureKind,
 } from '../lib/site-plan-measure';
+import { buildPlanLegend } from '../lib/site-plan-legend';
+import {
+  buildPlanInventory,
+  filterPlanInventory,
+  planInventoryKindLabel,
+  type PlanInventoryFilter,
+  type PlanInventoryKind,
+  type PlanInventoryRow,
+} from '../lib/site-plan-inventory';
 import {
   publicSourceTileUrl,
   tdtProbeTileUrl,
@@ -116,6 +134,7 @@ import {
   type ProbePublicSource,
   type TdtProbeLayer,
 } from '../lib/tdt-probe';
+import { DoorOpen, Route as RouteIcon, Ruler, Shapes, Truck, Users, type LucideIcon } from 'lucide-react';
 import {
   PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_LABELS,
@@ -127,6 +146,7 @@ import {
   PLANNING_ZONE_COLORS,
   PLANNING_ZONE_OPACITY,
   type PlanningEditMode,
+  type PlanningIconName,
   type PlanningLayerKind,
   type PlanningRouteKind,
   type PlanningZoneSemantic,
@@ -188,6 +208,42 @@ const WORKER_HIT_PX = 9;
 const ROUTE_HIT_PX = 8;
 /** undo 栈深度上限（评审稿「撤销和恢复均保留有效引用」；快照体积小，30 步足够）。 */
 const UNDO_LIMIT = 30;
+
+/** H3-c 规划信息面板页签（顺序固定：总览/清单/问题/图例）。 */
+const INFO_TABS = ['overview', 'inventory', 'issues', 'legend'] as const;
+const INFO_TAB_LABELS: Record<(typeof INFO_TABS)[number], string> = {
+  overview: '总览',
+  inventory: '清单',
+  issues: '问题',
+  legend: '图例',
+};
+/** 清单/问题列表单屏上限（与 PLAN_ISSUE_LIST_LIMIT 同口径，超出提示余量）。 */
+const PLAN_INFO_LIST_LIMIT = 40;
+/** 锚点缺省（与 initialView 同源）：plan.anchor 缺省时的经纬度。 */
+const DEFAULT_ANCHOR_LNG = 120.141306;
+const DEFAULT_ANCHOR_LAT = 30.2545;
+
+/** 图例图标映射（tokens PLANNING_ICONS 子集；未命中回落 Shapes）。 */
+const LEGEND_ICON_COMPONENTS: Partial<Record<PlanningIconName, LucideIcon>> = {
+  shapes: Shapes,
+  ruler: Ruler,
+  route: RouteIcon,
+  users: Users,
+  truck: Truck,
+  'door-open': DoorOpen,
+};
+
+/** 问题页签的可定位条目：文本 + 状态色 + 锚点 + 关联实体（点条目选中并居中）。 */
+interface PlanLocatableIssue {
+  key: string;
+  text: string;
+  color?: string;
+  anchor: PlanPoint;
+  routeId?: string;
+  facilityId?: string;
+  nodeId?: string;
+  workerId?: string;
+}
 
 export default function OutdoorPlanCanvas({
   plan,
@@ -273,6 +329,14 @@ export default function OutdoorPlanCanvas({
   const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
   const [conflictIssues, setConflictIssues] = useState<PlanConflictIssue[]>([]);
+  // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
+  const [infoOpen, setInfoOpen] = useState(true);
+  const [infoTab, setInfoTab] = useState<(typeof INFO_TABS)[number]>('overview');
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [invKind, setInvKind] = useState<PlanInventoryFilter['kind']>('all');
+  const [invZone, setInvZone] = useState<PlanInventoryFilter['zone']>(undefined);
+  const [invIssuesOnly, setInvIssuesOnly] = useState(false);
+  const infoPanelRef = useRef<HTMLDivElement>(null);
 
   function setMode(next: PlanningEditMode) {
     modeRef.current = next;
@@ -371,6 +435,18 @@ export default function OutdoorPlanCanvas({
   }, [visibility]);
   useEffect(() => { layerStateRef.current = layerState; draw(); }, [layerState]);
 
+  // H3-c 地图→清单同步聚焦：画布选中实体后（清单页签激活时）滚动到对应行并高亮。
+  useEffect(() => {
+    if (!infoOpen || infoTab !== 'inventory') return;
+    const id = selectedFacilityId ?? selectedRouteId ?? selectedNodeId ?? selectedWorkerId;
+    if (!id) return;
+    const frame = requestAnimationFrame(() => {
+      const row = infoPanelRef.current?.querySelector(`[data-inventory-id="${id}"]`);
+      row?.scrollIntoView({ block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedFacilityId, selectedRouteId, selectedNodeId, selectedWorkerId, infoTab, infoOpen]);
+
   const draw = useCallback(() => {
     const stage = stageRef.current;
     const baseCanvas = baseCanvasRef.current;
@@ -401,7 +477,16 @@ export default function OutdoorPlanCanvas({
 
     // 1) 底图（baseCanvas）：公开源单层 / 天地图双层，异步瓦片只画在底图 canvas 上，
     //    永不覆盖业务层。
-    const viewport: PlanViewport = { lng: v.lng, lat: v.lat, zoom: v.zoom, canvasW: cssW, canvasH: cssH };
+    const viewport: PlanViewport = {
+      lng: v.lng,
+      lat: v.lat,
+      zoom: v.zoom,
+      canvasW: cssW,
+      canvasH: cssH,
+      // H3-c：传真实锚点，平移/定位时规划层随地图同步移动（不再是钉死的画布中心）。
+      anchorLng: current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
+      anchorLat: current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+    };
     const world = 2 ** v.zoom * TILE;
     const centerPx = (v.lng + 180) / 360 * world;
     const latRad = v.lat * Math.PI / 180;
@@ -572,12 +657,15 @@ export default function OutdoorPlanCanvas({
 
   function currentViewport(): PlanViewport {
     const stage = stageRef.current;
+    const anchor = planRef.current.anchor;
     return {
       lng: viewRef.current.lng,
       lat: viewRef.current.lat,
       zoom: viewRef.current.zoom,
       canvasW: stage?.clientWidth ?? 0,
       canvasH: stage?.clientHeight ?? 0,
+      anchorLng: anchor?.lng ?? DEFAULT_ANCHOR_LNG,
+      anchorLat: anchor?.lat ?? DEFAULT_ANCHOR_LAT,
     };
   }
 
@@ -601,7 +689,9 @@ export default function OutdoorPlanCanvas({
     const w = 2 ** v.zoom * TILE;
     const dLng = -dx / w * 360;
     const latRad = v.lat * Math.PI / 180;
-    const dLat = -dy / w * (360 / (2 * Math.PI)) * Math.cos(latRad);
+    // H3-c 修复：跟手平移——下拖（dy 正）相机北移，屏幕位移 = dLat·world·sec/360 = dy；
+    // 旧版符号相反且少 2π 因子（下拖 40px 内容反而上移约 6px）。
+    const dLat = dy / w * 360 * Math.cos(latRad);
     commitView({
       lng: clamp(v.lng + dLng, -180, 180),
       lat: clamp(v.lat + dLat, -85, 85),
@@ -1088,6 +1178,55 @@ export default function OutdoorPlanCanvas({
     setEditMessage('测量标注已删除。');
   }
 
+  /* ---------------- H3-c 双向定位 ---------------- */
+
+  /** 平移视图使米制 ENU 点居中（zoom 不变；ENU→经纬度复用画布库锚点近似投影）。 */
+  function centerViewOn(pt: PlanPoint) {
+    const anchor = planRef.current.anchor;
+    const geo = enuToLngLat(pt.x, pt.y, anchor?.lng ?? DEFAULT_ANCHOR_LNG, anchor?.lat ?? DEFAULT_ANCHOR_LAT);
+    commitView({
+      lng: clamp(geo.lng, -180, 180),
+      lat: clamp(geo.lat, -85, 85),
+      zoom: viewRef.current.zoom,
+    });
+  }
+
+  /** 清单行 → 地图：居中锚点 + 选中实体（分区/测量无选中态，仅居中）。 */
+  function locateRow(row: PlanInventoryRow) {
+    centerViewOn(row.anchor);
+    if (row.kind === 'facility') {
+      selectRoute(null);
+      selectNode(null);
+      selectWorker(null);
+      selectFacility(row.id);
+    } else if (row.kind === 'route') {
+      selectRoute(row.id);
+    } else if (row.kind === 'node') {
+      selectNode(row.id);
+    } else if (row.kind === 'worker') {
+      selectWorker(row.id);
+    }
+    setInfoMessage(`已在地图上定位「${row.name}」。`);
+  }
+
+  /** 问题条目 → 地图：居中锚点，关联实体可选中。 */
+  function locateIssue(entry: PlanLocatableIssue) {
+    centerViewOn(entry.anchor);
+    if (entry.routeId) {
+      selectRoute(entry.routeId);
+    } else if (entry.facilityId) {
+      selectRoute(null);
+      selectNode(null);
+      selectWorker(null);
+      selectFacility(entry.facilityId);
+    } else if (entry.nodeId) {
+      selectNode(entry.nodeId);
+    } else if (entry.workerId) {
+      selectWorker(entry.workerId);
+    }
+    setInfoMessage(`已定位：${entry.text}`);
+  }
+
   function handleStageMouseDown(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
@@ -1234,16 +1373,18 @@ export default function OutdoorPlanCanvas({
             } else {
               setEditMessage(`${PLAN_CONFLICT_CATEGORY_LABELS[conflict.category]}：${conflict.message}`);
             }
+            setInfoTab('inventory');
             return;
           }
           const hitNode = nearestNodeIdAt(hit.px);
-          if (hitNode) { selectNode(hitNode); return; }
+          if (hitNode) { selectNode(hitNode); setInfoTab('inventory'); return; }
           const hitWorker = nearestWorkerIdAt(hit.px);
-          if (hitWorker) { selectWorker(hitWorker); return; }
+          if (hitWorker) { selectWorker(hitWorker); setInfoTab('inventory'); return; }
           const hitRoute = nearestRouteIdAt(hit.px);
-          if (hitRoute) { selectRoute(hitRoute); return; }
+          if (hitRoute) { selectRoute(hitRoute); setInfoTab('inventory'); return; }
           const hitFacility = [...planRef.current.facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
           selectFacility(hitFacility ? hitFacility.id : null);
+          if (hitFacility) setInfoTab('inventory');
         }
       }
       return;
@@ -1307,6 +1448,59 @@ export default function OutdoorPlanCanvas({
   const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
   const zoneSummaryRows = workerZoneSummary(plan);
   const roleSummaryRows = workerRoleSummary(plan);
+
+  /* ---------------- H3-c 规划信息面板（全部现算） ---------------- */
+  const overviewStats = planOverviewStats(plan);
+  const visibleCounts = {
+    zone: layerState.zone ? plan.zones.length : 0,
+    facility: layerState.facility ? plan.facilities.length : 0,
+    route: layerState.route ? plan.routes.length : 0,
+    node: layerState.access ? plan.nodes.length : 0,
+    worker: layerState.worker ? plan.workers.length : 0,
+    measurement: layerState.measure ? (plan.measurements ?? []).length : 0,
+  };
+  const inventoryRows = buildPlanInventory(plan);
+  const filteredInventoryRows = filterPlanInventory(inventoryRows, { kind: invKind, zone: invZone, issuesOnly: invIssuesOnly });
+  const legendGroups = buildPlanLegend(plan);
+  const anchorById = new Map(inventoryRows.map(row => [row.id, row.anchor] as const));
+  const infoIssues: PlanLocatableIssue[] = [
+    ...conflictIssues.map(item => ({
+      key: `c-${item.key}`,
+      text: `${item.status === 'conflict' ? '⚠' : item.status === 'missing' ? '缺' : '核'} ${PLAN_CONFLICT_CATEGORY_LABELS[item.category]}：${item.message}`,
+      color: conflictTextColors[item.status],
+      anchor: item.at,
+      routeId: item.routeIds[0],
+      facilityId: item.facilityId,
+    })),
+    ...issues.map((item, i) => ({
+      key: `z-${item.zoneId}-${item.issue.code}-${i}`,
+      text: `${item.zoneName}：${item.issue.message}`,
+      anchor: anchorById.get(item.zoneId) ?? { x: 0, y: 0 },
+    })),
+    ...facilityIssues.map((item, i) => ({
+      key: `f-${item.facilityId}-${i}`,
+      text: `${item.facilityName}：${item.issue.message}`,
+      anchor: anchorById.get(item.facilityId) ?? { x: 0, y: 0 },
+      facilityId: item.facilityId,
+    })),
+    ...nodeIssues.map((item, i) => ({
+      key: `n-${item.nodeId}-${i}`,
+      text: `出入口「${item.nodeName}」：${item.issue.message}`,
+      anchor: anchorById.get(item.nodeId) ?? { x: 0, y: 0 },
+      nodeId: item.nodeId,
+    })),
+    ...workerIssues.map((item, i) => ({
+      key: `w-${item.workerId}-${i}`,
+      text: `人员「${item.workerRole}」：${item.issue.message}`,
+      anchor: anchorById.get(item.workerId) ?? { x: 0, y: 0 },
+      workerId: item.workerId,
+    })),
+  ];
+  const inventoryRowSelected = (row: PlanInventoryRow): boolean =>
+    (row.kind === 'facility' && row.id === selectedFacilityId)
+    || (row.kind === 'route' && row.id === selectedRouteId)
+    || (row.kind === 'node' && row.id === selectedNodeId)
+    || (row.kind === 'worker' && row.id === selectedWorkerId);
   // 面板内点击不再冒泡到画布（否则勾选/选模板/点按钮会在面板对应画布位置误加草稿点或放置实体）。
   const stopPanelMouse = (event: React.MouseEvent) => event.stopPropagation();
   const panelStyle: React.CSSProperties = {
@@ -1327,6 +1521,47 @@ export default function OutdoorPlanCanvas({
     overflowY: 'auto',
   };
   const sectionTitle: React.CSSProperties = { marginTop: PLANNING_SPACING.sm, marginBottom: PLANNING_SPACING.xs, fontWeight: 600, opacity: 0.9 };
+  // H3-c 规划信息面板（左栏常驻）：与右栏编辑面板同源样式，互不遮挡。
+  const infoPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: PLANNING_SPACING.sm,
+    top: PLANNING_SPACING.sm,
+    zIndex: 3,
+    background: 'rgba(24, 34, 48, 0.92)',
+    border: '1px solid #35485f',
+    borderRadius: PLANNING_RADIUS.md,
+    padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
+    color: '#e7edf5',
+    fontSize: 12,
+    minWidth: 200,
+    maxWidth: 260,
+    pointerEvents: 'auto',
+    maxHeight: 'calc(100% - 16px)',
+    overflowY: 'auto',
+  };
+  const inventoryRowButtonStyle = (selected: boolean): React.CSSProperties => ({
+    all: 'unset',
+    cursor: 'pointer',
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    gap: PLANNING_SPACING.xs,
+    width: '100%',
+    padding: '3px 4px',
+    marginTop: 2,
+    borderRadius: PLANNING_RADIUS.sm,
+    border: selected ? '1px solid #7fb69a' : '1px solid transparent',
+    background: selected ? 'rgba(127, 182, 154, 0.18)' : 'transparent',
+    color: '#e7edf5',
+    fontSize: 11,
+    textAlign: 'left',
+  });
+  const issueButtonStyle = (color?: string): React.CSSProperties => ({
+    all: 'unset',
+    cursor: 'pointer',
+    color: color ?? '#e7edf5',
+    fontSize: 11,
+  });
   const modeButtonStyle = (active: boolean): React.CSSProperties => ({
     all: 'unset',
     cursor: 'pointer',
@@ -1389,6 +1624,163 @@ export default function OutdoorPlanCanvas({
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+
+      {/* H3-c 规划信息面板（左栏常驻）：总览 / 清单 / 问题 / 图例，只读也可用。 */}
+      <div ref={infoPanelRef} style={infoPanelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
+        <button
+          type="button"
+          data-testid="info-panel-toggle"
+          onClick={() => setInfoOpen(open => !open)}
+          style={{ all: 'unset', cursor: 'pointer', fontWeight: 600, display: 'block', width: '100%' }}
+          aria-expanded={infoOpen}
+        >
+          规划信息 {infoOpen ? '▾' : '▸'}
+        </button>
+        {infoOpen && (
+          <>
+            <div role="tablist" aria-label="规划信息页签" style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+              {INFO_TABS.map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={infoTab === tab}
+                  data-testid={`info-tab-${tab}`}
+                  style={modeButtonStyle(infoTab === tab)}
+                  onClick={() => setInfoTab(tab)}
+                >
+                  {INFO_TAB_LABELS[tab]}
+                </button>
+              ))}
+            </div>
+
+            {infoTab === 'overview' && (
+              <div data-testid="info-overview" style={{ lineHeight: 1.7 }}>
+                <div style={sectionTitle}>全案统计</div>
+                <div data-testid="info-overview-stats">
+                  <div>场地面积 {formatAreaM2(overviewStats.boundaryAreaM2)}</div>
+                  <div>分区 {overviewStats.zoneCount} · 设施 {overviewStats.facilityCount}</div>
+                  <div>动线 {overviewStats.routeCount} 条 · 全长 {formatLengthM(overviewStats.routeLengthTotalM)}</div>
+                  <div style={{ opacity: 0.85 }}>
+                    人行 {formatLengthM(overviewStats.routeLengthMByKind.pedestrian)} · 车辆 {formatLengthM(overviewStats.routeLengthMByKind.vehicle)} · 后勤 {formatLengthM(overviewStats.routeLengthMByKind.service)}
+                  </div>
+                  <div>出入口 {overviewStats.nodeCount} · 人员 {overviewStats.workerTotalCount} 人 / {overviewStats.workerPostCount} 点</div>
+                  <div>固定测量 {overviewStats.measurementCount}</div>
+                  <div data-testid="info-issue-count">待处理问题 {overviewStats.issueCount + overviewStats.conflictCount}（冲突/缺失 {overviewStats.conflictCount}）</div>
+                </div>
+                <div style={sectionTitle}>当前可见（隐藏不改全案数字）</div>
+                <div data-testid="info-visible-stats" style={{ opacity: 0.85 }}>
+                  分区 {visibleCounts.zone} · 设施 {visibleCounts.facility} · 动线 {visibleCounts.route} · 出入口 {visibleCounts.node} · 人员 {visibleCounts.worker} · 测量 {visibleCounts.measurement}
+                </div>
+              </div>
+            )}
+
+            {infoTab === 'inventory' && (
+              <div data-testid="info-inventory">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+                  <select
+                    aria-label="清单类型筛选"
+                    value={invKind ?? 'all'}
+                    onChange={event => setInvKind(event.target.value === 'all' ? 'all' : (event.target.value as PlanInventoryKind))}
+                    style={selectStyle}
+                  >
+                    <option value="all">全部类型</option>
+                    {(['zone', 'facility', 'route', 'node', 'worker', 'measurement'] as PlanInventoryKind[]).map(kind => (
+                      <option key={kind} value={kind}>{planInventoryKindLabel(kind)}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="清单分区筛选"
+                    value={invZone ?? 'all'}
+                    onChange={event => setInvZone(event.target.value === 'all' ? undefined : event.target.value)}
+                    style={selectStyle}
+                  >
+                    <option value="all">全部分区</option>
+                    <option value="unassigned">未归属</option>
+                    {plan.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                  </select>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={invIssuesOnly} onChange={event => setInvIssuesOnly(event.target.checked)} />
+                    只看问题
+                  </label>
+                </div>
+                <div data-testid="inventory-count" style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
+                  共 {filteredInventoryRows.length} 行 / 全案 {inventoryRows.length} 行
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {filteredInventoryRows.slice(0, PLAN_INFO_LIST_LIMIT).map(row => {
+                    const selected = inventoryRowSelected(row);
+                    return (
+                      <li key={`${row.kind}-${row.id}`} data-inventory-id={row.id} data-testid="inventory-row">
+                        <button type="button" onClick={() => locateRow(row)} style={inventoryRowButtonStyle(selected)} title="点击定位到地图">
+                          {row.hasIssue && <span style={{ color: PLANNING_CONFLICT_COLORS.conflict }} title="命中问题/冲突清单">⚠</span>}
+                          <span style={{ fontWeight: 600 }}>{row.name}</span>
+                          <span style={{ opacity: 0.8 }}>{row.typeLabel}{row.zoneName ? ` · ${row.zoneName}` : ''}</span>
+                          <span style={{ opacity: 0.85 }}>{row.metric}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {filteredInventoryRows.length > PLAN_INFO_LIST_LIMIT && (
+                  <div style={{ opacity: 0.7 }}>其余 {filteredInventoryRows.length - PLAN_INFO_LIST_LIMIT} 行从略，可用筛选缩小范围。</div>
+                )}
+                {filteredInventoryRows.length === 0 && <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>没有符合筛选的行。</div>}
+              </div>
+            )}
+
+            {infoTab === 'issues' && (
+              <div data-testid="info-issues">
+                {infoIssues.length === 0 ? (
+                  <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.8 }}>暂无待处理问题。</div>
+                ) : (
+                  <>
+                    <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>共 {infoIssues.length} 条，点击条目定位：</div>
+                    <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.6 }}>
+                      {infoIssues.slice(0, PLAN_INFO_LIST_LIMIT).map(item => (
+                        <li key={item.key}>
+                          <button type="button" data-testid="info-issue-item" onClick={() => locateIssue(item)} style={issueButtonStyle(item.color)}>
+                            {item.text}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {infoIssues.length > PLAN_INFO_LIST_LIMIT && (
+                      <div style={{ opacity: 0.7 }}>其余 {infoIssues.length - PLAN_INFO_LIST_LIMIT} 条从略。</div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {infoTab === 'legend' && (
+              <div data-testid="info-legend">
+                {legendGroups.map(group => (
+                  <div key={group.title}>
+                    <div style={sectionTitle}>{group.title}</div>
+                    {group.entries.map(entry => {
+                      const Icon = LEGEND_ICON_COMPONENTS[entry.icon] ?? Shapes;
+                      return (
+                        <div key={entry.label} data-testid="legend-entry" style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: 2 }}>
+                          <Icon size={11} color={entry.swatch} strokeWidth={2} />
+                          <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: entry.swatch, display: 'inline-block' }} />
+                          <span style={{ flex: 1 }}>{entry.label}</span>
+                          <span>× {entry.count}</span>
+                          {entry.detail && <span style={{ opacity: 0.75 }}>{entry.detail}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div role="status" aria-live="polite" style={{ marginTop: PLANNING_SPACING.sm, minHeight: 16, color: infoMessage ? '#ffd88a' : 'transparent' }}>
+              {infoMessage ?? '·'}
+            </div>
+          </>
+        )}
+      </div>
 
       <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
         <button
