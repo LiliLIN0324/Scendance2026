@@ -244,7 +244,7 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
     <p className="ap-audit-meta">
       <MessageSquare size={13} aria-hidden="true"/>
       <span>{feedback.pinCount}</span>
-      <small>{feedbackSummaryLabel(feedback, false)}</small>
+      <small>{feedbackSummaryLabel(feedback, false)}{saved ? ` · 已导入反馈 ${saved.pins.length} 条` : ''}</small>
     </p>
     {plan.linkStatus!=='unavailable'&&<div className="ap-audit-actions"><button type="button" className="ap-audit-link" aria-label={copied ? '甲方链接已复制' : '复制甲方链接'} onClick={() => { void copyLink(); }}>
       {copied ? <Check size={13} aria-hidden="true"/> : <Copy size={13} aria-hidden="true"/>}{copied ? '已复制' : '复制链接'}
@@ -260,7 +260,12 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
 
 function FeedbackPins({pins,floorNames}:{pins:readonly ReceiptPin[];floorNames:Record<string,string>}):JSX.Element {
   if(!pins.length)return <p>文件没有意见。</p>;
-  return <ol>{pins.map(pin=><li key={pin.id}><p>{pin.text}</p><p>{floorNames[pin.floorId]??'楼层待核对'} · 位置 {pin.x.toFixed(2)}，{pin.z.toFixed(2)} 米 · {pin.status==='resolved'?'文件标记已处理':'文件标记待处理'}</p></li>)}</ol>;
+  // -0.001 这类近零值 toFixed 会出「-0.00」；先取整到厘米再归零负零。
+  const fmtCoord = (value: number): string => {
+    const cents = Math.round(value * 100);
+    return (cents === 0 ? 0 : cents / 100).toFixed(2);
+  };
+  return <ol>{pins.map(pin=><li key={pin.id}><p>{pin.text}</p><p>{floorNames[pin.floorId]??'楼层待核对'} · 位置 {fmtCoord(pin.x)}，{fmtCoord(pin.z)} 米 · {pin.status==='resolved'?'文件标记已处理':'文件标记待处理'}</p></li>)}</ol>;
 }
 
 function AuditPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {
