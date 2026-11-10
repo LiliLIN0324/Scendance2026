@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计）。
+ * 户外 2D 规划满铺画布演示页（H2-a 验收入口 + H2-b 编辑演示 + H2-c 设施 + H2-d 动线/节点/人员 + H3-a 测量/派生统计 + H3-b 冲突规则）。
  *
  * 独立路由：不动主工作台（`/editor`）与探针页（`/tdt-probe`）。
  * 内置一份「平湖秋月市集」样例 SitePlanData（符合 site-plan 契约，样例动线
@@ -9,6 +9,10 @@
  *
  * H2-b：plan 状态提升到本页，编辑经 onPlanChange 回写；草稿按 schema 校验后存
  * localStorage——**刷新重开保留点列**（验收口径），「重置样例」一键回到初始样例。
+ *
+ * H3-b：冲突与缺失规则（人车交叉/越界/容量/缺宽度）随编辑实时跑——可定位标记
+ * 直接画在画布上（红=冲突、橙=缺宽度、灰=容量待核实），单击标记定位到关联动线；
+ * 样例自带一组人车交叉 + 一条缺宽度的后勤动线 + 观众区容量估算（规划假设，待核实）。
  *
  * H3-a：顶栏常驻派生统计（场地面积/分区/设施/动线全长/人员/固定测量，planOverviewStats
  * 现算，隐藏图层不改变统计）；测量在画布「测量」模式内进行（临时读数 + 固定测量落盘）。
@@ -124,7 +128,19 @@ const SAMPLE_PLAN: SitePlanData = {
         { x: 160, y: 95 },
       ],
       oneWay: false,
+      widthM: 4,
       startNodeId: 'd4000000-0000-4000-8000-000000000002',
+      notes: '',
+    },
+    {
+      id: 'c3000000-0000-4000-8000-000000000003',
+      kind: 'service',
+      name: '后勤电瓶车动线',
+      points: [
+        { x: 20, y: 10 },
+        { x: 70, y: 70 },
+      ],
+      oneWay: false,
       notes: '',
     },
   ],
@@ -206,10 +222,10 @@ export default function OutdoorPlanPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1620', color: '#e7edf5', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#182230', borderBottom: '1px solid #24334a' }}>
-        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H3-a）</h1>
-        <small style={{ color: '#93a4bc' }}>米制测量 · 派生统计 · 刷新保留草稿</small>
+        <h1 style={{ fontSize: 15, margin: 0 }}>户外 2D 规划画布（H3-b）</h1>
+        <small style={{ color: '#93a4bc' }}>冲突规则 · 可定位标记 · 米制测量 · 派生统计</small>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="plan-overview-stats">
-          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount}
+          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 测量 {stats.measurementCount} · <span data-testid="conflict-count" style={{ color: stats.conflictCount > 0 ? '#e8a3a3' : '#7fb69a' }}>冲突/缺失 {stats.conflictCount}</span>
         </span>
         <span style={{ color: '#7fb69a', fontSize: 12 }} data-testid="draft-saved">
           {savedAt ? `草稿已存 ${savedAt}` : ''}

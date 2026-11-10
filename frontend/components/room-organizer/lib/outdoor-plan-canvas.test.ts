@@ -3,6 +3,7 @@ import {
   PLAN_LAYER_STACK,
   defaultLayerVisibility,
   drawAccessLayer,
+  drawConflictMarkers,
   drawFacilityGhost,
   drawFacilityLayer,
   drawMeasureDraft,
@@ -21,7 +22,7 @@ import {
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
-import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
@@ -312,5 +313,48 @@ describe('measurement drawing (H3-a)', () => {
       { x: 0, y: 10 },
     );
     expect(area.cap.texts).toContain('100 m²');
+  });
+});
+
+/* ---------------- H3-b 冲突/缺失可定位标记 ---------------- */
+
+describe('conflict marker drawing (H3-b)', () => {
+  const conflicts = [
+    { key: 'crossing:1', status: 'conflict' as const, at: { x: 0, y: 0 } },
+    { key: 'no-width:1', status: 'missing' as const, at: { x: 10, y: 0 } },
+    { key: 'capacity:1', status: 'unverified' as const, at: { x: 20, y: 0 } },
+  ];
+
+  it('draws a badge per conflict with the status colour and an exclamation glyph', () => {
+    const { ctx, cap } = makeCtx();
+    drawConflictMarkers({ ctx, viewport: view } as PlanCanvasContext, conflicts);
+    expect(cap.fills).toContain(PLANNING_CONFLICT_COLORS.conflict);
+    expect(cap.fills).toContain(PLANNING_CONFLICT_COLORS.missing);
+    expect(cap.fills).toContain(PLANNING_CONFLICT_COLORS.unverified);
+    expect(cap.texts.filter(t => t === '!')).toHaveLength(3);
+    // 每个徽章一个白色外圈。
+    expect(cap.strokes.filter(s => s === '#ffffff')).toHaveLength(3);
+  });
+
+  it('enlarges the highlighted marker ring (可定位标记的高亮态)', () => {
+    const plain = makeCtx();
+    drawConflictMarkers({ ctx: plain.ctx, viewport: view } as PlanCanvasContext, [conflicts[0]!]);
+    const highlighted = makeCtx();
+    drawConflictMarkers(
+      { ctx: highlighted.ctx, viewport: view } as PlanCanvasContext,
+      [conflicts[0]!],
+      { highlightKey: 'crossing:1' },
+    );
+    expect(highlighted.cap.strokes.filter(s => s === '#ffffff')).toHaveLength(1);
+    // 高亮与常态都只有一个标记，差异在半径——用字体/描边宽度外的 fill 次数兜底核对不额外画标记。
+    expect(highlighted.cap.fills.filter(s => s === PLANNING_CONFLICT_COLORS.conflict)).toHaveLength(1);
+    expect(plain.cap.fills.filter(s => s === PLANNING_CONFLICT_COLORS.conflict)).toHaveLength(1);
+  });
+
+  it('draws nothing for an empty conflict list', () => {
+    const { ctx, cap } = makeCtx();
+    drawConflictMarkers({ ctx, viewport: view } as PlanCanvasContext, []);
+    expect(cap.texts).toHaveLength(0);
+    expect(cap.fills).toHaveLength(0);
   });
 });

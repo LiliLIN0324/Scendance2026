@@ -28,6 +28,7 @@ import {
 } from './site-plan-editing';
 import { planFacilityIssues } from './site-plan-facilities';
 import { planNodeIssues, planWorkerIssues } from './site-plan-routes';
+import { planConflictIssues } from './site-plan-conflicts';
 
 /** 测量顶点上限：与契约 planMeasurementSchema.points.max 一致。 */
 export const PLAN_MEASURE_MAX_VERTICES = 64;
@@ -168,6 +169,8 @@ export interface PlanOverviewStats {
   measurementCount: number;
   /** 待处理问题数：现有四类问题清单（分区/设施/节点/人员）条数合计。 */
   issueCount: number;
+  /** H3-b 冲突/缺失条数（人车交叉/共线/通行带压设施/越界/缺宽度/容量待核实）。 */
+  conflictCount: number;
 }
 
 /** 全案派生统计：评审稿顶栏「场地面积、区域数、设施数、各类流线长度、待处理问题」的数据源。 */
@@ -180,6 +183,7 @@ export function planOverviewStats(plan: SitePlanData): PlanOverviewStats {
     routeLengthTotalM += length;
   }
   const measurements = plan.measurements ?? [];
+  const conflicts = planConflictIssues(plan);
   const issueCount = planZoneIssues(plan).length
     + planFacilityIssues(plan).length
     + planNodeIssues(plan).length
@@ -196,5 +200,6 @@ export function planOverviewStats(plan: SitePlanData): PlanOverviewStats {
     workerTotalCount: plan.workers.reduce((sum, w) => sum + w.count, 0),
     measurementCount: measurements.length,
     issueCount,
+    conflictCount: conflicts.length,
   };
 }
