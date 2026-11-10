@@ -87,6 +87,13 @@ function isHold(raw: string): boolean {
   return occasionFrom(compact) !== null;
 }
 
+/** A banquet sentence, before the turn has been saved. Used so the composer can switch during the wait. */
+export function isBanquetUtterance(raw: string): boolean {
+  const occasion = occasionFrom(raw);
+  if (occasion && /宴|酒会|年会|派对|聚会/.test(occasion)) return true;
+  return isBanquetFact(raw);
+}
+
 function isBanquetFact(raw: string): boolean {
   const compact = raw.replace(/\s+/g, '');
   if (/(?:库存|现有|已有|我们有|手头有)/.test(compact)) return false;

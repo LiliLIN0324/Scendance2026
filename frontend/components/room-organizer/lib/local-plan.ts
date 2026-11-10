@@ -3,7 +3,7 @@ import { proposePlan, type PlanProposal } from './agent-proposal';
 import { sceneScriptFromBrief } from './scene-script';
 import { compileSceneScript, type SceneScriptCompileResult } from './scene-script-compiler';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
-import { structuralItemCollides } from './structural-layout';
+import { isStructuralMarker, structuralItemCollides } from './structural-layout';
 import { proposeRestArea } from './rest-area-plan';
 import { proposeStagePlatform } from './stage-platform-plan';
 import { checkFunctionalRequirements, type FunctionalNeeds } from './functional-requirements';
@@ -104,22 +104,39 @@ export function localPlan(input: LocalPlanInput): LocalPlanResult {
 }
 
 /**
- * A banquet confirm counts chairs this pass actually landed. Chairs already in the
- * room, and chairs the wall or a column refused, do not fill the headcount.
+ * Chairs and tables this pass that never cleared the usable interior stay out of the
+ * preview. A wall-grazing or out-of-shell footprint is drawn as a dashed outline and
+ * must not be counted as a landed seat. Chairs already in the room do not fill the headcount.
  */
+export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number, baseIds: ReadonlySet<string>): RoomLayout {
+  const floor = layout.floors[floorIndex];
+  if (!floor) return layout;
+  const items = floor.items.filter(item => {
+    if (baseIds.has(item.id) || isStructuralMarker(item)) return true;
+    const seat = item.type === 'dining-chair' || item.type === 'chair' || item.type === 'desk-chair';
+    const table = item.type === 'dining-table';
+    if (!seat && !table) return true;
+    return !structuralItemCollides(item, layout, floorIndex);
+  });
+  if (items.length === floor.items.length) return layout;
+  return { ...layout, floors: layout.floors.map((entry, index) => index === floorIndex ? { ...entry, items } : entry) };
+}
+
 function banquetLandedSeats(input: LocalPlanInput, result: LocalPlanResult): LocalPlanResult {
   const guests = input.guests ?? 0;
   if (!input.furnishing || guests <= 0) return result;
   const baseItems = input.base.floors[input.floorIndex]?.items ?? [];
   const baseIds = new Set(baseItems.map(item => item.id));
-  const landed = countSingleSeats(result.layouts.at(-1), input.floorIndex, baseIds);
+  const layouts = result.layouts.map(layout => omitUnlandedBanquetItems(layout, input.floorIndex, baseIds));
+  const landed = countSingleSeats(layouts.at(-1), input.floorIndex, baseIds);
   if (landed === null) return result;
-  if (landed >= guests) return { ...result, seats: landed };
-  const candidate = result.layouts.at(-1);
+  const next = { ...result, layouts, seats: landed };
+  if (landed >= guests) return next;
+  const candidate = layouts.at(-1);
   const floor = candidate?.floors[input.floorIndex];
   const tables = floor?.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id) && !(candidate && structuralItemCollides(item, candidate, input.floorIndex))).length ?? 0;
   const short = `这版放下 ${tables} 桌、${landed} 座，离 ${guests} 人还差 ${guests - landed}。没有按满员桌数确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
-  return { ...result, seats: landed, blocked: short, summary: [short] };
+  return { ...next, blocked: short, summary: [short] };
 }
 
 function arrangementFor(input: LocalPlanInput): TableArrangement | undefined {

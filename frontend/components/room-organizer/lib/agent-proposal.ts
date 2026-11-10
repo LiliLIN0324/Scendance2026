@@ -416,9 +416,15 @@ export function proposePlan(input: PlanInput): PlanProposal {
       const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(centers.length, wantedSets));
+      const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
       for (const center of centers.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
         accept(tryAdd(base, current, floorIndex, items));
+      }
+      if (seatPriority && (input.guests ?? 0) > 0) {
+        const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
+        const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
+        if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
       }
     }
   } else if (input.furnishing?.table.tableShape === 'rect' || (!input.furnishing && input.tablePlan?.shape === 'rect')) {
@@ -435,9 +441,15 @@ export function proposePlan(input: PlanInput): PlanProposal {
       const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
       const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / seatsEach) : areaSets;
       const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
+      const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
       for (const center of slots.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
         accept(tryAdd(base, current, floorIndex, items));
+      }
+      if (seatPriority && (input.guests ?? 0) > 0) {
+        const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
+        const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
+        if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
       }
     }
   } else {

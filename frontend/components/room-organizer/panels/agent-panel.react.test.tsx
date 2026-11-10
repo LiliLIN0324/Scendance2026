@@ -4542,10 +4542,10 @@ describe('event layout generation path', () => {
       lighting: 'neutral',
       structure: {
         walls: [
-          { id: id(1), start: { x: 4, z: 3.2 }, end: { x: 19.8, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-          { id: id(2), start: { x: 19.8, z: 3.2 }, end: { x: 19.8, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-          { id: id(3), start: { x: 19.8, z: 12.9 }, end: { x: 4, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
-          { id: id(4), start: { x: 4, z: 12.9 }, end: { x: 4, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(1), start: { x: 9, z: 6 }, end: { x: 15, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 15, z: 6 }, end: { x: 15, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 15, z: 11 }, end: { x: 9, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 9, z: 11 }, end: { x: 9, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
         ],
         openings: [],
         columns: [],
@@ -4557,20 +4557,40 @@ describe('event layout generation path', () => {
     expect(layout.floors[0]?.interiorWalls).toHaveLength(4);
     state.layout = layout;
     render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    let ghostBeforeCard = '';
     send('圆桌直径2.2米，80人，20米乘15米');
     await waitFor(() => {
-      const text = document.getElementById('plan-proposal')?.textContent ?? '';
+      const card = document.getElementById('plan-proposal');
+      const suggestion = document.querySelector('.ap-ghost')?.getAttribute('data-suggestion') ?? '';
+      if (!card && suggestion && !suggestion.includes('发布会')) ghostBeforeCard = suggestion;
+      const text = card?.textContent ?? '';
       expect(text).toMatch(/放下 \d+ 桌 · 座位 (?!80 \/ 80)\d+ \/ 80 · 还差 \d+/);
       expect(text).not.toContain('识别到');
       expect(text).toContain('没有按满员桌数确认');
     }, { timeout: 15000 });
+    expect(ghostBeforeCard).toContain('加座');
+    expect(ghostBeforeCard).not.toContain('发布会');
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
     expect(screen.getByText(/你说的 20×15 米这次不改场地/)).toBeTruthy();
     const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const landed = preview.floors[0]!.items.filter(item => item.type === 'dining-chair');
     expect(preview.width).toBeCloseTo(23.8);
     expect(preview.height).toBeCloseTo(16.1);
     expect(onApply).not.toHaveBeenCalled();
     expect(studioMock.generate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '加座，再排一版' }));
+    await waitFor(() => {
+      const text = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(text).toMatch(/座位 \d+ \/ 80 · 还差/);
+      expect(text).toContain('没有按满员桌数确认');
+    }, { timeout: 15000 });
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+    const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const afterChairs = after.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    expect(afterChairs.length).toBeGreaterThanOrEqual(landed.length);
+    expect(after.width).toBeCloseTo(23.8);
+    expect(onApply).not.toHaveBeenCalled();
   }, 20000);
 });

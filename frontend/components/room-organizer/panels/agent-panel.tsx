@@ -49,7 +49,7 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
 import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
-import { eventPreviewScale, leadOnStandingHall } from '../lib/event-layout-agent';
+import { eventPreviewScale, isBanquetUtterance, leadOnStandingHall } from '../lib/event-layout-agent';
 import { layoutFurnishing } from '../lib/furnishing-select';
 import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
@@ -239,6 +239,8 @@ interface ProposalView extends PendingPlan {
 /** A birthday or banquet session must not keep the launch-party composer example. */
 function isBanquetSession(memory: BriefMemory): boolean {
   if (memory.furnishing?.source === 'select_furnishing') return true;
+  const table = memory.banquetTable;
+  if (table?.shape || table?.width || table?.peoplePerTable) return true;
   const occasion = memory.eventIntent?.occasion ?? memory.event ?? '';
   return /宴|酒会|年会|派对|聚会/.test(occasion);
 }
@@ -2504,6 +2506,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     if(!queued)say({ role: 'user', text: trimmed });
+    if (isBanquetUtterance(trimmed) || isBanquetSession(memoryRef.current)) setBanquetChat(true);
     if(isPureGreeting(trimmed)){say({role:'agent',text:'你好，我可以帮你梳理活动需求、查看方案或准备布置。'});return;}
     const keepOriginals=preservationIntent(trimmed);
     if(keepOriginals){
@@ -3339,7 +3342,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     </div>}
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {short && !plan.localDraftDetails && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
+    {short && !plan.localDraftDetails && (!plan.seatPriority || banquet) && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold

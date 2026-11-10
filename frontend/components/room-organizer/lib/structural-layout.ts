@@ -21,8 +21,44 @@ function ringArea(points: readonly ShellPoint[]): number {
   return Math.abs(area) / 2;
 }
 
+function signedRing(points: readonly ShellPoint[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index]!, b = points[(index + 1) % points.length]!;
+    area += a.x * b.z - b.x * a.z;
+  }
+  return area / 2;
+}
+
+/** Pull a closed loop in to the wall's inner face. A bad offset keeps the centerline. */
+function insetLoop(loop: readonly ShellPoint[], distance: number): ShellPoint[] | null {
+  if (!(distance > 0) || loop.length < 3) return null;
+  const ccw = signedRing(loop) > 0;
+  const edges = loop.map((start, index) => {
+    const end = loop[(index + 1) % loop.length]!;
+    const dx = end.x - start.x, dz = end.z - start.z;
+    const length = Math.hypot(dx, dz) || 1;
+    const nx = (ccw ? -dz : dz) / length, nz = (ccw ? dx : -dx) / length;
+    return { x: start.x + nx * distance, z: start.z + nz * distance, dx, dz };
+  });
+  const verts: ShellPoint[] = [];
+  for (let index = 0; index < edges.length; index++) {
+    const prev = edges[(index + edges.length - 1) % edges.length]!;
+    const next = edges[index]!;
+    const den = prev.dx * next.dz - prev.dz * next.dx;
+    if (Math.abs(den) < 1e-9) return null;
+    const t = ((next.x - prev.x) * next.dz - (next.z - prev.z) * next.dx) / den;
+    const point = { x: prev.x + prev.dx * t, z: prev.z + prev.dz * t };
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.z)) return null;
+    verts.push(point);
+  }
+  const area = ringArea(verts);
+  if (!(area > 1) || area >= ringArea(loop) - 1e-6 || signedRing(verts) * signedRing(loop) <= 0) return null;
+  return verts;
+}
+
 /** A closed exterior shell smaller than the activity frame. Endpoints are world metres. */
-function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kind?: string }[], width: number, depth: number): ShellPoint[] | null {
+function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kind?: string; thickness?: number }[], width: number, depth: number): ShellPoint[] | null {
   const exterior = walls.filter(wall => wall.kind === 'exterior');
   if (exterior.length < 3 || !(width > 0) || !(depth > 0)) return null;
   const key = (point: ShellPoint) => `${point.x.toFixed(3)},${point.z.toFixed(3)}`;
@@ -42,7 +78,11 @@ function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kin
   const area = ringArea(loop);
   // Walls sitting on the activity frame are the frame itself. An inset shell is the usable room.
   if (!(area > 1) || area > width * depth * 0.98) return null;
-  return loop.map(point => ({
+  // The recorded line is the wall centerline. Seats have to clear the inner face, not the middle of the wall.
+  const half = Math.max(0, ...exterior.map(wall => wall.thickness ?? 0)) / 2;
+  const inner = insetLoop(loop, half);
+  const chosen = inner ?? loop;
+  return chosen.map(point => ({
     x: Math.min(width, Math.max(0, point.x)),
     z: Math.min(depth, Math.max(0, point.z)),
   }));
