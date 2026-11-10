@@ -4194,6 +4194,10 @@ describe('event layout generation path', () => {
     const tables = preview.floors[0]!.items.filter(item => item.name === '圆桌');
     expect(tables.length).toBeGreaterThan(0);
     expect(tables.every(item => item.width === 2.2)).toBe(true);
+    const chairs = preview.floors[0]!.items.filter(item => item.type === 'dining-chair' || item.type === 'chair');
+    expect(chairs.length).toBeGreaterThanOrEqual(80);
+    expect(screen.queryByText(/座位 30 \/ 80/)).toBeNull();
+    expect(screen.queryByText(/不能把这版当成满员方案确认/)).toBeNull();
     const stored = onMemory.mock.calls.at(-1)?.[0];
     expect(stored.venueIO).toBe('outdoor');
     expect(stored.lengthM).toBeCloseTo(23.8);
@@ -4294,5 +4298,43 @@ describe('event layout generation path', () => {
     expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
     expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
     expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('previews a birthday on an activity session after 80个人, even if the cloud model asks to confirm', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED', '1');
+    studioMock.connection = '项目已连接';
+    studioMock.controller.briefConversation.mockImplementation(async (message: string) => {
+      if (message.includes('生日')) return { enabled: true, extraction: { event: '生日宴' }, reply: '好的，为您策划生日宴。', unhandled: [], factEvidence: [] };
+      if (message.includes('80')) return { enabled: true, extraction: { event: '发布会', headcount: 80 }, reply: '已记下预计80人参加生日宴。', unhandled: [], factEvidence: [{ key: 'headcount', evidence: '80个人' }] };
+      return { enabled: true, extraction: { event: '发布会' }, reply: '记下发布会。', unhandled: [], factEvidence: [] };
+    });
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-birthday',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('这是一场发布会');
+    expect(await screen.findByText(/还没确定布置方式/)).toBeTruthy();
+    send('我想办个生日宴');
+    expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    send('80个人');
+    expect(await screen.findByText(/这样对吗/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    send('确认');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.floors[0]!.items.some(item => item.name === '圆桌')).toBe(true);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
   }, 20000);
 });

@@ -51,6 +51,8 @@ export interface LocalPlanInput {
   furnishing?: FurnishingChoice;
   stage?: boolean;
   checkin?: boolean;
+  /** Omit the front keep-out when a banquet cannot seat the asked headcount. */
+  aisle?: boolean;
 }
 
 export interface LocalPlanResult extends PlanProposal {
@@ -152,11 +154,15 @@ function buildLocalPlan(input: LocalPlanInput): LocalPlanResult {
     // A script that seats nobody while people were asked for is a worse answer than the
     // slot heuristic's. Compare instead of assuming the newer door is always better: a room
     // too shallow for a table set (8 × 6 with a stage) still deserves chairs.
-    if (seated && seats === 0) {
+    if (seated && seats === 0 && !input.furnishing) {
       const heuristic = fallbackPlan(input, arrangement, placed);
       if ((heuristic.seats ?? 0) > 0) {
         return { ...heuristic, via: 'fallback', fallbackReason: '脚本这一版一个座位都没排出来，改用了原来的摆放方式。' };
       }
+    }
+    if (input.furnishing && seated && seats < (input.guests ?? 0)) {
+      const recovered = recoverBanquetSeats(input, arrangement, placed, withArrangement({ ...scriptPlan, via: 'script', summary: scriptPlan.summary }, arrangement));
+      if (recovered) return recovered;
     }
     return withArrangement({ ...scriptPlan, via: 'script', summary: scriptPlan.summary }, arrangement);
   }
@@ -189,6 +195,34 @@ function fallbackPlan(input: LocalPlanInput, arrangement?: TableArrangement, pla
 }
 
 /** The script door, isolated so a compiler refusal can never take down generation. */
+function recoverBanquetSeats(
+  input: LocalPlanInput,
+  arrangement: TableArrangement | undefined,
+  placed: MaterializedFurnishing | undefined,
+  current: LocalPlanResult,
+): LocalPlanResult | null {
+  const guests = input.guests ?? 0;
+  const opened = input.aisle === false ? null : scriptAttempt({ ...input, aisle: false }, arrangement, placed);
+  const heuristic = fallbackPlan(input, arrangement, placed);
+  const options: LocalPlanResult[] = [
+    current,
+    opened && !opened.blocked ? withArrangement({ ...opened, via: 'script' as const, summary: opened.summary }, arrangement) : null,
+    heuristic.blocked ? null : withArrangement({ ...heuristic, via: 'fallback' as const, summary: [] }, arrangement),
+  ].flatMap(entry => entry ? [entry] : []);
+  options.sort((left, right) => (right.seats ?? 0) - (left.seats ?? 0));
+  const best = options[0];
+  if (!best) return null;
+  const seats = best.seats ?? 0;
+  if (seats >= guests) {
+    return best.via === 'script' && best !== current
+      ? { ...best, fallbackReason: '前侧预留带放不下这些圆桌，改用了整间场地。' }
+      : best;
+  }
+  if (seats * 2 >= guests) return seats > (current.seats ?? 0) ? best : null;
+  const short = `这版只排到 ${seats} 座，离 ${guests} 人还差 ${guests - seats}。不能把这版当成满员方案确认。可以说小一号的圆桌，或说「加座，再排一版」。`;
+  return { ...best, blocked: short, summary: [short, ...(best.summary ?? [])] };
+}
+
 function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement, placed?: MaterializedFurnishing): SceneScriptCompileResult | null {
   try {
     const script = sceneScriptFromBrief({
@@ -199,6 +233,7 @@ function scriptAttempt(input: LocalPlanInput, arrangement?: TableArrangement, pl
       stage: input.stage ?? true,
       checkin: input.checkin ?? false,
       seed: input.variant >>> 0,
+      ...(input.aisle === false ? { aisle: false } : {}),
     });
     return compileSceneScript(script, {
       base: input.base,

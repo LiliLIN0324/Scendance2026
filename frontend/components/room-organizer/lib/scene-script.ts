@@ -244,6 +244,8 @@ export interface BriefSceneScriptInput {
   checkin: boolean;
   /** 换一版：同一份需求换一个 seed，槽位顺序变，可行域不变。 */
   seed: number;
+  /** 没有舞台和签到时，前侧预留带会把大圆桌的椅子挡在场地外。缺座时可以不留。 */
+  aisle?: boolean;
 }
 
 /**
@@ -263,8 +265,10 @@ export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript 
     zones.push({ role: 'stage', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: stageDepth }, label: '主舞台' });
     north += stageDepth;
   }
-  zones.push({ role: 'aisle', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: aisleMinM }, label: '前侧预留带' });
-  north += aisleMinM;
+  if (input.aisle !== false) {
+    zones.push({ role: 'aisle', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: aisleMinM }, label: '前侧预留带' });
+    north += aisleMinM;
+  }
 
   // Keep the optional check-in band clear of seating.
   const southBandD = checkin || stage ? 1.6 : 0;

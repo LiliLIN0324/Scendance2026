@@ -238,6 +238,63 @@ function memoryBox(): Storage {
     expect(planHeldEvent('你好', initialBriefMemory(), blank)).toBeNull();
   });
 
+  it('keeps a birthday preview when the cloud model restates 80个人, and 确认 does not stop at notes', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    const context = { venueUp: true, scaleTyped: false, hasBase: true, command: null };
+    const prior = { ...initialBriefMemory(), event: '发布会', venueIO: 'indoor' as const };
+    const transport = {
+      briefExtract: vi.fn(),
+      briefConversation: vi.fn()
+        .mockResolvedValueOnce({ enabled: true, extraction: { event: '生日宴' }, reply: '好的，为您策划生日宴。', unhandled: [], factEvidence: [] })
+        .mockResolvedValueOnce({ enabled: true, extraction: { event: '生日宴', headcount: 80 }, reply: '已记下预计80人参加生日宴。', unhandled: [], factEvidence: [] }),
+    };
+    const first = await resolveBriefTurn('我想办个生日宴', prior, context, transport, undefined, { history: [] });
+    expect(first.kind).toBe('ask');
+    expect(first.text).toBe('这场生日宴大概多少人？');
+    expect(first.memory.event).toBe('生日宴');
+    const second = await resolveBriefTurn('80个人', first.memory, context, transport, undefined, { history: [] });
+    expect(second.kind).toBe('generate');
+    expect(second.memory.event).toBe('生日宴');
+    expect(second.memory.headcount).toBe(80);
+    expect(second.memory.furnishing?.source).toBe('select_furnishing');
+    expect(second.text).not.toContain('已记下你确认的信息');
+    const asked = await resolveBriefTurn('80个人', first.memory, context, {
+      briefExtract: vi.fn(),
+      briefConversation: vi.fn().mockResolvedValue({ enabled: true, extraction: { event: '发布会', headcount: 80 }, reply: '请核对。', unhandled: [], factEvidence: [] }),
+    }, undefined, { history: [] });
+    expect(asked.kind).toBe('ask');
+    expect(asked.text).toContain('这样对吗');
+    expect(asked.text).toContain('发布会');
+    expect(asked.memory.headcount).toBe(80);
+    const confirmed = await resolveBriefTurn('确认', asked.memory, context);
+    expect(confirmed.kind).toBe('generate');
+    expect(confirmed.text).not.toContain('已记下你确认的信息');
+    expect(confirmed.memory.event).toBe('生日宴');
+    expect(confirmed.memory.headcount).toBe(80);
+    expect(confirmed.layoutTools?.some(call => call.tool === 'select_furnishing')).toBe(true);
+  });
+
+  it('seats 80 at Ø2.2 on a 23.8×16.1 hall and refuses a short plan as a full banquet', () => {
+    const choice = selectFurnishing({ occasion: '圆桌宴', notes: '圆桌直径2.2米', statedShape: 'round', statedWidth: 2.2 });
+    const full = localPlan({
+      base: makeLayout({ id: 'pinghu', width: 23.8, height: 16.1 }),
+      floorIndex: 0, widthM: 23.8, depthM: 16.1, variant: 0, guests: 80,
+      layoutMode: 'dining', seatingShape: 'ring',
+      table: { shape: 'round', width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
+    });
+    const chairs = full.layouts.at(-1)!.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    expect(chairs.length).toBeGreaterThanOrEqual(80);
+    expect(full.blocked ?? null).toBeNull();
+    const tight = localPlan({
+      base: makeLayout({ width: 8, height: 6 }),
+      floorIndex: 0, widthM: 8, depthM: 6, variant: 0, guests: 80,
+      layoutMode: 'dining', seatingShape: 'ring',
+      table: { shape: 'round', width: 2.2, depth: 2.2 }, furnishing: choice, stage: false, checkin: false,
+    });
+    expect(tight.seats ?? 0).toBeLessThan(40);
+    expect(tight.blocked).toContain('不能把这版当成满员方案确认');
+  });
+
   it('accepts 个人 and a per-table count, and still plans from an area or a 发布会', () => {
     expect(spokenHeadcount('大概80个人')).toBe(80);
     expect(spokenHeadcount('八十个人')).toBe(80);
