@@ -6,6 +6,7 @@
  * brief-agent 规则版——对话永不因模型抖动中断。决策（记忆/防复读/出方案）始终在前端状态机。
  */
 import { hasNonPersonQuantity, isActivityNeedsAnswer, isUnresolvedNeedsAnswer, parseBriefTurn, type BriefMemory, type BriefTurn, type BriefTurnContext, type LayoutMode, type PendingBasicFact } from '@/components/room-organizer/lib/brief-agent';
+import { isRoundResizeUtterance, occasionFrom, planHeldEvent, spokenHeadcount } from '@/components/room-organizer/lib/event-layout-agent';
 import { HEADCOUNT_MAX, isBriefFactUtterance, isLayoutOnlyUtterance, layoutGenerateCommand, omitHandledLayoutActions, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
 import { BRIEF_CLIENT_TIMEOUT_MS, type BriefSlots, type BriefConversationResponse } from '../../supabase/functions/_shared/brief-extract-contract';
 import { SceneApiError } from '../../client/scene-client';
@@ -101,21 +102,25 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       const pendingGeneration=previous.pendingGeneration;
       const memory = { ...previous, pendingBasicFacts: [], pendingGeneration:undefined };
       for (const fact of previous.pendingBasicFacts) {
-        if (fact.key === 'event' && typeof fact.value === 'string') memory.event = fact.value;
+        if (fact.key === 'event' && typeof fact.value === 'string') {
+          if (!memory.eventIntent || fact.value === memory.eventIntent.occasion) memory.event = fact.value;
+        }
         else if (fact.key === 'headcount' && typeof fact.value === 'number') { memory.headcount = fact.value; memory.headcountMode = null; }
-        else if (fact.key === 'venueIO' && (fact.value === 'indoor' || fact.value === 'outdoor')) memory.venueIO = fact.value;
-        else if (fact.key === 'lengthM' && typeof fact.value === 'number') memory.lengthM = fact.value;
-        else if (fact.key === 'widthM' && typeof fact.value === 'number') memory.widthM = fact.value;
-        else if (fact.key === 'areaM2' && typeof fact.value === 'number') memory.areaM2 = fact.value;
-        else if (fact.key === 'layoutMode' && (fact.value === 'dining' || fact.value === 'desk-chair')) { memory.layoutMode = fact.value; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
+        else if (fact.key === 'venueIO' && (fact.value === 'indoor' || fact.value === 'outdoor') && !memory.eventIntent) memory.venueIO = fact.value;
+        else if (fact.key === 'lengthM' && typeof fact.value === 'number' && !memory.eventIntent) memory.lengthM = fact.value;
+        else if (fact.key === 'widthM' && typeof fact.value === 'number' && !memory.eventIntent) memory.widthM = fact.value;
+        else if (fact.key === 'areaM2' && typeof fact.value === 'number' && !memory.eventIntent) memory.areaM2 = fact.value;
+        else if (fact.key === 'layoutMode' && (fact.value === 'dining' || fact.value === 'desk-chair') && !memory.eventIntent) { memory.layoutMode = fact.value; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
       }
       const turn = parseBriefTurn('', memory, { ...context, command: pendingGeneration?.command??null });
       const time = previous.pendingBasicFacts.find(fact => fact.key === 'timeOfDay' && typeof fact.value === 'number');
       if (time && typeof time.value === 'number') turn.extraction.timeOfDay = time.value;
-      if(previous.pendingBasicFacts.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2')){
+      if(!memory.eventIntent && previous.pendingBasicFacts.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2')){
         turn.extraction.lengthM=memory.lengthM;turn.extraction.widthM=memory.widthM;turn.extraction.areaM2=memory.areaM2;
       }
       if(pendingGeneration)return {...turn,resolution:'confirmation',...(turn.kind==='generate'?{resumeInstruction:pendingGeneration.instruction}:{})};
+      const held = continueHeldEvent(previous.pendingBasicFacts, memory, turn.extraction);
+      if (held) return { ...held, resolution: 'confirmation' };
       return { ...turn, kind: 'ack', text: '已记下你确认的信息；如有其他要求可以继续补充。', resolution: 'confirmation' };
     }
     if (/^(不对|不是|否)$/.test(raw.trim())) {
@@ -157,7 +162,11 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       if (response.enabled && response.extraction) {
         const { extraction, pending } = validateModelFacts(raw, sanitizeModelNeeds(raw,response.extraction));
         const turn = parseBriefTurn(raw, previous, context, toExtraction(extraction));
-        const pendingFacts = [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending];
+        // A accepted smaller table is a relayout, not an inventory question and not 没接住.
+        if (turn.kind === 'generate' && isRoundResizeUtterance(raw, previous) && turn.layoutTools?.some(call => call.tool === 'layout_preview')) {
+          return { ...turn, resolution: 'model' };
+        }
+        const pendingFacts = dropHeldRestatements(raw, turn.memory, [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending]);
         const rawModelReply='reply' in response && typeof response.reply==='string'?response.reply:undefined;
         const modelReply=isGeneralActivityQuestion(raw)?rawModelReply:reconcileHeadcountReply(rawModelReply,turn.memory,pendingFacts);
         const beforeInventory=previous.reportedInventory??[],afterInventory=turn.memory.reportedInventory??[];
@@ -248,15 +257,53 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   const layoutOnly = isLayoutOnlyUtterance(raw);
   const fallbackContext = allowAutomaticGeneration || layoutOnly ? context : { ...context, command: null };
   const turn = parseBriefTurn(raw, previous, fallbackContext.command || !layoutOnly ? fallbackContext : { ...fallbackContext, command: layoutGenerateCommand(raw) }, toExtraction(extraction));
-  const pendingFacts = [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending];
+  const pendingFacts = dropHeldRestatements(raw, turn.memory, [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending]);
   if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...((allowAutomaticGeneration||layoutOnly)&&(context.command||layoutGenerateCommand(raw))?{pendingGeneration:{command:(context.command??layoutGenerateCommand(raw))!,instruction:raw}}:{}) }, resolution: layoutOnly && !allowAutomaticGeneration ? 'local_command' : fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   // A failed model must not start another provider call. A brief the local rules can already draw — seating ask, or the headcount/size that finishes one — still uses the local preview.
   const scaleReady = (turn.memory.lengthM !== null && turn.memory.widthM !== null) || turn.memory.areaM2 !== null || context.venueUp || context.scaleTyped;
   const briefReady = turn.kind === 'generate' && turn.memory.layoutModeConfirmed === true && turn.memory.headcount !== null && scaleReady;
   const continuesLayout = layoutOnly || layoutGenerateCommand(raw) !== null || isBriefFactUtterance(raw);
-  if (!allowAutomaticGeneration && turn.kind === 'generate' && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  const selectedLayout = turn.kind === 'generate' && turn.layoutTools?.some(call => call.tool === 'select_furnishing') === true;
+  if (!allowAutomaticGeneration && turn.kind === 'generate' && !selectedLayout && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
   return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+}
+
+/** Drop a sticky activity label the user did not just say. Ambiguous facts stay. */
+function dropHeldRestatements(raw: string, memory: BriefMemory, facts: PendingBasicFact[]): PendingBasicFact[] {
+  const spokenOccasion = occasionFrom(raw);
+  const intent = memory.eventIntent;
+  if (!spokenOccasion && !intent) return facts;
+  const spoken = spokenHeadcount(raw);
+  const saidVenue = /室内|户外|室外|露天/.test(raw);
+  const saidLayout = /圆桌|课桌|课椅|餐桌/.test(raw);
+  return facts.filter(fact => {
+    if (fact.key === 'event' && typeof fact.value === 'string' && spokenOccasion && fact.value !== spokenOccasion && !/还是|或者/.test(raw)) return false;
+    if (fact.requiresRestatement) return true;
+    if (fact.key === 'headcount' && typeof fact.value === 'number' && spoken === fact.value) return false;
+    if (fact.key === 'event' && typeof fact.value === 'string') {
+      if (spokenOccasion && fact.value !== spokenOccasion) return false;
+      if (!spokenOccasion && intent && !raw.includes(fact.value)) return false;
+      if (intent && fact.value === intent.occasion) return false;
+    }
+    if (fact.key === 'venueIO' && !saidVenue && (spokenOccasion || intent)) return false;
+    if (fact.key === 'layoutMode' && !saidLayout && (spokenOccasion || intent)) return false;
+    return true;
+  });
+}
+
+/** 「确认」 continues a held banquet. Leftover size or time must not stall it or replace the hall. */
+function continueHeldEvent(pending: PendingBasicFact[] | undefined, memory: BriefMemory, extraction: BriefTurn['extraction']): BriefTurn | null {
+  const intent = memory.eventIntent;
+  if (!intent || !pending?.length) return null;
+  if (pending.some(fact => fact.requiresRestatement !== false)) return null;
+  const restored = { ...memory, event: intent.occasion };
+  if (restored.headcount === null) {
+    const asked = planHeldEvent(`我想办个${intent.occasion}`, restored, extraction);
+    return asked?.kind === 'ask' ? asked : null;
+  }
+  const planned = planHeldEvent(`${restored.headcount}个人`, restored, extraction);
+  return planned?.kind === 'generate' ? planned : null;
 }
 
 function basicQuestion(facts: PendingBasicFact[]): string {
@@ -303,7 +350,7 @@ function validateModelFacts(raw: string, slots: BriefSlots): { extraction: Brief
       const count = key === 'headcount' ? chineseHeadcount(clause) : null;
       // A clause can contain multiple attendance figures even without commas.
       // Taking only the first number would silently treat “30人加40人” as 30.
-      const allCounts=key==='headcount' ? [...clause.matchAll(/(\d{1,6}|[零〇一二两三四五六七八九十百千]+)\s*(?:人|位|名)/g)]
+      const allCounts=key==='headcount' ? [...clause.matchAll(/(\d{1,6}|[零〇一二两三四五六七八九十百千]+)\s*(?:个)?\s*(?:人|位|名)/g)]
         .map(match=>/^\d+$/.test(match[1]!)?Number(match[1]):chineseHeadcount(match[0])) : [];
       return [parsed, count, ...allCounts].filter(item => item !== null && item !== undefined);
     }));
@@ -346,7 +393,7 @@ function validateModelFacts(raw: string, slots: BriefSlots): { extraction: Brief
 }
 
 function chineseHeadcount(clause: string): number | null {
-  const match = withoutNonTotalHeadcounts(clause).match(/([零〇一二两三四五六七八九十百千]+)(?:人|位|名)/);
+  const match = withoutNonTotalHeadcounts(clause).match(/([零〇一二两三四五六七八九十百千]+)(?:个)?(?:人|位|名)/);
   if (!match) return null;
   const digits: Record<string, number> = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
   let result = 0, digit = 0;

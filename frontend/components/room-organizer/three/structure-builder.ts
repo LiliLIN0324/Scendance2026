@@ -1,6 +1,7 @@
 import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { outdoorGroundSize } from '../lib/site';
 import { groundBasemapOpacity, groundBasemapStyleOf } from '../lib/ground-basemap';
+import { canvasFloor } from '../lib/floor-reading';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
@@ -112,8 +113,11 @@ export function buildStructureShell(
 ): void {
   const canonical = layoutGeometryScene(layout);
   const floor = layout.floors[0];
-  const points = canonical.venue.polygon ?? [{ x: 0, z: 0 }, { x: layout.width, z: 0 },
-    { x: layout.width, z: layout.height }, { x: 0, z: layout.height }];
+  const drawn = canvasFloor(layout, 0);
+  // Closed wall loop: the mesh edge is that room. An unclosed loop keeps the
+  // activity outline on screen, and the banquet ledger refuses to count it.
+  const points = drawn.recovered && drawn.floor ? drawn.floor : (canonical.venue.polygon ?? [{ x: 0, z: 0 }, { x: layout.width, z: 0 },
+    { x: layout.width, z: layout.height }, { x: 0, z: layout.height }]);
   const shape = new THREE.Shape();
   points.forEach((p, i) => {
     const x = p.x - layout.width / 2, y = -(p.z - layout.height / 2);

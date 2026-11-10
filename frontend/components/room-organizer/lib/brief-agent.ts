@@ -13,8 +13,10 @@
  * 模型化路径：turn 函数是唯一接缝，后续接 Vercel AI SDK（选型见 docs/plans/agent-reference-study.md）
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
+import { planHeldEvent } from './event-layout-agent';
 import { resolveTableArrangement } from './table-seat-plan';
 import { classifyLocalLayout, formatArea, HEADCOUNT_MAX, layoutGenerateCommand, mentionsCircleSeating, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
+import type { FurnishingChoice } from './furnishing-select';
 import type { LocalSeatingSpecs } from './local-seating-specs';
 import type { SeatingAllocation } from './seating-allocation';
 import type { OriginalPreservation } from './original-preservation';
@@ -60,6 +62,12 @@ export interface BriefMemory {
   seatingShape?: 'ring' | 'grid' | undefined;
   /** Table size or per-table headcount the user stated. The layout uses the derived seat count. */
   banquetTable?: { shape?: 'round' | 'rect' | undefined; width?: number | undefined; depth?: number | undefined; peoplePerTable?: number | undefined; evidence: string } | undefined;
+  /** The user is holding an event. Awaiting means the next missing fact is the headcount. */
+  eventIntent?: { occasion: string; awaiting?: 'headcount' | undefined } | undefined;
+  /** Table chosen by select_furnishing. Layout places this and does not pick another. */
+  furnishing?: FurnishingChoice | undefined;
+  /** Hall size the agent assumed. Not a user-stated measurement. */
+  agentVenue?: { lengthM: number; widthM: number } | undefined;
   /** 只有用户明确选择或确认后，才能把布局方式用于生成。 */
   layoutModeConfirmed?: boolean | undefined;
   /** 用户否定或尚未决定布置方式时，等待明确指定替代方式。 */
@@ -150,6 +158,10 @@ export interface BriefTurn {
   filledScaleAsk: boolean;
   /** ask/ack/none 的回话；generate 轮由面板按自己的语气组句，这里是空串。 */
   text: string;
+  /** Event preview copy. Names the agent-filled hall and the selected table, and waits for confirm. */
+  previewLead?: string | undefined;
+  /** Tool calls that produced a preview. Layout is listed only after selection. */
+  layoutTools?: ReadonlyArray<{ tool: 'select_furnishing' | 'layout_preview'; summary: string }> | undefined;
 }
 
 const EDUCATION_PATTERN = /(小学|中学|大学|学校|课堂|上课|讲课|教学|课室|班级|学生|小朋友)/;
@@ -215,8 +227,10 @@ export function cloudBriefMessage(raw: string, memory: BriefMemory): string {
   }
   if (memory.venueIO) facts.push(`场地：${memory.venueIO === 'indoor' ? '室内' : '户外'}`);
   if (memory.lengthM !== null && memory.widthM !== null) facts.push(`尺寸：${formatArea(memory.lengthM)} × ${formatArea(memory.widthM)} 米`);
+  else if (memory.agentVenue) facts.push(`场地尺寸未给定，暂按 ${formatArea(memory.agentVenue.lengthM)} × ${formatArea(memory.agentVenue.widthM)} 米出预览，待确认`);
   else if (memory.areaM2 !== null) facts.push(`面积：${formatArea(memory.areaM2)} 平方米（长宽未确认）`);
   if (memory.layoutModeConfirmed === true) facts.push(memory.layoutMode === 'desk-chair' ? '布置：课桌配椅' : memory.seatingShape === 'ring' ? '布置：圆桌围坐，沿环形或扇形摆，椅子绕桌，不要排成方格，中间留过道' : '布置：圆桌');
+  if (memory.furnishing) facts.push(`已选桌：${memory.furnishing.reason}`);
   if (memory.layoutMode !== 'desk-chair' && (memory.seatingShape === 'ring' || memory.banquetTable?.shape)) {
     const people = memory.banquetTable?.peoplePerTable ?? (memory.localSeatingAllocation?.status === 'shared_desk' ? memory.localSeatingAllocation.peoplePerDesk : null);
     const plan = resolveTableArrangement({
@@ -531,6 +545,9 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
     const missing=[memory.headcount===null?'本场人数':null,memory.layoutModeConfirmed!==true?'布置方式':null].filter(Boolean);
     return {kind:'ask',memory,extraction,filledScaleAsk:false,text:`这句话提到了物品数量，暂未保存为库存。${missing.length?`请再说明${missing.join('和')}。`:'可以继续补充活动要求。'}`};
   }
+  if ((extraction.lengthM !== null && extraction.widthM !== null) || extraction.areaM2 !== null) delete memory.agentVenue;
+  const eventTurn = planHeldEvent(raw, memory, extraction);
+  if (eventTurn) return eventTurn;
 
   const scaleKnown = context.venueUp || context.scaleTyped || hasDims(memory) || memory.areaM2 !== null;
   const filledScaleAsk = memory.askedScale && ((extraction.lengthM !== null && extraction.widthM !== null) || extraction.areaM2 !== null);
