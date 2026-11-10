@@ -484,7 +484,16 @@ function memoryBox(): Storage {
     expect(plan.seats).toBe(withoutNear.floors[0]!.items.filter(item => item.type === 'dining-chair' && item.id !== 'near-chair').length);
     expect(plan.blocked).not.toContain('每桌 15');
     expect(plan.blocked).toContain('这间厅按');
-    expect(plan.blocked).toMatch(/换成 Ø\d+\.\d+ 米，同一间室内可以落下 \d+ 座/);
+    const quoted = plan.blocked?.match(/换成 Ø(\d+\.\d+) 米，同一间室内可以落下 (\d+) 座/);
+    expect(quoted).toBeTruthy();
+    const switched = localPlan({
+      ...input,
+      furnishing: { ...choice, width: Number(quoted![1]), depth: Number(quoted![1]) },
+      table: { shape: 'round', width: Number(quoted![1]), depth: Number(quoted![1]) },
+    });
+    const switchedChairs = switched.layouts.at(-1)!.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    expect(switched.seats).toBe(Number(quoted![2]));
+    expect(switched.seats).toBe(switchedChairs.length);
     expect(plan.blocked).toContain('没有按满员桌数确认');
     expect(plan.blocked).toContain(`${plan.seats} 座`);
     expect(candidate.width).toBeCloseTo(23.8);
@@ -497,6 +506,36 @@ function memoryBox(): Storage {
     if ((denser.seats ?? 0) < 80) expect(denser.blocked).toContain('没有按满员桌数确认');
     expect(isBanquetUtterance('圆桌直径2.2米，80人，20米乘15米')).toBe(true);
     expect(isBanquetUtterance('80 人发布会，室内 12×9，安排签到和主舞台')).toBe(false);
+  });
+
+  it('drops a chair in the last 10 cm of an interior partition', () => {
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const hall = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
+      objects: [], camera: 'overview', lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 4, z: 3.2 }, end: { x: 19.8, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 19.8, z: 3.2 }, end: { x: 19.8, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 19.8, z: 12.9 }, end: { x: 4, z: 12.9 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 4, z: 12.9 }, end: { x: 4, z: 3.2 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(5), start: { x: 12, z: 6 }, end: { x: 12, z: 10 }, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+        ],
+        openings: [], columns: [],
+      },
+      sources: [], dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-partition' });
+    const beside = makeItem({
+      id: 'partition-chair', type: 'dining-chair', name: '餐椅', width: 0.45, depth: 0.45, height: 0.9,
+      position: { x: 12.375 - 11.9, z: 8 - 8.05 },
+    });
+    const layout = { ...hall, floors: hall.floors.map((floor, index) => index ? floor : { ...floor, items: [beside] }) };
+    expect(structuralItemCollides(beside, layout, 0)).toBe(false);
+    expect(omitUnlandedBanquetItems(layout, 0, new Set()).floors[0]!.items.some(item => item.id === 'partition-chair')).toBe(false);
   });
 
   it('keeps a short add-seats pass blocked when the tighter shell cannot hold 80', () => {

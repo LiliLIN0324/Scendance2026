@@ -121,9 +121,9 @@ function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: n
   return Math.hypot(px - ax - dx * t, pz - az - dz * t);
 }
 
-function grazesExteriorWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
+function grazesWall(item: FurnitureItem, layout: RoomLayout, floorIndex: number): boolean {
   if (!item.position) return false;
-  const walls = (layout.floors[floorIndex]?.interiorWalls ?? []).filter(wall => wall.kind === 'exterior');
+  const walls = layout.floors[floorIndex]?.interiorWalls ?? [];
   if (!walls.length) return false;
   const rotation = item.rotation ?? 0;
   const cos = Math.cos(rotation), sin = Math.sin(rotation);
@@ -157,7 +157,7 @@ export function omitUnlandedBanquetItems(layout: RoomLayout, floorIndex: number,
     const seat = isBanquetSeat(item);
     const table = item.type === 'dining-table';
     if (!seat && !table) { kept.push(item); continue; }
-    if (structuralItemCollides(item, layout, floorIndex) || grazesExteriorWall(item, layout, floorIndex)) continue;
+    if (structuralItemCollides(item, layout, floorIndex) || grazesWall(item, layout, floorIndex)) continue;
     if (seat) pendingSeats.push(item);
     else kept.push(item);
   }
@@ -174,7 +174,21 @@ function landedChairCount(layout: RoomLayout | undefined, floorIndex: number, ba
   return cleaned?.floors[floorIndex]?.items.filter(item => isBanquetSeat(item) && !baseIds.has(item.id)).length ?? 0;
 }
 
-/** Place the same round banquet at a smaller diameter and keep a count this room actually lands. */
+/** Same door a later 「换成 ØX」 preview uses: script first, then the card's own fallback. */
+function previewAtDiameter(input: LocalPlanInput, diameter: number): LocalPlanResult | null {
+  const choice = input.furnishing;
+  if (!choice || choice.shape !== 'round') return null;
+  const nextChoice = { ...choice, width: diameter, depth: diameter };
+  if (!materializeFurnishing(nextChoice)) return null;
+  return buildLocalPlan({
+    ...input,
+    furnishing: nextChoice,
+    table: { ...(input.table ?? {}), shape: 'round', width: diameter, depth: diameter },
+    seatPriority: false,
+  });
+}
+
+/** A smaller round table, quoted only at the seat count that door would actually land. */
 function probeSmallerRound(input: LocalPlanInput, current: number): { diameter: number; seats: number } | null {
   const choice = input.furnishing;
   if (!choice || choice.shape !== 'round' || !(choice.width > 1.2)) return null;
@@ -182,22 +196,8 @@ function probeSmallerRound(input: LocalPlanInput, current: number): { diameter: 
   let best: { diameter: number; seats: number } | null = null;
   for (const diameter of [2, 1.8, 1.6, 1.4, 1.2]) {
     if (diameter >= choice.width - 0.05) continue;
-    const placed = materializeFurnishing({ ...choice, width: diameter, depth: diameter });
-    if (!placed) continue;
-    const plan = proposePlan({
-      base: input.base,
-      floorIndex: input.floorIndex,
-      widthM: input.widthM,
-      depthM: input.depthM,
-      variant: input.variant,
-      guests: input.guests ?? null,
-      ...(input.layoutMode ? { layoutMode: input.layoutMode } : {}),
-      seatingShape: 'ring',
-      furnishing: placed,
-      stage: input.stage ?? false,
-      checkin: false,
-    });
-    const seats = landedChairCount(plan.layouts.at(-1), input.floorIndex, baseIds);
+    const preview = previewAtDiameter(input, diameter);
+    const seats = landedChairCount(preview?.layouts.at(-1), input.floorIndex, baseIds);
     if (seats > current && (!best || seats > best.seats)) best = { diameter, seats };
   }
   return best;
