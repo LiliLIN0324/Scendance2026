@@ -118,14 +118,11 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   const refusedList = visibleOutcome?.refused ?? [];
 
   return <section className="ap-card ap-audit" aria-label="系统体检与评审记录">
-    <header className="ap-audit-head">
-      <ShieldCheck size={16} aria-hidden="true"/>
-      <strong>系统体检与评审记录</strong>
-    </header>
+    <span className="ap-blocked-stamp"><ShieldCheck size={12} aria-hidden="true"/>体检 · 评审</span>
 
     {effectiveScore && <><h4>{outcome && !outcomeCurrent ? '历史系统体检记录' : '系统体检结果'}</h4><p className="ap-audit-scope">仅粗略检查已建模物件与画布；现场净宽、出入口、消防和规范验收均未核验。修改场景后请重新体检。</p>
       <div className="ap-audit-score" data-testid="bingo-score">
-        <p>几何检查：待核验{effectiveScore.failedCount > 0 ? `；发现 ${effectiveScore.failedCount} 件需关注` : ''}</p>
+        <p>几何检查：待核验{effectiveScore.failedCount > 0 ? `；${outcome && !outcomeCurrent ? '上次快照' : ''}发现 ${effectiveScore.failedCount} 件需关注` : ''}</p>
         <ul>{CHECKLIST_LABELS.map(label=><li key={label}>{label}：待核验</li>)}</ul>
       </div>
     </>}

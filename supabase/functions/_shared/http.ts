@@ -33,7 +33,11 @@ export async function readBounded(response: Response | Request, max: number): Pr
 export async function fetchJson(url: string, init: RequestInit, fetcher: Fetcher = fetch, max = 2_000_000, timeoutMs=25_000): Promise<unknown> {
   const timeout=AbortSignal.timeout(timeoutMs);
   const response = await fetcher(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal,timeout]) : timeout, redirect: 'error' });
-  if (!response.ok) { await response.body?.cancel(); throw new ApiError('PROVIDER_HTTP_ERROR', 502, { status: response.status }); }
+  if (!response.ok) {
+    let upstream = '';
+    try { upstream = new TextDecoder().decode(await readBounded(response, 2_048)); } catch { /* body optional */ }
+    throw new ApiError('PROVIDER_HTTP_ERROR', 502, { status: response.status, upstream: upstream.slice(0, 600) });
+  }
   try { return JSON.parse(new TextDecoder().decode(await readBounded(response, max))); }
   catch (e) { if (e instanceof ApiError || (e instanceof Error && ['AbortError','TimeoutError'].includes(e.name))) throw e; throw new ApiError('PROVIDER_INVALID_JSON', 502); }
 }

@@ -86,8 +86,15 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-divider { text-align: center; font-size: var(--fs-cap); color: var(--wk-muted); margin: 0; display: flex; align-items: center; gap: 8px; }
 .ap-divider::before, .ap-divider::after { content: ''; flex: 1; height: 1px; background: var(--wk-hair); }
 /* 回话是短气泡，不是左侧发丝线上的一整段记录。 */
-.ap-agent { margin: 0; align-self: flex-start; line-height: 1.55; max-width: 100%; font-size: 13.5px; color: var(--wk-ink); background: var(--wk-plane); border: 0; border-radius: 14px; padding: 10px 12px; }
+.ap-agent { margin: 0; align-self: flex-start; line-height: 1.6; max-width: 100%; font-size: 14.5px; color: var(--wk-ink); background: var(--wk-plane); border: 0; border-radius: 14px; padding: 10px 12px; white-space: pre-line; overflow-wrap: anywhere; }
 .ap-agent.is-amber { background: var(--wk-paper); border: 1px solid var(--wk-hair); box-shadow: none; }
+/* 编号条目/换行拆成的独立行：首行不压间距，其余行错开一点。 */
+.ap-agent-line { display: block; }
+.ap-agent-line + .ap-agent-line { margin-top: 5px; }
+/* 连续编号/符号条目收成一个列表块，块内条目间距统一。 */
+.ap-agent-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.ap-agent-list-item { display: block; overflow-wrap: anywhere; }
+.ap-agent-list + .ap-agent-line, .ap-agent-line + .ap-agent-list { margin-top: 5px; }
 /* 清单/文案这类多行回话保留换行结构。 */
 .ap-agent.is-long { white-space: pre-line; }
 /* 消息进场：200ms 淡入上浮（§一.3 动效 token），尊重 reduced-motion。 */
@@ -99,6 +106,20 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-bubble-action { min-height: 28px; padding: 0 12px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--plane); color: var(--ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-bubble-action:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); color: var(--ink); transform: translateY(-1px); }
 .ap-bubble-action:active { transform: none; }
+/* 追问句拆出的可点选项：点一下只填进输入框，不替人发送。行卡对照 petitmaker OptionPick。 */
+.ap-option-pick { display: flex; flex-direction: column; gap: 8px; max-width: 100%; margin-top: 2px; }
+.ap-option-row { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); padding: 8px 10px; text-align: left; color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-option-row:hover:not(:disabled) { border-color: var(--wk-ink-soft); background: var(--plane-deep); transform: translateY(-1px); }
+.ap-option-row:active:not(:disabled) { transform: none; }
+.ap-option-row.is-picked { border-color: var(--wk-ink); box-shadow: inset 0 0 0 1.5px var(--wk-ink); }
+.ap-option-row.is-dim { opacity: .5; }
+.ap-option-row:disabled { cursor: default; }
+.ap-option-row-cap { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ap-option-row-mark { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; background: var(--wk-plane); border-radius: 999px; padding: 2px 8px; font-size: var(--fs-cap); color: var(--wk-ink); }
+/* 能力 chip：pill 规格——描边浅底、圆角胶囊；悬停加深底，选中主色浅底深字。 */
+.ap-capability-chip, .sc-agent-panel .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 12px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-capability-chip:hover, .sc-agent-panel .chip:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); transform: translateY(-1px); }
+.ap-capability-chip:active, .sc-agent-panel .chip:active { transform: none; }
 /* 「回好自动落区」提议卡：品牌绿描边 + 浅底，按钮用品牌绿主按钮风格。 */
 .ap-zone-proposal { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border: 1px solid var(--ap-green); border-radius: var(--r-sm); background: var(--green-pale); max-width: 100%; }
 .ap-zone-proposal__hint { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--ink); }
@@ -126,14 +147,16 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* ── 信息卡 ── */
 .ap-card { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .ap-status-card { gap: 8px; padding: 8px 10px; }
-.ap-status-line { margin: 0; font-size: var(--fs-p2); line-height: 1.45; color: var(--wk-ink-soft); }
-.ap-status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.ap-status-head strong { font-size: var(--fs-p2); font-weight: 600; }
+/* 进度/暂停卡：状态标 + 说明 + 动作行，对照 petitmaker ResumeCard。 */
+.ap-progress-card { gap: 8px; }
+.ap-progress-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--sc-muted); font-size: var(--fs-cap); font-weight: 500; }
+.ap-progress-card.is-paused .ap-progress-stamp { background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); }
+.ap-progress-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-progress-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ap-text-action { border: 0; background: transparent; padding: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); cursor: pointer; }
 .ap-text-action:hover, .ap-text-action:focus-visible { color: var(--wk-ink); }
-.ap-pending { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ap-pending-label { flex: none; font-size: 12px; color: var(--wk-muted); }
-.ap-pending .ap-text-action { flex: none; margin-left: auto; }
+.ap-pending-card { gap: 8px; }
+.ap-pending-foot { display: flex; justify-content: flex-end; }
 .ap-pending-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .ap-pending-chips li { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-height: 28px; border: 1px solid var(--wk-hair); border-radius: 999px; padding: 0 2px 0 10px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-p2); }
 .ap-pending-chips li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 18em; }
@@ -151,10 +174,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-capabilities { flex: 0 0 auto; margin: 0 12px 8px; padding: 0 2px; display: flex; flex-direction: column; gap: 6px; }
 .ap-capability-label { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); font-weight: 500; }
 .ap-capability-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.ap-capability-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
-.ap-capability-chip:hover { border-color: var(--wk-ink-soft); background: var(--wk-plane); transform: translateY(-1px); }
 .ap-capability-chip svg { flex: 0 0 auto; color: var(--wk-ink-soft); }
-.sc-agent-panel .chip { border: 1px solid var(--wk-hair); background: var(--wk-paper); border-radius: var(--r-sm); padding: 4px 10px; font-size: var(--fs-p2); color: var(--wk-ink); }
 .sc-agent-panel .chip.is-on { border-color: var(--ap-green); background: var(--ap-pale2); color: var(--ap-deep); }
 .ap-venue { display: flex; flex-direction: column; gap: 8px; }
 .ap-venue-head { display: flex; align-items: center; justify-content: space-between; }
@@ -168,7 +188,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-agent-panel .btn-primary:hover:not([aria-disabled="true"]) { background: #2A2C31; }
 .sc-agent-panel .btn-primary:active:not([aria-disabled="true"]) { background: #3D3F45; }
 .sc-agent-panel .btn-primary[aria-disabled="true"] { background: var(--plane); color: var(--faint); cursor: not-allowed; }
-.sc-agent-panel #cta-hint { margin: -4px 0 0; text-align: center; font-size: var(--fs-cap); color: var(--ap-grey); }
+.sc-agent-panel #cta-hint { margin: -4px 0 0; justify-content: center; }
 .sc-agent-panel #cta-hint.ap-why { text-align: left; line-height: 1.5; }
 .ap-recap { margin: 0; align-self: flex-start; background: var(--wk-plane); border-radius: var(--r-sm); padding: 4px 9px; font-size: var(--fs-p2); color: var(--wk-ink-soft); display: flex; align-items: center; gap: 6px; }
 .ap-nudge { border: 1px solid var(--wk-hair); background: var(--wk-plane); border-radius: var(--r-sm); padding: 9px 11px; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
@@ -180,9 +200,27 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-steps li.is-done svg { background: var(--ap-green); color: #fff; border-radius: 50%; padding: 1px; }
 .ap-steps li.is-current { color: var(--wk-ink); font-weight: 600; }
 .ap-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--wk-hair); box-sizing: border-box; }
-/* 警告 = Alert 形制：白底发丝框 + 左缘 3px 语义色竖条（v2.2 §弹窗体系）。 */
-.ap-inline-error { border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); border-radius: var(--r-sm); background: var(--wk-paper); padding: 10px 12px; display: flex; flex-direction: column; gap: 9px; }
-.ap-inline-error p { margin: 0; color: var(--warn); display: flex; gap: 6px; align-items: flex-start; line-height: 1.5; }
+/* 失败卡：告警标 + 摘要 + 动作行，对照 petitmaker StopCard/IncidentCard；左缘 3px 语义色竖条保留。 */
+.ap-error-card { gap: 8px; border-left: 3px solid var(--warn); }
+.ap-error-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); font-size: var(--fs-cap); font-weight: 500; }
+.ap-error-summary { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-error-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 阻塞/旧方案卡：状态标 + 说明 + 动作行，对照 petitmaker ResumeCard blocked 面。 */
+.ap-blocked-card { gap: 8px; }
+.ap-status-panel { gap: 8px; }
+.ap-export-card { gap: 8px; }
+.ap-plan { gap: 8px; }
+.ap-stats { display: flex; gap: 8px; flex: 0 0 auto; }
+.ap-stat { flex: 1; min-width: 0; background: var(--wk-plane); border-radius: var(--r-sm); padding: 6px 10px 8px; display: flex; flex-direction: column; }
+.ap-stat b { font-size: 15px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ap-stat span { font-size: 12px; color: var(--wk-ink-soft); }
+.ap-material-card { gap: 8px; }
+.ap-material-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ap-material-list li { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--wk-plane); border-radius: var(--r-sm); }
+.ap-material-list span { font-size: var(--fs-p2); color: var(--wk-ink-soft); }
+.ap-blocked-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; }
+.ap-blocked-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-blocked-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ap-plan strong { font-size: var(--fs-p1); }
 .ap-plan p { margin: 0; }
 /* 本次结果 = 一次运行的账单：成功/被拒/没动/空结果各一行，数字已经在上面的统计条里。 */
@@ -211,9 +249,17 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-tool-chip button { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .ap-tools details { width: 100%; }
 .ap-tools summary { cursor: pointer; font-size: 12px; color: var(--wk-muted); }
-.ap-tool-rows { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
-.ap-tool-rows li { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--wk-hair); font-size: 12px; line-height: 1.4; color: var(--wk-ink-soft); }
-.ap-tool-rows li span:last-child { margin-left: auto; color: var(--wk-muted); }
+/* 步骤时间线：编号圆标 + 名称 + 远端状态，详情缩进一行；对照 petitmaker StepList。 */
+.ap-tool-rows { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-tool-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 8px; border-radius: var(--r-sm); }
+.ap-tool-row-no { width: 20px; height: 20px; flex: 0 0 auto; border-radius: 999px; background: var(--wk-plane); color: var(--wk-ink); display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-cap); font-variant-numeric: tabular-nums; }
+.ap-tool-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-tool-row-line { display: flex; align-items: center; gap: 8px; }
+.ap-tool-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-p2); color: var(--wk-ink); }
+.ap-tool-row-stat { margin-left: auto; flex: 0 0 auto; font-size: var(--fs-cap); color: var(--wk-muted); }
+.ap-tool-row-detail { padding-left: 28px; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
+.ap-tool-row.is-running .ap-tool-row-no { background: var(--ap-pale2); color: var(--ap-deep); }
+.ap-tool-row.is-error .ap-tool-row-no, .ap-tool-row.is-error .ap-tool-row-name { color: var(--warn); }
 .ap-foot { margin: 0; display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 11px; line-height: 1.3; color: var(--wk-muted); }
 .ap-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ap-process { margin: 0; font-size: var(--fs-p2); line-height: 1.4; color: var(--wk-muted); }
@@ -587,8 +633,6 @@ button.ap-ghost {
 
 /* Bingo 审计位：3.0.0 左栏「收甲方反馈」并回对话后的只读记录，不新增第二个入口。 */
 .ap-audit { gap: 8px; }
-.ap-audit-head { display: flex; align-items: center; gap: 6px; }
-.ap-audit-head strong { font-size: var(--fs-p1); font-weight: 600; }
 .ap-audit-phase { padding: 1px 7px; border: 1px solid var(--wk-hair); border-radius: 999px; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-phase.is-awaiting { color: var(--warn); border-color: currentColor; }
 .ap-audit-phase.is-returned { color: var(--warn); border-color: currentColor; }
