@@ -26,7 +26,7 @@ import { mergeLocalSeatingSpecs } from './local-seating-specs.ts';
 import {agentPlaceSearchEnabled,agentPlaceSearchSchema,searchAgentPlaces} from './agent-place-search.ts';
 import { generationCapabilities } from './generation-contract.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
-import { AGENT_PHASES, advancePhase, progressLine, type AgentPhase } from './agent-progress.ts';
+import { AGENT_PHASES, advancePhase, phaseIndex, phaseLabel, progressLine, type AgentPhase } from './agent-progress.ts';
 import { matchRecipes, renderRecipes } from './agent-recipes.ts';
 import { briefTarget, deadlinePressure, renderTurnBrief, type TurnTraceEntry } from './turn-brief.ts';
 import { rankCandidates, explainRanking, type ScoreInput } from './scorecard.ts';
@@ -96,6 +96,31 @@ const descriptions:Record<keyof typeof schemas,string>={get_scene:'读取本次�
   prepare_seating_candidate:'在本次原场景上试算一人一桌一椅组团，不删除已有物件、不写画布。须明确给数量、桌椅尺寸、间距与边界留距；这些是本次假设，不是库存或规范。返回 requested、placed、shortfall 和缺口原因；有候选时返回本次运行有效的 preparedId，调用 submit_candidates 时用 {preparedId} 提交。不能声称缺口已满足；出口、通行、消防和现场等仍需核验。用户未明确选择时只能作为标明假设的探索方案。',
   prepare_shared_seating_candidate:'仅当 context.seatingAllocation 是经核实的用户明确要求 shared_desk 且 peoplePerDesk 为 2 时，按人数试排每桌两把独立椅子。输入人数、桌椅尺寸、椅间净距、桌椅间距、行列间距与边界留距；返回实际人数、桌数、缺口、假设与运行内 preparedId。保留原场景，仅供预览，不代表实际库存或安全。',
   find_free_areas:'让引擎寻找候选落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回候选落地中心坐标及到最近标注出入口的距离；结果不证明连续通行或现场条件。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，不保存。valid 为 true 时返回本次运行专用 validatedId，可用 {validatedId} 提交原候选；修改后必须重新检查。valid 只表示候选构建与部分几何检查结果，warnings 和 coverage 仍须查看，不代表通行、安全或规范通过。',submit_candidates:'结束本次运行并提交方案。优先使用本次 validate_candidate 成功返回的 {validatedId}；组团工具使用 {preparedId}；也可提交完整候选 {title,explanation,commands,materialSuggestions?}。每项只能选择其中一种且不得附加字段。JEV关闭提交1个，开启提交3个不同方案；说明性答复可用空 commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'提交 Aholo Lux3D 文生 3D 异步任务（付费，约数分钟）。完成后用户在历史模型面板手动加入场地；本方案不能包含刚提交的物件，不得声称已布置。仅用于参数化六类和现有资源都无法满足的定制物件。'};
+/** Whitelist-only, truncated argument digest for telemetry. Never stores full geometry, prompts or secrets. */
+function summarizeToolArgs(name:string, raw:string):string|null{
+  let args:Record<string,unknown>;
+  try{const parsed=JSON.parse(raw);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return null;args=parsed as Record<string,unknown>;}catch{return null;}
+  const round=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?Math.round(v*100)/100:undefined;
+  const shortId=(v:unknown)=>typeof v==='string'?(v.length>8?`${v.slice(0,8)}…`:v):undefined;
+  let picked:Record<string,unknown>={};
+  switch(name){
+    case 'search_resources':case 'search_places':picked={query:typeof args.query==='string'?args.query.slice(0,40):undefined};break;
+    case 'inspect_zone':picked={x1:round(args.x1),z1:round(args.z1),x2:round(args.x2),z2:round(args.z2)};break;
+    case 'find_free_areas':picked={width:round(args.width),depth:round(args.depth),clearance:round(args.clearance)};break;
+    case 'prepare_seating_candidate':case 'prepare_shared_seating_candidate':picked={count:typeof args.count==='number'?args.count:undefined};break;
+    case 'validate_candidate':return null;
+    case 'submit_candidates':picked={count:Array.isArray(args.candidates)?args.candidates.length:undefined};break;
+    case 'inspect_materials':picked={resourceId:shortId(args.resourceId)};break;
+    case 'customize_material':picked={resourceId:shortId(args.resourceId),objectCount:Array.isArray(args.objectIds)?args.objectIds.length:undefined};break;
+    case 'create_parametric_model':picked={category:typeof args.parameters==='object'&&args.parameters!==null?(args.parameters as Record<string,unknown>).category:undefined};break;
+    case 'start_lux3d_model':picked={prompt:typeof args.prompt==='string'?args.prompt.slice(0,40):undefined};break;
+    default:return null;
+  }
+  for(const [key,value] of Object.entries(picked))if(value===undefined)delete picked[key];
+  if(!Object.keys(picked).length)return null;
+  const text=JSON.stringify(picked);
+  return text.length<=240?text:`${text.slice(0,237)}…`;
+}
 /** Explicitly records the limits of this tool's existing validation, not a safety result. */
 const candidateValidationCoverage={status:'partial' as const,
   covered:['命令格式和可修改对象','新增或变动物件的越界拦截','结构变更约束','物件重叠警告','改动物件与最近障碍的局部几何距离'],
@@ -237,8 +262,10 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   const rpc=backend.agent!;
   const start=await rpc(actor,'start',{projectId,id});if(!start.claimed)return;
   const input=agentRunRequestSchema.parse(start.input),deadline=Date.parse(start.deadline),claim=start.claim;
+  const now=backend.agentClock ?? Date.now;
   // Best effort, ordered and bounded: failed/missing observations never alter an operation.
   let eventChain:Promise<unknown>=Promise.resolve(),eventCount=0;
+  const toolStartedAt=new Map<string,number>();
   const observe=(event:AgentEvent)=>{
     if(!backend.agentEvents||eventCount>=128)return;
     eventCount++;
@@ -323,19 +350,24 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   // 阶段从行上接着走：这一趟之前推进到哪一段，重新接上时不该从头报。
   const persistedPhase=AGENT_PHASES.find(phase=>phase===start.phase);
   const call=(action:string,data:Record<string,unknown>={})=>rpc(actor,action,{projectId,id,claim,...data});
-  const check=async()=>{if(Date.now()>=deadline)throw new ApiError('AGENT_DEADLINE',409);await call('check');};
+  const check=async()=>{if(now()>=deadline)throw new ApiError('AGENT_DEADLINE',409);await call('check');};
   type Candidate=ReturnType<typeof buildProposal>&{label:'A'|'B'|'C';title:string;prepared?:boolean};
   let candidates:Candidate[]=[],lastError:unknown,repair=0,finished=false,consumedSteerTotal=0;
+  const preparedSeating=new Map<string,ReturnType<typeof buildProposal>&{title:string;prepared:true}>();
+  const validatedCandidates=new Map<string,z.infer<typeof candidateSchema>>();
+  /** Fallback stash: prepared drafts and checked candidates not yet submitted when time runs out. */
+  function fallbackStash():Candidate[]{
+    const fromPrepared=[...preparedSeating.values()].slice(0,3).map((p,i)=>({...p,label:(['A','B','C'] as const)[i],title:p.title}));
+    if(fromPrepared.length)return fromPrepared;
+    return [...validatedCandidates.values()].slice(0,3).map((raw,i)=>({...raw,label:(['A','B','C'] as const)[i],title:typeof raw.title==='string'?raw.title:'布置方案'}) as Candidate);
+  }
   const miniMax=chatProfile(env)==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
   try {
     if(input.context.annotationObservation!==undefined&&(env('AGENT_ANNOTATION_OBSERVATION_ENABLED')!=='1'||env('DEEPSEEK_AGENT_MODE')==='legacy'))throw new ApiError('AGENT_ANNOTATION_UNAVAILABLE',503);
     const resources=await readSceneResources(backend,actor,input.scene);
     const identities=new Map<string,string>();
     const materialVariants=new Map<string,{sourceAssetId:string;objectIds:string[]}>();
-    const preparedSeating=new Map<string,ReturnType<typeof buildProposal>&{title:string;prepared:true}>();
     let lastEmptySeating:{code:string;headcountUnverified:boolean;sceneKey:string;steerTotal:number}|null=null;
-    // Handles are scoped to this execution and hold input, not a trusted scene or verdict.
-    const validatedCandidates=new Map<string,z.infer<typeof candidateSchema>>();
     let seatingAttempts=0;
     if(env('DEEPSEEK_AGENT_MODE')==='legacy') {
       await check();
@@ -467,7 +499,12 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     let annotationReadTurn:number|null=null;
     let annotationReadStatus:'ready'|'unavailable'|null=null;
     let roundCostSec=90;
-    const canReplan=(turn:number)=>turn<6&&deadline-Date.now()>1000;
+    // Plain-text final replies get a bounded number of submit nudges before a downgrade failure.
+    let submitTextNudges=0;
+    const MAX_SUBMIT_NUDGES=2;
+    // Below this remaining budget another model round cannot finish; hand off instead of starting it.
+    const SAFE_HANDOFF_MS=15_000;
+    const canReplan=(turn:number)=>turn<6&&deadline-now()>1000;
     async function consumeSteering(beforeNotes?:()=>void):Promise<boolean>{
       const steering:{notes?:string[];steerTotal?:number}=await call('take_notes');
       if(!Number.isSafeInteger(steering.steerTotal)||steering.steerTotal!<consumedSteerTotal)throw new ApiError('AGENT_STEERING_GUARD_UNAVAILABLE',503);
@@ -506,26 +543,43 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       }
       return !!steering.notes?.length;
     }
-    async function finishCandidates():Promise<void>{
-      if(!candidates.length)throw lastError??new ApiError('AGENT_NO_VALID_CANDIDATE',422);
-      await check();
+    async function finishCandidates(list:Candidate[], note?:string, options?:{skipCheck?:boolean}):Promise<void>{
+      if(!list.length)throw lastError??new ApiError('AGENT_NO_VALID_CANDIDATE',422);
+      if(!options?.skipCheck)await check();
       const evaluation=input.jevEnabled
         ? (miniMax ? {status:'unavailable' as const,message:'本次预览未调用外部评价服务，可自行比较方案。'}
-          : await evaluateCandidates(candidates,input.instruction+'\n'+input.context.brief,env,deadline-Date.now()-700,fetcher,usage=>call('usage',{usage:{provider:'jev',usage}})))
+          : await evaluateCandidates(list,input.instruction+'\n'+input.context.brief,env,deadline-now()-700,fetcher,usage=>call('usage',{usage:{provider:'jev',usage}})))
         : null;
-      await check();
+      if(!options?.skipCheck)await check();
       await Promise.race([eventChain,new Promise(resolve=>setTimeout(resolve,250))]);
-      await call('finish',{steerTotal:consumedSteerTotal,evaluation,message:candidates.length<(input.jevEnabled?3:1)?'仅部分方案通过检查，可查看有效结果。':undefined});
+      const partial=list.length<(input.jevEnabled?3:1);
+      const fromStash=!candidates.length;
+      await call('finish',{steerTotal:consumedSteerTotal,evaluation,message:note??(partial?'仅部分方案通过检查，可查看有效结果。':undefined),...(fromStash?{candidates:list}:{})});
+    }
+    /** Deadline-aware handoff: keep any validated candidate rather than hard-failing the whole run. */
+    async function gracefulHandoff(turn:number, reason:string):Promise<void>{
+      const stash=fallbackStash();
+      if(candidates.length||stash.length){
+        const kept=Math.max(candidates.length,stash.length);
+        await finishCandidates(candidates.length?candidates:stash,`${reason}；已提交 ${kept} 个通过检查的候选，其余步骤未完成。`,{skipCheck:true});
+        finished=true;
+        return;
+      }
+      throw new ApiError('AGENT_INCOMPLETE',422,{message:`已进行到第 ${phaseIndex(phase)}/4 阶段 · ${phaseLabel(phase)} · 第 ${turn} 轮；${reason}，尚未形成通过校验的候选方案。`});
     }
     for(let turn=1;turn<=6&&!finished;turn++) {
-      const roundStart=Date.now();
+      const roundStart=now();
+      const preRoundRemainingMs=deadline-now();
+      // Below one safe round of budget, keep whatever validated candidates exist instead of
+      // starting another round that cannot finish. No candidate yet means a descriptive failure.
+      if(preRoundRemainingMs<SAFE_HANDOFF_MS){ await gracefulHandoff(turn,'运行时间预算不足，未再发起新一轮模型调用'); return; }
       await check();
       // Consume notes before the next model request and rebind all constraints.
       await consumeSteering();
       await call('step',{progress:progressLine(phase,turn,6),phase});
       // 三道闸：轮次用尽 / 时间不够再跑一轮 / 在同一处打转。后两道来自工坊实测——
       // 只看轮次时，模型能把单轮里的「再查一次」拖到 deadline，用户什么也拿不到。
-      const remainingSec=(deadline-Date.now())/1000;
+      const remainingSec=(deadline-now())/1000;
       const pressure=deadlinePressure({turn,maxTurns:6,remainingSec,roundCostSec,trace});
       const awaitingAnnotation=input.context.annotationObservation!==undefined&&annotationReadTurn===null;
       const forceSubmit=pressure.forceSubmit&&!awaitingAnnotation;
@@ -538,13 +592,14 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       const { url, init } = chatRequest(env, { messages:compactRepeatedValidationArrays(messages), tools:offered, tool_choice:miniMax?'auto':forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.
       if(new TextEncoder().encode(init.body as string).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
-      const requestStarted=Date.now(),remainingMs=Math.max(0,Math.min(900000,deadline-requestStarted));
+      const requestStarted=now(),remainingMs=Math.max(0,Math.min(900000,deadline-requestStarted));
       if(backend.agentTrialDiagnostic)trialDiagnostic(trialModelRoundDiagnostic(turn,'start',remainingMs));
       let raw:unknown;
-      try{raw=await fetchJson(url,init,fetcher,150000,Math.min(miniMax?110000:35000,Math.max(1,deadline-Date.now())));}
-      catch(error){if(backend.agentTrialDiagnostic)trialDiagnostic(trialModelRoundDiagnostic(turn,'failed',Math.max(0,Math.min(900000,deadline-Date.now())),Math.max(0,Math.min(900000,Date.now()-requestStarted))));throw error;}
-      if(backend.agentTrialDiagnostic)trialDiagnostic(trialModelRoundDiagnostic(turn,'response',Math.max(0,Math.min(900000,deadline-Date.now())),Math.max(0,Math.min(900000,Date.now()-requestStarted))));
+      try{raw=await fetchJson(url,init,fetcher,150000,Math.min(miniMax?110000:35000,Math.max(1,deadline-now())));}
+      catch(error){if(backend.agentTrialDiagnostic)trialDiagnostic(trialModelRoundDiagnostic(turn,'failed',Math.max(0,Math.min(900000,deadline-now())),Math.max(0,Math.min(900000,now()-requestStarted))));throw error;}
+      if(backend.agentTrialDiagnostic)trialDiagnostic(trialModelRoundDiagnostic(turn,'response',Math.max(0,Math.min(900000,deadline-now())),Math.max(0,Math.min(900000,now()-requestStarted))));
       const reply=parseAgentModelReply(raw);
+      if(reply.finishReason==='length')throw new ApiError('AGENT_OUTPUT_TRUNCATED',502);
       // Validate the whole batch before executing anything; private reasoning stays in memory.
       const miniMaxTurn=miniMax?parseMiniMaxToolTurn(raw,offered.map(t=>t.function.name),miniMaxCallIds,forceSubmit,true):null;
       const batchProblems=new Map<string,unknown>();
@@ -562,8 +617,12 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         if(!canReplan(turn))throw new ApiError('AGENT_STEERING_CHANGED',409);
         continue;
       }
-      if(reply.finishReason==='length')throw new ApiError('AGENT_OUTPUT_TRUNCATED',502);
-      if(!reply.toolCalls.length){messages.push(miniMaxTurn?miniMaxTurn.assistantMessage:{role:'assistant',content:reply.content??''},{role:'user',content:'请调用 submit_candidates 完成本次结果；说明性回答也使用一个空 commands 候选。'});continue;}
+      if(!reply.toolCalls.length){
+        submitTextNudges+=1;
+        if(submitTextNudges>MAX_SUBMIT_NUDGES)throw new ApiError('AGENT_SUBMIT_NOT_REACHED',422,{message:'模型连续多次只给出文字回复、没有提交候选；已停止重试，当前没有通过校验的方案。'});
+        messages.push(miniMaxTurn?miniMaxTurn.assistantMessage:{role:'assistant',content:reply.content??''},{role:'user',content:forceSubmit?'现在必须用 submit_candidates 提交当前可用结果；说明性回答也使用一个空 commands 候选，不要再继续读取或校验。':'请调用 submit_candidates 完成本次结果；说明性回答也使用一个空 commands 候选。'});
+        continue;
+      }
       messages.push(miniMaxTurn?miniMaxTurn.assistantMessage:{role:'assistant',content:reply.content,tool_calls:reply.toolCalls});
       if(batchProblems.size){
         // Reject the whole batch before any tool runs, including candidate submission.
@@ -581,14 +640,18 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
           await call('usage',{usage:{tool:tool.function.name,errorCode:code}});
         }
         lastError=new ApiError('INVALID_TOOL_INPUT',422);
-        roundCostSec=Math.max(20,Math.round((Date.now()-roundStart)/1000));
+        roundCostSec=Math.max(20,Math.round((now()-roundStart)/1000));
         continue;
       }
       let replanAfterSteering=false;
       for(const tool of reply.toolCalls) {
         await check();let result:unknown,fingerprint:string|undefined,replayed=false,checkpointFailed=false;
         const observedTool=agentEventTool(tool.function.name)?tool.function.name:null;
-        if(observedTool)observe({tool:observedTool,stage:'started',outcome:null,errorCode:null});
+        if(observedTool){
+          toolStartedAt.set(tool.id,now());
+          const summary=summarizeToolArgs(observedTool,tool.function.arguments);
+          observe({tool:observedTool,stage:'started',outcome:null,errorCode:null,...(summary?{argsSummary:summary}:{})});
+        }
         try {
           const name=tool.function.name as keyof typeof schemas;
           if(!(name in schemas))throw new ApiError('UNKNOWN_TOOL',422);
@@ -609,7 +672,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             if((name==='create_parametric_model'||name==='customize_material'||name==='start_lux3d_model')&&await consumeSteering(()=>{
               for(const pending of reply.toolCalls.slice(reply.toolCalls.indexOf(tool)))messages.push({role:'tool',tool_call_id:pending.id,content:'{"stopped":true}'});
             })){
-              if(observedTool)observe({tool:observedTool,stage:'finished',outcome:'unknown',errorCode:null});
+              if(observedTool)observe({tool:observedTool,stage:'finished',outcome:'unknown',errorCode:null,durationMs:Math.max(0,now()-(toolStartedAt.get(tool.id)??now()))});
               replanAfterSteering=true;break;
             }
             if(name==='get_scene'){
@@ -834,7 +897,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
           if(repeats>=2)result={...(result as Record<string,unknown>),repeat:repeats,stop:true,
             hint:code==='ANNOTATION_READ_REQUIRED'?errorHints.ANNOTATION_READ_REQUIRED:`这个调用已经用同样的参数失败 ${repeats} 次：不要再试第三次。换落点、换尺寸或换工具，或者直接用 submit_candidates 提交现有可用结果并说明这条限制。`};
         }
-        if(observedTool)observe({tool:observedTool,stage:'finished',...agentEventOutcome(observedTool,result,input.jevEnabled?3:1)});
+        if(observedTool)observe({tool:observedTool,stage:'finished',...agentEventOutcome(observedTool,result,input.jevEnabled?3:1),durationMs:Math.max(0,now()-(toolStartedAt.get(tool.id)??now()))});
         const content=JSON.stringify(result);
         // 轨迹：只留判打转要用的三件事（工具、目标、成没成）。失败同时记错误码，
         // 下一轮简报据此提醒「不要用同样参数再试一次」。
@@ -867,10 +930,10 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       }
       // 下一轮的时间闸用「刚刚这一轮实际花了多久」而不是拍一个常数：
       // 模型在不同场景下思考深度差三倍，固定常数会把时间闸定得过松或过紧。
-      roundCostSec=Math.max(20,Math.round((Date.now()-roundStart)/1000));
+      roundCostSec=Math.max(20,Math.round((now()-roundStart)/1000));
       if(replanAfterSteering){if(!canReplan(turn))throw new ApiError('AGENT_STEERING_CHANGED',409);continue;}
       if(finished){
-        try{await finishCandidates();return;}
+        try{await finishCandidates(candidates);return;}
         catch(error){
           if(error instanceof ApiError&&error.code==='AGENT_STEERING_CHANGED'&&canReplan(turn)){
             // The note was accepted after the checkpoint. Its RPC cleared that
@@ -882,10 +945,23 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       }
     }
     if(!candidates.length&&input.context.annotationObservation!==undefined&&annotationReadTurn===null)throw new ApiError('ANNOTATION_READ_REQUIRED',422);
-    await finishCandidates();
+    await finishCandidates(candidates);
   } catch(error) {
     // Preserve already-observed failures when storage responds promptly; never hold the run on telemetry.
     await Promise.race([eventChain,new Promise(resolve=>setTimeout(resolve,250))]);
-    await call('fail',{errorCode:error instanceof ApiError?error.code:'AGENT_FAILED'}).catch(()=>{});
+    const deadlineLike=(error instanceof ApiError&&error.code==='AGENT_DEADLINE')||(error instanceof Error&&(error.name==='AbortError'||error.name==='TimeoutError'));
+    if(deadlineLike&&(candidates.length||preparedSeating.size||validatedCandidates.size)){
+      try{
+        const list=candidates.length?candidates:fallbackStash();
+        if(list.length){
+          await call('finish',{steerTotal:consumedSteerTotal,evaluation:null,message:'运行时间预算不足，保留已通过检查的候选',candidates:list});
+          finished=true;
+          return;
+        }
+      }catch{/* fall through to the recorded failure */}
+    }
+    const errorCode=error instanceof ApiError?error.code:'AGENT_FAILED';
+    const message=error instanceof ApiError&&error.details&&typeof error.details==='object'&&typeof (error.details as {message?:unknown}).message==='string'?(error.details as {message:string}).message:undefined;
+    await call('fail',{errorCode,...(message?{message}:{})}).catch(()=>{});
   }
 }

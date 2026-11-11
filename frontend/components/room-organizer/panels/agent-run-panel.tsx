@@ -95,6 +95,33 @@ function eventStatus(stage:'started'|'finished',outcome:'success'|'failed'|'unkn
   return '结果待核对';
 }
 
+/** 放置/写入类工具：标题后可挂「N 个物品」数量胶囊；itemCount 由账本给，缺省不渲染、不编数。 */
+const PLACEMENT_TOOLS = new Set([
+  'prepare_seating_candidate','prepare_shared_seating_candidate','create_parametric_model',
+]);
+function isPlacementTool(tool: string): boolean {
+  return isWriteTool(tool) || PLACEMENT_TOOLS.has(tool);
+}
+
+/** 流水行右侧结果标记：进行中转圈 / 成功绿勾 / 失败红叉 / 待核对中性点。 */
+type RowResult = 'running' | 'success' | 'failed' | 'neutral';
+
+function eventRowResult(event: { stage: 'started'|'finished'; outcome: 'success'|'failed'|'unknown'|null }): RowResult {
+  if (event.stage === 'started' && event.outcome === null) return 'running';
+  if (event.outcome === 'failed') return 'failed';
+  if (event.outcome === 'success') return 'success';
+  return 'neutral';
+}
+
+function stepRowResult(outcome: 'running'|'done'|'error'|undefined): RowResult {
+  if (outcome === 'running') return 'running';
+  if (outcome === 'error') return 'failed';
+  if (outcome === 'done') return 'success';
+  return 'neutral';
+}
+
+const RESULT_MARK: Record<RowResult, string> = { running: '…', success: '✓', failed: '×', neutral: '·' };
+
 /** 归档的一次完成运行：快照进组件内存，不写库。 */
 interface ArchivedRun {
   id: number;
@@ -172,39 +199,40 @@ function RunProcessList({ entry, scope }: { entry: Pick<AgentRunState,'stepLog'|
       <ol aria-label="执行过程" className="ap-run-list">
         {hasEvents ? entry.eventLog.map(event => {
           const category=toolCategory(event.tool),Icon=CATEGORY_ICONS[category];
-          const pending=event.stage==='started'&&event.outcome===null;
-          return <li key={event.seq} data-tool-category={category} className="ap-run-row" data-pending={pending?'true':undefined}>
+          const result=eventRowResult(event);
+          return <li key={event.seq} data-tool-category={category} className="ap-run-row" data-pending={result==='running'?'true':undefined}>
             <Icon size={15} aria-hidden="true" style={{color:'var(--wk-green)'}}/>
             <span>{TOOL_LABELS[event.tool]??'处理任务'}</span>
             <span className="ap-run-status"> · {eventStatus(event.stage,event.outcome)}</span>
-            {!pending && <span className="ap-run-tick" aria-hidden="true">✓</span>}
-            {pending && <span className="ap-run-tick" data-pending="true" aria-hidden="true">…</span>}
+            <span className="ap-run-tick" data-result={result} aria-hidden="true">{RESULT_MARK[result]}</span>
           </li>;
         }):entry.stepLog.map((step, index) => {
           const localName = LOCAL_STEP_LABEL[step.toolName];
           const localStatus = localName ? localStepStatus(step.outcome) : null;
           if (localName && localStatus) {
-            const pending=step.outcome==='running';
-            return <li key={`${step.toolName}-${step.startedAt}-${index}`} className="ap-run-row" data-pending={pending?'true':undefined}>
+            const result=stepRowResult(step.outcome);
+            return <li key={`${step.toolName}-${step.startedAt}-${index}`} className="ap-run-row" data-pending={result==='running'?'true':undefined}>
               <span>{localName}</span><span className="ap-run-status"> · {localStatus}</span>
               {step.outcome === 'error' && step.thought ? <span className="ap-run-status"> · {step.thought}</span> : null}
-              {!pending && <span className="ap-run-tick" aria-hidden="true">✓</span>}
-              {pending && <span className="ap-run-tick" data-pending="true" aria-hidden="true">…</span>}
+              <span className="ap-run-tick" data-result={result} aria-hidden="true">{RESULT_MARK[result]}</span>
             </li>;
           }
           const write = isWriteTool(step.toolName);
-          const pending=step.outcome==='running';
+          const result=stepRowResult(step.outcome);
           return (
             <li
               key={`${step.toolName}-${step.startedAt}-${index}`}
               className="ap-run-row"
               data-kind={write?'write':undefined}
-              data-pending={pending?'true':undefined}
+              data-pending={result==='running'?'true':undefined}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span>已观察到：</span><span style={{ fontWeight: write ? 600 : 400 }}>{visibleProgress(step.toolName,scope)}</span>
-                {write && typeof step.itemCount === 'number' && <span style={{ color: 'var(--wk-green)', fontSize: 11.5 }}>· {step.itemCount} 件</span>}
+                {isPlacementTool(step.toolName) && typeof step.itemCount === 'number' && (
+                  <span className="ap-run-count-pill">{step.itemCount} 个物品</span>
+                )}
               </div>
+              <span className="ap-run-tick" data-result={result} aria-hidden="true">{RESULT_MARK[result]}</span>
             </li>
           );
         })}
@@ -236,6 +264,12 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
   const [currentArchived, setCurrentArchived] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const wasRunningRef = useRef(run.isRunning);
+
+  // —— 任务 3：已送达备注 / 未完成步骤的聚合回折条 ——
+  const [aggregateOpen, setAggregateOpen] = useState(false);
+
+  // —— 任务 5：停止确认行打开时焦点落在「取消」（安全项）——
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
 
   // 跑结束的瞬间把当前 run 快照进归档列表，并把当前卡标成「已归档」。
   // 新一轮开始时清掉这个标记（新 run 自然展开在折叠区之上）。
@@ -279,11 +313,29 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
     return () => window.removeEventListener('keydown', onKey);
   }, [confirmingStop]);
 
+  // 确认行一打开就把焦点给「取消」：回车/空格都不会误触停止。
+  useEffect(() => {
+    if (confirmingStop) cancelRef.current?.focus();
+  }, [confirmingStop]);
+
   const visibleSteps = useMemo(() => {
     if (expandedAll) return run.stepLog;
     return run.stepLog.slice(-3);
   }, [run.stepLog, expandedAll]);
   const visibleEvents=useMemo(()=>expandedAll?run.eventLog:run.eventLog.slice(-3),[run.eventLog,expandedAll]);
+
+  // 账本里没有逐步批准/拒绝事件：聚合条只按现成维度数——已送达备注 + 未完成（failed/error）条目。
+  const unresolvedCount = useMemo(() => {
+    const failedEvents = run.eventLog.filter(e => e.outcome === 'failed').length;
+    const failedSteps = run.stepLog.filter(s => s.outcome === 'error').length;
+    return failedEvents + failedSteps;
+  }, [run.eventLog, run.stepLog]);
+
+  // 收尾卡保留改动数：只累加写入步账本给的 itemCount；取不到就不写具体数。
+  const retainedCount = useMemo(
+    () => run.stepLog.reduce((sum, s) => sum + (typeof s.itemCount === 'number' ? s.itemCount : 0), 0),
+    [run.stepLog],
+  );
 
   // 账本是四张脸共用的：只认自己那张脸的账，别把别的功能域的运行过程搬过来。
   if (run.scope !== scope) return null;
@@ -379,7 +431,44 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
               {expandedAll ? '收起' : `共观察到 ${run.eventLog.length||run.stepLog.length} 条，展开全部`}
             </button>
           )}
+
+          {/* 已决策条目聚合回折条：账本没有逐步批准/拒绝事件，这里只按「已送达备注 / 未完成步骤」
+              两个现成维度收成一行；无拒绝/未完成=绿，有未完成=粉。明细点开再看。 */}
+          {(run.steerDelivered > 0 || unresolvedCount > 0) && (
+            <div className="ap-run-aggregate" data-tone={unresolvedCount > 0 ? 'warn' : 'ok'}>
+              <button
+                type="button"
+                aria-expanded={aggregateOpen}
+                className="ap-run-aggregate-row"
+                onClick={() => setAggregateOpen(v => !v)}
+              >
+                <span className="ap-run-aggregate-title">
+                  {run.steerDelivered > 0 ? `${run.steerDelivered} 条备注已送达` : `${unresolvedCount} 步未完成`}
+                </span>
+                <span className="ap-run-aggregate-badge">{unresolvedCount > 0 ? '含未完成' : '全部已处理'}</span>
+                <span className="ap-run-aggregate-chevron" aria-hidden="true">{aggregateOpen ? '⌃' : '⌄'}</span>
+              </button>
+              {aggregateOpen && (
+                <ul className="ap-run-aggregate-body">
+                  {run.steerDelivered > 0 && <li>已送达备注 {run.steerDelivered} 条 · 下一轮思考前生效</li>}
+                  {run.steerNotes.length > 0 && <li>待送达备注 {run.steerNotes.length} 条</li>}
+                  {unresolvedCount > 0 && <li>未完成步骤 {unresolvedCount} 条</li>}
+                </ul>
+              )}
+            </div>
+          )}
           </>}
+
+          {/* 停止/结束后的人话收尾：保留改动数（取不到不写数）、未完成部分不再继续、两档撤销语义。 */}
+          {!run.isRunning && (run.stepLog.length > 0 || run.eventLog.length > 0) && (
+            <div className="ap-run-wrapup">
+              <p className="ap-run-wrapup-line">
+                {retainedCount > 0 ? `地图上保留了 ${retainedCount} 处改动。` : '本轮没有在画布上留下改动。'}
+              </p>
+              <p className="ap-run-wrapup-line">停止时未完成的部分不会继续执行，可以接着补充说明。</p>
+              <p className="ap-run-wrapup-line">整体撤回会还原到这趟作业开始前；<kbd className="ap-kbd">Ctrl+Z</kbd> 是逐步撤销。</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -416,6 +505,20 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
       {/* 常驻运行条三控件（Y7/Y8/Y9）。 */}
       {run.isRunning && controls && (
         <div role="group" aria-label="运行中控制" className="ap-run-controls">
+          {/* 紧急停止钮：只在运行中出现；点击同样进「要停止这项工作吗？」确认行，
+              不绕开确认直接 requestAgentStop。确认行打开后收起，避免两套停止入口并存。 */}
+          {!confirmingStop && (
+            <button
+              type="button"
+              aria-label="紧急停止"
+              title="停止这项工作"
+              className="ap-run-emergency-stop"
+              disabled={run.stopRequested}
+              onClick={() => setConfirmingStop(true)}
+            >
+              <span aria-hidden="true" className="ap-run-emergency-stop-square" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setAgentPauseAfterStep(true)}
@@ -447,7 +550,8 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
               }}
             >
               <span className="ap-stop-confirm-text">要停止这项工作吗？</span>
-              <button type="button" className="ap-run-pill" onClick={confirmCancel}>取消</button>
+              <button type="button" ref={cancelRef} autoFocus className="ap-run-pill" onClick={confirmCancel}>取消</button>
+              <kbd className="ap-kbd" title="按 Esc 取消">Esc</kbd>
               <button type="button" className="ap-run-pill" data-stop="true" onClick={confirmStop}>停止</button>
             </div>
           )}

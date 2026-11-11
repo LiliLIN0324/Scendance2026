@@ -207,4 +207,76 @@ describe('AgentRunPanel', () => {
     expect(screen.getByText(/已送达 3 条改道备注/)).toBeTruthy();
     expect(screen.queryByText(/待送达/)).toBeNull();
   });
+
+  it('流水行按结果出 running / success / failed 标记（… / ✓ / ×）', () => {
+    appendAgentRunEvents([
+      {seq:1,tool:'get_scene',stage:'started',outcome:null,errorCode:null},
+      {seq:2,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null},
+      {seq:3,tool:'validate_candidate',stage:'finished',outcome:'failed',errorCode:null},
+    ]);
+    render(<AgentRunPanel scope="layout"/>);
+    const rows = within(screen.getByRole('list',{name:'执行过程'})).getAllByRole('listitem');
+    expect(rows.map(r => r.querySelector('.ap-run-tick')?.getAttribute('data-result')))
+      .toEqual(['running','success','failed']);
+    expect(rows[2]!.querySelector('.ap-run-tick')?.textContent).toBe('×');
+  });
+
+  it('放置类步骤有 itemCount 才挂数量胶囊，取不到不编数', () => {
+    appendAgentStep({toolName:'prepare_seating_candidate',durationMs:500,isReadonly:false,itemCount:2,startedAt:Date.now()});
+    appendAgentStep({toolName:'find_free_areas',durationMs:300,isReadonly:true,startedAt:Date.now()});
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText('2 个物品')).toBeTruthy();
+    expect(screen.queryByText(/件/)).toBeNull();
+  });
+
+  it('紧急停止钮同样进确认行，焦点落在「取消」，不绕过确认直接停', () => {
+    render(<AgentRunPanel scope="layout"/>);
+    fireEvent.click(screen.getByRole('button',{name:'紧急停止'}));
+    expect(screen.getByText('要停止这项工作吗？')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button',{name:'取消'}));
+    expect(getAgentRun().stopRequested).toBe(false);
+    // 确认行真实绑定 Esc 取消：只有取消侧挂 kbd 小标，停止钮没有快捷键。
+    expect(screen.getByText('Esc', {selector: '.ap-kbd'})).toBeTruthy();
+    expect(screen.getByRole('button',{name:'停止'}).querySelector('.ap-kbd')).toBeNull();
+  });
+
+  it('已送达备注收成聚合条；含未完成时走粉调，可展开明细', () => {
+    setAgentSteerDelivered(3);
+    appendAgentRunEvents([{seq:1,tool:'validate_candidate',stage:'finished',outcome:'failed',errorCode:null}]);
+    render(<AgentRunPanel scope="layout"/>);
+    const bar = screen.getByText('3 条备注已送达').closest('.ap-run-aggregate');
+    expect(bar).toBeTruthy();
+    expect(bar!.getAttribute('data-tone')).toBe('warn');
+    fireEvent.click(screen.getByRole('button',{name:/备注已送达/}));
+    expect(screen.getByText(/未完成步骤 1 条/)).toBeTruthy();
+  });
+
+  it('结束后收尾卡说清保留改动数与两档撤销语义', () => {
+    appendAgentStep({toolName:'layBanquet',durationMs:600,isReadonly:false,itemCount:3,startedAt:Date.now()-600});
+    endAgentRun();
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText('地图上保留了 3 处改动。')).toBeTruthy();
+    expect(screen.getByText('Ctrl+Z', {selector: '.ap-kbd'})).toBeTruthy();
+    expect(screen.getByText(/是逐步撤销/)).toBeTruthy();
+  });
+
+  it('没有真实快捷键绑定的控件不挂 kbd 小标（紧急停止 / 跑完这步停 / 聚合条；确认行未开不出 Esc）', () => {
+    setAgentSteerDelivered(2);
+    appendAgentRunEvents([{seq:1,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null}]);
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByRole('button',{name:'紧急停止'}).querySelector('.ap-kbd')).toBeNull();
+    expect(screen.getByRole('button',{name:/跑完这步停/}).querySelector('.ap-kbd')).toBeNull();
+    const aggregate = screen.getByText(/备注已送达/).closest('.ap-run-aggregate');
+    expect(aggregate).toBeTruthy();
+    expect(within(aggregate! as HTMLElement).getByRole('button').querySelector('.ap-kbd')).toBeNull();
+    expect(screen.queryByText('Esc', {selector: '.ap-kbd'})).toBeNull();
+  });
+
+  it('取不到改动数时收尾卡不写具体数量', () => {
+    appendAgentStep({toolName:'list_items',durationMs:300,isReadonly:true,startedAt:Date.now()-300});
+    endAgentRun();
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText('本轮没有在画布上留下改动。')).toBeTruthy();
+    expect(screen.queryByText(/处改动/)).toBeNull();
+  });
 });

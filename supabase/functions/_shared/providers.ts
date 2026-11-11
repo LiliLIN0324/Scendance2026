@@ -152,7 +152,11 @@ export function chatRequest(env: Env, body: Record<string, unknown>, options?: {
     const requestBody = profile === 'minimax' ? (() => {
       const { thinking: _thinking, temperature: _temperature, response_format: _format, ...rest } = body;
       if (!minimaxAgent && ('tools' in rest || 'tool_choice' in rest)) throw new ApiError('MODEL_PROVIDER_UNSUPPORTED_WORKFLOW', 503);
-      const effort = env('AGENT_CHAT_REASONING_EFFORT');
+      // Flash defaults to max thinking depth; a multi-round tool loop inside the 90s run
+      // deadline needs shallow reasoning unless an operator explicitly raises it. Brief
+      // extraction keeps the provider default.
+      const configuredEffort = env('AGENT_CHAT_REASONING_EFFORT');
+      const effort = configuredEffort ?? (options?.purpose === 'agent' ? 'low' : undefined);
       if (effort && !['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) throw new ApiError('MODEL_PROVIDER_INCOMPLETE', 503);
       return { model: customModel, ...rest, reasoning_split: true, ...(effort ? { reasoning_effort: effort } : {}) };
     })() : profile === 'bailian-qwen' ? (() => {

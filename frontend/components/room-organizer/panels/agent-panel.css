@@ -809,3 +809,181 @@ button.ap-ghost {
   background: var(--wk-hair);
   margin: 2px 0;
 }
+
+/* ===== AgentRunPanel 对标补充：结果标记 / 数量胶囊 / 紧急停止钮 / 聚合回折条 / 停止收尾 ===== */
+.ap-run-tick[data-result="success"] { background: rgba(74, 124, 89, .14); color: var(--wk-green); }
+.ap-run-tick[data-result="failed"] { background: color-mix(in srgb, var(--err) 14%, var(--wk-paper)); color: var(--err); }
+.ap-run-tick[data-result="neutral"] { background: var(--wk-plane); color: var(--wk-ink-faint); }
+.ap-run-tick[data-result="running"] { background: rgba(150, 101, 31, .14); color: var(--warn); }
+
+.ap-run-count-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wk-green-pale);
+  color: var(--wk-green);
+  font-size: var(--fs-cap);
+  font-weight: 500;
+}
+
+.ap-run-emergency-stop {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--err) 12%, var(--wk-paper));
+  cursor: pointer;
+}
+.ap-run-emergency-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 20%, var(--wk-paper)); }
+.ap-run-emergency-stop:disabled { opacity: .5; cursor: default; }
+.ap-run-emergency-stop-square { width: 11px; height: 11px; border-radius: 2px; background: var(--err); }
+
+.ap-run-aggregate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 10px;
+  background: var(--wk-paper);
+  padding: 6px 10px;
+}
+.ap-run-aggregate[data-tone="ok"] { border-left: 3px solid var(--wk-green); }
+.ap-run-aggregate[data-tone="warn"] { border-left: 3px solid var(--err); }
+.ap-run-aggregate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--wk-ink);
+}
+.ap-run-aggregate-title { font-weight: 600; }
+.ap-run-aggregate-badge {
+  margin-left: auto;
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.ap-run-aggregate[data-tone="ok"] .ap-run-aggregate-badge { background: var(--wk-green-pale); color: var(--wk-green); }
+.ap-run-aggregate[data-tone="warn"] .ap-run-aggregate-badge { background: color-mix(in srgb, var(--err) 12%, var(--wk-paper)); color: var(--err); }
+.ap-run-aggregate-chevron { color: var(--wk-muted); font-size: 11px; }
+.ap-run-aggregate-body { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.ap-run-aggregate-body li { font-size: var(--fs-cap); color: var(--wk-ink-soft); }
+
+.ap-run-wrapup { display: flex; flex-direction: column; gap: 4px; }
+.ap-run-wrapup-line { margin: 0; font-size: var(--fs-p2); line-height: 1.55; color: var(--wk-ink-soft); }
+
+/* kbd 快捷键小标：只标注面板域内真实存在的按键绑定（确认行 Esc 取消；收尾 Ctrl+Z 逐步撤销），
+   没有绑定的控件一律不加。等宽小字 + 浅底 + hair 边，沿用 --wk-* token。 */
+.ap-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 6px;
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap-run-wrapup-line .ap-kbd { margin: 0 2px; }
+
+/* ── 候选卡决策留痕：批准 / 拒绝徽章（纯面板内存态，不落后端） ─────────────── */
+.ap-decision-row { display: flex; align-items: center; gap: 8px; }
+.ap-decision-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  font-size: var(--fs-p2); font-weight: 600; line-height: 18px; letter-spacing: 0;
+}
+.ap-decision-badge.is-approved { background: var(--green-pale); color: var(--ok); }
+.ap-decision-badge.is-rejected { background: color-mix(in srgb, var(--err) 10%, var(--wk-paper)); color: var(--err); }
+.ap-decision-card { display: flex; align-items: center; padding: 12px 16px; }
+
+/* ── 状态头三件套：阶段色调 + 状态图标 + 短文案；拿不到阶段不硬造 ─────────── */
+.ap-head-status {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: var(--fs-cap); font-weight: 600; line-height: 16px; letter-spacing: 0; white-space: nowrap;
+}
+.ap-head-status--ask { background: color-mix(in srgb, var(--warn) 14%, var(--wk-paper)); color: var(--warn); }
+.ap-head-status--think { background: color-mix(in srgb, #E8DCC0 18%, var(--wk-paper)); color: #6E6247; }
+.ap-head-status--run { background: var(--green-pale); color: var(--ok); }
+.ap-head-status--paused { background: var(--wk-plane); color: var(--wk-ink-soft); }
+.ap-head-status--stopped { background: var(--wk-plane); color: var(--wk-muted); }
+.ap-head-status .cr-spin { animation-duration: 1.2s; }
+.ap-pause-glyph { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.ap-pause-glyph i { display: block; width: 2px; height: 10px; border-radius: 1px; background: currentColor; }
+
+/* 头部底色随阶段轻染一档，不覆盖头像与图标本身的颜色。 */
+.ap-session-head[data-tone="ask"] { background: color-mix(in srgb, var(--warn) 6%, var(--wk-paper)); }
+.ap-session-head[data-tone="think"] { background: color-mix(in srgb, #E8DCC0 10%, var(--wk-paper)); }
+.ap-session-head[data-tone="run"] { background: var(--green-pale); }
+.ap-session-head[data-tone="paused"] { background: var(--wk-plane); }
+.ap-session-head[data-tone="stopped"] { background: var(--wk-plane); }
+
+/* ── 头部圆形图标钮：hover 白色圆角气泡（沿用仓库 data-tip 模式） ─────────── */
+.ap-icon-btn[data-tip],
+.sc-space-library-menu summary[data-tip] { position: relative; }
+.ap-icon-btn[data-tip]::after,
+.sc-space-library-menu summary[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 2px; z-index: 60;
+  padding: 4px 9px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm);
+  background: var(--wk-paper); color: var(--wk-ink); box-shadow: var(--e1);
+  font-size: var(--fs-cap); line-height: 15px; letter-spacing: 0; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 120ms var(--ease-spec, ease);
+}
+.ap-icon-btn[data-tip]:hover::after,
+.ap-icon-btn[data-tip]:focus-visible::after,
+.sc-space-library-menu summary[data-tip]:hover::after,
+.sc-space-library-menu summary[data-tip]:focus-visible::after { opacity: 1; }
+
+/* ── 发送键双态：空态麦克风 / 有字箭头；圆钮绝对定位在输入框内部右下角 ─────────── */
+.ap-panel-field { position: relative; }
+.ap-panel-field textarea { padding: 26px 44px 36px 26px; }
+/* 左下 ⓘ 与右下圆钮同一基线、同一边距。 */
+.ap-panel-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; }
+/* 附件条 / 排队提示 / 告警 / 存盘失败：全部浮层盖在输入区上方，出现消失不撑高 composer、不顶歪圆钮与 ⓘ 基线。 */
+.ap-file-chip { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; }
+.ap-field-note { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; margin: 0; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
+.ap-field-alert { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; padding: 6px 8px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); box-shadow: var(--e1); font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-ink-soft); }
+.ap-field-alert p { margin: 0 0 6px; }
+.ap-field-alert button { margin: 0 6px 0 0; }
+.ap-panel-field .ap-panel-send {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #141416;
+  color: #FFFFFF;
+}
+.ap-panel-field .ap-panel-send:hover:not(:disabled) { transform: none; }
+.ap-panel-field .ap-panel-send:disabled { background-color: #FFFFFF; color: #A6AAB2; cursor: default; }
+/* 空态麦克风：中性浅底描边，不抢发送色。 */
+.ap-panel-field .ap-panel-send.ap-mic { background-color: #FFFFFF; border-color: #E4E4E7; color: #55585F; }
+.ap-panel-field .ap-panel-send.ap-mic:hover:not(:disabled) { background-color: #ECEDEF; color: #141416; }
+.ap-panel-field .ap-panel-send.ap-mic:disabled { color: #A6AAB2; background-color: #FFFFFF; opacity: .5; cursor: not-allowed; }
+.ap-panel-field .ap-panel-send.ap-mic.is-listening { background-color: #96651F; border-color: transparent; color: #FFFFFF; animation: ap-mic-pulse 1.2s ease-in-out infinite; }
+.ap-panel-field .ap-panel-send.ap-mic.is-listening:hover:not(:disabled) { background-color: #96651F; color: #FFFFFF; }
+@keyframes ap-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 32%, transparent); }
+  50% { box-shadow: 0 0 0 7px transparent; }
+}

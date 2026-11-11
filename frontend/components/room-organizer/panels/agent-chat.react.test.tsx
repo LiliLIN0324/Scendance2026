@@ -82,6 +82,10 @@ describe('AgentChat composer entry points', () => {
     expect([...menu.querySelectorAll('button')].map(button => button.textContent)).toEqual(['通过描述生成物料', '拍照/图片生成物料']);
   });
 
+  it('annotates the real Enter-to-send binding with a kbd chip', () => {
+    renderChat('space');
+    expect(screen.getByText('Enter', { selector: '.ap-kbd' })).toBeTruthy();
+  });
   it('keeps the space chat on its own plus menu without a generate button', () => {
     const onNewSpace = vi.fn();
     renderChat('space', onNewSpace);
