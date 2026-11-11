@@ -1,7 +1,9 @@
 import { z } from 'zod';
-export const BRIEF_PROVIDER_TIMEOUT_MS = 110_000;
+// 单路主力供应商超时：正常响应实测 3-20s，超过 90s 视为挂死。
+// 注意 Supabase 免费版 Edge Function 墙钟上限 150s，全兜底链（90+25+25）必须压在其下。
+export const BRIEF_PROVIDER_TIMEOUT_MS = 90_000;
 /** Includes a small transport allowance beyond the provider timeout. */
-export const BRIEF_CLIENT_TIMEOUT_MS = 115_000;
+export const BRIEF_CLIENT_TIMEOUT_MS = 100_000;
 
 /**
  * 简报槽位提取契约：前端 agent-resolver ↔ scene-api /brief/extract。

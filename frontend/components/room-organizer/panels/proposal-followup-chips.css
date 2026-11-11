@@ -1,0 +1,78 @@
+/* 方案预览卡的人话边界行 + 续问 chip。复用 ap-ok-line / ap-warn-line 的色板，
+   但加一个浅底圆角小条，一眼能看出是「给人看的边界说明」，不是技术枚举。 */
+
+.ap-followup { display: grid; gap: 8px; margin-top: 2px; }
+
+.ap-boundary-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: var(--fs-p2);
+  line-height: 1.45;
+  border: 1px solid var(--wk-hair);
+}
+
+.ap-boundary-dot {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+}
+
+.ap-boundary-ok {
+  background: color-mix(in srgb, var(--ap-green) 8%, var(--wk-paper));
+  color: var(--wk-ink);
+}
+.ap-boundary-ok .ap-boundary-dot { background: var(--ap-green); }
+
+.ap-boundary-warn {
+  background: color-mix(in srgb, var(--warn) 8%, var(--wk-paper));
+  color: var(--wk-ink);
+}
+.ap-boundary-warn .ap-boundary-dot { background: var(--warn); }
+
+.ap-followup-chips { margin-top: 2px; }
+
+/* === 方案卡紧凑化：stats 行 / 状态徽章 / 轻量 note === */
+
+/* stats 行：横向 2-3 格，大数字小标签，复用 .ap-stat 基础样式 */
+.ap-plan-stats { gap: 6px; }
+.ap-plan-stats .ap-stat { padding: 6px 8px; }
+.ap-plan-stats .ap-stat b { font-size: 14px; }
+.ap-plan-stats .ap-stat-of { font-size: 11px; color: var(--wk-ink-soft); font-weight: 400; margin-left: 1px; }
+.ap-plan-stats .ap-stat[data-short="true"] b { color: var(--warn); }
+
+/* 状态徽章：一行 pill，绿=已通过，橙=待核 */
+.ap-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ap-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid var(--wk-hair);
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+}
+.ap-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wk-ink-soft);
+}
+.ap-pill-ok { background: color-mix(in srgb, var(--ap-green) 10%, var(--wk-paper)); color: var(--wk-ink); border-color: color-mix(in srgb, var(--ap-green) 30%, var(--wk-hair)); }
+.ap-pill-ok::before { background: var(--ap-green); }
+.ap-pill-warn { background: color-mix(in srgb, var(--warn) 10%, var(--wk-paper)); color: var(--wk-ink); border-color: color-mix(in srgb, var(--warn) 30%, var(--wk-hair)); }
+.ap-pill-warn::before { background: var(--warn); }
+
+/* 轻量 note：缺项提示、细节备注，小字低对比，不抢 warn 的视觉 */
+.ap-notes .ap-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-notes .ap-note + .ap-note { margin-top: 2px; }

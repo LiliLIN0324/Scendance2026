@@ -3734,11 +3734,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                 }}
               >
                 <span className="sc-annotation-toggle__label">标注</span>
-                {planAnnot.drawMode === 'zone' && <span className="sc-annotation-toggle__suffix">·区</span>}
-                {planAnnot.drawMode === 'route' && <span className="sc-annotation-toggle__suffix">·线</span>}
-                {planAnnot.drawMode === 'fire-route' && <span className="sc-annotation-toggle__suffix">·疏散</span>}
-                {planAnnot.drawMode === 'measure' && <span className="sc-annotation-toggle__suffix">·距</span>}
-                {planAnnot.drawMode === 'door' && <span className="sc-annotation-toggle__suffix">·门</span>}
               </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               

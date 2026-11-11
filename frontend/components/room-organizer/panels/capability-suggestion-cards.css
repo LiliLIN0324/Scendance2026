@@ -1,0 +1,62 @@
+/* 「你可以做什么」建议卡：缩略图 + 落点虚线圈 + 一句话；点卡体预填指令，不发送。 */
+.cs-card-row { display: flex; flex-direction: column; gap: 8px; }
+
+.cs-card {
+  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--wk-hair);
+  border-radius: var(--r-md);
+  background: var(--wk-paper);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec), box-shadow var(--dur-1) var(--ease-spec);
+}
+.cs-card:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); transform: translateY(-1px); box-shadow: var(--e1); }
+.cs-card:active { transform: none; }
+.cs-card:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; }
+
+/* 缩略图：复用 PlanThumb 底图，虚线圈只做视觉落点示意，不找真坐标。 */
+.cs-thumb {
+  position: relative; flex: 0 0 auto;
+  width: 88px; height: 62px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--wk-plane-deep);
+  border: 1px solid var(--wk-hair-soft);
+}
+.cs-thumb canvas { display: block; }
+/* 没有场地时：斜纹占位 + 图标，避免裂图。 */
+.cs-thumb-empty {
+  display: grid; place-items: center; width: 100%; height: 100%;
+  color: var(--wk-ink-faint);
+  background-image: repeating-linear-gradient(45deg, var(--wk-hair-soft) 0 1px, transparent 1px 9px);
+}
+.cs-thumb-ring {
+  position: absolute; left: 50%; top: 50%;
+  width: 56%; aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  border: 1.5px dashed var(--wk-green);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.cs-thumb-ring--offset { left: 64%; top: 56%; width: 44%; }
+
+.cs-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cs-card-title { display: flex; align-items: center; gap: 5px; font-size: var(--fs-p2); font-weight: 600; color: var(--wk-ink); }
+.cs-card-title svg { flex: 0 0 auto; color: var(--wk-ink-soft); }
+.cs-card-desc {
+  font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 卡内小次按钮：原 picker 动作，降一级处理。 */
+.cs-card-action {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; min-height: 26px; padding: 3px 10px;
+  border: 1px solid var(--wk-hair); border-radius: 999px;
+  background: var(--wk-paper); color: var(--wk-ink-soft);
+  font-size: var(--fs-cap); font-weight: 500; white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec);
+}
+.cs-card-action:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); }
+.cs-card-action.is-on { border-color: var(--wk-green); background: var(--wk-green-pale); color: var(--wk-green-deep); }
