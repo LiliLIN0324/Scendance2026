@@ -152,14 +152,6 @@
   border-color: #4A7C59;
 }
 .sc-annotation-toggle__label { font-weight: 600; }
-.sc-annotation-toggle__suffix {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.85);
-  font-weight: 400;
-}
-.sc-annotation-toggle:not(.is-active) .sc-annotation-toggle__suffix {
-  color: #8a938d;
-}
 
 /* 移动端折叠横轨：globals.css 会把轨道按钮压成纯图标（span display:none、底色透明），
    标注钮没有图标，必须显式救回文字与胶囊底色，否则只剩 2px 空框。 */

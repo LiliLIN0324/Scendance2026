@@ -166,7 +166,8 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const emptyConversation={reply:null,unhandled:[],factEvidence:[]} as const;
         if(conversation && env('BRIEF_CONVERSATION_ENABLED')!=='1')return respond({enabled:false,extraction:null,...emptyConversation});
         // 2026-11-11 用户拍板（三十三轮修订）：可插拔多云端大模型 + 兜底链——
-        // 尝试顺序：百炼(启用时) → 自定义兼容端点(AGENT_CHAT_*) → Tokendance 网关 → DeepSeek 官方。
+        // 尝试顺序：百炼(启用时) → 自定义兼容端点(AGENT_CHAT_*，AGENT_CHAT_PROFILE=minimax 时即 MiniMax)
+        // → Tokendance 网关 → DeepSeek 官方。
         // 前一级失败（欠费/限流/超时/输出坏/证据不匹配）自动切下一级；客户端主动取消不重试；
         // 全部失败如实报「首选供应商的失败原因」，绝不静默无模型。
         const briefViews: Array<Record<string,string>> = [];
@@ -175,11 +176,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         // 自定义端点也失败（如弱模型证据不匹配）时，显式落到 Tokendance 网关：
         // chatRequest 只在 AGENT_CHAT_* 全空时才走网关，这里用视图级覆盖强制腾开。
         if(env('TOKENDANCE_API_KEY'))briefViews.push({
-          BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',
+          BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_PROFILE:'',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',
         });
         // 最后一级：DeepSeek 官方端点（同时清空网关 key 才会走到）。
         if(env('DEEPSEEK_API_KEY'))briefViews.push({
-          BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',TOKENDANCE_API_KEY:'',
+          BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_PROFILE:'',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',TOKENDANCE_API_KEY:'',
         });
         const briefReasons:string[]=[];
         let briefReply:Response|null=null;
@@ -198,7 +199,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           if(error instanceof Error&&['TimeoutError','AbortError'].includes(error.name))return 'MODEL_TIMEOUT';
           return 'MODEL_REQUEST_FAILED';
         };
-        for(const [viewIndex,view] of briefViews.entries()){
+        for(const view of briefViews){
           const viewEnv=(key:Parameters<typeof env>[0]):string|undefined=>{
             const override=(view as Record<string,unknown>)[key];
             return override===undefined?env(key):override as string;
@@ -216,9 +217,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
               { role:'system', content: systemPrompt },
               { role:'user', content: userContent },
             ], temperature: 0, ...tokenLimit, response_format: { type: 'json_object' } }, { purpose: 'brief' });
-            // 首选供应商可能是推理模型，给 110s；兜底级别统一压到 45s，
-            // 避免某一级挂死时用户要连等多个 110s 才看到失败。
-            const providerTimeout=viewIndex===0?BRIEF_PROVIDER_TIMEOUT_MS:45_000;
+            // 主力车道（百炼/AGENT_CHAT，含 MiniMax 推理模型）给 90s；
+            // 紧急兜底视图（主动清空 AGENT_CHAT_BASE_URL 的网关/官方端点）压到 25s，
+            // 全链最坏 90+25+25=140s，低于 Edge 免费版 150s 墙钟上限。
+            const providerTimeout=view.AGENT_CHAT_BASE_URL===''?25_000:BRIEF_PROVIDER_TIMEOUT_MS;
             const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,providerTimeout);
             if(conversation){
               const checked=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({message:z.object({tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(providerResponse);

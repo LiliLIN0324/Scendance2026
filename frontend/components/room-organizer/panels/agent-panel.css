@@ -267,7 +267,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-process button { margin-left: 6px; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* 聚焦只加深上缘分隔线，不加光环；品牌绿仍只留给选中态与发送键。 */
 .ap-composer:focus-within { border-top-color: var(--wk-ink-soft); }
-.ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 36px; }
+.ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 88px; }
 .ap-composer textarea:focus, .ap-composer textarea:focus-visible { outline: none; box-shadow: none; }
 .ap-composer-bar { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 .ap-composer-left { display: flex; align-items: center; gap: 6px; min-width: 0; justify-self: start; }
@@ -295,7 +295,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-send:disabled { color: var(--wk-ink-faint); background: var(--wk-plane); cursor: default; }
 
 /* 布置轨同款：空输入时把引导句逐字打在框里，按 Tab 填整句。 */
-.ap-composer-field { position: relative; display: flex; min-height: 40px; }
+.ap-composer-field { position: relative; display: flex; min-height: 92px; }
 .ap-composer-field textarea { position: relative; z-index: 1; width: 100%; }
 .ap-ghost { position: absolute; z-index: 0; left: 0; top: 0; right: 0; color: var(--wk-ink-faint, #9aa0a6); opacity: .72; pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p2); font-weight: 400; line-height: var(--lh-p2); }
 /* 四格共用：提示可点，点一下只把整句填进框里，不替人发送。不进 Tab 序列。 */
@@ -745,3 +745,67 @@ button.ap-ghost {
 .ap-run-receipt { flex-direction: row; align-items: center; gap: 8px; border-left: 3px solid var(--wk-green); }
 .ap-run-receipt-title { color: var(--wk-ink); font-size: 12.5px; }
 .ap-run-receipt-body { color: var(--wk-ink-soft); font-size: 12px; }
+
+/* ===== AgentRunPanel：停止确认行 + 过往任务归档折叠区（任务 1/2）===== */
+.ap-stop-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  border: 1px solid #c0392b;
+  border-radius: 999px;
+  background: var(--wk-paper);
+}
+.ap-stop-confirm-text {
+  font-size: 11.5px;
+  color: #c0392b;
+  font-weight: 600;
+}
+.ap-stop-confirm .ap-run-pill {
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+.ap-stop-confirm .ap-run-pill[data-stop="true"] {
+  background: #c0392b;
+  color: #fff;
+}
+.ap-archive {
+  border: 1px solid var(--wk-hair);
+  border-radius: 14px;
+  background: var(--wk-paper);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ap-archive-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--wk-ink);
+}
+.ap-archive-title { display: inline-flex; align-items: center; gap: 6px; }
+.ap-archive-chevron { color: var(--wk-muted); font-size: 11px; }
+.ap-archive-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.ap-archive-item { display: flex; flex-direction: column; gap: 6px; }
+.ap-archive-item .ap-run-head { font-size: 12px; }
+.ap-archive-item .ap-run-state { font-size: 12px; }
+.ap-archive-item .ap-run-state i { background: var(--wk-muted); }
+.ap-run-meta-inline { font-size: 11.5px; color: var(--wk-muted); margin-left: auto; }
+.ap-archive-divider {
+  height: 1px;
+  background: var(--wk-hair);
+  margin: 2px 0;
+}

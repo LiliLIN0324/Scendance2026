@@ -120,3 +120,4 @@ vibe_images/
 /.next/
 frontend/local-panel-preview.png
 docs/research/evidence-*/
+/artifacts/

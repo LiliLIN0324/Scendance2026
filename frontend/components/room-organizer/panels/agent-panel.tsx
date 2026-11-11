@@ -19,7 +19,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, Clock, Download, FileImage, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCcw, RotateCw, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
+import { ArrowUp, Check, Clock, Download, FileImage, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
@@ -75,7 +75,7 @@ import { checkRequiredSeats, checkRestArea, countSingleSeats } from '../lib/seat
 import { sameLayoutContent } from '../lib/persistence';
 import { layoutStore } from '../hooks/use-layout-store';
 import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicable } from '../lib/plan-artifact';
-import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
+import { buildOutcome, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
 import { clearLaneActivity, setLaneActivity } from '../lib/lane-status';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { canApplyLayoutGeometry, isStructuralMarker, materialCount, structuralItemCollides, venueArea } from '../lib/structural-layout';
@@ -83,7 +83,7 @@ import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory
 import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
-  describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE, SAFETY_CHECKS_UNKNOWN_TEXT, SEATING_ALLOCATION_UNVERIFIED_TEXT, SEATING_HEADCOUNT_UNVERIFIED_TEXT, SEATING_SPECS_UNVERIFIED_TEXT,
+  describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
   isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutGenerateCommand, lightPlanRail, mentionsUnsupportedSeating, normalizeOralSize, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
   prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
@@ -100,10 +100,11 @@ import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
 import { failOpenLocalStep, finishLocalLayoutRun, notePriorLayoutTool, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
-import { useAgentRun } from './agent-run-panel';
+import { AgentRunPanel, useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
+import { CapabilitySuggestionCards } from './capability-suggestion-cards';
 import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, STYLE_RUNS_KEY, type StyleBundle } from '../lib/style-bundles';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -125,6 +126,7 @@ import { RailAvatar, type RailForm } from './rail-avatar';
 import type { RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
+import { BoundaryLineNote, FollowupChips, type BoundaryContext } from './proposal-followup-chips';
 import './agent-panel.css';
 
 const MASCOT_DIR = '/assets/assistant/qingguang-3d';
@@ -3215,40 +3217,14 @@ export function MapRailButton({ variant = 'rail' }: { variant?: 'rail' | 'canvas
   </nav>;
 }
 
-type CapabilityChip = {
-  id: string;
-  label: string;
-  title: string;
-  icon: ReactNode;
-  run(): void;
-  active?: boolean;
-};
-
 /** 活动脸的快捷能力：活动级选址 + 风格套。S1 后这里是唯一的布置生成对话入口。 */
-function AgentCapabilityPrompts(): JSX.Element | null {
-  const agent = useAgent();
-  if (agent.callbacks.workbenchMode !== 'layout') return null;
-
-  const chips: CapabilityChip[] = [
-    { id: 'map', label: '地图选址', title: '确定地点并圈出真实场地范围', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen },
-    {
-      id: 'style',
-      label: '按风格配一套',
-      title: '内置气质，或存一句风格提示词',
-      icon: <Palette size={14} aria-hidden="true"/>,
-      run: () => { if (agent.stylePickerOpen) agent.closeStylePicker(); else agent.startStylePicker(); },
-      active: agent.stylePickerOpen,
-    },
-  ];
-
-  return <div id="ap-capabilities" className="ap-capabilities">
-    <p className="ap-capability-label">你可以做什么</p>
-    <div className="ap-capability-chips" role="group" aria-label="你可以做什么">
-      {chips.map(chip => <button key={chip.id} type="button" className={`chip ap-capability-chip${chip.active ? ' is-on' : ''}`} title={chip.title} onClick={chip.run}>
-        {chip.icon}<span>{chip.label}</span>
-      </button>)}
+function AgentCapabilityPrompts({ onPrefill }: { onPrefill(text: string): void }): JSX.Element {
+  return (
+    <div id="ap-capabilities" className="ap-capabilities">
+      <p className="ap-capability-label">你可以做什么</p>
+      <CapabilitySuggestionCards onPrefill={onPrefill}/>
     </div>
-  </div>;
+  );
 }
 
 /**
@@ -3428,7 +3404,7 @@ function foldConflictBubble(text: string): string {
 }
 
 /** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
-function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
+function ProposalCard({ agent, onPrefill }: { agent: AgentValue; onPrefill?: (text: string) => void }): JSX.Element | null {
   const { layout } = useRoomEditor();
   const plan = agent.proposal;
   if (!plan) return null;
@@ -3438,19 +3414,47 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   const seats = plan.seats ?? 0;
   const short = guests > 0 && seats < guests;
   const banquet = plan.receipt === 'banquet';
+  const followupCtx: BoundaryContext = { guests, seats, short, banquet, review };
     // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
     const hold = agent.cloudBusy || agent.recovering;
+  // 紧凑统计：座位 / 场地 / 物料 三件，数字大标签小。
+  const areaValue = formatArea(plan.candidateArea ?? venueArea(layout));
+  const placedCount = plan.outcome.placed ?? 0;
+  const removedCount = plan.outcome.removed ?? 0;
+  const movedCount = plan.outcome.moved ?? 0;
+  // 状态徽章：绿=已干净，橙=待核验。一行排开，不写长段落。
+  type Pill = { tone: 'ok' | 'warn'; label: string };
+  const pills: Pill[] = [];
+  if (plan.overlapCount > 0) pills.push({ tone: 'warn', label: `${plan.overlapCount} 件重叠` });
+  else if (!plan.blocked) pills.push({ tone: 'ok', label: '无重叠' });
+  if (short) pills.push({ tone: 'warn', label: `座位还差 ${guests - seats}` });
+  else if (guests > 0) pills.push({ tone: 'ok', label: '座位够了' });
+  if (plan.seatingAllocationUnverified || plan.seatingSpecsUnverified || plan.seatingHeadcountUnverified) {
+    pills.push({ tone: 'warn', label: '座位待核验' });
+  }
+  if (plan.safetyChecksUnknown) pills.push({ tone: 'warn', label: '安全待核' });
+  if (plan.entranceWarning) pills.push({ tone: 'warn', label: '门口净区待查' });
+  const pillRow = pills.slice(0, 5);
   return <div className="ap-card ap-plan" id="plan-proposal" data-tour="proposal-card">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
     {layout && !plan.comparisonOnly && <div className="ap-plan-thumb" aria-hidden="true"><PlanPreview layout={layout}/></div>}
-    {guests > 0 && <p className="ap-seats" id="plan-seats">{banquet
-      ? `放下 ${plan.placedTables ?? 0} 桌 · 座位 ${seats} / ${guests}${short ? ` · 还差 ${guests - seats}` : ' · 够了'}`
-      : short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
     {guests > 0 && !banquet && <div className="ap-seats-meter" aria-hidden="true"><div className="ap-seats-meter-fill" style={{ width: `${Math.min(100, Math.round((seats / Math.max(guests, 1)) * 100))}%` }} data-short={short ? 'true' : undefined}/></div>}
-    {!banquet && <div className="ap-outcome" role="note" aria-label="本次结果">
-      <p className="ap-outcome-label">本次结果 · {formatArea(plan.candidateArea ?? venueArea(layout))} ㎡</p>
-      {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
+    <div className="ap-stats ap-plan-stats">
+      {banquet && <div className="ap-stat"><b>{plan.placedTables ?? 0}</b><span>桌</span></div>}
+      {guests > 0 && <div className="ap-stat" data-short={short ? 'true' : undefined}>
+        <b>{seats}<span className="ap-stat-of">/{guests}</span></b>
+        <span>{banquet ? '座位' : '座位 / 目标'}</span>
+      </div>}
+      <div className="ap-stat"><b>{areaValue}</b><span>㎡ 场地</span></div>
+      {(placedCount > 0 || removedCount > 0 || movedCount > 0) && <div className="ap-stat">
+        <b>{placedCount > 0 ? `+${placedCount}` : '·'}{removedCount > 0 ? ` -${removedCount}` : ''}{movedCount > 0 ? ` 挪${movedCount}` : ''}</b>
+        <span>新增 / 撤掉</span>
+      </div>}
+    </div>
+    {pillRow.length > 0 && <div className="ap-pills" role="status">
+      {pillRow.map(pill => <span key={pill.label} className={`ap-pill ap-pill-${pill.tone}`}>{pill.label}</span>)}
     </div>}
+    <BoundaryLineNote plan={plan} ctx={followupCtx}/>
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
     {short && !plan.localDraftDetails && (!plan.seatPriority || (banquet && !/加不进更多/.test(plan.blocked ?? ''))) && <div className="ap-error-actions ap-seat-fix"><button type="button" className="chip btn-outline" onClick={agent.addSeats}>加座，再排一版</button></div>}
@@ -3464,36 +3468,31 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
             <button type="button" className="chip btn-outline" onClick={agent.withdrawProposal}>撤回</button>
             {!review && <button type="button" className="chip btn-outline" onClick={() => agent.regenerate()}>换一版</button>}
           </div>
+          <FollowupChips plan={plan} ctx={followupCtx} onPrefill={onPrefill}/>
         </>}
     {!banquet && <div className="ap-notes">
-      {plan.source === 'local' && plan.added > 0 && <p>新增物料由系统规则生成。</p>}
-      {plan.planNotes?.map(line => <p key={line}>{line}</p>)}
-      {plan.recolorPreview?.map(line => <p key={line}>{line}</p>)}
-      {plan.rotationPreview?.map(line => <p key={line}>{line}</p>)}
-      {plan.scalePreview?.map(line => <p key={line}>{line}</p>)}
-      {plan.movementPreview?.map(line => <p key={line}>{line}</p>)}
-      {plan.restPreview?.map(line => <p key={line}>{line}；通行和消防条件待核验。</p>)}
-      {short && !plan.localDraftDetails && plan.seatPriority && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+      {plan.source === 'local' && plan.added > 0 && <p className="ap-note">新增物料由系统规则生成。</p>}
+      {plan.planNotes?.map(line => <p className="ap-note" key={line}>{line}</p>)}
+      {plan.recolorPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
+      {plan.rotationPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
+      {plan.scalePreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
+      {plan.movementPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
+      {plan.restPreview?.map(line => <p className="ap-note" key={line}>{line}；通行和消防条件待核验。</p>)}
+      {short && !plan.localDraftDetails && plan.seatPriority && <p className="ap-note" id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
       {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
-      {plan.safetyChecksUnknown && <p className="ap-warn-line">{SAFETY_CHECKS_UNKNOWN_TEXT}</p>}
-      {plan.seatingAllocationUnverified && <p className="ap-warn-line" role="status">{SEATING_ALLOCATION_UNVERIFIED_TEXT}</p>}
-      {plan.seatingHeadcountUnverified && <p className="ap-warn-line" role="status">{SEATING_HEADCOUNT_UNVERIFIED_TEXT}</p>}
-      {plan.seatingSpecsUnverified && <p className="ap-warn-line" role="status">{SEATING_SPECS_UNVERIFIED_TEXT}</p>}
-      {plan.seatingShortfall && <p className="ap-warn-line" role="status">{plan.seatingShortfall}</p>}
-      {plan.seatingReview?.status==='broken' && <p className="ap-warn-line" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
-      {plan.seatingReview?.status==='unknown' && <p className="ap-warn-line" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
-      {plan.localDraftDetails?.map(line=><p key={line}>{line}</p>)}
-      {plan.seatWarning && <p className="ap-warn-line">{plan.seatWarning}</p>}
-      {plan.seatCeilingNote && <p className="ap-warn-line" role="status">{plan.seatCeilingNote}</p>}
-      {plan.entranceWarning && <p className="ap-warn-line" role="status"><span aria-hidden="true">!</span>{plan.entranceWarning}</p>}
-      {plan.annotationWarning && <p className="ap-warn-line" role="status">{plan.annotationWarning}</p>}
-      {plan.functionalWarnings?.map(message => <p className="ap-warn-line" key={message}>{message}</p>)}
+      {plan.seatingReview?.status==='broken' && <p className="ap-note" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
+      {plan.seatingReview?.status==='unknown' && <p className="ap-note" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
+      {plan.localDraftDetails?.map(line=><p className="ap-note" key={line}>{line}</p>)}
+      {plan.seatWarning && <p className="ap-note">{plan.seatWarning}</p>}
+      {plan.seatCeilingNote && <p className="ap-note" role="status">{plan.seatCeilingNote}</p>}
+      {plan.annotationWarning && <p className="ap-note" role="status">{plan.annotationWarning}</p>}
+      {plan.functionalWarnings?.map(message => <p className="ap-note" key={message}>{message}</p>)}
       {!!plan.existingChanges?.length && <details className="ap-existing-changes">
         <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
         <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
         <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
       </details>}
-      <p>{REFERENCE_SOURCE_UNVERIFIED}</p>
+      <p className="ap-note">{REFERENCE_SOURCE_UNVERIFIED}</p>
     </div>}
     {banquet && short && !plan.localDraftDetails && plan.seatPriority && !/加不进更多/.test(plan.blocked ?? '') && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
     {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
@@ -3660,7 +3659,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>
-      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' ? toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog }) : []} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
+      {/* 云端真跑时由 AgentRunPanel 接管：真步骤时间线 + 停止确认行 + 过往任务归档；
+          processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。 */}
+      {activity && mode === 'layout' && <AgentRunPanel scope="layout" controls steerInputId="ap-input"/>}
       {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card ap-blocked-card" aria-label="历史需求待核对">
         <span className="ap-blocked-stamp"><Lock size={12} aria-hidden="true"/>待核对</span>
         <p className="ap-blocked-note">当前记录还未核对。</p>
@@ -3731,7 +3733,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             <button type="button" className="chip btn-outline" onClick={() => { agent.dismissModelFailure(); document.getElementById('ap-input')?.focus(); }}>改一句再说</button>
           </div>
         </section>}
-        {proposed && <ProposalCard agent={agent}/>}
+        {proposed && <ProposalCard agent={agent} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         {planShown && <>
           <div className="ap-card ap-plan" id="plan-summary">
             <span className="ap-blocked-stamp"><MapIcon size={12} aria-hidden="true"/>布置</span>
@@ -3785,7 +3787,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             onPick={bundle => agent.placeStyleBundle(bundle)}
           />
         )}
-        {mode === 'layout' && activity && <AgentCapabilityPrompts/>}
+        {mode === 'layout' && activity && <AgentCapabilityPrompts onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         {agent.pendingFile && <div className="sc-chat-file">
