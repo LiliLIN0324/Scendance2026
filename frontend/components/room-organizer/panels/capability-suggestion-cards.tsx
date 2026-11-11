@@ -1,9 +1,9 @@
 'use client';
 
 import { Map as MapIcon, MapPin, Palette } from '@/components/solid-icons';
+import { useRoomEditor } from '../contexts';
 import { useAgent } from './agent-panel';
 import { PlanThumb } from './plan-thumb';
-import { useRoomEditor } from '../contexts';
 import './capability-suggestion-cards.css';
 
 const THUMB_WIDTH = 88;
@@ -20,8 +20,8 @@ export interface CapabilitySuggestionCardsProps {
  */
 export function CapabilitySuggestionCards({ onPrefill }: CapabilitySuggestionCardsProps): JSX.Element | null {
   const agent = useAgent();
-  if (agent.callbacks.workbenchMode !== 'layout') return null;
   const { layout, activeFloor } = useRoomEditor();
+  if (agent.callbacks.workbenchMode !== 'layout') return null;
   const hasVenue = agent.venueUp;
 
   const cards = [
