@@ -662,4 +662,42 @@ button.ap-ghost {
 .ap-plan .ap-seats-meter { height: 8px; border-radius: 999px; background: var(--wk-hair); overflow: hidden; margin: -6px 0 2px; }
 .ap-plan .ap-seats-meter-fill { height: 100%; border-radius: 999px; background: #5c7a54; }
 .ap-plan .ap-seats-meter-fill[data-short="true"] { background: var(--warn); }
-.ap-plan .ap-warn-line { color: var(--wk-ink-soft); background: rgba(150, 101, 31, .07); border-radius: 8px; padding: 6px 8px; }
+.ap-plan .ap-warn-line {
+  color: var(--wk-ink-soft);
+  background: var(--wk-paper);
+  border-left: 3px solid var(--wk-hair);
+  border-radius: 0 8px 8px 0;
+  padding: 6px 8px 6px 9px;
+  max-height: 3.4em;
+  overflow: hidden;
+  transition: max-height 0.2s;
+}
+.ap-plan .ap-warn-line:hover, .ap-plan .ap-warn-line:focus-within { max-height: none; background: var(--wk-paper); }
+
+/* —— 运行面板（对标 PetitMaker record：平色、发丝线、无阴影、纸色状态）—— */
+.ap-run { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ap-run-head { display: flex; align-items: center; gap: 8px; }
+.ap-run-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--wk-ink); }
+.ap-run-state i { width: 8px; height: 8px; border-radius: 999px; background: var(--wk-green); }
+.ap-run-state[data-state="stopped"] i { background: var(--wk-muted); }
+.ap-run-phase { font-size: 12px; color: var(--wk-muted); }
+.ap-run-timer { margin-left: auto; font-size: 11.5px; color: var(--wk-muted); font-variant-numeric: tabular-nums; }
+.ap-run-meta { font-size: 11.5px; color: var(--wk-muted); }
+.ap-run-note { margin: 0 0 6px; font-size: 11.5px; color: var(--wk-muted); }
+.ap-run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.ap-run-row { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--wk-hair); border-radius: 10px; background: var(--wk-paper); color: var(--wk-ink-soft); font-size: 12.5px; }
+.ap-run-row[data-kind="write"] { border-left: 3px solid var(--wk-green); color: var(--wk-ink); }
+.ap-run-row[data-pending="true"] { border-style: dashed; }
+.ap-run-status { color: var(--wk-muted); font-size: 11.5px; }
+.ap-run-tick { width: 15px; height: 15px; border-radius: 999px; display: inline-grid; place-items: center; background: rgba(92, 122, 84, .14); color: var(--wk-green); font-size: 10px; flex: none; margin-left: auto; }
+.ap-run-tick[data-pending="true"] { background: rgba(192, 127, 47, .14); color: var(--warn); }
+.ap-run-rollup { border: 0; background: transparent; color: var(--wk-muted); font-size: 11.5px; cursor: pointer; padding: 0; }
+.ap-run-steer { font-size: 11.5px; color: var(--wk-muted); }
+.ap-run-stall { margin: 0 0 6px; padding: 8px 10px; background: #FFF7E6; border-left: 3px solid var(--warn); border-radius: 6px; font-size: 12px; line-height: 1.6; color: #7a4f01; }
+.ap-run-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.ap-run-pill { padding: 4px 10px; font-size: 11.5px; border-radius: 999px; cursor: pointer; border: 1px solid var(--wk-green); background: var(--wk-paper); color: var(--wk-green); }
+.ap-run-pill[data-stop="true"] { border-color: #c0392b; color: #c0392b; }
+.ap-run-pill[data-active="false"] { opacity: .55; cursor: default; }
+.ap-run-receipt { flex-direction: row; align-items: center; gap: 8px; border-left: 3px solid var(--wk-green); }
+.ap-run-receipt-title { color: var(--wk-ink); font-size: 12.5px; }
+.ap-run-receipt-body { color: var(--wk-ink-soft); font-size: 12px; }

@@ -35,10 +35,6 @@ import {
   type AgentRunState,
 } from './agent-chat-store';
 
-const COLOR_STONE = '#F4F5F7';
-const COLOR_GREEN = '#4A7C59';
-const COLOR_RED = '#C0392B';
-const COLOR_AMBER = '#B45309';
 
 /** 停滞侦测的采样间隔：与云端轮询（2s）同频。 */
 const STALL_SAMPLE_MS = 2000;
@@ -188,96 +184,40 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
     <>
       {/* 空结果回执卡（X8）——不允许沉默结束。 */}
       {run.emptyOutcome && !run.isRunning && (
-        <div
-          role="status"
-          style={{
-            margin: '6px 0',
-            padding: '10px 12px',
-            background: COLOR_STONE,
-            borderLeft: `3px solid ${COLOR_GREEN}`,
-            borderRadius: 6,
-            fontSize: 12.5,
-            lineHeight: 1.6,
-          }}
-        >
-          <strong style={{ display: 'block', marginBottom: 2, color: '#2b2f36' }}>本次没有返回可用候选。</strong>
-          <span style={{ color: '#4a4f57' }}>请查看任务提示，再决定是否调整需求。</span>
-          <button
-            type="button"
-            onClick={dismissAgentEmptyReceipt}
-            style={{ marginLeft: 8, padding: '2px 8px', fontSize: 11.5, border: '1px solid #d4d7dc', borderRadius: 999, background: '#fff', cursor: 'pointer' }}
-          >
-            知道了
-          </button>
+        <div role="status" className="ap-run ap-run-receipt">
+          <strong className="ap-run-receipt-title">本次没有返回可用候选。</strong>
+          <span className="ap-run-receipt-body">请查看任务提示，再决定是否调整需求。</span>
+          <button type="button" className="ap-run-pill" onClick={dismissAgentEmptyReceipt}>知道了</button>
         </div>
       )}
 
       {/* 运行状态面板——真步骤时间线（Y3/Y4/Y5/Y6）。跑完后仍留在场上，
           策划师要能回看这一趟到底走了哪几步。 */}
       {(run.isRunning || run.stepLog.length > 0 || run.eventLog.length > 0) && (
-        <div
-          aria-live="polite"
-          style={{
-            margin: '6px 0',
-            padding: '10px 12px',
-            background: COLOR_STONE,
-            borderRadius: 6,
-            fontSize: 12,
-          }}
-        >
+        <div aria-live="polite" className="ap-run">
           {/* 主标题是「推进到哪一段工作」，不是「第几次模型调用」。
               阶段是云端给的真值（run.phase）：刷新页面重新读档也接得上。
               拿不到就不写阶段——不拿轮数顶替，那会把机器账当成工作进度。 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, fontWeight: 600, color: '#2b2f36' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: run.isRunning ? COLOR_GREEN : '#9aa0a6', display: 'inline-block' }} aria-hidden="true"/>
-            <span>{run.isRunning ? '正在处理' : '本次运行已结束'}</span>
-            {run.phase && <span>· 当前阶段：{phaseLabel(run.phase)}</span>}
+          <div className="ap-run-head">
+            <span className="ap-run-state" data-state={run.isRunning ? 'running' : 'stopped'}><i aria-hidden="true"/><span>{run.isRunning ? '正在处理' : '本次运行已结束'}</span></span>
+            {run.phase && <span className="ap-run-phase">· 当前阶段：{phaseLabel(run.phase)}</span>}
+            {run.isRunning && <span className="ap-run-timer">{formatDurationClock(elapsedMs)}</span>}
           </div>
 
           {/* 副行：这一段具体在做什么 + 预算读数。
               轮数在这里，不在主标题——它是真实的（6 轮硬上限），但它不回答「在干什么」。 */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6, fontSize: 11.5, color: '#4a4f57' }}>
-            <span>
-              {run.isRunning && <>已用时 {formatDurationClock(elapsedMs)} · </>}
-              已进行 {run.thoughtCount} 轮模型调用
-            </span>
+          <div className="ap-run-meta">
+            <span>{run.isRunning && <>已用时 {formatDurationClock(elapsedMs)} · </>}已进行 {run.thoughtCount} 轮模型调用</span>
           </div>
 
           {/* 停滞提示（纯前端推断）：连续 N 次轮询进度毫无变化，就提醒用户「似乎在同一处
               打转」，并给一个去写改道备注的入口。进度一旦前进立即移除（detectStall 判的）。 */}
           {stall.stalled && (
-            <div
-              role="status"
-              style={{
-                margin: '0 0 6px',
-                padding: '8px 10px',
-                background: '#FFF7E6',
-                borderLeft: `3px solid ${COLOR_AMBER}`,
-                borderRadius: 6,
-                fontSize: 12,
-                lineHeight: 1.6,
-                color: '#7a4f01',
-              }}
-            >
+            <div role="status" className="ap-run-stall">
               <strong>暂未收到新的进度。</strong>
               <span>任务可能仍在处理中。</span>
               {steerInputId && (
-                <button
-                  type="button"
-                  onClick={focusSteerInput}
-                  style={{
-                    marginLeft: 8,
-                    padding: '2px 8px',
-                    fontSize: 11.5,
-                    border: `1px solid ${COLOR_AMBER}`,
-                    borderRadius: 999,
-                    background: '#fff',
-                    color: COLOR_AMBER,
-                    cursor: 'pointer',
-                  }}
-                >
-                  去写备注
-                </button>
+                <button type="button" className="ap-run-pill" onClick={focusSteerInput}>去写备注</button>
               )}
             </div>
           )}
@@ -285,7 +225,7 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
           {/* 改道备注的去向：写进输入框不等于它已经在生效。送到服务端的那句会在
               下一轮思考之前被取走，所以这里分「已送达（等下一轮生效）」和「待送达」两截说。 */}
           {(run.steerDelivered > 0 || run.steerNotes.length > 0) && (
-            <div style={{ margin: '0 0 6px', fontSize: 11.5, color: '#4a4f57', lineHeight: 1.5 }}>
+            <div className="ap-run-steer">
               {run.steerDelivered > 0 && <span>已送达 {run.steerDelivered} 条改道备注 · 下一轮思考前生效</span>}
               {run.steerNotes.length > 0 && (
                 <span style={{ color: '#8a6d3b' }}>
@@ -295,41 +235,46 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
             </div>
           )}
 
-          <button type="button" aria-expanded={showProcess} onClick={()=>setShowProcess(value=>!value)} style={{border:0,background:'transparent',color:COLOR_GREEN,padding:'4px 0',cursor:'pointer',fontSize:12}}>
+          <button type="button" aria-expanded={showProcess} className="ap-run-rollup" onClick={()=>setShowProcess(value=>!value)}>
             {showProcess?'收起执行过程':'查看执行过程'}
           </button>
           {showProcess && <>
-          <p style={{margin:'2px 0 6px',fontSize:11.5,color:'#4a4f57'}}>{run.eventLog.length?'根据收到的工具回执整理，可能遗漏步骤；工具返回结果不代表安全或规范检查通过。':'根据收到的进度整理，可能遗漏步骤；不代表各项检查已通过。'}</p>
-          <ol aria-label="执行过程" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <p className="ap-run-note">{run.eventLog.length?'根据收到的工具回执整理，可能遗漏步骤；工具返回结果不代表安全或规范检查通过。':'根据收到的进度整理，可能遗漏步骤；不代表各项检查已通过。'}</p>
+          <ol aria-label="执行过程" className="ap-run-list">
             {run.eventLog.length>0?visibleEvents.map(event=>{
               const category=toolCategory(event.tool),Icon=CATEGORY_ICONS[category];
-              return <li key={event.seq} data-tool-category={category} style={{padding:'5px 8px',background:COLOR_STONE,borderRadius:4,color:'#4a4f57',display:'flex',alignItems:'center',gap:6}}>
-                <Icon size={15} aria-hidden="true" style={{color:COLOR_GREEN}}/><span>{TOOL_LABELS[event.tool]??'处理任务'}</span><span> · {eventStatus(event.stage,event.outcome)}</span>
+              const pending=event.stage==='started'&&event.outcome===null;
+              return <li key={event.seq} data-tool-category={category} className="ap-run-row" data-pending={pending?'true':undefined}>
+                <Icon size={15} aria-hidden="true" style={{color:'var(--wk-green)'}}/>
+                <span>{TOOL_LABELS[event.tool]??'处理任务'}</span>
+                <span className="ap-run-status"> · {eventStatus(event.stage,event.outcome)}</span>
+                {!pending && <span className="ap-run-tick" aria-hidden="true">✓</span>}
+                {pending && <span className="ap-run-tick" data-pending="true" aria-hidden="true">…</span>}
               </li>;
             }):visibleSteps.map((step, index) => {
               const localName = LOCAL_STEP_LABEL[step.toolName];
               const localStatus = localName ? localStepStatus(step.outcome) : null;
               if (localName && localStatus) {
-                return <li key={`${step.toolName}-${step.startedAt}-${index}`} style={{ padding: '5px 8px', background: COLOR_STONE, borderRadius: 4, color: '#4a4f57' }}>
-                  <span>{localName}</span><span> · {localStatus}</span>
-                  {step.outcome === 'error' && step.thought ? <span> · {step.thought}</span> : null}
+                const pending=step.outcome==='running';
+                return <li key={`${step.toolName}-${step.startedAt}-${index}`} className="ap-run-row" data-pending={pending?'true':undefined}>
+                  <span>{localName}</span><span className="ap-run-status"> · {localStatus}</span>
+                  {step.outcome === 'error' && step.thought ? <span className="ap-run-status"> · {step.thought}</span> : null}
+                  {!pending && <span className="ap-run-tick" aria-hidden="true">✓</span>}
+                  {pending && <span className="ap-run-tick" data-pending="true" aria-hidden="true">…</span>}
                 </li>;
               }
               const write = isWriteTool(step.toolName);
+              const pending=step.outcome==='running';
               return (
                 <li
                   key={`${step.toolName}-${step.startedAt}-${index}`}
-                  style={{
-                    padding: '5px 8px',
-                    background: write ? '#fff' : COLOR_STONE,
-                    borderLeft: write ? `3px solid ${COLOR_GREEN}` : '3px solid transparent',
-                    borderRadius: 4,
-                    color: write ? '#2b2f36' : '#6b7280',
-                  }}
+                  className="ap-run-row"
+                  data-kind={write?'write':undefined}
+                  data-pending={pending?'true':undefined}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <span>已观察到：</span><span style={{ fontWeight: write ? 600 : 400 }}>{visibleProgress(step.toolName,scope)}</span>
-                    {write && typeof step.itemCount === 'number' && <span style={{ color: COLOR_GREEN, fontSize: 11.5 }}>· {step.itemCount} 件</span>}
+                    {write && typeof step.itemCount === 'number' && <span style={{ color: 'var(--wk-green)', fontSize: 11.5 }}>· {step.itemCount} 件</span>}
                   </div>
                 </li>
               );
@@ -339,8 +284,8 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
           {(run.eventLog.length||run.stepLog.length) > 3 && (
             <button
               type="button"
+              className="ap-run-rollup"
               onClick={() => setExpandedAll(v => !v)}
-              style={{ marginTop: 6, border: 'none', background: 'transparent', color: COLOR_GREEN, fontSize: 11.5, cursor: 'pointer', padding: 0 }}
             >
               {expandedAll ? '收起' : `共观察到 ${run.eventLog.length||run.stepLog.length} 条，展开全部`}
             </button>
@@ -351,20 +296,13 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
 
       {/* 常驻运行条三控件（Y7/Y8/Y9）。 */}
       {run.isRunning && controls && (
-        <div
-          role="group"
-          aria-label="运行中控制"
-          style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}
-        >
+        <div role="group" aria-label="运行中控制" className="ap-run-controls">
           <button
             type="button"
             onClick={() => setAgentPauseAfterStep(true)}
             disabled={run.shouldPauseAfterStep}
-            style={{
-              padding: '4px 10px', fontSize: 11.5, borderRadius: 999, cursor: 'pointer',
-              border: `1px solid ${COLOR_GREEN}`, background: run.shouldPauseAfterStep ? COLOR_STONE : '#fff', color: COLOR_GREEN,
-              opacity: run.shouldPauseAfterStep ? 0.6 : 1,
-            }}
+            className="ap-run-pill"
+            data-active={run.shouldPauseAfterStep ? 'false' : 'true'}
           >
             {run.shouldPauseAfterStep ? '将在这步后停' : '跑完这步停'}
           </button>
@@ -372,11 +310,9 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
             type="button"
             onClick={requestAgentStop}
             disabled={run.stopRequested}
-            style={{
-              padding: '4px 10px', fontSize: 11.5, borderRadius: 999, cursor: 'pointer',
-              border: `1px solid ${COLOR_RED}`, background: '#fff', color: COLOR_RED,
-              opacity: run.stopRequested ? 0.6 : 1,
-            }}
+            className="ap-run-pill"
+            data-stop="true"
+            data-active={run.stopRequested ? 'false' : 'true'}
           >
             {run.stopRequested ? '正在收尾' : '停止'}
           </button>

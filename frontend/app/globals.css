@@ -53,7 +53,7 @@
 :root {
   /* 色彩 · 中性（ink/muted 间的辅助文字用 --wk-muted #71767E） */
   --paper: #FFFFFF;
-  --plane: #F4F5F7;
+  --plane: #FFFFFF;
   --plane-deep: #ECEDEF;
   --hair-soft: #EFEFF1;
   --hair: #E4E4E7;
