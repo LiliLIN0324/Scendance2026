@@ -19,7 +19,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, Clock, Download, FileImage, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
+import { ArrowUp, Check, Clock, Download, FileImage, HelpCircle, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
@@ -3403,8 +3403,47 @@ function foldConflictBubble(text: string): string {
   return `${count[1]} 件没写上。${reason}。这次没有写入。`;
 }
 
-/** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
-function ProposalCard({ agent, onPrefill }: { agent: AgentValue; onPrefill?: (text: string) => void }): JSX.Element | null {
+/** 这一轮候选卡上的决策留痕：批准 / 拒绝，只活在当前面板内存里，不落后端。 */
+type ProposalDecision = 'approved' | 'rejected';
+
+/* ── Web Speech API 最小本地收口：TS DOM 库未带 SpeechRecognition，类型只在本文件内，不写全局 d.ts。 ── */
+interface SpeechRecognitionAlternativeLike { transcript: string }
+interface SpeechRecognitionResultLike { isFinal: boolean; 0: SpeechRecognitionAlternativeLike }
+interface SpeechRecognitionEventLike { resultIndex: number; results: ArrayLike<SpeechRecognitionResultLike> }
+interface SpeechRecognitionInstanceLike {
+  lang: string; continuous: boolean; interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void; stop(): void; abort(): void;
+}
+interface SpeechRecognitionCtorLike { new(): SpeechRecognitionInstanceLike }
+function getSpeechRecognitionCtor(): SpeechRecognitionCtorLike | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtorLike; webkitSpeechRecognition?: SpeechRecognitionCtorLike };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/** 麦克风图标：仓库 solid-icons 未收录，本地内联一笔，Stroke 跟其他线性图标一致。 */
+function MicIcon({ size = 18, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 19v3" />
+      <path d="M8 22h8" />
+    </svg>
+  );
+}
+
+/** 预览态：主钮「确认布置」，次钮「不用」；决策后原地留成徽章，一屏只留一个深主钮。 */
+function ProposalCard({ agent, onPrefill, decision, onApprove, onReject }: {
+  agent: AgentValue;
+  onPrefill?: (text: string) => void;
+  decision?: ProposalDecision | null;
+  onApprove?: () => void;
+  onReject?: () => void;
+}): JSX.Element | null {
   const { layout } = useRoomEditor();
   const plan = agent.proposal;
   if (!plan) return null;
@@ -3462,10 +3501,18 @@ function ProposalCard({ agent, onPrefill }: { agent: AgentValue; onPrefill?: (te
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
-      : <>
-          {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" data-tour="confirm-plan" onClick={agent.confirmProposal}>确认布置</button>}
+      : decision === 'approved'
+        ? <div className="ap-decision-row" aria-label="本版已批准">
+            <span className="ap-decision-badge is-approved"><Check size={14} aria-hidden="true"/>已批准</span>
+          </div>
+        : decision === 'rejected'
+          ? <div className="ap-decision-row" aria-label="本版已拒绝">
+              <span className="ap-decision-badge is-rejected"><X size={14} aria-hidden="true"/>你拒绝了</span>
+            </div>
+          : <>
+          {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" data-tour="confirm-plan" onClick={() => { onApprove?.(); agent.confirmProposal(); }}>确认布置</button>}
           <div id="cta-hint" className="ap-error-actions">
-            <button type="button" className="chip btn-outline" onClick={agent.withdrawProposal}>撤回</button>
+            <button type="button" className="chip btn-outline" onClick={() => { onReject?.(); agent.withdrawProposal(); }}>不用</button>
             {!review && <button type="button" className="chip btn-outline" onClick={() => agent.regenerate()}>换一版</button>}
           </div>
           <FollowupChips plan={plan} ctx={followupCtx} onPrefill={onPrefill}/>
@@ -3532,6 +3579,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const studio = useStudioAgent();
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
+  // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
+  const [proposalDecision, setProposalDecision] = useState<ProposalDecision | null>(null);
   const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const draftKey=JSON.stringify([agent.sessionScope,assistantSessions.activeId]);
@@ -3541,8 +3590,37 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const setDraft=(value:string)=>{ if(value)volatileComposerDrafts.set(draftKey,value);else volatileComposerDrafts.delete(draftKey);setDraftState({key:draftKey,value}); };
   const restoredCancellation=useRef<number|null>(null);
   useEffect(()=>{const cancelled=agent.cancelledInput;if(!cancelled||restoredCancellation.current===cancelled.id)return;restoredCancellation.current=cancelled.id;if(!draft.trim())setDraft(cancelled.text);},[agent.cancelledInput]);
+  // 语音转文字：点一下开始拾音、再点停止；结果 append 到现有 draft 后，不覆盖。
+  const toggleMic = useCallback(() => {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
+    if (recognitionRef.current) { recognitionRef.current.stop(); return; }
+    const recognition = new Ctor();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) transcript += event.results[i][0]?.transcript ?? '';
+      const text = transcript.trim();
+      if (!text) return;
+      const current = volatileComposerDrafts.get(draftKey) ?? '';
+      setDraft(current.trim() ? `${current.trim()} ${text}` : text);
+    };
+    recognition.onend = () => { recognitionRef.current = null; setListening(false); };
+    recognition.onerror = () => { recognitionRef.current = null; setListening(false); };
+    recognitionRef.current = recognition;
+    setListening(true);
+    try { recognition.start(); } catch { recognitionRef.current = null; setListening(false); }
+  }, [draftKey]);
+  // 卸载时别把麦克风挂在后台。
+  useEffect(() => () => { recognitionRef.current?.abort(); recognitionRef.current = null; }, []);
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // 语音拾音：识别器实例与拾音中标记，纯本机内存，不落后端。
+  const recognitionRef = useRef<SpeechRecognitionInstanceLike | null>(null);
+  const [listening, setListening] = useState(false);
+  const speechSupported = getSpeechRecognitionCtor() !== null;
   const demo = isDemoBackend();
   // 第 8 批：真实运行账本（云端 AgentRun 写进来的真步骤/真轮数）。
   const runState = useAgentRun();
@@ -3568,10 +3646,25 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   const suggestion = useSuggestion(activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
-  const ghostVisible = mode === 'layout' && !draft.trim() && !generating;
+  // 待确认 / 暂停 / 圈选态让位给状态专属 placeholder，不再打例句。
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
+  const ghostVisible = mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
+  // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
+  const composerPlaceholder = agent.mapPickerOpen
+    ? '请在地图上圈选范围'
+    : generating ? '为下一步添加备注'
+    : proposed ? '或用文字回答'
+    : paused ? '补充说明后继续'
+    : mode === 'review' ? '说一句，比如「准备客户评审」'
+    : mode === 'delivery' ? '说一句，比如「导出给搭建方」'
+    : agent.banquetChat ? '说一句，比如「加座，再排一版」'
+    : '说一句，比如「80 人发布会，室内 12×9」';
+  // 发送键双态：空且无附件 → 麦克风；有字（或带附件）→ 箭头。理解中禁用，既有闸门不动。
+  const hasDraft = draft.trim().length > 0;
+  const canSend = !agent.isUnderstanding(draft) && (hasDraft || !!agent.pendingFile);
+  const showMic = !hasDraft && !agent.pendingFile;
   const preStates = !generating && !proposed && !paused && !planShown && agent.state !== 'generateFailed';
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
@@ -3582,6 +3675,26 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const activity = activeAgent === 'door';
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
+
+  // 状态头三件套：色调 + 图标 + 短文案；拿不到明确阶段就回退现有头部样式，不硬造状态。
+  const headStatus: { tone: 'ask' | 'think' | 'run' | 'paused' | 'stopped'; label: string; icon: ReactNode } | null = (() => {
+    if (mode !== 'layout' || !activity) return null;
+    const s = agent.state;
+    if (s === 'planProposed') return { tone: 'ask', label: '等你确认', icon: <HelpCircle size={15} aria-hidden="true" /> };
+    if (agent.understanding || agent.briefBusy) return { tone: 'think', label: '正在思考', icon: <Sparkles size={15} aria-hidden="true" /> };
+    if (s === 'generating') return { tone: 'run', label: '施工中', icon: <Loader2 size={15} className="cr-spin" aria-hidden="true" /> };
+    if (s === 'generatePaused') return { tone: 'paused', label: '已暂停', icon: <span className="ap-pause-glyph" aria-hidden="true"><i /><i /></span> };
+    if (FAILED_STATES.includes(s)) return { tone: 'stopped', label: '已停止', icon: <Square size={14} aria-hidden="true" /> };
+    return null;
+  })();
+
+  // 新一轮候选进来 / 换会话：清掉上一轮的决策留痕（纯内存态）。
+  useEffect(() => { if (agent.proposal) setProposalDecision(null); }, [agent.proposal]);
+  useEffect(() => { setProposalDecision(null); }, [assistantSessions.activeId]);
+  // 批准被既有闸门拦下时提案仍在、状态仍是待确认：别把徽章留成已批准。
+  useEffect(() => {
+    if (proposalDecision === 'approved' && agent.state === 'planProposed' && agent.proposal) setProposalDecision(null);
+  }, [agent.state, agent.proposal, proposalDecision]);
 
   // 活动那格常亮；这场对话出问题就爆红，别让人以为它还好好活着。（lane id 仍为内部字面量 'door'）
   useEffect(() => {
@@ -3594,16 +3707,19 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   }, [assistantSessions.activeId]);
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={activity ? (mode === 'layout' ? agent.state : mode) : activeAgent} data-venue-io={agent.venueIO} aria-label={meta.name} tabIndex={-1}>
-    <header className="ap-head ap-session-head">
+    <header className="ap-head ap-session-head" data-tone={headStatus?.tone}>
       <div className="ap-session-identity">
         <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
           <RailAvatar key={activeAgent} form={meta.form} size={36} />
         </span>
         <h1 className="ap-session-title" title={activity ? sessionTitle : meta.name}>{activity ? sessionTitle : meta.name}</h1>
+        {headStatus && <span className={`ap-head-status ap-head-status--${headStatus.tone}`} role="status">
+          {headStatus.icon}<span>{headStatus.label}</span>
+        </span>}
       </div>
       <div className="ap-session-actions">
         {activeAgent === 'space' && <details className="sc-space-library-menu">
-          <summary aria-label="场地资料" title="场地资料"><Paperclip size={17} aria-hidden="true"/></summary>
+          <summary aria-label="场地资料" data-tip="场地资料"><Paperclip size={17} aria-hidden="true"/></summary>
           <div className="sc-space-library-menu-content">
             <button type="button" className="chip" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); agent.startVenuePicker(); }}>新建/换场地</button>
             <button type="button" className="chip" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); agent.callbacks.onOpenReference?.(); }}>图纸与照片</button>
@@ -3615,7 +3731,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}
           aria-expanded={showHistory}
           aria-label="会话历史"
-          title="会话历史"
+          data-tip="会话历史"
           onClick={() => setShowHistory(value => !value)}
         >
           <Clock size={18} aria-hidden="true" />
@@ -3624,14 +3740,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           type="button"
           className="ap-icon-btn"
           aria-label="新开会话"
-          title="新开会话"
+          data-tip="新开会话"
           onClick={() => { const created=assistantSessions.openSession(); if(created?.verifiedFresh)agent.acceptFreshSession(created.id); setShowHistory(false); inputRef.current?.focus(); }}
         >
           <MessageCirclePlus size={18} aria-hidden="true" />
         </button>
         </>}
         {onClose && (
-          <button type="button" className="ap-icon-btn ap-close" aria-label={`收起 ${meta.name}`} title={`收起 ${meta.name}`} onClick={onClose}>
+          <button type="button" className="ap-icon-btn ap-close" aria-label={`收起 ${meta.name}`} data-tip={`收起 ${meta.name}`} onClick={onClose}>
             <X size={20} aria-hidden="true" />
           </button>
         )}
@@ -3733,7 +3849,12 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             <button type="button" className="chip btn-outline" onClick={() => { agent.dismissModelFailure(); document.getElementById('ap-input')?.focus(); }}>改一句再说</button>
           </div>
         </section>}
-        {proposed && <ProposalCard agent={agent} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        {proposed && <ProposalCard agent={agent} decision={proposalDecision} onApprove={() => setProposalDecision('approved')} onReject={() => setProposalDecision('rejected')} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        {!proposed && proposalDecision === 'rejected' && (
+          <section className="ap-card ap-plan ap-decision-card" aria-label="本版已拒绝">
+            <span className="ap-decision-badge is-rejected"><X size={14} aria-hidden="true"/>你拒绝了</span>
+          </section>
+        )}
         {planShown && <>
           <div className="ap-card ap-plan" id="plan-summary">
             <span className="ap-blocked-stamp"><MapIcon size={12} aria-hidden="true"/>布置</span>
@@ -3790,31 +3911,43 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {mode === 'layout' && activity && <AgentCapabilityPrompts onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-        {agent.pendingFile && <div className="sc-chat-file">
-          <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
-          <span className="sc-chat-file-name">{agent.pendingFile.name}</span>
-          <button type="button" className="sc-chat-file-remove" aria-label="移除附件" onClick={agent.removePendingFile}><X size={14} aria-hidden="true"/></button>
-        </div>}
-        <div className="ap-composer-field">
+        <div className="ap-composer-field ap-panel-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : agent.banquetChat ? '说一句，比如「加座，再排一版」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
         }}/>
+        {agent.pendingFile && <div className="sc-chat-file ap-file-chip">
+          <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
+          <span className="sc-chat-file-name">{agent.pendingFile.name}</span>
+          <button type="button" className="sc-chat-file-remove" aria-label="移除附件" onClick={agent.removePendingFile}><X size={14} aria-hidden="true"/></button>
+        </div>}
+        {agent.generationQueued>0&&<p role="status" className="ap-field-note">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
+        {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
+        {agent.sessionSaveFailed && <p role="status" className="ap-field-note">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
+        <button type="button" className="ap-foot-info ap-panel-info" aria-expanded={footDetailOpen} aria-label="数据与隐私说明" onClick={() => setFootDetailOpen(current => !current)}><Info size={12} aria-hidden="true"/></button>
+        {showMic ? (
+          <button
+            type="button"
+            className={`ap-send ap-panel-send ap-mic${listening ? ' is-listening' : ''}`}
+            aria-label={listening ? '停止语音输入' : '语音输入'}
+            aria-pressed={listening}
+            data-tour="chat-mic"
+            disabled={!speechSupported}
+            onClick={toggleMic}
+          >
+            <MicIcon size={18} aria-hidden="true" />
+          </button>
+        ) : (
+          <button type="submit" className="ap-send ap-panel-send" aria-label="发送" data-tour="chat-send" disabled={!canSend}><ArrowUp size={18}/></button>
+        )}
         </div>
-        {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
-        {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         <p className="ap-foot">
-          <button type="button" className="ap-foot-info" aria-expanded={footDetailOpen} aria-label="数据与隐私说明" onClick={() => setFootDetailOpen(current => !current)}><Info size={12} aria-hidden="true"/></button>
           <span id="ap-data-notice" className="ap-foot-detail" hidden={!footDetailOpen}>{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
+          <span className="ap-foot-detail" hidden={!footDetailOpen}>未发送的草稿只暂存在当前页面，刷新或关闭后会丢失。</span>
           {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span className="ap-foot-detail" hidden={!footDetailOpen}>近期对话也会发给模型。</span>}
         </p>
-        {!!draft && <p className="ap-small">未发送内容仅暂存在当前页面；刷新或关闭后会丢失。</p>}
-        {agent.sessionSaveFailed && <p role="status" className="ap-small">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
-        <div className="ap-composer-bar">
-          <button type="submit" className="ap-send" aria-label="发送" data-tour="chat-send" disabled={agent.isUnderstanding(draft) || (!draft.trim() && !agent.pendingFile)}><ArrowUp size={18}/></button>
-        </div>
       </form>
       </>}
   </aside>;

@@ -2,9 +2,13 @@
 
 /**
  * 画布左下角设置：切回官网、新手指引与 GitHub；付费入口暂不开放。
+ * 「清除密钥 / 清除历史任务」本轮不做入口：凭证走 cloud-panel 的退出登录（controller.signOut），
+ * 前端拿不到也删不了服务端密钥；本机方案会话按场在历史面板逐条删除（分域 + 写保护围栏，
+ * 存储层刻意不支持整批清空）；云端历史任务无前端删除通道。结论见交付汇报，不造假按钮。
  */
 import { BookOpen, Home, Settings } from '@/components/solid-icons';
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import './settings-menu.css';
 
 const HOME_URL = '/introduction';
 const GETTING_STARTED_URL = '/guide';
@@ -39,7 +43,7 @@ export function SettingsMenu({ buttonRef }: { buttonRef?: RefObject<HTMLButtonEl
       <Settings size={22} aria-hidden="true"/>
     </button>
     {open && <div className="sc-tool-pop sc-settings-pop" role="dialog" aria-label="设置">
-      {/* 官网是站内页面，同页返回落地页；其余三条去外部网站，另开标签。 */}
+      {/* 官网是站内页面，主层级；新手指引、GitHub 属次要导航，走浅底小胶囊拉开层级。 */}
       <a className="sc-settings-link" href={HOME_URL}>
         <Home size={15} aria-hidden="true"/><span>切回官网</span>
       </a>
@@ -47,12 +51,17 @@ export function SettingsMenu({ buttonRef }: { buttonRef?: RefObject<HTMLButtonEl
       {/* 付费入口暂不上线：<a className="sc-settings-link" href={PRICING_URL}>
         <Scan size={15} aria-hidden="true"/><span>购买重建次数</span>
       </a> */}
-      <a className="sc-settings-link" href={GETTING_STARTED_URL} target="_blank" rel="noopener noreferrer">
+      <a className="sc-settings-link sc-settings-link--ghost" href={GETTING_STARTED_URL} target="_blank" rel="noopener noreferrer">
         <BookOpen size={15} aria-hidden="true"/><span>新手指引</span>
       </a>
-      <a className="sc-settings-link" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+      <a className="sc-settings-link sc-settings-link--ghost" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
         <GithubMark/><span>GitHub</span>
       </a>
+      {/* Esc 关闭弹层是文档上真实绑定的按键，标一颗 kbd 小标；没有绑定的控件不加。 */}
+      <p className="sc-settings-hint">
+        <kbd className="ap-kbd" title="按 Esc 关闭">Esc</kbd>
+        <span>关闭</span>
+      </p>
     </div>}
   </div>;
 }

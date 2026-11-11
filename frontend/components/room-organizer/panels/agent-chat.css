@@ -73,3 +73,46 @@
   outline: 2px solid #4A7C59;
   outline-offset: 1px;
 }
+
+/* 监督档位菜单：头部实时摘要 + 三档人话说明（走查第 8 条）。 */
+.ap-supervise-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--wk-hair);
+  font-size: 11px;
+}
+.ap-supervise-summary-kicker { color: var(--wk-muted); }
+.ap-supervise-summary-value { font-weight: 600; color: var(--wk-ink); }
+.ap-supervise-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ap-supervise-option-row { display: inline-flex; align-items: center; gap: 6px; }
+.ap-supervise-option-label { font-weight: 400; color: var(--wk-ink-soft); }
+.ap-supervise-option.is-active .ap-supervise-option-label { font-weight: 600; color: var(--wk-ink); }
+.ap-supervise-option-hint { padding-left: 22px; font-size: 11px; line-height: 1.5; color: var(--wk-ink-faint); }
+.ap-supervise-option.is-active .ap-supervise-option-hint { color: var(--wk-muted); }
+
+/* 发送侧：Enter 快捷键小标与发送键同排。kbd 只标注文本框里真实存在的回车发送绑定。 */
+.ap-composer-actions { display: inline-flex; align-items: center; gap: 6px; justify-self: end; }
+.ap-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 6px;
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}

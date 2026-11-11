@@ -3,25 +3,29 @@ import { ApiError } from './domain.ts';
 import { readBounded } from './http.ts';
 
 /** Pure, opt-in protocol boundary. It does not dispatch requests or persist model messages. */
-const callSchema = z.strictObject({
+const callSchema = z.object({
   id: z.string().min(1).max(256).refine(value => value.trim().length > 0),
   type: z.literal('function'),
   index: z.number().int().nonnegative().optional(),
-  function: z.strictObject({ name: z.string().min(1).max(128), arguments: z.string().max(32_768) }),
+  function: z.object({ name: z.string().min(1).max(128), arguments: z.string().max(32_768) }),
 });
-const messageSchema = z.strictObject({
+// Known fields are validated; provider-specific extras (e.g. reasoning_details) stay on the
+// raw message so the whole assistant object can be replayed for interleaved thinking. They are
+// never persisted or copied into an error payload.
+const messageSchema = z.object({
   role: z.literal('assistant'),
   content: z.string().max(32_768).nullable().optional(),
   reasoning_content: z.string().max(100_000).optional(),
+  reasoning_details: z.unknown().optional(),
   name: z.string().max(128).optional(),
   audio_content: z.string().max(1024).optional(),
   tool_calls: z.array(callSchema).max(12).optional(),
 });
 const responseSchema = z.object({
-  choices: z.array(z.object({ finish_reason: z.string(), message: messageSchema })).length(1),
+  choices: z.array(z.object({ finish_reason: z.string(), message: z.unknown() })).length(1),
   base_resp: z.object({ status_code: z.number().int() }).optional(),
 });
-type AssistantMessage = z.infer<typeof messageSchema>;
+type AssistantMessage = { role: 'assistant'; [key: string]: unknown };
 export type MiniMaxToolDefinition = { type: 'function'; function: { name: string; [key: string]: unknown } };
 
 function invalid(): never { throw new ApiError('MINIMAX_INVALID_TOOL_RESPONSE', 502); }
@@ -110,15 +114,23 @@ export function parseMiniMaxToolTurn(raw: unknown, allowedNames: readonly string
   if (!priorCallIds || typeof priorCallIds.has !== 'function') return invalid();
   const parsed = responseSchema.safeParse(raw);
   if (!parsed.success || (parsed.data.base_resp && parsed.data.base_resp.status_code !== 0)) return invalid();
-  const { finish_reason: finish, message } = parsed.data.choices[0];
-  if (new TextEncoder().encode(JSON.stringify(message)).length > 150_000) return invalid();
+  const choice = parsed.data.choices[0]!;
+  const rawMessage = choice.message;
+  if (typeof rawMessage !== 'object' || rawMessage === null || Array.isArray(rawMessage)) return invalid();
+  const messageCheck = messageSchema.safeParse(rawMessage);
+  if (!messageCheck.success) return invalid();
+  const message = messageCheck.data;
+  if (new TextEncoder().encode(JSON.stringify(rawMessage)).length > 150_000) return invalid();
+  const finish = choice.finish_reason;
   if (finish !== 'stop' && finish !== 'tool_calls') return invalid();
   const calls = message.tool_calls ?? [];
   if ((finish === 'tool_calls') !== (calls.length > 0)) return invalid();
   if (new Set(calls.map(call => call.id)).size !== calls.length) return invalid();
   if (calls.some(call => priorCallIds.has(call.id))) return invalid();
   if (new Set(allowedNames).size !== allowedNames.length) return invalid();
-  if (final && (calls.length !== 1 || calls[0]?.function.name !== 'submit_candidates')) return invalid();
+  // A text-only final reply (stop, no tool_calls) is not an adapter fault: the runner
+  // nudges the model to submit and bounds how many plain-text turns it will retry.
+  if (final && calls.length > 0 && (calls.length !== 1 || calls[0]?.function.name !== 'submit_candidates')) return invalid();
   const normalized = calls.map(call => {
     if (!allowedNames.includes(call.function.name)) return invalid();
     try { return { id: call.id, name: call.function.name, arguments: safeToolArguments(call.function.arguments) }; }
@@ -128,5 +140,7 @@ export function parseMiniMaxToolTurn(raw: unknown, allowedNames: readonly string
       return { id: call.id, name: call.function.name, arguments: null };
     }
   });
-  return { assistantMessage: message, calls: normalized };
+  // Replay the untouched provider object: interleaved thinking state lives in provider-specific
+  // fields that the strict validation above does not enumerate.
+  return { assistantMessage: rawMessage as AssistantMessage, calls: normalized };
 }
