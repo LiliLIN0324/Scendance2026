@@ -204,7 +204,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   const currentName = layout.name || '未命名活动';
 
   return <section ref={sectionRef} className="sc-local-activities" aria-label="最近活动">
-    {paused && <p className="sc-handoff-error" role="status">打开已有活动或从备份文件恢复暂不可用。新建会先保存当前活动并进入新活动；已保存的活动在恢复保障完成前不能从列表再打开。你仍可导出本机备份。</p>}
+    {paused && <p className="sc-restore-paused" role="status"><span>已有活动暂不可打开</span><InfoTip label="恢复保障说明"><span>打开已有活动或从备份文件恢复暂不可用。新建会先保存当前活动并进入新活动；已保存的活动在恢复保障完成前不能从列表再打开。你仍可导出本机备份。</span></InfoTip></p>}
     {identityMissing && <p className="sc-handoff-error" role="alert">请先保存有明确编号的当前活动，再新建或打开其他活动。</p>}
     {showCreate && <div className="sc-activity-group">
       <header className="sc-activity-head">

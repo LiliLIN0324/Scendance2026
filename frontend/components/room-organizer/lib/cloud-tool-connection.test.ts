@@ -1,22 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { aholoChatStep, planGenerationLine, understandingLine } from './cloud-tool-connection';
+import { aholoChatStep, understandingLine } from './cloud-tool-connection';
 
-describe('cloud plan connection copy', () => {
-  it('keeps model readiness and plan generation on separate lines', () => {
+describe('cloud model readiness copy', () => {
+  it('keeps model readiness line tied to model availability', () => {
     expect(understandingLine(false)).toBe('文字识别按本机规则处理。');
     expect(understandingLine(true)).toBe('输入文字可能发送至模型服务。');
-    expect(planGenerationLine('离线引导')).toBe('当前用本机规则出预览；连接云项目后可云端生成。');
-    expect(planGenerationLine(undefined)).toBe('当前用本机规则出预览；连接云项目后可云端生成。');
-  });
-
-  it('names the real next step instead of a blanket disconnect', () => {
-    expect(planGenerationLine('正在准备工作台')).toContain('正在连接云端方案生成');
-    expect(planGenerationLine('正在准备工作台')).toContain('本机规则出预览');
-    expect(planGenerationLine('功能已开放')).toContain('登录并取得编辑权');
-    expect(planGenerationLine('项目已连接')).toBe('云端生成会发送当前场景及部分对话上下文。');
-    for (const line of [planGenerationLine('离线引导'), planGenerationLine('功能已开放'), planGenerationLine('正在准备工作台')]) {
-      expect(line).not.toContain('未连接云端方案生成');
-    }
   });
 });
 

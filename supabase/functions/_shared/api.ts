@@ -172,6 +172,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const briefViews: Array<Record<string,string>> = [];
         if(env('BAILIAN_PRODUCT_ENABLED')==='1')briefViews.push({BAILIAN_PRODUCT_ENABLED:'1'});
         briefViews.push({BAILIAN_PRODUCT_ENABLED:'0'});
+        // 自定义端点也失败（如弱模型证据不匹配）时，显式落到 Tokendance 网关：
+        // chatRequest 只在 AGENT_CHAT_* 全空时才走网关，这里用视图级覆盖强制腾开。
+        if(env('TOKENDANCE_API_KEY'))briefViews.push({
+          BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',
+        });
+        // 最后一级：DeepSeek 官方端点（同时清空网关 key 才会走到）。
+        if(env('DEEPSEEK_API_KEY'))briefViews.push({
+          BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',TOKENDANCE_API_KEY:'',
+        });
         const briefReasons:string[]=[];
         let briefReply:Response|null=null;
         const briefFailure=(error:unknown):string=>{
@@ -189,7 +198,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           if(error instanceof Error&&['TimeoutError','AbortError'].includes(error.name))return 'MODEL_TIMEOUT';
           return 'MODEL_REQUEST_FAILED';
         };
-        for(const view of briefViews){
+        for(const [viewIndex,view] of briefViews.entries()){
           const viewEnv=(key:Parameters<typeof env>[0]):string|undefined=>{
             const override=(view as Record<string,unknown>)[key];
             return override===undefined?env(key):override as string;
@@ -202,13 +211,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             // 把该次尝试实际运行的模型名注入系统提示，模型被问「你是什么模型」时能自报准确型号。
             const selfModel=chatModelName(viewEnv,{purpose:'brief'});
             const systemPrompt=(conversation?BRIEF_CONVERSATION_PROMPT:BRIEF_EXTRACT_PROMPT)+`
-你当前实际运行的模型是「${selfModel}」；用户问你是什么模型时，如实报告这个名字并保持简短。`;
+你当前实际运行的模型是「${selfModel}」。用户问你是什么模型、什么版本、什么供应商时，必须逐字报告这个完整模型 id（例如「${selfModel}」），禁止笼统回答「我是 Qwen」「我是通义千问」「我是 DeepSeek」或其他家族名；一句话即可，不要展开。`;
             const { url, init } = chatRequest(viewEnv, { messages: [
               { role:'system', content: systemPrompt },
               { role:'user', content: userContent },
             ], temperature: 0, ...tokenLimit, response_format: { type: 'json_object' } }, { purpose: 'brief' });
-            // 推理模型可能长思考，超时 110s；仍超时说明该供应商当前不可用，切下一级。
-            const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,BRIEF_PROVIDER_TIMEOUT_MS);
+            // 首选供应商可能是推理模型，给 110s；兜底级别统一压到 45s，
+            // 避免某一级挂死时用户要连等多个 110s 才看到失败。
+            const providerTimeout=viewIndex===0?BRIEF_PROVIDER_TIMEOUT_MS:45_000;
+            const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,providerTimeout);
             if(conversation){
               const checked=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({message:z.object({tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(providerResponse);
               // qwen3.8-max compatible responses set these to null when no tool ran.

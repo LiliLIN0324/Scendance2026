@@ -19,7 +19,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, Clock, FileImage, Info, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
+import { ArrowUp, Check, Clock, Download, FileImage, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCcw, RotateCw, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
@@ -92,7 +92,8 @@ import {
 import { proposalDifferences } from '../three/proposal-preview';
 import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
-import { aholoChatStep, planGenerationLine, understandingLine } from '../lib/cloud-tool-connection';
+import { aholoChatStep, understandingLine } from '../lib/cloud-tool-connection';
+import { parseFollowUpOptions, segmentBubbleBlocks } from '../lib/bubble-text';
 import { layoutChatHint, revisionRefusalText } from '../lib/layout-feedback';
 import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
@@ -481,6 +482,8 @@ interface AgentValue {
   progress: number; failed: boolean; overlapCount: number; bubbles: Bubble[];
   /** 只给「这次没出成」那张卡用：重跑上一句，不另开一个生成入口。 */
   retry(): void; stop(): void; resume(): void; regenerate(label?: string): void;
+  /** 智能理解瞬态失败的重试卡；null = 不显示。 */
+  modelFailure: {text:string;retry:()=>void} | null; dismissModelFailure(): void;
   /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   inventoryWorkspace: ReactNode; inventoryBlocked: boolean; inventoryInvalid: boolean;
@@ -682,6 +685,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const previewUtterance=useRef<string|null>(null);
   const [cancelledInput,setCancelledInput]=useState<{id:number;text:string}|null>(null);
   const [retryUncertain,setRetryUncertain]=useState<string|null>(null);
+  // 模型瞬态失败的可重试提示卡：文案 + 重试回调。
+  const [modelFailure,setModelFailure]=useState<{text:string;retry:()=>void}|null>(null);
   const dialogueTurnStartRef=useRef(onDialogueTurnStart);dialogueTurnStartRef.current=onDialogueTurnStart;
   const dialogueIncompleteRef=useRef(onDialogueIncompleteChange);dialogueIncompleteRef.current=onDialogueIncompleteChange;
   const incompleteDialogueTurns=useRef(new Map<string,Set<string>>());
@@ -2715,7 +2720,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const nextAllocation=mergeSeatingAllocation(beforeSpecs.localSeatingAllocation,trimmed);
     const nextBanquet=mergeBanquetTable(beforeSpecs.banquetTable,trimmed);
     const specsUnchanged=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)&&JSON.stringify(nextBanquet)===JSON.stringify(beforeSpecs.banquetTable);
-    const previousMemory=specsUnchanged?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation,...(nextBanquet?{banquetTable:nextBanquet}:{})};
+    let previousMemory=specsUnchanged?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation,...(nextBanquet?{banquetTable:nextBanquet}:{})};
     if(previousMemory!==beforeSpecs){
       // Keep the current banquet preview up until a diameter change has a new one.
       if(!isRoundResizeUtterance(trimmed, beforeSpecs) && (phaseRef.current==='proposed'||phaseRef.current==='paused')){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
@@ -2724,7 +2729,18 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const turnVenueBasis = venueScaleBasis(layoutStore.getState().layout);
     const turnVenueFact=venueFacts.capture();
     if(sessionScope !== 'legacy' && !turnVenueFact){say({role:'agent',amber:true,text:'场地状态正在核对，请稍后重试。'});releaseTurn();return;}
-    const staleScale = sessionScope !== 'legacy' && (!isVenueScaleCurrent(previousMemory,layoutStore.getState().layout) || !sourceScaleBound(previousMemory) || !factScaleBound(previousMemory));
+    let staleScale = sessionScope !== 'legacy' && (!isVenueScaleCurrent(previousMemory,layoutStore.getState().layout) || !sourceScaleBound(previousMemory) || !factScaleBound(previousMemory));
+    // 用户没报新尺寸/室内外时，画布 revision 漂移（确认布置、摆家具）不该把跟句拦成「场地已变化」。
+    // 静默把 basis 重绑到当前画布，继续正常理解；只有用户真说了尺寸/室内外才走硬门禁。
+    if (staleScale) {
+      const stated = parseBriefSentence(trimmed);
+      const userStatedScale = stated.lengthM !== null || stated.widthM !== null || stated.areaM2 !== null || stated.venueIO !== null;
+      if (!userStatedScale && previousMemory.lengthM !== null && previousMemory.widthM !== null) {
+        previousMemory = { ...previousMemory, venueScaleBasis: turnVenueBasis, scaleNeedsReconfirmation: false, previousVenueScale: undefined };
+        saveMemory(previousMemory); syncMemory(previousMemory);
+        staleScale = false;
+      }
+    }
     const previousVenueScale = previousMemory.previousVenueScale ?? {lengthM:previousMemory.lengthM,widthM:previousMemory.widthM,areaM2:previousMemory.areaM2};
     const resolverMemory = staleScale ? {...previousMemory,lengthM:null,widthM:null,areaM2:null,scaleNeedsReconfirmation:true,previousVenueScale,pendingGeneration:undefined} : previousMemory;
     let turn: Awaited<ReturnType<typeof resolveBriefTurn>>;
@@ -2791,6 +2807,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if ((turn.modelNotice?.includes('可能仍会计费') || !briefFallbackNotified.current) && (turn.resolution === 'failed' || turn.resolution === 'unavailable' || turn.resolution === 'not_connected')) {
       briefFallbackNotified.current = true;
       say({ role: 'agent', amber: true, text: turn.modelNotice ?? '这次暂时只能识别基本信息，复杂要求请核对后再出方案。' });
+    }
+    // 瞬态失败（网络/超时/400/429/5xx）：给一张可一键重试的卡，把原句重发；配置类失败不挂。
+    if (turn.modelRetryable && turn.modelNotice) {
+      const retryText = trimmed;
+      setModelFailure({ text: turn.modelNotice, retry: () => { if (!briefRequest.current) void send(retryText); } });
+    } else {
+      setModelFailure(null);
     }
     const memorySaved=saveMemory(turn.memory);
     releaseTurn();
@@ -2991,6 +3014,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, banquetChat, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
+    modelFailure, dismissModelFailure: () => setModelFailure(null),
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
     proposal: phase === 'proposed' ? activeProposal : null, inventoryWorkspace, inventoryBlocked: inventoryCheck?.status==='violated'||!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput), inventoryInvalid:!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput),
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
@@ -3324,20 +3348,49 @@ function ToolCallTrace({ line, rows, understanding, onStop }: {
     {rows.length > 0 && <details open={opened} onToggle={event => setOpened(event.currentTarget.open)}>
       <summary>执行过程</summary>
       <ol className="ap-tool-rows">
-        {rows.map(row => <li key={row.id}><span>{row.name}</span><span>{toolStatusWord(row.status)}</span><span>{row.result}</span></li>)}
+        {rows.map((row, index) => <li key={row.id} className={`ap-tool-row is-${row.status}`}>
+          <span className="ap-tool-row-no" aria-hidden="true">{index + 1}</span>
+          <div className="ap-tool-row-body">
+            <div className="ap-tool-row-line">
+              <span className="ap-tool-row-name">{row.name}</span>
+              <span className="ap-tool-row-stat">{toolStatusWord(row.status)}</span>
+            </div>
+            <div className="ap-tool-row-detail">{row.result}</div>
+          </div>
+        </li>)}
       </ol>
     </details>}
   </section>;
 }
 
-function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?: boolean }): JSX.Element {
+function Bubbles({ agent, reviewOnly = false, onPickOption }: { agent: AgentValue; reviewOnly?: boolean; onPickOption: (text: string) => void }): JSX.Element {
   const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
-  return <>{list.map(bubble => {
+  return <>{list.map((bubble, bubbleIndex) => {
+    const followups = bubble.role === 'agent' ? parseFollowUpOptions(bubble.text) : [];
+    const laterUserTexts = list.slice(bubbleIndex + 1).filter(b => b.role === 'user').map(b => b.text.trim());
+    const pickedOption = followups.find(option => laterUserTexts.includes(option));
+    const settled = pickedOption !== undefined;
     return bubble.role === 'user'
     ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
-    : <div key={bubble.id} className="ap-turn"><p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
+    : <div key={bubble.id} className="ap-turn"><div className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>
+        {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
+          ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
+          : <span key={index} className="ap-agent-line">{block.text}</span>)}
+      </div>
+      {followups.length > 0 && (
+        <div className="ap-option-pick" role="group" aria-label="可选回复">
+          {followups.map(option => {
+            const picked = option === pickedOption;
+            return <button key={option} type="button" className={`ap-option-row${picked ? ' is-picked' : ''}${settled && !picked ? ' is-dim' : ''}`} disabled={settled} onClick={() => onPickOption(option)}>
+              <span className="ap-option-row-cap">{option}</span>
+              {picked && <span className="ap-option-row-mark"><Check size={11} aria-hidden="true"/>已选</span>}
+            </button>;
+          })}
+        </div>
+      )}
       {bubble.zoneApply && (
         <div className="ap-zone-proposal">
+          <span className="ap-blocked-stamp"><SquareDashed size={12} aria-hidden="true"/>圈区域</span>
           <p className="ap-zone-proposal__hint">要不要直接在 2D 上把提议的区域圈出来？</p>
           <button type="button" className="ap-zone-proposal__btn" onClick={bubble.zoneApply.run}>好，帮我圈</button>
         </div>
@@ -3351,11 +3404,17 @@ function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?
 function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: boolean; hidden?: boolean }): JSX.Element | null {
   // 真实步骤时间线在场时，这套写死的步骤条让位——不同时摆两套进度。
   if (hidden) return null;
-  return <div className="ap-card" id="gen-progress">
-    <p>{paused ? '布置预览已暂停' : '正在准备布置预览'}</p>
-    <p id="cta-hint">{paused
-      ? <><button type="button" className="ap-link" onClick={agent.resume}>接着摆</button> · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>不要了</button></>
-      : <button type="button" className="ap-link" onClick={agent.stop}>停一下</button>}</p>
+  return <div className={`ap-card ap-progress-card${paused ? ' is-paused' : ''}`} id="gen-progress">
+    <span className="ap-progress-stamp"><Clock size={12} aria-hidden="true"/>{paused ? '已暂停' : '生成中'}</span>
+    <p className="ap-progress-note">{paused ? '布置预览已暂停' : '正在准备布置预览'}</p>
+    <div className="ap-progress-actions">
+      {paused
+        ? <>
+            <button type="button" className="chip" onClick={agent.resume}>接着摆</button>
+            <button type="button" className="chip btn-outline" onClick={agent.withdrawProposal}>不要了</button>
+          </>
+        : <button type="button" className="ap-link" onClick={agent.stop}>停一下</button>}
+    </div>
   </div>;
 }
 
@@ -3394,14 +3453,17 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     </div>}
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {short && !plan.localDraftDetails && (!plan.seatPriority || (banquet && !/加不进更多/.test(plan.blocked ?? ''))) && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
+    {short && !plan.localDraftDetails && (!plan.seatPriority || (banquet && !/加不进更多/.test(plan.blocked ?? ''))) && <div className="ap-error-actions ap-seat-fix"><button type="button" className="chip btn-outline" onClick={agent.addSeats}>加座，再排一版</button></div>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
       : <>
           {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" data-tour="confirm-plan" onClick={agent.confirmProposal}>确认布置</button>}
-          <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
+          <div id="cta-hint" className="ap-error-actions">
+            <button type="button" className="chip btn-outline" onClick={agent.withdrawProposal}>撤回</button>
+            {!review && <button type="button" className="chip btn-outline" onClick={() => agent.regenerate()}>换一版</button>}
+          </div>
         </>}
     {!banquet && <div className="ap-notes">
       {plan.source === 'local' && plan.added > 0 && <p>新增物料由系统规则生成。</p>}
@@ -3597,26 +3659,32 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      <Bubbles agent={agent} reviewOnly={bingo}/>
+      <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>
       {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' ? toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog }) : []} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
-      {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card" aria-label="历史需求待核对">
-        <p className="ap-status-line">当前记录还未核对。</p>
+      {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card ap-blocked-card" aria-label="历史需求待核对">
+        <span className="ap-blocked-stamp"><Lock size={12} aria-hidden="true"/>待核对</span>
+        <p className="ap-blocked-note">当前记录还未核对。</p>
         <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
       </section>}
-      {activity && agent.retainedOtherSessionProposal && <section className="ap-card" aria-label="其他会话的旧方案">
-        <p>其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
-        <button type="button" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
+      {activity && agent.retainedOtherSessionProposal && <section className="ap-card ap-blocked-card" aria-label="其他会话的旧方案">
+        <span className="ap-blocked-stamp"><RotateCcw size={12} aria-hidden="true"/>旧方案</span>
+        <p className="ap-blocked-note">其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
+        <div className="ap-blocked-actions">
+          <button type="button" className="chip" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
+        </div>
       </section>}
-      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-pending" aria-label="尚未处理的要求">
-        <span className="ap-pending-label">待处理</span>
+      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card ap-pending-card" aria-label="尚未处理的要求">
+        <span className="ap-blocked-stamp">待处理 · {agent.unresolvedDialogue.length}</span>
         <ul className="ap-pending-chips">
           {agent.unresolvedDialogue.map(text => <li key={text}><span title={text}>{text}</span><button type="button" className="ap-pending-x" aria-label={`撤回：${text}`} onClick={() => agent.withdrawUnresolvedDialogue(text)}>×</button></li>)}
         </ul>
-        <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
+        <div className="ap-pending-foot">
+          <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
+        </div>
       </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
-      {bingo && <div className="ap-card" aria-label="审校状态台">
-        <p className="ap-small">审校状态</p>
+      {bingo && <div className="ap-card ap-status-panel" aria-label="审校状态台">
+        <span className="ap-blocked-stamp">审校状态</span>
         <div className="ap-chips">
           <button type="button" className="chip btn-outline" onClick={() => agent.reviewNow()}>立即体检</button>
           <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>准备客户评审</button>
@@ -3626,29 +3694,52 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {bingo && <BingoAuditCard scopeKey={agent.sessionScope} isCurrent={agent.isSessionCurrent}/>}
       {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}
       {activity && mode === 'layout' && <>
-        {studio?.applyRecovery && <div className="ap-card" role="alert">
-          <p>{cloudRecoveryMessage(studio.applyRecovery)}</p>
-          <button type="button" className="ap-link" disabled={studio.busy || studio.reviewingApplyRecovery} onClick={() => void studio.reviewApplyRecovery()}>
-            {studio.reviewingApplyRecovery ? '正在只读核对…' : '只读核对云端版本'}
-          </button>
-          {studio.applyRecoveryReview && <><p>{studio.applyRecoveryReview.message}</p>
-            <button type="button" className="ap-link" disabled={studio.busy || studio.reviewingApplyRecovery} onClick={() => void studio.acknowledgeApplyRecovery()}>
-              {studio.applyRecoveryReview.status === 'unknown' ? '我已手动核对，解除提醒' : '已查看核对结果，解除提醒'}
-            </button></>}
-        </div>}
+        {studio?.applyRecovery && <section className="ap-card ap-error-card" role="alert">
+          <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>待核对</span>
+          <p className="ap-error-summary">{cloudRecoveryMessage(studio.applyRecovery)}</p>
+          <div className="ap-error-actions">
+            <button type="button" className="chip" disabled={studio.busy || studio.reviewingApplyRecovery} onClick={() => void studio.reviewApplyRecovery()}>
+              {studio.reviewingApplyRecovery ? '正在只读核对…' : '只读核对云端版本'}
+            </button>
+          </div>
+          {studio.applyRecoveryReview && <>
+            <p className="ap-blocked-note">{studio.applyRecoveryReview.message}</p>
+            <div className="ap-error-actions">
+              <button type="button" className="chip btn-outline" disabled={studio.busy || studio.reviewingApplyRecovery} onClick={() => void studio.acknowledgeApplyRecovery()}>
+                {studio.applyRecoveryReview.status === 'unknown' ? '我已手动核对，解除提醒' : '已查看核对结果，解除提醒'}
+              </button>
+            </div>
+          </>}
+        </section>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
             没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
         {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0}/>}
-        {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
-          <p><span aria-hidden="true">!</span>这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
-          <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={16} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>
-        </div>}
+        {agent.state === 'generateFailed' && <section id="inline-error" className="ap-card ap-error-card" role="alert">
+          <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>未完成</span>
+          <p className="ap-error-summary">这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
+          <div className="ap-error-actions">
+            <button type="button" className="chip" onClick={agent.retry}><RotateCw size={14} aria-hidden="true"/>重试</button>
+            <button type="button" className="chip btn-outline" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button>
+          </div>
+        </section>}
+        {agent.modelFailure && <section className="ap-card ap-error-card" role="alert">
+          <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>智能理解</span>
+          <p className="ap-error-summary">{agent.modelFailure.text}</p>
+          <div className="ap-error-actions">
+            <button type="button" className="chip" onClick={() => { const retry = agent.modelFailure?.retry; agent.dismissModelFailure(); retry?.(); }}><RotateCw size={14} aria-hidden="true"/>重试云端理解</button>
+            <button type="button" className="chip btn-outline" onClick={() => { agent.dismissModelFailure(); document.getElementById('ap-input')?.focus(); }}>改一句再说</button>
+          </div>
+        </section>}
         {proposed && <ProposalCard agent={agent}/>}
         {planShown && <>
           <div className="ap-card ap-plan" id="plan-summary">
+            <span className="ap-blocked-stamp"><MapIcon size={12} aria-hidden="true"/>布置</span>
             <strong>这一版布置</strong>
-            <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
+            <div className="ap-stats">
+              <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>㎡ 场地</span></div>
+              <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
+            </div>
             {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">当前检查未发现物料重叠；场地和通行仍需核对。</p>}
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
@@ -3659,20 +3750,23 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           </div>
         </>}
       </>}
-      {agent.exportPreview && <div className="ap-card" id="export-preview">
+      {agent.exportPreview && <div className="ap-card ap-export-card" id="export-preview">
+        <span className="ap-blocked-stamp"><Download size={12} aria-hidden="true"/>导出</span>
         <strong>导出执行资料草案</strong>
-        <p className="ap-small">包含执行页已保存的手工需求、物料工作单、制作计划和数量点验；不完整包含对话需求，交付前请逐项核对。</p>
+        <p className="ap-blocked-note">包含执行页已保存的手工需求、物料工作单、制作计划和数量点验；不完整包含对话需求，交付前请逐项核对。</p>
         {agent.proposal || !!studio?.preview
-          ? <p className="ap-small" role="status">当前有尚未应用的方案预览；请先确认布置或撤回预览，再导出。</p>
+          ? <p className="ap-blocked-note" role="status">当前有尚未应用的方案预览；请先确认布置或撤回预览，再导出。</p>
           : generating || paused || agent.cloudBusy || agent.recovering || agent.cloudStale || !!studio?.applyRecovery
-          ? <p className="ap-small" role="status">这一版还没稳，确认先不亮。</p>
-          : studio?.cloudMaterialDraftAvailable ? <p className="ap-small">云项目暂不支持此执行资料草案，可先导出下方物料草案。</p>
+          ? <p className="ap-blocked-note" role="status">这一版还没稳，确认先不亮。</p>
+          : studio?.cloudMaterialDraftAvailable ? <p className="ap-blocked-note">云项目暂不支持此执行资料草案，可先导出下方物料草案。</p>
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
         {studio?.cloudMaterialDraftAvailable && !agent.proposal && !studio.preview && !generating && !paused && !agent.cloudBusy && !agent.recovering && !agent.cloudStale && !studio.applyRecovery && <>
           <button type="button" className="chip" onClick={agent.confirmCloudMaterialDraft}>导出当前场景物料清单草案</button>
-          <p className="ap-small">本机快照，未冻结；不含完整需求、点验及场地方确认。模型与实物库存、现场条件均需核验。</p>
+          <p className="ap-blocked-note">本机快照，未冻结；不含完整需求、点验及场地方确认。模型与实物库存、现场条件均需核验。</p>
         </>}
-        <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
+        <div className="ap-error-actions">
+          <button type="button" className="chip btn-outline" onClick={agent.dismissExport}>先不了</button>
+        </div>
       </div>}
     </div>
     : <div key={activeAgent} className={`ap-agent-surface is-${activeAgent}`}>
@@ -3701,7 +3795,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : agent.banquetChat ? '说一句，比如「加座，再排一版」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : agent.banquetChat ? '说一句，比如「加座，再排一版」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
@@ -3710,7 +3804,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {agent.generationQueued>0&&<p role="status" className="ap-small">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-small"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         <p className="ap-foot">
-          <span id="ap-plan-notice" role="status">{planGenerationLine(studio?.connection)}</span>
           <button type="button" className="ap-foot-info" aria-expanded={footDetailOpen} aria-label="数据与隐私说明" onClick={() => setFootDetailOpen(current => !current)}><Info size={12} aria-hidden="true"/></button>
           <span id="ap-data-notice" className="ap-foot-detail" hidden={!footDetailOpen}>{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
           {(process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1'||process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1') && <span className="ap-foot-detail" hidden={!footDetailOpen}>近期对话也会发给模型。</span>}

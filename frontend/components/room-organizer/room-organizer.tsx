@@ -186,7 +186,7 @@ import type { GameMode } from './lib/types';
 import { ConfirmModal } from './components/ConfirmModal';
 import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
 import { F3CoachBubble } from './panels/f3-coach-bubble';
-import { usePlanAnnotations, type PlanDrawMode } from './hooks/use-plan-annotations';
+import { usePlanAnnotations } from './hooks/use-plan-annotations';
 import { buildDefaultZoneRects } from '@/lib/auto-zone-apply';
 import { PlanOverlay } from './canvas-2d/plan-overlay';
 import { AnnotationGuide } from './panels/annotation-guide';
@@ -3720,16 +3720,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
                 aria-label={planAnnot.drawMode === 'off' ? '规划活动区域' : '结束规划绘制'}
                 aria-pressed={planAnnot.drawMode !== 'off'}
-                data-tip="标注：区/线/疏散/距/门循环切换"
+                data-tip={planAnnot.drawMode === 'off' ? '标注区域、路线、距离或出入口' : '再次点击退出标注'}
                 onClick={() => {
-                  // 首次点击时开一份空草案。
-                  // door（真门标注）已接入：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。
-                  const order: PlanDrawMode[] = ['off', 'zone', 'route', 'fire-route', 'measure', 'door'];
-                  const idx = order.indexOf(planAnnot.drawMode);
-                  const next = order[(idx + 1) % order.length];
+                  // 真开关：已在标注时再点直接退出；未开始则进入区域标注，工具切换走引导面板的 pill。
+                  // door（真门标注）：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。
+                  if (planAnnot.drawMode !== 'off') {
+                    planAnnot.setDrawMode('off');
+                    return;
+                  }
                   if (!planAnnot.draft) planAnnot.startDraft();
                   setView(current => ({ ...current, view2D: true, walkthroughMode: false }));
-                  planAnnot.setDrawMode(next);
+                  planAnnot.setDrawMode('zone');
                 }}
               >
                 <span className="sc-annotation-toggle__label">标注</span>
@@ -4015,7 +4016,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               />
             )}
             {/* 第 11 批：正在画区时，底部浮出语义类型选择条（连续画框中随时切换）。 */}
-            {view.view2D && (planAnnot.drawMode === 'zone' || planAnnot.drawMode === 'route' || planAnnot.drawMode === 'measure') && (
+            {view.view2D && planAnnot.drawMode !== 'off' && (
               <AnnotationGuide mode={planAnnot.drawMode} zoneType={zoneType} onModeChange={planAnnot.setDrawMode}
                 onZoneTypeChange={setZoneType} onFinish={() => planAnnot.setDrawMode('off')} />
             )}
