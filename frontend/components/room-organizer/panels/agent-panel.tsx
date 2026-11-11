@@ -63,6 +63,7 @@ import { VenuePicker } from './venue-picker';
 import { cloudBriefMessage, cloudSeatingAllocation, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, splitConfirmationLead, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { type PlanDiagnostic } from '../lib/diagnostics';
 import { checkEntranceBlocks } from '../lib/entrance-block-check';
+import { PlanPreview } from './plan-preview';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { localPlan } from '../lib/local-plan';
@@ -3382,9 +3383,11 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal" data-tour="proposal-card">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
+    {layout && !plan.comparisonOnly && <div className="ap-plan-thumb" aria-hidden="true"><PlanPreview layout={layout}/></div>}
     {guests > 0 && <p className="ap-seats" id="plan-seats">{banquet
       ? `放下 ${plan.placedTables ?? 0} 桌 · 座位 ${seats} / ${guests}${short ? ` · 还差 ${guests - seats}` : ' · 够了'}`
       : short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
+    {guests > 0 && !banquet && <div className="ap-seats-meter" aria-hidden="true"><div className="ap-seats-meter-fill" style={{ width: `${Math.min(100, Math.round((seats / Math.max(guests, 1)) * 100))}%` }} data-short={short ? 'true' : undefined}/></div>}
     {!banquet && <div className="ap-outcome" role="note" aria-label="本次结果">
       <p className="ap-outcome-label">本次结果 · {formatArea(plan.candidateArea ?? venueArea(layout))} ㎡</p>
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}

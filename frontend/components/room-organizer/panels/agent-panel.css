@@ -655,3 +655,11 @@ button.ap-ghost {
 .sc-chat-plus-menu button:hover { background:var(--wk-plane); }
 .ap-foot-info { border: none; background: transparent; color: var(--wk-muted); cursor: pointer; display: inline-flex; padding: 0 2px; flex: none; }
 .ap-foot-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* —— 候选卡图文并茂 —— */
+.ap-plan-thumb { margin: 2px 0 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--wk-hair); }
+.ap-plan-thumb svg.sc-publish-plan { display: block; width: 100%; height: auto; }
+.ap-plan .ap-seats-meter { height: 8px; border-radius: 999px; background: var(--wk-hair); overflow: hidden; margin: -6px 0 2px; }
+.ap-plan .ap-seats-meter-fill { height: 100%; border-radius: 999px; background: #5c7a54; }
+.ap-plan .ap-seats-meter-fill[data-short="true"] { background: var(--warn); }
+.ap-plan .ap-warn-line { color: var(--wk-ink-soft); background: rgba(150, 101, 31, .07); border-radius: 8px; padding: 6px 8px; }
