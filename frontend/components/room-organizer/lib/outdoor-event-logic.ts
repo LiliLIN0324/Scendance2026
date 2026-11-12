@@ -62,7 +62,7 @@ function distanceToRoute(point: PlanPoint, route: PlanRoute): number {
 }
 /** Real portals only; an outside node or an activity sub-portal is not a confirmed site entrance. */
 export function confirmedOutdoorEntrances(nodes: readonly PlanNode[], boundary: readonly PlanPoint[]): PlanNode[] {
-  return nodes.filter(node => node.kind !== 'exit' && !/子口|子出入口/u.test(node.name + node.notes) && planPointInRing(node.position, boundary));
+  return nodes.filter(node => node.verification!=='unverified' && node.kind !== 'exit' && !/子口|子出入口/u.test(node.name + node.notes) && planPointInRing(node.position, boundary));
 }
 export function outdoorEventSiteSummary(input: Pick<BuildZoneEventInput, 'boundary' | 'nodes' | 'existingRoutes' | 'existingFacilities'>): string {
   const b = box(input.boundary);

@@ -4555,6 +4555,7 @@ useEffect(() => {
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
               view={outdoorView}
+              onViewChange={setOutdoorView}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
               dormant={!outdoor2DOpen}
               // 2026-11-12「3D 的时候也要可编辑」：接管态把右轨三张工具卡的出镜宿主交给画布，

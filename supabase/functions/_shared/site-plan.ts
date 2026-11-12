@@ -71,6 +71,10 @@ export const planZoneSchema = z.strictObject({
    * 可选——AI 区域提案（zone-event-proposal）写入、属性面板可改；旧数据缺字段照常解析（无需迁移）。
    */
   event: z.string().min(1).max(120).optional(),
+  /** 同一活动可有室内外混合分区；unknown不能由地图补猜。 */
+  environment: z.enum(['indoor','outdoor','unknown']).optional(),
+  purpose: z.enum(['exhibition','performance','market','service','audience']).optional(),
+  geometrySource: z.enum(['user-confirmed','user-drawing','map-unverified']).optional(),
   /** 所属图层（可选）：缺省归第一层；levels 缺省时不得携带（superRefine 把关）。 */
   levelId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
@@ -79,7 +83,9 @@ export type PlanZone = z.infer<typeof planZoneSchema>;
 
 /** 设施实例：模板放置后的独立实体（改名/改尺寸不影响模板默认值）。templateId 先放开为字符串，目录收敛归 H2。 */
 export const planFacilitySchema = z.strictObject({
+  allocationKey:z.string().min(1).max(200).optional(),
   id: z.uuid(),
+  sourceAssetId: z.string().min(1).max(160).optional(),
   templateId: z.string().min(1).max(64),
   name: z.string().min(1).max(60),
   position: planPointSchema,
@@ -135,6 +141,7 @@ export const planRouteKindLabels: Record<(typeof planRouteKinds)[number], string
   service: '后勤',
 };
 export const planRouteSchema = z.strictObject({
+  audiences: z.array(z.enum(['visitors','staff','security','performers','service'])).min(1).max(5).optional(),
   id: z.uuid(),
   kind: z.enum(planRouteKinds),
   name: z.string().min(1).max(60),
@@ -159,6 +166,8 @@ export const planNodeSchema = z.strictObject({
   kind: z.enum(['entry', 'exit', 'both']),
   name: z.string().min(1).max(60),
   position: planPointSchema,
+  verification: z.enum(['unverified','user-confirmed','map-evidenced']).optional(),
+  evidenceIds: z.array(z.string().max(160)).max(12).optional(),
   /** 所属图层（可选）：缺省归第一层。 */
   levelId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
@@ -169,6 +178,9 @@ export type PlanNode = z.infer<typeof planNodeSchema>;
 export const planWorkerSchema = z.strictObject({
   id: z.uuid(),
   role: z.string().min(1).max(60),
+  audience: z.enum(['visitors','staff','security','performers','service']).optional(),
+  routeIds: z.array(z.uuid()).max(20).optional(),
+  activityZoneIds: z.array(z.uuid()).max(20).optional(),
   count: z.number().int().min(1).max(9999),
   position: planPointSchema,
   zoneId: z.uuid().optional(),

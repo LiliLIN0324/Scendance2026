@@ -78,11 +78,14 @@ import { trueFootprintBoundary } from '../lib/outdoor-venue-sync';
 import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
+import { useOutdoorAgentWorkflow } from '../hooks/use-outdoor-agent-workflow';
+import { OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
+import type { OutdoorAgentBridge } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
 import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
-import type { PlanFacility, PlanNode, PlanRoute, PlanZone, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
@@ -565,7 +568,10 @@ interface AgentValue {
   startFlowSim(): void;
   stopFlowSim(): void;
   /** 户外画布桥（overlay 注册）：应用流线/区域走 commitPlan、读 plan 取锚点/边界。 */
-  registerRouteBridge(bridge: { applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean; beginVenueBoundary(anchor: NonNullable<SitePlanData['anchor']>): boolean; inspectFacility?(id: string): boolean; cancelVenueBoundary?(): void; previewVenuePoint?(place: PlaceSuggestion): void; clearVenuePreview?(): void; applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean; applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[], routes?: PlanRoute[], nodes?: PlanNode[]): boolean; getPlan(): SitePlanData | null } | null): void;
+  outdoorWorkflow: ReturnType<typeof useOutdoorAgentWorkflow>;
+  outdoorBridgeReady:boolean;
+  searchOutdoorVenue(query:string):void;
+  registerRouteBridge(bridge: OutdoorAgentBridge | null):void;
   /** 「换场地 / 新建」弹层：空白场地、我的云项目、新建项目同一个入口。 */
   venuePickerOpen: boolean;
   startVenuePicker(): void;
@@ -715,7 +721,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const outdoorRequestRef = useRef<AbortController | null>(null);
   const routeProposalBaseRef = useRef<string | null>(null);
   const zoneProposalBaseRef = useRef<string | null>(null);
-  type OutdoorTaskKind = 'venue' | 'route' | 'zone' | 'model' | 'simulation';
+  type OutdoorTaskKind = 'venue' | 'route' | 'zone' | 'model' | 'simulation' | 'workflow';
   const outdoorEpochRef = useRef(0);
   const outdoorKindRef = useRef<OutdoorTaskKind | null>(null);
   const routeTicketRef = useRef<{ epoch: number; proposal: RouteProposal } | null>(null);
@@ -747,7 +753,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   useEffect(() => { stopOutdoorTask(); setOutdoorTask(null); }, [sessionScope]);
   const [routeProposal, setRouteProposal] = useState<RouteProposal | null>(null);
   const [routeBusy, setRouteBusy] = useState(false);
-  const routeBridgeRef = useRef<{ applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean; beginVenueBoundary(anchor: NonNullable<SitePlanData['anchor']>): boolean; inspectFacility?(id: string): boolean; cancelVenueBoundary?(): void; previewVenuePoint?(place: PlaceSuggestion): void; clearVenuePreview?(): void; applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean; applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[], routes?: PlanRoute[], nodes?: PlanNode[]): boolean; getPlan(): SitePlanData | null } | null>(null);
+  const routeBridgeRef = useRef<OutdoorAgentBridge | null>(null);
+  const [outdoorBridgeReady,setOutdoorBridgeReady]=useState(false);
   // V-3：区域提案（预览态）——虚线分区+物料幽灵，确认才写入（可撤销）。
   const [zoneProposal, setZoneProposal] = useState<ZoneEventProposal | null>(null);
   const [zoneBusy, setZoneBusy] = useState(false);
@@ -963,12 +970,15 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     touchActiveSessionRef.current();
   }, [persistBubbles]);
 
+  function searchOutdoorVenue(query:string){outdoorWorkflow.cancel();const epoch=beginOutdoorTask('venue');setVenuePick({epoch,query,candidates:[],loading:true,picking:null});setOutdoorTask({intent:`搜索“${query}”`,state:'working',action:'检索真实场地候选；未修改活动范围',steps:[]});}
+  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:text=>say({role:'agent',text}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
+
   useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
     if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
     pendingCandidates?.invalidate();
     briefTurnSequence.current++;runToken.current++;
     researchRequest.current?.abort();
-    if (nextId !== boundSessionId.current) { stopOutdoorTask(); setOutdoorTask(null); }
+    if (nextId !== boundSessionId.current) { outdoorWorkflow.cancel();stopOutdoorTask(); setOutdoorTask(null); }
     if(nextId!==boundSessionId.current&&proposal.current){hidePreview();phaseRef.current='idle';setPhase('idle');setProgress(0);}
     if(generationWait.current||localDraftOwner.current){suppressCancelledCloudPreview.current=true;generationWait.current?.cancel();dropProposal();phaseRef.current='idle';setPhase('idle');setProgress(0);}
   }),[sessionScope,pendingCandidates]);
@@ -977,7 +987,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(!controller?.getSnapshot||!controller.subscribe)return;
     let actor=controller.getSnapshot().user?.id??null;
     return controller.subscribe(()=>{
-      const next=controller.getSnapshot().user?.id??null;if(next===actor)return;actor=next;
+      const next=controller.getSnapshot().user?.id??null;if(next===actor)return;actor=next;outdoorWorkflow.cancel();stopOutdoorTask();
       pendingCandidates?.invalidate();
       briefTurnSequence.current++;runToken.current++;
       researchRequest.current?.abort();
@@ -1665,6 +1675,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', text: '没找到可用的真实边界，已定位到候选地点。请在户外地图逐点手画并闭合边界；闭合前不写入新锚点，不虚构 300m 方块。Esc 可取消。' });
       return;
     }
+    if(bridge.applyPlan){outdoorWorkflow.offerBoundary(anchor,boundary,place.name);say({role:'agent',text:'已取得地点候选轮廓。请先核对其中哪一片确实是本次活动场地；不会把整座商场当成已授权活动范围。'});return;}
     if (bridge.applyVenue(anchor, boundary)) {
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'done', action: '真实边界与锚点已写入，2D/3D 同步', steps: ['地点已确认', '取得真实边界', '应用场地'], prompts: ['排一下流线'] });
       say({ role: 'agent', text: `已在户外规划设为「${place.name}」，边界来源：${source === 'osm' ? 'OSM 占地轮廓' : '行政区选区'}。2D/3D 共用这份规划，可撤销，未清除任何已有内容。` });
@@ -2960,6 +2971,21 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (attachment) setPendingFile(null);
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
+    // The single visible outdoor workbench dispatches through the contextual domain workflow.
+    // Legacy layout/keyword planners remain only for legacy integrations without the atomic plan bridge.
+    if(!queued&&callbacks.workbenchMode==='layout'&&routeBridgeRef.current?.applyPlan){
+      if(attachment){setPendingFile(attachment);say({role:'agent',amber:true,text:'附件尚未结构化进入地图理解，未上传或声称已读图；文件保留在输入框。室内信息请先依图核对并画出真实区域/门口，设施GLB请用当前设施的原位上传。'});if(!trimmed)return;}
+      say({role:'user',text:trimmed});
+      if(venuePick&&!venuePick.loading&&!venuePick.picking){
+        const ordinal=trimmed.match(/(?:第|选|用|就)([一二三四五12345])(?:个|项)?/u)?.[1];
+        const index=ordinal?('一二三四五'.includes(ordinal)?'一二三四五'.indexOf(ordinal):Number(ordinal)-1):-1;
+        const named=venuePick.candidates.filter(place=>trimmed.includes(place.name));
+        const chosen=index>=0?venuePick.candidates[index]:named.length===1?named[0]:undefined;
+        if(chosen){await handleVenuePick(chosen);return;}
+        if(isAffirmativeIntent(trimmed)){if(venuePick.candidates.length===1)await handleVenuePick(venuePick.candidates[0]!);else say({role:'agent',text:'有多个地点候选，请告诉我名称或第几个；不把其中一个猜成本次场地。'});return;}
+      }
+      await outdoorWorkflow.handle(trimmed);return;
+    }
     if (!attachment && isExplicitProposalConfirmation(trimmed)) {
       if(!queued)say({role:'user',text:trimmed});
       if(queued||briefRequest.current||pendingModelInputs.current.size>0||generationWait.current){
@@ -3565,6 +3591,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     dismissVenuePick: stopOutdoorTask,
     outdoorTask,
     manualOutdoorVenueApplied: anchor => {
+      if(routeBridgeRef.current?.applyPlan){manualVenueAnchorRef.current=undefined;outdoorWorkflow.manualApplied();return;}
       const pending = manualVenueAnchorRef.current;
       if (!pending || pending.lng !== anchor.lng || pending.lat !== anchor.lat) return;
       manualVenueAnchorRef.current = undefined;
@@ -3586,7 +3613,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     flowSimActive,
     startFlowSim,
     stopFlowSim,
-    registerRouteBridge: bridge => { routeBridgeRef.current = bridge; },
+    outdoorWorkflow,outdoorBridgeReady,searchOutdoorVenue,
+    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after); },
     exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
@@ -4316,9 +4344,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
-  const ghostVisible = mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
+  const ghostVisible = !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
-  const composerPlaceholder = agent.mapPickerOpen
+  const composerPlaceholder = agent.outdoorBridgeReady ? (agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : generating ? '为下一步添加备注'
     : proposed ? '或用文字回答'
@@ -4431,7 +4459,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <p className="ap-lead-title">{bingo ? '这边只管审校' : '先说一句就行'}</p>
         <p className="ap-lead-body">{bingo ? '点「立即体检」查看几何问题，或准备客户评审。对方的意见保存在对方浏览器，不会自动回到这里。' : '点一句例子，或自己说；听懂了会回显，确认后才写进画布。'}</p>
       </div>}
-      {activity && mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null) && (
+      {activity && mode === 'layout' && !agent.outdoorBridgeReady && isPlanHome(agent.state, layout, agent.proposal !== null) && (
         <PlanHome
           draft={draft}
           onPickExample={sentence => { setDraft(sentence); requestAnimationFrame(() => inputRef.current?.focus()); }}
@@ -4442,7 +4470,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>
-      {agent.outdoorTask && <OutdoorTaskCard task={agent.outdoorTask}
+      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onSearch={agent.searchOutdoorVenue} onSupplement={()=>inputRef.current?.focus()}/>}
+      {agent.outdoorTask && (!agent.outdoorBridgeReady||agent.venuePick) && <OutdoorTaskCard task={agent.outdoorTask}
         canStop={Boolean(agent.venuePick?.loading || agent.venuePick?.picking || agent.routeBusy || agent.flowSimActive)}
         onInspectFacility={agent.inspectOutdoorFacility} onStop={agent.stopOutdoorTask} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}>
       {agent.venuePick && <VenueConfirmCard

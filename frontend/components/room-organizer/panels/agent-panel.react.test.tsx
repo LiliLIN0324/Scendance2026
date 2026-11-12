@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { useState } from 'react';
+import { useEffect,useState } from 'react';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
@@ -4813,5 +4813,28 @@ describe('outdoor V1–V5 public-site continuation regression',()=>{
   const retry=current.outdoorTask!.prompts!.find(p=>p.includes('按当前场地'))!;expect(retry).toContain('45');
   plan={...plan,nodes:[{...plan.nodes[0]!,position:{x:80,y:33}}]};send(retry);
   await waitFor(()=>expect(current.zoneProposal).not.toBeNull());
+ });
+});
+
+
+describe('outdoor contextual workflow production Provider dispatch',()=>{
+ it('唯一户外入口先走同Agent模型与逐步范围确认，不落旧关键词固定模板',async()=>{
+  let plan={...createStarterOutdoorPlan(),boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}]};
+  let current!:NonNullable<ReturnType<typeof useAgent>>;const apply=vi.fn((next,expected)=>{if(JSON.stringify(plan)!==expected)return false;plan=next;return true;});
+  function Probe(){current=useAgent()!;useEffect(()=>{current.registerRouteBridge({getPlan:()=>plan,applyPlan:apply,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true});return()=>current.registerRouteBridge(null);},[]);return null;}
+  studioMock.controller.assistantChat.mockResolvedValueOnce({status:'ok',answer:JSON.stringify({action:'scope',reply:'',references:[],facts:{}})});
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('帮我核对这次的实际活动场地');await waitFor(()=>expect(current.outdoorWorkflow.proposal?.kind).toBe('scope'));
+  expect(studioMock.controller.assistantChat).toHaveBeenCalledTimes(1);expect(studioMock.generate).not.toHaveBeenCalled();expect(apply).not.toHaveBeenCalled();expect(screen.getAllByTestId('outdoor-workflow-card')).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button',{name:'确认并应用这一版'}));await waitFor(()=>expect(current.outdoorWorkflow.state.stage).toBe('zones'));
+  studioMock.controller.assistantChat.mockResolvedValueOnce({status:'ok',answer:JSON.stringify({action:'zones',reply:'',references:[],facts:{event:{value:'户外市集',evidence:'户外市集'},guests:{value:45,evidence:'45人'},zones:[{name:'展览区',purpose:'exhibition',environment:'outdoor',evidence:'室外展览区'}]}})});
+  send('户外市集45人，划室外展览区');await waitFor(()=>expect(current.outdoorWorkflow.proposal?.kind).toBe('zones'));expect(plan.zones).toHaveLength(0);
+  send('好');await waitFor(()=>expect(plan.zones).toHaveLength(1));expect(current.outdoorWorkflow.state.brief.guests).toBe(45);expect(apply).toHaveBeenCalledTimes(2);expect(studioMock.generate).not.toHaveBeenCalled();
+ });
+ it('生产入口的模型不可用显式提示，不能继续偷走老讲座模板',async()=>{
+  const plan={...createStarterOutdoorPlan(),boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}]};let current!:NonNullable<ReturnType<typeof useAgent>>;const apply=vi.fn(()=>true);
+  function Probe(){current=useAgent()!;useEffect(()=>{current.registerRouteBridge({getPlan:()=>plan,applyPlan:apply,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true});return()=>current.registerRouteBridge(null);},[]);return null;}
+  studioMock.controller.assistantChat.mockResolvedValue({status:'disabled',answer:null});render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('45人草坪演出');await waitFor(()=>expect(current.outdoorWorkflow.notice).toContain('disabled'));expect(current.zoneProposal).toBeNull();expect(current.outdoorWorkflow.proposal).toBeNull();expect(apply).not.toHaveBeenCalled();expect(studioMock.generate).not.toHaveBeenCalled();
  });
 });

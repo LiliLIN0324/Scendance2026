@@ -33,6 +33,11 @@ import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-s
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
 import type { BackendSession } from '@/lib/backend-session';
+import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
+import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
+import { boundaryKey } from '../lib/outdoor-agent-contract';
+import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
+import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
@@ -119,6 +124,7 @@ export interface OutdoorPlanOverlayProps {
    * 提交成功后画布轮询回填候选首位。只读分享页等不传，按钮缺省 no-op。
    */
   controller?: BackendSession | undefined;
+  onViewChange?:(view:'2d'|'3d')=>void;
 }
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
@@ -158,7 +164,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   view: controlledView,
   dormant = false,
   inspectorHostId,
-  controller,
+  controller, onViewChange,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
@@ -251,12 +257,33 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
 
   // 保存管线：同户外项目工作台（400ms 防抖 + 卸载 flush）；状态经 onSaveStateChange
   // 上报给 room-organizer，在左轨 foot（主产品保存态原位）显示。
+  const mapContextRef=useRef(createOutdoorMapContext());
+  const [evidenceHighlights,setEvidenceHighlights]=useState<OutdoorEvidenceHighlight[]>([]);
+  useEffect(()=>{mapContextRef.current.invalidate();setEvidenceHighlights([]);},[slotId]);
+  const flowRef=useRef(agent?.outdoorWorkflow);flowRef.current=agent?.outdoorWorkflow;
+  const viewChangeRef=useRef(onViewChange);viewChangeRef.current=onViewChange;
   const planRef = useRef<SitePlanData | null>(plan);
   planRef.current = plan;
   // V-2d/V-3c：把「应用流线/应用区域」的画布入口与当前 plan 读取口注册给 chat agent——
   // 气泡确认后 provider 调这里；plan 经 ref 每帧取最新，注册一次终身有效。
   useEffect(() => {
     agent?.registerRouteBridge?.({
+      projectId:()=>slotId,
+      beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);return true;},
+      applyPlan:(next,expected)=>{const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;if(ok){setPlacePin(null);setPlaceArea(null);}return ok;},
+      selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
+      previewBoundary:(anchor,boundary)=>{const polygon=boundary.map(p=>{const ll=enuToLngLat(p.x,p.y,anchor.lng,anchor.lat);return [ll.lng,ll.lat] as [number,number];});setPlaceArea({polygon,label:'候选活动范围（待核对）'});if(polygon.length){const lngs=polygon.map(p=>p[0]),lats=polygon.map(p=>p[1]);canvasApiRef.current?.focusBounds([Math.min(...lngs),Math.min(...lats),Math.max(...lngs),Math.max(...lats)]);}},
+      setView:next=>{if(viewChangeRef.current)viewChangeRef.current(next);else setUncontrolledView(next);},
+      models:async id=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return[];const result=await loadFacilityModelCandidates([f.templateId]);const own=listGeneratedFacilityModels(id,slotId);const current=f.modelOverride?findGeneratedFacilityModel(f.modelOverride):null;if(current&&current.projectId===slotId&&!own.some(m=>m.slug===current.slug))own.unshift(current);return[...own.map(m=>({slug:m.slug,name:m.name,source:'此设施已有/上传模型',width:m.width,depth:m.depth,height:m.height})),...(result.get(f.templateId)??[]).map(m=>({slug:m.slug,name:m.name,source:'现有公共物料库',width:m.width,depth:m.depth,height:m.height}))].slice(0,5);},
+      openGenerate:(id,kind)=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return false;setGenerateTarget({facilityId:id,facilityName:f.name,kind});return true;},
+      openUpload:id=>canvasApiRef.current?.openFacilityUpload(id)??false,
+      mapContext:async signal=>{const p=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!p)throw new Error('当前活动尚未载入');return mapContextRef.current.load(slotId,p,canvasApiRef.current?.getSelectedIds()??[],flowRef.current?.state.confirmedBoundary===boundaryKey(p),signal);},
+      proposeZones:(p,brief)=>mapContextRef.current.zones(p,brief),
+      roadNetwork:()=>mapContextRef.current.roads(),
+      proposeSpatialEdit:(turn,p)=>mapContextRef.current.spatial(turn,p),
+      validateCurrentReferences:refs=>mapContextRef.current.validateReferences(refs),
+      validateMapPlan:(base,next)=>mapContextRef.current.validate(base,next),
+      highlightReferences:refs=>setEvidenceHighlights(mapContextRef.current.highlights(refs)),
       applyVenue: (anchor, boundary) => {
         const applied = canvasApiRef.current?.applyVenue(anchor, boundary) ?? false;
         if (applied) {
@@ -276,10 +303,12 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       beginVenueBoundary: anchor => canvasApiRef.current?.beginVenueBoundary(anchor) ?? false,
       applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
       applyZoneProposal: (zones, facilities, routes, nodes) => canvasApiRef.current?.applyZoneProposal(zones, facilities, routes, nodes) ?? false,
-      getPlan: () => planRef.current,
+      getPlan: () => canvasApiRef.current?.getEditVisuals().plan??planRef.current,
     });
     return () => agent?.registerRouteBridge?.(null);
   }, [agent]);
+  const libraryAssetSignature=JSON.stringify(plan?.facilities.filter(f=>f.sourceAssetId).map(f=>[f.id,f.sourceAssetId,f.modelOverride])??[]);
+  useEffect(()=>{const p=planRef.current;if(!p)return;const request=new AbortController();void restoreOutdoorLibraryModels(controller??null,slotId,p,request.signal).catch(()=>{/* unavailable models stay visibly unavailable; no generated fallback */});return()=>request.abort();},[slotId,controller,libraryAssetSignature]);
   const pendingSaveRef = useRef<number | null>(null);
   const flushSave = useCallback(() => {
     const current = planRef.current;
@@ -431,6 +460,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(placePin ? { searchPin: placePin } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
+            workflowPreview={agent?.outdoorWorkflow?.proposal?.next??null}
+            evidenceHighlights={evidenceHighlights}
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
             generationController={controller}
