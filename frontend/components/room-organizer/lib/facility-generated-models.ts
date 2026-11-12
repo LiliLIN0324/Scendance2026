@@ -15,6 +15,7 @@
 
 /** 本机导入的 GLB（缓存键 `local-glb:*`）只在本会话有效，不持久化。 */
 export interface GeneratedFacilityModel {
+  projectId?: string;
   /** `generated:<taskid>`（生成）或 `generated:<local-glb key>`（导入）。 */
   slug: string;
   name: string;
@@ -104,8 +105,8 @@ export function getGeneratedFacilityModelsRevision(): number {
 }
 
 /** 新生成的排最前（候选回填首位）；指定 facilityId 时只给该设施的。 */
-export function listGeneratedFacilityModels(facilityId?: string): GeneratedFacilityModel[] {
-  const all = [...models].sort((a, b) => b.createdAt - a.createdAt);
+export function listGeneratedFacilityModels(facilityId?: string, projectId?: string): GeneratedFacilityModel[] {
+  const all = models.filter(model => !projectId || !model.projectId || model.projectId === projectId).sort((a, b) => b.createdAt - a.createdAt);
   return facilityId ? all.filter(model => model.facilityId === facilityId) : all;
 }
 
@@ -176,6 +177,8 @@ export function consumeFacilityGenerateLink(taskid: string, name: string): boole
 // ---------------------------------------------------------------------------
 
 export interface FacilityGenerateLink {
+  /** Original project association captured before dispatch (legacy links may omit). */
+  projectId?: string;
   taskid: string;
   facilityId: string;
   facilityName: string;
@@ -239,8 +242,8 @@ export function getFacilityGenerateLinksRevision(): number {
   return linksRevision;
 }
 
-export function listFacilityGenerateLinks(facilityId?: string): FacilityGenerateLink[] {
-  const all = [...links].sort((a, b) => b.submittedAt - a.submittedAt);
+export function listFacilityGenerateLinks(facilityId?: string, projectId?: string): FacilityGenerateLink[] {
+  const all = links.filter(link => !projectId || !link.projectId || link.projectId === projectId).sort((a, b) => b.submittedAt - a.submittedAt);
   return facilityId ? all.filter(link => link.facilityId === facilityId) : all;
 }
 
@@ -309,7 +312,7 @@ export async function resolveFacilityGenerateLink(
       if (state?.status !== 'ready' || !state.dimensions) return { state: 'pending', message: '模型已完成，正在读取尺寸…' };
       const model: GeneratedFacilityModel = {
         slug: `generated:${taskid}`, name: link.name, glbUrl: asset.url,
-        ...state.dimensions, facilityId: link.facilityId, facilityName: link.facilityName,
+        ...state.dimensions, ...(link.projectId ? { projectId: link.projectId } : {}), facilityId: link.facilityId, facilityName: link.facilityName,
         createdAt: Date.now(), sessionOnly: true,
       };
       // 云端签名 URL 有效期有限：不把它当永久公开地址落盘。
@@ -362,7 +365,7 @@ export async function resolveFacilityGenerateLink(
       width: item.width,
       depth: item.depth,
       height: item.height,
-      facilityId: link.facilityId,
+      ...(link.projectId ? { projectId: link.projectId } : {}), facilityId: link.facilityId,
       facilityName: link.facilityName,
       createdAt: Date.now(),
     };

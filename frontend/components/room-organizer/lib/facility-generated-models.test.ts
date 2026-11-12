@@ -230,3 +230,12 @@ describe('户外云生成取件与未知结果保护', () => {
     expect(listFacilityGenerateLinks('unknown-stage')).toHaveLength(1); expect(cloud.authorizeAsset).not.toHaveBeenCalled();
   });
 });
+
+it('新任务与候选按原项目隔离，即使复制计划沿用设施ID也不轮询/显示另一项目', () => {
+  for (const projectId of ['project-a', 'project-b']) {
+    attachFacilityGenerateTask({ taskid: projectId, projectId, facilityId: 'same-id', facilityName: '舞台', name: '舞台', submittedAt: 1 });
+    registerGeneratedFacilityModel(model({ slug: `generated:${projectId}`, projectId, facilityId: 'same-id' }));
+  }
+  expect(listFacilityGenerateLinks('same-id', 'project-a').map(link => link.taskid)).toEqual(['project-a']);
+  expect(listGeneratedFacilityModels('same-id', 'project-b').map(item => item.slug)).toEqual(['generated:project-b']);
+});

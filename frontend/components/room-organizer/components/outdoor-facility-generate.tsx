@@ -1,20 +1,48 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { BackendSession } from '@/lib/backend-session';
 import { submitMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
 import { attachFacilityGenerateTask, listFacilityGenerateLinks, findGeneratedFacilityModel } from '../lib/facility-generated-models';
 
-function hasUnknownOutcome(id: string): boolean {
-  try { return sessionStorage.getItem(`scendance:facility-submit-unknown:${id}`) === '1'; } catch { return false; }
+interface Submission {
+  requestId: string; projectId: string; facilityId: string; facilityName: string;
+  state: 'submitting' | 'unknown' | 'submitted'; submittedAt: number;
+  taskid?: string; lane?: 'direct' | 'cloud';
 }
-function recordUnknownOutcome(id: string): void {
-  try { sessionStorage.setItem(`scendance:facility-submit-unknown:${id}`, '1'); } catch { /* still locked in mounted form */ }
+function submissionKey(projectId: string, facilityId: string): string {
+  return `scendance:facility-submit:${JSON.stringify([projectId, facilityId])}`;
+}
+function readSubmission(projectId: string, facilityId: string): Submission | null {
+  try {
+    const raw = localStorage.getItem(submissionKey(projectId, facilityId));
+    if (raw) {
+      const row = JSON.parse(raw) as Submission;
+      if (row.projectId === projectId && row.facilityId === facilityId && row.requestId && ['submitting', 'unknown', 'submitted'].includes(row.state)) return row;
+      // Damaged durable state cannot prove no charge occurred. Fail closed.
+      return { requestId: 'unreadable', projectId, facilityId, facilityName: '', state: 'unknown', submittedAt: 0 };
+    }
+    if (sessionStorage.getItem(`scendance:facility-submit-unknown:${facilityId}`) === '1') return { requestId: 'legacy-unknown', projectId, facilityId, facilityName: '', state: 'unknown', submittedAt: 0 };
+  } catch { return { requestId: 'unreadable', projectId, facilityId, facilityName: '', state: 'unknown', submittedAt: 0 }; }
+  return null;
+}
+function saveSubmission(row: Submission): void {
+  const key = submissionKey(row.projectId, row.facilityId); const value = JSON.stringify(row);
+  localStorage.setItem(key, value);
+  if (localStorage.getItem(key) !== value) throw new Error('SUBMISSION_NOT_DURABLE');
+}
+function blocksSubmission(row: Submission | null): boolean {
+  return !!row && !(row.state === 'submitted' && row.taskid && findGeneratedFacilityModel(`generated:${row.taskid}`));
+}
+function submissionNote(row: Submission): string {
+  return row.taskid ? `原任务 ${row.taskid} 已保留，正在核对/取回，不会重复创建收费任务。`
+    : `此前提交结果未知（请求 ${row.requestId}）。当前接口不能按请求标识可靠找回任务；已锁定重复提交，请先核对生成任务记录与费用。`;
 }
 /** 户外设施原位表单。只有勾选额度并点击提交才可能创建收费任务；不会切走工作台。 */
-export function OutdoorFacilityGenerate({ target, controller, onClose }: {
+export function OutdoorFacilityGenerate({ target, projectId, controller, onClose }: {
   target: { facilityId: string; facilityName: string; kind: 'text' | 'image' };
+  projectId: string;
   controller?: BackendSession | undefined;
   onClose(): void;
 }): JSX.Element {
@@ -23,16 +51,50 @@ export function OutdoorFacilityGenerate({ target, controller, onClose }: {
   const [imageName, setImageName] = useState('');
   const [credit, setCredit] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [submitted, setSubmitted] = useState(() => listFacilityGenerateLinks(target.facilityId).some(link => !findGeneratedFacilityModel(`generated:${link.taskid}`)));
-  const [unknown, setUnknown] = useState(() => hasUnknownOutcome(target.facilityId));
-  const [note, setNote] = useState(() => hasUnknownOutcome(target.facilityId) ? '此前提交结果未知，已暂停重复提交。请先核对生成任务记录与费用。' : submitted ? '此设施已有待取回任务，请先核对原任务，不重复创建收费任务。' : '只回填此设施的模型候选，不会自动选中或添加到另一张画布。');
+  const [receipt, setReceipt] = useState(() => readSubmission(projectId, target.facilityId));
+  const [submitted, setSubmitted] = useState(() => listFacilityGenerateLinks(target.facilityId).some(link => (!link.projectId || link.projectId === projectId) && !findGeneratedFacilityModel(`generated:${link.taskid}`)));
+  const unknown = blocksSubmission(receipt);
+  const [note, setNote] = useState(() => receipt && unknown ? submissionNote(receipt) : submitted ? '此设施已有待取回任务，请先核对原任务，不重复创建收费任务。' : '只回填此设施的模型候选，不会自动选中或添加到另一张画布。');
   const lock = useRef(false);
   const imageReadSeq = useRef(0);
+  // Only the existing GET-by-job-ID is supported. Never infer a job from similar prompts,
+  // never re-POST an unknown request, and do not promise direct-provider idempotency.
+  useEffect(() => {
+    if (!receipt?.taskid || findGeneratedFacilityModel(`generated:${receipt.taskid}`)) return;
+    const original = receipt;
+    let active = true;
+    async function recover() {
+      try {
+        if (original.lane === 'cloud') {
+          if (!controller) return;
+          const job = await controller.getGenerationJob(original.taskid!);
+          if (job.id !== original.taskid) throw new Error('TASK_ID_MISMATCH');
+        }
+        if (!active) return;
+        attachFacilityGenerateTask({ ...original, taskid: original.taskid!, name: original.facilityName });
+        setSubmitted(true);
+        setNote(`已接回原任务 ${original.taskid}，留在户外规划等待候选回填；不会重复提交。`);
+      } catch { if (active) setNote(`原任务 ${original.taskid} 暂时无法核对，仍保留任务与提交锁，请勿重复扣费。`); }
+    }
+    void recover();
+    return () => { active = false; };
+  }, [receipt?.taskid, controller]);
   async function submit() {
     if (lock.current || submitted || unknown || !credit || (target.kind === 'image' ? !image : !prompt.trim())) return;
-    lock.current = true; setBusy(true);
+    // Recheck storage synchronously: a different mounted form may already have dispatched.
+    const prior = readSubmission(projectId, target.facilityId);
+    if (blocksSubmission(prior)) { setReceipt(prior); setNote(submissionNote(prior!)); return; }
+    const record: Submission = { requestId: crypto.randomUUID(), projectId, facilityId: target.facilityId, facilityName: target.facilityName, state: 'submitting', submittedAt: Date.now() };
+    try { saveSubmission(record); }
+    catch { setNote('无法持久保存提交保护，本次没有发出生成请求。请恢复本地存储后再试。'); return; }
+    lock.current = true; setBusy(true); setReceipt({ ...record }); setNote('提交已持久登记，正在等待服务端回执；刷新或关闭也不会自动重发。');
     const cloud: MaterialCloudLane | undefined = controller ? {
-      createJob: (text, options) => controller.createGenerationJob(text, crypto.randomUUID(), { ...options, provider: 'aholo' }),
+      createJob: async (text, options) => {
+        const job = await controller.createGenerationJob(text, record.requestId, { ...options, provider: 'aholo' });
+        // Persist the returned job before any component state/link publication.
+        record.taskid = job.id; record.lane = 'cloud'; record.state = 'submitted'; saveSubmission(record);
+        return job;
+      },
       uploadReference: file => controller.uploadGenerationReference(file),
     } : undefined;
     try {
@@ -40,18 +102,24 @@ export function OutdoorFacilityGenerate({ target, controller, onClose }: {
         ? { kind: 'image', imageDataUrl: image, prompt: prompt.trim() || imageName }
         : { kind: 'text', prompt: prompt.trim() }, cloud ? { cloud } : {});
       if (!result.ok) {
-        setNote(result.message); setCredit(false); setUnknown(result.outcome === 'unknown'); if (result.outcome === 'unknown') recordUnknownOutcome(target.facilityId);
+        setCredit(false);
+        if (!result.stub || result.outcome === 'unknown' || record.taskid) {
+          record.state = record.taskid ? 'submitted' : 'unknown'; saveSubmission(record); setReceipt({ ...record });
+          setNote(`${result.message} ${submissionNote(record)}`);
+        } else {
+          // Only the helper's no-channel stub proves no generation dispatch occurred.
+          localStorage.removeItem(submissionKey(projectId, target.facilityId)); setReceipt(null); setNote(result.message);
+        }
         return;
       }
-      attachFacilityGenerateTask({
-        taskid: result.taskid, lane: result.lane,
-        facilityId: target.facilityId, facilityName: target.facilityName,
-        name: prompt.trim() || imageName || target.facilityName, submittedAt: Date.now(),
-      });
-      setSubmitted(true);
+      record.taskid = result.taskid; record.lane = result.lane; record.state = 'submitted'; saveSubmission(record);
+      attachFacilityGenerateTask({ ...record, taskid: result.taskid, name: prompt.trim() || imageName || target.facilityName });
+      setReceipt({ ...record }); setSubmitted(true);
       setNote(`已提交 ${result.taskid}。留在户外规划，选中「${target.facilityName}」即可查看进度和回填候选。`);
     } catch {
-      recordUnknownOutcome(target.facilityId); setUnknown(true); setNote('提交结果未知，请先核对任务记录，避免重复扣额度。');
+      record.state = record.taskid ? 'submitted' : 'unknown';
+      try { saveSubmission(record); } catch { /* original submitting record remains locked */ }
+      setReceipt({ ...record }); setNote(submissionNote(record));
     } finally { lock.current = false; setBusy(false); }
   }
   function pick(file: File | undefined) {

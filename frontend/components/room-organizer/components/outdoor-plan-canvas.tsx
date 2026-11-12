@@ -311,6 +311,7 @@ interface View {
 }
 
 export interface OutdoorPlanCanvasProps {
+  generationProjectId?: string;
   plan: SitePlanData;
   /** 图源：默认 OSM 街道（公开免费）。天地图两档线上浏览器直连 / 本机走 3199 代理。 */
   source?: CanvasBasemapSource;
@@ -980,6 +981,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   flowSimRoutes,
   sceneObjects,
   onOpenMaterialGenerate,
+  generationProjectId,
   generationController,
 }: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
@@ -1230,7 +1232,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (!alive) return;
         // V-5b/c：生成/导入回填的候选排最前（「生成完回填候选首位」），库内候选殿后；
         // 上限放行生成位，不让回填把库内候选挤没。
-        const generated = listGeneratedFacilityModels(facility?.id);
+        const generated = listGeneratedFacilityModels(facility?.id, generationProjectId);
         const items = [...generated, ...(map.get(templateId) ?? [])]
           .slice(0, MAX_FACILITY_MODEL_CANDIDATES + generated.length);
         setFacilityModelCandidates(current => (current?.templateId === templateId ? { templateId, items } : current));
@@ -1238,10 +1240,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       .catch(() => {
         if (!alive) return;
         // 在线库故障也不能吞掉本次生成/导入的候选。
-        setFacilityModelCandidates({ templateId, items: listGeneratedFacilityModels(facility?.id) });
+        setFacilityModelCandidates({ templateId, items: listGeneratedFacilityModels(facility?.id, generationProjectId) });
       });
     return () => { alive = false; };
-  }, [selectedFacilityId, plan, generatedModelsRevision]);
+  }, [selectedFacilityId, plan, generatedModelsRevision, generationProjectId]);
 
   /** V5：按当前计划取回任务（不要求先点中），刷新后自动重新授权云模型。 */
   const [facilityGenerateStatus, setFacilityGenerateStatus] = useState<{ facilityId: string; name: string; message: string } | null>(null);
@@ -1252,7 +1254,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (busy) return;
       busy = true;
       try {
-        const pending = listFacilityGenerateLinks().filter(link => planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
+        const pending = listFacilityGenerateLinks(undefined, generationProjectId).filter(link => planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
         if (!pending.length) { if (alive) setFacilityGenerateStatus(null); return; }
         const start = facilityPollCursor.current % pending.length;
         const batch = [...pending.slice(start), ...pending.slice(0, start)].slice(0, 4);
@@ -1274,7 +1276,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     void tick();
     const timer = window.setInterval(() => { void tick(); }, FACILITY_GENERATE_POLL_MS);
     return () => { alive = false; window.clearInterval(timer); };
-  }, [selectedFacilityId, facilityGenerateLinksRevision, generatedModelsRevision, generationController, plan.facilities]);
+  }, [selectedFacilityId, facilityGenerateLinksRevision, generatedModelsRevision, generationController, plan.facilities, generationProjectId]);
 
   /** V-5b/c：本机 GLB 直传兜底（≤10MB，会话内有效）。缓存键 local-glb:* 与室内导入同链路。 */
   const glbImportInputRef = useRef<HTMLInputElement | null>(null);

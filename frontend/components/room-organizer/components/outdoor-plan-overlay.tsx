@@ -377,7 +377,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     >
       {generateTarget && <OutdoorFacilityGenerate
         key={`${slotId}:${generateTarget.facilityId}:${generateTarget.kind}`}
-        target={generateTarget} controller={controller} onClose={() => setGenerateTarget(null)} />}
+        target={generateTarget} projectId={slotId} controller={controller} onClose={() => setGenerateTarget(null)} />}
       {!dormant && guide.activeStep && (
         <GuideBubble
           step={guide.activeStep}
@@ -390,6 +390,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       {plan && (
         <div style={{ position: 'absolute', inset: 0, visibility: canvasHidden ? 'hidden' : 'visible', pointerEvents: canvasHidden ? 'none' : 'auto' }}>
           <OutdoorPlanCanvas
+            generationProjectId={slotId}
             ref={canvasApiRef}
             plan={plan}
             source={source}

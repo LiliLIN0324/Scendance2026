@@ -702,6 +702,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   // 点选才走锚定链（先回显再动手，「确认后才写进画布」纪律不破）。query 置空表示
   // 占位反问（'ask'），只回话不开卡。
   const [venuePick, setVenuePick] = useState<{
+    epoch: number;
     query: string;
     candidates: PlaceSuggestion[];
     loading: boolean;
@@ -714,19 +715,35 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const outdoorRequestRef = useRef<AbortController | null>(null);
   const routeProposalBaseRef = useRef<string | null>(null);
   const zoneProposalBaseRef = useRef<string | null>(null);
-  function stopOutdoorTask() {
+  type OutdoorTaskKind = 'venue' | 'route' | 'zone' | 'model' | 'simulation';
+  const outdoorEpochRef = useRef(0);
+  const outdoorKindRef = useRef<OutdoorTaskKind | null>(null);
+  const routeTicketRef = useRef<{ epoch: number; proposal: RouteProposal } | null>(null);
+  const zoneTicketRef = useRef<{ epoch: number; proposal: ZoneEventProposal } | null>(null);
+  const outdoorScopeRef = useRef(sessionScope);
+  outdoorScopeRef.current = sessionScope;
+  function beginOutdoorTask(kind: OutdoorTaskKind | null, keepVenue = false): number {
+    const epoch = ++outdoorEpochRef.current;
+    outdoorKindRef.current = kind;
+    if (kind) setOutdoorTask(null);
+    outdoorRequestRef.current?.abort(); outdoorRequestRef.current = null;
+    venuePickSeq.current += 1;
     if (manualVenueAnchorRef.current) routeBridgeRef.current?.cancelVenueBoundary?.();
     manualVenueAnchorRef.current = undefined;
-    routeBridgeRef.current?.clearVenuePreview?.();
-    setFlowSimActive(false);
-    outdoorRequestRef.current?.abort();
-    outdoorRequestRef.current = null;
-    venuePickSeq.current += 1;
-    setVenuePick(null); setRouteBusy(false); setZoneBusy(false);
-    setRouteProposal(null); setZoneProposal(null);
+    if (!keepVenue) { setVenuePick(null); routeBridgeRef.current?.clearVenuePreview?.(); }
+    routeTicketRef.current = null; zoneTicketRef.current = null;
+    routeProposalBaseRef.current = null; zoneProposalBaseRef.current = null;
+    setRouteProposal(null); setZoneProposal(null); setRouteBusy(false); setZoneBusy(false); setFlowSimActive(false);
+    return epoch;
+  }
+  function currentOutdoorTask(epoch: number, kind: OutdoorTaskKind): boolean {
+    return outdoorEpochRef.current === epoch && outdoorKindRef.current === kind && outdoorScopeRef.current === sessionScope;
+  }
+  function stopOutdoorTask() {
+    beginOutdoorTask(null);
     setOutdoorTask(current => current ? { ...current, state: 'stopped', action: '本次操作已停止；已应用的规划保持不变。' } : null);
   }
-  useEffect(() => () => { outdoorRequestRef.current?.abort(); venuePickSeq.current += 1; }, []);
+  useEffect(() => () => { outdoorEpochRef.current += 1; outdoorRequestRef.current?.abort(); venuePickSeq.current += 1; }, []);
   useEffect(() => { stopOutdoorTask(); setOutdoorTask(null); }, [sessionScope]);
   const [routeProposal, setRouteProposal] = useState<RouteProposal | null>(null);
   const [routeBusy, setRouteBusy] = useState(false);
@@ -1572,7 +1589,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   // V-1b：场地候选检索（双源：本机高德+天地图 / 线上高德）。失败静默为空，
   // 卡片自己显示「没搜到」；seq 防旧请求的迟到结果覆盖新问题。
   useEffect(() => {
-    if (!venuePick?.loading || !venuePick.query) return;
+    if (!venuePick?.loading || !venuePick.query || outdoorKindRef.current !== 'venue') return;
+    const epoch = venuePick.epoch;
     const seq = ++venuePickSeq.current;
     const query = venuePick.query;
     const controller = new AbortController();
@@ -1586,19 +1604,20 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return buildPlaceSearchOptions({ query, areas: [], places, recent: [], outlinedNames: names }).flatMap(option => option.kind === 'place' ? [option.place] : []);
     })
       .then(candidates => {
-        if (seq !== venuePickSeq.current) return;
+        if (seq !== venuePickSeq.current || !currentOutdoorTask(epoch, 'venue') || controller.signal.aborted) return;
         setVenuePick(current => (current && current.query === query ? { ...current, candidates, loading: false } : current));
         setOutdoorTask({ intent: `在「${query}」做设计`, state: candidates.length ? 'confirm' : 'blocked', action: candidates.length ? '选择真实场地，确认后才锚定' : '没有候选，请补充城市或地址', steps: ['理解场地名', '检索候选地点'], prompts: candidates.length ? [] : [`在杭州${query}做设计`] });
       })
       .catch(() => {
-        if (seq !== venuePickSeq.current) return;
+        if (seq !== venuePickSeq.current || !currentOutdoorTask(epoch, 'venue') || controller.signal.aborted) return;
         setVenuePick(current => (current && current.query === query ? { ...current, candidates: [], loading: false } : current));
       });
-  }, [venuePick?.loading, venuePick?.query]);
+  }, [venuePick?.loading, venuePick?.query, venuePick?.epoch]);
 
   // V-1c：真实面→行政区→原位手画。只写同一份 SitePlan，不虚构矩形或重建另一张场地。
   async function handleVenuePick(place: PlaceSuggestion): Promise<void> {
     if (!venuePick || venuePick.picking) return;
+    const epoch = beginOutdoorTask('venue', true);
     routeBridgeRef.current?.previewVenuePoint?.(place);
     const pickSeq = ++venuePickSeq.current;
     const pickBase = JSON.stringify(routeBridgeRef.current?.getPlan());
@@ -1628,7 +1647,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         if (area && spanMeters(area.polygon) <= 9000) { polygon = area.polygon; source = 'area'; }
       } catch { /* 静默降级 */ }
     }
-    if (controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
+    if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
     const bridge = routeBridgeRef.current;
     if (pickBase !== JSON.stringify(bridge?.getPlan())) { setVenuePick(null); setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间规划发生变化，未更换场地，请重新确认', steps: [] }); return; }
     const anchor = { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'lookup' as const };
@@ -1655,7 +1674,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   // V-2c：流线提案生成——读当前户外 plan（锚点/边界由 overlay 桥供给），路网 bbox 取边界最大跨度+余量。
   async function proposeRoutePlan(): Promise<void> {
-    if (routeBusy) return;
+    const epoch = beginOutdoorTask('route');
     const plan = routeBridgeRef.current?.getPlan() ?? null;
     if (!plan?.anchor || plan.boundary.length < 3) {
       say({ role: 'agent', amber: true, text: '还没有可排流线的场地——先说一句「在XX做设计」把场地立起来，再排流线。' });
@@ -1676,7 +1695,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const spanM = Math.max(east - west, north - south) * 0.75 + 300;
       say({ role: 'agent', text: '正在读这一带的路网，排一版人流/车流/后勤流线和出入口…' });
       const { roads } = await fetchRoadNetwork({ lng: plan.anchor.lng, lat: plan.anchor.lat }, spanM, { signal: controller.signal });
-      if (controller.signal.aborted || outdoorRequestRef.current !== controller) return;
+      if (!currentOutdoorTask(epoch, 'route') || controller.signal.aborted || outdoorRequestRef.current !== controller) return;
       if (JSON.stringify(routeBridgeRef.current?.getPlan()) !== base) {
         setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '读取期间场地发生变化，旧结果已丢弃，请重新生成', steps: [], prompts: ['排一下流线'] });
         return;
@@ -1692,41 +1711,45 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         return;
       }
       routeProposalBaseRef.current = base;
+      routeTicketRef.current = { epoch, proposal };
       setRouteProposal(proposal);
       setOutdoorTask({ intent: '安排流线和出入口', state: 'confirm', action: '虚线预览就绪，确认才写入', steps: ['读取真实路网', '按等级区分人行/车行/后勤', '生成流线与入口预览'] });
       say({ role: 'agent', text: `路网读到了：草拟 ${proposal.routes.length} 条流线（人行 ${proposal.summary.pedestrian}/车行 ${proposal.summary.vehicle}/后勤 ${proposal.summary.service}）+ ${proposal.summary.entrances} 个出入口。画布上的虚线是预览——点「应用」才真正写入，整批可撤销。` });
     } catch {
-      if (controller.signal.aborted) return;
+      if (!currentOutdoorTask(epoch, 'route') || controller.signal.aborted) return;
       setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '路网服务暂时不可用，本次未生成提案', steps: [] });
       say({ role: 'agent', amber: true, text: '路网服务暂时不可用，这次没有生成提案；稍后再试一次。' });
     } finally {
-      if (outdoorRequestRef.current === controller) setRouteBusy(false);
+      if (currentOutdoorTask(epoch, 'route') && outdoorRequestRef.current === controller) setRouteBusy(false);
     }
   }
 
   function confirmRouteProposal(): void {
     const proposal = routeProposal;
-    if (!proposal) return;
+    const ticket = routeTicketRef.current;
+    if (!proposal || !ticket || ticket.proposal !== proposal || !currentOutdoorTask(ticket.epoch, 'route')) return;
     if (routeProposalBaseRef.current !== JSON.stringify(routeBridgeRef.current?.getPlan())) {
       setRouteProposal(null);
       setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '场地/内容已变化，旧提案已失效，请重新生成', steps: [], prompts: ['排一下流线'] });
       return;
     }
     const ok = routeBridgeRef.current?.applyRoutes(proposal.routes, proposal.nodes) ?? false;
-    if (ok) { routeProposalBaseRef.current = null; setRouteProposal(null); setOutdoorTask({ intent: '安排流线和出入口', state: 'done', action: '已应用，可整批撤销', steps: ['虚线预览', '用户确认', '写入正式流线与入口'], prompts: ['45 人讲座', '80 人市集'] }); }
+    if (ok) { routeTicketRef.current = null; routeProposalBaseRef.current = null; setRouteProposal(null); setOutdoorTask({ intent: '安排流线和出入口', state: 'done', action: '已应用，可整批撤销', steps: ['虚线预览', '用户确认', '写入正式流线与入口'], prompts: ['45 人讲座', '80 人市集'] }); }
     if (ok) say({ role: 'agent', text: `已应用 ${proposal.routes.length} 条流线和 ${proposal.nodes.length} 个出入口——虚线变实线了，Ctrl+Z 可整批撤销。` });
     else say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），提案先留着；打开户外规划再说一次「排流线」。' });
   }
 
   function dismissRouteProposal(): void {
-    setRouteProposal(null);
+    const ticket = routeTicketRef.current;
+    if (!ticket || ticket.proposal !== routeProposal || !currentOutdoorTask(ticket.epoch, 'route')) return;
+    beginOutdoorTask(null);
     setOutdoorTask(current => current ? { ...current, state: 'stopped', action: '已放弃预览，未写入' } : null);
     say({ role: 'agent', text: '这版流线提案已放弃，画布上的虚线撤掉了。' });
   }
 
   // V-3：区域→事件→物料提案——brief 里的活动名/人数进配比，出入口决定入场朝向。
   function proposeZonePlan(): void {
-    if (zoneBusy) return;
+    const epoch = beginOutdoorTask('zone');
     const plan = routeBridgeRef.current?.getPlan() ?? null;
     if (!plan?.anchor || plan.boundary.length < 3) {
       say({ role: 'agent', amber: true, text: '还没有可分区的场地——先说一句「在XX做设计」把场地立起来，再分区。' });
@@ -1751,7 +1774,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         say({ role: 'agent', amber: true, text: '当前真实边界内找不到容纳该人数、避让现有设施/车流后勤、并连接入口的活动区。本次没有生成布局；可减少人数、调整边界或先修正流线，不会硬塞固定模板。' });
         return;
       }
+      if (!currentOutdoorTask(epoch, 'zone')) return;
       zoneProposalBaseRef.current = JSON.stringify(plan);
+      zoneTicketRef.current = { epoch, proposal };
       setZoneProposal(proposal);
       setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${memory.event ?? '活动'}`, state: 'confirm', action: '区域、物料与人行通道预览就绪，确认才写入', steps: ['核对活动类型与人数', '检查真实边界与交通冲突', '排布物料并留出通道'] });
       say({ role: 'agent', text: `分区草案好了：${proposal.summary.zones} 个区域（${proposal.zones.some(z => z.semantic === 'stage') ? '签到→观众→舞台' : '签到→市集通道→摊位'}）+ ${proposal.summary.facilities} 件物料。画布上的虚线框是预览——点「应用」才写入，可整批撤销。` });
@@ -1764,24 +1789,28 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   function confirmZoneProposal(): void {
     const proposal = zoneProposal;
-    if (!proposal) return;
+    const ticket = zoneTicketRef.current;
+    if (!proposal || !ticket || ticket.proposal !== proposal || !currentOutdoorTask(ticket.epoch, 'zone')) return;
     if (zoneProposalBaseRef.current !== JSON.stringify(routeBridgeRef.current?.getPlan())) {
       setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'blocked', action: '场地/内容已变化，旧提案已失效，请重新生成', steps: [] }); return;
     }
     const ok = routeBridgeRef.current?.applyZoneProposal(proposal.zones, proposal.facilities, proposal.routes, proposal.nodes) ?? false;
-    if (ok) { zoneProposalBaseRef.current = null; setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'done', action: '已应用。选设施可切模型/生成/上传；选区域可编辑事件', steps: ['区域物料预览', '用户确认', '写入同一份户外规划'], focusFacilityId: (proposal.facilities.find(f => f.name.includes('舞台')) ?? proposal.facilities[0])?.id, prompts: ['补子出入口', '开始模拟'] }); }
+    if (ok) { zoneTicketRef.current = null; zoneProposalBaseRef.current = null; setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'done', action: '已应用。选设施可切模型/生成/上传；选区域可编辑事件', steps: ['区域物料预览', '用户确认', '写入同一份户外规划'], focusFacilityId: (proposal.facilities.find(f => f.name.includes('舞台')) ?? proposal.facilities[0])?.id, prompts: ['补子出入口', '开始模拟'] }); }
     if (ok) say({ role: 'agent', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
     else say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），提案先留着；打开户外规划再说一次「分区」。' });
   }
 
   function dismissZoneProposal(): void {
-    setZoneProposal(null);
+    const ticket = zoneTicketRef.current;
+    if (!ticket || ticket.proposal !== zoneProposal || !currentOutdoorTask(ticket.epoch, 'zone')) return;
+    beginOutdoorTask(null);
     setOutdoorTask(current => current ? { ...current, state: 'stopped', action: '已放弃预览，未写入' } : null);
     say({ role: 'agent', text: '这版分区提案已放弃，画布上的虚线撤掉了。' });
   }
 
   // V-4a：子出入口提案——给每个分区接驳最近的主流线（复用 routeProposal 确认卡与 applyRoutes）。
   function proposeSubEntrances(): void {
+    const epoch = beginOutdoorTask('route');
     const plan = routeBridgeRef.current?.getPlan() ?? null;
     if (!plan) {
       say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），打开户外规划再补子出入口。' });
@@ -1799,7 +1828,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     routeProposalBaseRef.current = JSON.stringify(plan);
     setZoneProposal(null);
     setOutdoorTask({ intent: '补子出入口与接驳线', state: 'confirm', action: '虚线预览就绪，确认后可模拟分流', steps: ['读取分区与主流线', '寻找近邻接驳点', '生成子口与驳线'] });
-    setRouteProposal({ routes: proposal.routes, nodes: proposal.nodes, summary: { pedestrian: proposal.routes.filter(route => route.kind === 'pedestrian').length, vehicle: proposal.routes.filter(route => route.kind === 'vehicle').length, service: proposal.routes.filter(route => route.kind === 'service').length, entrances: proposal.nodes.length } });
+    const routeDraft = { routes: proposal.routes, nodes: proposal.nodes, summary: { pedestrian: proposal.routes.filter(route => route.kind === 'pedestrian').length, vehicle: proposal.routes.filter(route => route.kind === 'vehicle').length, service: proposal.routes.filter(route => route.kind === 'service').length, entrances: proposal.nodes.length } };
+    routeTicketRef.current = { epoch, proposal: routeDraft };
+    setRouteProposal(routeDraft);
     say({ role: 'agent', text: `子出入口草案：${proposal.summary.spurs} 条驳线 + ${proposal.nodes.length} 个子口（${proposal.summary.skippedFar} 个分区离流线太远没接）。虚线是预览——应用后人流就能从区口进出主流线。` });
   }
 
@@ -1809,6 +1840,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', text: '模拟已经在跑了——画布上的小点就是人流。说「停止模拟」结束。' });
       return;
     }
+    beginOutdoorTask('simulation');
     const plan = routeBridgeRef.current?.getPlan() ?? null;
     if (!plan || plan.routes.length === 0) {
       say({ role: 'agent', amber: true, text: '还没有流线可模拟——先「排一下流线」并应用，再开始模拟。' });
@@ -1822,7 +1854,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   function stopFlowSim(): void {
     if (!flowSimActive) return;
-    setFlowSimActive(false);
+    beginOutdoorTask(null);
     setOutdoorTask({ intent: '查看流动示意', state: 'stopped', action: '动画已停止，规划数据未改动', steps: ['停止画布动画'], prompts: ['开始模拟'] });
     say({ role: 'agent', text: '流动模拟停了。要再看就说「开始模拟」。' });
   }
@@ -3034,8 +3066,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 「回好自动落区」：用户直接说「好 / 可以 / 圈吧」时，若上一条 agent 给过「要不要帮你圈出来」提议，
     // 就在这里把默认 zone 矩形落到 2D 草案，不再走 brief-agent 解析。非 layout 模式不触发，避免误动画布。
     if (isAffirmativeIntent(trimmed)) {
-      if (routeProposal) { confirmRouteProposal(); return; }
-      if (zoneProposal) { confirmZoneProposal(); return; }
+      if (outdoorKindRef.current === 'route' && routeProposal) { confirmRouteProposal(); return; }
+      if (outdoorKindRef.current === 'zone' && zoneProposal) { confirmZoneProposal(); return; }
       const lastAgent = [...bubblesRef.current].reverse().find(b => b.role === 'agent');
       if (lastAgent && hasZoneApplyProposal(lastAgent.text)) {
         if (lastAgent.zoneApply) lastAgent.zoneApply.run();
@@ -3061,14 +3093,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 'ask' = 说了场地但没说清是哪儿，反问一句；抓到地名则开回显确认卡（V-1b）。
     const venueName = matchVenueCommand(trimmed);
     if (venueName === 'ask') {
+      beginOutdoorTask('venue');
       say({ role: 'agent', amber: true, text: '想在哪块场地做？说一个场地名（比如「在西湖做设计」），我帮你找出来确认。' });
       return;
     }
     if (venueName) {
-      outdoorRequestRef.current?.abort();
-      setRouteProposal(null); setZoneProposal(null);
+      const epoch = beginOutdoorTask('venue');
       setOutdoorTask({ intent: `在「${venueName}」做设计`, state: 'working', action: '检索场地候选', steps: ['理解场地名'] });
-      setVenuePick({ query: venueName, candidates: [], loading: true, picking: null });
+      setVenuePick({ epoch, query: venueName, candidates: [], loading: true, picking: null });
       say({ role: 'agent', text: `我理解为「${venueName}」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。` });
       return;
     }
@@ -3090,6 +3122,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     // 模型需求仍由同一个 Agent 接收；只定位设施与原位候选，不自动创建收费任务。
     if (routeBridgeRef.current?.getPlan() && ((/模型|三维|3D/iu.test(trimmed) && /查看|看看|换|生成|上传/iu.test(trimmed)) || (/生成|上传/iu.test(trimmed) && routeBridgeRef.current.getPlan()!.facilities.some(f => trimmed.includes(f.name))))) {
+      beginOutdoorTask('model');
       const facilities = routeBridgeRef.current.getPlan()!.facilities;
       const target = facilities.find(f => trimmed.includes(f.name))
         ?? facilities.find(f => /舞台|讲台/u.test(trimmed) && /舞台|讲台/u.test(f.name))
