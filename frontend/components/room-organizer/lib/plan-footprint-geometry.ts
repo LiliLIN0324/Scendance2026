@@ -175,6 +175,11 @@ export interface PlanPropShape {
   rotationDeg: number;
   /** 2026-11-12 活动包物件主题色（贴纸占位染色；缺省走既有贴纸画法）。 */
   color?: string;
+  /**
+   * V-5a：设施的手动 3D 模型 override（契约 planFacilitySchema.modelOverride，物料库 slug）。
+   * 缺省走 plan-facility-models 的自动挑选；plan-model-layer 落位时优先消费。
+   */
+  modelOverride?: string;
 }
 
 /**
@@ -283,7 +288,7 @@ export function facilityFootprint(
  * 没有任何信息量，不如按「最小可辨认物件」画。
  */
 export function facilityProp(
-  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size'> & { color?: string | undefined },
+  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size' | 'modelOverride'> & { color?: string | undefined },
   frame: PlanShellFrame,
 ): PlanPropShape {
   return {
@@ -296,6 +301,8 @@ export function facilityProp(
     depth: Math.max(0.6, facility.size.depth * frame.scaleZ),
     rotationDeg: facility.rotationDeg,
     ...(facility.color ? { color: facility.color } : {}),
+    // V-5a：手动模型 override 原样透传给 plan-model-layer（undefined 不落键）。
+    ...(facility.modelOverride !== undefined ? { modelOverride: facility.modelOverride } : {}),
   };
 }
 

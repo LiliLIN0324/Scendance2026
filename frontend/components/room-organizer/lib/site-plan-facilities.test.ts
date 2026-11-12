@@ -169,6 +169,35 @@ describe('buildFacility (H2-c 放置)', () => {
     expect(planFacilitySchema.safeParse({ ...base, strokeStyle: 'double' }).success).toBe(false);
   });
 
+  /* V-5a 3D 模型手动 override（facility.modelOverride 存物料库 slug）：可选直通，旧数据缺字段照常解析。 */
+  it('parses legacy facilities without modelOverride and round-trips a model override through JSON', () => {
+    const base = {
+      id: 'b4000000-0000-4000-8000-000000000001',
+      templateId: 'tent-3x3',
+      name: '后勤帐篷 1',
+      position: { x: 60, y: 80 },
+      rotationDeg: 0,
+      size: { width: 3, depth: 3 },
+    };
+    // 旧快照不带 modelOverride 照常解析（optional 直通，不虚构字段）。
+    const legacy = planFacilitySchema.parse(base);
+    expect(legacy.modelOverride).toBeUndefined();
+    // 写入 override：合法 slug 直通。
+    const slug = 'mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea';
+    const overridden = planFacilitySchema.parse({ ...base, modelOverride: slug });
+    expect(overridden.modelOverride).toBe(slug);
+    // JSON 快照往返（落库/回读同一条路径）：override 字段原样保留。
+    const restored = planFacilitySchema.parse(JSON.parse(JSON.stringify(overridden)));
+    expect(restored.modelOverride).toBe(slug);
+    // 清除 override：undefined 直通，JSON 序列化丢键后照常解析（回到自动挑选语义）。
+    const cleared = planFacilitySchema.parse({ ...overridden, modelOverride: undefined });
+    expect(cleared.modelOverride).toBeUndefined();
+    expect(planFacilitySchema.parse(JSON.parse(JSON.stringify(cleared))).modelOverride).toBeUndefined();
+    // 非法值拒绝：空串与超长 slug 不进契约。
+    expect(planFacilitySchema.safeParse({ ...base, modelOverride: '' }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, modelOverride: 'x'.repeat(161) }).success).toBe(false);
+  });
+
   it('allows out-of-boundary placement but returns a warning issue', () => {
     const inside = buildFacility({ templateId: 'booth-2x2', position: { x: 60, y: 80 } }, BOUNDARY);
     expect(inside.ok && inside.issues?.length === 0).toBe(true);

@@ -29,6 +29,8 @@ export function safeLocalAgentTrace(usage:unknown):LocalAgentTraceEntry[] {
 }
 
 export interface LocalServerOptions {
+  /** Explicit private box host for browser acceptance; default remains loopback. */
+  privateHost?: string;
   /** Explicitly passed by the isolated development runner; never reads production credentials. */
   env?: (key: string) => string | undefined;
   origins?: string[];
@@ -206,9 +208,9 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
     }
   });
   let address: Awaited<ReturnType<typeof listenLocalFetchSafe>>;
-  try { address=await listenLocalFetchSafe(server,port); }
+  try { address=await listenLocalFetchSafe(server,port,undefined,options.privateHost); }
   catch (error) { await fixture.db.close(); throw error; }
-  url = `http://127.0.0.1:${address.port}`;
+  url = `http://${options.privateHost ?? '127.0.0.1'}:${address.port}`;
   return {
     ...fixture, backend, url, links, env,
     async close() {

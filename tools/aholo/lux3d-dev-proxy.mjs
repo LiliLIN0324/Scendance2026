@@ -3,6 +3,7 @@
 // GET /health；POST /text-to-3d、/image-to-3d、/world；GET /task、/world；
 // POST /asset 把会过期的签名产物落到本机，GET /asset/<id>.<ext> 稳定回源。
 // 直接运行才读取环境变量 / 仓库根 .env.local，并监听 127.0.0.1:3199。
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { isIP } from 'node:net';
@@ -604,19 +605,38 @@ export function createServer({
   let amapPlaceKey = '';
   async function resolveAmapPlaceKey() {
     if (!amapPlaceKey) {
-      amapPlaceKey = await readEnvFile('NEXT_PUBLIC_AMAP_STATIC_KEY', new URL('../../frontend/.env.local', import.meta.url));
+      // REST place/text 需要 Web 服务 key：优先 root .env.local 的 AMAP_STATIC_KEY
+      // （与线上 Pages Function 同名同值）；frontend 的 NEXT_PUBLIC_AMAP_STATIC_KEY 是
+      // 带数字签名的 JS key，直接打 REST 会 10007 INVALID_USER_SIGNATURE（2026-11-13 实测）。
+      amapPlaceKey = await readEnvFile('AMAP_STATIC_KEY', new URL('../../.env.local', import.meta.url));
+      if (!amapPlaceKey) {
+        amapPlaceKey = await readEnvFile('NEXT_PUBLIC_AMAP_STATIC_KEY', new URL('../../frontend/.env.local', import.meta.url));
+      }
     }
     return amapPlaceKey;
   }
 
-  /** 本机地点检索：回地点名、地址与经纬度，Key 不进响应。 */
+  /** 本机地点检索：回地点名、地址与经纬度，Key 不进响应。
+   * 本机 REST key 缺失/无效（NEXT_PUBLIC_AMAP_STATIC_KEY 是带签名的 JS key，REST 打
+   * place/text 回 10007）时回退到线上 Pages Function（同契约同源数据），本机不用 key 也能出候选。 */
   async function fetchAmapPlace(searchParams) {
     const keywords = (searchParams.get('keywords') ?? '').trim();
     if (keywords.length < 2 || keywords.length > 80) throw new HttpError(400, 'keywords invalid');
-    const key = await resolveAmapPlaceKey();
-    if (!key) throw new HttpError(503, '本机缺少 NEXT_PUBLIC_AMAP_STATIC_KEY');
     const limitRaw = Number(searchParams.get('limit') ?? 5);
     const limit = Number.isInteger(limitRaw) ? Math.min(10, Math.max(1, limitRaw)) : 5;
+    const key = await resolveAmapPlaceKey();
+    if (key) {
+      try {
+        const places = await amapPlaceViaRest(key, keywords, limit);
+        if (places.length) return { places };
+      } catch { /* REST 不可用就走线上回退 */ }
+    }
+    const prod = await fetchProdAmapPlace(keywords, limit);
+    if (prod.length) return { places: prod };
+    throw new HttpError(404, 'no place');
+  }
+
+  async function amapPlaceViaRest(key, keywords, limit) {
     const target = new URL('https://restapi.amap.com/v3/place/text');
     target.searchParams.set('keywords', keywords);
     target.searchParams.set('offset', String(limit));
@@ -629,8 +649,27 @@ export function createServer({
     });
     if (!res.ok) throw new HttpError(502, 'place HTTP ' + res.status);
     const body = await res.json();
+    return amapPoisToPlaces(body, keywords);
+  }
+
+  async function fetchProdAmapPlace(keywords, limit) {
+    try {
+      const params = new URLSearchParams({ keywords, limit: String(limit) });
+      const res = await fetch(`https://scendance-scene-planner-ewz.pages.dev/api/amap-place?${params}`, {
+        signal: AbortSignal.timeout(20000),
+        headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0' },
+      });
+      if (!res.ok) return [];
+      const body = await res.json();
+      return Array.isArray(body?.places) ? body.places : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function amapPoisToPlaces(body, keywords) {
     const pois = Array.isArray(body?.pois) ? body.pois : [];
-    const places = pois.flatMap(poi => {
+    return pois.flatMap(poi => {
       const [lngRaw, latRaw] = String(poi?.location ?? '').split(',');
       const lng = Number(lngRaw);
       const lat = Number(latRaw);
@@ -638,8 +677,6 @@ export function createServer({
       const address = Array.isArray(poi.address) ? poi.address.join('') : (poi.address ?? '');
       return [{ id: String(poi.id ?? `${lng},${lat}`), name: String(poi.name ?? '').trim() || keywords, address: String(address), lng, lat }];
     });
-    if (!places.length) throw new HttpError(404, 'no place');
-    return { places };
   }
 
   async function fetchAmapService(pathname, searchParams) {
@@ -661,7 +698,7 @@ export function createServer({
       const headerNames = req.rawHeaders.filter((_value, index) => index % 2 === 0).map(name => name.toLowerCase());
       if (!localAuthority(req.headers.host) || headerNames.filter(name => name === 'host').length !== 1 ||
           headerNames.filter(name => name === 'origin').length > 1 ||
-          (req.headers.origin !== undefined && !trustedOrigin(req.headers.origin))) {
+          (req.headers.origin !== undefined && !trustedOrigin(req.headers.origin) && !(req.method === 'GET' && req.headers.origin === process.env.SCENDANCE_DEV_PUBLIC_ORIGIN && /^http:\/\/(?:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+):\d+$/.test(req.headers.origin) && /^\/(?:api\/(?:tdt-|place-shape|road-network)|amap-place)/.test(req.url ?? '')))) {
         throw new HttpError(403, '仅允许 localhost / 127.0.0.1 本机来源与 Host');
       }
       origin = req.headers.origin ?? '';
@@ -749,7 +786,19 @@ export function createServer({
         // 点地名后从 OSM 挖这个地点的实际占地（商场/公园/景区等面要素），
         // 高德那种「商圈虚线框」的公开数据等价物。Overpass 不稳（忙时排队），
         // 失败一律回空 shape，调用方降级保留定位钉，绝不报错打断。
-        result = await fetchPlaceShape(url.searchParams);
+        const controller = new AbortController();
+        const close = () => controller.abort(); res.once('close', close);
+        try { result = await shapeRequestBudget.run(AbortSignal.any([controller.signal, AbortSignal.timeout(65000)]), () => fetchPlaceShape(url.searchParams)); }
+        finally { res.off('close', close); controller.abort(); }
+      } else if (req.method === 'GET' && url.pathname === '/api/road-network') {
+        // 路网矢量（V-2a，dev-only，对齐 functions/api/road-network.ts）：
+        // 流线自动生成的道路几何来源——Overpass way["highway"] 按 bbox，
+        // GCJ-02 折线 + highway 等级；失败回空 roads，调用方回「路网暂时拿不到」。
+        result = await fetchRoadNetwork(url.searchParams);
+      } else if (req.method === 'GET' && url.pathname === '/api/place-shape-hints') {
+        // 库存提示（dev-only）：只问「哪些名字已有可信占地轮廓」，不挖 Overpass、不回多边形。
+        // 搜索下拉用它把「已有轮廓」的 POI 排到前面。失败回空 hints，不阻塞检索。
+        result = await fetchPlaceShapeHints(url.searchParams);
       } else if (req.method === 'GET' && url.pathname === '/health') {
         result = { ok: true, keyConfigured: Boolean(key), base, worldBase };
       } else if (req.method === 'GET' && url.pathname === '/meta') {
@@ -828,7 +877,7 @@ export function createServer({
       req.resume();
       if (!res.destroyed && !res.headersSent) {
         send(res, failure instanceof HttpError ? failure.statusCode : 500,
-          { error: failure instanceof HttpError ? failure.message : ('代理请求失败: ' + (failure && failure.message ? failure.message : String(failure))) }, origin, key);
+          { error: failure instanceof HttpError ? failure.message : '代理请求失败' }, origin, key);
       }
     }
   });
@@ -1225,6 +1274,11 @@ async function fetchTdtArea(searchParams) {
   return { areas: ranked.slice(0, limit) };
 }
 
+const shapeRequestBudget = new AsyncLocalStorage();
+function shapeFetch(input, init) {
+  const signal = shapeRequestBudget.getStore();
+  return fetch(input, signal ? { ...init, signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal } : init);
+}
 /* POI 真实轮廓（OSM，dev-only，对齐 functions/api/place-shape.ts）
  * 流程：photon（OSM 地理编码）按「名称+中心点」拿 osm_type/osm_id →
  * Overpass 按 id 取几何（way 或 relation）→ 拼/抽成单环 → WGS84→GCJ-02。
@@ -1263,7 +1317,7 @@ function photonUrl(name, near) {
 
 async function photonLookup(name, near) {
   try {
-    const res = await fetch(photonUrl(name, near), {
+    const res = await shapeFetch(photonUrl(name, near), {
       signal: AbortSignal.timeout(PHOTON_TIMEOUT_MS),
       headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0' },
     });
@@ -1276,7 +1330,7 @@ async function photonLookup(name, near) {
       if (p.osm_type === 'N') continue; // 节点没有面几何
       const candidate = normalizeShapeName(p.name);
       if (!candidate || !target) continue;
-      if (candidate.includes(target) || target.includes(candidate)) return { osmType: p.osm_type, osmId: p.osm_id, label: p.name };
+      if (candidate.includes(target)) return { osmType: p.osm_type, osmId: p.osm_id, label: p.name };
     }
     return null;
   } catch {
@@ -1294,7 +1348,7 @@ async function overpass(query) {
   if (live.length === 0) return null; // 全部熔断中：直接放弃，别把超时预算烧完
   for (const endpoint of live) {
     try {
-      const res = await fetch(endpoint, {
+      const res = await shapeFetch(endpoint, {
         method: 'POST',
         headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0', 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
@@ -1305,6 +1359,7 @@ async function overpass(query) {
       endpointCooldown.delete(endpoint);
       return payload;
     } catch {
+      if (shapeRequestBudget.getStore()?.aborted) return null;
       endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); // 超时/网络失败也熔断
     }
   }
@@ -1390,6 +1445,77 @@ function gcjBBoxAreaM2(polygon) {
   return ((east - west) * 111320 * Math.cos((latMid * Math.PI) / 180)) * ((north - south) * 110540);
 }
 
+function gcjPolylineLengthM(polygon) {
+  if (!polygon || polygon.length < 2) return 0;
+  const lat0 = polygon[0][1];
+  const kx = Math.cos((lat0 * Math.PI) / 180) * 111320;
+  let length = 0;
+  for (let i = 1; i < polygon.length; i += 1) {
+    const dx = (polygon[i][0] - polygon[i - 1][0]) * kx;
+    const dy = (polygon[i][1] - polygon[i - 1][1]) * 110540;
+    length += Math.hypot(dx, dy);
+  }
+  return length;
+}
+
+function simpleFootprint(polygon) {
+  if (polygon.length > 2048) return false;
+  const first = polygon[0]; const last = polygon[polygon.length - 1];
+  if (!first || !last) return false;
+  const pts = first[0] === last[0] && first[1] === last[1] ? polygon.slice(0, -1) : polygon;
+  if (pts.length < 3 || new Set(pts.map(p => `${p[0]},${p[1]}`)).size !== pts.length) return false;
+  const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  for (let i = 0; i < pts.length; i += 1) for (let j = i + 2; j < pts.length; j += 1) {
+    if (i === 0 && j === pts.length - 1) continue;
+    const a = pts[i]; const b = pts[(i + 1) % pts.length]; const c = pts[j]; const d = pts[(j + 1) % pts.length];
+    if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return false;
+  }
+  return true;
+}
+
+function footprintAreaM2(polygon) {
+  if (polygon.length < 3) return 0;
+  const x0 = polygon[0][0]; const y0 = polygon[0][1];
+  const kx = Math.cos(y0 * Math.PI / 180) * 111320;
+  let twice = 0;
+  for (let i = 0; i < polygon.length; i += 1) {
+    const a = polygon[i]; const b = polygon[(i + 1) % polygon.length];
+    twice += (a[0] - x0) * kx * (b[1] - y0) * 110540 - (b[0] - x0) * kx * (a[1] - y0) * 110540;
+  }
+  return Math.abs(twice) / 2;
+}
+
+function readShapePoints(shape) {
+  if (!shape || !Array.isArray(shape.polygon)) return null;
+  const pts = [];
+  for (const vertex of shape.polygon) {
+    if (!Array.isArray(vertex) || vertex.length < 2 || typeof vertex[0] !== 'number' || typeof vertex[1] !== 'number') return null;
+    const lng = Number(vertex[0]);
+    const lat = Number(vertex[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+    pts.push([lng, lat]);
+  }
+  return pts;
+}
+
+/** 与 functions/api/place-shape.ts 同口径：短 3 点 line 不当选区。 */
+function isDisplayablePlaceShape(shape) {
+  const pts = readShapePoints(shape);
+  if (!pts || /(?:→|->|往返|公交线路|公交路线)/u.test(shape.name ?? '')) return false;
+  if (shape.kind === 'line') return /(?:路|街|巷|大道|高速|公路|步道|胡同|road|street|avenue|lane|highway)$/iu.test(shape.name ?? '') && pts.length >= 2 && gcjPolylineLengthM(pts) >= 80;
+  return pts.length >= 3 && simpleFootprint(pts) && footprintAreaM2(pts) >= 20;
+}
+
+/** 只把可信的面轮廓写入杭州库存；线型（含垃圾 3 点 line）永不入库。 */
+function isPersistablePlaceShape(shape) {
+  if (!shape || shape.kind === 'line') return false;
+  return isDisplayablePlaceShape(shape);
+}
+
+function acceptShape(shape) {
+  return shape && isDisplayablePlaceShape(shape) ? shape : null;
+}
+
 /** 折线（道路）→ GCJ 线型选区：不闭合、不填充，前端画粗线。 */
 function lineToGcjShape(pts, id, label) {
   if (!pts || pts.length < 2) return null;
@@ -1452,6 +1578,9 @@ function simplifyRingMeters(ring, toleranceM) {
 }
 
 function ringToGcjShape(ring, id, label) {
+  if (!ring || ring.length < 4) return null;
+  const first = ring[0]; const last = ring[ring.length - 1];
+  if (Math.abs(first.lon - last.lon) > 1e-6 || Math.abs(first.lat - last.lat) > 1e-6) return null;
   if (!ring || ring.length < 3) return null;
   const simplified = simplifyRingMeters(ring, 4);
   const stride = Math.max(1, Math.ceil(simplified.length / SHAPE_MAX_POINTS));
@@ -1527,10 +1656,13 @@ function pickNameCandidate(candidates, name, near) {
   if (!target) return null;
   const scored = [];
   for (const c of candidates) {
-    if (!c.ring || c.ring.length < 3) continue;
+    if (!c.ring || c.ring.length < 4) continue;
+    const first = c.ring[0]; const last = c.ring[c.ring.length - 1];
+    if (Math.abs(first.lon - last.lon) > 1e-6 || Math.abs(first.lat - last.lat) > 1e-6) continue;
     const candidate = normalizeShapeName(c.label);
-    if (!candidate || !(candidate.includes(target) || target.includes(candidate))) continue;
+    if (!candidate || !candidate.includes(target)) continue;
     const gcj = c.ring.map(p => { const g = tdtWgs84ToGcj02(p.lon, p.lat); return [g.lng, g.lat]; });
+    if (!simpleFootprint(gcj) || footprintAreaM2(gcj) < 20) continue;
     const rank = candidate === target ? 0 : (near && pointInGcjPolygon(near, gcj) ? 1 : 2);
     scored.push({ ...c, rank, nameLen: candidate.length, area: gcjBBoxArea(gcj) });
   }
@@ -1542,7 +1674,7 @@ function pickNameCandidate(candidates, name, near) {
 async function nameSearchStage(name, near, kind) {
   if (!near) return null; // 无定位点没法收敛范围，不冒险全城正则扫
   const safe = escapeOverpassRegex(name);
-  const query = `[out:json][timeout:20];${kind}["name"~"${safe}",i](around:1500,${near.lat},${near.lng});out geom;`;
+  const query = `[out:json][timeout:20];${kind}["name"~"${safe}",i]["type"!="route"](around:1500,${near.lat},${near.lng});out geom;`;
   const payload = await overpass(query);
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
   if (kind === 'way') {
@@ -1573,6 +1705,7 @@ async function photonPath(name, near) {
 function firstNonNull(tasks) {
   return new Promise(resolve => {
     let pending = tasks.length;
+    if (!pending) { resolve(null); return; }
     for (const task of tasks) {
       Promise.resolve().then(task).then(value => {
         if (value) resolve(value);
@@ -1588,7 +1721,10 @@ function firstNonNull(tasks) {
 async function spatialAreaStage(name, near) {
   if (!near) return null;
   const at = `${near.lat},${near.lng}`;
-  const query = `[out:json][timeout:20];(way["building"](around:100,${at});way["landuse"](around:100,${at});way["leisure"](around:100,${at});way["amenity"](around:100,${at});way["shop"](around:100,${at});way["tourism"](around:100,${at});way["man_made"](around:100,${at});way["natural"](around:100,${at}););out geom;`;
+  // around:400 不是 100：大场地（度假村/园区 1km+）的 near 点常在地块内部，离最近
+  // 边界顶点轻松超过 100m，100 半径会整块漏掉；真正的「点的是不是它」由
+  // pointInGcjPolygon 判定，这里只是召回网，放宽无害。
+  const query = `[out:json][timeout:20];(way["building"](around:400,${at});way["landuse"](around:400,${at});way["leisure"](around:400,${at});way["amenity"](around:400,${at});way["shop"](around:400,${at});way["tourism"](around:400,${at});way["man_made"](around:400,${at});way["natural"](around:400,${at}););out geom;`;
   const payload = await overpass(query);
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
   const target = normalizeShapeName(name);
@@ -1600,7 +1736,7 @@ async function spatialAreaStage(name, near) {
     // 面要素要闭合（首尾同点）；开放折线（道路）不在此列，走 highway 线型兜底
     if (Math.abs(pts[0].lat - pts[pts.length - 1].lat) > 1e-6 || Math.abs(pts[0].lon - pts[pts.length - 1].lon) > 1e-6) continue;
     const gcj = pts.map(p => { const g = tdtWgs84ToGcj02(p.lon, p.lat); return [g.lng, g.lat]; });
-    if (!pointInGcjPolygon(near, gcj)) continue;
+    if (!pointInGcjPolygon(near, gcj) || !simpleFootprint(gcj) || footprintAreaM2(gcj) < 20) continue;
     const areaM2 = gcjBBoxAreaM2(gcj);
     if (areaM2 > 9e6) continue; // 3km×3km 门槛：更大的多是区域级地块，不算「点中的建筑」
     const label = el.tags?.name ?? '';
@@ -1610,7 +1746,7 @@ async function spatialAreaStage(name, near) {
       label,
       ring: pts,
       area: areaM2,
-      nameMatch: !!(target && candidate && (candidate.includes(target) || target.includes(candidate))),
+      nameMatch: !!(target && candidate && candidate.includes(target)),
     });
   }
   if (candidates.length === 0) return null;
@@ -1629,20 +1765,118 @@ async function highwayLineStage(name, near) {
   const query = `[out:json][timeout:20];way["highway"](around:60,${at});out geom;`;
   const payload = await overpass(query);
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  // 名字门槛（2026-11-13 用户「点 in77 给了开元路」）：路名必须与查询名互相包含，
+  // 无名/不同名的路一律不要——道路兜底只为「点道路」服务，绝不替 POI 编一个路选区。
+  const target = normalizeShapeName(name);
   let best = null; let bestD = Infinity;
   for (const el of elements) {
     if (el?.type !== 'way' || !Array.isArray(el.geometry)) continue;
     const pts = el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
     if (pts.length < 2) continue;
+    const label = el.tags?.name ?? '';
+    const candidate = normalizeShapeName(label);
+    if (!target || !candidate || !candidate.includes(target)) continue;
     let d = Infinity;
     for (const p of pts) {
       const dd = Math.hypot((p.lon - near.lng) * 85000, (p.lat - near.lat) * 111000);
       if (dd < d) d = dd;
     }
-    if (d < bestD) { bestD = d; best = { el, pts }; }
+    if (d < bestD) { bestD = d; best = { el, pts, label }; }
   }
-  if (!best || bestD > 120) return null; // 120m 内没有道路段就放弃
-  return lineToGcjShape(best.pts, `osm:W${best.el.id}`, best.el.tags?.name || name);
+  if (!best || bestD > 120) return null; // 120m 内没有同名道路段就放弃（宁降级只落钉，不出错路）
+  return lineToGcjShape(best.pts, `osm:W${best.el.id}`, best.label || name);
+}
+
+/* ---------------- 选区库存（2026-11-13 用户拍板「先存杭州」）----------------
+ * 挖到过的轮廓存 Supabase place_shapes 表（全用户共享、永久秒出）。
+ * 写入仅收杭州范围；表未建/无密钥/网络失败一律静默跳过——库存是锦上添花，
+ * 绝不阻塞主链路。只使用既有公开 anon / publishable 配置，不需要 service_role。 */
+const PLACE_STOCK_DB = 'https://wkhfvnzgopjdzxlmycks.supabase.co';
+const PLACE_STOCK_HZ = [119.9, 29.9, 120.9, 30.6]; // 杭州市域粗框
+
+async function placeStockKey() {
+  // anon 级钥匙即可（表 RLS 策略放行 anon 读写）。
+  // 故意绕过 process.env：npm --env-file 父子链路对 GBK 文件解析会把值截短
+  // （实测 46→37 位，Supabase 401 拒收）——直接 latin1 读文件拿完整钥匙。
+  try {
+    const rootLine = (await readFile(new URL('../../.env.local', import.meta.url), 'latin1'))
+      .split(/\r?\n/)
+      .find(line => /^NEXT_PUBLIC_SUPABASE_ANON_KEY=/.test(line));
+    if (rootLine) {
+      const value = rootLine.split('=').slice(1).join('=').trim();
+      if (value) return value;
+    }
+  } catch {
+    // 根 .env.local 读不到就试 frontend 的
+  }
+  try {
+    const feLine = (await readFile(new URL('../../frontend/.env.local', import.meta.url), 'latin1'))
+      .split(/\r?\n/)
+      .find(line => /^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/.test(line));
+    if (feLine) return feLine.split('=').slice(1).join('=').trim();
+  } catch {
+    // 兜底也失败就走 readEnvFile
+  }
+  return readEnvFile('NEXT_PUBLIC_SUPABASE_ANON_KEY', new URL('../../.env.local', import.meta.url)) || '';
+}
+
+function shapeInHangzhou(shape) {
+  const [w, s, e, n] = shape.bounds;
+  return w >= PLACE_STOCK_HZ[0] && s >= PLACE_STOCK_HZ[1] && e <= PLACE_STOCK_HZ[2] && n <= PLACE_STOCK_HZ[3];
+}
+
+async function lookupPlaceStock(nameNorm, near) {
+  const key = await placeStockKey();
+  if (!key) return null;
+  try {
+    const res = await shapeFetch(`${PLACE_STOCK_DB}/rest/v1/place_shapes?name_norm=eq.${encodeURIComponent(nameNorm)}&select=id,name,kind,polygon,bounds`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    const row = rows?.[0];
+    if (!row || !Array.isArray(row.polygon)) return null;
+    const hit = { id: row.id, name: row.name, kind: row.kind === 'line' ? 'line' : 'area', polygon: row.polygon, bounds: row.bounds };
+    // 库存里若已误写入垃圾几何（杭州大厦 3 点 line），当作未命中，走主链路重挖，绝不回喂。
+    const target = nameNorm.replace(/^(?:杭州市|杭州)/u, '');
+    const canonical = normalizeShapeName(hit.name).replace(/^(?:杭州市|杭州)/u, '');
+    const matches = target === canonical || (/^[a-z]+[0-9]+$/i.test(target) && canonical.endsWith(target));
+    if (near && Array.isArray(hit.bounds) && (near.lng < hit.bounds[0] - 0.01 || near.lng > hit.bounds[2] + 0.01 || near.lat < hit.bounds[1] - 0.01 || near.lat > hit.bounds[3] + 0.01)) return null;
+    return matches && isPersistablePlaceShape(hit) ? hit : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writePlaceStock(shape, nameNorm) {
+  if (!isPersistablePlaceShape(shape)) return;
+  const query = nameNorm.replace(/^(?:杭州市|杭州)/u, '');
+  const canonical = normalizeShapeName(shape.name).replace(/^(?:杭州市|杭州)/u, '');
+  if (query !== canonical && !(/^[a-z]+[0-9]+$/i.test(query) && canonical.endsWith(query))) return; // 3 点 line 等垃圾几何不入库
+  if (!shapeInHangzhou(shape)) return; // 先只囤杭州
+  const key = await placeStockKey();
+  if (!key) return;
+  try {
+    await fetch(`${PLACE_STOCK_DB}/rest/v1/place_shapes`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({
+        id: shape.id,
+        name_norm: nameNorm,
+        name: shape.name,
+        kind: shape.kind || 'area',
+        center_lng: (shape.bounds[0] + shape.bounds[2]) / 2,
+        center_lat: (shape.bounds[1] + shape.bounds[3]) / 2,
+        bounds: shape.bounds,
+        polygon: shape.polygon,
+        pts: shape.polygon.length,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    // 库存写入失败不影响本次出框
+  }
 }
 
 async function fetchPlaceShape(searchParams) {
@@ -1652,26 +1886,180 @@ async function fetchPlaceShape(searchParams) {
   // 检索名只取「名称 | 地址」的名称段：地址尾巴会污染 photon 匹配与 Overpass 按名正则，
   // 是「只有 in77 出框、大部分地点不出框」的主因之一（2026-11-13 用户要求大部分搜索带框）。
   const queryName = name.split('|')[0].trim() || name;
-  const cacheKey = `${normalizeShapeName(queryName)}|${near ? `${near.lng.toFixed(2)},${near.lat.toFixed(2)}` : ''}`;
+  const cacheKey = `${normalizeShapeName(queryName)}|${near ? `${near.lng.toFixed(4)},${near.lat.toFixed(4)}` : ''}`;
   const cached = shapeCache.get(cacheKey);
-  if (cached) return { shape: cached };
-  // 五路抢答（2026-11-13「点哪儿框哪儿」改造）：空间命中是主路径——点的坐标就在
-  // 建筑/园区里，按点查面不看名字，结构上保证「点建筑=建筑选区」；way/rel 按名兜底；
-  // 全落空再查最近道路段画线型选区（点道路=道路选区）。
-  let shape = await firstNonNull([
-    photonPath(queryName, near),
-    nameSearchStage(queryName, near, 'way'),
-    nameSearchStage(queryName, near, 'rel'),
-    spatialAreaStage(queryName, near),
-  ]);
-  if (!shape && near) shape = await highwayLineStage(queryName, near);
-  return { shape: shape ? cacheShape(cacheKey, shape) : null };
+  if (cached && isDisplayablePlaceShape(cached)) return { shape: cached };
+  if (cached) shapeCache.delete(cacheKey);
+  // 库存查询（2026-11-13 用户拍板「先存杭州」）：挖到过的轮廓存 Supabase 共享表，
+  // 命中即秒回；表未建/无密钥时静默跳过，绝不阻塞主链路。
+  const nameNorm = normalizeShapeName(queryName);
+  const stockHit = await lookupPlaceStock(nameNorm, near);
+  if (stockHit) return { shape: cacheShape(cacheKey, stockHit) };
+  // 名字分段重试：高德名「盐官古城-潮乐之城」与 OSM 名「盐官潮乐之城国际旅游度假区」
+  // 对不上时，按 -·/空格 拆段逐段试（整名优先，段长的优先）。空间命中本不看名字，
+  // 这里是名字链路的兜底；线上回退只跟第一轮（整名）一起跑，段轮不再惊动 CF。
+  const segmentCandidates = [
+    queryName,
+    ...queryName.split(/[-·\s]+/).map(s => s.trim()).filter(s => s.length >= 2),
+  ].filter((value, index, all) => all.indexOf(value) === index)
+    .sort((a, b) => b.length - a.length);
+  let shape = null;
+  for (let i = 0; i < segmentCandidates.length && !shape && !shapeRequestBudget.getStore()?.aborted; i += 1) {
+    const candidate = segmentCandidates[i];
+    shape = await firstNonNull([
+      () => photonPath(candidate, near).then(acceptShape),
+      async () => acceptShape(await nameSearchStage(candidate, near, 'way')) ?? acceptShape(await nameSearchStage(candidate, near, 'relation')),
+      // 线上函数同链路并发抢答：本机到 OSM 可能整段不可达（晚间坏窗口），CF 出口网络独立
+      // ——五路谁先出结果用谁，60s 上限恒在预算内；服务端对服务端直调无跨域问题。
+      // （线上旧部署的 highway 兜底还没有名字门槛——重部署前本机补一道，免得替 POI 编路选区）
+      ...(i === 0 ? [() => fetchProdPlaceShape(name, near).then(s => {
+        if (s) {
+          const target = normalizeShapeName(queryName);
+          const candidate = normalizeShapeName(s.name ?? '');
+          if (!target || !candidate || !candidate.includes(target)) return null;
+        }
+        return acceptShape(s);
+      })] : []),
+    ]);
+  }
+  if (!shape && near && !shapeRequestBudget.getStore()?.aborted) shape = acceptShape(await spatialAreaStage(queryName, near));
+  if (!shape && near && !shapeRequestBudget.getStore()?.aborted) shape = acceptShape(await highwayLineStage(queryName, near));
+  if (shape) {
+    cacheShape(cacheKey, shape);
+    void writePlaceStock(shape, nameNorm); // 只囤可信面轮廓（杭州范围），失败静默——出框不等它
+    return { shape };
+  }
+  // 未命中不写进程缓存：避免把镜像抖动期间的空结果当成「真没有」。
+  return { shape: null };
+}
+
+
+function sanitizeHintToken(value) {
+  return String(value ?? '').replace(/[^\p{L}\p{N}]/gu, '').trim().slice(0, 60);
+}
+
+/** 库存提示：按关键词/名字查已有可信面轮廓，不回多边形、不挖 Overpass。 */
+async function fetchPlaceShapeHints(searchParams) {
+  const key = await placeStockKey();
+  if (!key) return { hints: [] };
+  const query = sanitizeHintToken((searchParams.get('q') ?? '').split('|')[0]);
+  const named = String(searchParams.get('names') ?? '')
+    .split(',')
+    .map(value => sanitizeHintToken(value.split('|')[0]))
+    .filter(value => value.length >= 2);
+  const tokens = [...(query.length >= 2 ? [query] : []), ...named]
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .slice(0, 12);
+  if (tokens.length === 0) return { hints: [] };
+  const clauses = [];
+  for (const token of tokens) {
+    const norm = normalizeShapeName(token);
+    if (norm) {
+      clauses.push(`name_norm.eq.${norm}`);
+      clauses.push(`name_norm.ilike.*${norm}*`);
+    }
+    clauses.push(`name.ilike.*${token}*`);
+  }
+  const filter = clauses.slice(0, 24).join(',');
+  try {
+    const url = `${PLACE_STOCK_DB}/rest/v1/place_shapes?${new URLSearchParams({
+      or: `(${filter})`,
+      select: 'name,name_norm,kind,polygon',
+      limit: '12',
+    })}`;
+    const res = await shapeFetch(url, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return { hints: [] };
+    const rows = await res.json();
+    const hints = [];
+    const seen = new Set();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      if (!isPersistablePlaceShape(row)) continue;
+      const name = String(row.name ?? '').trim();
+      const nameNorm = String(row.name_norm ?? normalizeShapeName(name));
+      if (!name || !nameNorm || seen.has(nameNorm)) continue;
+      seen.add(nameNorm);
+      hints.push({ name, nameNorm, kind: 'area', pts: row.polygon.length });
+    }
+    return { hints };
+  } catch {
+    return { hints: [] };
+  }
+}
+
+const PROD_PLACE_SHAPE_URL = 'https://scendance-scene-planner-ewz.pages.dev/api/place-shape';
+
+/** 线上回退：调生产 place-shape（带完整同名链路），60s 预算。 */
+async function fetchProdPlaceShape(name, near) {
+  try {
+    const params = new URLSearchParams({ name });
+    if (near) params.set('near', `${near.lng.toFixed(6)},${near.lat.toFixed(6)}`);
+    const res = await shapeFetch(`${PROD_PLACE_SHAPE_URL}?${params}`, {
+      signal: AbortSignal.timeout(60000),
+      headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0' },
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body?.shape ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/* 路网矢量（V-2a，dev-only，对齐 functions/api/road-network.ts）：way["highway"] bbox → GCJ 折线 + 等级。 */
+const ROAD_MAX_POINTS = 160;
+
+function roadDecimate(points) {
+  if (points.length <= ROAD_MAX_POINTS) return points;
+  const stride = Math.ceil(points.length / ROAD_MAX_POINTS);
+  const out = [];
+  for (let i = 0; i < points.length; i += stride) out.push(points[i]);
+  return out;
+}
+
+function parseRoadWires(payload) {
+  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  const roads = [];
+  for (const el of elements) {
+    if (el?.type !== 'way' || !Array.isArray(el.geometry) || !el.tags?.highway) continue;
+    const points = [];
+    for (const node of el.geometry) {
+      if (!Number.isFinite(node?.lon) || !Number.isFinite(node?.lat)) continue;
+      const gcj = tdtWgs84ToGcj02(node.lon, node.lat);
+      points.push([Number(gcj.lng.toFixed(6)), Number(gcj.lat.toFixed(6))]);
+    }
+    if (points.length < 2) continue;
+    roads.push({
+      id: `osm:W${el.id ?? roads.length}`,
+      highway: String(el.tags.highway),
+      name: String(el.tags.name ?? ''),
+      points: roadDecimate(points),
+    });
+  }
+  return roads;
+}
+
+async function fetchRoadNetwork(searchParams) {
+  const lat = Number(searchParams.get('lat'));
+  const lng = Number(searchParams.get('lng'));
+  const spanRaw = Number(searchParams.get('span') ?? 1200);
+  const span = Number.isFinite(spanRaw) ? Math.min(5000, Math.max(200, spanRaw)) : 1200;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { roads: [] };
+  const halfDegLat = span / 111132.92;
+  const halfDegLng = span / (Math.cos(lat * Math.PI / 180) * 111319.49);
+  const query = `[out:json][timeout:20];way["highway"](${(lat - halfDegLat).toFixed(6)},${(lng - halfDegLng).toFixed(6)},${(lat + halfDegLat).toFixed(6)},${(lng + halfDegLng).toFixed(6)});out geom;`;
+  const payload = await overpass(query);
+  return { roads: payload ? parseRoadWires(payload) : [] };
 }
 
 async function readEnvFile(name, fileUrl) {
   if (process.env[name] !== undefined) return process.env[name].trim();
   try {
-    const source = await readFile(fileUrl, 'utf8');
+    // latin1 读：.env.local 是 GBK 编码（中文注释），utf8 解码时 GBK 序列会吞掉
+    // 相邻 ASCII 密钥行（NEXT_PUBLIC_SUPABASE_ANON_KEY 就这样丢过）；密钥值全 ASCII，latin1 安全。
+    const source = await readFile(fileUrl, 'latin1');
     const value = source.split(/\r?\n/).find(line => new RegExp(`^\\s*${name}\\s*=`).test(line))?.split('=').slice(1).join('=').trim() ?? '';
     return value.replace(/^(['"])(.*)\1$/, '$2');
   } catch {

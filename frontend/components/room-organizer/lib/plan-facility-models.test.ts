@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { registerPackEntries, type LibraryEntry } from './oneplan-library';
+import { loadOnlineModels } from './online-models';
+import { clearGeneratedFacilityModelsForTests, registerGeneratedFacilityModel } from './facility-generated-models';
 import {
   facilityTemplateSlug,
   fitFacilityModel,
   loadFacilityModelCandidates,
+  loadFacilityModelOverride,
   resolveFacilityModels,
   selectFacilityModel,
+  selectFacilityModelOverride,
   type FacilityModelCandidate,
 } from './plan-facility-models';
 
@@ -280,17 +284,111 @@ describe('fitFacilityModel / selectFacilityModel', () => {
 });
 
 describe('loadFacilityModelCandidates', () => {
-  it('为每个模板给出候选，含内置映射且数量受限', async () => {
+  it('为每个模板给出候选，含内置映射且数量受限（V-5a 候选上限 5）', async () => {
     const templateIds = [...LEGACY_TEMPLATES, 'oneplan:scale:tent', 'oneplan:icon:market-stall'];
     const map = await loadFacilityModelCandidates(templateIds);
     for (const templateId of templateIds) {
       const candidates = map.get(templateId) ?? [];
       assertWellFormed(candidates);
-      expect(candidates.length).toBeLessThanOrEqual(3);
+      expect(candidates.length).toBeLessThanOrEqual(5);
       const slugs = candidates.map((item) => item.slug);
       expect(new Set(slugs).size).toBe(slugs.length);
     }
     expect((map.get('tent-3x3') ?? []).length).toBeGreaterThanOrEqual(1);
     expect((map.get('toilet-2.4x1.2') ?? []).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('V-5a：候选上限提到 5——内置 3 个帐篷候选 + 在线兜底最多补到 5，缩略图尽力带上', async () => {
+    const tent = (await loadFacilityModelCandidates(['tent-3x3'])).get('tent-3x3') ?? [];
+    expect(tent.length).toBeLessThanOrEqual(5);
+    expect(tent.length).toBeGreaterThanOrEqual(3);
+    // 在线索引在手时，内置候选也按 slug 补缩略图（V-5a 属性卡网格用）。
+    const { models } = await loadOnlineModels();
+    const thumbBySlug = new Map(models.filter((model) => model.thumb).map((model) => [model.slug, model.thumb]));
+    for (const candidate of tent) {
+      if (thumbBySlug.has(candidate.slug)) expect(candidate.thumb).toBe(thumbBySlug.get(candidate.slug));
+    }
+  });
+});
+
+describe('selectFacilityModelOverride / loadFacilityModelOverride (V-5a)', () => {
+  const modelA: FacilityModelCandidate = {
+    slug: 'test-model-a',
+    name: '候选 A（小方桌）',
+    glbUrl: '/showcase/assets/library/model/test-model-a.glb',
+    width: 2,
+    depth: 2,
+    height: 2,
+  };
+  const modelB: FacilityModelCandidate = {
+    slug: 'test-model-b',
+    name: '候选 B（大亭子）',
+    glbUrl: '/showcase/assets/library/model/test-model-b.glb',
+    width: 10,
+    depth: 10,
+    height: 2,
+  };
+
+  it('override 命中候选时直接用它，不再按占地自动挑选位次', () => {
+    const candidates = [modelA, modelB];
+    // 自动挑选按占地贴合选 A；override 指定 B 就用 B。
+    expect(selectFacilityModel(candidates, 3, 3)?.slug).toBe('test-model-a');
+    const overridden = selectFacilityModelOverride(candidates, 'test-model-b', 3, 3);
+    expect(overridden?.slug).toBe('test-model-b');
+    expect(overridden?.glbUrl).toBe(modelB.glbUrl);
+    expect(overridden?.scale).toBeGreaterThan(0);
+    expect(overridden?.height).toBeGreaterThan(0);
+  });
+
+  it('override 不在候选列表（含空列表）时返回 null，调用方回退自动挑选', () => {
+    expect(selectFacilityModelOverride([modelA, modelB], 'no-such-model', 3, 3)).toBeNull();
+    expect(selectFacilityModelOverride([], 'test-model-a', 3, 3)).toBeNull();
+    // 回退路径本身仍然可用。
+    expect(selectFacilityModel([modelA], 3, 3)?.slug).toBe('test-model-a');
+  });
+
+  it('loadFacilityModelOverride：内置映射命中的 slug 直查可用', async () => {
+    const slug = 'mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea';
+    const resolved = await loadFacilityModelOverride(slug);
+    expect(resolved?.glbUrl).toBe(`/showcase/assets/library/model/${slug}.glb`);
+    expect(resolved?.name).toBe('大本营圆顶帐篷');
+  });
+
+  it('loadFacilityModelOverride：在线库里的 slug 全库直查；不存在的 slug 返回 null', async () => {
+    const { models } = await loadOnlineModels();
+    const builtinSlugs = new Set(
+      [...LEGACY_TEMPLATES, 'oneplan:scale:tent', 'oneplan:icon:market-stall'].flatMap(
+        (templateId) => resolveFacilityModels(templateId).map((candidate) => candidate.slug),
+      ),
+    );
+    const onlineOnly = models.find((model) => !builtinSlugs.has(model.slug));
+    if (onlineOnly) {
+      const resolved = await loadFacilityModelOverride(onlineOnly.slug);
+      expect(resolved?.slug).toBe(onlineOnly.slug);
+      expect(resolved?.glbUrl).toBe(onlineOnly.glb);
+    }
+    expect(await loadFacilityModelOverride('definitely-not-a-real-slug-v5a')).toBeNull();
+  });
+
+  it('V-5b/c：生成/导入回填的候选（generated:*）优先于物料库解析；清掉后回 null', async () => {
+    registerGeneratedFacilityModel({
+      slug: 'generated:4475964',
+      name: '生成舞台',
+      glbUrl: 'http://127.0.0.1:3199/asset/xyz.glb',
+      width: 6,
+      depth: 4,
+      height: 3,
+      facilityId: 'facility-1',
+      facilityName: '主舞台',
+      createdAt: 0,
+    });
+    try {
+      const resolved = await loadFacilityModelOverride('generated:4475964');
+      expect(resolved?.glbUrl).toBe('http://127.0.0.1:3199/asset/xyz.glb');
+      expect(resolved?.name).toBe('生成舞台');
+    } finally {
+      clearGeneratedFacilityModelsForTests();
+    }
+    expect(await loadFacilityModelOverride('generated:4475964')).toBeNull();
   });
 });

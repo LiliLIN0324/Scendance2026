@@ -2273,7 +2273,8 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   color: var(--sc-muted, #71767e);
 }
 /* 选区行（行政区边界）：名称旁一枚「选区」小徽标，和普通地点在视觉上分开。 */
-.sc-plan-place-search-option.is-area .sc-plan-place-search-option-name {
+.sc-plan-place-search-option.is-area .sc-plan-place-search-option-name,
+.sc-plan-place-search-option.is-outline .sc-plan-place-search-option-name {
   display: inline-flex;
   align-items: center;
   gap: 6px;
