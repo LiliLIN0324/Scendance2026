@@ -119,7 +119,7 @@
   1. `.sc-scene-viewport` 容器由"纯户外才隐藏"改为**无条件 `visibility:hidden` + `pointerEvents:none`**：房间 three 组件仍挂载保活（renderer/canvas ref/isReady 被环境、漫游、就绪态逻辑复用），但画面不再出镜。
   2. 起步 effect 由"仅纯户外进 2D"扩为**所有项目起步进户外 2D**；视角记忆仍只按户外 projectId 回读，室内项目默认 2D。
   3. 停用房间语境浮标 `CanvasHeading`（室内"2D 平面 + 容量/座位"徽标），移除其 import；地图标题/比例尺由户外 overlay 自带。
-  4. **地图常驻不可收起**：左轨「户外规划」钮的整体收起分支在所有语境禁用（已开启再点保持现状），不再 `setOutdoor2DOpen(false)`；清理随之失效的 `restoreBingo` 回调与 `agentCollapsedByOutdoorRef`。`setOutdoor2DOpen(false)` 仅剩 2D→3D 接管一处（2D/3D 互斥，地图仍在 3D 形态）。
+  4. **按钮只控左栏户外面板、地图常驻**（14g 口径修正）：「户外规划」钮不再负责收起地图；已开启时再点只 `setOutdoorPanel(null)` 收起左栏户外物料卡，右侧地图保留。左栈 `leftStackCards` 与户外卡挂载条件均加 `outdoorPanel !== null` 联动；地图 overlay 挂载只看 `outdoor2DOpen/outdoorPlanState`，不收面板。`setOutdoor2DOpen(false)` 仅剩 2D→3D 接管一处。
 - 校验：Node24 `tsc --noEmit` exit 0（`tsc-14e.log`）；app 定向 23 通过（`vitest-14e-shell.log`）；户外画布 lib 43 通过（`vitest-14e-b.log`）。
 - **后续清理（未做，避免本轮回归面过大）**：
   - 彻底卸载 `Viewport` 组件与室内 layout 回写链路（assertLayoutWrite / shellVenuePatchFromPlanBoundary / applyLayout）、three renderer/NPC/墙体/漫游状态；
@@ -127,6 +127,33 @@
   - 物料落位从室内 layoutStore 打通到地图（当前室内物料仍写室内草稿、不投影到地图）；
   - shell 分流（室内草稿续接 / `mode=indoor`）在房间退役后是否还需要保留，复盘后再定。
 - **待真机核对**：任一项目起步右侧即户外地图；左栏 Agent/Bingo/空间/物料/户外规划互切，右侧地图不换、不空白、不残留房间 3D/比例尺/标题；2D↔3D 胶囊直切保持。
+
+### 阶段 14g · 拆除室内/户外二分，墙体并入素材库 🟡 出镜与分流收口，深耦合链路后置
+
+- **用户拍板（2026-11-13 晚）**：项目不再有室内/户外概念二分，墙体本身就是素材库里的一种物件；右侧只保留地图。
+- 本轮已落地：
+  1. 删除退役旧工作台 A 文件 `outdoor-plan-workspace.tsx`（无 import/测试引用；main `72af5635` 已删同名文件）。
+  2. `workspace-shell.tsx`：无参数不再续室内草稿（`hasLocalIndoorDraft` 分支移除），一律 `decideDefaultOutdoorProject()`；显式 `?mode=indoor` 入口暂留，待后置拆除。
+  3. 户外钮改为面板开关（见 14f 第 4 条），左栈/户外卡条件联动 `outdoorPanel !== null`。
+  4. 真机：刷新后地图（OSM/天地图 POI、选址多边形、2D/3D、指北针、比例尺）出镜；切 Bingo/空间地图不换；点户外钮左栏户外卡退出、地图保留；2D→3D→2D 闭环正常。
+- **已知残留（#19）**：
+  - 收左栏户外面板后，画布内「已放置物件 / 测量 / 标注 / 底图图层」回落浮窗仍浮在地图上：原因是 aside 卸载后 `#outdoor-panel-host-*` 宿主丢失，`PanelPortal`（`outdoor-plan-canvas.tsx:828`）回落到画布内原地渲染。需把"面板可见"透传 overlay→canvas，回落分支在面板收起时不渲染（或 aside 保活隐藏不卸载宿主）。
+  - 室内深耦合仍在 RoomOrganizer 主组件：`layoutStore`、墙体 `interiorWalls`/`drawWallMode`/`selectedWall`、`useNpcs`、`walkthroughActive`/`scanIsolated`、室内 layout 回写（`applyLayout`/`assertLayoutWrite`/`shellVenuePatchFromPlanBoundary`）、会话/历史跟踪绑 `layout.id`；`isOutdoorProject` 二分仍散布 1695/1725/1732/4542-4551/4693 等。312 处引用，需分步拆，不能本轮盲删。
+  - `mode=indoor` 入口（`resolveOutdoorProjectId`、`venue-picker.tsx:246` 跳转）拆除；墙体从室内墙体工具转为地图素材库物件。
+- 校验：tsc exit 0；app + store + canvas 定向 77 通过（`vitest-14e-b.log`）。
+
+### 阶段 14h · 合并 origin/main（72af5635）冲突融合 🟡 已解决未提交
+
+- 合并卡在 4 个 UU 文件：`app/page.test.tsx`、`outdoor-plan-overlay.tsx`、`room-organizer.tsx`、`workspace-shell.tsx`。冲突本质是两代分流架构：本地 HEAD 用 `outdoorProjectId` 传参（14b 统一 + 房间退役），main 用 `startOutdoor` 布尔 + `hasRecentActivity`。
+- 取舍（用户确认"继续融合"）：**以本地 `outdoorProjectId` 架构为基底**，并入 main 纯新增地图链路；丢弃 main 旧的 `startOutdoor`/`hasRecentActivity` 分流与已删的新手引导（`tour-machine`/`tour-reel`/`onboarding-steps`）。
+- 具体解决：
+  1. `workspace-shell.tsx`：保留 `decideDefaultOutdoorProject()` + `resolveOutdoorProjectId()` + `outdoorProjectId` state；去掉 `startOutdoor`/`hasRecentActivity`/`requestsOutdoorMode` 组件调用（store 内旧导出 `requestsOutdoorMode` 暂留，#19 清）。
+  2. `room-organizer.tsx`：签名保留 `outdoorProjectId`；`:4930` 工具排去掉 main 塞入的 `outdoorStage` prop（本地 `ScendanceViewTools` 的 `ViewToolsProps` 不收该属性，2D/3D 直切由独立 `OutdoorViewSwitch` + `handleOutdoorViewSwitch` 负责）；悬空 `TourReel` JSX 随冲突块移除。
+  3. `outdoor-plan-overlay.tsx`：import 双侧合并（`facility-footprint-lock` + `place-area.fetchPlaceShape`，均在用）；保留 main 的"正在圈范围…"加载胶囊；删除未使用的 `OutdoorViewSwitch` import。
+  4. `page.test.tsx`：保留本地 14b 断言（`打开 Bingo Agent`），去掉 main 的 `data-start-outdoor=1` 断言。
+- 并入的 main 新链路：`place-area.ts`(+test)、`functions/api/place-shape.ts`、`functions/api/tdt-area.ts`、`lib/tdt-probe.ts`、`lib/plan-tile-cache.ts`、`lib/place-search.ts`、`app/tdt-probe`、`app/cases/garden-flower-show/**`。
+- 校验：Node24 `tsc --noEmit` exit 0（`tsc-merge.log`）；前端定向 86 通过（app 9 + projects 14 + store 23 + canvas 31 + place-area 9，`vitest-merge.log`）；lib 48 通过（tdt-probe 11 + plan-tile-cache 18 + place-search 19，`vitest-merge-lib.log`）；后端 13 通过（api-place-shape 6 + tdt-search 7，`vitest-merge-api.log`）。
+- 状态：冲突已解决并完成 merge commit，随后合入本地 main 并推送 origin/main；本次一并带入 #51 足迹锁、统一交付面板、14e 房间退役与阵列预览在制品。
 
 ### 1.5 B 初始化耦合事实（2026-11-13 实读）
 
