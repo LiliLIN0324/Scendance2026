@@ -1,15 +1,14 @@
 /**
- * 户外项目本地存取层（Phase 2 · P2-a：项目体系分支 + 「从地图开始」）。
+ * 地图项目本地存取层（项目体系分支 + 「从地图开始」）。
  *
- * 户外项目 = 项目体系里「从地图开始」的项目：打开时默认进 2D 规划工作台
- * （OutdoorPlanWorkspace），不挂室内 RoomOrganizer。判定与草稿都按 projectId
+ * 所有项目统一进地图工作台，不再区分室内/户外。判定与草稿都按 projectId
  * 落 localStorage（单 key 信封）：
- * - meta：名称/创建时间——**存在即认定这是户外项目**（workspace-shell 据此分支）；
+ * - meta：名称/创建时间——存在即认定该项目有本机草稿（workspace-shell 据此续载）；
  * - plan：SitePlanData（schema 严格校验；坏数据宽容回落 null，上层用起步 plan）。
  *
  * 与 site-plan-store 的关系：那是「版本化子资源 + 并发冲突」的契约层（云端表
- * 接线后沿用），本层是 Phase 2 的本机草稿实现，保存态如实标「本机草稿」——
- * 云端子资源表归 B 评审（评审稿 §7.1），接入后本层可平移到 IndexedDB/云端。
+ * 接线后沿用），本层是本机草稿实现，保存态如实标「本机草稿」——
+ * 云端子资源表接入后本层可平移到 IndexedDB/云端。
  *
  * storage 参数注入以便 node 环境测试；缺省 window.localStorage（SSR 不落盘）。
  */
@@ -127,12 +126,10 @@ export function clearOutdoorProjectRecord(projectId: string, storage?: KeyValueS
 }
 
 /**
- * 户外分支判定（workspace-shell 开工前调用）：
- * - `?project=<id>&mode=outdoor` → 户外（新入口一律带 mode，2026-11-11 用户拍板）；
- * - `?project=<id>&mode=indoor` → 室内（显式室内入口，不再看本机草稿）；
- * - `?project=<id>&start=outdoor` → 户外（旧链接兼容）；
- * - `?project=<id>` 且本机有户外草稿 → 户外（旧链接兼容）；
- * - 其余（无参数 / 室内项目）→ null，走既有室内工作台。
+ * 项目解析（workspace-shell 开工前调用）：所有项目统一进地图工作台，不再区分室内/户外。
+ * - `?project=<id>&mode=outdoor` 或 `?project=<id>&start=outdoor` → 显式地图入口；
+ * - `?project=<id>` 过渡期按本机草稿嗅探（旧链接兼容）；
+ * - 其余（无参数）→ null，由 shell 续最近项目或起步默认草稿。
  */
 export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorage | null): string | null {
   // 归一化：调用方可能传 window.location.search（"?project=…"）、完整 URL 或路径带参——
@@ -141,34 +138,15 @@ export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorag
   const params = new URLSearchParams(query);
   const explicitMode = params.get('mode');
   const projectId = params.get('project')?.trim() ?? '';
-  if (explicitMode === 'indoor') return null;
   if (explicitMode === 'outdoor') {
-    // 显式指定了 outdoor——没给 project 就用默认本机草稿（起步锚点平湖秋月），
+    // 显式地图入口——没给 project 就用默认本机草稿（起步锚点平湖秋月），
     // 不再强依赖 URL 上 project=。workspace-shell 根路径无参数时也这么走。
     return projectId || ensureDefaultOutdoorProject(storage);
   }
   if (!projectId) return null;
   if (params.get('start') === 'outdoor') return projectId;
-  // 2026-11-11 用户拍板：旧 `?project=`（无 mode）过渡期仍按本机草稿嗅探；
-  // 新入口一律带 mode，两个月后连同这段嗅探一起删除，不长期双轨。
+  // 旧 `?project=`（无 mode）过渡期仍按本机草稿嗅探；新入口一律带 mode，后续连同这段嗅探一起删除。
   return hasOutdoorPlanDraft(projectId, storage) ? projectId : null;
-}
-
-/**
- * 「这次打开要不要直接进户外 2D」——workspace-shell 用，**纯判定、不落盘**
- * （2026-11-12 用户拍板：独立整页户外工作台删掉，户外一律在主工作台里开）。
- * 与 resolveOutdoorProjectId 同口径，但不会顺手创建默认草稿。
- */
-export function requestsOutdoorMode(search: string, storage?: KeyValueStorage | null): boolean {
-  const query = search.includes('?') ? search.slice(search.lastIndexOf('?')) : search;
-  const params = new URLSearchParams(query);
-  const explicitMode = params.get('mode');
-  if (explicitMode === 'indoor') return false;
-  if (explicitMode === 'outdoor') return true;
-  const projectId = params.get('project')?.trim() ?? '';
-  if (!projectId) return params.get('start') === 'outdoor';
-  if (params.get('start') === 'outdoor') return true;
-  return hasOutdoorPlanDraft(projectId, storage);
 }
 
 /** 最近动过的户外项目 id（`/` 无参数时「续上次」用）；没有户外记录时 null。 */

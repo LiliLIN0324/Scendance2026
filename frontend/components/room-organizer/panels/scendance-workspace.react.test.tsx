@@ -213,9 +213,9 @@ describe('ScendanceLibrary shelf lifecycle', () => {
 
 describe('ScendanceViewTools design column', () => {
   function renderTools(view = makeViewSettings(), onExportImage = vi.fn(), onExportAlbum?: (options: { scale: number }) => Promise<{ ok: boolean; count: number }>) {
-    const values = contexts(makeLayout(), view), onApplyPreset = vi.fn(), onZoom = vi.fn();
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onZoom={onZoom} onExportImage={onExportImage} {...(onExportAlbum ? { onExportAlbum } : {})}/></Providers>);
-    return { values, onApplyPreset, onZoom, onExportImage, rail: screen.getByRole('navigation', { name: '工具' }) };
+    const values = contexts(makeLayout(), view), onZoom = vi.fn();
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={onZoom} onExportImage={onExportImage} {...(onExportAlbum ? { onExportAlbum } : {})}/></Providers>);
+    return { values, onZoom, onExportImage, rail: screen.getByRole('navigation', { name: '工具' }) };
   }
 
   it('renders one right-edge island of flat round tools with no more-ellipsis', () => {
@@ -223,19 +223,17 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.id).toBe('tool-column');
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
-    // 室内常驻：发布 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(15);
+    // 室内常驻：发布 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。尺寸标注收进账户中心设置分区；卫星只在户外。
+    expect(within(rail).getAllByRole('button')).toHaveLength(13);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
     // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
-    for (const name of ['发布', '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
+    for (const name of ['发布', '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。
     const selectButton = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
     expect(selectButton.disabled).toBe(false);
     expect(selectButton.getAttribute('aria-pressed')).toBe('true');
-    // 三个机位是同一层切换，右轨只留一颗「视角」钮，点一下按 整体 → 俯视 → 正面机位 轮换。
-    expect(within(rail).getByRole('button', { name: '视角切换：当前整体，点击切到俯视' })).toBeTruthy();
     expect(rail.querySelector('#tool-satellite')).toBeNull();
     expect(rail.querySelector('#tool-map-type')).toBeNull();
     // 省略号没了：撤销/重做/缩放/导出全是一级圆钮；看全场也删掉了。
@@ -245,15 +243,16 @@ describe('ScendanceViewTools design column', () => {
       expect(rail.querySelector(`#${id}`)).toBeTruthy();
     }
     expect(rail.querySelector('#tool-grid')).toBeTruthy();
-    expect(rail.querySelector('#tool-preset')).toBeTruthy();
+    expect(rail.querySelector('#tool-dims')).toBeNull();
+    // 视角轮换钮已移除，机位只保留在导出选项与机位册里。
+    expect(rail.querySelector('#tool-preset')).toBeNull();
     // 机位不再拆成两颗一级钮。
     expect(rail.querySelector('#tool-top')).toBeNull();
     expect(rail.querySelector('#tool-front')).toBeNull();
     expect(rail.querySelector('#tool-walk')).toBeTruthy();
-    // 第一人称在右轨一级，并且排在视角钮前面；氛围菜单里不再重复。
+    // 第一人称在右轨一级；氛围菜单里不再重复。
     const order = [...rail.querySelectorAll('button')].map(button => button.id);
     expect(order.indexOf('tool-walk')).toBeGreaterThan(-1);
-    expect(order.indexOf('tool-walk')).toBeLessThan(order.indexOf('tool-preset'));
     // 撤销/重做在工具组之后，缩小/放大在导出前面。
     expect(order.indexOf('tool-undo')).toBeGreaterThan(order.indexOf('tool-grid'));
     expect(order.indexOf('tool-zoom-in')).toBeLessThan(order.indexOf('tool-export'));
@@ -300,7 +299,7 @@ describe('ScendanceViewTools design column', () => {
     cleanup();
     // 关掉之后是「抓手浏览」：仍然可点，菜单里再点「选择工具」就是重新启用。
     const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
-    render(<Providers values={off}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={off}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
     const offSelect = screen.getByRole('button', { name: '画布工具：抓手浏览中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
     expect(offSelect.disabled).toBe(false);
     expect(offSelect.getAttribute('aria-pressed')).toBe('false');
@@ -312,24 +311,14 @@ describe('ScendanceViewTools design column', () => {
     cleanup();
     // 在走动里它不是当前工具：菜单里点「选择工具」就是退出走动回到选择。
     const walking = contexts(makeLayout(), makeViewSettings({ walkthroughMode: true }));
-    render(<Providers values={walking}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={walking}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
     fireEvent.click(screen.getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /选择工具/ }));
     expect(walking.setView).toHaveBeenCalledTimes(1);
   });
 
   it('keeps 撤销 / 重做 / 缩放 / 导出 on the rail and closes the export popover on Escape', () => {
-    const { values, rail, onApplyPreset, onZoom, onExportImage } = renderTools();
-    fireEvent.click(within(rail).getByRole('button', { name: '尺寸标注' }));
-    expect(values.toggle).toHaveBeenCalledWith('showMeasurements');
-    // 视角钮一颗顶三颗：点一下 整体 → 俯视 → 正面机位，再点回整体；人视只是环绕预设，不进走动。
-    fireEvent.click(within(rail).getByRole('button', { name: '视角切换：当前整体，点击切到俯视' }));
-    expect(onApplyPreset).toHaveBeenLastCalledWith('top');
-    fireEvent.click(within(rail).getByRole('button', { name: '视角切换：当前俯视，点击切到正面机位' }));
-    expect(onApplyPreset).toHaveBeenLastCalledWith('front');
-    fireEvent.click(within(rail).getByRole('button', { name: '视角切换：当前正面机位，点击切到整体' }));
-    expect(onApplyPreset).toHaveBeenLastCalledWith('iso');
-    expect(onApplyPreset).not.toHaveBeenCalledWith('walk');
+    const { values, rail, onZoom, onExportImage } = renderTools();
     fireEvent.click(within(rail).getByRole('button', { name: '网格吸附' }));
     expect(values.toggle).toHaveBeenCalledWith('snapToGrid');
     fireEvent.click(within(rail).getByRole('button', { name: '撤销' }));
@@ -339,7 +328,7 @@ describe('ScendanceViewTools design column', () => {
     expect(values.history.undo).toHaveBeenCalledTimes(1);
     expect(values.history.redo).toHaveBeenCalledTimes(1);
     expect(onZoom.mock.calls).toEqual([['-'], ['+']]);
-    expect(values.toggle.mock.calls).toEqual([['showMeasurements'], ['snapToGrid']]);
+    expect(values.toggle.mock.calls).toEqual([['snapToGrid']]);
     expect(onExportImage).not.toHaveBeenCalled();
     // 导出是一级钮，点开只有一层选项弹层；Esc 收起。
     fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
@@ -397,7 +386,7 @@ describe('ScendanceViewTools design column', () => {
 
   it('disables zoom in 2D and hides atmosphere when requested', () => {
     const values = contexts(makeLayout(), makeViewSettings({ view2D: true }));
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
     for (const name of ['缩小', '放大']) {
       expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
@@ -409,7 +398,7 @@ describe('ScendanceViewTools design column', () => {
   it('keeps the atmosphere controls in view once something is actually changed', () => {
     // 收起只收「没在用的」：开了雨就不许藏，否则找不到地方关掉。
     const values = contexts(makeLayout(), makeViewSettings({ weather: 'rain' }));
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('true');
     // 天气按钮嵌在氛围弹层里，显示当前天气「降雨」
     expect(screen.getByRole('menuitem', { name: '降雨' })).toBeTruthy();
@@ -417,7 +406,7 @@ describe('ScendanceViewTools design column', () => {
 
   it('keeps rail wheel browsing from reaching the canvas zoom handler', () => {
     const values = contexts(), onCanvasWheel = vi.fn();
-    render(<Providers values={values}><div onWheel={onCanvasWheel}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></div></Providers>);
+    render(<Providers values={values}><div onWheel={onCanvasWheel}><ScendanceViewTools onZoom={vi.fn()}/></div></Providers>);
     fireEvent.wheel(screen.getByRole('navigation', { name: '工具' }), { deltaY: 80 });
     expect(onCanvasWheel).not.toHaveBeenCalled();
   });
@@ -431,17 +420,12 @@ describe('ScendanceViewTools atmosphere menus', () => {
     const requestPointerLock = vi.fn(() => Promise.resolve());
     canvas.requestPointerLock = requestPointerLock as HTMLCanvasElement['requestPointerLock'];
     document.body.appendChild(canvas);
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
     fireEvent.click(within(rail).getByRole('button', { name: '第一人称漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
     expect(walk(makeViewSettings()).view2D).toBe(false);
-    expect(requestPointerLock).toHaveBeenCalledTimes(1);
-    // 视角钮（当前整体 → 俯视）同样会退出走动。
-    fireEvent.click(within(rail).getByRole('button', { name: '视角切换：当前整体，点击切到俯视' }));
-    const front = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
-    expect(front(makeViewSettings({ walkthroughMode: true })).walkthroughMode).toBe(false);
     expect(requestPointerLock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
     expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
@@ -486,7 +470,7 @@ describe('ScendanceViewTools satellite ground', () => {
   }
 
   it('does not put a satellite button on an ordinary indoor room', () => {
-    render(<Providers values={contexts()}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={contexts()}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     expect(screen.queryByRole('button', { name: /卫星贴地/ })).toBeNull();
   });
 
@@ -495,7 +479,7 @@ describe('ScendanceViewTools satellite ground', () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
     const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' });
     const values = contexts(layout);
-    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const button = screen.getByRole('button', { name: /卫星贴地，已打开/ });
     expect(button.id).toBe('tool-satellite');
     expect(button.getAttribute('aria-pressed')).toBe('true');
@@ -516,7 +500,7 @@ describe('ScendanceViewTools satellite ground', () => {
       ],
     });
     const values = contexts(layout);
-    const view = render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const view = render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const button = await screen.findByRole('button', { name: /卫星贴地，已打开/ });
     await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('false'));
     fireEvent.click(button);
@@ -524,20 +508,20 @@ describe('ScendanceViewTools satellite ground', () => {
     const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
     expect(hidden.satelliteGroundRef).toBe(false);
     const offValues = contexts(hidden);
-    view.rerender(<Providers values={offValues}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    view.rerender(<Providers values={offValues}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const offButton = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
     expect(offButton.getAttribute('aria-busy')).toBe('false');
     fireEvent.click(offButton);
     const opened = offValues.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
     expect(opened.satelliteGroundRef).toBe(true);
     expect(offButton.getAttribute('aria-busy')).toBe('true');
-    view.rerender(<Providers values={contexts(opened)}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    view.rerender(<Providers values={contexts(opened)}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     expect(screen.getByRole('button', { name: /卫星贴地，已打开/ }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('keeps tool-satellite visible when the layer was explicitly turned off', () => {
     const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m', satelliteGroundRef: false });
-    render(<Providers values={contexts(layout)}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={contexts(layout)}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const button = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
     expect(button.id).toBe('tool-satellite');
     expect(button.getAttribute('aria-pressed')).toBe('false');
@@ -564,7 +548,7 @@ describe('ScendanceViewTools satellite ground', () => {
     };
     try {
     const values = contexts(legacySaltShell());
-    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const button = screen.getByRole('button', { name: /卫星贴地，已打开/ });
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.classList.contains('is-active')).toBe(true);
@@ -587,13 +571,13 @@ describe('ScendanceViewTools satellite ground', () => {
       { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
     ] };
     const values = contexts(on);
-    const { rerender } = render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const { rerender } = render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     fireEvent.click(screen.getByRole('button', { name: /卫星贴地，已打开/ }));
     const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof on;
     expect(hidden.satelliteGroundRef).toBe(false);
     expect(hidden.floorPlanImage).toBe(image);
     const offValues = contexts(hidden);
-    rerender(<Providers values={offValues}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    rerender(<Providers values={offValues}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const offButton = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
     expect(offButton.getAttribute('aria-pressed')).toBe('false');
     expect(offButton.classList.contains('is-active')).toBe(false);
@@ -634,7 +618,7 @@ describe('ScendanceViewTools satellite ground', () => {
       },
     });
     const values = contexts(layout);
-    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const opener = screen.getByRole('button', { name: /地图类型：卫星/ });
     expect(opener.id).toBe('tool-map-type');
     fireEvent.click(opener);
@@ -667,7 +651,7 @@ describe('ScendanceViewTools satellite ground', () => {
       ],
     });
     const values = contexts(layout);
-    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     fireEvent.click(screen.getByRole('button', { name: /地图类型/ }));
     fireEvent.click(screen.getByRole('option', { name: /街道 2/ }));
     await waitFor(() => expect(screen.getByRole('button', { name: /这一层暂时拉不到/ })).toBeTruthy());

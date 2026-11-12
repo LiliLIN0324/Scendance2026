@@ -10,7 +10,7 @@ afterEach(cleanup);
 function show(layout:RoomLayout,index=0){const addFloor=vi.fn(),setActiveFloorIndex=vi.fn(),setView=vi.fn();
  const editor={layout,activeFloor:layout.floors[index]!,activeFloorIndex:index,view:makeViewSettings(),actions:{addFloor,setActiveFloorIndex},history:{},setView,toggle:vi.fn()} as unknown as RoomEditorContextValue;
  const selection={selectedItemId:null,selectedItem:null,allSelectedIds:new Set(),extraSelectedIds:new Set(),setSelectedItemId:vi.fn(),setExtraSelectedIds:vi.fn(),selectOnly:vi.fn()} as unknown as SelectionContextValue;
- render(<RoomEditorProvider value={editor}><SelectionProvider value={selection}><ScendanceViewTools onApplyPreset={vi.fn()} onZoom={vi.fn()}/></SelectionProvider></RoomEditorProvider>);
+ render(<RoomEditorProvider value={editor}><SelectionProvider value={selection}><ScendanceViewTools onZoom={vi.fn()}/></SelectionProvider></RoomEditorProvider>);
  return {addFloor,setActiveFloorIndex,setView};}
 it('disables V2 floor creation and displays the reason without changing the view',()=>{
  const layout=makeLayout();layout.backendSceneV2={} as NonNullable<RoomLayout['backendSceneV2']>;

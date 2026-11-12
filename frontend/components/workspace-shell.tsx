@@ -108,13 +108,13 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     // 工作台无任何参数（`/` 或 `/editor` 别名）：续最近户外项目或起步默认户外 2D。
     // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
     if (!window.location.search) {
-      // 2026-11-13 房间画布退役后右侧只保留户外地图：无参数不再续室内草稿，
-      // 一律进最近户外项目或默认户外草稿；显式 ?mode=indoor 入口留待后置清理拆除。
+      // 无参数：续最近地图项目，没有则起步默认地图草稿。所有项目统一进地图工作台。
       setOutdoorProjectId(decideDefaultOutdoorProject());
       setEditorStarted(true);
       return;
     }
-    setOutdoorProjectId(resolveOutdoorProjectId(window.location.search));
+    // 带参但无本机草稿（旧链接/登录回跳/恢复备份）也统一落默认地图草稿，不再回退室内壳体。
+    setOutdoorProjectId(resolveOutdoorProjectId(window.location.search) ?? decideDefaultOutdoorProject());
     setEditorStarted(true);
   }, [workspacePath, ready, pathname]);
 
@@ -125,8 +125,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   return <>
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
-    {/* 2026-11-13 收敛 14b：独立户外工作台 A 下线，户外项目与室内项目统一挂 RoomOrganizer；
-        户外语境由 outdoorProjectId 标识，室内 Viewport 让位，户外草稿按该 id 落本机 store。 */}
+    {/* 所有项目统一挂同一壳体；地图草稿按 outdoorProjectId 落本机 store，右侧常驻唯一地图。 */}
     {editorStarted && (
       <div hidden={!entered}>
         <RoomOrganizer isActive={entered} controller={controller} outdoorProjectId={outdoorProjectId} />

@@ -76,7 +76,7 @@ export interface UseCanvas2DInteractionParams {
   layout: RoomLayout;
   activeFloor: FloorLayout;
   referenceImage?: ReferenceImageLayer;
-  view: Pick<ViewSettings, 'showMeasurements' | 'showWiFiSignals' | 'showHeatmap' | 'drawZoneMode' | 'showReferenceImage' | 'referenceImageOpacity'>;
+  view: Pick<ViewSettings, 'showMeasurements' | 'lengthUnit' | 'showWiFiSignals' | 'showHeatmap' | 'drawZoneMode' | 'showReferenceImage' | 'referenceImageOpacity'>;
   selectedItemId: string | null;
   extraSelectedIds: ReadonlySet<string>;
   allSelectedIds: ReadonlySet<string>;
@@ -243,6 +243,7 @@ export function useCanvas2DInteraction(
         selectedItemId,
         extraSelectedIds,
         showMeasurements: view.showMeasurements,
+        lengthUnit: view.lengthUnit,
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
         ...(referenceImage ? { referenceImage } : {}),

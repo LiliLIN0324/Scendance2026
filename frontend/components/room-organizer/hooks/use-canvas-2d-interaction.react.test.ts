@@ -41,7 +41,7 @@ function setup(selected: string[]) {
     canvasRef: { current: canvas },
     layout,
     activeFloor: floor,
-    view: { showMeasurements: false, showWiFiSignals: false, showHeatmap: false, drawZoneMode: false },
+    view: { showMeasurements: false, lengthUnit: 'm', showWiFiSignals: false, showHeatmap: false, drawZoneMode: false },
     selectedItemId: selected[0] ?? null,
     extraSelectedIds: new Set(selected.slice(1)),
     allSelectedIds: new Set(selected),

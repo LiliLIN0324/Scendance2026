@@ -1683,11 +1683,6 @@ body {
   padding: 4px; border-radius: var(--r-md); background: var(--wk-paper); border: 1px solid var(--wk-hair);
   box-shadow: var(--e1);
 }
-/* 户外交付簇挪到画布左下角（outdoor-canvas-actions.bl）后，发布/分享弹层改向上+右对齐，
-   否则按右轨语境向左弹会被画布左缘裁掉。 */
-.sc-workbench .sc-outdoor-actions-bl .sc-tool-pop {
-  right: auto; left: 0; top: auto; bottom: calc(100% + 8px);
-}
 /* 户外右上三张工具卡（测量 / 标注 / 属性，2026-11-12）：卡头与关闭钮的悬停/焦点态。
    重置写在类里而不是 inline all:unset —— inline all:unset 优先级高于类规则，会把 hover 背景一起压掉。 */
 .sc-outdoor-toolcard-btn {

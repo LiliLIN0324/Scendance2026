@@ -9,7 +9,9 @@ import { entrancePlanOutline, planFloorIndex } from '../lib/street';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { zoneArea, type ZoneRect } from '../lib/zones';
 import { drawStairsSymbol, drawStairwellHoles } from './stairs-symbol';
+import { formatArea, formatLength } from '../lib/display-units';
 import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, WallId } from '../lib/types';
+import type { DisplayUnit } from '../lib/types';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
 
 export interface Render2DOptions {
@@ -22,6 +24,8 @@ export interface Render2DOptions {
   /** Multi-select extras — outlined like the primary so group state is visible (#118). */
   extraSelectedIds?: ReadonlySet<string>;
   showMeasurements: boolean;
+  /** 读数显示单位；内部底稿仍存米，仅标注换算展示。缺省按米。 */
+  lengthUnit?: DisplayUnit;
   showWiFiSignals: boolean;
   showHeatmap?: boolean;
   /** Main-canvas reference display; absent preserves the legacy callers. */
@@ -177,6 +181,7 @@ export function render2DTopDown(options: Render2DOptions): void {
   const { canvas, layout, floor } = options;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+  const displayUnit = options.lengthUnit ?? 'm';
 
   // The backing store is sized clientWidth/clientHeight × devicePixelRatio (by
   // the ResizeObserver in use-scene-effects), but all drawing below works in
@@ -213,7 +218,7 @@ export function render2DTopDown(options: Render2DOptions): void {
     drawRoomOutline(ctx, layout, floor, offsetX, offsetY, scale);
     drawInteriorWalls(ctx, layout, floor, offsetX, offsetY, scale);
   }
-  drawZoneLabels(ctx, layout, floor, offsetX, offsetY, scale, options.showMeasurements);
+  drawZoneLabels(ctx, layout, floor, offsetX, offsetY, scale, options.showMeasurements, displayUnit);
 
   if (options.showHeatmap) {
     drawHeatmap(ctx, layout, floor.items, offsetX, offsetY, scale, viewWidth, viewHeight);
@@ -229,20 +234,20 @@ export function render2DTopDown(options: Render2DOptions): void {
   if (options.showMeasurements) {
     ctx.save(); ctx.font = 'bold 12px Arial';
     dimensionBlockers.push(labelBounds(offsetX + layout.width * scale / 2, offsetY - 10,
-      ctx.measureText(`${Number(layout.width.toFixed(2))}m`).width + 6, 16));
+      ctx.measureText(formatLength(layout.width, displayUnit)).width + 6, 16));
     dimensionBlockers.push(labelBounds(offsetX - 10, offsetY + layout.height * scale / 2,
-      16, ctx.measureText(`${Number(layout.height.toFixed(2))}m`).width + 6));
+      16, ctx.measureText(formatLength(layout.height, displayUnit)).width + 6));
     ctx.restore();
   }
   drawPersonRoutes(ctx, options, offsetX, offsetY, scale);
   drawFurniture(ctx, options, offsetX, offsetY, scale, { width: viewWidth, height: viewHeight }, dimensionBlockers);
 
   if (options.showMeasurements) {
-    drawRoomDimensions(ctx, layout, offsetX, offsetY, scale);
+    drawRoomDimensions(ctx, layout, offsetX, offsetY, scale, displayUnit);
   }
 
   if (options.zoneDraft) {
-    drawZoneDraft(ctx, layout, options.zoneDraft, offsetX, offsetY, scale);
+    drawZoneDraft(ctx, layout, options.zoneDraft, offsetX, offsetY, scale, displayUnit);
   }
   if (options.marqueeDraft) {
     drawMarqueeDraft(ctx, layout, options.marqueeDraft, offsetX, offsetY, scale);
@@ -335,7 +340,8 @@ function drawZoneLabels(
   offsetX: number,
   offsetY: number,
   scale: number,
-  showArea: boolean
+  showArea: boolean,
+  unit: DisplayUnit
 ): void {
   const zones = floor.zones ?? [];
   if (zones.length === 0) return;
@@ -353,7 +359,7 @@ function drawZoneLabels(
     // Along the top edge rather than the centre: the centre of a room is
     // where its bed or table sits, and the furniture paints over labels.
     const cx = x + w / 2;
-    const area = showArea ? `${zoneArea(zone).toFixed(1)} m²` : null;
+    const area = showArea ? formatArea(zoneArea(zone), unit) : null;
     ctx.font = 'bold 12px Arial';
     ctx.strokeText(zone.name, cx, y + 11);
     ctx.fillText(zone.name, cx, y + 11);
@@ -372,7 +378,8 @@ function drawZoneDraft(
   draft: ZoneRect,
   offsetX: number,
   offsetY: number,
-  scale: number
+  scale: number,
+  unit: DisplayUnit
 ): void {
   const { x, y, w, h } = zoneCanvasRect(draft, layout, offsetX, offsetY, scale);
   ctx.save();
@@ -387,7 +394,7 @@ function drawZoneDraft(
   ctx.fillStyle = '#1d4ed8';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(`${draft.w.toFixed(1)}m × ${draft.d.toFixed(1)}m`, x + w / 2, y - 4);
+  ctx.fillText(`${formatLength(draft.w, unit)} × ${formatLength(draft.d, unit)}`, x + w / 2, y - 4);
   ctx.restore();
 }
 
@@ -983,7 +990,8 @@ function drawFurniture(
       const { halfW, halfD } = rotatedHalfExtents(item);
       if (cx + halfW * scale <= 0 || cx - halfW * scale >= viewport.width ||
           cy + halfD * scale <= 0 || cy - halfD * scale >= viewport.height) continue;
-      const text = `${Number(item.width.toFixed(2))}m × ${Number(item.depth.toFixed(2))}m`;
+      const itemUnit = options.lengthUnit ?? 'm';
+      const text = `${formatLength(item.width, itemUnit)} × ${formatLength(item.depth, itemUnit)}`;
       ctx.save(); ctx.font = '10px Arial';
       const width = ctx.measureText(text).width + 6;
       ctx.restore();
@@ -1043,17 +1051,18 @@ function drawRoomDimensions(
   layout: RoomLayout,
   offsetX: number,
   offsetY: number,
-  scale: number
+  scale: number,
+  unit: DisplayUnit
 ): void {
   ctx.fillStyle = '#333';
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${Number(layout.width.toFixed(2))}m`, offsetX + (layout.width * scale) / 2, offsetY - 10);
+  ctx.fillText(formatLength(layout.width, unit), offsetX + (layout.width * scale) / 2, offsetY - 10);
   ctx.save();
   ctx.translate(offsetX - 10, offsetY + (layout.height * scale) / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText(`${Number(layout.height.toFixed(2))}m`, 0, 0);
+  ctx.fillText(formatLength(layout.height, unit), 0, 0);
   ctx.restore();
 }
 

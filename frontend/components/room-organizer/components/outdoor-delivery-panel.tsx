@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DELIVERY_AUDIENCES,
   DELIVERY_SEGMENTS,
@@ -101,7 +102,7 @@ export function OutdoorDeliveryPanel({
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   const exportSegment = DELIVERY_SEGMENTS.find(seg => seg.id === 'export')!;
   const exportVisible = segmentVisible(exportSegment, audience);
@@ -149,7 +150,7 @@ export function OutdoorDeliveryPanel({
 
   const visibleSegments = DELIVERY_SEGMENTS.filter(seg => segmentVisible(seg, audience));
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -170,7 +171,7 @@ export function OutdoorDeliveryPanel({
       <div
         onClick={event => event.stopPropagation()}
         style={{
-          width: 'min(980px, 100%)',
+          width: 'min(760px, calc(100vw - 32px))',
           maxHeight: 'calc(100vh - 32px)',
           display: 'flex',
           flexDirection: 'column',
@@ -191,7 +192,7 @@ export function OutdoorDeliveryPanel({
           <button type="button" onClick={onClose} aria-label="关闭" style={iconButtonStyle}>×</button>
         </header>
 
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0, 560px) minmax(0, 1fr)', gap: 0, minHeight: 0 }}>
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0, 356px) minmax(0, 1fr)', gap: 0, minHeight: 0 }}>
           {/* 左栏：动作 */}
           <div style={{ borderRight: `1px solid ${PLANNING_SURFACE.fieldBg}`, padding: `${PLANNING_SPACING.md}px ${PLANNING_SPACING.lg}px`, overflowY: 'auto', minWidth: 0 }}>
             {/* 交付对象选择器 */}
@@ -221,7 +222,7 @@ export function OutdoorDeliveryPanel({
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 10, color: '#a6aab2', margin: `0 2px ${PLANNING_SPACING.md}px`, lineHeight: 15 }}>
+            <p style={{ fontSize: 10, color: '#a6aab2', margin: `0 2px ${PLANNING_SPACING.md}px`, lineHeight: '15px' }}>
               {DELIVERY_AUDIENCES.find(aud => aud.id === audience)?.note}
             </p>
 
@@ -410,7 +411,7 @@ export function OutdoorDeliveryPanel({
 
             <div style={qrRowStyle}>
               <div style={qrStyle}>二维码</div>
-              <div style={{ fontSize: 11, color: PLANNING_TEXT.muted, lineHeight: 17 }}>
+              <div style={{ fontSize: 11, color: PLANNING_TEXT.muted, lineHeight: '17px' }}>
                 发布后这里出二维码，手机扫码看到的就是同一版；后续编辑不改已发布版本。
               </div>
             </div>
@@ -448,7 +449,8 @@ export function OutdoorDeliveryPanel({
           </button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -492,7 +494,7 @@ const disabledActStyle: React.CSSProperties = {
 const actRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 };
 const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0 };
 const nameStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600 };
-const descStyle: React.CSSProperties = { fontSize: 11, color: PLANNING_TEXT.muted, marginTop: 2, lineHeight: 15 };
+const descStyle: React.CSSProperties = { fontSize: 11, color: PLANNING_TEXT.muted, marginTop: 2, lineHeight: '15px' };
 const iconTileStyle: React.CSSProperties = { width: 30, height: 30, borderRadius: 9, background: PLANNING_SURFACE.fieldBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: PLANNING_TEXT.soft, flex: 'none' };
 
 const rowActionsStyle: React.CSSProperties = { display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 };

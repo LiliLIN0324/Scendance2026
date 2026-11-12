@@ -3220,7 +3220,7 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
       <div className="sc-brief-tool-list">
         {venueRows.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
         <button type="button" title={known ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={16} aria-hidden="true"/><span>地图圈画</span></button>
-        {!known && <button type="button" title="先给一块空地，尺寸回头在对话里说" onClick={agent.startBlankVenue}><SquareDashed size={16} aria-hidden="true"/><span>空白空间 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</span></button>}
+        {/* 室内「空白空间 · 12×8m」立壳入口已退役：选址统一走地图圈画；空白草稿由场地选择弹层「从空白开始」承担。 */}
       </div>
     </div>
     {docsRows.length > 0 && <details className="sc-brief-tools">
@@ -3315,7 +3315,7 @@ export function MapVenueOverlay({ onReconUpload, onVenueSaved }: {
 
 /**
  * 「换场地 / 新建」弹层：与地图浮层同款盖画布。云项目同标签 router.push（认证按标签页存），
- * 空白场地复用 startBlankVenue 那条立壳链；新建只起名字，没工作室时静默建「个人工作室」。
+ * 空白 / 新建 / 地图选址统一建本机地图草稿并进 2D 规划；没工作室时静默建「个人工作室」。
  */
 export function VenuePickerOverlay(): JSX.Element | null {
   const agent = useAgent();
@@ -3325,10 +3325,10 @@ export function VenuePickerOverlay(): JSX.Element | null {
   return <div className="sc-venue-overlay" ref={panel} role="dialog" aria-modal="true" aria-label="换场地 / 新建" tabIndex={-1}>
     <div className="sc-map-head">
       <strong>换场地 / 新建</strong>
-      <span className="sc-note">空白场地立刻开工；云项目同标签打开，进度都在。</span>
+      <span className="sc-note">空白选址进 2D 规划后再画边界；云项目同标签打开，进度都在。</span>
       <button type="button" className="sc-button" aria-label="关闭" data-tip="关闭" title="关闭" onClick={agent.closeVenuePicker}><X size={16} aria-hidden="true"/></button>
     </div>
-    <VenuePicker onClose={agent.closeVenuePicker} onBlankVenue={() => { agent.startBlankVenue(); agent.closeVenuePicker(); }} />
+    <VenuePicker onClose={agent.closeVenuePicker} />
   </div>;
 }
 

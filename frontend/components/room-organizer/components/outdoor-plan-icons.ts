@@ -13,6 +13,7 @@ import {
   BoxSelect,
   ChevronDown,
   ChevronUp,
+  Circle,
   Copy,
   DoorOpen,
   Download,
@@ -26,6 +27,7 @@ import {
   Lock,
   LockOpen,
   MapPin,
+  Minus,
   Move,
   PenTool,
   Plus,
@@ -35,8 +37,10 @@ import {
   Ruler,
   Shapes,
   SlidersHorizontal,
+  Square,
   StickyNote,
   Tent,
+  Triangle as TriangleShape,
   TriangleAlert,
   Truck,
   Undo2,
@@ -82,6 +86,10 @@ export const PLANNING_ICON_COMPONENTS: Record<PlanningIconName, LucideIcon> = {
   'sliders-horizontal': SlidersHorizontal,
   'chevron-up': ChevronUp,
   'chevron-down': ChevronDown,
+  square: Square,
+  circle: Circle,
+  'triangle-shape': TriangleShape,
+  minus: Minus,
 };
 
 /** 取图标组件：类型上不会越界，回落 shapes 仅作运行时防御。 */

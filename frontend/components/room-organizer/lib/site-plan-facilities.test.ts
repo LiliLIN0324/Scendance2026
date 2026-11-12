@@ -16,6 +16,7 @@ import {
   facilityLocalPoint,
   facilityPassesContract,
   facilityPlacementIssues,
+  facilitiesFootprintsIntersect,
   facilitySideResize,
   facilityUniformCornerResize,
   facilityTemplatesValid,
@@ -102,6 +103,38 @@ describe('facilityContainsPoint (H2-c 选中命中)', () => {
       expect(Math.abs(local.u)).toBeCloseTo(2, 6);
       expect(Math.abs(local.v)).toBeCloseTo(1.5, 6);
     }
+  });
+});
+
+describe('facilitiesFootprintsIntersect (D 块占地矩形相交)', () => {
+  const box = (x: number, y: number, w: number, d: number, rotationDeg = 0) => ({
+    position: { x, y },
+    rotationDeg,
+    size: { width: w, depth: d },
+  });
+
+  it('overlaps axis-aligned boxes that share area, and separates a clear gap', () => {
+    expect(facilitiesFootprintsIntersect(box(0, 0, 2, 2), box(1.5, 0, 2, 2))).toBe(true);
+    expect(facilitiesFootprintsIntersect(box(0, 0, 2, 2), box(3, 0, 2, 2))).toBe(false); // 边缘间隙 1 m
+  });
+
+  it('catches a rotated cross that a corner/center probe used to miss', () => {
+    // 横 6×1 与竖 1×6 同中心：十字重叠，矩形相交为真。
+    expect(facilitiesFootprintsIntersect(box(0, 0, 6, 1), box(0, 0, 1, 6, 90))).toBe(true);
+  });
+
+  it('keeps edge-touching footprints touching at zero margin (含边界)', () => {
+    // 中心距 2 m = 半宽之和，贴边不算分离。
+    expect(facilitiesFootprintsIntersect(box(0, 0, 2, 2), box(2, 0, 2, 2), 0)).toBe(true);
+  });
+
+  it('honours a safety margin: a clear gap collides once the margin covers it', () => {
+    // 两 2×2 中心距 3 m：边缘间隙 1 m。
+    const a = box(0, 0, 2, 2);
+    const b = box(3, 0, 2, 2);
+    expect(facilitiesFootprintsIntersect(a, b, 0)).toBe(false);
+    expect(facilitiesFootprintsIntersect(a, b, 0.5)).toBe(false); // 外扩 0.5 仍留 0.5 m 缝
+    expect(facilitiesFootprintsIntersect(a, b, 1.5)).toBe(true); // 外扩 1.5 盖过 1 m 缝
   });
 });
 

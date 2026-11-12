@@ -130,6 +130,7 @@ import {
   facilityHandles,
   facilityInRect,
   facilityPlacementIssues,
+  facilitiesFootprintsIntersect,
   facilitySideResize,
   facilityUniformCornerResize,
   findFacilityTemplate,
@@ -167,6 +168,7 @@ import {
   buildMeasurement,
   formatAreaM2,
   formatLengthM,
+  measureDraftReadout,
   measureValue,
   planOverviewStats,
   type PlanMeasureKind,
@@ -176,6 +178,7 @@ import {
   buildAnnotation,
   planShapeDraftTarget,
   PLAN_SHAPE_KINDS,
+  type PlanAnnotationStrokeWidth,
   type PlanShapeKind,
 } from '../lib/site-plan-annotate';
 import { buildPlanLegend } from '../lib/site-plan-legend';
@@ -495,6 +498,19 @@ const PLACED_KIND_COLORS: Record<PlanInventoryKind, string> = {
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
 
+/**
+ * 2026-11-13 自由标注色板：全部取自既有图层/表面 token，不另造 hex；第一项为缺省标注紫。
+ * 文本/形状共用取色；旧快照不带 color 时渲染层回退标注紫。
+ */
+const ANNOTATE_COLOR_SWATCHES: readonly { value: string; label: string }[] = [
+  { value: PLANNING_LAYER_COLORS.annotate, label: '紫' },
+  { value: PLANNING_SURFACE.panelText, label: '墨' },
+  { value: PLANNING_LAYER_COLORS.boundary, label: '绿' },
+  { value: PLANNING_LAYER_COLORS.route, label: '蓝' },
+  { value: PLANNING_LAYER_COLORS.facility, label: '橙' },
+  { value: PLANNING_LAYER_COLORS.worker, label: '粉' },
+];
+
 /** 2026-11-11 图层卡 OnePlan 镜像：清单 kind → 图层（文件夹行尾的可见性/锁定按层读写）。 */
 const LAYER_OF_INVENTORY_KIND: Record<PlanInventoryKind, PlanLayerRow> = {
   zone: 'zone',
@@ -797,6 +813,34 @@ const INVENTORY_KIND_COLORS: Record<PlanInventoryKind, string> = {
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
 
+/** 测量三模式图标：距离=尺、面积=框选矩形、路径=折线；与 Lucide 注册表编译期闭环。 */
+const MEASURE_KIND_ICONS: Record<PlanMeasureKind, PlanningIconName> = {
+  distance: 'ruler',
+  area: 'box-select',
+  path: 'route',
+};
+/** 菜单右侧点数约束短标：与点数门槛同口径（距离 2、面积 ≥3、路径 ≥2）。 */
+const MEASURE_KIND_META: Record<PlanMeasureKind, string> = {
+  distance: '2 点',
+  area: '≥3 点',
+  path: '≥2 点',
+};
+
+/** 标注形状四类型图标：矩形/圆形/三角形/线段；与 Lucide 注册表编译期闭环。 */
+const ANNOTATE_SHAPE_ICONS: Record<PlanShapeKind, PlanningIconName> = {
+  rect: 'square',
+  circle: 'circle',
+  triangle: 'triangle-shape',
+  line: 'minus',
+};
+/** 形状菜单右侧点数短标：rect/circle/line 2 点、triangle 3 点。 */
+const ANNOTATE_SHAPE_META: Record<PlanShapeKind, string> = {
+  rect: '2 点',
+  circle: '2 点',
+  triangle: '3 点',
+  line: '2 点',
+};
+
 /** H4-a 类型胶囊：清单行的「图标+类型」药丸，色从图层色派生（withAlphaHex），不另立色值。 */
 function TypeCapsule({ kind, label }: { kind: PlanInventoryKind; label: string }) {
   const Icon = planningIcon(INVENTORY_KIND_ICONS[kind]);
@@ -1057,6 +1101,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const annotateDraftRef = useRef<PlanPoint[]>([]);
   const annotateCursorRef = useRef<PlanPoint | null>(null);
   const annotateDragRef = useRef<{ startPx: { x: number; y: number }; startPt: PlanPoint; active: boolean } | null>(null);
+  /** 2026-11-13 标注当前取色/描边档位：ref 镜像供事件回调与草稿闭包取最新值。 */
+  const annotateColorRef = useRef<string>(PLANNING_LAYER_COLORS.annotate);
+  const annotateStrokeWidthRef = useRef<PlanAnnotationStrokeWidth>('thin');
   const selectedAnnotationRef = useRef<string | null>(null);
   // H3-b 冲突/缺失：可定位标记（规则检查输出，恒在业务层之上）。
   const conflictIssuesRef = useRef<PlanConflictIssue[]>([]);
@@ -1138,9 +1185,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [repeatRows, setRepeatRows] = useState(1);
   const [repeatGapX, setRepeatGapX] = useState(1);
   const [repeatGapY, setRepeatGapY] = useState(1);
+  /** 阵列碰撞安全间距（米）：候选副本占地向外留的空隙，0 为纯占地相交。 */
+  const [repeatGapMargin, setRepeatGapMargin] = useState(0);
   // 阵列预览真值走 ref：draw 闭包依赖 sceneObjects、读不到最新 state，参数与卡片模式都由 ref 取。
   // state 仅用于面板渲染；输入变更时同步 ref 并触发一次 draw。
-  const repeatParamsRef = useRef({ cols: 2, rows: 1, gapX: 1, gapY: 1, cardMode: 'props' as 'props' | 'repeat' });
+  const repeatParamsRef = useRef({ cols: 2, rows: 1, gapX: 1, gapY: 1, margin: 0, cardMode: 'props' as 'props' | 'repeat' });
   // 2026-11-12 OnePlan 面板换页：属性页 ⇄ 阵列复制页（标题行图标钮切换，选中变化即回属性页）。
   const [facilityCardMode, setFacilityCardMode] = useState<'props' | 'repeat'>('props');
   // 手风琴（+ 布场信息 / + 备注）：默认收起，同 OnePlan。
@@ -1154,10 +1203,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** P2-g 重做栈深度（state 供工具排 disabled，ref 供命令句柄即时查询）。 */
   const [redoCount, setRedoCount] = useState(0);
   const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
+  const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
   // 2026-11-11 用户指令：自由标注 UI 态（形状类型/草稿计数/选中/文本就地输入框）。
   const [annotateShape, setAnnotateShape] = useState<PlanShapeKind>('rect');
   const [annotateDraftCount, setAnnotateDraftCount] = useState(0);
+  const [annotateColor, setAnnotateColor] = useState<string>(PLANNING_LAYER_COLORS.annotate);
+  const [annotateStrokeWidth, setAnnotateStrokeWidth] = useState<PlanAnnotationStrokeWidth>('thin');
+  const [annotateMenuOpen, setAnnotateMenuOpen] = useState(false);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   /** 文本标注就地输入框：锚点（米制）+ 屏幕位置（渲染时现算）+ 草稿文本。 */
   const [noteInput, setNoteInput] = useState<{ pt: PlanPoint; value: string } | null>(null);
@@ -1827,7 +1880,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     // 2026-11-11 用户指令：形状草稿（拖拽实时预览 / 三角形逐点橡皮筋）。
     if (activeMode === 'shape') {
-      drawAnnotationDraft({ ctx: planCtx, viewport }, annotateDraftRef.current, annotateShapeRef.current, annotateCursorRef.current ?? undefined);
+      drawAnnotationDraft({ ctx: planCtx, viewport }, annotateDraftRef.current, annotateShapeRef.current, annotateCursorRef.current ?? undefined, annotateColorRef.current, annotateStrokeWidthRef.current);
     }
     if (activeMode === 'node' && nodeGhostRef.current) {
       const names = { entry: '入口', exit: '出口', both: '出入口' } as const;
@@ -1858,7 +1911,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const repeatAnchor = current.facilities.find(f => f.id === selectedFacilityRef.current) ?? null;
       if (repeatAnchor) {
         const rp = repeatParamsRef.current;
-        const repeatPreview = evaluateRepeatPreview(repeatAnchor, rp.cols, rp.rows, rp.gapX, rp.gapY, current.facilities, current.boundary);
+        const repeatPreview = evaluateRepeatPreview(repeatAnchor, rp.cols, rp.rows, rp.gapX, rp.gapY, current.facilities, current.boundary, rp.margin);
         for (const slot of repeatPreview.slots) {
           drawFacilityGhost(
             { ctx: planCtx, viewport },
@@ -2903,18 +2956,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     trailing?: React.ReactNode | undefined;
     title?: string;
     draggable?: boolean;
-    onDragStart?: ((event: React.DragEvent<HTMLButtonElement>) => void) | undefined;
+    onDragStart?: ((event: React.DragEvent<HTMLDivElement>) => void) | undefined;
     /** 2026-11-11 用户指令：右键删除已放置物件。 */
-    onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+    onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
   }) {
+    // 2026-11-13 修复嵌套按钮：行根用 div + role=button，避免 trailing 删除钮再嵌一层 <button> 触发 HTML 嵌套非法 / hydration 报错。
     return (
-      <button
+      <div
         key={input.key}
-        type="button"
+        role="button"
+        tabIndex={0}
         data-testid={input.testId}
         aria-pressed={input.active}
         title={input.title}
         onClick={input.onClick}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            input.onClick();
+          }
+        }}
         draggable={input.draggable}
         onDragStart={input.onDragStart}
         onContextMenu={input.onContextMenu}
@@ -2938,7 +2999,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         {input.icon}
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{input.label}</span>
         {input.trailing}
-      </button>
+      </div>
     );
   }
 
@@ -3082,7 +3143,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               : `${entry.nameZh} / ${entry.nameEn}（默认 ${entry.width}×${entry.depth} m）`,
             draggable: isFacility,
             onDragStart: isFacility
-              ? (event: React.DragEvent<HTMLButtonElement>) => {
+              ? (event: React.DragEvent<HTMLDivElement>) => {
                 // 与内置模板同一条拖放通道：画布 onDrop 读 text/plain 后落模板（含主题色）。
                 event.dataTransfer.setData('text/plain', templateId);
                 event.dataTransfer.effectAllowed = 'copy';
@@ -3176,7 +3237,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               title: `${entry.nameZh} / ${entry.nameEn}`,
               draggable: entry.placeKind === 'facility',
               onDragStart: entry.placeKind === 'facility'
-                ? (event: React.DragEvent<HTMLButtonElement>) => {
+                ? (event: React.DragEvent<HTMLDivElement>) => {
                   event.dataTransfer.setData('text/plain', packTemplateIdStr);
                   event.dataTransfer.effectAllowed = 'copy';
                 }
@@ -3330,9 +3391,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** 2026-11-11 OnePlan Repeat 阵列：沿物件自身旋转轴复制 cols×rows（原件占 (0,0) 格），间距沿轴可调，一条 undo。 */
   /**
    * D 块阵列幽灵预览评估：沿原件自身旋转轴算出每个副本落点，逐格判越界 / 碰撞。
-   * 口径（保守默认，待拍板）：
+   * 口径：
    *  - 越界：占地四角环过 facilityPlacementIssues（与放置设施同口径）；
-   *  - 碰撞：候选角点 + 中心落入任一已有设施或先前副本占地内（facilityContainsPoint，点-矩形近似，可能把轻微贴边误判为碰撞）；
+   *  - 碰撞：两个占地矩形是否相交（facilitiesFootprintsIntersect，SAT 任意旋转通用）；
+   *    marginM 为候选盒外扩的安全间距（米），0 为纯占地相交，面板「碰撞间距」可调；
    *  - 越界策略：只要有非法格就整体禁提交（跳过非法格只生成合法格的方案留待拍板）；
    *  - 件数上限：REPEAT_MAX_COPIES，参照 Figpea Repeat 单次 500 件，这里取保守值。
    */
@@ -3345,6 +3407,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     gapY: number,
     facilities: readonly PlanFacility[],
     boundary: readonly PlanPoint[],
+    marginM = 0,
   ): { slots: { position: PlanPoint; invalid: boolean }[]; total: number; invalidCount: number; overLimit: boolean } {
     const theta = (anchor.rotationDeg * Math.PI) / 180;
     const cos = Math.cos(theta);
@@ -3361,8 +3424,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const footprint = facilityFootprintRing({ position, rotationDeg: anchor.rotationDeg, size: anchor.size });
         let invalid = facilityPlacementIssues(footprint, boundary).length > 0;
         if (!invalid) {
-          const probes = [...footprint, position];
-          invalid = placed.some(other => probes.some(pt => facilityContainsPoint(pt, other)));
+          const candidate = { position, rotationDeg: anchor.rotationDeg, size: anchor.size };
+          invalid = placed.some(other => facilitiesFootprintsIntersect(candidate, other, marginM));
         }
         if (invalid) invalidCount += 1;
         else placed.push({ ...anchor, id: `__repeat-preview-${j}-${i}`, position });
@@ -3373,7 +3436,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 阵列输入变更：同步 ref 真值并重画画布（state 供面板渲染，ref 供 draw 闭包读取）。 */
-  function updateRepeatParams(patch: Partial<{ cols: number; rows: number; gapX: number; gapY: number }>) {
+  function updateRepeatParams(patch: Partial<{ cols: number; rows: number; gapX: number; gapY: number; margin: number }>) {
     Object.assign(repeatParamsRef.current, patch);
     draw();
   }
@@ -3952,7 +4015,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const name = input.kind === 'note'
       ? (textSummary.slice(0, 20) || `文本 ${count}`)
       : `${planAnnotationKindLabels[input.kind]} ${count}`;
-    const result = buildAnnotation({ ...input, name });
+    const result = buildAnnotation({
+      ...input,
+      name,
+      color: annotateColorRef.current,
+      ...(input.kind !== 'note' ? { strokeWidth: annotateStrokeWidthRef.current } : {}),
+    });
     if (!result.ok) {
       setEditMessage(result.issue.message);
       return false;
@@ -4879,7 +4947,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedFacility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) ?? null : null;
   // D 块：阵列预览评估（与画布幽灵同口径），供提交钮禁用与原因回读。
   const repeatPreview = selectedFacility
-    ? evaluateRepeatPreview(selectedFacility, repeatCols, repeatRows, repeatGapX, repeatGapY, plan.facilities, plan.boundary)
+    ? evaluateRepeatPreview(selectedFacility, repeatCols, repeatRows, repeatGapX, repeatGapY, plan.facilities, plan.boundary, repeatGapMargin)
     : null;
   const repeatBlocked = !repeatPreview || repeatPreview.invalidCount > 0 || repeatPreview.overLimit;
   const selectedRoute = selectedRouteId ? plan.routes.find(r => r.id === selectedRouteId) ?? null : null;
@@ -5110,7 +5178,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const measureZone = !readOnly ? (
     <div
       data-testid="measure-zone"
-      style={{ ...(measurePanelHost ? {} : { marginTop: PLANNING_SPACING.xs }), paddingBottom: PLANNING_SPACING.xs, borderBottom: `1px solid ${PLANNING_SURFACE.panelBorder}` }}
+      style={{ ...(measurePanelHost ? {} : { marginTop: PLANNING_SPACING.xs }), paddingBottom: PLANNING_SPACING.xs }}
     >
       {/* 浮窗自带页签标题，搬进右上角后不再重复渲染这一行。 */}
       {!outdoorInspectorActive && (
@@ -5121,32 +5189,102 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <span style={{ opacity: 0.6, fontSize: 11 }}>{levelView.measurements?.length ?? 0}</span>
         </div>
       )}
-      <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
-        {(['distance', 'area', 'path'] as const).map(k => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={mode === 'measure' && measureKind === k}
-            data-testid={`measure-type-${k}`}
-            style={{ ...modeButtonStyle(mode === 'measure' && measureKind === k), flex: 1, justifyContent: 'center' }}
-            onClick={() => {
-              measureKindRef.current = k;
-              setMeasureKind(k);
-              measureDraftRef.current = [];
-              measureCursorRef.current = null;
-              setMeasureDraftCount(0);
-              setEditMessage(null);
-              draw();
-              setMode('measure');
+      {/* 2026-11-12 变体2：紧凑工具条——图标入口钮 + 右侧读数小标签；点开竖向下拉切模式，入口记住上次默认。 */}
+      <div style={{ marginTop: PLANNING_SPACING.xs }}>
+        {(() => {
+          const TriggerIcon = planningIcon(MEASURE_KIND_ICONS[measureKind]);
+          const readout = measureDraftReadout(measureKind, measureDraftRef.current, measureCursorRef.current ?? undefined);
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                data-testid="measure-trigger"
+                aria-haspopup="listbox"
+                aria-expanded={measureMenuOpen}
+                aria-label={`测量模式：${planMeasurementKindLabels[measureKind]}`}
+                onClick={() => setMeasureMenuOpen(open => !open)}
+                style={{
+                  all: 'unset', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 8px', borderRadius: PLANNING_RADIUS.sm,
+                  border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+                  background: PLANNING_SURFACE.panelBg, color: PLANNING_SURFACE.panelText,
+                  cursor: 'pointer',
+                }}
+              >
+                <TriggerIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+                <span aria-hidden style={{ opacity: 0.55, fontSize: 10, display: 'inline-flex' }}>{measureMenuOpen ? '▾' : '▸'}</span>
+              </button>
+              <span
+                aria-hidden
+                style={{ marginLeft: 'auto', fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: readout ? PLANNING_SURFACE.panelText : PLANNING_TEXT.muted }}
+              >
+                {readout ?? '—'}
+              </span>
+            </div>
+          );
+        })()}
+        {measureMenuOpen && (
+          <div
+            role="listbox"
+            aria-label="测量类型"
+            data-testid="measure-menu"
+            style={{
+              marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
+              background: PLANNING_SURFACE.panelBg,
+              border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+              boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
+              display: 'grid', gap: 2,
             }}
           >
-            {planMeasurementKindLabels[k]}
-          </button>
-        ))}
+            {(['distance', 'area', 'path'] as const).map(k => {
+              const KindIcon = planningIcon(MEASURE_KIND_ICONS[k]);
+              const active = mode === 'measure' && measureKind === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  data-testid={`measure-type-${k}`}
+                  onClick={() => {
+                    measureKindRef.current = k;
+                    setMeasureKind(k);
+                    measureDraftRef.current = [];
+                    measureCursorRef.current = null;
+                    setMeasureDraftCount(0);
+                    setEditMessage(null);
+                    draw();
+                    setMode('measure');
+                    setMeasureMenuOpen(false);
+                  }}
+                  style={{
+                    all: 'unset', display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 8px', borderRadius: PLANNING_RADIUS.sm,
+                    background: active ? PLANNING_SURFACE.activeBg : 'transparent',
+                    color: PLANNING_SURFACE.panelText,
+                    fontWeight: active ? 600 : 400,
+                    fontSize: PLANNING_TYPOGRAPHY.row, cursor: 'pointer',
+                  }}
+                >
+                  <span aria-hidden style={{ width: 14, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center', color: PLANNING_LAYER_COLORS.measure }}>
+                    {active ? (
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                    ) : null}
+                  </span>
+                  <KindIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+                  <span>{planMeasurementKindLabels[k]}</span>
+                  <span aria-hidden style={{ marginLeft: 'auto', color: PLANNING_TEXT.muted, fontSize: PLANNING_TYPOGRAPHY.hint }}>{MEASURE_KIND_META[k]}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
-      {/* 2026-11-11 拖拽式测量引导：拖拽为快速模式，单击保留精细逐点模式。 */}
-      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: 12 }}>
-        按住拖动：距离拉线 · 面积矩形（Shift 正方形）· 路径手绘；单击 = 逐点精细测量。
+      {/* 2026-11-12 精简：不再常驻三模式长说明，只给当前模式一句短引导；拖拽快速、单击逐点两种手势都保留。 */}
+      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+        {measureKind === 'distance' && '点两点，或拖一条线'}
+        {measureKind === 'area' && '拖矩形（Shift 正方形），或点选闭合'}
+        {measureKind === 'path' && '按住手绘，或逐点单击、双击结束'}
       </div>
       {mode === 'measure' && measureKind !== 'distance' && (
         <button
@@ -5156,7 +5294,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           style={{ ...modeButtonStyle(false), marginTop: PLANNING_SPACING.xs, width: '100%', justifyContent: 'center', opacity: (measureKind === 'area' ? measureDraftCount < 3 : measureDraftCount < 2) ? 0.5 : 1 }}
           onClick={() => finishMeasure()}
         >
-          完成测量（{measureDraftCount} 点）
+          完成（{measureDraftCount} 点）
         </button>
       )}
       {(levelView.measurements?.length ?? 0) > 0 && levelView.measurements!.map(m => renderOneplanItemRow({
@@ -5202,55 +5340,153 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <span style={{ opacity: 0.6, fontSize: 11 }}>{levelView.annotations?.length ?? 0}</span>
         </div>
       )}
-      <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+      {/* 2026-11-13 A2 唤出式工具条：文本 T 常驻；形状四类收进父钮白色下拉菜单；去掉两层 tab 与长说明段。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
         <button
           type="button"
           aria-pressed={mode === 'note'}
           data-testid="annotate-type-note"
-          style={{ ...modeButtonStyle(mode === 'note'), flex: 1, justifyContent: 'center' }}
-          onClick={() => setMode('note')}
+          title="文本备注"
+          style={{ ...modeButtonStyle(mode === 'note'), width: 32, justifyContent: 'center', fontWeight: 700, fontSize: PLANNING_TYPOGRAPHY.row }}
+          onClick={() => { setMode('note'); setAnnotateMenuOpen(false); }}
         >
-          文本
+          T
         </button>
-        <button
-          type="button"
-          aria-pressed={mode === 'shape'}
-          data-testid="annotate-type-shape"
-          style={{ ...modeButtonStyle(mode === 'shape'), flex: 1, justifyContent: 'center' }}
-          onClick={() => setMode('shape')}
-        >
-          形状
-        </button>
-      </div>
-      {/* 2026-11-11 用户指令：形状态展开四类型选项（OnePlan 形状按钮点开同款）。 */}
-      {mode === 'shape' && (
-        <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
-          {PLAN_SHAPE_KINDS.map(k => (
+        {(() => {
+          const ShapeIcon = planningIcon(ANNOTATE_SHAPE_ICONS[annotateShape]);
+          return (
             <button
-              key={k}
               type="button"
-              aria-pressed={annotateShape === k}
-              data-testid={`annotate-shape-${k}`}
-              style={{ ...modeButtonStyle(annotateShape === k), flex: 1, justifyContent: 'center' }}
+              aria-haspopup="listbox"
+              aria-expanded={annotateMenuOpen}
+              aria-pressed={mode === 'shape'}
+              data-testid="annotate-type-shape"
+              style={{ ...modeButtonStyle(mode === 'shape'), flex: 1, justifyContent: 'center', gap: 6 }}
               onClick={() => {
-                annotateShapeRef.current = k;
-                setAnnotateShape(k);
-                annotateDraftRef.current = [];
-                annotateCursorRef.current = null;
-                annotateDragRef.current = null;
-                setAnnotateDraftCount(0);
-                setEditMessage(null);
-                draw();
+                setMode('shape');
+                setAnnotateMenuOpen(open => !open);
               }}
             >
-              {planAnnotationKindLabels[k]}
+              <ShapeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+              <span>{planAnnotationKindLabels[annotateShape]}</span>
+              <span aria-hidden style={{ opacity: 0.55, fontSize: 10, display: 'inline-flex' }}>{annotateMenuOpen ? '▾' : '▸'}</span>
             </button>
-          ))}
+          );
+        })()}
+      </div>
+      {annotateMenuOpen && mode === 'shape' && (
+        <div
+          role="listbox"
+          aria-label="标注形状"
+          data-testid="annotate-shape-menu"
+          style={{
+            marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
+            background: PLANNING_SURFACE.panelBg,
+            border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+            boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
+            display: 'grid', gap: 2,
+          }}
+        >
+          {PLAN_SHAPE_KINDS.map(k => {
+            const KindIcon = planningIcon(ANNOTATE_SHAPE_ICONS[k]);
+            const active = annotateShape === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="option"
+                aria-selected={active}
+                data-testid={`annotate-shape-${k}`}
+                onClick={() => {
+                  annotateShapeRef.current = k;
+                  setAnnotateShape(k);
+                  annotateDraftRef.current = [];
+                  annotateCursorRef.current = null;
+                  annotateDragRef.current = null;
+                  setAnnotateDraftCount(0);
+                  setEditMessage(null);
+                  setAnnotateMenuOpen(false);
+                  setMode('shape');
+                  draw();
+                }}
+                style={{
+                  all: 'unset', display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 8px', borderRadius: PLANNING_RADIUS.sm,
+                  background: active ? PLANNING_SURFACE.activeBg : 'transparent',
+                  color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText,
+                  fontWeight: active ? 600 : 400,
+                  fontSize: PLANNING_TYPOGRAPHY.row, cursor: 'pointer',
+                }}
+              >
+                <span aria-hidden style={{ width: 14, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center' }}>
+                  {active ? (
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                  ) : null}
+                </span>
+                <KindIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
+                <span>{planAnnotationKindLabels[k]}</span>
+                <span aria-hidden style={{ marginLeft: 'auto', color: PLANNING_TEXT.muted, fontSize: PLANNING_TYPOGRAPHY.hint }}>{ANNOTATE_SHAPE_META[k]}</span>
+              </button>
+            );
+          })}
         </div>
       )}
-      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: 12 }}>
-        文本：点一下放置就地输入（Enter 提交 / Esc 取消）；形状：矩形/圆形/线段按住拖（也可两点），三角形单击 3 点。
-        {mode === 'shape' && annotateDraftCount > 0 && ` 已收 ${annotateDraftCount} 点（${planAnnotationKindLabels[annotateShape]}还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点）。`}
+      {/* 属性行：取色对文本/形状生效；描边档位仅形状显示。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.sm }}>
+        <div role="radiogroup" aria-label="标注颜色" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {ANNOTATE_COLOR_SWATCHES.map(sw => {
+            const active = annotateColor === sw.value;
+            return (
+              <button
+                key={sw.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                aria-label={`标注颜色 ${sw.label}`}
+                data-testid={`annotate-color-${sw.value.replace('#', '')}`}
+                title={sw.label}
+                onClick={() => { annotateColorRef.current = sw.value; setAnnotateColor(sw.value); draw(); }}
+                style={{
+                  all: 'unset', width: 16, height: 16, borderRadius: 999, cursor: 'pointer',
+                  background: sw.value,
+                  boxShadow: active ? `inset 0 0 0 2px ${PLANNING_SURFACE.panelBg}, 0 0 0 1.5px ${sw.value}` : 'inset 0 0 0 1px rgba(20, 20, 22, 0.12)',
+                }}
+              />
+            );
+          })}
+        </div>
+        {mode === 'shape' && (
+          <div role="radiogroup" aria-label="描边粗细" style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+            {(['thin', 'thick'] as const).map(w => {
+              const active = annotateStrokeWidth === w;
+              return (
+                <button
+                  key={w}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={w === 'thin' ? '细线' : '粗线'}
+                  data-testid={`annotate-stroke-${w}`}
+                  title={w === 'thin' ? '细线' : '粗线'}
+                  onClick={() => { annotateStrokeWidthRef.current = w; setAnnotateStrokeWidth(w); draw(); }}
+                  style={{
+                    ...modeButtonStyle(active), width: 28, justifyContent: 'center',
+                  }}
+                >
+                  <svg viewBox="0 0 20 10" width="16" height="8" fill="none" stroke="currentColor" strokeLinecap="round">
+                    <line x1="2" y1="5" x2="18" y2="5" strokeWidth={w === 'thin' ? 1.5 : 3.5} />
+                  </svg>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+        {mode === 'note' && '点一下放置，就地输入（Enter 提交 / Esc 取消）'}
+        {mode === 'shape' && (annotateDraftCount > 0
+          ? `已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
+          : (annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖，或点两个点'))}
       </div>
       {(levelView.annotations?.length ?? 0) > 0 && levelView.annotations!.map(a => renderOneplanItemRow({
         key: `annotate-${a.id}`,
@@ -5485,6 +5721,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <span style={benchUnitSuffixStyle}>m</span>
                         </label>
                       </div>
+                      <label style={{ ...benchUnitBoxStyle, width: '100%', marginTop: PLANNING_SPACING.sm }}>
+                        <span style={benchUnitLabelStyle}>碰撞间距</span>
+                        <input
+                          aria-label="阵列碰撞安全间距（米）"
+                          data-testid="facility-repeat-margin"
+                          type="number"
+                          min={0}
+                          max={20}
+                          step={0.5}
+                          value={repeatGapMargin}
+                          onChange={event => { const v = Math.max(0, Math.min(20, Number(event.target.value) || 0)); setRepeatGapMargin(v); updateRepeatParams({ margin: v }); }}
+                          style={benchUnitInputStyle}
+                        />
+                        <span style={benchUnitSuffixStyle}>m</span>
+                      </label>
+                      <div style={{ marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.6 }}>副本与已有物件之间预留的空隙，0 为按占地紧贴判定。</div>
                       {repeatPreview && repeatBlocked && (
                         <div
                           style={{ marginTop: PLANNING_SPACING.sm, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_SURFACE.dangerText }}

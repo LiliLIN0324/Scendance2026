@@ -805,9 +805,14 @@ function drawAnnotationNote(
  * 固定自由标注（2026-11-11 用户指令）：形状 = 半透明填充 + 实线描边（线段无填充），
  * 文本 = 深底 pill。图形一律从米制几何现算，缩放不变形；选中加白描边（与动线同口径）。
  */
+/** 标注形状描边像素档位：thin 细线（旧数据缺省同此口径）/ thick 粗线；文本备注不取线宽。 */
+export function annotationStrokeWidthPx(width?: PlanAnnotation['strokeWidth']): number {
+  return width === 'thick' ? 3.5 : 2;
+}
+
 export function drawAnnotationLayer(
   c: PlanCanvasContext,
-  annotations: readonly (Pick<PlanAnnotation, 'kind' | 'points' | 'radiusM' | 'text' | 'name' | 'color'> & { selected?: boolean })[],
+  annotations: readonly (Pick<PlanAnnotation, 'kind' | 'points' | 'radiusM' | 'text' | 'name' | 'color' | 'strokeWidth'> & { selected?: boolean })[],
 ): void {
   const { ctx, viewport } = c;
   for (const a of annotations) {
@@ -844,7 +849,7 @@ export function drawAnnotationLayer(
       ctx.fill();
     }
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = annotationStrokeWidthPx(a.strokeWidth);
     ctx.stroke();
     ctx.restore();
   }
@@ -859,15 +864,19 @@ export function drawAnnotationDraft(
   draft: readonly PlanPoint[],
   kind: PlanShapeKind,
   cursorPoint?: PlanPoint,
+  /** 草稿预览沿用当前选中色/描边档位；缺省标注紫 + 细线（旧口径）。 */
+  previewColor?: string,
+  previewStrokeWidth?: PlanAnnotation['strokeWidth'],
 ): void {
   const { ctx } = c;
-  const color = PLANNING_LAYER_COLORS.annotate;
+  const color = previewColor ?? PLANNING_LAYER_COLORS.annotate;
+  const lineWidth = annotationStrokeWidthPx(previewStrokeWidth);
   if (kind === 'triangle') {
     // 三角形：已收点虚线相连 + 顶点方块 + 指针橡皮筋（与测量面积草稿同手感）。
     if (draft.length >= 2) {
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = lineWidth;
       ctx.setLineDash([8, 5]);
       tracePolyline(c, draft);
       ctx.stroke();
@@ -899,7 +908,7 @@ export function drawAnnotationDraft(
   if (!a || !b) return;
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = lineWidth;
   ctx.setLineDash([6, 4]);
   if (kind === 'rect') {
     traceRing(c, annotationRectRing(a, b));

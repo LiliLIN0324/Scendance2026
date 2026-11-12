@@ -954,6 +954,26 @@ it('keeps local activity controls available for a scene connection and does not 
   expect(local.id).toBe(localId);
 });
 
+describe('CloudPanel preferences section', () => {
+  it('shows the active unit and measurement switch, forwarding changes', () => {
+    const onPreferenceChange = vi.fn();
+    const initial = backendSceneToLayout(scene, { projectId, name: original.name });
+    render(<CloudPanel controller={controller} layout={initial} onLoadLayout={vi.fn()}
+      preferences={{ lengthUnit: 'ft', showMeasurements: false }}
+      onPreferenceChange={onPreferenceChange} />);
+    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    expect(screen.getByRole('button', { name: /英尺/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /米/ }).getAttribute('aria-pressed')).toBe('false');
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /米/ }));
+    expect(onPreferenceChange).toHaveBeenLastCalledWith({ lengthUnit: 'm' });
+    fireEvent.click(checkbox);
+    expect(onPreferenceChange).toHaveBeenLastCalledWith({ showMeasurements: true });
+  });
+});
+
 describe('CloudPanel section entry points', () => {
   it('opens 账户中心 from the avatar and follows explicit requests to other sections', () => {
     queue([]);
