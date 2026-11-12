@@ -2,7 +2,7 @@
 
 import { useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import { Pencil, Loader2, Upload } from '@/components/solid-icons';
-import { importBrief, importDisplayName, localGlbKey, validateLocalGlbPick } from '../lib/glb-import';
+import { importBrief, importDisplayName, newLocalGlbKey, validateLocalGlbPick } from '../lib/glb-import';
 import {
   importLocalGlb,
   listImportedGlbAssets,
@@ -30,12 +30,8 @@ export interface LocalGlbImportProps {
 
 const SERVER_REVISION = () => 0;
 
-function nowKey(): string {
-  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : Date.now().toString(36);
-  return localGlbKey(random);
-}
+/** 会话内一次性的导入缓存键；实现收口在 lib/glb-import.ts（画布「导入 GLB」也用它）。 */
+const nowKey = newLocalGlbKey;
 
 const HELP = <>
   只收单文件 .glb。导入时按现有规则归一化：最长边 ≥ 20 判厘米 ×0.01，Z-up 绕 X 转 -90°，

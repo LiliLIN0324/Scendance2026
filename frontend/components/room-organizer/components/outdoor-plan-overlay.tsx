@@ -18,6 +18,7 @@ import OutdoorPlanCanvas, {
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from '@/components/room-organizer/components/outdoor-plan-3d';
 import type { PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
@@ -29,6 +30,7 @@ import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { fetchPlaceShape } from '@/components/room-organizer/lib/place-area';
+import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
 import OutdoorViewSwitch from '@/components/room-organizer/components/outdoor-view-switch';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
@@ -109,6 +111,12 @@ export interface OutdoorPlanOverlayProps {
    * 接管态由 room-organizer 提供（透传给画布，portal 出隐藏覆盖层）；2D 态不传。
    */
   inspectorHostId?: string;
+  /**
+   * V-5b/c（2026-11-13）：属性卡「模型」区的生成/上传入口外发（透传给 OutdoorPlanCanvas）。
+   * room-organizer 侧接线：记 facility 链接 + 预填左栏物料生成框（仍须确认额度）；
+   * 提交成功后画布轮询回填候选首位。只读分享页等不传，按钮缺省 no-op。
+   */
+  onOpenMaterialGenerate?: (facilityId: string, kind: 'text' | 'image') => void;
 }
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
@@ -149,7 +157,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onViewChange,
   dormant = false,
   inspectorHostId,
+  onOpenMaterialGenerate,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
+  const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const plan3dApiRef = useRef<OutdoorPlan3DApi | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
@@ -232,10 +242,57 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotId]);
 
+  // V-1c（2026-11-13）：chat 场地确认 / 地图圈画换场地后，壳体会带着新锚点重新播种
+  // （room-organizer 的 outdoorSeedPlan 随 layout 重算）——但本组件只在挂载时吃 seedPlan
+  // （防每次 layout 编辑都重置画布）。这里守一道「场地签名」：锚点或边界形状变了才重播种
+  // （换场地=清空重开，与「新建/换场地」同语义），同一场地内的普通编辑不动草稿。
+  // 重播种后顺带把视野框进新边界（V-1d 相机框选）。
+  const venueSignature = (source: SitePlanData | null | undefined): string | null =>
+    source?.anchor
+      ? `${source.anchor.lng.toFixed(6)},${source.anchor.lat.toFixed(6)}|${source.boundary.length}|${Math.round(source.boundary[0]?.x ?? 0)},${Math.round(source.boundary[0]?.y ?? 0)}`
+      : null;
+  const venueSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (venueSigRef.current === null) {
+      venueSigRef.current = venueSignature(plan) ?? venueSignature(seedPlan);
+      return;
+    }
+    const sig = venueSignature(seedPlan);
+    if (!sig || !seedPlan?.anchor || sig === venueSigRef.current) return;
+    venueSigRef.current = sig;
+    setPlan(seedPlan);
+    // 旧场地的视图残留（定位钉/选区）一并清掉；视野飞进新边界。
+    setPlacePin(null);
+    setPlaceArea(null);
+    setShapeLoading(false);
+    let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+    for (const point of seedPlan.boundary) {
+      const geo = enuToLngLat(point.x, point.y, seedPlan.anchor.lng, seedPlan.anchor.lat);
+      west = Math.min(west, geo.lng); east = Math.max(east, geo.lng);
+      south = Math.min(south, geo.lat); north = Math.max(north, geo.lat);
+    }
+    const focusAnchor = seedPlan.anchor;
+    requestAnimationFrame(() => {
+      canvasApiRef.current?.focusBounds([west, south, east, north]);
+      plan3dApiRef.current?.focusLngLat(focusAnchor.lng, focusAnchor.lat);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedPlan, plan]);
+
   // 保存管线：同户外项目工作台（400ms 防抖 + 卸载 flush）；状态经 onSaveStateChange
   // 上报给 room-organizer，在左轨 foot（主产品保存态原位）显示。
   const planRef = useRef<SitePlanData | null>(plan);
   planRef.current = plan;
+  // V-2d/V-3c：把「应用流线/应用区域」的画布入口与当前 plan 读取口注册给 chat agent——
+  // 气泡确认后 provider 调这里；plan 经 ref 每帧取最新，注册一次终身有效。
+  useEffect(() => {
+    agent?.registerRouteBridge?.({
+      applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
+      applyZoneProposal: (zones, facilities) => canvasApiRef.current?.applyZoneProposal(zones, facilities) ?? false,
+      getPlan: () => planRef.current,
+    });
+    return () => agent?.registerRouteBridge?.(null);
+  }, [agent]);
   const pendingSaveRef = useRef<number | null>(null);
   const flushSave = useCallback(() => {
     const current = planRef.current;
@@ -365,6 +422,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             sceneObjects={sceneObjects}
             {...(placePin ? { searchPin: placePin } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
+            {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
+            {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
+            {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
+            {...(onOpenMaterialGenerate ? { onOpenMaterialGenerate } : {})}
             {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>
@@ -400,25 +461,39 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             const seq = shapeSeqRef.current + 1;
             shapeSeqRef.current = seq;
             setShapeLoading(true);
-            void fetchPlaceShape(place.name, {
-              near: { lng: place.lng, lat: place.lat },
-            }).then(shape => {
-              if (shapeSeqRef.current !== seq) return; // 期间换了目标：loading 归新目标管
-              setShapeLoading(false);
-              if (!shape) return;
-              // 2026-11-13 用户拍板：出框后钉不撤——挪到范围正中继续挂着
-              // （高德同款：蓝框 + 中心定位钉带名称胶囊）；选区顶部标签让位给这枚钉。
-              const [west, south, east, north] = shape.bounds;
-              setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: place.name });
-              setPlaceArea({
-                polygon: shape.polygon,
-                label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
-                ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
+            // 2026-11-13 用户「到底要怎么样能转出来选区」：上游公共镜像间歇抽风
+            // （本机/CF 都会断），一次点击自动重试三轮（间隔 9s）——坏窗口里
+            // 命中率翻几倍；期间「正在圈范围…」提示持续在，换目标/清除即停。
+            const attemptShapeFetch = (attempt: number) => {
+              void fetchPlaceShape(place.name, {
+                near: { lng: place.lng, lat: place.lat },
+              }).then(shape => {
+                if (shapeSeqRef.current !== seq) return; // 期间换了目标：loading 归新目标管
+                if (!shape && attempt < 2) {
+                  window.setTimeout(() => attemptShapeFetch(attempt + 1), 9000);
+                  return;
+                }
+                setShapeLoading(false);
+                if (!shape) return;
+                // 2026-11-13 用户拍板：出框后钉不撤——挪到范围正中继续挂着
+                // （高德同款：蓝框 + 中心定位钉带名称胶囊）；选区顶部标签让位给这枚钉。
+                const [west, south, east, north] = shape.bounds;
+                setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: place.name });
+                setPlaceArea({
+                  polygon: shape.polygon,
+                  label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
+                  ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
+                });
+                canvasApiRef.current?.focusBounds(shape.bounds);
+              }).catch(() => {
+                if (shapeSeqRef.current === seq && attempt < 2) {
+                  window.setTimeout(() => attemptShapeFetch(attempt + 1), 9000);
+                  return;
+                }
+                if (shapeSeqRef.current === seq) setShapeLoading(false);
               });
-              canvasApiRef.current?.focusBounds(shape.bounds);
-            }).catch(() => {
-              if (shapeSeqRef.current === seq) setShapeLoading(false);
-            });
+            };
+            attemptShapeFetch(0);
           }}
           onClear={() => { shapeSeqRef.current += 1; setShapeLoading(false); setPlacePin(null); setPlaceArea(null); }}
         />

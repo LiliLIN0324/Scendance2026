@@ -68,6 +68,14 @@ import {
   XIHU_LOCAL_PLACE,
   XIHU_LOCAL_SPAN_M,
 } from '../lib/research-area';
+import { matchVenueCommand } from '../lib/venue-intent';
+import { searchPlaces, type PlaceSuggestion } from '../lib/place-search';
+import { fetchPlaceShape, searchAreas } from '../lib/place-area';
+import { fetchRoadNetwork } from '../lib/road-network';
+import { buildRouteProposal, matchRouteCommand, type RouteProposal } from '../lib/route-proposal';
+import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
+import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
+import type { PlanFacility, PlanNode, PlanRoute, PlanZone, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
@@ -522,6 +530,31 @@ interface AgentValue {
   mapPickerOpen: boolean;
   startMapVenuePicker(): void;
   closeMapVenuePicker(): void;
+  /** V-1b 场地回显确认卡状态：null=没有待确认的场地意图。 */
+  venuePick: { query: string; candidates: PlaceSuggestion[]; loading: boolean; picking: string | null } | null;
+  /** V-1c 锚定链：POI 轮廓 → 行政区 → 起步矩形兜底，走 applyMapVenuePick 落壳。 */
+  handleVenuePick(place: PlaceSuggestion): void;
+  dismissVenuePick(): void;
+  /** V-2d 流线提案（预览态）：虚线画在画布上，确认才 applyRoutes 写入（可撤销）。 */
+  routeProposal: RouteProposal | null;
+  routeBusy: boolean;
+  proposeRoutePlan(): void;
+  confirmRouteProposal(): void;
+  dismissRouteProposal(): void;
+  /** V-3 区域提案（预览态）：虚线分区+物料幽灵，确认才 applyZoneProposal 写入（可撤销）。 */
+  zoneProposal: ZoneEventProposal | null;
+  zoneBusy: boolean;
+  proposeZonePlan(): void;
+  confirmZoneProposal(): void;
+  dismissZoneProposal(): void;
+  /** V-4a 子出入口提案：复用 routeProposal 通道（驳线+子口走同一确认卡/applyRoutes）。 */
+  proposeSubEntrances(): void;
+  /** V-4b 流动模拟开关：开=画布 66ms 步进行人动画（纯视图，不写 plan）。 */
+  flowSimActive: boolean;
+  startFlowSim(): void;
+  stopFlowSim(): void;
+  /** 户外画布桥（overlay 注册）：应用流线/区域走 commitPlan、读 plan 取锚点/边界。 */
+  registerRouteBridge(bridge: { applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean; applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[]): boolean; getPlan(): SitePlanData | null } | null): void;
   /** 「换场地 / 新建」弹层：空白场地、我的云项目、新建项目同一个入口。 */
   venuePickerOpen: boolean;
   startVenuePicker(): void;
@@ -654,6 +687,25 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [stylePickerOpen, setStylePickerOpen] = useState(false);
+  // V-1b（2026-11-13）：chat 认出场地意图后的回显确认卡——候选来自双源检索，
+  // 点选才走锚定链（先回显再动手，「确认后才写进画布」纪律不破）。query 置空表示
+  // 占位反问（'ask'），只回话不开卡。
+  const [venuePick, setVenuePick] = useState<{
+    query: string;
+    candidates: PlaceSuggestion[];
+    loading: boolean;
+    picking: string | null;
+  } | null>(null);
+  const venuePickSeq = useRef(0);
+  // V-2d：流线提案（预览态）——虚线画在画布上（overlay 经 context 读到），确认才写入（可撤销）。
+  const [routeProposal, setRouteProposal] = useState<RouteProposal | null>(null);
+  const [routeBusy, setRouteBusy] = useState(false);
+  const routeBridgeRef = useRef<{ applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean; applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[]): boolean; getPlan(): SitePlanData | null } | null>(null);
+  // V-3：区域提案（预览态）——虚线分区+物料幽灵，确认才写入（可撤销）。
+  const [zoneProposal, setZoneProposal] = useState<ZoneEventProposal | null>(null);
+  const [zoneBusy, setZoneBusy] = useState(false);
+  // V-4b：流动模拟开关（动画在 canvas 内 ticker，这里只管开/关与回话）。
+  const [flowSimActive, setFlowSimActive] = useState(false);
   const [progress, setProgress] = useState(0);
   // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
   const [exportPreview, setExportPreview] = useState(false);
@@ -1483,6 +1535,257 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       removeAbortListener();
       unsubscribeMap();
       if(researchRequest.current === controller)researchRequest.current = null;
+    }
+  }
+
+  // V-1b：场地候选检索（双源：本机高德+天地图 / 线上高德）。失败静默为空，
+  // 卡片自己显示「没搜到」；seq 防旧请求的迟到结果覆盖新问题。
+  useEffect(() => {
+    if (!venuePick?.loading || !venuePick.query) return;
+    const seq = ++venuePickSeq.current;
+    const query = venuePick.query;
+    searchPlaces(query, { limit: 5 })
+      .then(candidates => {
+        if (seq !== venuePickSeq.current) return;
+        setVenuePick(current => (current && current.query === query ? { ...current, candidates, loading: false } : current));
+      })
+      .catch(() => {
+        if (seq !== venuePickSeq.current) return;
+        setVenuePick(current => (current && current.query === query ? { ...current, candidates: [], loading: false } : current));
+      });
+  }, [venuePick?.loading, venuePick?.query]);
+
+  // V-1c 锚定链：POI 真实轮廓（OSM）→ 行政区边界 → 起步矩形兜底——
+  // 真实轮廓挖不到不虚构，矩形与起步计划同语义（用户可在物件库「场地边界（重画）」修正）。
+  // 应用本身走既有 applyMapVenuePick（立壳/校验/清物料/回话全在它身上）。
+  async function handleVenuePick(place: PlaceSuggestion): Promise<void> {
+    if (!venuePick || venuePick.picking) return;
+    setVenuePick(current => (current ? { ...current, picking: place.name } : current));
+    const near = { lng: place.lng, lat: place.lat };
+    const spanMeters = (polygon: [number, number][]): number => {
+      let west = Infinity; let east = -Infinity; let south = Infinity; let north = -Infinity;
+      for (const [lng, lat] of polygon) {
+        west = Math.min(west, lng); east = Math.max(east, lng);
+        south = Math.min(south, lat); north = Math.max(north, lat);
+      }
+      return Math.max((east - west) * 85000, (north - south) * 111132);
+    };
+    let polygon: [number, number][] | null = null;
+    let source = 'rect';
+    try {
+      const shape = await fetchPlaceShape(place.name, { near });
+      if (shape?.polygon?.length && spanMeters(shape.polygon) <= 9000) { polygon = shape.polygon; source = 'osm'; }
+    } catch { /* 静默降级 */ }
+    if (!polygon) {
+      try {
+        const areas = await searchAreas(place.name, { near });
+        const area = areas.find(entry => entry.polygon.length >= 3);
+        if (area && spanMeters(area.polygon) <= 9000) { polygon = area.polygon; source = 'area'; }
+      } catch { /* 静默降级 */ }
+    }
+    if (!polygon) {
+      // 起步矩形兜底：以 POI 为中心的 300m 方块（±5000m ENU 契约内）。
+      const dLng = 150 / 85000;
+      const dLat = 150 / 111132;
+      polygon = [
+        [place.lng - dLng, place.lat - dLat],
+        [place.lng + dLng, place.lat - dLat],
+        [place.lng + dLng, place.lat + dLat],
+        [place.lng - dLng, place.lat + dLat],
+      ];
+    }
+    const reason = applyVenuePick({
+      name: place.name,
+      location: place.address,
+      polygon: polygon.map(([lng, lat]) => ({ lng, lat })),
+    });
+    setVenuePick(null);
+    if (!reason && source === 'rect') {
+      say({ role: 'agent', text: '这块地暂时没挖到真实轮廓，先按 300m 起步矩形立了壳——要精确边界可用物件库「场地边界（重画）」。' });
+    }
+  }
+
+  // V-2c：流线提案生成——读当前户外 plan（锚点/边界由 overlay 桥供给），路网 bbox 取边界最大跨度+余量。
+  async function proposeRoutePlan(): Promise<void> {
+    if (routeBusy) return;
+    const plan = routeBridgeRef.current?.getPlan() ?? null;
+    if (!plan?.anchor || plan.boundary.length < 3) {
+      say({ role: 'agent', amber: true, text: '还没有可排流线的场地——先说一句「在XX做设计」把场地立起来，再排流线。' });
+      return;
+    }
+    setRouteBusy(true);
+    try {
+      let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+      for (const point of plan.boundary) {
+        west = Math.min(west, point.x); east = Math.max(east, point.x);
+        south = Math.min(south, point.y); north = Math.max(north, point.y);
+      }
+      const spanM = Math.max(east - west, north - south) * 0.75 + 300;
+      say({ role: 'agent', text: '正在读这一带的路网，排一版人流/车流/后勤流线和出入口…' });
+      const { roads } = await fetchRoadNetwork({ lng: plan.anchor.lng, lat: plan.anchor.lat }, spanM);
+      const proposal = buildRouteProposal({
+        boundary: plan.boundary,
+        anchor: { lng: plan.anchor.lng, lat: plan.anchor.lat },
+        roads,
+      });
+      if (!proposal) {
+        say({ role: 'agent', amber: true, text: '这一带的路网暂时拿不到（OSM 忙或没收录道路）——稍后再说一次「排流线」，或先用画布手画。' });
+        return;
+      }
+      setRouteProposal(proposal);
+      say({ role: 'agent', text: `路网读到了：草拟 ${proposal.routes.length} 条流线（人行 ${proposal.summary.pedestrian}/车行 ${proposal.summary.vehicle}/后勤 ${proposal.summary.service}）+ ${proposal.summary.entrances} 个出入口。画布上的虚线是预览——点「应用」才真正写入，整批可撤销。` });
+    } catch {
+      say({ role: 'agent', amber: true, text: '路网服务暂时不可用，这次没有生成提案；稍后再试一次。' });
+    } finally {
+      setRouteBusy(false);
+    }
+  }
+
+  function confirmRouteProposal(): void {
+    const proposal = routeProposal;
+    if (!proposal) return;
+    const ok = routeBridgeRef.current?.applyRoutes(proposal.routes, proposal.nodes) ?? false;
+    setRouteProposal(null);
+    if (ok) say({ role: 'agent', text: `已应用 ${proposal.routes.length} 条流线和 ${proposal.nodes.length} 个出入口——虚线变实线了，Ctrl+Z 可整批撤销。` });
+    else say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），提案先留着；打开户外规划再说一次「排流线」。' });
+  }
+
+  function dismissRouteProposal(): void {
+    setRouteProposal(null);
+    say({ role: 'agent', text: '这版流线提案已放弃，画布上的虚线撤掉了。' });
+  }
+
+  // V-3：区域→事件→物料提案——brief 里的活动名/人数进配比，出入口决定入场朝向。
+  function proposeZonePlan(): void {
+    if (zoneBusy) return;
+    const plan = routeBridgeRef.current?.getPlan() ?? null;
+    if (!plan?.anchor || plan.boundary.length < 3) {
+      say({ role: 'agent', amber: true, text: '还没有可分区的场地——先说一句「在XX做设计」把场地立起来，再分区。' });
+      return;
+    }
+    setZoneBusy(true);
+    try {
+      const memory = memoryRef.current;
+      const proposal = buildZoneEventProposal({
+        boundary: plan.boundary,
+        nodes: plan.nodes,
+        brief: { event: memory.event ?? null, guests: memory.headcount ?? null },
+      });
+      if (!proposal) {
+        say({ role: 'agent', amber: true, text: '这块场地太小（可用范围不足 40×30m），分区没有意义——先把边界画大一点。' });
+        return;
+      }
+      setZoneProposal(proposal);
+      say({ role: 'agent', text: `分区草案好了：${proposal.summary.zones} 个区域（签到→观众→舞台${proposal.zones.some(z => z.semantic === 'parking') ? '，含停车/装卸' : ''}）+ ${proposal.summary.facilities} 件物料。画布上的虚线框是预览——点「应用」才写入，可整批撤销。` });
+    } catch {
+      say({ role: 'agent', amber: true, text: '分区提案生成失败；稍后再说一次「分区」。' });
+    } finally {
+      setZoneBusy(false);
+    }
+  }
+
+  function confirmZoneProposal(): void {
+    const proposal = zoneProposal;
+    if (!proposal) return;
+    const ok = routeBridgeRef.current?.applyZoneProposal(proposal.zones, proposal.facilities) ?? false;
+    setZoneProposal(null);
+    if (ok) say({ role: 'agent', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
+    else say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），提案先留着；打开户外规划再说一次「分区」。' });
+  }
+
+  function dismissZoneProposal(): void {
+    setZoneProposal(null);
+    say({ role: 'agent', text: '这版分区提案已放弃，画布上的虚线撤掉了。' });
+  }
+
+  // V-4a：子出入口提案——给每个分区接驳最近的主流线（复用 routeProposal 确认卡与 applyRoutes）。
+  function proposeSubEntrances(): void {
+    const plan = routeBridgeRef.current?.getPlan() ?? null;
+    if (!plan) {
+      say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），打开户外规划再补子出入口。' });
+      return;
+    }
+    if (plan.zones.length === 0 || plan.routes.length === 0) {
+      say({ role: 'agent', amber: true, text: '子出入口要「分区」和「流线」都在才能接——先排流线、分区，再补子口。' });
+      return;
+    }
+    const proposal = buildSubEntranceProposal(plan);
+    if (!proposal) {
+      say({ role: 'agent', amber: true, text: '没找到能接驳的分区——流线都离分区太远（>120m），或者子口位已经被占了。' });
+      return;
+    }
+    setRouteProposal({ routes: proposal.routes, nodes: proposal.nodes, summary: { pedestrian: proposal.routes.filter(route => route.kind === 'pedestrian').length, vehicle: proposal.routes.filter(route => route.kind === 'vehicle').length, service: proposal.routes.filter(route => route.kind === 'service').length, entrances: proposal.nodes.length } });
+    say({ role: 'agent', text: `子出入口草案：${proposal.summary.spurs} 条驳线 + ${proposal.nodes.length} 个子口（${proposal.summary.skippedFar} 个分区离流线太远没接）。虚线是预览——应用后人流就能从区口进出主流线。` });
+  }
+
+  // V-4b：流动模拟开关（动画在 canvas ticker；这里校验流线在不在并回话）。
+  function startFlowSim(): void {
+    if (flowSimActive) {
+      say({ role: 'agent', text: '模拟已经在跑了——画布上的小点就是人流。说「停止模拟」结束。' });
+      return;
+    }
+    const plan = routeBridgeRef.current?.getPlan() ?? null;
+    if (!plan || plan.routes.length === 0) {
+      say({ role: 'agent', amber: true, text: '还没有流线可模拟——先「排一下流线」并应用，再开始模拟。' });
+      return;
+    }
+    setFlowSimActive(true);
+    say({ role: 'agent', text: `流动模拟开始了：${plan.routes.length} 条流线上的小点就是人流/车流，线色深浅=密度。这是预览动画，不写入方案；说「停止模拟」结束。` });
+  }
+
+  function stopFlowSim(): void {
+    if (!flowSimActive) return;
+    setFlowSimActive(false);
+    say({ role: 'agent', text: '流动模拟停了。要再看就说「开始模拟」。' });
+  }
+
+  /** 场地圈画应用（原 value 内联体，V-1c 提为具名函数：chat 锚定链与地图选址共用同一落壳路径）。 */
+  function applyVenuePick(pick: { name: string; location: string; polygon: AmapPoint[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null {
+    if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
+    const was2D = view.view2D;
+    try {
+      const base = layoutStore.getState().layout;
+      if (base.floors.length !== 1) throw new Error('当前方案有多个楼层，圈场地会丢失已有内容；请保留原方案并先核对。');
+      const { layout, cleared } = createVenueFromPick(base, pick);
+      const preservation = validateCandidateApply(base, layout, activeFloorIndex);
+      if (!preservation.ok) throw new Error(preservation.reason);
+      for (const floor of base.floors) for (const item of floor.items) {
+        const candidate = layout.floors.find(value => value.id === floor.id)?.items.find(value => value.id === item.id);
+        if (!candidate || !sameRecoveryFormValue(item, candidate)) throw new Error(`圈场地会改变或移除「${item.name}」，本次未应用；请先保留原方案并核对。`);
+      }
+      // 圈在平湖秋月这一片里：自动垫上这一片的卫星底图；圈在别处就沿用现有底图。
+      const localBounds = boundsAround(XIHU_LOCAL_CENTER, XIHU_LOCAL_SPAN_M);
+      const { west, east, south, north } = localBounds;
+      const withinWestLake = pick.polygon.every(({ lng, lat }) => lng >= west && lng <= east && lat >= south && lat <= north);
+      const researchArea = withinWestLake
+        ? layout.researchArea?.name === XIHU_LOCAL_NAME
+          ? layout.researchArea
+          : createResearchArea(XIHU_LOCAL_PLACE, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE)
+        : layout.researchArea;
+      onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
+      runToken.current++; if (proposal.current) dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0);
+      setVenueIO('outdoor');
+      onVenueIOChange?.('outdoor');
+      if (was2D) setView(current => ({ ...current, view2D: true }));
+      if (pick.satelliteGround) {
+        setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: layout.floorPlanOpacity ?? 0.55 }));
+      }
+      const dims = polygonBboxMeters(pick.polygon);
+      const clamped = dims.width > 100 || dims.depth > 100;
+      const dropped = cleared ? `${cleared} 件物料放不下先撤了` : '物料照常摆';
+      const polyNote = (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon')
+        ? '，壳体按圈画真轮廓（非仅外接矩形）'
+        : '';
+      const satNote = withinWestLake
+        ? '；已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围'
+        : pick.satelliteGround ? '；已开启卫星参考底图'
+        : '';
+      say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步可在「空间」查看实景，或重新打开地图选址，按采集单拍摄本场素材。` });
+      return null;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '地图场地没立起来，再试一次。';
+      say({ role: 'agent', amber: true, text: reason });
+      return reason;
     }
   }
 
@@ -2646,6 +2949,42 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       await runResearchCommand(researchQuery);
       return;
     }
+    // V-1a：场地意图先于 brief 管线——「在潮乐之城去做设计」不是活动描述，是选场地。
+    // 'ask' = 说了场地但没说清是哪儿，反问一句；抓到地名则开回显确认卡（V-1b）。
+    const venueName = matchVenueCommand(trimmed);
+    if (venueName === 'ask') {
+      say({ role: 'agent', amber: true, text: '想在哪块场地做？说一个场地名（比如「在西湖做设计」），我帮你找出来确认。' });
+      return;
+    }
+    if (venueName) {
+      setVenuePick({ query: venueName, candidates: [], loading: true, picking: null });
+      say({ role: 'agent', text: `我理解为「${venueName}」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。` });
+      return;
+    }
+    // V-2c/d：流线提案——「排流线/自动排入口」读路网生成草案，虚线预览等确认。
+    if (matchRouteCommand(trimmed)) {
+      await proposeRoutePlan();
+      return;
+    }
+    // V-3：区域提案——「分区/排区域」按入场朝向分带生成区域+物料草案，虚线预览等确认。
+    if (matchZoneCommand(trimmed)) {
+      await proposeZonePlan();
+      return;
+    }
+    // V-4a：子出入口——「补子出入口」给已有分区接驳主流线（复用流线提案通道）。
+    if (matchSubEntranceCommand(trimmed)) {
+      await proposeSubEntrances();
+      return;
+    }
+    // V-4b：流动模拟开关。
+    if (/开始模拟|启动模拟|模拟人流|流动模拟|跑一下模拟/u.test(trimmed)) {
+      startFlowSim();
+      return;
+    }
+    if (/停止模拟|停下模拟|关掉模拟|结束模拟/u.test(trimmed)) {
+      stopFlowSim();
+      return;
+    }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
     const aholo = prepareAholoAsk(trimmed);
     if (aholo) {
@@ -3057,54 +3396,25 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     startStylePicker: () => { setStylePickerOpen(true); setMapPickerOpen(false); setVenuePickerOpen(false); },
     closeStylePicker: () => setStylePickerOpen(false),
     placeStyleBundle: placeStyleBundleNow,
-    applyMapVenuePick: pick => {
-      if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
-      const was2D = view.view2D;
-      try {
-        const base = layoutStore.getState().layout;
-        if (base.floors.length !== 1) throw new Error('当前方案有多个楼层，圈场地会丢失已有内容；请保留原方案并先核对。');
-        const { layout, cleared } = createVenueFromPick(base, pick);
-        const preservation = validateCandidateApply(base, layout, activeFloorIndex);
-        if (!preservation.ok) throw new Error(preservation.reason);
-        for (const floor of base.floors) for (const item of floor.items) {
-          const candidate = layout.floors.find(value => value.id === floor.id)?.items.find(value => value.id === item.id);
-          if (!candidate || !sameRecoveryFormValue(item, candidate)) throw new Error(`圈场地会改变或移除「${item.name}」，本次未应用；请先保留原方案并核对。`);
-        }
-        // 圈在平湖秋月这一片里：自动垫上这一片的卫星底图；圈在别处就沿用现有底图。
-        const localBounds = boundsAround(XIHU_LOCAL_CENTER, XIHU_LOCAL_SPAN_M);
-        const { west, east, south, north } = localBounds;
-        const withinWestLake = pick.polygon.every(({ lng, lat }) => lng >= west && lng <= east && lat >= south && lat <= north);
-        const researchArea = withinWestLake
-          ? layout.researchArea?.name === XIHU_LOCAL_NAME
-            ? layout.researchArea
-            : createResearchArea(XIHU_LOCAL_PLACE, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE)
-          : layout.researchArea;
-        onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
-        runToken.current++; if (proposal.current) dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0);
-        setVenueIO('outdoor');
-        onVenueIOChange?.('outdoor');
-        if (was2D) setView(current => ({ ...current, view2D: true }));
-        if (pick.satelliteGround) {
-          setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: layout.floorPlanOpacity ?? 0.55 }));
-        }
-        const dims = polygonBboxMeters(pick.polygon);
-        const clamped = dims.width > 100 || dims.depth > 100;
-        const dropped = cleared ? `${cleared} 件物料放不下先撤了` : '物料照常摆';
-        const polyNote = (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon')
-          ? '，壳体按圈画真轮廓（非仅外接矩形）'
-          : '';
-        const satNote = withinWestLake
-          ? '；已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围'
-          : pick.satelliteGround ? '；已开启卫星参考底图'
-          : '';
-        say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步可在「空间」查看实景，或重新打开地图选址，按采集单拍摄本场素材。` });
-        return null;
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : '地图场地没立起来，再试一次。';
-        say({ role: 'agent', amber: true, text: reason });
-        return reason;
-      }
-    },
+    applyMapVenuePick: applyVenuePick,
+    venuePick,
+    handleVenuePick: place => { void handleVenuePick(place); },
+    dismissVenuePick: () => setVenuePick(null),
+    routeProposal,
+    routeBusy,
+    proposeRoutePlan: () => { void proposeRoutePlan(); },
+    confirmRouteProposal,
+    dismissRouteProposal,
+    zoneProposal,
+    zoneBusy,
+    proposeZonePlan: () => { void proposeZonePlan(); },
+    confirmZoneProposal,
+    dismissZoneProposal,
+    proposeSubEntrances: () => { void proposeSubEntrances(); },
+    flowSimActive,
+    startFlowSim,
+    stopFlowSim,
+    registerRouteBridge: bridge => { routeBridgeRef.current = bridge; },
     exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
@@ -3251,6 +3561,85 @@ export function MapRailButton(): JSX.Element {
 }
 
 /** 活动脸的快捷能力：活动级选址 + 风格套。S1 后这里是唯一的布置生成对话入口。 */
+/** V-1b 场地回显确认卡：候选来自双源检索；点选=确认真实场地并走 V-1c 锚定链。 */
+function VenueConfirmCard({ state, onPick, onDismiss }: {
+  state: { query: string; candidates: PlaceSuggestion[]; loading: boolean; picking: string | null };
+  onPick: (place: PlaceSuggestion) => void;
+  onDismiss: () => void;
+}): JSX.Element {
+  return <section className="ap-card ap-venue-card" aria-label="场地确认">
+    <p className="ap-lead-title">我理解为「{state.query}」，设为场地？</p>
+    <p className="ap-lead-body">点一个候选确认是真实场地；确认后我会立壳、铺底图并把边界框出来。都不是就换个说法再说一句（可带上城市）。</p>
+    {state.loading && <p className="ap-agent-line" role="status">正在找「{state.query}」的候选场地…</p>}
+    {!state.loading && state.candidates.length === 0 && <p className="ap-agent-line">没搜到候选场地。换个说法再说一句，或点右栏「地图选址」手动圈。</p>}
+    {state.candidates.length > 0 && <div className="ap-option-pick">
+      {state.candidates.map(place => (
+        <button
+          key={place.id}
+          type="button"
+          className="ap-option-row"
+          disabled={state.picking !== null}
+          onClick={() => onPick(place)}
+        >
+          <span className="ap-venue-option-text">
+            <span className="ap-venue-option-name">{place.name}</span>
+            {place.address && <span className="ap-venue-option-addr">{place.address}</span>}
+          </span>
+          {state.picking === place.name && <span className="ap-option-row-mark">确认中…</span>}
+        </button>
+      ))}
+    </div>}
+    {!state.loading && state.candidates.length > 0 && (
+      <button type="button" className="chip" onClick={onDismiss}>都不是，换个说法</button>
+    )}
+  </section>;
+}
+
+/** V-2d 流线提案确认卡：虚线预览在画布上，应用才 commitPlan（整批可撤销）。 */
+function RouteConfirmCard({ summary, routes, busy, onConfirm, onDismiss }: {
+  summary: { pedestrian: number; vehicle: number; service: number; entrances: number };
+  routes: number;
+  busy: boolean;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}): JSX.Element {
+  return <section className="ap-card ap-venue-card" aria-label="流线提案确认">
+    <p className="ap-lead-title">这版流线要应用吗？</p>
+    <p className="ap-lead-body">草拟 {routes} 条（人行 {summary.pedestrian} · 车行 {summary.vehicle} · 后勤 {summary.service}）+ {summary.entrances} 个出入口。画布上的虚线是预览——应用后变实线，Ctrl+Z 可整批撤销。</p>
+    <div className="ap-option-pick">
+      <button type="button" className="ap-option-row" disabled={busy} onClick={onConfirm}>
+        <span className="ap-venue-option-text"><span className="ap-venue-option-name">应用这版流线</span></span>
+        {busy && <span className="ap-option-row-mark">应用中…</span>}
+      </button>
+      <button type="button" className="ap-option-row" disabled={busy} onClick={onDismiss}>
+        <span className="ap-venue-option-text"><span className="ap-venue-option-name">放弃这版</span></span>
+      </button>
+    </div>
+  </section>;
+}
+
+/** V-3 区域提案确认卡：虚线分区+物料幽灵在画布，应用才 commitPlan（整批可撤销）。 */
+function ZoneConfirmCard({ proposal, busy, onConfirm, onDismiss }: {
+  proposal: ZoneEventProposal;
+  busy: boolean;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}): JSX.Element {
+  return <section className="ap-card ap-venue-card" aria-label="区域提案确认">
+    <p className="ap-lead-title">这版分区要应用吗？</p>
+    <p className="ap-lead-body">草拟 {proposal.summary.zones} 个区域 + {proposal.summary.facilities} 件物料（签到→观众→舞台按入场朝向分带）。画布上的虚线框是预览——应用后变实线，Ctrl+Z 可整批撤销。</p>
+    <div className="ap-option-pick">
+      <button type="button" className="ap-option-row" disabled={busy} onClick={onConfirm}>
+        <span className="ap-venue-option-text"><span className="ap-venue-option-name">应用这版分区</span></span>
+        {busy && <span className="ap-option-row-mark">应用中…</span>}
+      </button>
+      <button type="button" className="ap-option-row" disabled={busy} onClick={onDismiss}>
+        <span className="ap-venue-option-text"><span className="ap-venue-option-name">放弃这版</span></span>
+      </button>
+    </div>
+  </section>;
+}
+
 function AgentCapabilityPrompts({ onPrefill }: { onPrefill(text: string): void }): JSX.Element {
   return (
     <div id="ap-capabilities" className="ap-capabilities">
@@ -3879,6 +4268,27 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>
+      {/* V-1b 场地回显确认卡：候选来自双源检索，点选即走 V-1c 锚定链；「都不是」关卡换说法。 */}
+      {agent.venuePick && <VenueConfirmCard
+        state={agent.venuePick}
+        onPick={place => agent.handleVenuePick(place)}
+        onDismiss={() => agent.dismissVenuePick()}
+      />}
+      {/* V-2d 流线提案确认卡：虚线预览在画布，应用才写入（可撤销）。 */}
+      {agent.routeProposal && <RouteConfirmCard
+        summary={agent.routeProposal.summary}
+        routes={agent.routeProposal.routes.length}
+        busy={agent.routeBusy}
+        onConfirm={() => agent.confirmRouteProposal()}
+        onDismiss={() => agent.dismissRouteProposal()}
+      />}
+      {/* V-3 区域提案确认卡：虚线分区+物料幽灵在画布，应用才写入（可撤销）。 */}
+      {agent.zoneProposal && <ZoneConfirmCard
+        proposal={agent.zoneProposal}
+        busy={agent.zoneBusy}
+        onConfirm={() => agent.confirmZoneProposal()}
+        onDismiss={() => agent.dismissZoneProposal()}
+      />}
       {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {/* 云端真跑时由 AgentRunPanel 接管：真步骤时间线 + 停止确认行 + 过往任务归档；
           processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。 */}

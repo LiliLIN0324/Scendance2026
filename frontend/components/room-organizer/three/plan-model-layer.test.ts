@@ -11,8 +11,10 @@ import {
 } from './plan-model-layer';
 import {
   loadFacilityModelCandidates,
+  loadFacilityModelOverride,
   resolveFacilityModels,
   selectFacilityModel,
+  selectFacilityModelOverride,
   type FacilityModelCandidate,
   type FacilityModelFit,
 } from '@/components/room-organizer/lib/plan-facility-models';
@@ -40,13 +42,20 @@ vi.mock('@/components/room-organizer/lib/plan-facility-models', () => ({
   resolveFacilityModels: vi.fn(() => [CANDIDATE]),
   selectFacilityModel: vi.fn(() => FITTED),
   loadFacilityModelCandidates: vi.fn(() => Promise.resolve(new Map())),
+  fitFacilityModel: vi.fn(() => ({ scale: 1, swap: false, height: 3 })),
+  selectFacilityModelOverride: vi.fn(),
+  loadFacilityModelOverride: vi.fn(),
 }));
 
 const flush = async (): Promise<void> => {
   for (let round = 0; round < 4; round += 1) await Promise.resolve();
 };
 
-function prop(id: string, overrides: Partial<{ x: number; z: number; width: number; depth: number; rotationDeg: number }> = {}): PlanPropShape {
+function prop(
+  id: string,
+  overrides: Partial<{ x: number; z: number; width: number; depth: number; rotationDeg: number }> = {},
+  modelOverride?: string,
+): PlanPropShape {
   return {
     id,
     templateId: 'oneplan:icon:tent',
@@ -56,6 +65,7 @@ function prop(id: string, overrides: Partial<{ x: number; z: number; width: numb
     width: overrides.width ?? 5,
     depth: overrides.depth ?? 5,
     rotationDeg: overrides.rotationDeg ?? 0,
+    ...(modelOverride !== undefined ? { modelOverride } : {}),
   };
 }
 
@@ -205,6 +215,110 @@ describe('plan model layer assembly', () => {
     expect(newPlaceholder.visible).toBe(false);
     const model2 = layer.group.children.find((child) => child.userData.planPropId === 'p2');
     expect(model2).toBeDefined();
+    layer.dispose();
+  });
+});
+
+describe('plan model layer modelOverride (V-5a)', () => {
+  const OVERRIDE: FacilityModelCandidate = {
+    slug: 'override-tent',
+    name: 'override 帐篷',
+    glbUrl: '/showcase/assets/library/model/override-tent.glb',
+    width: 4,
+    depth: 4,
+    height: 2.5,
+  };
+  const metrics = { width: 100, depth: 60 };
+
+  beforeEach(() => {
+    vi.mocked(createCachedGlbModel).mockClear();
+    vi.mocked(disposeOwnedModel).mockClear();
+    vi.mocked(selectFacilityModel).mockClear();
+    vi.mocked(selectFacilityModelOverride).mockClear().mockImplementation((candidates, slug) => {
+      const found = (candidates as readonly FacilityModelCandidate[]).find((candidate) => candidate.slug === slug);
+      return found ? { ...found, scale: 1, swap: false } : null;
+    });
+    vi.mocked(loadFacilityModelCandidates).mockClear().mockImplementation(() => Promise.resolve(new Map()));
+    vi.mocked(loadFacilityModelOverride).mockClear().mockImplementation(() => Promise.resolve(null));
+  });
+
+  it('override 在候选里：直接落 override 模型，不走自动挑选', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, CANDIDATE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(vi.mocked(selectFacilityModelOverride)).toHaveBeenCalledWith([CANDIDATE], CANDIDATE.slug, 5, 5);
+    expect(vi.mocked(selectFacilityModel)).not.toHaveBeenCalled();
+    const item = vi.mocked(createCachedGlbModel).mock.calls[0]?.[0];
+    expect(item?.glbUrl).toBe(CANDIDATE.glbUrl);
+    layer.dispose();
+  });
+
+  it('override 不在 top-N 候选：等在线轮按 slug 全库直查，命中后照落', async () => {
+    vi.mocked(loadFacilityModelOverride).mockImplementation(() => Promise.resolve(OVERRIDE));
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, OVERRIDE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    // 内置同步轮没命中 override：此时一个模型都没落（不急着回退）。
+    expect(layer.group.children).toHaveLength(0);
+    await flush();
+    expect(vi.mocked(loadFacilityModelOverride)).toHaveBeenCalledWith(OVERRIDE.slug);
+    expect(vi.mocked(createCachedGlbModel)).toHaveBeenCalledTimes(1);
+    const item = vi.mocked(createCachedGlbModel).mock.calls[0]?.[0];
+    expect(item?.glbUrl).toBe(OVERRIDE.glbUrl);
+    layer.dispose();
+  });
+
+  it('override 指向不存在的模型：回退自动挑选，不空崩', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, 'no-such-model')],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(vi.mocked(loadFacilityModelOverride)).toHaveBeenCalledWith('no-such-model');
+    // 自动挑选路径接管：selectFacilityModel → FITTED。
+    expect(vi.mocked(selectFacilityModel)).toHaveBeenCalled();
+    const item = vi.mocked(createCachedGlbModel).mock.calls[0]?.[0];
+    expect(item?.glbUrl).toBe(FITTED.glbUrl);
+    layer.dispose();
+  });
+
+  it('syncPositions：override 从 A 切到 B 当场换模型（dispose 旧模型 + 重落），清除回自动也换', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, CANDIDATE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(vi.mocked(createCachedGlbModel).mock.calls[0]?.[0]?.glbUrl).toBe(CANDIDATE.glbUrl);
+    expect(disposeOwnedModel).not.toHaveBeenCalled();
+
+    // 切到另一个 override：旧模型 dispose、新模型按 override 落（在线候选轮命中）。
+    const B: FacilityModelCandidate = { ...OVERRIDE, slug: 'override-tent-b', glbUrl: '/showcase/assets/library/model/override-tent-b.glb' };
+    vi.mocked(loadFacilityModelCandidates).mockImplementation(() => Promise.resolve(new Map([['oneplan:icon:tent', [CANDIDATE, B]]])));
+    layer.syncPositions([prop('p1', {}, B.slug)], metrics);
+    expect(disposeOwnedModel).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(vi.mocked(createCachedGlbModel).mock.calls[1]?.[0]?.glbUrl).toBe(B.glbUrl);
+
+    // 清除 override（undefined）：回到自动挑选的模型。
+    layer.syncPositions([prop('p1')], metrics);
+    expect(disposeOwnedModel).toHaveBeenCalledTimes(2);
+    await flush();
+    expect(vi.mocked(createCachedGlbModel).mock.calls[2]?.[0]?.glbUrl).toBe(FITTED.glbUrl);
     layer.dispose();
   });
 });

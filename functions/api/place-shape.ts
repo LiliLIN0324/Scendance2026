@@ -444,21 +444,27 @@ export async function highwayLineStage(
   const query = `[out:json][timeout:20];way["highway"](around:60,${at});out geom;`;
   const payload = await overpass(query, fetchImpl) as { elements?: OverpassElement[] } | null;
   const elements = payload?.elements ?? [];
-  let best: { el: OverpassElement; pts: OverpassNode[] } | null = null;
+  // 名字门槛（2026-11-13 用户「点 in77 给了开元路」）：路名必须与查询名互相包含，
+  // 无名/不同名的路一律不要——道路兜底只为「点道路」服务，绝不替 POI 编一个路选区。
+  const target = normalizeShapeName(name);
+  let best: { el: OverpassElement; pts: OverpassNode[]; label: string } | null = null;
   let bestD = Infinity;
   for (const el of elements) {
     if (el?.type !== 'way' || !Array.isArray(el.geometry)) continue;
     const pts = el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
     if (pts.length < 2) continue;
+    const label = el.tags?.name ?? '';
+    const candidate = normalizeShapeName(label);
+    if (!target || !candidate || !(candidate.includes(target) || target.includes(candidate))) continue;
     let d = Infinity;
     for (const p of pts) {
       const dd = Math.hypot((p.lon - near.lng) * 85000, (p.lat - near.lat) * 111000);
       if (dd < d) d = dd;
     }
-    if (d < bestD) { bestD = d; best = { el, pts }; }
+    if (d < bestD) { bestD = d; best = { el, pts, label }; }
   }
-  if (!best || bestD > 120) return null; // 120m 内没有道路段就放弃
-  return lineToGcjShape(best.pts, `osm:W${best.el.id}`, best.el.tags?.name || name);
+  if (!best || bestD > 120) return null; // 120m 内没有同名道路段就放弃（宁降级只落钉，不出错路）
+  return lineToGcjShape(best.pts, `osm:W${best.el.id}`, best.label || name);
 }
 
 /** 米制近似坐标（等距圆柱，x=lon·cos(lat0)·111320 / y=lat·110540）。 */

@@ -49,7 +49,7 @@
  * 分区颜色/透明度/命名可在面板内直接编辑（契约可选字段 opacity，0.05–0.6 区间）。
  */
 
-import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlignCenterHorizontal,
@@ -77,11 +77,14 @@ import {
   drawNodeGhost,
   drawRouteDraft,
   drawRouteLayer,
+  drawRouteProposalLayer,
+  drawFlowSimulationLayer,
   drawSearchArea,
   drawSearchPin,
   drawSceneObjectsLayer,
   drawWorkerLayer,
   drawZoneLayer,
+  drawZoneProposalLayer,
   enuToLngLat,
   isLayerVisible,
   lngLatToEnu,
@@ -91,6 +94,7 @@ import {
   type LayerVisibility,
   type PlanViewport,
 } from '../lib/outdoor-plan-canvas';
+import { createFlowWalkers, stepFlowWalkers, walkerPoints, routeDensity, type FlowWalker } from '../lib/flow-sim';
 import {
   PLAN_CONFLICT_CATEGORY_LABELS,
   planConflictIssues,
@@ -140,6 +144,19 @@ import {
   type PlanRect,
 } from '../lib/site-plan-facilities';
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
+import {
+  FACILITY_GENERATE_POLL_MS,
+  getFacilityGenerateLinksRevision,
+  getGeneratedFacilityModelsRevision,
+  listFacilityGenerateLinks,
+  listGeneratedFacilityModels,
+  registerGeneratedFacilityModel,
+  resolveFacilityGenerateLink,
+  subscribeFacilityGenerateLinks,
+  subscribeGeneratedFacilityModels,
+} from '../lib/facility-generated-models';
+import { newLocalGlbKey, validateLocalGlbPick } from '../lib/glb-import';
+import { MAX_FACILITY_MODEL_CANDIDATES, loadFacilityModelCandidates, type FacilityModelCandidate } from '../lib/plan-facility-models';
 import {
   PLAN_ROUTE_MAX_VERTICES,
   buildRoute,
@@ -366,10 +383,34 @@ export interface OutdoorPlanCanvasProps {
    */
   searchArea?: { polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null;
   /**
+   * V-2d（2026-11-13）流线提案预览：虚线路线 + 出入口圆点，应用前不进 plan。
+   * 与定位钉同性质——纯视图辅助；「应用」走 handle.applyRoutes（commitPlan 可撤销）。
+   */
+  routeProposal?: { routes: PlanRoute[]; nodes: PlanNode[] } | null;
+  /**
+   * V-3c（2026-11-13）区域提案预览：虚线分区 + 物料幽灵，应用前不进 plan。
+   * 「应用」走 handle.applyZoneProposal（commitPlan 可撤销）。
+   */
+  zoneProposal?: { zones: PlanZone[]; facilities: PlanFacility[] } | null;
+  /**
+   * V-4b（2026-11-13）流动模拟：非 null 时在给定流线上跑 2D 行人动画（66ms 步进），
+   * 密度按每 10m 人数着色。纯视图动画——不写 plan，置 null 即停。
+   */
+  flowSimRoutes?: PlanRoute[] | null;
+  /**
    * 2026-11-11 统一视图：室内 3D 场景的落位（物料 + 场地实景扫描）投影到户外 2D 画布。
    * 只读展示层——不参与命中测试/交互，不写进 plan。
    */
   sceneObjects?: readonly PlanSceneObject[] | undefined;
+  /**
+   * V-5b/c（2026-11-13）：属性卡「模型」区底部的生成/上传入口外发——
+   * kind 'text'=「生成一个」（文生 3D）、'image'=「上传图片生成」（图生 3D）。
+   * 主线接线（organizer → overlay → 本组件）：organizer 侧 recordFacilityGenerateLink
+   * 记「这炉生成给哪个设施」+ stageMaterialGenerate 预填左栏物料生成框（仍须确认额度）；
+   * 提交成功后 MaterialCreateCell 消费链接落 taskid↔facility，本组件轮询回填候选首位。
+   * 独立只读分享页（plan-share）不传：按钮保留、回调缺省 no-op（?. 调用）。
+   */
+  onOpenMaterialGenerate?: (facilityId: string, kind: 'text' | 'image') => void;
 }
 
 const TILE = 256;
@@ -849,6 +890,10 @@ export interface OutdoorPlanCanvasHandle {
   focusLngLat(lng: number, lat: number, zoom?: number): void;
   /** 2026-11-12 选区：把视野框到 `[west, south, east, north]`（只动视图，不改 plan/anchor）。 */
   focusBounds(bounds: [number, number, number, number]): void;
+  /** V-2d：应用流线提案（合并 routes/nodes 进 plan，commitPlan 可撤销）；空提案回 false。 */
+  applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean;
+  /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
+  applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[]): boolean;
   /** 当前 2D 视口（切 3D 时用来对着同一中心把地图斜起来）。 */
   getView(): PlanViewport;
   /** 当前绘制/浏览模式：3D 里非浏览态要关掉左键环绕，把点击交给编辑。 */
@@ -920,7 +965,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onModeChange,
   searchPin,
   searchArea,
+  routeProposal,
+  zoneProposal,
+  flowSimRoutes,
   sceneObjects,
+  onOpenMaterialGenerate,
 }: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
   // 查不到（左栏收起/未渲染）时 PanelPortal 自动回落画布内浮窗。
@@ -990,6 +1039,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
   const searchAreaRef = useRef<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(searchArea ?? null);
+  // V-2d：流线提案预览（同一路数；应用走 handle.applyRoutes，预览本身不进 plan）。
+  const routeProposalRef = useRef<{ routes: PlanRoute[]; nodes: PlanNode[] } | null>(routeProposal ?? null);
+  // V-3c：区域提案预览（同一路数；应用走 handle.applyZoneProposal，预览本身不进 plan）。
+  const zoneProposalRef = useRef<{ zones: PlanZone[]; facilities: PlanFacility[] } | null>(zoneProposal ?? null);
+  // V-4b：流动模拟（walkers 状态放 ref，ticker 步进后整帧重绘；模拟不写 plan）。
+  const flowSimRef = useRef<{ walkers: FlowWalker[]; routes: PlanRoute[] } | null>(null);
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
@@ -1135,6 +1190,116 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 手风琴（+ 布场信息 / + 备注）：默认收起，同 OnePlan。
   const [facilitySetupOpen, setFacilitySetupOpen] = useState(false);
   const [facilityNotesOpen, setFacilityNotesOpen] = useState(false);
+  // V-5a 模型候选切换：选中设施的 3D 模型候选（loadFacilityModelCandidates：内置映射同步
+  // + 在线物料库异步兜底，上限 5）。属性卡「模型」网格渲染；点候选写 facility.modelOverride。
+  const [facilityModelCandidates, setFacilityModelCandidates] = useState<{ templateId: string; items: FacilityModelCandidate[] } | null>(null);
+  // V-5b/c：生成/导入注册表的 revision——回填完成（或 GLB 导入）时候选网格实时重排。
+  const generatedModelsRevision = useSyncExternalStore(
+    subscribeGeneratedFacilityModels,
+    getGeneratedFacilityModelsRevision,
+    getGeneratedFacilityModelsRevision,
+  );
+  const facilityGenerateLinksRevision = useSyncExternalStore(
+    subscribeFacilityGenerateLinks,
+    getFacilityGenerateLinksRevision,
+    getFacilityGenerateLinksRevision,
+  );
+  useEffect(() => {
+    const facility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) : null;
+    const templateId = facility?.templateId ?? null;
+    if (!templateId) {
+      setFacilityModelCandidates(null);
+      return undefined;
+    }
+    // 同模板换选不重拉（函数式 set 同引用即跳过），plan 编辑重跑只是自愈。
+    let alive = true;
+    setFacilityModelCandidates(current => (current?.templateId === templateId ? current : { templateId, items: [] }));
+    void loadFacilityModelCandidates([templateId])
+      .then(map => {
+        if (!alive) return;
+        // V-5b/c：生成/导入回填的候选排最前（「生成完回填候选首位」），库内候选殿后；
+        // 上限放行生成位，不让回填把库内候选挤没。
+        const generated = listGeneratedFacilityModels(facility?.id);
+        const items = [...generated, ...(map.get(templateId) ?? [])]
+          .slice(0, MAX_FACILITY_MODEL_CANDIDATES + generated.length);
+        setFacilityModelCandidates(current => (current?.templateId === templateId ? { templateId, items } : current));
+      })
+      .catch(() => {
+        /* 在线候选拉不到：网格只显示「自动」位，不空崩。 */
+      });
+    return () => { alive = false; };
+  }, [selectedFacilityId, plan, generatedModelsRevision]);
+
+  /**
+   * V-5b/c：选中设施的生成任务轮询。链接在 recordFacilityGenerateLink 时落库（含 localStorage），
+   * 换选再回来接着轮；imported → 候选首位回填（注册表订阅刷新网格），failed → 消息并清链接。
+   */
+  const [facilityGenerateStatus, setFacilityGenerateStatus] = useState<{ facilityId: string; name: string; message: string } | null>(null);
+  useEffect(() => {
+    if (!selectedFacilityId) {
+      setFacilityGenerateStatus(null);
+      return undefined;
+    }
+    let alive = true;
+    let busy = false;
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        for (const link of listFacilityGenerateLinks(selectedFacilityId)) {
+          const result = await resolveFacilityGenerateLink(link.taskid);
+          if (!alive) return;
+          if (result.state === 'imported') {
+            setFacilityGenerateStatus(null);
+            setEditMessage(`「${result.model.name}」生成完成，已回填「${result.model.facilityName}」候选首位，点候选即可切 3D 模型。`);
+          } else if (result.state === 'failed') {
+            setFacilityGenerateStatus(null);
+            setEditMessage(`「${link.name}」${result.message}`);
+          } else {
+            setFacilityGenerateStatus({ facilityId: link.facilityId, name: link.name, message: result.message });
+          }
+        }
+        if (alive && listFacilityGenerateLinks(selectedFacilityId).length === 0) setFacilityGenerateStatus(null);
+      } finally {
+        busy = false;
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => { void tick(); }, FACILITY_GENERATE_POLL_MS);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [selectedFacilityId, facilityGenerateLinksRevision, generatedModelsRevision]);
+
+  /** V-5b/c：本机 GLB 直传兜底（≤10MB，会话内有效）。缓存键 local-glb:* 与室内导入同链路。 */
+  const glbImportInputRef = useRef<HTMLInputElement | null>(null);
+  const handleImportFacilityGlb = async (file: File | undefined) => {
+    const facility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) : null;
+    if (!file || !facility) return;
+    const invalid = validateLocalGlbPick(file);
+    if (invalid) {
+      setEditMessage(invalid);
+      return;
+    }
+    // three/glb-assets 只在真导入时动态进包：2D 画布主包不带 three。
+    try {
+      const [{ importLocalGlb }] = await Promise.all([import('../three/glb-assets')]);
+      const asset = await importLocalGlb(file, newLocalGlbKey());
+      registerGeneratedFacilityModel({
+        slug: `generated:${asset.key}`,
+        name: asset.name,
+        glbUrl: asset.key,
+        width: asset.width,
+        depth: asset.depth,
+        height: asset.height,
+        facilityId: facility.id,
+        facilityName: facility.name,
+        createdAt: Date.now(),
+        sessionOnly: true,
+      });
+      setEditMessage(`「${asset.name}」已导入并回填候选首位（仅本次编辑有效，刷新后需重新导入），点候选即可切 3D 模型。`);
+    } catch (error) {
+      setEditMessage(error instanceof Error ? error.message : 'GLB 导入失败，请重试。');
+    }
+  };
   /** P2-j：选中的分区（画布上画顶点手柄，拖顶点改形）。 */
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [nodeIssues, setNodeIssues] = useState<PlanNodeIssue[]>([]);
@@ -1875,6 +2040,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       drawSearchPin({ ctx: planCtx, viewport }, { point: pinPoint, label: pin.label });
     }
 
+    // 7b) V-2d：流线提案预览（虚线 + 出入口圆点）——画在搜钉之上，应用前不进 plan。
+    if (routeProposalRef.current) {
+      drawRouteProposalLayer({ ctx: planCtx, viewport }, routeProposalRef.current);
+    }
+    // 7c) V-3c：区域提案预览（虚线分区 + 物料幽灵）——同上，应用前不进 plan。
+    if (zoneProposalRef.current) {
+      drawZoneProposalLayer({ ctx: planCtx, viewport }, zoneProposalRef.current);
+    }
+    // 7d) V-4b：流动模拟（行人点 + 密度着色）——纯视图动画，不写 plan。
+    if (flowSimRef.current) {
+      drawFlowSimulationLayer({ ctx: planCtx, viewport }, {
+        routes: flowSimRef.current.routes,
+        walkerPoints: walkerPoints(flowSimRef.current.walkers, flowSimRef.current.routes),
+        density: routeDensity(flowSimRef.current.walkers, flowSimRef.current.routes),
+      });
+    }
+
     // 本机验收桥：把 viewport 与选中设施的手柄坐标暴露出来（只读，生产构建没有），
     // 这样 Playwright 脚本能精确点到手柄，而不用靠猜像素。
     if (process.env.NODE_ENV !== 'production') {
@@ -1919,6 +2101,33 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     searchAreaRef.current = searchArea ?? null;
     drawRef.current();
   }, [searchArea]);
+  // V-2d：流线提案预览（props → ref → 重绘；应用走 handle.applyRoutes，预览本身不进 plan）。
+  useEffect(() => {
+    routeProposalRef.current = routeProposal ?? null;
+    drawRef.current();
+  }, [routeProposal]);
+  // V-3c：区域提案预览（props → ref → 重绘；应用走 handle.applyZoneProposal）。
+  useEffect(() => {
+    zoneProposalRef.current = zoneProposal ?? null;
+    drawRef.current();
+  }, [zoneProposal]);
+  // V-4b：流动模拟 ticker——流线集合变化（或停止）时重建 walkers；跑动期 66ms 步进重绘。
+  useEffect(() => {
+    if (!flowSimRoutes || flowSimRoutes.length === 0) {
+      flowSimRef.current = null;
+      drawRef.current();
+      return undefined;
+    }
+    flowSimRef.current = { walkers: createFlowWalkers(flowSimRoutes), routes: flowSimRoutes };
+    drawRef.current();
+    const timer = window.setInterval(() => {
+      const sim = flowSimRef.current;
+      if (!sim) return;
+      sim.walkers = stepFlowWalkers(sim.walkers, sim.routes, 0.066);
+      drawRef.current();
+    }, 66);
+    return () => window.clearInterval(timer);
+  }, [flowSimRoutes]);
 
   // P4-b：底图形态切换（纸面 ↔ 瓦片）立即重绘一次；不改 draw 依赖，免得重建回调。
   useEffect(() => {
@@ -2289,6 +2498,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     canRedo: () => redoRef.current.length > 0,
     focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
     focusBounds: (bounds: [number, number, number, number]) => focusBounds(bounds),
+    /** V-2d：应用流线提案（合并进 plan，走 commitPlan 可撤销）；成功返回 true。 */
+    applyRoutes: (routes: PlanRoute[], nodes: PlanNode[]) => {
+      const current = planRef.current;
+      if (routes.length === 0 && nodes.length === 0) return false;
+      commitPlan({
+        ...current,
+        routes: [...current.routes, ...routes],
+        nodes: [...current.nodes, ...nodes],
+      });
+      return true;
+    },
+    /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
+    applyZoneProposal: (zones: PlanZone[], facilities: PlanFacility[]) => {
+      const current = planRef.current;
+      if (zones.length === 0 && facilities.length === 0) return false;
+      commitPlan({
+        ...current,
+        zones: [...current.zones, ...zones],
+        facilities: [...current.facilities, ...facilities],
+      });
+      return true;
+    },
     getView: () => currentViewport(),
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
@@ -3215,7 +3446,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function updateFacility(
     id: string,
     patch: Partial<Pick<PlanFacility,
-      'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle'
+      'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride'
       | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
     >> & { size?: { width: number; depth: number } },
   ) {
@@ -5494,6 +5725,104 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           />
                           <span style={benchUnitSuffixStyle}>m</span>
                         </label>
+                      </div>
+                      {/* V-5a 模型候选（OnePlan 卡小标签+浅描边盒同款）：点缩略图写 facility.modelOverride，
+                          3D plan-model-layer 即时换模型；「自动」清除 override 回自动挑选。一条 updateFacility=一条 undo。 */}
+                      <div style={{ ...benchSectionTitleStyle, marginTop: PLANNING_SPACING.sm }}>模型</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: PLANNING_SPACING.xs }} role="group" aria-label="3D 模型候选">
+                        <button
+                          type="button"
+                          aria-pressed={!selectedFacility.modelOverride}
+                          data-testid="facility-model-auto"
+                          title="按占地自动挑选模型（清除手动 override）"
+                          style={{ position: 'relative', height: 48, padding: '0 4px', background: PLANNING_SURFACE.panelBg, border: `1px solid ${selectedFacility.modelOverride ? PLANNING_SURFACE.panelBorder : GROUP_SELECT_BLUE}`, borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onClick={() => {
+                            updateFacility(selectedFacility.id, { modelOverride: undefined });
+                            setEditMessage(`「${selectedFacility.name}」已恢复自动挑选 3D 模型。`);
+                          }}
+                        >
+                          <span style={{ fontSize: 12, color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>自动</span>
+                        </button>
+                        {(facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId
+                          ? facilityModelCandidates.items
+                          : []
+                        ).map((candidate) => (
+                          <button
+                            key={candidate.slug}
+                            type="button"
+                            aria-pressed={selectedFacility.modelOverride === candidate.slug}
+                            data-testid={`facility-model-${candidate.slug}`}
+                            title={`${candidate.name}（${candidate.width}×${candidate.depth}×${candidate.height} m）`}
+                            style={{ position: 'relative', height: 48, padding: 0, background: PLANNING_SURFACE.panelBg, border: `1px solid ${selectedFacility.modelOverride === candidate.slug ? GROUP_SELECT_BLUE : PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', overflow: 'hidden' }}
+                            onClick={() => {
+                              updateFacility(selectedFacility.id, { modelOverride: candidate.slug });
+                              setEditMessage(`「${selectedFacility.name}」的 3D 模型已切换为「${candidate.name}」，切 3D 即时生效。`);
+                            }}
+                          >
+                            {/* 缩略图盖在名称占位块上：加载失败 onError 隐藏图片 → 露出占位块，不空崩。 */}
+                            {candidate.thumb ? (
+                              <img
+                                key={`${selectedFacility.id}:${candidate.slug}`}
+                                src={candidate.thumb}
+                                alt=""
+                                loading="lazy"
+                                onError={event => { event.currentTarget.style.display = 'none'; }}
+                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : null}
+                            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 4px 2px', fontSize: 10, lineHeight: '12px', color: PLANNING_SURFACE.panelText, textShadow: candidate.thumb ? '0 1px 2px rgba(0,0,0,0.6)' : 'none', pointerEvents: 'none' }}>
+                              <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.name}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {/* V-5b/c 生成中状态行：轮询到待取回任务时给一句可读进度，完成后自动消失。 */}
+                      {facilityGenerateStatus && facilityGenerateStatus.facilityId === selectedFacility.id ? (
+                        <div role="status" style={{ marginTop: PLANNING_SPACING.xs, fontSize: 12, lineHeight: '16px', color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>
+                          「{facilityGenerateStatus.name}」{facilityGenerateStatus.message}，完成后自动回填候选首位。
+                        </div>
+                      ) : null}
+                      {/* V-5b/c 生成/上传/导入入口：生成与图片经 onOpenMaterialGenerate 外发到主线物料生成框
+                          （仍须确认额度）；GLB 直传走本机导入兜底（会话内有效），完成即回填候选首位。 */}
+                      <div style={{ display: 'flex', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.xs }}>
+                        <input
+                          ref={glbImportInputRef}
+                          type="file"
+                          accept=".glb,model/gltf-binary"
+                          style={{ display: 'none' }}
+                          onChange={event => {
+                            const file = event.target.files?.[0];
+                            event.target.value = '';
+                            void handleImportFacilityGlb(file);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          data-testid="facility-model-generate"
+                          title="按设施名预填左栏物料生成框，确认额度后提交；生成完自动回填候选首位"
+                          style={{ ...modeButtonStyle(false), flex: 1, justifyContent: 'center' }}
+                          onClick={() => onOpenMaterialGenerate?.(selectedFacility.id, 'text')}
+                        >
+                          生成一个
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="facility-model-upload"
+                          title="上传一张图片，预填到物料生成框生成 3D 模型"
+                          style={{ ...modeButtonStyle(false), flex: 1, justifyContent: 'center' }}
+                          onClick={() => onOpenMaterialGenerate?.(selectedFacility.id, 'image')}
+                        >
+                          上传图片生成
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="facility-model-import-glb"
+                          title="导入本机 .glb（≤10MB），仅本次编辑有效"
+                          style={{ ...modeButtonStyle(false), flex: 1, justifyContent: 'center' }}
+                          onClick={() => glbImportInputRef.current?.click()}
+                        >
+                          导入 GLB
+                        </button>
                       </div>
                       {/* + 布场信息（OnePlan Object setup 镜像：供应商/进撤场/用电）。 */}
                       <button

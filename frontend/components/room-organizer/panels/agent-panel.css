@@ -116,6 +116,11 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-option-row:disabled { cursor: default; }
 .ap-option-row-cap { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ap-option-row-mark { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; background: var(--wk-plane); border-radius: 999px; padding: 2px 8px; font-size: var(--fs-cap); color: var(--wk-ink); }
+/* V-1b 场地确认卡：候选两行（名 + 地址），复用 option-row/chip 既有规格。 */
+.ap-venue-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ap-venue-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: left; }
+.ap-venue-option-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-venue-option-addr { font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 能力 chip：pill 规格——描边浅底、圆角胶囊；悬停加深底，选中主色浅底深字。 */
 .ap-capability-chip, .sc-agent-panel .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 12px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-capability-chip:hover, .sc-agent-panel .chip:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); transform: translateY(-1px); }

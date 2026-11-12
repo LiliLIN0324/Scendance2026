@@ -85,6 +85,8 @@ import { requestWalkPointerLock } from './lib/walk-engage';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
+import { recordFacilityGenerateLink } from './lib/facility-generated-models';
+import { stageMaterialGenerate } from './lib/material-generate';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { suggestDropPoint } from './lib/drop-zone';
@@ -1707,6 +1709,19 @@ useEffect(() => {
     () => (outdoorPlanState && outdoorPlanState.projectId === (layout.id ?? null) ? outdoorPlanState.plan : null),
     [layout.id, outdoorPlanState],
   );
+  /**
+   * V-5b/c（2026-11-13）：属性卡「生成一个/上传图片生成」的外发入口。
+   * 先记「这炉生成给哪个设施」（提交成功后由 MaterialCreateCell 消费成 taskid↔facility
+   * 链接，画布轮询回填候选首位），再按 agent 对话点名生成的同款链路预填左栏物料生成框
+   * （仍须勾「确认扣额度后才提交」，不新增免确认扣额度路径）。
+   */
+  const handleOpenMaterialGenerate = useCallback((facilityId: string, kind: 'text' | 'image') => {
+    const facility = outdoorPlan?.facilities.find(item => item.id === facilityId);
+    recordFacilityGenerateLink({ facilityId, facilityName: facility?.name ?? '所选设施' });
+    stageMaterialGenerate({ kind, prompt: facility?.name ?? '' });
+    setWorkbenchMode('layout');
+    showAgent('material');
+  }, [outdoorPlan, showAgent]);
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
   // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。
   useEffect(() => {
@@ -4490,6 +4505,7 @@ useEffect(() => {
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
               onModeChange={handleOutdoorCanvasMode}
               onPlanChange={handleOutdoorPlanChange}
+              onOpenMaterialGenerate={handleOpenMaterialGenerate}
               onActiveLevelChange={handleOutdoorActiveLevelChange}
               seedPlan={outdoorSeedPlan}
               sceneObjects={outdoorSceneObjects}

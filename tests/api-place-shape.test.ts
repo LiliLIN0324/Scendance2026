@@ -94,4 +94,17 @@ describe('highwayLineStage（道路线型兜底）', () => {
     const shape = await highwayLineStage(NEAR, '延安路', fakeOverpass([farRoad]));
     expect(shape).toBeNull();
   });
+
+  it('名字门槛：查询与路名不互相包含 → null（点 in77 绝不给开元路）', async () => {
+    const kaiyuan = line(10, [
+      { lon: 120.162, lat: 30.249 },
+      { lon: 120.166, lat: 30.2492 },
+    ], '开元路');
+    const unnamed = line(11, [
+      { lon: 120.1625, lat: 30.2488 },
+      { lon: 120.1655, lat: 30.2488 },
+    ]);
+    const shape = await highwayLineStage(NEAR, 'in77', fakeOverpass([kaiyuan, unnamed]));
+    expect(shape).toBeNull();
+  });
 });
