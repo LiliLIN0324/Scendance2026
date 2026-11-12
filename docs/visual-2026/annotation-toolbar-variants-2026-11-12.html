@@ -173,16 +173,16 @@ td:first-child{width:150px;font-weight:600}
 <header class="hd">
   <div class="cap">三版可选 · 未动代码 · 未提交</div>
   <h1>标注工具条 · 方案草图（A2 唤出式定稿方向）</h1>
-  <p class="note">已核对 <span class="mono">origin/main</span>（最新 <span class="mono">99e86ce</span>）：标注面板就在 main 的 <span class="mono">outdoor-plan-canvas.tsx</span>（<span class="mono">annotateZone</span> 4991–5058），入口圆钮在 <span class="mono">scendance-workspace.tsx:731</span>。当前方向：<b>版本 A2 · Figma 式唤出浮条</b>（底部精简浮条 + 父钮白色菜单）；沿用现有 <span class="mono">data-tip</span> / <span class="mono">sc-tool-pop</span> / <span class="mono">is-active</span> 与品牌 token，不新造图标族和弹层。</p>
+  <p class="note">已在本机 <span class="mono">localhost:3210</span> 实测核对：标注面板在 <span class="mono">outdoor-plan-canvas.tsx</span> 的 <span class="mono">annotateZone</span>（5196–5285：文本/形状 tab 5210–5229，形状四钮 5231–5254，说明段 5256–5259，清单行 5260–5283）；入口圆钮 <span class="mono">#tool-annotate</span> 在 <span class="mono">scendance-workspace.tsx</span>。当前方向：<b>版本 A2 · Figma 式唤出浮条</b>（底部精简浮条 + 父钮白色菜单）；沿用现有 <span class="mono">data-tip</span> / <span class="mono">sc-tool-pop</span> / <span class="mono">is-active</span> 与品牌 token，不新造图标族和弹层。</p>
 </header>
 
 <section>
   <h2>现状基准（main 上的四层冗余）</h2>
   <div class="base">
-    <div class="b"><b>① 分组 tab</b><span>「文本 / 形状」两个文字钮，先选组再选工具（5009 / 5018）</span></div>
-    <div class="b"><b>② 形状文字钮</b><span>矩形 / 圆形 / 三角形 / 线段四个中文按钮，无图标（5033）</span></div>
-    <div class="b"><b>③ 常驻说明段</b><span>~60 字手势说明常驻面板底部（5052）</span></div>
-    <div class="b"><b>④ 头部重复</b><span>图标块 +「标注」标题，与右轨入口钮语义重复（6921–6969）</span></div>
+    <div class="b"><b>① 分组 tab</b><span>「文本 / 形状」两个文字钮，先选组再选工具（5211 / 5220）</span></div>
+    <div class="b"><b>② 形状文字钮</b><span>矩形 / 圆形 / 三角形 / 线段四个中文按钮，无图标（5233）</span></div>
+    <div class="b"><b>③ 常驻说明段</b><span>~60 字手势说明常驻面板底部（5256）</span></div>
+    <div class="b"><b>④ 头部重复</b><span>图标块 +「标注」标题，与右轨入口钮语义重复（5202–5209）</span></div>
   </div>
 </section>
 
@@ -584,6 +584,7 @@ td:first-child{width:150px;font-weight:600}
       <li>四个形状换本地图标，中文名进 <span class="mono">aria-label</span>，手势进 <span class="mono">data-tip</span>；不混字形家族。</li>
       <li>常驻 ~60 字说明整段移除；草稿剩余点数保留为一句短行（进行中状态反馈，不删）。</li>
       <li>颜色 / 线宽本轮一起做：颜色走图层 token 色板（缺省标注紫），线宽细 / 粗两档仅形状生效；契约 <span class="mono">PlanAnnotation.color</span> 已有，线宽补可选字段。</li>
+      <li><b>基线现存问题（3210 实测）</b>：清单行 <span class="mono">renderOneplanItemRow</span> 根元素是 <span class="mono">&lt;button&gt;</span>，行尾删除钮又嵌一个 <span class="mono">&lt;button&gt;</span>，按钮套按钮触发 React hydration 报错。落地时行根改 <span class="mono">div + role="button"</span>，删除钮保持独立按钮并 <span class="mono">stopPropagation</span>，标注 / 测量清单行一并修。</li>
     </ul>
   </div>
 </section>

@@ -239,6 +239,11 @@
 .sc-settings-row-main strong{font-size:13px;font-weight:600;overflow-wrap:anywhere}
 .sc-settings-row-main small{font-size:11px;line-height:1.5;color:var(--sc-muted);overflow-wrap:anywhere}
 .sc-settings-row-actions{display:flex;align-items:center;gap:6px;flex:none}
+.sc-settings-prefs{display:grid;gap:16px;align-content:start}
+.sc-unit-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-plane)}
+.sc-unit-seg button{display:inline-flex;align-items:center;gap:4px;margin:0;padding:5px 10px;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;white-space:nowrap}
+.sc-unit-seg button[aria-pressed=true]{background:var(--wk-paper);color:var(--wk-ink);font-weight:600}
+.sc-unit-seg button:hover:not([aria-pressed=true]){color:var(--wk-ink)}
 /* 首字母圆片：每人一档颜色，由账号 ID 分出来，取色见 AVATAR_TONES；没分到色就还是灰片。 */
 .sc-settings-avatar{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:var(--sc-avatar-bg, var(--wk-plane-deep));font-size:12px;font-weight:600;color:var(--sc-avatar-ink, var(--wk-ink))}
 /* 左轨成员位用同一颗圆片，只按窄轨的尺度收一档。 */

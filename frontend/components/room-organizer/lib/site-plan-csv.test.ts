@@ -164,6 +164,21 @@ describe('csv plan export (H5-a)', () => {
     expect(nodeRow[9]).toBe('✓');
   });
 
+  it('swaps area/length headers and values to feet while keeping metre coordinates', () => {
+    const csv = buildPlanCsv(samplePlan(), 'ft');
+    const lines = csv.replace(/^\uFEFF/, '').split('\r\n');
+    expect(lines[0]).toContain('面积 (ft²)');
+    expect(lines[0]).toContain('长度 (ft)');
+    // 坐标是 ENU 米制定位基准，不换算。
+    expect(lines[0]).toContain('东向 x (m)');
+    const rows = parseCsv(csv.replace(/^\uFEFF/, ''));
+    const zoneRow = rows.find(cells => cells[0] === '分区');
+    const routeRow = rows.find(cells => cells[0] === '动线');
+    expect(zoneRow![7]).toMatch(/ft²$/);
+    expect(routeRow![8]).toMatch(/ft$/);
+    expect(zoneRow![5]).toBe('50.00');
+  });
+
   it('keeps node kind labels aligned', () => {
     expect(PLAN_NODE_KIND_LABELS.entry).toBe('入口');
     expect(PLAN_NODE_KIND_LABELS.exit).toBe('出口');

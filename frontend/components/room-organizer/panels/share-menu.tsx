@@ -12,7 +12,8 @@ import { describeUnshareableAssets } from '../../../lib/share-snapshot';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { PlanPreview } from './plan-preview';
 import { isStructuralMarker } from '../lib/structural-layout';
-import type { RoomLayout } from '../lib/types';
+import type { DisplayUnit, RoomLayout } from '../lib/types';
+import { convertMetres } from '../lib/display-units';
 import { MaterialSymbol } from './material-symbol';
 
 export interface PublishedLink {
@@ -46,7 +47,7 @@ export interface PlanOutline {
 }
 
 /** 项目大纲：场地、楼层、物料分类、分区、设计簿。只读摘要，不改画布。 */
-export function planOutline(layout: RoomLayout): PlanOutline {
+export function planOutline(layout: RoomLayout, unit: DisplayUnit = 'm'): PlanOutline {
   const floors = layout.floors ?? [];
   const items = floors.flatMap(floor => floor.items.filter(item => !isStructuralMarker(item)));
   const counted = new Map<string, number>();
@@ -59,7 +60,9 @@ export function planOutline(layout: RoomLayout): PlanOutline {
   const zones = floors.flatMap(floor => (floor.zones ?? []).map(zone => zone.name?.trim())).filter((name): name is string => !!name);
   const variants = (layout.designBook?.variants ?? []).map(variant => ({ name: variant.name, active: variant.id === layout.designBook?.activeId }));
   return {
-    size: `${meters(layout.width)} × ${meters(layout.height)} m`,
+    size: unit === 'ft'
+      ? `${feet(layout.width)} × ${feet(layout.height)} ft`
+      : `${meters(layout.width)} × ${meters(layout.height)} m`,
     floors: floors.map((floor, index) => floor.name?.trim() || `第 ${index + 1} 层`),
     itemCount: items.length,
     categories,
@@ -68,10 +71,12 @@ export function planOutline(layout: RoomLayout): PlanOutline {
   };
 }
 
-export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0, variant = 'rail' }: {
+export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, closeSignal = 0, variant = 'rail' }: {
   actions?: ShareMenuActions;
   /** 画布当前方案，用来画预览和大纲。 */
   layout?: RoomLayout;
+  /** 大纲尺寸读数跟随的显示单位；底稿仍存米。 */
+  lengthUnit?: DisplayUnit;
   /** 旧「评审」入口改道时递增，用来把菜单打开。 */
   openRequest?: number;
   /** 别的工具菜单打开时递增，用来把发布收起。 */
@@ -95,7 +100,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0, v
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
-  const outline = useMemo(() => layout ? planOutline(layout) : null, [layout]);
+  const outline = useMemo(() => layout ? planOutline(layout, lengthUnit) : null, [layout, lengthUnit]);
 
   useEffect(() => {
     if (openRequest === seenOpen.current) return;
@@ -369,6 +374,10 @@ function titleOf(layout?: RoomLayout): string {
 
 function meters(value: number): string {
   return Number.isFinite(value) && value > 0 ? String(Number(value.toFixed(2))) : '—';
+}
+
+function feet(metres: number): string {
+  return Number.isFinite(metres) && metres > 0 ? convertMetres(metres, 'ft').toFixed(1) : '—';
 }
 
 async function copyText(value: string): Promise<boolean> {

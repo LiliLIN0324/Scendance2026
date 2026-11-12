@@ -2,9 +2,9 @@
 
 /**
  * 「换场地 / 新建」弹层本体：卡片栅格（设计规范 v2.5.2 §二.4——选择器一律 icon 优先 + 卡片视觉）。
- * 「从空白开始」走现有立壳链；「从地图开始」（P2-a）建云项目后写本机户外标记并整页跳
- * `/editor/?project=<id>&start=outdoor`——workspace-shell 据此直接进 2D 规划，不挂室内工作台
- * （硬跳避免与已挂载画布的深链/租约状态打架；室内未保存草稿照旧留在本地存储，可回）。
+ * 「从空白开始」「新建项目」「从地图开始」统一进地图工作台：登录态建云项目后写本机户外
+ * 草稿并整页跳 `/editor/?project=<id>&mode=outdoor`；访客落本机默认地图草稿。workspace-shell
+ * 据此直接进 2D 规划，不挂室内工作台（硬跳避免与已挂载画布的深链/租约状态打架）。
  * 项目卡带俯视缩略预览，选中同标签 router.push（认证在 sessionStorage，新标签会变访客）；
  * 新建只输名字——没有工作室时静默建「个人工作室」。「云」一词不面向用户（§二.4 默认在云上）。模板与导入在下一期。
  */
@@ -14,9 +14,8 @@ import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from '../../../lib/auth-provider';
 import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
-import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { createStarterOutdoorPlan, ensureDefaultOutdoorProject, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { matchRecentPlaces, mergePlaceSuggestions, rememberPlace, searchPlaces, type PlaceSuggestion } from '../lib/place-search';
-import { BLANK_VENUE } from '../lib/blank-venue';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 
 type Selection = { kind: 'blank' } | { kind: 'map' } | { kind: 'new' } | { kind: 'project'; id: string };
@@ -69,9 +68,8 @@ function Card({ selected, onSelect, visual, title, meta }: {
   </button>;
 }
 
-export function VenuePicker({ onClose, onBlankVenue, studioId, initialSelection }: {
+export function VenuePicker({ onClose, studioId, initialSelection }: {
   onClose(): void;
-  onBlankVenue(): void;
   /** 「新建项目」带过来的工作室：新项目落在这里，不再按最近用的工作室猜。 */
   studioId?: string;
   /** 入口默认选中项：独立的「找场地」页直接落「从地图开始」。 */
@@ -216,42 +214,41 @@ export function VenuePicker({ onClose, onBlankVenue, studioId, initialSelection 
 
   function confirm(): void {
     if (!canStart) return;
-    if (selection.kind === 'blank') { onBlankVenue(); return; }
     if (selection.kind === 'project') { router.push(`/editor/?project=${encodeURIComponent(selection.id)}`); return; }
-    if (cloud.status !== 'ready') return;
-    const studioId = cloud.studioId;
-    setBusy(true); setNotice('');
-    if (selection.kind === 'map') {
-      // 从地图开始（P2-a + 创建流程第 1 步）：建云项目 → 本机户外记录带上活动地点锚点
-      // → 整页跳进 2D 规划；锚点在起步 plan 里，进 2D 就是该地点的真地图。
-      const anchor = place ? { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'picker' as const } : null;
-      void controller.createProject(studioId, name.trim(), emptyProjectScene())
-        .then(created => {
-          const now = new Date().toISOString();
-          saveOutdoorProjectRecord({
-            v: 1,
-            projectId: created.id,
-            name: name.trim() || '户外规划',
-            createdAt: now,
-            updatedAt: now,
-            plan: createStarterOutdoorPlan(anchor ?? undefined),
-          });
-          // 新入口一律带 mode（2026-11-11 用户拍板）；旧 `?project=` 无 mode 走草稿嗅探，
-          // 那段过渡兼容两个月后删除，见 outdoor-project-store#resolveOutdoorProjectId。
-          window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&mode=outdoor`);
-        })
-        .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
+    // 访客 / 云列表未就绪：不建云项目，落本机默认地图草稿整页进 2D 规划。
+    if (cloud.status !== 'ready') {
+      const fallbackId = ensureDefaultOutdoorProject();
+      window.location.assign(`/editor/?project=${encodeURIComponent(fallbackId)}&mode=outdoor`);
       return;
     }
-    void controller.createProject(studioId, name.trim(), emptyProjectScene())
-      .then(created => router.push(`/editor/?project=${encodeURIComponent(created.id)}&mode=indoor`))
+    const studioId = cloud.studioId;
+    // 所有新项目统一进地图工作台：建云项目 → 写本机地图草稿 → 整页跳进 2D 规划。
+    // map 分支带上所选地点锚点；blank / new 分支用默认预置锚点，进地图后再选址。
+    const anchor = selection.kind === 'map' && place
+      ? { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'picker' as const }
+      : null;
+    const projectName = selection.kind === 'blank' ? NEW_PROJECT_DEFAULT : (name.trim() || NEW_PROJECT_DEFAULT);
+    setBusy(true); setNotice('');
+    void controller.createProject(studioId, projectName, emptyProjectScene())
+      .then(created => {
+        const now = new Date().toISOString();
+        saveOutdoorProjectRecord({
+          v: 1,
+          projectId: created.id,
+          name: projectName,
+          createdAt: now,
+          updatedAt: now,
+          plan: createStarterOutdoorPlan(anchor ?? undefined),
+        });
+        window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&mode=outdoor`);
+      })
       .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
   }
 
   return <div className="sc-venue-picker">
     <div className="sc-venue-picker-grid" role="group" aria-label="从哪开始">
       <Card selected={selection.kind === 'blank'} onSelect={() => setSelection({ kind: 'blank' })}
-        visual={<SquareDashed size={32} />} title="从空白开始" meta={`${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m · 立刻开工`} />
+        visual={<SquareDashed size={32} />} title="从空白开始" meta="地图空白选址 · 进 2D 规划后再画边界" />
       {cloud.status === 'ready' && (
         <Card selected={selection.kind === 'map'} onSelect={() => setSelection({ kind: 'map' })}
           visual={<Globe size={32} />} title="从地图开始" meta="户外活动 · 选地点后直接进 2D 规划" />
@@ -322,7 +319,7 @@ export function VenuePicker({ onClose, onBlankVenue, studioId, initialSelection 
     <div className="sc-venue-picker-foot">
       <p className="sc-venue-picker-note" role="status">{notice}</p>
       <button type="button" className="sc-button" onClick={onClose} disabled={busy}>取消</button>
-      <button type="button" className="sc-venue-picker-go" onClick={confirm} disabled={!canStart}>{busy ? '创建中…' : selection.kind === 'map' ? '开始规划' : '开始布置'}</button>
+      <button type="button" className="sc-venue-picker-go" onClick={confirm} disabled={!canStart}>{busy ? '创建中…' : '开始规划'}</button>
     </div>
   </div>;
 }

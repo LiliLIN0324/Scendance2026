@@ -155,6 +155,85 @@
 - 校验：Node24 `tsc --noEmit` exit 0（`tsc-merge.log`）；前端定向 86 通过（app 9 + projects 14 + store 23 + canvas 31 + place-area 9，`vitest-merge.log`）；lib 48 通过（tdt-probe 11 + plan-tile-cache 18 + place-search 19，`vitest-merge-lib.log`）；后端 13 通过（api-place-shape 6 + tdt-search 7，`vitest-merge-api.log`）。
 - 状态：冲突已解决并完成 merge commit，随后合入本地 main 并推送 origin/main；本次一并带入 #51 足迹锁、统一交付面板、14e 房间退役与阵列预览在制品。
 
+### 阶段 14i · 右轨控件口径：五颗钮保留（不分室内室外）🟡 已落盘未提交
+
+- 基底：HEAD `9f2c811a`，与 `origin/main` 顶端一致；无进行中 merge。
+- 口径修正（用户 2026-11-13 拍板）：项目不再分室内/室外。上一轮被当作"室内概念"隐藏的五颗工具钮**不删除、不分室内室外、都保留可用**：
+  1. `.sc-floor-switcher` 楼层切换器（`1F` + 上下三角 / 新建第 2 层）。
+  2. `#tool-walk` 第一人称漫游 / 退出漫游。
+  3. `#tool-preset` 相机视角预设（整体/俯视…）。
+  4. `#tool-dims` 尺寸标注（`showMeasurements`）。
+  5. `#tool-grid` 网格吸附（`snapToGrid`）。
+- 处置：此前 `!outdoorEditing` 条件包裹已逐段回退，五颗钮 JSX 回到 HEAD 原状。`scendance-workspace.tsx` 相对 HEAD 仅剩分享菜单 / 导出钮两处历史在制品 diff（统一交付面板接线：户外语境旧 ShareMenu、旧导出钮让位给新 `OutdoorDeliveryPanel`），与五颗钮无关，保留。
+- 真机取证（`http://127.0.0.1:3210/editor`，硬刷新后探针）：右轨含楼层上下三角、`tool-walk`、`tool-preset`、`tool-dims`、`tool-grid`；文案依次为 `1F` / `第一人称漫游` / `视角切换：当前整体，点击切到俯视` / `尺寸标注` / `网格吸附`。截图 `docs/plans/ia-mapping/_shots/adversarial-five-restored.png`。
+- 校验：清掉陈旧 `frontend/tsconfig.tsbuildinfo` 后 Node24 `tsc --noEmit` exit 0（此前 6133/1005 报错系增量缓存陈旧误报，三处被报"未使用"的符号在文件内均有真实调用/导出）；定向 8 文件 264 测试通过（`vitest-adversarial.log`）。
+- 待核（未决）：五颗钮回调当前仍接室内 `view`/`layout`/history（`cyclePreset`、`toggle showMeasurements`/`snapToGrid`、`changeVisibleFloor`、`toggleWalk`），户外地图语境下逐颗实际行为（是否空转、是否需接户外对应能力）尚未逐颗验证。
+- 未拆、留 #19 深耦合：
+  - 左轨「拍摄场地」钮（Aholo 扫描/重建、`scanIsolated`/splat/environment/floorIndex/walkthrough 链路），落地到地图素材库前不退役。
+  - `venue-picker.tsx:247` 旧项目/空白走 `mode=indoor`；`resolveOutdoorProjectId` 的 `explicitMode==='indoor'` 返回 null 分支；`requestsOutdoorMode` 死代码。
+  - 收左栏后画布内「已放置物件/测量/标注/底图」回落浮窗（`PanelPortal` host 随 aside 卸载丢失）。
+  - 室内容器隐藏但保活挂载，仍收完整室内 layout/选中/墙体/漫游 props；layoutStore、墙体、useNpcs、室内回写、会话绑 layout.id、`isOutdoorProject` 二分仍散布。
+
+### 阶段 14j · 去室内化 A 层：分流二分与入口收口 🟡 代码完成，B/C 深耦合后置
+
+- 基底：HEAD `9f2c811a`，本地未提交在制品之上继续；目标口径（用户 2026-11-13 再升级）：室内接的东西全部拿出、室内概念整体删除、不分室内户外、所有功能接到地图对应能力、深耦合想办法合并，最终不能残留室内，验收后合 main。
+- **A 层（分流二分，本轮已落地）：**
+  1. `lib/outdoor-project-store.ts`：`resolveOutdoorProjectId` 删除 `explicitMode==='indoor' → null` 分支；`mode=outdoor` 仍返回 `projectId || ensureDefaultOutdoorProject(storage)`；无 projectId 返回 null；`start=outdoor` 命中。整段零引用死函数 `requestsOutdoorMode` 删除；文件头注释由"户外项目/不挂室内 RoomOrganizer"改为"地图项目"。
+  2. `lib/outdoor-project-store.test.ts`：两条 indoor 断言改写——`mode=indoor` 不再切独立通路，无草稿回落 null、有草稿照常命中；`start=outdoor&mode=indoor` 时 start=outdoor 优先返回 PID。
+  3. `panels/venue-picker.tsx`：`confirm()` 抽出共用创建跳转——`map` 带所选地点锚点、`new` 用默认预置锚点，两者都 `saveOutdoorProjectRecord` + `window.location.assign('/editor/?project=<id>&mode=outdoor')`；`new` 原先 `router.push('…&mode=indoor')` 删除。底部按钮文案「开始布置」统一为「开始规划」。`blank` 仍走 `onBlankVenue`（C 层未改）；`project` 已有项目分支保留 `router.push('/editor/?project=<id>')`。
+  4. `panels/venue-picker.react.test.tsx`：三处按钮名 `开始布置`→`开始规划`；`new` 用例断言从 `push('/editor/?project=p-new&mode=indoor')` 改为 push 未调用 + 本机地图草稿落盘（读 `scendance-outdoor-plan-v1:p-new`，boundary 空、name 春夏市集）。
+  5. `workspace-shell.tsx`：二分注释去"显式 ?mode=indoor 入口"表述；带参 `resolveOutdoorProjectId` 返回 null 时兜底 `decideDefaultOutdoorProject()`，旧链接/登录回跳/恢复备份也统一落默认地图草稿，不再回退室内壳体。
+- **B 层（`isOutdoorProject` 恒真拉直，未做）：** 定义 `room-organizer.tsx:302`，false 侧依赖室内 `layoutStore` 壳体（`layout.id` 绑定、`layout.sceneAnchor/mapLngLat/name`、`outdoorSeedPlan/outdoorSceneObjects` 喂地图、`applyLayout`/`shellVenuePatchFromPlanBoundary` 室内回写）。生产入口（shell）已恒真；`isolated-room-organizer.tsx:53` 是未接线遗留封装（当前无生产挂载），仍走 false 通路。壳体依赖未隔离前不强拆 false 分支。
+- **C 层（深耦合壳体与数据模型，本轮未动）：** Viewport 保活容器 `:4633`；layoutStore；`interiorWalls` 深入布局 schema/碰撞/安置/预览/导出/Agent 提案/2D 渲染/分享；`useNpcs`；墙体 draft（`wallDraft/selectedWall/drawWallMode/wallSnapResult`）；`walkthroughActive/walkthroughPhase/scanIsolated`；楼层 `activeFloor`；会话绑 `layout.id`；室内回写 `applyLayout/assertLayoutWrite/shellVenuePatchFromPlanBoundary`；`blank` 卡片 `startBlankVenue` 立壳回调与 `BLANK_VENUE` 12×8m 室内尺寸文案。物料放置/选中/历史/会话/导出仍走壳体管线再镜像地图。Provider 深嵌套，拆 Viewport 前必须先隔离会话/历史/物料/导出对 layout 的依赖。
+- **D 层（业务场地类型事实，保留）：** `venueIO`/`indoorOutdoor` 是 Agent 对话解析、recipe、投资人报告、地图室内场地判定的业务字段（`agent-resolver.ts`、`recipe.ts`、`investor-report.ts`、`amap-venue.ts`、`blank-venue.ts` 等，命中数百处），不属工作台室内模式，不删，否则需求理解链路破裂。
+- **五钮出镜复核（#24 部分，以当前磁盘为准）：** 定向 27 测试绿，测试固定断言 `#tool-dims`、`#tool-preset` 均为 null。
+  - 当前并行版本口径：右轨**不放** `tool-dims` / `tool-preset` 两颗。`showMeasurements` 作为账户偏好存 `lib/account-preferences.ts`（默认 `true`），渲染消费仍在室内 2D `render.ts` 与 three `use-scene-effects.ts`；右轨无对应开关钮。
+  - `tool-preset`（视角轮换）链路已整段移除——`preset` 状态 / `presetAt` / `onApplyPreset` prop / `choosePreset·cyclePreset` 在 `scendance-workspace.tsx` 中不存在；`OutdoorPlan3D` api 仅暴露 `zoomBy/focusLngLat/captureImage`，无 iso/top 机位切换。若要恢复右轨视角钮，需先在户外 3D 补机位切换 API，归 #24。
+  - 仍出镜：楼层上下三角、`tool-walk` 第一人称漫游、`tool-grid` 网格吸附；回调仍接室内 `view`/`layout`/history（`changeVisibleFloor`/`toggleWalk`/`toggle snapToGrid`），户外地图语境下逐颗实际行为与是否接地图能力（3D 相机/放置吸附/第一人称行走/地图测量）未验证。
+  - **口径冲突待用户拍板：** 14i 用户拍板五颗钮都保留可用；当前磁盘并行版本把尺寸标注、视角轮换两颗从右轨撤下。两者需对齐：是回到 HEAD 五钮右轨版，还是接受 dims 归账户偏好、preset 待户外相机能力再回。
+- 校验：清陈旧 `frontend/tsconfig.tsbuildinfo` 后 Node24 `tsc --noEmit` exit 0；定向 64 测试通过（store 23 + picker 11 + shell 1 + floor-structure 2 + workspace 27）。
+- 全量 vitest（Node24，`vitest-full-out.txt`）：33 失败文件 / 284 失败用例 / 7535 通过 / 74 跳过；本轮改动的 store/picker/shell 三个测试文件均不在失败清单。失败集中在 three 解码/几何碰撞/场景图层/Agent 面板夹具/交付分享等既有基线债（#12/#13），未逐文件回退到 HEAD 对照，需在 #12 专项补齐时核对是否本轮回归。
+
+### 阶段 14k · 对抗性残留分级与五钮定稿 🟡 排查落盘，C 层拆除后置
+
+- **五钮定稿口径（2026-11-13 用户拍板）：**
+  - 楼层、第一人称漫游、网格吸附：保留出镜；回调待接到地图能力。
+  - 尺寸标注：保留在账户偏好链路（`lib/account-preferences.ts` `showMeasurements`，默认 true），**不回右轨圆钮**；渲染消费目前仍在室内 2D `render.ts` 与 three `use-scene-effects.ts`，后续随壳体迁移。
+  - 视角预设：**彻底删除、不恢复**。右轨轮换链路（`preset`/`presetAt`/`choosePreset`/`cyclePreset`/`onApplyPreset` prop）已在 `scendance-workspace.tsx` 清空，panels 目录零残留死引用；测试固定断言 `#tool-preset` 为 null。注意：`CameraPreset` 类型与导出/交付机位册（`ANGLE_PRESETS`/`EXPORT_VIEWS`/share-snapshot/delivery-package/shot-list/use-import-export）是**导出成图机位**，不是右轨轮换钮，保留不动。
+  - **真机探针取证（dev 3210 `/editor`，2026-11-13）：** `.sc-scene-viewport` display=block 但 visibility=hidden（室内容器保活在 DOM、视觉已退役）；右轨出镜钮 = 楼层上下、tool-select、tool-measure、tool-annotate、tool-selection、tool-walk、tool-grid、tool-undo、tool-redo、tool-zoom-out、tool-zoom-in；`#tool-preset` 与 `#tool-dims` 均不在列（符合定稿）；户外规划钮 aria-pressed=true，文案「户外规划：在地图上画边界分区动线」。待核：该钮「再点取消」语义（用户反馈点开不能取消），归 #24 地图能力接入时定。
+- **对抗性残留分级（全前端 56 个含 indoor 的文件，按拆除先后）：**
+  - **L0 · 已清（本轮）：** `mode=indoor`/`start=indoor` 链接拼接、`requestsOutdoorMode` 死函数、store indoor 通路分支；生产代码无室内模式链接。
+  - **L1 · 活跃入口（低风险，可独立关）：** `venue-picker` 的 `blank` 卡片→`startBlankVenue` 立 12×8m 室内壳（`blank-venue.ts`/`createBlankVenue`→`RoomLayout`→layoutStore）；`project` 旧项目分支跳 `/editor/?project=<id>` 不带地图通路；左轨「拍摄场地」Aholo 扫描/重建入口（`openAholoWorkflow`/`startStoredScene`/`applyRealVenue`/`scanIsolated`）。
+  - **L2 · 保活壳体状态（中风险，须先隔离依赖）：** Viewport 保活容器 `room-organizer.tsx:4633`；layoutStore；`interiorWalls`（schema/碰撞/安置/预览/导出/Agent 提案/2D 渲染/分享）；useNpcs；墙体 draft；walkthroughActive/scanIsolated；楼层 activeFloor；会话绑 `layout.id`；室内回写 `applyLayout/assertLayoutWrite/shellVenuePatchFromPlanBoundary`。物料放置/选中/历史/会话/导出仍走壳体管线再镜像地图。
+  - **L3 · 零引用原型遗留（可独立删，但牵连草稿导出）：** `isolated-room-organizer.tsx`（`IsolatedRoomOrganizer`/`captureIsolatedPageDrafts`）、`isolated-workspace-session.tsx`（`IsolatedWorkspaceSession`）——生产零挂载，仅各自测试引用；连带 `readonly-draft-registry`/`readonly-draft-bundle`/`local-draft-delivery` 需一并核引用。
+  - **L4 · 业务事实字段（保留，不删）：** `venueIO`/`indoorOutdoor` 是 Agent 解析、recipe、投资人报告、地图场地判定字段（`agent-resolver.ts`/`recipe.ts`/`investor-report.ts`/`amap-venue.ts`/`blank-venue.ts` 等），不属工作台室内模式；评审只读页 `review-share-page` 的 `RoomLayout` 是其自身钉评审模型，保留。
+- **拆除顺序建议：** 先 L1 活跃入口改走地图草稿通路 → 隔离会话/历史/物料/导出对 layout 的依赖 → L2 卸载保活容器与室内数据模型 → L3 删原型遗留封装 → L4 字段维持。每步守 tsc + 定向测试绿。
+- **基线债聚类（#12）：** three/几何碰撞真债（shared-seating-placement footprint 45 vs 50、position undefined、SceneAdapterError；structure-v2/structure-satellite/blueprint/geometry）；Agent/面板夹具脱节（agent-panel 185、local-activities-panel 22、scene-layers-panel 9）；源码静态结构断言脱节（workbench-rail-head 左轨四形）。修债前须回退 HEAD 对照是否本轮回归。
+- **tsc 类型债（2026-11-13 全量 `tsc --noEmit`，清 tsbuildinfo 后复现）：**
+  - `outdoor-plan-canvas.tsx` 9 条 TS6133 未使用声明：`:505 ANNOTATE_COLOR_SWATCHES`、`:830 ANNOTATE_SHAPE_ICONS`、`:837 ANNOTATE_SHAPE_META`、`:1211 annotateColor/setAnnotateColor`、`:1212 annotateStrokeWidth/setAnnotateStrokeWidth`、`:1213 annotateMenuOpen/setAnnotateMenuOpen`。HEAD 基线无这三个新常量，属标注面板并行在制品半成品；实际草稿渲染走 `annotateColorRef`/`annotateStrokeWidthRef` 双轨。处置需该标注线确认：要么补回未接上的挂载，要么删死 state 与常量；不要在去室内化主线里擅自拆。
+  - `cloud-panel.react.test.tsx` jest-dom 匹配器类型缺失（test-setup 未引 `@testing-library/jest-dom` 类型）：`:969 toBeChecked` 已改原生 `checkbox.checked` 断言；`:966/967` 已是 `getAttribute('aria-pressed')` 原生写法。
+
+### 阶段 14l · blank 入口转地图草稿 + tsc 转绿复核 🟡 代码完成，未提交
+
+- 基底：HEAD `9f2c811a`，沿用本地未提交在制品；本轮用户拍板：室内数据模型都是物料、墙体也是物料；「从空白开始」先转成地图空白选址草稿；`venueIO`/`indoorOutdoor` 业务字段由我判断——维持 D 层保留。
+- **L1 blank 入口已改（picker 弹层通路）：**
+  1. `panels/venue-picker.tsx`：props 去掉 `onBlankVenue`；import 去 `BLANK_VENUE`、加 `ensureDefaultOutdoorProject`；`confirm()` 重写——`project` 分支仍 `router.push('/editor/?project=<id>')`；非 ready（访客/云列表未就绪）落 `ensureDefaultOutdoorProject()` 本机默认草稿整页跳 `mode=outdoor`；ready 态 `blank` 用默认名 `NEW_PROJECT_DEFAULT`、`new/map` 用输入名，`map` 带选点锚点，统一 `createProject` → `saveOutdoorProjectRecord`（`createStarterOutdoorPlan`，零边界）→ 跳 `mode=outdoor`。blank 卡片 meta 由「12×8m · 立刻开工」改为「地图空白选址 · 进 2D 规划后再画边界」；头注改三入口统一地图口径。
+  2. `panels/agent-panel.tsx`：`VenuePickerOverlay` 去掉 `onBlankVenue` 回调（`startBlankVenue` 不再被弹层调用）；头注/副文案改地图草稿口径。
+  3. `panels/venue-picker.react.test.tsx`：批量移除 `onBlankVenue` prop；blank 登录态用例改写为断言 `createProject('studio-1','我的活动方案',…)` + 本机草稿 `p-new` boundary 空、push 未调；overlay 用例改写为走 `createProject` 通路、`onApply` 未被调；点击前 `findByRole` 等云列表 ready（否则落访客分支）。
+- **校验：** Node24 清 `tsconfig.tsbuildinfo` 后全量 `tsc --noEmit` **exit 0**；14k 记录的 9 条 TS6133（标注面板 `ANNOTATE_*`/annotate state）本轮不复现，已被并行标注线接上或消除。定向测试：picker 11 + store 23 + shell 1 全绿（35）。
+- **真机复核（dev 3210 `/editor`，2026-11-13，bu 探针 + 截图 `_shots/residual-check-20261113.png`）：**
+  - 右侧为 2D 地图规划面：绿边界、紫分区、舞台/座椅图元、OSM 版权、2D/3D 胶囊、N 指北针、比例尺；左栏物料库 + 新会话正常。
+  - `.sc-scene-viewport` display=block / visibility=hidden：室内容器仍保活在 DOM；console 两条 `Too many active WebGL contexts` 警告，旁证室内 three 场景上下文仍驻留（C 层卸载目标）。
+  - 右轨出镜：楼层上下、select、measure、annotate、selection、walk、grid、undo、redo、zoom-out、zoom-in；`tool-preset`/`tool-dims` 不在列（符合定稿）。户外规划钮 `aria-pressed=true`，「再点取消」语义归 #24。
+  - 瓦片：network 直连 `tile.openstreetmap.org` 多枚 `ERR_CONNECTION_TIMED_OUT`，底图停在「底图加载中…」兜底——#13 网络/代理另线，非去室内化回归。
+- **L1 补充退役（本轮随后）：**
+  - `agent-panel.tsx:3223` 简报卡「空白空间 · 12×8 m」立壳钮整段移除（`!known` 出镜的室内空白壳入口）；选址统一走「地图圈画」，空白草稿由 picker「从空白开始」承担。`startBlankVenue` 函数/接口/导出暂留（#27 连壳退役）；`SquareDashed` 在 :3402 仍用，导入保留。
+  - `agent-panel.react.test.tsx`：两条按钮清单断言去掉空白钮（`['地图圈画']` / `['图纸与照片','地图圈画']`）；删除两条测已退役入口的用例（一键立 12×8 壳、有物料区域拒绝替换）。定向 `-t` 两条清单用例绿。
+- **L3 原型封装删除（本轮）：** 生产零挂载、仅各自测试引用的 `isolated-room-organizer.tsx`（`IsolatedRoomOrganizer`/`captureIsolatedPageDrafts`）、`isolated-workspace-session.tsx`（`IsolatedWorkspaceSession`）及两个测试文件已删；全前端零残留 import。连带草稿模块（`readonly-draft-registry`/`-bundle`/`local-draft-delivery`/`readonly-draft-export`）被生产 `use-layout-persistence`/`creative-studio`/`scene-delivery-panel`/`delivery-private-text` 复用，**模块本体保留**。`isolatedWriteSession` prop 与 `isolatedRef` 写守卫 seam 生产恒空，留 #23 随壳体退役，本轮未动写守卫。
+- **校验复核：** 两轮删增量缓存后全量 `tsc --noEmit` 均 exit 0；定向回归全绿——store 23 + picker 11 + shell 1 = 35；草稿交付/持久化/交付面板 196（local-draft-delivery、readonly-draft-export、use-layout-persistence 74、scene-delivery-panel 98）；未改面板 space-panel 3 + scene-presets 10 + agent-chat 12 = 25；agent-panel 简报清单 2。删 isolated 原型后被复用草稿模块无回归。
+- **真机复核（dev 3210，2026-11-13）：** 硬刷新后 2D 地图规划面正常出图（绿边界/紫分区/舞台图元/OSM 版权/2D·3D 胶囊/N 指北针/比例尺）；本轮第二次刷新瓦片成功加载，#13 直连 OSM `ERR_CONNECTION_TIMED_OUT` 属偶发网络超时，非硬空屏。`.sc-scene-viewport` 仍 visibility=hidden 保活，console `Too many active WebGL contexts` 旁证室内 three 上下文仍驻留（#23 卸载目标）。简报「空白空间」钮在新会话态不出镜。
+- **遗留边界：** 对话内 `startBlankVenue`（agent-panel:1863）函数体、`agent-chat.tsx:140/141` 加号菜单「新建空白空间/从模板开始」、`space-panel:99/160/275`、`scene-presets-panel:58/96/97` 仍 `createBlankVenue`/`createHardFinishHall`/`loadScenePreset` 立室内壳，深绑 layoutStore/onApply，归 #27（C 层隔离会话/历史/物料/导出后并入地图草稿）。B 层 `isOutdoorProject` 生产恒真，false 侧室内镜像回写待 C 层隔离后物理删。
+
 ### 1.5 B 初始化耦合事实（2026-11-13 实读）
 
 - `RoomOrganizer` 签名 :291：`{ controller, isActive, localWriteCapability, isolatedWriteSession }`，无户外项目 id 入参。

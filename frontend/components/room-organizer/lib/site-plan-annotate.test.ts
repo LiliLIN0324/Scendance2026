@@ -158,6 +158,26 @@ describe('annotations in the contract & plan views (2026-11-11)', () => {
     expect(parsed.data.annotations?.[0]?.text).toBe('主入口');
   });
 
+  it('round-trips strokeWidth for shapes and leaves old plans without it valid', () => {
+    const rect = buildAnnotation({ kind: 'rect', name: '矩形 1', points: [{ x: 0, y: 0 }, { x: 4, y: 4 }], strokeWidth: 'thick' });
+    expect(rect.ok).toBe(true);
+    if (!rect.ok) return;
+    expect(rect.value.strokeWidth).toBe('thick');
+    const parsed = sitePlanDataSchema.safeParse({ ...basePlan(), annotations: [rect.value] });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.annotations?.[0]?.strokeWidth).toBe('thick');
+
+    // 旧快照不带 strokeWidth：照常解析，字段为 undefined（渲染层按细线兜底）。
+    const legacy = buildAnnotation({ kind: 'line', name: '线段 1', points: [{ x: 0, y: 0 }, { x: 8, y: 0 }] });
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) return;
+    const legacyParsed = sitePlanDataSchema.safeParse({ ...basePlan(), annotations: [legacy.value] });
+    expect(legacyParsed.success).toBe(true);
+    if (!legacyParsed.success) return;
+    expect(legacyParsed.data.annotations?.[0]?.strokeWidth).toBeUndefined();
+  });
+
   it('counts annotations in overview stats without touching conflicts', () => {
     const rect = buildAnnotation({ kind: 'rect', name: '矩形 1', points: [{ x: 1, y: 1 }, { x: 9, y: 5 }] });
     const line = buildAnnotation({ kind: 'line', name: '线段 1', points: [{ x: 0, y: 0 }, { x: 8, y: 0 }] });

@@ -156,7 +156,7 @@ describe('outdoor-project-store', () => {
       expect(resolveOutdoorProjectId(`/editor/?project=${PID}`, storage)).toBe(PID);
     });
 
-    it('无 project 参数 → null（室内工作台不受影响）', () => {
+    it('无 project 参数 → null（由 shell 续最近项目或起步默认草稿）', () => {
       const storage = memoryStorage();
       saveOutdoorProjectRecord(record(null), storage);
       expect(resolveOutdoorProjectId('/editor/', storage)).toBeNull();
@@ -164,7 +164,7 @@ describe('outdoor-project-store', () => {
       expect(resolveOutdoorProjectId('/editor/?restore=backup', storage)).toBeNull();
     });
 
-    it('start=outdoor 之外的 start 值不算户外', () => {
+    it('start=outdoor 之外的 start 值不直接命中', () => {
       expect(resolveOutdoorProjectId(`/editor/?project=${PID}&start=indoor`, memoryStorage())).toBeNull();
     });
 
@@ -172,14 +172,15 @@ describe('outdoor-project-store', () => {
       expect(resolveOutdoorProjectId(`/editor/?project=${PID}&mode=outdoor`, memoryStorage())).toBe(PID);
     });
 
-    it('显式 mode=indoor 直接进室内，即使本机有户外草稿', () => {
+    it('mode=indoor 不再切独立通路：无草稿回落 null，有草稿照常命中', () => {
       const storage = memoryStorage();
-      saveOutdoorProjectRecord(record(null), storage);
       expect(resolveOutdoorProjectId(`/editor/?project=${PID}&mode=indoor`, storage)).toBeNull();
+      saveOutdoorProjectRecord(record(null), storage);
+      expect(resolveOutdoorProjectId(`/editor/?project=${PID}&mode=indoor`, storage)).toBe(PID);
     });
 
-    it('mode 优先于旧 start 参数', () => {
-      expect(resolveOutdoorProjectId(`/editor/?project=${PID}&start=outdoor&mode=indoor`, memoryStorage())).toBeNull();
+    it('start=outdoor 优先于已废弃的 indoor 模式标记', () => {
+      expect(resolveOutdoorProjectId(`/editor/?project=${PID}&start=outdoor&mode=indoor`, memoryStorage())).toBe(PID);
     });
   });
 

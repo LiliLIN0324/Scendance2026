@@ -79,30 +79,39 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('VenuePicker（换场地 / 新建）', () => {
-  it('空白场地默认选中，「开始布置」走本机立壳', () => {
-    const onBlankVenue = vi.fn();
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={onBlankVenue}/>);
-    fireEvent.click(screen.getByRole('button', { name: '开始布置' }));
-    expect(onBlankVenue).toHaveBeenCalledOnce();
+  it('空白开始：登录态建云项目并写本机地图草稿，整页进地图', async () => {
+    render(<VenuePicker onClose={vi.fn()} />);
+    await screen.findByRole('button', { name: /云端验证/ });
+    fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
+    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '我的活动方案', expect.objectContaining({ schemaVersion: 1 })));
     expect(mocks.push).not.toHaveBeenCalled();
+    const raw = localStorage.getItem('scendance-outdoor-plan-v1:p-new');
+    expect(raw).toBeTruthy();
+    const record = JSON.parse(raw!) as { plan: { boundary: unknown[] } };
+    expect(record.plan.boundary).toHaveLength(0);
   });
 
   it('列出云项目，选中后同标签打开', async () => {
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+    render(<VenuePicker onClose={vi.fn()}/>);
     fireEvent.click(await screen.findByRole('button', { name: /云端验证/ }));
     await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith('p-1'));
     await screen.findByLabelText('场地俯视预览');
-    fireEvent.click(screen.getByRole('button', { name: '开始布置' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
     expect(mocks.push).toHaveBeenCalledWith('/editor/?project=p-1');
   });
 
-  it('新建项目只输名字，建完同标签打开', async () => {
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+  it('新建项目只输名字，建完写本机地图草稿并整页进地图', async () => {
+    render(<VenuePicker onClose={vi.fn()}/>);
     fireEvent.click(await screen.findByRole('button', { name: /新建项目/ }));
     fireEvent.change(screen.getByLabelText('方案名称'), { target: { value: '春夏市集' } });
-    fireEvent.click(screen.getByRole('button', { name: '开始布置' }));
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/editor/?project=p-new&mode=indoor'));
-    expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '春夏市集', expect.objectContaining({ schemaVersion: 1 }));
+    fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
+    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '春夏市集', expect.objectContaining({ schemaVersion: 1 })));
+    expect(mocks.push).not.toHaveBeenCalled();
+    const raw = localStorage.getItem('scendance-outdoor-plan-v1:p-new');
+    expect(raw).toBeTruthy();
+    const record = JSON.parse(raw!) as { name: string; plan: { boundary: unknown[] } };
+    expect(record.name).toBe('春夏市集');
+    expect(record.plan.boundary).toHaveLength(0);
   });
 
   it('从地图开始：选活动地点（天地图检索）→ 建云项目 → 本机户外标记带锚点', async () => {
@@ -114,7 +123,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
     try {
-      render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+      render(<VenuePicker onClose={vi.fn()}/>);
       fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
       fireEvent.change(screen.getByLabelText('活动名称'), { target: { value: '西湖市集' } });
       fireEvent.change(screen.getByLabelText('活动地点'), { target: { value: '浙江省杭州 平湖秋月' } });
@@ -147,7 +156,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ places: [] }), { status: 404, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
     try {
-      render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+      render(<VenuePicker onClose={vi.fn()}/>);
       fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
       const input = screen.getByLabelText('活动地点') as HTMLInputElement;
       fireEvent.focus(input);
@@ -185,7 +194,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
     try {
-      render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+      render(<VenuePicker onClose={vi.fn()}/>);
       fireEvent.click(await screen.findByRole('button', { name: /从地图开始/ }));
       fireEvent.change(screen.getByLabelText('活动地点'), { target: { value: '平湖秋月' } });
       const options = await screen.findAllByRole('option', {}, { timeout: 3000 });
@@ -197,7 +206,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
 
   it('访客看不到「从地图开始」（云就绪才显示）', () => {
     snapshot.user = null;
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+    render(<VenuePicker onClose={vi.fn()}/>);
     expect(screen.queryByRole('button', { name: /从地图开始/ })).toBeNull();
   });
 
@@ -205,14 +214,14 @@ describe('VenuePicker（换场地 / 新建）', () => {
     mocks.listStudios.mockResolvedValue([]);
     mocks.businessRequest.mockImplementation((path: string, method?: string) => Promise.resolve(
       method === 'POST' && path === '/studios' ? studio : path.endsWith('/projects') ? [project] : []));
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+    render(<VenuePicker onClose={vi.fn()}/>);
     await screen.findByRole('button', { name: /云端验证/ });
     expect(mocks.businessRequest).toHaveBeenCalledWith('/studios', 'POST', expect.objectContaining({ name: '个人工作室' }));
   });
 
   it('访客只见「从空白开始」，不碰云端', () => {
     snapshot.user = null;
-    render(<VenuePicker onClose={vi.fn()} onBlankVenue={vi.fn()}/>);
+    render(<VenuePicker onClose={vi.fn()}/>);
     expect(screen.getByRole('button', { name: /从空白开始/ })).toBeTruthy();
     expect(screen.getByText(/登录后可接着上次的方案继续/)).toBeTruthy();
     expect(mocks.listStudios).not.toHaveBeenCalled();
@@ -226,11 +235,11 @@ describe('VenuePicker（换场地 / 新建）', () => {
     expect(screen.queryByRole('dialog', { name: '换场地 / 新建' })).toBeNull();
   });
 
-  it('弹层里选空白场地，开始布置 = 现有立壳链', async () => {
+  it('弹层里选空白开始，走地图草稿通路而不立室内壳', async () => {
     const onApply = harness();
     fireEvent.click(screen.getByRole('button', { name: '新建/换场地' }));
-    fireEvent.click(await screen.findByRole('button', { name: '开始布置' }));
-    expect(onApply).toHaveBeenCalled();
-    expect(screen.queryByRole('dialog', { name: '换场地 / 新建' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: '开始规划' }));
+    await waitFor(() => expect(mocks.createProject).toHaveBeenCalled());
+    expect(onApply).not.toHaveBeenCalled();
   });
 });

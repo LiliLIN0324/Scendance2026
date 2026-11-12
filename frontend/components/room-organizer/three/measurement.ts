@@ -1,5 +1,6 @@
 import { removeAndDispose } from './builder-utils';
-import type { Vec2 } from '../lib/types';
+import { formatLength } from '../lib/display-units';
+import type { DisplayUnit, Vec2 } from '../lib/types';
 import type * as ThreeNS from 'three';
 
 type ThreeModule = typeof import('three');
@@ -37,12 +38,13 @@ export function renderRoomDimensions(
   scene: ThreeNS.Scene,
   width: number,
   depth: number,
+  unit: DisplayUnit,
   yOffset = 0
 ): void {
   clearRoomDimensions(scene);
   const gap = 0.35;
-  addDimensionSprite(THREE, scene, `${Number(width.toFixed(2))}`, 0, yOffset + 0.4, -depth / 2 - gap);
-  addDimensionSprite(THREE, scene, `${Number(depth.toFixed(2))}`, -width / 2 - gap, yOffset + 0.4, 0);
+  addDimensionSprite(THREE, scene, formatLength(width, unit), 0, yOffset + 0.4, -depth / 2 - gap);
+  addDimensionSprite(THREE, scene, formatLength(depth, unit), -width / 2 - gap, yOffset + 0.4, 0);
 }
 
 function measureTextWidth(text: string): number {
