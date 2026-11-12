@@ -16,7 +16,12 @@
  *  - `loadFacilityModelCandidates()`：异步，在线物料库兜底（关键词打分 + top N）。
  */
 
-import { isPackTemplateId, packEntryByTemplateId, parseLibraryTemplateId } from './oneplan-library';
+import {
+  isPackTemplateId,
+  packEntryByTemplateId,
+  parseLibraryTemplateId,
+  parsePackTemplateId,
+} from './oneplan-library';
 import { loadOnlineModels, type OnlineModel } from './online-models';
 import { planPropKind, type PlanPropKind } from './plan-footprint-geometry';
 
@@ -718,11 +723,17 @@ export function facilityTemplateSlug(templateId: string): string | null {
  * 活动包物件（`pack:`）先查包专属映射，再按包 slug 回落物件库映射（两套 slug 同为
  * OnePlan 短语义词、同一张 curated 表，命中即用）；都没有时保持低模占位——
  * 包物件不做关键词/在线乱配（`planPropKind` 对 pack: 钉死 misc 的既有纪律）。
+ *
+ * slug 取值：优先运行时 packs.json 登记条目的权威 slug；包清单尚未异步登记（载入历史草稿
+ * 同步规整时常见）则从 templateId 自带的 itemId 解析，使 `pack:fairs:chuck-wagon` 这类 id
+ * 即便在包索引为空时也能命中内置同名映射，不至于误回落成 misc 的 1:1 占位外廓。
  */
 export function resolveFacilityModels(templateId: string): FacilityModelCandidate[] {
   if (isPackTemplateId(templateId)) {
     const entry = packEntryByTemplateId(templateId);
-    const slug = entry?.slug ?? '';
+    const parsed = parsePackTemplateId(templateId);
+    const slug = entry?.slug ?? parsed?.itemId ?? '';
+    if (!slug) return [];
     const packExplicit = BUILTIN_BY_PACK_SLUG[slug] ?? BUILTIN_BY_ONEPLAN_SLUG[slug] ?? [];
     return packExplicit.map(candidateFromBuiltin).filter((item): item is FacilityModelCandidate => item !== null);
   }

@@ -23,8 +23,8 @@ import type { PlanPropShape, ShellPoint } from '../lib/plan-footprint-geometry';
  * 尺寸与朝向直接来自 2D 占地（已换算到壳体米），所以两个视图里是同一个东西。
  *
  * 坐标：物件建在**世界轴**上（BoxGeometry 的 X 就是东西、Z 就是南北、Y 是高度），
- * 不参与 `ShapeGeometry` 那套绕 X 轴 -90° 的翻转；2D 画布的顺时针 `rotationDeg`
- * 对应 `rotation.y = -theta`（three 绕 Y 正向是逆时针）。
+ * 不参与 `ShapeGeometry` 那套绕 X 轴 -90° 的翻转；整组 yaw 由外层占位体按
+ * `rotation.y = +theta` 设置（rotationDeg 为 ENU 逆时针，three R_y(θ) 同向）。
  */
 
 const PALETTE = {

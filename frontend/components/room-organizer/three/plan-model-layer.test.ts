@@ -5,6 +5,7 @@ import {
   candidateItemFor,
   collectPlaceholdersByPropId,
   createPlanModelLayer,
+  diffPlanPropIds,
   planModelTransform,
   shrinkFactorFor,
   syncPlanModelPositions,
@@ -17,12 +18,12 @@ import {
   type FacilityModelFit,
 } from '@/components/room-organizer/lib/plan-facility-models';
 import type { PlanPropShape } from '@/components/room-organizer/lib/plan-footprint-geometry';
-import { createCachedGlbModel, disposeOwnedModel } from './glb-assets';
+import { createCachedGlbModel, disposeOwnedModel, getGlbAssetState } from './glb-assets';
 
 vi.mock('./glb-assets', () => ({
   ensureGlbAsset: vi.fn(() => Promise.resolve()),
   createCachedGlbModel: vi.fn(() => new THREE.Group()),
-  getGlbAssetState: vi.fn(() => null),
+  getGlbAssetState: vi.fn(() => ({ status: 'idle' })),
   disposeOwnedModel: vi.fn(),
 }));
 
@@ -69,9 +70,9 @@ describe('plan model layer pure math', () => {
     expect(transform.rotationY).toBe(0);
   });
 
-  it('negates the 2D clockwise rotation and adds 90° for swapped models', () => {
+  it('keeps the ENU CCW rotation as the three yaw and adds 90° for swapped models', () => {
     const rotated = planModelTransform(prop('p1', { rotationDeg: 90 }), metrics, false);
-    expect(rotated.rotationY).toBeCloseTo(-Math.PI / 2, 12);
+    expect(rotated.rotationY).toBeCloseTo(Math.PI / 2, 12);
     const swapped = planModelTransform(prop('p1'), metrics, true);
     expect(swapped.rotationY).toBeCloseTo(Math.PI / 2, 12);
   });
@@ -107,6 +108,13 @@ describe('plan model layer pure math', () => {
     expect(map.size).toBe(1);
   });
 
+  it('diffPlanPropIds 给出新增 / 保留 / 移除三态', () => {
+    const diff = diffPlanPropIds(['p1', 'p2', 'p3'], ['p2', 'p4']);
+    expect(diff.added).toEqual(['p4']);
+    expect(diff.kept).toEqual(['p2']);
+    expect(diff.removed).toEqual(['p1', 'p3']);
+  });
+
   it('sync repositions existing models only (不重摆新模型)', () => {
     const layer = new THREE.Group();
     const model = new THREE.Group();
@@ -117,6 +125,69 @@ describe('plan model layer pure math', () => {
     expect(model.position.z).toBeCloseTo(20 - metrics.depth / 2, 9);
     // p2 没有已落地模型：不新建。
     expect(layer.children).toHaveLength(1);
+  });
+
+  it('编辑后既有模型按最新占地等比跟随放大缩小，并对实测越界做兜底收缩', () => {
+    const layer = new THREE.Group();
+    const model = new THREE.Group();
+    model.userData.planPropId = 'p1';
+    model.userData.planPropBaseScale = [1, 1, 1] as const;
+    model.userData.planPropFit = {
+      width: 5,
+      depth: 5,
+      height: 3,
+      scale: 1,
+      swap: true,
+      glbUrl: '/showcase/assets/library/model/event-tent-05m.glb',
+    };
+    layer.add(model);
+
+    // 实测包围盒 6×6×3：swap 后塞进 4×2 → 新 contain=min(4/5,2/5)=0.4，shrink=2/6=1/3。
+    vi.mocked(getGlbAssetState).mockReturnValue({
+      dimensions: { width: 6, depth: 6, height: 3 },
+    } as ReturnType<typeof getGlbAssetState>);
+    const edited = prop('p1', { x: 10, z: 20, width: 4, depth: 2 });
+    syncPlanModelPositions(layer, [edited], metrics);
+
+    const { position, rotationY } = planModelTransform(edited, metrics, true);
+    expect(model.position.x).toBeCloseTo(position[0], 9);
+    expect(model.position.z).toBeCloseTo(position[2], 9);
+    expect(model.rotation.y).toBeCloseTo(rotationY, 9);
+    expect(model.rotation.y).toBeCloseTo(Math.PI / 2, 9);
+    // 跟随 0.4 × 兜底收缩 1/3。
+    expect(model.scale.x).toBeCloseTo(0.4 / 3, 9);
+    expect(model.scale.y).toBeCloseTo(0.4 / 3, 9);
+    expect(model.scale.z).toBeCloseTo(0.4 / 3, 9);
+
+    // 资产状态缺失（idle，无 dimensions）时只按最新占地跟随，不抛错。
+    vi.mocked(getGlbAssetState).mockReturnValue({ status: 'idle' } as ReturnType<typeof getGlbAssetState>);
+    syncPlanModelPositions(layer, [edited], metrics);
+    expect(model.scale.x).toBeCloseTo(0.4, 9);
+    vi.mocked(getGlbAssetState).mockClear();
+  });
+
+  it('框放大时模型等比跟随放大（contain 倍率 >1）', () => {
+    const layer = new THREE.Group();
+    const model = new THREE.Group();
+    model.userData.planPropId = 'p1';
+    model.userData.planPropBaseScale = [0.5, 0.5, 0.5] as const;
+    model.userData.planPropFit = {
+      width: 5,
+      depth: 5,
+      height: 1.5,
+      scale: 1,
+      swap: false,
+      glbUrl: '/showcase/assets/library/model/event-tent-05m.glb',
+    };
+    layer.add(model);
+    vi.mocked(getGlbAssetState).mockReturnValue({ status: 'idle' } as ReturnType<typeof getGlbAssetState>);
+    const enlarged = prop('p1', { width: 10, depth: 10 });
+    syncPlanModelPositions(layer, [enlarged], metrics);
+    // contain=10/5=2，跟随倍率 2，基底 0.5 → 1.0。
+    expect(model.scale.x).toBeCloseTo(1, 9);
+    expect(model.scale.y).toBeCloseTo(1, 9);
+    expect(model.scale.z).toBeCloseTo(1, 9);
+    vi.mocked(getGlbAssetState).mockClear();
   });
 });
 
@@ -205,6 +276,28 @@ describe('plan model layer assembly', () => {
     expect(newPlaceholder.visible).toBe(false);
     const model2 = layer.group.children.find((child) => child.userData.planPropId === 'p2');
     expect(model2).toBeDefined();
+    layer.dispose();
+  });
+
+  it('删除设施后剪枝孤儿 GLB：旧模型摘掉并释放，不留在原位（J1）', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1')],
+      metrics: { width: 100, depth: 60 },
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(layer.group.children).toHaveLength(1);
+    vi.mocked(disposeOwnedModel).mockClear();
+
+    // 2D 删掉 p1、改放 p2：p1 模型必须被剪枝，p2 当场落地。
+    layer.placeNew([prop('p2')], { width: 100, depth: 60 });
+    await flush();
+    expect(layer.group.children).toHaveLength(1);
+    expect(layer.group.children[0].userData.planPropId).toBe('p2');
+    const disposed = vi.mocked(disposeOwnedModel).mock.calls[0]?.[0];
+    expect(disposed?.userData.planPropId).toBe('p1');
     layer.dispose();
   });
 });

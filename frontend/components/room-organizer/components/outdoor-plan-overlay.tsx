@@ -28,6 +28,7 @@ import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share'
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
+import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
@@ -94,7 +95,6 @@ export interface OutdoorPlanOverlayProps {
   sceneObjects?: readonly PlanSceneObject[] | undefined;
   /** 受控视角：同一份规划的 2D 地图 / 3D 场地，只换看法，功能不变。 */
   view?: '2d' | '3d';
-  onViewChange?: (view: '2d' | '3d') => void;
   /**
    * 2026-11-12 接管态保活隐藏：全屏 OutdoorPlan3D 接管画布时，本覆盖层**保持挂载**
    * （2D 画布编辑桥 pointerFromPlan 要用它的句柄与布局），但它自己的 2D 画面/浮层
@@ -207,7 +207,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   anchorRef.current = anchor;
   useEffect(() => {
     const record = readOutdoorProjectRecord(slotId);
-    const loaded = record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan();
+    // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
+    const loaded = normalizePlanFacilityFootprints(
+      record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan(),
+    );
     if (!loaded.anchor && !anchorRef.current) {
       setPlan({ ...loaded, anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR });
       return;

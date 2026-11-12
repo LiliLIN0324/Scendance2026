@@ -165,6 +165,7 @@ import {
   shellVenuePatchFromPlanBoundary,
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
+import { readOutdoorPlanView } from './lib/outdoor-project-store';
 import { filterPlanByLevel } from './lib/plan-levels';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
@@ -288,7 +289,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, isolatedWriteSession }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, isolatedWriteSession, outdoorProjectId: outdoorProjectIdProp }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession; outdoorProjectId?: string | null } = {}): JSX.Element {
   const isolatedRef=useRef<{session:WorkspaceWriteSession;revoked:boolean}|null>(null);
   if(!isolatedRef.current&&isolatedWriteSession)isolatedRef.current={session:isolatedWriteSession,revoked:false};
   else if(isolatedRef.current&&isolatedWriteSession!==isolatedRef.current.session)isolatedRef.current.revoked=true;
@@ -298,6 +299,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
+  // 2026-11-13 收敛 14b：户外项目直进 B（外壳 A 下线）。非空 outdoorProjectId = 纯户外语境：
+  // 草稿按该 id 存本机 outdoor-project-store，室内布置 Viewport 让位，不回写室内壳体。
+  const isOutdoorProject = outdoorProjectIdProp != null && outdoorProjectIdProp !== '';
   const placementIdentity = useRef({ controller, apiUrl: controller.config.apiUrl, isActive, epoch: 0 });
   if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller.config.apiUrl || placementIdentity.current.isActive !== isActive) {
     placementIdentity.current = { controller, apiUrl: controller.config.apiUrl, isActive, epoch: placementIdentity.current.epoch + 1 };
@@ -545,6 +549,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
   const [outdoor3dWarm, setOutdoor3dWarm] = useState(false);
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('library');
+  // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
+  // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
+  useEffect(() => {
+    // 2026-11-13 房间画布退役后，右侧唯一画面是户外地图：所有项目起步都进 2D 地图，
+    // 不再按室内/户外语境决定地图是否出镜；视角记忆仅户外项目按 projectId 回读。
+    setOutdoor2DOpen(true);
+    setOutdoor3dTakeoverActive(false);
+    setOutdoorPanel('library');
+    if (isOutdoorProject) setOutdoorView(readOutdoorPlanView(outdoorProjectIdProp!) ?? '2d');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outdoorProjectIdProp, isOutdoorProject]);
   // 2026-11-11：保存态不再上左轨 foot（用户指令去掉「户外草稿·已存」文字）——保存管线本身不变。
   const handleOutdoorSaveState = useCallback((_next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => { /* no-op：仅接收 */ }, []);
   // P2-g 数据打通：室内工具排通用钮（撤销/重做/缩放/导出）在户外模式下转发给 2D 画布，
@@ -832,7 +847,7 @@ useEffect(() => {
     setCapturePanel(value => value === 'open' ? 'hidden' : value);
     // 2026-11-13 收敛 14a：户外 3D 接管态下切到任一对话格，先退回户外 2D 地图——
     // 否则接管层随左栏切换仍保持 visible，空屏 + 比例尺/指北针残留在右侧。只退视图，不整体关户外。
-    if (outdoor3dTakeoverActive && !outdoor2DOpen) {
+    if ((outdoor3dTakeoverActive && !outdoor2DOpen) || (isOutdoorProject && !outdoor2DOpen && !outdoor3dTakeoverActive)) {
       clearPendingPlacement();
       setOutdoor3dTakeoverActive(false);
       setOutdoor2DOpen(true);
@@ -852,7 +867,7 @@ useEffect(() => {
       const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
       (input ?? document.getElementById('agent-panel'))?.focus({ preventScroll: true });
     });
-  }, [outdoor2DOpen, outdoor3dTakeoverActive]);
+  }, [outdoor2DOpen, outdoor3dTakeoverActive, isOutdoorProject]);
   const openTemplates = useCallback(() => {
     if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
     showAgent('space');
@@ -1689,7 +1704,13 @@ useEffect(() => {
     // 先镜像给 3D 地面图层：即使边界没变（只挪了设施/改分区），3D 里也要跟着动。
     // 收在户外视图里也保留这份快照——切回 3D 才看得见平面在哪儿。
     outdoorFullPlanRef.current = plan;
-    setOutdoorPlanState({ projectId: layoutStore.getState().layout.id ?? null, plan: filterPlanByLevel(plan, outdoorLevelIdRef.current) });
+    const boundId = isOutdoorProject ? outdoorProjectIdProp : (layoutStore.getState().layout.id ?? null);
+    setOutdoorPlanState({ projectId: boundId, plan: filterPlanByLevel(plan, outdoorLevelIdRef.current) });
+    // 纯户外项目没有室内壳体：不回写室内 layout，只把边界/分区镜像给 3D 地面图层。
+    if (isOutdoorProject) {
+      applyOutdoorGroundBasemap(plan);
+      return;
+    }
     const step = nextOutdoorBoundarySync(outdoorBoundarySyncRef.current, plan);
     outdoorBoundarySyncRef.current = step.state;
     if (!step.apply) {
@@ -1708,17 +1729,22 @@ useEffect(() => {
     // 边界变了就重拼 3D 地面底图（用 2D 当前那张地图：OSM/Carto/天地图）。
     applyOutdoorGroundBasemap(plan);
     if (patch.scaled) notify('平面边界超过 200 m，已按比例缩到壳体可承载的尺寸。', 'info');
-  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, applyOutdoorGroundBasemap]);
+  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, applyOutdoorGroundBasemap, isOutdoorProject, outdoorProjectIdProp]);
   const handleOutdoorActiveLevelChange = useCallback((levelId: string) => {
     outdoorLevelIdRef.current = levelId;
     const full = outdoorFullPlanRef.current;
     if (!full) return;
-    setOutdoorPlanState({ projectId: layoutStore.getState().layout.id ?? null, plan: filterPlanByLevel(full, levelId) });
-  }, []);
+    const boundId = isOutdoorProject ? outdoorProjectIdProp : (layoutStore.getState().layout.id ?? null);
+    setOutdoorPlanState({ projectId: boundId, plan: filterPlanByLevel(full, levelId) });
+  }, [isOutdoorProject, outdoorProjectIdProp]);
   /** 切回 3D 也保留平面图层（这才是「2D 策划的东西 3D 里也在」）；只丢掉别的活动的残留。 */
   const outdoorPlan = useMemo(
-    () => (outdoorPlanState && outdoorPlanState.projectId === (layout.id ?? null) ? outdoorPlanState.plan : null),
-    [layout.id, outdoorPlanState],
+    () => {
+      if (!outdoorPlanState) return null;
+      const matchId = isOutdoorProject ? outdoorProjectIdProp : (layout.id ?? null);
+      return outdoorPlanState.projectId === matchId ? outdoorPlanState.plan : null;
+    },
+    [layout.id, outdoorPlanState, isOutdoorProject, outdoorProjectIdProp],
   );
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
   // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。
@@ -4305,6 +4331,9 @@ useEffect(() => {
                       setOutdoor2DOpen(true);
                       return;
                     }
+                    // 2026-11-13 收敛 14c：纯户外项目没有室内场景可回退——地图是右侧唯一画面，
+                    // 整体收起会让户外 overlay 隐藏、室内 Viewport 又已让位，右侧直接空屏。纯户外下禁止收起。
+                    if (isOutdoorProject) return;
                     setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
                     applyPresetRef.current('iso');
                     if (agentCollapsedByOutdoorRef.current) {
@@ -4323,7 +4352,7 @@ useEffect(() => {
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => {
               // 2026-11-13 收敛 14a：接管态开私信同样先退回户外 2D，避免接管层残留。
-              if (outdoor3dTakeoverActive && !outdoor2DOpen) {
+              if ((outdoor3dTakeoverActive && !outdoor2DOpen) || (isOutdoorProject && !outdoor2DOpen && !outdoor3dTakeoverActive)) {
                 clearPendingPlacement();
                 setOutdoor3dTakeoverActive(false);
                 setOutdoor2DOpen(true);
@@ -4533,35 +4562,22 @@ useEffect(() => {
             >
             <OutdoorPlanOverlay
               ref={outdoorOverlayRef}
-              projectId={layout.id ?? null}
-              anchor={layout.sceneAnchor ?? layout.mapLngLat ?? null}
-              activityName={layout.name}
+              projectId={isOutdoorProject ? outdoorProjectIdProp : (layout.id ?? null)}
+              anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? layout.mapLngLat ?? null)}
+              activityName={isOutdoorProject ? null : layout.name}
               onSaveStateChange={handleOutdoorSaveState}
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
               onModeChange={handleOutdoorCanvasMode}
               onPlanChange={handleOutdoorPlanChange}
               onActiveLevelChange={handleOutdoorActiveLevelChange}
-              seedPlan={outdoorSeedPlan}
-              sceneObjects={outdoorSceneObjects}
+              seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
+              sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
               view={outdoorView}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
               dormant={!outdoor2DOpen}
               // 2026-11-12「3D 的时候也要可编辑」：接管态把右轨三张工具卡的出镜宿主交给画布，
               // 卡片 portal 出隐藏覆盖层；2D 卡内不传，浮窗照旧画在画布内。
               {...(outdoor3dTakeover ? { inspectorHostId: 'outdoor-inspector-host' } : {})}
-              onViewChange={next => {
-                // 2026-11-12 用户拍板（统一 2D/3D 切换）：覆盖层里点「3D 场地」＝关覆盖层
-                // 进全屏接管（OutdoorPlan3D），不在覆盖层里画 3D；重开卡片回到 2D 地图。
-                if (next === '3d') {
-                  setOutdoorView('2d');
-                  setOutdoor2DOpen(false);
-                  // 显式点亮接管态：outdoorPlanState 常驻后，「关覆盖层」不再隐含接管。
-                  setOutdoor3dTakeoverActive(true);
-                  setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-                  return;
-                }
-                setOutdoorView(next);
-              }}
 />
               </div>
             )}
@@ -4589,7 +4605,10 @@ useEffect(() => {
                 />
               </div>
             )}
-      <div className="sc-scene-viewport"><Viewport
+      {/* 2026-11-13 用户拍板：右侧唯一画面 = 户外地图 2D/3D；室内房间 three 画布整体退役出镜，
+          容器常驻隐藏但保留保活管线（renderer/canvas ref 仍被环境、漫游、就绪态逻辑复用），
+          彻底卸载 Viewport 与室内 layout 回写链路作为后续清理。 */}
+      <div className="sc-scene-viewport" style={{ visibility: 'hidden', pointerEvents: 'none' }}><Viewport
         isReady={isReady}
         error={error}
         view2D={view.view2D}
@@ -4694,7 +4713,7 @@ useEffect(() => {
                 <OutdoorPlan3D
                   plan={outdoorPlan}
                   source={geoGroundSource}
-                  sceneObjects={outdoorSceneObjects}
+                  sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
                   apiRef={outdoorPlan3DRef}
                   canvasApiRef={outdoorCanvasBridgeRef}
                   active={outdoor3dTakeover}
