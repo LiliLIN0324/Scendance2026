@@ -174,6 +174,12 @@ export interface BackendSnapshot {
   writeBlocked: boolean;
   error: BackendFailure | null;
 }
+
+/** 用户级界面偏好（云端账号维度）。缺失字段由前端补本地默认值；工程底稿始终存米。 */
+export interface AccountPreferences {
+  unit?: 'm' | 'ft';
+  showMeasurements?: boolean;
+}
 interface AuthResponse {
   access_token: string; refresh_token: string; expires_in: number; expires_at?: number; user: BackendUser;
 }
@@ -814,6 +820,14 @@ export class BackendSession {
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
+  /** 读取当前账号的界面偏好；未登录或服务不可用时由调用方回退本机默认值。 */
+  async getPreferences(): Promise<AccountPreferences> {
+    return this.businessRequest<AccountPreferences>("/preferences", "GET");
+  }
+  /** 回写当前账号的界面偏好；只提交白名单字段，不触碰项目 / 租约状态。 */
+  async savePreferences(prefs: AccountPreferences): Promise<AccountPreferences> {
+    return this.businessRequest<AccountPreferences>("/preferences", "PATCH", prefs);
+  }
   /** Scene processing uses a remote project without replacing the caller's local activity identity. */
   async ensureGeometryWorkbenchReady(scene: Scene, name: string, localActivityId: string): Promise<BackendProject> {
     const project = await this.prepareGeometryWorkbench(scene, name, localActivityId, true);

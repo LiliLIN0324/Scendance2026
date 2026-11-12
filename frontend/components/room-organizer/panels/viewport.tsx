@@ -350,7 +350,7 @@ function walkHint(phase: WalkthroughPhase | undefined, inEnvironment: boolean | 
       ? '眼高走进环境 · 按住左键拖动转头 · WASD 走动'
       : '按住左键拖动转头 · WASD 走动 · Shift 加速';
   }
-  return '正在进入第一人称…';
+  return '正在进入第一人称漫游…';
 }
 
 const WALK_HINT_VISIBLE_MS = 7000;

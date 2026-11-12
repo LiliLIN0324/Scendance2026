@@ -348,6 +348,7 @@ button.ap-ghost {
 /* 第一人称：顶部只留一组控件（全屏 + 退出），退出只说一次。 */
 .ap-walk-controls { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; }
 .ap-walk-controls .ap-canvas-pill { position: static; transform: none; padding: 4px 12px; }
+.ap-walk-esc { color: var(--wk-ink-faint, #71717a); }
 #walk-exit, #walk-fullscreen { background: var(--wk-paper); border: 1px solid var(--wk-hair); color: var(--wk-ink); cursor: pointer; }
 #walk-fullscreen[aria-pressed="true"] { background: var(--wk-ink); border-color: var(--wk-ink); color: var(--wk-paper); }
 .sc-workbench.is-walkthrough .sc-material-shelf { display: none !important; }

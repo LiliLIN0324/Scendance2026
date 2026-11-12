@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 · 标注工具条精简方案 · 2026-11-12</title>
+<style>
+/* ── 令牌（与 05-设计规范.md / globals.css 一致） ─────────────── */
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+  --hair-soft:#EFEFF1; --hair:#E4E4E7; --faint:#A6AAB2;
+  --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF; --green-line:#C5D4C9;
+  --warn:#96651F; --err:#B4443C;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10);
+  --e2:0 16px 48px rgba(20,20,22,.18);
+  --ease:cubic-bezier(.2,0,0,1);
+  --font:"Inter",Manrope,Arial,"PingFang SC","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{background:var(--paper);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto;padding:64px 48px 120px}
+.cap{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.note{font-size:12px;line-height:20px;color:var(--muted)}
+h1{font-size:24px;line-height:34px;font-weight:600}
+h2{font-size:18px;line-height:26px;font-weight:600;margin-bottom:6px}
+section{border-top:1px solid var(--hair);padding:40px 0}
+header.hd{padding-bottom:28px}
+header.hd .note{margin-top:8px;max-width:680px}
+
+/* ── 指标条 ─────────────────────────────────────────────────── */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}
+.metric{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:14px 16px;background:var(--plane)}
+.metric b{display:block;font-size:20px;line-height:28px;font-weight:600}
+.metric span{font-size:12px;color:var(--muted)}
+.metric .old{color:var(--err)}
+.metric .new{color:var(--green-deep)}
+
+/* ── 双栏对比 ────────────────────────────────────────────────── */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px}
+.col{border:1px solid var(--hair);border-radius:var(--r-lg);overflow:hidden;background:var(--paper)}
+.col-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--hair-soft)}
+.col-head .cap{text-transform:none;letter-spacing:0}
+.tag{font-size:11px;line-height:16px;font-weight:500;padding:2px 8px;border-radius:999px}
+.tag-bad{background:#FBECEB;color:var(--err)}
+.tag-ok{background:var(--green-pale);color:var(--green-deep)}
+
+/* 画布模拟 */
+.canvas{position:relative;height:300px;background:#DCEAF2;overflow:hidden}
+.canvas .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:28px 28px}
+
+/* 现状：黑胶囊 + 白圆钮 */
+.old-entry{position:absolute;left:18px;top:18px;display:flex;align-items:center;gap:12px}
+.old-pill{display:flex;align-items:center;height:44px;padding:0 22px;border-radius:999px;background:#141416;color:#fff;font-size:16px;font-weight:500}
+.old-round{width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:var(--e1);display:grid;place-items:center;color:var(--ink-soft)}
+
+/* 现状：白卡面板 */
+.old-card{position:absolute;left:18px;right:18px;top:86px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1);padding:14px 16px}
+.old-card .ch{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.old-card .ch-ic{width:30px;height:30px;border-radius:8px;background:#F1ECF7;display:grid;place-items:center;color:#7A5C9E}
+.old-card .ch-title{font-size:14px;font-weight:600;flex:1}
+.old-tabs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.old-tab{height:40px;border:1px solid var(--hair);border-radius:var(--r-sm);display:grid;place-items:center;font-size:14px;color:var(--ink-soft)}
+.old-tab.on{background:var(--green-pale);border-color:var(--green-line);color:var(--ink)}
+.old-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.old-shape{height:38px;border:1px solid var(--hair);border-radius:var(--r-sm);display:grid;place-items:center;font-size:13px;color:var(--ink-soft)}
+.old-shape.on{background:var(--green-pale);border-color:var(--green-line)}
+.old-copy{font-size:12px;line-height:20px;color:var(--muted);border-top:1px solid var(--hair-soft);padding-top:12px}
+
+/* 现状批注 */
+.note-bad{position:absolute;z-index:3;font-size:11px;line-height:16px;color:var(--err);background:#fff;border:1px dashed var(--err);border-radius:var(--r-sm);padding:4px 8px;white-space:nowrap}
+
+/* 推荐：图标浮条 */
+.new-entry{position:absolute;right:18px;top:18px;width:30px;height:30px;border-radius:50%;background:var(--green-pale);border:1px solid var(--green-line);color:var(--green-deep);display:grid;place-items:center}
+.new-bar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1)}
+.new-bar .sep{width:1px;height:20px;background:var(--hair);margin:0 4px}
+.tbtn{position:relative;width:32px;height:32px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--ink-soft);display:grid;place-items:center}
+.tbtn:hover{background:var(--plane)}
+.tbtn.on{background:var(--green-pale);color:var(--green-deep)}
+.tbtn svg{display:block}
+/* tooltip 示意 */
+.tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:11px;line-height:15px;padding:4px 8px;border-radius:var(--r-sm);white-space:nowrap;pointer-events:none}
+.tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink)}
+/* 二级属性 */
+.props{position:absolute;left:50%;bottom:74px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-sm);box-shadow:var(--e1)}
+.dot{width:16px;height:16px;border-radius:50%;border:1px solid var(--hair)}
+.w{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.w i{display:block;width:18px;height:2px;background:var(--ink-soft);border-radius:2px}
+
+/* 清单 */
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{text-align:left;padding:12px 14px;border-top:1px solid var(--hair-soft);vertical-align:top;font-size:13px;line-height:20px}
+th{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+td:first-child{width:170px;font-weight:600}
+.mono{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+/* 案例 */
+.cases{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+.case{border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;background:var(--paper)}
+.case img{width:100%;height:150px;object-fit:cover;object-position:top;border-bottom:1px solid var(--hair-soft)}
+.case .body{padding:14px 16px}
+.case .body b{display:block;font-size:13px;margin-bottom:4px}
+.case .body p{font-size:12px;line-height:19px;color:var(--muted)}
+
+.callout{margin-top:24px;border:1px solid var(--green-line);background:var(--green-pale);border-radius:var(--r-md);padding:16px 18px}
+.callout b{color:var(--green-deep)}
+ul{padding-left:18px}li{margin:6px 0;font-size:13px;line-height:20px}
+
+@media(max-width:860px){
+  .wrap{padding:40px 20px 80px}
+  .vs,.cases{grid-template-columns:1fr}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hd">
+  <div class="cap">可视化对照稿 · 未动代码</div>
+  <h1>标注工具条：从「文字按钮 + 常驻说明」改成「图标工具条 + 悬浮提示」</h1>
+  <p class="note">现状三张截图：黑胶囊入口 + 文字分组 tab + 四个文字形状钮 + 一段常驻操作说明。对照 Excalidraw / FigJam / Snipaste 的成熟形制，把一级入口压成纯图标，说明下沉到 tooltip，复用工作台已有的 <span class="mono">data-tip</span>、<span class="mono">sc-tool-pop</span>、选中态与 token 体系。代码落点已核实：这套标注面板在户外规划模块 <span class="mono">outdoor-plan-canvas.tsx</span> 的 <span class="mono">annotateZone</span>（详见文末「代码落点」）；测量区已先做过一轮同款精简，标注区照此同步。</p>
+</header>
+
+<section>
+  <div class="metrics">
+    <div class="metric"><b><span class="old">6</span> → <span class="new">0</span></b><span>文字按钮：2 分组 tab + 4 形状钮（全部改图标）</span></div>
+    <div class="metric"><b><span class="old">~60 字</span> → <span class="new">0</span></b><span>常驻操作说明段落</span></div>
+    <div class="metric"><b><span class="old">4 层</span> → <span class="new">2 层</span></b><span>入口 → 分组 → 按钮 → 说明，压成 工具条 → 二级属性</span></div>
+    <div class="metric"><b>0 新造</b><span>图标族 / 弹层 / tooltip 全部复用现有机制</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>前后对照</h2>
+  <p class="note">左侧按截图复刻现状；右侧为推荐形制。画布背景与浮层阴影沿用现有工作台浮层语言。</p>
+
+  <div class="vs">
+    <!-- ── 现状 ── -->
+    <div class="col">
+      <div class="col-head"><span class="cap">现状（截图复刻）</span><span class="tag tag-bad">字多 · 层级深</span></div>
+      <div class="canvas">
+        <div class="grid"></div>
+
+        <div class="old-entry">
+          <div class="old-pill">标注</div>
+          <div class="old-round">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <line x1="5" y1="6" x2="15" y2="6"/><line x1="5" y1="11" x2="15" y2="11"/><line x1="5" y1="16" x2="12" y2="16"/>
+              <path d="M15.5 14.5l3.5 3.5-1.6 1.6-3.5-3.5z"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="note-bad" style="left:18px;top:72px">① 入口文字与图标重复占位</div>
+
+        <div class="old-card">
+          <div class="ch">
+            <div class="ch-ic">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <line x1="5" y1="6" x2="15" y2="6"/><line x1="5" y1="11" x2="15" y2="11"/><line x1="5" y1="16" x2="12" y2="16"/>
+                <path d="M15.5 14.5l3.5 3.5-1.6 1.6-3.5-3.5z"/>
+              </svg>
+            </div>
+            <div class="ch-title">标注</div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </div>
+          <div class="old-tabs">
+            <div class="old-tab">文本</div>
+            <div class="old-tab on">形状</div>
+          </div>
+          <div class="old-shapes">
+            <div class="old-shape on">矩形</div>
+            <div class="old-shape">圆形</div>
+            <div class="old-shape">三角形</div>
+            <div class="old-shape">线段</div>
+          </div>
+          <div class="old-copy">文本：点一下放置就地输入（Enter 提交 / Esc 取消）；形状：矩形/圆形/线段按住拖（也可两点），三角形单击 3 点。</div>
+        </div>
+
+        <div class="note-bad" style="right:18px;bottom:118px">② 常驻一段说明，每次都占眼</div>
+      </div>
+    </div>
+
+    <!-- ── 推荐 ── -->
+    <div class="col">
+      <div class="col-head"><span class="cap">推荐：图标工具条</span><span class="tag tag-ok">干净 · 手势进提示</span></div>
+      <div class="canvas">
+        <div class="grid"></div>
+
+        <div class="new-entry" title="标注（选中态）">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <line x1="5" y1="6" x2="15" y2="6"/><line x1="5" y1="11" x2="15" y2="11"/><line x1="5" y1="16" x2="12" y2="16"/>
+            <path d="M15.5 14.5l3.5 3.5-1.6 1.6-3.5-3.5z"/>
+          </svg>
+        </div>
+
+        <!-- 二级属性：选中工具后才浮现 -->
+        <div class="props">
+          <span class="dot" style="background:var(--ink)"></span>
+          <span class="dot" style="background:var(--green)"></span>
+          <span class="dot" style="background:#fff"></span>
+          <span class="sep" style="width:1px;height:16px;background:var(--hair)"></span>
+          <span class="w"><i style="width:14px"></i>细</span>
+          <span class="w"><i></i>粗</span>
+        </div>
+
+        <!-- 图标浮条 -->
+        <div class="new-bar">
+          <button class="tbtn" aria-label="选择" title="选择 / 移动">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l7 18 2.5-7.5L22 11z"/></svg>
+          </button>
+          <span class="sep"></span>
+          <button class="tbtn" aria-label="文本" title="文本 · 点一下放置，Enter 提交 / Esc 取消">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg>
+          </button>
+          <button class="tbtn" aria-label="矩形" title="矩形 · 按住拖出，也可点两点">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg>
+          </button>
+          <button class="tbtn" aria-label="圆形" title="圆形 · 按住拖出，也可点两点">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6.5"/></svg>
+          </button>
+          <button class="tbtn on" aria-label="三角形" title="三角形 · 依次点 3 点">
+            <span class="tip">三角形 · 依次点 3 点</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 5l8 14H4z"/></svg>
+          </button>
+          <button class="tbtn" aria-label="线段" title="线段 · 按住拖出，也可点两点">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+          </button>
+          <span class="sep"></span>
+          <button class="tbtn" aria-label="撤销" title="撤销">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>成熟案例对照</h2>
+  <p class="note">三款产品的标注 / 绘图工具条，规律一致：一级工具纯图标、分组用分隔线、手势说明进 tooltip，属性（颜色 / 粗细）二级浮现。</p>
+  <div class="cases">
+    <div class="case">
+      <img src="https://aka.doubaocdn.com/l/28NxUhgLjR" alt="Excalidraw 工具条截图" loading="lazy">
+      <div class="body">
+        <b>Excalidraw</b>
+        <p>顶部一条白色浮条：选择、矩形、菱形、圆、箭头、直线、画笔、文本、图片全是图标；同组竖线分隔；悬浮出名称与快捷键。颜色 / 描边宽度在左侧属性板，不常驻工具条。</p>
+      </div>
+    </div>
+    <div class="case">
+      <img src="https://aka.doubaocdn.com/l/liRw7Of8DU" alt="FigJam 底部工具条截图" loading="lazy">
+      <div class="body">
+        <b>Figma · FigJam</b>
+        <p>底部圆角浮条，图标为主；同类形状收进一个带小下拉的图标钮；文本用「T」字形；画布内只留一句占位提示（Press Enter to add text），不写操作段落。</p>
+      </div>
+    </div>
+    <div class="case">
+      <img src="https://aka.doubaocdn.com/l/JVnRXU5hUk" alt="Snipaste 标注工具条截图" loading="lazy">
+      <div class="body">
+        <b>Snipaste</b>
+        <p>截图下方一条工具条：矩形 / 椭圆 / 直线 / 箭头 / 画笔 / 文字 / 马赛克 / 橡皮全部图标；空心实心等变体选中后再切；颜色与粗细紧跟工具出现，说明靠 tooltip 与快捷键。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>落地清单</h2>
+  <table>
+    <thead><tr><th>位置</th><th>现状</th><th>改法（复用现有机制）</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>入口钮<br><span class="mono">scendance-workspace.tsx:731</span></td>
+        <td>截图为黑色胶囊「标注」两个大字 + 一枚独立圆形图标，重复占位；当前代码里右轨已是一枚纯图标圆钮（<span class="mono">#tool-annotate</span>，edit_note，<span class="mono">data-tip="标注"</span>），胶囊大字是更早形态。</td>
+        <td>保留现有圆钮形制：30px 图标钮，与右轨其它工具同高同距；选中态 <span class="mono">is-active</span>（green-pale 底）；名称写进 <span class="mono">aria-label</span> 与 <span class="mono">data-tip</span>，不画大字、不回退胶囊。</td>
+      </tr>
+      <tr>
+        <td>分组层<br><span class="mono">outdoor-plan-canvas.tsx:5016–5034</span></td>
+        <td>「文本 / 形状」两个 <span class="mono">flex:1</span> 文字 tab，先选组再选工具，多一层；<span class="mono">mode</span> 取 <span class="mono">note / shape</span>。</td>
+        <td>取消这层 tab：文本、矩形、圆形、三角形、线段并列一排图标，<span class="mono">sc-tool-sep</span> 竖线分组。窄屏放不下时，形状组收进一个带下拉的图标钮，弹层复用现有 <span class="mono">sc-tool-pop</span>。</td>
+      </tr>
+      <tr>
+        <td>形状按钮<br><span class="mono">outdoor-plan-canvas.tsx:5037–5059</span></td>
+        <td>矩形 / 圆形 / 三角形 / 线段四个文字钮，文案取 <span class="mono">planAnnotationKindLabels</span>，无图标；四类型共用 <span class="mono">annotateShape</span> 状态与一份草稿。</td>
+        <td>换本地图标（16–20px，currentColor）；现有图标注册表 <span class="mono">PLANNING_EDIT_MODE_ICONS</span> 只有模式级 sticky-note / shapes，四个形状子类型需在注册表补名并编译期闭环；每个钮 <span class="mono">aria-label</span> 写中文名，<span class="mono">data-tip</span> 写手势。</td>
+      </tr>
+      <tr>
+        <td>常驻说明段<br><span class="mono">outdoor-plan-canvas.tsx:5061–5064</span></td>
+        <td>面板底部一段 ~60 字操作说明常驻；末尾附一行草稿剩余点数（<span class="mono">annotateDraftCount</span>）。</td>
+        <td>说明整段移除，手势下沉到各钮 tooltip：<br>· 文本 —「点一下放置 · Enter 提交 / Esc 取消」<br>· 矩形 / 圆形 / 线段 —「按住拖出，也可点两点」<br>· 三角形 —「依次点 3 点」<br>草稿剩余点数是进行中状态反馈，保留为一句短行（对齐测量区 <span class="mono">完成（n 点）</span> 的口径），不跟说明段一起删。首次进入可给一条可关闭轻提示，不常驻。</td>
+      </tr>
+      <tr>
+        <td>二级属性<br><span class="mono">site-plan.ts:126</span></td>
+        <td>面板里没有颜色 / 粗细控制；契约 <span class="mono">PlanAnnotation</span> 已有可选 <span class="mono">color</span> 字段，UI 未暴露，说明文字承担了本该由控件表达的信息。</td>
+        <td>选中工具后，在工具条旁浮现一行属性：颜色点 + 线宽两档（对齐 Snipaste / Excalidraw）；未选中工具时收起，不占常驻空间。颜色取值走图层色板，不另造色值。</td>
+      </tr>
+      <tr>
+        <td>卡片头部<br><span class="mono">outdoor-plan-canvas.tsx:6921–6969</span></td>
+        <td>26px 紫色图标块 +「标注」标题 + 计数角标 + 下拉折叠 + 关闭 ×，标题与入口钮语义重复。</td>
+        <td>容器若保留，头部只留折叠与关闭；标题交给 tooltip。计数角标可保留（清单条数），面板不再重复一级入口名称。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>一致性边界（对照 05-设计规范.md）</b>
+    <ul>
+      <li>图标尺寸 16 / 20 档，触达 ≥32×32；选中态同时有底色与图标色，不只靠颜色区分。</li>
+      <li>同一视线区域字号不超过三档；弹层阴影用 E1，圆角 <span class="mono">--r-sm / --r-md</span>；组件 CSS 不写私有色值。</li>
+      <li>品牌绿只做选中指示，不做大色块；tooltip 文案走 <span class="mono">data-tip</span> 既有伪元素体系，不另造说明气泡。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>代码落点（已核实）</h2>
+  <p class="note">这套「文本 / 形状 · 矩形 / 圆形 / 三角形 / 线段」标注面板不在当前主工作树，而在本地另一份工作副本 <span class="mono">C:\幕景\Scendance2026-site-release</span>（分支 <span class="mono">codex/yuquan-on-b8cf77b</span>）的户外规划模块。链路如下：</p>
+  <table>
+    <thead><tr><th>层</th><th>文件 · 位置</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>契约 / 标签</td>
+        <td><span class="mono">supabase/functions/_shared/site-plan.ts:195–201</span></td>
+        <td>五类 <span class="mono">note/rect/circle/triangle/line</span>；标签 文本/矩形/圆形/三角形/线段；点位 1/1/2/2/3。</td>
+      </tr>
+      <tr>
+        <td>纯函数层</td>
+        <td><span class="mono">components/room-organizer/lib/site-plan-annotate.ts:28,31</span></td>
+        <td><span class="mono">PLAN_SHAPE_KINDS</span>、<span class="mono">planShapeDraftTarget</span>（triangle 3 点，其余 2 点）；<span class="mono">buildAnnotation</span> 几何校验、命中距离。配套 <span class="mono">site-plan-annotate.test.ts</span>。</td>
+      </tr>
+      <tr>
+        <td>面板 JSX</td>
+        <td><span class="mono">components/room-organizer/components/outdoor-plan-canvas.tsx:5001–5090</span></td>
+        <td><span class="mono">annotateZone</span>：头部行 → 文本/形状 tab（5016–5034）→ 形状四钮（5037–5059）→ 常驻说明段 + 草稿计数（5061–5064）→ 标注清单行（5065–5088）。</td>
+      </tr>
+      <tr>
+        <td>画布交互</td>
+        <td><span class="mono">outdoor-plan-canvas.tsx:3785–3846 · 6061–6097</span></td>
+        <td><span class="mono">commitAnnotation / addShapePoint / finishShape / deleteAnnotation</span>；文本就地输入 textarea（Enter 提交、Esc 取消、Shift+Enter 换行）。</td>
+      </tr>
+      <tr>
+        <td>入口圆钮</td>
+        <td><span class="mono">panels/scendance-workspace.tsx:731–733</span></td>
+        <td><span class="mono">#tool-annotate</span>，图标 <span class="mono">edit_note</span>，<span class="mono">data-tip="标注"</span>，<span class="mono">is-active</span> 按下态；右轨测量/标注/属性三钮并列。</td>
+      </tr>
+      <tr>
+        <td>图标口径 / tokens</td>
+        <td><span class="mono">components/outdoor-tool-icons.ts:12</span> · <span class="mono">lib/outdoor-plan-tokens.ts:37,93–126</span></td>
+        <td>标注紫 <span class="mono">#8e44ad</span>；字号 panel12/row11/hint10；面板白 #fff、发丝线 #e4e4e7、激活底 #eef3ef；图标工具档 12px。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>边界与待确认</h2>
+  <ul>
+    <li>远端 <span class="mono">origin/main</span>（最新 <span class="mono">99e86ce</span>，2026-11-12）已合入整套 outdoor / site-plan 模块，上述文件在 main 上均存在；本地特性分支 <span class="mono">feat/continue-20261105</span> 基线落后 main 约 489 个提交，本地树看不到这套文件。落地前先把分支基线同步到 main，再在其上改。</li>
+    <li>同一份副本的<strong>测量区</strong>已有一轮未提交的同款精简：文字钮补图标、长说明改成按模式一句短引导、按钮文案缩短（<span class="mono">完成（n 点）</span>）。标注区照此口径同步即可，不用另起一套形制。</li>
+    <li>本稿只做可视对照，未改代码、未提交；按既定节奏，组件定稿后本地攒好 tsc + 测试 + 真机验收，再一次性推 main，不拆小步开 PR。</li>
+    <li>三角形三点、线段两点这些手势是否保留，取决于已有取点逻辑（<span class="mono">addShapePoint / finishShape</span>）；若交互简化为拖拽，tooltip 文案同步调整，契约点位口径也要一起改。</li>
+  </ul>
+</section>
+
+</div>
+</body>
+</html>

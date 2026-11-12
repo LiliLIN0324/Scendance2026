@@ -384,10 +384,19 @@ export function facilityHandleAt(
   return null;
 }
 
+/** 等比缩放系数统一夹取：保证两条边乘 k 后都落在 [minM, maxM]，且严格保持宽高比。 */
+function clampUniformScale(width: number, depth: number, k0: number, bounds: { minM: number; maxM: number }): number {
+  // 非法系数（异常指针产生的 NaN/Infinity）退回不缩放；负系数由 kMin 顶回正的最小缩放，杜绝翻转。
+  const kRequested = Number.isFinite(k0) ? k0 : 1;
+  const kMin = Math.max(bounds.minM / width, bounds.minM / depth);
+  const kMax = Math.min(bounds.maxM / width, bounds.maxM / depth);
+  return Math.max(kMin, Math.min(kMax, kRequested));
+}
+
 /**
- * 单边拉伸：拖动序号为 side 的面，对面固定，尺寸沿该轴独立变化（另一轴不变），
- * 中心沿拉伸轴平移使对面保持原位；宽深夹在 [minM, maxM]（与角柄同一口径）。
- * 边序：0=南 1=东 2=北 3=西（与 handles.sides 一致）。
+ * 单边等比拉伸（#51 方案甲，锁宽高比）：拖动序号为 side 的面，对面固定，
+ * 先由指针在该面法向轴上的期望尺寸求出缩放系数，再同一系数作用于两条边，
+ * 中心只沿法向轴平移（对面中点不动）。边序：0=南 1=东 2=北 3=西（与 handles.sides 一致）。
  */
 export function facilitySideResize(
   anchor: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
@@ -401,28 +410,70 @@ export function facilitySideResize(
   const sin = Math.sin(theta);
   const halfW = anchor.size.width / 2;
   const halfD = anchor.size.depth / 2;
-  const clampSize = (value: number) => Math.max(bounds.minM, Math.min(bounds.maxM, value));
+  // 指针在被拖面法向轴上的期望尺寸 → 统一缩放系数（两条边同乘，锁宽高比）。
+  let k0 = 1;
+  if (side === 0) k0 = (halfD - local.v) / anchor.size.depth; // 北面固定在 +halfD
+  else if (side === 1) k0 = (local.u + halfW) / anchor.size.width; // 西面固定在 -halfW
+  else if (side === 2) k0 = (local.v + halfD) / anchor.size.depth; // 南面固定在 -halfD
+  else k0 = (halfW - local.u) / anchor.size.width; // 东面固定在 +halfW
+  const k = clampUniformScale(anchor.size.width, anchor.size.depth, k0, bounds);
+  const width = anchor.size.width * k;
+  const depth = anchor.size.depth * k;
+  // 对面固定：中心只沿法向轴平移，切向不动。
   let u1 = 0;
   let v1 = 0;
-  let width = anchor.size.width;
-  let depth = anchor.size.depth;
-  if (side === 0) {
-    depth = clampSize(halfD - local.v);
-    v1 = halfD - depth / 2; // 北面固定在 +halfD
-  } else if (side === 1) {
-    width = clampSize(local.u + halfW);
-    u1 = -halfW + width / 2; // 西面固定在 -halfW
-  } else if (side === 2) {
-    depth = clampSize(local.v + halfD);
-    v1 = -halfD + depth / 2; // 南面固定在 -halfD
-  } else {
-    width = clampSize(halfW - local.u);
-    u1 = halfW - width / 2; // 东面固定在 +halfW
-  }
+  if (side === 0) v1 = halfD - depth / 2;
+  else if (side === 1) u1 = -halfW + width / 2;
+  else if (side === 2) v1 = -halfD + depth / 2;
+  else u1 = halfW - width / 2;
   return {
     position: {
       x: anchor.position.x + u1 * cos - v1 * sin,
       y: anchor.position.y + u1 * sin + v1 * cos,
+    },
+    size: { width, depth },
+  };
+}
+
+/** 角柄索引（与 facilityHandles 的 corners 顺序一致：0 起顺时针）。 */
+export type FacilityCornerIndex = 0 | 1 | 2 | 3;
+
+/**
+ * 对角固定的等比角缩放（#51 方案甲）：被拖角的对角点 opp 纹丝不动，指针在两条本地轴上
+ * 各自给出一个缩放比，取均值作为统一系数（沿对角方向拖时两比相等），宽深同乘该系数，
+ * 新中心由固定对角点回推。宽深夹取由 clampUniformScale 统一保证且不破宽高比。
+ */
+export function facilityUniformCornerResize(
+  anchor: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
+  corner: FacilityCornerIndex,
+  pointer: PlanPoint,
+  bounds: { minM: number; maxM: number },
+): { position: PlanPoint; size: { width: number; depth: number } } {
+  const local = facilityLocalPoint(pointer, anchor);
+  const theta = (anchor.rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  const halfW = anchor.size.width / 2;
+  const halfD = anchor.size.depth / 2;
+  const signX = corner === 1 || corner === 2 ? 1 : -1;
+  const signY = corner >= 2 ? 1 : -1;
+  // 固定对角点 opp 的本地坐标 = (-signX·halfW, -signY·halfD)，先转世界坐标。
+  const oppU = -signX * halfW;
+  const oppV = -signY * halfD;
+  const oppX = anchor.position.x + oppU * cos - oppV * sin;
+  const oppY = anchor.position.y + oppU * sin + oppV * cos;
+  // 指针相对 opp 的本地向量（opp 到被拖角跨越整条边长，故 localX 对应新 full width）。
+  const localX = local.u + signX * halfW;
+  const localY = local.v + signY * halfD;
+  const kU = Math.abs(localX) / anchor.size.width;
+  const kV = Math.abs(localY) / anchor.size.depth;
+  const k = clampUniformScale(anchor.size.width, anchor.size.depth, (kU + kV) / 2, bounds);
+  const width = anchor.size.width * k;
+  const depth = anchor.size.depth * k;
+  return {
+    position: {
+      x: oppX + signX * (width / 2) * cos - signY * (depth / 2) * sin,
+      y: oppY + signX * (width / 2) * sin + signY * (depth / 2) * cos,
     },
     size: { width, depth },
   };

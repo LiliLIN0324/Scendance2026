@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN" data-canvas-width="1280" data-canvas-height="940" style="width:1280px;height:940px;">
+<head>
+<meta charset="utf-8">
+<title>导出 / 分享入口结构示意 · 方案 A</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:940px}
+body{font-family:Arial,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;color:#141416;background:#F4F5F7}
+main{width:1280px;height:940px;padding:28px 32px 24px;display:flex;flex-direction:column;gap:18px}
+:root{
+  --paper:#FFFFFF;--plane:#F4F5F7;--plane-deep:#ECEDEF;--hair:#E4E4E7;--hair-soft:#EFEFF1;
+  --ink:#141416;--ink-soft:#55585F;--muted:#71767E;--faint:#A6AAB2;
+  --green:#4A7C59;--green-deep:#3A6247;--green-pale:#EEF3EF;
+  --warn:#96651F;--warn-pale:#F7F0E2;--err:#B4443C;
+}
+/* ---------- 头部 ---------- */
+header h1{font-size:24px;line-height:32px;font-weight:700}
+header p{font-size:13px;color:var(--muted);margin-top:4px}
+.kicker{font-size:11px;letter-spacing:.08em;color:var(--green-deep);margin-bottom:6px}
+
+/* ---------- 两栏 ---------- */
+.cols{display:grid;grid-template-columns:1fr 1.15fr;gap:22px;flex:1 1 auto;min-height:0}
+.panel{background:var(--paper);border:1px solid var(--hair);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel-title{font-size:16px;font-weight:700;display:flex;align-items:center;gap:10px}
+.panel-title .tagline{font-size:12px;font-weight:400;color:var(--muted)}
+
+/* ---------- 左：现状 ---------- */
+.stage-now{position:relative;flex:1 1 auto;min-height:0;border:1px solid var(--hair);border-radius:14px;background:var(--plane);overflow:hidden}
+.fake-canvas{position:absolute;inset:20px 20px 76px 20px;border:1.5px solid var(--ink-soft);border-radius:10px;background-image:linear-gradient(var(--hair-soft) 1px,transparent 1px),linear-gradient(90deg,var(--hair-soft) 1px,transparent 1px);background-size:24px 24px;background-color:#fff}
+.fake-canvas .kick{position:absolute;left:12px;top:10px;font-size:12px;color:var(--muted);background:#fff;border:1px solid var(--hair);padding:3px 8px;border-radius:6px}
+.pills{position:absolute;left:20px;right:20px;bottom:20px;display:flex;gap:12px}
+.pill{flex:1;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600}
+.pill.ghost{border:1px solid var(--hair);background:#fff;color:var(--ink-soft)}
+.pill.solid{background:var(--ink);color:#fff}
+.pop-now{position:absolute;right:24px;top:20px;width:248px;display:flex;flex-direction:column;gap:10px;background:#fff;border:1px solid var(--hair);border-radius:16px;padding:12px;box-shadow:0 6px 18px rgba(20,20,22,.10)}
+.pop-card{border:1px solid var(--hair);border-radius:12px;padding:10px 12px;background:var(--plane)}
+.pop-card .name{font-size:14px;font-weight:600}
+.pop-card .desc{font-size:11px;color:var(--muted);margin-top:2px}
+.pop-card.link{background:var(--green-pale);border-color:var(--green);position:relative}
+.pop-card.link::after{content:"";position:absolute;inset:-5px;border:1.5px dashed var(--err);border-radius:14px}
+.now-note{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink-soft);background:var(--plane);border-radius:12px;padding:10px 12px}
+.now-note .dot-err{width:8px;height:8px;border-radius:50%;background:var(--err);margin-top:7px;flex:none}
+
+/* ---------- 右：提案 ---------- */
+.next-top{display:flex;align-items:center;gap:16px;min-width:0;flex:1 1 auto}
+.rail{flex:none;display:flex;flex-direction:column;gap:8px;padding:10px 8px;background:var(--plane);border-radius:14px}
+.rail-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--hair);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:11px}
+.rail-btn.main{border-color:var(--green);background:var(--green-pale);color:var(--green-deep);font-weight:700}
+.arrow{flex:none;color:var(--muted)}
+.modal-next{flex:1 1 auto;min-width:0;min-height:0;border:1px solid var(--hair);border-radius:16px;display:flex;flex-direction:column;overflow:hidden}
+.modal-head{display:flex;align-items:center;gap:10px;padding:14px 16px 0}
+.modal-head h3{font-size:16px;font-weight:700}
+.chip{font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:3px 10px}
+.modal-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 16px 0;background:var(--plane);border-radius:10px;padding:4px}
+.tab-head{text-align:center;font-size:13px;font-weight:600;padding:8px 6px;border-radius:8px;color:var(--ink-soft)}
+.tab-head.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(20,20,22,.06)}
+.modal-body{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px 16px;flex:1 1 auto;min-height:0;min-width:0}
+.col{display:flex;flex-direction:column;gap:8px;min-height:0;min-width:0}
+.col h4{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:2px}
+.act{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;background:#fff;min-width:0;overflow:hidden}
+.act .n{font-size:13px;font-weight:600}
+.act .d{font-size:11px;color:var(--muted);margin-top:1px}
+.act.done{background:var(--green-pale);border-color:#c6dcc9}
+.act.done .n{color:var(--green-deep)}
+.act.plan{background:var(--warn-pale);border:1.5px dashed var(--warn)}
+.act.plan .n{color:var(--warn)}
+.act.keep{background:var(--plane-deep)}
+.act.keep .n{color:var(--ink-soft)}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:12px 16px;border-top:1px solid var(--hair)}
+.btn{font-size:13px;border-radius:10px;padding:9px 16px;border:1px solid var(--hair);background:#fff;color:var(--ink-soft)}
+.btn.primary{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+
+/* ---------- 图例 ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;font-size:13px;color:var(--ink-soft);background:#fff;border:1px solid var(--hair);border-radius:14px;padding:14px 18px}
+.legend .item{display:flex;align-items:center;gap:8px}
+.swatch{width:18px;height:18px;border-radius:6px;border:1px solid var(--hair)}
+.swatch.done{background:var(--green-pale);border-color:#c6dcc9}
+.swatch.plan{background:var(--warn-pale);border:1.5px dashed var(--warn)}
+.swatch.keep{background:var(--plane-deep)}
+.legend .note{flex-basis:100%;color:var(--muted);font-size:12px;border-top:1px solid var(--hair-soft);padding-top:10px}
+</style>
+</head>
+<body>
+<main data-canvas-root style="width:1280px;height:940px;">
+
+  <header>
+    <div class="kicker">SCENDANCE 2026 · 结构示意 · 方案 A 讨论稿</div>
+    <h1>导出 / 分享：入口与归属怎么摆</h1>
+    <p>左：现在的问题；右：提案。方块颜色代表动作状态，详见底部图例。</p>
+  </header>
+
+  <div class="cols">
+
+    <!-- ======== 左：现状 ======== -->
+    <section class="panel">
+      <div class="panel-title">现在 <span class="tagline">两个大按钮并排，一份菜单里下载和链接混在一起</span></div>
+      <div class="stage-now">
+        <div class="fake-canvas"><span class="kick">方案预览</span></div>
+        <div class="pills">
+          <div class="pill ghost">导出</div>
+          <div class="pill solid">分享</div>
+        </div>
+        <div class="pop-now">
+          <div class="pop-card"><div class="name">PNG 快照</div><div class="desc">效果图 · 本地下载</div></div>
+          <div class="pop-card"><div class="name">CSV 清单</div><div class="desc">物料表 · 本地下载</div></div>
+          <div class="pop-card"><div class="name">GeoJSON</div><div class="desc">几何数据 · 本地下载</div></div>
+          <div class="pop-card link"><div class="name">只读分享</div><div class="desc">生成链接 · 不是文件</div></div>
+        </div>
+      </div>
+      <div class="now-note">
+        <span class="dot-err"></span>
+        <span><b>分类错位：</b>前三张是下载到本地的文件，第四张「只读分享」是生成链接，却塞进导出菜单；底部又单独有一颗「分享」钮，同一个动作两处入口、职责重复。</span>
+      </div>
+    </section>
+
+    <!-- ======== 右：提案 ======== -->
+    <section class="panel">
+      <div class="panel-title">提案 <span class="tagline">一颗主钮打开弹窗，里面按用途分三块</span></div>
+
+      <div class="next-top">
+        <div class="rail" aria-label="工具轨示意">
+          <div class="rail-btn">选</div>
+          <div class="rail-btn">2D</div>
+          <div class="rail-btn">漫</div>
+          <div class="rail-btn">撤</div>
+          <div class="rail-btn main">存</div>
+        </div>
+        <svg class="arrow" width="46" height="24" viewBox="0 0 46 24" fill="none"><path d="M2 12h38M32 5l8 7-8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+
+        <div class="modal-next">
+          <div class="modal-head">
+            <h3>保存与分享</h3>
+            <span class="chip">盐官潮乐之城</span>
+            <span class="chip">未发布</span>
+          </div>
+          <div class="modal-tabs">
+            <div class="tab-head on">存档继续</div>
+            <div class="tab-head">给客户看</div>
+            <div class="tab-head">带走资料</div>
+          </div>
+          <div class="modal-body">
+            <div class="col">
+              <h4>本机再编辑</h4>
+              <div class="act done"><div class="n">工程备份 JSON</div><div class="d">下载场景与活动副本</div></div>
+              <div class="act done"><div class="n">从备份恢复</div><div class="d">预检合并 · 可撤销</div></div>
+              <div class="act done"><div class="n">携带内容勾选</div><div class="d">平面 / 标注 / 备注 / 历史</div></div>
+            </div>
+            <div class="col">
+              <h4>在线 · 给对方看</h4>
+              <div class="act done"><div class="n">只读 3D 链接</div><div class="d">快照内嵌 · 复制打开</div></div>
+              <div class="act done"><div class="n">发布只读页</div><div class="d">版本 · 二维码 · 复制链接</div></div>
+              <div class="act done"><div class="n">评审链接</div><div class="d">对方可留言</div></div>
+            </div>
+            <div class="col">
+              <h4>本地文件 · 二次加工</h4>
+              <div class="act done"><div class="n">PNG 单帧 / 机位册</div><div class="d">视角 · 画质可选</div></div>
+              <div class="act done"><div class="n">交接包 HTML</div><div class="d">平面 + 任务表 + 工作单</div></div>
+              <div class="act plan"><div class="n">物料清单 CSV</div><div class="d">规划 · 未打通</div></div>
+              <div class="act plan"><div class="n">GeoJSON 几何</div><div class="d">规划 · 未打通</div></div>
+              <div class="act plan"><div class="n">打印 PDF 演示稿</div><div class="d">规划 · 未打通</div></div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <div class="btn">取消</div>
+            <div class="btn primary">导出所选文件</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="legend">
+    <div class="item"><span class="swatch done"></span>已实现（代码中存在对应动作）</div>
+    <div class="item"><span class="swatch plan"></span>规划项（未打通，置灰不做假按钮）</div>
+    <div class="item"><span class="swatch keep"></span>留在工具轨 / 各自面板，不进弹窗</div>
+    <div class="note">视图操作、撤销重做、氛围留在工具轨；「打开资料」「到场清单」留在素材库与左栏清单卡，不进保存分享弹窗。</div>
+  </footer>
+
+</main>
+</body>
+</html>

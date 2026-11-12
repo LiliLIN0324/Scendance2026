@@ -230,13 +230,9 @@ it('passes a safe return destination through the legacy auth route', () => {
 it('opens the outdoor planning directly at cold root — no "找场地" detour', async () => {
   window.history.replaceState(null, '', '/');
   render(<App />);
-  // 2026-11-12 用户拍板（删独立整页户外工作台）：根路径无参数且本机无活动 →
-  // 主工作台直接开户外 2D（户外卡片开在画布上，不再挂独立整页）。
-  // 不调任何 router.replace，也不需要登录。
-  await waitFor(
-    () => expect(screen.getByTestId('workspace-shell').getAttribute('data-start-outdoor')).toBe('1'),
-    { timeout: 10000 },
-  );
+  // 2026-11-13 收敛 14b：独立户外工作台 A 下线，冷根无参的户外项目也进同一 RoomOrganizer。
+  // 找场地是工作台里的"搜地点"，不该挡在入口前面；不调 router.replace，也不需要登录。
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('密码')).toBeNull();
 }, 15000);

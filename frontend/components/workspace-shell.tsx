@@ -8,10 +8,10 @@ import {
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
 import {
+  ensureDefaultOutdoorProject,
   latestOutdoorProjectId,
-  requestsOutdoorMode,
+  resolveOutdoorProjectId,
 } from '@/components/room-organizer/lib/outdoor-project-store';
-import { STORAGE_KEY } from '@/components/room-organizer/lib/constants';
 import { useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
@@ -40,11 +40,6 @@ const RoomOrganizer = dynamic(
   { ssr: false, loading: () => <BootSkeleton /> }
 );
 
-/**
- * 户外规划（2026-11-12 用户拍板）：**不再有独立的整页户外工作台**。
- * `?start=outdoor` / `mode=outdoor` 一律进主工作台（RoomOrganizer），
- * 打开即把户外 2D 卡片开到画布上（左轨/右轨/物件库都在主界面里）。
- */
 /**
  * 打开工作台时的骨架屏（T-VISUAL-2026）。
  * 不再用绿色进度条：进度条既说不出走到了哪，又给「快好了」的假承诺。
@@ -86,24 +81,15 @@ export function BootSkeleton(): JSX.Element {
 }
 
 /**
- * 「最近活动」判定（`/` 无参数时有最近活动就续上次，没有就直接开户外 2D）：
- * - 本机画布草稿里有物料（室内工作台上次在用）；
- * - 存过户外规划草稿（最近一次户外项目）。
- * 坏草稿 / 存储不可用一律按"没有活动"处理。
- *
- * 找场地是工作台里的能力（搜地点 / 场馆 / 地址），不该挡在入口前面。
+ * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板）：
+ * - 有最近的户外项目 → 续那个 projectId（上次的规划继续）；
+ * - 没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
+ * 找场地是工作台里的"搜地点"，不再先跳独立页。
  */
-function hasRecentActivity(): boolean {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { floors?: { items?: unknown[] }[] };
-      if ((parsed.floors?.[0]?.items?.length ?? 0) > 0) return true;
-    }
-  } catch {
-    // 坏草稿按无活动处理。
-  }
-  return latestOutdoorProjectId() !== null;
+function decideDefaultOutdoorProject(): string {
+  const last = latestOutdoorProjectId();
+  if (last) return last;
+  return ensureDefaultOutdoorProject();
 }
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX.Element {
@@ -112,21 +98,23 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   const [editorStarted, setEditorStarted] = useState(false);
   const workspacePath = pathname === '/' || pathname.replace(/\/$/, '') === '/editor';
   const entered = workspacePath && ready;
-  // 本次打开是否直接进户外 2D（不是独立页：户外卡片开在主工作台画布上）。
-  const [startOutdoor, setStartOutdoor] = useState(false);
+  // 户外项目判定（P2-a）：与 editorStarted 同批同步判定，户外命中时不挂 RoomOrganizer。
+  const [outdoorProjectId, setOutdoorProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
-    if (!workspacePath || !ready) { setStartOutdoor(false); return; }
-    // 根路径且没有任何参数：有最近活动就续上次（室内），没有就直接开户外 2D（主工作台内）。
+    if (!workspacePath || !ready) { setOutdoorProjectId(null); return; }
+    // 工作台无任何参数（`/` 或 `/editor` 别名）：续最近户外项目或起步默认户外 2D。
     // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
-    if (pathname.replace(/\/$/, '') === '' && !window.location.search) {
-      setStartOutdoor(!hasRecentActivity());
+    if (!window.location.search) {
+      // 2026-11-13 房间画布退役后右侧只保留户外地图：无参数不再续室内草稿，
+      // 一律进最近户外项目或默认户外草稿；显式 ?mode=indoor 入口留待后置清理拆除。
+      setOutdoorProjectId(decideDefaultOutdoorProject());
       setEditorStarted(true);
       return;
     }
-    setStartOutdoor(requestsOutdoorMode(window.location.search));
+    setOutdoorProjectId(resolveOutdoorProjectId(window.location.search));
     setEditorStarted(true);
   }, [workspacePath, ready, pathname]);
 
@@ -137,10 +125,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   return <>
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
+    {/* 2026-11-13 收敛 14b：独立户外工作台 A 下线，户外项目与室内项目统一挂 RoomOrganizer；
+        户外语境由 outdoorProjectId 标识，室内 Viewport 让位，户外草稿按该 id 落本机 store。 */}
     {editorStarted && (
       <div hidden={!entered}>
-        <RoomOrganizer isActive={entered} controller={controller} startOutdoor={startOutdoor} />
-      </div>
-    )}
+        <RoomOrganizer isActive={entered} controller={controller} outdoorProjectId={outdoorProjectId} />
+      </div>)}
   </>;
 }

@@ -1,0 +1,41 @@
+name: miniprogram
+
+# 小程序侧的自动闸门。三道，都是零依赖、秒级：
+#   1. 阈值漂移：小程序与网页端共用一套快检口径，漂了必须挡住；
+#   2. 语法体检：小程序没有编译期类型检查，语法错只有运行时才炸；
+#   3. 主包体积：2 MB 上限，加素材时早知道，别等开发者工具报超限。
+#
+# 真机/开发者工具的验收跑不了 CI（要装微信开发者工具 + 扫码登录），
+# 那一道留在本地：node miniprogram/scripts/verify-devtools.mjs
+
+on:
+  push:
+    paths:
+      - 'miniprogram/**'
+      - 'frontend/lib/capture-guide/**'
+      - '.github/workflows/miniprogram.yml'
+  pull_request:
+    paths:
+      - 'miniprogram/**'
+      - 'frontend/lib/capture-guide/**'
+      - '.github/workflows/miniprogram.yml'
+  workflow_dispatch:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.15.0'
+
+      - name: 阈值与网页端一致
+        run: node miniprogram/scripts/gen-thresholds.mjs --check
+
+      - name: JS 语法体检
+        run: node miniprogram/scripts/check-syntax.mjs
+
+      - name: 主包体积
+        run: node miniprogram/scripts/check-package-size.mjs

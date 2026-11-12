@@ -17,12 +17,14 @@ import {
   facilityPassesContract,
   facilityPlacementIssues,
   facilitySideResize,
+  facilityUniformCornerResize,
   facilityTemplatesValid,
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
   findFacilityTemplate,
   footprintSelfCheck,
   nextFacilityName,
   planFacilityIssues,
+  type FacilitySideIndex,
 } from './site-plan-facilities';
 import { planMetersPerPixel } from './outdoor-plan-canvas';
 import { planRingSelfIntersects } from './site-plan-editing';
@@ -307,43 +309,132 @@ describe('facility edit handles', () => {
     expect(facilityHandleAt(facility, viewport, HANDLE_CENTER)).toBeNull();
   });
 
-  it('单面拉伸：南面拖动只改深度，北面固定，中心沿深度轴平移', () => {
+  it('单面等比拉伸：南面拖动深度变 8，宽度同比例放大，北面固定、中心沿深度轴平移', () => {
     const facility = handleFacility(0, 10, 6);
     const next = facilitySideResize(facility, 0, { x: 0, y: -5 }, { minM: 0.5, maxM: 100 });
-    // 南面 v=-3 → 指针 v=-5 → 深度 8；北面 v=+3 固定 → 中心南移 1 m。
+    // 南面 v=-3 → 指针 v=-5 → k=8/6；宽深同乘 k（锁比例 10:6）。
     expect(next.size.depth).toBeCloseTo(8, 6);
-    expect(next.size.width).toBeCloseTo(10, 6);
+    expect(next.size.width).toBeCloseTo(10 * (8 / 6), 6);
     expect(next.position.y).toBeCloseTo(-1, 6);
     expect(next.position.x).toBeCloseTo(0, 6);
     const ys = facilityFootprintRing({ ...next, rotationDeg: 0 }).map(p => p.y);
-    expect(Math.max(...ys)).toBeCloseTo(3, 6);
+    expect(Math.max(...ys)).toBeCloseTo(3, 6); // 北面纹丝不动
   });
 
-  it('单面拉伸：东面拖动只改宽度，西面固定', () => {
+  it('单面等比拉伸：东面拖动宽度变 14，深度同比例放大，西面固定', () => {
     const facility = handleFacility(0, 10, 6);
     const next = facilitySideResize(facility, 1, { x: 9, y: 0 }, { minM: 0.5, maxM: 100 });
     expect(next.size.width).toBeCloseTo(14, 6);
-    expect(next.size.depth).toBeCloseTo(6, 6);
+    expect(next.size.depth).toBeCloseTo(6 * 1.4, 6);
     expect(next.position.x).toBeCloseTo(2, 6);
     const xs = facilityFootprintRing({ ...next, rotationDeg: 0 }).map(p => p.x);
     expect(Math.min(...xs)).toBeCloseTo(-5, 6);
   });
 
-  it('单面拉伸：越过中心被最小尺寸夹住，对面纹丝不动', () => {
+  it('单面等比拉伸：越过中心被最小尺寸夹住时两轴同比例收缩，对面纹丝不动', () => {
     const facility = handleFacility(0, 10, 6);
     const next = facilitySideResize(facility, 0, { x: 0, y: 30 }, { minM: 0.5, maxM: 100 });
     expect(next.size.depth).toBeCloseTo(0.5, 6);
+    expect(next.size.width).toBeCloseTo(10 * (0.5 / 6), 6);
+    expect(next.size.width / next.size.depth).toBeCloseTo(10 / 6, 6); // 宽高比恒定
     const ys = facilityFootprintRing({ ...next, rotationDeg: 0 }).map(p => p.y);
     expect(Math.max(...ys)).toBeCloseTo(3, 6);
   });
 
-  it('单面拉伸：旋转 90° 后拖「南面」仍改深度（v 轴随占地一起转），中心矩阵回位', () => {
+  it('单面等比拉伸：旋转 90° 后拖「南面」宽深同比例（v 轴随占地一起转），中心矩阵回位', () => {
     const facility = handleFacility(90, 10, 6);
     const next = facilitySideResize(facility, 0, { x: 5, y: 0 }, { minM: 0.5, maxM: 100 });
     expect(next.size.depth).toBeCloseTo(8, 6);
-    expect(next.size.width).toBeCloseTo(10, 6);
+    expect(next.size.width).toBeCloseTo(10 * (8 / 6), 6);
     expect(next.position.x).toBeCloseTo(1, 6);
     expect(next.position.y).toBeCloseTo(0, 6);
+  });
+
+  it('角柄等比缩放：指针停在被拖角原位时尺寸与中心不变（防翻倍回归）', () => {
+    const facility = handleFacility(0, 10, 6);
+    const next = facilityUniformCornerResize(facility, 2, { x: 5, y: 3 }, { minM: 0.5, maxM: 100 });
+    expect(next.size.width).toBeCloseTo(10, 6);
+    expect(next.size.depth).toBeCloseTo(6, 6);
+    expect(next.position.x).toBeCloseTo(0, 6);
+    expect(next.position.y).toBeCloseTo(0, 6);
+  });
+
+  it('角柄等比缩放：拖 NE 角到 2 倍距，宽深同乘 2、对角 SW 固定、中心回推', () => {
+    const facility = handleFacility(0, 10, 6);
+    const next = facilityUniformCornerResize(facility, 2, { x: 15, y: 9 }, { minM: 0.5, maxM: 100 });
+    expect(next.size.width).toBeCloseTo(20, 6);
+    expect(next.size.depth).toBeCloseTo(12, 6);
+    expect(next.size.width / next.size.depth).toBeCloseTo(10 / 6, 6);
+    expect(next.position.x).toBeCloseTo(5, 6);
+    expect(next.position.y).toBeCloseTo(3, 6);
+    const ring = facilityFootprintRing({ ...next, rotationDeg: 0 }).map(p => [p.x, p.y]);
+    expect(ring).toContainEqual([-5, -3]); // 固定对角点 SW 仍在原位
+  });
+
+  // ---------------- #51 方案甲对抗性：极端/非法指针下始终等比、界内、不翻转 ----------------
+  const BOUNDS = { minM: 0.5, maxM: 100 };
+  const ratioOf = (s: { width: number; depth: number }) => s.width / s.depth;
+
+  it('角柄：指针拖到甚至越过固定对角点，夹到最小尺寸仍严格等比、不出现负边、对角不动', () => {
+    const facility = handleFacility(0, 10, 6);
+    const next = facilityUniformCornerResize(facility, 2, { x: -5, y: -3 }, BOUNDS); // 指针落到 opp(SW)
+    expect(next.size.width).toBeGreaterThanOrEqual(0.5 - 1e-9);
+    expect(next.size.depth).toBeGreaterThanOrEqual(0.5 - 1e-9);
+    expect(ratioOf(next.size)).toBeCloseTo(10 / 6, 6);
+    const pts = facilityFootprintRing({ ...next, rotationDeg: 0 }).map(p => [p.x, p.y]);
+    expect(pts).toContainEqual([-5, -3]); // opp 依旧纹丝不动
+  });
+
+  it('角柄：超远指针（1e6）夹到上限，两轴均 ≤100 且比例恒定', () => {
+    const facility = handleFacility(0, 10, 6);
+    const next = facilityUniformCornerResize(facility, 2, { x: 1e6, y: 1e6 }, BOUNDS);
+    expect(next.size.width).toBeLessThanOrEqual(100 + 1e-9);
+    expect(next.size.depth).toBeLessThanOrEqual(100 + 1e-9);
+    expect(ratioOf(next.size)).toBeCloseTo(10 / 6, 6);
+  });
+
+  it('边/角柄收到 NaN 指针不炸，退回界内等比尺寸（纵深防御）', () => {
+    const facility = handleFacility(0, 10, 6);
+    const nan = { x: Number.NaN, y: Number.NaN } as PlanPoint;
+    const bySide = facilitySideResize(facility, 0, nan, BOUNDS);
+    const byCorner = facilityUniformCornerResize(facility, 2, nan, BOUNDS);
+    for (const out of [bySide, byCorner]) {
+      expect(Number.isFinite(out.size.width) && Number.isFinite(out.size.depth)).toBe(true);
+      expect(out.size.width).toBeGreaterThanOrEqual(0.5 - 1e-9);
+      expect(out.size.width).toBeLessThanOrEqual(100 + 1e-9);
+      expect(ratioOf(out.size)).toBeCloseTo(10 / 6, 6);
+    }
+  });
+
+  it('任意旋转角等比缩放后，占地环面积恒等于宽深乘积且永不自交', () => {
+    for (const rotationDeg of [0, 3.7, 45, 123.7, 270, 359.9]) {
+      const facility = handleFacility(rotationDeg, 10, 6);
+      const next = facilityUniformCornerResize(facility, 2, { x: 15, y: 9 }, BOUNDS);
+      // 交互函数只回 position/size，rotationDeg 由调用方从原设施保留（与画布 spread 一致）。
+      const check = footprintSelfCheck({ ...next, rotationDeg });
+      expect(check.selfIntersects).toBe(false);
+      expect(check.areaM2).toBeCloseTo(next.size.width * next.size.depth, 6);
+      expect(ratioOf(next.size)).toBeCloseTo(10 / 6, 6);
+    }
+  });
+
+  it('连续 20 次角/边乱拖（含反复放大缩小）后宽高比零漂移', () => {
+    let facility = handleFacility(17.4, 10, 6);
+    const pointers: Array<['c' | 's', PlanPoint]> = [
+      ['c', { x: 20, y: 12 }], ['s', { x: 0, y: -8 }], ['c', { x: -5, y: -3 }],
+      ['s', { x: 30, y: 0 }], ['c', { x: 40, y: 24 }], ['s', { x: 0, y: 2 }],
+    ];
+    for (let i = 0; i < 20; i++) {
+      const [kind, p] = pointers[i % pointers.length]!;
+      const resized = kind === 'c'
+        ? facilityUniformCornerResize(facility, 2, p, BOUNDS)
+        : facilitySideResize(facility, (i % 4) as FacilitySideIndex, p, BOUNDS);
+      facility = { ...resized, rotationDeg: 17.4 }; // 旋转角由调用方在设施上保留
+      expect(Number.isFinite(facility.size.width) && Number.isFinite(facility.size.depth)).toBe(true);
+      expect(ratioOf(facility.size)).toBeCloseTo(10 / 6, 6);
+      expect(facility.size.width).toBeGreaterThanOrEqual(0.5 - 1e-9);
+      expect(facility.size.width).toBeLessThanOrEqual(100 + 1e-9);
+    }
   });
 
   it('占地太小（< 20px）时挂「虚拟外扩盒」手柄：手柄在中心外 10px 处，仍可命中', () => {

@@ -43,6 +43,9 @@ export interface RoomEditorContextValue {
   setGameMode: Dispatch<SetStateAction<GameMode>>;
   readonly autoCycleLighting: boolean;
   setAutoCycleLighting: Dispatch<SetStateAction<boolean>>;
+
+  /** 退出第一人称漫游：关漫游视图，并把 live 模式回退到 build（Esc / 胶囊 / 右轨三条路径共用）。 */
+  exitWalkthrough: () => void;
 }
 
 const RoomEditorContext = createContext<RoomEditorContextValue | null>(null);
@@ -84,6 +87,7 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
     value.autoCycleLighting,
     value.setAutoCycleLighting,
     value.toggle,
+    value.exitWalkthrough,
   ]);
   return <RoomEditorContext.Provider value={memoised}>{children}</RoomEditorContext.Provider>;
 }

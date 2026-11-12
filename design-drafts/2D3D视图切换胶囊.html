@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2D / 3D 视图切换 · 胶囊分段控件设计稿</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23141416'/%3E%3Cpath d='M7 12h10M12 7v10' stroke='%23fff' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  /* ===== 沿用 Scendance 设计规范 v2.2 token：冷石画廊白 ===== */
+  :root {
+    --paper: #ffffff;
+    --plane: #f4f5f7;
+    --plane-deep: #ecedef;
+    --hair-soft: #efeff1;
+    --hair: #e4e4e7;
+    --faint: #a6aab2;
+    --ink-soft: #55585f;
+    --ink: #141416;
+    --green: #4a7c59;
+    --green-deep: #3a6247;
+    --green-pale: #eef3ef;
+    --green-line: #c5d4c9;
+    --r-sm: 10px; --r-md: 14px; --r-lg: 18px;
+    --e1: 0 6px 18px rgba(20, 20, 22, .10);
+    --e3: 0 1px 2px rgba(20, 20, 22, .06);
+    --dur-1: 120ms; --dur-2: 200ms; --dur-3: 300ms;
+    --ease-spec: cubic-bezier(.2, 0, 0, 1);
+    --font-sans: var(--font-inter, "Inter"), Arial, "Noto Sans SC", "Source Han Sans SC",
+      "Source Han Sans CN", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px 64px;
+    background: var(--plane); color: var(--ink);
+    font-family: var(--font-sans); font-size: 13px; line-height: 1.55;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* ===== 头部 ===== */
+  header h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: .01em; font-weight: 600; }
+  header .meta { color: var(--ink-soft); font-size: 12px; }
+  header .meta b { color: var(--ink); font-weight: 600; }
+
+  section.block { margin-top: 30px; }
+  .block-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .block-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
+  .block-head .note { color: var(--ink-soft); font-size: 12px; }
+
+  /* ===== 场景悬浮预览 ===== */
+  .stage {
+    position: relative; height: 300px; border-radius: var(--r-lg);
+    background:
+      linear-gradient(var(--hair-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--hair-soft) 1px, transparent 1px),
+      var(--paper);
+    background-size: 28px 28px, 28px 28px, auto;
+    border: 1px solid var(--hair); overflow: hidden;
+  }
+  .plot { position: absolute; border: 1px solid var(--hair); background: rgba(255,255,255,.6); border-radius: var(--r-md); }
+  .plot--main { left: 7%; top: 18%; width: 46%; height: 58%; }
+  .plot--side { right: 9%; top: 30%; width: 30%; height: 42%; }
+  .plot .divider { position: absolute; background: var(--hair-soft); }
+  .plot--main .divider-v { left: 50%; top: 0; bottom: 0; width: 1px; }
+  .dot { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--green-pale); border: 1px solid var(--green-line); }
+  .stage-caption { position: absolute; right: 16px; bottom: 14px; font-size: 11px; color: var(--ink-soft); letter-spacing: .02em; }
+  .stage .seg { position: absolute; left: 16px; bottom: 16px; }
+
+  /* ===== 胶囊分段控件 · B 墨黑皮肤 ===== */
+  .seg {
+    position: relative; display: inline-grid; grid-template-columns: 1fr 1fr;
+    padding: 3px; border: 1px solid var(--hair); border-radius: 999px;
+    background: var(--paper); box-shadow: var(--e1); isolation: isolate;
+  }
+  .seg-thumb {
+    position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px);
+    border-radius: 999px; z-index: 0; background: var(--ink);
+    transition: transform var(--dur-2) var(--ease-spec);
+  }
+  .seg[data-active="1"] .seg-thumb { transform: translateX(100%); }
+  .seg-btn {
+    position: relative; z-index: 1; height: 34px; padding: 0 14px; min-width: 60px;
+    border: 0; background: transparent; border-radius: 999px; cursor: pointer;
+    font-family: var(--font-sans); font-size: 13.5px; font-weight: 500; line-height: 1;
+    color: var(--ink-soft); white-space: nowrap;
+    transition: color var(--dur-2) var(--ease-spec), font-weight var(--dur-2) var(--ease-spec);
+  }
+  .seg-btn.is-active { color: #ffffff; font-weight: 600; }
+  .seg-btn:focus-visible { outline: 2px solid var(--ink-soft); outline-offset: 2px; }
+
+  /* ===== 规格表 ===== */
+  .spec { background: var(--paper); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 6px 18px; }
+  .spec dl { display: grid; grid-template-columns: 180px 1fr; gap: 0; margin: 0; }
+  .spec dt, .spec dd { padding: 12px 0; border-bottom: 1px solid var(--hair-soft); margin: 0; }
+  .spec dt { color: var(--ink-soft); font-size: 12px; }
+  .spec dd { font-size: 12.5px; color: var(--ink); }
+  .spec dl > div:last-child dt, .spec dl > div:last-child dd { border-bottom: 0; }
+  .spec dl > div { display: contents; }
+  code { font-family: var(--font-sans); font-size: 11.5px; background: var(--plane); border: 1px solid var(--hair-soft); border-radius: 6px; padding: 1px 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .seg-thumb, .seg-btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>2D / 3D 视图切换 · 胶囊分段控件</h1>
+    <p class="meta">已定 <b>B 墨黑皮肤</b> · 动效 <b>平移缓动</b> · 文案仅「2D / 3D」无图标 · 尺寸 <b>标准档</b> · 落点 <b>画布左下动作簇</b></p>
+  </header>
+
+  <!-- ===== 场景悬浮预览 ===== -->
+  <section class="block">
+    <div class="block-head">
+      <h2>场景位置预览</h2>
+      <span class="note">控件固定在画布左下动作簇，与导出/分享同排；2D/3D 两态同一入口，点一下切换（平移缓动 200ms）</span>
+    </div>
+    <div class="stage">
+      <div class="plot plot--main">
+        <span class="divider divider-v"></span>
+        <span class="dot" style="left:18%; top:24%"></span>
+        <span class="dot" style="left:30%; top:52%"></span>
+        <span class="dot" style="left:66%; top:30%"></span>
+        <span class="dot" style="left:70%; top:60%"></span>
+      </div>
+      <div class="plot plot--side">
+        <span class="dot" style="left:28%; top:32%"></span>
+        <span class="dot" style="left:58%; top:56%"></span>
+      </div>
+
+      <div class="seg" role="group" aria-label="视图模式切换" data-seg data-active="0">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button class="seg-btn is-active" aria-pressed="true" type="button">2D</button>
+        <button class="seg-btn" aria-pressed="false" type="button">3D</button>
+      </div>
+
+      <span class="stage-caption">场地画布 · 悬浮控件状态示意</span>
+    </div>
+  </section>
+
+  <!-- ===== 规格 ===== -->
+  <section class="block">
+    <div class="block-head">
+      <h2>控件规格</h2>
+      <span class="note">对齐设计规范 v2.2 token，落地时直接复用</span>
+    </div>
+    <div class="spec">
+      <dl>
+        <div><dt>控件尺寸</dt><dd>轨高 <code>36px</code> / 段高 <code>34px</code>；段内边距 <code>0 14px</code>；容器内边距 <code>3px</code>；圆角全胶囊 <code>999px</code></dd></div>
+        <div><dt>控件落点</dt><dd>两态统一固定在画布左下动作簇（与导出 / 分享同排，<code>left 12 · bottom 56</code> 避开比例尺盒）；升级现有 <code>OutdoorViewSwitch</code> 组件。右轨 <code>44px</code> 竖轨不纳横排文字胶囊，原 <code>#tool-2d3d</code> 圆钮移除</dd></div>
+        <div><dt>规范对照</dt><dd>Material 3：容器高 <code>40dp</code>、左右 padding ≥ <code>12dp</code>、段宽均分容器；iOS：段高 <code>32pt</code>（小）/ <code>50pt</code>（大），触控目标 <code>44pt</code>，段数 2–5</dd></div>
+        <div><dt>文字字阶</dt><dd>字号 <code>13.5px</code>；未选中字重 <code>500</code> / 选中 <code>600</code>；未选中色 <code>--ink-soft #55585F</code></dd></div>
+        <div><dt>B 墨黑皮肤</dt><dd>激活段实底 <code>--ink #141416</code>、白字；容器白底 <code>--paper</code> + 1px 发丝线 <code>--hair</code> + 阴影 <code>--e1</code></dd></div>
+        <div><dt>文案</dt><dd>左段「2D」右段「3D」；不带后缀词、不附图标、不附加强制缩写</dd></div>
+        <div><dt>动效时长</dt><dd>平移缓动 <code>200ms</code> <code>cubic-bezier(.2,0,0,1)</code>，滑块水平滑过两段</dd></div>
+        <div><dt>可访问性</dt><dd><code>aria-pressed</code> 随态更新；按钮原生可聚焦，焦点环 2px；<code>prefers-reduced-motion</code> 下关闭全部滑块与位移动画</dd></div>
+      </dl>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  document.querySelectorAll('[data-seg]').forEach(function (seg) {
+    var btns = Array.prototype.slice.call(seg.querySelectorAll('.seg-btn'));
+    function setActive(i) {
+      seg.setAttribute('data-active', String(i));
+      btns.forEach(function (btn, k) {
+        var on = k === i;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-pressed', String(on));
+      });
+    }
+    btns.forEach(function (btn, k) {
+      btn.addEventListener('click', function () { setActive(k); });
+    });
+  });
+</script>
+</body>
+</html>

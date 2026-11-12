@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN" data-canvas-width="1280" data-canvas-height="1704" style="width:1280px;height:1704px;">
+<head>
+<meta charset="utf-8">
+<title>交付入口 · 六结构草案对比</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:1704px}
+body{font-family:Arial,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;color:#141416;background:#F4F5F7}
+main{width:1280px;height:1704px;padding:28px 32px 24px;display:flex;flex-direction:column;gap:18px}
+:root{
+  --paper:#FFF;--plane:#F4F5F7;--plane-deep:#ECEDEF;--hair:#E4E4E7;--hair-soft:#EFEFF1;
+  --ink:#141416;--ink-soft:#55585F;--muted:#71767E;--faint:#A6AAB2;
+  --green:#4A7C59;--green-deep:#3A6247;--green-pale:#EEF3EF;
+  --warn:#96651F;--warn-pale:#F7F0E2;--err:#B4443C;--blue:#3B6EA5;--blue-pale:#EAF1F8;
+}
+header h1{font-size:24px;line-height:32px;font-weight:700}
+header p{font-size:13px;color:var(--muted);margin-top:5px}
+.kicker{font-size:11px;letter-spacing:.08em;color:var(--green-deep);margin-bottom:6px}
+.baseline{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;font-size:12px;color:var(--ink-soft);background:#fff;border:1px solid var(--hair);border-radius:10px;padding:10px 14px}
+.baseline b{color:var(--ink)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:#fff;border:1px solid var(--hair);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.card-no{font-size:12px;font-weight:700;color:var(--green-deep);letter-spacing:.06em}
+.card-name{font-size:16px;font-weight:700}
+.card-fit{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:3px 10px}
+.stage{display:flex;gap:12px;align-items:stretch;min-height:196px}
+.rail{flex:none;width:46px;background:var(--plane);border-radius:12px;padding:8px 6px;display:flex;flex-direction:column;gap:7px;align-items:center}
+.rb{width:34px;height:34px;border-radius:10px;border:1px solid var(--hair);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:10px;position:relative}
+.rb.main{border-color:var(--green);background:var(--green-pale);color:var(--green-deep);font-weight:700}
+.rb.bingo{border-color:var(--warn);background:var(--warn-pale);color:var(--warn);font-weight:700}
+.rb .badge{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;border-radius:7px;background:var(--err);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+.wire{flex:1;min-width:0;border:1px solid var(--hair);border-radius:14px;background:var(--plane);padding:12px;display:flex;flex-direction:column;gap:9px}
+.whead{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
+.whead .chip{font-size:10px;font-weight:400;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:2px 8px;background:#fff}
+.seg{background:#fff;border:1px solid var(--hair);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.seg-t{font-size:10px;color:var(--muted);font-weight:600}
+.row{display:flex;gap:7px;min-width:0;flex-wrap:wrap}
+.act{flex:1 1 0;min-width:0;border:1px solid var(--hair);border-radius:8px;padding:7px 9px;background:#fff}
+.act .n{font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.act .d{font-size:10px;color:var(--muted);margin-top:1px;word-break:break-word}
+.act.done{background:var(--green-pale);border-color:#c6dcc9}
+.act.done .n{color:var(--green-deep)}
+.act.review{background:var(--warn-pale);border-color:#e6d3ac}
+.act.review .n{color:var(--warn)}
+.act.plan{background:#fff;border:1.5px dashed var(--faint)}
+.act.plan .n{color:var(--muted)}
+.bbar{display:flex;align-items:center;gap:8px;border:1px solid #e6d3ac;background:var(--warn-pale);border-radius:8px;padding:8px 10px;min-width:0}
+.bbar .st{font-size:12px;font-weight:700;color:var(--warn);flex:none}
+.bbar .mt{font-size:10px;color:var(--muted);min-width:0}
+.bbar .sp{flex:1}
+.mbtn{font-size:11px;border:1px solid var(--hair);background:#fff;border-radius:7px;padding:5px 9px;color:var(--ink-soft);flex:none}
+.mbtn.p{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+.qr{width:38px;height:38px;border:1.5px dashed var(--faint);border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:9px;flex:none}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:9px;flex:1;min-width:0}
+.sub{border-left:2px solid var(--hair);padding-left:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;background:var(--plane-deep);border-radius:9px;padding:4px}
+.chip{text-align:center;font-size:11px;font-weight:600;padding:6px 4px;border-radius:7px;color:var(--ink-soft)}
+.chip.on{background:#fff;color:var(--ink)}
+.capsule{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border:1px solid rgba(20,20,22,.16);background:#fff;border-radius:999px;font-size:12px;font-weight:600;align-self:flex-end}
+.points{list-style:none;display:flex;flex-direction:column;gap:6px}
+.points li{font-size:12px;color:var(--muted);line-height:17px;padding-left:15px;position:relative}
+.points li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;border-radius:2px;background:var(--green)}
+.points li b{color:var(--ink-soft);font-weight:600}
+.takeaway{font-size:12px;color:var(--ink-soft);background:var(--plane);border-radius:10px;padding:9px 12px;line-height:18px}
+footer{font-size:12px;color:var(--ink-soft);background:#fff;border:1px solid var(--hair);border-radius:14px;padding:13px 18px;line-height:19px}
+footer b{color:var(--ink)}
+</style>
+</head>
+<body>
+<main data-canvas-root style="width:1280px;height:1704px;">
+
+  <header>
+    <div class="kicker">SCENDANCE 2026 · 结构草案 · 未动组件代码 · 本地分支草稿</div>
+    <h1>交付入口：6 个结构草案，挑一个方向</h1>
+    <p>大框架已定 Canva 式：一颗主钮打开面板，链接、送审、文件在面板内分区。下面 6 个草案只变面板结构、审校位置和触发钮形态，动作归属完全一致。</p>
+    <div class="baseline">
+      <span><b>对外：</b>发布只读页（版本·二维码）、只读 3D 链接</span>
+      <span><b>送审：</b>评审链接 → Bingo 待审标记 · 钉评回执</span>
+      <span><b>文件：</b>PNG/机位册、交接包、工程备份</span>
+      <span><b>置灰：</b>CSV / GeoJSON / PDF 未打通</span>
+      <span><b>不进面板：</b>打开资料、到场清单、视图操作</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- 草案 A：纵向三段 -->
+    <section class="card">
+      <div class="card-head">
+        <span class="card-no">草案 A</span><span class="card-name">纵向三段 · 单栏滚动</span>
+        <span class="card-fit">最贴近 Canva</span>
+      </div>
+      <div class="stage">
+        <div class="rail"><div class="rb">选</div><div class="rb">2D</div><div class="rb main">享</div><div class="rb bingo">B</div></div>
+        <div class="wire">
+          <div class="whead">分享 · 交付 <span class="chip">未发布</span></div>
+          <div class="seg">
+            <div class="seg-t">给对方看</div>
+            <div class="row">
+              <div class="act done"><div class="n">发布只读页</div><div class="d">版本 · 二维码</div></div>
+              <div class="act done"><div class="n">3D 链接</div><div class="d">复制 / 打开</div></div>
+            </div>
+          </div>
+          <div class="seg">
+            <div class="seg-t">送审 Bingo</div>
+            <div class="bbar"><span class="st">待审 v1</span><span class="mt">2 条钉评</span><span class="sp"></span><button class="mbtn">评审链接</button><button class="mbtn p">去 Bingo</button></div>
+          </div>
+          <div class="seg">
+            <div class="seg-t">带走文件</div>
+            <div class="row">
+              <div class="act done"><div class="n">PNG / 机位册</div></div>
+              <div class="act done"><div class="n">交接包</div></div>
+              <div class="act done"><div class="n">工程备份</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="points">
+        <li><b>一屏滚完</b>：三类动作自上而下，小标题分段</li>
+        <li><b>结构最简单</b>：面板就是一张长卡片</li>
+        <li><b>文件参数</b>：点进具体动作再选视角画质</li>
+      </ul>
+      <div class="takeaway">适合动作数量中等、不想让用户先选分类的情况。</div>
+    </section>
+
+    <!-- 草案 B：左动作右预览 -->
+    <section class="card">
+      <div class="card-head">
+        <span class="card-no">草案 B</span><span class="card-name">左动作 · 右预览双栏</span>
+        <span class="card-fit">PetitMaker 式内核</span>
+      </div>
+      <div class="stage">
+        <div class="rail"><div class="rb">选</div><div class="rb">2D</div><div class="rb main">享</div><div class="rb bingo">B</div></div>
+        <div class="wire">
+          <div class="duo">
+            <div class="col" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+              <div class="seg">
+                <div class="seg-t">给对方看</div>
+                <div class="act done"><div class="n">发布只读页</div></div>
+                <div class="act done"><div class="n">3D 链接</div></div>
+              </div>
+              <div class="seg">
+                <div class="seg-t">送审 Bingo</div>
+                <div class="act review"><div class="n">评审链接 · 待审 v1</div></div>
+              </div>
+              <div class="seg">
+                <div class="seg-t">带走文件</div>
+                <div class="act done"><div class="n">PNG / 交接包 / 备份</div></div>
+              </div>
+            </div>
+            <div class="col" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+              <div class="seg" style="flex:1;align-items:center;justify-content:center">
+                <div class="qr">预览</div>
+                <div class="d" style="text-align:center">方案平面 · 当前版本</div>
+              </div>
+              <div class="row">
+                <div class="act ghost" style="background:var(--plane-deep)"><div class="n" style="color:var(--ink-soft)">二维码</div></div>
+                <div class="act ghost" style="background:var(--plane-deep)"><div class="n" style="color:var(--ink-soft)">84.7×100m · 0 件</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="points">
+        <li><b>右列通高预览</b>：发出去是哪一版，随时看得见</li>
+        <li><b>动作分组在左</b>：配置和结果分开两栏</li>
+        <li><b>面板要更宽</b>：窄屏下面栏会挤</li>
+      </ul>
+      <div class="takeaway">适合重视「交付前核对版本和预览」的场景。</div>
+    </section>
+
+    <!-- 草案 C：分段 chips -->
+    <section class="card">
+      <div class="card-head">
+        <span class="card-no">草案 C</span><span class="card-name">分段 chips · 短面板</span>
+        <span class="card-fit">每层动作最少</span>
+      </div>
+      <div class="stage">
+        <div class="rail"><div class="rb">选</div><div class="rb">2D</div><div class="rb main">享</div><div class="rb bingo">B</div></div>
+        <div class="wire">
+          <div class="whead">分享 · 交付 <span class="chip">未发布</span></div>
+          <div class="chips">
+            <div class="chip on">对外</div><div class="chip">审校</div><div class="chip">文件</div>
+          </div>
+          <div class="seg" style="flex:1">
+            <div class="seg-t">给对方看 · 当前段</div>
+            <div class="row">
+              <div class="act done"><div class="n">发布只读页</div><div class="d">版本 · 二维码</div></div>
+              <div class="act done"><div class="n">3D 链接</div><div class="d">复制 / 打开</div></div>
+            </div>
+            <div class="act plan"><div class="n">切换到「审校」发评审链接</div></div>
+          </div>
+        </div>
+      </div>
+      <ul class="points">
+        <li><b>面板固定高度</b>：只显示当前段，不拉长滚动</li>
+        <li><b>归类最清楚</b>：三类互不干扰</li>
+        <li><b>多一次点选</b>：切段才能看到另一类动作</li>
+      </ul>
+      <div class="takeaway">适合动作继续增多、单栏排不下时的扩展结构。</div>
+    </section>
+
+    <!-- 草案 D：两层抽屉 -->
+    <section class="card">
+      <div class="card-head">
+        <span class="card-no">草案 D</span><span class="card-name">两层抽屉 · 参数二级展开</span>
+        <span class="card-fit">创客贴式</span>
+      </div>
+      <div class="stage">
+        <div class="rail"><div class="rb">选</div><div class="rb">2D</div><div class="rb main">享</div><div class="rb bingo">B</div></div>
+        <div class="wire">
+          <div class="whead">分享 · 交付 <span class="chip">未发布</span></div>
+          <div class="row">
+            <div class="act done"><div class="n">给对方看</div><div class="d">只读页 · 3D 链接</div></div>
+            <div class="act review"><div class="n">送审 Bingo</div><div class="d">评审链接 · 状态</div></div>
+          </div>
+          <div class="seg">
+            <div class="seg-t">带走文件 · 已展开</div>
+            <div class="sub">
+              <div class="row">
+                <div class="act done"><div class="n">PNG 单帧</div></div>
+                <div class="act done"><div class="n">机位册</div></div>
+                <div class="act done"><div class="n">交接包</div></div>
+              </div>
+              <div class="row">
+                <div class="act ghost" style="background:var(--plane-deep)"><div class="n" style="color:var(--ink-soft)">视角：当前 / 俯视 / 正面</div></div>
+                <div class="act ghost" style="background:var(--plane-deep)"><div class="n" style="color:var(--ink-soft)">画质：标准 / 高清 / 原生</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="points">
+        <li><b>首层清爽</b>：下载参数不占第一层位置</li>
+        <li><b>参数就近展开</b>：选哪类文件才出对应选项</li>
+        <li><b>层级深一层</b>：找参数要点两次</li>
+      </ul>
+      <div class="takeaway">适合文件类型和参数会继续增加的情况。</div>
+    </section>
+
+    <!-- 草案 E：审校独立到 Bingo 钮 -->
+    <section class="card">
+      <div class="card-head">
+        <span class="card-no">草案 E</span><span class="card-name">审校独立 · 归 Bingo 钮</span>
+        <span class="card-fit">分享与审校解耦</span>
+      </div>
+      <div class="stage">
+        <div class="rail"><div class="rb">选</div><div class="rb">2D</div><div class="rb main">享</div><div class="rb bingo">B<span class="badge">2</span></div></div>
+        <div class="wire">
+          <div class="whead">分享 · 交付 <span class="chip">未发布</span></div>
+          <div class="seg">
+            <div class="seg-t">给对方看</div>
+            <div class="row">
+              <div class="act done"><div class="n">发布只读页</div></div>
+              <div class="act done"><div class="n">3D 链接</div></div>
+            </div>
+          </div>
+          <div class="seg">
+            <div class="seg-t">带走文件</div>
+            <div class="row">
+              <div class="act done"><div class="n">PNG / 机位册</div></div>
+              <div class="act done"><div class="n">交接包 / 备份</div></div>
+            </div>
+          </div>
+          <div class="act plan"><div class="n">评审链接收在 Bingo 面板内</div></div>
+        </div>
+      </div>
+      <ul class="points">
+        <li><b>主钮更轻</b>：只管对外链接和文件下载</li>
+        <li><b>评审归审校</b>：发链接、看钉评都在 Bingo 面板</li>
+        <li><b>角标提醒</b>：待审条数回写在轨上 Bingo 钮</li>
+      </ul>
+      <div class="takeaway">适合审校是独立工作流、不希望和交付动作混在一起的情况。</div>
+    </section>
+
+    <!-- 草案 F：右上胶囊触发 -->
+    <section class="card">
+      <div class="card-head">
+        <span class="card-no">草案 F</span><span class="card-name">右上胶囊 · 文字触发</span>
+        <span class="card-fit">复用现有发布胶囊</span>
+      </div>
+      <div class="stage">
+        <div class="rail"><div class="rb">选</div><div class="rb">2D</div><div class="rb">漫</div><div class="rb bingo">B</div></div>
+        <div class="wire">
+          <div style="display:flex;justify-content:flex-end">
+            <div class="capsule">↑ 分享 · 交付</div>
+          </div>
+          <div class="seg">
+            <div class="seg-t">给对方看</div>
+            <div class="row">
+              <div class="act done"><div class="n">发布只读页</div></div>
+              <div class="act done"><div class="n">3D 链接</div></div>
+            </div>
+          </div>
+          <div class="seg">
+            <div class="seg-t">送审 · 文件</div>
+            <div class="row">
+              <div class="act review"><div class="n">评审链接</div></div>
+              <div class="act done"><div class="n">PNG / 交接包 / 备份</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="points">
+        <li><b>按钮直白</b>：文字胶囊比圆钮更容易被发现</li>
+        <li><b>圆钮让位</b>：工具轨只留视图类工具</li>
+        <li><b>复用现貌</b>：和户外画布右上交付簇同一形态</li>
+      </ul>
+      <div class="takeaway">适合入口需要醒目、文字语义优先于图标的情况。</div>
+    </section>
+
+  </div>
+
+  <footer>
+    <b>选草案时主要看三点：</b>① 面板想一屏滚完，还是分屏点选；② 审校状态放在交付面板里，还是归到 Bingo 面板；③ 触发钮用工具轨圆钮，还是画布右上文字胶囊。定下来后再细化高保真原型，组件代码仍在本地攒着，验收通过前不推 main。
+  </footer>
+</main>
+</body>
+</html>

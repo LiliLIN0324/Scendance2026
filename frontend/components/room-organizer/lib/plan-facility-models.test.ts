@@ -215,9 +215,22 @@ describe('resolveFacilityModels', () => {
       assertWellFormed(ferris);
     });
 
-    it('未登记的 pack: 模板不抛错也不命中', () => {
+    it('未登记且内置表无同名 slug 的 pack: 模板不抛错也不命中', () => {
       registerPackEntries([]);
-      expect(resolveFacilityModels('pack:cricket:dugout')).toEqual([]);
+      expect(resolveFacilityModels('pack:cricket:unknown-prop')).toEqual([]);
+    });
+
+    it('包清单未登记时用 templateId 自带 itemId 回落命中内置映射（#51 真机外廓修复）', () => {
+      // 模拟载入历史草稿时 packs.json 尚未异步登记：不能因此把餐车误判成 misc 1:1。
+      registerPackEntries([]);
+      const truck = resolveFacilityModels('pack:fairs:chuck-wagon');
+      expect(truck.length).toBeGreaterThanOrEqual(1);
+      expect(truck[0]?.slug).toBe('car-park-and-road-vehicle-fleet-box-truck-4574c765');
+      assertWellFormed(truck);
+      // pack 专属表条目同样可仅凭 itemId 命中。
+      expect(resolveFacilityModels('pack:cricket:dugout')[0]?.slug).toBe(
+        'trading-post-and-barter-market-canopy-market-booth-46c6c10f',
+      );
     });
   });
 });

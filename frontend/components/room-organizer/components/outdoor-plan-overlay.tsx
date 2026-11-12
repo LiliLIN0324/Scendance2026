@@ -19,8 +19,9 @@ import OutdoorPlanCanvas, {
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from '@/components/room-organizer/components/outdoor-plan-3d';
 import type { PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
-import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
-import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
+import { GuideBubble, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
+import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
+import { OutdoorDeliveryPanel } from '@/components/room-organizer/components/outdoor-delivery-panel';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
 import { writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
@@ -29,11 +30,11 @@ import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share'
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
+import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { fetchPlaceShape } from '@/components/room-organizer/lib/place-area';
 import type { BackendSession } from '@/lib/backend-session';
 import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
-import OutdoorViewSwitch from '@/components/room-organizer/components/outdoor-view-switch';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
@@ -100,7 +101,6 @@ export interface OutdoorPlanOverlayProps {
   sceneObjects?: readonly PlanSceneObject[] | undefined;
   /** 受控视角：同一份规划的 2D 地图 / 3D 场地，只换看法，功能不变。 */
   view?: '2d' | '3d';
-  onViewChange?: (view: '2d' | '3d') => void;
   /**
    * 2026-11-12 接管态保活隐藏：全屏 OutdoorPlan3D 接管画布时，本覆盖层**保持挂载**
    * （2D 画布编辑桥 pointerFromPlan 要用它的句柄与布局），但它自己的 2D 画面/浮层
@@ -156,7 +156,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   seedPlan,
   sceneObjects,
   view: controlledView,
-  onViewChange,
   dormant = false,
   inspectorHostId,
   controller,
@@ -185,11 +184,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const captureMapView = () => {
     const next = canvasApiRef.current?.getView();
     if (next && next.canvasW > 0 && next.canvasH > 0) setMapView(next);
-  };
-  const changeView = (next: '2d' | '3d') => {
-    if (next === '3d') captureMapView();
-    if (controlledView === undefined) setUncontrolledView(next);
-    onViewChange?.(next);
   };
   const viewSlotRef = useRef(slotId);
   useEffect(() => {
@@ -237,7 +231,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   useEffect(() => {
     setGenerateTarget(null);
     const record = readOutdoorProjectRecord(slotId);
-    const loaded = record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan();
+    // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
+    const loaded = normalizePlanFacilityFootprints(
+      record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan(),
+    );
     if (!loaded.anchor && !anchorRef.current) {
       setPlan({ ...loaded, anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR });
       return;
@@ -354,16 +351,32 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     if (plan) onPlanChange?.(plan);
   }, [plan, onPlanChange]);
 
-  function pickExport(id: string): void {
+  const exportStem = activityName?.trim() || 'outdoor-plan';
+
+  function printDeck(): void {
     if (!plan) return;
-    const stem = activityName?.trim() || 'outdoor-plan';
-    if (id === 'share') { setShareOpen(true); return; }
-    if (id === 'csv') { downloadPlanCsv(plan, stem); return; }
-    if (id === 'geojson') { downloadPlanGeoJson(plan, stem); return; }
-    if (id === 'png') {
-      exportPlanPng();
-    }
+    const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
+    const planCanvas = canvases[canvases.length - 1];
+    const pngCanvas = planCanvas ? composePlanPng({ plan, planCanvas, revision: 1, dpi: 72 }) : undefined;
+    printPlanDeck(
+      { planId: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : '99999999-9999-4999-8999-999999999999',
+        projectId: slotId === LOCAL_DRAFT_SLOT ? '88888888-8888-4888-8888-888888888888' : slotId,
+        revision: 1, updatedAt: new Date().toISOString(), data: plan },
+      pngCanvas?.toDataURL('image/png'),
+    );
   }
+
+  const overview = plan ? planOverviewStats(plan) : null;
+  const summaryMeta = overview
+    ? `${Math.round(overview.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 ${overview.zoneCount} · 设施 ${overview.facilityCount}`
+    : '';
+
+  const deliveryHandlers = {
+    onExportPng: () => exportPlanPng(),
+    onExportCsv: () => { if (plan) downloadPlanCsv(plan, exportStem); },
+    onExportGeoJson: () => { if (plan) downloadPlanGeoJson(plan, exportStem); },
+    onPrintDeck: printDeck,
+  };
 
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
   // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜。
@@ -511,12 +524,35 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       <div
         data-testid="outdoor-canvas-actions"
         className="sc-outdoor-actions-bl"
-        style={{ position: 'absolute', left: 12, bottom: 56, zIndex: 4, display: plan ? 'flex' : 'none', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}
+        style={{ position: 'absolute', left: 148, bottom: 56, zIndex: 4, display: plan ? 'flex' : 'none', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}
       >
-        <OutdoorViewSwitch view={view} onChange={changeView} />
-        <span data-testid="outdoor-export-host" style={{ display: 'inline-flex' }}>
-          <ExportMenu variant="canvas" enableExports menuPlacement="above-left" onPick={pickExport} />
-        </span>
+        {/* 轨上相机快捷钮：本轮先接当前视角出 PNG，视角 / 画质参数后定。 */}
+        <button
+          type="button"
+          data-testid="outdoor-camera-quick"
+          aria-label="相机快捷导出当前视角"
+          data-tip="快捷导出当前视角"
+          onClick={() => exportPlanPng()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 34,
+            width: 34,
+            borderRadius: 999,
+            border: '1px solid #e4e4e7',
+            background: '#ffffff',
+            color: '#141416',
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
+            fontFamily: 'inherit',
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </button>
         <button
           type="button"
           id="tool-outdoor-share"
@@ -527,6 +563,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           style={{
             display: 'inline-flex',
             alignItems: 'center',
+            gap: 6,
             height: 34,
             padding: '0 16px',
             borderRadius: 999,
@@ -540,6 +577,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             fontFamily: 'inherit',
           }}
         >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 3h6v6" />
+            <path d="M10 14 21 3" />
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          </svg>
           分享
         </button>
         {/* P4-c：发布卡片由 room-organizer 传进来，和导出/分享同排同位置。 */}
@@ -680,27 +722,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         </div>
       </div>
       {plan && (
-        <ShareDialog
+        <OutdoorDeliveryPanel
           open={shareOpen}
           onClose={() => setShareOpen(false)}
-          content={shareDialogContent({
-            revision: 1,
-            updatedAt: savedAt ?? new Date().toLocaleString('zh-CN', { hour12: false }),
-            counts: (() => { const s = planOverviewStats(plan); return { zones: s.zoneCount, facilities: s.facilityCount, routes: plan.routes.length, workers: s.workerTotalCount }; })(),
-          })}
-        shareLink={shareLink}
-        onPrintDeck={() => {
-          if (!plan) return;
-          const canvases = document.querySelectorAll<HTMLCanvasElement>('canvas');
-          const planCanvas = canvases[canvases.length - 1];
-          const pngCanvas = planCanvas ? composePlanPng({ plan, planCanvas, revision: 1, dpi: 72 }) : undefined;
-          printPlanDeck(
-            { planId: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : '99999999-9999-4999-8999-999999999999',
-              projectId: slotId === LOCAL_DRAFT_SLOT ? '88888888-8888-4888-8888-888888888888' : slotId,
-              revision: 1, updatedAt: new Date().toISOString(), data: plan },
-            pngCanvas?.toDataURL('image/png'),
-          );
-        }}
+          activityName={activityName?.trim() || ''}
+          summaryMeta={summaryMeta}
+          shareLink={shareLink}
+          handlers={deliveryHandlers}
         />
       )}
     </div>
