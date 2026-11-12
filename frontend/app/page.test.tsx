@@ -79,7 +79,8 @@ vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
-    RoomOrganizer: ({ controller }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+    RoomOrganizer: ({ controller, startOutdoor }: EditorProps & { startOutdoor?: boolean }) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+      <div data-testid="workspace-shell" data-start-outdoor={startOutdoor ? '1' : '0'} />
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
         <button onClick={() => navigation.push('/auth')}>返回登录页</button>
         <CreativeAssistant />
@@ -226,16 +227,19 @@ it('passes a safe return destination through the legacy auth route', () => {
 });
 
 
-it('opens the outdoor planning workspace directly at cold root — no "找场地" detour', async () => {
+it('opens the outdoor planning directly at cold root — no "找场地" detour', async () => {
   window.history.replaceState(null, '', '/');
   render(<App />);
-  // 2026-11-11 用户拍板：找场地是工作台里的"搜地点"，不该挡在入口前面。
-  // 根路径无参数 → 直接挂 OutdoorPlanWorkspace（起步锚点平湖秋月，默认草稿 id='default-outdoor'）。
+  // 2026-11-12 用户拍板（删独立整页户外工作台）：根路径无参数且本机无活动 →
+  // 主工作台直接开户外 2D（户外卡片开在画布上，不再挂独立整页）。
   // 不调任何 router.replace，也不需要登录。
-  await screen.findByText('正在加载测试工作台');
+  await waitFor(
+    () => expect(screen.getByTestId('workspace-shell').getAttribute('data-start-outdoor')).toBe('1'),
+    { timeout: 10000 },
+  );
   expect(navigation.replace).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('密码')).toBeNull();
-});
+}, 15000);
 
 it('keeps the root workspace when there is a recent local draft', async () => {
   localStorage.setItem('scendance-editor-local-v1', JSON.stringify({ floors: [{ items: [{ id: 'kept' }] }] }));

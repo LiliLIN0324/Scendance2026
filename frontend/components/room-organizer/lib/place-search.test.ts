@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   matchRecentPlaces,
+  mergePlaceSuggestions,
   placeRelevance,
   placeSearchUrl,
   rankPlaces,
@@ -25,9 +26,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('placeSearchUrl', () => {
-  it('本机走 3199 代理、线上走同源 /api，关键词去空白并带上 limit', () => {
+  it('本机走 3199 代理（天地图）、线上走同源 /api/amap-place（高德），关键词去空白并带上 limit', () => {
     expect(placeSearchUrl(' 平湖秋月 ', 4, true)).toBe('http://127.0.0.1:3199/api/tdt-search?keywords=%E5%B9%B3%E6%B9%96%E7%A7%8B%E6%9C%88&limit=4');
-    expect(placeSearchUrl('西湖', 6, false)).toBe('/api/tdt-search?keywords=%E8%A5%BF%E6%B9%96&limit=6');
+    expect(placeSearchUrl('西湖', 6, false)).toBe('/api/amap-place?keywords=%E8%A5%BF%E6%B9%96&limit=6');
+  });
+
+  it('带上画布锚点：中心点以 center=lng,lat 传下去（天地图只能在小范围里搜）', () => {
+    expect(placeSearchUrl('in77', 6, true, { lng: 120.16, lat: 30.253 })).toBe(
+      'http://127.0.0.1:3199/api/tdt-search?keywords=in77&limit=6&center=120.160000%2C30.253000',
+    );
+    expect(placeSearchUrl('in77', 6, true, null)).toBe('http://127.0.0.1:3199/api/tdt-search?keywords=in77&limit=6');
+    // 坏坐标不往 URL 里塞。
+    expect(placeSearchUrl('in77', 6, true, { lng: NaN, lat: 30 })).toBe('http://127.0.0.1:3199/api/tdt-search?keywords=in77&limit=6');
   });
 });
 
@@ -45,6 +55,16 @@ describe('searchPlaces', () => {
     expect(await searchPlaces('西', { fetchImpl })).toEqual([]);
     expect(await searchPlaces('长'.repeat(81), { fetchImpl })).toEqual([]);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('把 center 透传给服务端（搜「in77」靠它围着画布找）', async () => {
+    // vi.fn(async () => …) 推导出零参签名，mock.calls[i]?.[0] 会报 TS2493；
+    // 换可变参数让 calls 首参可索引（vitest 运行时本来就记录实参，语义不变）。
+    const fetchImpl = vi.fn(async (..._args: unknown[]) => jsonResponse(PLACES));
+    await searchPlaces('in77', { fetchImpl, local: true, center: { lng: 120.16, lat: 30.253 } });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('center=120.160000%2C30.253000');
+    await searchPlaces('in77', { fetchImpl, local: true });
+    expect(String(fetchImpl.mock.calls[1]?.[0])).not.toContain('center=');
   });
 
   it('无结果（404）与网络异常都回空数组，不抛错', async () => {
@@ -116,6 +136,31 @@ describe('placeRelevance / rankPlaces（模糊排序）', () => {
     }));
     const found = await searchPlaces('平湖秋月', { fetchImpl, local: true });
     expect(found.map(item => item.id)).toEqual(['poi-1', 'poi-2']);
+  });
+});
+
+describe('mergePlaceSuggestions（建议栏合成）', () => {
+  it('名字完全一致的新鲜结果压过「最近」：旧 geocoder 兜底点（in77→大同）不再霸占第一条', () => {
+    const staleRecent = { id: '113.302516,40.072312', name: 'in77', address: '天地图定位：区县及以上级行政区划', lng: 113.302516, lat: 40.072312 };
+    const freshExact = { id: '908CB57AC78761ED', name: 'in77', address: '解放路', lng: 120.164797, lat: 30.25062 };
+    const freshOther = { id: 'D75A124AE22E821F', name: 'in羲和(in77店)', address: '延安路湖滨银泰IN77E区', lng: 120.163263, lat: 30.251523 };
+    const merged = mergePlaceSuggestions('in77', [staleRecent], [freshExact, freshOther]);
+    expect(merged.map(item => item.id)).toEqual([freshExact.id, staleRecent.id, freshOther.id]);
+  });
+
+  it('没有完全命中的新鲜结果时维持「最近 → 其余新鲜结果」，按 id 去重', () => {
+    const recent = place('r1', '湖滨银泰B区');
+    const hitFresh = place('h1', '碧桃餐厅(湖滨IN77店)');
+    const hitSameAsRecent = place('r1', '湖滨银泰B区');
+    const merged = mergePlaceSuggestions('湖滨银泰', [recent], [hitFresh, hitSameAsRecent]);
+    expect(merged.map(item => item.id)).toEqual(['r1', 'h1']);
+  });
+
+  it('关键词为空时只给最近建议（打开下拉时的默认提示）', () => {
+    const recent = [place('r1', '平湖秋月'), place('r2', '杭州大剧院')];
+    const hits = [place('h1', '西湖')];
+    expect(mergePlaceSuggestions('', recent, hits).map(item => item.id)).toEqual(['r1', 'r2']);
+    expect(mergePlaceSuggestions('   ', recent, hits).map(item => item.id)).toEqual(['r1', 'r2']);
   });
 });
 

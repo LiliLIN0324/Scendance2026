@@ -77,6 +77,7 @@ import {
   drawNodeGhost,
   drawRouteDraft,
   drawRouteLayer,
+  drawSearchArea,
   drawSearchPin,
   drawSceneObjectsLayer,
   drawWorkerLayer,
@@ -290,7 +291,7 @@ interface View {
 
 export interface OutdoorPlanCanvasProps {
   plan: SitePlanData;
-  /** 图源：默认 OSM 街道（公开免费）。天地图两档待 key。 */
+  /** 图源：默认 OSM 街道（公开免费）。天地图两档线上浏览器直连 / 本机走 3199 代理。 */
   source?: CanvasBasemapSource;
   initialView?: Partial<View>;
   /** 图层可见性（受控模式）；缺省全开、组件内开关直接生效。 */
@@ -360,6 +361,11 @@ export interface OutdoorPlanCanvasProps {
    */
   searchPin?: { lng: number; lat: number; label: string } | null;
   /**
+   * 2026-11-12 搜地点「选区」：行政区边界环（经纬度），画成浅填充 + 虚线描边。
+   * 与定位钉同性质——纯视图辅助，不写进 plan，不参与统计与冲突判定。
+   */
+  searchArea?: { polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null;
+  /**
    * 2026-11-11 统一视图：室内 3D 场景的落位（物料 + 场地实景扫描）投影到户外 2D 画布。
    * 只读展示层——不参与命中测试/交互，不写进 plan。
    */
@@ -375,14 +381,18 @@ const TILE = 256;
 const MAP_MIN_ZOOM = 12;
 /**
  * 2026-11-11 用户反馈「放大倍数不够」：按图源分档放大上限——CARTO 瓦片原生支持到 z21、
- * 天地图影像 z20/矢量 z18；纸面格网模式用 FLOOR 档。
+ * 天地图影像/矢量 z18（z19+ 返回占位图）；纸面格网模式用 FLOOR 档。
  * OSM 官方瓦片 z20 直接 400（实测 tile.openstreetmap.org/20/... → 400 Bad Request，
  * 且 400 响应无 CORS 头，浏览器报「blocked by CORS policy」），所以 OSM 上限是 z19。
  */
 function mapMaxZoomFor(source: CanvasBasemapSource): number {
   if (source === 'carto-light' || source === 'carto-dark') return 21;
   if (source === 'osm') return 19;
-  if (source === 'img') return 20;
+  // 2026-11-12 实测（杭州大剧院同坐标瓦片）：天地图影像 z18 是真影像（7487b），
+  // z19/z20 返回的是同一张占位图（同 4769b、同 MD5）——真实数据到 z18 为止。
+  // 上限按 18，更高级别由 paintBasemapTiles 的 overzoom 把 z18 瓦片等比拉伸
+  // （清晰度优于占位图），与 3D 的 maxZoomForSource('img')=18 口径一致。
+  if (source === 'img') return 18;
   // 2026-11-12 用户反馈「放大后满屏此区域无卫星图」实测（杭州/上海/北京/深圳/广州/成都六城
   // 同一哈希）：高德卫星 z19/z20 一律返回 4235 字节的灰色占位图（图上就印着「此区域无卫星图」），
   // 真影像到 z18 为止。原生级别按 18，19~22 级由 paintBasemapTiles 的 overzoom 把 z18
@@ -837,6 +847,8 @@ export interface OutdoorPlanCanvasHandle {
   canRedo(): boolean;
   /** P2-k：飞到某个经纬度（可带 zoom）；只动视图，不改 plan/anchor。 */
   focusLngLat(lng: number, lat: number, zoom?: number): void;
+  /** 2026-11-12 选区：把视野框到 `[west, south, east, north]`（只动视图，不改 plan/anchor）。 */
+  focusBounds(bounds: [number, number, number, number]): void;
   /** 当前 2D 视口（切 3D 时用来对着同一中心把地图斜起来）。 */
   getView(): PlanViewport;
   /** 当前绘制/浏览模式：3D 里非浏览态要关掉左键环绕，把点击交给编辑。 */
@@ -907,6 +919,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onInspectorChange,
   onModeChange,
   searchPin,
+  searchArea,
   sceneObjects,
 }: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
@@ -976,6 +989,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const drawRef = useRef<() => void>(() => {});
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
+  const searchAreaRef = useRef<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(searchArea ?? null);
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
@@ -1001,6 +1015,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const workerGhostRef = useRef<PlanPoint | null>(null);
   const [basemapVisible, setBasemapVisible] = useState(true);
   const basemapVisibleRef = useRef(true);
+  // 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间在画布顶部给一枚轻提示。
+  const [basemapLoading, setBasemapLoading] = useState(false);
+  const basemapLoadingRef = useRef(false);
   const workerRoleRef = useRef('安保');
   const workerCountRef = useRef(1);
   // 2026-11-12 活动包物件预设：动线（颜色/名称/线型）、分区（颜色/名称）、人员点位色。
@@ -1425,6 +1442,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return () => cancelAnimationFrame(frame);
   }, [selectedFacilityId, selectedRouteId, selectedNodeId, selectedWorkerId, infoTab, infoOpen]);
 
+  // 底图「加载中」状态上报：只在跨态时 set 一次，避免每帧重渲染。
+  const publishBasemapLoading = useCallback((loading: boolean) => {
+    if (basemapLoadingRef.current === loading) return;
+    basemapLoadingRef.current = loading;
+    setBasemapLoading(loading);
+  }, []);
+
   const draw = useCallback(() => {
     const stage = stageRef.current;
     const baseCanvas = baseCanvasRef.current;
@@ -1482,8 +1506,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // P4-b：室内平面底——不请求任何瓦片，只铺纸面 + 米制网格。
       // 场地轮廓/分区/设施/动线由下面的业务层照常叠上来，所以室内外是同一套画布代码。
       paintFloorGrid(baseCtx, viewport, cssW, cssH);
+      publishBasemapLoading(false);
     } else if (!basemapVisibleRef.current) {
       // 图层里关了底图：不再铺瓦片，业务层照常画。
+      publishBasemapLoading(false);
     } else {
     const grid = visibleTileGrid(tileCenter.lng, tileCenter.lat, tileZoom, cssW / overScale, cssH / overScale);
     if (!basemapCacheRef.current) basemapCacheRef.current = new BasemapTileCache({ max: 1200 });
@@ -1529,6 +1555,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         });
       },
     });
+    // 「加载中」信号取限流器视角（在途+排队）：成败都会结算，归零可靠；
+    // paint 结果里的 pending 含已失败格（网络断时永远 >0），不能拿来当转圈依据。
+    publishBasemapLoading(basemapCacheRef.current.loadingCount > 0);
     }
 
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
@@ -1818,6 +1847,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (baseModeRef.current !== 'floor') drawAttribution(planCtx, sourceRef.current, cssW, cssH);
 
     // 7) P2-k：搜地点落钉（纯视图辅助，不进 plan、不参与统计与冲突）。
+    // 7a) 先画选区面（行政区边界），再画钉——钉压在上面不会被浅填充吞掉。
+    const areaShape = searchAreaRef.current;
+    if (areaShape && areaShape.polygon.length >= 3) {
+      const points = areaShape.polygon.map(([lng, lat]) => lngLatToEnu(
+        lng,
+        lat,
+        current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
+        current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+      ));
+      // 出框后中心挂着定位钉时，选区顶部标签让位给钉上胶囊（同一名称不画两枚）。
+      drawSearchArea({ ctx: planCtx, viewport }, {
+        points,
+        label: areaShape.label,
+        showLabel: !searchPinRef.current,
+        ...(areaShape.kind ? { kind: areaShape.kind } : {}),
+      });
+    }
     const pin = searchPinRef.current;
     if (pin) {
       const pinPoint = lngLatToEnu(
@@ -1851,7 +1897,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           : null,
       };
     }
-  }, [sceneObjects]);
+  }, [sceneObjects, publishBasemapLoading]);
 
   // 瓦片加载完成后的异步重绘走 ref，避免 onDirty 依赖整份 draw 造成互相引用。
   useEffect(() => {
@@ -1868,6 +1914,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     searchPinRef.current = searchPin ?? null;
     drawRef.current();
   }, [searchPin]);
+  // 选区：同一定位钉的同步路数（props → ref → 重绘）。
+  useEffect(() => {
+    searchAreaRef.current = searchArea ?? null;
+    drawRef.current();
+  }, [searchArea]);
 
   // P4-b：底图形态切换（纸面 ↔ 瓦片）立即重绘一次；不改 draw 依赖，免得重建回调。
   useEffect(() => {
@@ -2237,6 +2288,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     canUndo: () => historyRef.current.length > 0,
     canRedo: () => redoRef.current.length > 0,
     focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
+    focusBounds: (bounds: [number, number, number, number]) => focusBounds(bounds),
     getView: () => currentViewport(),
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
@@ -3884,8 +3936,39 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     });
   }
 
-  /** 清单行 → 地图：居中锚点 + 选中实体（分区/测量无选中态，仅居中）。 */
-  /** 2026-11-11：分区删除（树行右键/Delete 入口）——worker/facility 的 zoneId 引用一并摘除，不留悬空。 */
+  /**
+   * 2026-11-12 搜地点选区：把视野框到给定经纬度外框 `[west, south, east, north]`。
+   * 墨卡托反解：先按画布像素算「要多大世界宽度才装得下这块地」，再换回 zoom。
+   * 只动视图，不改 plan / anchor。
+   */
+  function focusBounds(bounds: [number, number, number, number]) {
+    const [west, south, east, north] = bounds;
+    if (![west, south, east, north].every(value => Number.isFinite(value))) return;
+    if (!(east > west) || !(north > south)) return;
+    const floor = baseModeRef.current === 'floor';
+    const vp = currentViewport();
+    const mercY = (lat: number) => {
+      const rad = (clamp(lat, -85, 85) * Math.PI) / 180;
+      return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+    };
+    const spanLng = east - west;
+    const spanMerc = Math.max(1e-9, mercY(north) - mercY(south));
+    const worldForWidth = (vp.canvasW * 360) / spanLng;
+    const worldForHeight = (vp.canvasH * Math.PI * 2) / spanMerc;
+    // 0.35 级余量：边界贴着画布四边会显得局促。
+    const zoom = Math.log2(Math.min(worldForWidth, worldForHeight) / 256) - 0.35;
+    commitView({
+      lng: clamp((west + east) / 2, -180, 180),
+      lat: clamp((south + north) / 2, -85, 85),
+      zoom: clamp(
+        zoom,
+        floor ? FLOOR_MIN_ZOOM : MAP_MIN_ZOOM,
+        floor ? FLOOR_MAX_ZOOM : MAP_MAX_ZOOM,
+      ),
+    });
+  }
+
+  /** 清单行 → 地图：居中锚点 + 选中实体（分区/测量无选中态，仅居中）。 */  /** 2026-11-11：分区删除（树行右键/Delete 入口）——worker/facility 的 zoneId 引用一并摘除，不留悬空。 */
   function deleteZone(id: string) {
     const zone = planRef.current.zones.find(z => z.id === id);
     if (!zone) return;
@@ -5775,6 +5858,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {/* 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间顶部居中一枚轻提示，
+          全部结算（含失败）即收；pointer-events 无、不挡任何画布交互。 */}
+      {basemapLoading && (
+        <div className="pc-top-chip absolute left-1/2" style={{ top: 14, transform: 'translateX(-50%)', zIndex: 26, pointerEvents: 'none' }}>
+          <div className="pc-glass pc-glass--dark" role="status" aria-live="polite"
+            style={{ padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: 11, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' }}>
+            <span className="pc-basemap-loading__spinner" aria-hidden="true" />
+            底图加载中…
+          </div>
+        </div>
+      )}
       {/* 2026-11-12 室内多选胶囊移植：组选浮层（计数+复制/删除 / 对齐八向+等距），锚在组包围盒上方，
           拖组会话中隐藏（不跟随拖拽帧，松手回位）；对齐/等距各一条 undo。 */}
       {multiSelectedFacilityIds.length >= 2 && !groupDragRef.current && multiGroupChipPx && (

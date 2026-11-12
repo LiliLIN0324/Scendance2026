@@ -28,6 +28,7 @@ import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share'
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
+import { fetchPlaceShape } from '@/components/room-organizer/lib/place-area';
 import OutdoorViewSwitch from '@/components/room-organizer/components/outdoor-view-switch';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
@@ -197,6 +198,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
+  // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
+  // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
+  const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(null);
+  // 点击 POI 后挖真实占地轮廓的序号尺：防止新选中被旧请求的迟到结果覆盖。
+  const shapeSeqRef = useRef(0);
+  // 2026-11-12 用户拍板：挖形期间给「正在圈范围…」小提示——Overpass 忙时要排队
+  // 30~50 秒，不提示用户会以为点了没反应；挖到/挖不到/换目标/清除都会收掉。
+  const [shapeLoading, setShapeLoading] = useState(false);
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
@@ -355,6 +364,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             onActiveLevelChange={onActiveLevelChange}
             sceneObjects={sceneObjects}
             {...(placePin ? { searchPin: placePin } : {})}
+            {...(placeArea ? { searchArea: placeArea } : {})}
             {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>
@@ -369,13 +379,60 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       {plan && (
         <PlanPlaceSearch
           testIdPrefix="outdoor-place-search"
+          near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
+          onPickArea={area => {
+            // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
+            shapeSeqRef.current += 1; // 新选区使旧的 POI 挖形结果过期。
+            setShapeLoading(false); // 行政区边界是现成的，没有挖形在途。
+            setPlacePin(null);
+            setPlaceArea({ polygon: area.polygon, label: `${area.name} · ${area.level}` });
+            canvasApiRef.current?.focusBounds(area.bounds);
+            plan3dApiRef.current?.focusLngLat(area.lng, area.lat);
+          }}
           onPick={place => {
+            setPlaceArea(null);
             setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
             plan3dApiRef.current?.focusLngLat(place.lng, place.lat);
+            // 2026-11-12（像高德一样点地名框出范围）：钉先落地，后台去 OSM 挖
+            // 这个地点的真实占地。Overpass 忙时要排队几十秒，所以给足预算且
+            // 失败静默保留钉，不打断交互。
+            const seq = shapeSeqRef.current + 1;
+            shapeSeqRef.current = seq;
+            setShapeLoading(true);
+            void fetchPlaceShape(place.name, {
+              near: { lng: place.lng, lat: place.lat },
+            }).then(shape => {
+              if (shapeSeqRef.current !== seq) return; // 期间换了目标：loading 归新目标管
+              setShapeLoading(false);
+              if (!shape) return;
+              // 2026-11-13 用户拍板：出框后钉不撤——挪到范围正中继续挂着
+              // （高德同款：蓝框 + 中心定位钉带名称胶囊）；选区顶部标签让位给这枚钉。
+              const [west, south, east, north] = shape.bounds;
+              setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: place.name });
+              setPlaceArea({
+                polygon: shape.polygon,
+                label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
+                ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
+              });
+              canvasApiRef.current?.focusBounds(shape.bounds);
+            }).catch(() => {
+              if (shapeSeqRef.current === seq) setShapeLoading(false);
+            });
           }}
-          onClear={() => setPlacePin(null)}
+          onClear={() => { shapeSeqRef.current += 1; setShapeLoading(false); setPlacePin(null); setPlaceArea(null); }}
         />
+      )}
+      {/* 2026-11-12 用户拍板：挖形期间的小提示（Overpass 排队 30~50s，别让用户以为点了没反应）。
+          与画布白底名称胶囊同范式；只压 2D 画面，3D/接管态不出镜。 */}
+      {shapeLoading && !canvasHidden && (
+        <div
+          data-testid="outdoor-shape-loading"
+          className="sc-shape-loading-pill"
+          style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 4 }}
+        >
+          正在圈范围…
+        </div>
       )}
       {/* 2D/3D 切换改到左下角：右上角被工作台右侧圆钮和楼层芯片挡住，点不到。
           bottom 56 避开画布左下角的比例尺盒（P2-i，占 bottom 10–48）；弹层全部向上翻

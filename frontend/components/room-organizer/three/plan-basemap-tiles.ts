@@ -25,7 +25,7 @@ import {
   tileNorthLat,
   type PlanGroundBounds,
 } from '@/components/room-organizer/lib/plan-ground-capture';
-import { publicSourceTileUrl } from '@/components/room-organizer/lib/tdt-probe';
+import { publicSourceTileUrl, tdtDirectTileUrl } from '@/components/room-organizer/lib/tdt-probe';
 import { alignedTileBounds, needsWgs84Alignment } from '@/components/room-organizer/lib/basemap-alignment';
 import { ancestorTileCrop, BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
 import { wgs84ToGcj02 } from '@/components/room-organizer/lib/geo-coords';
@@ -160,9 +160,13 @@ export function maxZoomForSource(source: CanvasBasemapSource): number {
   return 19;
 }
 
+/**
+ * 天地图两档：线上浏览器直连 WMTS（天地图 CloudWAF 拦境外节点，服务端代理线上拉不到，
+ * 2026-11-12 实测 418）；本机 dev / SSR / 无 key 回落同源 /api/tdt-tiles（本机经 3199 代理）。
+ */
 export function tileUrlFor(source: CanvasBasemapSource, z: number, x: number, y: number): string {
-  if (source === 'vec') return `/api/tdt-tiles?layer=vec_w&z=${z}&x=${x}&y=${y}`;
-  if (source === 'img') return `/api/tdt-tiles?layer=img_w&z=${z}&x=${x}&y=${y}`;
+  if (source === 'vec') return tdtDirectTileUrl('vec_w', z, x, y) ?? `/api/tdt-tiles?layer=vec_w&z=${z}&x=${x}&y=${y}`;
+  if (source === 'img') return tdtDirectTileUrl('img_w', z, x, y) ?? `/api/tdt-tiles?layer=img_w&z=${z}&x=${x}&y=${y}`;
   return publicSourceTileUrl(source, z, x, y);
 }
 

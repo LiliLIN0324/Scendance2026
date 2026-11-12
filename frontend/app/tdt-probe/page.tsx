@@ -24,12 +24,12 @@ interface View {
   zoom: number;
 }
 
-/** 探针图源：天地图两档（待 key）+ 公开源三档（无需 key，立即可出真图）。 */
+/** 探针图源：天地图两档（线上浏览器直连 / 本机代理）+ 公开源三档（无需 key）。 */
 type ProbeSource = TdtProbeLayer | ProbePublicSource;
 
 const TDT_SOURCES: { id: TdtProbeLayer; label: string }[] = [
-  { id: 'vec', label: '天地图矢量（待 key）' },
-  { id: 'img', label: '天地图影像（待 key）' },
+  { id: 'vec', label: '天地图矢量' },
+  { id: 'img', label: '天地图影像' },
 ];
 
 const TILE_REQ_BASE = '/api/tdt-tiles';
@@ -248,7 +248,7 @@ export default function TdtProbePage() {
         <span>缩放 <b>z{view.zoom}</b></span>
         <span>瓦片 <b>{loading ? `${tileCount} 加载中` : `${tileCount} 张`}</b></span>
         <span>失败 <b>{errorTiles}</b></span>
-        <span>模式 <b>{mockMode ? '占位网格（待 key 实测）' : hasRealTiles ? '真实瓦片' : '待加载'}</b></span>
+        <span>模式 <b>{mockMode ? '占位网格（无 key 兑底）' : hasRealTiles ? '真实瓦片' : '待加载'}</b></span>
       </footer>
     </main>
   );

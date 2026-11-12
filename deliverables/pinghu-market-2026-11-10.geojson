@@ -1,0 +1,560 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.1460368,
+              30.2521924
+            ],
+            [
+              120.1481167,
+              30.2521924
+            ],
+            [
+              120.1481167,
+              30.2532722
+            ],
+            [
+              120.1460368,
+              30.2532722
+            ],
+            [
+              120.1460368,
+              30.2521924
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "boundary",
+        "name": "场地边界",
+        "type": "边界",
+        "zone": null,
+        "issue": null,
+        "area_m2": 24000
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.1461408,
+              30.2522824
+            ],
+            [
+              120.1469727,
+              30.2522824
+            ],
+            [
+              120.1469727,
+              30.2526873
+            ],
+            [
+              120.1461408,
+              30.2526873
+            ],
+            [
+              120.1461408,
+              30.2522824
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "zone",
+        "name": "观众区",
+        "type": "观众区",
+        "zone": null,
+        "issue": null,
+        "area_m2": 3600,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.1471807,
+              30.2523004
+            ],
+            [
+              120.1475967,
+              30.2523004
+            ],
+            [
+              120.1475967,
+              30.2525703
+            ],
+            [
+              120.1471807,
+              30.2525703
+            ],
+            [
+              120.1471807,
+              30.2523004
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "zone",
+        "name": "舞台区",
+        "type": "舞台区",
+        "zone": null,
+        "issue": null,
+        "area_m2": 1200,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.1461616,
+              30.2528223
+            ],
+            [
+              120.1464736,
+              30.2528223
+            ],
+            [
+              120.1464736,
+              30.2531642
+            ],
+            [
+              120.1461616,
+              30.2531642
+            ],
+            [
+              120.1461616,
+              30.2528223
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "zone",
+        "name": "排队区",
+        "type": "排队区",
+        "zone": null,
+        "issue": null,
+        "area_m2": 1140,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1466608,
+          30.2529123
+        ]
+      },
+      "properties": {
+        "kind": "facility",
+        "name": "市集摊位 A",
+        "type": "市集摊位",
+        "zone": "排队区",
+        "issue": null,
+        "width_m": 2,
+        "depth_m": 2,
+        "rotation_deg": 0,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.146744,
+          30.2529123
+        ]
+      },
+      "properties": {
+        "kind": "facility",
+        "name": "市集摊位 B",
+        "type": "市集摊位",
+        "zone": "排队区",
+        "issue": null,
+        "width_m": 2,
+        "depth_m": 2,
+        "rotation_deg": 0,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1479087,
+          30.2530922
+        ]
+      },
+      "properties": {
+        "kind": "facility",
+        "name": "后勤帐篷",
+        "type": "后勤帐篷",
+        "zone": null,
+        "issue": null,
+        "width_m": 3,
+        "depth_m": 3,
+        "rotation_deg": 15,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1474235,
+          30.2530418
+        ]
+      },
+      "properties": {
+        "kind": "facility",
+        "name": "后勤帐篷 2",
+        "type": "后勤帐篷",
+        "zone": null,
+        "issue": null,
+        "width_m": 3,
+        "depth_m": 3,
+        "rotation_deg": 0,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1471392,
+          30.2530697
+        ]
+      },
+      "properties": {
+        "kind": "facility",
+        "name": "移动洗手间 1",
+        "type": "移动洗手间",
+        "zone": null,
+        "issue": null,
+        "width_m": 2.4,
+        "depth_m": 1.2,
+        "rotation_deg": 0,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1477346,
+          30.2524106
+        ]
+      },
+      "properties": {
+        "kind": "facility",
+        "name": "移动洗手间 2",
+        "type": "移动洗手间",
+        "zone": null,
+        "issue": null,
+        "width_m": 2.4,
+        "depth_m": 1.2,
+        "rotation_deg": 0,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.1460368,
+            30.2527323
+          ],
+          [
+            120.1466088,
+            30.2527323
+          ],
+          [
+            120.1466088,
+            30.2524623
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "route",
+        "name": "入场动线",
+        "type": "人行动线",
+        "zone": null,
+        "issue": "✓",
+        "length_m": 85,
+        "width_m": null,
+        "one_way": true,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.1481167,
+            30.2527323
+          ],
+          [
+            120.1477007,
+            30.2527323
+          ],
+          [
+            120.1477007,
+            30.2530472
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "route",
+        "name": "装卸动线",
+        "type": "车辆动线",
+        "zone": null,
+        "issue": null,
+        "length_m": 75,
+        "width_m": 4,
+        "one_way": false,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.1462448,
+            30.2522824
+          ],
+          [
+            120.1467648,
+            30.2528223
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "route",
+        "name": "后勤电瓶车动线",
+        "type": "后勤动线",
+        "zone": null,
+        "issue": "✓",
+        "length_m": 78.1,
+        "width_m": null,
+        "one_way": false,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1460368,
+          30.2527323
+        ]
+      },
+      "properties": {
+        "kind": "node",
+        "name": "西门",
+        "type": "入口",
+        "zone": null,
+        "issue": null,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1481167,
+          30.2527323
+        ]
+      },
+      "properties": {
+        "kind": "node",
+        "name": "东出口",
+        "type": "出口",
+        "zone": null,
+        "issue": null,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1467825,
+          30.253
+        ]
+      },
+      "properties": {
+        "kind": "node",
+        "name": "入口 3",
+        "type": "入口",
+        "zone": null,
+        "issue": "✓",
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1474745,
+          30.2527123
+        ]
+      },
+      "properties": {
+        "kind": "node",
+        "name": "入口 4",
+        "type": "入口",
+        "zone": null,
+        "issue": "✓",
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1474208,
+          30.2534596
+        ]
+      },
+      "properties": {
+        "kind": "node",
+        "name": "出口 5",
+        "type": "出口",
+        "zone": null,
+        "issue": "✓",
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.146068,
+          30.2527053
+        ]
+      },
+      "properties": {
+        "kind": "worker",
+        "name": "安保",
+        "type": "人员",
+        "zone": "排队区",
+        "issue": null,
+        "count": 2,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1480647,
+          30.2530652
+        ]
+      },
+      "properties": {
+        "kind": "worker",
+        "name": "引导员",
+        "type": "人员",
+        "zone": null,
+        "issue": null,
+        "count": 1,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1488826,
+          30.2530047
+        ]
+      },
+      "properties": {
+        "kind": "worker",
+        "name": "安保",
+        "type": "人员",
+        "zone": null,
+        "issue": "✓",
+        "count": 1,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1485822,
+          30.2525916
+        ]
+      },
+      "properties": {
+        "kind": "worker",
+        "name": "安保",
+        "type": "人员",
+        "zone": null,
+        "issue": "✓",
+        "count": 1,
+        "notes": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.1485071,
+          30.2523688
+        ]
+      },
+      "properties": {
+        "kind": "worker",
+        "name": "安保",
+        "type": "人员",
+        "zone": null,
+        "issue": "✓",
+        "count": 1,
+        "notes": ""
+      }
+    }
+  ]
+}
