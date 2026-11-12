@@ -4787,3 +4787,31 @@ describe('outdoor V1–V5 unified task epoch regression', () => {
     expect(app.current().outdoorTask?.state).not.toBe('confirm');
   });
 });
+
+describe('outdoor V1–V5 public-site continuation regression',()=>{
+ it('manual correction and plain site supplement resume the same 45-person intent, then only current confirmation applies',async()=>{
+  let plan=createStarterOutdoorPlan();plan.boundary=[{x:0,y:0},{x:10,y:0},{x:10,y:70},{x:0,y:70}];
+  plan.nodes=[{id:'east-entry',kind:'entry',name:'入口1',notes:'人工确认',position:{x:10,y:33}}];
+  let current!:NonNullable<ReturnType<typeof useAgent>>;const apply=vi.fn(()=>true);
+  function Probe(){current=useAgent()!;current.registerRouteBridge({getPlan:()=>plan,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:apply});return null;}
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('45人讲座');await waitFor(()=>expect(current.outdoorTask?.state).toBe('blocked'));
+  expect(current.outdoorTask?.action).toContain('10.0×70.0m');expect(current.zoneProposal).toBeNull();
+  plan={...plan,boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}],nodes:[{...plan.nodes[0]!,position:{x:80,y:33}}],routes:[{id:'existing-walk',kind:'pedestrian',name:'人行线',points:[{x:80,y:33},{x:43.9,y:33}],widthM:3,oneWay:false,notes:''}]};
+  send('场地已画好，入口在东侧，签到放入口内侧，舞台在远端');
+  await waitFor(()=>expect(current.zoneProposal?.facilities.filter(f=>f.templateId.includes('chair'))).toHaveLength(45));
+  expect(current.outdoorTask?.intent).toContain('45');expect(current.outdoorTask?.state).toBe('confirm');expect(screen.getAllByTestId('outdoor-task-card')).toHaveLength(1);
+  expect(apply).not.toHaveBeenCalled();send('好');expect(apply).toHaveBeenCalledTimes(1);
+ });
+ it('an outside node is explained as an entrance problem, not a false capacity conclusion; explicit current-site retry remains actionable',async()=>{
+  let plan=createStarterOutdoorPlan();plan.boundary=[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}];
+  plan.nodes=[{id:'outside',kind:'entry',name:'入口1',notes:'',position:{x:80.2,y:33}}];
+  let current!:NonNullable<ReturnType<typeof useAgent>>;
+  function Probe(){current=useAgent()!;current.registerRouteBridge({getPlan:()=>plan,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true});return null;}
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('45人讲座');await waitFor(()=>expect(current.outdoorTask?.action).toContain('不在当前真实边界内'));expect(current.zoneProposal).toBeNull();
+  const retry=current.outdoorTask!.prompts!.find(p=>p.includes('按当前场地'))!;expect(retry).toContain('45');
+  plan={...plan,nodes:[{...plan.nodes[0]!,position:{x:80,y:33}}]};send(retry);
+  await waitFor(()=>expect(current.zoneProposal).not.toBeNull());
+ });
+});

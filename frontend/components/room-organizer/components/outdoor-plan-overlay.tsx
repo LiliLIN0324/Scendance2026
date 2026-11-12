@@ -214,7 +214,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
       ...(shape.kind === 'line' ? { kind: 'line' as const } : {}) });
     canvasApiRef.current?.focusBounds(shape.bounds);
-  });
+  }, JSON.stringify(plan?.boundary ?? []));
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {

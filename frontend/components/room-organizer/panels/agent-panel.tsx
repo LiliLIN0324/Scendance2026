@@ -79,7 +79,7 @@ import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
-import { outdoorEventIssue } from '../lib/outdoor-event-logic';
+import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
 import type { PlanFacility, PlanNode, PlanRoute, PlanZone, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -1761,7 +1761,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const memory = memoryRef.current;
       const issue = outdoorEventIssue(memory.event ?? null, memory.headcount ?? null);
       if (issue) { setOutdoorTask({ intent: '按活动需求分区与放置物料', state: 'blocked', action: issue, steps: ['读取当前场地'], prompts: ['45 人讲座', '80 人市集'] }); say({ role: 'agent', amber: true, text: issue }); return; }
-      if (!plan.nodes.some(node => node.kind !== 'exit' && !/子口|子出入口/u.test(node.name + node.notes))) { setOutdoorTask({ intent: '按活动需求安排区域', state: 'blocked', action: '先确认真实场地入口，才能安排签到、观众方向与接驳', steps: ['记录活动类型与人数'], prompts: ['排一下流线'] }); return; }
+      if (!confirmedOutdoorEntrances(plan.nodes, plan.boundary).length) { setOutdoorTask({ intent: '按活动需求安排区域', state: 'blocked', action: plan.nodes.length ? '现有节点不在当前真实边界内，或只是出口/活动子口；请把真实入口放在边界上或内部，再按当前场地重试' : '先确认真实场地入口，才能安排签到、观众方向与接驳', steps: ['记录活动类型与人数'], prompts: [`按当前场地重新安排${memory.headcount ?? ''}人${memory.event ?? '活动'}`, '排一下流线'] }); return; }
+      const siteSummary = outdoorEventSiteSummary({ boundary: plan.boundary, nodes: plan.nodes, existingFacilities: plan.facilities, existingRoutes: plan.routes });
       const proposal = buildZoneEventProposal({
         boundary: plan.boundary,
         nodes: plan.nodes,
@@ -1770,8 +1771,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         existingRoutes: plan.routes,
       });
       if (!proposal) {
-        setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${memory.event ?? '活动'}`, state: 'blocked', action: '当前场地/通道条件放不下这版需求；请减少人数或调整场地，未生成布局', steps: ['核对活动类型与人数', '检查占地、通道与交通冲突'] });
-        say({ role: 'agent', amber: true, text: '当前真实边界内找不到容纳该人数、避让现有设施/车流后勤、并连接入口的活动区。本次没有生成布局；可减少人数、调整边界或先修正流线，不会硬塞固定模板。' });
+        setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${memory.event ?? '活动'}`, state: 'blocked', action: `未找到同时满足占地、完整3m通道与入口连通的候选。${siteSummary} 可修改画布后按当前场地重试；未写入布局。`, steps: ['核对活动类型与人数', '检查占地、通道与交通冲突'], prompts: [`按当前场地重新安排${memory.headcount ?? ''}人${memory.event ?? '活动'}`] });
+        say({ role: 'agent', amber: true, text: `当前真实边界内尚未找到避让设施/车流后勤并连通入口的候选，不等于断言场地绝对放不下。${siteSummary} 本次未生成布局；修改边界或流线后可直接补充说明，或点按当前场地重试；不会硬塞固定模板。` });
         return;
       }
       if (!currentOutdoorTask(epoch, 'zone')) return;
@@ -3110,7 +3111,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     // V-3：区域提案——「分区/排区域」按入场朝向分带生成区域+物料草案，虚线预览等确认。
-    const outdoorEventTurn = routeBridgeRef.current?.getPlan() ? parseOutdoorEventTurn(trimmed, memoryRef.current.event ?? null) : null;
+    const outdoorEventTurn = routeBridgeRef.current?.getPlan() ? parseOutdoorEventTurn(trimmed, memoryRef.current.event ?? null, outdoorKindRef.current === 'zone' && outdoorTask?.state === 'blocked') : null;
     if (matchZoneCommand(trimmed) || outdoorEventTurn) {
       const stated = parseBriefSentence(trimmed);
       if (outdoorEventTurn) saveMemory({ ...memoryRef.current,
@@ -4325,7 +4326,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     : mode === 'review' ? '说一句，比如「准备客户评审」'
     : mode === 'delivery' ? '说一句，比如「导出给搭建方」'
     : agent.banquetChat ? '说一句，比如「加座，再排一版」'
-    : '说一句，比如「80 人发布会，室内 12×9」';
+    : '说一句，比如「45 人讲座，入口在东侧」';
   // 发送键双态：空且无附件 → 麦克风；有字（或带附件）→ 箭头。理解中禁用，既有闸门不动。
   const hasDraft = draft.trim().length > 0;
   const canSend = !agent.isUnderstanding(draft) && (hasDraft || !!agent.pendingFile);

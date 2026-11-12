@@ -48,3 +48,14 @@ it('current request still retries three times and stops loading after a miss', a
  await act(async()=>vi.advanceTimersByTimeAsync(18000));
  expect(fetchPlaceShape).toHaveBeenCalledTimes(3);expect(hook.result.current.loading).toBe(false);
 });
+
+it.each(['timer','in-flight'])('manual boundary replacement stops %s lookup and its loading pill',async mode=>{
+ let finish!:(value:typeof shape)=>void;const received=vi.fn();
+ if(mode==='timer')vi.mocked(fetchPlaceShape).mockResolvedValue(null);
+ else vi.mocked(fetchPlaceShape).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ const hook=renderHook(({boundary})=>usePlaceShapeLookup('same-project',received,boundary),{initialProps:{boundary:'old-ring'}});
+ await act(async()=>hook.result.current.start('IN77',near));const signal=vi.mocked(fetchPlaceShape).mock.calls[0][1]!.signal!;
+ hook.rerender({boundary:'hand-drawn-ring'});expect(signal.aborted).toBe(true);expect(hook.result.current.loading).toBe(false);
+ if(mode==='in-flight')await act(async()=>finish(shape));
+ await act(async()=>vi.advanceTimersByTimeAsync(30000));expect(fetchPlaceShape).toHaveBeenCalledTimes(1);expect(received).not.toHaveBeenCalled();
+});
