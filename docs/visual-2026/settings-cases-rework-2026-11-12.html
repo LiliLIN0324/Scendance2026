@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234A7C59'/%3E%3Cpath d='M7 17V7h10v10z' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
+<title>幕景 · 设置收纳入口 · 改版草图 2026-11-12</title>
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+  --hair-soft:#EFEFF1; --hair:#E4E4E7; --faint:#A6AAB2;
+  --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF; --green-line:#C5D4C9;
+  --warn:#96651F; --warn-pale:#F7EFDF; --err:#B4443C;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10);
+  --e2:0 16px 48px rgba(20,20,22,.18);
+  --ease:cubic-bezier(.2,0,0,1);
+  --font:"Inter",Manrope,Arial,"PingFang SC","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{background:var(--paper);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;font-variant-numeric:tabular-nums}
+.wrap{max-width:1120px;margin:0 auto;padding:56px 40px 120px}
+.cap{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.note{font-size:12px;line-height:20px;color:var(--muted)}
+h1{font-size:24px;line-height:34px;font-weight:600}
+h2{font-size:18px;line-height:26px;font-weight:600}
+h3{font-size:15px;line-height:22px;font-weight:600}
+section{border-top:1px solid var(--hair);padding:36px 0}
+header.hd{padding-bottom:24px}
+header.hd .note{margin-top:8px;max-width:720px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.chip{display:flex;gap:8px;align-items:center;border:1px solid var(--hair);background:var(--plane);border-radius:999px;padding:7px 14px;font-size:13px;color:var(--ink-soft)}
+.chip b{color:var(--green-deep);font-weight:600}
+
+/* ── 方案卡 ── */
+.scheme{border:1px solid var(--hair);border-radius:var(--r-lg);overflow:hidden;margin-top:24px;background:var(--paper)}
+.scheme-head{display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--hair-soft);background:var(--plane)}
+.scheme-head .titles{flex:1}
+.scheme-head .titles .note{margin-top:2px}
+.tag{font-size:11px;line-height:16px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.tag-ok{background:var(--green-pale);color:var(--green-deep)}
+.tag-alt{background:var(--plane-deep);color:var(--ink-soft)}
+.scheme-body{padding:22px}
+.scheme-cols{display:grid;grid-template-columns:300px 1fr;gap:20px}
+@media(max-width:860px){.scheme-cols{grid-template-columns:1fr}}
+
+/* ── 工作台模拟 ── */
+.mock{border:1px solid var(--hair);border-radius:var(--r-md);background:var(--plane);overflow:hidden}
+.mock-title{padding:10px 14px;border-bottom:1px solid var(--hair-soft);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.mock-stage{display:flex;min-height:320px;position:relative}
+/* 左轨 */
+.rail{width:64px;border-right:1px solid var(--hair-soft);background:var(--paper);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:10px;flex:none}
+.rail-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--hair);background:var(--paper);display:grid;place-items:center;color:var(--ink-soft);cursor:pointer;transition:all var(--ease)}
+.rail-btn:hover{border-color:var(--green-line);color:var(--green-deep)}
+.rail-btn.is-active{background:var(--green-pale);border-color:var(--green-line);color:var(--green-deep)}
+.rail-avatar{width:38px;height:38px;border-radius:50%;background:var(--plane-deep);display:grid;place-items:center;overflow:hidden;color:var(--muted)}
+.rail-sep{width:22px;height:1px;background:var(--hair)}
+/* 画布 */
+.canvas{flex:1;position:relative;background:#DCEAF2;min-height:320px}
+.canvas .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:28px 28px}
+.toolcol{position:absolute;right:14px;top:14px;display:flex;flex-direction:column;gap:10px;align-items:center}
+.tool{width:38px;height:38px;border-radius:50%;background:#fff;box-shadow:var(--e1);display:grid;place-items:center;color:var(--ink-soft);cursor:pointer;border:none}
+.tool.is-active{color:var(--green-deep);background:var(--green-pale)}
+.tool.is-gone{border:1px dashed var(--faint);background:transparent;box-shadow:none;color:var(--faint)}
+.tool-tip{position:absolute;right:52px;top:50%;transform:translateY(-50%);white-space:nowrap;background:#141416;color:#fff;font-size:12px;padding:6px 12px;border-radius:999px;pointer-events:none}
+/* 弹层 */
+.pop{position:absolute;left:74px;top:12px;width:210px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e2);padding:8px;z-index:5}
+.pop-link{display:flex;gap:10px;align-items:center;width:100%;padding:9px 12px;border-radius:var(--r-sm);font-size:13px;color:var(--ink);background:none;border:none;cursor:pointer;text-align:left}
+.pop-link:hover{background:var(--plane)}
+.pop-link.ghost{background:var(--plane);border-radius:999px;color:var(--ink-soft);margin:4px 0}
+.pop-sep{height:1px;background:var(--hair-soft);margin:6px 8px}
+
+/* ── 账户中心模拟 ── */
+.dialog{border:1px solid var(--hair);border-radius:var(--r-lg);box-shadow:var(--e2);background:var(--paper);overflow:hidden}
+.dialog-body{display:flex;min-height:380px}
+.acct-side{width:232px;border-right:1px solid var(--hair-soft);padding:16px 12px;flex:none;display:flex;flex-direction:column;gap:14px}
+.acct-profile{display:flex;gap:10px;align-items:center;padding:2px 4px}
+.acct-profile .who{flex:1;min-width:0}
+.acct-profile .who strong{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-profile .who small{font-size:11px;color:var(--muted)}
+.dotbtn{width:28px;height:28px;border:none;background:none;border-radius:8px;display:grid;place-items:center;color:var(--muted);cursor:pointer}
+.dotbtn:hover{background:var(--plane)}
+.acct-team h4{font-size:11px;color:var(--muted);font-weight:500;padding:0 6px;margin-bottom:6px}
+.team-row{display:flex;gap:10px;align-items:center;padding:8px 6px;border-radius:var(--r-sm);font-size:13px;cursor:pointer}
+.team-row .mark{width:26px;height:26px;border-radius:8px;background:var(--plane-deep);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--ink-soft);flex:none}
+.team-row .name{flex:1}
+.team-row .role{font-size:11px;color:var(--muted)}
+.side-nav{display:flex;flex-direction:column;gap:2px;margin-top:auto}
+.nav-item{display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:var(--r-sm);border:none;background:none;font-size:13px;color:var(--ink-soft);cursor:pointer;text-align:left;width:100%}
+.nav-item:hover{background:var(--plane)}
+.nav-item.is-active{background:var(--green-pale);color:var(--green-deep);font-weight:600}
+.nav-item svg{flex:none}
+.acct-main{flex:1;padding:20px 22px;min-width:0}
+.subnav{display:flex;gap:14px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:16px}
+.subnav button{border:none;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0}
+.subnav .cur{color:var(--ink);font-weight:600}
+
+/* 设置分区控件 */
+.set-group{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:16px;margin-bottom:14px}
+.set-group h3{margin-bottom:4px}
+.set-group .note{margin-bottom:12px}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0}
+.set-row + .set-row{border-top:1px solid var(--hair-soft)}
+.set-row .lab{font-size:13px}
+.set-row .lab small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.seg{display:inline-flex;background:var(--plane);border:1px solid var(--hair);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:none;background:none;border-radius:999px;padding:6px 14px;font-size:12px;color:var(--ink-soft);cursor:pointer;font-family:var(--font)}
+.seg button.on{background:var(--paper);color:var(--green-deep);font-weight:600;box-shadow:var(--e1)}
+.switch{width:42px;height:24px;border-radius:999px;background:var(--hair);border:none;position:relative;cursor:pointer;transition:background var(--ease);flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:var(--e1);transition:transform var(--ease)}
+.switch.on{background:var(--green)}
+.switch.on::after{transform:translateX(18px)}
+.conv{display:inline-flex;gap:8px;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-soft);background:var(--plane);border-radius:8px;padding:6px 10px}
+.conv b{color:var(--green-deep)}
+
+/* 对照注记 */
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+@media(max-width:860px){.notes{grid-template-columns:1fr}}
+.note-card{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:16px;background:var(--plane)}
+.note-card h3{margin-bottom:8px}
+.note-card ul{padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-soft)}
+.vs-old{color:var(--err)}
+.vs-new{color:var(--green-deep)}
+.fact-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+.fact-table th,.fact-table td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--hair-soft);vertical-align:top}
+.fact-table th{color:var(--muted);font-weight:500;font-size:12px}
+.fact-table code{font-family:var(--mono);font-size:12px;background:var(--plane);padding:1px 6px;border-radius:6px}
+.toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%) translateY(20px);background:#141416;color:#fff;font-size:13px;padding:10px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:all var(--ease);z-index:50}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:12px;height:12px;border-radius:4px;border:1px solid var(--hair)}
+
+/* ── 参考调研 ── */
+.ref-group-title{font-size:13px;font-weight:600;color:var(--ink-soft);margin:24px 0 4px}
+.ref-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:12px}
+@media(max-width:860px){.ref-grid{grid-template-columns:1fr}}
+.ref-card{border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;background:var(--paper)}
+.ref-shot{background:var(--plane);border-bottom:1px solid var(--hair-soft);display:grid;place-items:center;padding:14px;min-height:180px}
+.ref-shot img{max-width:100%;max-height:280px;border-radius:8px;box-shadow:var(--e1);object-fit:contain}
+.ref-card .ref-cap{padding:12px 14px}
+.ref-card .ref-cap .src{font-size:11px;color:var(--muted);margin-bottom:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ref-card .ref-cap .src b{color:var(--ink-soft);font-size:12px}
+.ref-card .ref-cap p{font-size:12px;line-height:19px;color:var(--ink-soft)}
+.ref-take{margin-top:22px;border:1px solid var(--green-line);background:var(--green-pale);border-radius:var(--r-md);padding:16px 18px}
+.ref-take h3{margin-bottom:8px;color:var(--green-deep)}
+.ref-take ul{padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ===== 页头 ===== -->
+<header class="hd">
+  <div class="cap">Scendance2026 · 工作台 IA 微调</div>
+  <h1 style="margin-top:8px">设置收纳入口 · 改版草图</h1>
+  <p class="note">基线：origin/main（99e86ce）。本地分支 <code>feat/continue-20261105</code> 落后 main 235 个提交，草图按 main 现状绘制；工具栏尺寸钮、左轨齿轮、账户中心左栏均以 main 代码为准。</p>
+  <div class="chips">
+    <span class="chip"><b>①</b> 工具栏尺寸钮撤除：标注显隐 + 米/英尺切换收进设置</span>
+    <span class="chip"><b>②</b> 左轨齿轮换成三点「更多」</span>
+    <span class="chip"><b>③</b> 账户中心新增「设置」入口</span>
+  </div>
+</header>
+
+<!-- ===== §1 现状 ===== -->
+<section>
+  <h2>1 · 现状（main 基线）</h2>
+  <p class="note" style="margin-top:6px">三处现状对应你给的三张截图；代码里目前<b>不存在英制单位状态</b>，尺寸数据内部一律按米存储。</p>
+
+  <div class="scheme">
+    <div class="scheme-body">
+      <div class="scheme-cols">
+        <!-- 工具栏现状 -->
+        <div class="mock">
+          <div class="mock-title">画布右侧工具栏 <span class="cap">tool-column</span></div>
+          <div class="mock-stage" style="min-height:240px">
+            <div class="canvas">
+              <div class="grid"></div>
+              <div class="toolcol">
+                <button class="tool" title="选择"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3l7 18 2.5-7.5L22 11z"/></svg></button>
+                <button class="tool" title="平面 / 立体"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l8-3 8 3v12l-8 3-8-3z"/><path d="M4 6l8 3 8-3M12 9v12"/></svg></button>
+                <button class="tool is-active" aria-label="尺寸标注">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L20 4M8 4h2v2M14 18h2v2M4 8h2v2M18 14h2v2"/></svg>
+                </button>
+                <button class="tool" title="网格吸附"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg></button>
+              </div>
+              <div class="tool-tip" style="top:118px">尺寸（单位 m）</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 左轨 + 账户中心现状 -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="mock">
+            <div class="mock-title">左轨 <span class="cap">齿轮 + 头像</span></div>
+            <div class="mock-stage" style="min-height:120px">
+              <div class="rail">
+                <button class="rail-btn" aria-label="设置" title="设置（齿轮）">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8l1.2 2.6 2.8-.4 1 2.6 2.4 1.6-.6 2.8 1.8 2.2-1.8 2.2.6 2.8-2.4 1.6-1 2.6-2.8-.4L12 21.2l-1.2-2.6-2.8.4-1-2.6-2.4-1.6.6-2.8L5.4 11.8l1.8-2.2-.6-2.8 2.4-1.6 1-2.6 2.8.4z"/></svg>
+                </button>
+                <div class="rail-sep"></div>
+                <div class="rail-avatar" title="账户中心">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.6-3.4 4-5 7-5s5.4 1.6 7 5"/></svg>
+                </div>
+              </div>
+              <div style="flex:1;padding:16px">
+                <p class="note">齿轮 <code>SettingsMenu</code> 弹层：切回官网 / 新手指引 / GitHub。头像 <code>CloudPanel</code> 打开账户中心。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="dialog">
+            <div class="dialog-body" style="min-height:180px">
+              <div class="acct-side">
+                <div class="acct-profile">
+                  <div class="rail-avatar" style="width:30px;height:30px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.6-3.4 4-5 7-5s5.4 1.6 7 5"/></svg></div>
+                  <div class="who"><strong>2487…@qq.com</strong><small>未命名访客</small></div>
+                  <button class="dotbtn" aria-label="更多"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                </div>
+                <div class="acct-team">
+                  <h4>团队</h4>
+                  <div class="team-row"><span class="mark">E</span><span class="name">endTree的工作室</span><span class="role">负责人</span></div>
+                  <div class="team-row"><span class="mark">幕</span><span class="name">幕景</span><span class="role">编辑</span></div>
+                </div>
+                <nav class="side-nav">
+                  <button class="nav-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-4 4 3 3-2 4 3"/></svg>物料</button>
+                  <button class="nav-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="2.6"/><path d="M3 19c1.4-3 3.4-4.4 6-4.4s4.6 1.4 6 4.4"/><circle cx="17" cy="9" r="2"/><path d="M15.5 14.8c2.4.2 4 1.6 4.5 4.2"/></svg>团队与权限</button>
+                </nav>
+              </div>
+              <div class="acct-main">
+                <p class="note">右栏为项目卡片墙。左栏目前<b>没有「设置」入口，也没有「案例」入口</b>；退出登录收在头像旁的三点里。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== §2 方案 A ===== -->
+<section>
+  <h2>2 · 方案 A（定稿）：设置下沉账户中心</h2>
+  <p class="note" style="margin-top:6px">设置项在账户中心独立分区；左轨三点只保留外链与退出相关的轻量操作；标注开关与单位切换进设置分区。本期不做案例入口与案例墙。</p>
+
+  <div class="scheme">
+    <div class="scheme-head">
+      <div class="titles"><h3>A · 账户中心内「设置」分区</h3><div class="note">左轨齿轮 → 三点；工具栏尺寸钮撤除；标注开关与单位进设置分区</div></div>
+      <span class="tag tag-ok">定稿</span>
+    </div>
+    <div class="scheme-body">
+      <div class="scheme-cols">
+        <!-- 左轨 + 工具栏 -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="mock">
+            <div class="mock-title">左轨 · 三点「更多」</div>
+            <div class="mock-stage" style="min-height:170px">
+              <div class="rail">
+                <button class="rail-btn is-active" aria-label="更多" title="更多">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+                </button>
+                <div class="rail-sep"></div>
+                <div class="rail-avatar" title="账户中心">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.6-3.4 4-5 7-5s5.4 1.6 7 5"/></svg>
+                </div>
+              </div>
+              <div class="pop">
+                <button class="pop-link" data-toast="草图：切回官网"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>切回官网</button>
+                <div class="pop-sep"></div>
+                <button class="pop-link ghost" data-toast="草图：新手指引"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h10a3 3 0 013 3v11H7a3 3 0 01-3-3z"/><path d="M4 19a3 3 0 013-3h10"/></svg>新手指引</button>
+                <button class="pop-link ghost" data-toast="草图：GitHub"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mock">
+            <div class="mock-title">画布工具栏 · 尺寸钮撤除</div>
+            <div class="mock-stage" style="min-height:170px">
+              <div class="canvas">
+                <div class="grid"></div>
+                <div class="toolcol">
+                  <button class="tool" title="选择"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3l7 18 2.5-7.5L22 11z"/></svg></button>
+                  <button class="tool" title="平面 / 立体"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l8-3 8 3v12l-8 3-8-3z"/><path d="M4 6l8 3 8-3M12 9v12"/></svg></button>
+                  <button class="tool is-gone" disabled aria-label="已移入设置" title="尺寸标注已移入设置"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20L20 4M8 4h2v2M14 18h2v2M4 8h2v2M18 14h2v2"/></svg></button>
+                  <button class="tool" title="网格吸附"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 账户中心：设置分区 -->
+        <div class="dialog">
+          <div class="dialog-body">
+            <div class="acct-side">
+              <div class="acct-profile">
+                <div class="rail-avatar" style="width:30px;height:30px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.6-3.4 4-5 7-5s5.4 1.6 7 5"/></svg></div>
+                <div class="who"><strong>2487…@qq.com</strong><small>未命名访客</small></div>
+                <button class="dotbtn" aria-label="更多"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+              </div>
+              <div class="acct-team">
+                <h4>团队</h4>
+                <div class="team-row"><span class="mark">E</span><span class="name">endTree的工作室</span><span class="role">负责人</span></div>
+                <div class="team-row"><span class="mark">幕</span><span class="name">幕景</span><span class="role">编辑</span></div>
+              </div>
+              <nav class="side-nav">
+                <button class="nav-item is-active" data-section="settings"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8l1.2 2.6 2.8-.4 1 2.6 2.4 1.6-.6 2.8 1.8 2.2-1.8 2.2.6 2.8-2.4 1.6-1 2.6-2.8-.4L12 21.2l-1.2-2.6-2.8.4-1-2.6-2.4-1.6.6-2.8L5.4 11.8l1.8-2.2-.6-2.8 2.4-1.6 1-2.6 2.8.4z"/></svg>设置</button>
+                <button class="nav-item" data-toast="草图演示：物料分区（本期未展开）"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-4 4 3 3-2 4 3"/></svg>物料</button>
+                <button class="nav-item" data-toast="草图演示：团队与权限分区（本期未展开）"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="2.6"/><path d="M3 19c1.4-3 3.4-4.4 6-4.4s4.6 1.4 6 4.4"/><circle cx="17" cy="9" r="2"/><path d="M15.5 14.8c2.4.2 4 1.6 4.5 4.2"/></svg>团队与权限</button>
+              </nav>
+            </div>
+
+            <div class="acct-main" data-panel="settings">
+              <div class="subnav"><button>← 项目</button><span class="cur">设置</span></div>
+
+              <div class="set-group">
+                <h3>长度单位</h3>
+                <p class="note">场景数据仍按米存储，这里只切换画布标注与读数的显示单位；单位偏好随账号同步。</p>
+                <div class="set-row">
+                  <span class="lab">显示单位<small>标注、属性面板尺寸读数跟随</small></span>
+                  <div class="seg" id="unitSeg">
+                    <button class="on" data-unit="m">米 · m</button>
+                    <button data-unit="ft">英尺 · ft</button>
+                  </div>
+                </div>
+                <div class="set-row">
+                  <span class="lab">换算示例</span>
+                  <span class="conv" id="convDemo">12.0 m ≈ <b>39.4 ft</b></span>
+                </div>
+              </div>
+
+              <div class="set-group">
+                <h3>画布显示</h3>
+                <p class="note">从右侧工具栏移入；网格吸附仍保留在工具栏，不在此重复。</p>
+                <div class="set-row">
+                  <span class="lab">尺寸标注<small>在画布上显示场地与物件的尺寸读数</small></span>
+                  <button class="switch on" role="switch" aria-checked="true" data-switch aria-label="尺寸标注"></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note-card">
+          <h3>方案 A 的取舍</h3>
+          <ul>
+            <li class="vs-new">设置项有完整分区承载，分段控件、开关、说明文案都放得下；后续加偏好（语言、默认视角）有位置。</li>
+            <li>左轨三点弹层只留外链，弹层保持轻薄，不再塞开关。</li>
+          </ul>
+        </div>
+        <div class="note-card">
+          <h3>落地要点</h3>
+          <ul>
+            <li>标注开关与单位切换从工具栏移入设置，画布其余工具保持原位。</li>
+            <li>单位偏好随账号云端同步；标注、属性面板与导出清单均跟随显示单位。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== §3 方案 B ===== -->
+<section>
+  <h2>3 · 方案 B：设置留在左轨三点弹层</h2>
+  <p class="note" style="margin-top:6px">不下沉账户中心；单位分段、标注开关直接挂在左轨三点弹层里，账户中心不另加入口。</p>
+
+  <div class="scheme">
+    <div class="scheme-head">
+      <div class="titles"><h3>B · 轻量弹层承载设置</h3><div class="note">改动面最小，但弹层空间窄，设置项一多就拥挤</div></div>
+      <span class="tag tag-alt">备选</span>
+    </div>
+    <div class="scheme-body">
+      <div class="scheme-cols">
+        <div class="mock">
+          <div class="mock-title">左轨三点弹层（展开态）</div>
+          <div class="mock-stage" style="min-height:300px">
+            <div class="rail">
+              <button class="rail-btn is-active" aria-label="更多"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+              <div class="rail-sep"></div>
+              <div class="rail-avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.6-3.4 4-5 7-5s5.4 1.6 7 5"/></svg></div>
+            </div>
+            <div class="pop" style="width:232px">
+              <div class="set-row" style="padding:6px 4px">
+                <span class="lab" style="font-size:12px">单位</span>
+                <div class="seg" id="unitSegB">
+                  <button class="on" data-unit="m">m</button>
+                  <button data-unit="ft">ft</button>
+                </div>
+              </div>
+              <div class="set-row" style="padding:6px 4px">
+                <span class="lab" style="font-size:12px">尺寸标注</span>
+                <button class="switch on" role="switch" aria-checked="true" data-switch aria-label="尺寸标注"></button>
+              </div>
+              <div class="pop-sep"></div>
+              <button class="pop-link" data-toast="草图：切回官网"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>切回官网</button>
+              <button class="pop-link ghost" data-toast="草图：新手指引">新手指引</button>
+              <button class="pop-link ghost" data-toast="草图：GitHub">GitHub</button>
+            </div>
+          </div>
+        </div>
+        <div class="notes" style="margin-top:0">
+          <div class="note-card">
+            <h3>适合什么情况</h3>
+            <ul>
+              <li>设置项长期只有「单位 + 标注开关 + 外链」三项，不想动账户中心结构。</li>
+              <li>弹层是浮层，宽度受限：分段控件只能放缩写 m / ft，说明文案无处安放。</li>
+            </ul>
+          </div>
+          <div class="note-card">
+            <h3>风险</h3>
+            <ul>
+              <li class="vs-old">后续加偏好（语言、默认机位、导出规格）时，弹层会再次拥挤，仍要回迁到分区。</li>
+              <li>标注开关藏在浮层里，可发现性低于工具栏直出；收进设置分区后也要在设置页有清晰文案。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== §4 定稿口径 ===== -->
+<section>
+  <h2>4 · 定稿口径与事实边界</h2>
+  <table class="fact-table">
+    <thead><tr><th style="width:26%">事项</th><th>定稿口径</th><th style="width:30%">备注 / 理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>单位偏好存哪</td>
+        <td>跟随云端账号同步；内部场景数据仍存米，显示层按偏好换算，换设备登录继承同一偏好。</td>
+        <td>不存本机 localStorage；账号未登录时临时用本机默认值，登录后回写账号偏好。</td>
+      </tr>
+      <tr>
+        <td>英尺显示精度</td>
+        <td>默认英尺一位小数（如 12.0 m ≈ 39.4 ft），不拆 ft′ in″ 双单位。</td>
+        <td>场地尺度大，小数英尺读数简洁；后续需要可在设置里加精度分段（参照 SketchUp Web）。</td>
+      </tr>
+      <tr>
+        <td>换算覆盖范围</td>
+        <td>画布标注、属性面板读数、导出 CSV / 交付包均跟随单位偏好，可显示英制。</td>
+        <td>内部存储与工程底稿仍为米；导出文件按当前显示单位出数，附米制基准列。</td>
+      </tr>
+      <tr>
+        <td>工具栏撤除项</td>
+        <td>仅「尺寸标注」钮移入设置；网格吸附保留在工具栏，本期不收进设置。</td>
+        <td>选择、2D/3D、漫游、网格吸附、撤销重做、缩放、导出、氛围保持原位。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--green-pale);border-color:var(--green-line)"></i>推荐态 / 当前选中</span>
+    <span><i class="sw" style="background:var(--plane)"></i>次要控件与占位</span>
+  </div>
+</section>
+
+<!-- ===== §5 竞品与开源参考 ===== -->
+<section>
+  <h2>5 · 成熟产品与开源项目参考</h2>
+  <p class="note">调研对象：设计工具 Figma、建模/场地工具 SketchUp，开源设计平台 Penpot。截图取自各产品公开界面，仅作信息架构对照；Penpot 两组模板画廊仅作后续参考，本期不落地案例墙。</p>
+
+  <div class="ref-group-title">设置入口放在哪</div>
+  <div class="ref-grid">
+    <figure class="ref-card">
+      <div class="ref-shot"><img src="assets/figma-account-menu.jpg" alt="Figma 账户下拉菜单"></div>
+      <figcaption class="ref-cap">
+        <div class="src"><b>Figma</b><span>头像下拉账户菜单</span></div>
+        <p>账户浮层里单列 Settings，Theme 紧随其后；账号切换、退出登录与设置同层，画布工具条上不挂设置钮。对应我们把「设置」收进账户中心、左轨只留三点「更多」。</p>
+      </figcaption>
+    </figure>
+    <figure class="ref-card">
+      <div class="ref-shot"><img src="assets/figma-sidebar.jpg" alt="Figma 文件浏览器左栏"></div>
+      <figcaption class="ref-cap">
+        <div class="src"><b>Figma</b><span>文件浏览器左栏分区</span></div>
+        <p>左栏按 Recents / Drafts / All projects / Trash / Starred 分区，Admin（管理设置）沉在列表底部。对应账户中心左栏「项目 / 物料 / 团队与权限 / 设置」并列成项。</p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="ref-group-title">单位（公制 / 英制）切换怎么摆</div>
+  <div class="ref-grid">
+    <figure class="ref-card">
+      <div class="ref-shot"><img src="assets/sketchup-units-desktop.jpg" alt="SketchUp Model Info 单位面板"></div>
+      <figcaption class="ref-cap">
+        <div class="src"><b>SketchUp 桌面版</b><span>Model Info → Units</span></div>
+        <p>单位是独立设置分区：左侧目录选 Units，右侧按长度 / 面积 / 体积分行，单位与显示精度各自下拉；英制走 feet+inches，公制走 mm/cm/m。内部建模基准不变，这里只改显示口径。</p>
+      </figcaption>
+    </figure>
+    <figure class="ref-card">
+      <div class="ref-shot"><img src="assets/sketchup-units-web.jpg" alt="SketchUp Web 单位分段选择"></div>
+      <figcaption class="ref-cap">
+        <div class="src"><b>SketchUp Web</b><span>长度单位分段 + 精度分段</span></div>
+        <p>网页版把长度单位做成 mm / cm / m 分段按钮，精度另起一行分段；另有长度吸附、显示单位格式勾选。对应我们设置里「米 · m / 英尺 · ft」分段 + 换算示例，吸附开关可同组放置。</p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="ref-group-title">案例 / 模板画廊怎么组织</div>
+  <div class="ref-grid">
+    <figure class="ref-card">
+      <div class="ref-shot"><img src="assets/penpot-hub.jpg" alt="Penpot Hub 社区模板入口"></div>
+      <figcaption class="ref-cap">
+        <div class="src"><b>Penpot Hub</b><span>独立社区门户（开源）</span></div>
+        <p>模板与组件库集中在独立 hub：顶部搜索，Libraries &amp; Templates / Plugins 分区块，每块「See all」进详情墙。这是内容增长后的独立门户形态，本期不落地。</p>
+      </figcaption>
+    </figure>
+    <figure class="ref-card">
+      <div class="ref-shot"><img src="assets/penpot-templates.jpg" alt="Penpot 模板卡片墙"></div>
+      <figcaption class="ref-cap">
+        <div class="src"><b>Penpot 模板库</b><span>封面卡片墙（开源）</span></div>
+        <p>模板卡片 = 封面图 + 名称 + 作者/来源 + 下载/载入图标；规整三列网格，载入动作统一。仅作后续案例形态参考，本期不做案例墙。</p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="ref-take">
+    <h3>对照到我们的方案 A</h3>
+    <ul>
+      <li>设置入口：主流做法都不在画布工具条上放设置钮，而是收进账户 / 头像菜单——与草图方案 A 一致。</li>
+      <li>单位控件：公制/英制是设置里的一个独立分组，分段或下拉选单位 + 精度；底层数据单位不动，只切显示口径。</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Toast ──
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+document.querySelectorAll('[data-toast]').forEach(btn => {
+  btn.addEventListener('click', () => showToast(btn.getAttribute('data-toast')));
+});
+
+// ── 单位分段（A / B 两处）──
+function bindSeg(segId, onPick){
+  const seg = document.getElementById(segId);
+  if(!seg) return;
+  seg.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      seg.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      onPick(btn.dataset.unit);
+    });
+  });
+}
+const FT_PER_M = 3.28084;
+function renderConv(unit){
+  const demo = document.getElementById('convDemo');
+  if(!demo) return;
+  demo.innerHTML = unit === 'ft'
+    ? '39.4 ft ≈ <b>12.0 m</b>'
+    : '12.0 m ≈ <b>' + (12 * FT_PER_M).toFixed(1) + ' ft</b>';
+}
+bindSeg('unitSeg', renderConv);
+bindSeg('unitSegB', () => showToast('草图演示：单位切换'));
+
+// ── 开关 ──
+document.querySelectorAll('[data-switch]').forEach(sw => {
+  sw.addEventListener('click', () => {
+    const on = sw.classList.toggle('on');
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    showToast(on ? '草图演示：已打开' : '草图演示：已关闭');
+  });
+});
+
+// ── 方案 A 左栏分区切换 ──
+document.querySelectorAll('[data-section]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-section]').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    const target = btn.dataset.section;
+    document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== target; });
+  });
+});
+</script>
+</body>
+</html>
