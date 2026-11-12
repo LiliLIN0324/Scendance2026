@@ -740,6 +740,16 @@ export function createServer({
         // 天地图地名搜索（dev-only，对齐 functions/api/tdt-search.ts）。
         // 本机 next dev 没有 Pages Functions，创建活动时的「活动地点」检索走这条口子。
         result = await fetchTdtSearch(url.searchParams);
+      } else if (req.method === 'GET' && url.pathname === '/api/tdt-area') {
+        // 天地图行政区选区（dev-only，对齐 functions/api/tdt-area.ts）：
+        // 用户输入地名时给「这块地的边界」，而不是只有中心点。
+        result = await fetchTdtArea(url.searchParams);
+      } else if (req.method === 'GET' && url.pathname === '/api/place-shape') {
+        // POI 真实轮廓（dev-only，对齐 functions/api/place-shape.ts）：
+        // 点地名后从 OSM 挖这个地点的实际占地（商场/公园/景区等面要素），
+        // 高德那种「商圈虚线框」的公开数据等价物。Overpass 不稳（忙时排队），
+        // 失败一律回空 shape，调用方降级保留定位钉，绝不报错打断。
+        result = await fetchPlaceShape(url.searchParams);
       } else if (req.method === 'GET' && url.pathname === '/health') {
         result = { ok: true, keyConfigured: Boolean(key), base, worldBase };
       } else if (req.method === 'GET' && url.pathname === '/meta') {
@@ -887,12 +897,28 @@ async function fetchTdtTile(searchParams) {
 /* 天地图地名搜索（dev-only，对齐 functions/api/tdt-search.ts） */
 const TDT_KEYWORD_MIN = 2;
 const TDT_KEYWORD_MAX = 80;
-/** 天地图 v2 搜索只在小范围 mapBound 内出结果：窄 → 中 → 宽 三档围着 geocoder 中心试探。 */
+/** 天地图 v2 搜索只在小范围 mapBound 内出结果：窄 → 中 → 宽 三档试探，第一档有结果就回。 */
 const TDT_BOUND_STEPS = [
   [0.16, 0.12],
   [0.35, 0.26],
   [0.7, 0.5],
 ];
+/**
+ * geocoder 的可信分。实测（2026-11-12）：「in77」「asdfgh」回 score 0 并被塞到大同（113.29,40.07），
+ * 「查无此地xyz」回 score 42 却指向上海，「平湖秋月」score 0 指向嘉兴；而真地名是
+ * 城市/区县 100、兴趣点 99（「湖滨银泰in77」只有 50，所以兴趣点类可以宽松些）。
+ * 低于这些分的点既不当搜索中心，也不回成建议。
+ */
+const TDT_TRUST_SCORE_MIN = 40;
+const TDT_ADMIN_TRUST_SCORE_MIN = 80;
+
+function tdtGeocodeTrusted(center) {
+  if (!center) return false;
+  if (/兴趣点|门牌/.test(center.level)) return center.score >= TDT_TRUST_SCORE_MIN;
+  return center.score >= TDT_ADMIN_TRUST_SCORE_MIN;
+}
+/** 一次请求最多打几次上游搜索：多个中心 × 三档会吃满 8s 超时，这里封顶。 */
+const TDT_MAX_UPSTREAM_SEARCHES = 6;
 
 function tdtGcjOffsetRegion(lng, lat) {
   return lng >= 72.004 && lng <= 137.8347 && lat >= 0.8293 && lat <= 55.8271;
@@ -940,6 +966,50 @@ function parseTdtLonLat(raw) {
   return { lng, lat };
 }
 
+/** `center=120.16,30.25` → `{lng, lat}`；格式不对就当没给。 */
+function parseTdtCenter(raw) {
+  if (typeof raw !== 'string' || !raw.includes(',')) return null;
+  const [lngRaw, latRaw] = raw.split(',');
+  const lng = Number(lngRaw);
+  const lat = Number(latRaw);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  if (Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+  return { lng, lat };
+}
+
+function tdtBoundString(lng, lat, spanLng, spanLat) {
+  return `${(lng - spanLng).toFixed(6)},${(lat - spanLat).toFixed(6)},${(lng + spanLng).toFixed(6)},${(lat + spanLat).toFixed(6)}`;
+}
+
+/** 名字比较用：忽略大小写、空格与括号标点（「in77」≈「IN77」）。 */
+function normalizeTdtName(value) {
+  return String(value).toLowerCase().replace(/[\s\u3000·・()（）\-—_/]+/g, '');
+}
+
+/** geocoder 单点：回 `{lng, lat, score, level, keyWord}`，取不到回 null。 */
+async function tdtGeocodeCenter(keywords, key) {
+  try {
+    const geocoder = new URL('https://api.tianditu.gov.cn/geocoder');
+    geocoder.searchParams.set('ds', JSON.stringify({ keyWord: keywords }));
+    geocoder.searchParams.set('tk', key);
+    const res = await fetch(geocoder, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceDevProxy/2.2.0' } });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const lng = Number(body?.location?.lon);
+    const lat = Number(body?.location?.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+    return {
+      lng,
+      lat,
+      score: Number.isFinite(Number(body?.location?.score)) ? Number(body.location.score) : 0,
+      level: typeof body?.location?.level === 'string' ? body.location.level : '',
+      keyWord: typeof body?.location?.keyWord === 'string' && body.location.keyWord.trim() ? body.location.keyWord.trim() : keywords,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchTdtSearch(searchParams) {
   const keywords = (searchParams.get('keywords') ?? searchParams.get('keyword') ?? '').trim();
   if (keywords.length < TDT_KEYWORD_MIN || keywords.length > TDT_KEYWORD_MAX) throw new HttpError(400, 'keywords invalid');
@@ -947,40 +1017,56 @@ async function fetchTdtSearch(searchParams) {
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(10, Math.max(1, Math.round(rawLimit))) : 6;
   const key = await resolveTdtKey();
   if (!key) throw new HttpError(503, '本机缺少 TDT_KEY（仓库根 .env.local 或前端 .env.local）');
+  // 用户当前看的地方（画布锚点）：天地图只能在小范围里搜，有它就先用它当中心。
+  const hint = parseTdtCenter(searchParams.get('center'));
 
-  // 1) geocoder 拿中心点（顺带拿天地图回填的规范名与命中级别）。
-  let center = null;
-  try {
-    const geocoder = new URL('https://api.tianditu.gov.cn/geocoder');
-    geocoder.searchParams.set('ds', JSON.stringify({ keyWord: keywords }));
-    geocoder.searchParams.set('tk', key);
-    const res = await fetch(geocoder, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceDevProxy/2.2.0' } });
-    if (res.ok) {
-      const body = await res.json();
-      const lng = Number(body?.location?.lon);
-      const lat = Number(body?.location?.lat);
-      if (Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lng) <= 180 && Math.abs(lat) <= 90) {
-        center = {
-          lng,
-          lat,
-          level: typeof body?.location?.level === 'string' ? body.location.level : '',
-          keyWord: typeof body?.location?.keyWord === 'string' && body.location.keyWord.trim() ? body.location.keyWord.trim() : keywords,
-        };
-      }
-    }
-  } catch {
-    // 没有中心点就无从收窄，按没找到处理。
-  }
-  if (!center) throw new HttpError(404, 'no place');
-
-  // 2) 窄 → 中 → 宽 三档 mapBound 试探，第一档有结果就回。
-  for (const [spanLng, spanLat] of TDT_BOUND_STEPS) {
-    const bound = `${(center.lng - spanLng).toFixed(6)},${(center.lat - spanLat).toFixed(6)},${(center.lng + spanLng).toFixed(6)},${(center.lat + spanLat).toFixed(6)}`;
+  let searched = 0;
+  const cache = new Map();
+  const runSearch = async bound => {
+    if (cache.has(bound)) return cache.get(bound);
+    searched += 1;
     const places = await searchTdtPlaces(keywords, key, bound, limit);
-    if (places.length > 0) return { places };
+    cache.set(bound, places);
+    return places;
+  };
+  const target = normalizeTdtName(keywords);
+
+  // 0) 有锚点就先打最窄一档（约 50–150ms）：命中同名 POI 直接回，
+  //    省掉 geocoder 那一趟——它遇到「in77」这种查不到的词要 ~2s 才吐答案。
+  if (hint) {
+    const quick = await runSearch(tdtBoundString(hint.lng, hint.lat, TDT_BOUND_STEPS[0][0], TDT_BOUND_STEPS[0][1]));
+    if (quick.some(place => normalizeTdtName(place.name) === target)) return { places: quick };
   }
 
-  // 3) 三档都空：把 geocoder 那个点回成一条建议，用户至少能落到该地点。
+  // 1) geocoder 拿一个中心点，顺带判断可信度（低分的点当中心会把搜索带到别的城市）。
+  const center = await tdtGeocodeCenter(keywords, key);
+  const trusted = tdtGeocodeTrusted(center);
+  const adminIntent = trusted && /行政区划|行政区/.test(center.level);
+
+  // 2) 中心优先级：
+  //    搜的是行政区（「杭州」「西湖区」）→ geocoder 先，用户要的是那块地，不是名字带「杭州」的店；
+  //    其它（「in77」「平湖秋月」这种本地专名）→ 先围画布搜，再退到 geocoder 中心。
+  const centers = [];
+  const pushCenter = point => {
+    if (!point) return;
+    if (centers.some(item => Math.abs(item.lng - point.lng) < 0.05 && Math.abs(item.lat - point.lat) < 0.05)) return;
+    centers.push({ lng: point.lng, lat: point.lat });
+  };
+  if (adminIntent) pushCenter(center);
+  pushCenter(hint);
+  if (trusted) pushCenter(center);
+
+  for (const point of centers) {
+    for (const [spanLng, spanLat] of TDT_BOUND_STEPS) {
+      if (searched >= TDT_MAX_UPSTREAM_SEARCHES) break;
+      const places = await runSearch(tdtBoundString(point.lng, point.lat, spanLng, spanLat));
+      if (places.length > 0) return { places };
+    }
+    if (searched >= TDT_MAX_UPSTREAM_SEARCHES) break;
+  }
+
+  // 3) 都没搜到：只有可信的 geocoder 点才当「至少能落钉」的兜底，不可信的（大同那种）算没找到。
+  if (!trusted) throw new HttpError(404, 'no place');
   const gcj = tdtWgs84ToGcj02(center.lng, center.lat);
   return {
     places: [
@@ -1029,6 +1115,557 @@ async function searchTdtPlaces(keywords, key, bound, limit) {
     }
   }
   return [];
+}
+
+/* 天地图行政区选区（dev-only，对齐 functions/api/tdt-area.ts） */
+const TDT_AREA_MAX_POINTS = 240;
+const TDT_AREA_LEVELS = { 1: '省', 2: '区县', 3: '市', 4: '街道' };
+
+/** WKT（POLYGON / MULTIPOLYGON）→ 环数组：只取最内层坐标串，外层括号不带信息。 */
+function tdtRingsFromWkt(wkt) {
+  const rings = [];
+  if (typeof wkt !== 'string' || !wkt.includes('(')) return rings;
+  const pattern = /\(([^()]+)\)/g;
+  let match;
+  while ((match = pattern.exec(wkt)) !== null) {
+    const points = [];
+    for (const pair of match[1].split(',')) {
+      const [lngRaw, latRaw] = pair.trim().split(/\s+/);
+      const lng = Number(lngRaw);
+      const lat = Number(latRaw);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      if (Math.abs(lng) > 180 || Math.abs(lat) > 90) continue;
+      points.push([lng, lat]);
+    }
+    if (points.length >= 3) rings.push(points);
+  }
+  return rings;
+}
+
+function tdtRingArea(ring) {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += a[0] * b[1] - b[0] * a[1];
+  }
+  return Math.abs(sum) / 2;
+}
+
+async function fetchTdtArea(searchParams) {
+  const keywords = (searchParams.get('keywords') ?? searchParams.get('keyword') ?? '').trim();
+  if (keywords.length < 2 || keywords.length > 40) throw new HttpError(400, 'keywords invalid');
+  const rawLimit = Number(searchParams.get('limit'));
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(5, Math.max(1, Math.round(rawLimit))) : 3;
+  const near = parseTdtLonLat(searchParams.get('near') ?? '');
+  const key = await resolveTdtKey();
+  if (!key) throw new HttpError(503, '本机缺少 TDT_KEY（仓库根 .env.local 或前端 .env.local）');
+
+  const upstream = new URL('https://api.tianditu.gov.cn/v2/administrative');
+  upstream.searchParams.set('keyword', keywords);
+  upstream.searchParams.set('childLevel', '0');
+  upstream.searchParams.set('extensions', 'true');
+  upstream.searchParams.set('tk', key);
+  let body = null;
+  try {
+    const response = await fetch(upstream, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'ScendanceDevProxy/2.2.0' } });
+    if (!response.ok) return { areas: [] };
+    body = await response.json();
+  } catch {
+    return { areas: [] };
+  }
+
+  const districts = Array.isArray(body?.data?.district) ? body.data.district : [];
+  const areas = [];
+  const seen = new Set();
+  for (const item of districts) {
+    const name = typeof item?.name === 'string' ? item.name.trim() : '';
+    const wkt = typeof item?.boundary === 'string' ? item.boundary : '';
+    if (!name || !wkt) continue;
+    const id = typeof item?.gb === 'string' && item.gb ? item.gb : `${name}:${wkt.length}`;
+    if (seen.has(id)) continue;
+    const rings = tdtRingsFromWkt(wkt);
+    if (rings.length === 0) continue;
+    let biggest = rings[0];
+    for (const ring of rings) if (tdtRingArea(ring) > tdtRingArea(biggest)) biggest = ring;
+    const stride = Math.max(1, Math.ceil(biggest.length / TDT_AREA_MAX_POINTS));
+    const polygon = [];
+    for (let i = 0; i < biggest.length; i += stride) {
+      const gcj = tdtWgs84ToGcj02(biggest[i][0], biggest[i][1]);
+      polygon.push([Number(gcj.lng.toFixed(6)), Number(gcj.lat.toFixed(6))]);
+    }
+    if (polygon.length < 3) continue;
+    let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+    for (const [lng, lat] of polygon) {
+      west = Math.min(west, lng); east = Math.max(east, lng);
+      south = Math.min(south, lat); north = Math.max(north, lat);
+    }
+    const cnLng = Number(item?.center?.lng);
+    const cnLat = Number(item?.center?.lat);
+    const center = Number.isFinite(cnLng) && Number.isFinite(cnLat)
+      ? tdtWgs84ToGcj02(cnLng, cnLat)
+      : { lng: (west + east) / 2, lat: (south + north) / 2 };
+    seen.add(id);
+    areas.push({
+      id,
+      name,
+      level: TDT_AREA_LEVELS[Number(item?.level)] ?? '行政区',
+      lng: Number(center.lng.toFixed(6)),
+      lat: Number(center.lat.toFixed(6)),
+      bounds: [Number(west.toFixed(6)), Number(south.toFixed(6)), Number(east.toFixed(6)), Number(north.toFixed(6))],
+      polygon,
+    });
+  }
+  const ranked = near
+    ? areas
+      .map(area => ({ area, d: (area.lng - near.lng) ** 2 + (area.lat - near.lat) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+      .map(entry => entry.area)
+    : areas;
+  return { areas: ranked.slice(0, limit) };
+}
+
+/* POI 真实轮廓（OSM，dev-only，对齐 functions/api/place-shape.ts）
+ * 流程：photon（OSM 地理编码）按「名称+中心点」拿 osm_type/osm_id →
+ * Overpass 按 id 取几何（way 或 relation）→ 拼/抽成单环 → WGS84→GCJ-02。
+ * photon 不可达时的兜底：Overpass 直接按名搜面要素（先 way 快查、再 relation 慢查），
+ * 用 near 收敛范围防全城正则扫；命中结果进程内缓存，镜像抖动时重复查询秒回。
+ * 上游忙时一次要排队数十秒，超时预算给足但失败只回 null。 */
+const PHOTON_TIMEOUT_MS = 6000;
+// 2026-11-13 用户反馈「圈范围太久」→ ①单台预算 45s→25s（QL timeout 同步 40→20），
+// ②镜像熔断：刚失败的台 60s 内跳过（坏窗口里不再挨台等死，秒降级），
+// ③三路并发抢答（photon/way/rel 同时开跑，见 fetchPlaceShape）。
+const OVERPASS_TIMEOUT_MS = 25000;
+const OVERPASS_COOLDOWN_MS = 60000;
+const SHAPE_MAX_POINTS = 320;
+const OVERPASS_ENDPOINTS = [
+  // mail.ru 镜像国内最稳（2026-11-12 实测：overpass-api.de 整段 502、photon/Nominatim 全不可达时它 15s 出结果）
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass-api.de/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+];
+
+function normalizeShapeName(value) {
+  return String(value ?? '').toLowerCase().replace(/[\s\u3000·．.,，()（）\-—_/]+/g, '');
+}
+
+function photonUrl(name, near) {
+  const u = new URL('https://photon.komoot.io/api/');
+  u.searchParams.set('q', name);
+  if (near) {
+    u.searchParams.set('lat', String(near.lat));
+    u.searchParams.set('lon', String(near.lng));
+  }
+  u.searchParams.set('limit', '3');
+  u.searchParams.set('lang', 'default');
+  return u;
+}
+
+async function photonLookup(name, near) {
+  try {
+    const res = await fetch(photonUrl(name, near), {
+      signal: AbortSignal.timeout(PHOTON_TIMEOUT_MS),
+      headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0' },
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const features = Array.isArray(body?.features) ? body.features : [];
+    const target = normalizeShapeName(name);
+    for (const f of features) {
+      const p = f?.properties ?? {};
+      if (p.osm_type === 'N') continue; // 节点没有面几何
+      const candidate = normalizeShapeName(p.name);
+      if (!candidate || !target) continue;
+      if (candidate.includes(target) || target.includes(candidate)) return { osmType: p.osm_type, osmId: p.osm_id, label: p.name };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** 镜像熔断表：endpoint → 熔断到期时间戳。刚失败的台先跳过，坏窗口秒降级不挨台等死。 */
+const endpointCooldown = new Map();
+
+async function overpass(query) {
+  const body = 'data=' + encodeURIComponent(query);
+  const now = Date.now();
+  const live = OVERPASS_ENDPOINTS.filter(ep => (endpointCooldown.get(ep) ?? 0) <= now);
+  if (live.length === 0) return null; // 全部熔断中：直接放弃，别把超时预算烧完
+  for (const endpoint of live) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
+      });
+      if (!res.ok) { endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); continue; } // 失败（含 403/451/520 系）熔断后换下一台
+      const payload = await res.json();
+      endpointCooldown.delete(endpoint);
+      return payload;
+    } catch {
+      endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); // 超时/网络失败也熔断
+    }
+  }
+  return null;
+}
+
+/** relation 成员 way 拼成单环：按 way 首尾节点 id 接龙；拼不拢回 null（多部件园区就放弃）。 */
+function stitchRelationRings(elements) {
+  const nodes = new Map();
+  for (const el of elements) {
+    if (el?.type !== 'way' || !Array.isArray(el.nodes) || !Array.isArray(el.geometry)) continue;
+    const pts = el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
+    if (pts.length < 2) continue;
+    nodes.set(el.id, { pts, head: el.nodes[0], tail: el.nodes[el.nodes.length - 1] });
+  }
+  if (nodes.size === 0) return null;
+  const firstId = nodes.keys().next().value;
+  const ring = [];
+  let cursor = nodes.get(firstId);
+  nodes.delete(firstId);
+  ring.push(...cursor.pts);
+  let guard = 0;
+  while (nodes.size > 0 && guard < 500) {
+    guard += 1;
+    let found = null;
+    for (const [id, way] of nodes) {
+      if (way.head === cursor.tail) { found = { id, way, reverse: false }; break; }
+      if (way.tail === cursor.tail) { found = { id, way, reverse: true }; break; }
+    }
+    if (!found) return null;
+    const pts = found.reverse ? [...found.way.pts].reverse() : found.way.pts;
+    ring.push(...pts.slice(1));
+    cursor = found.way;
+    nodes.delete(found.id);
+  }
+  return ring.length >= 3 ? ring : null;
+}
+
+/** 命中过的 shape 进程内缓存：公共镜像抖动大，重复查询秒回、也省上游配额。 */
+const shapeCache = new Map();
+const SHAPE_CACHE_MAX = 64;
+
+function cacheShape(key, shape) {
+  if (shapeCache.size >= SHAPE_CACHE_MAX) shapeCache.delete(shapeCache.keys().next().value);
+  shapeCache.set(key, shape);
+  return shape;
+}
+
+function escapeOverpassRegex(value) {
+  return value.replace(/[\\^$.*+?()[\]{}|"]/g, ch => '\\' + ch);
+}
+
+/** GCJ-02 射线法：near 落在多边形内才认为「用户点的是这块地」。 */
+function pointInGcjPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const crosses = (yi > point.lat) !== (yj > point.lat)
+      && point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function gcjBBoxArea(polygon) {
+  let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+  for (const [lng, lat] of polygon) {
+    west = Math.min(west, lng); east = Math.max(east, lng);
+    south = Math.min(south, lat); north = Math.max(north, lat);
+  }
+  return (east - west) * (north - south);
+}
+
+/** bbox 平方米（等距圆柱近似）——空间命中候选的绝对尺寸门槛用。 */
+function gcjBBoxAreaM2(polygon) {
+  let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+  for (const [lng, lat] of polygon) {
+    west = Math.min(west, lng); east = Math.max(east, lng);
+    south = Math.min(south, lat); north = Math.max(north, lat);
+  }
+  const latMid = (north + south) / 2;
+  return ((east - west) * 111320 * Math.cos((latMid * Math.PI) / 180)) * ((north - south) * 110540);
+}
+
+/** 折线（道路）→ GCJ 线型选区：不闭合、不填充，前端画粗线。 */
+function lineToGcjShape(pts, id, label) {
+  if (!pts || pts.length < 2) return null;
+  const simplified = simplifyRingMeters(pts, 4);
+  const stride = Math.max(1, Math.ceil(simplified.length / SHAPE_MAX_POINTS));
+  const polygon = [];
+  for (let i = 0; i < simplified.length; i += stride) {
+    const gcj = tdtWgs84ToGcj02(simplified[i].lon, simplified[i].lat);
+    polygon.push([Number(gcj.lng.toFixed(6)), Number(gcj.lat.toFixed(6))]);
+  }
+  if (polygon.length < 2) return null;
+  let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+  for (const [lng, lat] of polygon) {
+    west = Math.min(west, lng); east = Math.max(east, lng);
+    south = Math.min(south, lat); north = Math.max(north, lat);
+  }
+  return {
+    id,
+    name: label,
+    kind: 'line',
+    polygon,
+    bounds: [Number(west.toFixed(6)), Number(south.toFixed(6)), Number(east.toFixed(6)), Number(north.toFixed(6))],
+  };
+}
+
+/** 米制近似坐标（等距圆柱，x=lon·cos(lat0)·111320 / y=lat·110540）。 */
+function ringToMeters(ring) {
+  const lat0 = ring[0].lat;
+  const kx = Math.cos((lat0 * Math.PI) / 180) * 111320;
+  return ring.map(p => ({ x: p.lon * kx, y: p.lat * 110540 }));
+}
+
+/** 轻量 Douglas-Peucker 抽稀（米制）：压掉楼宇尺度的微抖动，轮廓像高德一样干净。 */
+function simplifyRingMeters(ring, toleranceM) {
+  if (ring.length < 5) return ring;
+  const pts = ringToMeters(ring);
+  const keep = new Array(ring.length).fill(false);
+  keep[0] = true;
+  keep[ring.length - 1] = true;
+  const stack = [[0, ring.length - 1]];
+  while (stack.length > 0) {
+    const [a, b] = stack.pop();
+    if (b <= a + 1) continue;
+    const ax = pts[a].x; const ay = pts[a].y;
+    const dx = pts[b].x - ax; const dy = pts[b].y - ay;
+    const len2 = dx * dx + dy * dy || 1e-9;
+    let maxD = -1; let maxI = -1;
+    for (let i = a + 1; i < b; i++) {
+      const t = Math.max(0, Math.min(1, ((pts[i].x - ax) * dx + (pts[i].y - ay) * dy) / len2));
+      const ex = ax + dx * t - pts[i].x;
+      const ey = ay + dy * t - pts[i].y;
+      const d = Math.sqrt(ex * ex + ey * ey);
+      if (d > maxD) { maxD = d; maxI = i; }
+    }
+    if (maxD > toleranceM) { keep[maxI] = true; stack.push([a, maxI], [maxI, b]); }
+  }
+  const out = [];
+  for (let i = 0; i < ring.length; i++) if (keep[i]) out.push(ring[i]);
+  return out;
+}
+
+function ringToGcjShape(ring, id, label) {
+  if (!ring || ring.length < 3) return null;
+  const simplified = simplifyRingMeters(ring, 4);
+  const stride = Math.max(1, Math.ceil(simplified.length / SHAPE_MAX_POINTS));
+  const polygon = [];
+  for (let i = 0; i < simplified.length; i += stride) {
+    const gcj = tdtWgs84ToGcj02(simplified[i].lon, simplified[i].lat);
+    polygon.push([Number(gcj.lng.toFixed(6)), Number(gcj.lat.toFixed(6))]);
+  }
+  if (polygon.length < 3) return null;
+  let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+  for (const [lng, lat] of polygon) {
+    west = Math.min(west, lng); east = Math.max(east, lng);
+    south = Math.min(south, lat); north = Math.max(north, lat);
+  }
+  return {
+    id,
+    name: label,
+    polygon,
+    bounds: [Number(west.toFixed(6)), Number(south.toFixed(6)), Number(east.toFixed(6)), Number(north.toFixed(6))],
+  };
+}
+
+/** relation 成员直接按坐标接龙成单环（`out geom` 的成员带 geometry；首尾点相同即相接，不依赖节点 id）。 */
+function stitchMemberGeometry(members) {
+  const key = p => `${p.lon.toFixed(7)},${p.lat.toFixed(7)}`;
+  const pieces = [];
+  for (const m of members ?? []) {
+    if (m?.role === 'inner' || !Array.isArray(m.geometry)) continue;
+    const pts = m.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
+    if (pts.length < 2) continue;
+    pieces.push({ pts, head: key(pts[0]), tail: key(pts[pts.length - 1]) });
+  }
+  if (pieces.length === 0) return null;
+  const ring = [...pieces[0].pts];
+  let tail = pieces[0].tail;
+  const rest = pieces.slice(1);
+  let guard = 0;
+  while (rest.length > 0 && guard < 500) {
+    guard += 1;
+    const idx = rest.findIndex(p => p.head === tail || p.tail === tail);
+    if (idx < 0) return null;
+    const piece = rest.splice(idx, 1)[0];
+    const reverse = piece.tail === tail;
+    const pts = reverse ? [...piece.pts].reverse() : piece.pts;
+    ring.push(...pts.slice(1));
+    tail = reverse ? piece.head : piece.tail;
+  }
+  return rest.length === 0 && ring.length >= 3 ? ring : null;
+}
+
+/** photon 命中路径：按 osm id 取几何；relation 先试整包元素接龙，失败再从成员 geometry 拼环。 */
+async function shapeFromOsmId(osmType, osmId, label) {
+  const kind = osmType === 'R' ? 'rel' : 'way';
+  const query = `[out:json][timeout:20];${kind}(${osmId});out geom;`;
+  const payload = await overpass(query);
+  const elements = payload?.elements;
+  if (!Array.isArray(elements) || elements.length === 0) return null;
+  const primary = elements.find(el => el?.type === kind && el?.id === osmId);
+  if (!primary) return null;
+  let ring = null;
+  if (kind === 'way') {
+    const pts = (primary.geometry ?? []).filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
+    ring = pts.length >= 3 ? pts : null;
+  } else {
+    ring = stitchRelationRings(elements) ?? stitchMemberGeometry(primary.members);
+  }
+  return ringToGcjShape(ring, `osm:${osmType}${osmId}`, label);
+}
+
+/** 候选排序：同名 > 包含定位点 > 其余；同级名字短的优先（整场地 > 区块），面积大的优先。 */
+function pickNameCandidate(candidates, name, near) {
+  const target = normalizeShapeName(name);
+  if (!target) return null;
+  const scored = [];
+  for (const c of candidates) {
+    if (!c.ring || c.ring.length < 3) continue;
+    const candidate = normalizeShapeName(c.label);
+    if (!candidate || !(candidate.includes(target) || target.includes(candidate))) continue;
+    const gcj = c.ring.map(p => { const g = tdtWgs84ToGcj02(p.lon, p.lat); return [g.lng, g.lat]; });
+    const rank = candidate === target ? 0 : (near && pointInGcjPolygon(near, gcj) ? 1 : 2);
+    scored.push({ ...c, rank, nameLen: candidate.length, area: gcjBBoxArea(gcj) });
+  }
+  scored.sort((a, b) => a.rank - b.rank || a.nameLen - b.nameLen || b.area - a.area);
+  return scored[0] ?? null;
+}
+
+/** Overpass 按名搜单类要素（kind='way'|'relation'）：geometry 随结果返回，无需二次请求。 */
+async function nameSearchStage(name, near, kind) {
+  if (!near) return null; // 无定位点没法收敛范围，不冒险全城正则扫
+  const safe = escapeOverpassRegex(name);
+  const query = `[out:json][timeout:20];${kind}["name"~"${safe}",i](around:1500,${near.lat},${near.lng});out geom;`;
+  const payload = await overpass(query);
+  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  if (kind === 'way') {
+    const pick = pickNameCandidate(
+      elements
+        .filter(el => el?.type === 'way' && Array.isArray(el.geometry))
+        .map(el => ({ el, label: el.tags?.name ?? '', ring: el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat)) })),
+      name, near,
+    );
+    return pick ? ringToGcjShape(pick.ring, `osm:W${pick.el.id}`, pick.label || name) : null;
+  }
+  const pick = pickNameCandidate(
+    elements
+      .filter(el => el?.type === 'relation')
+      .map(el => ({ el, label: el.tags?.name ?? '', ring: stitchMemberGeometry(el.members) })),
+    name, near,
+  );
+  return pick ? ringToGcjShape(pick.ring, `osm:R${pick.el.id}`, pick.label || name) : null;
+}
+
+/** photon 精确链：osm_id 定位 → 按 id 取几何。 */
+async function photonPath(name, near) {
+  const hit = await photonLookup(name, near);
+  return hit ? shapeFromOsmId(hit.osmType, hit.osmId, hit.label || name) : null;
+}
+
+/** 三路并发抢答：谁先挖到用谁的，全空才 null——串行排队是「圈范围太久」的主因。 */
+function firstNonNull(tasks) {
+  return new Promise(resolve => {
+    let pending = tasks.length;
+    for (const task of tasks) {
+      Promise.resolve().then(task).then(value => {
+        if (value) resolve(value);
+        else if (--pending === 0) resolve(null);
+      }).catch(() => {
+        if (--pending === 0) resolve(null);
+      });
+    }
+  });
+}
+
+/** 空间命中：点在哪个面里就框哪个面——不看名字，是「点建筑出建筑选区」的主路径。 */
+async function spatialAreaStage(name, near) {
+  if (!near) return null;
+  const at = `${near.lat},${near.lng}`;
+  const query = `[out:json][timeout:20];(way["building"](around:100,${at});way["landuse"](around:100,${at});way["leisure"](around:100,${at});way["amenity"](around:100,${at});way["shop"](around:100,${at});way["tourism"](around:100,${at});way["man_made"](around:100,${at});way["natural"](around:100,${at}););out geom;`;
+  const payload = await overpass(query);
+  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  const target = normalizeShapeName(name);
+  const candidates = [];
+  for (const el of elements) {
+    if (el?.type !== 'way' || !Array.isArray(el.geometry)) continue;
+    const pts = el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
+    if (pts.length < 4) continue;
+    // 面要素要闭合（首尾同点）；开放折线（道路）不在此列，走 highway 线型兜底
+    if (Math.abs(pts[0].lat - pts[pts.length - 1].lat) > 1e-6 || Math.abs(pts[0].lon - pts[pts.length - 1].lon) > 1e-6) continue;
+    const gcj = pts.map(p => { const g = tdtWgs84ToGcj02(p.lon, p.lat); return [g.lng, g.lat]; });
+    if (!pointInGcjPolygon(near, gcj)) continue;
+    const areaM2 = gcjBBoxAreaM2(gcj);
+    if (areaM2 > 9e6) continue; // 3km×3km 门槛：更大的多是区域级地块，不算「点中的建筑」
+    const label = el.tags?.name ?? '';
+    const candidate = normalizeShapeName(label);
+    candidates.push({
+      el,
+      label,
+      ring: pts,
+      area: areaM2,
+      nameMatch: !!(target && candidate && (candidate.includes(target) || target.includes(candidate))),
+    });
+  }
+  if (candidates.length === 0) return null;
+  // 有同名候选优先（点的名字就是它）；否则取「包含点击点的最小的面」=点中的那个建筑
+  const named = candidates.filter(c => c.nameMatch);
+  const pool = named.length > 0 ? named : candidates;
+  pool.sort((a, b) => a.area - b.area);
+  const pick = pool[0];
+  return ringToGcjShape(pick.ring, `osm:W${pick.el.id}`, pick.label || name);
+}
+
+/** 道路线型兜底：面要素都不命中时，框住点击点最近的道路段（前端画粗线高亮）。 */
+async function highwayLineStage(name, near) {
+  if (!near) return null;
+  const at = `${near.lat},${near.lng}`;
+  const query = `[out:json][timeout:20];way["highway"](around:60,${at});out geom;`;
+  const payload = await overpass(query);
+  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  let best = null; let bestD = Infinity;
+  for (const el of elements) {
+    if (el?.type !== 'way' || !Array.isArray(el.geometry)) continue;
+    const pts = el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat));
+    if (pts.length < 2) continue;
+    let d = Infinity;
+    for (const p of pts) {
+      const dd = Math.hypot((p.lon - near.lng) * 85000, (p.lat - near.lat) * 111000);
+      if (dd < d) d = dd;
+    }
+    if (d < bestD) { bestD = d; best = { el, pts }; }
+  }
+  if (!best || bestD > 120) return null; // 120m 内没有道路段就放弃
+  return lineToGcjShape(best.pts, `osm:W${best.el.id}`, best.el.tags?.name || name);
+}
+
+async function fetchPlaceShape(searchParams) {
+  const name = (searchParams.get('name') ?? '').trim();
+  if (!name || name.length < 2 || name.length > 60) throw new HttpError(400, 'name invalid');
+  const near = parseTdtLonLat(searchParams.get('near') ?? '');
+  // 检索名只取「名称 | 地址」的名称段：地址尾巴会污染 photon 匹配与 Overpass 按名正则，
+  // 是「只有 in77 出框、大部分地点不出框」的主因之一（2026-11-13 用户要求大部分搜索带框）。
+  const queryName = name.split('|')[0].trim() || name;
+  const cacheKey = `${normalizeShapeName(queryName)}|${near ? `${near.lng.toFixed(2)},${near.lat.toFixed(2)}` : ''}`;
+  const cached = shapeCache.get(cacheKey);
+  if (cached) return { shape: cached };
+  // 五路抢答（2026-11-13「点哪儿框哪儿」改造）：空间命中是主路径——点的坐标就在
+  // 建筑/园区里，按点查面不看名字，结构上保证「点建筑=建筑选区」；way/rel 按名兜底；
+  // 全落空再查最近道路段画线型选区（点道路=道路选区）。
+  let shape = await firstNonNull([
+    photonPath(queryName, near),
+    nameSearchStage(queryName, near, 'way'),
+    nameSearchStage(queryName, near, 'rel'),
+    spatialAreaStage(queryName, near),
+  ]);
+  if (!shape && near) shape = await highwayLineStage(queryName, near);
+  return { shape: shape ? cacheShape(cacheKey, shape) : null };
 }
 
 async function readEnvFile(name, fileUrl) {

@@ -1,17 +1,14 @@
 /**
  * 地点检索客户端（创建活动时填「活动地点」用）。
  *
- * 契约与生产 Pages Function `functions/api/tdt-search.ts` 一致：
- * GET `?keywords=&limit=` → `{ places: [{ id, name, address, lng, lat }] }`，
- * 关键词 2–80 字、无结果 404、Key（TDT_KEY）只在服务端。
- *
- * 为什么从高德换成天地图：amap 那把 WEB 服务 key 在控制台开了数字签名，
- * 服务端没有私钥就算不了 sig，`restapi.amap.com` 一律回 INVALID_USER_SIGNATURE；
- * 天地图 key（仓库根 .env.local 的 TDT_KEY）已实测可用，且坐标是 CGCS2000≈WGS84，
- * 服务端会转成 GCJ-02 再回给客户端，符合 `SitePlanData.anchor` 的 `crs: 'gcj-02'` 契约。
- *
- * 本机开发（localhost / 127.0.0.1）走 3199 代理的 `/api/tdt-search`（代理读 .env.local 的 TDT_KEY，且带 CORS）；
- * 线上走同源 `/api/tdt-search`。Key 不进页面。
+ * 两套服务端契约同形（`{ places: [{ id, name, address, lng, lat }] }`，坐标 GCJ-02）：
+ * - 本机开发（localhost / 127.0.0.1）：`http://127.0.0.1:3199/api/tdt-search`，
+ *   代理读根 .env.local 的 TDT_KEY（天地图），且带 CORS。
+ * - 线上：同源 `/api/amap-place`（Pages Function，AMAP_STATIC_KEY）。
+ *   为什么线上不用天地图：天地图 CloudWAF 会拦截境外节点（Cloudflare 边缘出口）
+ *   的请求，实测 geocoder 418「访问被拦截」（2026-11-12），而 restapi.amap.com
+ *   从边缘可达——线上搜索切高德（amap-place 与 tdt-search 契约同形，客户端不用改）。
+ * - Key（TDT_KEY / AMAP_STATIC_KEY）都只留在服务端，不进页面。
  */
 
 export interface PlaceSuggestion {
@@ -28,19 +25,33 @@ export interface PlaceSearchOptions {
   local?: boolean;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  /**
+   * 用户当前看的地方（画布中心 / 项目锚点，GCJ-02）。
+   * 天地图的地名搜索只能在小范围 mapBound 内出结果，没有这个提示点就只能靠 geocoder 猜中心——
+   * 实测「in77」会被 geocoder 猜到大同（score 0），而围着杭州搜就能命中「湖滨银泰 in77」。
+   */
+  center?: { lng: number; lat: number } | null;
 }
 
-/** 本机开发走 3199；线上走同源 Pages Function。与 amap-venue 的 usesLocalAmapProxy 同口径。 */
+/** 本机开发走 3199（天地图）；线上走同源 Pages Function 高德代理。与 amap-venue 的 usesLocalAmapProxy 同口径。 */
 export function usesLocalPlaceProxy(): boolean {
   if (typeof window === 'undefined') return false;
   const host = window.location?.hostname ?? '';
   return host === 'localhost' || host === '127.0.0.1' || host === '';
 }
 
-export function placeSearchUrl(keywords: string, limit = 6, local = usesLocalPlaceProxy()): string {
+export function placeSearchUrl(
+  keywords: string,
+  limit = 6,
+  local = usesLocalPlaceProxy(),
+  center: { lng: number; lat: number } | null = null,
+): string {
   const params = new URLSearchParams({ keywords: keywords.trim(), limit: String(limit) });
+  if (center && Number.isFinite(center.lng) && Number.isFinite(center.lat)) {
+    params.set('center', `${center.lng.toFixed(6)},${center.lat.toFixed(6)}`);
+  }
   const query = params.toString();
-  return local ? `http://127.0.0.1:3199/api/tdt-search?${query}` : `/api/tdt-search?${query}`;
+  return local ? `http://127.0.0.1:3199/api/tdt-search?${query}` : `/api/amap-place?${query}`;
 }
 
 function parsePlaces(body: unknown): PlaceSuggestion[] {
@@ -71,7 +82,7 @@ export async function searchPlaces(keywords: string, options: PlaceSearchOptions
   const local = options.local ?? usesLocalPlaceProxy();
   const doFetch = options.fetchImpl ?? fetch;
   try {
-    const response = await doFetch(placeSearchUrl(query, options.limit ?? 6, local), {
+    const response = await doFetch(placeSearchUrl(query, options.limit ?? 6, local, options.center ?? null), {
       signal: options.signal ?? AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
@@ -114,6 +125,36 @@ export function rankPlaces(places: readonly PlaceSuggestion[], query: string): P
     .map((place, index) => ({ place, index, score: placeRelevance(place, q) }))
     .sort((a, b) => (b.score - a.score) || (a.index - b.index))
     .map(entry => entry.place);
+}
+
+/**
+ * 建议栏合成：**名字与关键词完全一致的新鲜结果**最先——旧版 geocoder 兜底点（地址是
+ * 「天地图定位：…」）被选中后会进「最近选过」，凭同名挤在真 POI 前面，回车默认选第一条
+ * 就又飞回假点；所以完全命中的新鲜结果压过「最近」，其后按「最近 → 其余新鲜结果」排列，
+ * 按 id 去重。关键词为空时只有最近建议。
+ */
+export function mergePlaceSuggestions(
+  keyword: string,
+  recent: readonly PlaceSuggestion[],
+  hits: readonly PlaceSuggestion[],
+): PlaceSuggestion[] {
+  const query = keyword.trim();
+  const seen = new Set<string>();
+  const out: PlaceSuggestion[] = [];
+  const push = (place: PlaceSuggestion): void => {
+    if (seen.has(place.id)) return;
+    seen.add(place.id);
+    out.push(place);
+  };
+  if (query) {
+    for (const hit of hits) if (placeRelevance(hit, query) >= 100) push(hit);
+    for (const item of recent) push(item);
+    for (const hit of hits) push(hit);
+    return out;
+  }
+  // 空关键词只有最近建议（调用方此时本来也不会有搜索结果，这里防御性丢弃）。
+  for (const item of recent) push(item);
+  return out;
 }
 
 /* ---------------- 最近选过的地点：本地记忆，输入时先给「最近」建议 ---------------- */

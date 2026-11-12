@@ -559,6 +559,18 @@ body {
 .sc-canvas-loading-copy { margin: 0; font-size: 12px; line-height: 20px; color: var(--faint, #a6aab2); }
 @keyframes sc-canvas-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
 
+/* 底图加载轻提示（户外画布顶部居中）：深玻璃胶囊 + 白描边小转圈，与多选胶囊同语言。 */
+.pc-basemap-loading__spinner {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  animation: sc-basemap-loading-spin 0.7s linear infinite;
+}
+@keyframes sc-basemap-loading-spin { to { transform: rotate(360deg); } }
+
 /* 画布错误态：与缺省图同一语言——不整屏红、无毛玻璃，只有一个 err 图标、一句话和可折叠的技术细节。 */
 .sc-canvas-error { display: grid; justify-items: center; gap: 8px; max-width: 420px; padding: 0 24px; text-align: center; }
 .sc-canvas-error-icon { display: grid; place-items: center; height: 32px; color: var(--err, #b4443c); }
@@ -1683,6 +1695,23 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="site-calibration-hud"],
 body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   display: none !important;
 }
+/* 搜地点挖形小提示（2026-11-12 用户拍板）：Overpass 忙时排队 30~50s，
+   画布顶中给一枚白底胶囊轻脉冲——与画布上 drawMapLabelPill 名称胶囊同范式。 */
+.sc-shape-loading-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(20, 20, 22, 0.14);
+  box-shadow: 0 1.5px 6px rgba(20, 20, 22, 0.16);
+  font: 600 11px/16px Inter, system-ui, sans-serif;
+  color: #141416;
+  pointer-events: none;
+  animation: sc-shape-loading-pulse 1.6s ease-in-out infinite;
+}
+@keyframes sc-shape-loading-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
 /* 2026-11-11 户外左栏页签 = OnePlan 分段式页签（Add Objects/Placed Objects 同款）：
    灰底描边容器 + 两枚等宽胶囊，激活深底白字加粗。 */
 .sc-left-context.is-oneplan-tabs {
@@ -2043,104 +2072,206 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-walk-avatar-controls button { padding:4px 7px; border:1px solid var(--wk-hair); border-radius:6px; background:transparent; color:inherit; cursor:pointer; }
 .sc-walk-avatar-state { display:inline-flex; align-items:center; gap:4px; color:var(--wk-ink-soft); }
 
-/* —— 演示回放（tour-reel）—— */
-[data-tour-active] {
-  outline: 3px solid var(--primary, #b45309);
-  outline-offset: 3px;
-  border-radius: 10px;
-  transition: outline-color 0.3s;
+/* ── 画布左上角「搜地点」浮条（components/plan-place-search.tsx）───────────────
+   2026-11-13 灵动岛化：收缩 = 44px 圆图标（有词/落钉时变「图标+地名」短胶囊），
+   悬停/点击弹性展开成完整搜索框。宽度三态都给显式像素值，width 才能平滑过渡；
+   弹性曲线带一点过冲，是 Dynamic Island 的手感。input 常驻 DOM，收缩时淡出。 */
+.sc-plan-place-search {
+  position: absolute;
+  z-index: 6;
+  width: 44px;
+  transition: width 0.36s cubic-bezier(0.32, 1.25, 0.48, 1);
+  will-change: width;
 }
-.tour-fab {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 80;
+.sc-plan-place-search.has-value {
+  width: 192px;
+}
+.sc-plan-place-search.is-expanded {
+  width: var(--sc-pps-w, 320px);
+}
+.sc-plan-place-search:not(.is-expanded) .sc-plan-place-search-field {
+  cursor: pointer;
+}
+.sc-plan-place-search:not(.is-expanded) .sc-plan-place-search-clear,
+.sc-plan-place-search:not(.is-expanded) .sc-plan-place-search-spinner {
+  display: none;
+}
+.sc-plan-place-search-collapsed-name {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0;
+  transition: max-width 0.36s cubic-bezier(0.32, 1.25, 0.48, 1), opacity 0.2s ease;
+}
+.sc-plan-place-search:not(.is-expanded).has-value .sc-plan-place-search-collapsed-name {
+  max-width: 140px;
+  opacity: 1;
+}
+.sc-plan-place-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  border: 1px solid rgba(20, 20, 22, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--sc-ink, #141416);
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.04), 0 8px 24px rgba(20, 20, 22, 0.1);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.sc-plan-place-search-field:hover {
+  border-color: rgba(20, 20, 22, 0.18);
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.05), 0 10px 28px rgba(20, 20, 22, 0.12);
+}
+.sc-plan-place-search-field:focus-within {
+  border-color: rgba(20, 20, 22, 0.34);
+  box-shadow: 0 0 0 3px rgba(20, 20, 22, 0.07), 0 10px 28px rgba(20, 20, 22, 0.12);
+}
+.sc-plan-place-search-icon {
+  flex: 0 0 auto;
+  color: var(--sc-muted, #71767e);
+  transition: color 0.16s ease;
+}
+.sc-plan-place-search-field:focus-within .sc-plan-place-search-icon {
+  color: var(--sc-ink, #141416);
+}
+.sc-plan-place-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: left;
+  /* 灵动岛收缩态：输入框淡出让位给「图标+地名」，但仍占位（宽度近似 0），
+     保证验收脚本与键盘 Tab 仍能命中。 */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.sc-plan-place-search.is-expanded input {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* 2026-11-13 用户反馈「地名写在右边不好看，改回左对齐」：收缩态 input 虽透明但
+   flex:1 占满整行，把地名胶囊顶到最右。收缩态让它宽度归零，地名贴着放大镜图标。
+   （选择器只挂一层根节点：field 的类名是 -field 后缀，不匹配 .sc-plan-place-search。） */
+.sc-plan-place-search:not(.is-expanded) input {
+  flex: 0 1 0px;
+  min-width: 0;
+}
+.sc-plan-place-search input::placeholder {
+  color: var(--sc-muted, #71767e);
+  opacity: 1;
+}
+/* 2026-11-12 用户反馈「点击出现一个描边框，很丑」：`.sc-workbench :is(...input...):focus-visible`
+   会给输入区套一圈 2px 方角描边。文本框聚焦时浏览器总是 :focus-visible，所以这里显式压掉，
+   聚焦反馈只留胶囊自身的描边加深 + 淡环。 */
+.sc-plan-place-search input:focus,
+.sc-plan-place-search input:focus-visible {
+  outline: 0;
+}
+.sc-plan-place-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.sc-plan-place-search-clear {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sc-muted, #71767e);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.sc-plan-place-search-clear:hover {
+  background: rgba(20, 20, 22, 0.06);
+  color: var(--sc-ink, #141416);
+}
+.sc-plan-place-search-spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(20, 20, 22, 0.14);
+  border-top-color: rgba(20, 20, 22, 0.5);
+  border-radius: 50%;
+  animation: sc-plan-place-search-spin 0.7s linear infinite;
+}
+@keyframes sc-plan-place-search-spin {
+  to { transform: rotate(360deg); }
+}
+.sc-plan-place-search-options {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 5px;
+  border: 1px solid rgba(20, 20, 22, 0.08);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--sc-ink, #141416);
+  box-shadow: 0 2px 6px rgba(20, 20, 22, 0.04), 0 14px 34px rgba(20, 20, 22, 0.14);
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+}
+.sc-plan-place-search-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--sc-ink, #141416);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-plan-place-search-option[aria-selected='true'] {
+  background: rgba(20, 20, 22, 0.055);
+}
+.sc-plan-place-search-option-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.sc-plan-place-search-option-address {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--sc-muted, #71767e);
+}
+/* 选区行（行政区边界）：名称旁一枚「选区」小徽标，和普通地点在视觉上分开。 */
+.sc-plan-place-search-option.is-area .sc-plan-place-search-option-name {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border, #d4d4d8);
-  background: var(--card, #fff);
-  color: var(--card-foreground, #18181b);
-  font-size: 13px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
-  cursor: pointer;
 }
-.tour-card {
-  position: fixed;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
-  z-index: 90;
-  width: min(560px, calc(100vw - 24px));
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--border, #d4d4d8);
-  background: var(--card, #fff);
-  color: var(--card-foreground, #18181b);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
-}
-.tour-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.tour-dots {
-  display: inline-flex;
-  gap: 4px;
-}
-.tour-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--muted, #e4e4e7);
-}
-.tour-dots i[data-on="true"] {
-  background: var(--primary, #b45309);
-}
-.tour-step-label {
-  font-size: 12px;
-  color: var(--muted-foreground, #71717a);
-}
-.tour-x {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--muted-foreground, #71717a);
-  display: inline-flex;
-}
-.tour-caption {
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0 0 8px;
-}
-.tour-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.tour-actions .btn {
-  border: 1px solid var(--border, #d4d4d8);
-  background: transparent;
-  border-radius: 8px;
-  padding: 5px 10px;
-  font-size: 13px;
-  cursor: pointer;
+.sc-plan-place-search-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: inherit;
-}
-.tour-actions .btn-primary {
-  background: var(--primary, #b45309);
-  color: var(--primary-foreground, #fff);
-  border-color: transparent;
-  margin-left: auto;
-}
-.tour-actions .btn:disabled {
-  opacity: 0.45;
-  cursor: default;
+  height: 15px;
+  padding: 0 5px;
+  border: 1px solid rgba(20, 20, 22, 0.16);
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--sc-muted, #71767e);
 }

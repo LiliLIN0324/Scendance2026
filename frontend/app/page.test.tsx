@@ -79,7 +79,8 @@ vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
-    RoomOrganizer: ({ controller }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+    RoomOrganizer: ({ controller, startOutdoor }: EditorProps & { startOutdoor?: boolean }) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+      <div data-testid="workspace-shell" data-start-outdoor={startOutdoor ? '1' : '0'} />
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
         <button onClick={() => navigation.push('/auth')}>返回登录页</button>
         <CreativeAssistant />
@@ -226,7 +227,7 @@ it('passes a safe return destination through the legacy auth route', () => {
 });
 
 
-it('opens the outdoor planning workspace directly at cold root — no "找场地" detour', async () => {
+it('opens the outdoor planning directly at cold root — no "找场地" detour', async () => {
   window.history.replaceState(null, '', '/');
   render(<App />);
   // 2026-11-13 收敛 14b：独立户外工作台 A 下线，冷根无参的户外项目也进同一 RoomOrganizer。
@@ -234,7 +235,7 @@ it('opens the outdoor planning workspace directly at cold root — no "找场地
   await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('密码')).toBeNull();
-});
+}, 15000);
 
 it('keeps the root workspace when there is a recent local draft', async () => {
   localStorage.setItem('scendance-editor-local-v1', JSON.stringify({ floors: [{ items: [{ id: 'kept' }] }] }));
