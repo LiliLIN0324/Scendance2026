@@ -1138,6 +1138,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [repeatRows, setRepeatRows] = useState(1);
   const [repeatGapX, setRepeatGapX] = useState(1);
   const [repeatGapY, setRepeatGapY] = useState(1);
+  // 阵列预览真值走 ref：draw 闭包依赖 sceneObjects、读不到最新 state，参数与卡片模式都由 ref 取。
+  // state 仅用于面板渲染；输入变更时同步 ref 并触发一次 draw。
+  const repeatParamsRef = useRef({ cols: 2, rows: 1, gapX: 1, gapY: 1, cardMode: 'props' as 'props' | 'repeat' });
   // 2026-11-12 OnePlan 面板换页：属性页 ⇄ 阵列复制页（标题行图标钮切换，选中变化即回属性页）。
   const [facilityCardMode, setFacilityCardMode] = useState<'props' | 'repeat'>('props');
   // 手风琴（+ 布场信息 / + 备注）：默认收起，同 OnePlan。
@@ -1847,6 +1850,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         });
         const invalid = facilityPlacementIssues(footprint, current.boundary).length > 0;
         drawFacilityGhost({ ctx: planCtx, viewport }, template, ghostPointRef.current, { invalid });
+      }
+    }
+
+    // D) 阵列复制幽灵预览：repeat 面板打开时按当前列/行/间距画出全部副本落点；越界/碰撞格标红。
+    if (repeatParamsRef.current.cardMode === 'repeat' && selectedFacilityRef.current) {
+      const repeatAnchor = current.facilities.find(f => f.id === selectedFacilityRef.current) ?? null;
+      if (repeatAnchor) {
+        const rp = repeatParamsRef.current;
+        const repeatPreview = evaluateRepeatPreview(repeatAnchor, rp.cols, rp.rows, rp.gapX, rp.gapY, current.facilities, current.boundary);
+        for (const slot of repeatPreview.slots) {
+          drawFacilityGhost(
+            { ctx: planCtx, viewport },
+            { name: repeatAnchor.name, width: repeatAnchor.size.width, depth: repeatAnchor.size.depth },
+            slot.position,
+            { rotationDeg: repeatAnchor.rotationDeg, invalid: slot.invalid },
+          );
+        }
       }
     }
 
@@ -3308,6 +3328,62 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** P2-i Ctrl+D：复制选中设施（同模板/尺寸/旋转，偏移 2 m，名称加「副本」），复制件成为新选中。 */
   /** 2026-11-11 OnePlan Repeat 阵列：沿物件自身旋转轴复制 cols×rows（原件占 (0,0) 格），间距沿轴可调，一条 undo。 */
+  /**
+   * D 块阵列幽灵预览评估：沿原件自身旋转轴算出每个副本落点，逐格判越界 / 碰撞。
+   * 口径（保守默认，待拍板）：
+   *  - 越界：占地四角环过 facilityPlacementIssues（与放置设施同口径）；
+   *  - 碰撞：候选角点 + 中心落入任一已有设施或先前副本占地内（facilityContainsPoint，点-矩形近似，可能把轻微贴边误判为碰撞）；
+   *  - 越界策略：只要有非法格就整体禁提交（跳过非法格只生成合法格的方案留待拍板）；
+   *  - 件数上限：REPEAT_MAX_COPIES，参照 Figpea Repeat 单次 500 件，这里取保守值。
+   */
+  const REPEAT_MAX_COPIES = 100;
+  function evaluateRepeatPreview(
+    anchor: PlanFacility,
+    cols: number,
+    rows: number,
+    gapX: number,
+    gapY: number,
+    facilities: readonly PlanFacility[],
+    boundary: readonly PlanPoint[],
+  ): { slots: { position: PlanPoint; invalid: boolean }[]; total: number; invalidCount: number; overLimit: boolean } {
+    const theta = (anchor.rotationDeg * Math.PI) / 180;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const placed = facilities.filter(f => f.id !== anchor.id);
+    const slots: { position: PlanPoint; invalid: boolean }[] = [];
+    let invalidCount = 0;
+    for (let j = 0; j < rows; j += 1) {
+      for (let i = 0; i < cols; i += 1) {
+        if (i === 0 && j === 0) continue;
+        const lu = i * (anchor.size.width + gapX);
+        const lv = j * (anchor.size.depth + gapY);
+        const position: PlanPoint = { x: anchor.position.x + lu * cos - lv * sin, y: anchor.position.y + lu * sin + lv * cos };
+        const footprint = facilityFootprintRing({ position, rotationDeg: anchor.rotationDeg, size: anchor.size });
+        let invalid = facilityPlacementIssues(footprint, boundary).length > 0;
+        if (!invalid) {
+          const probes = [...footprint, position];
+          invalid = placed.some(other => probes.some(pt => facilityContainsPoint(pt, other)));
+        }
+        if (invalid) invalidCount += 1;
+        else placed.push({ ...anchor, id: `__repeat-preview-${j}-${i}`, position });
+        slots.push({ position, invalid });
+      }
+    }
+    return { slots, total: slots.length, invalidCount, overLimit: slots.length > REPEAT_MAX_COPIES };
+  }
+
+  /** 阵列输入变更：同步 ref 真值并重画画布（state 供面板渲染，ref 供 draw 闭包读取）。 */
+  function updateRepeatParams(patch: Partial<{ cols: number; rows: number; gapX: number; gapY: number }>) {
+    Object.assign(repeatParamsRef.current, patch);
+    draw();
+  }
+  /** 属性页 ⇄ 阵列页切换：state 驱动面板，ref 同步给画布幽灵层。 */
+  function switchRepeatCardMode(mode: 'props' | 'repeat') {
+    setFacilityCardMode(mode);
+    repeatParamsRef.current.cardMode = mode;
+    draw();
+  }
+
   function applyRepeatFacility(fac: PlanFacility, cols: number, rows: number, gapX: number, gapY: number) {
     const theta = (fac.rotationDeg * Math.PI) / 180;
     const cos = Math.cos(theta);
@@ -4801,6 +4877,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const activeLevelIndex = Math.max(0, levelList.findIndex(level => level.id === activeLevelId));
   const activeLevelName = levelList[activeLevelIndex]?.name ?? '图层 1';
   const selectedFacility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) ?? null : null;
+  // D 块：阵列预览评估（与画布幽灵同口径），供提交钮禁用与原因回读。
+  const repeatPreview = selectedFacility
+    ? evaluateRepeatPreview(selectedFacility, repeatCols, repeatRows, repeatGapX, repeatGapY, plan.facilities, plan.boundary)
+    : null;
+  const repeatBlocked = !repeatPreview || repeatPreview.invalidCount > 0 || repeatPreview.overLimit;
   const selectedRoute = selectedRouteId ? plan.routes.find(r => r.id === selectedRouteId) ?? null : null;
   const selectedNode = selectedNodeId ? plan.nodes.find(n => n.id === selectedNodeId) ?? null : null;
   const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
@@ -4814,6 +4895,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 2026-11-12 换页守卫：选中一变就回属性页并收起手风琴，别把 Repeat 页/展开态挂到另一件物件上。
   useEffect(() => {
     setFacilityCardMode('props');
+    repeatParamsRef.current.cardMode = 'props';
     setFacilitySetupOpen(false);
     setFacilityNotesOpen(false);
   }, [selectedFacility?.id]);
@@ -5220,6 +5302,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const chipPillStyle: React.CSSProperties = { padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: 11, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' };
   const chipAlignRowStyle: React.CSSProperties = { padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 2, borderRadius: 999, color: 'var(--pc-paper, #141416)' };
   const chipButtonStyle: React.CSSProperties = { border: '1px solid', borderRadius: 999, background: 'transparent', color: 'inherit', fontWeight: 700, fontSize: 10, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap' };
+  // 删除动作 danger 变体：深底胶囊用 demolish 红（--pc-demolish），描边同色降透明。
+  const chipDangerButtonStyle: React.CSSProperties = { ...chipButtonStyle, color: 'var(--pc-demolish, #E45248)', borderColor: 'rgba(228, 82, 72, 0.55)' };
+  // 计数徽章：深底胶囊上的半透明白底小丸，件数居中。
+  const chipCountBadgeStyle: React.CSSProperties = { minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.16)', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '18px' };
   const chipIconButtonStyle: React.CSSProperties = { width: 22, height: 22, display: 'grid', placeItems: 'center', borderRadius: 7, background: 'transparent', color: 'inherit', border: '1.5px solid transparent', cursor: 'pointer', opacity: 0.9, padding: 0 };
   /** 组选胶囊锚点：组包围盒顶边中点 → 屏幕像素（每次渲染按当前视口现算，跟随平移/缩放/对齐后的新包围盒）。 */
   const multiGroupChipPx = (() => {
@@ -5258,7 +5344,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       <button
                         type="button"
                         data-testid="facility-multi-delete"
-                        style={modeButtonStyle(false)}
+                        style={{ ...modeButtonStyle(false), color: PLANNING_SURFACE.dangerText, borderColor: withAlphaHex(PLANNING_SURFACE.dangerText, 0.5) }}
                         onClick={() => deleteFacilitiesMulti(multiSelectedFacilityIds)}
                       >
                         删除
@@ -5336,7 +5422,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           aria-label="返回物件属性"
                           data-testid="facility-repeat-back"
                           style={benchIconButtonStyle}
-                          onClick={() => setFacilityCardMode('props')}
+                          onClick={() => switchRepeatCardMode('props')}
                         >
                           <BenchCloseIcon size={16} aria-hidden />
                         </button>
@@ -5351,7 +5437,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             min={1}
                             max={20}
                             value={repeatCols}
-                            onChange={event => setRepeatCols(Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1))))}
+                            onChange={event => { const v = Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1))); setRepeatCols(v); updateRepeatParams({ cols: v }); }}
                             style={benchUnitInputStyle}
                           />
                         </label>
@@ -5363,7 +5449,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             min={1}
                             max={20}
                             value={repeatRows}
-                            onChange={event => setRepeatRows(Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1))))}
+                            onChange={event => { const v = Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1))); setRepeatRows(v); updateRepeatParams({ rows: v }); }}
                             style={benchUnitInputStyle}
                           />
                         </label>
@@ -5379,7 +5465,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             max={200}
                             step={0.5}
                             value={repeatGapX}
-                            onChange={event => setRepeatGapX(Math.max(0, Math.min(200, Number(event.target.value) || 0)))}
+                            onChange={event => { const v = Math.max(0, Math.min(200, Number(event.target.value) || 0)); setRepeatGapX(v); updateRepeatParams({ gapX: v }); }}
                             style={benchUnitInputStyle}
                           />
                           <span style={benchUnitSuffixStyle}>m</span>
@@ -5393,19 +5479,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             max={200}
                             step={0.5}
                             value={repeatGapY}
-                            onChange={event => setRepeatGapY(Math.max(0, Math.min(200, Number(event.target.value) || 0)))}
+                            onChange={event => { const v = Math.max(0, Math.min(200, Number(event.target.value) || 0)); setRepeatGapY(v); updateRepeatParams({ gapY: v }); }}
                             style={benchUnitInputStyle}
                           />
                           <span style={benchUnitSuffixStyle}>m</span>
                         </label>
                       </div>
+                      {repeatPreview && repeatBlocked && (
+                        <div
+                          style={{ marginTop: PLANNING_SPACING.sm, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_SURFACE.dangerText }}
+                          role="alert"
+                        >
+                          {repeatPreview.overLimit
+                            ? `超出单次上限 ${REPEAT_MAX_COPIES} 件，请减少列数或行数。`
+                            : `${repeatPreview.invalidCount} 格越界或与现有物件碰撞，请调整布局或间距。`}
+                        </div>
+                      )}
                       <button
                         type="button"
                         data-testid="facility-repeat"
-                        style={{ ...modeButtonStyle(false), marginTop: PLANNING_SPACING.sm, width: '100%', justifyContent: 'center' }}
-                        onClick={() => applyRepeatFacility(selectedFacility, repeatCols, repeatRows, repeatGapX, repeatGapY)}
+                        disabled={repeatBlocked}
+                        style={{ ...modeButtonStyle(false), marginTop: PLANNING_SPACING.sm, width: '100%', justifyContent: 'center', opacity: repeatBlocked ? 0.5 : 1, cursor: repeatBlocked ? 'not-allowed' : 'pointer' }}
+                        onClick={() => { if (!repeatBlocked) applyRepeatFacility(selectedFacility, repeatCols, repeatRows, repeatGapX, repeatGapY); }}
                       >
-                        按阵列复制 {repeatCols * repeatRows - 1} 件
+                        {repeatPreview && repeatPreview.overLimit
+                          ? `超出上限 ${REPEAT_MAX_COPIES} 件`
+                          : `按阵列复制 ${repeatPreview?.total ?? repeatCols * repeatRows - 1} 件`}
                       </button>
                     </div>
                   ) : (
@@ -5425,7 +5524,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           title="阵列复制"
                           data-testid="facility-repeat-open"
                           style={benchIconButtonStyle}
-                          onClick={() => setFacilityCardMode('repeat')}
+                          onClick={() => switchRepeatCardMode('repeat')}
                         >
                           <BenchRepeatIcon size={16} aria-hidden />
                         </button>
@@ -5476,22 +5575,50 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <span style={benchUnitSuffixStyle}>%</span>
                         </label>
                       </div>
-                      {/* 2026-11-12 描边三态+无描边（OnePlan 同款）：实线/虚线/点线/无。 */}
-                      <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }} role="group" aria-label="描边样式">
-                        {([['solid', '实线'], ['dashed', '虚线'], ['dotted', '点线'], ['none', '无']] as const).map(([value, label]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            aria-pressed={(selectedFacility.strokeStyle ?? 'solid') === value}
-                            aria-label={`描边${label}`}
-                            data-testid={`facility-stroke-${value}`}
-                            style={{ ...modeButtonStyle((selectedFacility.strokeStyle ?? 'solid') === value), flex: 1, justifyContent: 'center' }}
-                            onClick={() => updateFacility(selectedFacility.id, { strokeStyle: value })}
+                      {/* 描边三态+无描边：单滑动药丸分段控件（等宽单选，药丸随选中段滑动；选择立即生效，无提交钮）。 */}
+                      {(() => {
+                        const strokeOptions = [['solid', '实线'], ['dashed', '虚线'], ['dotted', '点线'], ['none', '无']] as const;
+                        const currentStroke = selectedFacility.strokeStyle ?? 'solid';
+                        const activeStrokeIndex = Math.max(0, strokeOptions.findIndex(([v]) => v === currentStroke));
+                        const segGap = PLANNING_SPACING.xs;
+                        const segCount = strokeOptions.length;
+                        return (
+                          <div
+                            className="sc-seg"
+                            role="group"
+                            aria-label="描边样式"
+                            style={{ marginTop: PLANNING_SPACING.xs, background: PLANNING_SURFACE.fieldBg }}
                           >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
+                            <span
+                              aria-hidden
+                              className="sc-seg__pill"
+                              style={{
+                                left: `calc((100% + ${segGap}px) * ${activeStrokeIndex / segCount})`,
+                                width: `calc((100% - ${segGap * (segCount - 1)}px) / ${segCount})`,
+                                background: PLANNING_SURFACE.activeBg,
+                                boxShadow: '0 1px 2px rgba(20, 24, 32, 0.10)',
+                              }}
+                            />
+                            {strokeOptions.map(([value, label]) => {
+                              const active = currentStroke === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  aria-pressed={active}
+                                  aria-label={`描边${label}`}
+                                  data-testid={`facility-stroke-${value}`}
+                                  className="sc-seg__btn"
+                                  style={{ color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText }}
+                                  onClick={() => updateFacility(selectedFacility.id, { strokeStyle: value })}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                       {/* Details：W/L 盒式输入，单位内嵌（OnePlan 同款）。 */}
                       <div style={{ ...benchSectionTitleStyle, marginTop: PLANNING_SPACING.sm }}>尺寸</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: PLANNING_SPACING.sm }}>
@@ -5920,12 +6047,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         <div className="pc-top-chip absolute" style={{ left: multiGroupChipPx.x, top: multiGroupChipPx.y, transform: 'translateX(-50%)', zIndex: 26 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
             <div className="pc-glass pc-glass--dark" style={chipPillStyle}>
-              <BenchCopyIcon size={14} aria-hidden />
-              {multiSelectedFacilityIds.length} 件 · 已选中 · 拖动即整体移动
+              <span aria-hidden style={chipCountBadgeStyle}>{multiSelectedFacilityIds.length}</span>
+              <span style={{ opacity: 0.9 }}>件已选中 · 拖动即整体移动</span>
               <button type="button" data-testid="facility-multi-copy" title="复制所选（Ctrl+D 同效）" style={chipButtonStyle} onClick={() => duplicateFacilitiesMulti(multiSelectedFacilityIds)}>
                 复制
               </button>
-              <button type="button" data-testid="facility-multi-remove" title="删除所选（Delete 同效）" style={chipButtonStyle} onClick={() => deleteFacilitiesMulti(multiSelectedFacilityIds)}>
+              <button type="button" data-testid="facility-multi-remove" title="删除所选（Delete 同效）" style={chipDangerButtonStyle} onClick={() => deleteFacilitiesMulti(multiSelectedFacilityIds)}>
                 删除
               </button>
             </div>
@@ -7000,11 +7127,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             body: selectionInspectorCount > 0
               ? selectionInspectorZone
               : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '18px 8px', textAlign: 'center', color: PLANNING_TEXT.muted }}>
-                  <span aria-hidden style={{ width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center', background: PLANNING_SURFACE.fieldBg, color: PLANNING_TEXT.muted }}>
-                    <MaterialSymbol name={OUTDOOR_TOOL_ICONS.selection} size={18} />
-                  </span>
-                  <span style={{ fontSize: 12, lineHeight: 1.6 }}>在图上点选分区 / 设施 / 动线 / 出入口 / 人员，<br />这里会出现它的属性。</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 4px', textAlign: 'left', color: PLANNING_TEXT.muted }}>
+                  <span style={{ fontSize: 12, lineHeight: 1.6 }}>还没选中物件。点下面类型快速开始，或直接在图上点选查看属性。</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs }}>
+                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('zone')}>分区</button>
+                    <button
+                      type="button"
+                      className="sc-empty-chip"
+                      disabled={readOnly}
+                      onClick={() => {
+                        selectFacility(null);
+                        setSelectedZoneId(null);
+                        setMode('facility');
+                        setEditMessage('从左侧物件库选一件设施，在地图上单击放置；Esc 结束。');
+                        draw();
+                      }}
+                    >
+                      设施
+                    </button>
+                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('route')}>动线</button>
+                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('node')}>出入口</button>
+                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startLaborRole('安保')}>人员</button>
+                  </div>
                 </div>
               ),
           },

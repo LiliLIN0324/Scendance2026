@@ -642,6 +642,21 @@ body {
 .sc-button.is-primary:disabled { background: var(--plane); border-color: var(--hair); color: var(--faint); }
 .sc-icon-button:active:not(:disabled) { background: var(--plane-deep); }
 .sc-icon-button:disabled { color: var(--faint); cursor: not-allowed; }
+
+/* 分段滑动药丸：等宽轨道 + 单个药丸随选中段水平滑动（属性卡线型等单选）。
+   轨道/药丸底色由调用方内联传入；这里只管布局、定位、滑动过渡与焦点态。 */
+.sc-seg { position: relative; display: flex; gap: 4px; padding: 3px; border-radius: 999px; overflow: hidden; }
+.sc-seg__pill { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 999px; z-index: 0; transition: left 140ms ease, width 140ms ease; }
+.sc-seg__btn { position: relative; z-index: 1; flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer; padding: 4px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.sc-seg__btn:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .sc-seg__pill { transition: none; } }
+
+/* 空态类型 chip：紧凑提示条里的快速开始入口，描边小药丸，hover 淡绿底。 */
+.sc-empty-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--sc-line); background: var(--paper, #fff); color: var(--sc-ink); border-radius: 999px; padding: 4px 10px; font-size: 11px; cursor: pointer; white-space: nowrap; transition: background 120ms ease, color 120ms ease; }
+.sc-empty-chip:hover { background: var(--sc-accent-soft); border-color: var(--sc-accent); }
+.sc-empty-chip:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 1px; }
+.sc-empty-chip[disabled] { opacity: 0.45; cursor: not-allowed; }
+
 .sc-mobile-menu { display: none; }
 .sc-workspace { position: absolute; top: 58px; bottom: 12px; left: 16px; right: 16px; overflow: hidden; }
 .sc-left-drawer { position: absolute; inset: 0 auto 0 0; width: 279px; z-index: 35; }
