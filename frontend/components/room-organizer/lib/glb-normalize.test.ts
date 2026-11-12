@@ -25,6 +25,21 @@ function actual(object: THREE.Object3D) {
 }
 
 describe('GLB 尺度归一化', () => {
+  it('2026-11-12 回归：沿 Z 躺平的长桌按 Y-up 归一化时不许被立起来', () => {
+    // 绿色咖啡桌椅套装实测包围盒 0.8×0.9×1.81（X/Y/Z）：包围盒猜测会误判成 Z-up
+    // 把整个模型绕 X 立 90°（桌椅组合/护栏/车辆在 3D 里翻倒）。URL 加载一律显式
+    // 传 upAxis:'y'（见 three/glb-assets.ts ensureGlbAsset），这里钉死该行为。
+    const source = box(0.8, 0.9, 1.81);
+    const { root, plan } = normalizeGlbRoot(source, { upAxis: 'y' });
+    expect(plan).toMatchObject({ unit: 'm', upAxis: 'y', rotateX: 0 });
+    expect(plan.size.width).toBeCloseTo(0.8, 5);
+    expect(plan.size.depth).toBeCloseTo(1.81, 5);
+    expect(plan.size.height).toBeCloseTo(0.9, 5);
+    const size = actual(root);
+    expect(size.height).toBeCloseTo(0.9, 5);
+    expect(size.minY).toBeCloseTo(0, 5);
+  });
+
   it('米制 Y-up 物件：只把底面中心挪到原点，尺寸不变', () => {
     const source = box(2, 1, 0.5);
     source.position.set(5, 3, -7);

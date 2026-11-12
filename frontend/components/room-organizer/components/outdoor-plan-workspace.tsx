@@ -34,9 +34,12 @@ import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import {
   createStarterOutdoorPlan,
+  readOutdoorPlanView,
   readOutdoorProjectRecord,
+  saveOutdoorPlanView,
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
+import { writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { WorkbenchBrandToggle } from '@/components/room-organizer/panels/workbench-brand-toggle';
 import { SettingsMenu } from '@/components/room-organizer/panels/settings-menu';
 import { ArrowLeft, FolderOpen } from '@/components/solid-icons';
@@ -47,6 +50,9 @@ const SOURCES: { id: CanvasBasemapSource; label: string }[] = [
   { id: 'osm', label: 'OSM 街道' },
   { id: 'carto-light', label: 'Carto 浅色' },
   { id: 'carto-dark', label: 'Carto 深色' },
+  { id: 'amap-satellite', label: '高德卫星' },
+  { id: 'amap-streets', label: '高德街道' },
+  { id: 'amap-streets-labels', label: '高德街道注记' },
   { id: 'vec', label: '天地图矢量（待 key）' },
   { id: 'img', label: '天地图影像（待 key）' },
 ];
@@ -82,7 +88,9 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [shareOpen, setShareOpen] = useState(false);
   // P2-k：进来先是 2D 地图，右侧「视角」钮才切 3D（卫星底图三维效果 + 低模草图）。
-  const [view, setView] = useState<'2d' | '3d'>('2d');
+  // 2026-11-11 用户拍板：视角按项目记住上次是 2D 还是 3D，重开不再必回 2D。
+  const [view, setView] = useState<'2d' | '3d'>(() => readOutdoorPlanView(projectId) ?? '2d');
+  useEffect(() => { saveOutdoorPlanView(projectId, view); }, [projectId, view]);
   // 左上角搜地点（用户 m05472）：只动视图 + 落定位钉，不改 plan / anchor。
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
@@ -214,7 +222,12 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
           <select
             aria-label="底图图源"
             value={source}
-            onChange={event => setSource(event.target.value as CanvasBasemapSource)}
+            onChange={event => {
+              const next = event.target.value as CanvasBasemapSource;
+              setSource(next);
+              // 与编辑器内嵌户外画布同一条偏好：2D 选了什么图源，3D 地面就用同一张。
+              writePlanGroundSource(next);
+            }}
             style={{ background: 'var(--sc-plane, #f4f5f7)', color: 'var(--sc-ink, #141416)', border: '1px solid var(--sc-line, #e4e4e7)', borderRadius: 10, padding: '5px 10px', fontSize: 13, fontFamily: 'inherit' }}
           >
             {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -265,7 +278,10 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
               onDismiss={guide.dismiss}
             />
           )}
-                  {plan && view === '2d' && (
+                  {plan && (
+          /* 2026-11-12 中键转地图/左键改物件：2D 画布在 3D 态保活（隐藏不卸载），
+             其编辑桥（pointerFromPlan 管线）经 canvasApiRef 供给 OutdoorPlan3D 的左键手势。 */
+          <div style={{ position: 'absolute', inset: 0, ...(view === '2d' ? {} : { visibility: 'hidden' as const, pointerEvents: 'none' as const }) }}>
           <OutdoorPlanCanvas
             ref={canvasApiRef}
             plan={plan}
@@ -273,6 +289,7 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
             onPlanChange={setPlan}
             {...(placePin ? { searchPin: placePin } : {})}
           />
+          </div>
         )}
         {plan && view === '2d' && (
           <PlanPlaceSearch
@@ -284,7 +301,7 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
             onClear={() => setPlacePin(null)}
           />
         )}
-          {plan && view === '3d' && <OutdoorPlan3D plan={plan} />}
+          {plan && view === '3d' && <OutdoorPlan3D plan={plan} source={source} canvasApiRef={canvasApiRef} />}
           {/* 右侧视角开关：2D 地图 ↔ 3D 卫星底图低模（用户口径 m05067）。 */}
           <button
             type="button"

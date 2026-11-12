@@ -433,3 +433,31 @@ describe('computeFloorPlanPlacement (#218)', () => {
     }
   });
 });
+
+it('paints a round banquet table as an ellipse and keeps a rectangular dining table as a box', () => {
+  const paint = (item: ReturnType<typeof makeItem>) => {
+    const ellipses: number[][] = [];
+    const footprints: number[][] = [];
+    const methods = {
+      ellipse: (...args: number[]) => { ellipses.push(args); },
+      fillRect: (...args: number[]) => { if (args[0] === -args[2]! / 2 && args[1] === -args[3]! / 2) footprints.push(args); },
+      measureText: () => ({ width: 12 }),
+    };
+    const ctx = new Proxy(methods, { get: (target, key) => target[key as keyof typeof methods] ?? (() => {}) });
+    const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const floor = makeFloor({ items: [item] });
+    const layout = makeLayout({ width: 12, height: 10, floors: [floor] });
+    render2DTopDown({ canvas, layout, floor, selectedItemId: item.id, showMeasurements: false, showWiFiSignals: false, hasCollision: () => false });
+    return { ellipses, footprints };
+  };
+  const round = paint(makeItem({ id: 'round', type: 'dining-table', name: '圆桌', tableShape: 'round', width: 1.4, depth: 1.4, height: 0.75 }));
+  expect(round.ellipses.length).toBeGreaterThan(0);
+  expect(round.ellipses.every(args => args[2] === args[3] && (args[2] ?? 0) > 0)).toBe(true);
+  expect(round.footprints).toEqual([]);
+  const named = paint(makeItem({ id: 'named', type: 'dining-table', name: '圆桌', width: 1.8, depth: 1.8, height: 0.7 }));
+  expect(named.ellipses.length).toBeGreaterThan(0);
+  expect(named.footprints).toEqual([]);
+  const rect = paint(makeItem({ id: 'rect', type: 'dining-table', name: 'Dining Table', width: 1.8, depth: 1, height: 0.75 }));
+  expect(rect.ellipses).toEqual([]);
+  expect(rect.footprints.some(args => args[2] !== args[3])).toBe(true);
+});

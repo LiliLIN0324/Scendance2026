@@ -113,11 +113,10 @@ describe('buildOnlineModelIndex', () => {
   ]);
   const index = buildOnlineModelIndex(models);
 
-  it('labels and counts every family, busiest first', () => {
+  it('labels and counts every family, in infra-category order', () => {
     expect(index.buckets).toEqual([
-      { key: 'stage', label: '舞台', count: 3 },
-      { key: 'seating', label: '座席', count: 2 },
-      { key: 'decor', label: '布景', count: 1 },
+      { key: '家具', label: '家具', count: 2 },
+      { key: '景点', label: '景点', count: 4 },
     ]);
   });
 
@@ -133,10 +132,11 @@ describe('buildOnlineModelIndex', () => {
 });
 
 describe('onlineBucketLabel', () => {
-  it('translates a known family and falls back to the raw key otherwise', () => {
-    expect(onlineBucketLabel('seating')).toBe('座席');
-    expect(onlineBucketLabel('audio')).toBe('视听');
-    expect(onlineBucketLabel('plants')).toBe('布景');
+  it('folds a known family into the shared infra category and passes unknown keys through', () => {
+    expect(onlineBucketLabel('seating')).toBe('家具');
+    expect(onlineBucketLabel('audio')).toBe('视听设备');
+    expect(onlineBucketLabel('plants')).toBe('景点');
+    expect(onlineBucketLabel('people')).toBe('不同人群');
     expect(onlineBucketLabel('unmapped-family')).toBe('unmapped-family');
     expect(onlineBucketLabel('')).toBe('其他');
     expect(ONLINE_BUCKET_LABELS.stage).toBe('舞台设施');
@@ -240,10 +240,12 @@ describe('merged Chinese library', () => {
   it('merges all sources once and keeps Chinese and English searches usable', async () => {
     clearOnlineModelCache();
     const index = await loadOnlineModels();
-    expect(index.models).toHaveLength(528);
-    expect(new Set(index.models.map(model => model.slug)).size).toBe(528);
+    // 库快照（2026-11-12）：merged 543 件、1 件 blocked 场景被过滤 → 542 placeable；
+    // 其中已注册云身份 528（合并补入的 11 件与 rides 游乐设施 3 件均未走云注册）。
+    expect(index.models).toHaveLength(542);
+    expect(new Set(index.models.map(model => model.slug)).size).toBe(542);
     expect(index.models.filter(model => model.assetId)).toHaveLength(528);
-    expect(index.buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(528);
+    expect(index.buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(542);
     expect(filterOnlineModels(index.models, '抱臂', 'people')[0]?.name).toBe('抱臂站立人物');
     expect(filterOnlineModels(index.models, 'arms crossed', 'people')[0]?.name).toBe('抱臂站立人物');
     expect(filterOnlineModels(index.models, '音箱', 'audio').length).toBeGreaterThan(5);

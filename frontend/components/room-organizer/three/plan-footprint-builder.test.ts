@@ -55,12 +55,14 @@ describe('buildPlanFootprint', () => {
     expect(box.max.x).toBeLessThanOrEqual(metrics.width / 2 + markerSlack);
     expect(box.min.z).toBeGreaterThanOrEqual(-metrics.depth / 2 - markerSlack);
     expect(box.max.z).toBeLessThanOrEqual(metrics.depth / 2 + markerSlack);
-    // 地面图形本身是贴地的：只取没有 planPropId 的那批（分区/设施地贴/动线/点位），
-    // 它们必须都挤在几厘米的抬升范围内，而不是立起来的墙。
+    // 地面图形本身是贴地抬升，不是立起来的墙。不含 planPropId（帐篷等低模/贴纸占位）。
+    // 2026-11-12「物体没放在平面上」：分层压到瓦片金字塔顶（0.048）之上——
+    // 边界 0.05 / 分区 0.062 / 设施 0.074 / 动线 0.086，最高点位圆环 0.134。
     const flat = layer.children.filter(child => !child.userData.planPropId);
     const flatBox = new THREE.Box3();
     for (const child of flat) flatBox.expandByObject(child);
-    expect(flatBox.max.y - flatBox.min.y).toBeLessThan(0.2);
+    expect(flatBox.min.y).toBeGreaterThanOrEqual(-0.01);
+    expect(flatBox.max.y).toBeLessThan(0.2);
   });
 
   it('每个设施在 3D 里立起对应物件，且高度是「能认出来」的尺度而不是地贴', () => {
@@ -83,18 +85,61 @@ describe('buildPlanFootprint', () => {
     expect(box.max.z - box.min.z).toBeLessThan(4.6);
   });
 
-  it('未知模板也立一块可辨认的低块，不会静默消失', () => {
+  it('没有贴纸的未知模板不再立灰块，只保留地面占地', () => {
     const scene = new THREE.Scene();
     const plan = makePlan();
     (plan as unknown as { facilities: unknown[] }).facilities = [
       { id: 'f9', templateId: 'mystery-box', name: '神秘物件', position: { x: 5, y: 5 }, rotationDeg: 30, size: { width: 2, depth: 1.4 }, notes: '' },
     ];
     expect(buildPlanFootprint(THREE, scene, plan, metrics)).toBe(true);
-    const prop = findLayer(scene)!.children.find(child => child.userData.planPropId === 'f9');
-    expect(prop).toBeDefined();
-    const box = new THREE.Box3().setFromObject(prop!);
-    expect(box.max.y).toBeGreaterThan(0.8);
-    expect(box.max.y).toBeLessThan(2);
+    const layer = findLayer(scene)!;
+    const prop = layer.children.find(child => child.userData.planPropId === 'f9');
+    expect(prop).toBeUndefined();
+    // 地面设施色块还在，只是不再竖一块 1.1 m 的灰盒。
+    expect(layer.children.length).toBeGreaterThan(0);
+    const tallBox = new THREE.Box3();
+    layer.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.geometry instanceof THREE.BoxGeometry) tallBox.expandByObject(mesh);
+    });
+    if (tallBox.isEmpty()) return;
+    expect(tallBox.max.y).toBeLessThan(0.8);
+  });
+
+  it('没有 3D 模型的库物件在场地上铺原来的 2D 贴纸，不再立低模方块', () => {
+    const scene = new THREE.Scene();
+    const plan = makePlan();
+    (plan as unknown as { facilities: unknown[] }).facilities = [
+      { id: 'f10', templateId: 'oneplan:icon:first-aid-point', name: '急救点', position: { x: 5, y: 5 }, rotationDeg: 0, size: { width: 2, depth: 2 }, notes: '' },
+      { id: 'f11', templateId: 'oneplan:scale:car', name: '轿车', position: { x: 12, y: 5 }, rotationDeg: 45, size: { width: 4.5, depth: 2.1 }, notes: '' },
+    ];
+    expect(buildPlanFootprint(THREE, scene, plan, metrics)).toBe(true);
+    const layer = findLayer(scene)!;
+    const icon = layer.children.find(child => child.userData.planPropId === 'f10');
+    const scale = layer.children.find(child => child.userData.planPropId === 'f11');
+    expect(icon).toBeDefined();
+    expect(scale).toBeDefined();
+    expect(icon!.name).toBe('plan-prop-misc');
+    expect(scale!.name).toBe('plan-prop-misc');
+    const hasBox = (object: THREE.Object3D): boolean => {
+      let found = false;
+      object.traverse((child) => {
+        if ((child as THREE.Mesh).geometry instanceof THREE.BoxGeometry) found = true;
+      });
+      return found;
+    };
+    expect(hasBox(icon!)).toBe(false);
+    expect(hasBox(scale!)).toBe(false);
+    layer.updateMatrixWorld(true);
+    const iconBox = new THREE.Box3().setFromObject(icon!);
+    const scaleBox = new THREE.Box3().setFromObject(scale!);
+    // 2026-11-12「物体没放在平面上」：贴纸层压到瓦片顶之上贴地带（0.08），不再悬空 0.42。
+    expect(iconBox.max.y).toBeLessThan(0.2);
+    expect(scaleBox.max.y).toBeLessThan(0.2);
+    expect(iconBox.max.y).toBeGreaterThan(0.05);
+    // 比例尺贴纸按占地铺满（轿车约 4.5×2.1）。
+    expect(scaleBox.max.x - scaleBox.min.x).toBeGreaterThan(2);
+    expect(scaleBox.max.z - scaleBox.min.z).toBeGreaterThan(1);
   });
 
   it('平面为空/边界退化时返回 false 且不挂空图层', () => {

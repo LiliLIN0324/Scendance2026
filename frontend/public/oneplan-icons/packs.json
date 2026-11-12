@@ -1,0 +1,1715 @@
+{
+  "generated_at": "2026-11-11T18:01:16.974Z",
+  "source": "app.oneplan.io Object library marketplace (event b35acea2-1a57-4052-a571-e4d7695a8e2f)",
+  "note": "物件级活动包清单：packs 与 manifest.json（资产级）互补；kind: icon/route/area/scale；generic=纯色圆点位（无字形）；颜色=OnePlan 默认主题色。中国节庆包为原创图标。",
+  "packs": [
+    {
+      "id": "cricket",
+      "oneplan_id": "166164e9-023a-4594-9ca6-62b60215f311",
+      "name_en": "Cricket pack",
+      "name_zh": "板球活动包",
+      "source": "oneplan",
+      "order": 1,
+      "items": [
+        {
+          "id": "accreditation-manager",
+          "asset_slug": "transparent",
+          "name_en": "Accreditation Manager",
+          "name_zh": "注册证件经理",
+          "kind": "icon",
+          "color": "#903d00",
+          "generic": true
+        },
+        {
+          "id": "alternate-wickets",
+          "asset_slug": "alternate-wickets",
+          "name_en": "Alternate Wickets",
+          "name_zh": "备用三柱门",
+          "kind": "scale",
+          "color": "#21ef00"
+        },
+        {
+          "id": "boundary-advertising-leds",
+          "asset_slug": "route-solid",
+          "name_en": "Boundary Advertising/LEDS",
+          "name_zh": "边界广告屏",
+          "kind": "route",
+          "color": "#808080"
+        },
+        {
+          "id": "boundary-calculator-men",
+          "asset_slug": "boundary-calculator-men",
+          "name_en": "Boundary Calculator Men",
+          "name_zh": "边界计算器（男）",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "boundary-calculator-women",
+          "asset_slug": "boundary-calculator-women",
+          "name_en": "Boundary Calculator Women",
+          "name_zh": "边界计算器（女）",
+          "kind": "scale",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "boundary-rope-and-toblerones",
+          "asset_slug": "route-solid",
+          "name_en": "Boundary Rope and Toblerones",
+          "name_zh": "边界绳与隔离墩",
+          "kind": "route",
+          "color": "#903d00"
+        },
+        {
+          "id": "broadcast-manager",
+          "asset_slug": "transparent",
+          "name_en": "Broadcast Manager",
+          "name_zh": "转播经理",
+          "kind": "icon",
+          "color": "#159300",
+          "generic": true
+        },
+        {
+          "id": "cricket-operations-manager",
+          "asset_slug": "transparent",
+          "name_en": "Cricket Operations Manager",
+          "name_zh": "板球运营经理",
+          "kind": "icon",
+          "color": "#9e00ff",
+          "generic": true
+        },
+        {
+          "id": "dj",
+          "asset_slug": "transparent",
+          "name_en": "DJ",
+          "name_zh": "DJ 台",
+          "kind": "icon",
+          "color": "#0000ff",
+          "generic": true
+        },
+        {
+          "id": "doping-control-officer",
+          "asset_slug": "transparent",
+          "name_en": "Doping Control Officer",
+          "name_zh": "兴奋剂检查官",
+          "kind": "icon",
+          "color": "#ff810d",
+          "generic": true
+        },
+        {
+          "id": "dugout",
+          "asset_slug": "dugout",
+          "name_en": "Dugout",
+          "name_zh": "球员休息棚",
+          "kind": "scale",
+          "color": "#808080"
+        },
+        {
+          "id": "field-of-play-access",
+          "asset_slug": "pedestrian-access",
+          "name_en": "Field of Play Access",
+          "name_zh": "场内通道",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "flood-light",
+          "asset_slug": "permanent-lighting-tower",
+          "name_en": "Flood Light",
+          "name_zh": "泛光灯塔",
+          "kind": "icon",
+          "color": "#808080"
+        },
+        {
+          "id": "groundsperson",
+          "asset_slug": "transparent",
+          "name_en": "Groundsperson",
+          "name_zh": "场地养护员",
+          "kind": "icon",
+          "color": "#159300",
+          "generic": true
+        },
+        {
+          "id": "heavy-roller",
+          "asset_slug": "heavy-roller",
+          "name_en": "Heavy Roller",
+          "name_zh": "重型压路机",
+          "kind": "scale",
+          "color": "#159300"
+        },
+        {
+          "id": "high-45",
+          "asset_slug": "slips",
+          "name_en": "High 45",
+          "name_zh": "高位 45 度位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "hospitality-manager",
+          "asset_slug": "transparent",
+          "name_en": "Hospitality Manager",
+          "name_zh": "招待经理",
+          "kind": "icon",
+          "color": "#f80086",
+          "generic": true
+        },
+        {
+          "id": "led-operator",
+          "asset_slug": "transparent",
+          "name_en": "LED Operator",
+          "name_zh": "LED 操作员",
+          "kind": "icon",
+          "color": "#808080",
+          "generic": true
+        },
+        {
+          "id": "light-roller",
+          "asset_slug": "light-roller",
+          "name_en": "Light roller",
+          "name_zh": "轻型压路机",
+          "kind": "scale",
+          "color": "#159300"
+        },
+        {
+          "id": "match-officials",
+          "asset_slug": "transparent",
+          "name_en": "Match Officials",
+          "name_zh": "赛事官员",
+          "kind": "icon",
+          "color": "#f80086",
+          "generic": true
+        },
+        {
+          "id": "media",
+          "asset_slug": "pedestrian-access",
+          "name_en": "Media",
+          "name_zh": "媒体通道",
+          "kind": "icon",
+          "color": "#f80086"
+        },
+        {
+          "id": "media-operations-manager",
+          "asset_slug": "transparent",
+          "name_en": "Media Operations Manager",
+          "name_zh": "媒体运营经理",
+          "kind": "icon",
+          "color": "#faff00",
+          "generic": true
+        },
+        {
+          "id": "mid-reverse-wicket",
+          "asset_slug": "slips",
+          "name_en": "Mid Reverse Wicket",
+          "name_zh": "反向中位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "mid-wicket",
+          "asset_slug": "slips",
+          "name_en": "Mid Wicket",
+          "name_zh": "中位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "multi-faith-room",
+          "asset_slug": "multi-faith-room",
+          "name_en": "Multi faith room",
+          "name_zh": "多信仰祈祷室",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "net-bowler",
+          "asset_slug": "transparent",
+          "name_en": "Net Bowler",
+          "name_zh": "练习笼投手",
+          "kind": "icon",
+          "color": "#808080",
+          "generic": true
+        },
+        {
+          "id": "perimeter-fence",
+          "asset_slug": "route-solid",
+          "name_en": "Perimeter Fence",
+          "name_zh": "围栏",
+          "kind": "route",
+          "color": "#ff810d"
+        },
+        {
+          "id": "player-match-officials",
+          "asset_slug": "pedestrian-access",
+          "name_en": "Player & Match Officials",
+          "name_zh": "球员与官员通道",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "press-box-scorer",
+          "asset_slug": "transparent",
+          "name_en": "Press Box Scorer",
+          "name_zh": "记者席记分员",
+          "kind": "icon",
+          "color": "#903d00",
+          "generic": true
+        },
+        {
+          "id": "replay-screen",
+          "asset_slug": "replay-screen",
+          "name_en": "Replay Screen",
+          "name_zh": "回放大屏",
+          "kind": "icon",
+          "color": "#f80086"
+        },
+        {
+          "id": "reverse-slips",
+          "asset_slug": "slips",
+          "name_en": "Reverse Slips",
+          "name_zh": "反向滑位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "roaming",
+          "asset_slug": "slips",
+          "name_en": "Roaming",
+          "name_zh": "游走位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "scoreboard-operator",
+          "asset_slug": "transparent",
+          "name_en": "Scoreboard Operator",
+          "name_zh": "记分屏操作员",
+          "kind": "icon",
+          "color": "#808080",
+          "generic": true
+        },
+        {
+          "id": "sight-screen",
+          "asset_slug": "sight-screen",
+          "name_en": "Sight Screen",
+          "name_zh": "视线挡板",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "slips",
+          "asset_slug": "slips",
+          "name_en": "Slips",
+          "name_zh": "滑位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "spectator-services",
+          "asset_slug": "transparent",
+          "name_en": "Spectator Services",
+          "name_zh": "观众服务点",
+          "kind": "icon",
+          "color": "#0000ff",
+          "generic": true
+        },
+        {
+          "id": "sponsorship-manager",
+          "asset_slug": "transparent",
+          "name_en": "Sponsorship Manager",
+          "name_zh": "赞助经理",
+          "kind": "icon",
+          "color": "#ff96e2",
+          "generic": true
+        },
+        {
+          "id": "stroller-storage",
+          "asset_slug": "stroller-storage",
+          "name_en": "Stroller Storage",
+          "name_zh": "婴儿车存放",
+          "kind": "icon",
+          "color": "#f80086"
+        },
+        {
+          "id": "stump-cam",
+          "asset_slug": "slips",
+          "name_en": "Stump Cam",
+          "name_zh": "三柱门摄像机",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "taxi-loadzone",
+          "asset_slug": "load-zone",
+          "name_en": "Taxi Loadzone",
+          "name_zh": "出租车落客区",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "training-wickets",
+          "asset_slug": "training-wickets",
+          "name_en": "Training Wickets",
+          "name_zh": "训练三柱门",
+          "kind": "scale",
+          "color": "#903d00"
+        },
+        {
+          "id": "ultra-motion",
+          "asset_slug": "slips",
+          "name_en": "Ultra Motion",
+          "name_zh": "超慢动作机位",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "wicket-covers",
+          "asset_slug": "wicket-covers",
+          "name_en": "Wicket Covers",
+          "name_zh": "三柱门罩布",
+          "kind": "scale",
+          "color": "#ffffff"
+        }
+      ]
+    },
+    {
+      "id": "biathlon",
+      "oneplan_id": "f3a45f23-a814-40c7-9c97-b4c996486a4e",
+      "name_en": "Biathlon pack",
+      "name_zh": "冬季两项活动包",
+      "source": "oneplan",
+      "order": 2,
+      "items": [
+        {
+          "id": "access-control",
+          "asset_slug": "transparent",
+          "name_en": "Access Control",
+          "name_zh": "通行管控",
+          "kind": "icon",
+          "color": "#808080",
+          "generic": true
+        },
+        {
+          "id": "access-point-vehicle-main",
+          "asset_slug": "vehicle-access",
+          "name_en": "Access Point Vehicle Main",
+          "name_zh": "车辆主入口",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "access-point-vehicle-secondary",
+          "asset_slug": "vehicle-access",
+          "name_en": "Access Point Vehicle Secondary",
+          "name_zh": "车辆次入口",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "aed-defibrillator",
+          "asset_slug": "defibrillator",
+          "name_en": "AED Defibrillator",
+          "name_zh": "AED 除颤器",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "badge-scanning",
+          "asset_slug": "accreditation",
+          "name_en": "Badge Scanning",
+          "name_zh": "证件扫描点",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "camera-crane-left",
+          "asset_slug": "camera-crane",
+          "name_en": "Camera Crane Left",
+          "name_zh": "摄像摇臂（左）",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "camera-crane-right",
+          "asset_slug": "camera-crane",
+          "name_en": "Camera Crane Right",
+          "name_zh": "摄像摇臂（右）",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "camera-drone",
+          "asset_slug": "camera-drone",
+          "name_en": "Camera Drone",
+          "name_zh": "无人机航拍",
+          "kind": "icon",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "changing-room",
+          "asset_slug": "changing-room",
+          "name_en": "Changing Room",
+          "name_zh": "更衣室",
+          "kind": "icon",
+          "color": "#000000"
+        },
+        {
+          "id": "course-crossroad-a",
+          "asset_slug": "course-crossroad-a",
+          "name_en": "Course Crossroad A",
+          "name_zh": "赛道交叉口 A",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "course-crossroad-b",
+          "asset_slug": "course-crossroad-b",
+          "name_en": "Course Crossroad B",
+          "name_zh": "赛道交叉口 B",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "doping-control",
+          "asset_slug": "transparent",
+          "name_en": "Doping Control",
+          "name_zh": "兴奋剂检查站",
+          "kind": "icon",
+          "color": "#000000",
+          "generic": true
+        },
+        {
+          "id": "electrical-cable",
+          "asset_slug": "route-dash",
+          "name_en": "Electrical Cable",
+          "name_zh": "电缆走线",
+          "kind": "route",
+          "color": "#000000"
+        },
+        {
+          "id": "finish-line",
+          "asset_slug": "route-solid",
+          "name_en": "Finish Line",
+          "name_zh": "终点线",
+          "kind": "route",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "hb-van",
+          "asset_slug": "hb-van",
+          "name_en": "HB Van",
+          "name_zh": "HB 转播车",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "intermediate-on-course",
+          "asset_slug": "timing-point",
+          "name_en": "Intermediate on Course",
+          "name_zh": "赛道中途计时点",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "lan-socket",
+          "asset_slug": "lan-socket",
+          "name_en": "Lan Socket",
+          "name_zh": "局域网插座",
+          "kind": "icon",
+          "color": "#808080"
+        },
+        {
+          "id": "led-screen",
+          "asset_slug": "large-screen",
+          "name_en": "LED Screen",
+          "name_zh": "LED 大屏",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "ob-truck",
+          "asset_slug": "ob-truck",
+          "name_en": "OB Truck",
+          "name_zh": "OB 转播车",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "p1",
+          "asset_slug": "p1",
+          "name_en": "P1",
+          "name_zh": "P1 停车区",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "p2",
+          "asset_slug": "p2",
+          "name_en": "P2",
+          "name_zh": "P2 停车区",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "p3",
+          "asset_slug": "p3",
+          "name_en": "P3",
+          "name_zh": "P3 停车区",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "p4",
+          "asset_slug": "p4",
+          "name_en": "P4",
+          "name_zh": "P4 停车区",
+          "kind": "icon",
+          "color": "#21ef00"
+        },
+        {
+          "id": "paramedic",
+          "asset_slug": "first-aid-point",
+          "name_en": "Paramedic",
+          "name_zh": "急救员",
+          "kind": "icon",
+          "color": "#21ef00"
+        },
+        {
+          "id": "pedestrian-bridge",
+          "asset_slug": "pedestrian-bridge",
+          "name_en": "Pedestrian Bridge",
+          "name_zh": "人行天桥",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "power",
+          "asset_slug": "transparent",
+          "name_en": "Power",
+          "name_zh": "电源点",
+          "kind": "icon",
+          "color": "#eb0420",
+          "generic": true
+        },
+        {
+          "id": "referee",
+          "asset_slug": "transparent",
+          "name_en": "Referee",
+          "name_zh": "裁判",
+          "kind": "icon",
+          "color": "#ff810d",
+          "generic": true
+        },
+        {
+          "id": "scaffold-tower",
+          "asset_slug": "scaffold-tower",
+          "name_en": "Scaffold Tower",
+          "name_zh": "脚手架塔",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "setup",
+          "asset_slug": "transparent",
+          "name_en": "Setup",
+          "name_zh": "布场中",
+          "kind": "icon",
+          "color": "#faff00",
+          "generic": true
+        },
+        {
+          "id": "shooting-racks",
+          "asset_slug": "shooting-racks",
+          "name_en": "Shooting Racks",
+          "name_zh": "射击枪架",
+          "kind": "icon",
+          "color": "#000000"
+        },
+        {
+          "id": "shooting-range-inc-safety-zone",
+          "asset_slug": "shooting-range",
+          "name_en": "Shooting Range (Inc Safety Zone)",
+          "name_zh": "射击场（含安全区）",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "ski-cameras",
+          "asset_slug": "ski-cameras",
+          "name_en": "Ski Cameras",
+          "name_zh": "滑雪摄像",
+          "kind": "icon",
+          "color": "#808080"
+        },
+        {
+          "id": "ski-paramedic",
+          "asset_slug": "ski-paramedic",
+          "name_en": "Ski Paramedic",
+          "name_zh": "滑雪急救员",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "start-line",
+          "asset_slug": "route-solid",
+          "name_en": "Start Line",
+          "name_zh": "起点线",
+          "kind": "route",
+          "color": "#faff00"
+        },
+        {
+          "id": "targets-control",
+          "asset_slug": "targets-control",
+          "name_en": "Targets Control",
+          "name_zh": "靶标控制",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "team-wax-truck",
+          "asset_slug": "team-wax-truck",
+          "name_en": "Team Wax Truck",
+          "name_zh": "队伍打蜡车",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "tunnel-entry-exit",
+          "asset_slug": "tunnel-entry-exit",
+          "name_en": "Tunnel Entry/Exit",
+          "name_zh": "隧道出入口",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "tv-tripod-left",
+          "asset_slug": "camera-tripod",
+          "name_en": "TV Tripod Left",
+          "name_zh": "电视三脚架（左）",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "tv-tripod-right",
+          "asset_slug": "camera-tripod",
+          "name_en": "TV Tripod Right",
+          "name_zh": "电视三脚架（右）",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "visual-check",
+          "asset_slug": "accreditation",
+          "name_en": "Visual Check",
+          "name_zh": "目视核验点",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "water-pool",
+          "asset_slug": "water-pool",
+          "name_en": "Water Pool",
+          "name_zh": "水池",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        }
+      ]
+    },
+    {
+      "id": "race",
+      "oneplan_id": "2e36116e-e986-4578-948c-3739bf6d37ae",
+      "name_en": "Race pack",
+      "name_zh": "路跑活动包",
+      "source": "oneplan",
+      "order": 3,
+      "items": [
+        {
+          "id": "5km",
+          "asset_slug": "5km",
+          "name_en": "5km",
+          "name_zh": "5 公里牌",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "aid-station-electrolyte",
+          "asset_slug": "aid-station-electrolyte",
+          "name_en": "Aid Station - Electrolyte",
+          "name_zh": "补给站（电解质）",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "aid-station-200m",
+          "asset_slug": "aid-station-200m",
+          "name_en": "Aid Station 200m",
+          "name_zh": "补给站 200 米",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "barrier-concord",
+          "asset_slug": "route-dash",
+          "name_en": "Barrier Concord",
+          "name_zh": "护栏",
+          "kind": "route",
+          "color": "#faff00"
+        },
+        {
+          "id": "bike-course",
+          "asset_slug": "route-dash",
+          "name_en": "Bike Course",
+          "name_zh": "自行车赛道",
+          "kind": "route",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "bike-in",
+          "asset_slug": "bike-in",
+          "name_en": "Bike In",
+          "name_zh": "自行车入口",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "bike-mechanic",
+          "asset_slug": "bike-mechanic",
+          "name_en": "Bike Mechanic",
+          "name_zh": "自行车技修师",
+          "kind": "icon",
+          "color": "#808080"
+        },
+        {
+          "id": "bike-out",
+          "asset_slug": "bike-out",
+          "name_en": "Bike Out",
+          "name_zh": "自行车出口",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "bike-pump-drop-off",
+          "asset_slug": "bike-pump-drop-off",
+          "name_en": "Bike Pump Drop Off",
+          "name_zh": "打气筒投放点",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "bike-racks-double-sided",
+          "asset_slug": "route-solid",
+          "name_en": "Bike Racks: Double-sided",
+          "name_zh": "自行车架（双侧）",
+          "kind": "route",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "bike-racks-single-sided",
+          "asset_slug": "route-solid",
+          "name_en": "Bike Racks: Single-sided",
+          "name_zh": "自行车架（单侧）",
+          "kind": "route",
+          "color": "#0000ff"
+        },
+        {
+          "id": "dismount-area",
+          "asset_slug": "solid",
+          "name_en": "Dismount Area",
+          "name_zh": "下车区",
+          "kind": "area",
+          "color": "#eb0420"
+        },
+        {
+          "id": "dismount-line",
+          "asset_slug": "route-solid",
+          "name_en": "Dismount Line",
+          "name_zh": "下车线",
+          "kind": "route",
+          "color": "#eb0420"
+        },
+        {
+          "id": "feed-station",
+          "asset_slug": "feed-station",
+          "name_en": "Feed Station",
+          "name_zh": "食物补给站",
+          "kind": "icon",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "finish",
+          "asset_slug": "finish",
+          "name_en": "Finish",
+          "name_zh": "终点",
+          "kind": "scale",
+          "color": "#ffffff"
+        },
+        {
+          "id": "littering-end",
+          "asset_slug": "littering-end",
+          "name_en": "Littering End",
+          "name_zh": "扔物区终点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "littering-start",
+          "asset_slug": "littering-start",
+          "name_en": "Littering Start",
+          "name_zh": "扔物区起点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "medal",
+          "asset_slug": "medal",
+          "name_en": "Medal",
+          "name_zh": "奖牌点",
+          "kind": "icon",
+          "color": "#808080"
+        },
+        {
+          "id": "mixed-relay-zone",
+          "asset_slug": "mixed-relay-zone",
+          "name_en": "Mixed Relay Zone",
+          "name_zh": "混合接力区",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "mount-area",
+          "asset_slug": "solid",
+          "name_en": "Mount Area",
+          "name_zh": "上车区",
+          "kind": "area",
+          "color": "#159300",
+          "fg_color": "#eb0420"
+        },
+        {
+          "id": "mount-line",
+          "asset_slug": "route-solid",
+          "name_en": "Mount Line",
+          "name_zh": "上车线",
+          "kind": "route",
+          "color": "#159300"
+        },
+        {
+          "id": "no-aero-end",
+          "asset_slug": "no-aero-end",
+          "name_en": "No Aero End",
+          "name_zh": "禁趴把段终点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "no-aero-start",
+          "asset_slug": "no-aero-start",
+          "name_en": "No Aero Start",
+          "name_zh": "禁趴把段起点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "no-draft-end",
+          "asset_slug": "no-draft-end",
+          "name_en": "No Draft End",
+          "name_zh": "禁跟车段终点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "no-draft-start",
+          "asset_slug": "no-draft-start",
+          "name_en": "No Draft Start",
+          "name_zh": "禁跟车段起点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "paramedic-motorbike",
+          "asset_slug": "paramedic-motorbike",
+          "name_en": "Paramedic Motorbike",
+          "name_zh": "摩托急救车",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "penalty-box",
+          "asset_slug": "penalty-box",
+          "name_en": "Penalty Box",
+          "name_zh": "罚时盒",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "penalty-box-200m",
+          "asset_slug": "penalty-box-200m",
+          "name_en": "Penalty Box 200m",
+          "name_zh": "罚时盒 200 米",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "pin-and-tape",
+          "asset_slug": "route-dash",
+          "name_en": "Pin And Tape",
+          "name_zh": "钉标贴带",
+          "kind": "route",
+          "color": "#21ef00"
+        },
+        {
+          "id": "relay-handover",
+          "asset_slug": "relay-handover",
+          "name_en": "Relay Handover",
+          "name_zh": "接力交接点",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "repair",
+          "asset_slug": "repair",
+          "name_en": "Repair",
+          "name_zh": "维修点",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "repair-200m",
+          "asset_slug": "repair-200m",
+          "name_en": "Repair 200m",
+          "name_zh": "维修点 200 米",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "run-course",
+          "asset_slug": "route-dash",
+          "name_en": "Run Course",
+          "name_zh": "跑步赛道",
+          "kind": "route",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "run-out",
+          "asset_slug": "run-out",
+          "name_en": "Run Out",
+          "name_zh": "跑步出口",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "special-needs",
+          "asset_slug": "special-needs",
+          "name_en": "Special Needs",
+          "name_zh": "特需包补给站",
+          "kind": "scale",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "swim-course",
+          "asset_slug": "route-dash",
+          "name_en": "Swim Course",
+          "name_zh": "游泳赛道",
+          "kind": "route",
+          "color": "#0000ff"
+        },
+        {
+          "id": "swim-evacuation-point",
+          "asset_slug": "swim-evacuation-point",
+          "name_en": "Swim Evacuation Point",
+          "name_zh": "游泳撤离点",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "swim-in",
+          "asset_slug": "swim-in",
+          "name_en": "Swim in",
+          "name_zh": "下水口",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "swim-out",
+          "asset_slug": "swim-out",
+          "name_en": "Swim out",
+          "name_zh": "上水口",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "time-trial-ramp",
+          "asset_slug": "time-trial-ramp",
+          "name_en": "Time Trial Ramp",
+          "name_zh": "计时赛坡道",
+          "kind": "scale",
+          "color": "#808080"
+        },
+        {
+          "id": "timing-mat",
+          "asset_slug": "route-solid",
+          "name_en": "Timing Mat",
+          "name_zh": "计时毯",
+          "kind": "route",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "timing-point",
+          "asset_slug": "timing-point",
+          "name_en": "Timing Point",
+          "name_zh": "计时点",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "transition-racks-double-sided",
+          "asset_slug": "route-solid",
+          "name_en": "Transition racks: Double-sided",
+          "name_zh": "换项架（双侧）",
+          "kind": "route",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "transition-racks-single-sided",
+          "asset_slug": "route-solid",
+          "name_en": "Transition racks: Single-sided",
+          "name_zh": "换项架（单侧）",
+          "kind": "route",
+          "color": "#f80086"
+        },
+        {
+          "id": "transition-zone",
+          "asset_slug": "transition-zone",
+          "name_en": "Transition Zone",
+          "name_zh": "换项区",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "tv-boat",
+          "asset_slug": "tv-boat",
+          "name_en": "TV Boat",
+          "name_zh": "电视船",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "water-crossing",
+          "asset_slug": "water-crossing",
+          "name_en": "Water Crossing",
+          "name_zh": "涉水段",
+          "kind": "scale",
+          "color": "#faff00"
+        },
+        {
+          "id": "wheel-station",
+          "asset_slug": "wheel-station",
+          "name_en": "Wheel station",
+          "name_zh": "换轮站",
+          "kind": "icon",
+          "color": "#808080"
+        }
+      ]
+    },
+    {
+      "id": "christmas",
+      "oneplan_id": "5f4222ce-430d-46f7-9920-7614d7608ae5",
+      "name_en": "Christmas pack",
+      "name_zh": "圣诞活动包",
+      "source": "oneplan",
+      "order": 4,
+      "items": [
+        {
+          "id": "bratwurst",
+          "asset_slug": "bratwurst",
+          "name_en": "Bratwurst",
+          "name_zh": "德式香肠",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "candied-fruits",
+          "asset_slug": "candied-fruits",
+          "name_en": "Candied Fruits",
+          "name_zh": "糖渍水果",
+          "kind": "icon",
+          "color": "#21ef00"
+        },
+        {
+          "id": "christmas-garland",
+          "asset_slug": "christmas-garland",
+          "name_en": "Christmas Garland",
+          "name_zh": "圣诞花环",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "christmas-tree",
+          "asset_slug": "christmas-tree",
+          "name_en": "Christmas tree",
+          "name_zh": "圣诞树",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "crokicurl",
+          "asset_slug": "crokicurl",
+          "name_en": "Crokicurl",
+          "name_zh": "克罗基冰壶",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "elf",
+          "asset_slug": "elf",
+          "name_en": "Elf",
+          "name_zh": "精灵",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "ferris-wheel",
+          "asset_slug": "ferris-wheel",
+          "name_en": "Ferris Wheel",
+          "name_zh": "摩天轮",
+          "kind": "scale",
+          "color": "#f80086"
+        },
+        {
+          "id": "fire-pit",
+          "asset_slug": "fire-pit",
+          "name_en": "Fire Pit",
+          "name_zh": "篝火坑",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "fondue",
+          "asset_slug": "fondue",
+          "name_en": "Fondue",
+          "name_zh": "芝士火锅",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "gifts",
+          "asset_slug": "gifts",
+          "name_en": "Gifts",
+          "name_zh": "礼品",
+          "kind": "icon",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "hot-chocolate",
+          "asset_slug": "hot-chocolate",
+          "name_en": "Hot Chocolate",
+          "name_zh": "热巧克力",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "ice-sculpture",
+          "asset_slug": "ice-sculpture",
+          "name_en": "Ice Sculpture",
+          "name_zh": "冰雕",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "ice-skating",
+          "asset_slug": "ice-skating",
+          "name_en": "Ice Skating",
+          "name_zh": "滑冰",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "inflatable-santa",
+          "asset_slug": "inflatable-santa",
+          "name_en": "Inflatable Santa",
+          "name_zh": "充气圣诞老人",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "mulled-wine",
+          "asset_slug": "mulled-wine",
+          "name_en": "Mulled Wine",
+          "name_zh": "热红酒",
+          "kind": "icon",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "nativity-scene",
+          "asset_slug": "nativity-scene",
+          "name_en": "Nativity Scene",
+          "name_zh": "圣诞马槽场景",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "roasted-chestnuts",
+          "asset_slug": "roasted-chestnuts",
+          "name_en": "Roasted Chestnuts",
+          "name_zh": "烤栗子",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "sledding",
+          "asset_slug": "sledding",
+          "name_en": "Sledding",
+          "name_zh": "滑雪橇",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "slide",
+          "asset_slug": "slide",
+          "name_en": "Slide",
+          "name_zh": "滑梯",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "star",
+          "asset_slug": "star",
+          "name_en": "Star",
+          "name_zh": "星星",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "warming-dome",
+          "asset_slug": "warming-dome",
+          "name_en": "Warming Dome",
+          "name_zh": "取暖穹顶",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "wooden-rudolf",
+          "asset_slug": "wooden-rudolf",
+          "name_en": "Wooden Rudolf",
+          "name_zh": "木制驯鹿",
+          "kind": "icon",
+          "color": "#903d00"
+        }
+      ]
+    },
+    {
+      "id": "fairs",
+      "oneplan_id": "f6198f01-7f5a-4f44-8e7b-e6549cb9f580",
+      "name_en": "Fairs, Shows & Markets pack",
+      "name_zh": "集市活动包",
+      "source": "oneplan",
+      "order": 5,
+      "items": [
+        {
+          "id": "agricultural-competition",
+          "asset_slug": "agricultural-competition",
+          "name_en": "Agricultural Competition",
+          "name_zh": "农业竞赛",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "balloons",
+          "asset_slug": "balloons",
+          "name_en": "Balloons",
+          "name_zh": "气球",
+          "kind": "icon",
+          "color": "#f80086"
+        },
+        {
+          "id": "barrel-racing",
+          "asset_slug": "barrel-racing",
+          "name_en": "Barrel Racing",
+          "name_zh": "绕桶赛马",
+          "kind": "icon",
+          "color": "#808080"
+        },
+        {
+          "id": "bull-riding",
+          "asset_slug": "bull-riding",
+          "name_en": "Bull Riding",
+          "name_zh": "骑牛",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "bungee-trampoline",
+          "asset_slug": "bungee-trampoline",
+          "name_en": "Bungee Trampoline",
+          "name_zh": "蹦极蹦床",
+          "kind": "scale",
+          "color": "#0000ff"
+        },
+        {
+          "id": "carousel",
+          "asset_slug": "carousel",
+          "name_en": "Carousel",
+          "name_zh": "旋转木马",
+          "kind": "scale",
+          "color": "#eb0420"
+        },
+        {
+          "id": "chair-o-planes",
+          "asset_slug": "chair-o-planes",
+          "name_en": "Chair-O-Planes",
+          "name_zh": "旋转飞椅",
+          "kind": "scale",
+          "color": "#ff810d"
+        },
+        {
+          "id": "chuck-wagon",
+          "asset_slug": "chuck-wagon",
+          "name_en": "Chuck Wagon",
+          "name_zh": "牛仔餐车",
+          "kind": "icon",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "clay-pigeon-shooting",
+          "asset_slug": "clay-pigeon-shooting",
+          "name_en": "Clay Pigeon Shooting",
+          "name_zh": "飞碟射击",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "draft-horses",
+          "asset_slug": "draft-horses",
+          "name_en": "Draft Horses",
+          "name_zh": "挽马",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "duck-pond-booth",
+          "asset_slug": "duck-pond-booth",
+          "name_en": "Duck Pond Booth",
+          "name_zh": "捞鸭游戏摊",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "ferris-wheel",
+          "asset_slug": "ferris-wheel",
+          "name_en": "Ferris Wheel",
+          "name_zh": "摩天轮",
+          "kind": "scale",
+          "color": "#f80086"
+        },
+        {
+          "id": "floriculture",
+          "asset_slug": "floriculture",
+          "name_en": "Floriculture",
+          "name_zh": "花卉园艺",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "hedgelaying",
+          "asset_slug": "hedgelaying",
+          "name_en": "Hedgelaying",
+          "name_zh": "树篱修剪技艺",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "horse-racing",
+          "asset_slug": "horse-racing",
+          "name_en": "Horse Racing",
+          "name_zh": "赛马",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "horticulture",
+          "asset_slug": "horticulture",
+          "name_en": "Horticulture",
+          "name_zh": "园艺",
+          "kind": "icon",
+          "color": "#21ef00"
+        },
+        {
+          "id": "maintenance",
+          "asset_slug": "transparent",
+          "name_en": "Maintenance",
+          "name_zh": "维护点",
+          "kind": "icon",
+          "color": "#159300",
+          "generic": true
+        },
+        {
+          "id": "milk-bottle-toss",
+          "asset_slug": "milk-bottle-toss",
+          "name_en": "Milk Bottle Toss",
+          "name_zh": "牛奶瓶投掷游戏",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "mirror-maze",
+          "asset_slug": "mirror-maze",
+          "name_en": "Mirror Maze",
+          "name_zh": "镜子迷宫",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "paratrooper",
+          "asset_slug": "paratrooper",
+          "name_en": "Paratrooper",
+          "name_zh": "伞兵游乐设施",
+          "kind": "scale",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "performer",
+          "asset_slug": "transparent",
+          "name_en": "Performer",
+          "name_zh": "表演者",
+          "kind": "icon",
+          "color": "#21ef00",
+          "generic": true
+        },
+        {
+          "id": "ploughing",
+          "asset_slug": "ploughing",
+          "name_en": "Ploughing",
+          "name_zh": "犁地表演",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "ring-toss",
+          "asset_slug": "ring-toss",
+          "name_en": "Ring Toss",
+          "name_zh": "套圈",
+          "kind": "icon",
+          "color": "#0000ff"
+        },
+        {
+          "id": "rodeo-clown",
+          "asset_slug": "rodeo-clown",
+          "name_en": "Rodeo Clown",
+          "name_zh": "牛仔竞技小丑",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "stickmakers-guild",
+          "asset_slug": "stickmakers-guild",
+          "name_en": "Stickmakers Guild",
+          "name_zh": "手杖工匠行会",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "stuffed-toys",
+          "asset_slug": "stuffed-toys",
+          "name_en": "Stuffed Toys",
+          "name_zh": "毛绒玩具",
+          "kind": "icon",
+          "color": "#f80086"
+        },
+        {
+          "id": "traffic-marshall",
+          "asset_slug": "transparent",
+          "name_en": "Traffic Marshall",
+          "name_zh": "交通引导员",
+          "kind": "icon",
+          "color": "#f80086",
+          "generic": true
+        },
+        {
+          "id": "vendor-seller",
+          "asset_slug": "transparent",
+          "name_en": "Vendor Seller",
+          "name_zh": "摊贩",
+          "kind": "icon",
+          "color": "#5bcdfe",
+          "generic": true
+        },
+        {
+          "id": "young-farmers-club",
+          "asset_slug": "young-farmers-club",
+          "name_en": "Young Farmers Club",
+          "name_zh": "青年农夫俱乐部",
+          "kind": "icon",
+          "color": "#0000ff"
+        }
+      ]
+    },
+    {
+      "id": "festival-cn",
+      "name_en": "Chinese Festivals pack",
+      "name_zh": "中国节庆包",
+      "source": "original",
+      "order": 6,
+      "items": [
+        {
+          "id": "cn-lantern",
+          "asset_slug": "cn-lantern",
+          "name_en": "Red Lantern",
+          "name_zh": "灯笼",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "cn-palace-lantern",
+          "asset_slug": "cn-palace-lantern",
+          "name_en": "Palace Lantern",
+          "name_zh": "宫灯",
+          "kind": "icon",
+          "color": "#f80086"
+        },
+        {
+          "id": "cn-firecracker",
+          "asset_slug": "cn-firecracker",
+          "name_en": "Firecrackers",
+          "name_zh": "鞭炮",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "cn-couplet",
+          "asset_slug": "cn-couplet",
+          "name_en": "Spring Couplets",
+          "name_zh": "对联",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "cn-red-envelope",
+          "asset_slug": "cn-red-envelope",
+          "name_en": "Red Envelope",
+          "name_zh": "红包",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "cn-dumpling",
+          "asset_slug": "cn-dumpling",
+          "name_en": "Dumplings",
+          "name_zh": "饺子",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "cn-chinese-knot",
+          "asset_slug": "cn-chinese-knot",
+          "name_en": "Chinese Knot",
+          "name_zh": "中国结",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "cn-tangyuan",
+          "asset_slug": "cn-tangyuan",
+          "name_en": "Tangyuan",
+          "name_zh": "汤圆",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "cn-zongzi",
+          "asset_slug": "cn-zongzi",
+          "name_en": "Zongzi",
+          "name_zh": "粽子",
+          "kind": "icon",
+          "color": "#159300"
+        },
+        {
+          "id": "cn-mugwort",
+          "asset_slug": "cn-mugwort",
+          "name_en": "Mugwort",
+          "name_zh": "艾草",
+          "kind": "icon",
+          "color": "#21ef00"
+        },
+        {
+          "id": "cn-mooncake",
+          "asset_slug": "cn-mooncake",
+          "name_en": "Mooncake",
+          "name_zh": "月饼",
+          "kind": "icon",
+          "color": "#903d00"
+        },
+        {
+          "id": "cn-jade-rabbit",
+          "asset_slug": "cn-jade-rabbit",
+          "name_en": "Jade Rabbit",
+          "name_zh": "玉兔",
+          "kind": "icon",
+          "color": "#5bcdfe"
+        },
+        {
+          "id": "cn-firework",
+          "asset_slug": "cn-firework",
+          "name_en": "Firework",
+          "name_zh": "烟花",
+          "kind": "icon",
+          "color": "#9e00ff"
+        },
+        {
+          "id": "cn-bunting",
+          "asset_slug": "cn-bunting",
+          "name_en": "Festival Bunting",
+          "name_zh": "彩旗",
+          "kind": "icon",
+          "color": "#ff810d"
+        },
+        {
+          "id": "cn-wish-tablet",
+          "asset_slug": "cn-wish-tablet",
+          "name_en": "Wish Tablet",
+          "name_zh": "祈福牌",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "cn-candied-hawthorn",
+          "asset_slug": "cn-candied-hawthorn",
+          "name_en": "Candied Hawthorn",
+          "name_zh": "糖葫芦",
+          "kind": "icon",
+          "color": "#eb0420"
+        },
+        {
+          "id": "cn-round-fan",
+          "asset_slug": "cn-round-fan",
+          "name_en": "Round Fan",
+          "name_zh": "团扇",
+          "kind": "icon",
+          "color": "#ff96e2"
+        },
+        {
+          "id": "cn-lantern-riddle",
+          "asset_slug": "cn-lantern-riddle",
+          "name_en": "Lantern Riddle",
+          "name_zh": "灯谜",
+          "kind": "icon",
+          "color": "#faff00"
+        },
+        {
+          "id": "cn-dragon-boat",
+          "asset_slug": "cn-dragon-boat",
+          "name_en": "Dragon Boat",
+          "name_zh": "龙舟",
+          "kind": "scale",
+          "color": "#159300"
+        },
+        {
+          "id": "cn-opera-stage",
+          "asset_slug": "cn-opera-stage",
+          "name_en": "Opera Stage",
+          "name_zh": "戏台",
+          "kind": "scale",
+          "color": "#eb0420"
+        }
+      ]
+    }
+  ]
+}

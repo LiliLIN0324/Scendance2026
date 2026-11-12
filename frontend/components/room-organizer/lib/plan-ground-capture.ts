@@ -12,6 +12,8 @@
  * - 高德静态图仍是兜底：这里返回 null 时调用方继续走老路径。
  */
 
+import { alignedTileBounds } from './basemap-alignment';
+
 export interface PlanGroundBounds {
   west: number;
   south: number;
@@ -19,7 +21,13 @@ export interface PlanGroundBounds {
   north: number;
 }
 
-export type PlanGroundSource = 'osm' | 'carto-light' | 'carto-dark';
+export type PlanGroundSource =
+  | 'osm'
+  | 'carto-light'
+  | 'carto-dark'
+  | 'amap-satellite'
+  | 'amap-streets'
+  | 'amap-streets-labels';
 
 export interface PlanGroundTilePlacement {
   url: string;
@@ -43,7 +51,20 @@ export const PLAN_GROUND_BACKDROP: Record<PlanGroundSource, string> = {
   osm: '#efe9df',
   'carto-light': '#f6f3ee',
   'carto-dark': '#1b1f26',
+  'amap-satellite': '#12161b',
+  'amap-streets': '#f4f1ea',
+  'amap-streets-labels': '#f4f1ea',
 };
+
+/**
+ * 各底图的瓦片上限（贴地拼图用）。
+ * 高德矢量档 z19 返回 100 多字节的空瓦片，只有 z18 及以下是真图；卫星档 z19 仍有影像。
+ * OSM z19（z20 是 400）；Carto 能到 21，但 1024px 拼图在 z19 已覆盖约 20 m，够用。
+ */
+export function planGroundMaxZoom(source: PlanGroundSource): number {
+  if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
+  return 19;
+}
 
 /** Web 墨卡托：瓦片 y 对应的北缘纬度。 */
 export function tileNorthLat(tileY: number, zoom: number): number {
@@ -176,8 +197,11 @@ export async function capturePlanGround(options: {
   if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
   const size = Math.max(256, Math.min(2048, Math.round(options.size ?? 1024)));
   const span = boundsSpanMeters(options.bounds);
-  const zoom = Math.max(4, Math.min(19, options.zoom ?? zoomForGroundSpan(span.width, span.depth, size)));
-  const plan = planGroundTiles(options.bounds, size, zoom, (z, x, y) => options.urlFor(options.source, z, x, y));
+  const zoom = Math.max(4, Math.min(planGroundMaxZoom(options.source), options.zoom ?? zoomForGroundSpan(span.width, span.depth, size)));
+  // 高德三档本身就是 GCJ-02（与应用锚点同系）；OSM/Carto 是 WGS-84，
+  // 拼图前把范围挪到 WGS-84 网格，免得贴到 3D 地面后相对场地偏几百米。
+  const tileBounds = alignedTileBounds(options.bounds, options.source);
+  const plan = planGroundTiles(tileBounds, size, zoom, (z, x, y) => options.urlFor(options.source, z, x, y));
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;

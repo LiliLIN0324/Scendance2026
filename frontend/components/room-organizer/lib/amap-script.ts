@@ -18,7 +18,8 @@ export interface AmapNamespace {
   AutoComplete?: new (opts: Record<string, unknown>) => AmapAutoComplete;
   Map?: new (...args: unknown[]) => unknown;
   MouseTool?: new (...args: unknown[]) => unknown;
-  TileLayer?: { Satellite?: new () => { setMap(map: unknown): void; show(): void } };
+  // 2026-11-11 用户 m00690：选址圈画不再叠 AMap.TileLayer.Satellite 卫星切片，
+  // 这里随之去掉 TileLayer 声明（插件列表里本来也没有它）。
 }
 
 // 高德 Key 的域名白名单只放行线上域名时，localhost 会被回 10006（INVALID_USER_DOMAIN）并用 JSON 顶掉脚本，

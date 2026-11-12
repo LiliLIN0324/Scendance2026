@@ -3,11 +3,23 @@ import type * as ThreeNS from 'three';
 
 export function buildChair({ THREE, item, hasCollision, baseColor, opacity }: BuilderContext): ThreeNS.Group {
   const group = new THREE.Group();
-  const seatMat = material(THREE, baseColor, hasCollision, opacity, { roughness: 0.7, metalness: 0.1 });
+  const banquet = item.type === 'dining-chair';
+  const seatMat = material(THREE, baseColor, hasCollision, opacity, { roughness: banquet ? 0.92 : 0.7, metalness: banquet ? 0.02 : 0.1 });
 
   const seat = mesh(THREE, new THREE.BoxGeometry(item.width, item.height * 0.1, item.depth), seatMat);
   seat.position.y = item.height * 0.5;
   group.add(seat);
+
+  if (banquet) {
+    const cushion = mesh(
+      THREE,
+      new THREE.BoxGeometry(item.width * 0.86, item.height * 0.05, item.depth * 0.7),
+      material(THREE, hasCollision ? baseColor : lightenHex(item.color, 0.16), hasCollision, opacity, { roughness: 0.96, metalness: 0 }),
+    );
+    cushion.position.set(0, item.height * 0.55, item.depth * 0.04);
+    cushion.userData.part = 'chair-cushion';
+    group.add(cushion);
+  }
 
   const back = mesh(THREE, new THREE.BoxGeometry(item.width, item.height * 0.5, item.depth * 0.1), seatMat);
   back.position.set(0, item.height * 0.75, -item.depth * 0.45);

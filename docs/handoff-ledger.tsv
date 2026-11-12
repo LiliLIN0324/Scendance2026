@@ -1,0 +1,9 @@
+ts	phase	decision	why	evidence	result
+2026-11-10T12:04:53Z	handoff	引入交接冻结器 handoff-freeze 与决策账本	把 HANDOFF 文档承诺升级为可核验档案（哈希可重算，交接被改可追）	PR #109	open
+2026-11-11T16:34:12Z	geoground	主画布 3D 接入户外地理瓦片地面（GeoGround）	退出户外回到主舞台只见悬空纸面+色块；docs/42 主线「2D 规划→3D 场地视角」最后一环	浏览器探针 68 条 OSM 瓦片请求+署名 DOM；vitest 147/147；根+前端 tsc 0	open
+2026-11-11T16:38:46Z	bench-card	属性面板 OnePlan Bench 卡全量对齐（标题直改/经纬度坐标行/Styling 盒式/W-L 单位内嵌/+布场信息手风琴/+备注/Repeat 面板换页/删按钮行；契约加 7 个 vendor 可选字段）	用户附 OnePlan Bench 截图「我需要这样的设计」；IAB 实站爬得全规格后四卡连做（A1–A4）	OnePlan DOM 探针（296 卡/换页/手风琴/字段全量）；vitest 290/290（新增 vendor 契约用例）；前端 tsc 0	open
+2026-11-11T17:22:30Z	select-tool	OnePlan Selection tool 复刻（select 模式+框选 marquee+组选互斥+整组移动/缩放+批量删/复制/微调+组包围盒蓝线4角柄+右栏/全局行入口）	用户附 OnePlan 框选截图「这个 selection tool 我很喜欢」；拍板并列钮入口+先做 4 角柄	vitest 96/96（新增组选纯函数 6 例）；前端 tsc 0；实机验收交用户（页签未进户外态）	open
+2026-11-11T17:36:02Z	workbench-parity	主舞台对齐户外体验：右轨统一+底部比例尺罗盘簇+计划GLB模型层共享	右轨多误导钮/底部缺比例尺指北针/主3D只有低模占位——docs/42 主线收尾	探针：geo-ground-compass+署名在、卫星贴地/地图类型隐藏、户外3D live 500m、模型层 vitest 8/8	open
+2026-11-11T18:15:22Z	outdoor3d-takeover	户外项目主画布 3D 归一：OutdoorPlan3D 接管态（同一组件两处挂载）	卡内 3D 与退出后主 3D 各渲染各的——用户指出两套 tsx 应收敛为一套	接管门+右轨改派+罗盘去重+漫游 overlay 修复；探针接管态全过；tsc 0/vitest 54 绿	open
+2026-11-11T18:50:13Z	inspector-rail	测量/标注收进右轨圆钮（工具与属性浮条拆除）	右上两套圆钮不统一——用户指令	探针：右轨钮开浮窗/切页签/按下态/再点收起全过；tsc 全清	open
+2026-11-11T18:57:21Z	inspector-rail	右轨补第三颗「属性」圆钮（测量/标注/属性三开）	用户澄清三钮分别拆开	探针三钮齐+属性页签开+按下态 ✓；tsc CLEAN	open

@@ -1432,7 +1432,7 @@
 .is-workbench .cg-top { height: auto; min-height: 58px; padding: 10px 14px; border-radius: 0; }
 .cg-workbench-title { min-width: 0; flex: 1; display: grid; gap: 3px; font-size: 15px; }
 .cg-workbench-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--wk-muted); }
-.cg-workbench-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: var(--plane); color: var(--ink); cursor: pointer; }
+/* 2026-11-11 关闭钮已统一为 .sc-left-close（globals.css）：同一枚 32px plane 底圆角方块，不再各画各的。 */
 .is-workbench .cg-main { flex: 1; padding: 8px 14px 18px; }
 .is-workbench .cg-stephead { padding-top: 10px; }
 .is-workbench .cg-title { font-size: 20px; }

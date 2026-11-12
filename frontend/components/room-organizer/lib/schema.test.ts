@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
-import { createPresetResearchArea } from './research-area';
+import { createResearchArea, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE, XIHU_LOCAL_PLACE } from './research-area';
 import {
   MAX_COLOR_LENGTH,
   MAX_COORDINATE,
@@ -37,6 +37,14 @@ describe('isFurnitureItem', () => {
     ['non-boolean hasVisionCone', makeItem({ hasVisionCone: 'yes' as never })],
   ])('rejects %s (#121)', (_label, value) => {
     expect(isFurnitureItem(value)).toBe(false);
+  });
+
+  it('keeps a round banquet table and rejects an unknown table shape', () => {
+    const item = makeItem({ type: 'dining-table', name: '圆桌', tableShape: 'round', width: 1.4, depth: 1.4 });
+    expect(isFurnitureItem(item)).toBe(true);
+    expect(isFurnitureItem({ ...item, tableShape: 'oval' as never })).toBe(false);
+    const layout = makeLayout({ floors: [makeFloor({ items: [item] })] });
+    expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
   });
 
   it('accepts valid enum/range fields (#121)', () => {
@@ -235,8 +243,8 @@ describe('isRoomLayout', () => {
     expect(isRoomLayout(makeLayout({ mapGroundFrame: { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 2 } }))).toBe(false);
   });
 
-  it('accepts the scenic preset basemap and round-trips its presetId', () => {
-    const area = createPresetResearchArea();
+  it('accepts a manual basemap and round-trips it', () => {
+    const area = createResearchArea(XIHU_LOCAL_PLACE, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE);
     const layout = makeLayout({ researchArea: area });
     expect(isRoomLayout(layout)).toBe(true);
     const parsed = parseStoredLayout(JSON.parse(JSON.stringify(layout)));
@@ -244,11 +252,9 @@ describe('isRoomLayout', () => {
     // 静态底图只放行仓库 /basemap/ 相对路径：外站与越界路径仍拒绝。
     expect(isRoomLayout(makeLayout({ researchArea: { ...area, imageUrl: 'https://evil.example/basemap/x.jpg' } }))).toBe(false);
     expect(isRoomLayout(makeLayout({ researchArea: { ...area, imageUrl: '/basemap/../secrets.json' } }))).toBe(false);
-    expect(isRoomLayout(makeLayout({ researchArea: { ...area, presetId: 'unknown-preset' as never } }))).toBe(false);
-    // 手动底图没有 presetId 也照常收（走卫星代理白名单）。
+    // 卫星代理地址照常收。
     const manual = {
       ...area,
-      presetId: undefined as never,
       imageUrl: '/api/amap-static?location=120.1,30.2&zoom=15&size=2048*2048&scale=2&x-ref=map-basemap',
     };
     expect(isRoomLayout(makeLayout({ researchArea: manual }))).toBe(true);
@@ -753,6 +759,8 @@ describe('persisted-field whitelist and bounds (#350)', () => {
       wallRotation: 0,
       cameraBracket: true,
       sofaShape: 'standard',
+      tableShape: 'rect',
+      tableFinish: 'linen',
       locked: true,
       mirrored: true,
       stairsShape: 'winder',

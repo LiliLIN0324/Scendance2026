@@ -22,7 +22,7 @@ function itemBasis(item: FurnitureItem) {
     glbNode: item.glbNode ?? null, size: [item.width, item.depth, item.height], color: item.color,
     position: item.position ?? null, rotation: item.rotation ?? 0, elevation: item.elevation ?? 0,
     wallId: item.wallId ?? null, sillHeight: item.sillHeight ?? null, mirrored: item.mirrored ?? false,
-    sofaShape: item.sofaShape ?? 'standard', stairsShape: item.stairsShape ?? 'straight', stairsLeadIn: item.stairsLeadIn ?? 0,
+    sofaShape: item.sofaShape ?? 'standard', tableShape: item.tableShape ?? 'rect', stairsShape: item.stairsShape ?? 'straight', stairsLeadIn: item.stairsLeadIn ?? 0,
     cameraBracket: item.cameraBracket ?? false, wallRotation: item.wallRotation ?? null };
 }
 

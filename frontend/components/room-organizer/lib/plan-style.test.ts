@@ -39,6 +39,8 @@ describe('planSymbol', () => {
   it('maps the common families', () => {
     expect(planSymbol(item({ type: 'sofa' }))).toBe('sofa');
     expect(planSymbol(item({ type: 'table' }))).toBe('table');
+    expect(planSymbol(item({ type: 'dining-table', name: '圆桌', tableShape: 'round', width: 1.4, depth: 1.4 }))).toBe('round-table');
+    expect(planSymbol(item({ type: 'dining-table', name: 'Dining Table', width: 1.8, depth: 1 }))).toBe('table');
     expect(planSymbol(item({ type: 'plant' }))).toBe('plant');
     expect(planSymbol(item({ type: 'stairs' }))).toBe('stairs');
     expect(planSymbol(item({ type: 'door' }))).toBe('opening');

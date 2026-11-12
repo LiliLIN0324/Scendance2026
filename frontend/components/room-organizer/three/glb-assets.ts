@@ -142,7 +142,11 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
       source = gltf.scene;
       assertRenderableGlb(source);
       // 米制 / Y-up / 底面中心：加载时统一一次，实例只按目录尺寸缩放。
-      const normalized = normalizeGlbRoot(source);
+      // 2026-11-12 用户报告「桌椅组合在 3D 里翻倒 90°」：URL 加载的资产一律按 glTF
+      // 规范 Y-up，不再用包围盒猜轴向——「沿 Z 躺平的长桌/护栏/车」会被误判成
+      // Z-up 而整个立起来，且这里无人复核；猜轴向只保留在 importLocalGlb
+      // （导入时有人工预览与登记的 upAxis 元数据兜底）。
+      const normalized = normalizeGlbRoot(source, { upAxis: 'y' });
       if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
       entry.source = normalized.root;
       entry.animations = gltf.animations?.length ? gltf.animations : undefined;

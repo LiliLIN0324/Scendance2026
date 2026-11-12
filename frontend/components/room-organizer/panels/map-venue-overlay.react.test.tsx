@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, type AmapPoint } from '../lib/amap-venue';
 import { ActivityBrief, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './agent-panel';
+import { XIHU_LOCAL_NAME } from '../lib/research-area';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 
@@ -77,7 +78,7 @@ describe('圈画 → 采集单 → 上传重建', () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     fireEvent.click(screen.getByRole('button', { name: '圈选西湖场地' }));
-    expect(state.layout.researchArea?.presetId).toBe('xihu-scenic');
+    expect(state.layout.researchArea?.name).toBe(XIHU_LOCAL_NAME);
     expect(state.layout.mapGroundPolygon).toHaveLength(4);
     expect(state.layout.sceneAnchor?.source).toBe('picker');
   });

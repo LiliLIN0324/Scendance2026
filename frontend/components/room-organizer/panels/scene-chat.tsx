@@ -46,7 +46,7 @@ export function SceneChat({ scans, onPickScan, onOpenCapture, onGenerate, onReco
     if (intent.kind === 'agent') {
       if (agent) { void agent.send(text); return; }
       push({ role: 'user', text });
-      push({ role: 'agent', amber: true, text: '这段对话得在工作台的 Agent 面板里说。' });
+      push({ role: 'agent', amber: true, text: '这段对话得在工作台的 Bingo 面板里说。' });
       return;
     }
     push({ role: 'user', text });

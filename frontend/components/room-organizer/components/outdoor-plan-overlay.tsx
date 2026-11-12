@@ -16,6 +16,8 @@ import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
+import OutdoorPlan3D, { type OutdoorPlan3DApi } from '@/components/room-organizer/components/outdoor-plan-3d';
+import type { PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { ExportMenu, GuideBubble, ShareDialog, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS, shareDialogContent } from '@/components/room-organizer/lib/site-plan-guide';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
@@ -26,21 +28,29 @@ import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share'
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
+import OutdoorViewSwitch from '@/components/room-organizer/components/outdoor-view-switch';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
+  DEFAULT_OUTDOOR_PLAN_ANCHOR,
+  readOutdoorPlanView,
   readOutdoorProjectRecord,
+  saveOutdoorPlanView,
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
 
-/** 图源循环顺序（右侧工具排一枚钮循环切换）。 */
-const SOURCE_CYCLE: { id: CanvasBasemapSource; short: string; label: string }[] = [
-  { id: 'osm', short: 'OSM', label: 'OSM 街道' },
-  { id: 'carto-light', short: 'C浅', label: 'Carto 浅色' },
-  { id: 'carto-dark', short: 'C深', label: 'Carto 深色' },
-  { id: 'vec', short: '天矢', label: '天地图矢量' },
-  { id: 'img', short: '天影', label: '天地图影像' },
+/** 图源循环顺序（右下图标钮弹出面板选图源）。 */
+const SOURCE_CYCLE: { id: CanvasBasemapSource; label: string }[] = [
+  { id: 'osm', label: 'OSM 街道' },
+  { id: 'carto-light', label: 'Carto 浅色' },
+  { id: 'carto-dark', label: 'Carto 深色' },
+  { id: 'amap-satellite', label: '高德卫星' },
+  { id: 'amap-streets', label: '高德街道' },
+  { id: 'amap-streets-labels', label: '高德街道注记' },
+  { id: 'vec', label: '天地图矢量' },
+  { id: 'img', label: '天地图影像' },
 ];
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
@@ -60,8 +70,14 @@ export interface OutdoorPlanOverlayProps {
   onSaveStateChange?: (next: OutdoorSaveState) => void;
   /** P2-g：undo/redo 可用态上报（室内工具排撤销/重做钮启用态）。 */
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
+  /** 2026-11-12 B1 选择工具：2D 画布绘制/浏览模式上报（右栏工具排「选择」钮按下态）。 */
+  onModeChange?: (mode: 'view' | 'select') => void;
+  /** 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自展开态上报（右轨三枚圆钮的按下态）。 */
+  onInspectorChange?: (state: { openTabs: Record<'measure' | 'annotate' | 'selection', boolean> }) => void;
   /** P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动用；含初次载入的那一帧）。 */
   onPlanChange?: (plan: SitePlanData) => void;
+  /** 2026-11-11 图层：活动层切换上报（3D 地面图层据此只镜像当前层；含初次载入的初始层）。 */
+  onActiveLevelChange?: (levelId: string) => void;
   /**
    * P4-c：交付簇里的「发布」槽位。发布卡片由 room-organizer 传进来（ShareMenu variant="canvas"），
    * 卡片本体只实现一次——用户反馈「导出 分享 发布 应该是一起的」。
@@ -72,18 +88,47 @@ export interface OutdoorPlanOverlayProps {
    * 只在**该槽位还没有户外草稿**时使用；有草稿时草稿优先（用户自己画过的东西不覆盖）。
    */
   seedPlan?: SitePlanData | null;
+  /**
+   * 2026-11-11 统一视图：室内 3D 场景的落位（物料 + 场地实景扫描）投影到户外 2D 画布。
+   * 只读展示层——透传给 OutdoorPlanCanvas，不参与命中测试/交互。
+   */
+  sceneObjects?: readonly PlanSceneObject[] | undefined;
+  /** 受控视角：同一份规划的 2D 地图 / 3D 场地，只换看法，功能不变。 */
+  view?: '2d' | '3d';
+  onViewChange?: (view: '2d' | '3d') => void;
+  /**
+   * 2026-11-12 接管态保活隐藏：全屏 OutdoorPlan3D 接管画布时，本覆盖层**保持挂载**
+   * （2D 画布编辑桥 pointerFromPlan 要用它的句柄与布局），但它自己的 2D 画面/浮层
+   * 必须真正不可见、不可点。只在外层包 div 上设 visibility:hidden 不够——内层画布
+   * 容器按 `view` 又写了 visibility:visible，会把隐藏顶掉，2D 画面直接盖住 3D。
+   */
+  dormant?: boolean;
+  /**
+   * 2026-11-12 用户指令「3D 的时候也要可编辑」：右轨三张工具卡的出镜宿主 id，
+   * 接管态由 room-organizer 提供（透传给画布，portal 出隐藏覆盖层）；2D 态不传。
+   */
+  inspectorHostId?: string;
 }
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
 export interface OutdoorPlanOverlayHandle {
   /** 缩放一档（与滚轮同源）。 */
   zoomBy(direction: 1 | -1): void;
+  /**
+   * 2026-11-12 接管态编辑桥：把覆盖层里活着的 2D 画布句柄交给全屏 OutdoorPlan3D
+   * （canvasApiRef），左键物件手势走同一条 pointerFromPlan 管线；覆盖层未挂载时 null。
+   */
+  getCanvasApi(): OutdoorPlanCanvasHandle | null;
   /** 业务层画布截图 dataURL（无画布时 null）。 */
   captureImage(): string | null;
   /** 按当前 plan 导出 PNG（与右侧导出菜单的 PNG 同一口径）；无 plan 时返回 false。 */
   exportPng(): boolean;
   undo(): void;
   redo(): void;
+  /** 2026-11-12 B1 选择工具：切 2D 画布浏览/选择模式（右栏工具排「选择」钮转发）。 */
+  setCanvasMode(mode: 'view' | 'select'): void;
+  /** 2026-11-12 测量/标注收进右轨圆钮：开/关「工具与属性」浮窗并切页签（右轨圆钮转发）。 */
+  setInspector(open: boolean, tab?: 'measure' | 'annotate' | 'selection'): void;
 }
 
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
@@ -92,11 +137,20 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   activityName,
   onSaveStateChange,
   onHistoryChange,
+  onModeChange,
+  onInspectorChange,
   onPlanChange,
+  onActiveLevelChange,
   deliverySlot,
   seedPlan,
+  sceneObjects,
+  view: controlledView,
+  onViewChange,
+  dormant = false,
+  inspectorHostId,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
+  const plan3dApiRef = useRef<OutdoorPlan3DApi | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
   const [source, setSource] = useState<CanvasBasemapSource>('osm');
   const [plan, setPlan] = useState<SitePlanData | null>(null);
@@ -107,6 +161,37 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
   // 不再把「OSM」这种图源缩写塞进室内工具排里让人猜。
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  // 2026-11-11 用户拍板：户外默认铺真地图（起步计划自带预置锚点）；纸面格网降级为
+  // 用户显式「隐藏底图」的形态。geoHidden = true 时切纸面，业务图层不受影响。
+  const [geoHidden, setGeoHidden] = useState(false);
+  // 2D 画布始终挂载（左栏图层/测量/标注都 portal 到它上面）。
+  // 切到 3D：把当前 2D 地图按同一中心斜起来（OutdoorPlan3D），不是跳到另一套工作台场景。
+  const [uncontrolledView, setUncontrolledView] = useState<'2d' | '3d'>(() => controlledView ?? readOutdoorPlanView(slotId) ?? '2d');
+  const view = controlledView ?? uncontrolledView;
+  const [mapView, setMapView] = useState<PlanViewport | null>(null);
+  const captureMapView = () => {
+    const next = canvasApiRef.current?.getView();
+    if (next && next.canvasW > 0 && next.canvasH > 0) setMapView(next);
+  };
+  const changeView = (next: '2d' | '3d') => {
+    if (next === '3d') captureMapView();
+    if (controlledView === undefined) setUncontrolledView(next);
+    onViewChange?.(next);
+  };
+  const viewSlotRef = useRef(slotId);
+  useEffect(() => {
+    if (controlledView !== undefined) return;
+    if (viewSlotRef.current === slotId) return;
+    viewSlotRef.current = slotId;
+    setUncontrolledView(readOutdoorPlanView(slotId) ?? '2d');
+  }, [slotId, controlledView]);
+  useEffect(() => { saveOutdoorPlanView(slotId, view); }, [slotId, view]);
+  useEffect(() => {
+    if (view !== '3d') return undefined;
+    const frame = requestAnimationFrame(captureMapView);
+    return () => cancelAnimationFrame(frame);
+  // 只在切进 3D 时拍一次视口；编辑规划时不要改 mapView，否则整场 3D 会重建、镜头被重置。
+  }, [view]);
 
   // 搜地点（用户 m04938 / m05472）：左上角「和地图 App 一样」的搜索框，组件本体在
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
@@ -122,9 +207,19 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // P2-g：没有草稿但有 3D 场地时，按 3D 壳体的轮廓起稿（同一个场地的两个视图）。
   const seedPlanRef = useRef<SitePlanData | null | undefined>(seedPlan);
   seedPlanRef.current = seedPlan;
+  // 2026-11-11 默认锚点：旧草稿没锚点、活动也从未定位过（seedPlan/anchor 都没有）时，
+  // 一次性补预置锚点（平湖秋月，source 'preset'）并经 autosave 落盘——真地图开箱即用。
+  // 活动本身有位置（seedPlan 已带 anchor / anchor prop 存在）则不动草稿，维持「不虚构」纪律。
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
   useEffect(() => {
     const record = readOutdoorProjectRecord(slotId);
-    setPlan(record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan());
+    const loaded = record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan();
+    if (!loaded.anchor && !anchorRef.current) {
+      setPlan({ ...loaded, anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR });
+      return;
+    }
+    setPlan(loaded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotId]);
 
@@ -188,11 +283,17 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // P2-g：对外命令句柄（室内工具排的撤销/重做/缩放/导出转发到这里）。
   // 不写依赖数组：每帧重建，句柄永远拿到当帧闭包（内部读的都是 ref/最新 state）。
   useImperativeHandle(ref, () => ({
-    zoomBy: (direction: 1 | -1) => canvasApiRef.current?.zoomBy(direction),
+    zoomBy: (direction: 1 | -1) => {
+      if (view === '3d') plan3dApiRef.current?.zoomBy(direction);
+      else canvasApiRef.current?.zoomBy(direction);
+    },
+    getCanvasApi: () => canvasApiRef.current,
     captureImage: () => canvasApiRef.current?.captureImage() ?? null,
     exportPng: () => exportPlanPng(),
     undo: () => canvasApiRef.current?.undo(),
     redo: () => canvasApiRef.current?.redo(),
+    setCanvasMode: (mode: 'view' | 'select') => canvasApiRef.current?.setMode(mode),
+  setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => canvasApiRef.current?.setInspector(open, tab),
   }));
 
   // P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动的入口；初次载入也报一次）。
@@ -212,13 +313,16 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }
 
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
+  // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜。
+  const canvasHidden = dormant || view === '3d';
 
   return (
     <div
       data-testid="outdoor-overlay"
-      style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'var(--sc-surface, #ffffff)', color: 'var(--sc-ink, #141416)' }}
+      data-view={view}
+      style={{ position: 'absolute', inset: 0, zIndex: 30, background: dormant ? 'transparent' : 'var(--sc-surface, #ffffff)', color: 'var(--sc-ink, #141416)', ...(dormant ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}) }}
     >
-      {guide.activeStep && (
+      {!dormant && guide.activeStep && (
         <GuideBubble
           step={guide.activeStep}
           stepIndex={GUIDE_STEPS.indexOf(guide.activeStep)}
@@ -228,24 +332,37 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         />
       )}
       {plan && (
-        <OutdoorPlanCanvas
-          ref={canvasApiRef}
-          plan={plan}
-          source={source}
-          // P4-b：有地理锚点就是真地图；没有锚点（室内房间/模板场景）走纸面平面底，
-          // 室内「标注区」与户外地图从此共用同一张画布。
-          // 注意：草稿里的 plan.anchor 可能为空，但场地/活动本身带 sceneAnchor/mapLngLat，
-          // 这种「有地理位置、草稿还没落锚点」的情况必须继续走地图，否则真场地会变成
-          // 一张空白纸面（看起来就像「底图加载不出来」）。
-          base={plan.anchor || anchor ? 'map' : 'floor'}
-          onPlanChange={setPlan}
-          {...(onHistoryChange ? { onHistoryChange } : {})}
-          panelsHostId="outdoor-panel-host-layers"
-          infoPanelHostId="outdoor-panel-host-info"
-          libraryPanelHostId="outdoor-panel-host-library"
-          {...(placePin ? { searchPin: placePin } : {})}
-          {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
-        />
+        <div style={{ position: 'absolute', inset: 0, visibility: canvasHidden ? 'hidden' : 'visible', pointerEvents: canvasHidden ? 'none' : 'auto' }}>
+          <OutdoorPlanCanvas
+            ref={canvasApiRef}
+            plan={plan}
+            source={source}
+            // 2026-11-11 用户拍板：户外默认有地理锚点（起步计划自带预置锚点、旧草稿一次性回填），
+            // 默认铺真地图；「隐藏底图」钮把纸面平面底（P4-b）变成用户显式选择的形态，
+            // 业务图层在两种形态下照常叠加。
+            base={geoHidden ? 'floor' : 'map'}
+            onPlanChange={setPlan}
+            {...(onHistoryChange ? { onHistoryChange } : {})}
+            {...(onModeChange ? { onModeChange: mode => onModeChange(mode === 'select' ? 'select' : 'view') } : {})}
+            {...(onInspectorChange ? { onInspectorChange } : {})}
+            {...(inspectorHostId ? { inspectorHostId } : {})}
+            panelsHostId="outdoor-panel-host-layers"
+            infoPanelHostId="outdoor-panel-host-info"
+            libraryPanelHostId="outdoor-panel-host-library"
+            levelsHostId="outdoor-panel-host-levels"
+            measureHostId="outdoor-panel-host-measure"
+            annotateHostId="outdoor-panel-host-annotate"
+            onActiveLevelChange={onActiveLevelChange}
+            sceneObjects={sceneObjects}
+            {...(placePin ? { searchPin: placePin } : {})}
+            {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
+          />
+        </div>
+      )}
+      {plan && view === '3d' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+          <OutdoorPlan3D plan={plan} source={source} sceneObjects={sceneObjects} apiRef={plan3dApiRef} canvasApiRef={canvasApiRef} {...(mapView ? { mapView } : {})} />
+        </div>
       )}
       {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
           选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。 */}
@@ -255,18 +372,22 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           onPick={place => {
             setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
+            plan3dApiRef.current?.focusLngLat(place.lng, place.lat);
           }}
           onClear={() => setPlacePin(null)}
         />
       )}
-      {/* 右上：分享 + 导出（对齐 OnePlan 画布右上交付区）；这两枚钮不再挂在室内工具排上。
-          纵向让开 3D 顶右角的楼层切换芯片（sc-floor-switcher，占 top 12–64），否则点击会被它吃掉。 */}
+      {/* 2D/3D 切换改到左下角：右上角被工作台右侧圆钮和楼层芯片挡住，点不到。
+          bottom 56 避开画布左下角的比例尺盒（P2-i，占 bottom 10–48）；弹层全部向上翻
+          （ExportMenu menuPlacement + .sc-outdoor-actions-bl CSS 覆盖 ShareMenu 的 sc-tool-pop）。 */}
       <div
         data-testid="outdoor-canvas-actions"
-        style={{ position: 'absolute', right: 80, top: 80, zIndex: 2, display: 'flex', alignItems: 'center', gap: 8 }}
+        className="sc-outdoor-actions-bl"
+        style={{ position: 'absolute', left: 12, bottom: 56, zIndex: 4, display: plan ? 'flex' : 'none', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}
       >
+        <OutdoorViewSwitch view={view} onChange={changeView} />
         <span data-testid="outdoor-export-host" style={{ display: 'inline-flex' }}>
-          <ExportMenu variant="canvas" enableExports onPick={pickExport} />
+          <ExportMenu variant="canvas" enableExports menuPlacement="above-left" onPick={pickExport} />
         </span>
         <button
           type="button"
@@ -296,9 +417,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         {/* P4-c：发布卡片由 room-organizer 传进来，和导出/分享同排同位置。 */}
         {deliverySlot}
       </div>
-      {/* 右下：底图选择（OnePlan 的 Select a map）+ 重看引导。 */}
+      {/* 右下：底图选择（OnePlan 的 Select a map）+ 隐藏底图 + 重看引导。
+          2026-11-11 用户指令：整簇往右挪（right 80→24），贴近画布右缘；
+          只动右下簇，右上交付簇的 right:80 是给 3D 楼层切换芯片让位的，不动。 */}
       <div
-        style={{ position: 'absolute', right: 80, bottom: 16, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}
+        style={{ position: 'absolute', right: 24, bottom: 16, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}
       >
         {mapPickerOpen && (
           <div
@@ -328,7 +451,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                   role="radio"
                   aria-checked={active}
                   data-testid={`map-source-${option.id}`}
-                  onClick={() => { setSource(option.id); setMapPickerOpen(false); }}
+                  onClick={() => { setSource(option.id); setGeoHidden(false); setMapPickerOpen(false); }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -347,68 +470,84 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                   }}
                 >
                   <span>{option.label}</span>
-                  <span style={{ fontSize: 11, opacity: active ? 0.85 : 0.5 }}>{active ? '当前' : option.short}</span>
+                  {active && <span style={{ fontSize: 11, opacity: 0.85 }}>当前</span>}
                 </button>
               );
             })}
-            <div style={{ fontSize: 11, lineHeight: 1.4, opacity: 0.62, color: PLANNING_SURFACE.panelText, padding: '2px 4px 0' }}>
-              天地图两档由服务端注入 key（TDT_KEY）；本机未配时瓦片回落灰色占位，可先切 OSM 街道。
-            </div>
+            {/* 2026-11-11：与室内地图类型菜单的「关闭底图」同语义——切纸面平面底（geoHidden）。 */}
+            <button
+              type="button"
+              data-testid="map-picker-toggle-geo"
+              onClick={() => { setGeoHidden(value => !value); setMapPickerOpen(false); }}
+              style={{
+                marginTop: 2,
+                padding: '7px 9px',
+                borderRadius: 9,
+                border: `1px solid ${geoHidden ? PLANNING_SURFACE.selectedBorder : 'transparent'}`,
+                background: geoHidden ? PLANNING_SURFACE.selectedBg : PLANNING_SURFACE.fieldBg,
+                color: PLANNING_SURFACE.panelText,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontFamily: 'inherit',
+                width: '100%',
+              }}
+            >
+              {geoHidden ? '恢复底图 · 真地图' : '关闭底图 · 纸面模式'}
+            </button>
+            {/* 2026-11-11：重看引导收进面板（原右下 ？ 钮按用户指令撤并）。 */}
+            <button
+              type="button"
+              data-testid="map-picker-restart-guide"
+              onClick={() => { guide.restart(); setMapPickerOpen(false); }}
+              style={{
+                padding: '6px 9px',
+                borderRadius: 9,
+                border: 'none',
+                background: 'transparent',
+                color: PLANNING_SURFACE.panelText,
+                fontSize: 11,
+                opacity: 0.75,
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontFamily: 'inherit',
+                width: '100%',
+              }}
+            >
+              重看首次开图引导
+            </button>
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {guide.activeStep === null && (
-            <button
-              type="button"
-              id="tool-outdoor-guide"
-              aria-label="重看首次开图引导"
-              data-tip="重看引导"
-              onClick={guide.restart}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 999,
-                border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                background: PLANNING_SURFACE.panelBg,
-                color: PLANNING_SURFACE.panelText,
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
-                fontFamily: 'inherit',
-              }}
-            >
-              ?
-            </button>
-          )}
+          {/* 2026-11-11 用户拍板：底部只留一枚图标钮（OnePlan 侧样）；隐藏底图/重看引导收进面板行。 */}
           <button
             type="button"
             id="tool-outdoor-source"
             data-testid="outdoor-source-cycle"
-            aria-label={`底图：${currentSource.label}（点选切换）`}
+            aria-label={`底图：${currentSource.label}${geoHidden ? '（当前纸面）' : ''}（点选图源/关闭底图/重看引导）`}
             aria-expanded={mapPickerOpen}
             aria-haspopup="dialog"
-            data-tip={`底图：${currentSource.label}`}
+            data-tip={`底图${geoHidden ? ' · 已关闭' : ` · ${currentSource.label}`}`}
             onClick={() => setMapPickerOpen(value => !value)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
+              justifyContent: 'center',
+              width: 34,
               height: 34,
-              padding: '0 14px',
               borderRadius: 999,
               border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
               background: PLANNING_SURFACE.panelBg,
               color: PLANNING_SURFACE.panelText,
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: 600,
               cursor: 'pointer',
               boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
               fontFamily: 'inherit',
             }}
           >
-            <span aria-hidden style={{ opacity: 0.7 }}>◱</span>
-            底图 · {currentSource.label}
+            <span aria-hidden style={{ opacity: 0.75 }}>{geoHidden ? '▢' : '◱'}</span>
           </button>
         </div>
       </div>

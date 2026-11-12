@@ -101,7 +101,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
     fireEvent.click(await screen.findByRole('button', { name: /新建项目/ }));
     fireEvent.change(screen.getByLabelText('方案名称'), { target: { value: '春夏市集' } });
     fireEvent.click(screen.getByRole('button', { name: '开始布置' }));
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/editor/?project=p-new'));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/editor/?project=p-new&mode=indoor'));
     expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '春夏市集', expect.objectContaining({ schemaVersion: 1 }));
   });
 
@@ -131,7 +131,8 @@ describe('VenuePicker（换场地 / 新建）', () => {
         plan: { boundary: unknown[]; anchor?: { lng: number; lat: number; crs: string; source: string } };
       };
       expect(record.name).toBe('西湖市集');
-      expect(record.plan.boundary).toHaveLength(4);
+      // 2026-11-11 拍板：起步 plan 零边界（边界由用户在 2D 里画），只带选点的地理锚点。
+      expect(record.plan.boundary).toHaveLength(0);
       expect(record.plan.anchor).toEqual({ lng: 120.146169, lat: 30.252176, crs: 'gcj-02', source: 'picker' });
     } finally {
       vi.unstubAllGlobals();

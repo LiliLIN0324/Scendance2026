@@ -16,6 +16,7 @@ import {
 import { isUntouched, snapshotBeforeReplace } from '../lib/restore-point';
 import { parseLayoutEventOperations, parseStoredLayout } from '../lib/schema';
 import { decodeShareUrl, isShareHash, isShareHashWithinBudget } from '../lib/share';
+import { purgeWestLakeBasemap } from '../lib/west-lake-basemap';
 import { recordSnapshot } from '../lib/version-history';
 import {retainReadonlyDraft} from '../lib/readonly-draft-registry';
 import type { SaveFailureReason } from '../lib/persistence';
@@ -273,7 +274,26 @@ export function useLayoutPersistence({
     };
 
     const hydrateFromLocalSave = (): void => {
-      const saved = loadLayout(writeLeaseRef.current || capabilityRef.current ? requireWriteLease : undefined);
+      const loaded = loadLayout(writeLeaseRef.current || capabilityRef.current ? requireWriteLease : undefined);
+      // 2026-11-11 用户 m00760：默认进来的西湖 / 平湖秋月底图不要了。已存草稿里
+      // 还带着的那张「切出来的西湖区」（调研底图 + 卫星贴地裁切图）在这里剥掉，
+      // 并把剥离后的草稿写回存盘 —— 否则水合那一下会被自动保存吞掉，下次重载
+      // 那块底图又会回来。
+      const purged = loaded ? purgeWestLakeBasemap(loaded) : { layout: null, changed: false };
+      const saved = purged.layout;
+      if (purged.changed && saved) {
+        const written = saveLayout(
+          saved,
+          undefined,
+          writeLeaseRef.current || capabilityRef.current ? requireWriteLease : undefined
+        );
+        if (written.ok) {
+          // The stored blob changed under us: rebase the baseline so the next
+          // autosave is not mistaken for another tab's write (#334).
+          storedBaselineRef.current = { known: true, json: written.json };
+          lastSavedJsonRef.current = written.json;
+        }
+      }
       if (saved) {
         localHydrationRef.current = { layout: saved, id: saved.id || null };
         hydrationBaseRef.current = layoutRef.current;

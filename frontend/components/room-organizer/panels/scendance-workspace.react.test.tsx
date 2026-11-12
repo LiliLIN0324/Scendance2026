@@ -141,8 +141,8 @@ describe('ScendanceLibrary shelf lifecycle', () => {
   it('keeps category, search, pagination and the scrolling row through tabs, collapse and 2D', async () => {
     const test = librarySetup();
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
-    fireEvent.click(screen.getByRole('button', { name: /^座席/ }));
-    expect(screen.getByRole('button', { name: /^座席/ }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: /^家具/ }));
+    expect(screen.getByRole('button', { name: /^家具/ }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.change(screen.getByRole('textbox', { name: /搜索/ }), { target: { value: 'Rehearsal Model' } });
     fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
     expect(tiles()).toHaveLength(30);
@@ -223,14 +223,15 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.id).toBe('tool-column');
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
-    // 室内常驻：发布 / 移动局部物体 / 2D·3D / 进入漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
+    // 室内常驻：发布 / 画布工具（抓手·选择）/ 2D·3D / 进入漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
     expect(within(rail).getAllByRole('button')).toHaveLength(15);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
-    for (const name of ['发布', '移动局部物体 · 激活中，再点一次退出', '2D / 3D', '进入漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图']) {
+    // 2026-11-12 统一 2D/3D：这颗钮常亮表示当前模式，aria-label 随模式报「当前 2D 地图 / 3D 场地」。
+    for (const name of ['发布', '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）', /当前 (2D 地图|3D 场地)/, '进入漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
-    // 选择是开关而不是禁用：默认激活，但按钮可点，再点一次退出。
-    const selectButton = within(rail).getByRole('button', { name: '移动局部物体 · 激活中，再点一次退出' }) as HTMLButtonElement;
+    // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。
+    const selectButton = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
     expect(selectButton.disabled).toBe(false);
     expect(selectButton.getAttribute('aria-pressed')).toBe('true');
     // 三个机位是同一层切换，右轨只留一颗「视角」钮，点一下按 整体 → 俯视 → 正面机位 轮换。
@@ -265,7 +266,7 @@ describe('ScendanceViewTools design column', () => {
     // 氛围四条在竖列 rail 的弹出菜单里。
     expect(rail.querySelector('.sc-atmosphere-group')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
-    const dimension = within(rail).getByRole('button', { name: '2D / 3D' });
+    const dimension = within(rail).getByRole('button', { name: /当前 (2D 地图|3D 场地)/ });
     // 图标体系已迁到 Material Symbol 蒙版 span（sc-material-symbol），不再是 svg。
     expect(dimension.querySelector('.sc-material-symbol')).toBeTruthy();
     expect(dimension.textContent).not.toMatch(/2D|3D/);
@@ -273,29 +274,47 @@ describe('ScendanceViewTools design column', () => {
     expect(values.toggle).toHaveBeenCalledWith('view2D');
   });
 
-  it('toggles 移动局部物体 as a real switch instead of disabling it', () => {
+  // 2026-11-11 OnePlan 画布工具菜单：抓手 H / 选择 S。
+  it('2026-11-11 OnePlan 画布工具菜单：抓手 H / 选择 S', () => {
     const { values, rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '移动局部物体 · 激活中，再点一次退出' }) as HTMLButtonElement;
+    const select = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
     expect(select.disabled).toBe(false);
     expect(select.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(select);
+    const handItem = screen.getByRole('menuitemradio', { name: /抓手工具/ });
+    expect(handItem.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('menuitemradio', { name: /选择工具/ }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(handItem);
+    expect(applyView(values, makeViewSettings())).toMatchObject({ selectMode: false });
+  });
+
+  // 2026-11-12 统一 2D/3D 后沿用菜单语义：抓手/选择仍是一把真开关，只是经由菜单切换。
+  it('toggles 选择工具 via the canvas-tool menu instead of disabling it', () => {
+    const { values, rail } = renderTools();
+    const select = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
+    expect(select.disabled).toBe(false);
+    expect(select.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /抓手工具/ }));
     expect(applyView(values, makeViewSettings())).toMatchObject({ selectMode: false });
     cleanup();
-    // 关掉之后是「未启用」：仍然可点，再点一下就是重新启用。
+    // 关掉之后是「抓手浏览」：仍然可点，菜单里再点「选择工具」就是重新启用。
     const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
     render(<Providers values={off}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const offSelect = screen.getByRole('button', { name: '移动局部物体 · 未启用，点一下启用' }) as HTMLButtonElement;
+    const offSelect = screen.getByRole('button', { name: '画布工具：抓手浏览中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
     expect(offSelect.disabled).toBe(false);
     expect(offSelect.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(offSelect);
+    const selectItem = screen.getByRole('menuitemradio', { name: /选择工具/ });
+    expect(selectItem.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(selectItem);
     expect(applyView(off, makeViewSettings({ selectMode: false }))).toMatchObject({ selectMode: true });
     cleanup();
-    // 在走动里它不是当前工具：可点，点一下就是退出走动回到选择。
+    // 在走动里它不是当前工具：菜单里点「选择工具」就是退出走动回到选择。
     const walking = contexts(makeLayout(), makeViewSettings({ walkthroughMode: true }));
     render(<Providers values={walking}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const walkingSelect = screen.getByRole('button', { name: '移动局部物体 · 已启用，点一下切回' });
-    expect((walkingSelect as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(walkingSelect);
+    fireEvent.click(screen.getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /选择工具/ }));
     expect(walking.setView).toHaveBeenCalledTimes(1);
   });
 

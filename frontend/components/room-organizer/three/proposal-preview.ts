@@ -1,6 +1,7 @@
 import { mountBand } from '../lib/mount-band';
 import { floorElevation, itemForStorey } from '../lib/storeys';
 import { disposeObject } from './builder-utils';
+import { footprintEdges } from './footprint-outline';
 import { createFurnitureModel } from './furniture-builders';
 import { buildStructureShell } from './structure-builder';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
@@ -16,7 +17,7 @@ function itemsById(layout: RoomLayout): Map<string, LocatedItem> {
 
 function visibleValues({ item, floorIndex }: LocatedItem) {
   return [floorIndex, item.type, item.assetId, item.assetId ? null : item.glbUrl, item.glbNode, item.materialId, item.width, item.depth, item.height,
-    item.position?.x, item.position?.z, item.elevation ?? 0, item.sillHeight, item.rotation ?? 0, item.mirrored ?? false, item.color, item.locked ?? false, item.notes ?? ''];
+    item.position?.x, item.position?.z, item.elevation ?? 0, item.sillHeight, item.rotation ?? 0, item.mirrored ?? false, item.color, item.locked ?? false, item.notes ?? '', item.tableShape ?? null];
 }
 
 function sameVisibleValues(before: LocatedItem, after: LocatedItem): boolean {
@@ -74,9 +75,14 @@ export function createProposalPreview(
   function outline(located: LocatedItem, layout: RoomLayout, color: number, role: string): void {
     const floor = layout.floors[located.floorIndex];
     const band = mountBand(located.item.structuralOpeningId || located.item.structuralColumnId ? located.item : itemForStorey(located.item, floor));
-    const box = new THREE.BoxGeometry(located.item.width + 0.02, band.top - band.bottom + 0.02, located.item.depth + 0.02);
-    const edges = new THREE.EdgesGeometry(box);
-    box.dispose();
+    const pad = 0.02;
+    const edges = footprintEdges(
+      THREE,
+      located.item,
+      located.item.width + pad,
+      band.top - band.bottom + pad,
+      located.item.depth + pad,
+    );
     const material = new THREE.LineDashedMaterial({ color, transparent: true, opacity: 0.9, dashSize: 0.1, gapSize: 0.06, depthTest: false });
     const line = new THREE.LineSegments(edges, material);
     line.computeLineDistances();

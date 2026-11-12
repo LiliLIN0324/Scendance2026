@@ -1,7 +1,8 @@
 'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { Check, Hand } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
   SATELLITE_GROUND_LABEL,
@@ -19,7 +20,13 @@ import {
   satelliteImageAligned,
   satelliteMissReason,
 } from '../lib/amap-venue';
-import { readPlanGroundSource } from '../lib/plan-basemap-source';
+import {
+  PLAN_GROUND_SOURCES,
+  readPlanGroundSource,
+  subscribePlanGroundSource,
+  writePlanGroundSource,
+} from '../lib/plan-basemap-source';
+import { basemapSourceAttribution, PUBLIC_SOURCE_SPECS } from '../lib/tdt-probe';
 import {
   GROUND_BASEMAP_LAYERS,
   activeGroundBasemap,
@@ -32,6 +39,7 @@ import { materialCount } from '../lib/structural-layout';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
+import { OUTDOOR_TOOL_ICONS } from '../components/outdoor-tool-icons';
 import { OnlineModelLibrary } from './online-model-library';
 import { MaterialCreateCell } from './material-create-cell';
 import { LibraryChat } from './library-chat';
@@ -50,6 +58,8 @@ interface LibraryProps {
   capturePlacementBatch?(): CatalogPlacementBatchGuard;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
   placeCatalogItemResult?(item: CatalogItem): CatalogPlacementResult;
+  /** 2026-11-12 统一放置流程：点物料进「待放置」（点哪放哪，同户外），不再直接落正中。 */
+  onArmCatalogItem?(item: CatalogItem): void;
 }
 
 export function MaterialGlyph({ materialId, color = 'currentColor' }: { materialId?: string | undefined; color?: string }): JSX.Element {
@@ -141,11 +151,11 @@ export function ShelfGrip({ shelfRef, label = '调整物料库高度' }: { shelf
   ><span aria-hidden="true"/></div>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, controller, onClose, capturePlacement, capturePlacementBatch, variant = 'shelf', walkRoles = [] }: LibraryProps & {
+export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onArmCatalogItem, controller, onClose, capturePlacement, capturePlacementBatch, variant = 'shelf', walkRoles = [] }: LibraryProps & {
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
   /** 左侧只负责选角色；进出漫游统一走右侧 `tool-walk`。 */
-  walkRoles?: readonly { id: string; name: string; image: string; walkable: boolean; note?: string; selected: boolean; onSelect(): void }[];
+  walkRoles?: readonly { id: string; name: string; image: string; walkable: boolean; note?: string; crowdType?: string; selected: boolean; onSelect(): void }[];
 }): JSX.Element {
   const { layout, activeFloor, actions, history } = useRoomEditor();
   const { selectOnly } = useSelection();
@@ -183,24 +193,9 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, con
       {card
         ? <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} {...(onArmCatalogItem ? { onArmCatalogItem } : {})} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}
               createSlot={<LibraryChat title="物料库"><MaterialCreateCell variant="chat" importSlot={importSlot} {...(controller ? { controller } : {})}/></LibraryChat>}
-              walkRoleSlot={walkRoles.length > 0 ? <ul className="sc-lib-grid" aria-label="漫游角色">
-                {walkRoles.map(role => <li key={role.id}>
-                  <button type="button" className={`sc-walk-role-card${role.selected ? ' is-selected' : ''}`}
-                    aria-pressed={role.selected} disabled={!role.walkable}
-                    aria-label={role.walkable ? `选用${role.name}漫游` : `${role.name}无法漫游`}
-                    title={role.note ?? (role.selected ? '当前角色，右侧「进入漫游」用它' : `点一下换成${role.name}`)}
-                    onClick={role.onSelect}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={role.image} alt={`${role.name}全身预览`} loading="lazy"/>
-                  <strong>{role.name}</strong>
-                  {role.note
-                    ? <span className="sc-walk-role-note">{role.note}</span>
-                    : role.selected ? <span className="sc-walk-role-note">当前角色</span> : null}
-                  </button>
-                </li>)}
-              </ul> : undefined}/>
+              walkRoles={walkRoles}/>
           </div>
         </div>
         : <div className="sc-library-content">
@@ -267,7 +262,28 @@ interface ViewToolsProps {
     zoomBy(direction: 1 | -1): void;
     /** 导出 PNG：户外走 2D 规划快照（不抓 3D 帧），无 plan 时返回 false。 */
     exportPng?(): boolean;
+    /** 覆盖层当前视角：2D 地图 / 3D 场地是同一份规划的两种看法，工具排始终走规划画布。 */
+    view?: '2d' | '3d';
+    setCanvasView?(view: '2d' | '3d'): void;
+    /** 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自一张卡，这里给出各自的展开态（右轨按下态）。 */
+    inspectorTabs?: Record<'measure' | 'annotate' | 'selection', boolean>;
+    setInspector?(tab: 'measure' | 'annotate' | 'selection'): void;
+    /** 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（「选择」钮按下态与切换；S/H 快捷键同源）。 */
+    canvasMode?: 'view' | 'select';
+    setCanvasMode?(mode: 'view' | 'select'): void;
   } | null;
+  /**
+   * GeoGround（2026-11-12）：主画布 3D 地面由户外计划的地理瓦片接管时置真。
+   * 「卫星贴地 / 地图类型」两钮管的是室内高德静态贴地，此时没有可管的东西
+   * （且会显示「未定位」误导），与户外态同一扇门隐藏。
+   */
+  geoGroundActive?: boolean;
+  /**
+   * 2026-11-12 统一 2D/3D（用户拍板）：有户外计划时「平面/立体」钮不再碰室内 view2D——
+   * 平面＝户外覆盖层（2D 地图，图五）、立体＝关覆盖层进全屏接管（GeoGround 3D，图六）。
+   * showing3d 由宿主算（覆盖层开=2D、关=3D 接管）；无户外计划时缺省走室内 toggle('view2D')。
+   */
+  outdoorStage?: { showing3d: boolean; onSwitch: () => void } | null | undefined;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -323,11 +339,15 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null }: ViewToolsProps): JSX.Element {
-  // P2-g：户外模式＝这四组通用钮改派给 2D 画布；室内历史/相机一概不动。
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null, geoGroundActive = false, outdoorStage = null }: ViewToolsProps): JSX.Element {
+  // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
+  // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
   const sceneMoveActive = sceneMoveMode !== 'off';
   const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
+  const outdoorEditing = outdoor != null;
+  // 2026-11-12 统一 2D/3D：有户外计划时跟随宿主给的舞台态（覆盖层开=2D、关=3D 接管）。
+  const showing3D = outdoorStage ? outdoorStage.showing3d : (outdoor?.setCanvasView ? outdoor.view === '3d' : !view.view2D);
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -352,6 +372,8 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const [satelliteMiss, setSatelliteMiss] = useState<'key' | 'place' | null>(null);
   const [mapTypeOpen, setMapTypeOpen] = useState(false);
   const [mapMiss, setMapMiss] = useState(false);
+  // 2026-11-11 用户指令：选择钮改 OnePlan 画布工具菜单（点钮开弹层：抓手 H / 选择 S）。
+  const [selectMenuOpen, setSelectMenuOpen] = useState(false);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
@@ -500,10 +522,17 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   const mapTypeMenuRef = useRef<HTMLDivElement>(null);
-  const selectActive = view.selectMode && !view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode;
-  const selectTip = selectActive
-    ? '移动局部物体 · 激活中，再点一次退出'
-    : view.selectMode ? '移动局部物体 · 已启用，点一下切回' : '移动局部物体 · 未启用，点一下启用';
+  // 2026-11-12 用户指令：GeoGround 态补回「地图切换」——主 3D 瓦片图源与户外 2D 同一份偏好联动。
+  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as (typeof PLAN_GROUND_SOURCES)[number]);
+  const [groundSourceOpen, setGroundSourceOpen] = useState(false);
+  const groundSourceMenuRef = useRef<HTMLDivElement>(null);
+  const selectMenuRef = useRef<HTMLDivElement>(null);
+  // 2026-11-12 B2：户外态的抓手/选择走 2D 画布的 canvasMode（outdoor 转发），室内沿用 selectMode——
+  // 同一个下拉管两套画布，✓ 与图标跟随当前画布的真实模式。
+  const outdoorSelectOn = outdoor?.canvasMode === 'select';
+  const canvasSelectOn = outdoor != null ? outdoorSelectOn : view.selectMode;
+  const selectActive = canvasSelectOn && (outdoor != null || (!view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode));
+  const canvasToolTip = `画布工具：${outdoor != null ? (outdoorSelectOn ? '选择设施' : '抓手浏览') : view.selectMode ? '选择物体' : '抓手浏览'}中 · 点击切换（H 抓手 / S 选择）`;
   const { current: angleNow, next: angleNext } = presetAt(preset);
   const choosePreset = (next: CameraPreset) => {
     setView(current => ({ ...current, view2D: false, walkthroughMode: false }));
@@ -528,17 +557,27 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     // stays visible from the orbit camera.
     setView(current => ({ ...current, showAllFloors: false, wallDisplay: 'cutaway' }));
   };
-  // 选择钮是真开关：第二次点击把 selectMode 关掉（画布只浏览、不抓物料）；
-  // 从别的工具点回来时，顺手把那件工具停掉。
-  const toggleSelect = () => {
+  // 2026-11-11 OnePlan 画布工具菜单：抓手 = 画布只浏览不抓物料（selectMode off）；
+  // 选择 = 移动局部物体（顺手把互斥工具停掉）。点菜单项或按 H / S 都走这里。
+  // 2026-11-12 B2：户外态转发 2D 画布 canvasMode（抓手=view、选择=select），室内分支原样。
+  const chooseHandTool = () => {
+    setSelectMenuOpen(false);
+    if (outdoor?.setCanvasMode) {
+      outdoor.setCanvasMode('view');
+      return;
+    }
     // Object movement and whole-scene movement are exclusive modes.
     onSceneMoveModeChange?.('off');
-    setView(current => {
-      const active = current.selectMode && !current.measurementMode && !current.drawWallMode && !current.drawZoneMode && !current.walkthroughMode;
-      return active
-        ? { ...current, selectMode: false }
-        : { ...current, selectMode: true, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false };
-    });
+    setView(current => ({ ...current, selectMode: false }));
+  };
+  const chooseSelectTool = () => {
+    setSelectMenuOpen(false);
+    if (outdoor?.setCanvasMode) {
+      outdoor.setCanvasMode('select');
+      return;
+    }
+    onSceneMoveModeChange?.('off');
+    setView(current => ({ ...current, selectMode: true, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false }));
   };
   const setWalkthrough = (on: boolean) => {
     if (on) onSceneMoveModeChange?.('off');
@@ -583,11 +622,11 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       }
       return;
     }
-    if (!onExportImage && !outdoor?.exportPng) return;
+    if (!onExportImage && !(outdoorEditing && outdoor?.exportPng)) return;
     setExporting(true);
     try {
-      // P2-g：户外模式导出走 2D 规划快照（底图+业务层+图例的 plan PNG），不抓 3D 帧。
-      if (outdoor?.exportPng) outdoor.exportPng();
+      // 仅在 2D 地图编辑时导出规划快照；3D 抓工作台三维帧。
+      if (outdoorEditing && outdoor?.exportPng) outdoor.exportPng();
       else if (onExportImage) await onExportImage({ view: exportView, scale: exportScale });
     } finally {
       setExporting(false);
@@ -595,12 +634,14 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     }
   };
   useEffect(() => {
-    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen && !mapTypeOpen) return undefined;
+    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen && !mapTypeOpen && !groundSourceOpen && !selectMenuOpen) return undefined;
     const onPointer = (event: MouseEvent) => {
       const target = event.target as Node;
       const el = event.target as HTMLElement | null;
       if (exportOpen && exportMenuRef.current && !exportMenuRef.current.contains(target)) setExportOpen(false);
       if (mapTypeOpen && mapTypeMenuRef.current && !mapTypeMenuRef.current.contains(target)) setMapTypeOpen(false);
+      if (groundSourceOpen && groundSourceMenuRef.current && !groundSourceMenuRef.current.contains(target)) setGroundSourceOpen(false);
+      if (selectMenuOpen && selectMenuRef.current && !selectMenuRef.current.contains(target)) setSelectMenuOpen(false);
       if (atmosphereMenuRef.current && !atmosphereMenuRef.current.contains(target)) {
         setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false);
       } else if (atmosphereMenuRef.current) {
@@ -611,12 +652,29 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); setMapTypeOpen(false); }
+      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); setMapTypeOpen(false); setSelectMenuOpen(false); }
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
-  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown, mapTypeOpen]);
+  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown, mapTypeOpen, selectMenuOpen]);
+
+  // 2026-11-11 画布工具快捷键（OnePlan 同款）：H 抓手 / S 选择；漫游 WASD 与输入框中不抢键。
+  // 每次渲染重挂（无 deps），保证闭包拿到最新的 view/choose 函数，开销可忽略。
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key !== 'h' && key !== 's') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (view.walkthroughMode) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+      if (key === 'h') chooseHandTool();
+      else chooseSelectTool();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
 
   return (
     /* 圆钮贴在画布右上角。所有工具都是一级钮，没有省略号菜单；只有导出还带一层选项弹层。 */
@@ -638,13 +696,44 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       {sceneMoveEnabled && <button type="button" id="tool-move-scene" data-tip={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '移动整体场景 · 坐标轴 · 再点切无轴' : '移动整体场景 · 无轴 · 再点完成'} aria-label={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '切换到无轴移动' : '完成移动整体场景'} aria-pressed={sceneMoveActive} className={sceneMoveActive ? 'is-active' : ''} onClick={() => onSceneMoveModeChange?.(sceneMoveMode === 'off' ? 'gizmo' : sceneMoveMode === 'gizmo' ? 'numeric' : 'off')}>
         <MoveSceneIcon />
       </button>}
-      <button type="button" id="tool-select" data-tip={selectTip} aria-label={selectTip} aria-pressed={selectActive} className={selectActive ? 'is-active' : view.selectMode ? '' : 'is-off'} onClick={toggleSelect}>
-        <MaterialSymbol name="near_me" />
-      </button>
+      {/* 2026-11-11 用户指令：OnePlan 画布工具菜单——按钮图标随当前工具（抓手/选择），
+          点开弹层两行（图标 + 名称 + 快捷键徽标 + ✓ 当前项），H/S 快捷键直达。 */}
+      <div className="sc-tool-menu" ref={selectMenuRef}>
+        <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolTip} aria-pressed={selectActive} aria-haspopup="menu" aria-expanded={selectMenuOpen} aria-controls="tool-select-panel" className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { setSelectMenuOpen(open => !open); setMapTypeOpen(false); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+          {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <Hand size={20} strokeWidth={2} />}
+        </button>
+        {selectMenuOpen && <div id="tool-select-panel" className="sc-tool-pop" role="menu" aria-label="画布工具">
+          <button type="button" role="menuitemradio" aria-checked={!canvasSelectOn} className={`sc-canvas-tool-row${!canvasSelectOn ? ' is-active' : ''}`} onClick={chooseHandTool}>
+            <Hand size={15} strokeWidth={2} />
+            <span>抓手工具</span>
+            <span className="sc-tool-key" aria-hidden="true">H</span>
+            {!canvasSelectOn && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
+          </button>
+          <button type="button" role="menuitemradio" aria-checked={canvasSelectOn} className={`sc-canvas-tool-row${canvasSelectOn ? ' is-active' : ''}`} onClick={chooseSelectTool}>
+            <MaterialSymbol name="near_me" size={15} />
+            <span>选择工具</span>
+            <span className="sc-tool-key" aria-hidden="true">S</span>
+            {canvasSelectOn && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
+          </button>
+        </div>}
+      </div>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { onSceneMoveModeChange?.('off'); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
-        <MaterialSymbol name={view.view2D ? 'view_compact' : 'view_in_ar'} />
+      {/* 2026-11-12 用户拍板「2D/3D 按钮统一」：这颗钮在 2D/3D 两种模式下同位置、同高亮——
+          常亮绿色描边表示「当前模式」，图标随模式切换（2D=view_compact 线框、3D=view_in_ar 立方体），
+          让 2D 态也能一眼认出它就是 3D 里那颗绿色立方体钮。aria-pressed 仍如实报当前是否 3D。 */}
+      <button type="button" id="tool-2d3d" data-tip={showing3D ? '当前 3D 场地 · 切到 2D 地图' : '当前 2D 地图 · 切到 3D 场地'} aria-label={showing3D ? '当前 3D 场地，点击切到 2D 地图' : '当前 2D 地图，点击切到 3D 场地'} aria-pressed={showing3D} className="is-active" onClick={() => { onSceneMoveModeChange?.('off'); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); if (outdoorStage) { outdoorStage.onSwitch(); return; } if (outdoor?.setCanvasView) { outdoor.setCanvasView(outdoor.view === '3d' ? '2d' : '3d'); return; } toggle('view2D'); }}>
+        <MaterialSymbol name={showing3D ? 'view_in_ar' : 'view_compact'} />
       </button>
+      {/* 2026-11-12 三张卡拆开（用户指令）：测量 / 标注 / 属性 各一张卡，圆钮按下态各自独立。 */}
+      {outdoor?.setInspector && <button type="button" id="tool-measure" data-tip="测量" aria-label="测量" aria-pressed={outdoor.inspectorTabs?.measure === true} className={outdoor.inspectorTabs?.measure === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('measure')}>
+        <MaterialSymbol name={OUTDOOR_TOOL_ICONS.measure} />
+      </button>}
+      {outdoor?.setInspector && <button type="button" id="tool-annotate" data-tip="标注" aria-label="标注" aria-pressed={outdoor.inspectorTabs?.annotate === true} className={outdoor.inspectorTabs?.annotate === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('annotate')}>
+        <MaterialSymbol name={OUTDOOR_TOOL_ICONS.annotate} />
+      </button>}
+      {outdoor?.setInspector && <button type="button" id="tool-selection" data-tip="属性" aria-label="属性" aria-pressed={outdoor.inspectorTabs?.selection === true} className={outdoor.inspectorTabs?.selection === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('selection')}>
+        <MaterialSymbol name={OUTDOOR_TOOL_ICONS.selection} />
+      </button>}
       {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
       {environmentViewEnabled && onEnvironmentViewChange && <button type="button" id="tool-environment-view" data-tip={environmentView === 'gaussian' ? '切换到识别轮廓' : '切换到高斯实景'} aria-label={environmentView === 'gaussian' ? '切换到识别轮廓' : '切换到高斯实景'} aria-pressed={environmentView === 'footprint'} className={environmentView === 'footprint' ? 'is-active' : ''} onClick={() => {
         const next = environmentView === 'gaussian' ? 'footprint' : 'gaussian';
@@ -667,8 +756,52 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
         <MaterialSymbol name={view.snapToGrid ? 'center_focus_strong' : 'grid_3x3'} />
       </button>
-      {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。 */}
-      {satelliteVenue && <div className="sc-tool-menu" ref={mapTypeMenuRef}>
+      {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。
+          户外规划（含 3D 场地）时隐藏工作台「地图类型」：底图入口只在覆盖层右下角。
+          GeoGround（计划瓦片接管主 3D 地面）：「卫星贴地」没有可管的东西继续隐藏；
+          「地图切换」2026-11-12 用户指令补回——直接切 GeoGround 瓦片图源，与户外 2D 底图同一份偏好联动。 */}
+      {geoGroundActive && !outdoorEditing && <div className="sc-tool-menu" ref={groundSourceMenuRef}>
+        <button
+          type="button"
+          id="tool-ground-source"
+          data-tip={`地图切换 · ${PUBLIC_SOURCE_SPECS[groundSource].label}`}
+          aria-label={`地图切换，当前 ${PUBLIC_SOURCE_SPECS[groundSource].label}，点选图源`}
+          aria-haspopup="dialog"
+          aria-expanded={groundSourceOpen}
+          aria-controls="tool-ground-source-panel"
+          className={groundSourceOpen ? 'is-active' : ''}
+          onClick={() => { quietShare(); setGroundSourceOpen(open => !open); setExportOpen(false); setMapTypeOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}
+        >
+          <MaterialSymbol name="map" />
+        </button>
+        {groundSourceOpen && <div id="tool-ground-source-panel" className="sc-tool-pop sc-map-type-pop" role="dialog" aria-label="地图切换">
+          <span className="sc-map-type-title">地图切换</span>
+          <div role="listbox" aria-label="地理瓦片图源">
+            {PLAN_GROUND_SOURCES.map(src => {
+              const selected = src === groundSource;
+              const spec = PUBLIC_SOURCE_SPECS[src];
+              return (
+                <button
+                  type="button"
+                  key={src}
+                  role="option"
+                  aria-selected={selected}
+                  className={`sc-map-type-row${selected ? ' is-active' : ''}`}
+                  onClick={() => { writePlanGroundSource(src); setGroundSourceOpen(false); }}
+                >
+                  <span className="sc-map-type-copy">
+                    <strong>{spec.label}</strong>
+                    <small>与户外 2D 底图联动</small>
+                  </span>
+                  <span className="sc-map-type-provider">{spec.attribution}</span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="sc-map-type-note">{basemapSourceAttribution(groundSource)} · 3D 地面与户外 2D 底图同源联动</span>
+        </div>}
+      </div>}
+      {satelliteVenue && !outdoorEditing && !geoGroundActive && <div className="sc-tool-menu" ref={mapTypeMenuRef}>
         <button type="button" id="tool-map-type" data-tip={mapTip} aria-label={mapTip} aria-haspopup="dialog" aria-expanded={mapTypeOpen} aria-controls="tool-map-type-panel" aria-busy={satelliteBusy} className={mapTypeOpen ? 'is-active' : ''} onClick={() => { quietShare(); setMapTypeOpen(open => !open); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <MaterialSymbol name="map" />
         </button>
@@ -691,21 +824,21 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
           <span className="sc-map-type-note">底图 © 高德地图 · 仅作参照，不可作重建素材</span>
         </div>}
       </div>}
-      {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
+      {satelliteVenue && !outdoorEditing && !geoGroundActive && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
         <MaterialSymbol name="satellite" />
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-undo" data-tip={outdoor ? '撤销（平面编辑）' : '撤销'} aria-label="撤销" disabled={outdoor ? !outdoor.canUndo : (layoutLocked || !history.canUndo)} onClick={outdoor ? () => outdoor.undo() : history.undo}>
+      <button type="button" id="tool-undo" data-tip={outdoorEditing ? '撤销（平面编辑）' : '撤销'} aria-label="撤销" disabled={outdoorEditing ? !outdoor!.canUndo : (layoutLocked || !history.canUndo)} onClick={outdoorEditing ? () => outdoor!.undo() : history.undo}>
         <MaterialSymbol name="undo" />
       </button>
-      <button type="button" id="tool-redo" data-tip={outdoor ? '重做（平面编辑）' : '重做'} aria-label="重做" disabled={outdoor ? !outdoor.canRedo : (layoutLocked || !history.canRedo)} onClick={outdoor ? () => outdoor.redo() : history.redo}>
+      <button type="button" id="tool-redo" data-tip={outdoorEditing ? '重做（平面编辑）' : '重做'} aria-label="重做" disabled={outdoorEditing ? !outdoor!.canRedo : (layoutLocked || !history.canRedo)} onClick={outdoorEditing ? () => outdoor!.redo() : history.redo}>
         <MaterialSymbol name="redo" />
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={outdoor ? false : view.view2D} onClick={() => (outdoor ? outdoor.zoomBy(-1) : onZoom('-'))}>
+      <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={outdoorEditing ? false : view.view2D} onClick={() => (outdoorEditing ? outdoor!.zoomBy(-1) : onZoom('-'))}>
         <MaterialSymbol name="iconpark_zoom_out_solid" />
       </button>
-      <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={outdoor ? false : view.view2D} onClick={() => (outdoor ? outdoor.zoomBy(1) : onZoom('+'))}>
+      <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={outdoorEditing ? false : view.view2D} onClick={() => (outdoorEditing ? outdoor!.zoomBy(1) : onZoom('+'))}>
         <MaterialSymbol name="iconpark_zoom_in_solid" />
       </button>
       {onExportImage && <div className="sc-tool-menu" ref={exportMenuRef}>

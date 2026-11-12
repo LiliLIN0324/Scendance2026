@@ -25,7 +25,7 @@ const SOURCES: { id: CanvasBasemapSource; label: string }[] = [
   { id: 'carto-dark', label: 'Carto 深色' },
 ];
 
-/** 演示用样例快照（发布方入口 /outdoor-plan 生成链接；此处兜底展示）。 */
+/** 演示用样例快照（无链接参数时的兜底展示；分享链接由主工作台生成）。 */
 const DEMO_SNAPSHOT: SitePlanSnapshot = {
   planId: '99999999-9999-4999-8999-999999999999',
   projectId: '88888888-8888-4888-8888-888888888888',

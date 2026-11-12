@@ -1,5 +1,5 @@
 import { structureSchema, type Scene } from '../../../../supabase/functions/_shared/domain';
-import { canApplyStructuralChange, structuralViolations, dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
+import { canApplyStructuralChange, structuralViolations, structuralWarnings, dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
 import { isWallHung, mountBand } from './mount-band';
 import { isWallMounted } from './opening-snap';
 import type { FurnitureItem, RoomLayout } from './types';
@@ -10,17 +10,152 @@ export function stableMeasurement(value: number, original?: number): number {
   return original !== undefined && Math.abs(value - original) <= 1e-12 ? original : value;
 }
 
+type ShellPoint = { x: number; z: number };
+
+function ringArea(points: readonly ShellPoint[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index]!, b = points[(index + 1) % points.length]!;
+    area += a.x * b.z - b.x * a.z;
+  }
+  return Math.abs(area) / 2;
+}
+
+function signedRing(points: readonly ShellPoint[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index]!, b = points[(index + 1) % points.length]!;
+    area += a.x * b.z - b.x * a.z;
+  }
+  return area / 2;
+}
+
+/** Pull a closed loop in to the wall's inner face. A bad offset keeps the centerline. */
+function insetLoop(loop: readonly ShellPoint[], distance: number): ShellPoint[] | null {
+  if (!(distance > 0) || loop.length < 3) return null;
+  const ccw = signedRing(loop) > 0;
+  const edges = loop.map((start, index) => {
+    const end = loop[(index + 1) % loop.length]!;
+    const dx = end.x - start.x, dz = end.z - start.z;
+    const length = Math.hypot(dx, dz) || 1;
+    const nx = (ccw ? -dz : dz) / length, nz = (ccw ? dx : -dx) / length;
+    return { x: start.x + nx * distance, z: start.z + nz * distance, dx, dz };
+  });
+  const verts: ShellPoint[] = [];
+  for (let index = 0; index < edges.length; index++) {
+    const prev = edges[(index + edges.length - 1) % edges.length]!;
+    const next = edges[index]!;
+    const den = prev.dx * next.dz - prev.dz * next.dx;
+    if (Math.abs(den) < 1e-9) return null;
+    const t = ((next.x - prev.x) * next.dz - (next.z - prev.z) * next.dx) / den;
+    const point = { x: prev.x + prev.dx * t, z: prev.z + prev.dz * t };
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.z)) return null;
+    verts.push(point);
+  }
+  const area = ringArea(verts);
+  if (!(area > 1) || area >= ringArea(loop) - 1e-6 || signedRing(verts) * signedRing(loop) <= 0) return null;
+  return verts;
+}
+
+/** A closed exterior shell smaller than the activity frame. Endpoints are world metres. */
+function shellInterior(walls: readonly { start: ShellPoint; end: ShellPoint; kind?: string; thickness?: number }[], width: number, depth: number): ShellPoint[] | null {
+  const exterior = walls.filter(wall => wall.kind === 'exterior');
+  if (exterior.length < 3 || !(width > 0) || !(depth > 0)) return null;
+  const key = (point: ShellPoint) => `${point.x.toFixed(3)},${point.z.toFixed(3)}`;
+  const pending = exterior.map(wall => ({ start: wall.start, end: wall.end }));
+  const loop = [pending[0]!.start, pending[0]!.end];
+  pending.shift();
+  while (pending.length) {
+    const end = loop[loop.length - 1]!;
+    const index = pending.findIndex(wall => key(wall.start) === key(end) || key(wall.end) === key(end));
+    if (index < 0) return null;
+    const wall = pending.splice(index, 1)[0]!;
+    const next = key(wall.start) === key(end) ? wall.end : wall.start;
+    if (key(next) === key(loop[0]!)) break;
+    loop.push(next);
+  }
+  if (pending.length || loop.length < 3) return null;
+  const area = ringArea(loop);
+  // Walls sitting on the activity frame are the frame itself. An inset shell is the usable room.
+  if (!(area > 1) || area > width * depth * 0.98) return null;
+  // The recorded line is the wall centerline. Seats have to clear the inner face, not the middle of the wall.
+  const half = Math.max(0, ...exterior.map(wall => wall.thickness ?? 0)) / 2;
+  const inner = insetLoop(loop, half);
+  const chosen = inner ?? loop;
+  return chosen.map(point => ({
+    x: Math.min(width, Math.max(0, point.x)),
+    z: Math.min(depth, Math.max(0, point.z)),
+  }));
+}
+
+export interface SeatingRect { x: number; z: number; w: number; d: number }
+
+/**
+ * The room people can sit in, in layout coordinates (origin at the frame centre).
+ * A tighter exterior loop uses its inner face. No such loop means the activity
+ * frame itself is the floor — callers must not invent a smaller room.
+ */
+function exteriorWalls(layout: RoomLayout, floorIndex: number) {
+  const floor = layout.floors[floorIndex];
+  const stored = layout.backendSceneV2;
+  const floorWalls = floor?.interiorWalls ?? [];
+  return floorWalls.length
+    ? floorWalls.map(wall => ({
+        start: { x: wall.x1 + layout.width / 2, z: wall.z1 + layout.height / 2 },
+        end: { x: wall.x2 + layout.width / 2, z: wall.z2 + layout.height / 2 },
+        ...(wall.kind ? { kind: wall.kind } : {}),
+        ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}),
+      }))
+    : (stored?.structure?.walls ?? []).map(wall => ({
+        start: wall.start, end: wall.end,
+        ...(wall.kind ? { kind: wall.kind } : {}),
+        ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}),
+      }));
+}
+
+/** World-metre polygon the floor is actually drawn from, when it is tighter than the frame. */
+export function usableFloorPolygon(layout: RoomLayout, floorIndex = 0): ShellPoint[] | null {
+  const shell = shellInterior(exteriorWalls(layout, floorIndex), layout.width, layout.height);
+  const recorded = layout.backendVenue?.polygon;
+  const frame = layout.width * layout.height;
+  const shellOk = !!shell && ringArea(shell) < (recorded ? ringArea(recorded) : frame) * 0.98;
+  const recordedOk = !!recorded && ringArea(recorded) < frame * 0.98;
+  if (shellOk && recordedOk && recorded && shell && ringArea(recorded) < ringArea(shell)) return recorded.map(point => ({ x: point.x, z: point.z }));
+  if (shellOk && shell) return shell;
+  if (recordedOk && recorded) return recorded.map(point => ({ x: point.x, z: point.z }));
+  return null;
+}
+
+export function usableSeatingRect(layout: RoomLayout, floorIndex = 0): SeatingRect | null {
+  const shell = shellInterior(exteriorWalls(layout, floorIndex), layout.width, layout.height);
+  if (!shell) return null;
+  const recorded = layout.backendVenue?.polygon;
+  if (!(ringArea(shell) < (recorded ? ringArea(recorded) : layout.width * layout.height) * 0.98)) return null;
+  const xs = shell.map(point => point.x);
+  const zs = shell.map(point => point.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const w = maxX - minX, d = maxZ - minZ;
+  if (!(w > 1) || !(d > 1)) return null;
+  return { x: minX - layout.width / 2, z: minZ - layout.height / 2, w, d };
+}
+
 /** Geometry-only conversion. No asset IDs are invented and this is never persisted. */
 export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2 {
   const floor = layout.floors[floorIndex];
   const world = (p: { x: number; z: number }, original?: {x:number;z:number}) => ({ x: stableMeasurement(p.x + layout.width / 2, original?.x), z: stableMeasurement(p.z + layout.height / 2, original?.z) });
   const stored = layout.backendSceneV2;
-  const walls = (floor?.interiorWalls ?? []).map(w => ({
+  const floorWalls = floor?.interiorWalls ?? [];
+  const walls = floorWalls.length ? floorWalls.map(w => ({
     ...stored?.structure.walls.find(original => original.id === w.id),
     id: w.id, start: world({ x: w.x1, z: w.z1 }, stored?.structure.walls.find(o=>o.id===w.id)?.start), end: world({ x: w.x2, z: w.z2 }, stored?.structure.walls.find(o=>o.id===w.id)?.end),
     height: w.height ?? floor?.height ?? 3, thickness: w.thickness ?? 0.16,
     kind: w.kind ?? 'interior', status: w.status ?? 'inferred',
-  }));
+  })) : (stored?.structure?.walls ?? []).map(wall => ({ ...wall }));
+  const shell = shellInterior(walls, layout.width, layout.height);
+  const recorded = layout.backendVenue?.polygon;
+  // A map pick stores the outer activity outline. A tighter wall loop is the room people can sit in.
+  const useShell = !!shell && ringArea(shell) < (recorded ? ringArea(recorded) : layout.width * layout.height) * 0.98;
   const openings: SceneV2['structure']['openings'] = [];
   for (const item of floor?.items ?? []) {
     if (!item.position || (item.type !== 'door' && item.type !== 'window')) continue;
@@ -56,8 +191,9 @@ export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2
     ...(i.wallId ? { wallId: i.wallId } : isWallHung(i.type) ? { wallId: nearestWallId(i, walls, layout.width, layout.height) } : {}),
   }));
   return {
-    schemaVersion: 2, venue: { ...(layout.backendVenue ?? { entrances: [], shape: 'rectangle' }),
-      width: layout.width, depth: layout.height, height: floor?.height ?? 3 },
+    schemaVersion: 2, venue: { ...(layout.backendVenue ?? { entrances: [], shape: 'rectangle' as const }),
+      width: layout.width, depth: layout.height, height: floor?.height ?? 3,
+      ...(useShell && shell ? { shape: 'polygon' as const, polygon: shell } : {}) },
     objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
     structure: { walls, openings, columns }, sources: stored?.sources ?? [], dimensions: stored?.dimensions ?? [],
     ...(stored?.design ? { design: stored.design } : {}),
@@ -78,6 +214,10 @@ function nearestWallId(item: FurnitureItem, walls: SceneV2['structure']['walls']
   return result;
 }
 
+/**
+ * 严格几何闸门（保存 / 提交前用）：穿透不能变坏 + 无尺寸冲突 + schema 合法 + 洞口 marker 数对齐。
+ * 语义保持不变——有任何一条不满足就 false。
+ */
 export function canApplyLayoutGeometry(before: RoomLayout, after: RoomLayout): boolean {
   return after.floors.every((floor, index) => {
     const next = layoutGeometryScene(after, index);
@@ -87,6 +227,43 @@ export function canApplyLayoutGeometry(before: RoomLayout, after: RoomLayout): b
     layoutGeometryScene(before, Math.min(index, before.floors.length - 1)), next
     );
   });
+}
+
+/**
+ * 宽松"画布交互"闸门（拖拽 / 拖动 / 移动物料时用）：只拦**数据损坏**——
+ * schema 非法 或 洞口 marker 数与 Scene 不对齐。穿透 / 尺寸冲突 / 边界越界都放行，
+ * 交给 `collectLayoutGeometryWarnings` 给 UI 提示。
+ *
+ * 2026-11-11 新主线（地理优先）拍板：规划阶段应该允许草图"先过、再调"，硬闸门让 AI 出方案被卡死，
+ * 真正的结构一致性在保存 / 提交前再严格校验（走 canApplyLayoutGeometry）。
+ */
+export function layoutGeometryIsAcceptable(before: RoomLayout, after: RoomLayout): boolean {
+  return after.floors.every((floor, index) => {
+    const next = layoutGeometryScene(after, index);
+    if (after.backendSceneV2 && !structureSchema.safeParse(next.structure).success) return false;
+    if (after.backendSceneV2 && next.structure.openings.length !== floor.items.filter(i => i.structuralOpeningId).length) return false;
+    void before; // 宽松闸门不比较 before/after 的穿透单调性——允许规划阶段"先坏后好"。
+    return true;
+  });
+}
+
+/**
+ * 收集当前 layout 的结构警告（穿透 / 尺寸冲突 / 边界越界），用于 UI 上的红框 / tooltip 提示。
+ * 没有警告返回空数组。
+ */
+export function collectLayoutGeometryWarnings(layout: RoomLayout): string[] {
+  const warnings: string[] = [];
+  if (!layout.backendSceneV2) return warnings;
+  for (let index = 0; index < layout.floors.length; index++) {
+    const scene = layoutGeometryScene(layout, index);
+    for (const conflict of dimensionConflicts(scene)) warnings.push(conflict.message);
+    for (const { code, ids } of structuralWarnings(scene)) {
+      if (code === 'OUT_OF_BOUNDS') warnings.push(`${ids[0] ?? '物件'} 超出场地边界`);
+      else if (code === 'COLUMN_COLLISION') warnings.push(`${ids[0] ?? '物件'} 与柱子冲突`);
+      else warnings.push(`${ids[0] ?? '物件'} 与结构冲突 (${code})`);
+    }
+  }
+  return warnings;
 }
 
 export function structuralItemCollides(item: FurnitureItem, layout: RoomLayout, floorIndex = 0): boolean {

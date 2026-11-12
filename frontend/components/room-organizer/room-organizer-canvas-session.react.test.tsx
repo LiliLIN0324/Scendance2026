@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {layoutStore} from './hooks/use-layout-store';
 import {makeFloor,makeItem,makeLayout} from './lib/__testfixtures__/fixtures';
@@ -56,7 +56,7 @@ it.each(['two','three'] as const)('rejects a stale %s gesture after same-batch A
 it('disconnects the old 2D canvas observer and observes the replacement after an activity switch',async()=>{
  const a=activity('observer-A'),b=activity('observer-B');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- fireEvent.click(screen.getByRole('button',{name:'2D / 3D'}));
+ // 2026-11-11 起工作台默认就是 2D 平面（地理优先主线），不必再点「2D / 3D」切进来。
  const oldCanvas=document.querySelector('#sc-viewport-3d')?.previousElementSibling;expect(oldCanvas?.tagName).toBe('CANVAS');
  await waitFor(()=>expect(observed.some(entry=>entry.targets.includes(oldCanvas!))).toBe(true));
  act(()=>layoutStore.setState({layout:b,activeFloorIndex:0}));

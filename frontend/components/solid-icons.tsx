@@ -21,6 +21,7 @@ export const ArrowLeft = makeSolidIcon('arrow_back');
 export const ArrowLeftRight = makeSolidIcon('swap_horiz');
 export const ArrowRight = makeSolidIcon('arrow_forward');
 export const ArrowUp = makeSolidIcon('arrow_upward');
+export const ArrowUpDown = makeSolidIcon('swap_vert');
 export const ArrowUpRight = makeSolidIcon('north_east');
 export const BookOpen = makeSolidIcon('menu_book');
 export const Box = makeSolidIcon('inventory_2');

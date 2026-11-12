@@ -1,3 +1,4 @@
+import { isRoundTable } from './table-shape';
 import type { FurnitureItem } from './types';
 
 /**
@@ -17,7 +18,7 @@ export function isPlanCut(item: Pick<FurnitureItem, 'type' | 'height' | 'elevati
 }
 
 export type PlanSymbol =
-  | 'seat' | 'sofa' | 'table' | 'bed' | 'rug' | 'plant'
+  | 'seat' | 'sofa' | 'table' | 'round-table' | 'bed' | 'rug' | 'plant'
   | 'storage' | 'equipment' | 'opening' | 'person' | 'stairs' | 'none';
 
 const SEATS = new Set(['chair', 'dining-chair', 'armchair', 'bench', 'seating', 'stool', 'bar-stool', 'garden-bench', 'folding-chair']);
@@ -31,7 +32,8 @@ const EQUIPMENT = new Set(['wifi', 'router', 'cctv', 'security-camera', 'compute
 const OPENINGS = new Set(['door', 'window', 'opening']);
 const PEOPLE = new Set(['person', 'pet', 'crowd', 'guest']);
 
-export function planSymbol(item: Pick<FurnitureItem, 'type' | 'category'>): PlanSymbol {
+export function planSymbol(item: Pick<FurnitureItem, 'type' | 'category'> & Partial<Pick<FurnitureItem, 'tableShape' | 'name' | 'width' | 'depth'>>): PlanSymbol {
+  if (isRoundTable(item)) return 'round-table';
   const type = String(item.type);
   if (type === 'stairs') return 'stairs';
   if (SEATS.has(type)) return 'seat';

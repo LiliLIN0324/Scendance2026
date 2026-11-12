@@ -31,7 +31,7 @@ import {
   sameEntrance,
   streetLevel,
 } from '../lib/street';
-import { canApplyLayoutGeometry, isEvidenceProtectedWall, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
+import { layoutGeometryIsAcceptable, isEvidenceProtectedWall, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, isValidZoneType, sameZone } from '../lib/zones';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -223,7 +223,7 @@ function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): Lay
     next = {...next,layout:{...next.layout,floors}};
   }
   if (next !== state && state.layout.backendSceneV2 && STRUCTURAL_ACTIONS.has(action.type) && !sameExistingStructuralMarkers(state.layout,next.layout)) return state;
-  if (next !== state && STRUCTURAL_ACTIONS.has(action.type) && !canApplyLayoutGeometry(state.layout, next.layout)) return state;
+  if (next !== state && STRUCTURAL_ACTIONS.has(action.type) && !layoutGeometryIsAcceptable(state.layout, next.layout)) return state;
   const entrance = next.layout.entrance;
   if (next === state || !entrance) return next;
   if (DOOR_REMOVAL_ACTIONS.has(action.type) && entrance.door === undefined) {

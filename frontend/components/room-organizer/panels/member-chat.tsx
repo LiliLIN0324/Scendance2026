@@ -11,7 +11,7 @@ import { useTeamThread } from '../lib/team-messages';
 import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-avatars';
 import type { TeamSnapshot } from '../lib/team-data';
 import type { BackendSession } from '@/lib/backend-session';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type { CSSProperties, FormEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import './agent-panel.css';
 import './member-chat.css';
 
@@ -20,11 +20,17 @@ function stamp(createdAt: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-export function MemberChat({ controller, team, peerId, onClose }: {
+export function MemberChat({ controller, team, peerId, onClose, className, style, onHeaderPointerDown, floatBar, floatFooter }: {
   controller: BackendSession;
   team: TeamSnapshot;
   peerId: string;
   onClose(): void;
+  /** 2026-11-12 左栏半卡片堆栈：外部传入的类/样式/头部抓取手势与独立小窗装饰。 */
+  className?: string;
+  style?: CSSProperties;
+  onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+  floatBar?: ReactNode;
+  floatFooter?: ReactNode;
 }): JSX.Element {
   const selfId = team.userId;
   const peer = team.members.find(member => member.userId === peerId);
@@ -58,9 +64,11 @@ export function MemberChat({ controller, team, peerId, onClose }: {
     }
   };
 
-  return <aside className="sc-person-chat" aria-label={isSelf ? '给自己留话' : `和 ${name} 的对话`} tabIndex={-1}
+  return <aside className={`sc-person-chat${className ? ` ${className}` : ''}`} style={style} aria-label={isSelf ? '给自己留话' : `和 ${name} 的对话`} tabIndex={-1}
     onKeyDown={event => { if (event.key === 'Escape') onClose(); }}>
-    <header className="sc-person-chat-head">
+    {floatBar}
+    <header className="sc-person-chat-head" onPointerDown={onHeaderPointerDown}
+      style={onHeaderPointerDown ? { cursor: 'grab', touchAction: 'none' } : undefined}>
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">
         {preset ? <img src={preset.src} alt=""/> : name.slice(0, 1)}
       </span>
@@ -93,5 +101,6 @@ export function MemberChat({ controller, team, peerId, onClose }: {
         <button type="submit" className="ap-send" aria-label={thread.sending ? '发送中' : '发送'} disabled={!draft.trim() || thread.sending}><ArrowUp size={18}/></button>
       </div>
     </form>
+    {floatFooter}
   </aside>;
 }

@@ -34,6 +34,7 @@ export const PLANNING_LAYER_COLORS = {
   worker: '#B3628C',
   node: '#6B6B6B',
   measure: '#2fa8b5', // 测量标注（H3-a）：青色，与其他图层色互异
+  annotate: '#8e44ad', // 2026-11-11 用户指令：自由标注（文本/形状）：紫色，与其他图层色互异
 } as const;
 
 export type PlanningLayerKind = keyof typeof PLANNING_LAYER_COLORS;
@@ -186,7 +187,13 @@ export const PLANNING_ICONS = [
   'lock', // 图层锁定
   'lock-open', // 图层解锁
   'rotate-cw', // 设施旋转
-  'copy', // 设施复制
+  'copy', // 设施复制 / 坐标复制
+  'plus', // 属性卡手风琴展开（Object setup / Notes，2026-11-12）
+  'x', // 属性卡换页返回（阵列复制页关闭钮，2026-11-12）
+  'box-select', // 框选工具（OnePlan Selection tool，2026-11-12）
+  'sliders-horizontal', // 工具与属性浮窗（选中物体属性）
+  'chevron-up', // 浮窗收起
+  'chevron-down', // 浮窗展开
 ] as const;
 
 export type PlanningIconName = (typeof PLANNING_ICONS)[number];
@@ -200,11 +207,14 @@ export const PLANNING_LABELS = {
   access: '出入口',
   worker: '人员',
   measure: '测量',
+  annotate: '标注',
 } as const;
 
 /** H2-b/H2-c/H2-d/H3-a 画布编辑模式文案（面板工具行）。 */
 export const PLANNING_EDIT_MODE_LABELS = {
   view: '浏览',
+  // 2026-11-12 OnePlan Selection tool：框选多选设施（S 快捷键，浏览旁并列钮）。
+  select: '选择',
   boundary: '画边界',
   'boundary-vertex': '编辑边界',
   zone: '画分区',
@@ -213,6 +223,9 @@ export const PLANNING_EDIT_MODE_LABELS = {
   node: '放节点',
   worker: '布人员',
   measure: '测量',
+  // 2026-11-11 用户指令：自由标注两模式（OnePlan 工具栏 T / 形状同款）。
+  note: '放文本',
+  shape: '画形状',
 } as const;
 
 export type PlanningEditMode = keyof typeof PLANNING_EDIT_MODE_LABELS;
@@ -230,6 +243,7 @@ export const PLANNING_LAYER_ICONS: Record<PlanningLayerKind, PlanningIconName> =
   worker: 'users',
   node: 'door-open',
   measure: 'ruler',
+  annotate: 'sticky-note',
 };
 
 /**
@@ -238,6 +252,8 @@ export const PLANNING_LAYER_ICONS: Record<PlanningLayerKind, PlanningIconName> =
  */
 export const PLANNING_EDIT_MODE_ICONS: Record<PlanningEditMode, PlanningIconName> = {
   view: 'hand',
+  // 2026-11-12 OnePlan Selection tool：虚线框选图标（OnePlan Selection tool: S 同语义）。
+  select: 'box-select',
   boundary: 'pen-tool',
   'boundary-vertex': 'move',
   zone: 'lasso',
@@ -246,6 +262,9 @@ export const PLANNING_EDIT_MODE_ICONS: Record<PlanningEditMode, PlanningIconName
   node: 'door-open',
   worker: 'user-plus',
   measure: 'ruler',
+  // 2026-11-11 用户指令：自由标注（文本=便签图标、形状=shapes 组合图标）。
+  note: 'sticky-note',
+  shape: 'shapes',
 };
 
 /**

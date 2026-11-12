@@ -255,6 +255,23 @@ const LOCAL_LAYOUT_STEP: Readonly<Record<LocalLayoutKind, { toolName: string; ru
  * Local generate / revise / validate / apply. A new preview starts a fresh
  * timeline. Later steps append, so the row stays 出预览 → 确认布置 → 已落画布.
  */
+/** Record a selection that already finished, without wiping the preview timeline. */
+export function notePriorLayoutTool(toolName: string, thought: string): void {
+  if (run.scope !== 'layout') return;
+  if (run.stepLog.some(step => step.toolName === toolName)) return;
+  commitRun({
+    ...run,
+    stepLog: [{
+      toolName,
+      durationMs: 1,
+      isReadonly: true,
+      startedAt: Date.now(),
+      outcome: 'done' as const,
+      thought,
+    }, ...run.stepLog],
+  });
+}
+
 export function pushLocalLayoutStep(kind: LocalLayoutKind, outcome: 'running' | 'done' | 'error', note?: string): void {
   const spec = LOCAL_LAYOUT_STEP[kind];
   const now = Date.now();

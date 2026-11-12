@@ -3,6 +3,7 @@ import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '.
 import { rotatedHalfExtents } from '../lib/geometry';
 import { planDrawOrder } from '../lib/plan-order';
 import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
+import { isRoundTable } from '../lib/table-shape';
 import { routeIsLoop } from '../lib/person-route';
 import { entrancePlanOutline, planFloorIndex } from '../lib/street';
 import { layoutGeometryScene } from '../lib/structural-layout';
@@ -822,6 +823,9 @@ function drawPlanSymbol(ctx: CanvasRenderingContext2D, kind: PlanSymbol, w: numb
     case 'table':
       ctx.rect(-halfW + inset, -halfD + inset, w - inset * 2, d - inset * 2);
       break;
+    case 'round-table':
+      ctx.arc(0, 0, Math.max(2, Math.min(w, d) / 2 - inset), 0, Math.PI * 2);
+      break;
     case 'bed':
       ctx.rect(-halfW + inset, -halfD + inset, w - inset * 2, d * 0.26);
       ctx.moveTo(-halfW + inset, -halfD + d * 0.34);
@@ -899,6 +903,19 @@ function drawPersonRoutes(
   }
 }
 
+/** Round banquet tops paint an ellipse; other furniture keeps the collision rectangle. */
+function paintFootprint(ctx: CanvasRenderingContext2D, round: boolean, w: number, d: number, mode: 'fill' | 'stroke'): void {
+  if (round) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w / 2, d / 2, 0, 0, Math.PI * 2);
+    if (mode === 'fill') ctx.fill();
+    else ctx.stroke();
+    return;
+  }
+  if (mode === 'fill') ctx.fillRect(-w / 2, -d / 2, w, d);
+  else ctx.strokeRect(-w / 2, -d / 2, w, d);
+}
+
 function drawFurniture(
   ctx: CanvasRenderingContext2D,
   options: Render2DOptions,
@@ -923,6 +940,7 @@ function drawFurniture(
     const cy = offsetY + ((live?.z ?? item.position.z) + options.layout.height / 2) * scale;
     const w = item.width * scale;
     const d = item.depth * scale;
+    const round = isRoundTable(item);
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -935,7 +953,7 @@ function drawFurniture(
       ctx.fillStyle = collision
         ? 'rgba(192, 57, 43, 0.22)'
         : symbol === 'rug' ? planTint(item, 0.1) : cut ? PLAN_CUT_FILL : planTint(item);
-      ctx.fillRect(-w / 2, -d / 2, w, d);
+      paintFootprint(ctx, round, w, d, 'fill');
     }
 
     if (options.selectedItemId === item.id) {
@@ -953,7 +971,7 @@ function drawFurniture(
       ctx.lineWidth = cut ? 1.6 : 1.1;
     }
     if (symbol === 'rug') ctx.setLineDash([5, 3]);
-    ctx.strokeRect(-w / 2, -d / 2, w, d);
+    paintFootprint(ctx, round, w, d, 'stroke');
     ctx.setLineDash([]);
 
     // 楼梯保留踏步符号；其余家具画线符，不再往平面里塞 emoji。
@@ -1015,7 +1033,7 @@ function drawSelectionOutlines(
     ctx.rotate(-(item.rotation ?? 0));
     ctx.strokeStyle = collision ? PLAN_COLLISION : primary ? PLAN_SELECT : PLAN_SELECT_SOFT;
     ctx.lineWidth = primary ? 2.5 : 2;
-    ctx.strokeRect(-w / 2, -d / 2, w, d);
+    paintFootprint(ctx, isRoundTable(item), w, d, 'stroke');
     ctx.restore();
   }
 }

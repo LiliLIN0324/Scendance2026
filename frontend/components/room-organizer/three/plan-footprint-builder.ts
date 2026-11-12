@@ -1,5 +1,8 @@
-﻿import { ROOM_OBJECT_TAGS } from './room-builder';
-import { planFootprintShapes, type ShellPoint } from '../lib/plan-footprint-geometry';
+﻿import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { ROOM_OBJECT_TAGS } from './room-builder';
+import { planFootprintShapes, type PlanFootprintStrokeShape, type ShellPoint } from '../lib/plan-footprint-geometry';
 import { buildGroundLabel, buildPlanPropObject } from './plan-props-builder';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type * as ThreeNS from 'three';
@@ -16,14 +19,20 @@ import type * as ThreeNS from 'three';
  * 重建时 `removeTagged` 一次清掉，进出 3D/2D 不留残影。
  */
 
-/** 各层的贴地高度（米）：边界 → 分区 → 设施 → 动线 → 点位，始终保持这个叠放次序。 */
+/** 各层贴在底图之上（米）。2026-11-12 用户反馈「物体没放在平面上」：
+ *  旧值（boundary 0.18 … label 0.78）是瓦片金字塔还共面、靠层间距防 z-fighting 时代的
+ *  设计——真模型落地后，悬空的色块/标签看起来像物体飘在半空。现在瓦片面片已
+ *  depthWrite:false + renderOrder 定序（plan-basemap-tiles），规划层只需要贴着
+ *  瓦片金字塔最高点（z19 = 0.048 m）之上以 8–12 mm 级差排开即可。 */
 const ELEVATION = {
-  boundary: 0.02,
-  zone: 0.03,
-  facility: 0.035,
-  route: 0.045,
-  marker: 0.055,
-  label: 0.07,
+  boundary: 0.05,
+  zone: 0.062,
+  facility: 0.074,
+  route: 0.086,
+  marker: 0.134,
+  measure: 0.098,
+  annotate: 0.11,
+  label: 0.15,
 } as const;
 
 const MARKER_RADIUS = 0.9;
@@ -52,13 +61,62 @@ function flatMaterial(
   color: string,
   opacity: number,
 ): import('three').MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
+  const material = new THREE.MeshBasicMaterial({
     color: new THREE.Color(color),
     transparent: true,
     opacity,
     side: THREE.DoubleSide,
     depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
+  material.depthTest = true;
+  return material;
+}
+
+function lineResolution(): { x: number; y: number } {
+  if (typeof window === 'undefined') return { x: 1920, y: 1080 };
+  return { x: Math.max(1, window.innerWidth), y: Math.max(1, window.innerHeight) };
+}
+
+function fatLine(
+  THREE: typeof import('three'),
+  ring: readonly ShellPoint[],
+  metrics: { width: number; depth: number },
+  color: string,
+  opacity: number,
+  elevation: number,
+  options: { closed?: boolean; lineWidth?: number },
+  materials: InstanceType<typeof LineMaterial>[],
+): Line2 | null {
+  if (ring.length < 2) return null;
+  const closed = options.closed === true;
+  const positions: number[] = [];
+  const source = closed ? [...ring, ring[0]!] : ring;
+  for (const point of source) {
+    const [x, y] = shapePoint(point, metrics);
+    // 直接写场景坐标（x, 抬升, -y），不再靠绕 X 旋转，Line2 在倾斜镜头下宽度才稳定。
+    positions.push(x, elevation, -y);
+  }
+  const geometry = new LineGeometry();
+  geometry.setPositions(positions);
+  const resolution = lineResolution();
+  const material = new LineMaterial({
+    color: new THREE.Color(color).getHex(),
+    transparent: true,
+    opacity,
+    linewidth: options.lineWidth ?? 2,
+    depthTest: true,
+    depthWrite: false,
+    worldUnits: false,
+    resolution: new THREE.Vector2(resolution.x, resolution.y),
+  });
+  materials.push(material);
+  const line = new Line2(geometry, material);
+  line.computeLineDistances();
+  line.renderOrder = 8;
+  return line;
 }
 
 function borderLine(
@@ -68,18 +126,10 @@ function borderLine(
   color: string,
   opacity: number,
   elevation: number,
-): import('three').Line {
-  const points = ring.map(point => {
-    const [x, y] = shapePoint(point, metrics);
-    return new THREE.Vector3(x, y, 0);
-  });
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity });
-  const line = new THREE.LineLoop(geometry, material);
-  line.rotation.x = -Math.PI / 2;
-  // 抬升走 Y：几何先绕 X 轴 -90° 铺平，position 是场景轴，改 z 只会往南平移不会升高。
-  line.position.y = elevation;
-  return line;
+  materials: InstanceType<typeof LineMaterial>[],
+  lineWidth = 2,
+): Line2 | null {
+  return fatLine(THREE, ring, metrics, color, opacity, elevation, { closed: true, lineWidth }, materials);
 }
 
 /** 分区语义 → 地面标签文字（与 2D 图例同一套中文口径）。 */
@@ -128,14 +178,17 @@ export function buildPlanFootprint(
   scene: ThreeNS.Scene,
   plan: SitePlanData | null | undefined,
   metrics: PlanFootprintMetrics,
+  options?: { clampPoints?: boolean },
 ): boolean {
   if (!plan) return false;
-  const shapes = planFootprintShapes(plan, metrics);
+  const shapes = planFootprintShapes(plan, metrics, options);
   if (!shapes || shapes.boundary.length < 3) return false;
 
   const group = new THREE.Group();
   group.name = 'plan-footprint';
   group.userData.type = ROOM_OBJECT_TAGS.PlanFootprint;
+  const lineMaterials: InstanceType<typeof LineMaterial>[] = [];
+  group.userData.planLineMaterials = lineMaterials;
 
   // 分区：半透明色块 + 描边，和 2D 画布同一套语义色。
   for (const zone of shapes.zones) {
@@ -145,7 +198,8 @@ export function buildPlanFootprint(
     mesh.position.y = ELEVATION.zone;
     mesh.userData.planZoneId = zone.id;
     group.add(mesh);
-    group.add(borderLine(THREE, zone.points, metrics, zone.color, Math.min(0.9, zone.opacity + 0.35), ELEVATION.zone));
+    const zoneBorder = borderLine(THREE, zone.points, metrics, zone.color, Math.min(0.9, zone.opacity + 0.35), ELEVATION.zone, lineMaterials, 2);
+    if (zoneBorder) group.add(zoneBorder);
   }
 
   // 设施：按平面上的占地矩形 + 朝向铺一块地贴（"物料在哪儿"先落在个真实占位上）。
@@ -156,7 +210,8 @@ export function buildPlanFootprint(
     mesh.position.y = ELEVATION.facility;
     mesh.userData.planFacilityId = facility.id;
     group.add(mesh);
-    group.add(borderLine(THREE, facility.points, metrics, facility.color, 0.95, ELEVATION.facility + 0.001));
+    const facilityBorder = borderLine(THREE, facility.points, metrics, facility.color, 0.95, ELEVATION.facility + 0.001, lineMaterials, 2);
+    if (facilityBorder) group.add(facilityBorder);
   }
 
   // 设施实体：同一份 2D 数据在 3D 里立起来（帐篷/舞台/餐车/厕位/摊位/岗亭/垃圾桶）。
@@ -172,22 +227,61 @@ export function buildPlanFootprint(
     group.add(object);
   }
 
-  // 动线：折线直接压在设施之上，颜色区分人行/车辆/后勤。
+  // 动线：折线直接压在设施之上，颜色区分人行/车辆/后勤。屏幕空间线宽对齐 2D。
   for (const route of shapes.routes) {
     if (route.points.length < 2) continue;
-    const points = route.points.map(point => {
-      const [x, y] = shapePoint(point, metrics);
-      return new THREE.Vector3(x, y, 0);
-    });
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: new THREE.Color(route.color), transparent: true, opacity: 0.95 });
-    // 动线是开口折线（Line，不是 LineLoop：闭环会把首尾硬连一条直线）。
-    const line = new THREE.Line(geometry, material);
-    line.rotation.x = -Math.PI / 2;
-    line.position.y = ELEVATION.route;
+    const line = fatLine(THREE, route.points, metrics, route.color, 0.95, ELEVATION.route, { lineWidth: route.lineWidth }, lineMaterials);
+    if (!line) continue;
     line.userData.planRouteId = route.id;
     group.add(line);
   }
+
+  const addStroke = (stroke: PlanFootprintStrokeShape, elevation: number, userDataKey: string): void => {
+    if (stroke.points.length >= 2) {
+      const line = fatLine(
+        THREE,
+        stroke.points,
+        metrics,
+        stroke.color,
+        0.95,
+        elevation,
+        { closed: stroke.closed, lineWidth: stroke.lineWidth },
+        lineMaterials,
+      );
+      if (line) {
+        line.userData[userDataKey] = stroke.id;
+        group.add(line);
+      }
+    }
+    if (stroke.fill && stroke.points.length >= 3) {
+      const mesh = new THREE.Mesh(ringShape(THREE, stroke.points, metrics), flatMaterial(THREE, stroke.color, 0.16));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = elevation;
+      mesh.userData[userDataKey] = stroke.id;
+      group.add(mesh);
+    }
+    if (stroke.label && stroke.points[0]) {
+      const at = stroke.points.length >= 3 ? centroidOf(stroke.points) : stroke.points[0];
+      const label = buildGroundLabel(THREE, stroke.label, at, metrics, { widthM: 4.2, y: ELEVATION.label, color: '#f4f1fb' });
+      if (label) {
+        label.userData[userDataKey] = stroke.id;
+        group.add(label);
+      }
+    } else if (stroke.points.length === 1 && stroke.points[0]) {
+      const [x, y] = shapePoint(stroke.points[0], metrics);
+      const geometry = new THREE.CircleGeometry(MARKER_RADIUS * 0.28, 16);
+      geometry.translate(x, y, 0);
+      const mesh = new THREE.Mesh(geometry, flatMaterial(THREE, stroke.color, 0.95));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = elevation;
+      mesh.userData[userDataKey] = stroke.id;
+      group.add(mesh);
+    }
+  };
+
+  for (const measure of shapes.measurements) addStroke(measure, ELEVATION.measure, 'planMeasureId');
+  for (const annotation of shapes.annotations) addStroke(annotation, ELEVATION.annotate, 'planAnnotationId');
+
 
   // 出入口点位（环）与人员点位（实心圆盘）：位置对位，尺寸固定，不随缩放乱飘。
   for (const node of shapes.nodes) {
@@ -245,7 +339,8 @@ export function buildPlanFootprint(
   }
 
   // 场地轮廓最后画，压在最高层，方便一眼看出 2D 画的边界在哪。
-  group.add(borderLine(THREE, shapes.boundary, metrics, '#7fb3ff', 0.85, ELEVATION.boundary));
+  const boundary = borderLine(THREE, shapes.boundary, metrics, '#7fb3ff', 0.85, ELEVATION.boundary, lineMaterials, 2.5);
+  if (boundary) group.add(boundary);
 
   scene.add(group);
   return true;

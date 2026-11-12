@@ -683,6 +683,12 @@ export async function resolveSatellitePolygon(layout: RoomLayout): Promise<AmapP
   if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) {
     return rectangleAroundMeters(layout.mapLngLat, layout.width, layout.height);
   }
+  // 旧户外场地：没有圈画点、也没有调研范围，但立壳时留下过地理锚点。
+  // 按锚点 + 壳体尺寸摊一块矩形，重开项目直接进 3D 也能补上同源地图，不必先回 2D 再画边界（用户 m00001）。
+  if (layout.sceneAnchor) {
+    const factor = layout.sceneAnchor.metersPerUnit > 0 ? layout.sceneAnchor.metersPerUnit : 1;
+    return rectangleAroundMeters(layout.sceneAnchor, Math.max(layout.width, 4) * factor, Math.max(layout.height, 4) * factor);
+  }
   if (!isMapOutdoorLayout(layout)) return null;
   const query = mapVenuePlaceQuery(layout.name);
   if (!query || query === '户外场地' || query === '未命名' || query === '未命名活动') return null;

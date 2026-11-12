@@ -108,12 +108,16 @@ describe('reducer output always reloads unchanged (#332, #350)', () => {
     }
   }, 30_000);
 
-  it('refuses a drag far past the lot instead of writing an invalid placement', () => {
+  it('accepts out-of-lot drags so the caller can visualise the clamps', () => {
+    // 2026-11-11 新主线（地理优先）：规划阶段允许草图先过、再调——硬闸门卡死 AI 出方案。
+    // 边界 / 穿透提示由 UI（红框 / tooltip）给；保存到云端前再走 canApplyLayoutGeometry 严格校验。
+    // 坐标 clamp（MAX_COORDINATE = 10×MAX_ROOM_DIMENSION = 1000）仍是第一道防线，防 1e300 这种炸 camera 的值。
     let state: LayoutState = { layout: makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'a' })] })] }), activeFloorIndex: 0 };
     state = layoutReducer(state, { type: 'moveItem', id: 'a', x: 1e9, z: -250 });
-    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: 0, z: 0 });
+    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: 1000, z: -250 });
     state = layoutReducer(state, { type: 'bulkSetPositions', positions: new Map([['a', { x: -1e9, z: 1e9 }]]) });
-    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: 0, z: 0 });
+    // bulkSetPositions 有自己的 clampPosition（防 localStorage 写进坏数）。
+    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: -1000, z: 1000 });
     expectReloadsUnchanged(state);
   });
 

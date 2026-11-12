@@ -29,3 +29,5 @@
 - Phase 2（嵌入工作台，需动 `room-organizer.tsx` 独占文件）与 Phase 3（localStorage→项目体系）待用户确认入口后推进
 
 > AI 生成 · 主产品视觉收敛 Phase 1
+
+> AI生成

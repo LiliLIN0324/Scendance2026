@@ -1,13 +1,26 @@
 import type * as ThreeNS from 'three';
+import { libraryStickerFor, packStickerForTemplateId } from '../lib/oneplan-library';
+import {
+  facilitySticker,
+  getOneplanStickerImage,
+  getOneplanTintedStickerCanvas,
+  ONEOPLAN_CHIP_FILL,
+  oneplanScaleSrcs,
+  oneplanStickerSrc,
+  oneplanStickerUsesChip,
+  preloadOneplanStickers,
+  subscribeOneplanStickerLoads,
+  type OneplanStickerDescriptor,
+} from '../lib/oneplan-stickers';
 import type { PlanPropShape, ShellPoint } from '../lib/plan-footprint-geometry';
 
 /**
  * 2D 规划里的设施 → 3D 里立起来的物件（P2-g「2D 设施与 3D 物料对位」）。
  *
  * 和 `plan-footprint-builder` 的分工：那里画「地面上的图形」（分区/动线/占地），
- * 这里给每个设施立一个可辨认的低模物件——帐篷是帐篷、舞台有台面和桁架、餐车有
- * 车身和轮子。尺寸与朝向直接来自 2D 占地（已换算到壳体米），所以两个视图里是
- * 同一个东西，不是各画一套。
+ * 这里给帐篷/舞台/摊位/餐车/厕所/立柱/垃圾桶立可辨认的低模；没有对应 3D 模型的
+ * 杂项则改铺原来的 2D 贴纸（比例尺贴纸按占地贴地，点位图标在占地中心）。
+ * 尺寸与朝向直接来自 2D 占地（已换算到壳体米），所以两个视图里是同一个东西。
  *
  * 坐标：物件建在**世界轴**上（BoxGeometry 的 X 就是东西、Z 就是南北、Y 是高度），
  * 不参与 `ShapeGeometry` 那套绕 X 轴 -90° 的翻转；2D 画布的顺时针 `rotationDeg`
@@ -307,13 +320,129 @@ function buildBin(THREE: typeof import('three'), width: number, depth: number): 
   return group;
 }
 
-/** 兜底：一块可辨认的低块（未知模板也不至于什么都不立）。 */
-function buildMisc(THREE: typeof import('three'), width: number, depth: number): ThreeNS.Group {
+
+/** 贴纸略高于设施色块（0.36），避免和地贴抢深度。 */
+// 2026-11-12 用户反馈「物体没放在平面上」：0.42 的悬空地贴与贴地真模型冲突，
+// 压到设施色块（0.074）之上 6 mm。
+const STICKER_ELEVATION = 0.08;
+
+function planStickerFor(templateId: string): OneplanStickerDescriptor | null {
+  // 2026-11-12：`pack:` 活动包物件优先（3D 贴纸占位同 2D 观感）。
+  return packStickerForTemplateId(templateId) ?? libraryStickerFor(templateId) ?? facilitySticker(templateId);
+}
+
+function paintStickerCanvas(
+  sticker: OneplanStickerDescriptor,
+  canvasW: number,
+  canvasH: number,
+  /** 2026-11-12 活动包物件主题色：芯片换彩底、scale 底形染色。 */
+  color?: string,
+): HTMLCanvasElement | null {
+  const doc = typeof document === 'undefined' ? null : document;
+  const canvas = doc?.createElement('canvas');
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  ctx.clearRect(0, 0, canvasW, canvasH);
+  if (sticker.kind === 'scale') {
+    const srcs = oneplanScaleSrcs(sticker.slug);
+    const bg = color ? getOneplanTintedStickerCanvas(srcs.bg, color) : getOneplanStickerImage(srcs.bg);
+    const fg = getOneplanStickerImage(srcs.fg);
+    if (!bg && !fg) return null;
+    if (bg) {
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(bg, 0, 0, canvasW, canvasH);
+      ctx.globalAlpha = 1;
+    }
+    if (fg) ctx.drawImage(fg, 0, 0, canvasW, canvasH);
+    return canvas;
+  }
+  const image = getOneplanStickerImage(oneplanStickerSrc(sticker));
+  if (!image) return null;
+  // 芯片：活动包物件（color 传入）用主题色圆底——generic 纯色圆点位没有字形，
+  // 芯片本身就是那颗彩点；其余维持深色芯片。
+  const packChip = color !== undefined && sticker.kind === 'icon'
+    && (oneplanStickerUsesChip(sticker) || sticker.slug === 'transparent');
+  if (packChip || oneplanStickerUsesChip(sticker)) {
+    ctx.beginPath();
+    ctx.arc(canvasW / 2, canvasH / 2, canvasW / 2, 0, Math.PI * 2);
+    ctx.fillStyle = packChip ? color! : ONEOPLAN_CHIP_FILL;
+    ctx.fill();
+  }
+  ctx.drawImage(image, 0, 0, canvasW, canvasH);
+  return canvas;
+}
+
+/**
+ * 没有对应库模型时，把 2D 贴纸铺在占地里：比例尺贴纸铺满占地，点位图标画在中心。
+ * 图片未就绪时先立一张隐藏的地贴，加载完再贴上纹理；没有贴纸则返回空组，只保留地面色块。
+ */
+function buildStickerPlaceholder(THREE: typeof import('three'), prop: PlanPropShape): ThreeNS.Group {
   const group = new THREE.Group();
-  const material = standard(THREE, PALETTE.binGray, { roughness: 0.9 });
-  box(THREE, group, [width * 0.9, 1.1, depth * 0.9], material, { position: [0, 0.55, 0] });
+  const sticker = planStickerFor(prop.templateId);
+  if (!sticker) return group;
+
+  const width = Math.max(0.2, prop.width);
+  const depth = Math.max(0.2, prop.depth);
+  const isScale = sticker.kind === 'scale';
+  const planeW = isScale ? width : Math.max(0.35, Math.min(width, depth) * 0.9);
+  const planeH = isScale ? depth : planeW;
+  const maxPx = 512;
+  const aspect = planeW / planeH;
+  const canvasW = aspect >= 1 ? maxPx : Math.max(32, Math.round(maxPx * aspect));
+  const canvasH = aspect >= 1 ? Math.max(32, Math.round(maxPx / aspect)) : maxPx;
+
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = STICKER_ELEVATION;
+  mesh.renderOrder = 4;
+  mesh.visible = false;
+  mesh.name = 'plan-sticker';
+  group.add(mesh);
+
+  preloadOneplanStickers([sticker]);
+
+  let disposed = false;
+  const apply = (): void => {
+    if (disposed) return;
+    const canvas = paintStickerCanvas(sticker, canvasW, canvasH, prop.color);
+    if (!canvas) return;
+    const previous = material.map;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    texture.needsUpdate = true;
+    material.map = texture;
+    material.opacity = 0.95;
+    material.needsUpdate = true;
+    mesh.visible = true;
+    previous?.dispose();
+  };
+
+  apply();
+  const unsubscribe = subscribeOneplanStickerLoads(apply);
+  group.userData.planStickerDispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    unsubscribe();
+    const map = material.map;
+    material.map = null;
+    map?.dispose();
+  };
   return group;
 }
+
 
 /** 一个设施的 3D 物件（不含定位；调用方负责摆位与朝向）。 */
 export function buildPlanPropObject(THREE: typeof import('three'), prop: PlanPropShape): ThreeNS.Group {
@@ -335,7 +464,7 @@ export function buildPlanPropObject(THREE: typeof import('three'), prop: PlanPro
     case 'bin':
       return buildBin(THREE, width, depth);
     default:
-      return buildMisc(THREE, width, depth);
+      return buildStickerPlaceholder(THREE, prop);
   }
 }
 
@@ -354,16 +483,17 @@ export function buildGroundLabel(
   if (!canvas) return null;
   const context = canvas.getContext('2d');
   if (!context) return null;
-  const fontSize = 44;
-  canvas.width = 512;
-  canvas.height = 128;
+  // 2026-11-12：512×128 下中文拉到 5m 贴地面糊成乱码（用户实测反馈），提到 1024×256。
+  const fontSize = 88;
+  canvas.width = 1024;
+  canvas.height = 256;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.font = `${options.bold ? '600' : '500'} ${fontSize}px "PingFang SC", "Microsoft YaHei", system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = options.color ?? '#ffffff';
   // 深色描边让文字在浅色底图与饱和色块上都读得出来。
-  context.lineWidth = 7;
+  context.lineWidth = 14;
   context.strokeStyle = 'rgba(12, 16, 22, 0.72)';
   context.strokeText(trimmed, canvas.width / 2, canvas.height / 2);
   context.fillText(trimmed, canvas.width / 2, canvas.height / 2);

@@ -23,7 +23,12 @@ interface TileEntry {
   img: HTMLImageElement;
   status: TileLoadStatus;
   listeners: (() => void)[];
+  /** 2026-11-12：失败重试次数（OSM 会偶发断连/限流，错一次就永久空白太脆）。 */
+  attempts: number;
 }
+
+/** 单张瓦片最多尝试次数（首次 + 2 次重试）。 */
+const MAX_TILE_ATTEMPTS = 3;
 
 /** 上一级瓦片在「当前瓦片」里的裁剪区域（用于兜底放大）。 */
 export interface AncestorTileCrop {
@@ -84,15 +89,28 @@ export class BasemapTileCache {
     return this.entries.has(url);
   }
 
+  /** 该 URL 的加载状态；从未请求过则返回 null。 */
+  status(url: string): TileLoadStatus | null {
+    return this.entries.get(url)?.status ?? null;
+  }
+
   /**
    * 请求一个瓦片。重复调用同一 URL 只会挂监听，不会重复发请求。
-   * `onReady` 在图片就绪时调用；加载失败不回调（调用方继续用祖先兜底）。
+   * `onReady` 在图片就绪**或最终失败**时调用（失败时调用方查 `get()` 仍是 null，
+   * 可以走祖先兜底或下一轮重试）——早先失败完全不回调，3D 的瓦片任务队列会永远等不到
+   * 结算，`lodBusy` 卡死 → 之后再怎么放大都不再补高清瓦片（表现为「3D 地面一直糊」）。
    */
   load(url: string, onReady: () => void): void {
     const existing = this.entries.get(url);
     if (existing) {
-      if (existing.status === 'ready') onReady();
-      else if (existing.status === 'loading') existing.listeners.push(onReady);
+      if (existing.status === 'ready') { onReady(); return; }
+      if (existing.status === 'loading') { existing.listeners.push(onReady); return; }
+      // 已失败：有限次重试（下一次重绘/LOD 再要这张图时才重发，不会主动轰炸）。
+      if (existing.attempts >= MAX_TILE_ATTEMPTS) return;
+      existing.status = 'loading';
+      existing.attempts += 1;
+      existing.listeners.push(onReady);
+      existing.img.src = url;
       return;
     }
     let img: HTMLImageElement;
@@ -101,7 +119,7 @@ export class BasemapTileCache {
     } catch {
       return;
     }
-    const entry: TileEntry = { img, status: 'loading', listeners: [onReady] };
+    const entry: TileEntry = { img, status: 'loading', listeners: [onReady], attempts: 1 };
     this.entries.set(url, entry);
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -114,7 +132,10 @@ export class BasemapTileCache {
     img.onerror = () => {
       entry.status = 'error';
       this.errorCount += 1;
+      // 失败也要结算监听者：调用方据此结束等待（否则 Promise 永远 pending）。
+      const listeners = entry.listeners;
       entry.listeners = [];
+      for (const listener of listeners) listener();
     };
     img.src = url;
     this.trim();
@@ -161,13 +182,19 @@ export interface BasemapPaintSpec {
   cache: BasemapTileCache;
   /** 当前层级与视口中心的世界像素坐标。 */
   zoom: number;
+  /**
+   * 2026-11-12 用户「放大倍数不够」：允许视图 zoom 超过图源真实瓦片级别（overzoom）。
+   * 传图源上限（如 OSM 19），超过部分把该级瓦片等比放大绘制——再往里就是模糊放大，
+   * 但缩放/平移/标尺照常工作，不会卡在「已经不能再放大」。
+   */
+  tileZoom?: number;
   centerPx: number;
   centerPy: number;
   cssW: number;
   cssH: number;
   /** 瓦片边长（设备无关像素）。 */
   tileSize: number;
-  /** 可见瓦片网格。 */
+  /** 可见瓦片网格（按 tileZoom 级计算）。 */
   tiles: readonly { x: number; y: number }[];
   /** 取某层级瓦片在该坐标下的图源 URL 列表（天地图是底图 + 注记两层）。 */
   urlsFor: (zoom: number, x: number, y: number) => readonly string[];
@@ -175,6 +202,9 @@ export interface BasemapPaintSpec {
   onDirty: () => void;
   /** 祖先兜底最多回溯层级，默认 4。 */
   fallbackDepth?: number;
+  /** 优先加载的焦点（画布 CSS 像素）；缺省用视口中心。 */
+  focusX?: number;
+  focusY?: number;
 }
 
 export interface BasemapPaintResult {
@@ -206,26 +236,44 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
   } = spec;
   const fallbackDepth = spec.fallbackDepth ?? 4;
   const result: BasemapPaintResult = { drawn: 0, fallback: 0, pending: 0 };
+  const focusX = spec.focusX ?? cssW / 2;
+  const focusY = spec.focusY ?? cssH / 2;
+  // overzoom：视图级别高于图源上限时，按上限取瓦片再等比放大（drawSize > tileSize）。
+  const tileZoom = Math.min(zoom, spec.tileZoom ?? zoom);
+  const drawSize = tileSize * 2 ** (zoom - tileZoom);
 
+  const visible: { x: number; y: number; left: number; top: number }[] = [];
   for (const { x, y } of tiles) {
-    const left = x * tileSize - centerPx + cssW / 2;
-    const top = y * tileSize - centerPy + cssH / 2;
-    // 视口外的瓦片不画（网格本身有 1 格余量）。
-    if (left > cssW || top > cssH || left + tileSize < 0 || top + tileSize < 0) continue;
+    const left = x * drawSize - centerPx + cssW / 2;
+    const top = y * drawSize - centerPy + cssH / 2;
+    if (left > cssW || top > cssH || left + drawSize < 0 || top + drawSize < 0) continue;
+    visible.push({ x, y, left, top });
+  }
+  visible.sort((a, b) => {
+    const da = (a.left + drawSize / 2 - focusX) ** 2 + (a.top + drawSize / 2 - focusY) ** 2;
+    const db = (b.left + drawSize / 2 - focusX) ** 2 + (b.top + drawSize / 2 - focusY) ** 2;
+    return da - db;
+  });
 
-    const layers = urlsFor(zoom, x, y);
-    layers.forEach((url, layerIndex) => {
+  type Cell = { x: number; y: number; left: number; top: number; layers: readonly string[] };
+  const cells: Cell[] = visible.map((tile) => ({ ...tile, layers: urlsFor(tileZoom, tile.x, tile.y) }));
+
+  for (const cell of cells) {
+    cell.layers.forEach((url) => {
+      if (!cache.get(url)) cache.load(url, onDirty);
+    });
+  }
+  for (const cell of cells) {
+    cell.layers.forEach((url, layerIndex) => {
       const ready = cache.get(url);
       if (ready) {
-        ctx.drawImage(ready, left, top, tileSize, tileSize);
+        ctx.drawImage(ready, cell.left, cell.top, drawSize, drawSize);
         result.drawn += 1;
         return;
       }
-      cache.load(url, onDirty);
-      // 祖先兜底：拿上一级已缓存的瓦片，裁出本格对应的子区域放大。
       for (let depth = 1; depth <= fallbackDepth; depth += 1) {
-        if (zoom - depth < 0) break;
-        const crop = ancestorTileCrop(zoom, x, y, depth, tileSize);
+        if (tileZoom - depth < 0) break;
+        const crop = ancestorTileCrop(tileZoom, cell.x, cell.y, depth, tileSize);
         const ancestorUrl = urlsFor(crop.zoom, crop.x, crop.y)[layerIndex];
         if (!ancestorUrl) break;
         const ancestor = cache.get(ancestorUrl);
@@ -236,15 +284,14 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
             crop.sy,
             crop.size,
             crop.size,
-            left,
-            top,
-            tileSize,
-            tileSize,
+            cell.left,
+            cell.top,
+            drawSize,
+            drawSize,
           );
           result.fallback += 1;
           return;
         }
-        // 祖先也没加载过，顺手排队（下一帧就能用上）。
         cache.load(ancestorUrl, onDirty);
       }
       result.pending += 1;

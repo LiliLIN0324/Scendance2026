@@ -37,6 +37,8 @@ export interface PlanFacilityTemplate {
   depth: number;
   /** 用途说明（面板 title 提示）。 */
   note: string;
+  /** 2026-11-12 活动包模板：放置时落到 facility.color 的物件主题色（可选）。 */
+  color?: string;
 }
 
 /**
@@ -119,6 +121,8 @@ export function facilityPlacementIssues(
   boundary: readonly PlanPoint[],
 ): PlanEditIssue[] {
   const issues: PlanEditIssue[] = [];
+  // 2026-11-11 零边界起步：边界未画（<3 点）时不判设施越界——没有基准就没有「出界」。
+  if (boundary.length < 3) return issues;
   for (const pt of footprint) {
     if (!planPointInRing(pt, boundary)) {
       issues.push({ code: 'out-of-boundary', message: '设施越界：占地有角点落在场地边界之外。', at: pt });
@@ -200,7 +204,8 @@ export function buildFacility(
     rotationDeg,
     size,
     ...(input.zoneId !== undefined ? { zoneId: input.zoneId } : {}),
-    ...(input.color !== undefined ? { color: input.color } : {}),
+    // 显式入参优先；活动包模板自带主题色作为缺省（用户在 Bench 里仍可改）。
+    ...(input.color !== undefined ? { color: input.color } : template.color !== undefined ? { color: template.color } : {}),
     notes: input.notes ?? '',
   };
   return { ok: true, value: facility, issues };
@@ -258,8 +263,12 @@ export const FACILITY_HANDLE_PX = 8;
 export const FACILITY_HANDLE_HIT_PX = 12;
 /** 旋转柄离占地顶边的距离（CSS px，屏幕上恒定）：设施缩小时不会被压进本体。 */
 export const FACILITY_ROTATE_GAP_PX = 26;
-/** 占地最大边小于这个像素时不挂手柄：此时手柄会盖满本体，直接拖本体移动更顺手。 */
-export const FACILITY_HANDLE_MIN_FOOTPRINT_PX = 34;
+/**
+ * 手柄盒的最小屏幕尺寸（CSS px）：占地比这还小时手柄画在「虚拟外扩盒」上（OnePlan/画布工具
+ * 通用做法）——z19 上限下 2 m 级物件只有 ~7px，没有虚拟盒的话小物件永远够不到缩放/旋转柄。
+ * 拖拽数学不变：虚拟柄位置换算回本地坐标后照常走单面/角点拉伸。
+ */
+export const FACILITY_HANDLE_MIN_FOOTPRINT_PX = 20;
 
 /** 屏幕像素坐标（CSS px）。 */
 export type PlanPixelPoint = { x: number; y: number };
@@ -267,13 +276,20 @@ export type PlanPixelPoint = { x: number; y: number };
 export type FacilityHandles = {
   /** 占地四角（CSS px，顺序同 facilityFootprintRing：SW→SE→NE→NW）。 */
   corners: PlanPixelPoint[];
+  /** 四边中点（CSS px，序：0=南 1=东 2=北 3=西）——单边拉伸柄（2026-11-11「多个面」编辑）。 */
+  sides: PlanPixelPoint[];
   /** 顶边（北侧边）中点：旋转柄连线的起点（CSS px）。 */
   topMid: PlanPixelPoint;
   /** 旋转柄圆心（顶边中点沿北向法线外推 FACILITY_ROTATE_GAP_PX，CSS px）。 */
   rotate: PlanPixelPoint;
 };
 
-/** 设施在屏幕上够大才挂手柄（够小时手柄会盖住本体，反而不如直接拖动）。 */
+/** 边序（与 handles.sides 一致）：0=南 1=东 2=北 3=西。 */
+export type FacilitySideIndex = 0 | 1 | 2 | 3;
+
+/**
+ * 设施在屏幕上是否大到直接挂「真实」手柄（不够大时 facilityHandles 走虚拟外扩盒）。
+ */
 export function facilityHandlesUsable(
   facility: { size: { width: number; depth: number } },
   viewport: PlanViewport,
@@ -284,7 +300,11 @@ export function facilityHandlesUsable(
 }
 
 /**
- * 选中设施的编辑手柄坐标（CSS px）：四角=改尺寸，北侧边中点外推=旋转。
+ * 选中设施的编辑手柄坐标（CSS px）：四角=改尺寸，四边中点=单面拉伸（2026-11-11「多个面」），北侧外推=旋转。
+ *
+ * `minFootprintPx`：占地最大边在屏幕上小于该值时，手柄画在「虚拟外扩盒」上——把宽深等比放大到
+ * 盒子达到 minFootprintPx（OnePlan/画布工具对小物件的标准做法；z19 上限下 2 m 物件只有 ~7px，
+ * 没有虚拟盒就永远够不到手柄）。虚拟柄的命中坐标换算回本地坐标后照常走拉伸/旋转数学。
  *
  * 方向口径：旋转柄必须和 topMid（NE/NW 中点，即北侧边）落在同一侧，
  * 否则连线会横穿本体、鼠标永远抓不到（P2-i 实测 bug 的根因）。
@@ -293,46 +313,119 @@ export function facilityHandlesUsable(
 export function facilityHandles(
   facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
   viewport: PlanViewport,
+  minFootprintPx = 0,
 ): FacilityHandles {
-  const ring = facilityFootprintRing(facility);
+  const mpp = planMetersPerPixel(viewport);
+  let ring = facilityFootprintRing(facility);
+  let rotateGapFacility = facility;
+  if (minFootprintPx > 0 && Number.isFinite(mpp) && mpp > 0) {
+    const maxSidePx = Math.max(facility.size.width, facility.size.depth) / mpp;
+    if (maxSidePx < minFootprintPx) {
+      const scale = minFootprintPx / Math.max(1e-6, maxSidePx);
+      rotateGapFacility = {
+        ...facility,
+        size: { width: facility.size.width * scale, depth: facility.size.depth * scale },
+      };
+      ring = facilityFootprintRing(rotateGapFacility);
+    }
+  }
   const theta = (facility.rotationDeg * Math.PI) / 180;
   // 旋转柄间距用屏幕像素折算成米：放大时柄跟着走远，缩小时也不至于落到本体上。
-  const gap = facility.size.depth / 2 + FACILITY_ROTATE_GAP_PX * planMetersPerPixel(viewport);
+  const gap = rotateGapFacility.size.depth / 2 + FACILITY_ROTATE_GAP_PX * planMetersPerPixel(viewport);
   const rotatePt = {
     x: facility.position.x - gap * Math.sin(theta),
     y: facility.position.y + gap * Math.cos(theta),
   };
   const corners = ring.map(pt => planPointToPixel(pt, viewport));
+  const sides = corners.map((pt, i) => {
+    const next = corners[(i + 1) % corners.length]!;
+    return { x: (pt.x + next.x) / 2, y: (pt.y + next.y) / 2 };
+  });
   return {
     corners,
+    sides,
     topMid: { x: (corners[2]!.x + corners[3]!.x) / 2, y: (corners[2]!.y + corners[3]!.y) / 2 },
     rotate: planPointToPixel(rotatePt, viewport),
   };
 }
 
-export type FacilityHandleHit = { kind: 'rotate'; corner: null } | { kind: 'resize'; corner: number };
+export type FacilityHandleHit =
+  | { kind: 'rotate'; corner: null; side: null }
+  | { kind: 'resize'; corner: number; side: null }
+  | { kind: 'side'; corner: null; side: FacilitySideIndex };
 
 /**
- * 命中判定：先旋转柄、再四角改尺寸柄；拿到即返回，屏幕外/手柄不挂时返回 null。
- * 与画布 mousedown 的接管顺序保持一致（旋转 > 改尺寸 > 拖本体）。
+ * 命中判定：旋转柄 → 四边中点单面拉伸柄（2026-11-11「多个面」编辑）→ 四角改尺寸柄。
+ * 小物件走虚拟外扩盒（minFootprintPx），命中的就是虚拟柄坐标。
+ * 与画布 mousedown 的接管顺序保持一致（旋转 > 单边 > 角 > 拖本体）。
  */
 export function facilityHandleAt(
   facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
   viewport: PlanViewport,
   px: PlanPixelPoint,
+  minFootprintPx = 0,
 ): FacilityHandleHit | null {
-  if (!facilityHandlesUsable(facility, viewport)) return null;
-  const handles = facilityHandles(facility, viewport);
+  const handles = facilityHandles(facility, viewport, minFootprintPx);
   if (Math.hypot(px.x - handles.rotate.x, px.y - handles.rotate.y) <= FACILITY_HANDLE_HIT_PX) {
-    return { kind: 'rotate', corner: null };
+    return { kind: 'rotate', corner: null, side: null };
+  }
+  for (let i = 0; i < handles.sides.length; i += 1) {
+    const side = handles.sides[i]!;
+    if (Math.hypot(px.x - side.x, px.y - side.y) <= FACILITY_HANDLE_HIT_PX) {
+      return { kind: 'side', corner: null, side: i as FacilitySideIndex };
+    }
   }
   for (let i = 0; i < handles.corners.length; i += 1) {
     const corner = handles.corners[i]!;
     if (Math.hypot(px.x - corner.x, px.y - corner.y) <= FACILITY_HANDLE_HIT_PX) {
-      return { kind: 'resize', corner: i };
+      return { kind: 'resize', corner: i, side: null };
     }
   }
   return null;
+}
+
+/**
+ * 单边拉伸：拖动序号为 side 的面，对面固定，尺寸沿该轴独立变化（另一轴不变），
+ * 中心沿拉伸轴平移使对面保持原位；宽深夹在 [minM, maxM]（与角柄同一口径）。
+ * 边序：0=南 1=东 2=北 3=西（与 handles.sides 一致）。
+ */
+export function facilitySideResize(
+  anchor: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
+  side: FacilitySideIndex,
+  pointer: PlanPoint,
+  bounds: { minM: number; maxM: number },
+): { position: PlanPoint; size: { width: number; depth: number } } {
+  const local = facilityLocalPoint(pointer, anchor);
+  const theta = (anchor.rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  const halfW = anchor.size.width / 2;
+  const halfD = anchor.size.depth / 2;
+  const clampSize = (value: number) => Math.max(bounds.minM, Math.min(bounds.maxM, value));
+  let u1 = 0;
+  let v1 = 0;
+  let width = anchor.size.width;
+  let depth = anchor.size.depth;
+  if (side === 0) {
+    depth = clampSize(halfD - local.v);
+    v1 = halfD - depth / 2; // 北面固定在 +halfD
+  } else if (side === 1) {
+    width = clampSize(local.u + halfW);
+    u1 = -halfW + width / 2; // 西面固定在 -halfW
+  } else if (side === 2) {
+    depth = clampSize(local.v + halfD);
+    v1 = -halfD + depth / 2; // 南面固定在 -halfD
+  } else {
+    width = clampSize(halfW - local.u);
+    u1 = halfW - width / 2; // 东面固定在 +halfW
+  }
+  return {
+    position: {
+      x: anchor.position.x + u1 * cos - v1 * sin,
+      y: anchor.position.y + u1 * sin + v1 * cos,
+    },
+    size: { width, depth },
+  };
 }
 
 /** 占地环自检：面积恒等于宽深乘积、永不自交（任意旋转角）。 */
@@ -341,4 +434,120 @@ export function footprintSelfCheck(
 ): { areaM2: number; selfIntersects: boolean } {
   const ring = facilityFootprintRing(facility);
   return { areaM2: planRingAreaM2(ring), selfIntersects: planRingSelfIntersects(ring) };
+}
+
+/* ---------------- 2026-11-12 OnePlan Selection tool（框选多选） ---------------- */
+
+/** 平面轴对齐矩形（米制，plan 坐标系）。 */
+export interface PlanRect {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** 组选包围盒：全部选中件足迹环的轴对齐外接矩形；空组返回 null。 */
+export function facilityGroupBounds(
+  facilities: readonly { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } }[],
+): PlanRect | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const facility of facilities) {
+    for (const point of facilityFootprintRing(facility)) {
+      if (point.x < minX) minX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y > maxY) maxY = point.y;
+    }
+  }
+  return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+}
+
+/** 框选命中：设施中心在矩形内，或足迹环任一顶点在矩形内（与 OnePlan 框选相交语义一致）。 */
+export function facilityInRect(
+  facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
+  rect: PlanRect,
+): boolean {
+  const inRect = (p: PlanPoint) => p.x >= rect.minX && p.x <= rect.maxX && p.y >= rect.minY && p.y <= rect.maxY;
+  if (inRect(facility.position)) return true;
+  return facilityFootprintRing(facility).some(inRect);
+}
+
+/**
+ * 组等比缩放（B3 角柄）：绕固定锚点等比缩放每件位置，尺寸乘同一系数后逐件夹紧
+ * （minM/maxM 同画布口径；某件顶到夹紧界不回推系数——整组形变优先于绝对一致）。
+ * rotation 不变；factor ≤ 0 或非有限直接原样返回。
+ */
+export function facilityGroupScale<T extends { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } }>(
+  items: readonly T[],
+  anchor: PlanPoint,
+  factor: number,
+  bounds: { minM: number; maxM: number },
+): T[] {
+  if (!Number.isFinite(factor) || factor <= 0) return [...items];
+  return items.map(facility => ({
+    ...facility,
+    position: {
+      x: anchor.x + (facility.position.x - anchor.x) * factor,
+      y: anchor.y + (facility.position.y - anchor.y) * factor,
+    },
+    size: {
+      width: Math.max(bounds.minM, Math.min(bounds.maxM, facility.size.width * factor)),
+      depth: Math.max(bounds.minM, Math.min(bounds.maxM, facility.size.depth * factor)),
+    },
+  }));
+}
+
+/* ---------------- 2026-11-12 组对齐/等距（室内多选胶囊 SelectionChip 移植到户外 2D） ---------------- */
+
+export type FacilityAlignMode = 'min-x' | 'center-x' | 'max-x' | 'min-y' | 'center-y' | 'max-y';
+
+/**
+ * 组对齐：把每件足迹环的对应边/中线对到组包围盒的边/中线（位移只沿轴，rotation/尺寸不变）。
+ * plan y 北=屏上，故「上对齐」= max-y、「下对齐」= min-y（调用方映射标签）。
+ */
+export function facilityGroupAlign<T extends { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } }>(
+  items: readonly T[],
+  mode: FacilityAlignMode,
+): T[] {
+  const group = facilityGroupBounds(items);
+  if (!group) return [...items];
+  return items.map(item => {
+    const own = facilityGroupBounds([item])!;
+    let dx = 0;
+    let dy = 0;
+    if (mode === 'min-x') dx = group.minX - own.minX;
+    else if (mode === 'center-x') dx = (group.minX + group.maxX) / 2 - (own.minX + own.maxX) / 2;
+    else if (mode === 'max-x') dx = group.maxX - own.maxX;
+    else if (mode === 'min-y') dy = group.minY - own.minY;
+    else if (mode === 'center-y') dy = (group.minY + group.maxY) / 2 - (own.minY + own.maxY) / 2;
+    else dy = group.maxY - own.maxY;
+    return { ...item, position: { x: item.position.x + dx, y: item.position.y + dy } };
+  });
+}
+
+/** 组等距：按足迹中心沿轴在首尾之间均匀分布（保序；少于 3 件原样返回）。 */
+export function facilityGroupDistribute<T extends { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } }>(
+  items: readonly T[],
+  axis: 'x' | 'y',
+): T[] {
+  if (items.length < 3) return [...items];
+  const centerOf = (item: T) => {
+    const rect = facilityGroupBounds([item])!;
+    return axis === 'x' ? (rect.minX + rect.maxX) / 2 : (rect.minY + rect.maxY) / 2;
+  };
+  const sorted = [...items].sort((a, b) => centerOf(a) - centerOf(b));
+  const first = centerOf(sorted[0]!);
+  const last = centerOf(sorted[sorted.length - 1]!);
+  const step = (last - first) / (sorted.length - 1);
+  const targetByItem = new Map<T, number>();
+  sorted.forEach((item, rank) => targetByItem.set(item, first + rank * step));
+  return items.map(item => {
+    const delta = targetByItem.get(item)! - centerOf(item);
+    return axis === 'x'
+      ? { ...item, position: { x: item.position.x + delta, y: item.position.y } }
+      : { ...item, position: { x: item.position.x, y: item.position.y + delta } };
+  });
 }

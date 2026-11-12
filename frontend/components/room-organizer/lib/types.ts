@@ -86,6 +86,9 @@ export type FurnitureType =
 
 export type SofaShape = 'standard' | 'L-shape' | 'U-shape';
 
+/** Round banquet top versus a rectangular slab. Absent means rectangular. */
+export type TableShape = 'round' | 'rect';
+
 /** 'winder': a half-turn dog-leg with a fan of winders (#205). */
 export type StairsShape = 'straight' | 'winder';
 
@@ -200,6 +203,13 @@ export interface FurnitureItem {
    */
   cameraBracket?: boolean;
   sofaShape?: SofaShape;
+  /**
+   * Round banquet tables use a circular top whose diameter is the square
+   * footprint (width === depth). Collision stays the axis-aligned box.
+   */
+  tableShape?: TableShape;
+  /** Cloth chosen by the selection tool. Absent keeps the existing linen banquet top. */
+  tableFinish?: 'linen' | 'bare';
   locked?: boolean;
   mirrored?: boolean;
   /** Straight flight (default) or half-turn winder (#205). */
@@ -485,8 +495,6 @@ export interface RoomLayout {
     style: 6 | 7 | 8;
     /** 这张底图跟着哪套场地扫描走（docs/19）；没有就是用户手动标的，自动逻辑不动它。 */
     scanAssetId?: string;
-    /** 静态预置整景区底图；有它时 bounds 即图片精确范围，不再按半径重算。 */
-    presetId?: 'xihu-scenic';
   };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
@@ -513,8 +521,6 @@ export interface ViewSettings {
   /** Pure main-canvas presentation; never deletes an image or changes its correspondence. */
   showReferenceImage?: boolean;
   referenceImageOpacity?: number;
-  /** 整景区底图上叠景区范围线/水面；未设 = 开。 */
-  showResearchOverlays?: boolean;
   /** Hour of the day in [0, 24); drives the continuous sun-arc lighting. */
   timeOfDay: number;
   /** Rain or snow falling over the lot, with matching overcast lighting (#189). */

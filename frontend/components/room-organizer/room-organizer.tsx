@@ -5,10 +5,10 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { Box, Globe, LayoutGrid, Loader2, PanelLeftClose, Scan } from '@/components/solid-icons';
+import { ArrowUpDown, Box, Globe, LayoutGrid, Loader2, Minimize2, PanelLeftClose, Scan, X } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib/pending-candidate-registry';
 import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -48,6 +48,19 @@ import { useSilentCloudAttach } from './hooks/use-silent-cloud-attach';
 import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts';
 import { useLayoutPersistence } from './hooks/use-layout-persistence';
 import { applyGuardedWorkspaceReplacement, useWorkspaceWriteGuards } from './lib/workspace-write-guards';
+import {
+  clampFloatRect,
+  defaultLeftStackState,
+  ratioFromPointer,
+  readLeftStackState,
+  swapLeftStackOrder,
+  withLeftStackDetached,
+  withLeftStackRatio,
+  withLeftStackRect,
+  writeLeftStackState,
+  type LeftStackPanelId,
+  type LeftStackState,
+} from './lib/left-stack';
 import type { WorkspaceWriteSession } from '@/lib/workspace-write-session';
 import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { useLayoutState } from './hooks/use-layout-state';
@@ -98,6 +111,7 @@ import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
+import { loadStoredAholoCatalogItem } from './lib/aholo-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
@@ -127,10 +141,8 @@ import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
-import { GeoBasemapInput } from './panels/geo-basemap-input';
-import { XIHU_LOCAL_CENTER, XIHU_LOCAL_SPAN_M } from './lib/research-area';
-import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapRailButton, MapVenueOverlay, VenuePickerOverlay, readonlyComposerDrafts, type AgentId } from './panels/agent-panel';
-import { CanvasWorkflow } from './panels/canvas-workflow';
+import { XIHU_LOCAL_CENTER, XIHU_LOCAL_NAME, XIHU_LOCAL_SPAN_M } from './lib/research-area';
+import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, readonlyComposerDrafts, type AgentId } from './panels/agent-panel';
 import { settlePlacement } from '@/lib/settle-placement';
 import { cloudSeatingAllocation, cloudSeatingSpecs, type BriefMemory } from './lib/brief-agent';
 import { projectDialogueHandoff } from './lib/dialogue-handoff';
@@ -151,6 +163,20 @@ import {
   shellVenuePatchFromPlanBoundary,
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
+import { filterPlanByLevel } from './lib/plan-levels';
+import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
+import {
+  METERS_PER_DEGREE_LAT,
+  metersPerDegreeLng,
+  satelliteBoundsForFrame,
+  anchorFromMapFrame,
+  rememberPlanGroundBounds,
+  isPlanGroundImage,
+  type MapGroundFrame,
+} from './lib/amap-venue';
+import { capturePlanGround, type PlanGroundSource } from './lib/plan-ground-capture';
+import { readPlanGroundSource, subscribePlanGroundSource } from './lib/plan-basemap-source';
+import { publicSourceTileUrl, basemapSourceAttribution } from './lib/tdt-probe';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
 import { useActivitySessionTracker, type ActivitySessionToken } from './lib/activity-session-epoch';
@@ -166,6 +192,9 @@ import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
+import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
+import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
+import { GeoScaleCompass } from './components/geo-scale-compass';
 /** 户外左栏卡片只剩两个页签：图层栈 / 物件库（物件库合入图层卡，规划信息改挂 Bingo 面板）。 */
 type OutdoorPanelKind = 'layers' | 'library';
 import { MemberChat } from './panels/member-chat';
@@ -185,7 +214,7 @@ import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
-import { ShareMenu, type ShareMenuActions } from './panels/share-menu';
+import { type ShareMenuActions } from './panels/share-menu';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
@@ -228,7 +257,9 @@ function zoomCamera(
 }
 
 const INITIAL_VIEW_SETTINGS: ViewSettings = {
-  view2D: false,
+  // 2026-11-11 新主线（地理优先）：先进 2D 平面上做规划，3D 是用来「看场地」的那一面，
+  // 不再一开门就是室内 3D 舞台。
+  view2D: true,
   showMeasurements: true,
   showWiFiSignals: false,
   snapToGrid: false,
@@ -494,20 +525,36 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     });
   };
   useEffect(() => { if (captureOpen) capturePanelRef.current?.focus(); }, [captureOpen]);
-  // 户外 2D 规划覆盖层（P2-c）：同一页面内的户外面——开启后满幅盖在 3D 画布上，关闭即回。
+  // 户外规划覆盖层（P2-c）：同一页面内的户外面。默认是同一张地图的「3D 场地」视角，
+  // 不是工作台预览；切「2D 地图」只换看法，规划功能不变。关掉才回到工作台 3D。
   // 数据同态：草稿按 layout.id 存本机（outdoor-project-store），底图定位继承活动点位。
   // P2-e：左栏户外卡片（图层/信息两页签）由左轨「户外规划」开关控制；
   // 保存态经覆盖层上报后在左轨 foot（主产品保存态原位）显示。
   const [outdoor2DOpen, setOutdoor2DOpen] = useState(false);
-  const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('layers');
-  // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
-  // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
-  const columnExpanded = navExpanded || personChat || captureOpen || (outdoor2DOpen && outdoorPanel !== null);
-  const [outdoorSaveFoot, setOutdoorSaveFoot] = useState<{ state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null>(null);
-  const handleOutdoorSaveState = useCallback((next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => setOutdoorSaveFoot(next), []);
+  // 2026-11-12 用户反馈「展开后再点收不起来」：outdoorPlanState 常驻后，outdoor2DOpen=false
+  // 同时表达「收起」和「3D 接管」两种态，收起被派生成全屏接管。引入显式接管开关：
+  // 只有它为 true（且非 2D）才全屏接管；收起＝两者都 false，回工作台。
+  const [outdoor3dTakeoverActive, setOutdoor3dTakeoverActive] = useState(false);
+  const [outdoorView, setOutdoorView] = useState<'2d' | '3d'>('3d');
+  const applyPresetRef = useRef<(preset: 'iso') => void>(() => undefined);
+  // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
+  // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
+  const [outdoor3dWarm, setOutdoor3dWarm] = useState(false);
+  const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('library');
+  // 2026-11-11：保存态不再上左轨 foot（用户指令去掉「户外草稿·已存」文字）——保存管线本身不变。
+  const handleOutdoorSaveState = useCallback((_next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => { /* no-op：仅接收 */ }, []);
   // P2-g 数据打通：室内工具排通用钮（撤销/重做/缩放/导出）在户外模式下转发给 2D 画布，
   // 3D 侧状态原样保活；关掉户外即恢复原来的 3D 行为。
   const outdoorOverlayRef = useRef<OutdoorPlanOverlayHandle | null>(null);
+/** 主画布接管态（户外项目非漫游 3D）挂的 OutdoorPlan3D 实例：右轨缩放/导出效果图改派用。 */
+const outdoorPlan3DRef = useRef<OutdoorPlan3DApi | null>(null);
+// 2026-11-12 用户拍板「3D 里中键转地图、左键改物件」：接管态把覆盖层里活着的 2D 画布
+// 编辑桥（pointerFromPlan 管线）交给全屏 OutdoorPlan3D——覆盖层在接管态保活（隐藏不卸载），
+// 这个 ref 每次 render 同步到它内部的画布句柄。
+const outdoorCanvasBridgeRef = useRef<OutdoorPlanCanvasHandle | null>(null);
+useEffect(() => {
+  outdoorCanvasBridgeRef.current = outdoorOverlayRef.current?.getCanvasApi() ?? null;
+});
   // P2-g 对位：平面数据在 2D 画布内部编辑，这里镜像一份最新快照给 3D 地面图层用
   // （分区色块/设施占地/动线/点位），所以 2D 改到哪儿 3D 里就在哪儿。
   // 带 projectId：换活动后旧项目的平面不能接着盖在新场地上。
@@ -516,14 +563,206 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const handleOutdoorHistory = useCallback((next: { canUndo: boolean; canRedo: boolean }) => {
     setOutdoorHistory(current => (current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next));
   }, []);
-  const outdoorActions = useMemo(() => (outdoor2DOpen ? {
+  // 2026-11-12 B1 选择工具：2D 画布当前模式（右栏「选择」钮按下态）。
+  const [outdoorCanvasMode, setOutdoorCanvasMode] = useState<'view' | 'select'>('view');
+  const handleOutdoorCanvasMode = useCallback((mode: 'view' | 'select') => {
+    setOutdoorCanvasMode(mode);
+  }, []);
+  // 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自展开态（右轨三枚圆钮的按下态）。
+  const [outdoorInspector, setOutdoorInspector] = useState<{
+    openTabs: Record<'measure' | 'annotate' | 'selection', boolean>;
+  }>({ openTabs: { measure: false, annotate: false, selection: false } });
+  const handleOutdoorInspectorChange = useCallback((next: { openTabs: Record<'measure' | 'annotate' | 'selection', boolean> }) => {
+    setOutdoorInspector(current => {
+      const same = (Object.keys(next.openTabs) as ('measure' | 'annotate' | 'selection')[])
+        .every(key => current.openTabs[key] === next.openTabs[key]);
+      return same ? current : next;
+    });
+  }, []);
+  // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
+  const outdoorActions = useMemo(() => ((outdoor2DOpen || !!outdoorPlanState) ? {
     canUndo: outdoorHistory.canUndo,
     canRedo: outdoorHistory.canRedo,
     undo: () => outdoorOverlayRef.current?.undo(),
     redo: () => outdoorOverlayRef.current?.redo(),
     zoomBy: (direction: 1 | -1) => outdoorOverlayRef.current?.zoomBy(direction),
     exportPng: () => outdoorOverlayRef.current?.exportPng() ?? false,
-  } : null), [outdoor2DOpen, outdoorHistory]);
+    // 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（右栏工具排「选择」钮的按下态与切换）。
+    canvasMode: outdoorCanvasMode,
+    setCanvasMode: (mode: 'view' | 'select') => outdoorOverlayRef.current?.setCanvasMode(mode),
+    // 2026-11-12 三张卡拆开：右轨每枚圆钮只管自己那张卡的展开态。
+    inspectorTabs: outdoorInspector.openTabs,
+    setInspector: (tab: 'measure' | 'annotate' | 'selection') => {
+      const open = !outdoorInspector.openTabs[tab];
+      outdoorOverlayRef.current?.setInspector(open, tab);
+    },
+    view: outdoorView,
+    setCanvasView: (next: '2d' | '3d') => {
+      setOutdoorView(next);
+    },
+  } : null), [outdoor2DOpen, outdoorHistory, outdoorView, outdoorCanvasMode, outdoorInspector]);
+  // 2026-11-11 用户要求：Bingo 与户外规划同开时——中间分隔要清楚、可上下换序、可拖动改高度、
+  // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
+  const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
+  const [leftStackDragging, setLeftStackDragging] = useState(false);
+  const leftStackHydratedRef = useRef(false);
+  const leftStackColumnRef = useRef<HTMLDivElement | null>(null);
+  const leftStackViewportRef = useRef({ width: 1280, height: 800 });
+  /** 当前可见的堆栈卡对（≤2 张时参与比例调节）；赋值在 outdoor3dTakeover 声明之后。 */
+  const leftStackPairRef = useRef<LeftStackPanelId[] | null>(null);
+  const leftStackDragRef = useRef<null | {
+    kind: 'split' | 'move' | 'resize' | 'pull';
+    panel?: LeftStackPanelId;
+    startX: number;
+    startY: number;
+    rect: { x: number; y: number; width: number; height: number };
+    pulled?: boolean;
+    reordered?: boolean;
+  }>(null);
+  useEffect(() => {
+    leftStackViewportRef.current = { width: window.innerWidth, height: window.innerHeight };
+    setLeftStack(readLeftStackState(undefined, leftStackViewportRef.current));
+    // 读盘完成之前不许回写，否则挂载瞬间的默认值会把上次的排版冲掉。
+    leftStackHydratedRef.current = true;
+  }, []);
+  useEffect(() => {
+    if (!leftStackHydratedRef.current) return;
+    writeLeftStackState(leftStack);
+  }, [leftStack]);
+  useEffect(() => {
+    const onResize = () => {
+      leftStackViewportRef.current = { width: window.innerWidth, height: window.innerHeight };
+      setLeftStack(current => ({
+        ...current,
+        rects: {
+          outdoor: clampFloatRect(current.rects.outdoor, leftStackViewportRef.current),
+          bingo: clampFloatRect(current.rects.bingo, leftStackViewportRef.current),
+          capture: clampFloatRect(current.rects.capture, leftStackViewportRef.current),
+          chat: clampFloatRect(current.rects.chat, leftStackViewportRef.current),
+        },
+      }));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  useEffect(() => {
+    // 2026-11-11 用户纠正：不要按钮弹出——直接抓住面板标题「拽出来」。左栏内纵向拖超过阈值则换上下顺序。
+    const overColumn = (clientX: number, clientY: number) => {
+      const box = leftStackColumnRef.current?.getBoundingClientRect();
+      if (!box) return false;
+      // 要拖回栏内偏里的位置才收回，避免刚抓出来一点就弹回去。
+      return clientX >= box.left + 8 && clientX <= box.right - 24 && clientY >= box.top - 8 && clientY <= box.bottom + 8;
+    };
+    const onMove = (event: PointerEvent) => {
+      const drag = leftStackDragRef.current;
+      if (!drag) return;
+      if (drag.kind === 'split') {
+        const box = leftStackColumnRef.current?.getBoundingClientRect();
+        if (!box) return;
+        setLeftStack(current => withLeftStackRatio(current, ratioFromPointer(event.clientY, box.top, box.height)));
+        return;
+      }
+      const panel = drag.panel;
+      if (!panel) return;
+      if (drag.kind === 'pull') {
+        if (drag.reordered) return;
+        const dx = event.clientX - drag.startX;
+        const dy = event.clientY - drag.startY;
+        const box = leftStackColumnRef.current?.getBoundingClientRect();
+        if (!box) return;
+        // 往左栏外拽（或横向拖出栏宽的一半）→ 抓成独立小窗，窗口跟着指针走。
+        if (!drag.pulled && (event.clientX > box.right + 18 || dx > Math.max(56, box.width * 0.35))) {
+          const rect = clampFloatRect({
+            x: event.clientX - 48,
+            y: event.clientY - 20,
+            width: Math.max(leftStack.rects[panel].width, Math.min(420, box.width + 80)),
+            height: leftStack.rects[panel].height,
+          }, leftStackViewportRef.current);
+          drag.pulled = true;
+          drag.kind = 'move';
+          drag.rect = rect;
+          drag.startX = event.clientX;
+          drag.startY = event.clientY;
+          setLeftStack(current => withLeftStackRect(withLeftStackDetached(current, panel), panel, rect));
+          return;
+        }
+        // 左栏内上下拖 → 两个面板换顺序（只在开关双面板时生效）。
+        if (!drag.pulled && Math.abs(dy) > 48 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+          drag.reordered = true;
+          const pair = leftStackPairRef.current;
+          const other = pair?.find(id => id !== (drag.panel ?? leftStack.first));
+          if (other) setLeftStack(current => swapLeftStackOrder(current, other));
+        }
+        return;
+      }
+      const next = clampFloatRect({
+        ...drag.rect,
+        ...(drag.kind === 'move'
+          ? { x: drag.rect.x + (event.clientX - drag.startX), y: drag.rect.y + (event.clientY - drag.startY) }
+          : { width: drag.rect.width + (event.clientX - drag.startX), height: drag.rect.height + (event.clientY - drag.startY) }),
+      }, leftStackViewportRef.current);
+      setLeftStack(current => withLeftStackRect(current, panel, next));
+    };
+    const stop = (event: PointerEvent) => {
+      const drag = leftStackDragRef.current;
+      if (!drag) return;
+      leftStackDragRef.current = null;
+      setLeftStackDragging(false);
+      // 小窗拖回左栏范围内松手 → 收回左栏（只在当前确实是浮着的那个面板上生效）。
+      if (drag.kind === 'move' && drag.panel && overColumn(event.clientX, event.clientY)) {
+        const panel = drag.panel;
+        // 注意 withLeftStackDetached 传同一个 panel 是幂等的，收回要显式传 null。
+        setLeftStack(current => (current.detached === panel ? withLeftStackDetached(current, null) : current));
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+  }, [leftStack.rects]);
+  const beginLeftStackDrag = useCallback((kind: 'split' | 'move' | 'resize', panel: LeftStackPanelId | undefined, event: React.PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    leftStackDragRef.current = {
+      kind,
+      ...(panel ? { panel } : {}),
+      startX: event.clientX,
+      startY: event.clientY,
+      rect: panel ? leftStack.rects[panel] : { x: 0, y: 0, width: 0, height: 0 },
+    };
+    setLeftStackDragging(true);
+  }, [leftStack.rects]);
+  /** 按住面板标题往左栏外拽 → 直接变独立小窗（不再靠按钮）。 */
+  const beginLeftStackPull = useCallback((panel: LeftStackPanelId, event: React.PointerEvent) => {
+    if ((event.target as HTMLElement).closest('button, input, select, textarea, a, [role="button"]')) return;
+    if (event.button !== 0) return;
+    leftStackDragRef.current = {
+      kind: 'pull',
+      panel,
+      startX: event.clientX,
+      startY: event.clientY,
+      rect: leftStack.rects[panel],
+    };
+    setLeftStackDragging(true);
+  }, [leftStack.rects]);
+  const toggleLeftStackDetach = useCallback((panel: LeftStackPanelId) => {
+    setLeftStack(current => withLeftStackDetached(current, current.detached === panel ? null : panel));
+  }, []);
+  // 可见卡对的实际计算在 outdoor3dTakeover 声明之后（需要它的值），见 leftStackCards。
+  /** 抓出来的小窗：位置/尺寸从 --sc-float-* 变量给，CSS 里 !important 的 inset 才不会把内联定位抹掉。 */
+  const leftStackFloatStyle = (panel: LeftStackPanelId): React.CSSProperties => {
+    const rect = leftStack.rects[panel];
+    return {
+      ['--sc-float-x' as string]: `${rect.x}px`,
+      ['--sc-float-y' as string]: `${rect.y}px`,
+      ['--sc-float-w' as string]: `${rect.width}px`,
+      ['--sc-float-h' as string]: `${rect.height}px`,
+    } as React.CSSProperties;
+  };
   // P2-g 反向播种：3D 已经圈好的场地直接成为 2D 平面的起步边界（同一个场地的两个视图）。
   // 只在覆盖层没有既有草稿时生效；锚点取活动点位，2D 边界才落得回真实经纬度。
   // 模板场景没有 backendVenue，但 layout.width/height 就是 3D 壳体的权威尺寸。
@@ -532,9 +771,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     [layout],
   );
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
-  useEffect(() => {
-    if (columnExpanded) setMobileRailOpen(false);
-  }, [columnExpanded]);
+  // （columnExpanded 在接管态定义之后才能算出，本 effect 搬到那边同置。）
   // 手机端首屏先收起对话：画布吃满，底部只留一条最新消息 + 一行输入。
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia('(max-width: 768px)').matches) return;
@@ -682,15 +919,31 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const openMaterialsFromShare = useCallback(() => {
     document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
   }, []);
+  // 底部 Agent 面板收起/恢复：户外 2D 打开时会临时收起，关掉户外后要还原回去，
+  // 否则用户切回 3D 会发现下方一排按钮（地图选址/按风格配一套/发送）全没了。
+  const agentCloseTimerRef = useRef<number | null>(null);
+  /** 本次「收起 Bingo」是否由打开户外 2D 触发（只有它触发才在关掉户外时还原）。 */
+  const agentCollapsedByOutdoorRef = useRef(false);
   const closeBingo = useCallback(() => {
     setAgentClosing(true);
-    window.setTimeout(() => {
+    if (agentCloseTimerRef.current !== null) window.clearTimeout(agentCloseTimerRef.current);
+    agentCloseTimerRef.current = window.setTimeout(() => {
+      agentCloseTimerRef.current = null;
       setAgentCollapsed(true);
       setAgentClosing(false);
       const rail = activeAgent === 'door' ? brandRailRef : activeAgent === 'bingo' ? bingoRailRef : activeAgent === 'space' ? spaceEntryRef : toolsEntryRef;
       rail.current?.focus();
     }, 280);
   }, [activeAgent]);
+  /** 撤销一次「收起 Bingo」（含尚未落地的 280ms 延迟收起）。 */
+  const restoreBingo = useCallback(() => {
+    if (agentCloseTimerRef.current !== null) {
+      window.clearTimeout(agentCloseTimerRef.current);
+      agentCloseTimerRef.current = null;
+    }
+    setAgentClosing(false);
+    setAgentCollapsed(false);
+  }, []);
   /** 点同一格收起，点别的格就地换成那个 agent 的卡。私信开着时点格子 = 换回那一格，不是收起整栏。 */
   const toggleAgent = useCallback((id: AgentId) => {
     if (!captureOpen && agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
@@ -1353,26 +1606,132 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 只写 backendVenue.polygon + width/height（layoutGeometryScene 靠这两个字段长地面与外墙），
   // 不走 createVenueFromPick（那会清空已有的物料）。初次载入只记基线，绝不覆盖用户在 3D 里圈好的场地。
   const outdoorBoundarySyncRef = useRef<OutdoorBoundarySyncState>({ baseline: null });
+  // 2026-11-11 图层（Level = 独立设计方案）：3D 地面图层只镜像 2D 当前活动层；边界跨层共享照常同步。
+  const outdoorFullPlanRef = useRef<SitePlanData | null>(null);
+  const outdoorLevelIdRef = useRef<string | null>(null);
+  // 3D 地面底图拼贴的并发守卫（序列号 + 已贴锚点指纹）：慢请求回来时若边界已变就丢弃。
+  const outdoorGroundSeqRef = useRef(0);
+  const outdoorGroundKeyRef = useRef<string | null>(null);
+  const applyOutdoorGroundBasemap = useCallback((plan: SitePlanData) => {
+    const anchor = plan.anchor;
+    const boundary = plan.boundary;
+    if (!anchor || boundary.length < 3) return;
+    if (typeof document === 'undefined') return;
+    // 三维贴地只支持公开源（OSM/Carto）——与 2D 画布同源、与 plan-ground-capture 的口径一致。
+    const source = readPlanGroundSource();
+    const urlFor = (src: PlanGroundSource, z: number, x: number, y: number) => publicSourceTileUrl(src, z, x, y);
+    // 边界是 ENU 局部米（x 东、y 北，原点在锚点）。换算回经纬度多边形定贴地帧。
+    const mLng = metersPerDegreeLng(anchor.lat);
+    const polygon = boundary.map(p => ({ lng: anchor.lng + p.x / mLng, lat: anchor.lat + p.y / METERS_PER_DEGREE_LAT }));
+    const lngs = polygon.map(p => p.lng);
+    const lats = polygon.map(p => p.lat);
+    const lng0 = Math.min(...lngs);
+    const latNorth = Math.max(...lats);
+    const latSouth = Math.min(...lats);
+    const xs = boundary.map(p => p.x);
+    const ys = boundary.map(p => p.y);
+    const widthM = Math.max(1, Math.max(...xs) - Math.min(...xs));
+    const depthM = Math.max(1, Math.max(...ys) - Math.min(...ys));
+    // 防重复：锚点+边界范围+图源没变就别重拼（只比点数会漏掉「拖顶点但点数不变」）。
+    const key = `${anchor.lng.toFixed(6)},${anchor.lat.toFixed(6)}|${widthM.toFixed(1)}x${depthM.toFixed(1)}|${boundary.length}|${source}`;
+    if (outdoorGroundKeyRef.current === key) return;
+    const frame: MapGroundFrame = {
+      lng0,
+      lat0: latNorth,
+      latMid: (latSouth + latNorth) / 2,
+      scale: 1,
+      latSign: -1,
+    };
+    const bounds = satelliteBoundsForFrame(polygon, frame, widthM, depthM);
+    const seq = ++outdoorGroundSeqRef.current;
+    void capturePlanGround({ bounds, source, size: 1024, urlFor }).then(capture => {
+      if (!capture) return;
+      if (outdoorGroundSeqRef.current !== seq) return; // 期间又画了新的边界，丢弃旧图。
+      const current = layoutStore.getState().layout;
+      // 用户后来手动换过底图/清了图就别覆盖。
+      if (current.floorPlanImage && !isPlanGroundImage(current.floorPlanImage)) return;
+      outdoorGroundKeyRef.current = key;
+      rememberPlanGroundBounds(capture.dataUrl, capture.bounds);
+      // 贴地多边形也写进 layout：3D 进场自动补图（ensurePlanGround / isMapOutdoorLayout）
+      // 靠它定场地位置，不再向高德按场地名 geocode（Key 失效，那条链路已不可用）。
+      actions.applyLayout({
+        ...current,
+        floorPlanImage: capture.dataUrl,
+        floorPlanOpacity: 0.94,
+        satelliteGroundRef: true,
+        mapGroundPolygon: polygon,
+        mapLngLat: { lng: (lng0 + Math.max(...lngs)) / 2, lat: (latSouth + latNorth) / 2 },
+        mapGroundFrame: frame,
+        // 已经有场景锚点就别动：锚点是世界定位的正源，自动补图不该把 3D 场景挪走。
+        ...(current.sceneAnchor
+          ? {}
+          : { sceneAnchor: { ...anchorFromMapFrame(frame, current.width, current.height), source: 'picker' as const } }),
+      });
+    }).catch(() => undefined);
+  }, [actions]);
+
   const handleOutdoorPlanChange = useCallback((plan: SitePlanData) => {
     // 先镜像给 3D 地面图层：即使边界没变（只挪了设施/改分区），3D 里也要跟着动。
     // 收在户外视图里也保留这份快照——切回 3D 才看得见平面在哪儿。
-    setOutdoorPlanState({ projectId: layoutStore.getState().layout.id ?? null, plan });
+    outdoorFullPlanRef.current = plan;
+    setOutdoorPlanState({ projectId: layoutStore.getState().layout.id ?? null, plan: filterPlanByLevel(plan, outdoorLevelIdRef.current) });
     const step = nextOutdoorBoundarySync(outdoorBoundarySyncRef.current, plan);
     outdoorBoundarySyncRef.current = step.state;
-    if (!step.apply) return;
+    if (!step.apply) {
+      // 初次载入只记基线、不动壳体；但 3D 地面还没有一张贴地地图时要补一张。
+      // 以前只在「边界变了」才拼图，重开项目 3D 就永远停在素板上（用户报的「3D 场地没地图」）。
+      try { workspaceWriteGuards?.assertLayoutWrite(); } catch { return; }
+      applyOutdoorGroundBasemap(plan);
+      return;
+    }
     try { workspaceWriteGuards?.assertLayoutWrite(); } catch { notify('本机编辑权已失效，平面边界未同步到 3D。', 'error'); return; }
     const base = layoutStore.getState().layout;
     const patch = shellVenuePatchFromPlanBoundary(base, plan.boundary);
     if (!patch) return;
     commitHistoryNow();
     actions.applyLayout({ ...base, ...patch });
+    // 边界变了就重拼 3D 地面底图（用 2D 当前那张地图：OSM/Carto/天地图）。
+    applyOutdoorGroundBasemap(plan);
     if (patch.scaled) notify('平面边界超过 200 m，已按比例缩到壳体可承载的尺寸。', 'info');
-  }, [actions, commitHistoryNow, notify, workspaceWriteGuards]);
+  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, applyOutdoorGroundBasemap]);
+  const handleOutdoorActiveLevelChange = useCallback((levelId: string) => {
+    outdoorLevelIdRef.current = levelId;
+    const full = outdoorFullPlanRef.current;
+    if (!full) return;
+    setOutdoorPlanState({ projectId: layoutStore.getState().layout.id ?? null, plan: filterPlanByLevel(full, levelId) });
+  }, []);
   /** 切回 3D 也保留平面图层（这才是「2D 策划的东西 3D 里也在」）；只丢掉别的活动的残留。 */
   const outdoorPlan = useMemo(
     () => (outdoorPlanState && outdoorPlanState.projectId === (layout.id ?? null) ? outdoorPlanState.plan : null),
     [layout.id, outdoorPlanState],
   );
+  // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
+  // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。
+  useEffect(() => {
+    if (!outdoorPlan) {
+      setOutdoor3dWarm(false);
+      return undefined;
+    }
+    if (outdoor3dWarm) return undefined;
+    const timer = window.setTimeout(() => setOutdoor3dWarm(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [outdoorPlan, outdoor3dWarm]);
+  // GeoGround 瓦片地面（2026-11-12）与户外 2D 同一份图源偏好；署名随源切换。
+  const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as const);
+  // 左下「比例尺+指北针+署名」簇的 DOM refs（与户外 3D 同款组件，下方 effect 驱动更新）。
+  const geoScaleLabelRef = useRef<HTMLSpanElement | null>(null);
+  const geoScaleBarRef = useRef<HTMLDivElement | null>(null);
+  const geoCompassRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 2026-11-11 统一视图：把「室内 3D 场景的物料 + 场地实景扫描」的落位算成户外 2D 能画的框。
+   * 没有户外规划（outdoorPlan 为 null）时返回空数组——此时边界退化，画出来的都是无意义的壳体落位。
+   */
+  const outdoorSceneObjects = useMemo(() => {
+    if (!outdoorPlan) return [] as PlanSceneObject[];
+    const boundary = outdoorPlan.boundary ?? [];
+    const items = layout.floors.flatMap((floor) => floor.items);
+    return planSceneObjects({ items, layout, boundary });
+  }, [outdoorPlan, layout]);
 
   // Wrap layout actions with the side-effect of clearing the selection when
   // the targeted item disappears. Discrete actions (delete, duplicate, add,
@@ -1675,6 +2034,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     selectOnly,
     placeCatalogItem: placeDiscrete,
   });
+  /**
+   * 2026-11-12 统一放置流程（用户拍板）：物料卡点选 = 载入后进「待放置」（点哪放哪，同户外），
+   * 不再直接落正中。已有待放置时换成新选的这件；拖拽到画布仍是拖哪落哪（onCatalogDrop）。
+   */
+  const armCatalogFromLibrary = useCallback((item: CatalogItem) => {
+    clearPendingPlacement();
+    armPendingPlacement(item);
+  }, [clearPendingPlacement, armPendingPlacement]);
+
   const placeCatalogItemResult=useCallback((item:CatalogItem):CatalogPlacementResult=>{
     const id=placeFromCatalog(item);
     if(id)return {status:'placed',id};
@@ -2043,6 +2411,71 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [isolatedScanId, setIsolatedScanId] = useState<string>();
   const scanIsolated = !!environment && environment.assetId === isolatedScanId;
   const showGaussianInCanvas = !mappedWorkspace || scanIsolated;
+  // 户外项目主画布 3D 接管（2026-11-12 续三）：非漫游 3D 态直接复用户外 3D 场地组件
+  // （OutdoorPlan3D），卡内 3D 与退出后的主 3D 是同一份渲染（docs/42 终局形态）。
+  // 2026-11-12 用户拍板（统一 2D/3D）：有户外计划时关掉覆盖层就是接管 3D（图六），
+  // 不再看 view2D 落「主舞台平面平铺图」（图三已废）——漫游/实景隔离仍不接管。
+  const outdoor3dTakeover = outdoor3dTakeoverActive && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive && !scanIsolated;
+  // 2026-11-12 用户拍板：左栏所有卡片统一「半卡片」交互（拖把手调高/收起/拖出独立小窗）。
+  // 当前可见的堆栈成员：≤2 张时参与比例调节；>2 张（拍摄向导+私聊+户外同开的极端组合）
+  // 安全退化为均分。captureOpen 不再独占左栏：拍摄场地卡与户外卡/私聊卡堆叠共存
+  //（Bingo 保持让位，避免三卡同屏）。
+  const leftStackCards: LeftStackPanelId[] = [
+    ...(captureOpen ? ['capture' as const] : []),
+    ...(personChat ? ['chat' as const] : []),
+    ...((outdoor2DOpen || outdoor3dTakeover) ? ['outdoor' as const] : []),
+    ...(!captureOpen && !personChat && agentPanelVisible ? ['bingo' as const] : []),
+  ];
+  leftStackPairRef.current = leftStackCards.length === 2 ? leftStackCards : null;
+  const leftStackPair = leftStackPairRef.current;
+  // first 必须在当前可见对里；不可见时回落到对的第一张。
+  const leftStackFirst: LeftStackPanelId | null = leftStackPair
+    ? (leftStackPair.includes(leftStack.first) ? leftStack.first : leftStackPair[0])
+    : null;
+  const leftStackSecond: LeftStackPanelId | null = leftStackPair && leftStackFirst ? (leftStackPair.find(id => id !== leftStackFirst) ?? null) : null;
+  const leftStackSplit = !!leftStackPair && !leftStack.detached;
+  // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
+  // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
+  // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
+  // 左栏户外卡片里，接管态不挂卡片 = 3D 里没有任何编辑入口（误删回归，本行修复）。
+  // columnExpanded 的全部消费点都在本行之后（769/4130/4135/4264），搬到这里才能引用 takeover。
+  const columnExpanded = navExpanded || personChat || captureOpen || ((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null);
+  // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
+  useEffect(() => {
+    if (columnExpanded) setMobileRailOpen(false);
+  }, [columnExpanded]);
+  // GeoGround 左下「比例尺+指北针」随相机更新（挂点仿 use-scene-effects cutaway effect，
+  // 公式同户外 3D 渲染循环；两处都是「北 = -z」口径）。接管态由 OutdoorPlan3D 自带的
+  // 罗盘簇出示（同款共享组件），这里不渲染避免双份。
+  const geoClusterOn = !view.view2D && !scanIsolated && !!outdoorPlan?.anchor && !outdoor3dTakeover;
+  useEffect(() => {
+    if (!geoClusterOn || !isReady) return undefined;
+    const controls = controlsRef.current;
+    if (!controls) return undefined;
+    const update = (): void => {
+      const camera = cameraRef.current;
+      if (!camera) return;
+      if (geoCompassRef.current) {
+        const dx = camera.position.x - controls.target.x;
+        const dz = camera.position.z - controls.target.z;
+        geoCompassRef.current.style.transform = `rotate(${-Math.atan2(-dx, dz)}rad)`;
+      }
+      if (geoScaleBarRef.current && geoScaleLabelRef.current) {
+        const canvasH = rendererRef.current?.domElement.clientHeight || 600;
+        const dist = Math.max(camera.position.distanceTo(controls.target), 4);
+        const metersPerPixel = (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(canvasH, 1);
+        const targetM = metersPerPixel * 80;
+        const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+        const meters = nice.find((value) => value >= targetM) ?? Math.round(targetM);
+        const width = Math.max(24, Math.min(140, meters / Math.max(metersPerPixel, 0.01)));
+        geoScaleBarRef.current.style.width = `${width}px`;
+        geoScaleLabelRef.current.textContent = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+      }
+    };
+    update();
+    controls.addEventListener('change', update);
+    return () => controls.removeEventListener('change', update);
+  }, [geoClusterOn, isReady]);
   // 左侧「漫游角色」只改 walkRoleId；右侧 tool-walk 用它进出漫游，两边是同一套状态。
   const [walkRoleId, setWalkRoleId] = useState(DEFAULT_WALK_ROLE_ID);
   const walkRole = findWalkRole(walkRoleId);
@@ -2414,14 +2847,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   );
   const peopleModelReady = usePeopleModel(threeModuleRef, isReady, layoutHasPeople);
 
-  const [isoStatus, setIsoStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
-  const [isoRetry, setIsoRetry] = useState(0);
-  const [showIso, setShowIso] = useState(true);
   useSceneEffects({
     showBasemap: !scanIsolated,
-    isoRetry,
-    showIso,
-    onIsoStatus: setIsoStatus,
     outdoorPlan,
     isReady,
     peopleModelReady,
@@ -2515,6 +2942,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     canvasRef,
     buildingHeight: buildingHeight(layout.floors),
   });
+  applyPresetRef.current = applyPreset;
   // MAP-03 走查实测：清焦点后同步调 fitToRoom，闭包里还是旧焦点框，取景会停在场地
   // 而不是全湖。回概览/底图重置统一走 ref+rAF，等焦点态真的清掉再取景。
   const fitToRoomRef = useRef(fitToRoom);
@@ -2619,8 +3047,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     if (pendingMapVenueFrame === layout.mapGroundPolygon && pendingMapVenueFrame) return undefined;
     // 焦点清掉后下一帧再取景（同步调 fitToRoom 会读到旧焦点闭包，停在场地框）。
     if (!area) return fitOverviewAfterFocusClear();
-    // 西湖整景区底图只作垫图，默认取景收在平湖秋月这一小片，不再摊全湖。
-    if (area.presetId === 'xihu-scenic' && !area.scanAssetId) return framePinghuQiuYue();
+    // 平湖秋月这一片底图只作垫图，默认取景收在这一小片，不摊全湖。
+    if (!area.scanAssetId && area.name === XIHU_LOCAL_NAME) return framePinghuQiuYue();
     if (!area.scanAssetId) return fitOverviewAfterFocusClear();
     setSceneFocus(null);
     return undefined;
@@ -2689,6 +3117,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     notify(ok ? '效果图已开始下载。' : '效果图导出失败，请稍后重试。', ok ? 'success' : 'error');
     return ok;
   }, [exportRenderImage]);
+
+  // 接管态（主画布复用户外 3D 场地组件）的效果图导出：直接抓 OutdoorPlan3D 当前帧。
+  const handleOutdoor3dExport = useCallback(async () => {
+    const data = outdoorPlan3DRef.current?.captureImage();
+    if (!data) {
+      notify('效果图导出失败，请稍后重试。', 'error');
+      return false;
+    }
+    const link = document.createElement('a');
+    link.href = data;
+    link.download = `outdoor-3d-${Date.now()}.png`;
+    link.click();
+    notify('效果图已开始下载。', 'success');
+    return true;
+  }, [notify]);
 
   // 机位册：四张机位逐张下载，再落一份可离线打开的图册；2D 不提供。
   const handleExportAlbum = useCallback(async (options: { scale: number }) => {
@@ -3171,17 +3614,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         return rest as RoomLayout;
       }
       const existing = sceneAnchorOf(current);
-      // 静态整景区底图是「给已有锚点的场景垫一张大图」：锚点必须留在原扫描位置，
+      // 静态底图是「给已有锚点的场景垫一张大图」：锚点必须留在原扫描位置，
       // 底图中心由 bounds 经 anchorGeoToWorld 投出来，不能把锚点搬到 bbox 中心去。
-      const sceneAnchor: SceneAnchor = area.presetId
-        ? existing ?? { lng: area.center.lng, lat: area.center.lat, orientationDeg: 0, metersPerUnit: 1, source: 'preset' }
-        : {
-          lng: area.center.lng,
-          lat: area.center.lat,
-          orientationDeg: meta?.orientationDeg ?? existing?.orientationDeg ?? 0,
-          metersPerUnit: existing?.metersPerUnit ?? 1,
-          source: meta?.source ?? 'manual',
-        };
+      const sceneAnchor: SceneAnchor = {
+        lng: area.center.lng,
+        lat: area.center.lat,
+        orientationDeg: meta?.orientationDeg ?? existing?.orientationDeg ?? 0,
+        metersPerUnit: existing?.metersPerUnit ?? 1,
+        source: meta?.source ?? 'manual',
+      };
       return { ...current, sceneAnchor, researchArea: area };
     })();
     try {
@@ -3505,6 +3946,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setAgentClosing(false);
     setAgentCollapsed(false);
   }, []);
+  // 2026-11-12 出 3D 接 Aholo：拍摄场地「直接送重建」把原始文件种子交给场地重建面板（nonce 变一次填一次）。
+  const [aholoReconSeed, setAholoReconSeed] = useState<{ files: File[]; name: string; nonce: number } | null>(null);
+  const handleCaptureSendToRecon = useCallback(({ files, name }: { files: File[]; name: string }) => {
+    setAholoReconSeed({ files, name, nonce: Date.now() });
+    openAholoWorkflow('recon');
+    closeCapturePanel();
+  }, [openAholoWorkflow, closeCapturePanel]);
   const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
   const previewCandidate = validAiPreview;
   // 预览说明只闪一下：候选出现时提示约 2 秒，之后淡出；重新回到画布才再闪一次。
@@ -3720,7 +4168,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             {capacityText}
           </span>
         </div>
-        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px` }}>
+        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
@@ -3773,15 +4221,40 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                 </button>
                 <button
                   type="button"
-                  className={`sc-rail-tool sc-rail-disc${outdoor2DOpen ? ' is-active' : ''}`}
-                  aria-pressed={outdoor2DOpen}
+                  className={`sc-rail-tool sc-rail-disc${outdoor2DOpen || outdoor3dTakeover ? ' is-active' : ''}`}
+                  aria-pressed={outdoor2DOpen || outdoor3dTakeover}
                   aria-label="户外规划：在地图上画边界分区动线"
                   data-tip="户外规划 · 地图上画边界分区动线"
-                  onClick={() => setOutdoor2DOpen(current => {
-                    const next = !current;
-                    if (next) { setOutdoorPanel('layers'); if (agentPanelOpen) closeBingo(); } // 开启时左栏亮图层页签，室内面板让位（焦点跟随）。
-                    return next;
-                  })}
+                  onClick={() => {
+                    // 2026-11-12 用户反馈「展开后再点收不起来」：3D 接管（全屏「3D 场地」）也算
+                    // 展开中——此前按钮态只跟 outdoor2DOpen 挂钩，接管态下按钮熄灭，再点被误判
+                    // 成「开启」把用户带回 2D 地图。现在任一形态（2D 地图 / 3D 场地）下再点都整体收起。
+                    const outdoorOpen = outdoor2DOpen || outdoor3dTakeover;
+                    if (!outdoorOpen) {
+                      // 进户外规划先清待放置：地图点击只服务边界/分区/动线。
+                      clearPendingPlacement();
+                      setOutdoorPanel('library');
+                      // 开启时默认亮「添加物件」页签（OnePlan Add Objects 同款默认）。
+                      // 2026-11-12 用户拍板（统一 2D/3D 切换）：点「户外规划」进 2D 地图；
+                      // 「3D 场地」＝关覆盖层进全屏接管，覆盖层里不再画 3D。
+                      setOutdoorView('2d');
+                      setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+                      applyPresetRef.current('iso');
+                      if (agentPanelOpen && !agentCollapsed) { agentCollapsedByOutdoorRef.current = true; closeBingo(); }
+                      setOutdoor3dTakeoverActive(false);
+                      setOutdoor2DOpen(true);
+                      return;
+                    }
+                    setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+                    applyPresetRef.current('iso');
+                    if (agentCollapsedByOutdoorRef.current) {
+                      // 关掉户外回到 3D 时把底部按钮还原（用户 m00274）；原来只收不放。
+                      agentCollapsedByOutdoorRef.current = false;
+                      restoreBingo();
+                    }
+                    setOutdoor3dTakeoverActive(false);
+                    setOutdoor2DOpen(false);
+                  }}
                 >
                   <Globe size={26} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
@@ -3790,11 +4263,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
-              {outdoor2DOpen
-                ? <p role="status" className="sc-rail-draft" data-testid="outdoor-save-foot" title="户外规划草稿保存在本机；云端规划表接线后自动同步">
-                  {outdoorSaveFoot?.state === 'saving' ? '户外草稿保存中…' : outdoorSaveFoot?.savedAt ? `户外草稿 · 已存 ${outdoorSaveFoot.savedAt}` : '户外草稿待保存'}
-                </p>
-                : draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
+              {/* 2026-11-11 用户指令：户外态不再显示草稿保存状态文字（保存仍自动进行）。 */}
+              {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               <button
                 type="button"
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
@@ -3828,7 +4298,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
           <button
             type="button"
             className="sc-mobile-agent-entry"
-            aria-label="Agent 菜单"
+            aria-label="助理菜单"
             aria-expanded={mobileRailOpen}
             aria-controls="sc-agent-rail"
             onClick={() => setMobileRailOpen(value => !value)}
@@ -3848,61 +4318,197 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             </svg>
             <span>拍摄场地</span>
           </button>}
-          <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
-          {capturePanel !== 'new' && <aside ref={capturePanelRef} className="sc-workbench-capture" aria-label="场地采集" tabIndex={-1} hidden={!captureOpen}
+          <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
+          {capturePanel !== 'new' && <aside ref={capturePanelRef} aria-hidden={!captureOpen}
+            className={`sc-workbench-capture${leftStack.detached === 'capture' ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
+            style={{
+              ...(leftStack.detached === 'capture' ? leftStackFloatStyle('capture') : leftStackSplit && leftStackFirst === 'capture' ? { order: 0 } : leftStackSplit && leftStackSecond === 'capture' ? { order: 2 } : {}),
+            }}
+            aria-label="场地采集" tabIndex={-1} hidden={!captureOpen}
             onKeyDown={event => {
               if (event.key !== 'Escape' || event.defaultPrevented) return;
               event.stopPropagation();
               closeCapturePanel();
             }}>
-            <WorkbenchCaptureGuide key={layout.id ?? layout.name} venueName={hasMapVenue ? layout.name?.split(' · ')[0] : undefined} onClose={closeCapturePanel} />
+            {leftStack.detached === 'capture' && <div
+              className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
+              onPointerDown={event => beginLeftStackDrag('move', 'capture', event)}
+            >
+              <strong>拍摄场地</strong><span>独立小窗</span><span className="spacer" />
+              <button type="button" aria-label="收回拍摄场地面板" title="收回左栏" onClick={() => toggleLeftStackDetach('capture')}><Minimize2 size={12}/>收回</button>
+            </div>}
+            <WorkbenchCaptureGuide key={layout.id ?? layout.name} venueName={hasMapVenue ? layout.name?.split(' · ')[0] : undefined} onClose={closeCapturePanel} onSendToRecon={handleCaptureSendToRecon}
+              {...(leftStack.detached === 'capture' ? { onHeaderPointerDown: event => beginLeftStackDrag('move', 'capture', event) } : leftStackSplit ? { onHeaderPointerDown: event => beginLeftStackPull('capture', event) } : {})} />
+            {leftStack.detached === 'capture' && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'capture', event)} />}
           </aside>}
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed || captureOpen ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setSidebarCollapsed(false);}}>选中物料</button>}
               {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLux3dOpenKind(null);setLeftMode('lux3d');setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
-            </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
+            </nav><button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {!captureOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {outdoor2DOpen && !agentPanelOpen && (
-            <aside className="sc-left-drawer sc-float-layer is-outdoor-card" data-testid="outdoor-left-card" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div className="sc-left-heading"><nav className="sc-left-context" aria-label="户外规划面板">
-                <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>图层</button>
-                <button type="button" aria-pressed={outdoorPanel === 'library'} onClick={() => setOutdoorPanel('library')}>物件库</button>
-              </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><PanelLeftClose size={20}/></button></div>
-              <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-                <div id="outdoor-panel-host-layers" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'layers' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
-                
-                <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+          {!captureOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}
+            {...(leftStack.detached === 'chat' ? {
+              className: 'is-detached', style: leftStackFloatStyle('chat'),
+              floatBar: <div className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`} onPointerDown={event => beginLeftStackDrag('move', 'chat', event)}>
+                <strong>私信</strong><span>独立小窗</span><span className="spacer" />
+                <button type="button" aria-label="收回私信面板" title="收回左栏" onClick={() => toggleLeftStackDetach('chat')}><Minimize2 size={12}/>收回</button>
+              </div>,
+              floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'chat', event)} />,
+            } : leftStackSplit ? {
+              className: leftStackFirst === 'chat' ? 'is-stack-first' : 'is-stack-second',
+              style: { order: leftStackFirst === 'chat' ? 0 : 2 },
+              onHeaderPointerDown: event => beginLeftStackPull('chat', event),
+            } : {})} />}
+          {(outdoor2DOpen || outdoor3dTakeover) && (
+            <aside
+              className={`sc-left-drawer sc-float-layer is-outdoor-card${leftStack.detached === 'outdoor' ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
+              data-testid="outdoor-left-card"
+              style={{
+                position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                // 堆栈态高度交给 CSS（is-stack-first 吃 --sc-left-stack-percent，第二张吃剩余）；
+                // 独占/无对时占满。独立小窗时位置尺寸从 --sc-float-* 来。
+                ...(leftStack.detached === 'outdoor'
+                  ? {}
+                  : leftStackSplit && (leftStackFirst === 'outdoor' || leftStackSecond === 'outdoor')
+                    ? { order: leftStackFirst === 'outdoor' ? 0 : 2 }
+                    : { height: '100%' }),
+                ...(leftStack.detached === 'outdoor' ? leftStackFloatStyle('outdoor') : {}),
+              }}
+            >
+              <div
+                className="sc-left-heading is-oneplan-head"
+                onPointerDown={leftStack.detached === 'outdoor'
+                  ? event => beginLeftStackDrag('move', 'outdoor', event)
+                  : leftStackSplit ? event => beginLeftStackPull('outdoor', event) : undefined}
+                style={leftStack.detached === 'outdoor' || leftStackSplit ? { cursor: 'grab', touchAction: 'none' } : undefined}
+                title={leftStackSplit ? '抓住这里往左栏外拖，可以变成独立小窗；上下拖可以换顺序' : undefined}
+              >
+                {leftStack.detached === 'outdoor' && <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--sc-muted)' }}>户外规划 · 独立窗口</span>}
+                <button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><X size={18}/></button>
               </div>
+              {/* 2026-11-11 图层行宿主（Level = 独立设计方案，非楼层高度）：
+                  行本体由户外画布经 PanelPortal 挂进来（含切换/重命名/删除/新建）。 */}
+              <div id="outdoor-panel-host-levels" style={{ flex: '0 0 auto' }} />
+              {/* 2026-11-11 用户指令：测量区宿主——图层行下方、添加物件/已放置物件页签上方（常驻）。 */}
+              <div id="outdoor-panel-host-measure" style={{ flex: '0 0 auto' }} />
+              {/* 2026-11-11 用户指令：标注区宿主——测量区下方、页签上方（常驻，OnePlan 工具栏 T/形状同款功能）。 */}
+              <div id="outdoor-panel-host-annotate" style={{ flex: '0 0 auto' }} />
+              {/* 2026-11-11 OnePlan 分段式页签（Add Objects/Placed Objects 同款交互）：激活=深底白字胶囊。 */}
+              <nav className="sc-left-context is-oneplan-tabs" aria-label="户外规划面板">
+                <button type="button" aria-pressed={outdoorPanel === 'library'} onClick={() => setOutdoorPanel('library')}>添加物件</button>
+                <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>已放置物件</button>
+              </nav>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+                <div id="outdoor-panel-host-layers" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 10, display: outdoorPanel === 'layers' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+
+                <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+              </div>
+              {leftStack.detached === 'outdoor' && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'outdoor', event)} />}
             </aside>
           )}
-          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+          {leftStackSplit && (
+            <div
+              className={`sc-left-stack-splitter${leftStackDragging ? ' is-dragging' : ''}`}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="拖动中间这条线调整上下高度；把面板标题往左栏外拖可以抓成独立小窗，拖回左栏松手收回"
+              data-testid="left-stack-splitter"
+              onPointerDown={event => beginLeftStackDrag('split', undefined, event)}
+            >
+              <span className="sc-left-stack-grip" aria-hidden="true" />
+              <div className="sc-left-stack-actions" onPointerDown={event => event.stopPropagation()}>
+                <button
+                  type="button"
+                  aria-label="上下换序"
+                  title="上下换序（也可以直接拖面板标题上下换）"
+                  data-testid="left-stack-swap"
+                  onClick={() => { const other = leftStackSecond; if (other) setLeftStack(current => swapLeftStackOrder(current, other)); }}
+                ><ArrowUpDown size={14} /></button>
+              </div>
+            </div>
+          )}
+          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(leftStack.detached === 'bingo' ? {} : leftStackSplit ? { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) } : {})} {...(leftStack.detached === 'bingo' ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(leftStack.detached === 'bingo' ? {
+                floatBar: (
+                  <div
+                    className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
+                    onPointerDown={event => beginLeftStackDrag('move', 'bingo', event)}
+                  >
+                    <strong>Bingo</strong><span>独立小窗</span><span className="spacer" />
+                    <button type="button" aria-label="收回 Bingo 面板" title="收回左栏" data-testid="bingo-float-dock" onClick={() => toggleLeftStackDetach('bingo')}><Minimize2 size={12}/>收回</button>
+                  </div>
+                ),
+                floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
+              } : {})} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
-            if (workbenchMode !== 'layout' || !pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
+            // 2026-11-12 户外态短路：户外地图/接管 3D 也是 canvas，待放置物料不能被误落到室内场景。
+            if (workbenchMode !== 'layout' || outdoor2DOpen || outdoor3dTakeover || !pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
             const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
             if (!point) return;
             const id = placeDiscrete(pendingCatalog,point);
             if (id) selectOnly(id, { keepPanel: true });
           }}>
-          {outdoor2DOpen && (
+          {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
+              供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
+              2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），
+              2D 左下簇不再重复放发布胶囊（deliverySlot 撤了），右轨按钮列切换视角时不再跳格。 */}
+          {(outdoor2DOpen || !!outdoorPlanState) && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                ...(outdoor2DOpen ? {} : { visibility: 'hidden' as const, pointerEvents: 'none' as const }),
+              }}
+            >
             <OutdoorPlanOverlay
               ref={outdoorOverlayRef}
               projectId={layout.id ?? null}
               anchor={layout.sceneAnchor ?? layout.mapLngLat ?? null}
               activityName={layout.name}
               onSaveStateChange={handleOutdoorSaveState}
-              onHistoryChange={handleOutdoorHistory}
+              onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
+              onModeChange={handleOutdoorCanvasMode}
               onPlanChange={handleOutdoorPlanChange}
-              deliverySlot={<ShareMenu variant="canvas" actions={shareActions} layout={layout} />}
+              onActiveLevelChange={handleOutdoorActiveLevelChange}
               seedPlan={outdoorSeedPlan}
+              sceneObjects={outdoorSceneObjects}
+              view={outdoorView}
+              // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
+              dormant={!outdoor2DOpen}
+              // 2026-11-12「3D 的时候也要可编辑」：接管态把右轨三张工具卡的出镜宿主交给画布，
+              // 卡片 portal 出隐藏覆盖层；2D 卡内不传，浮窗照旧画在画布内。
+              {...(outdoor3dTakeover ? { inspectorHostId: 'outdoor-inspector-host' } : {})}
+              onViewChange={next => {
+                // 2026-11-12 用户拍板（统一 2D/3D 切换）：覆盖层里点「3D 场地」＝关覆盖层
+                // 进全屏接管（OutdoorPlan3D），不在覆盖层里画 3D；重开卡片回到 2D 地图。
+                if (next === '3d') {
+                  setOutdoorView('2d');
+                  setOutdoor2DOpen(false);
+                  // 显式点亮接管态：outdoorPlanState 常驻后，「关覆盖层」不再隐含接管。
+                  setOutdoor3dTakeoverActive(true);
+                  setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+                  return;
+                }
+                setOutdoorView(next);
+              }}
+/>
+              </div>
+            )}
+            {/* 2026-11-12 用户指令：接管态左下角「2D地图/3D场地」胶囊已移除——右轨 #tool-2d3d
+                （z 35）在接管层（29）/覆盖层（30）之上始终可见可点，2D↔3D 切换一律走右轨单入口。 */}
+            {/* 接管态右轨三张工具卡（测量/标注/属性）的出镜宿主：画布本体在覆盖层里保活隐藏，
+                卡片 portal 到这里才能在 3D 里看见（z 31：接管层 29 / 覆盖层 30 之上，右轨 35 之下）。
+                宿主只负责定位，点击事件由卡片自身的 pointerEvents:auto 接住。 */}
+            <div
+              id="outdoor-inspector-host"
+              data-testid="outdoor-inspector-host"
+              style={{ position: 'absolute', inset: 0, zIndex: 31, pointerEvents: 'none', visibility: outdoor3dTakeover ? 'visible' : 'hidden' }}
             />
-          )}
       <div className="sc-scene-viewport"><Viewport
         isReady={isReady}
         error={error}
@@ -3956,6 +4562,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         }
         onCatalogDrop={async (clientX, clientY, key) => {
           if (workbenchMode !== 'layout' || !dropActive.current) return;
+          // 2026-11-12 统一放置流程：拖拽落点优先于「待放置」——带着待放置拖新物件进来，
+          // 自动取消待放置、落拖拽这件；拖的就是待放置这件也走同一条路。
+          if (pendingPlacement.current) clearPendingPlacement();
           const base = layoutStore.getState();
           const world = view.view2D
             ? clientToWorld2D(clientX, clientY)
@@ -3968,6 +4577,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               const model = (await loadOnlineModels()).models.find(entry => entry.slug === key.slice(7));
               if (!model) return;
               item = await loadOnlineCatalogItem(model, controller);
+            } else if (key.startsWith('generated:')) {
+              // 2026-11-12 统一放置流程：「我的生成」物料也可拖入，拖哪落哪。
+              item = await loadStoredAholoCatalogItem(key.slice('generated:'.length));
             }
             if (!item) return;
             if (!dropActive.current) return;
@@ -3985,6 +4597,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
           finally { placement.dispose(); }
         }}
       />
+            {/* 户外项目主画布 3D 接管：与户外卡内 3D 同一个组件（同一份渲染管线）。
+                2026-11-12 用户反馈「点 2D/立体切换不丝滑」：组件**常驻不卸载**——切回 2D 时
+                只置 hidden（内层 active=false 停渲染、只推进瓦片 LOD），切回 3D 当帧就出画面，
+                镜头保持上一次的位置，不再重建 three 场景/重抓瓦片/重放顶部俯冲倾斜动画。 */}
+            {outdoorPlan && (outdoor3dTakeover || outdoor3dWarm) && !walkthroughActive && !scanIsolated && (
+              <div
+                className="sc-outdoor-takeover"
+                data-testid="outdoor-takeover"
+                data-active={outdoor3dTakeover ? 'true' : 'false'}
+                style={{
+                  visibility: outdoor3dTakeover ? 'visible' : 'hidden',
+                  pointerEvents: outdoor3dTakeover ? 'auto' : 'none',
+                }}
+              >
+                <OutdoorPlan3D
+                  plan={outdoorPlan}
+                  source={geoGroundSource}
+                  sceneObjects={outdoorSceneObjects}
+                  apiRef={outdoorPlan3DRef}
+                  canvasApiRef={outdoorCanvasBridgeRef}
+                  active={outdoor3dTakeover}
+                />
+              </div>
+            )}
             {walkAvatarOn && <div className="sc-walk-avatar-controls" aria-label="漫游角色">
               <button type="button" onClick={cycleWalkView}>{walkViewMode === 'third' ? '第三人称' : walkViewMode === 'shoulder' ? '近肩视角' : '第一人称'} · F5 切换</button>
               <button type="button" onClick={cycleWalkRole} title="和左侧「漫游角色」是同一份选择">{walkRole.name} · 换角色</button>
@@ -4001,8 +4637,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               if (environmentsRef.current.some(entry => entry.assetId === DEMO_WORLD_SCENE_ID)) {
                 removeEnvironment(DEMO_WORLD_SCENE_ID);
               }
-              const current = layoutStore.getState().layout;
-              if (current.researchArea?.presetId === 'xihu-scenic') setShowIso(true);
               focusMapVenue();
             }} onReconUpload={luxDirectVisible ? preset => {
               noteVenueThreeIntent();
@@ -4029,17 +4663,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             </div>}
             {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
               <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
-              <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
+              <Lux3dDirectTest reconPreset={aholoReconPreset} reconFilesSeed={aholoReconSeed} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
             <CanvasHeading view2D={view.view2D} />
-            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameLocal={framePinghuQiuYue}
-              venuePicker={!walkthroughActive && (hasMapVenue || scanIsolated || pendingCatalog || selectedItem || captureOpen || previewCandidate || workbenchMode !== 'layout') && <MapRailButton variant="canvas" />}
-              isoStatus={isoStatus} onRetryIso={() => setIsoRetry(value => value + 1)} />
-            {!scanIsolated && !walkthroughActive && !pendingCatalog && !selectedItem && !captureOpen && !previewCandidate && workbenchMode === 'layout' &&
-              <CanvasWorkflow placedCount={materialCount(activeFloor.items)} onMaterials={() => showAgent('material')}
-                onSpace={() => showAgent('space')} onReview={() => showAgent('bingo')}
-                {...(hasMapVenue ? { venue: { name: layout.name?.split(' · ')[0] || '本场区域',
-                  length: layout.width, width: layout.height, onFocus: focusMapVenue, onWalk: tryMapVenue } } : {})}/>}
+            {/* GeoGround 左下「比例尺+指北针+署名」簇（与户外 3D 同款；OSM ODbL 署名硬要求）。
+                接管态由 OutdoorPlan3D 自带罗盘簇出示，这里不渲染避免双份。 */}
+            {!view.view2D && !scanIsolated && !outdoor3dTakeover && outdoorPlan?.anchor && (
+              <GeoScaleCompass
+                scaleLabelRef={geoScaleLabelRef}
+                scaleBarRef={geoScaleBarRef}
+                compassRef={geoCompassRef}
+                attribution={basemapSourceAttribution(geoGroundSource)}
+                testIdPrefix="geo-ground"
+              />
+            )}
             {scanIsolated && environment && <div className={`sc-canvas-mode${isolatedScanFailed ? ' is-error' : ''}`}
               role={isolatedScanFailed ? 'alert' : 'status'} aria-live="polite">
               <Scan size={13} aria-hidden="true"/>
@@ -4216,7 +4853,31 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools outdoorActions={outdoorActions} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} publishHidden={outdoor2DOpen} shareActions={shareActions} onExportImage={handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} outdoorStage={outdoorPlan ? { showing3d: outdoor3dTakeover, onSwitch: () => {
+              // 2026-11-12 统一 2D/3D（图五 ↔ 图六）＋显式接管开关：覆盖层开＝2D 地图；
+              // 接管开＝全屏 3D；两者都关（收起态）＝「切到 3D 场地」直接进全屏接管。
+              if (outdoor2DOpen) {
+                setOutdoor2DOpen(false);
+                setOutdoor3dTakeoverActive(true);
+                setOutdoorView('2d');
+                setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+              } else if (outdoor3dTakeoverActive) {
+                clearPendingPlacement();
+                setOutdoor3dTakeoverActive(false);
+                setOutdoor2DOpen(true);
+                setOutdoorPanel('library');
+                setOutdoorView('2d');
+              } else {
+                setOutdoor3dTakeoverActive(true);
+                setOutdoorView('2d');
+                setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+              }
+            } } : undefined} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+              // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
+              if (outdoor3dTakeover) {
+                outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);
+                return;
+              }
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

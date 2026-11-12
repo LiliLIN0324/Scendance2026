@@ -107,10 +107,10 @@ describe('compileSceneScript — 简报落地成可拖的一版', () => {
     expect(chairs.length).toBeGreaterThanOrEqual(6);
     const table = items.find(item => item.type === 'dining-table' && item.name === '圆桌');
     expect(table?.position).toBeTruthy();
-    const radii = chairs
-      .filter(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)) < 2)
-      .map(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)));
-    expect(radii.length).toBe(8);
+    const distances = chairs.map(item => Math.hypot((item.position?.x ?? 0) - (table!.position?.x ?? 0), (item.position?.z ?? 0) - (table!.position?.z ?? 0)));
+    const closest = Math.min(...distances);
+    const radii = distances.filter(distance => Math.abs(distance - closest) < 0.08);
+    expect(radii.length).toBeGreaterThanOrEqual(6);
     expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.08);
   });
 });

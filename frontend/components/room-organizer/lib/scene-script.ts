@@ -244,6 +244,10 @@ export interface BriefSceneScriptInput {
   checkin: boolean;
   /** 换一版：同一份需求换一个 seed，槽位顺序变，可行域不变。 */
   seed: number;
+  /** 没有舞台和签到时，前侧预留带会把大圆桌的椅子挡在场地外。缺座时可以不留。 */
+  aisle?: boolean;
+  /** Usable interior in layout coordinates. Zones stay inside it instead of the activity frame. */
+  floor?: { x: number; z: number; w: number; d: number };
 }
 
 /**
@@ -252,28 +256,33 @@ export interface BriefSceneScriptInput {
  * below, with an optional check-in band. It writes nothing; the compiler does.
  */
 export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript {
-  const { widthM, depthM, guests, layoutMode = 'dining', stage, checkin } = input;
+  const { guests, layoutMode = 'dining', stage, checkin } = input;
+  const frame = input.floor && input.floor.w > 1 && input.floor.d > 1
+    ? input.floor
+    : { x: -input.widthM / 2, z: -input.depthM / 2, w: input.widthM, d: input.depthM };
   const gap = 0.35;
   const aisleMinM = 1.2;
   const zones: SceneScriptZone[] = [];
 
-  let north = -depthM / 2 + gap;
+  let north = frame.z + gap;
   if (stage) {
-    const stageDepth = clamp(depthM * 0.16, 1.2, 3.2);
-    zones.push({ role: 'stage', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: stageDepth }, label: '主舞台' });
+    const stageDepth = clamp(frame.d * 0.16, 1.2, 3.2);
+    zones.push({ role: 'stage', rect: { x: frame.x + gap, z: north, w: frame.w - 2 * gap, d: stageDepth }, label: '主舞台' });
     north += stageDepth;
   }
-  zones.push({ role: 'aisle', rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: aisleMinM }, label: '前侧预留带' });
-  north += aisleMinM;
+  if (input.aisle !== false) {
+    zones.push({ role: 'aisle', rect: { x: frame.x + gap, z: north, w: frame.w - 2 * gap, d: aisleMinM }, label: '前侧预留带' });
+    north += aisleMinM;
+  }
 
   // Keep the optional check-in band clear of seating.
   const southBandD = checkin || stage ? 1.6 : 0;
-  const south = depthM / 2 - gap - southBandD;
+  const south = frame.z + frame.d - gap - southBandD;
   const seatingD = south - north;
   if (seatingD >= 0.5) {
     zones.push({
       role: 'seating',
-      rect: { x: -widthM / 2 + gap, z: north, w: widthM - 2 * gap, d: seatingD },
+      rect: { x: frame.x + gap, z: north, w: frame.w - 2 * gap, d: seatingD },
       ...(guests ? { count: guests } : {}),
     });
   }
@@ -281,7 +290,7 @@ export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript 
     if (checkin) {
       zones.push({
         role: 'checkin',
-        rect: { x: -widthM / 2 + gap, z: south + gap, w: Math.min(2.4, widthM * 0.3), d: southBandD - gap },
+        rect: { x: frame.x + gap, z: south + gap, w: Math.min(2.4, frame.w * 0.3), d: southBandD - gap },
         label: '签到台',
       });
     }

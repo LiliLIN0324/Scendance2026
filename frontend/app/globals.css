@@ -777,22 +777,23 @@ body {
 .sc-warning { color: var(--warn) !important; border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); background: var(--paper); font-size: var(--fs-p2); padding: 9px 10px; border-radius: var(--r-sm); line-height: 1.7; margin: 10px 0; overflow-wrap: anywhere; }
 .sc-canvas-stage { position: absolute; top: 0; bottom: 0; left: 291px; right: 0; min-width: 0; border-radius: 0; overflow: hidden; }
 .sc-canvas-heading { position: absolute; top: var(--sc-space-md); left: var(--sc-space-md); display: flex; align-items: center; gap: var(--sc-space-sm); color: var(--wk-muted); font-size: var(--fs-p2); pointer-events: none; }
-.sc-geo-basemap { position: absolute; top: var(--sc-space-md); left: var(--sc-space-md); z-index: 26; pointer-events: auto; }
-.sc-geo-basemap button { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: none; color: var(--wk-ink-soft); font-size: var(--fs-cap); cursor: pointer; padding: 4px 7px; border-radius: var(--r-sm); min-height: 28px; }
-.sc-geo-basemap .sc-geo-toggle { gap: 6px; padding: 4px 9px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); }
-.sc-geo-basemap .sc-geo-toggle + .sc-geo-toggle { margin-inline-start: 6px; }
-.sc-geo-basemap button:hover:not(:disabled), .sc-geo-basemap button[aria-pressed='true'] { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
-.sc-geo-basemap button:disabled { opacity: .5; cursor: default; }
-.sc-geo-panel { position: absolute; top: calc(100% + 6px); left: 0; display: grid; gap: 8px; width: min(260px, calc(100vw - 110px)); max-height: min(70vh, 420px); overflow: auto; padding: 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-cap); }
-.sc-geo-current { display: grid; gap: 4px; }
-.sc-geo-actions, .sc-geo-search { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.sc-geo-search { flex-wrap: nowrap; }
-.sc-geo-search input { flex: 1; min-width: 0; padding-inline: 7px; }
-.sc-geo-search button { flex: none; }
-.sc-geo-panel :is(input, select) { min-height: 28px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: inherit; }
-.sc-geo-notice { margin: 0; color: var(--wk-ink-soft); }
-.sc-geo-notice[role='alert'] { color: var(--warn); }
-.sc-geo-attribution { padding-top: 6px; border-top: 1px solid var(--wk-hair); font-size: inherit; color: var(--wk-muted); }
+/* 户外项目主画布 3D 接管层：OutdoorPlan3D 与户外卡内 3D 同一组件，盖住主 three 视口（低于户外 overlay 的 z30）。 */
+.sc-outdoor-takeover { position: absolute; inset: 0; z-index: 29; }
+.sc-outdoor-takeover [data-testid='outdoor-plan-3d'] { position: absolute; inset: 0; }
+/* 漫游态户外 overlay 让位：漫游相机/人物在主场景上，overlay 不透明会整个挡住画面（现存缺口顺手修）。 */
+.sc-workbench.is-walkthrough [data-testid='outdoor-overlay'] { display: none !important; }
+/* GeoGround 瓦片地面的图源署名（主画布 3D 态右下角，OSM ODbL 要求可见）。 */
+.sc-geo-scale-north { position: absolute; left: 14px; bottom: 16px; z-index: 2; display: flex; align-items: flex-end; gap: 10px; pointer-events: none; }
+.sc-geo-scale-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.sc-geo-scale-label { color: #1f2933; font-size: 11px; line-height: 14px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.sc-geo-scale-bar { height: 3px; width: 80px; background: #1f2933; box-shadow: 0 0 0 1px #fff; }
+.sc-geo-compass-dial { width: 36px; height: 36px; border-radius: 50%; background: rgba(255, 255, 255, .92); box-shadow: 0 1px 4px rgba(15, 23, 42, .25); display: flex; align-items: center; justify-content: center; }
+.sc-geo-compass-needle { width: 22px; height: 22px; transform-origin: 50% 50%; position: relative; }
+.sc-geo-compass-tri { position: absolute; left: 9px; width: 0; height: 0; border-left: 2px solid transparent; border-right: 2px solid transparent; }
+.sc-geo-compass-tri.is-north { top: 1px; border-bottom: 11px solid #c0392b; }
+.sc-geo-compass-tri.is-south { bottom: 1px; border-top: 11px solid #334155; }
+.sc-geo-compass-n { position: absolute; left: 50%; top: -11px; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: #c0392b; text-shadow: 0 0 2px #fff; }
+.sc-geo-attribution-pill { position: absolute; left: 140px; bottom: 16px; z-index: 2; padding: 2px 8px; border-radius: 6px; background: rgba(18, 20, 26, .45); color: rgba(255, 255, 255, .86); font-size: 11px; line-height: 16px; pointer-events: none; }
 .sc-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sc-canvas-dot { color: var(--faint); }
 .sc-canvas-tip { position: absolute; right: 20px; top: 17px; padding-right: 24px; pointer-events: none; }
@@ -947,7 +948,14 @@ body {
 .sc-workbench .sc-left-heading { display:flex; align-items:center; gap:var(--sc-space-sm); flex-shrink:0; min-height:40px; }
 .sc-workbench .sc-left-heading>strong { flex:1; padding-left:var(--sc-space-sm); font-size:var(--sc-type-section); }
 .sc-workbench .sc-left-heading .sc-left-context { flex:1; min-width:0; }
-.sc-workbench .sc-left-close { flex:none; margin-left:auto; }
+/* 2026-11-11 用户指令：左侧展开面板的关闭钮统一成同一枚——32px plane 底圆角方块，
+   固定面板右上角（上 10 / 右 14，由各自头部 padding 保证）；拍摄场地面板同样复用本类。 */
+.sc-workbench .sc-left-close {
+  flex: none; margin-left: auto; width: 32px; height: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--r-sm); background: var(--wk-plane); color: var(--wk-ink); cursor: pointer;
+}
+.sc-workbench .sc-left-close:hover:not(:disabled) { background: var(--wk-plane-deep); }
 .sc-workbench .sc-left-context button { padding:var(--sc-space-sm); border:1px solid var(--sc-line); border-radius:var(--r-sm); background:var(--sc-surface); color:var(--sc-muted); font-size:var(--sc-type-body); }
 .sc-workbench .sc-left-context button[aria-pressed=true] { background:var(--sc-accent-soft); color:var(--sc-accent-ink); }
 .sc-workbench .sc-properties.is-embedded { position:relative; inset:auto; width:100%; height:100%; max-height:none; box-sizing:border-box; }
@@ -1330,6 +1338,107 @@ body {
   display: flex; flex-direction: column; pointer-events: auto;
 }
 .sc-left-column.has-tool > .sc-agent-panel { flex: 1 1 auto; }
+/* 2026-11-12 半卡片堆栈泛化（用户拍板：左栏所有卡片统一交互）：堆栈态的第一张卡吃
+   --sc-left-stack-percent（分隔条拖动改这个变量），第二张吃剩余；不再限定户外/Bingo 两张。
+   特异性必须压过 1336 行的 flex:1 1 auto !important 与各卡自己的 flex 规则。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer.is-stack-first,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel.is-stack-first,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture.is-stack-first,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-stack-first {
+  /* 百分比必须由变量直接给（calc(比例 * 100%) 在本机 Chrome 会被整条丢弃）。 */
+  flex: 0 0 var(--sc-left-stack-percent, 50%) !important;
+  min-height: 0; height: auto !important; width: 100% !important; max-width: none !important;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer.is-stack-second,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel.is-stack-second,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture.is-stack-second,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-stack-second {
+  flex: 1 1 0 !important; min-height: 0 !important; max-height: none !important;
+  width: 100% !important; max-width: none !important;
+}
+/* 双面板之间的分隔条：上下两条发丝线夹一条可见抓手，hover/拖动时变强调色。
+   右侧小按钮：上下换序（标题也可直接拖）。 */
+/* 住在左栏时，堆栈成员的标题都能直接抓住往外拖（拖成小窗）或上下拖（换顺序）。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel .ap-head.ap-session-head,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat .sc-person-chat-head,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture .cg-top {
+  cursor: grab; touch-action: none;
+}
+.sc-left-stack-splitter {
+  position: relative; z-index: 6; flex: 0 0 15px; min-height: 15px; order: 1;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--wk-paper);
+  border-top: 1px solid var(--sc-line); border-bottom: 1px solid var(--sc-line);
+  cursor: row-resize; touch-action: none; user-select: none;
+}
+.sc-left-stack-splitter:hover, .sc-left-stack-splitter.is-dragging {
+  background: color-mix(in oklab, var(--wk-paper) 92%, var(--sc-accent) 8%);
+  border-color: color-mix(in oklab, var(--sc-line) 55%, var(--sc-accent) 45%);
+}
+.sc-left-stack-grip {
+  width: 44px; height: 4px; border-radius: 999px; background: var(--sc-line);
+  transition: background-color .15s ease, width .15s ease;
+}
+.sc-left-stack-splitter:hover .sc-left-stack-grip, .sc-left-stack-splitter.is-dragging .sc-left-stack-grip {
+  width: 56px; background: var(--sc-accent);
+}
+.sc-left-stack-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; }
+.sc-left-stack-actions button {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--sc-muted);
+  cursor: pointer; padding: 0;
+}
+.sc-left-stack-actions button:hover { color: var(--sc-ink); background: rgba(20, 20, 22, .06); border-color: var(--sc-line); }
+.sc-left-stack-actions button:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 1px; }
+/* 抓出来的独立小窗：脱离左栏流，浮在工作台之上，标题条拖动、右下角缩放。
+   选择器要压过 1061 行与组件样式里 !important 的 position:relative。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer.is-detached,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel.is-detached,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture.is-detached,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-detached,
+.sc-workbench .sc-left-column > .sc-left-drawer.is-detached,
+.sc-workbench .sc-left-column > .sc-agent-panel.is-detached,
+.sc-workbench .sc-left-column > .sc-workbench-capture.is-detached,
+.sc-workbench .sc-left-column > .sc-person-chat.is-detached {
+  /* 位置/尺寸从内联 CSS 变量来：上一条 !important 的 inset:auto 会把内联 left/top 抹掉。 */
+  position: fixed !important;
+  left: var(--sc-float-x, 24px) !important; top: var(--sc-float-y, 72px) !important;
+  right: auto !important; bottom: auto !important;
+  width: var(--sc-float-w, 420px) !important; height: var(--sc-float-h, 520px) !important;
+  flex: 0 0 auto !important; min-width: 0; min-height: 0; max-height: none; margin: 0; transform: none !important;
+  z-index: 120 !important; overflow: hidden;
+  background: var(--wk-paper) !important; border: 1px solid var(--sc-line) !important; border-radius: 14px !important;
+  box-shadow: 0 18px 48px rgba(20, 20, 22, .26), 0 2px 8px rgba(20, 20, 22, .12) !important;
+  pointer-events: auto;
+}
+.sc-left-column > .is-detached.is-dragging { cursor: grabbing; }
+.sc-agent-float-bar {
+  display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  padding: 5px 6px 5px 12px; border-bottom: 1px solid var(--sc-line);
+  background: color-mix(in oklab, var(--wk-paper) 94%, var(--sc-accent) 6%);
+  font-size: var(--sc-type-meta, 12px); color: var(--sc-muted); cursor: grab; touch-action: none;
+}
+.sc-agent-float-bar.is-dragging { cursor: grabbing; }
+.sc-agent-float-bar strong { font-size: var(--sc-type-meta, 12px); font-weight: 600; color: var(--sc-ink); }
+.sc-agent-float-bar .spacer { flex: 1; }
+.sc-agent-float-bar button {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px;
+  border: 1px solid var(--sc-line); border-radius: 6px; background: var(--wk-paper); color: var(--sc-muted);
+  font-size: var(--sc-type-meta, 12px); cursor: pointer;
+}
+.sc-agent-float-bar button:hover { color: var(--sc-ink); border-color: var(--sc-accent); }
+.sc-float-resize {
+  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
+  cursor: nwse-resize; touch-action: none;
+}
+.sc-float-resize::after {
+  content: ''; position: absolute; right: 4px; bottom: 4px; width: 9px; height: 9px;
+  border-right: 2px solid var(--sc-muted); border-bottom: 2px solid var(--sc-muted);
+  border-radius: 0 0 4px 0; opacity: .55;
+}
+@media (max-width: 760px) {
+  .sc-left-stack-splitter { display: none; }
+}
 /* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。 */
 .sc-canvas-share {
   position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 28;
@@ -1545,6 +1654,65 @@ body {
   padding: 4px; border-radius: var(--r-md); background: var(--wk-paper); border: 1px solid var(--wk-hair);
   box-shadow: var(--e1);
 }
+/* 户外交付簇挪到画布左下角（outdoor-canvas-actions.bl）后，发布/分享弹层改向上+右对齐，
+   否则按右轨语境向左弹会被画布左缘裁掉。 */
+.sc-workbench .sc-outdoor-actions-bl .sc-tool-pop {
+  right: auto; left: 0; top: auto; bottom: calc(100% + 8px);
+}
+/* 户外右上三张工具卡（测量 / 标注 / 属性，2026-11-12）：卡头与关闭钮的悬停/焦点态。
+   重置写在类里而不是 inline all:unset —— inline all:unset 优先级高于类规则，会把 hover 背景一起压掉。 */
+.sc-outdoor-toolcard-btn {
+  appearance: none; background: none; border: 0; padding: 0; font: inherit; color: inherit;
+}
+.sc-outdoor-toolcard-btn:hover { background: var(--wk-plane, #f4f5f7); }
+.sc-outdoor-toolcard-btn:focus-visible {
+  outline: 2px solid #4a7c59; outline-offset: 1px;
+}
+/* 户外工具卡里的危险动作（删除测量/标注，2026-11-12 用户采纳）：默认弱化为次级灰，
+   悬停/聚焦才显警示红——降低静态视觉权重，避免与行内主要操作抢注意力。 */
+.sc-danger-quiet {
+  appearance: none; background: none; border: 0; padding: 0; font: inherit;
+  color: var(--wk-muted, #71767e); cursor: pointer; transition: color 120ms ease;
+}
+.sc-danger-quiet:hover, .sc-danger-quiet:focus-visible { color: var(--err, #b4443c); }
+/* 户外 2D 覆盖层打开时隐藏室内 3D 的空间标定/光照 HUD（z400/401 高于覆盖层，
+   会透到地图左下角跟比例尺叠在一起——2026-11-11 用户指令「按范式改」）。 */
+body:has([data-testid="outdoor-overlay"]) [data-testid="site-calibration-hud"],
+body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
+  display: none !important;
+}
+/* 2026-11-11 户外左栏页签 = OnePlan 分段式页签（Add Objects/Placed Objects 同款）：
+   灰底描边容器 + 两枚等宽胶囊，激活深底白字加粗。 */
+.sc-left-context.is-oneplan-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 10px 8px;
+  padding: 4px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 10px;
+  background: #f1f2f4;
+}
+.sc-left-context.is-oneplan-tabs button {
+  flex: 1;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sc-ink, #141416);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sc-left-context.is-oneplan-tabs button[aria-pressed="true"] {
+  background: var(--sc-ink, #141416);
+  color: #ffffff;
+  font-weight: 700;
+}
+.sc-left-heading.is-oneplan-head {
+  justify-content: flex-end;
+  /* 2026-11-11 关闭钮与拍摄场地面板同位：上 10 / 右 14（此前无内边距，× 贴在面板角上）。 */
+  min-height: 0; padding: 10px 14px 4px;
+}
 .sc-workbench .sc-tool-pop button {
   border: 0 !important; background: transparent !important; box-shadow: none !important;
   width: 100% !important; height: auto !important; min-height: 0 !important;
@@ -1554,6 +1722,15 @@ body {
 .sc-workbench .sc-tool-pop button.is-active {
   background: var(--sc-accent-soft) !important; color: var(--sc-accent-ink) !important;
 }
+/* 2026-11-11 OnePlan 画布工具菜单（抓手 H / 选择 S）：图标 + 名称 + 快捷键徽标 + 当前项 ✓。 */
+.sc-workbench .sc-tool-pop .sc-canvas-tool-row { display: flex !important; align-items: center; gap: 8px; }
+.sc-workbench .sc-tool-pop .sc-canvas-tool-row > svg,
+.sc-workbench .sc-tool-pop .sc-canvas-tool-row > .ms { flex: 0 0 auto; }
+.sc-workbench .sc-tool-pop .sc-canvas-tool-row .sc-tool-key {
+  margin-left: auto; font-size: 10px; line-height: 1.5; color: var(--sc-ink-3, #98a4b0);
+  border: 1px solid var(--sc-edge, #e3e8ee); border-radius: 4px; padding: 0 4px;
+}
+.sc-workbench .sc-tool-pop .sc-canvas-tool-row .sc-tool-check { color: var(--sc-accent, #2f6bff); margin-left: 2px; }
 /* 右轨只有「导出效果图」还带一层弹层（选项样式在 workbench-shelf.css）；这里托住氛围弹层里的人群/天气/时段/灯光。 */
 .sc-workbench .sc-more-pop { min-width: 170px; padding: 6px; gap: 1px; max-height: min(70vh, 420px); overflow-y: auto; }
 .sc-workbench .sc-more-pop .sc-tool-menu-label {

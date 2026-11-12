@@ -2,7 +2,7 @@ import { useCallback, useRef, type MutableRefObject } from 'react';
 import { findFreePosition, hasCollisions, type KeepOutRect } from '../lib/geometry';
 import { isWallHung } from '../lib/mount-band';
 import { isWallMounted, settleWallMountedItem, type WallGap } from '../lib/opening-snap';
-import { canApplyLayoutGeometry, structuralItemCollides } from '../lib/structural-layout';
+import { layoutGeometryIsAcceptable, structuralItemCollides } from '../lib/structural-layout';
 import {
   advanceGroupScaleSession,
   advanceTransformSession,
@@ -277,7 +277,9 @@ export function useItemDrag({
       });
       const base = layout ?? { name: '拖动', width: roomWidth, height: roomDepth, floors: [activeFloor] };
       const candidate = { ...base, floors: base.floors.map(f => f.id === activeFloor.id ? { ...f, items: candidateItems } : f) };
-      if (canApplyLayoutGeometry(base, candidate)) session.valid = new Map(session.latest);
+      // 2026-11-11 宽松闸门：规划阶段允许"先停住再调"——穿透/尺寸冲突不再让 valid 失效，
+      // 只有 schema 非法或洞口 marker 数对不上才拦住。穿透提示由下方 setDragCollisionTint 染红。
+      if (layoutGeometryIsAcceptable(base, candidate)) session.valid = new Map(session.latest);
       const dragged = candidateItems.find((item) => item.id === id);
       const primaryGroup = findFurnitureGroup(id);
       if (dragged && primaryGroup) {

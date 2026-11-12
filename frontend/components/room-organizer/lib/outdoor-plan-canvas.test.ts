@@ -52,8 +52,8 @@ describe('outdoor plan canvas core (H2-a)', () => {
     expect(backY).toBeCloseTo(p.y, 1);
   });
 
-  it('orders the layer stack bottom-up with the business layers plus measure on top (H3-a)', () => {
-    expect(PLAN_LAYER_STACK).toEqual(['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure']);
+  it('orders the layer stack bottom-up with the business layers plus measure/annotate on top (H3-a + 2026-11-11 用户指令)', () => {
+    expect(PLAN_LAYER_STACK).toEqual(['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure', 'annotate']);
   });
 
   it('filters visible layers without changing the stack order', () => {
@@ -62,8 +62,11 @@ describe('outdoor plan canvas core (H2-a)', () => {
     vis.facility = false;
     vis.zone = false;
     vis.measure = false;
+    // 2026-11-11 用户指令：标注层随图层开关隐藏。
+    vis.annotate = false;
     expect(visiblePlanLayers(vis)).toEqual(['boundary', 'route', 'worker', 'access']);
     expect(isLayerVisible(vis, 'facility')).toBe(false);
+    expect(isLayerVisible(vis, 'annotate')).toBe(false);
     // 全案数据不受可见性影响——这里只校验过滤函数本身的口径。
   });
 

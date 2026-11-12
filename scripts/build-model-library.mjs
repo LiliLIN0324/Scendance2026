@@ -15,6 +15,7 @@ const categories = {
   storage: '收纳容器', logistics: '后勤设施', tools: '工具设备', sports: '运动器材',
   plants: '绿植景观', structure: '建筑结构', digital: '数码设备', decor: '装饰陈设',
   food: '餐饮用品', vehicles: '交通载具', scenes: '完整场景',
+  rides: '游乐设施',
 };
 const original = [
   ...online.models.map(m => ({ ...m, cdnUrl: m.glb, source: 'website-online' })),

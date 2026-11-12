@@ -29,7 +29,9 @@ const EPS = 1e-9;
 
 /** 编辑问题：可定位（at 为问题点的 ENU 坐标，可选）。 */
 export interface PlanEditIssue {
-  code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index' | 'out-of-range' | 'unknown-template' | 'unknown-node' | 'unknown-zone' | 'unconnected-node';
+  code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index' | 'out-of-range' | 'unknown-template' | 'unknown-node' | 'unknown-zone' | 'unconnected-node'
+    // 2026-11-11 用户指令：自由标注校验新增的四种问题码。
+    | 'bad-vertex-count' | 'bad-radius' | 'too-small' | 'empty-text';
   message: string;
   at?: PlanPoint;
 }
@@ -256,11 +258,13 @@ export function planZoneFillAlpha(zone: { opacity?: number | undefined }): numbe
   return Math.min(PLANNING_ZONE_OPACITY.max, Math.max(PLANNING_ZONE_OPACITY.min, raw));
 }
 
-/** 分区多边形相对场地边界的越界问题；贴边（顶点落在边界上/共边）不算越界。 */
+/** 分区多边形相对场地边界的越界问题；贴边（顶点落在边界上/共边）不算越界。
+    2026-11-11：边界未画（<3 点，新草稿零边界起步）时不判越界——没有基准就没有「出界」。 */
 export function zoneOutsideBoundaryIssue(
   polygon: readonly PlanPoint[],
   boundary: readonly PlanPoint[],
 ): PlanEditIssue | null {
+  if (boundary.length < 3) return null;
   for (const pt of polygon) {
     if (!planPointInRing(pt, boundary)) {
       return { code: 'out-of-boundary', message: '分区越界：有顶点落在场地边界之外。', at: pt };

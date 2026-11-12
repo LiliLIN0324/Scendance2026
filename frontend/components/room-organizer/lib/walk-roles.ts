@@ -16,6 +16,8 @@ export type WalkRole = {
   walkable: boolean;
   /** 不能走时说明原因，显示在卡片下面。 */
   note?: string;
+  /** 挂到「不同人群」的哪一类；缺省为演员。 */
+  crowdType?: 'performer' | 'security' | 'police' | 'volunteer' | 'manager' | 'admin';
 };
 
 export const WALK_ROLES: readonly WalkRole[] = [
@@ -25,6 +27,11 @@ export const WALK_ROLES: readonly WalkRole[] = [
   { assetId: '7a9f1e21-8c34-4d51-a004-b00000000004', name: '明女', image: '/assets/avatars/walk-ming-f.jpg', walkable: true },
   { assetId: '7a9f1e21-8c34-4d51-a005-b00000000005', name: '明男', image: '/assets/avatars/walk-ming-m.jpg', walkable: true },
   { assetId: '7a9f1e21-8c34-4d51-a006-b00000000006', name: '宋男', image: '/assets/avatars/walk-song-m.jpg', walkable: true },
+  { assetId: '7a9f1e21-8c34-4d51-a007-b00000000007', name: '保安', image: '/assets/avatars/walk-security.jpg', walkable: true, crowdType: 'security' },
+  { assetId: '7a9f1e21-8c34-4d51-a008-b00000000008', name: '警察', image: '/assets/avatars/walk-police.jpg', walkable: true, crowdType: 'police' },
+  { assetId: '7a9f1e21-8c34-4d51-a009-b00000000009', name: '志愿者', image: '/assets/avatars/walk-volunteer.jpg', walkable: true, crowdType: 'volunteer' },
+  { assetId: '7a9f1e21-8c34-4d51-a00a-b0000000000a', name: '主管', image: '/assets/avatars/walk-manager.jpg', walkable: true, crowdType: 'manager' },
+  { assetId: '7a9f1e21-8c34-4d51-a00b-b0000000000b', name: '管理员', image: '/assets/avatars/walk-admin.jpg', walkable: true, crowdType: 'admin' },
 ];
 
 export const DEFAULT_WALK_ROLE_ID = WALK_ROLES[0]!.assetId;
