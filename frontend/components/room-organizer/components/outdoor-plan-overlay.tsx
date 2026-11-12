@@ -28,7 +28,6 @@ import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share'
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
-import OutdoorViewSwitch from '@/components/room-organizer/components/outdoor-view-switch';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
@@ -145,7 +144,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   seedPlan,
   sceneObjects,
   view: controlledView,
-  onViewChange,
   dormant = false,
   inspectorHostId,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
@@ -172,11 +170,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const captureMapView = () => {
     const next = canvasApiRef.current?.getView();
     if (next && next.canvasW > 0 && next.canvasH > 0) setMapView(next);
-  };
-  const changeView = (next: '2d' | '3d') => {
-    if (next === '3d') captureMapView();
-    if (controlledView === undefined) setUncontrolledView(next);
-    onViewChange?.(next);
   };
   const viewSlotRef = useRef(slotId);
   useEffect(() => {
@@ -377,15 +370,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           onClear={() => setPlacePin(null)}
         />
       )}
-      {/* 2D/3D 切换改到左下角：右上角被工作台右侧圆钮和楼层芯片挡住，点不到。
-          bottom 56 避开画布左下角的比例尺盒（P2-i，占 bottom 10–48）；弹层全部向上翻
-          （ExportMenu menuPlacement + .sc-outdoor-actions-bl CSS 覆盖 ShareMenu 的 sc-tool-pop）。 */}
+      {/* 左下交付簇：右上角被工作台右侧圆钮和楼层芯片挡住，点不到，故落左下角。
+          2D/3D 胶囊由 room-organizer 独立挂载在最左（left 12），本簇只留导出 / 分享 / 发布，
+          向右让位到 left 148；bottom 56 避开画布左下角比例尺盒（占 bottom 10–48）；
+          弹层全部向上翻（ExportMenu menuPlacement + .sc-outdoor-actions-bl CSS 覆盖 ShareMenu）。 */}
       <div
         data-testid="outdoor-canvas-actions"
         className="sc-outdoor-actions-bl"
-        style={{ position: 'absolute', left: 12, bottom: 56, zIndex: 4, display: plan ? 'flex' : 'none', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}
+        style={{ position: 'absolute', left: 148, bottom: 56, zIndex: 4, display: plan ? 'flex' : 'none', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}
       >
-        <OutdoorViewSwitch view={view} onChange={changeView} />
         <span data-testid="outdoor-export-host" style={{ display: 'inline-flex' }}>
           <ExportMenu variant="canvas" enableExports menuPlacement="above-left" onPick={pickExport} />
         </span>

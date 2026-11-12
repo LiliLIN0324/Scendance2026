@@ -278,12 +278,6 @@ interface ViewToolsProps {
    * （且会显示「未定位」误导），与户外态同一扇门隐藏。
    */
   geoGroundActive?: boolean;
-  /**
-   * 2026-11-12 统一 2D/3D（用户拍板）：有户外计划时「平面/立体」钮不再碰室内 view2D——
-   * 平面＝户外覆盖层（2D 地图，图五）、立体＝关覆盖层进全屏接管（GeoGround 3D，图六）。
-   * showing3d 由宿主算（覆盖层开=2D、关=3D 接管）；无户外计划时缺省走室内 toggle('view2D')。
-   */
-  outdoorStage?: { showing3d: boolean; onSwitch: () => void } | null | undefined;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -317,6 +311,15 @@ function MoveSceneIcon(): JSX.Element {
     <path d="M12 3v18M3 12h18M12 3l-2 2m2-2 2 2m-2 16-2-2m2 2 2-2M3 12l2-2m-2 2 2 2m16-2-2-2m2 2-2 2"/>
   </svg>;
 }
+// 网格吸附：井字轮廓两态同构，开启时在右下象限压一颗落点块；状态由按钮 is-active 底色/字色承接。
+function GridSnapIcon({ active }: { active: boolean }): JSX.Element {
+  return (
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5.5 8.8 H18.5 M5.5 15.2 H18.5 M8.8 5.5 V18.5 M15.2 5.5 V18.5" />
+      {active && <rect x="12.7" y="12.7" width="4.6" height="4.6" rx="1" fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}
 function FloorTriangle({ direction }: { direction: 'up' | 'down' }): JSX.Element {
   const path = direction === 'up'
     ? 'M12 3.2c-2.6 0-5.2 4.5-7.1 8.4-1.8 3.6-.2 6.2 3.5 6.2h7.2c3.7 0 5.3-2.6 3.5-6.2C17.2 7.7 14.6 3.2 12 3.2Z'
@@ -339,15 +342,16 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null, geoGroundActive = false, outdoorStage = null }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
   const sceneMoveActive = sceneMoveMode !== 'off';
   const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
   const outdoorEditing = outdoor != null;
-  // 2026-11-12 统一 2D/3D：有户外计划时跟随宿主给的舞台态（覆盖层开=2D、关=3D 接管）。
-  const showing3D = outdoorStage ? outdoorStage.showing3d : (outdoor?.setCanvasView ? outdoor.view === '3d' : !view.view2D);
+  // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
+  // 这里只剩纯室内场景的平面/立体兜底切换。
+  const showing3D = !view.view2D;
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -364,7 +368,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const quietShare = () => setShareClose(value => value + 1);
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
   // 氛围条默认收起成一颗「氛围」：真开了人群/雨雪/非正午就展开，别让人找不到关掉它的地方。
-  // 第一人称走进场是右轨一级圆钮，不收进氛围，也不收进省略号。
+  // 第一人称漫游是右轨一级圆钮，不收进氛围，也不收进省略号。
   const atmosphereShown = atmosphereOpen || view.showNpcs || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
   const satelliteVenue = isMapOutdoorLayout(layout) || layout.satelliteGroundRef !== undefined || isSatelliteGroundImage(layout.floorPlanImage);
   const satelliteOn = satelliteGroundWanted(layout);
@@ -718,12 +722,13 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         </div>}
       </div>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      {/* 2026-11-12 用户拍板「2D/3D 按钮统一」：这颗钮在 2D/3D 两种模式下同位置、同高亮——
-          常亮绿色描边表示「当前模式」，图标随模式切换（2D=view_compact 线框、3D=view_in_ar 立方体），
-          让 2D 态也能一眼认出它就是 3D 里那颗绿色立方体钮。aria-pressed 仍如实报当前是否 3D。 */}
-      <button type="button" id="tool-2d3d" data-tip={showing3D ? '当前 3D 场地 · 切到 2D 地图' : '当前 2D 地图 · 切到 3D 场地'} aria-label={showing3D ? '当前 3D 场地，点击切到 2D 地图' : '当前 2D 地图，点击切到 3D 场地'} aria-pressed={showing3D} className="is-active" onClick={() => { onSceneMoveModeChange?.('off'); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); if (outdoorStage) { outdoorStage.onSwitch(); return; } if (outdoor?.setCanvasView) { outdoor.setCanvasView(outdoor.view === '3d' ? '2d' : '3d'); return; } toggle('view2D'); }}>
-        <MaterialSymbol name={showing3D ? 'view_in_ar' : 'view_compact'} />
-      </button>
+      {/* 2026-11-13 定稿：户外 2D/3D 切换统一走左下动作簇胶囊（见 room-organizer），右轨这颗钮只在
+          纯室内场景兜底平面/立体；有户外计划时不出镜。aria-pressed 如实报当前是否 3D。 */}
+      {!outdoorEditing && (
+        <button type="button" id="tool-2d3d" data-tip={showing3D ? '当前 3D 场景 · 切到 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={showing3D ? '当前 3D 场景，点击切到 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={showing3D} className="is-active" onClick={() => { onSceneMoveModeChange?.('off'); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
+          <MaterialSymbol name={showing3D ? 'view_in_ar' : 'view_compact'} />
+        </button>
+      )}
       {/* 2026-11-12 三张卡拆开（用户指令）：测量 / 标注 / 属性 各一张卡，圆钮按下态各自独立。 */}
       {outdoor?.setInspector && <button type="button" id="tool-measure" data-tip="测量" aria-label="测量" aria-pressed={outdoor.inspectorTabs?.measure === true} className={outdoor.inspectorTabs?.measure === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('measure')}>
         <MaterialSymbol name={OUTDOOR_TOOL_ICONS.measure} />
@@ -743,9 +748,9 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         <MaterialSymbol name="layers" />
       </button>}
       {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
-      <button type="button" id="tool-walk" data-tip={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-label={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
+      <button type="button" id="tool-walk" aria-label={view.walkthroughMode ? '退出漫游' : '第一人称漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
         <MaterialSymbol name="footprint" />
-        <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称走进场'}</span>
+        <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称漫游'}</span>
       </button>
       <button type="button" id="tool-preset" data-tip={`视角：${angleNow.label} · 点一下切到${angleNext.label}`} aria-label={`视角切换：当前${angleNow.label}，点击切到${angleNext.label}`} onClick={cyclePreset}>
         <MaterialSymbol name={angleNow.symbol} />
@@ -754,7 +759,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
         <MaterialSymbol name="straighten" />
       </button>
       <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
-        <MaterialSymbol name={view.snapToGrid ? 'center_focus_strong' : 'grid_3x3'} />
+        <GridSnapIcon active={view.snapToGrid} />
       </button>
       {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。
           户外规划（含 3D 场地）时隐藏工作台「地图类型」：底图入口只在覆盖层右下角。

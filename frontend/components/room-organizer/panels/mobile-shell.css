@@ -98,8 +98,12 @@
   .sc-workbench .sc-floor-switcher-arrows button {
     width: 44px; height: 44px; min-width: 44px; min-height: 44px;
   }
-  /* 漫游按钮去掉长文案，只留脚印图标 */
+  /* 漫游按钮去掉长文案，只留图标 */
   .sc-workbench .sc-tool-column #tool-walk .sc-walk-label { display: none; }
+  /* 触屏没有 Esc 键：胶囊上的「· Esc」后缀隐藏 */
+  .ap-walk-esc { display: none; }
+  /* 退出控件顶部避开刘海安全区 */
+  .ap-walk-controls { top: calc(var(--sc-mobile-safe-t, 0px) + 8px); }
   /* 触屏没有 hover，黑胶囊提示全部关掉 */
   .sc-workbench .sc-tool-column [data-tip]::after { display: none !important; }
   /* 工具弹层：工具条在顶部，弹层改为向下展开；锚到工具条右端，

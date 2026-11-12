@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 Scendance · 信息架构现状→目标对照</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2348643e'/%3E%3Cpath d='M8 22V12l8-5 8 5v10l-8 4z' fill='none' stroke='%23fcfcf7' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#fcfcf7; --paper:#ffffff; --ink:#33453b; --green:#48643e; --green-deep:#36502f;
+    --line:#dfe5d6; --line-strong:#c6d0bc; --muted:#74806b; --tint:#f2f5ec;
+    --reuse:#48643e; --reuse-bg:#e7ede2;
+    --adapt:#9c6b1f; --adapt-bg:#f5ead2;
+    --add:#2f6f7e;  --add-bg:#ddeef1;
+    --gap:#a4473b;  --gap-bg:#f4ddd8;
+    --demo:#6b7364; --demo-bg:#ebeee6;
+    --shadow:0 1px 2px rgba(54,80,47,.06), 0 8px 24px -16px rgba(54,80,47,.18);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",-apple-system,"Segoe UI",sans-serif;
+    font-size:15px; line-height:1.7; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 72px;}
+  code,.mono{font-family:ui-monospace,"Cascadia Code","SFMono-Regular",Consolas,monospace;font-size:.86em;}
+  h1,h2,h3{font-weight:650;line-height:1.3;color:var(--green-deep);letter-spacing:.01em;}
+  h1{font-size:27px;margin:0 0 10px;}
+  h2{font-size:19px;margin:0 0 16px;display:flex;align-items:center;gap:10px;}
+  h3{font-size:15px;margin:0 0 6px;}
+  p{margin:0 0 10px;}
+  .eyebrow{color:var(--muted);font-size:13px;letter-spacing:.14em;margin-bottom:14px;}
+  .lead{font-size:16px;max-width:62em;}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:18px;color:var(--muted);font-size:13px;}
+  .meta span{display:inline-flex;align-items:center;gap:6px;}
+  .rule{height:1px;background:var(--line);border:0;margin:34px 0;}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:24px;box-shadow:var(--shadow);}
+  .verdict{border-left:3px solid var(--green);background:var(--tint);border-radius:0 10px 10px 0;padding:16px 20px;margin:22px 0 0;}
+  .verdict strong{color:var(--green-deep);}
+
+  /* legend + filters */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 22px;}
+  .chip{border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);border-radius:999px;
+    padding:7px 15px;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;
+    min-height:36px;transition:background .15s,border-color .15s,color .15s;font-family:inherit;}
+  .chip:hover{border-color:var(--green);}
+  .chip[aria-pressed="true"]{background:var(--green-deep);border-color:var(--green-deep);color:#fff;}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  .dot.reuse{background:var(--reuse);}.dot.adapt{background:var(--adapt);}.dot.add{background:var(--add);}
+  .dot.gap{background:var(--gap);}.dot.demo{background:var(--demo);}
+  .chip[aria-pressed="true"] .dot{box-shadow:0 0 0 2px rgba(255,255,255,.35);}
+
+  /* IA diagram */
+  .ia-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:stretch;}
+  .stage{border:2px solid var(--green);border-radius:12px;padding:0;overflow:hidden;background:var(--tint);display:flex;flex-direction:column;}
+  .stage-head{background:var(--green);color:#fff;padding:11px 16px;font-weight:650;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .stage-head small{font-weight:400;opacity:.86;}
+  .stage-body{padding:16px;display:flex;flex-direction:column;gap:12px;flex:1;}
+  .gallery{background:var(--paper);border:1px dashed var(--line-strong);border-radius:9px;padding:11px 14px;font-size:13.5px;color:var(--muted);}
+  .gallery b{color:var(--ink);}
+  .canvas{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:14px;flex:1;min-height:150px;}
+  .canvas .tag{position:absolute;top:-9px;left:14px;background:var(--green-deep);color:#fff;font-size:12px;padding:2px 10px;border-radius:999px;}
+  .canvas ul{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--muted);}
+  .librow{display:flex;gap:10px;}
+  .lib{flex:1;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13.5px;}
+  .lib b{display:block;color:var(--green-deep);}
+  .lib small{color:var(--muted);}
+  .review-action{display:flex;align-items:center;gap:10px;background:var(--gap-bg);border:1px solid var(--gap);border-radius:9px;padding:11px 14px;}
+  .review-action .ico{flex:none;}
+  .review-action b{color:var(--gap);}
+  .review-action small{display:block;color:var(--muted);}
+  .members{background:var(--demo-bg);border:1px solid var(--line-strong);border-radius:9px;padding:10px 14px;font-size:13.5px;color:var(--ink);}
+  .members small{color:var(--muted);}
+  .aside{display:flex;flex-direction:column;gap:14px;}
+  .talk{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:14px;flex:1;}
+  .avoid{background:#fafaf7;border:1px dashed var(--demo);border-radius:10px;padding:16px;position:relative;}
+  .avoid h3{color:var(--muted);}
+  .avoid .four{display:flex;gap:8px;margin:12px 0;}
+  .avoid .four div{flex:1;border:1px solid var(--line-strong);border-radius:8px;padding:12px 6px;text-align:center;font-size:12.5px;color:var(--muted);background:#fff;position:relative;}
+  .avoid .four div::after{content:"";position:absolute;left:50%;bottom:-9px;width:1px;height:9px;background:var(--line-strong);}
+  .avoid p{font-size:13px;color:var(--muted);margin:14px 0 0;}
+  .badge-no{position:absolute;top:12px;right:12px;}
+
+  /* table */
+  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--paper);}
+  table{border-collapse:collapse;width:100%;min-width:920px;table-layout:fixed;}
+  col.c1{width:17%;}col.c2{width:35%;}col.c3{width:16%;}col.c4{width:12%;}col.c5{width:20%;}
+  th,td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);font-size:13.6px;}
+  th{background:var(--tint);color:var(--green-deep);font-weight:650;font-size:13px;position:sticky;top:0;}
+  tbody tr:hover{background:#fbfdf8;}
+  .group td{background:var(--green-deep);color:#fff;font-weight:650;font-size:13.5px;padding:9px 14px;letter-spacing:.03em;}
+  .group .gdesc{float:right;font-weight:400;opacity:.82;font-size:12px;}
+  td.name{font-weight:600;color:var(--green-deep);}
+  td.fact{color:var(--ink);}
+  td.fact .file{display:block;margin-top:5px;color:var(--muted);font-size:12px;word-break:break-all;}
+  td.target{color:var(--ink);}
+  .pill{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:600;white-space:nowrap;}
+  .pill.reuse{background:var(--reuse-bg);color:var(--reuse);}
+  .pill.adapt{background:var(--adapt-bg);color:var(--adapt);}
+  .pill.add{background:var(--add-bg);color:var(--add);}
+  .pill.gap{background:var(--gap-bg);color:var(--gap);}
+  .pill.demo{background:var(--demo-bg);color:var(--demo);}
+  td.note{color:var(--muted);font-size:13px;}
+  tr.hidden-row{display:none;}
+  .empty-note{display:none;padding:18px;color:var(--muted);font-size:13.5px;}
+
+  /* risk cards */
+  .risk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .risk{border:1px solid var(--line);border-left:3px solid var(--gap);border-radius:9px;padding:16px;background:var(--paper);}
+  .risk h3{font-size:14.5px;margin-bottom:7px;}
+  .risk p{font-size:13px;color:var(--muted);margin:0;}
+  .term{background:var(--adapt-bg);border:1px solid var(--adapt);border-radius:9px;padding:16px 18px;font-size:13.8px;}
+  .term b{color:var(--adapt);}
+  .src{font-size:12.5px;color:var(--muted);}
+  .src li{margin-bottom:5px;word-break:break-all;}
+  footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);}
+
+  @media (max-width:900px){
+    .wrap{padding:28px 16px 56px;}
+    .ia-grid{grid-template-columns:1fr;}
+    .risk-grid{grid-template-columns:1fr;}
+    .librow{flex-direction:column;}
+    h1{font-size:23px;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SCENDANCE · 信息架构评审</div>
+    <h1>幕景信息架构：现状能力 → 目标四象限对照</h1>
+    <p class="lead">目标结构按讨论收敛为「活动 / 审校 Bingo / 空间 / 物料」四块，成员挂在活动内。下表逐行核对每个目标块在<strong>当前代码</strong>里已有什么、缺什么、要改什么——所有结论可回溯到具体文件，而非设计稿印象。</p>
+    <div class="meta">
+      <span>核查分支 <code>codex/delivery-research-20261007</code>（其余 3 分支同口径）</span>
+      <span>运行时证据 Playwright 快照 2026-10-10</span>
+      <span>整理日期 2026-11-04</span>
+    </div>
+    <div class="verdict">
+      <strong>一句话结论：</strong>现有产品是「一个 3D 画布 + 唯一一个 Binggo 对话 + 一堆功能面板」，并没有四个平级 agent。目标四块里，<strong>空间、物料、活动的底座大多可直接复用</strong>；真正要动的是两件事——把 Binggo 的<strong>名字与主对话归位</strong>，以及把<strong>审校钉评闭环补回来</strong>（当前只剩只读快照，客户无法在画面上点评）。
+    </div>
+  </header>
+
+  <hr class="rule">
+
+  <!-- ========== 区块：目标 IA 示意 ========== -->
+  <h2>目标长什么样：一个容器，而不是四个聊天人格</h2>
+  <div class="ia-grid">
+    <div class="stage">
+      <div class="stage-head">活动（容器 · 主工作台）<small>开场画廊 → 进场</small></div>
+      <div class="stage-body">
+        <div class="gallery">开场：<b>活动画廊</b>（过往 / 新建活动卡片，本机列表已具雏形，云端库待通）</div>
+        <div class="canvas">
+          <span class="tag">空间 · 3D 主舞台（画布始终是核心）</span>
+          <ul>
+            <li>场地设定 / 模板 / 图纸重建 / 图层 / 楼层结构</li>
+            <li>物料以「可拖入的件」摆进同一个舞台，不另开孤岛</li>
+          </ul>
+        </div>
+        <div class="librow">
+          <div class="lib"><b>空间库</b><small>场 / 壳 / 模板 / 环境</small></div>
+          <div class="lib"><b>物料库</b><small>道具 / 生成 / 材质 / 点验</small></div>
+        </div>
+        <div class="review-action">
+          <svg class="ico" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h8.5" stroke="#a4473b" stroke-width="1.8" stroke-linecap="round"/><path d="m8 9 3 3 3-3.5L18 12" stroke="#a4473b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="18" r="3" stroke="#a4473b" stroke-width="1.8"/><path d="M18 16.6v1.7l1.1 1" stroke="#a4473b" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <div><b>审校 Bingo · 一个动作，不是一个聊天对象</b><small>分享 / 只读态触发：画面钉点 → 意见线程 → 标记解决 → 回流制作者台账</small></div>
+        </div>
+        <div class="members">底部 <b>成员</b>：真人团队与权限（在线协作 / 在场 / 待办），<small>不占 agent 格、不是四个工具的入口</small></div>
+      </div>
+    </div>
+
+    <div class="aside">
+      <div class="talk">
+        <h3>活动主对话（唯一接 LLM 的入口）</h3>
+        <p style="font-size:13.5px;color:var(--muted)">承接现在的「场景策划」：说目标 → 出布置方案 → 校验后应用。物料建模收缩为物料库内的短指令 / 工具，不再单列人格。「agent」这个称号只留给这条真实对话链。</p>
+      </div>
+      <div class="avoid">
+        <svg class="badge-no" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#74806b" stroke-width="2"/><path d="m7.5 7.5 9 9M16.5 7.5l-9 9" stroke="#a4473b" stroke-width="2" stroke-linecap="round"/></svg>
+        <h3>要避免的摆法</h3>
+        <div class="four"><div>活动<br>人格</div><div>审校<br>人格</div><div>空间<br>人格</div><div>物料<br>人格</div></div>
+        <p>四者是异层范畴（容器 / 动作 / 两类资产）硬并列，为维持对称只能给每个都塞一个对话框，于是逼出「空间 / 物料假聊天」。它们应是面板与动作，不是四个并排头像。</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== 区块：对照表 ========== -->
+  <h2>逐行对照：现有面板往哪归、怎么处置</h2>
+  <div class="legend" id="legend" role="group" aria-label="按处置状态筛选">
+    <button class="chip" type="button" data-filter="all" aria-pressed="true">全部 <span class="mono" id="cnt-all"></span></button>
+    <button class="chip" type="button" data-filter="reuse" aria-pressed="false"><span class="dot reuse"></span>直接复用</button>
+    <button class="chip" type="button" data-filter="adapt" aria-pressed="false"><span class="dot adapt"></span>需要改造</button>
+    <button class="chip" type="button" data-filter="add" aria-pressed="false"><span class="dot add"></span>全新增建</button>
+    <button class="chip" type="button" data-filter="gap" aria-pressed="false"><span class="dot gap"></span>缺口 · 回归本意</button>
+    <button class="chip" type="button" data-filter="demo" aria-pressed="false"><span class="dot demo"></span>演示 / 仅底层</button>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"></colgroup>
+      <thead><tr><th>现状能力 / 组件</th><th>代码里实际是什么</th><th>归入目标</th><th>处置</th><th>迁移判断 / 缺口</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty-note" id="emptyNote">当前筛选条件下没有匹配项。</div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== 区块：关键风险 ========== -->
+  <h2>五个必须先拍板的风险点</h2>
+  <div class="risk-grid">
+    <div class="risk"><h3>1 · Binggo 命名与归属回归</h3><p>现在 Binggo 挂着最成熟的 AI 链（DeepSeek 策划 + 腾讯 HY-3D 生成，经 proposals/apply 做租约 / 哈希 / 修订校验后回写画布）。把名字还给审校、主对话另立，须保住这条校验回写，回归成本不低。</p></div>
+    <div class="risk"><h3>2 · 审校闭环当前断裂</h3><p>现评审是「制作者截图 → 导出只读 HTML 包」，客户只读页没有任何评论入口；全库无锚点钉点、意见线程、已解决状态与回流台账。这正是「能钉评」本意缺失的部分，是补回而非微调。</p></div>
+    <div class="risk"><h3>3 · 异层范畴不要平级人格化</h3><p>活动是容器、审校是动作、空间 / 物料是两类资产。用面板 / 模式 / 库等不同 UI 原语区分，真正接 LLM 的才叫 agent，从根上避免为对称而生造聊天窗。</p></div>
+    <div class="risk"><h3>4 · 多智能体成熟度不足</h3><p>后端现状是「一次 JSON 生成 + 最多一次修复，未接 Harness」。先把单 agent 的多步工具调用与状态机做扎实，等真出现并行 / 异步硬需求再上任务编排，不提前建调度台。</p></div>
+    <div class="risk"><h3>5 · 成员协作上层尚未建</h3><p>成员面板目前是明确标注的虚构 demo；真实存在的是 Supabase 工作室 / 编辑权租约 / 只读分享这套权限底层。成员直达、在场、待办属于在底座上的新增，建议后置，勿当成已有功能。</p></div>
+  </div>
+
+  <hr class="rule">
+
+  <h2>技术名词先澄清，避免据错误前提排期</h2>
+  <div class="term">
+    <p style="margin:0"><b>全库（含全部 git 分支与同级目录）大小写不敏感检索，以下词零命中：</b>「总控 / 分派 / 左轨 / 门洞 / Aholo / Lux3d / MemberChat / 高斯」。它们来自尚未入库的设计稿，不是已实现模块。代码里真实的生成链路是 <b>腾讯 HY-3D 单体 mesh 生成</b>（generated-model-library），场地重建走的是 <b>图纸 / 照片 floorplan</b>（reconstruction-panel），并不存在高斯 / 世界模型管线。物料与场地在产品上可分库，但当前就同一条后端管线，无需先造第二套生成故事。</p>
+  </div>
+
+  <hr class="rule">
+
+  <h2>核查口径与来源</h2>
+  <ul class="src">
+    <li>特征词跨当前分支及 <code>main / codex/release-1.0.1 / codex/post-1.0.1-followup</code> 全量 git grep，并覆盖根目录独立原型与 <code>release-1.0.1 / hackathon</code> 姊妹目录，区分「零命中」与「未搜到」。</li>
+    <li>权威入口：<code>frontend/docs/AGENT-ENTRY.md</code>（右下角唯一 Binggo 入口、曾刻意移除左侧标签）；运行时界面：<code>.playwright-cli/page-2026-10-10T03-29-55-369Z.yml</code>。</li>
+    <li>关键组件：<code>panels/creative-studio.tsx</code>（CHAT_MODES 仅 场景策划 / 物料建模，评审是其资料分类之一）、<code>panels/project-review-panel.tsx</code>、<code>hooks/use-review-capture.ts</code>、<code>app/view/page.tsx</code>、<code>panels/local-activities-panel.tsx</code>、<code>panels/account-team-demo.tsx</code>。</li>
+    <li>边界声明：本表只反映该分支当前代码；若丽丽的总控设计稿位于 Figma 或库外原型，其细节需以设计源文件另行核对，本表不代为脑补实现。</li>
+  </ul>
+
+  <footer>幕景 Scendance · 信息架构现状→目标对照 · 基于代码核查整理，状态色用于标识处置决策，可点击上方标签筛选。</footer>
+</div>
+
+<script>
+var STATUS = {
+  reuse:{label:"直接复用",cls:"reuse"},
+  adapt:{label:"需要改造",cls:"adapt"},
+  add:{label:"全新增建",cls:"add"},
+  gap:{label:"缺口·回归",cls:"gap"},
+  demo:{label:"演示/底层",cls:"demo"}
+};
+var ROWS = [
+  {group:"A · 活动（容器 / 主线工作台）",gdesc:"画廊选场 → 进场主对话 → 执行交付",items:[
+    {name:"本机活动库",fact:"本地活动的新建（空白等模式）、归档、备份、恢复列表。",file:"panels/local-activities-panel.tsx · lib/local-activities.ts",target:"活动 · 开场画廊",status:"adapt",note:"列表升级为画廊卡片；云端活动库尚未打通。"},
+    {name:"活动执行安排",fact:"筹备 / 布场 / 活动 / 撤场四阶段任务，含负责人、计划时间、状态与物料关联。",file:"panels/event-operations-panel.tsx · activity-task-workspace.tsx",target:"活动 · 进场进度（填格板数据源）",status:"reuse",note:"非线性进度格直接读这套真实状态，不需要另做调度引擎。"},
+    {name:"创意简报 / 活动需求",fact:"目标、观众、范围、约束与体验节点，复用 description 单一真源。",file:"lib/creative-brief.ts",target:"活动 · 主对话 Brief",status:"reuse",note:"作为主对话开场的需求表单直接承接。"},
+    {name:"执行交付工作单",fact:"活动时间表、逐件物料工单与生产计划的汇总工作台。",file:"panels/scene-delivery-panel.tsx",target:"活动 · 执行交付",status:"reuse",note:"进场后的执行视图，位置不变。"},
+    {name:"合同与约定",fact:"报价、合同、履约与供应方记录的商业资料面板。",file:"panels/commercial-dossier-panel.tsx",target:"活动次级资料（不进顶层四格）",status:"reuse",note:"作为资料分类保留，不提升为一个 agent。"}
+  ]},
+  {group:"B · AI 对话与引擎（横跨活动 / 物料）",gdesc:"唯一接 LLM 的链路，先归位再谈多智能体",items:[
+    {name:"Binggo 聊天（策划 + 建模）",fact:"仅两个对话模式：场景策划（DeepSeek）与物料建模（HY-3D），方案经校验后应用 / 预览，可撤销。",file:"panels/creative-studio.tsx（CHAT_MODES）",target:"策划归活动主对话；建模收进物料库",status:"adapt",note:"对话链重新归位，是 IA 调整里改动最深的一处。"},
+    {name:"Agent 运行后端",fact:"一次 JSON 生成加最多一次修复，尚未接入 DeepSeek Harness，无多步工具编排。",file:"supabase/functions/_shared/agent-runner.ts · ai.ts",target:"活动主对话引擎",status:"adapt",note:"先补多步工具调用 / 状态机；真多智能体编排后置。"}
+  ]},
+  {group:"C · 审校 Bingo（动作 · 钉评协作）",gdesc:"本意是画面钉评，当前只剩只读快照",items:[
+    {name:"项目评审包 + 评审库",fact:"准备评审、冻结快照、生成 HTML 评审包、过期识别与历史库，偏制作者单向导出。",file:"panels/project-review-panel.tsx · lib/project-review.ts",target:"审校 Bingo · 制作者侧",status:"adapt",note:"保留快照与版本能力，扩展为可承接回流意见的台账。"},
+    {name:"评审画面捕获",fact:"对 2D / 3D 画布做截图捕获并校验资源就绪，捕获过程不改项目与视角。",file:"hooks/use-review-capture.ts",target:"审校 Bingo · 画面捕获底座",status:"reuse",note:"能截画面但不能在画面上钉点，是钉评的底层而非完整闭环。"},
+    {name:"客户只读分享页",fact:"只读预览三维方案与物料清单、模型来源，带过期提示；没有任何评论 / 反馈输入。",file:"app/view/page.tsx · lib/share.ts",target:"审校 Bingo · 客户侧",status:"gap",note:"客户目前只能看，无法在具体场地点评。"},
+    {name:"钉点 / 线程 / 解决状态",fact:"全库未见画布锚点评论、意见线程、已解决标记与回流制作者的闭环数据结构。",file:"检索结论：无对应模块",target:"审校 Bingo 核心交互",status:"gap",note:"对标 Figma / Frame.io，是回归「能钉评」本意要新建的主体。"},
+    {name:"Binggo 命名与品牌",fact:"Binggo 名字当前挂在策划 / 生成对话上，与「审校」产品本意错位。",file:"panels/creative-studio.tsx 区域标识",target:"名称回归审校，主对话另命名",status:"adapt",note:"改名同时必须保住 apply 校验回写，需专项迁移回归。"}
+  ]},
+  {group:"D · 空间（场 / 壳 / 舞台）",gdesc:"画布核心资产，基本整体复用",items:[
+    {name:"3D 画布与编辑",fact:"相机、点选 / 移动 / 缩放、楼层、墙体、屋顶、结构、碰撞与撤销重做，测试覆盖最重的核心。",file:"panels/viewport.tsx · three/ · hooks/use-three-scene.ts",target:"空间 · 主舞台",status:"reuse",note:"产品本体，目标 IA 围绕它组织而不是替换它。"},
+    {name:"场景预设与模板",fact:"酒吧、咖啡馆、会议等 10 套完整场景模板，带预览、载入确认与过期检查。",file:"panels/scene-presets-panel.tsx · templates-panel.tsx · scene/templates/",target:"空间 · 模板",status:"reuse",note:"作为场地壳库直接保留。"},
+    {name:"图纸 / 照片重建",fact:"基于图纸与尺寸重建可编辑场地（floorplan），并非高斯 / 世界模型生成。",file:"panels/reconstruction-panel.tsx · canvas-2d/",target:"空间 · 图纸重建",status:"reuse",note:"对外沟通避免称「高斯生成」，与真实实现对齐。"},
+    {name:"场地设定与图层",fact:"房间形状尺寸、场地参数、楼层切换与图层管理。",file:"panels/site-panel.tsx · room-settings-panel.tsx · scene-layers-panel.tsx",target:"空间 · 场地设定 / 图层",status:"reuse",note:"工具面板形态，不人格化。"}
+  ]},
+  {group:"E · 物料（道具 / 可摆放的件）",gdesc:"库 + 生成 + 点验，收进同一舞台",items:[
+    {name:"线上模型库",fact:"528 项可摆 / 529 项归档资源，分类、搜索、拖放或点击放置。",file:"panels/online-model-library.tsx · lib/library.ts",target:"物料 · 库",status:"reuse",note:"道具库主体，直接复用。"},
+    {name:"生成模型库",fact:"腾讯 HY-3D 生成的单体物件归档与加入场地流程。",file:"panels/generated-model-library.tsx",target:"物料 · 生成",status:"reuse",note:"单体 mesh 生成，与场地重建区分清楚。"},
+    {name:"材质调整",fact:"针对指定物件的材质候选与应用保护。",file:"panels/material-customization.tsx",target:"物料 · 材质",status:"reuse",note:"物料工具内能力。"},
+    {name:"逐件点验工单",fact:"物料到场核对、勾选与异常记录的执行台账。",file:"panels/material-checkin-panel.tsx · hooks/use-material-checkins.ts",target:"物料 · 到场点验",status:"reuse",note:"执行阶段保留。"},
+    {name:"素材架 / 目录条",fact:"画布旁的物料分类条与拖放入口，当前与库面板存在入口重叠。",file:"panels/catalog-strip.tsx · furniture-catalog-panel.tsx",target:"收编为空间舞台内的库入口",status:"adapt",note:"统一入口，避免物料变成独立孤岛 / 重复花名册。"}
+  ]},
+  {group:"F · 成员与协作（挂在活动内）",gdesc:"权限底层为真，协作上层待建",items:[
+    {name:"团队 / 权限演示",fact:"虚构成员与角色权限演示，界面明确声明不写云端、不发邀请、不改真实权限。",file:"panels/account-team-demo.tsx",target:"活动 · 成员",status:"demo",note:"不能当作已上线的真实成员管理。"},
+    {name:"云端工作室与分享权限",fact:"工作室 / 项目、编辑权租约、版本校验、私有授权与客户只读分享等真实权限底座。",file:"panels/cloud-panel.tsx · lib/backend-session.ts · Supabase",target:"成员 · 权限底座",status:"reuse",note:"真实可用的协作地基，上层 UI 在其上生长。"},
+    {name:"成员直达 / 在场 / 待办",fact:"常驻成员聊天、在线状态与分工待办当前不存在（MemberChat 等关键词零命中）。",file:"检索结论：无对应模块",target:"活动 · 成员协作",status:"add",note:"后置增量，先借只读分享与权限满足协作，不急着做聊天。"}
+  ]}
+];
+
+var tbody=document.getElementById('tbody');
+var counts={all:0,reuse:0,adapt:0,add:0,gap:0,demo:0};
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+ROWS.forEach(function(grp){
+  var trg=document.createElement('tr');
+  trg.className='group';trg.dataset.group=grp.group;
+  trg.innerHTML='<td colspan="5">'+esc(grp.group)+'<span class="gdesc">'+esc(grp.gdesc)+'</span></td>';
+  tbody.appendChild(trg);
+  grp.items.forEach(function(it){
+    counts.all++;counts[it.status]++;
+    var tr=document.createElement('tr');
+    tr.className='row';tr.dataset.status=it.status;tr.dataset.group=grp.group;
+    var st=STATUS[it.status];
+    tr.innerHTML=
+      '<td class="name">'+esc(it.name)+'</td>'+
+      '<td class="fact">'+esc(it.fact)+'<span class="file mono">'+esc(it.file)+'</span></td>'+
+      '<td class="target">'+esc(it.target)+'</td>'+
+      '<td><span class="pill '+st.cls+'"><span class="dot '+st.cls+'"></span>'+st.label+'</span></td>'+
+      '<td class="note">'+esc(it.note)+'</td>';
+    tbody.appendChild(tr);
+  });
+});
+Object.keys(counts).forEach(function(k){var el=document.getElementById('cnt-'+k);if(el)el.textContent=k==='all'?counts.all:counts[k];});
+
+var current='all';
+var chips=document.querySelectorAll('.chip');
+chips.forEach(function(chip){
+  chip.addEventListener('click',function(){
+    current=chip.dataset.filter;
+    chips.forEach(function(c){c.setAttribute('aria-pressed',c===chip?'true':'false');});
+    var visibleGroups={};
+    document.querySelectorAll('tr.row').forEach(function(r){
+      var show=current==='all'||r.dataset.status===current;
+      r.classList.toggle('hidden-row',!show);
+      if(show)visibleGroups[r.dataset.group]=true;
+    });
+    document.querySelectorAll('tr.group').forEach(function(g){
+      g.style.display=visibleGroups[g.dataset.group]?'':'none';
+    });
+    document.getElementById('emptyNote').style.display=Object.keys(visibleGroups).length?'none':'block';
+  });
+});
+</script>
+</body>
+</html>

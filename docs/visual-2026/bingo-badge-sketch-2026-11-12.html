@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bingo 徽标候选草图对比 · 2026-11-12</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' fill='%23F7F5F0' stroke='%233B5D45' stroke-width='2'/%3E%3Ccircle cx='9' cy='11' r='1.4' fill='%2326262A'/%3E%3Ccircle cx='15' cy='11' r='1.4' fill='%2326262A'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#F7F5F0; --plane:#EFECE5; --hair:#E3DFD6; --ink:#26262A; --ink-soft:#5C5C63; --muted:#8A8A90;
+  --ok:#4A7C59; --warn:#96651F; --err:#B4443C; --green-deep:#3B5D45; --white:#FFFFFF;
+  /* 旧版配色：待评赭、已回执红 */
+  --pending:var(--warn); --done:var(--err);
+  --pending-soft:rgba(150,101,31,.16); --done-soft:rgba(180,68,60,.22);
+}
+body.semantic{
+  /* 语义配色：待办红、闭环绿 */
+  --pending:var(--err); --done:var(--ok);
+  --pending-soft:rgba(180,68,60,.16); --done-soft:rgba(74,124,89,.18);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  font-size:14px;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 24px 64px}
+header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.meta{color:var(--muted);font-size:12px}
+.note{background:var(--plane);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;color:var(--ink-soft);font-size:13px;margin:16px 0}
+.scheme-btn{border:1px solid var(--hair);background:var(--white);color:var(--ink-soft);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer}
+.scheme-btn:hover{background:var(--plane)}
+section{margin-top:36px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.sec-sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+
+/* ── 轨道基准 ── */
+.rail{display:flex;gap:10px;align-items:flex-start;background:var(--white);border:1px solid var(--hair);border-radius:16px;padding:16px;overflow-x:auto}
+.slot{width:48px;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative}
+.slot-hit{width:40px;height:40px;display:grid;place-items:center;position:relative}
+.glyph{width:28px;height:28px;border-radius:10px;background:var(--plane);border:1px solid var(--hair);display:grid;place-items:center;position:relative}
+.glyph.ball{border-radius:999px}
+.glyph.ball::before,.glyph.ball::after{content:"";position:absolute;top:11px;width:3px;height:3px;border-radius:999px;background:var(--ink)}
+.glyph.ball::before{left:9px}.glyph.ball::after{right:9px}
+.glyph.avatar{border-radius:999px;background:var(--paper);font-weight:600;color:var(--green-deep);font-size:13px}
+.glyph svg{width:18px;height:18px}
+.slot-label{font-size:11px;color:var(--ink-soft);white-space:nowrap}
+
+/* ── 旧版整圆复刻 V1 ── */
+.old-ball{width:40px;height:40px;border-radius:999px;background:var(--paper);border:1.5px solid var(--hair);
+  display:grid;place-items:center;position:relative;box-shadow:inset 0 0 0 3px var(--plane)}
+.old-ball.awaiting{border:2px solid var(--pending);box-shadow:0 0 0 3px var(--pending-soft),inset 0 0 0 3px var(--plane)}
+.old-ball.returned{border:3px solid var(--done);box-shadow:0 0 0 4px var(--done-soft)}
+.old-ball.returned::before{content:"";width:12px;height:12px;border-radius:999px;background:var(--done)}
+.old-count{font:600 13px/1 tabular-nums;font-variant-numeric:tabular-nums;color:var(--pending)}
+
+/* ── 候选卡片 ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:var(--white);border:1px solid var(--hair);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.card-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.card-title{font-weight:600;font-size:14px}
+.ref{color:var(--muted);font-size:11px;text-align:right}
+.states{display:flex;gap:18px;align-items:flex-start;justify-content:space-around;background:var(--plane);border-radius:12px;padding:16px 10px}
+.state{display:flex;flex-direction:column;align-items:center;gap:6px}
+.state-name{font-size:11px;color:var(--muted)}
+.verdict{font-size:12px;color:var(--ink-soft);display:grid;gap:4px}
+.verdict b{color:var(--ink);font-weight:600}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--plane);color:var(--ink-soft)}
+.tag.ok{background:var(--pending-soft);color:var(--pending)}
+
+/* V2 角标数字圆 */
+.corner{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+  background:var(--pending);border:2px solid var(--paper);color:#fff;font:600 10px/12px tabular-nums;
+  font-variant-numeric:tabular-nums;display:grid;place-items:center}
+.corner.dot{width:10px;height:10px;min-width:10px;padding:0;background:var(--done)}
+/* V3 状态环 */
+.ring{border:2px solid var(--pending);border-radius:999px}
+.corner.sm{min-width:12px;height:12px;font-size:9px;top:-4px;right:-4px}
+/* V4 底部胶囊 */
+.pill{position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);min-width:22px;height:14px;border-radius:7px;
+  background:var(--pending);color:#fff;font:600 9px/12px tabular-nums;display:grid;place-items:center;padding:0 5px}
+/* V5 同尺寸圆内数字 */
+.v5{width:28px;height:28px;border-radius:999px;background:var(--paper);border:1.5px solid var(--pending);
+  display:grid;place-items:center;font:600 11px/1 tabular-nums;font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+.v5.returned{border-color:var(--done);color:var(--done)}
+.v5.idle{border-color:var(--hair);color:var(--muted)}
+.tip{font-size:11px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-top:1px solid var(--hair);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1>左轨 Bingo 徽标 · 候选草图对比</h1>
+    <p class="meta">2026-11-12 讨论稿 ｜ 依据 <code>docs/05-设计规范.md</code> 语义色 token ｜ 形体均为占位，落地换 <code>RailAvatar</code> PNG</p>
+  </div>
+  <button class="scheme-btn" id="schemeBtn" type="button">切换配色：旧版赭 / 红</button>
+</header>
+
+<div class="note">
+  <b>基线（2026-11-12 核对）：</b>HEAD = <code>origin/main</code> <code>7d38fb57</code>，0 超前 / 0 落后；工作区另有未提交 WIP，按偏好本地攒着不推。本稿只做视觉对比，不改代码。
+</div>
+
+<!-- ══ 尺寸基准 ══ -->
+<section>
+  <h2>一、尺寸基准：当前六格左轨</h2>
+  <p class="sec-sub">触达区 40×40，图形槽 28×28，标签 12px。候选徽标都以此为基准，不允许把本体撑大到 40px。</p>
+  <div class="rail">
+    <div class="slot"><div class="slot-hit"><div class="glyph ball">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3B5D45" stroke-width="1.8"><rect x="6" y="4" width="12" height="16" rx="3"/><circle cx="9.5" cy="11" r="1.3" fill="#26262A" stroke="none"/><circle cx="14.5" cy="11" r="1.3" fill="#26262A" stroke="none"/></svg>
+    </div></div><span class="slot-label">小景</span></div>
+    <div class="slot"><div class="slot-hit"><div class="glyph ball">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="#EFECE5" stroke="#3B5D45" stroke-width="1.8"/><circle cx="9" cy="11" r="1.4" fill="#26262A"/><circle cx="15" cy="11" r="1.4" fill="#26262A"/></svg>
+    </div></div><span class="slot-label">Bingo</span></div>
+    <div class="slot"><div class="slot-hit"><div class="glyph">
+      <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3" fill="#EFECE5" stroke="#3B5D45" stroke-width="1.8"/><circle cx="9.5" cy="12" r="1.3" fill="#26262A"/><circle cx="14.5" cy="12" r="1.3" fill="#26262A"/></svg>
+    </div></div><span class="slot-label">空间</span></div>
+    <div class="slot"><div class="slot-hit"><div class="glyph">
+      <svg viewBox="0 0 24 24"><path d="M12 5 L19 18 L5 18 Z" fill="#EFECE5" stroke="#3B5D45" stroke-width="1.8" stroke-linejoin="round"/><circle cx="10" cy="14" r="1.2" fill="#26262A"/><circle cx="14" cy="14" r="1.2" fill="#26262A"/></svg>
+    </div></div><span class="slot-label">物料</span></div>
+    <div class="slot"><div class="slot-hit"><div class="glyph">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#5C5C63" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.2"/><path d="M8 7 L9.5 4.5 H14.5 L16 7"/></svg>
+    </div></div><span class="slot-label">拍摄场地</span></div>
+    <div class="slot"><div class="slot-hit"><div class="glyph avatar">我</div></div><span class="slot-label">给自己留话</span></div>
+  </div>
+</section>
+
+<!-- ══ 旧版还原 ══ -->
+<section>
+  <h2>二、旧版 Bingo 徽标长什么样（考古还原 · tag v2.3.0–v3.5.0）</h2>
+  <p class="sec-sub">出处提交 <code>b9a9587</code>。旧版整颗按钮就是 40px 正圆，数字直接画在圆内；这也是它和现在 28px 形体槽尺寸对不上的原因。</p>
+  <div class="states" style="background:var(--white);border:1px solid var(--hair)">
+    <div class="state"><div class="old-ball idle"></div><span class="state-name">待发 to-send</span><span class="tip">中性 hair 描边，不出数</span></div>
+    <div class="state"><div class="old-ball awaiting"><span class="old-count">3</span></div><span class="state-name">待评 awaiting</span><span class="tip">状态色描边 + 光晕，圆内数字</span></div>
+    <div class="state"><div class="old-ball returned"></div><span class="state-name">已回执 returned</span><span class="tip">粗描边 + 内芯圆点</span></div>
+  </div>
+  <div class="note" style="margin-top:14px">
+    旧版实测配色：待评 = warn 赭 <code>#96651F</code>；已回执 = err 红 <code>#B4443C</code>，<b>没有绿态</b>。右上角按钮可切到语义配色（待办红 / 闭环绿）对照。
+  </div>
+</section>
+
+<!-- ══ 候选变体 ══ -->
+<section>
+  <h2>三、候选草图（尺寸对齐 28px 槽）</h2>
+  <p class="sec-sub">每格三态：待发（休眠）｜待评（数字 3，示例口径：链接数 / 钉数）｜已回执（闭环）。成熟案例标注在卡片右上。</p>
+  <div class="grid">
+
+    <!-- V2 -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">A · 角标数字圆</span><span class="ref">iOS Messages / 微信头像 / Discord · 未读角标</span></div>
+      <div class="states">
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div></div><span class="state-name">待发</span></div>
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div><span class="corner">3</span></div><span class="state-name">待评</span></div>
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div><span class="corner dot"></span></div><span class="state-name">已回执</span></div>
+      </div>
+      <div class="verdict">
+        <span><b>做法：</b>28 形体不动，右上角叠 16px 圆，2px 纸底白边，白字 <code>9+</code> 截断。</span>
+        <span><b>优点：</b>轨上一眼看到计数；本体尺寸与其他格完全一致；仓库现有成员未读徽标已是这一套。</span>
+        <span><b>代价：</b>角标叠加在形体上；双计数只能出一个主数，另一路进 tooltip（「链接 2 · 钉 3」）。</span>
+      </div>
+    </div>
+
+    <!-- V3 -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">B · 状态环 + 角标</span><span class="ref">macOS 头像在线环 / 团队成员状态</span></div>
+      <div class="states">
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div></div><span class="state-name">待发</span></div>
+        <div class="state"><div class="slot-hit"><div class="glyph ball ring"></div><span class="corner sm">3</span></div><span class="state-name">待评</span></div>
+        <div class="state"><div class="slot-hit"><div class="glyph ball ring" style="border-color:var(--done)"></div></div><span class="state-name">已回执</span></div>
+      </div>
+      <div class="verdict">
+        <span><b>做法：</b>形体外圈 2px 状态色环，右上角再叠 12px 计数小圆。</span>
+        <span><b>优点：</b>状态（环）与计数（角标）分层，语义最清楚。</span>
+        <span><b>代价：</b>环 + 角标双层装饰，小轨上偏重；与现有 9px 状态点体系要做替换决策。</span>
+      </div>
+    </div>
+
+    <!-- V4 -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">C · 底部计数胶囊</span><span class="ref">VS Code 活动栏 / Linear 侧栏条目计数</span></div>
+      <div class="states">
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div></div><span class="state-name">待发</span></div>
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div><span class="pill">3</span></div><span class="state-name">待评</span></div>
+        <div class="state"><div class="slot-hit"><div class="glyph ball"></div><span class="pill" style="background:var(--done);min-width:14px"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 L10 17.5 L19 7.5"/></svg></span></div><span class="state-name">已回执</span></div>
+      </div>
+      <div class="verdict">
+        <span><b>做法：</b>形体下方贴 14px 高胶囊，计数或勾形居中。</span>
+        <span><b>优点：</b>不遮形体面部；胶囊能容纳两位数字。</span>
+        <span><b>代价：</b>40px 触达区要塞下 28 形体 + 胶囊，纵向偏挤；移动端 dock 上容易和标签打架。</span>
+      </div>
+    </div>
+
+    <!-- V5 -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">D · 同尺寸圆内数字 <span class="tag ok">贴合「退回旧版」</span></span><span class="ref">旧版整圆缩小到 28px</span></div>
+      <div class="states">
+        <div class="state"><div class="slot-hit"><div class="v5 idle"></div></div><span class="state-name">待发</span></div>
+        <div class="state"><div class="slot-hit"><div class="v5">3</div></div><span class="state-name">待评</span></div>
+        <div class="state"><div class="slot-hit"><div class="v5 returned">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 L10 17.5 L19 7.5"/></svg>
+        </div></div><span class="state-name">已回执</span></div>
+      </div>
+      <div class="verdict">
+        <span><b>做法：</b>保留旧版「圆里有数 / 圆里有勾」的识别，但本体就是 28px，与其他格同尺寸；不叠角标。</span>
+        <span><b>优点：</b>最贴近你记忆里的旧版，又不破坏轨上尺寸一致性；无双层装饰。</span>
+        <span><b>代价：</b>28px 圆内放数字余量有限，双计数仍需走 tooltip / 面板头。</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ 对照与待定 ══ -->
+<section>
+  <h2>四、对照与待定项</h2>
+  <table>
+    <thead><tr><th style="width:18%">项</th><th>现状 / 结论</th></tr></thead>
+    <tbody>
+      <tr><td>命名</td><td>第一格 Agent 定名「小景」；轨钮标签、面板头、文档称呼全量替换「总控 / 门厅 / 新会话」。</td></tr>
+      <tr><td>双计数</td><td>链接数 L（<code>plans.length</code>）与钉数 P（open 画内钉）先分开记；徽标建议只出主数，另一路进 tooltip / 面板头摘要。</td></tr>
+      <tr><td>配色</td><td>旧版：待评赭、已回执红；语义方案：待办红、闭环绿。稿内按钮可切换对照，第二轮定。</td></tr>
+      <tr><td>数据层</td><td><code>bingo-status.ts</code> / <code>bingo-feedback.ts</code> 仍在，未接 Supabase；第一轮沿用本机 localStorage 口径。</td></tr>
+      <tr><td>落地顺序</td><td>规范补丁 → 组件 → 测试 → 真机三态验收；本地攒好一次性推 main，不逐小改开 PR。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+<script>
+  const btn = document.getElementById('schemeBtn');
+  btn.addEventListener('click', () => {
+    const semantic = document.body.classList.toggle('semantic');
+    btn.textContent = semantic ? '切换配色：语义红 / 绿' : '切换配色：旧版赭 / 红';
+  });
+</script>
+</body>
+</html>

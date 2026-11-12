@@ -1,24 +1,27 @@
 'use client';
 
 /**
- * 户外「2D 地图 / 3D 场地」视角切换（OnePlan 式分段胶囊）。
+ * 户外「2D / 3D」视角切换（OnePlan 式分段胶囊 · B 墨黑皮肤定稿）。
  *
- * 消费方：
- * - 2D 覆盖层左下簇（outdoor-plan-overlay.tsx，testIdPrefix 默认 `outdoor-view`）。
- * - 3D 接管态的切换已统一走右轨 #tool-2d3d（scendance-workspace.tsx），不再渲染本组件；
- *   2026-11-12 用户指令移除接管态左下角胶囊（`outdoor-takeover-view-*`）。
+ * 落点（2026-11-13 定稿）：2D 覆盖层与 3D 接管态**同一个入口**，固定在画布左下动作簇，
+ * 由 room-organizer 在画布层独立渲染；右轨 44px 竖轨不再纳横排文字胶囊。
  *
- * 覆盖层在接管态**保活隐藏**（visibility:hidden），同屏仍留在 DOM 里；2D 卡内的
- * 切换钮因此要靠 testid 精确定位，避免 getByTestId 撞到隐藏节点。
+ * 定稿口径：
+ * - 文案仅左「2D」右「3D」，不带后缀词、不附图标；
+ * - 激活段实底近黑墨 `#141416`、白字；容器纯白 + 发丝线 + 柔和阴影；
+ * - 标准档：段高 34、段内边距 `0 14px`、容器内边距 3、圆角全胶囊；
+ * - 动效：滑块水平平移 `200ms cubic-bezier(.2,0,0,1)`；`prefers-reduced-motion` 下关闭。
+ *
+ * testid 前缀：`${prefix}-toggle` / `${prefix}-2d` / `${prefix}-3d`。
  */
 
-import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_SURFACE, PLANNING_TEXT } from '@/lib/outdoor-plan-tokens';
 
 export type OutdoorPlanView = '2d' | '3d';
 
 const VIEW_MODES: readonly (readonly [OutdoorPlanView, string])[] = [
-  ['2d', '2D 地图'],
-  ['3d', '3D 场地'],
+  ['2d', '2D'],
+  ['3d', '3D'],
 ];
 
 export interface OutdoorViewSwitchProps {
@@ -29,15 +32,21 @@ export interface OutdoorViewSwitchProps {
 }
 
 export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outdoor-view' }: OutdoorViewSwitchProps) {
+  const activeIndex = view === '3d' ? 1 : 0;
+  const reducedMotion = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   return (
     <div
       data-testid={`${testIdPrefix}-toggle`}
       role="group"
-      aria-label="视角：地图 2D / 场地 3D"
+      aria-label="2D / 3D 视图切换"
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 2,
+        position: 'relative',
+        display: 'inline-grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 0,
         padding: 3,
         borderRadius: 999,
         background: PLANNING_SURFACE.panelBg,
@@ -45,6 +54,20 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
         boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
       }}
     >
+      <span
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 3,
+          left: 3,
+          width: 'calc(50% - 3px)',
+          height: 34,
+          borderRadius: 999,
+          background: PLANNING_SURFACE.panelText,
+          transform: reducedMotion ? undefined : `translateX(${activeIndex * 100}%)`,
+          transition: reducedMotion ? 'none' : 'transform 200ms cubic-bezier(.2,0,0,1)',
+        }}
+      />
       {VIEW_MODES.map(([mode, label]) => {
         const active = view === mode;
         return (
@@ -55,14 +78,18 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
             aria-pressed={active}
             onClick={() => onChange(mode)}
             style={{
-              height: 28,
-              padding: '0 12px',
+              position: 'relative',
+              zIndex: 1,
+              height: 34,
+              minWidth: 60,
+              padding: '0 14px',
               borderRadius: 999,
               border: 'none',
-              background: active ? PLANNING_SURFACE.selectedBg : 'transparent',
-              color: PLANNING_SURFACE.panelText,
-              fontSize: 12,
+              background: 'transparent',
+              color: active ? '#ffffff' : PLANNING_TEXT.soft,
+              fontSize: 13.5,
               fontWeight: active ? 600 : 500,
+              letterSpacing: '.02em',
               cursor: 'pointer',
               fontFamily: 'inherit',
             }}

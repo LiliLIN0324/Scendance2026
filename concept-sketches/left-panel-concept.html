@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-canvas-width="1200" data-canvas-height="2280" style="width:1200px;height:2280px;">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 2280px; }
+  body { width: 1200px; height: 2280px; background: #f5f7fa; font-family: "Source Han Sans SC VF", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: #1f2733; }
+  [data-canvas-root] { width: 1200px; height: 2280px; padding: 40px 40px 32px; display: flex; flex-direction: column; gap: 28px; }
+
+  /* 顶栏 */
+  .board-head { display: flex; flex-direction: column; gap: 10px; }
+  .board-title { font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+  .board-sub { font-size: 15px; color: #6b7686; line-height: 1.6; }
+  .legend { display: flex; gap: 20px; font-size: 13px; color: #6b7686; margin-top: 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+  .sw-before { background: #fdf1e3; border: 1px dashed #d9822b; }
+  .sw-after { background: #eaf2ff; border: 1px solid #2f7cf6; }
+
+  /* 卡片 */
+  .card { background: #fff; border: 1px solid #e3e8ef; border-radius: 18px; padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; }
+  .card-top { display: flex; align-items: center; gap: 14px; }
+  .num { width: 30px; height: 30px; border-radius: 9px; background: #1f2733; color: #fff; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+  .card-title { font-size: 19px; font-weight: 700; }
+  .tag { font-size: 12px; padding: 4px 10px; border-radius: 999px; font-weight: 600; }
+  .tag-eff { background: #f1f4f8; color: #6b7686; }
+  .tag-ref { background: #eef6f0; color: #1f9d6b; margin-left: auto; }
+  .card-body { display: flex; gap: 24px; align-items: stretch; }
+  .stage { display: flex; flex-direction: column; gap: 8px; }
+  .stage-label { font-size: 12px; font-weight: 600; color: #6b7686; letter-spacing: .5px; }
+  .stage-label.after { color: #2f7cf6; }
+  .notes { flex: 1; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+  .notes ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .notes li { font-size: 14px; line-height: 1.6; color: #33404f; padding-left: 18px; position: relative; }
+  .notes li::before { content: ""; position: absolute; left: 2px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: #2f7cf6; }
+  .notes .meta { font-size: 13px; color: #6b7686; }
+
+  /* 迷你线框面板 */
+  .mini { width: 320px; background: #fff; border: 1px solid #e3e8ef; border-radius: 14px; overflow: hidden; font-size: 12px; display: flex; flex-direction: column; }
+  .mini.detached { box-shadow: 0 10px 28px rgba(31,39,51,.16); }
+  .mini-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eef1f5; }
+  .dots { display: flex; gap: 4px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: #c3ccd7; }
+  .mini-title { flex: 1; font-weight: 600; color: #33404f; }
+  .mini-x { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7686; border: 1px solid #e3e8ef; }
+  .mini-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .layer-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #33404f; }
+  .layer-row .plus { margin-left: auto; width: 18px; height: 18px; border: 1px solid #d7dee7; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #6b7686; }
+  .tabs { display: flex; gap: 6px; }
+  .tab { flex: 1; text-align: center; padding: 6px 0; border-radius: 8px; color: #6b7686; background: #f4f6f9; }
+  .tab.on { background: #1f2733; color: #fff; font-weight: 600; }
+  .search { display: flex; align-items: center; gap: 7px; border: 1px solid #d7dee7; border-radius: 9px; padding: 7px 10px; color: #6b7686; }
+  .search .q { flex: 1; color: #33404f; }
+  .search .clear { width: 18px; height: 18px; border-radius: 50%; background: #e3e8ef; color: #6b7686; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .tree-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; color: #33404f; }
+  .tree-row.ind { margin-left: 14px; }
+  .tree-row.active { background: #eaf2ff; box-shadow: inset 2px 0 0 #2f7cf6; color: #1f5fb8; font-weight: 600; }
+  .tree-row .sub { margin-left: auto; font-size: 10px; color: #2f7cf6; font-weight: 600; }
+  .muted { color: #98a3b1; }
+  .empty { border: 1px dashed #d7dee7; border-radius: 12px; padding: 22px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #98a3b1; text-align: center; }
+  .empty .ico { width: 34px; height: 34px; border-radius: 10px; background: #f1f4f8; display: flex; align-items: center; justify-content: center; }
+  .empty .big { font-size: 13px; color: #6b7686; font-weight: 600; }
+  .empty .cap { font-size: 11px; line-height: 1.5; }
+  .btn-primary { align-self: center; margin-top: 4px; background: #2f7cf6; color: #fff; font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 9px; }
+  .place-bar { display: flex; align-items: center; gap: 8px; background: #eaf2ff; border: 1px solid #cfe2ff; border-radius: 10px; padding: 8px 10px; }
+  .place-bar .pt { flex: 1; font-size: 12px; color: #1f5fb8; font-weight: 600; }
+  .place-bar .pc { font-size: 11px; color: #6b7686; font-weight: 400; }
+  .chip-x { font-size: 11px; color: #d65656; border: 1px solid #f0c2c2; border-radius: 7px; padding: 3px 8px; background: #fff; }
+  .dock-strip { display: flex; flex-direction: column; gap: 6px; }
+  .dock-slot { border: 1px solid #e3e8ef; border-radius: 10px; padding: 10px 12px; color: #98a3b1; font-size: 12px; background: #fafbfc; }
+  .dock-slot.filled { border-color: #cfe2ff; background: #eaf2ff; color: #1f5fb8; font-weight: 600; }
+  .gap-line { width: 1px; align-self: stretch; background: #eef1f5; }
+</style>
+</head>
+<body style="width:1200px;height:2280px;">
+<main data-canvas-root style="width:1200px;height:2280px;">
+
+  <header class="board-head">
+    <div class="board-title">左栏面板 · 交互概念草图</div>
+    <div class="board-sub">围绕「户外规划」卡片的六项待办：左为现状线框，右为建议方案；成熟模式对照 OnePlan 素材库与 petitmaker 面板走查。本页仅概念方案，未改动代码。</div>
+    <div class="legend">
+      <span><i class="sw sw-before"></i>现状问题</span>
+      <span><i class="sw sw-after"></i>建议方案</span>
+    </div>
+  </header>
+
+  <!-- 1 搜索清空 -->
+  <section class="card">
+    <div class="card-top">
+      <div class="num">1</div>
+      <div class="card-title">搜索框一键清空</div>
+      <span class="tag tag-eff">改动量：小</span>
+      <span class="tag tag-ref">参考：素材库搜索通行模式</span>
+    </div>
+    <div class="card-body">
+      <div class="stage">
+        <div class="stage-label">现状</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab on">添加物件</div><div class="tab">已放置物件</div></div>
+            <div class="search"><span>⌕</span><span class="q">圆桌</span></div>
+            <div class="tree-row ind muted">要清空只能手动选中删字</div>
+            <div class="tree-row">舞台区</div>
+            <div class="tree-row">观众区</div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-label after">方案</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab on">添加物件</div><div class="tab">已放置物件</div></div>
+            <div class="search"><span>⌕</span><span class="q">圆桌</span><span class="clear">✕</span></div>
+            <div class="tree-row ind muted">点 × 立即清空并保留焦点</div>
+            <div class="tree-row active">全场显示，无关键词过滤</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li>输入框右侧放清空钮，仅在有文案时出现；点击清空关键词、结果回到全量。</li>
+          <li>清空后焦点留在搜索框，便于继续输入。</li>
+        </ul>
+        <div class="meta">成熟案例：OnePlan / SketchUp 类素材库搜索均为输入框尾部清除钮。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 空态 -->
+  <section class="card">
+    <div class="card-top">
+      <div class="num">2</div>
+      <div class="card-title">「已放置物件」空态引导</div>
+      <span class="tag tag-eff">改动量：小</span>
+      <span class="tag tag-ref">参考：空状态三件套</span>
+    </div>
+    <div class="card-body">
+      <div class="stage">
+        <div class="stage-label">现状</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab">添加物件</div><div class="tab on">已放置物件</div></div>
+            <div class="tree-row muted">图层 1（仅图层文件夹）</div>
+            <div class="empty" style="border:none;padding:14px 0;">
+              <div class="cap">0 件物件，页面大片留白，没有下一步提示</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-label after">方案</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab">添加物件</div><div class="tab on">已放置物件</div></div>
+            <div class="empty">
+              <div class="ico">▢</div>
+              <div class="big">还没有放置物件</div>
+              <div class="cap">去「添加物件」挑一件，回到画布单击放置</div>
+              <div class="btn-primary">去添加物件</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li>空态 = 轻图标 + 一句人话 + 一个主行动钮，不堆说明文案。</li>
+          <li>主钮直接切回「添加物件」页签，缩短路径。</li>
+        </ul>
+        <div class="meta">成熟案例：planner 类工具空面板统一给「图标 + 引导文案 + 主行动」。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 跨页签放置态 -->
+  <section class="card">
+    <div class="card-top">
+      <div class="num">3</div>
+      <div class="card-title">放置工具跨页签保持可见与可退出</div>
+      <span class="tag tag-eff">改动量：中</span>
+      <span class="tag tag-ref">参考：petitmaker 绘制态状态条</span>
+    </div>
+    <div class="card-body">
+      <div class="stage">
+        <div class="stage-label">现状</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab">添加物件</div><div class="tab on">已放置物件</div></div>
+            <div class="tree-row muted">已选「圆桌」仍在放置态</div>
+            <div class="tree-row ind muted">本页签无高亮、无退出入口</div>
+            <div class="tree-row ind muted">只能靠 Esc 退出</div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-label after">方案</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="place-bar">
+              <span>▣</span>
+              <div style="flex:1;"><div class="pt">正在放置：圆桌</div><div class="pc">单击画布放置 · 右键 / Esc 取消</div></div>
+              <span class="chip-x">退出放置</span>
+            </div>
+            <div class="tabs"><div class="tab">添加物件</div><div class="tab on">已放置物件</div></div>
+            <div class="tree-row ind muted">状态条在两个页签下都常驻</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li>放置态是全局画布模式，状态条钉在面板头部，切页签不消失。</li>
+          <li>状态条给显式「退出放置」钮，不必记住快捷键。</li>
+        </ul>
+        <div class="meta">成熟案例：petitmaker「正在圈选范围 / 请在地图上绘制」头部状态条与底部工具条。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 关闭后布局复位 -->
+  <section class="card">
+    <div class="card-top">
+      <div class="num">4</div>
+      <div class="card-title">关闭后独立窗 / 分栏布局复位</div>
+      <span class="tag tag-eff">改动量：中</span>
+      <span class="tag tag-ref">参考：停靠 ↔ 浮窗显式开关</span>
+    </div>
+    <div class="card-body">
+      <div class="stage">
+        <div class="stage-label">现状</div>
+        <div class="mini detached">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划 · 独立窗口</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="dock-slot">拖出过浮窗 / 上下分栏</div>
+            <div class="tree-row ind muted">点 × 收起后，布局记忆残留</div>
+            <div class="tree-row ind muted">重开又回到原来的浮窗位置</div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-label after">方案</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="dock-strip">
+              <div class="dock-slot filled">关闭即回停靠位：清除 detached / 分栏</div>
+              <div class="dock-slot">重开默认贴回左栏堆叠</div>
+              <div class="dock-slot">只有主动拖出才进入独立小窗</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li>× 的语义是「归档关闭」，同时清掉浮窗与分栏记忆。</li>
+          <li>浮动 / 停靠由显式拖出或停靠开关控制，不跟随关闭动作遗留。</li>
+        </ul>
+        <div class="meta">成熟案例：petitmaker 面板外侧 dock 图标在浮动气泡与常驻栏之间显式切换。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 关闭钮标签 -->
+  <section class="card">
+    <div class="card-top">
+      <div class="num">5</div>
+      <div class="card-title">关闭钮可读屏命名（无障碍）</div>
+      <span class="tag tag-eff">改动量：极小</span>
+      <span class="tag tag-ref">参考：按钮命名归属明确</span>
+    </div>
+    <div class="card-body">
+      <div class="stage">
+        <div class="stage-label">现状</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tree-row" style="background:#fdf1e3;box-shadow:inset 2px 0 0 #d9822b;color:#a85f14;">aria-label「收起左侧面板」</div>
+            <div class="tree-row ind muted">读屏分不清关的是哪张卡</div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-label after">方案</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tree-row active">aria-label / title：「关闭户外规划」</div>
+            <div class="tree-row ind muted">视觉不变，仅属性改名</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li>关闭钮标签带上面板归属，读屏与悬停提示一致。</li>
+          <li>纯属性改动，不涉及布局与样式。</li>
+        </ul>
+        <div class="meta">成熟案例：可访问性规范要求按钮名称能说明操作对象。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 边界子态高亮 -->
+  <section class="card">
+    <div class="card-top">
+      <div class="num">6</div>
+      <div class="card-title">边界顶点编辑子态同行高亮</div>
+      <span class="tag tag-eff">改动量：小</span>
+      <span class="tag tag-ref">参考：工具主态 / 子态同组高亮</span>
+    </div>
+    <div class="card-body">
+      <div class="stage">
+        <div class="stage-label">现状</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab on">添加物件</div><div class="tab">已放置物件</div></div>
+            <div class="tree-row ind">场地边界（重画）</div>
+            <div class="tree-row ind muted">进入顶点编辑后该行熄灭</div>
+            <div class="tree-row ind muted">看不出仍在边界工具里</div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="stage-label after">方案</div>
+        <div class="mini">
+          <div class="mini-head"><div class="dots"><i></i><i></i><i></i></div><div class="mini-title">户外规划</div><div class="mini-x">✕</div></div>
+          <div class="mini-body">
+            <div class="tabs"><div class="tab on">添加物件</div><div class="tab">已放置物件</div></div>
+            <div class="tree-row ind active">场地边界（重画）<span class="sub">编辑顶点</span></div>
+            <div class="tree-row ind muted">boundary 与 boundary-vertex 同属一行激活</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <ul>
+          <li>激活判定纳入顶点编辑子态，主态 / 子态保持同一行高亮。</li>
+          <li>子态下挂一枚「编辑顶点」小标记，区分当前在画边界还是调顶点。</li>
+        </ul>
+        <div class="meta">成熟案例：绘图工具栏中同工具的绘制与编辑子态归为一组选中态。</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>
