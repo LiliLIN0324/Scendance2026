@@ -867,13 +867,21 @@ html{scroll-snap-type:y proximity}
 .band.blank{scroll-margin-top:0}
 @media (prefers-reduced-motion:reduce){html{scroll-snap-type:none}}
 
-.field-case{width:min(1200px,calc(100% - 48px));margin:4rem auto;display:grid;grid-template-columns:1.05fr 1fr;align-items:center;gap:clamp(20px,5vw,68px);padding:clamp(16px,3vw,36px);border:1px solid #dce6dd;border-radius:16px;background:#fff;color:#20352c;scroll-margin-top:85px}
-.field-case-media img{display:block;width:100%;height:auto;aspect-ratio:1.65;object-fit:cover;border-radius:9px}
-.field-case-media small{display:block;margin-top:6px;color:#4c6057;font-size:12px}
-.field-case-copy h2{font-size:clamp(1.8rem,4vw,3.25rem);line-height:1.15;margin:.2em 0}
-.field-case-copy p:not(.eyebrow){margin:0 0 18px;color:#4c6057}
-.field-case-copy .intro-cta{display:inline-flex}
-@media(max-width:680px){.field-case{width:calc(100% - 28px);grid-template-columns:1fr;margin:2rem auto}.field-case-copy h2{font-size:1.7rem}}
+#site-cases{background:#fff;color:#20382e;width:min(1240px,calc(100% - 64px));margin:0 auto;padding:clamp(45px,8vw,112px) 0;min-height:0;scroll-margin-top:60px}
+#site-cases .case-eyebrow{text-align:center;color:#416658;font-size:14px;font-weight:750;letter-spacing:.09em;margin:0 0 8px}
+#site-cases h2{text-align:center;font-size:clamp(28px,5vw,54px);letter-spacing:-.03em;margin:0 0 38px;line-height:1.12}
+.case-spotlight-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(5px,2vw,26px);margin-bottom:30px}
+.case-spotlight-tabs button{border:0;border-bottom:2px solid #ccd5ca;background:transparent;color:#20382e;padding:12px 3px;font:inherit;font-weight:750;cursor:pointer;white-space:nowrap}
+.case-spotlight-tabs button[aria-pressed=true]{color:#286044;border-bottom-color:#367151}
+.spotlight-visual{display:grid;grid-template-columns:1fr 1fr;border:5px solid #fff;border-radius:22px;overflow:hidden;box-shadow:0 15px 34px #22382c24}
+.spotlight-visual img{display:block;width:100%;min-width:0;aspect-ratio:1.65;object-fit:cover}
+.spotlight-caption{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-top:20px}
+.spotlight-caption h3{margin:0;font-size:clamp(20px,2.6vw,28px)}
+.spotlight-caption p{margin:5px 0 0;color:#51665a}
+.spotlight-caption a,.case-quick-filters a{display:inline-flex;align-items:center;gap:8px;border:1px solid #aebeb2;border-radius:999px;color:#244d3a;padding:9px 16px;text-decoration:none;white-space:nowrap}
+.case-quick-filters{display:flex;justify-content:center;flex-wrap:wrap;gap:14px;margin-top:64px;border:1px solid #d6e1d7;border-radius:23px;padding:clamp(16px,5vw,45px)}
+.case-quick-filters a:hover,.spotlight-caption a:hover{background:#edf4ec}
+@media(max-width:680px){#site-cases{width:calc(100% - 32px)}#site-cases h2{margin-bottom:20px}.case-spotlight-tabs{margin-bottom:18px}.case-spotlight-tabs button{font-size:12px}.spotlight-visual img{aspect-ratio:1.12}.spotlight-caption{display:grid;gap:8px}.spotlight-caption a{justify-self:start}.case-quick-filters{margin-top:32px;gap:6px}.case-quick-filters a{font-size:13px;padding:6px 10px}}
 </style>
 </head>
 <body>
@@ -903,7 +911,7 @@ html{scroll-snap-type:y proximity}
     <nav class="nav-pill" id="nav" aria-label="页面导航">
       <a href="#library" data-view-link="library">三维场景</a>
       <a href="#process" data-view-link="process">流程</a>
-      <a href="#field-case">活动案例</a>
+      <a href="#site-cases">活动案例</a>
       <a href="#about" data-view-link="about">关于我们</a>
       <a href="/guide">新手指引</a>
     </nav>
@@ -1007,15 +1015,35 @@ html{scroll-snap-type:y proximity}
 
 
   <!-- 客户评价：白卡片（序号 + 场景图 + 引语 + 人物 + 标签），图用的是十场景渲染的压缩版 -->
-  <section class="band field-case" id="field-case" aria-labelledby="field-case-title">
-    <div class="field-case-media"><img src="./assets/yuquan-market-aerial.jpg" alt="杭州植物园玉泉鱼跃和展览小花园周边的卫星俯视图" width="914" height="650" loading="lazy"><small>底图来源 · Esri World Imagery</small></div>
-    <div class="field-case-copy">
-      <p class="eyebrow">场地策划示例</p>
-      <h2 id="field-case-title">杭州植物园菊展市集</h2>
-      <p>用卫星底图组织摊位、手作与补货。对照两种集章排队布置，看看怎样留出贯通园路。</p>
-      <a class="intro-cta" href="./assets/yuquan-market-proposal.html">查看布置方案 <span aria-hidden="true">↗</span></a>
-    </div>
+  <section class="band" id="site-cases" aria-labelledby="site-cases-heading">
+    <span id="field-case" aria-hidden="true"></span>
+    <p class="case-eyebrow">幕景活动案例</p><h2 id="site-cases-heading">一场活动，从场地开始</h2>
+    <div class="case-spotlight-tabs" role="group" aria-label="选择展示的活动类型"><button type="button" data-spotlight-case="marathon" aria-controls="spotlight-marathon" aria-pressed="false">路跑赛事</button><button type="button" data-spotlight-case="yuquan" aria-controls="spotlight-yuquan" aria-pressed="true">节庆演艺</button><button type="button" data-spotlight-case="waic" aria-controls="spotlight-waic" aria-pressed="false">会展与大会</button><button type="button" data-spotlight-case="keqiao" aria-controls="spotlight-keqiao" aria-pressed="false">场馆空间</button></div>
+    <div id="case-spotlight-visual"><article id="spotlight-marathon" class="spotlight-panel" hidden>
+      <div class="spotlight-visual"><img src="./assets/case-marathon-map.jpg" alt="2024 杭州马拉松的场地卫星对照图" loading="lazy"><img src="./assets/case-marathon-photo.jpg" alt="2024 杭州马拉松的活动资料照片" loading="lazy"></div>
+      <div class="spotlight-caption"><div><h3>2024 杭州马拉松</h3><p>从黄龙体育中心出发，核对检录、起终点和赛后交接。</p></div><a href="https://www.zjim.org/sb/articleview.jsf?article=577516620">查看这个案例 ↗</a></div>
+    </article><article id="spotlight-yuquan" class="spotlight-panel">
+      <div class="spotlight-visual"><img src="./assets/case-yuquan-map.jpg" alt="杭州植物园菊花展的场地卫星对照图" loading="lazy"><img src="./assets/case-yuquan-photo.jpg" alt="杭州植物园菊花展的活动资料照片" loading="lazy"></div>
+      <div class="spotlight-caption"><div><h3>杭州植物园菊花展</h3><p>在园路旁试排市集、手作和补货，沿地图点位查看花艺与活动照片。</p></div><a href="./assets/yuquan-market-proposal.html">查看这个案例 ↗</a></div>
+    </article><article id="spotlight-waic" class="spotlight-panel" hidden>
+      <div class="spotlight-visual"><img src="./assets/case-waic-map.jpg" alt="WAIC 2026 世界人工智能大会的场地卫星对照图" loading="lazy"><img src="./assets/case-waic-photo.jpg" alt="WAIC 2026 世界人工智能大会的活动资料照片" loading="lazy"></div>
+      <div class="spotlight-caption"><div><h3>WAIC 2026 世界人工智能大会</h3><p>以上海世博展览馆为参照，核对入场、等候和馆外导视。</p></div><a href="https://www.shanghai.gov.cn/nw15343/20260722/4514c99cfd364c3ba7d1b81790a09163.html">查看这个案例 ↗</a></div>
+    </article><article id="spotlight-keqiao" class="spotlight-panel" hidden>
+      <div class="spotlight-visual"><img src="./assets/case-keqiao-map.jpg" alt="绍兴国际会展中心的场地卫星对照图" loading="lazy"><img src="./assets/case-keqiao-photo.jpg" alt="绍兴国际会展中心的活动资料照片" loading="lazy"></div>
+      <div class="spotlight-caption"><div><h3>绍兴国际会展中心</h3><p>对照会展建筑与纺博会现场，查看展位、主通道和导览。</p></div><a href="https://www.cntac.org.cn/zixun/hangye/202611/t20261106_4424820.html">查看这个案例 ↗</a></div>
+    </article></div>
+    <div class="case-quick-filters" aria-label="按活动小类浏览"><a href="./assets/activity-type.html?type=flower-show"><span aria-hidden="true">♧</span>花卉展</a><a href="./assets/activity-type.html?type=marathon"><span aria-hidden="true">↝</span>马拉松</a><a href="./assets/activity-type.html?type=tech-conference"><span aria-hidden="true">▦</span>科技大会</a><a href="./assets/activity-type.html?type=expo-venue"><span aria-hidden="true">⌂</span>展览场馆</a><a href="./assets/activity-type.html?type=cultural-festival"><span aria-hidden="true">⚑</span>文旅节庆</a><a href="./assets/activity-type.html?type=culture-expo"><span aria-hidden="true">▧</span>文化展会</a><a href="./assets/activity-type.html?type=trade-show"><span aria-hidden="true">◇</span>产业展会</a><a href="./assets/activity-type.html?type=music-festival"><span aria-hidden="true">♫</span>音乐节</a><a href="./assets/activity-type.html?type=anime-festival"><span aria-hidden="true">▤</span>动漫节</a><a href="./assets/activity-type.html?type=art-festival"><span aria-hidden="true">◈</span>艺术节</a><a href="./assets/activity-type.html?type=market"><span aria-hidden="true">▥</span>集市</a><a href="./assets/activity-type.html?type=dragon-boat"><span aria-hidden="true">◒</span>端午活动</a><a href="./assets/activity-type.html?type=film-festival"><span aria-hidden="true">▣</span>电影节</a><a href="./assets/activity-type.html?type=beer-festival"><span aria-hidden="true">♧</span>啤酒节</a><a href="./assets/activity-type.html?type=kite-festival"><span aria-hidden="true">◇</span>风筝节</a></div>
   </section>
+  <script>
+    const spotlightButtons = document.querySelectorAll('#site-cases [data-spotlight-case]');
+    for (const button of spotlightButtons) button.addEventListener('click', () => {
+      for (const tab of spotlightButtons) {
+        const selected = tab === button;
+        tab.setAttribute('aria-pressed', String(selected));
+        document.getElementById(tab.getAttribute('aria-controls')).hidden = !selected;
+      }
+    });
+  </script>
 
   <section class="band" id="quotes">
     <div class="quote-head">

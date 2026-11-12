@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>活动类型 · 幕景</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#fff;color:#20382e;font:16px/1.65 "Microsoft YaHei",sans-serif}main{width:min(900px,calc(100% - 36px));margin:0 auto;padding:48px 0}a{color:#245440}h1{font-size:clamp(30px,7vw,66px);margin:24px 0 0}h2{margin:28px 0 8px}li{padding:6px 0}.case-reference{border-top:1px solid #d8e2d8;padding:14px 0}</style></head>
+<body><main><a href="/introduction#site-cases">← 返回活动案例</a><h1>活动类型</h1><p id="lead"></p><h2>布置时要做的事</h2><ol id="tasks"></ol><div id="reference" class="case-reference" hidden><h2>可参考的活动</h2><p id="reference-note"></p><a id="reference-link"></a></div></main>
+<script type="module">
+import {activityTypes} from './site-activity-types.mjs';
+const type = new URLSearchParams(location.search).get('type');
+const known = {
+  'flower-show':['杭州植物园菊展市集 · 图纸、路线与现场照片','./yuquan-market-proposal.html'],
+  marathon:['2024 杭州马拉松 · 当届竞赛规程','https://www.zjim.org/sb/articleview.jsf?article=577516620'],
+  'tech-conference':['WAIC 2026 · 会场与活动介绍','https://www.shanghai.gov.cn/nw15343/20260722/4514c99cfd364c3ba7d1b81790a09163.html'],
+  'expo-venue':['柯桥纺博会 · 场馆与活动介绍','https://www.cntac.org.cn/zixun/hangye/202611/t20261106_4424820.html'],
+  'culture-expo':['杭州文博会专题','https://z.hangzhou.com.cn/2026/hzwhcycyblh/index.html'],
+  'trade-show':['进博会 · 参展资料','https://www.ciie.org/zbh/cn/19BusinessEx/SerArea/exh/'],
+  'music-festival':['太合音乐 · 现场活动记录','https://www.taihemusic.cn/news/2221'],
+  'anime-festival':['中国国际动漫节现场报道','https://www.hzzx.gov.cn/cshz/content/2026-06/16/content_9240222.htm']
+};
+const content = Object.hasOwn(activityTypes,type) ? activityTypes[type] : null;
+if(content){
+  const [title,intro,tasks,reference]=content;
+  document.title=title+'布置指南 · 幕景';
+  document.querySelector('h1').textContent=title;
+  document.querySelector('#lead').textContent=intro;
+  for(const text of tasks){const li=document.createElement('li');li.textContent=text;document.querySelector('#tasks').append(li)}
+  const link = known[type] || reference;
+  if(link){
+    document.querySelector('#reference').hidden=false;
+    document.querySelector('#reference-note').textContent=reference?.[3] || '';
+    const anchor=document.querySelector('#reference-link');anchor.textContent=link[0];anchor.href=link[1];
+  }
+}else{document.querySelector('#lead').textContent='从案例页选择一个活动类型。'}
+</script></body></html>
