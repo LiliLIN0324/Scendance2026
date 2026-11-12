@@ -220,8 +220,8 @@ export function buildPlanFootprint(
     const object = buildPlanPropObject(THREE, prop);
     if (!object.children.length) continue;
     object.position.set(prop.center.x - metrics.width / 2, 0, prop.center.z - metrics.depth / 2);
-    // 2D 画布顺时针为正；three 绕 Y 正向是逆时针，所以取负。
-    object.rotation.y = -(prop.rotationDeg * Math.PI) / 180;
+    // rotationDeg 为 ENU 逆时针为正；壳体 z = −y，three R_y(φ) 直接取 φ = rotationDeg。
+    object.rotation.y = (prop.rotationDeg * Math.PI) / 180;
     object.userData.planPropId = prop.id;
     object.name = `plan-prop-${prop.kind}`;
     group.add(object);

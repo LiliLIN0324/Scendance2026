@@ -74,7 +74,7 @@ describe('workspace management', () => {
     render(<ProjectsPage />); await ready(); changeStudio('studio-b'); await ready();
     fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
     // 2026-11-11 新主线：工作台里就有搜地点的能力，不该先过一个找场地页；
-    // 直接跳 /editor/ → workspace-shell 写 default-outdoor 起步草稿（平湖秋月）→ 挂 OutdoorPlanWorkspace。
+    // 直接跳 /editor/ → workspace-shell 写 default-outdoor 起步草稿（平湖秋月）→ 并入同一 RoomOrganizer（外壳 A 已下线）。
     expect(mocks.replace).toHaveBeenCalledWith('/editor/');
     expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.createProject).not.toHaveBeenCalled();

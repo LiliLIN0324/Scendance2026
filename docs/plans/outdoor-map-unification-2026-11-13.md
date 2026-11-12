@@ -68,32 +68,56 @@
 
 ## 4. 分阶段落地
 
-### 阶段 14a · 止血（低风险，先消残留）
+### 阶段 14a · 止血（低风险，先消残留）✅ 已完成 2026-11-13
 
-- 在 `showAgent`（及 `toggleAgent` 收口）增加条件化复位：若户外已开（`outdoor2DOpen || outdoor3dTakeover`）且当前处于 3D 接管态，退回户外 2D 地图——`setOutdoor3dTakeoverActive(false)`、`setOutdoor2DOpen(true)`、`setOutdoorView('2d')`；**不整体关闭户外**。
-- 户外未开时不动任何户外状态（室内物料 / 空间路径不受影响）。
-- 不改动 2D↔3D 胶囊直切链路。
-- 验收：3D 接管态点 Agent/Bingo/空间/物料，右侧回到同一幅户外 2D 地图，无接管空屏残留。
+- `showAgent`（`room-organizer.tsx:831`）增加条件化复位：`outdoor3dTakeoverActive && !outdoor2DOpen` 时退回户外 2D——`clearPendingPlacement()` + `setOutdoor3dTakeoverActive(false)` + `setOutdoor2DOpen(true)` + `setOutdoorPanel('library')` + `setOutdoorView('2d')`；**不整体关闭户外**。
+- 成员私信入口 `RailTeamBlock onOpenChat`（:4324 一带）补同一复位，绕过 `showAgent` 的对话路径一并覆盖。
+- 依赖只列前置 state（`outdoor2DOpen` / `outdoor3dTakeoverActive`）；`clearPendingPlacement` 留在回调体内，规避 `showAgent` 在前、后置 const 的 TDZ。
+- 户外未开时不动任何户外状态；2D↔3D 胶囊直切链路未改。
+- **真机验收（dev 3210）**：进户外 2D → 胶囊切 3D（接管层 `visible/active=true`）→ 点 Agent，接管层回落 `hidden/active=false`，左侧新会话栏、右侧回归 2D 地图，无空屏残留；Bingo/空间/物料 切换接管层不复活。取证 `residual-after-agent-fixed.png`。
+- **类型/测试**：Node24 `tsc --noEmit` exit 0；map-preservation / rail-side-panels / bingo-rail-button 通过。剩余失败为基线既有测试债（agent-panel contexts mock 缺 `useSelectionOptional`、workbench-rail-head 旧四形体断言），非本次引入。
 
-### 阶段 14b · 分流统一（下线 A）
+### 阶段 14b · 分流统一（下线 A）🟡 代码完成，待真机走查
 
-- `workspace-shell.tsx`：移除 `OutdoorPlanWorkspace` dynamic 挂载与户外二选一；始终挂 `RoomOrganizer`，把判定出的 `outdoorProjectId`（户外语境信号）作为 prop 传入。
-- B 按 `outdoorProjectId` 经 `readOutdoorProjectRecord` 载入本机户外草稿；无记录用 `createStarterOutdoorPlan(anchor)` 起步；默认打开户外 2D。
-- 调整 `venue-picker.tsx` 跳转、`resolveOutdoorProjectId` 用途；更新 `app/page.test.tsx:229`、`app/projects/page.react.test.tsx:73` 断言与注释。
-- 待评估：A 文件 `outdoor-plan-workspace.tsx` 在无引用后删除或保留备用；其导入的独立导航/设置是否被 B 复用。
+- `workspace-shell.tsx`：移除 `OutdoorPlanWorkspace` dynamic 挂载与户外二选一；始终挂 `RoomOrganizer`，把判定出的 `outdoorProjectId` 作为 prop 传入。无 query 兜底（`/` 与 `/editor` 同口径）：室内草稿有物料续室内（null），否则续最近户外项目或起步户外；带参（`?mode=…` / `?restore=backup` / `?login=…`）仍走 `resolveOutdoorProjectId`。
+- `room-organizer.tsx`：新增 `outdoorProjectId` prop 与 `isOutdoorProject` 派生；起步 effect 在纯户外时打开户外 2D、回读项目视角记忆；overlay 的 `projectId/anchor/activityName/seedPlan/sceneObjects` 按纯户外切换；`handleOutdoorPlanChange` 纯户外跳过室内壳体回写（不 `applyLayout`），只镜像 3D 地面；`outdoorPlan` 身份判定兼容户外项目 ID。
+- 持久化复用 overlay 既有管线：`slotId=projectId` 已接 `readOutdoorProjectRecord`/防抖 `saveOutdoorProjectRecord`/`read·saveOutdoorPlanView`，未另写存储层。
+- 测试：`app/page.test.tsx:229` 断言改为 B mock 的「打开 Bingo Agent」钮（旧 A 骨架文案不再出现）；`projects/page` 注释同步；app 子集 23 用例通过。
+- 待办：A 文件 `outdoor-plan-workspace.tsx` 已无代码引用，先保留备用，14d 真机通过后再删；其独立导航/设置不进 B。
 
-### 阶段 14c · 唯一地图（B 内地图层做减法）
+### 阶段 14c · 唯一地图（B 内地图层做减法）🟡 代码完成，待真机走查
 
-- 户外语境下室内 `Viewport` 让位（隐藏或不初始化 three）；不再与户外 overlay / 接管层同帧叠加。
-- 2D overlay 与 3D takeover 严格互斥显隐；overlay 保活隐藏仅作为编辑桥，不出镜。
-- 核对 `outdoorSceneObjects`（室内 items → 壳体落位）与边界回写在唯一地图口径下的去留；与既有计划 D1（SitePlanData 唯一真相）对齐。
-- 左轨对话切换只改左栏，不触动地图层显隐。
+- 纯户外语境下室内 `.sc-scene-viewport` 容器 `visibility:hidden` + `pointerEvents:none`（双 canvas 常驻维持渲染管线，暂未卸载 three；真机评估资源占用后再定是否卸载）。
+- overlay 与接管 3D 的 `sceneObjects` 纯户外传 `[]`，室内物料壳体不投影到户外地图。
+- 2D overlay 与 3D takeover 互斥沿用既有接管/保活逻辑；左轨对话切换只换左栏（14a 复位兜底），不改地图层显隐。
+- 待真机核对：纯户外打开时室内 three 场景不与户外地图同帧叠加；户外地图为右侧唯一画面。
 
-### 阶段 14d · 验收
+### 阶段 14d · 验收 🟡 静态验收通过，真机走查待浏览器后端恢复
 
-- Node24 `tsc --noEmit` exit 0。
-- `vitest run` 对照基线（52 用例失败 / 21 文件，均为既有测试债）不新增失败。
-- 真机走查：2D↔3D 直切镜头保持；切对话不残留接管层；户外草稿刷新续上；退出户外画面正确；对话轨可与地图联动。
+- Node24 `tsc --noEmit` exit 0（`tsc-14b.log`）。
+- 定向单测全绿：app 分流 23 通过（`vitest-14b-shell.log`）；B 侧房间组织器子集 12 通过（`vitest-14b-b.log`）；全量里被并发压挂的 4 个文件（brand-tokens / structure-satellite / scene-delivery / amap-venue-picker）单跑 55 通过。
+- 全量对照：基线实测 22 失败文件 / 111 失败用例（`vitest-node24-post-ci-20261112.log`）；本次失败集合为既有测试债（scene-layers 12、structure-v2 9、scene-layers-panel 9、shared-seating 4 等）叠加并发超时/抖动，未发现本轮代码引入的真实回归。基线债归类仍挂 #12。
+- 待真机走查（浏览器后端恢复后）：纯户外打开右侧仅户外 2D/3D、室内 Viewport 隐藏不叠；左轨 Agent/Bingo/空间/物料/私信切换不复活接管层、不留空屏；2D↔3D 胶囊直切镜头保持；草稿按项目续上、刷新后视角记忆恢复；室内草稿有物料时冷根仍续室内。
+
+### 阶段 14e · 白屏诱因核查 + 纯户外空屏路径加固 🟡 代码完成，待真机
+
+- **白屏直接诱因（2026-11-13 核查）**：本仓库 dev（3210）进程曾退出，3199 代理存活；浏览器旧页面壳/右轨/左栏会话仍在，但 three/地图 chunk 随重启 hash 变化、旧 chunk 取不到，画布整片白屏。已用 Node24 重启 `scripts/dev-with-amap-proxy.mjs --hostname 127.0.0.1 --port 3210`，3210 LISTEN、`/editor` 编译 200、3199 `/health` 200。旧页面需硬刷新（Ctrl+Shift+R）加载新 chunk。
+- **代码层加固（room-organizer.tsx）**：
+  1. 左轨「户外规划」钮收起分支加纯户外守卫：`if (isOutdoorProject) return;`——纯户外项目没有室内壳体可回退，整体收起会让户外 overlay 隐藏、室内 Viewport 又已让位，右侧直接空屏；纯户外下地图保持出镜，禁止收起。
+  2. `showAgent` 复位条件由「仅接管态」扩为「接管态 或 纯户外双 false（`!outdoor2DOpen && !outdoor3dTakeoverActive`）」，兜底切对话时回 2D；deps 补 `isOutdoorProject`。
+  3. `RailTeamBlock onOpenChat` 私信入口补同一纯户外双 false 兜底。
+- 复核 `setOutdoor2DOpen(false)` 仅剩两处：切 3D 接管（保留 3D 画面，非空屏）与已加守卫的收起分支。
+- Node24 `tsc --noEmit` exit 0（`tsc-14e.log`）；app 定向 23 通过（`vitest-14e-shell.log`）。
+- **地图 key 现状**：仓库根 `.env.local` 缺失，代理读不到 `LUX3D_API_KEY`（`/health` `keyConfigured:false`）与 `TDT_KEY`；前端 `.env.local` 仅 Supabase。key 文件被 gitignore，不随 main 提交下发，需本机配置或由服务端 functions 持有。2D OSM 直连不受影响；3D aholo / 天地图瓦片仍挂 #13。
+- **分支差距**：本地 HEAD `76ccbe6f` 落后 `origin/main` 一个提交 `72af5635`（POI 真实轮廓架构 + 选区体验 + 工作树批量入库；含瓦片链路、tdt-probe、aholo 代理改动，并直接删除 A 文件 `outdoor-plan-workspace.tsx`）。本地有未提交在制品（14b/14c 及并行设施模型改动），未合并；合入前先备份。
+- 浏览器自动化：bu 产品浏览器后端 `sending window binding timed out`（守护未挂），cu 桌面会话 `NO_SESSION`；9222 端口非标准 DevTools 端点。真机走查暂由用户手动完成。
+
+### 1.5 B 初始化耦合事实（2026-11-13 实读）
+
+- `RoomOrganizer` 签名 :291：`{ controller, isActive, localWriteCapability, isolatedWriteSession }`，无户外项目 id 入参。
+- 核心状态来自 `useLayoutState()`（室内 `RoomLayout` / layoutStore）；`sessionScope = activity:${layout.id}`，会话、历史、物料、导出全部绑室内 layout。
+- `outdoorPlanState` 初始 `null`，由 overlay `onPlanChange` 回写；起步 plan 走 `seededPlanFromLayout(layout)`。**B 不调用 `readOutdoorProjectRecord`**，不从本机 SitePlanData 草稿恢复。
+- 因此 14b 让纯户外项目进 B，需新增 `outdoorProjectId` 入参 + 草稿载入 effect（对齐 D1：SitePlanData 为真相），并处理室内 layout/会话在户外语境的空起步；14c 再让室内 Viewport 让位。
 
 ## 5. 风险与边界
 

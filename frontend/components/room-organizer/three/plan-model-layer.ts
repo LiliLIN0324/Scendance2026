@@ -7,7 +7,7 @@
  *
  * 坐标口径（外层偏移由调用方承担，本模块只管内层落位）：
  * - 内层：`position = (prop.center.x - metrics.width / 2, 0, prop.center.z - metrics.depth / 2)`、
- *   `rotation.y = -(rotationDeg * π / 180) + (swap ? π / 2 : 0)`——与
+ *   `rotation.y = (rotationDeg * π / 180) + (swap ? π / 2 : 0)`——与
  *   plan-footprint-builder 的 shapePoint / 占位体完全同式。
  * - 外层：户外 3D 的组补 `(siteFrame.cx, 0, -siteFrame.cy)`（ENU 世界）；主舞台壳体世界
  *   原点已居中，组放在 (0,0,0) 即可与分区色块对齐。
@@ -46,11 +46,15 @@ export function planModelTransform(
 ): { position: [number, number, number]; rotationY: number } {
   return {
     position: [prop.center.x - metrics.width / 2, 0, prop.center.z - metrics.depth / 2],
-    // 2D 画布顺时针为正；three 绕 Y 正向是逆时针，所以取负。
+    // rotationDeg 为 ENU 逆时针为正；壳体 z = −y，three R_y(φ) 取 φ = rotationDeg。
     // swap：模型长边换到占地长边（例如 7.5 m 长的餐车塞进 6×2.5 的格子）。
-    rotationY: -(prop.rotationDeg * Math.PI) / 180 + (swap ? Math.PI / 2 : 0),
+    rotationY: (prop.rotationDeg * Math.PI) / 180 + (swap ? Math.PI / 2 : 0),
   };
 }
+
+/** 兜底收缩只用到的候选拟合字段（不必带 slug/name 等选模信息）。 */
+export type ShrinkFit = Pick<FacilityModelCandidate, 'width' | 'depth' | 'glbUrl'> &
+  Pick<FacilityModelFit, 'scale' | 'swap' | 'height'>;
 
 /**
  * 物料库登记尺寸与 GLB 实际包围盒有出入时，模型不允许超出 2D 占地的兜底收缩。
@@ -58,7 +62,7 @@ export function planModelTransform(
  */
 export function shrinkFactorFor(
   prop: PlanPropShape,
-  candidate: FacilityModelCandidate & FacilityModelFit,
+  candidate: ShrinkFit,
   dims: { width: number; depth: number; height: number },
 ): number {
   if (!(dims.width > 0 && dims.depth > 0 && dims.height > 0)) return 1;
@@ -103,8 +107,26 @@ export function collectPlaceholdersByPropId(group: THREE.Object3D): Map<string, 
 }
 
 /**
- * plan 编辑后同步既有模型位置（只挪位置不重摆新模型——与 outdoor-plan-3d
- * syncFootprint 的原语义一致；新设施等场景重挂时再落 GLB）。
+ * 设施 id 差集对账：新增 / 保留 / 移除三态（模型层孤儿剪枝的纯函数口径，便于单测）。
+ */
+export function diffPlanPropIds(
+  prev: Iterable<string>,
+  next: readonly string[],
+): { added: string[]; kept: string[]; removed: string[] } {
+  const prevSet = new Set(prev);
+  const nextSet = new Set(next);
+  const added = next.filter((id) => !prevSet.has(id));
+  const kept = next.filter((id) => prevSet.has(id));
+  const removed = [...prevSet].filter((id) => !nextSet.has(id));
+  return { added, kept, removed };
+}
+
+/** 落模时登记的候选拟合快照：编辑后按最新占地重算旋转/缩放用（不重选模型变体）。 */
+type PlacedPropFit = ShrinkFit;
+
+/**
+ * plan 编辑后同步既有模型的落位：位置、旋转、兜底缩放都按最新 2D 占地重算，
+ * 保证模型与黄框完全对齐；只改既有模型，不重摆新模型（新设施由 placeNew 落地）。
  */
 export function syncPlanModelPositions(
   layer: THREE.Object3D,
@@ -114,8 +136,32 @@ export function syncPlanModelPositions(
   props.forEach((prop) => {
     const object = layer.children.find((child) => child.userData.planPropId === prop.id);
     if (!object) return;
-    const { position } = planModelTransform(prop, metrics, false);
+    const fit = object.userData.planPropFit as PlacedPropFit | undefined;
+    const swap = fit?.swap ?? false;
+    const { position, rotationY } = planModelTransform(prop, metrics, swap);
     object.position.set(position[0], position[1], position[2]);
+    object.rotation.y = rotationY;
+    // 缩放：以落模基底系数为底，按最新占地等比跟随放大/缩小，实测越界再由 shrink 兜底。
+    const base = object.userData.planPropBaseScale as readonly [number, number, number] | undefined;
+    object.scale.set(base?.[0] ?? 1, base?.[1] ?? 1, base?.[2] ?? 1);
+    if (fit) {
+      const dims = fit.glbUrl ? getGlbAssetState(fit.glbUrl)?.dimensions : undefined;
+      // 按最新占地重算 contain：框变大模型跟放大、变小跟缩小（方案甲：框即模型真实外廓）。
+      // 落模基底系数相对当时 contain_old，故跟随倍率 = 新 contain / 落模 contain。
+      const contain = fit.swap
+        ? Math.min(prop.width / fit.depth, prop.depth / fit.width)
+        : Math.min(prop.width / fit.width, prop.depth / fit.depth);
+      const follow = fit.scale > 0 ? contain / fit.scale : 1;
+      object.scale.set(
+        (base?.[0] ?? 1) * follow,
+        (base?.[1] ?? 1) * follow,
+        (base?.[2] ?? 1) * follow,
+      );
+      if (dims) {
+        const shrink = shrinkFactorFor(prop, fit, dims);
+        object.scale.multiplyScalar(shrink);
+      }
+    }
   });
 }
 
@@ -152,10 +198,29 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
   group.name = 'plan-models';
   deps.parent.add(group);
   const placedPropIds = new Set<string>();
+  /** 当前 plan 里仍然存在的设施 id；删除剪枝与晚到模型回写都以此为准。 */
+  const livePropIds = new Set(deps.props.map((prop) => prop.id));
   let placeholders = deps.placeholders;
   let run = 0;
   run += 1;
   const initialRun = run;
+
+  /**
+   * 删除剪枝：plan 里已不存在的设施，把已落地的 GLB 从组里摘掉并释放几何/材质，
+   * 同时从 placedPropIds 除名——否则旧模型会留在原位成孤儿（J1）。
+   */
+  const pruneRemoved = (props: readonly PlanPropShape[]): void => {
+    const { removed } = diffPlanPropIds(placedPropIds, props.map((prop) => prop.id));
+    if (removed.length === 0) return;
+    const removedSet = new Set(removed);
+    group.children.slice().forEach((child) => {
+      const propId = child.userData.planPropId;
+      if (typeof propId !== 'string' || !removedSet.has(propId)) return;
+      disposeOwnedModel(child);
+      group.remove(child);
+      placedPropIds.delete(propId);
+    });
+  };
 
   const placeModel = (
     prop: PlanPropShape,
@@ -174,7 +239,14 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
           disposeOwnedModel(model);
           return;
         }
+        // 模型晚到前设施已被删除：不挂回组，直接释放，避免孤儿模型复活。
+        if (!livePropIds.has(prop.id)) {
+          disposeOwnedModel(model);
+          return;
+        }
         // 兜底：物料库登记的尺寸与 GLB 实际包围盒有出入时，模型不允许超出 2D 占地。
+        // 先留一份落模基底缩放，编辑重算缩放时回到基底再乘新的收缩系数。
+        const baseScale = model.scale.clone();
         const dims = getGlbAssetState(candidate.glbUrl)?.dimensions;
         if (dims) {
           const shrink = shrinkFactorFor(prop, candidate, dims);
@@ -185,6 +257,15 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
         model.rotation.y = transform.rotationY;
         model.name = `plan-model-${prop.kind}`;
         model.userData.planPropId = prop.id;
+        model.userData.planPropBaseScale = [baseScale.x, baseScale.y, baseScale.z] as const;
+        model.userData.planPropFit = {
+          width: candidate.width,
+          depth: candidate.depth,
+          height: candidate.height,
+          scale: candidate.scale,
+          swap: candidate.swap,
+          glbUrl: candidate.glbUrl,
+        } satisfies PlacedPropFit;
         group.add(model);
         const placeholder = placeholders?.get(prop.id);
         if (placeholder) placeholder.visible = false;
@@ -231,6 +312,10 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     nextPlaceholders?: ReadonlyMap<string, THREE.Object3D> | undefined,
   ): void => {
     if (nextPlaceholders) placeholders = nextPlaceholders;
+    livePropIds.clear();
+    props.forEach((prop) => livePropIds.add(prop.id));
+    // 先剪枝已删除设施的孤儿模型，再补新增；两者互不干扰。
+    pruneRemoved(props);
     const pending = props.filter((prop) => !placedPropIds.has(prop.id));
     if (pending.length === 0) return;
     placeAll(pending, metrics);

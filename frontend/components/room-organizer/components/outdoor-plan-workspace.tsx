@@ -39,6 +39,7 @@ import {
   saveOutdoorPlanView,
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
+import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { WorkbenchBrandToggle } from '@/components/room-organizer/panels/workbench-brand-toggle';
 import { SettingsMenu } from '@/components/room-organizer/panels/settings-menu';
@@ -100,7 +101,8 @@ export default function OutdoorPlanWorkspace({ projectId, controller }: { projec
   // 载入本机草稿：无记录（直链 start=outdoor 情形）用起步矩形，并补一条 meta。
   useEffect(() => {
     const record = readOutdoorProjectRecord(projectId);
-    setPlan(record?.plan ?? createStarterOutdoorPlan());
+    // #51 方案甲：载入即把历史自由比例设施吸附到模型权威宽高比（幂等，中心/旋转不变）。
+    setPlan(normalizePlanFacilityFootprints(record?.plan ?? createStarterOutdoorPlan()));
     setName(record?.name ?? '');
     if (!record) {
       const now = new Date().toISOString();

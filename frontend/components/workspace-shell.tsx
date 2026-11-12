@@ -42,16 +42,6 @@ const RoomOrganizer = dynamic(
 );
 
 /**
- * 户外规划工作台（P2-a）：户外项目**完全不挂**室内 RoomOrganizer，
- * 不初始化 three 场景。是否户外由 resolveOutdoorProjectId 判定
- * （?start=outdoor 硬跳 / 本机有该项目的户外草稿），见 outdoor-project-store。
- */
-const OutdoorPlanWorkspace = dynamic(
-  () => import('@/components/room-organizer/components/outdoor-plan-workspace'),
-  { ssr: false, loading: () => <BootSkeleton /> }
-);
-
-/**
  * 打开工作台时的骨架屏（T-VISUAL-2026）。
  * 不再用绿色进度条：进度条既说不出走到了哪，又给「快好了」的假承诺。
  * 这里只是把工作台外壳（顶栏 / 模式轨 / 画布 / 右栏 / 素材架）的形状先摆出来，
@@ -92,16 +82,11 @@ export function BootSkeleton(): JSX.Element {
 }
 
 /**
- * 「最近活动」判定（2026-11-11 用户拍板：`/` 无参数时有最近活动就续上次，没有就直接进户外 2D 规划）：
- * - 本机画布草稿里有物料（室内工作台上次在用）；
- * - 存过户外规划草稿（最近一次户外项目）。
- * 坏草稿 / 存储不可用一律按"没有活动"处理。
- *
- * 2026-11-11 用户再次拍板：**找场地是工作台里的能力**（搜地点 / 场馆 / 地址），
- * 不该挡在入口前面。所以根路径无参数时**直接进户外工作台**（起步锚点平湖秋月），
- * 不先过一个独立的"找场地"页。
+ * 是否存在本机室内布置草稿（画布里已放物料）。坏草稿 / 存储不可用按"没有"处理。
+ * 2026-11-13 收敛 14b：冷根无参时，只有室内草稿在用才续室内；其余情况续最近户外项目
+ * 或起步户外 2D 规划——户外草稿归 decideDefaultOutdoorProject 判定，不再混入室内续接条件。
  */
-function hasRecentActivity(): boolean {
+function hasLocalIndoorDraft(): boolean {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -111,7 +96,7 @@ function hasRecentActivity(): boolean {
   } catch {
     // 坏草稿按无活动处理。
   }
-  return latestOutdoorProjectId() !== null;
+  return false;
 }
 
 /**
@@ -139,11 +124,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
     if (!workspacePath || !ready) { setOutdoorProjectId(null); return; }
-    // 根路径且没有任何参数：有最近活动就续上次，没有就直接进户外工作台（默认草稿，平湖秋月锚点）。
-    // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
-    if (pathname.replace(/\/$/, '') === '' && !window.location.search) {
-      if (hasRecentActivity()) {
-        // 有最近的室内活动 → 让它走原有的无参路径（续本机画布草稿）。
+    // 工作台无任何参数（`/` 或 `/editor` 别名）：室内草稿在用就续室内，否则续最近户外项目
+    // 或起步户外 2D。带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
+    if (!window.location.search) {
+      if (hasLocalIndoorDraft()) {
+        // 本机画布草稿有物料 → 续室内工作台（无户外项目语境）。
         setOutdoorProjectId(null);
       } else {
         setOutdoorProjectId(decideDefaultOutdoorProject());
@@ -162,10 +147,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   return <>
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
-    {editorStarted && (outdoorProjectId !== null
-      ? <OutdoorPlanWorkspace projectId={outdoorProjectId} controller={controller} />
-      : <div hidden={!entered}>
-        <RoomOrganizer isActive={entered} controller={controller} />
+    {/* 2026-11-13 收敛 14b：独立户外工作台 A 下线，户外项目与室内项目统一挂 RoomOrganizer；
+        户外语境由 outdoorProjectId 标识，室内 Viewport 让位，户外草稿按该 id 落本机 store。 */}
+    {editorStarted && (
+      <div hidden={!entered}>
+        <RoomOrganizer isActive={entered} controller={controller} outdoorProjectId={outdoorProjectId} />
       </div>)}
   </>;
 }

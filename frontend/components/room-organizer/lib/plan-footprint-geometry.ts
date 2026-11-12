@@ -245,8 +245,9 @@ export interface PlanFootprintShapes {
 /**
  * 设施占地矩形：绕自身中心按 `rotationDeg` 旋转后的四角。
  *
- * 2D 画布是「x 东、y 向屏幕下方=南」，`rotationDeg` 在画布上顺时针为正；
- * 壳体也是 x 东、z 向南，所以这里用同一套顺时针旋转换算，两个视图的朝向一致。
+ * `rotationDeg` 在 ENU（x 东、y 北）里逆时针为正；壳体是 x 东、z 南（z = −y）。
+ * three 绕 Y 正向把本地 +X 映到 (cosφ, −sinφ)，故壳体矩阵取 φ = rotationDeg，
+ * 与室内 itemCorners 同一套 R_y(φ) 式，保证 2D 画布与 3D 朝向一致。
  */
 export function facilityFootprint(
   facility: Pick<PlanFacility, 'position' | 'rotationDeg' | 'size'>,
@@ -265,8 +266,8 @@ export function facilityFootprint(
     [-halfWidth, halfDepth],
   ];
   return corners.map(([dx, dz]) => {
-    const x = center.x + dx * cos - dz * sin;
-    const z = center.z + dx * sin + dz * cos;
+    const x = center.x + dx * cos + dz * sin;
+    const z = center.z - dx * sin + dz * cos;
     if (!frame.clampPoints) return { x, z };
     return {
       x: clamp(x, 0, frame.width),

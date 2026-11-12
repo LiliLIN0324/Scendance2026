@@ -130,15 +130,23 @@ import {
   facilityInRect,
   facilityPlacementIssues,
   facilitySideResize,
+  facilityUniformCornerResize,
   findFacilityTemplate,
   planFacilityIssues,
   type FacilityAlignMode,
+  type FacilityCornerIndex,
   type FacilitySideIndex,
   type PlanFacilityIssue,
   type PlanFacilityTemplate,
   type PlanRect,
 } from '../lib/site-plan-facilities';
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
+import {
+  facilityFootprintSpec,
+  normalizeFacilitySize,
+  sizeWithDepth,
+  sizeWithWidth,
+} from '../lib/facility-footprint-lock';
 import {
   PLAN_ROUTE_MAX_VERTICES,
   buildRoute,
@@ -1802,10 +1810,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         ? override
         : findFacilityTemplate(pendingId) ?? resolveFacilityTemplate(pendingId);
       if (template) {
+        const spec = facilityFootprintSpec(template.templateId);
         const footprint = facilityFootprintRing({
           position: ghostPointRef.current,
           rotationDeg: 0,
-          size: { width: template.width, depth: template.depth },
+          size: { width: spec.width, depth: spec.depth },
         });
         const invalid = facilityPlacementIssues(footprint, current.boundary).length > 0;
         drawFacilityGhost({ ctx: planCtx, viewport }, template, ghostPointRef.current, { invalid });
@@ -2324,6 +2333,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             ? libraryTemplatesRef.current.get(facilityTemplateRef.current) ?? resolveFacilityTemplate(facilityTemplateRef.current)
             : null);
         if (template) {
+          const spec = facilityFootprintSpec(template.templateId);
           next = {
             ...next,
             facilities: [
@@ -2334,7 +2344,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 name: template.name,
                 position: { x: ghostPointRef.current.x, y: ghostPointRef.current.y },
                 rotationDeg: 0,
-                size: { width: template.width, depth: template.depth },
+                size: { width: spec.width, depth: spec.depth },
                 notes: "",
               },
             ],
@@ -2696,6 +2706,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    */
   function pickLibraryEntry(entry: LibraryEntry) {
     const template = libraryFacilityTemplate(entry);
+    // 2026-11-12 再点同一件已选设施 = 取消选择回浏览（允许「一件都不选」）。
+    if (modeRef.current === 'facility' && facilityTemplateRef.current === template.templateId) {
+      setMode('view');
+      return;
+    }
     // 顺序要紧：setMode 会清空待放模板（切模式即重置草稿），所以先切模式再落模板。
     setMode('facility');
     facilityTemplateRef.current = template.templateId;
@@ -2712,6 +2727,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * worker（纯色圆点位）走布人员，点位色用物件主题色。
    */
   function pickPackEntry(entry: LibraryEntry) {
+    // 2026-11-12 再点当前已激活的同一件包物件 = 取消选择回浏览（与目录贴纸同一口径）。
+    const packTemplateId = entry.packItemId ? `pack:${entry.packId}:${entry.packItemId}` : '';
+    const alreadyActive = entry.placeKind === 'route'
+      ? modeRef.current === 'route' && routePresetRef.current?.name === entry.nameZh
+      : entry.placeKind === 'area'
+        ? modeRef.current === 'zone' && zonePresetRef.current?.name === entry.nameZh
+        : entry.placeKind === 'worker'
+          ? modeRef.current === 'worker' && workerRoleRef.current === entry.nameZh
+          : modeRef.current === 'facility' && facilityTemplateRef.current === packTemplateId;
+    if (alreadyActive) {
+      setMode('view');
+      return;
+    }
     if (entry.placeKind === 'route') {
       setMode('route');
       routePresetRef.current = {
@@ -2746,6 +2774,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /**
+   * 目录条目点选统一口径：已处于该工具（active）时再点一次取消选择、回浏览；
+   * 未激活才进入对应放置工具。允许最终「一件栏目都不选」。
+   */
+  function armOrDisarm(active: boolean, arm: () => void) {
+    if (active) setMode('view');
+    else arm();
+  }
+
+  /**
    * P2-k 第一段工具：区域（圈分区）/ 入口和通道图标（上面列出图标，点了按设施放）/
    * 路线（画动线）。都是已有编辑模式的入口，这里只是把按钮接到 setMode。
    */
@@ -2769,6 +2806,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** P2-k 第三段：劳动力按钮 → 直接进「布人员」模式，岗位名就是按钮名。 */
   function startLaborRole(role: string) {
     if (!onPlanChange) return;
+    // 2026-11-12 再点当前岗位 = 取消选择回浏览（允许一件都不选）。
+    if (modeRef.current === 'worker' && workerRoleRef.current === role) {
+      setMode('view');
+      return;
+    }
     workerRoleRef.current = role;
     setWorkerRole(role);
     setMode('worker');
@@ -2933,6 +2975,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     );
   }
 
+  /** 包物件是否处于已激活状态（与 pickPackEntry 的反查口径一致；再点即取消选择）。 */
+  function packEntryActive(entry: LibraryEntry, templateId: string): boolean {
+    if (entry.placeKind === 'route') return mode === 'route' && routePresetRef.current?.name === entry.nameZh;
+    if (entry.placeKind === 'area') return mode === 'zone' && zonePresetRef.current?.name === entry.nameZh;
+    if (entry.placeKind === 'worker') return mode === 'worker' && workerRole === entry.nameZh;
+    return mode === 'facility' && facilityTemplateId === templateId;
+  }
+
   /** 包物件的放置入口/拖拽/title（树段、包浏览、搜索三处共用）。 */
   function renderPackItemRows(items: readonly LibraryEntry[]) {
     return (
@@ -2941,6 +2991,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           if (!entry.packId || !entry.packItemId) return null;
           const templateId = `pack:${entry.packId}:${entry.packItemId}`;
           const isFacility = entry.placeKind === 'facility';
+          const packActive = packEntryActive(entry, templateId);
           const placeLabel = entry.placeKind === 'route'
             ? '动线'
             : entry.placeKind === 'area'
@@ -2952,8 +3003,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             key: templateId,
             testId: `pack-item-${entry.packId}-${entry.packItemId}`,
             label: entry.nameZh,
-            active: isFacility && facilityTemplateId === templateId,
-            onClick: () => pickPackEntry(entry),
+            active: packActive,
+            onClick: () => armOrDisarm(packActive, () => pickPackEntry(entry)),
             title: placeLabel
               ? `${entry.nameZh}：点击进入画${placeLabel === '点位' ? '人员点位' : placeLabel}（主题色已带）`
               : `${entry.nameZh} / ${entry.nameEn}（默认 ${entry.width}×${entry.depth} m）`,
@@ -3043,12 +3094,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           // 2026-11-12 搜索结果里的活动包物件：彩色 chip + pickPackEntry 语义分派。
           if (entry.packId) {
             const packTemplateIdStr = entry.packItemId ? `pack:${entry.packId}:${entry.packItemId}` : '';
+            const packActive = packEntryActive(entry, packTemplateIdStr);
             return renderOneplanItemRow({
               key: entry.id,
               testId: `pack-item-${entry.packId}-${entry.packItemId}`,
               label: entry.nameZh,
-              active: entry.placeKind === 'facility' && facilityTemplateId === packTemplateIdStr,
-              onClick: () => pickPackEntry(entry),
+              active: packActive,
+              onClick: () => armOrDisarm(packActive, () => pickPackEntry(entry)),
               title: `${entry.nameZh} / ${entry.nameEn}`,
               draggable: entry.placeKind === 'facility',
               onDragStart: entry.placeKind === 'facility'
@@ -3061,13 +3113,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             });
           }
           const template = libraryFacilityTemplate(entry);
-          const active = facilityTemplateId === template.templateId;
+          const active = mode === 'facility' && facilityTemplateId === template.templateId;
           return renderOneplanItemRow({
             key: entry.id,
             testId: `library-item-${entry.kind}-${entry.slug}`,
             label: entry.nameZh,
             active,
-            onClick: () => pickLibraryEntry(entry),
+            onClick: () => armOrDisarm(active, () => pickLibraryEntry(entry)),
             title: `${entry.nameZh} / ${entry.nameEn}（默认 ${entry.width}×${entry.depth} m）`,
             draggable: true,
             onDragStart: event => {
@@ -3172,11 +3224,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     const facilities = current.facilities.map(f => {
       if (f.id !== id) return f;
+      // #51 方案甲收口：任何来源（手柄/面板/程序化写入）的尺寸都吸附到权威宽高比，
+      // 已等比的输入幂等不变，自由比例按长边为锚纠偏，夹取在统一界内。
       const size = patch.size
-        ? {
-            width: clamp(patch.size.width, FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M),
-            depth: clamp(patch.size.depth, FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M),
-          }
+        ? normalizeFacilitySize(patch.size, f.templateId, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M })
         : f.size;
       const rotationDeg = patch.rotationDeg !== undefined ? ((patch.rotationDeg % 360) + 360) % 360 : f.rotationDeg;
       return { ...f, ...patch, size, rotationDeg };
@@ -3396,30 +3447,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const next = facilitySideResize(start, drag.side as FacilitySideIndex, pt, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M });
       return { ...start, position: next.position, size: next.size };
     }
-    // resize：对角点固定，指针投影到本地方向得到新宽深，中心按新尺寸回推。
-    const theta = (start.rotationDeg * Math.PI) / 180;
-    const cos = Math.cos(theta);
-    const sin = Math.sin(theta);
-    const signX = drag.corner === 1 || drag.corner === 2 ? 1 : -1;
-    const signY = drag.corner >= 2 ? 1 : -1;
-    const halfW = start.size.width / 2;
-    const halfD = start.size.depth / 2;
-    const oppX = start.position.x - signX * halfW * cos + signY * halfD * sin;
-    const oppY = start.position.y - signX * halfW * sin - signY * halfD * cos;
-    const dx = pt.x - oppX;
-    const dy = pt.y - oppY;
-    const localX = dx * cos + dy * sin;
-    const localY = -dx * sin + dy * cos;
-    const width = clamp(Math.abs(localX), FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M);
-    const depth = clamp(Math.abs(localY), FACILITY_MIN_SIZE_M, FACILITY_MAX_SIZE_M);
-    return {
-      ...start,
-      position: {
-        x: oppX + signX * (width / 2) * cos - signY * (depth / 2) * sin,
-        y: oppY + signX * (width / 2) * sin + signY * (depth / 2) * cos,
-      },
-      size: { width, depth },
-    };
+    // resize（#51 方案甲）：对角固定的等比角缩放，宽深同乘统一系数，中心按新尺寸回推。
+    const next = facilityUniformCornerResize(
+      start,
+      drag.corner as FacilityCornerIndex,
+      pt,
+      { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M },
+    );
+    return { ...start, position: next.position, size: next.size };
   }
 
   /* ---------------- H2-d 动线 / 节点 / 人员 ---------------- */
@@ -5388,7 +5423,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             value={Number(selectedFacility.size.width.toFixed(1))}
                             onChange={event => {
                               const width = Number(event.target.value);
-                              if (Number.isFinite(width)) updateFacility(selectedFacility.id, { size: { width, depth: selectedFacility.size.depth } });
+                              if (Number.isFinite(width)) {
+                                updateFacility(selectedFacility.id, {
+                                  size: sizeWithWidth(width, selectedFacility.size, selectedFacility.templateId,
+                                    { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
+                                });
+                              }
                             }}
                             style={benchUnitInputStyle}
                           />
@@ -5405,7 +5445,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             value={Number(selectedFacility.size.depth.toFixed(1))}
                             onChange={event => {
                               const depth = Number(event.target.value);
-                              if (Number.isFinite(depth)) updateFacility(selectedFacility.id, { size: { width: selectedFacility.size.width, depth } });
+                              if (Number.isFinite(depth)) {
+                                updateFacility(selectedFacility.id, {
+                                  size: sizeWithDepth(depth, selectedFacility.size, selectedFacility.templateId,
+                                    { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
+                                });
+                              }
                             }}
                             style={benchUnitInputStyle}
                           />
@@ -6620,18 +6665,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 testId: 'catalog-boundary',
                                 label: plan.boundary.length > 0 ? '场地边界（重画）' : '场地边界',
                                 active: mode === 'boundary',
-                                onClick: () => startAreaTool('boundary'),
+                                onClick: () => armOrDisarm(mode === 'boundary', () => startAreaTool('boundary')),
                                 title: '沿场地单击加顶点，闭合后替换旧边界',
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_LAYER_COLORS.boundary, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
                               })}
-                              {planZoneSemantics.map(s => renderOneplanItemRow({
+                              {planZoneSemantics.map(s => {
+                                const zoneActive = mode === 'zone' && zoneSemantic === s;
+                                return renderOneplanItemRow({
                                 key: `zone-${s}`,
                                 testId: `catalog-zone-${s}`,
                                 label: planZoneSemanticLabels[s],
-                                active: mode === 'zone' && zoneSemantic === s,
-                                onClick: () => { setZoneSemantic(s); startAreaTool('zone'); },
+                                active: zoneActive,
+                                onClick: () => armOrDisarm(zoneActive, () => { setZoneSemantic(s); startAreaTool('zone'); }),
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_ZONE_COLORS[s], boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
-                              }))}
+                              });
+                              })}
                             </div>
                           )}
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '入口和通道图标', label: '入口和通道图标', count: libraryEntranceIcons.length + 1, icon: 'door-open' })}
@@ -6642,7 +6690,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 testId: 'catalog-area-node',
                                 label: '出入口节点',
                                 active: mode === 'node',
-                                onClick: () => startAreaTool('node'),
+                                onClick: () => armOrDisarm(mode === 'node', () => startAreaTool('node')),
                                 icon: <NodeToolIcon size={16} aria-hidden color={PLANNING_LAYER_COLORS.access} />,
                               })}
                               {renderOneplanStickerRows(libraryEntranceIcons)}
@@ -6651,14 +6699,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '路线', label: '路线', count: planRouteKinds.length, icon: 'route' })}
                           {openLibrarySubgroups.includes('areas:路线') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                              {planRouteKinds.map(k => renderOneplanItemRow({
+                              {planRouteKinds.map(k => {
+                                const routeActive = mode === 'route' && routeKind === k;
+                                return renderOneplanItemRow({
                                 key: `route-${k}`,
                                 testId: `catalog-route-${k}`,
                                 label: planRouteKindLabels[k],
-                                active: mode === 'route' && routeKind === k,
-                                onClick: () => { routeKindRef.current = k; setRouteKind(k); draw(); startAreaTool('route'); },
+                                active: routeActive,
+                                onClick: () => armOrDisarm(routeActive, () => { routeKindRef.current = k; setRouteKind(k); draw(); startAreaTool('route'); }),
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 16, height: 5, borderRadius: 3, background: PLANNING_ROUTE_KIND_COLORS[k] }} /></span>,
-                              }))}
+                              });
+                              })}
                             </div>
                           )}
                         </>
@@ -6725,7 +6776,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                               testId: `catalog-labor-${role}`,
                               label: role,
                               active: mode === 'worker' && workerRole === role,
-                              onClick: () => startLaborRole(role),
+                              onClick: () => armOrDisarm(mode === 'worker' && workerRole === role, () => startLaborRole(role)),
                               icon: (
                                 <span
                                   aria-hidden

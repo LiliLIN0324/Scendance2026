@@ -5,9 +5,11 @@
  * （x 东、z 南、0..width / 0..depth）。这里负责把两者对上，并给出朝向，
  * 让 3D 渲染层只负责"摆"和"着色"。
  *
- * 口径与 three/plan-footprint-builder.ts 保持一致：设施实体用
- * `position.set(center.x - metrics.width / 2, 0, center.z - metrics.depth / 2)`、
- * `rotation.y = -(rotationDeg * Math.PI) / 180`，组再补 (w/2, 0, -d/2)。
+ * 口径与 three/plan-footprint-builder.ts 保持位置一致：设施实体用
+ * `position.set(center.x - metrics.width / 2, 0, center.z - metrics.depth / 2)`。
+ * 朝向分两套：本层服务 bridge 派生的场景物件，其 `rotationDeg` 已在 bridge 里反号存入，
+ * 故 3D 还原 `rotation.y = -(rotationDeg * Math.PI) / 180`；户外原生设施（plan-model-layer /
+ * plan-footprint-builder）存的是 ENU 平面角，3D 取 `+rotationDeg`，两者约定不同、不要混用。
  */
 
 import { planShellFrame } from './plan-footprint-geometry';
