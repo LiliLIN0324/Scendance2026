@@ -1,0 +1,42 @@
+/* 选中物件弹层 · 局部 AI 动作入口：只预填到既有 composer，不发送、不接管画布指针。 */
+.sc-ai-local { margin-top: 20px; }
+
+.sc-ai-local-row { display: flex; gap: 7px; }
+
+.sc-ai-local-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--sc-line);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--sc-ink);
+  font-size: var(--fs-p2);
+  font-family: inherit;
+}
+
+.sc-ai-local-input:disabled { background: var(--plane); border-color: var(--hair); color: var(--faint); }
+
+.sc-ai-local-row .sc-button { flex: 0 0 auto; }
+
+.sc-ai-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* 与提案卡续问 chip 同规格的描边胶囊；弹层在 .sc-agent-panel 树外，需要自带样式。 */
+.sc-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--sc-line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--sc-ink);
+  font-size: var(--fs-p2);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sc-ai-chip:hover:not(:disabled) { border-color: var(--sc-muted); background: var(--plane-deep); }
+
+.sc-ai-chip:disabled { background: var(--plane); border-color: var(--hair); color: var(--faint); cursor: not-allowed; }

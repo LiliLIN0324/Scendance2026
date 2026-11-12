@@ -360,6 +360,9 @@ export function planRouteLengthM(points: readonly PlanPoint[]): number {
   return total;
 }
 
+/** 户外草稿固定未核验 notice：读取不代表已用于排布、容量核定或通过安全检查。 */
+export const AGENT_PLAN_OBSERVATION_NOTICE='户外平面草稿为待核验快照；读取不代表已用于排布、容量核定或通过安全检查。';
+
 /** 快照指纹：canonical JSON + sha256（与 sceneHash 同一套路），交付/版本对账共用。 */
 export async function sitePlanHash(snapshot: SitePlanSnapshot): Promise<string> {
   return sha256(canonical({ planId: snapshot.planId, revision: snapshot.revision, data: snapshot.data }));

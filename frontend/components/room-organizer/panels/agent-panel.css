@@ -233,6 +233,19 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-notes p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--wk-muted); }
 .ap-notes .ap-warn-line { color: var(--warn); font-size: 12px; }
 .ap-plan .ap-seat-fix { margin: -4px 0 0; }
+/* 提案分组清单：新增 / 挪动 / 撤掉 三组可点条目，字号灰阶复用 ap-note/ap-stat，不新造色阶。 */
+.ap-change-list { display: flex; flex-direction: column; gap: 6px; }
+.ap-change-summary { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-muted); }
+.ap-change-group { width: 100%; }
+.ap-change-group > summary { cursor: pointer; font-size: var(--fs-p2); color: var(--wk-ink-soft); }
+.ap-change-group > summary:hover { color: var(--wk-ink); }
+.ap-change-group ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ap-change-item {
+  display: block; width: 100%; text-align: left; border: 1px solid var(--wk-hair);
+  border-radius: var(--r-sm); background: var(--wk-plane); padding: 6px 10px;
+  font-size: var(--fs-p2); color: var(--wk-ink); cursor: pointer; overflow-wrap: anywhere;
+}
+.ap-change-item:hover { background: var(--plane-deep, #ECEDEF); }
 .ap-ok-line { color: var(--ap-green); font-size: var(--fs-p2); }
 .ap-warn-line { color: var(--warn); font-size: var(--fs-p2); display: flex; align-items: flex-start; gap: 5px; }
 .ap-warn-line span { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; background: rgba(150, 101, 31, .12); color: var(--warn); font-size: 10px; font-weight: 700; flex: 0 0 14px; }
@@ -998,3 +1011,43 @@ button.ap-ghost {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 32%, transparent); }
   50% { box-shadow: 0 0 0 7px transparent; }
 }
+
+/* ── 画布顶左徽标：容量 / 座位软提示（非闸门），复用全局色板，不新造色阶 ── */
+.sc-workbench .sc-canvas-heading.is-badge-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.sc-canvas-heading-badges { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sc-canvas-heading-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  line-height: 1.5;
+  border: 1px solid var(--wk-hair);
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+}
+.sc-canvas-heading-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wk-ink-soft);
+}
+.sc-canvas-heading-badge.is-ok {
+  background: color-mix(in srgb, var(--green) 10%, var(--wk-paper));
+  color: var(--wk-ink);
+  border-color: color-mix(in srgb, var(--green) 30%, var(--wk-hair));
+}
+.sc-canvas-heading-badge.is-ok::before { background: var(--green); }
+.sc-canvas-heading-badge.is-warn {
+  background: color-mix(in srgb, var(--warn) 10%, var(--wk-paper));
+  color: var(--wk-ink);
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--wk-hair));
+}
+.sc-canvas-heading-badge.is-warn::before { background: var(--warn); }

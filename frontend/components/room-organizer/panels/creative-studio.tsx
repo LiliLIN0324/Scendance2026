@@ -26,6 +26,7 @@ import { layoutStore } from '../hooks/use-layout-store';
 import { getActiveAssistantSessionId, subscribeActiveAssistantSession } from '../hooks/use-assistant-sessions';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { agentRunFailureMessage } from '../lib/agent-run-failure';
+import { buildPlanObservation, computePlanFingerprint, type AgentPlanObservation, type OutdoorPlanCapture } from '../lib/plan-agent-observation';
 import { STORAGE_KEY } from '../lib/constants';
 import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARDS, INITIAL_BRIEF, isBlankBriefScaffold, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { countSingleSeats } from '../lib/seat-requirement';
@@ -174,7 +175,7 @@ export async function withApplyLock<T>(scope: string, run: () => Promise<T>): Pr
 }
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
 export type SeatingAllocationCapture={status:'ready';value:AgentRunInput['context']['seatingAllocation'];specs?:AgentRunInput['context']['seatingSpecs']|undefined;defaults?:{desk?:string|undefined;chair?:string|undefined}|undefined;token:string;annotationObservation?:AgentRunInput['context']['annotationObservation'];annotationProvenance?:readonly AnnotationProof[];readAnnotationReview?:()=>{observation:NonNullable<AgentRunInput['context']['annotationObservation']>;provenance:readonly AnnotationProof[]}|null;isCurrent:()=>boolean}|{status:'unavailable'};
-interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; controller: BackendSession; layout: RoomLayout; captureImage?: DeliveryCapture | undefined; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; commitFreshActivityLayout?(next: RoomLayout, clearance: FreshActivityScopeClearance): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
+interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; controller: BackendSession; layout: RoomLayout; captureImage?: DeliveryCapture | undefined; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; captureOutdoorPlan?:(()=>OutdoorPlanCapture|undefined)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; commitFreshActivityLayout?(next: RoomLayout, clearance: FreshActivityScopeClearance): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 function serializeReadonlyBrief(scope:string,kind:'original'|'draft',value:unknown):string {
   const envelope={format:'scendance-readonly-brief-v1',scope,kind,notice:kind==='original'?'原始本机保存记录；来源及确认状态均需独立核对。':'当前未保存的页面草稿；不代表已保存或已确认。',value};
@@ -264,7 +265,7 @@ export function clearUnsentMessageDraftsForTests(){unsentMessageDrafts.clear();i
 const PARTIAL_RUN_NOTICE='后续处理中断，已保留通过检查的方案，请核对后继续。';
 const ANNOTATION_BLOCK='新布置占用了已标路线或预留区，请调整后重新生成。';
 
-export function CreativeStudioProvider({ pendingCandidates, reviewContext, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken, isFloorCurrent, captureImage, captureMobility, captureDialogue, captureSeatingAllocation, getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, commitFreshActivityLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
+export function CreativeStudioProvider({ pendingCandidates, reviewContext, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken, isFloorCurrent, captureImage, captureMobility, captureDialogue, captureSeatingAllocation, captureOutdoorPlan, getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, commitFreshActivityLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
   const applyAuthority=useRef<{capability:LocalWriteCapability|undefined;source:SourceWriteGuard|undefined;revoked:boolean;abort:AbortController}|null>(null);
   if(!applyAuthority.current&&(writeCapability||sourceWriteGuard))applyAuthority.current={capability:writeCapability,source:sourceWriteGuard,revoked:false,abort:new AbortController()};
   else if(applyAuthority.current&&(writeCapability!==applyAuthority.current.capability||sourceWriteGuard!==applyAuthority.current.source)){
@@ -534,6 +535,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   const sessionGuardRequired=useRef(!!isSessionCurrent);if(isSessionCurrent)sessionGuardRequired.current=true;
   const seatingCaptureRequired=useRef(!!captureSeatingAllocation);if(captureSeatingAllocation)seatingCaptureRequired.current=true;
   const seatingCaptureRef=useRef(captureSeatingAllocation);seatingCaptureRef.current=captureSeatingAllocation;
+  const outdoorPlanCaptureRef=useRef(captureOutdoorPlan);outdoorPlanCaptureRef.current=captureOutdoorPlan;
   const seatingCurrent=(capture:Extract<SeatingAllocationCapture,{status:'ready'}>|null|undefined):boolean=>{
     if(!capture)return !seatingCaptureRequired.current;
     try{return !!seatingCaptureRef.current&&capture.isCurrent();}catch{return false;}
@@ -1757,6 +1759,15 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
         try{annotationEvidence={observation:structuredClone(annotationObservation),provenance:structuredClone(seatingCapture?.annotationProvenance??[]),projectBinding:annotationProjectBinding(base),base:structuredClone(base)};}
         catch{throw new Error('规划标注无法完整冻结，本次生成尚未提交。');}
       }
+      let planObservation:AgentPlanObservation|undefined;
+      const outdoorCapture=outdoorPlanCaptureRef.current?.();
+      if(outdoorCapture){
+        try{
+          const frozenPlan=structuredClone(outdoorCapture.plan);
+          const planHash=await computePlanFingerprint(frozenPlan);
+          planObservation=buildPlanObservation({plan:frozenPlan,anchor:outdoorCapture.anchor,selected:outdoorCapture.selected,...(planHash?{planHash}:{})});
+        }catch{throw new Error('户外平面草稿无法完整冻结，本次生成尚未提交。');}
+      }
       const pendingRecovery=readApplyRecovery(projectRecoveryScope(controller.config.apiUrl,remoteProjectId));
       if(pendingRecovery){applyRecoveryRef.current=pendingRecovery;setApplyRecovery(pendingRecovery);throw new Error('此云项目有待核对的提交结果，请先查看云端版本。');}
       const marker:RunMarker={requestId:crypto.randomUUID(),projectId:remoteProjectId,baseKey:canonical(scene),briefKey:submittedBrief,...(seatingCapture?{seatingToken:seatingCapture.token}:{}),...(annotationObservation?{annotationSnapshot:true as const}:{})};
@@ -1768,7 +1779,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       try{rememberRun(marker,submittedScope);}catch{throw new Error('无法保存任务编号，尚未提交。请恢复浏览器本机存储后重试。');}
       requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;dispatchedRequestId=marker.requestId;
       if(annotationObservation)say(annotationObservation.status==='ready'?'本次将提供规划标注供模型读取；标注尚未核验，提供不代表已经用于排布或安全检查。':'本次无法完整读取规划标注，模型不会据此检查区域、路线或入口。');
-      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview'});
+      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{}),...(planObservation?{planObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview'});
       creationResponded=true;
       if(cancelledRequest.current===marker.requestId){
         if(agentScopeRef.current===submittedScope){

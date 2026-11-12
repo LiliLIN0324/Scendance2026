@@ -4081,7 +4081,7 @@ useEffect(() => {
     <LocalActivitySwitchGuardProvider guard={localSwitchGuard}>
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider pendingCandidates={pendingCandidates} captureImage={view => captureRenderImage({ view, scale: 1 })} floorToken={floorToken} isFloorCurrent={floorSession.isCurrent} sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} captureSeatingAllocation={captureSeatingAllocation} captureDialogue={captureDialogue} captureMobility={()=>{
+    <CreativeStudioProvider pendingCandidates={pendingCandidates} captureImage={view => captureRenderImage({ view, scale: 1 })} floorToken={floorToken} isFloorCurrent={floorSession.isCurrent} sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} captureSeatingAllocation={captureSeatingAllocation} captureOutdoorPlan={()=>{if(!outdoorPlan)return undefined;const selected=outdoorOverlayRef.current?.getCanvasApi()?.getSelectedIds() ?? [];return {plan:outdoorPlan,anchor:outdoorPlan.anchor ?? null,selected};}} captureDialogue={captureDialogue} captureMobility={()=>{
       const token=sessionToken,selectedFloor=floorToken;if(!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor))throw new Error('活动或楼层已切换，请重新核对后导出。');
       const snapshot=()=>{const memory=getActiveBrief();return {present:!!memory,requirement:memory?.mobilityRequirement??null,needsClarification:memory?.mobilityNeedsClarification===true};};
       const basis=structuredClone(snapshot()),requirement=basis.requirement;

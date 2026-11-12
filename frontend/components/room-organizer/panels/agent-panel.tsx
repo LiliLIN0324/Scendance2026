@@ -44,7 +44,7 @@ import type { LayoutPlanDraft, ZoneSemanticType } from '../../../lib/plan-annota
 import type {UserRouteProvenance} from '../hooks/use-plan-annotations';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { localPlanKey } from '../../review-share-page/load-plan';
-import { useRoomEditor } from '../contexts';
+import { useRoomEditor, useSelectionOptional } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
@@ -102,6 +102,10 @@ import {
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
 import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
+import {
+  groupChangeItems, proposalChangeItems, proposalChangeSummary, proposalZoneCount,
+  type ProposalChangeItem, type ProposalChangeKind, type ProposalChangeSummary,
+} from '../lib/proposal-change-groups';
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
 import { aholoChatStep, understandingLine } from '../lib/cloud-tool-connection';
 import { parseFollowUpOptions, segmentBubbleBlocks } from '../lib/bubble-text';
@@ -110,7 +114,8 @@ import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
-import { failOpenLocalStep, finishLocalLayoutRun, notePriorLayoutTool, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { subscribeComposerPrefill } from './composer-prefill-bus';
 import { AgentRunPanel, useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
@@ -254,6 +259,10 @@ interface ProposalView extends PendingPlan {
   localDraftDetails?: string[];
   seatingReview?:LocalSeatingReview;
   existingChanges?: ExistingChangeDescription[];
+  /** 分组清单：新增 / 挪动 / 撤掉 的带 id 条目，供卡片点选定位；不挂单件批准/拒绝。 */
+  changeItems?: ProposalChangeItem[];
+  /** 清单上方一行摘要：改动总数、区域数（可派生时）、耗时（有可读字段时），缺项省略。 */
+  changeSummary?: ProposalChangeSummary;
 }
 
 /** A birthday or banquet session must not keep the launch-party composer example. */
@@ -377,6 +386,12 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
   })) : [];
   const originalOutcome = outcomeOfPlan(plan);
   const outcome = scaleFactor !== undefined || rotationOnly || recolorOnly ? {...originalOutcome,moved:0,empty:null} : originalOutcome;
+  const differences = base && candidate ? proposalDifferences(base, candidate) : [];
+  const changeItems = proposalChangeItems(differences);
+  const changeSummary = proposalChangeSummary(
+    changeItems,
+    base && candidate ? proposalZoneCount(differences, base, candidate) : null,
+  );
   return {
     added: plan.added, removing: plan.removing, changed: plan.moved ?? 0, lockedTouched: 0,
     overlapCount: plan.overlapCount, overlapNames: plan.overlapNames, outcome: venueChange && outcome.empty ? { ...outcome, empty: null } : outcome,
@@ -390,7 +405,8 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
     ...(scalePreview.length ? { scalePreview } : {}),
     ...(rotationPreview.length ? { rotationPreview } : {}),
     ...(recolorPreview.length ? { recolorPreview } : {}),
-    ...(base && candidate ? {existingChanges:describeExistingChanges(proposalDifferences(base,candidate),base,candidate)} : {}),
+    ...(base && candidate ? {existingChanges:describeExistingChanges(differences,base,candidate)} : {}),
+    ...(changeItems.length ? { changeItems, changeSummary } : {}),
     ...(plan.seatingReview ? {seatingReview:plan.seatingReview} : {}),
     ...(plan.seatCeilingNote ? { seatCeilingNote: plan.seatCeilingNote } : {}),
     ...(candidate ? { candidateArea: venueArea(candidate) } : {}),
@@ -1513,6 +1529,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const restCheck = checkRestArea(preview.layout, activeFloorIndex, memory.zoneNeeds.rest === true);
     const requirementError = current?.candidateRequirementError?.(preview.base, preview.layout);
     const annotationWarning = current?.candidateAnnotationAdvisory?.(preview);
+    const changeItems = proposalChangeItems(differences);
+    const changeSummary = proposalChangeSummary(changeItems, proposalZoneCount(differences, preview.base, preview.layout));
     const comparisonOnly=isUnchangedProposal(preview.proposal);
     const blocked = current?.applyRecovery ? cloudRecoveryMessage(current.applyRecovery)
       : current?.expired ? '这版已经过期了，重新出一版再看。'
@@ -1526,6 +1544,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     return {
       ...plan, source: 'cloud', keptLocked: 0, dropped: 0, blocked, comparisonOnly, candidateArea: venueArea(preview.layout),
       existingChanges:describeExistingChanges(differences,preview.base,preview.layout),
+      ...(changeItems.length ? { changeItems, changeSummary } : {}),
       ...(typeof preview.proposal.explanation==='string'&&preview.proposal.explanation.trim()?{modelExplanation:preview.proposal.explanation}:{}),
       ...(seatCheck.warning ? { seatWarning: seatCheck.warning } : {}),
       ...(annotationWarning && annotationWarning!==blocked ? { annotationWarning } : {}),
@@ -3450,6 +3469,49 @@ function MicIcon({ size = 18, 'aria-hidden': ariaHidden }: { size?: number; 'ari
   );
 }
 
+/**
+ * 提案分组清单：新增 / 挪动 / 撤掉 三组可点条目，点选只做选中定位，
+ * 不挂任何单件批准/拒绝按钮；整版二元决策仍由卡片底部按钮行负责。
+ */
+function ProposalChangeList({ items, summary, onLocate }: {
+  items: ProposalChangeItem[];
+  summary: ProposalChangeSummary;
+  onLocate(id: string): void;
+}): JSX.Element {
+  const groups = groupChangeItems(items);
+  const meta: { kind: ProposalChangeKind; title: string }[] = [
+    { kind: 'added', title: '新增' },
+    { kind: 'moved', title: '挪动' },
+    { kind: 'removed', title: '撤掉' },
+  ];
+  const summaryParts = [`改动 ${summary.total} 处`];
+  if (summary.zoneCount != null) summaryParts.push(`涉及 ${summary.zoneCount} 个区域`);
+  if (summary.elapsedMs != null) summaryParts.push(`用时 ${formatDurationClock(summary.elapsedMs)}`);
+  return (
+    <div className="ap-change-list">
+      <p className="ap-note ap-change-summary">{summaryParts.join(' · ')}</p>
+      {meta.map(({ kind, title }) => {
+        const entries = groups[kind];
+        if (entries.length === 0) return null;
+        return (
+          <details className="ap-change-group" key={kind}>
+            <summary>{title}（{entries.length}）</summary>
+            <ul>
+              {entries.map(entry => (
+                <li key={entry.id}>
+                  <button type="button" className="ap-change-item" onClick={() => onLocate(entry.id)}>
+                    {entry.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 预览态：主钮「确认布置」，次钮「不用」；决策后原地留成徽章，一屏只留一个深主钮。 */
 function ProposalCard({ agent, onPrefill, decision, onApprove, onReject }: {
   agent: AgentValue;
@@ -3459,6 +3521,7 @@ function ProposalCard({ agent, onPrefill, decision, onApprove, onReject }: {
   onReject?: () => void;
 }): JSX.Element | null {
   const { layout } = useRoomEditor();
+  const selection = useSelectionOptional();
   const plan = agent.proposal;
   if (!plan) return null;
   const names = plan.overlapNames.slice(0, 3).join('、');
@@ -3507,6 +3570,13 @@ function ProposalCard({ agent, onPrefill, decision, onApprove, onReject }: {
     {pillRow.length > 0 && <div className="ap-pills" role="status">
       {pillRow.map(pill => <span key={pill.label} className={`ap-pill ap-pill-${pill.tone}`}>{pill.label}</span>)}
     </div>}
+    {plan.changeItems && plan.changeItems.length > 0 && plan.changeSummary && (
+      <ProposalChangeList
+        items={plan.changeItems}
+        summary={plan.changeSummary}
+        onLocate={id => selection?.selectOnly(id, { keepPanel: true })}
+      />
+    )}
     <BoundaryLineNote plan={plan} ctx={followupCtx}/>
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
@@ -3643,6 +3713,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   useEffect(() => () => { recognitionRef.current?.abort(); recognitionRef.current = null; }, []);
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // 树外入口（选中物件弹层）经预填总线把指令送进既有 composer：
+  // 并入现有草稿（空格追加、不覆盖），聚焦输入框；不自动发送，仍走原提案审批链。
+  useEffect(() => subscribeComposerPrefill((text) => {
+    const current = volatileComposerDrafts.get(draftKey) ?? '';
+    setDraft(current.trim() ? `${current.trim()} ${text}` : text);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }), [draftKey]);
   // 语音拾音：识别器实例与拾音中标记，纯本机内存，不落后端。
   const recognitionRef = useRef<SpeechRecognitionInstanceLike | null>(null);
   const [listening, setListening] = useState(false);
