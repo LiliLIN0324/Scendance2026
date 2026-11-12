@@ -5,7 +5,7 @@
  * （模型 key 在 Supabase secrets，浏览器不接触）；失败或未配置一律原路回退
  * brief-agent 规则版——对话永不因模型抖动中断。决策（记忆/防复读/出方案）始终在前端状态机。
  */
-import { hasNonPersonQuantity, isActivityNeedsAnswer, isUnresolvedNeedsAnswer, parseBriefTurn, type BriefMemory, type BriefTurn, type BriefTurnContext, type LayoutMode, type PendingBasicFact } from '@/components/room-organizer/lib/brief-agent';
+import { hasNonPersonQuantity, isActivityNeedsAnswer, isUnresolvedNeedsAnswer, parseBriefTurn, splitConfirmationLead, type BriefMemory, type BriefTurn, type BriefTurnContext, type LayoutMode, type PendingBasicFact } from '@/components/room-organizer/lib/brief-agent';
 import { isRoundResizeUtterance, occasionFrom, planHeldEvent, spokenHeadcount } from '@/components/room-organizer/lib/event-layout-agent';
 import { HEADCOUNT_MAX, isBriefFactUtterance, isLayoutOnlyUtterance, layoutGenerateCommand, omitHandledLayoutActions, parseBriefSentence } from '@/components/room-organizer/lib/workbench-agent';
 import { BRIEF_CLIENT_TIMEOUT_MS, type BriefSlots, type BriefConversationResponse } from '../../supabase/functions/_shared/brief-extract-contract';
@@ -27,7 +27,19 @@ export interface BriefExtractTransport {
 export type BriefResolution = 'model' | 'confirmation' | 'local_command' | 'disabled' | 'not_connected' | 'unavailable' | 'failed';
 /** Stable category for logs and tests. Production chat copy stays in modelNotice. */
 export interface ModelCallDiagnostic { category: 'unauthenticated' | 'route' | 'config' | 'timeout' | 'session' | 'network' | 'non_json' | 'contract' | 'http' | 'provider' | 'unknown'; status?: number; code?: string }
-export type ResolvedBriefTurn = BriefTurn & { resolution: BriefResolution; modelNotice?: string; modelDiagnostic?: ModelCallDiagnostic; modelReply?:string; unhandled?:BriefConversationResponse['unhandled']; materialQueries?:string[]; readOnlyReply?:boolean; usesModelText?:boolean; resumeInstruction?:string };
+export type ResolvedBriefTurn = BriefTurn & { resolution: BriefResolution; modelNotice?: string; modelDiagnostic?: ModelCallDiagnostic; modelRetryable?: boolean; modelReply?:string; unhandled?:BriefConversationResponse['unhandled']; materialQueries?:string[]; readOnlyReply?:boolean; usesModelText?:boolean; resumeInstruction?:string };
+
+/** Transient upstream blips worth one click-retry; config/auth/billing stay local. */
+function isRetryableDiagnostic(d: ModelCallDiagnostic | undefined): boolean {
+  if(!d)return false;
+  if(d.category==='network'||d.category==='timeout')return true;
+  if(d.category==='provider'||d.category==='http'){
+    if(d.code==='PROVIDER_HTTP_ERROR:429')return true;
+    if(d.code==='PROVIDER_HTTP_ERROR:400')return true; // upstream 400 often cold-start/momentary; user retry re-runs the chain
+    if(d.status && d.status>=500)return true;
+  }
+  return false;
+}
 
 /** Only recognise these explicit, non-executing instructions; preserve them
  * in unhandled for review, and reject any accompanying unrecognised action. */
@@ -92,7 +104,8 @@ function reconcileHeadcountReply(text:string|undefined,memory:BriefMemory,pendin
 export async function resolveBriefTurn(raw: string, previous: BriefMemory, context: BriefTurnContext, controller?: BriefExtractTransport | null, signal?:AbortSignal, conversation?:{history:Array<{role:'user'|'assistant';text:string}>}): Promise<ResolvedBriefTurn> {
   if(signal?.aborted)throw new DOMException('已停止等待','AbortError');
   if (previous.pendingBasicFacts?.length) {
-    if (/^(对|是|确认|没错|是的|好的|可以)$/.test(raw.trim())) {
+    const lead = splitConfirmationLead(raw);
+    if (/^(对|是|确认|没错|是的|好的|可以)$/.test(raw.trim()) || lead?.kind === 'affirm') {
       if (previous.pendingBasicFacts.some(fact => fact.requiresRestatement !== false)) {
         return { ...parseBriefTurn('', previous, { ...context, command: null }), kind: 'ask', text: basicQuestion(previous.pendingBasicFacts), resolution: 'confirmation' };
       }
@@ -112,20 +125,24 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
         else if (fact.key === 'areaM2' && typeof fact.value === 'number' && !memory.eventIntent) memory.areaM2 = fact.value;
         else if (fact.key === 'layoutMode' && (fact.value === 'dining' || fact.value === 'desk-chair') && !memory.eventIntent) { memory.layoutMode = fact.value; memory.layoutModeUnresolved = false; memory.layoutModeConfirmed = true; }
       }
-      const turn = parseBriefTurn('', memory, { ...context, command: pendingGeneration?.command??null });
+      // 带内容的确认：答复词只回答待确认事实，其余文字仍按普通需求理解，不能静默丢弃。
+      const restTurn = lead?.rest ? parseBriefTurn(lead.rest, memory, { ...context, command: pendingGeneration?.command??null }) : null;
+      const turn = restTurn ?? parseBriefTurn('', memory, { ...context, command: pendingGeneration?.command??null });
+      const finalMemory = restTurn ? restTurn.memory : memory;
       const time = previous.pendingBasicFacts.find(fact => fact.key === 'timeOfDay' && typeof fact.value === 'number');
       if (time && typeof time.value === 'number') turn.extraction.timeOfDay = time.value;
-      if(!memory.eventIntent && previous.pendingBasicFacts.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2')){
-        turn.extraction.lengthM=memory.lengthM;turn.extraction.widthM=memory.widthM;turn.extraction.areaM2=memory.areaM2;
+      if(!finalMemory.eventIntent && previous.pendingBasicFacts.some(fact=>fact.key==='lengthM'||fact.key==='widthM'||fact.key==='areaM2')){
+        turn.extraction.lengthM=finalMemory.lengthM;turn.extraction.widthM=finalMemory.widthM;turn.extraction.areaM2=finalMemory.areaM2;
       }
-      if(pendingGeneration)return {...turn,resolution:'confirmation',...(turn.kind==='generate'?{resumeInstruction:pendingGeneration.instruction}:{})};
-      const held = continueHeldEvent(previous.pendingBasicFacts, memory, turn.extraction);
+      if(pendingGeneration)return {...turn,memory:finalMemory,resolution:'confirmation',...(turn.kind==='generate'?{resumeInstruction:pendingGeneration.instruction}:{})};
+      const held = continueHeldEvent(previous.pendingBasicFacts, finalMemory, turn.extraction);
       if (held) return { ...held, resolution: 'confirmation' };
+      if (restTurn) return { ...restTurn, memory: finalMemory, resolution: 'confirmation', ...(restTurn.kind === 'ack' ? { text: `已记下你确认的信息；${restTurn.text}` } : {}) };
       return { ...turn, kind: 'ack', text: '已记下你确认的信息；如有其他要求可以继续补充。', resolution: 'confirmation' };
     }
-    if (/^(不对|不是|否)$/.test(raw.trim())) {
-      const turn = parseBriefTurn('', { ...previous, pendingBasicFacts: [], pendingGeneration:undefined }, { ...context, command: null });
-      return { ...turn, kind: 'ack', text: '这部分先不采用，请告诉我正确的信息。', resolution: 'confirmation' };
+    if (/^(不对|不是|否)$/.test(raw.trim()) || lead?.kind === 'reject') {
+      const turn = parseBriefTurn(lead?.rest ?? '', { ...previous, pendingBasicFacts: [], pendingGeneration:undefined }, { ...context, command: null });
+      return { ...turn, kind: 'ack', text: lead?.rest ? `这部分先不采用。${turn.text}` : '这部分先不采用，请告诉我正确的信息。', resolution: 'confirmation' };
     }
     const layoutCommand = layoutGenerateCommand(raw);
     if (layoutCommand) {
@@ -147,6 +164,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   let fallback: BriefResolution = modelEnabled() ? 'not_connected' : 'disabled';
   let modelNotice: string | undefined = modelEnabled() && !controller ? '智能理解服务未连接，本次使用本地规则理解；请核对结果。' : undefined;
   let modelDiagnostic: ModelCallDiagnostic | undefined = modelEnabled() && !controller ? {category:'config',code:'NOT_CONNECTED'} : undefined;
+  let modelRetryable = false;
   if (modelEnabled() && controller) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const abort=new AbortController();let timedOut=false;
@@ -223,6 +241,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       const reason='reason' in response && typeof response.reason==='string'?response.reason:undefined;
       modelNotice = `${response.enabled ? modelFailureNotice(reason) : '智能理解服务尚未配置，请联系管理员。'} 本次使用本地规则理解，请核对结果。`;
       modelDiagnostic = providerDiagnostic(reason,response.enabled);
+      modelRetryable = response.enabled && isRetryableDiagnostic(modelDiagnostic);
     } catch (error) {
       // 后端不可用/未登录/模型抖动/超时：落到规则版。保留分类，不把响应正文写进界面。
       if(signal?.aborted)throw new DOMException('已停止等待','AbortError');
@@ -230,6 +249,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       const classified=thrownModelFailure(error,timedOut);
       modelNotice=classified.notice;
       modelDiagnostic=classified.diagnostic;
+      modelRetryable=isRetryableDiagnostic(modelDiagnostic);
       if(process.env.NODE_ENV==='development')console.info('[brief]',classified.diagnostic.category,classified.diagnostic.code??'',classified.diagnostic.status??'');
     } finally {
       if (timeout !== undefined) clearTimeout(timeout);
@@ -258,15 +278,15 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
   const fallbackContext = allowAutomaticGeneration || layoutOnly ? context : { ...context, command: null };
   const turn = parseBriefTurn(raw, previous, fallbackContext.command || !layoutOnly ? fallbackContext : { ...fallbackContext, command: layoutGenerateCommand(raw) }, toExtraction(extraction));
   const pendingFacts = dropHeldRestatements(raw, turn.memory, [...(previous.pendingBasicFacts ?? []).filter(old => extraction[old.key] == null && !pending.some(fact => fact.key === old.key)), ...pending]);
-  if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...((allowAutomaticGeneration||layoutOnly)&&(context.command||layoutGenerateCommand(raw))?{pendingGeneration:{command:(context.command??layoutGenerateCommand(raw))!,instruction:raw}}:{}) }, resolution: layoutOnly && !allowAutomaticGeneration ? 'local_command' : fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (pendingFacts.length) return { ...turn, kind: 'ask', text: basicQuestion(pendingFacts), memory: { ...turn.memory, pendingBasicFacts: pendingFacts,...((allowAutomaticGeneration||layoutOnly)&&(context.command||layoutGenerateCommand(raw))?{pendingGeneration:{command:(context.command??layoutGenerateCommand(raw))!,instruction:raw}}:{}) }, resolution: layoutOnly && !allowAutomaticGeneration ? 'local_command' : fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}), ...(modelRetryable ? { modelRetryable: true } : {}) };
   // A failed model must not start another provider call. A brief the local rules can already draw — seating ask, or the headcount/size that finishes one — still uses the local preview.
   const scaleReady = (turn.memory.lengthM !== null && turn.memory.widthM !== null) || turn.memory.areaM2 !== null || context.venueUp || context.scaleTyped;
   const briefReady = turn.kind === 'generate' && turn.memory.layoutModeConfirmed === true && turn.memory.headcount !== null && scaleReady;
   const continuesLayout = layoutOnly || layoutGenerateCommand(raw) !== null || isBriefFactUtterance(raw);
   const selectedLayout = turn.kind === 'generate' && turn.layoutTools?.some(call => call.tool === 'select_furnishing') === true;
-  if (!allowAutomaticGeneration && turn.kind === 'generate' && !selectedLayout && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
-  if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
-  return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}) };
+  if (!allowAutomaticGeneration && turn.kind === 'generate' && !selectedLayout && !(briefReady && continuesLayout)) return { ...turn, kind:'ack', text:'已按本地规则记录可识别的信息；本次没有发起生成，请核对后重新提出。', memory:{...turn.memory,pendingGeneration:undefined}, resolution:fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}), ...(modelRetryable ? { modelRetryable: true } : {}) };
+  if (!allowAutomaticGeneration && turn.kind === 'generate') return { ...turn, resolution: 'local_command', ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}), ...(modelRetryable ? { modelRetryable: true } : {}) };
+  return { ...turn, memory: { ...turn.memory, pendingBasicFacts: pendingFacts }, resolution: fallback, ...(modelNotice ? { modelNotice } : {}), ...(modelDiagnostic ? { modelDiagnostic } : {}), ...(modelRetryable ? { modelRetryable: true } : {}) };
 }
 
 /** Drop a sticky activity label the user did not just say. Ambiguous facts stay. */

@@ -118,14 +118,11 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   const refusedList = visibleOutcome?.refused ?? [];
 
   return <section className="ap-card ap-audit" aria-label="系统体检与评审记录">
-    <header className="ap-audit-head">
-      <ShieldCheck size={16} aria-hidden="true"/>
-      <strong>系统体检与评审记录</strong>
-    </header>
+    <span className="ap-blocked-stamp"><ShieldCheck size={12} aria-hidden="true"/>体检 · 评审</span>
 
     {effectiveScore && <><h4>{outcome && !outcomeCurrent ? '历史系统体检记录' : '系统体检结果'}</h4><p className="ap-audit-scope">仅粗略检查已建模物件与画布；现场净宽、出入口、消防和规范验收均未核验。修改场景后请重新体检。</p>
       <div className="ap-audit-score" data-testid="bingo-score">
-        <p>几何检查：待核验{effectiveScore.failedCount > 0 ? `；发现 ${effectiveScore.failedCount} 件需关注` : ''}</p>
+        <p>几何检查：待核验{effectiveScore.failedCount > 0 ? `；${outcome && !outcomeCurrent ? '上次快照' : ''}发现 ${effectiveScore.failedCount} 件需关注` : ''}</p>
         <ul>{CHECKLIST_LABELS.map(label=><li key={label}>{label}：待核验</li>)}</ul>
       </div>
     </>}
@@ -244,7 +241,7 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
     <p className="ap-audit-meta">
       <MessageSquare size={13} aria-hidden="true"/>
       <span>{feedback.pinCount}</span>
-      <small>{feedbackSummaryLabel(feedback, false)}</small>
+      <small>{feedbackSummaryLabel(feedback, false)}{saved ? ` · 已导入反馈 ${saved.pins.length} 条` : ''}</small>
     </p>
     {plan.linkStatus!=='unavailable'&&<div className="ap-audit-actions"><button type="button" className="ap-audit-link" aria-label={copied ? '甲方链接已复制' : '复制甲方链接'} onClick={() => { void copyLink(); }}>
       {copied ? <Check size={13} aria-hidden="true"/> : <Copy size={13} aria-hidden="true"/>}{copied ? '已复制' : '复制链接'}
@@ -260,7 +257,12 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
 
 function FeedbackPins({pins,floorNames}:{pins:readonly ReceiptPin[];floorNames:Record<string,string>}):JSX.Element {
   if(!pins.length)return <p>文件没有意见。</p>;
-  return <ol>{pins.map(pin=><li key={pin.id}><p>{pin.text}</p><p>{floorNames[pin.floorId]??'楼层待核对'} · 位置 {pin.x.toFixed(2)}，{pin.z.toFixed(2)} 米 · {pin.status==='resolved'?'文件标记已处理':'文件标记待处理'}</p></li>)}</ol>;
+  // -0.001 这类近零值 toFixed 会出「-0.00」；先取整到厘米再归零负零。
+  const fmtCoord = (value: number): string => {
+    const cents = Math.round(value * 100);
+    return (cents === 0 ? 0 : cents / 100).toFixed(2);
+  };
+  return <ol>{pins.map(pin=><li key={pin.id}><p>{pin.text}</p><p>{floorNames[pin.floorId]??'楼层待核对'} · 位置 {fmtCoord(pin.x)}，{fmtCoord(pin.z)} 米 · {pin.status==='resolved'?'文件标记已处理':'文件标记待处理'}</p></li>)}</ol>;
 }
 
 function AuditPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {

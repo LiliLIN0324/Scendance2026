@@ -24,10 +24,11 @@ export const sizeSchema = z.strictObject({
 });
 export const pointSchema = z.strictObject({ x: z.number().min(-200).max(400), z: z.number().min(-200).max(400) });
 export const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase());
-export const materialIds = ['chair', 'table', 'reception', 'backdrop', 'display', 'partition', 'carpet', 'decoration'] as const;
+export const materialIds = ['chair', 'table', 'desk', 'reception', 'backdrop', 'display', 'partition', 'carpet', 'decoration'] as const;
 export const catalog = [
   { id: 'chair', name: '椅子', size: { width: 0.5, depth: 0.5, height: 0.85 } },
   { id: 'table', name: '桌子', size: { width: 1.2, depth: 0.6, height: 0.75 } },
+  { id: 'desk', name: '课桌', size: { width: 1.8, depth: 0.6, height: 0.75 } },
   { id: 'reception', name: '签到台', size: { width: 1.8, depth: 0.6, height: 1 } },
   { id: 'backdrop', name: '背景板', size: { width: 3, depth: 0.15, height: 2.4 } },
   { id: 'display', name: '展架', size: { width: 0.8, depth: 0.4, height: 1.8 } },

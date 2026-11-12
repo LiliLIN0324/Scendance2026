@@ -86,8 +86,15 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-divider { text-align: center; font-size: var(--fs-cap); color: var(--wk-muted); margin: 0; display: flex; align-items: center; gap: 8px; }
 .ap-divider::before, .ap-divider::after { content: ''; flex: 1; height: 1px; background: var(--wk-hair); }
 /* 回话是短气泡，不是左侧发丝线上的一整段记录。 */
-.ap-agent { margin: 0; align-self: flex-start; line-height: 1.55; max-width: 100%; font-size: 13.5px; color: var(--wk-ink); background: var(--wk-plane); border: 0; border-radius: 14px; padding: 10px 12px; }
+.ap-agent { margin: 0; align-self: flex-start; line-height: 1.6; max-width: 100%; font-size: 14.5px; color: var(--wk-ink); background: var(--wk-plane); border: 0; border-radius: 14px; padding: 10px 12px; white-space: pre-line; overflow-wrap: anywhere; }
 .ap-agent.is-amber { background: var(--wk-paper); border: 1px solid var(--wk-hair); box-shadow: none; }
+/* 编号条目/换行拆成的独立行：首行不压间距，其余行错开一点。 */
+.ap-agent-line { display: block; }
+.ap-agent-line + .ap-agent-line { margin-top: 5px; }
+/* 连续编号/符号条目收成一个列表块，块内条目间距统一。 */
+.ap-agent-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.ap-agent-list-item { display: block; overflow-wrap: anywhere; }
+.ap-agent-list + .ap-agent-line, .ap-agent-line + .ap-agent-list { margin-top: 5px; }
 /* 清单/文案这类多行回话保留换行结构。 */
 .ap-agent.is-long { white-space: pre-line; }
 /* 消息进场：200ms 淡入上浮（§一.3 动效 token），尊重 reduced-motion。 */
@@ -99,6 +106,20 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-bubble-action { min-height: 28px; padding: 0 12px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--plane); color: var(--ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-bubble-action:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); color: var(--ink); transform: translateY(-1px); }
 .ap-bubble-action:active { transform: none; }
+/* 追问句拆出的可点选项：点一下只填进输入框，不替人发送。行卡对照 petitmaker OptionPick。 */
+.ap-option-pick { display: flex; flex-direction: column; gap: 8px; max-width: 100%; margin-top: 2px; }
+.ap-option-row { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); padding: 8px 10px; text-align: left; color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-option-row:hover:not(:disabled) { border-color: var(--wk-ink-soft); background: var(--plane-deep); transform: translateY(-1px); }
+.ap-option-row:active:not(:disabled) { transform: none; }
+.ap-option-row.is-picked { border-color: var(--wk-ink); box-shadow: inset 0 0 0 1.5px var(--wk-ink); }
+.ap-option-row.is-dim { opacity: .5; }
+.ap-option-row:disabled { cursor: default; }
+.ap-option-row-cap { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ap-option-row-mark { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; background: var(--wk-plane); border-radius: 999px; padding: 2px 8px; font-size: var(--fs-cap); color: var(--wk-ink); }
+/* 能力 chip：pill 规格——描边浅底、圆角胶囊；悬停加深底，选中主色浅底深字。 */
+.ap-capability-chip, .sc-agent-panel .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 12px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-capability-chip:hover, .sc-agent-panel .chip:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); transform: translateY(-1px); }
+.ap-capability-chip:active, .sc-agent-panel .chip:active { transform: none; }
 /* 「回好自动落区」提议卡：品牌绿描边 + 浅底，按钮用品牌绿主按钮风格。 */
 .ap-zone-proposal { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border: 1px solid var(--ap-green); border-radius: var(--r-sm); background: var(--green-pale); max-width: 100%; }
 .ap-zone-proposal__hint { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--ink); }
@@ -126,14 +147,16 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* ── 信息卡 ── */
 .ap-card { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .ap-status-card { gap: 8px; padding: 8px 10px; }
-.ap-status-line { margin: 0; font-size: var(--fs-p2); line-height: 1.45; color: var(--wk-ink-soft); }
-.ap-status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.ap-status-head strong { font-size: var(--fs-p2); font-weight: 600; }
+/* 进度/暂停卡：状态标 + 说明 + 动作行，对照 petitmaker ResumeCard。 */
+.ap-progress-card { gap: 8px; }
+.ap-progress-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--sc-muted); font-size: var(--fs-cap); font-weight: 500; }
+.ap-progress-card.is-paused .ap-progress-stamp { background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); }
+.ap-progress-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-progress-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ap-text-action { border: 0; background: transparent; padding: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); cursor: pointer; }
 .ap-text-action:hover, .ap-text-action:focus-visible { color: var(--wk-ink); }
-.ap-pending { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ap-pending-label { flex: none; font-size: 12px; color: var(--wk-muted); }
-.ap-pending .ap-text-action { flex: none; margin-left: auto; }
+.ap-pending-card { gap: 8px; }
+.ap-pending-foot { display: flex; justify-content: flex-end; }
 .ap-pending-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .ap-pending-chips li { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-height: 28px; border: 1px solid var(--wk-hair); border-radius: 999px; padding: 0 2px 0 10px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-p2); }
 .ap-pending-chips li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 18em; }
@@ -151,10 +174,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-capabilities { flex: 0 0 auto; margin: 0 12px 8px; padding: 0 2px; display: flex; flex-direction: column; gap: 6px; }
 .ap-capability-label { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); font-weight: 500; }
 .ap-capability-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.ap-capability-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
-.ap-capability-chip:hover { border-color: var(--wk-ink-soft); background: var(--wk-plane); transform: translateY(-1px); }
 .ap-capability-chip svg { flex: 0 0 auto; color: var(--wk-ink-soft); }
-.sc-agent-panel .chip { border: 1px solid var(--wk-hair); background: var(--wk-paper); border-radius: var(--r-sm); padding: 4px 10px; font-size: var(--fs-p2); color: var(--wk-ink); }
 .sc-agent-panel .chip.is-on { border-color: var(--ap-green); background: var(--ap-pale2); color: var(--ap-deep); }
 .ap-venue { display: flex; flex-direction: column; gap: 8px; }
 .ap-venue-head { display: flex; align-items: center; justify-content: space-between; }
@@ -168,7 +188,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-agent-panel .btn-primary:hover:not([aria-disabled="true"]) { background: #2A2C31; }
 .sc-agent-panel .btn-primary:active:not([aria-disabled="true"]) { background: #3D3F45; }
 .sc-agent-panel .btn-primary[aria-disabled="true"] { background: var(--plane); color: var(--faint); cursor: not-allowed; }
-.sc-agent-panel #cta-hint { margin: -4px 0 0; text-align: center; font-size: var(--fs-cap); color: var(--ap-grey); }
+.sc-agent-panel #cta-hint { margin: -4px 0 0; justify-content: center; }
 .sc-agent-panel #cta-hint.ap-why { text-align: left; line-height: 1.5; }
 .ap-recap { margin: 0; align-self: flex-start; background: var(--wk-plane); border-radius: var(--r-sm); padding: 4px 9px; font-size: var(--fs-p2); color: var(--wk-ink-soft); display: flex; align-items: center; gap: 6px; }
 .ap-nudge { border: 1px solid var(--wk-hair); background: var(--wk-plane); border-radius: var(--r-sm); padding: 9px 11px; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
@@ -180,9 +200,27 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-steps li.is-done svg { background: var(--ap-green); color: #fff; border-radius: 50%; padding: 1px; }
 .ap-steps li.is-current { color: var(--wk-ink); font-weight: 600; }
 .ap-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--wk-hair); box-sizing: border-box; }
-/* 警告 = Alert 形制：白底发丝框 + 左缘 3px 语义色竖条（v2.2 §弹窗体系）。 */
-.ap-inline-error { border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); border-radius: var(--r-sm); background: var(--wk-paper); padding: 10px 12px; display: flex; flex-direction: column; gap: 9px; }
-.ap-inline-error p { margin: 0; color: var(--warn); display: flex; gap: 6px; align-items: flex-start; line-height: 1.5; }
+/* 失败卡：告警标 + 摘要 + 动作行，对照 petitmaker StopCard/IncidentCard；左缘 3px 语义色竖条保留。 */
+.ap-error-card { gap: 8px; border-left: 3px solid var(--warn); }
+.ap-error-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); font-size: var(--fs-cap); font-weight: 500; }
+.ap-error-summary { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-error-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 阻塞/旧方案卡：状态标 + 说明 + 动作行，对照 petitmaker ResumeCard blocked 面。 */
+.ap-blocked-card { gap: 8px; }
+.ap-status-panel { gap: 8px; }
+.ap-export-card { gap: 8px; }
+.ap-plan { gap: 8px; }
+.ap-stats { display: flex; gap: 8px; flex: 0 0 auto; }
+.ap-stat { flex: 1; min-width: 0; background: var(--wk-plane); border-radius: var(--r-sm); padding: 6px 10px 8px; display: flex; flex-direction: column; }
+.ap-stat b { font-size: 15px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ap-stat span { font-size: 12px; color: var(--wk-ink-soft); }
+.ap-material-card { gap: 8px; }
+.ap-material-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ap-material-list li { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--wk-plane); border-radius: var(--r-sm); }
+.ap-material-list span { font-size: var(--fs-p2); color: var(--wk-ink-soft); }
+.ap-blocked-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; }
+.ap-blocked-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-blocked-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ap-plan strong { font-size: var(--fs-p1); }
 .ap-plan p { margin: 0; }
 /* 本次结果 = 一次运行的账单：成功/被拒/没动/空结果各一行，数字已经在上面的统计条里。 */
@@ -211,9 +249,17 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-tool-chip button { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .ap-tools details { width: 100%; }
 .ap-tools summary { cursor: pointer; font-size: 12px; color: var(--wk-muted); }
-.ap-tool-rows { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
-.ap-tool-rows li { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--wk-hair); font-size: 12px; line-height: 1.4; color: var(--wk-ink-soft); }
-.ap-tool-rows li span:last-child { margin-left: auto; color: var(--wk-muted); }
+/* 步骤时间线：编号圆标 + 名称 + 远端状态，详情缩进一行；对照 petitmaker StepList。 */
+.ap-tool-rows { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-tool-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 8px; border-radius: var(--r-sm); }
+.ap-tool-row-no { width: 20px; height: 20px; flex: 0 0 auto; border-radius: 999px; background: var(--wk-plane); color: var(--wk-ink); display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-cap); font-variant-numeric: tabular-nums; }
+.ap-tool-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-tool-row-line { display: flex; align-items: center; gap: 8px; }
+.ap-tool-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-p2); color: var(--wk-ink); }
+.ap-tool-row-stat { margin-left: auto; flex: 0 0 auto; font-size: var(--fs-cap); color: var(--wk-muted); }
+.ap-tool-row-detail { padding-left: 28px; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
+.ap-tool-row.is-running .ap-tool-row-no { background: var(--ap-pale2); color: var(--ap-deep); }
+.ap-tool-row.is-error .ap-tool-row-no, .ap-tool-row.is-error .ap-tool-row-name { color: var(--warn); }
 .ap-foot { margin: 0; display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 11px; line-height: 1.3; color: var(--wk-muted); }
 .ap-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ap-process { margin: 0; font-size: var(--fs-p2); line-height: 1.4; color: var(--wk-muted); }
@@ -221,7 +267,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-process button { margin-left: 6px; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* 聚焦只加深上缘分隔线，不加光环；品牌绿仍只留给选中态与发送键。 */
 .ap-composer:focus-within { border-top-color: var(--wk-ink-soft); }
-.ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 36px; }
+.ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 88px; }
 .ap-composer textarea:focus, .ap-composer textarea:focus-visible { outline: none; box-shadow: none; }
 .ap-composer-bar { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 .ap-composer-left { display: flex; align-items: center; gap: 6px; min-width: 0; justify-self: start; }
@@ -249,7 +295,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-send:disabled { color: var(--wk-ink-faint); background: var(--wk-plane); cursor: default; }
 
 /* 布置轨同款：空输入时把引导句逐字打在框里，按 Tab 填整句。 */
-.ap-composer-field { position: relative; display: flex; min-height: 40px; }
+.ap-composer-field { position: relative; display: flex; min-height: 92px; }
 .ap-composer-field textarea { position: relative; z-index: 1; width: 100%; }
 .ap-ghost { position: absolute; z-index: 0; left: 0; top: 0; right: 0; color: var(--wk-ink-faint, #9aa0a6); opacity: .72; pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p2); font-weight: 400; line-height: var(--lh-p2); }
 /* 四格共用：提示可点，点一下只把整句填进框里，不替人发送。不进 Tab 序列。 */
@@ -598,8 +644,6 @@ button.ap-ghost {
 
 /* Bingo 审计位：3.0.0 左栏「收甲方反馈」并回对话后的只读记录，不新增第二个入口。 */
 .ap-audit { gap: 8px; }
-.ap-audit-head { display: flex; align-items: center; gap: 6px; }
-.ap-audit-head strong { font-size: var(--fs-p1); font-weight: 600; }
 .ap-audit-phase { padding: 1px 7px; border: 1px solid var(--wk-hair); border-radius: 999px; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-phase.is-awaiting { color: var(--warn); border-color: currentColor; }
 .ap-audit-phase.is-returned { color: var(--warn); border-color: currentColor; }
@@ -664,3 +708,293 @@ button.ap-ghost {
 .sc-chat-plus-menu button { display:flex; align-items:center; gap:6px; width:100%; padding:5px 6px; border:none; border-radius:6px; background:transparent; color:var(--wk-ink); font-size:var(--fs-cap); text-align:left; white-space:nowrap; }
 .sc-chat-plus-menu button > span:first-child { flex:0 0 auto; }
 .sc-chat-plus-menu button:hover { background:var(--wk-plane); }
+.ap-foot-info { border: none; background: transparent; color: var(--wk-muted); cursor: pointer; display: inline-flex; padding: 0 2px; flex: none; }
+.ap-foot-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* —— 候选卡图文并茂 —— */
+.ap-plan-thumb { margin: 2px 0 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--wk-hair); }
+.ap-plan-thumb svg.sc-publish-plan { display: block; width: 100%; height: auto; }
+.ap-plan .ap-seats-meter { height: 8px; border-radius: 999px; background: var(--wk-hair); overflow: hidden; margin: -6px 0 2px; }
+.ap-plan .ap-seats-meter-fill { height: 100%; border-radius: 999px; background: #5c7a54; }
+.ap-plan .ap-seats-meter-fill[data-short="true"] { background: var(--warn); }
+.ap-plan .ap-warn-line {
+  color: var(--wk-ink-soft);
+  background: var(--wk-paper);
+  border-left: 3px solid var(--wk-hair);
+  border-radius: 0 8px 8px 0;
+  padding: 6px 8px 6px 9px;
+  max-height: 3.4em;
+  overflow: hidden;
+  transition: max-height 0.2s;
+}
+.ap-plan .ap-warn-line:hover, .ap-plan .ap-warn-line:focus-within { max-height: none; background: var(--wk-paper); }
+
+/* —— 运行面板（对标 PetitMaker record：平色、发丝线、无阴影、纸色状态）—— */
+.ap-run { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ap-run-head { display: flex; align-items: center; gap: 8px; }
+.ap-run-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--wk-ink); }
+.ap-run-state i { width: 8px; height: 8px; border-radius: 999px; background: var(--wk-green); }
+.ap-run-state[data-state="stopped"] i { background: var(--wk-muted); }
+.ap-run-phase { font-size: 12px; color: var(--wk-muted); }
+.ap-run-timer { margin-left: auto; font-size: 11.5px; color: var(--wk-muted); font-variant-numeric: tabular-nums; }
+.ap-run-meta { font-size: 11.5px; color: var(--wk-muted); }
+.ap-run-note { margin: 0 0 6px; font-size: 11.5px; color: var(--wk-muted); }
+.ap-run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.ap-run-row { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--wk-hair); border-radius: 10px; background: var(--wk-paper); color: var(--wk-ink-soft); font-size: 12.5px; }
+.ap-run-row[data-kind="write"] { border-left: 3px solid var(--wk-green); color: var(--wk-ink); }
+.ap-run-row[data-pending="true"] { border-style: dashed; }
+.ap-run-status { color: var(--wk-muted); font-size: 11.5px; }
+.ap-run-tick { width: 15px; height: 15px; border-radius: 999px; display: inline-grid; place-items: center; background: rgba(92, 122, 84, .14); color: var(--wk-green); font-size: 10px; flex: none; margin-left: auto; }
+.ap-run-tick[data-pending="true"] { background: rgba(192, 127, 47, .14); color: var(--warn); }
+.ap-run-rollup { border: 0; background: transparent; color: var(--wk-muted); font-size: 11.5px; cursor: pointer; padding: 0; }
+.ap-run-steer { font-size: 11.5px; color: var(--wk-muted); }
+.ap-run-stall { margin: 0 0 6px; padding: 8px 10px; background: #FFF7E6; border-left: 3px solid var(--warn); border-radius: 6px; font-size: 12px; line-height: 1.6; color: #7a4f01; }
+.ap-run-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.ap-run-pill { padding: 4px 10px; font-size: 11.5px; border-radius: 999px; cursor: pointer; border: 1px solid var(--wk-green); background: var(--wk-paper); color: var(--wk-green); }
+.ap-run-pill[data-stop="true"] { border-color: #c0392b; color: #c0392b; }
+.ap-run-pill[data-active="false"] { opacity: .55; cursor: default; }
+.ap-run-receipt { flex-direction: row; align-items: center; gap: 8px; border-left: 3px solid var(--wk-green); }
+.ap-run-receipt-title { color: var(--wk-ink); font-size: 12.5px; }
+.ap-run-receipt-body { color: var(--wk-ink-soft); font-size: 12px; }
+
+/* ===== AgentRunPanel：停止确认行 + 过往任务归档折叠区（任务 1/2）===== */
+.ap-stop-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  border: 1px solid #c0392b;
+  border-radius: 999px;
+  background: var(--wk-paper);
+}
+.ap-stop-confirm-text {
+  font-size: 11.5px;
+  color: #c0392b;
+  font-weight: 600;
+}
+.ap-stop-confirm .ap-run-pill {
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+.ap-stop-confirm .ap-run-pill[data-stop="true"] {
+  background: #c0392b;
+  color: #fff;
+}
+.ap-archive {
+  border: 1px solid var(--wk-hair);
+  border-radius: 14px;
+  background: var(--wk-paper);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ap-archive-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--wk-ink);
+}
+.ap-archive-title { display: inline-flex; align-items: center; gap: 6px; }
+.ap-archive-chevron { color: var(--wk-muted); font-size: 11px; }
+.ap-archive-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.ap-archive-item { display: flex; flex-direction: column; gap: 6px; }
+.ap-archive-item .ap-run-head { font-size: 12px; }
+.ap-archive-item .ap-run-state { font-size: 12px; }
+.ap-archive-item .ap-run-state i { background: var(--wk-muted); }
+.ap-run-meta-inline { font-size: 11.5px; color: var(--wk-muted); margin-left: auto; }
+.ap-archive-divider {
+  height: 1px;
+  background: var(--wk-hair);
+  margin: 2px 0;
+}
+
+/* ===== AgentRunPanel 对标补充：结果标记 / 数量胶囊 / 紧急停止钮 / 聚合回折条 / 停止收尾 ===== */
+.ap-run-tick[data-result="success"] { background: rgba(74, 124, 89, .14); color: var(--wk-green); }
+.ap-run-tick[data-result="failed"] { background: color-mix(in srgb, var(--err) 14%, var(--wk-paper)); color: var(--err); }
+.ap-run-tick[data-result="neutral"] { background: var(--wk-plane); color: var(--wk-ink-faint); }
+.ap-run-tick[data-result="running"] { background: rgba(150, 101, 31, .14); color: var(--warn); }
+
+.ap-run-count-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wk-green-pale);
+  color: var(--wk-green);
+  font-size: var(--fs-cap);
+  font-weight: 500;
+}
+
+.ap-run-emergency-stop {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--err) 12%, var(--wk-paper));
+  cursor: pointer;
+}
+.ap-run-emergency-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 20%, var(--wk-paper)); }
+.ap-run-emergency-stop:disabled { opacity: .5; cursor: default; }
+.ap-run-emergency-stop-square { width: 11px; height: 11px; border-radius: 2px; background: var(--err); }
+
+.ap-run-aggregate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 10px;
+  background: var(--wk-paper);
+  padding: 6px 10px;
+}
+.ap-run-aggregate[data-tone="ok"] { border-left: 3px solid var(--wk-green); }
+.ap-run-aggregate[data-tone="warn"] { border-left: 3px solid var(--err); }
+.ap-run-aggregate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--wk-ink);
+}
+.ap-run-aggregate-title { font-weight: 600; }
+.ap-run-aggregate-badge {
+  margin-left: auto;
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.ap-run-aggregate[data-tone="ok"] .ap-run-aggregate-badge { background: var(--wk-green-pale); color: var(--wk-green); }
+.ap-run-aggregate[data-tone="warn"] .ap-run-aggregate-badge { background: color-mix(in srgb, var(--err) 12%, var(--wk-paper)); color: var(--err); }
+.ap-run-aggregate-chevron { color: var(--wk-muted); font-size: 11px; }
+.ap-run-aggregate-body { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.ap-run-aggregate-body li { font-size: var(--fs-cap); color: var(--wk-ink-soft); }
+
+.ap-run-wrapup { display: flex; flex-direction: column; gap: 4px; }
+.ap-run-wrapup-line { margin: 0; font-size: var(--fs-p2); line-height: 1.55; color: var(--wk-ink-soft); }
+
+/* kbd 快捷键小标：只标注面板域内真实存在的按键绑定（确认行 Esc 取消；收尾 Ctrl+Z 逐步撤销），
+   没有绑定的控件一律不加。等宽小字 + 浅底 + hair 边，沿用 --wk-* token。 */
+.ap-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 6px;
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap-run-wrapup-line .ap-kbd { margin: 0 2px; }
+
+/* ── 候选卡决策留痕：批准 / 拒绝徽章（纯面板内存态，不落后端） ─────────────── */
+.ap-decision-row { display: flex; align-items: center; gap: 8px; }
+.ap-decision-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  font-size: var(--fs-p2); font-weight: 600; line-height: 18px; letter-spacing: 0;
+}
+.ap-decision-badge.is-approved { background: var(--green-pale); color: var(--ok); }
+.ap-decision-badge.is-rejected { background: color-mix(in srgb, var(--err) 10%, var(--wk-paper)); color: var(--err); }
+.ap-decision-card { display: flex; align-items: center; padding: 12px 16px; }
+
+/* ── 状态头三件套：阶段色调 + 状态图标 + 短文案；拿不到阶段不硬造 ─────────── */
+.ap-head-status {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: var(--fs-cap); font-weight: 600; line-height: 16px; letter-spacing: 0; white-space: nowrap;
+}
+.ap-head-status--ask { background: color-mix(in srgb, var(--warn) 14%, var(--wk-paper)); color: var(--warn); }
+.ap-head-status--think { background: color-mix(in srgb, #E8DCC0 18%, var(--wk-paper)); color: #6E6247; }
+.ap-head-status--run { background: var(--green-pale); color: var(--ok); }
+.ap-head-status--paused { background: var(--wk-plane); color: var(--wk-ink-soft); }
+.ap-head-status--stopped { background: var(--wk-plane); color: var(--wk-muted); }
+.ap-head-status .cr-spin { animation-duration: 1.2s; }
+.ap-pause-glyph { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.ap-pause-glyph i { display: block; width: 2px; height: 10px; border-radius: 1px; background: currentColor; }
+
+/* 头部底色随阶段轻染一档，不覆盖头像与图标本身的颜色。 */
+.ap-session-head[data-tone="ask"] { background: color-mix(in srgb, var(--warn) 6%, var(--wk-paper)); }
+.ap-session-head[data-tone="think"] { background: color-mix(in srgb, #E8DCC0 10%, var(--wk-paper)); }
+.ap-session-head[data-tone="run"] { background: var(--green-pale); }
+.ap-session-head[data-tone="paused"] { background: var(--wk-plane); }
+.ap-session-head[data-tone="stopped"] { background: var(--wk-plane); }
+
+/* ── 头部圆形图标钮：hover 白色圆角气泡（沿用仓库 data-tip 模式） ─────────── */
+.ap-icon-btn[data-tip],
+.sc-space-library-menu summary[data-tip] { position: relative; }
+.ap-icon-btn[data-tip]::after,
+.sc-space-library-menu summary[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 2px; z-index: 60;
+  padding: 4px 9px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm);
+  background: var(--wk-paper); color: var(--wk-ink); box-shadow: var(--e1);
+  font-size: var(--fs-cap); line-height: 15px; letter-spacing: 0; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 120ms var(--ease-spec, ease);
+}
+.ap-icon-btn[data-tip]:hover::after,
+.ap-icon-btn[data-tip]:focus-visible::after,
+.sc-space-library-menu summary[data-tip]:hover::after,
+.sc-space-library-menu summary[data-tip]:focus-visible::after { opacity: 1; }
+
+/* ── 发送键双态：空态麦克风 / 有字箭头；圆钮绝对定位在输入框内部右下角 ─────────── */
+.ap-panel-field { position: relative; }
+.ap-panel-field textarea { padding: 26px 44px 36px 26px; }
+/* 左下 ⓘ 与右下圆钮同一基线、同一边距。 */
+.ap-panel-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; }
+/* 附件条 / 排队提示 / 告警 / 存盘失败：全部浮层盖在输入区上方，出现消失不撑高 composer、不顶歪圆钮与 ⓘ 基线。 */
+.ap-file-chip { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; }
+.ap-field-note { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; margin: 0; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
+.ap-field-alert { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; padding: 6px 8px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); box-shadow: var(--e1); font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-ink-soft); }
+.ap-field-alert p { margin: 0 0 6px; }
+.ap-field-alert button { margin: 0 6px 0 0; }
+.ap-panel-field .ap-panel-send {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #141416;
+  color: #FFFFFF;
+}
+.ap-panel-field .ap-panel-send:hover:not(:disabled) { transform: none; }
+.ap-panel-field .ap-panel-send:disabled { background-color: #FFFFFF; color: #A6AAB2; cursor: default; }
+/* 空态麦克风：中性浅底描边，不抢发送色。 */
+.ap-panel-field .ap-panel-send.ap-mic { background-color: #FFFFFF; border-color: #E4E4E7; color: #55585F; }
+.ap-panel-field .ap-panel-send.ap-mic:hover:not(:disabled) { background-color: #ECEDEF; color: #141416; }
+.ap-panel-field .ap-panel-send.ap-mic:disabled { color: #A6AAB2; background-color: #FFFFFF; opacity: .5; cursor: not-allowed; }
+.ap-panel-field .ap-panel-send.ap-mic.is-listening { background-color: #96651F; border-color: transparent; color: #FFFFFF; animation: ap-mic-pulse 1.2s ease-in-out infinite; }
+.ap-panel-field .ap-panel-send.ap-mic.is-listening:hover:not(:disabled) { background-color: #96651F; color: #FFFFFF; }
+@keyframes ap-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 32%, transparent); }
+  50% { box-shadow: 0 0 0 7px transparent; }
+}

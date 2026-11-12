@@ -110,7 +110,9 @@ describe('local activity creation and switching', () => {
     expect(restoreAvailability.localRestoreAvailable()).toBe(false);
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const ui = setup();
-    expect(screen.getByText(/打开已有活动或从备份文件恢复暂不可用/)).toBeTruthy();
+    expect(screen.getByText(/已有活动暂不可打开/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '恢复保障说明' }));
+    expect(await screen.findByText(/打开已有活动或从备份文件恢复暂不可用/)).toBeTruthy();
     const form = screen.getByRole('form', { name: '新建活动' });
     expect(form.querySelector('fieldset')!.disabled).toBe(false);
     expect((screen.getByRole('button', { name: '新建活动' }) as HTMLButtonElement).disabled).toBe(false);

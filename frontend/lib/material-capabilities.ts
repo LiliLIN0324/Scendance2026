@@ -64,6 +64,7 @@ const missingRules: MaterialRule[] = [
 const aliases: Record<BuiltinMaterialId, RegExp> = {
   chair: /椅子|座椅|单椅|單椅|桌椅|\bchairs?\b/giu,
   table: /桌子|(?:长(?:方形)?桌|長桌|方桌|矩形桌|普通桌)(?:子)?|桌椅|\btables?\b/giu,
+  desk: /课桌|課桌|\bdesks?\b/giu,
   reception: /签到台|簽到台|接待台|\breception\b/giu,
   backdrop: /背景板|背景墙|背景牆|\bbackdrops?\b/giu,
   display: /展示架|展架|\bdisplays?\b/giu,

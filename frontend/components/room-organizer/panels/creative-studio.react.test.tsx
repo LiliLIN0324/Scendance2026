@@ -3253,7 +3253,7 @@ describe('complete local backup transactions', () => {
     const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
     renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
-    expect(screen.getByText(/打开已有活动或从备份文件恢复暂不可用/)).toBeTruthy();
+    expect(screen.getByText(/已有活动暂不可打开/)).toBeTruthy();
     expect((screen.getByRole('button',{name:'新建活动'}) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'独立活动集成演练'}});
     fireEvent.click(screen.getByRole('button',{name:'新建活动'}));

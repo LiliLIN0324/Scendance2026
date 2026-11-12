@@ -44,7 +44,6 @@ describe('MiniMax simulated tool protocol (never dispatches)', () => {
     response({ role: 'assistant', tool_calls: [call('a', 'unknown')] }),
     response({ role: 'assistant', tool_calls: [call('a', 'get_scene', '[]')] }),
     response({ role: 'assistant', tool_calls: [call('a')], reasoning_content: 'x'.repeat(100_001) }),
-    response({ role: 'assistant', tool_calls: [call('a')], undocumented: 'private' }),
     { choices: [], base_resp: { status_code: 1008 } },
   ])('fails closed without exposing provider payload', raw => {
     try { parseMiniMaxToolTurn(raw, ['get_scene'], new Set()); throw new Error('unexpected success'); }
@@ -52,6 +51,12 @@ describe('MiniMax simulated tool protocol (never dispatches)', () => {
       expect(error).toMatchObject({ code: 'MINIMAX_INVALID_TOOL_RESPONSE' });
       expect(JSON.stringify(error)).not.toContain('private');
     }
+  });
+  it('keeps provider-specific message fields on the in-memory replay only, never in an error payload', () => {
+    const raw = response({ role: 'assistant', tool_calls: [call('a')], reasoning_details: [{ text: 'private' }], undocumented: 'private' });
+    const turn = parseMiniMaxToolTurn(raw, ['get_scene'], new Set());
+    expect(turn.assistantMessage).toMatchObject({ reasoning_details: [{ text: 'private' }], undocumented: 'private' });
+    expect(JSON.stringify(turn.calls)).not.toContain('private');
   });
 
   it('requires exactly one submit on the last turn and rejects unknown tool configuration', () => {

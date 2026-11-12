@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloudBriefMessage, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, parseBriefTurn, summarizeMemory } from './brief-agent';
+import { cloudBriefMessage, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, parseBriefTurn, splitConfirmationLead, summarizeMemory } from './brief-agent';
 
 /** 画布上还没立场地、也没拖图纸的默认语境。 */
 const bare = { venueUp: false, scaleTyped: false, hasBase: false, command: null as null | 'again' | 'first' };
@@ -393,5 +393,38 @@ describe('summarizeMemory / memoryExtraction', () => {
     expect(extraction.headcount).toBe(80);
     expect(extraction.lengthM).toBe(39);
     expect(extraction.timeOfDay).toBeNull();
+  });
+});
+
+describe('splitConfirmationLead / 带内容的确认答复', () => {
+  it('答复词+分隔符拆出肯定答复与剩余要求', () => {
+    expect(splitConfirmationLead('确认，需要签到区。课桌每桌坐3人')).toEqual({ kind: 'affirm', rest: '需要签到区。课桌每桌坐3人' });
+    expect(splitConfirmationLead('对，45人')).toEqual({ kind: 'affirm', rest: '45人' });
+    expect(splitConfirmationLead('好的，但是签到区往南挪')).toEqual({ kind: 'affirm', rest: '但是签到区往南挪' });
+    expect(splitConfirmationLead('不需要签到台')).toEqual({ kind: 'reject', rest: '签到台' });
+  });
+  it('整句答复、提案短语、疑问与请求不拆，走原有门', () => {
+    expect(splitConfirmationLead('确认')).toBeNull();
+    expect(splitConfirmationLead('确认布置')).toBeNull();
+    expect(splitConfirmationLead('可以帮我加两把椅子吗')).toBeNull();
+    expect(splitConfirmationLead('需要签到区吗？需要的话加上')).toBeNull();
+    expect(splitConfirmationLead('随便看看')).toBeNull();
+  });
+
+  it('待确认需求时，带内容的确认被接受且剩余要求照常记录', () => {
+    const previous = { ...initialBriefMemory(), pendingActivityNeeds: [{ kind: 'checkin' as const, value: true, evidence: '需要签到区' }], unresolvedActivityNeeds: ['checkin' as const] };
+    const turn = parseBriefTurn('确认，需要签到区。课桌每桌坐3人', previous, { venueUp: false, scaleTyped: false, hasBase: false, command: null });
+    expect(turn.memory.zoneNeeds.checkin).toBe(true);
+    expect(turn.memory.pendingActivityNeeds).toHaveLength(0);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).toContain('记下了：需要签到区');
+  });
+
+  it('待确认需求时，带内容的否定答复不采纳该需求，保持未知待追问', () => {
+    const previous = { ...initialBriefMemory(), pendingActivityNeeds: [{ kind: 'rest' as const, value: true, evidence: '需要休息区' }], unresolvedActivityNeeds: ['rest' as const] };
+    const turn = parseBriefTurn('不对，休息区不用了', previous, { venueUp: false, scaleTyped: false, hasBase: false, command: null });
+    expect(turn.memory.zoneNeeds.rest).toBeNull();
+    expect(turn.memory.pendingActivityNeeds).toHaveLength(0);
+    expect(turn.text).toContain('先不采用');
   });
 });
