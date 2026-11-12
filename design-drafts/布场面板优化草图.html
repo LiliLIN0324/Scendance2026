@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>布场编辑器 · 属性 / 多选 / 阵列 优化草图</title>
+<style>
+  /* ===== 沿用 outdoor-plan-tokens：冷石画廊白 ===== */
+  :root {
+    --paper: #ffffff;
+    --hair: #e4e4e7;
+    --ink: #141416;
+    --ink-soft: #55585f;
+    --muted: #71767e;
+    --field: #f4f5f7;
+    --active: #eef3ef;
+    --green: #35624a;
+    --green-2: #4a7c59;
+    --facility: #c98a2c;
+    --route: #4a6fa3;
+    --worker: #b3628c;
+    --zone: #7fb69a;
+    --measure: #2fa8b5;
+    --annotate: #8e44ad;
+    --danger: #b4443c;
+    --warn: #96651f;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+    --shadow: 0 10px 26px rgba(20, 24, 32, 0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px 64px;
+    background: var(--field);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px; line-height: 1.55;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: 0.01em; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  .legend { display: flex; gap: 16px; margin: 14px 0 0; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); font-size: 12px; }
+  .swatch { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+
+  section.block { margin-top: 30px; }
+  .block-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .block-head .no {
+    width: 24px; height: 24px; border-radius: 7px; background: var(--green); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: 0 0 auto;
+  }
+  .block-head h2 { font-size: 15px; margin: 0; }
+  .block-head .note { color: var(--muted); font-size: 12px; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999; border: 1px solid var(--hair); color: var(--ink-soft); background: var(--paper); }
+  .tag.now { color: var(--muted); border-style: dashed; }
+  .tag.next { color: var(--green-2); border-color: var(--green-2); background: var(--active); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--paper); border: 1px solid var(--hair); border-radius: var(--r-lg);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .panel-label { padding: 8px 12px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--hair); }
+  .panel-body { padding: 14px; }
+
+  /* ===== 卡片内部原语 ===== */
+  .card-head { display: flex; align-items: center; gap: 8px; }
+  .icon-tile {
+    width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto;
+  }
+  .icon-tile.accent { background: rgba(53,98,74,0.10); color: var(--green); }
+  .count-pill {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999;
+    background: rgba(53,98,74,0.14); color: var(--green);
+    font-size: 10px; font-weight: 600; line-height: 18px; text-align: center;
+  }
+  .head-btn {
+    width: 28px; height: 28px; border: none; background: transparent; border-radius: 8px;
+    display: grid; place-items: center; cursor: pointer; color: var(--ink-soft);
+  }
+  .head-btn:hover { background: var(--field); }
+  .spacer { margin-left: auto; }
+
+  .fact-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .fact { background: var(--field); border-radius: var(--r-sm); padding: 7px 9px; min-width: 0; }
+  .fact .k { font-size: 10px; color: var(--muted); }
+  .fact .v { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; display: flex; align-items: center; gap: 5px; }
+  .icon-btn {
+    width: 20px; height: 20px; border: none; background: transparent; border-radius: 6px;
+    display: grid; place-items: center; cursor: pointer; color: var(--muted); padding: 0;
+  }
+  .icon-btn:hover { background: var(--hair); color: var(--ink); }
+
+  .section-title { font-size: 11px; color: var(--ink-soft); margin: 12px 0 6px; font-weight: 600; }
+  .swatch-row { display: flex; align-items: center; gap: 10px; }
+  .color-dot { width: 28px; height: 28px; border-radius: 999; border: 1px solid var(--hair); padding: 0; cursor: pointer; }
+  .unit-box { background: var(--field); border-radius: var(--r-sm); display: flex; align-items: center; gap: 4px; padding: 0 8px; }
+  .unit-box input { border: none; background: transparent; outline: none; width: 100%; font-size: 12px; padding: 6px 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .unit-box .u { font-size: 10px; color: var(--muted); }
+  .unit-box.w76 { width: 76px; }
+
+  /* 分段控件：单滑动药丸 */
+  .seg { display: flex; gap: 2px; background: var(--field); border-radius: 999; padding: 2px; margin-top: 6px; }
+  .seg button {
+    flex: 1; border: none; background: transparent; border-radius: 999; padding: 5px 4px;
+    font-size: 11px; cursor: pointer; color: var(--ink-soft); white-space: nowrap;
+  }
+  .seg button[aria-pressed="true"] { background: var(--paper); color: var(--green); font-weight: 600; box-shadow: 0 1px 3px rgba(20,24,32,0.12); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    border: 1px solid var(--hair); background: var(--paper); border-radius: 999;
+    padding: 5px 10px; font-size: 11px; color: var(--ink-soft); cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .chip:hover { border-color: var(--green-2); color: var(--green); }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .accordion {
+    display: flex; align-items: center; gap: 8px; width: 100%; background: transparent;
+    border: none; border-top: 1px solid var(--hair); padding: 10px 2px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink);
+  }
+  .setup-rows { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 4px 18px; }
+  .setup-row { display: flex; align-items: center; gap: 8px; }
+  .setup-row label, .setup-row > span { flex: 0 0 44px; font-size: 11px; color: var(--muted); }
+  .setup-row input { flex: 1; min-width: 0; border: 1px solid var(--hair); background: var(--paper); border-radius: var(--r-sm); padding: 6px 8px; font-size: 12px; outline: none; }
+  .setup-row input:focus { border-color: var(--green-2); }
+
+  /* 多选浮条 */
+  .float-bar {
+    display: inline-flex; align-items: center; gap: 8px; background: var(--paper);
+    border: 1px solid var(--hair); border-radius: 999; padding: 6px 8px; box-shadow: var(--shadow);
+  }
+  .float-bar .title { font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .float-bar .hint { font-size: 11px; color: var(--muted); }
+  .btn {
+    border: 1px solid var(--hair); background: transparent; border-radius: 999;
+    padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; color: var(--ink);
+  }
+  .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn.danger { color: var(--danger); border-color: rgba(180,68,60,0.4); }
+  .icon-row { display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; }
+  .icon-row .ib { width: 24px; height: 24px; border: none; background: transparent; border-radius: 7px; display: grid; place-items: center; cursor: pointer; color: var(--ink-soft); }
+  .icon-row .ib:hover { background: var(--field); }
+  .icon-row .ib:disabled { opacity: 0.35; cursor: default; }
+
+  /* 画布草图 */
+  .stage {
+    position: relative; height: 300px; border: 1px dashed var(--hair); border-radius: var(--r-md);
+    background: linear-gradient(var(--field) 1px, transparent 1px), linear-gradient(90deg, var(--field) 1px, transparent 1px);
+    background-size: 24px 24px; overflow: hidden;
+  }
+  .ghost { position: absolute; border: 1.5px dashed var(--green-2); background: rgba(74,124,89,0.10); border-radius: 5px; }
+  .ghost.bad { border-color: var(--danger); background: rgba(180,68,60,0.10); }
+  .origin { position: absolute; width: 44px; height: 32px; background: var(--facility); border-radius: 5px; box-shadow: 0 2px 6px rgba(20,24,32,0.2); }
+  .origin::after { content: "原件"; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); font-size: 9px; color: var(--ink-soft); margin-top: 3px; white-space: nowrap; }
+  .stage-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--ink-soft); flex-wrap: wrap; }
+  .stage-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .stroke-demo { width: 18px; height: 0; border-top: 1.5px dashed var(--green-2); }
+  .stroke-bad { width: 18px; height: 0; border-top: 1.5px solid var(--danger); }
+
+  .repeat-panel { display: flex; flex-direction: column; gap: 4px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .muted-line { font-size: 11px; color: var(--muted); }
+  .repeat-result { font-size: 12px; font-weight: 600; color: var(--green); margin-top: 4px; }
+
+  /* 待确认清单 */
+  ol.asks { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+  ol.asks li { color: var(--ink-soft); }
+  ol.asks b { color: var(--ink); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(8px);
+    background: var(--ink); color: #fff; font-size: 12px; padding: 8px 14px; border-radius: 999;
+    opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .note-inline { font-size: 11px; color: var(--warn); }
+  .tag.done { color: var(--green); border-color: var(--green-2); background: var(--active); }
+  .result-bad { color: var(--danger); }
+  .evidence { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .evidence th, .evidence td { border-top: 1px solid var(--hair); padding: 8px 10px; text-align: left; vertical-align: top; line-height: 1.5; }
+  .evidence th { color: var(--muted); font-weight: 600; font-size: 11px; }
+  .evidence td:first-child { white-space: nowrap; font-weight: 600; color: var(--ink-soft); }
+  .evidence td .src { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>布场编辑器 · 属性 / 多选 / 阵列复制 优化草图</h1>
+    <div class="meta">基线：origin/main（outdoor-plan-canvas.tsx）｜参照：PetitMaker SelectionCard / SegmentedControl / HintPanel，Figpea Repeat，Apple HIG，GitHub Primer ActionBar，Carbon Empty State｜v2 已拍板：空态轻量提示条 · 幽灵半透明 · 线型滑动药丸｜仅草图，未改代码</div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--field);border:1px dashed var(--hair)"></i>现状（main 已落地）</span>
+      <span><i class="swatch" style="background:var(--active);border:1px solid var(--green-2)"></i>建议方向</span>
+      <span><i class="swatch" style="background:var(--facility)"></i>设施</span>
+      <span><i class="swatch" style="background:var(--green-2)"></i>预览幽灵</span>
+      <span><i class="swatch" style="background:var(--danger)"></i>越界 / 碰撞</span>
+    </div>
+  </header>
+
+  <!-- A 空态 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="no">A</span><h2>属性卡 · 空态（未选中任何实体）</h2>
+      <span class="note">现状：居中大图标 + 两行斜杠罗列文案；已采纳：紧凑提示条，对象类型做成可点 chip</span>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="panel-label"><span class="tag now">现状</span></div>
+        <div class="panel-body">
+          <div class="card-head">
+            <span class="icon-tile accent"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/></svg></span>
+            <span style="font-weight:600">属性</span>
+            <span class="spacer"></span>
+            <button class="head-btn" aria-label="折叠"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+            <button class="head-btn" aria-label="关闭"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;text-align:center;color:var(--muted)">
+            <span style="width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--field)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+            </span>
+            <span style="font-size:12;line-height:1.6">在图上点选分区 / 设施 / 动线 / 出入口 / 人员，<br>这里会出现它的属性。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label"><span class="tag done">已采纳</span></div>
+        <div class="panel-body">
+          <div class="card-head">
+            <span class="icon-tile accent"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/></svg></span>
+            <span style="font-weight:600">属性</span>
+            <span class="spacer"></span>
+            <button class="head-btn" aria-label="折叠"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+            <button class="head-btn" aria-label="关闭"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+          <div style="margin-top:10px">
+            <div style="font-size:12;color:var(--ink-soft)">点选图上任意对象，这里会显示它的属性：</div>
+            <div class="chips" id="empty-chips">
+              <button class="chip" data-kind="分区"><i class="dot" style="background:var(--zone)"></i>分区</button>
+              <button class="chip" data-kind="设施"><i class="dot" style="background:var(--facility)"></i>设施</button>
+              <button class="chip" data-kind="动线"><i class="dot" style="background:var(--route)"></i>动线</button>
+              <button class="chip" data-kind="出入口"><i class="dot" style="background:var(--measure)"></i>出入口</button>
+              <button class="chip" data-kind="人员"><i class="dot" style="background:var(--worker)"></i>人员</button>
+            </div>
+            <div class="muted-line" style="margin-top:8px">chip 等价于提示「去图上选这类对象」；只聚焦一个下一步动作，文案说清「选了之后这里会出现什么」；面板可折叠、可关闭，不常驻大面板挤占画布（Carbon Empty State：不堆多个动作、不用未解释的术语）。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- B 属性选中态 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="no">B</span><h2>属性卡 · 选中态（单件设施）</h2>
+      <span class="note">头部一行式；事实改卡片网格；线型换滑动分段；布场信息折叠</span>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="panel-label"><span class="tag now">现状要点</span></div>
+        <div class="panel-body" style="color:var(--ink-soft);display:flex;flex-direction:column;gap:8px">
+          <div>· 名称直改 + 阵列换页钮；坐标行 + 复制图标</div>
+          <div>· 色板圆点 + 透明度数字盒；线型四个并排描边按钮</div>
+          <div>· 尺寸 W / L 双盒；布场信息手风琴（供应商 / 区域 / 进撤场 / 用电）</div>
+          <div class="note-inline">可保留：字段与数据契约不动；优化的是排布、扫读效率与控件形态。</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label"><span class="tag done">已采纳</span></div>
+        <div class="panel-body">
+          <!-- 头部行 -->
+          <div class="card-head">
+            <span class="icon-tile accent"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg></span>
+            <input value="电梯 xxx 33" style="flex:1;min-width:0;background:transparent;border:none;outline:none;font-weight:700;font-size:14px;color:var(--ink);padding:4px 0">
+            <span class="count-pill">1</span>
+            <button class="head-btn" aria-label="阵列复制" data-toast="进入阵列复制页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+            <button class="head-btn" aria-label="折叠"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+            <button class="head-btn" aria-label="关闭"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+
+          <!-- 事实网格 -->
+          <div class="fact-grid">
+            <div class="fact" style="grid-column: span 2">
+              <div class="k">坐标</div>
+              <div class="v">30.40, 120.12
+                <button class="icon-btn" data-toast="坐标已复制" aria-label="复制坐标"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+              </div>
+            </div>
+            <div class="fact"><div class="k">W</div><div class="v">2.0 m</div></div>
+            <div class="fact"><div class="k">L</div><div class="v">1.5 m</div></div>
+            <div class="fact"><div class="k">旋转</div><div class="v">0°</div></div>
+          </div>
+
+          <!-- 样式 -->
+          <div class="section-title">样式</div>
+          <div class="swatch-row">
+            <button class="color-dot" style="background:var(--facility)" data-toast="更换颜色"></button>
+            <div class="unit-box w76"><input value="100" aria-label="透明度"><span class="u">%</span></div>
+          </div>
+          <div class="seg" id="stroke-seg" role="group" aria-label="描边样式">
+            <button aria-pressed="true" data-toast="实线">实线</button>
+            <button aria-pressed="false" data-toast="虚线">虚线</button>
+            <button aria-pressed="false" data-toast="点线">点线</button>
+            <button aria-pressed="false" data-toast="无描边">无</button>
+          </div>
+          <div class="muted-line" style="margin-top:6px">4 段等宽、单选；选中药丸浮起带轻阴影，切换滑动动画（reduced-motion 下停动画）；选择立即生效，不加提交按钮。</div>
+
+          <!-- 布场信息 折叠 -->
+          <button class="accordion" id="setup-toggle" aria-expanded="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="setup-plus"><path d="M12 5v14M5 12h14"/></svg>
+            布场信息
+          </button>
+          <div class="setup-rows" id="setup-rows" hidden>
+            <div class="setup-row"><label>供应商</label><input placeholder="输入名称"></div>
+            <div class="setup-row"><label>区域</label><input placeholder="输入区域"></div>
+            <div class="setup-row"><span>进场</span><input type="date" aria-label="进场日期"><input type="time" aria-label="进场时间"></div>
+            <div class="setup-row"><span>撤场</span><input type="date" aria-label="撤场日期"><input type="time" aria-label="撤场时间"></div>
+            <div class="setup-row"><label>用电</label><input type="number" placeholder="kW" min="0" step="0.1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- C 多选 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="no">C</span><h2>多选浮动条（≥2 件设施）</h2>
+      <span class="note">主条只留计数 + 高频动作；对齐分布收图标行；低频操作进溢出菜单</span>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="panel-label"><span class="tag now">现状</span></div>
+        <div class="panel-body">
+          <div style="font-weight:700;font-size:14;margin-bottom:4px">已选 6 件设施</div>
+          <div class="muted-line" style="margin-bottom:10px">拖组内任意一件整组移动 · 角柄整组缩放 · 方向键微调 · Ctrl+D 复制 · Delete 删除</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn">复制</button>
+            <button class="btn danger">删除</button>
+            <button class="btn">取消选择</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label"><span class="tag done">建议稿</span></div>
+        <div class="panel-body" style="display:flex;flex-direction:column;align-items:flex-start;gap:8px">
+          <div class="float-bar">
+            <span class="count-pill">6</span>
+            <span class="title">件已选中</span>
+            <span class="hint">拖动即整体移动</span>
+            <span class="spacer"></span>
+            <button class="btn" data-toast="批量复制">复制</button>
+            <button class="btn danger" data-toast="批量删除">删除</button>
+            <button class="head-btn" data-toast="更多操作" aria-label="更多"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+          </div>
+          <div class="icon-row" aria-label="对齐与分布">
+            <button class="ib" title="左对齐" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v16M8 8h8M8 12h12M8 16h6"/></svg></button>
+            <button class="ib" title="水平居中"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M7 7h10M5 12h14M8 17h8"/></svg></button>
+            <button class="ib" title="右对齐"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 4v16M8 8h8M4 12h16M10 16h6"/></svg></button>
+            <span style="width:1px;height:16px;background:var(--hair);margin:0 4px"></span>
+            <button class="ib" title="顶对齐"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16M8 8v8M12 5v14M16 8v6"/></svg></button>
+            <button class="ib" title="垂直居中"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M7 7v10M12 5v14M17 7v10"/></svg></button>
+            <button class="ib" title="底对齐"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M8 8v8M12 5v14M16 8v6"/></svg></button>
+          </div>
+          <div class="muted-line">动作条只放触发动作的按钮（选中态控件不进动作条）；成组 / 解组 / 存为组合等低频操作收进末尾「⋯」溢出菜单；删除用 danger 变体；图标与文字不混排；触摸目标 ≥44px；浮条锚在组包围盒顶边，自动避开选中物。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- D 阵列复制 + 预览 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="no">D</span><h2>阵列复制 · 画布预览模式（当前最大缺口）</h2>
+      <span class="note">main 现状：点按钮才生成；已采纳：输入列 / 行 / 间距时画布先出半透明幽灵落点，越界碰撞标红，确认才提交</span>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="panel-label"><span class="tag next">阵列面板（可交互）</span></div>
+        <div class="panel-body">
+          <div class="repeat-panel">
+            <div class="muted-line">已选中 1 件物件</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
+              <span style="font-weight:700;font-size:14">阵列复制</span>
+              <button class="head-btn" data-toast="返回物件属性" aria-label="返回"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+
+            <div class="section-title">布局</div>
+            <div class="two-col">
+              <label class="unit-box"><span class="u">列</span><input type="number" id="in-cols" min="1" max="20" value="4"></label>
+              <label class="unit-box"><span class="u">行</span><input type="number" id="in-rows" min="1" max="20" value="3"></label>
+            </div>
+
+            <div class="section-title">间距（两件之间的净空，非中心距）</div>
+            <div class="two-col">
+              <label class="unit-box"><span class="u">列距</span><input type="number" id="in-gapx" min="0" max="200" step="0.5" value="1.0"><span class="u">m</span></label>
+              <label class="unit-box"><span class="u">行距</span><input type="number" id="in-gapy" min="0" max="200" step="0.5" value="1.0"><span class="u">m</span></label>
+            </div>
+
+            <div class="repeat-result" id="repeat-result">将生成 49 件</div>
+            <button class="btn primary" id="repeat-commit" style="justify-content:center;width:100%;margin-top:6px">按阵列复制 49 件</button>
+            <div class="muted-line" style="margin-top:6px">幽灵半透明、穿透不挡下层点选；收起面板 / 改选对象即消失；网格锚定原件向右下铺开，原件不动，提交后成一组、一条 undo。预览不进 undo 栈；越界 / 碰撞格位当场标红，原因写在上方回读行，而不是只把按钮置灰。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label"><span class="tag next">画布幽灵预览</span></div>
+        <div class="panel-body">
+          <div class="stage" id="stage">
+            <div class="origin" id="origin"></div>
+          </div>
+          <div class="stage-legend">
+            <span><i class="stroke-demo"></i>半透明幽灵落点（未提交）</span>
+            <span><i class="stroke-bad"></i>越界 / 碰撞</span>
+            <span><i class="swatch" style="background:var(--facility)"></i>原件</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- E 待确认 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="no">E</span><h2>待你拍板</h2>
+    </div>
+    <div class="panel">
+      <div class="panel-body">
+        <ol class="asks">
+          <li><b>空态形态（已采纳）：</b>轻量提示条 + 可点类型 chip，不做居中大空态面板。</li>
+          <li><b>预览强度（已采纳）：</b>幽灵落点用半透明轮廓；碰撞 / 越界当场标红并阻止提交。</li>
+          <li><b>分段控件（已采纳）：</b>线型（实线 / 虚线 / 点线 / 无）换成单滑动药丸，替代现状四个并排按钮。</li>
+          <li><b>阵列判定规则（待确认）：</b>碰撞是按占地矩形相交判定还是留安全间距？单次数件上限取多少（参照 Figpea 500 件 / 次）？越界格是整行禁提交，还是跳过非法格只生成合法格？</li>
+          <li><b>动手节奏：</b>本地攒分支，一个组件一个组件改，tsc + 测试 + 真机验收通过后再一次性推 main；建议顺序：C 多选条 → B 属性头部 / 分段 → A 空态 → D 阵列预览。</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- F 案例依据 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="no">F</span><h2>成熟案例依据对照</h2>
+      <span class="note">每条建议都能回追到具体案例的做法，不是凭空设计</span>
+    </div>
+    <div class="panel">
+      <div class="panel-body" style="padding:6px 10px">
+        <table class="evidence">
+          <thead>
+            <tr><th>组件</th><th>成熟案例</th><th>关键做法</th><th>落到我们</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>阵列幽灵预览</td>
+              <td>Figpea Repeat <span class="src">figpea.com</span></td>
+              <td>面板打开即画半透明幽灵，输入即时重渲染；幽灵穿透不挡下层；Apply / 收起 / 改选后消失；状态行回读结果与原因；间距是净空 gap；锚定原件向右下；原件不动、一次 undo；超限禁用并说明原因。</td>
+              <td>D 块画布幽灵 + 回读行 + 越界标红；提交一条 undo。</td>
+            </tr>
+            <tr>
+              <td>线型滑动药丸</td>
+              <td>Apple HIG · freedesignmd 词条 · PetitMaker SegmentedControl</td>
+              <td>2–5 个互斥短选项、等宽；选中段白色药丸浮起带轻阴影，高亮滑动；立即生效无提交钮；单选；不混图标段与文字段；reduced-motion 停动画。</td>
+              <td>B 块线型 4 段换单滑动药丸。</td>
+            </tr>
+            <tr>
+              <td>多选动作条</td>
+              <td>GitHub Primer ActionBar · Figma 上下文工具</td>
+              <td>动作条只放动作按钮；分隔线分组；放不下进末尾 kebab 溢出；danger 变体表删除；图标文字不混排；toolbar 单 Tab 停止、方向键切换；触摸目标 ≥44px；工具随选中态出现。</td>
+              <td>C 块主条计数 + 复制 / 删除 + ⋯；对齐分布第二条图标行。</td>
+            </tr>
+            <tr>
+              <td>空态提示</td>
+              <td>Carbon Empty State · Unity Empty States · PetitMaker HintPanel</td>
+              <td>讲清为什么没内容 + 下一步做什么；聚焦一个主行动；上下文相关、不用未解释术语；文案行宽设上限；可折叠 / 关闭。</td>
+              <td>A 块轻量提示条 + 类型 chip。</td>
+            </tr>
+            <tr>
+              <td>属性头部 / 事实网格</td>
+              <td>PetitMaker SelectionCard</td>
+              <td>一行头部：缩略图 + 名称 + 计数徽章 + 折叠 / 关闭；事实用 label / value 小卡片网格；卡片跟随选中物放置、自动选上下侧。</td>
+              <td>B 块头部一行式 + Fact 网格。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg) {
+    if (!msg) return;
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1400);
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-toast]');
+    if (t) toast(t.getAttribute('data-toast'));
+  });
+
+  // 线型分段：单选切换
+  var seg = document.getElementById('stroke-seg');
+  seg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) { b.setAttribute('aria-pressed', 'false'); });
+    btn.setAttribute('aria-pressed', 'true');
+  });
+
+  // 布场信息折叠
+  var toggle = document.getElementById('setup-toggle');
+  var rows = document.getElementById('setup-rows');
+  var plus = document.getElementById('setup-plus');
+  toggle.addEventListener('click', function () {
+    var open = rows.hidden;
+    rows.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    plus.style.transform = open ? 'rotate(45deg)' : 'none';
+  });
+
+  // 阵列幽灵预览联动
+  var colsEl = document.getElementById('in-cols');
+  var rowsEl = document.getElementById('in-rows');
+  var gapxEl = document.getElementById('in-gapx');
+  var gapyEl = document.getElementById('in-gapy');
+  var stage = document.getElementById('stage');
+  var origin = document.getElementById('origin');
+  var result = document.getElementById('repeat-result');
+  var commit = document.getElementById('repeat-commit');
+
+  var ORIGIN = { x: 24, y: 134, w: 44, h: 32 };
+
+  function clampInt(v, min, max) {
+    var n = Math.floor(Number(v) || min);
+    return Math.max(min, Math.min(max, n));
+  }
+  function clampNum(v, min, max) {
+    var n = Number(v);
+    if (!Number.isFinite(n)) n = min;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function render() {
+    var cols = clampInt(colsEl.value, 1, 20);
+    var rows = clampInt(rowsEl.value, 1, 20);
+    var gapx = clampNum(gapxEl.value, 0, 200);
+    var gapy = clampNum(gapyEl.value, 0, 200);
+
+    // 清掉旧幽灵
+    Array.prototype.forEach.call(stage.querySelectorAll('.ghost'), function (g) { g.remove(); });
+
+    var cellW = ORIGIN.w, cellH = ORIGIN.h;
+    var stepX = cellW + gapx * 20;
+    var stepY = cellH + gapy * 20;
+    var stageW = stage.clientWidth, stageH = stage.clientHeight;
+    var bad = 0;
+
+    for (var j = 0; j < rows; j++) {
+      for (var i = 0; i < cols; i++) {
+        if (i === 0 && j === 0) continue; // 原件占位
+        var g = document.createElement('div');
+        g.className = 'ghost';
+        var x = ORIGIN.x + i * stepX;
+        var y = ORIGIN.y - j * stepY;
+        var out = x + cellW > stageW - 8 || y < 8 || y + cellH > stageH - 8;
+        if (out) { g.classList.add('bad'); bad++; }
+        g.style.left = x + 'px';
+        g.style.top = y + 'px';
+        g.style.width = cellW + 'px';
+        g.style.height = cellH + 'px';
+        stage.appendChild(g);
+      }
+    }
+
+    var total = cols * rows - 1;
+    result.textContent = '将生成 ' + total + ' 件' + (bad > 0 ? '（' + bad + ' 格越界 / 碰撞，请调整）' : '');
+    result.classList.toggle('result-bad', bad > 0);
+    commit.textContent = '按阵列复制 ' + total + ' 件';
+    commit.disabled = bad > 0;
+    commit.style.opacity = bad > 0 ? '0.45' : '1';
+  }
+
+  [colsEl, rowsEl, gapxEl, gapyEl].forEach(function (el) {
+    el.addEventListener('input', render);
+  });
+  commit.addEventListener('click', function () {
+    if (commit.disabled) { toast('存在越界格位，请调整列 / 行 / 间距'); return; }
+    toast('演示：确认后才提交一条历史');
+  });
+
+  window.addEventListener('resize', render);
+  render();
+})();
+</script>
+</body>
+</html>

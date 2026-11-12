@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * 画布左下角设置：切回官网、新手指引与 GitHub；付费入口暂不开放。
+ * 画布左下角「更多」：切回官网、新手指引与 GitHub；付费入口暂不开放。
+ * 单位、标注显隐等设置项已下沉到账户中心「设置」分区，这里只保留外链导航。
  * 「清除密钥 / 清除历史任务」本轮不做入口：凭证走 cloud-panel 的退出登录（controller.signOut），
  * 前端拿不到也删不了服务端密钥；本机方案会话按场在历史面板逐条删除（分域 + 写保护围栏，
  * 存储层刻意不支持整批清空）；云端历史任务无前端删除通道。结论见交付汇报，不造假按钮。
  */
-import { BookOpen, Home, Settings } from '@/components/solid-icons';
+import { BookOpen, Home, MoreHorizontal } from '@/components/solid-icons';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import './settings-menu.css';
 
@@ -39,10 +40,10 @@ export function SettingsMenu({ buttonRef }: { buttonRef?: RefObject<HTMLButtonEl
   }, [open]);
 
   return <div className="sc-tool-menu sc-rail-settings-wrap" ref={rootRef}>
-    <button ref={buttonRef} type="button" className={`sc-rail-settings${open ? ' is-active' : ''}`} aria-label="设置" data-tip="设置" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)}>
-      <Settings size={22} aria-hidden="true"/>
+    <button ref={buttonRef} type="button" className={`sc-rail-settings${open ? ' is-active' : ''}`} aria-label="更多" data-tip="更多" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)}>
+      <MoreHorizontal size={22} aria-hidden="true"/>
     </button>
-    {open && <div className="sc-tool-pop sc-settings-pop" role="dialog" aria-label="设置">
+    {open && <div className="sc-tool-pop sc-settings-pop" role="dialog" aria-label="更多">
       {/* 官网是站内页面，主层级；新手指引、GitHub 属次要导航，走浅底小胶囊拉开层级。 */}
       <a className="sc-settings-link" href={HOME_URL}>
         <Home size={15} aria-hidden="true"/><span>切回官网</span>

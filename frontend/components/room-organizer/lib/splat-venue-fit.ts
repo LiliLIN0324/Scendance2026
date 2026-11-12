@@ -17,11 +17,11 @@ function roundMeter(value: number): number {
 }
 
 function keptNote(name: string): string {
-  return `环境预览：${name} · 观感已挂上，场地尺寸保持不动。第一人称走进场仍按眼高走动。`;
+  return `环境预览：${name} · 观感已挂上，场地尺寸保持不动。第一人称漫游仍按眼高走动。`;
 }
 
 function outdoorNote(name: string): string {
-  return `环境预览：${name} · 样例观感已挂上，没有改这块户外场地的尺寸（高斯不参与碰撞）。右轨「第一人称走进场」按眼高在场地里走。`;
+  return `环境预览：${name} · 样例观感已挂上，没有改这块户外场地的尺寸（高斯不参与碰撞）。右轨「第一人称漫游」按眼高在场地里走。`;
 }
 
 function calibratedNote(name: string, width: number, depth: number): string {

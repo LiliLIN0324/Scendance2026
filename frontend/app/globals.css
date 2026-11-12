@@ -1628,6 +1628,8 @@ body {
 .sc-workbench .sc-tool-column > #tool-walk:focus-visible .sc-walk-label {
   opacity: 1;
 }
+/* 漫游钮自带左侧深绿 label：压住通用 data-tip 浮层，避免两套标签叠印。 */
+.sc-workbench .sc-tool-column > #tool-walk[data-tip]::after { display: none; }
 /* 纯图标看不出作用：悬停/聚焦即在左侧浮出名字。 */
 .sc-workbench .sc-tool-column [data-tip]::after {
   content: attr(data-tip); position: absolute; right: calc(100% + 7px); top: 50%;

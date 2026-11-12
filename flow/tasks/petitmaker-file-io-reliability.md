@@ -1,0 +1,13 @@
+# PetitMaker成果机制：文件IO失败完整收口
+
+2026-10-10模块正式验收：root读delivery/build proof实际exit0，实核4路径与冻结副本SHA一致，新增26+旧caller13共39、4lint0、完整readonlytypes及独立build通过；browser/diskReadback明确false。file-io 6ed4a56ff815cd05d0f61a2e8a88edbcf115c4728977d7d83b9eae7a1f645a5c；images-test 2e429dc3b2c12ad4ca802f224922a8fcae2cd2449bc717cc46e0a0741921c57a；hook ca0cedc691096142c1d106104a9b82d96e7f4f3cc8ba805f5ed76f4224404483；hook-test 9dcb69758c274aeba8484622f8e4bd7f30d707231e3e44d833ce7cfebfb1ca11。证据在development-evidence/petitmaker-artifact-io-20261010。source owner冻结不再重复跑，已交前端下一底架固定副本做真实正常PNG/合法大窄示意图与保存核对；V2/V4原件不由这legacy缩图改变。
+
+来源是PetitMaker固定4e120e50的ExportModal336–387集中处理编码/交付异常，以及raster-image53–72最小1px和释放。原备份对话调查后，root直接读幕景原file-io/use-import-export及ReferenceImageControls确认了两处真实失败路径，已按用户“全面学习，其他可改”授权实施，不将参考游戏的分享码/素材/16384探测或模型风格带入。
+
+唯一执行owner为原本地备份对话：file-io.ts、新增file-io-images测试、use-import-export.ts、新增截图hook回归。前端已收到避开这四路径及后续纳固定副本的通知，负责正常PNG/参考底图真实页面流程；root核红绿证据、接口、hash和范围。其它caller/共享UI不由该owner改。
+
+截图必须在toBlob同步异常、回调createURL/DOM/click错误与null时明确完成失败，不留无人处理reject或永等；成功仍延后释放已造URL，Promise<boolean>接口保留，不伪称OS保存已确认。hook捕3D同步render及下载失败给用户友好反馈，不输出原始URL/内部异常。
+
+示意图读取保1500px最长边、白底JPEG0.85和已符合尺寸小图原文。失败reject，不用未缩小大图掩盖转换失败；事件draw/encode异常结束等待，取整宽高至少1。现10MiB与身份/布局门禁、旧图保留和busy finally由原caller保持。FileReader abort/无效结果若也会悬挂在同函数最小修，不建泛用图像框架/依赖或改几何/原件/合同/V4。
+
+验收：旧原版红证据对应每个新分支，模块与实际caller必要回归、旧JSON/私有URL导出保护、严格类型/lint与独立组合build，具体源码快照。单元失败模拟与实际正常图片/下载证据分列，不能拿helper测试宣称整站新布局已验。仍不Git小提交、付费、定时、外联。

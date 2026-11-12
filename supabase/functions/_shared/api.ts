@@ -248,6 +248,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         return respond({enabled:true,extraction:null,...(conversation?emptyConversation:{}),reason:briefReasons[0]??'MODEL_REQUEST_FAILED'});
       }
       if(['/assets/import','/assets/floorplan','/assets/glb','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
+      if(path==='/preferences' && method==='GET') return respond(await backend.scene(actor,'preferences.get'));
+      if(path==='/preferences' && method==='PATCH') {
+        const input=z.strictObject({unit:z.enum(['m','ft']).optional(),showMeasurements:z.boolean().optional()}).parse(await json());
+        return respond(await backend.scene(actor,'preferences.put',input));
+      }
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
       if(path==='/studios' && method==='POST') {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());

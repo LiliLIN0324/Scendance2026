@@ -511,9 +511,14 @@ export const FLOOR_HEIGHT_METERS = 3;
 /** Outdoor weather over the lot (#189). View-only: never part of a RoomLayout. */
 export type Weather = 'clear' | 'rain' | 'snow';
 
+/** 画布与导出读数的显示长度单位；内部工程底稿始终存米。 */
+export type DisplayUnit = 'm' | 'ft';
+
 export interface ViewSettings {
   view2D: boolean;
   showMeasurements: boolean;
+  /** 读数显示单位：内部仍按米存储，仅标注 / 属性面板 / 导出清单换算展示。 */
+  lengthUnit: DisplayUnit;
   showWiFiSignals: boolean;
   snapToGrid: boolean;
   snapToWall: boolean;

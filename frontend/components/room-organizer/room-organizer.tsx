@@ -194,6 +194,7 @@ import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
+import OutdoorViewSwitch from './components/outdoor-view-switch';
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
@@ -263,6 +264,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   // 不再一开门就是室内 3D 舞台。
   view2D: true,
   showMeasurements: true,
+  lengthUnit: 'm',
   showWiFiSignals: false,
   snapToGrid: false,
   snapToWall: false,
@@ -828,6 +830,15 @@ useEffect(() => {
   /** 左轨四格共用一个面板：切到哪一格，整栏就变成那个 agent 的卡。 */
   const showAgent = useCallback((id: AgentId) => {
     setCapturePanel(value => value === 'open' ? 'hidden' : value);
+    // 2026-11-13 收敛 14a：户外 3D 接管态下切到任一对话格，先退回户外 2D 地图——
+    // 否则接管层随左栏切换仍保持 visible，空屏 + 比例尺/指北针残留在右侧。只退视图，不整体关户外。
+    if (outdoor3dTakeoverActive && !outdoor2DOpen) {
+      clearPendingPlacement();
+      setOutdoor3dTakeoverActive(false);
+      setOutdoor2DOpen(true);
+      setOutdoorPanel('library');
+      setOutdoorView('2d');
+    }
     if (id === 'material') setWorkbenchMode('layout');
     // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
     setChatPeerId(null);
@@ -841,7 +852,7 @@ useEffect(() => {
       const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
       (input ?? document.getElementById('agent-panel'))?.focus({ preventScroll: true });
     });
-  }, []);
+  }, [outdoor2DOpen, outdoor3dTakeoverActive]);
   const openTemplates = useCallback(() => {
     if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
     showAgent('space');
@@ -2420,6 +2431,29 @@ useEffect(() => {
   // 2026-11-12 用户拍板（统一 2D/3D）：有户外计划时关掉覆盖层就是接管 3D（图六），
   // 不再看 view2D 落「主舞台平面平铺图」（图三已废）——漫游/实景隔离仍不接管。
   const outdoor3dTakeover = outdoor3dTakeoverActive && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive && !scanIsolated;
+  // 2026-11-13 定稿：2D/3D 胶囊固定在画布左下动作簇，2D 覆盖层与 3D 接管同一入口；
+  // 右轨 44px 竖轨不再纳横排文字胶囊。状态机沿用原 outdoorStage.onSwitch 的三态流转。
+  const handleOutdoorViewSwitch = (next: '2d' | '3d') => {
+    if (next === '3d') {
+      setSplatTransformModeState('off');
+      if (outdoor2DOpen) {
+        setOutdoor2DOpen(false);
+        setOutdoor3dTakeoverActive(true);
+        setOutdoorView('2d');
+        setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+      } else if (!outdoor3dTakeoverActive) {
+        setOutdoor3dTakeoverActive(true);
+        setOutdoorView('2d');
+        setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+      }
+      return;
+    }
+    clearPendingPlacement();
+    setOutdoor3dTakeoverActive(false);
+    setOutdoor2DOpen(true);
+    setOutdoorPanel('library');
+    setOutdoorView('2d');
+  };
   // 2026-11-12 用户拍板：左栏所有卡片统一「半卡片」交互（拖把手调高/收起/拖出独立小窗）。
   // 当前可见的堆栈成员：≤2 张时参与比例调节；>2 张（拍摄向导+私聊+户外同开的极端组合）
   // 安全退化为均分。captureOpen 不再独占左栏：拍摄场地卡与户外卡/私聊卡堆叠共存
@@ -2512,10 +2546,15 @@ useEffect(() => {
     requestWalkPointerLock();
     setView(current => ({ ...current, view2D: false, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: true }));
   }
+  /** 退出漫游的唯一收口：关视图 + live→build；Esc、顶部胶囊、右轨按钮都走这里。 */
+  const exitWalkthrough = useCallback(() => {
+    setView(current => (current.walkthroughMode ? { ...current, walkthroughMode: false } : current));
+    setGameMode(mode => (mode === 'live' ? 'build' : mode));
+  }, [setView, setGameMode]);
   /** 右侧 tool-walk 与场地卡共用：进 = startWalk（带当前角色），出 = 收漫游。 */
   function toggleWalkthrough(on: boolean) {
     if (on) { startWalk(); return; }
-    setView(current => ({ ...current, walkthroughMode: false }));
+    exitWalkthrough();
   }
   const splatLodEnabled = showGaussianInCanvas && !!layout.researchArea && !!environment && !scanIsolated;
   const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
@@ -2854,10 +2893,7 @@ useEffect(() => {
     ...(splatWalkBounds ? { walkBounds: splatWalkBounds } : {}),
     items: activeFloor.items,
     ...(activeFloor.interiorWalls ? { interiorWalls: activeFloor.interiorWalls } : {}),
-    onExit: useCallback(() => {
-      setView((v) => (v.walkthroughMode ? { ...v, walkthroughMode: false } : v));
-      setGameMode((mode) => (mode === 'live' ? 'build' : mode));
-    }, []),
+    onExit: exitWalkthrough,
   });
 
   // people.glb is fetched only once a person is placed; wandering NPCs keep
@@ -3394,6 +3430,7 @@ useEffect(() => {
       setGameMode,
       autoCycleLighting,
       setAutoCycleLighting,
+      exitWalkthrough,
     }),
     [
       layout, activeFloor, activeFloorIndex, actions,
@@ -3402,6 +3439,7 @@ useEffect(() => {
       recentColors, pushColor, playCue,
       history, isReady, error,
       gameMode, setGameMode, autoCycleLighting, setAutoCycleLighting,
+      exitWalkthrough,
     ]
   );
 
@@ -4283,7 +4321,17 @@ useEffect(() => {
                 </button>
               </nav>
             </div>
-            <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
+            <RailTeamBlock controller={controller} team={team} onOpenChat={member => {
+              // 2026-11-13 收敛 14a：接管态开私信同样先退回户外 2D，避免接管层残留。
+              if (outdoor3dTakeoverActive && !outdoor2DOpen) {
+                clearPendingPlacement();
+                setOutdoor3dTakeoverActive(false);
+                setOutdoor2DOpen(true);
+                setOutdoorPanel('library');
+                setOutdoorView('2d');
+              }
+              setChatPeerId(current => current === member.userId ? null : member.userId);
+            }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
               {/* 2026-11-11 用户指令：户外态不再显示草稿保存状态文字（保存仍自动进行）。 */}
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
@@ -4527,6 +4575,20 @@ useEffect(() => {
               data-testid="outdoor-inspector-host"
               style={{ position: 'absolute', inset: 0, zIndex: 31, pointerEvents: 'none', visibility: outdoor3dTakeover ? 'visible' : 'hidden' }}
             />
+            {/* 2026-11-13 定稿：2D/3D 胶囊独立于覆盖层挂载——接管态覆盖层保活隐藏，胶囊仍要出镜。
+                位置对齐左下交付簇（left 12 · bottom 56，避开比例尺盒）；z 33：接管层 29 / 覆盖层 30 /
+                工具卡宿主 31 之上，右轨 35 之下。导出 / 分享簇向右让位（见 outdoor-plan-overlay 左下簇）。 */}
+            {!!outdoorPlan && (outdoor2DOpen || outdoor3dTakeover) && (
+              <div
+                data-testid="outdoor-view-switch-host"
+                style={{ position: 'absolute', left: 12, bottom: 56, zIndex: 33, pointerEvents: 'auto' }}
+              >
+                <OutdoorViewSwitch
+                  view={outdoor3dTakeover ? '3d' : '2d'}
+                  onChange={handleOutdoorViewSwitch}
+                />
+              </div>
+            )}
       <div className="sc-scene-viewport"><Viewport
         isReady={isReady}
         error={error}
@@ -4872,26 +4934,7 @@ useEffect(() => {
           </div>
             <div className="sc-editor-dock">
             <TourReel steps={onboardingSteps} storageKey="scdance:tour:v1" />
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} outdoorStage={outdoorPlan ? { showing3d: outdoor3dTakeover, onSwitch: () => {
-              // 2026-11-12 统一 2D/3D（图五 ↔ 图六）＋显式接管开关：覆盖层开＝2D 地图；
-              // 接管开＝全屏 3D；两者都关（收起态）＝「切到 3D 场地」直接进全屏接管。
-              if (outdoor2DOpen) {
-                setOutdoor2DOpen(false);
-                setOutdoor3dTakeoverActive(true);
-                setOutdoorView('2d');
-                setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-              } else if (outdoor3dTakeoverActive) {
-                clearPendingPlacement();
-                setOutdoor3dTakeoverActive(false);
-                setOutdoor2DOpen(true);
-                setOutdoorPanel('library');
-                setOutdoorView('2d');
-              } else {
-                setOutdoor3dTakeoverActive(true);
-                setOutdoorView('2d');
-                setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-              }
-            } } : undefined} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

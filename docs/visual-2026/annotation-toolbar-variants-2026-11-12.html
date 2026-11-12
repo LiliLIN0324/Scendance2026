@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 · 标注工具条三版草图 · 2026-11-12</title>
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+  --hair-soft:#EFEFF1; --hair:#E4E4E7; --faint:#A6AAB2;
+  --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF; --green-line:#C5D4C9;
+  --annotate:#8e44ad; --annotate-pale:#F1ECF7;
+  --warn:#96651F; --err:#B4443C;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10);
+  --e2:0 16px 48px rgba(20,20,22,.18);
+  --ease:cubic-bezier(.2,0,0,1);
+  --font:"Inter",Manrope,Arial,"PingFang SC","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{background:var(--paper);color:var(--ink);font-family:var(--font);font-size:14px;line-height:22px;font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:56px 40px 120px}
+.cap{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.note{font-size:12px;line-height:20px;color:var(--muted)}
+h1{font-size:24px;line-height:34px;font-weight:600}
+h2{font-size:18px;line-height:26px;font-weight:600}
+section{border-top:1px solid var(--hair);padding:36px 0}
+header.hd{padding-bottom:24px}
+header.hd .note{margin-top:8px;max-width:760px}
+.mono{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+/* 现状基准条 */
+.base{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
+.base .b{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:12px 14px;background:var(--plane)}
+.base .b b{display:block;font-size:13px;margin-bottom:2px}
+.base .b span{font-size:12px;color:var(--muted)}
+
+/* 三版栅格 */
+.variants{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px}
+.vcard{border:1px solid var(--hair);border-radius:var(--r-lg);overflow:hidden;background:var(--paper);display:flex;flex-direction:column}
+.vcard.pick{border-color:var(--green-line);box-shadow:0 0 0 1px var(--green-line)}
+.v-head{padding:16px 18px 12px;border-bottom:1px solid var(--hair-soft)}
+.v-head .tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--plane);color:var(--ink-soft);margin-bottom:8px}
+.vcard.pick .tag{background:var(--green-pale);color:var(--green-deep)}
+.v-head h2{font-size:15px}
+.v-head .note{margin-top:4px}
+
+/* 舞台 */
+.stage{position:relative;height:264px;background:#DCEAF2;overflow:hidden;border-bottom:1px solid var(--hair-soft)}
+.stage .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:26px 26px}
+.stage .plan{position:absolute;left:26px;top:28px;width:150px;height:120px;border:1.5px solid rgba(53,98,74,.45);border-radius:6px;background:rgba(255,255,255,.35)}
+.stage .plan::after{content:"";position:absolute;left:18px;top:22px;width:46px;height:34px;border:1px dashed rgba(53,98,74,.4);border-radius:4px}
+
+/* 通用控件 */
+.vbtn{position:relative;width:32px;height:32px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--ink-soft);display:grid;place-items:center;cursor:pointer}
+.vbtn:hover{background:var(--plane)}
+.vbtn.on{background:var(--green-pale);color:var(--green-deep)}
+.vbtn svg{display:block}
+.vsep{width:1px;height:20px;background:var(--hair);margin:0 3px}
+.tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:11px;line-height:15px;padding:4px 8px;border-radius:var(--r-sm);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity 120ms var(--ease);z-index:6}
+.tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink)}
+.vbtn:hover .tip,.vbtn:focus-visible .tip{opacity:1}
+
+/* A：底部浮条 */
+.a-bar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:6px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1)}
+.a-props{position:absolute;left:50%;bottom:62px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:7px 12px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-sm);box-shadow:var(--e1)}
+.dot{width:15px;height:15px;border-radius:50%;border:1px solid var(--hair);cursor:pointer}
+.dot.on{box-shadow:0 0 0 2px #fff,0 0 0 3px var(--green)}
+.w{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.w i{display:block;height:2px;background:var(--ink-soft);border-radius:2px}
+
+/* B：右轨 + 弹层 */
+.b-rail{position:absolute;right:14px;top:16px;display:flex;flex-direction:column;gap:6px}
+.b-rail .vbtn{width:30px;height:30px;background:#fff;border:1px solid var(--hair);box-shadow:var(--e1)}
+.b-pop{position:absolute;right:56px;top:16px;width:208px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1);padding:6px;display:flex;flex-direction:column;gap:2px}
+.b-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--r-sm);cursor:pointer}
+.b-row:hover{background:var(--plane)}
+.b-row.on{background:var(--green-pale);color:var(--green-deep)}
+.b-row .ic{width:24px;height:24px;flex:0 0 auto;display:grid;place-items:center}
+.b-row .nm{flex:1;font-size:13px}
+.b-row .gt{font-size:10px;color:var(--muted)}
+
+/* C：卡片 */
+.c-card{position:absolute;left:16px;right:16px;top:16px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1);padding:12px 14px}
+.c-ch{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.c-ch .ic{width:26px;height:26px;border-radius:8px;background:var(--annotate-pale);color:var(--annotate);display:grid;place-items:center}
+.c-ch .tt{font-size:13px;font-weight:600;flex:1}
+.c-ch .cnt{font-size:10px;font-weight:600;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:rgba(142,68,173,.14);color:var(--annotate);display:grid;place-items:center}
+.c-row{display:flex;gap:4px}
+.c-props{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--hair-soft)}
+.c-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.c-list .li{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft)}
+.c-list .li .sw{width:10px;height:10px;border-radius:50%;background:var(--annotate);opacity:.7}
+
+/* 卡片底部说明 */
+.v-body{padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px;flex:1}
+.v-body ul{padding-left:16px}
+.v-body li{font-size:12px;line-height:19px;margin:4px 0;color:var(--ink-soft)}
+.v-body li b{color:var(--ink)}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.meta span{font-size:11px;color:var(--muted);border:1px solid var(--hair-soft);border-radius:999px;padding:2px 9px}
+
+/* 对照表 */
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{text-align:left;padding:11px 13px;border-top:1px solid var(--hair-soft);vertical-align:top;font-size:13px;line-height:20px}
+th{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+td:first-child{width:150px;font-weight:600}
+.callout{margin-top:24px;border:1px solid var(--green-line);background:var(--green-pale);border-radius:var(--r-md);padding:16px 18px}
+.callout b{color:var(--green-deep)}
+.callout ul{padding-left:18px}
+
+/* 入口图标候选 */
+.icon-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+.icon-cell{border:1px solid var(--hair);border-radius:var(--r-md);padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--paper)}
+.icon-cell.rec{border-color:var(--green-line);background:var(--green-pale)}
+.icon-row{display:flex;align-items:center;gap:12px}
+.ibtn{width:40px;height:40px;border-radius:var(--r-sm);background:#fff;border:1px solid var(--hair);display:grid;place-items:center;color:var(--ink-soft);flex:0 0 auto}
+.icon-cell.rec .ibtn{color:var(--green-deep)}
+.icon-row b{font-size:13px}
+.icon-row .src{font-size:11px;color:var(--muted);margin-left:auto}
+.icon-cell p{font-size:12px;line-height:19px;color:var(--ink-soft)}
+.icon-cell .feas{font-size:11px;color:var(--muted);border-top:1px dashed var(--hair);padding-top:8px}
+.icon-cell .feas code{font-family:var(--mono);font-size:11px}
+.ref-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.ref-strip figure{border:1px solid var(--hair-soft);border-radius:var(--r-md);overflow:hidden;background:var(--plane)}
+.ref-strip img{width:100%;height:110px;object-fit:cover;display:block}
+.ref-strip figcaption{font-size:11px;color:var(--muted);padding:7px 10px;line-height:15px}
+.rec-flag{font-size:10px;font-weight:600;color:var(--green-deep);background:#fff;border:1px solid var(--green-line);border-radius:999px;padding:1px 8px}
+
+/* A2 · Figma 式唤出浮条 */
+.a2-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}
+.a2-stage{position:relative;height:264px;background:#DCEAF2;border:1px solid var(--hair-soft);border-radius:var(--r-md);overflow:hidden}
+.a2-stage .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:26px 26px}
+.a2-stage .plan{position:absolute;left:22px;top:24px;width:130px;height:100px;border:1.5px solid rgba(53,98,74,.45);border-radius:6px;background:rgba(255,255,255,.35)}
+.fig-bar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:6px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1)}
+.pbtn{position:relative;display:flex;align-items:center;height:32px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--ink-soft);cursor:pointer;padding:0 4px}
+.pbtn .ic{width:32px;height:32px;display:grid;place-items:center;border-radius:var(--r-sm)}
+.pbtn.on{background:var(--green-pale);color:var(--green-deep)}
+.pbtn .chev{width:14px;height:32px;display:grid;place-items:center;border-left:1px solid var(--hair-soft);color:var(--muted)}
+.pbtn .chev svg{display:block}
+.fig-menu{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);width:218px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e2);padding:6px;display:flex;flex-direction:column;gap:2px}
+.fig-menu:before{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#fff}
+.mrow{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);font-size:13px;cursor:pointer}
+.mrow:hover{background:var(--plane)}
+.mrow.on{background:var(--green-pale);color:var(--green-deep)}
+.mrow .mcheck{width:16px;display:grid;place-items:center;flex:0 0 auto}
+.mrow .mic{width:20px;display:grid;place-items:center;flex:0 0 auto}
+.mrow .mname{flex:1}
+.mrow .mkey{font-size:11px;color:var(--faint);font-family:var(--mono)}
+.mrow.on .mkey{color:var(--ink-soft)}
+.a2-note{margin-top:16px}
+.a2-spec{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.a2-spec .sp{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:12px 14px;background:var(--plane)}
+.a2-spec .sp b{display:block;font-size:13px;margin-bottom:3px}
+.a2-spec .sp span{font-size:12px;color:var(--muted);line-height:18px}
+.a2-props{position:absolute;right:16px;bottom:60px;display:flex;align-items:center;gap:10px;padding:7px 12px;background:#fff;border:1px solid var(--hair);border-radius:var(--r-sm);box-shadow:var(--e1)}
+.a2-props .dot{width:15px;height:15px;border-radius:50%;border:1px solid var(--hair);cursor:pointer}
+.a2-props .dot.on{box-shadow:0 0 0 2px #fff,0 0 0 3px var(--green)}
+.a2-props .w{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer}
+.a2-props .w i{display:block;height:2px;background:var(--ink-soft);border-radius:2px}
+.a2-props .w.on{color:var(--green-deep)}
+.a2-props .w.on i{background:var(--green-deep)}
+
+@media(max-width:1020px){.variants{grid-template-columns:1fr}.base{grid-template-columns:repeat(2,1fr)}.icon-grid{grid-template-columns:repeat(2,1fr)}.ref-strip{grid-template-columns:repeat(2,1fr)}.a2-grid{grid-template-columns:1fr}.a2-spec{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hd">
+  <div class="cap">三版可选 · 未动代码 · 未提交</div>
+  <h1>标注工具条 · 方案草图（A2 唤出式定稿方向）</h1>
+  <p class="note">已核对 <span class="mono">origin/main</span>（最新 <span class="mono">99e86ce</span>）：标注面板就在 main 的 <span class="mono">outdoor-plan-canvas.tsx</span>（<span class="mono">annotateZone</span> 4991–5058），入口圆钮在 <span class="mono">scendance-workspace.tsx:731</span>。当前方向：<b>版本 A2 · Figma 式唤出浮条</b>（底部精简浮条 + 父钮白色菜单）；沿用现有 <span class="mono">data-tip</span> / <span class="mono">sc-tool-pop</span> / <span class="mono">is-active</span> 与品牌 token，不新造图标族和弹层。</p>
+</header>
+
+<section>
+  <h2>现状基准（main 上的四层冗余）</h2>
+  <div class="base">
+    <div class="b"><b>① 分组 tab</b><span>「文本 / 形状」两个文字钮，先选组再选工具（5009 / 5018）</span></div>
+    <div class="b"><b>② 形状文字钮</b><span>矩形 / 圆形 / 三角形 / 线段四个中文按钮，无图标（5033）</span></div>
+    <div class="b"><b>③ 常驻说明段</b><span>~60 字手势说明常驻面板底部（5052）</span></div>
+    <div class="b"><b>④ 头部重复</b><span>图标块 +「标注」标题，与右轨入口钮语义重复（6921–6969）</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>三版方案</h2>
+  <div class="variants">
+
+    <!-- ── A ── -->
+    <article class="vcard">
+      <div class="v-head">
+        <span class="tag">版本 A · 平铺初稿</span>
+        <h2>画布底部图标浮条</h2>
+        <p class="note">Excalidraw / FigJam 形制：工具平铺在画布底部一条浮条上，手势进 tooltip，属性跟在选中工具上方。</p>
+      </div>
+      <div class="stage">
+        <div class="grid"></div>
+        <div class="plan"></div>
+        <div class="a-props">
+          <span class="dot on" style="background:var(--ink)"></span>
+          <span class="dot" style="background:var(--green)"></span>
+          <span class="dot" style="background:#fff"></span>
+          <span class="vsep"></span>
+          <span class="w"><i style="width:14px"></i>细</span>
+          <span class="w"><i></i>粗</span>
+        </div>
+        <div class="a-bar">
+          <button class="vbtn" aria-label="选择">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l7 18 2.5-7.5L22 11z"/></svg>
+          </button>
+          <span class="vsep"></span>
+          <button class="vbtn" aria-label="文本">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg>
+            <span class="tip">文本 · 点一下放置，Enter 提交 / Esc 取消</span>
+          </button>
+          <button class="vbtn" aria-label="矩形">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg>
+            <span class="tip">矩形 · 按住拖出，也可点两点</span>
+          </button>
+          <button class="vbtn" aria-label="圆形">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6.5"/></svg>
+            <span class="tip">圆形 · 按住拖出，也可点两点</span>
+          </button>
+          <button class="vbtn on" aria-label="三角形">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 5l8 14H4z"/></svg>
+            <span class="tip">三角形 · 依次点 3 点</span>
+          </button>
+          <button class="vbtn" aria-label="线段">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+            <span class="tip">线段 · 按住拖出，也可点两点</span>
+          </button>
+          <span class="vsep"></span>
+          <button class="vbtn" aria-label="撤销">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="v-body">
+        <ul>
+          <li><b>优点：</b>工具一眼看全、随手够到；画布内不挂文字，最干净；与 Excalidraw / FigJam 同构。</li>
+          <li><b>代价：</b>浮条占画布底边空间；窄屏需把形状组收进下拉；工具状态要在浮条与清单之间同步。</li>
+          <li><b>改动：</b><span class="mono">annotateZone</span> 从卡片内挪到画布浮条；取消 tab 层；新增颜色/线宽二级行。</li>
+        </ul>
+        <div class="meta"><span>改动量 中</span><span>贴近成熟案例</span><span>2D 画布友好</span></div>
+      </div>
+    </article>
+
+    <!-- ── B ── -->
+    <article class="vcard">
+      <div class="v-head">
+        <span class="tag">版本 B · 备选</span>
+        <h2>右轨父钮 + 竖向弹层</h2>
+        <p class="note">沿用现有右轨圆钮体系：一枚标注父钮点开竖向弹层，五行图标 + 名称 + 手势，与「选择工具」弹层同形制。</p>
+      </div>
+      <div class="stage">
+        <div class="grid"></div>
+        <div class="plan"></div>
+        <div class="b-pop">
+          <div class="b-row">
+            <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg></span>
+            <span class="nm">文本</span><span class="gt">点一下放置</span>
+          </div>
+          <div class="b-row">
+            <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg></span>
+            <span class="nm">矩形</span><span class="gt">拖 / 两点</span>
+          </div>
+          <div class="b-row">
+            <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6.5"/></svg></span>
+            <span class="nm">圆形</span><span class="gt">拖 / 两点</span>
+          </div>
+          <div class="b-row on">
+            <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 5l8 14H4z"/></svg></span>
+            <span class="nm">三角形</span><span class="gt">点 3 点</span>
+          </div>
+          <div class="b-row">
+            <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg></span>
+            <span class="nm">线段</span><span class="gt">拖 / 两点</span>
+          </div>
+        </div>
+        <div class="b-rail">
+          <button class="vbtn" aria-label="测量"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 17L17 3M7 7h.01M17 17h.01"/></svg></button>
+          <button class="vbtn on" aria-label="标注">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-7-4-7 4z"/></svg>
+          </button>
+          <button class="vbtn" aria-label="属性"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2"/><circle cx="8" cy="16" r="2"/></svg></button>
+        </div>
+      </div>
+      <div class="v-body">
+        <ul>
+          <li><b>优点：</b>画布零占位；弹层机制现成（<span class="mono">sc-tool-pop</span>）；右轨三钮格局不变，学习成本最低。</li>
+          <li><b>代价：</b>工具藏一层，点选比平铺多一次开合；弹层内名称仍占一行（可只留图标 + tooltip）。</li>
+          <li><b>改动：</b>把 <span class="mono">annotateZone</span> 两行钮收进标注父钮弹层；tab 层取消；说明进 tooltip。</li>
+        </ul>
+        <div class="meta"><span>改动量 小</span><span>复用现成弹层</span><span>推荐稳妥落地</span></div>
+      </div>
+    </article>
+
+    <!-- ── C ── -->
+    <article class="vcard">
+      <div class="v-head">
+        <span class="tag">版本 C · 备选</span>
+        <h2>卡片内紧凑一行</h2>
+        <p class="note">保留现有卡片壳与清单行，只把「tab + 四钮 + 说明段」压成卡片内一行图标组；属性行选中后浮现。</p>
+      </div>
+      <div class="stage">
+        <div class="grid"></div>
+        <div class="plan"></div>
+        <div class="c-card">
+          <div class="c-ch">
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-7-4-7 4z"/></svg></span>
+            <span class="tt">标注</span>
+            <span class="cnt">3</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div class="c-row">
+            <button class="vbtn" aria-label="文本"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg></button>
+            <button class="vbtn on" aria-label="矩形"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg></button>
+            <button class="vbtn" aria-label="圆形"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6.5"/></svg></button>
+            <button class="vbtn" aria-label="三角形"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 5l8 14H4z"/></svg></button>
+            <button class="vbtn" aria-label="线段"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg></button>
+          </div>
+          <div class="c-props">
+            <span class="dot on" style="background:var(--ink)"></span>
+            <span class="dot" style="background:var(--annotate)"></span>
+            <span class="w"><i style="width:14px"></i>细</span>
+            <span class="w"><i></i>粗</span>
+          </div>
+          <div class="c-list">
+            <span class="li"><span class="sw"></span>文本：示例备注文字</span>
+            <span class="li"><span class="sw"></span>矩形 2</span>
+          </div>
+        </div>
+      </div>
+      <div class="v-body">
+        <ul>
+          <li><b>优点：</b>布局改动最保守，左右轨面板与清单不动；卡片内直接看到已有标注。</li>
+          <li><b>代价：</b>工具仍受卡片宽度约束，五个图标挤一行；卡片头部标题仍占一行（可再砍）。</li>
+          <li><b>改动：</b>仅重排 <span class="mono">annotateZone</span> 内部：tab 取消、五图标一行、说明进 tooltip、加属性行。</li>
+        </ul>
+        <div class="meta"><span>改动量 小–中</span><span>布局不变</span><span>清单顺手可点</span></div>
+      </div>
+    </article>
+
+  </div>
+</section>
+
+<section>
+  <h2>版本 A2 · 唤出式浮条（Figma 形制） <span class="rec-flag">当前方向</span></h2>
+  <p class="note">在已选定的 A 底部浮条基础上，按 Figma 调整：形状四类<b>不常驻平铺</b>，收进一枚带下拉箭头的父钮，点开白色菜单选择；<b>文本 T 常驻浮条（已确认）</b>。浮条收起时只留少数几颗钮，画布最干净；要画哪种形状时再唤出菜单。</p>
+
+  <div class="a2-grid">
+    <!-- 收起态 -->
+    <div class="a2-stage">
+      <div class="grid"></div>
+      <div class="plan"></div>
+      <div class="fig-bar">
+        <button class="pbtn" aria-label="选择">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l7 18 2.5-7.5L22 11z"/></svg></span>
+        </button>
+        <span class="vsep"></span>
+        <button class="pbtn on" aria-label="形状标注">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg></span>
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </button>
+        <button class="pbtn" aria-label="文本备注">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg></span>
+        </button>
+        <span class="vsep"></span>
+        <button class="pbtn" aria-label="撤销">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></span>
+        </button>
+      </div>
+      <p class="note" style="position:absolute;left:14px;top:12px;background:rgba(255,255,255,.8);padding:3px 8px;border-radius:8px">收起态：浮条只留选择 / 形状父钮 / 文本 / 撤销</p>
+    </div>
+
+    <!-- 唤出态 -->
+    <div class="a2-stage">
+      <div class="grid"></div>
+      <div class="plan"></div>
+      <div class="fig-menu" role="menu">
+        <div class="mrow on" role="menuitemradio" aria-checked="true">
+          <span class="mcheck"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+          <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg></span>
+          <span class="mname">矩形</span>
+          <span class="mkey">拖 / 两点</span>
+        </div>
+        <div class="mrow" role="menuitemradio" aria-checked="false">
+          <span class="mcheck"></span>
+          <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6.5"/></svg></span>
+          <span class="mname">圆形</span>
+          <span class="mkey">拖 / 两点</span>
+        </div>
+        <div class="mrow" role="menuitemradio" aria-checked="false">
+          <span class="mcheck"></span>
+          <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 5l8 14H4z"/></svg></span>
+          <span class="mname">三角形</span>
+          <span class="mkey">点 3 点</span>
+        </div>
+        <div class="mrow" role="menuitemradio" aria-checked="false">
+          <span class="mcheck"></span>
+          <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg></span>
+          <span class="mname">线段</span>
+          <span class="mkey">拖 / 两点</span>
+        </div>
+        <div class="mrow" role="menuitemradio" aria-checked="false">
+          <span class="mcheck"></span>
+          <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg></span>
+          <span class="mname">文本备注</span>
+          <span class="mkey">点一下</span>
+        </div>
+      </div>
+      <div class="a2-props" role="toolbar" aria-label="标注颜色与线宽">
+        <span class="dot on" style="background:#8e44ad" aria-label="标注紫"></span>
+        <span class="dot" style="background:#141416" aria-label="墨色"></span>
+        <span class="dot" style="background:#35624A" aria-label="绿"></span>
+        <span class="dot" style="background:#4A6FA3" aria-label="蓝"></span>
+        <span class="dot" style="background:#C98A2C" aria-label="橙"></span>
+        <span class="dot" style="background:#B3628C" aria-label="粉"></span>
+        <span class="vsep"></span>
+        <span class="w on" aria-label="细线宽"><i style="width:12px"></i>细</span>
+        <span class="w" aria-label="粗线宽"><i></i>粗</span>
+      </div>
+      <div class="fig-bar">
+        <button class="pbtn" aria-label="选择">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l7 18 2.5-7.5L22 11z"/></svg></span>
+        </button>
+        <span class="vsep"></span>
+        <button class="pbtn on" aria-label="形状标注，菜单已展开">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/></svg></span>
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </button>
+        <button class="pbtn" aria-label="文本备注">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 5h12M12 5v14M9 19h6"/></svg></span>
+        </button>
+        <span class="vsep"></span>
+        <button class="pbtn" aria-label="撤销">
+          <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></span>
+        </button>
+      </div>
+      <p class="note" style="position:absolute;left:14px;top:12px;background:rgba(255,255,255,.8);padding:3px 8px;border-radius:8px">唤出态 · 白色菜单</p>
+    </div>
+  </div>
+
+  <div class="a2-spec">
+    <div class="sp"><b>父钮形制</b><span>图标 + 右下下拉箭头，箭头与图标间细分隔槽；父钮显示当前选中形状，选中态绿底；点图标区直接用当前形状，点箭头开菜单（同 Figma）。</span></div>
+    <div class="sp"><b>菜单形制</b><span>白色 #fff 圆角浮层 + 发丝描边，行高 36：勾选列 + 图标 + 名称 + 右侧手势/快捷键徽标；当前项浅绿底 + 绿字，顶部小三角指向父钮。</span></div>
+    <div class="sp"><b>属性行（本轮纳入）</b><span>颜色取图层 token 色板：缺省标注紫 <span class="mono">#8e44ad</span>，另墨 / 绿 / 蓝 / 橙 / 粉 5 点，不另造色值；线宽细 / 粗两档，仅形状显示，文本备注不显示。选中工具后浮在浮条上方，取消即收起。契约 <span class="mono">color</span> 已有；线宽需在 <span class="mono">PlanAnnotation</span> 补可选字段（thin / thick）。</span></div>
+  </div>
+
+  <div class="ref-strip" style="margin-top:18px">
+    <figure><img src="https://aka.doubaocdn.com/l/vXIo6H6ZeK" alt="Figma 底部工具条与形状菜单"><figcaption>Figma 底部白浮条：父钮带下拉槽，点开深色形状菜单，选中行蓝底 + 勾选 + 右侧快捷键</figcaption></figure>
+    <figure><img src="https://aka.doubaocdn.com/l/dawF3ez0am" alt="Figma 菜单指向父钮"><figcaption>菜单锚定在父钮上方，小三角指向来源钮；行内图标 + 名称 + 右对齐快捷键</figcaption></figure>
+    <figure><img src="https://aka.doubaocdn.com/l/Qo88ImvGaY" alt="Figma 形状菜单中文版式"><figcaption>同构中文版式：名称居中偏左，快捷键右对齐；可对照我们的中文文案长度</figcaption></figure>
+    <figure><img src="https://aka.doubaocdn.com/l/Of74j0ukbD" alt="Figma 形状工具组"><figcaption>形状工具组默认代表图标显示在父钮上，切换后父钮图标随当前项更新</figcaption></figure>
+  </div>
+
+  <p class="note a2-note">落地复用：这套菜单在代码里已有同形制——选择工具菜单（<span class="mono">sc-tool-pop</span> 弹层、<span class="mono">sc-canvas-tool-row</span> 行、<span class="mono">sc-tool-key</span> 快捷键徽标、<span class="mono">sc-tool-check</span> 勾选），标注形状父钮照此套接线即可，不新造弹层。手势徽标位可先放「拖 / 两点」「点 3 点」，快捷键待全局键位确定后补。入口钮（右轨 <span class="mono">#tool-annotate</span>）图标沿用现状 <span class="mono">edit_note</span>；浮条内形状父钮显示当前选中形状，两者不要混用。</p>
+</section>
+
+<section>
+  <h2>入口图标候选</h2>
+  <p class="note">入口图标本轮选定现状 Material Symbols <span class="mono">edit_note</span>（三条横线 + 斜铅笔），沿用现有 Material 体系，不换图标族；下方按语义列出备选，供后续迭代参考。功能 = 文本备注 + 四种形状圈画，圆钮内为 18px 线稿示意。</p>
+
+  <div class="icon-grid">
+
+    <div class="icon-cell rec">
+      <div class="icon-row">
+        <span class="ibtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h7M5 10h6M5 14h4"/><path d="M12.5 12.5l4 4M15 11l2 2"/></svg></span>
+        <b>编辑便签 edit_note</b>
+        <span class="rec-flag">选定</span>
+      </div>
+      <p>三横线 + 斜笔，「在笔记上改注」；沿用现状图形，不换图标族。</p>
+      <div class="feas">Material 码点表 <code>edit_note: 0xe745</code> + <code>edit_note-fill.svg</code> 双闭环，右轨三钮同为 Material 体系；<code>OUTDOOR_TOOL_ICONS.annotate</code> 保持不变</div>
+    </div>
+
+    <div class="icon-cell">
+      <div class="icon-row">
+        <span class="ibtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h9l5 5v10H5z"/><path d="M14 4v5h5"/><path d="M8.5 12.5h7M8.5 15.5h5"/></svg></span>
+        <b>便签 Sticky Note</b>
+        <span class="src">备选</span>
+      </div>
+      <p>折角便签 + 两行文字，偏「留备注」；FigJam、MS Whiteboard 的 Add Note 都用便签形。本轮未选，留作后续迭代。</p>
+      <div class="feas">若日后换此形：右轨钮切到 Lucide <code>sticky-note</code>（<code>StickyNote</code> 已注册闭环）；本地 Material 未登记便签 glyph，不走 Material 名</div>
+    </div>
+
+    <div class="icon-cell">
+      <div class="icon-row">
+        <span class="ibtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H11l-3 3v-3H4z"/><path d="M8.5 9h7M8.5 12h5"/></svg></span>
+        <b>留言气泡</b>
+        <span class="src">MessageSquareText</span>
+      </div>
+      <p>气泡内带横线，偏「评审 / 反馈留言」；MS Whiteboard 的 New comment 用蓝气泡。若标注主要是给方案提意见，这个最贴切。</p>
+      <div class="feas">Lucide 需新增注册 <code>message-square-text</code>；Material 对应 <code>comment</code></div>
+    </div>
+
+    <div class="icon-cell">
+      <div class="icon-row">
+        <span class="ibtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5 5 5 9a5 5 0 01-10 0c0 4 5 9 5 9z"/><circle cx="12" cy="12" r="2"/></svg></span>
+        <b>定位图钉</b>
+        <span class="src">Pin / MapPin</span>
+      </div>
+      <p>把标记钉在场地上，定位感强；但不体现备注文字。注意与设施点位的 MapPin 区分，避免两个定位图标打架。</p>
+      <div class="feas">Lucide <code>pin</code> 需新增；<code>map-pin</code> 已注册；Material 对应 <code>push_pin</code></div>
+    </div>
+
+    <div class="icon-cell">
+      <div class="icon-row">
+        <span class="ibtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="10" height="9" rx="2"/><path d="M13.5 13.5L18 9l2 2-4.5 4.5h-2z"/></svg></span>
+        <b>纸 + 笔</b>
+        <span class="src">SquarePen</span>
+      </div>
+      <p>载体（纸）和动作（笔）都在，折中方案；比 edit_note 主体更完整，30px 下不碎。</p>
+      <div class="feas">Lucide 需新增注册 <code>square-pen</code>；另有 <code>notebook-pen</code>、<code>pen-line</code> 可选</div>
+    </div>
+
+    <div class="icon-cell">
+      <div class="icon-row">
+        <span class="ibtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 4l7 7-6.5 6.5H5v-4z"/><path d="M7 4h5"/></svg></span>
+        <b>高亮笔</b>
+        <span class="src">Highlighter</span>
+      </div>
+      <p>圈划重点，偏手绘；FigJam 工具条有高亮笔。不体现文本备注，适合标注以圈画为主的定位。</p>
+      <div class="feas">Lucide 需新增注册 <code>highlighter</code>；Material 对应 <code>highlighter_pen</code></div>
+    </div>
+
+  </div>
+
+  <div class="ref-strip">
+    <figure><img src="https://aka.doubaocdn.com/l/TdKE2NjFhV" alt="FigJam 底部工具条"><figcaption>FigJam 底部工具条：T 文本、黄色便签叠、形状框、网格，工具各占一枚纯图标</figcaption></figure>
+    <figure><img src="https://aka.doubaocdn.com/l/iTEjyOy8Ue" alt="MS Whiteboard 工具条"><figcaption>MS Whiteboard：便签（Add Note）、评论气泡（New comment）、T 文本、形状线框分列</figcaption></figure>
+    <figure><img src="https://aka.doubaocdn.com/l/4i0BuN9jmU" alt="评论气泡线稿"><figcaption>评论气泡线稿：圆角矩形 + 下尖角，内部留文字位</figcaption></figure>
+    <figure><img src="https://aka.doubaocdn.com/l/VHVpw0NJmb" alt="图钉线稿"><figcaption>图钉线稿：钉帽 + 针杆，定位标记语义</figcaption></figure>
+  </div>
+
+  <p class="note" style="margin-top:14px">落地口径：右轨圆钮走 Material Symbols（码点表 <span class="mono">material-symbol-codepoints.ts</span> + <span class="mono">public/material-symbols/rounded</span> SVG 双闭环，未登记名会静默空白）；卡片/图层走 Lucide（<span class="mono">outdoor-plan-icons.ts</span> 编译期闭环）。annotate 现状沿用 Material <span class="mono">edit_note</span>；若日后换成 Lucide 图标（如便签），这颗钮可单独切到 Lucide 注册表，不影响 measure / selection 的 Material 图标，且必须同步 <span class="mono">PLANNING_ICONS</span> 登记与组件映射，否则 tsc 报错。图标统一 currentColor、18–20px，选中态只靠 <span class="mono">is-active</span> 底色 + 描边，不只换颜色。</p>
+</section>
+
+<section>
+  <h2>选型对照</h2>
+  <table>
+    <thead><tr><th>维度</th><th>A · 底部浮条</th><th>B · 右轨弹层</th><th>C · 卡片紧凑行</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>工具可见性</td>
+        <td>五工具平铺，一眼全见</td>
+        <td>收在父钮弹层内，多一次开合</td>
+        <td>卡片内一行，宽度受限</td>
+      </tr>
+      <tr>
+        <td>画布占用</td>
+        <td>底部一条浮条</td>
+        <td>零占位</td>
+        <td>零占位（仍在面板内）</td>
+      </tr>
+      <tr>
+        <td>改动范围</td>
+        <td>浮条新增 + 状态接线</td>
+        <td>复用 sc-tool-pop，收进弹层</td>
+        <td>只重排卡片内部</td>
+      </tr>
+      <tr>
+        <td>与现状差距</td>
+        <td>最大，形制换成浮条</td>
+        <td>最小，右轨格局不变</td>
+        <td>小，卡片壳保留</td>
+      </tr>
+      <tr>
+        <td>成熟案例参照</td>
+        <td>Excalidraw / FigJam</td>
+        <td>Figma 右栏工具组</td>
+        <td>Snipaste 面板内工具排</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>共同口径（三版一致）</b>
+    <ul>
+      <li>取消「文本 / 形状」tab 层；文本 T 常驻浮条，矩形/圆形/三角形/线段收进父钮菜单，同组竖线分隔。</li>
+      <li>四个形状换本地图标，中文名进 <span class="mono">aria-label</span>，手势进 <span class="mono">data-tip</span>；不混字形家族。</li>
+      <li>常驻 ~60 字说明整段移除；草稿剩余点数保留为一句短行（进行中状态反馈，不删）。</li>
+      <li>颜色 / 线宽本轮一起做：颜色走图层 token 色板（缺省标注紫），线宽细 / 粗两档仅形状生效；契约 <span class="mono">PlanAnnotation.color</span> 已有，线宽补可选字段。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>待确认</h2>
+  <ul>
+    <li>已定：版式 <b>版本 A2 · 唤出式浮条</b>（底部精简浮条 + 父钮白色菜单，参照 Figma）；<b>文本 T 常驻浮条</b>；入口图标<b>沿用现状 Material <span class="mono">edit_note</span></b>（三横线 + 斜笔，码点表与 fill SVG 双闭环，不换图标族）。</li>
+    <li>颜色 / 线宽已纳入本轮：6 点色板 + 细 / 粗两档；线宽字段契约待补，渲染层按缺省细线宽兼容旧数据。</li>
+    <li>手势暂保留现状：三角形点 3 点、线段点 2 点，不简化为拖拽；落地前真机复核手感，契约点位口径与 tooltip 维持不变。</li>
+    <li>落地前先把特性分支基线同步到 <span class="mono">origin/main</span>；改动本地攒好 tsc + 测试 + 真机验收，再一次性推 main，不拆小步开 PR。</li>
+  </ul>
+</section>
+
+</div>
+</body>
+</html>

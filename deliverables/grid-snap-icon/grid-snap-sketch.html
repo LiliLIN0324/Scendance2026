@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-canvas-width="920" data-canvas-height="660" style="width:920px;height:660px;">
+<head>
+  <meta charset="UTF-8">
+  <title>网格吸附图标 · 外框宫格方案草图</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 920px; height: 660px; }
+    body {
+      font-family: Inter, Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #E7EEF0; color: #141416;
+      padding: 28px 30px;
+    }
+    [data-canvas-root] { width: 860px; height: 604px; }
+
+    .head { margin-bottom: 16px; }
+    .head h1 { font-size: 20px; line-height: 28px; font-weight: 650; }
+    .head p { margin-top: 6px; font-size: 12px; line-height: 20px; color: #55585F; }
+
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .card {
+      background: #FFFFFF; border: 1px solid #E4E4E7; border-radius: 14px;
+      padding: 16px 18px; display: flex; gap: 18px; align-items: center;
+    }
+    .card .meta { flex: 1; }
+    .card h2 { font-size: 14px; line-height: 20px; font-weight: 650; }
+    .card .desc { margin-top: 6px; font-size: 11px; line-height: 16px; color: #55585F; }
+
+    .row { display: flex; align-items: center; gap: 14px; }
+    .state { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .state .label { font-size: 10px; line-height: 14px; color: #A6AAB2; }
+
+    .tb {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: grid; place-items: center;
+      border: 1px solid transparent; background: rgba(255,255,255,.55);
+      color: #55585F;
+      box-shadow: 0 1px 0 rgba(255,255,255,.85), 0 0 2px rgba(255,255,255,.6);
+    }
+    .tb.on { background: #EEF3EF; border-color: #C5D4C9; color: #3A6247; }
+    .tb svg { width: 18px; height: 18px; }
+
+    .big {
+      width: 64px; height: 64px; border-radius: 16px;
+      display: grid; place-items: center;
+      border: 1px solid #EFEFF1; background: #F4F5F7; color: #55585F;
+    }
+    .big.on { background: #EEF3EF; border-color: #C5D4C9; color: #3A6247; }
+    .big svg { width: 34px; height: 34px; }
+
+    .foot { margin-top: 14px; font-size: 11px; line-height: 16px; color: #55585F; }
+    .foot b { color: #141416; }
+  </style>
+</head>
+<body>
+  <main data-canvas-root>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <!-- 2×2 空宫格 -->
+        <symbol id="g2-off" viewBox="0 0 24 24">
+          <rect x="5.5" y="5.5" width="13" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M12 5.5 V18.5 M5.5 12 H18.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </symbol>
+        <!-- 3×3 空宫格 -->
+        <symbol id="g3-off" viewBox="0 0 24 24">
+          <rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9.7 5 V19 M14.3 5 V19 M5 9.7 H19 M5 14.3 H19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </symbol>
+
+        <!-- D1 2×2 右下格顶满填实 -->
+        <symbol id="d1-on" viewBox="0 0 24 24">
+          <rect x="5.5" y="5.5" width="13" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M12 5.5 V18.5 M5.5 12 H18.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <rect x="12.7" y="12.7" width="5.1" height="5.1" rx="1.2" fill="currentColor"/>
+        </symbol>
+        <!-- D2 3×3 中心格顶满填实 -->
+        <symbol id="d2-on" viewBox="0 0 24 24">
+          <rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9.7 5 V19 M14.3 5 V19 M5 9.7 H19 M5 14.3 H19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="10.15" y="10.15" width="3.7" height="3.7" rx="0.9" fill="currentColor"/>
+        </symbol>
+        <!-- D3 2×2 右下格内圈描边高亮（不填实） -->
+        <symbol id="d3-on" viewBox="0 0 24 24">
+          <rect x="5.5" y="5.5" width="13" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M12 5.5 V18.5 M5.5 12 H18.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <rect x="12.9" y="12.9" width="4.7" height="4.7" rx="1.1" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        </symbol>
+        <!-- D4 3×3 中心格双层：填实 + 格心留底 -->
+        <symbol id="d4-on" viewBox="0 0 24 24">
+          <rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9.7 5 V19 M14.3 5 V19 M5 9.7 H19 M5 14.3 H19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="10.15" y="10.15" width="3.7" height="3.7" rx="0.9" fill="currentColor"/>
+          <rect x="11.35" y="11.35" width="1.3" height="1.3" rx="0.4" fill="#EEF3EF"/>
+        </symbol>
+      </defs>
+    </svg>
+
+    <div class="head">
+      <h1>网格吸附图标 · 外框宫格方案草图</h1>
+      <p>四版都补全外框、高亮格顶满格子边界，不再外挂或内缩小块；关闭态为空宫格，开启态只激活一格。按钮尺寸、配色对照工具条现状（30px 圆钮，激活底 #EEF3EF / 描边 #C5D4C9 / 图标 #3A6247）。</p>
+    </div>
+
+    <section class="grid">
+      <!-- D1 -->
+      <article class="card">
+        <div class="meta">
+          <h2>D1 · 2×2 右下格填实</h2>
+          <p class="desc">沿用 C4 的右下意向：2×2 完整宫格，开启时右下格实心填到格线。结构最简单，小尺寸最稳。</p>
+        </div>
+        <div class="row">
+          <div class="state"><button class="tb"><svg><use href="#g2-off"/></svg></button><span class="label">关闭</span></div>
+          <div class="state"><button class="tb on"><svg><use href="#d1-on"/></svg></button><span class="label">开启</span></div>
+          <div class="state"><span class="big on"><svg><use href="#d1-on"/></svg></span></div>
+        </div>
+      </article>
+
+      <!-- D2 -->
+      <article class="card">
+        <div class="meta">
+          <h2>D2 · 3×3 中心格填实</h2>
+          <p class="desc">经典单格变暗画法：3×3 宫格，中心格实心。网格感最强，中心落点端正，接近主流图标库做法。</p>
+        </div>
+        <div class="row">
+          <div class="state"><button class="tb"><svg><use href="#g3-off"/></svg></button><span class="label">关闭</span></div>
+          <div class="state"><button class="tb on"><svg><use href="#d2-on"/></svg></button><span class="label">开启</span></div>
+          <div class="state"><span class="big on"><svg><use href="#d2-on"/></svg></span></div>
+        </div>
+      </article>
+
+      <!-- D3 -->
+      <article class="card">
+        <div class="meta">
+          <h2>D3 · 2×2 右下格描边高亮</h2>
+          <p class="desc">不填实，用内圈边框把右下格勾出来，像选中单元格。视觉最轻，但小尺寸下内圈线和宫格线略叠。</p>
+        </div>
+        <div class="row">
+          <div class="state"><button class="tb"><svg><use href="#g2-off"/></svg></button><span class="label">关闭</span></div>
+          <div class="state"><button class="tb on"><svg><use href="#d3-on"/></svg></button><span class="label">开启</span></div>
+          <div class="state"><span class="big on"><svg><use href="#d3-on"/></svg></span></div>
+        </div>
+      </article>
+
+      <!-- D4 -->
+      <article class="card">
+        <div class="meta">
+          <h2>D4 · 3×3 中心格双层</h2>
+          <p class="desc">中心格填实后格心留一颗底色小方块，像"物件落在格上"，比纯实心块多一层吸附物件的暗示。</p>
+        </div>
+        <div class="row">
+          <div class="state"><button class="tb"><svg><use href="#g3-off"/></svg></button><span class="label">关闭</span></div>
+          <div class="state"><button class="tb on"><svg><use href="#d4-on"/></svg></button><span class="label">开启</span></div>
+          <div class="state"><span class="big on"><svg><use href="#d4-on"/></svg></span></div>
+        </div>
+      </article>
+    </section>
+
+    <p class="foot"><b>落地备注：</b>四版关闭 / 开启沿用同一外框结构，`aria-pressed` 与 `is-active` 逻辑不变；高亮格为内嵌 SVG。26px 小按钮下优先复核 D1 / D2，D3 的内圈描边需放大笔画才保得住清晰度。</p>
+  </main>
+</body>
+</html>

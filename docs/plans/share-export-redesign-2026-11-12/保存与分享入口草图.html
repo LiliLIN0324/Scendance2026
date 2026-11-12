@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>保存与分享 · 入口与归属草图（方案 A 讨论稿）</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234A7C59'/%3E%3Cpath d='M12 6l4 5h-3v5h-2v-5H8z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF; --hair:#E4E4E7; --hair-soft:#EFEFF1;
+  --faint:#A6AAB2; --ink-soft:#55585F; --ink:#141416; --muted:#71767E;
+  --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF;
+  --warn:#96651F; --warn-pale:#F7F0E2; --err:#B4443C;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10); --e2:0 16px 48px rgba(20,20,22,.18);
+  --dur:200ms; --ease:cubic-bezier(.2,0,0,1);
+  --font:var(--font-inter,"Inter"),Arial,"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--plane);color:var(--ink);font-size:14px;line-height:22px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 24px 80px}
+
+/* ---------- 页头 ---------- */
+.page-head{margin-bottom:28px}
+.page-head .kicker{font-size:11px;letter-spacing:.08em;color:var(--green-deep);text-transform:uppercase;margin-bottom:8px}
+.page-head h1{font-size:24px;line-height:34px;font-weight:700;margin-bottom:8px}
+.page-head p{color:var(--muted);max-width:720px}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:12px;color:var(--ink-soft)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.done{background:var(--green)}
+.dot.plan{background:var(--warn)}
+.dot.out{background:var(--faint)}
+
+/* ---------- 通用卡片 ---------- */
+.card{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:20px}
+.section-title{font-size:16px;font-weight:600;margin:36px 0 14px;display:flex;align-items:baseline;gap:10px}
+.section-title small{font-size:12px;font-weight:400;color:var(--muted)}
+
+/* ---------- 工作台示意 ---------- */
+.stage{display:grid;grid-template-columns:1fr 72px;gap:16px;align-items:stretch}
+.canvas{position:relative;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);min-height:420px;overflow:hidden}
+.canvas .grid-bg{position:absolute;inset:0;background-image:linear-gradient(var(--hair-soft) 1px,transparent 1px),linear-gradient(90deg,var(--hair-soft) 1px,transparent 1px);background-size:28px 28px}
+.plan-rect{position:absolute;left:14%;top:16%;width:56%;height:58%;border:2px solid var(--ink-soft);border-radius:6px;background:rgba(74,124,89,.06)}
+.plan-rect .kick{position:absolute;left:12px;top:10px;font-size:12px;color:var(--muted);background:var(--paper);padding:2px 8px;border-radius:6px;border:1px solid var(--hair)}
+.canvas .meta{position:absolute;right:14px;bottom:12px;font-size:12px;color:var(--muted);background:var(--paper);border:1px solid var(--hair);padding:4px 10px;border-radius:8px}
+
+.rail{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:12px 0}
+.rail .sep{width:24px;height:1px;background:var(--hair)}
+.rail-btn{width:44px;height:44px;border-radius:14px;border:1px solid var(--hair);background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);cursor:pointer;transition:all var(--dur) var(--ease)}
+.rail-btn svg{width:20px;height:20px}
+.rail-btn:hover{border-color:var(--faint);background:var(--plane)}
+.rail-btn.is-main{border-color:var(--green);background:var(--green-pale);color:var(--green-deep);box-shadow:var(--e3,0 1px 2px rgba(20,20,22,.06))}
+.rail-btn.is-main:hover{background:var(--green-pale)}
+.rail-btn.is-alt{border-style:dashed;border-color:var(--faint);color:var(--faint)}
+.rail-btn[disabled]{cursor:not-allowed;opacity:.5}
+.rail-label{font-size:10px;color:var(--muted);text-align:center;line-height:13px}
+
+.rail-notes{display:flex;flex-direction:column;gap:10px;margin-top:14px;font-size:12px;color:var(--ink-soft)}
+.rail-notes .note{display:flex;gap:10px;align-items:flex-start;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-sm);padding:10px 12px}
+.rail-notes .note b{color:var(--ink)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.tag.done{background:var(--green-pale);color:var(--green-deep)}
+.tag.plan{background:var(--warn-pale);color:var(--warn)}
+.tag.out{background:var(--plane-deep);color:var(--muted)}
+
+/* ---------- 模态弹窗 ---------- */
+.modal-mask{position:fixed;inset:0;background:rgba(20,20,22,.32);display:none;align-items:center;justify-content:center;z-index:50;padding:24px}
+.modal-mask.is-open{display:flex}
+.modal{width:980px;max-width:100%;height:640px;max-height:92vh;background:var(--paper);border-radius:var(--r-lg);box-shadow:var(--e2);display:flex;flex-direction:column;overflow:hidden}
+.modal-head{display:flex;align-items:center;gap:12px;padding:20px 24px 0}
+.modal-head h2{font-size:20px;font-weight:700}
+.modal-head .chip{font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:3px 10px}
+.modal-head .close{margin-left:auto;width:36px;height:36px;border-radius:10px;border:1px solid var(--hair);background:var(--paper);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink-soft)}
+.modal-head .close:hover{background:var(--plane)}
+
+.tabs{display:flex;gap:4px;margin:16px 24px 0;background:var(--plane);border-radius:var(--r-sm);padding:4px}
+.tab{flex:1;border:0;background:transparent;font-family:inherit;font-size:14px;padding:9px 12px;border-radius:8px;color:var(--ink-soft);cursor:pointer}
+.tab.is-active{background:var(--paper);color:var(--ink);font-weight:600;box-shadow:var(--e3,0 1px 2px rgba(20,20,22,.06))}
+
+.modal-body{display:grid;grid-template-columns:340px 1fr;gap:24px;flex:1 1 auto;min-height:0;padding:20px 24px}
+.col-config{display:flex;flex-direction:column;min-height:0;overflow-y:auto;scrollbar-gutter:stable}
+.col-preview{min-height:0;display:flex;flex-direction:column;gap:14px}
+
+.group{margin-bottom:18px}
+.group>h3{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;letter-spacing:.02em}
+.opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--hair);border-radius:var(--r-sm);padding:12px;margin-bottom:8px;background:var(--paper)}
+.opt.off{opacity:.55}
+.opt .ico{width:34px;height:34px;border-radius:10px;background:var(--plane);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);flex:none}
+.opt .ico svg{width:18px;height:18px}
+.opt .body{flex:1;min-width:0}
+.opt .body .row1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.opt .body .name{font-weight:600;font-size:14px}
+.opt .body .desc{font-size:12px;color:var(--muted);margin-top:2px}
+.opt .acts{display:flex;gap:6px;flex:none}
+.mini-btn{border:1px solid var(--hair);background:var(--paper);border-radius:8px;font-family:inherit;font-size:12px;padding:5px 10px;color:var(--ink-soft);cursor:pointer}
+.mini-btn:hover{background:var(--plane)}
+.mini-btn.primary{background:var(--green);border-color:var(--green);color:#fff}
+
+.switch{width:40px;height:24px;border-radius:999px;background:var(--plane-deep);position:relative;cursor:pointer;flex:none;transition:background var(--dur) var(--ease);border:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:var(--e3,0 1px 2px rgba(20,20,22,.16));transition:transform var(--dur) var(--ease)}
+.switch.is-on{background:var(--green)}
+.switch.is-on::after{transform:translateX(16px)}
+
+.seg{display:flex;gap:4px;background:var(--plane);border-radius:8px;padding:3px;margin:6px 0}
+.seg button{border:0;background:transparent;font-family:inherit;font-size:12px;padding:5px 10px;border-radius:6px;color:var(--ink-soft);cursor:pointer}
+.seg button.is-active{background:var(--paper);color:var(--ink);font-weight:600}
+
+.preview-box{flex:1;border:1px solid var(--hair);border-radius:var(--r-md);background:var(--plane);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;color:var(--muted)}
+.preview-box .thumb{width:100%;max-width:360px;aspect-ratio:16/10;border:1px solid var(--hair);border-radius:12px;background:var(--paper);background-image:linear-gradient(var(--hair-soft) 1px,transparent 1px),linear-gradient(90deg,var(--hair-soft) 1px,transparent 1px);background-size:22px 22px;position:relative}
+.preview-box .thumb .inner{position:absolute;left:14%;top:16%;width:58%;height:60%;border:1.5px solid var(--ink-soft);border-radius:4px;background:rgba(74,124,89,.07)}
+.preview-meta{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.qr{width:96px;height:96px;border:1px solid var(--hair);border-radius:12px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--faint)}
+
+.modal-foot{display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--hair)}
+.btn{font-family:inherit;font-size:14px;border-radius:12px;padding:10px 18px;cursor:pointer;border:1px solid var(--hair);background:var(--paper);color:var(--ink-soft)}
+.btn:hover{background:var(--plane)}
+.btn.primary{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--green-deep)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+
+/* ---------- 表格 ---------- */
+table{width:100%;border-collapse:collapse;font-size:13px}
+col.c1{width:22%}col.c2{width:26%}col.c3{width:30%}col.c4{width:22%}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600}
+td .muted{color:var(--muted);font-size:12px}
+
+/* ---------- 机制卡片 ---------- */
+.mech-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.mech{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:16px}
+.mech h3{font-size:14px;font-weight:600;margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.mech p{font-size:12px;color:var(--ink-soft)}
+.mech .num{width:22px;height:22px;border-radius:7px;background:var(--green-pale);color:var(--green-deep);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+
+/* ---------- 待拍板 ---------- */
+.ask-list{display:flex;flex-direction:column;gap:10px}
+.ask{display:flex;gap:12px;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-sm);padding:14px}
+.ask .n{width:24px;height:24px;border-radius:8px;background:var(--plane-deep);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.ask p{font-size:13px}
+.ask p b{font-weight:600}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%) translateY(8px);background:var(--ink);color:#fff;font-size:13px;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:all var(--dur) var(--ease);z-index:80;max-width:80%}
+.toast.is-show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media (max-width:760px){
+  .stage{grid-template-columns:1fr}
+  .rail{flex-direction:row;flex-wrap:wrap;justify-content:center}
+  .modal-body{grid-template-columns:1fr;overflow-y:auto}
+  .col-preview{min-height:220px}
+  .mech-grid{grid-template-columns:1fr}
+  .wrap{padding:20px 16px 60px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ========== 页头 ========== -->
+  <header class="page-head">
+    <div class="kicker">Scendance 2026 · 讨论稿</div>
+    <h1>保存与分享 · 入口与归属草图</h1>
+    <p>方案 A：交付动作收敛进一颗「保存与分享」主钮，弹窗内按交付对象分三 Tab；视图操作仍留在侧栏工具轨。本页是可交互原型，按钮反馈仅为演示，未接真实动作；状态徽标依据生产代码核实。</p>
+    <div class="legend">
+      <span><i class="dot done"></i>已实现（代码中存在对应动作）</span>
+      <span><i class="dot plan"></i>规划项（尚未打通，不做可点假按钮）</span>
+      <span><i class="dot out"></i>不进本弹窗（留在原面板 / 工具轨）</span>
+    </div>
+  </header>
+
+  <!-- ========== 区块 A：工作台示意 ========== -->
+  <h2 class="section-title">1 · 工作台入口排布 <small>保留侧栏圆形钮区，交付动作合并为一颗主钮</small></h2>
+  <div class="stage">
+    <div class="canvas">
+      <div class="grid-bg"></div>
+      <div class="plan-rect"><span class="kick">方案预览</span></div>
+      <span class="meta">12 × 9 m · 1 件</span>
+    </div>
+    <nav class="rail" aria-label="工具轨示意">
+      <button class="rail-btn" title="楼层切换" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5l6 7H6z"/><path d="M12 19l6-7H6z"/></svg></button>
+      <button class="rail-btn" title="选择" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l7 18 2-7 7-2z"/></svg></button>
+      <button class="rail-btn" title="平面 / 立体" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 5v8l-9 5-9-5V8z"/><path d="M12 11l9-5M12 11L3 6M12 11v10"/></svg></button>
+      <button class="rail-btn" title="第一人称漫游" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V8m0 0l8-4 8 4M12 12v9"/></svg></button>
+      <button class="rail-btn" title="尺寸标注" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17L17 4M4 17h4M4 17v4M17 4h-4M17 4V0"/></svg></button>
+      <button class="rail-btn" title="网格吸附" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg></button>
+      <span class="sep"></span>
+      <button class="rail-btn" title="撤销" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+      <button class="rail-btn" title="重做" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg></button>
+      <span class="sep"></span>
+      <button class="rail-btn is-main" id="open-share" title="保存与分享">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l5 6h-3v5h-4V9H7z"/><path d="M5 15v3a3 3 0 003 3h8a3 3 0 003-3v-3"/></svg>
+      </button>
+      <button class="rail-btn is-alt" title="备选：相机快捷直达（待拍板）" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <button class="rail-btn" title="氛围" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg></button>
+    </nav>
+  </div>
+  <div class="rail-notes">
+    <div class="note"><span class="tag done">保留原位</span><span><b>视图与操作类</b>：选择、2D/3D、漫游、尺寸、网格、撤销重做、缩放、氛围，继续留在工具轨，不进交付弹窗。</span></div>
+    <div class="note"><span class="tag done">合并入口</span><span><b>保存与分享主钮</b>：现在的「发布」钮与「导出效果图」钮收敛到这里，点开大弹窗；弹窗内按交付对象分流。</span></div>
+    <div class="note"><span class="tag plan">待拍板</span><span><b>相机虚线钮</b>：是否保留一颗直达 PNG 导出的快捷钮，还是全部并入弹窗（见文末问题 1）。</span></div>
+  </div>
+
+  <!-- ========== 区块 B：弹窗原型 ========== -->
+  <div class="modal-mask" id="modalMask" role="dialog" aria-modal="true" aria-label="保存与分享">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>保存与分享</h2>
+        <span class="chip">盐官潮乐之城 · 海宁盐官</span>
+        <span class="chip">未发布</span>
+        <button class="close" id="modalClose" aria-label="关闭"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab is-active" role="tab" data-tab="save">存档继续</button>
+        <button class="tab" role="tab" data-tab="share">给客户看</button>
+        <button class="tab" role="tab" data-tab="files">带走资料</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- 配置列 -->
+        <div class="col-config">
+          <!-- Tab: 存档继续 -->
+          <section class="tab-panel" data-panel="save">
+            <div class="group">
+              <h3>工程副本 · 本机再编辑</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">下载场景与活动备份</span><span class="tag done">已实现</span></div>
+                  <div class="desc">JSON 副本，可在另一台设备打开继续编辑；普通备份上限 8 MiB。</div>
+                  <div class="seg" role="group" aria-label="备份范围">
+                    <button class="is-active" data-seg="backup">不含图纸照片</button>
+                    <button data-seg="backup">含本机图纸照片</button>
+                  </div>
+                </div>
+              </div>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 7l1.5 12h13L20 7M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">从备份文件恢复</span><span class="tag done">已实现</span></div>
+                  <div class="desc">预检后合并点验记录；恢复冲突时保留双方资料并停止，可撤销本次恢复。</div>
+                </div>
+                <div class="acts"><button class="mini-btn" data-demo="选择备份文件">选择文件</button></div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>副本包含内容</h3>
+              <label class="opt off" style="cursor:pointer">
+                <div class="body"><div class="row1"><span class="name">平面布局</span></div><div class="desc">场地尺寸、楼层、物件与分区</div></div>
+                <button class="switch is-on" data-switch aria-label="平面布局"></button>
+              </label>
+              <label class="opt" style="cursor:pointer">
+                <div class="body"><div class="row1"><span class="name">规划标注</span></div><div class="desc">标注及其显示、锁定状态</div></div>
+                <button class="switch" data-switch aria-label="规划标注"></button>
+              </label>
+              <label class="opt" style="cursor:pointer">
+                <div class="body"><div class="row1"><span class="name">标题与备注</span></div><div class="desc">方案名称与描述写入文件</div></div>
+                <button class="switch" data-switch aria-label="标题与备注"></button>
+              </label>
+              <label class="opt" style="cursor:pointer">
+                <div class="body"><div class="row1"><span class="name">操作历史</span></div><div class="desc">导入后仍可撤销的步骤记录</div></div>
+                <button class="switch" data-switch aria-label="操作历史"></button>
+              </label>
+            </div>
+          </section>
+
+          <!-- Tab: 给客户看 -->
+          <section class="tab-panel" data-panel="share" hidden>
+            <div class="group">
+              <h3>只读 3D 方案链接</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 5v8l-9 5-9-5V8z"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">生成只读 3D 链接</span><span class="tag done">已实现</span></div>
+                  <div class="desc">快照内嵌 URL，无需后端；外部模型带不走时会提示占位。</div>
+                </div>
+                <div class="acts">
+                  <button class="mini-btn" data-demo="复制 3D 链接">复制</button>
+                  <button class="mini-btn" data-demo="打开只读 3D 方案">打开</button>
+                </div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>发布只读页</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l5 6h-3v5h-4V9H7z"/><path d="M5 15v3a3 3 0 003 3h8a3 3 0 003-3v-3"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">发布当前版本</span><span class="tag done">已实现</span></div>
+                  <div class="desc">发布不改已发布版本；链接由你自己发给对方，不通知对方。</div>
+                </div>
+                <div class="acts">
+                  <button class="mini-btn primary" data-demo="发布新版本">发布 v2</button>
+                  <button class="mini-btn" data-demo="复制只读页链接">复制</button>
+                </div>
+              </div>
+              <div class="opt">
+                <div class="qr" aria-label="二维码占位"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 14h3v3h-3zM14 18h3v3h-3zM18 18h3v3h-3z"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">手机扫码看同一版</span></div>
+                  <div class="desc">发布后出二维码；未发布时显示占位提示。</div>
+                </div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>评审链接</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a5 5 0 007 0l3-3a5 5 0 00-7-7l-1.5 1.5"/><path d="M14 10a5 5 0 00-7 0l-3 3a5 5 0 007 7l1.5-1.5"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">发评审链接</span><span class="tag done">已实现</span></div>
+                  <div class="desc">对方打开可看平面并留言；链接生成后自动复制。</div>
+                </div>
+                <div class="acts">
+                  <button class="mini-btn" data-demo="复制评审链接">复制</button>
+                  <button class="mini-btn" data-demo="打开对方所见">打开</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab: 带走资料 -->
+          <section class="tab-panel" data-panel="files" hidden>
+            <div class="group">
+              <h3>效果图 · 给客户看画面</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">PNG 单帧效果图</span><span class="tag done">已实现</span></div>
+                  <div class="seg" role="group" aria-label="视角">
+                    <button class="is-active" data-seg="view">当前机位</button>
+                    <button data-seg="view">俯视</button>
+                    <button data-seg="view">正面</button>
+                    <button data-seg="view">对角</button>
+                  </div>
+                  <div class="seg" role="group" aria-label="画质">
+                    <button data-seg="scale">标准</button>
+                    <button class="is-active" data-seg="scale">高清</button>
+                    <button data-seg="scale">原生</button>
+                  </div>
+                </div>
+              </div>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">机位册 HTML</span><span class="tag done">已实现</span></div>
+                  <div class="desc">顺序抓取全部机位逐张下载，另附离线图册。</div>
+                </div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>清单与交接 · 给搭建 / 执行方</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">交接包 HTML</span><span class="tag done">已实现 · 从分享卡片底部迁入</span></div>
+                  <div class="desc">平面示意、任务表、物料工作单与点验资料；冻结版本不随后续编辑更新。</div>
+                </div>
+              </div>
+              <div class="opt off">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">物料清单 CSV</span><span class="tag plan">规划 · 未打通</span></div>
+                  <div class="desc">字段对齐，Excel 直开；打通前不以可点按钮出现。</div>
+                </div>
+              </div>
+              <div class="opt off">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">打印 PDF 演示稿</span><span class="tag plan">规划 · 未打通</span></div>
+                  <div class="desc">从原分享弹窗迁回导出侧；A4 排版随交接包样式走。</div>
+                </div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>几何与数据 · 二次加工 / GIS</h3>
+              <div class="opt">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12L3 7M12 12v10"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">平面 SVG / DXF</span><span class="tag done">已实现 · 随交接包带出</span></div>
+                  <div class="desc">家具为占位包络，不表达实物细部；图中数字对应物件编号。</div>
+                </div>
+              </div>
+              <div class="opt off">
+                <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg></div>
+                <div class="body">
+                  <div class="row1"><span class="name">GeoJSON</span><span class="tag plan">规划 · 未打通</span></div>
+                  <div class="desc">全量几何，GIS 可用；打通前置条件另议。</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 预览列 -->
+        <div class="col-preview">
+          <section class="tab-panel" data-panel="save">
+            <div class="preview-box">
+              <div class="thumb"><div class="inner"></div></div>
+              <div class="preview-meta"><span>12 × 9 m</span><span>1 件</span><span>2 楼层</span></div>
+              <div class="preview-meta"><span>副本体积估算：约 0.6 MB（不含图纸照片）</span></div>
+            </div>
+          </section>
+          <section class="tab-panel" data-panel="share" hidden>
+            <div class="preview-box">
+              <div class="thumb"><div class="inner"></div></div>
+              <div class="preview-meta"><span>方案预览</span><span>版本 r1 · 18:11:09</span></div>
+              <div class="preview-meta"><span>0 分区 · 0 设施 · 0 动线 · 0 人员</span></div>
+            </div>
+          </section>
+          <section class="tab-panel" data-panel="files" hidden>
+            <div class="preview-box">
+              <div class="thumb"><div class="inner"></div></div>
+              <div class="preview-meta"><span>效果图预览与导出文件保持同一缓存资产</span></div>
+              <div class="preview-meta"><span id="previewDims">1920 × 1080 · 高清</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn" id="modalCancel">取消</button>
+        <button class="btn primary" id="modalCta">下载工程副本</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- ========== 区块 C：动作归属迁移表 ========== -->
+  <h2 class="section-title">2 · 动作归属迁移 <small>现状位置 → 提案位置</small></h2>
+  <div class="card" style="padding:8px 12px">
+    <table>
+      <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+      <thead><tr><th>动作</th><th>现在位置</th><th>提案位置</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>发布只读页（版本 / 二维码 / 链接）</td><td>分享卡片（tool-share）</td><td>弹窗 · 给客户看</td><td><span class="tag done">已实现</span></td></tr>
+        <tr><td>只读 3D 方案链接</td><td>分享卡片内</td><td>弹窗 · 给客户看</td><td><span class="tag done">已实现</span></td></tr>
+        <tr><td>评审链接（可留言）</td><td>分享卡片底部</td><td>弹窗 · 给客户看</td><td><span class="tag done">已实现</span></td></tr>
+        <tr><td>交接包 HTML</td><td>分享卡片底部（寄生在分享侧）</td><td>弹窗 · 带走资料</td><td><span class="tag done">已实现 · 迁移</span></td></tr>
+        <tr><td>PNG 单帧 / 机位册</td><td>相机钮小面板</td><td>弹窗 · 带走资料（或保留快捷直达钮）</td><td><span class="tag done">已实现</span></td></tr>
+        <tr><td>工程备份 / 恢复</td><td>独立备份面板</td><td>弹窗 · 存档继续（可并入）</td><td><span class="tag done">已实现 · 待决定</span></td></tr>
+        <tr><td>物料清单 CSV</td><td>草图设想，代码未打通</td><td>弹窗 · 带走资料</td><td><span class="tag plan">规划</span></td></tr>
+        <tr><td>GeoJSON 几何</td><td>草图设想，代码未打通</td><td>弹窗 · 带走资料</td><td><span class="tag plan">规划</span></td></tr>
+        <tr><td>打印 PDF 演示稿</td><td>分享弹窗草图（代码未打通）</td><td>弹窗 · 带走资料</td><td><span class="tag plan">规划</span></td></tr>
+        <tr><td>打开资料（素材库）</td><td>分享卡片底部</td><td>不进弹窗，留在素材库入口</td><td><span class="tag out">移出</span></td></tr>
+        <tr><td>到场清单</td><td>分享卡片底部</td><td>不进弹窗，留在左栏清单卡</td><td><span class="tag out">移出</span></td></tr>
+        <tr><td>视图 / 撤销重做 / 氛围</td><td>工具轨</td><td>工具轨原位，不变</td><td><span class="tag out">不变</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========== 区块 D：PetitMaker 对照 ========== -->
+  <h2 class="section-title">3 · PetitMaker 做法对照 <small>上游「保存与分享」弹窗可借鉴的机制</small></h2>
+  <div class="mech-grid">
+    <div class="mech"><h3><span class="num">1</span>单入口，弹窗内分流</h3><p>一颗按钮打开「保存与分享」大弹窗，不在画布上并列导出 / 分享两个大胶囊；弹窗内按交付对象（自己继续 / 给朋友 / 搬进游戏）分 Tab。</p></div>
+    <div class="mech"><h3><span class="num">2</span>左配置 · 右通高预览</h3><p>340px 左列放表单、开关、分段且可滚动；右列预览通高，底部一行取消 + 主按钮；预览与导出复用同一缓存资产，看到的就是导出的。</p></div>
+    <div class="mech"><h3><span class="num">3</span>选项下次沿用</h3><p>除标题与备注外，画质、尺寸、携带内容等选择记忆到本机，下次打开沿用上次配置，减少重复设置。</p></div>
+    <div class="mech"><h3><span class="num">4</span>打开才算重活</h3><p>快照捕获、编码、来源扫描等重活都 gate 在弹窗打开之后；未挂载打开的页签不跑计算，避免编辑器常驻开销。</p></div>
+    <div class="mech"><h3><span class="num">5</span>忙态可取消</h3><p>导出中遮罩 + 进度指示 + 可取消按钮；按钮在 busy / 被审核拦截 / 缺前置条件时明确禁用，不给出可点假象。</p></div>
+    <div class="mech"><h3><span class="num">6</span>不可用就标灰说明</h3><p>缺前置条件的项置灰并写明原因（如"此方案不由生成器完整创建，因此不可用"），不藏进菜单，也不做假按钮。</p></div>
+  </div>
+
+  <!-- ========== 区块 E：待拍板 ========== -->
+  <h2 class="section-title">4 · 待拍板 <small>讨论清楚后再动组件</small></h2>
+  <div class="ask-list">
+    <div class="ask"><span class="n">1</span><p><b>相机快捷钮去留：</b>PNG 导出是高频单次动作，是全部并入弹窗，还是在工具轨保留一颗直达效果图的快捷钮（虚线备选位）？</p></div>
+    <div class="ask"><span class="n">2</span><p><b>工程备份是否并入：</b>独立备份面板的下载 / 恢复 / 撤销，是收进弹窗「存档继续」，还是保留独立面板、弹窗只放入口？</p></div>
+    <div class="ask"><span class="n">3</span><p><b>两个面板入口确认移出：</b>「打开资料」「到场清单」不属于交付动作，确认留在素材库与左栏清单卡，不进保存分享弹窗？</p></div>
+    <div class="ask"><span class="n">4</span><p><b>规划项展示策略：</b>CSV、GeoJSON、PDF 演示稿本期是否打通；未打通前是以置灰"即将上线"展示，还是暂时不放进菜单？</p></div>
+    <div class="ask"><span class="n">5</span><p><b>Tab 命名：</b>「存档继续 / 给客户看 / 带走资料」是否贴合幕景用户语言，还是换成「本机备份 / 在线分享 / 文件导出」一类叫法？</p></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  var mask = document.getElementById('modalMask');
+  var openBtn = document.getElementById('open-share');
+  var closeBtn = document.getElementById('modalClose');
+  var cancelBtn = document.getElementById('modalCancel');
+  var cta = document.getElementById('modalCta');
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  var panels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
+  var toast = document.getElementById('toast');
+  var toastTimer = null;
+
+  var CTA = { save:'下载工程副本', share:'复制最新链接', files:'导出所选文件' };
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('is-show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toast.classList.remove('is-show'); }, 2200);
+  }
+  function demoToast(label){ showToast('草图演示：「' + label + '」未接真实动作'); }
+
+  function openModal(){ mask.classList.add('is-open'); }
+  function closeModal(){ mask.classList.remove('is-open'); }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  mask.addEventListener('mousedown', function(e){ if(e.target === mask) closeModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeModal(); });
+
+  function switchTab(name){
+    tabs.forEach(function(t){ t.classList.toggle('is-active', t.dataset.tab === name); });
+    panels.forEach(function(p){ p.hidden = p.dataset.panel !== name; });
+    cta.textContent = CTA[name];
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ switchTab(t.dataset.tab); }); });
+
+  // 开关
+  document.querySelectorAll('[data-switch]').forEach(function(sw){
+    sw.addEventListener('click', function(e){
+      e.preventDefault();
+      sw.classList.toggle('is-on');
+      var opt = sw.closest('.opt');
+      if(opt) opt.classList.toggle('off', !sw.classList.contains('is-on'));
+    });
+  });
+
+  // 分段选择（同组互斥）
+  document.querySelectorAll('.seg').forEach(function(group){
+    group.addEventListener('click', function(e){
+      var btn = e.target.closest('button');
+      if(!btn) return;
+      group.querySelectorAll('button').forEach(function(b){ b.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+      if(group.closest('[data-panel="files"]')) updatePreviewDims();
+    });
+  });
+
+  function updatePreviewDims(){
+    var dims = document.getElementById('previewDims');
+    if(!dims) return;
+    var scale = document.querySelector('[data-panel="files"] .seg[data-seg="scale"] .is-active');
+    var view = document.querySelector('[data-panel="files"] .seg[data-seg="view"] .is-active');
+    var size = scale ? scale.textContent : '高清';
+    dims.textContent = '1920 × 1080 · ' + size + (view ? ' · ' + view.textContent : '');
+  }
+
+  // 演示按钮（规划置灰项不挂 handler）
+  document.querySelectorAll('[data-demo]').forEach(function(btn){
+    btn.addEventListener('click', function(){ demoToast(btn.dataset.demo); });
+  });
+
+  cta.addEventListener('click', function(){ demoToast(cta.textContent); });
+})();
+</script>
+</body>
+</html>

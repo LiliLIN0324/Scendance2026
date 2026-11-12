@@ -65,6 +65,7 @@ export function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSet
   return {
     view2D: false,
     showMeasurements: true,
+    lengthUnit: 'm',
     showWiFiSignals: true,
     snapToGrid: false,
     snapToWall: false,

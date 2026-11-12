@@ -3971,7 +3971,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
-              <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
+              <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>第一人称漫游</button>
               <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>导出与交接</button>
             </div>
           </div>
@@ -4155,7 +4155,7 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
 
 export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
-  const { activeFloor, collidingIds, layout, view, setView } = useRoomEditor();
+  const { activeFloor, collidingIds, view, exitWalkthrough } = useRoomEditor();
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
     const sync = () => setFullscreen(document.fullscreenElement !== null);
@@ -4177,8 +4177,8 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
   if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><div className="ap-walk-controls">
     <button id="walk-fullscreen" type="button" className="ap-canvas-pill" aria-pressed={fullscreen} title={fullscreen ? '退出全屏' : '全屏'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} aria-hidden="true"/> : <Maximize2 size={14} aria-hidden="true"/>}{fullscreen ? '退出全屏' : '全屏'}</button>
-    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>
-      {(layout.mapGroundPolygon?.length ?? 0) >= 3 ? '返回场地 · Esc' : '退出第一人称 · Esc'}
+    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={exitWalkthrough}>
+      退出漫游 <span className="ap-walk-esc">· Esc</span>
     </button>
   </div></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;

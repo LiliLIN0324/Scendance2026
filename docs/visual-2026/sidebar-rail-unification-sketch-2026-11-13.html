@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>左栏入口统一草图 · 2026-11-13</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' fill='%23F7F5F0' stroke='%233B5D45' stroke-width='2'/%3E%3Ccircle cx='9' cy='11' r='1.4' fill='%2326262A'/%3E%3Ccircle cx='15' cy='11' r='1.4' fill='%2326262A'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#F7F5F0; --plane:#EFECE5; --hair:#E3DFD6; --ink:#26262A; --ink-soft:#5C5C63; --muted:#8A8A90;
+  --ok:#4A7C59; --warn:#96651F; --err:#B4443C; --green-deep:#3B5D45; --white:#FFFFFF;
+  --pending:var(--warn); --done:var(--err);
+  --pending-soft:rgba(150,101,31,.16); --done-soft:rgba(180,68,60,.22);
+}
+body.semantic{
+  --pending:var(--err); --done:var(--ok);
+  --pending-soft:rgba(180,68,60,.16); --done-soft:rgba(74,124,89,.18);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  font-size:14px;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 24px 64px}
+header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.meta{color:var(--muted);font-size:12px}
+.note{background:var(--plane);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;color:var(--ink-soft);font-size:13px;margin:16px 0}
+.scheme-btn{border:1px solid var(--hair);background:var(--white);color:var(--ink-soft);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer}
+.scheme-btn:hover{background:var(--plane)}
+section{margin-top:36px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.sec-sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 0;font-size:12px;color:var(--ink-soft)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot-swatch{width:10px;height:10px;border-radius:999px;display:inline-block}
+.fam-a{background:var(--green-deep);border-radius:4px}
+.fam-b{background:var(--ink-soft);border-radius:3px}
+.fam-c{background:var(--plane);border:1px solid var(--hair);border-radius:999px}
+
+/* ── 收起态轨 ── */
+.demo-row{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.rail-col{width:64px;background:var(--white);border:1px solid var(--hair);border-radius:16px;padding:10px 8px;display:flex;flex-direction:column;gap:10px}
+.slot{width:48px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+.hit{width:40px;height:40px;display:grid;place-items:center;position:relative}
+.glyph{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;position:relative}
+.glyph.soft{background:var(--plane);border:1px solid var(--hair)}
+.glyph.ball{border-radius:999px}
+.glyph.avatar{border-radius:999px;background:var(--plane);color:var(--green-deep);font-weight:600;font-size:13px}
+.glyph svg{width:20px;height:20}
+.glyph .eyes{position:absolute;top:9px;width:3px;height:3px;border-radius:999px;background:#fff}
+.glyph .eyes.l{left:9px}.glyph .eyes.r{right:9px}
+.label{font-size:11px;color:var(--ink-soft);white-space:nowrap}
+.lane-dot{position:absolute;right:1px;bottom:1px;width:9px;height:9px;border-radius:999px;border:2px solid var(--white);background:var(--ok)}
+.lane-dot.idle{background:var(--hair)}
+.unread{position:absolute;top:-2px;right:-2px;min-width:15px;height:15px;border-radius:999px;background:var(--err);border:2px solid var(--paper);color:#fff;font:600 10px/11px tabular-nums;font-variant-numeric:tabular-nums;display:grid;place-items:center;padding:0 4px}
+
+/* ── D 徽标 ── */
+.badge{width:28px;height:28px;border-radius:999px;background:var(--paper);border:1.5px solid var(--hair);display:grid;place-items:center;font:600 11px/1 tabular-nums;font-variant-numeric:tabular-nums;color:var(--muted)}
+.badge.awaiting{border-color:var(--pending);color:var(--pending);box-shadow:0 0 0 3px var(--pending-soft)}
+.badge.returned{border-color:var(--done);color:var(--done)}
+.badge.returned svg{width:13px;height:13px}
+
+/* ── 展开态卡片 ── */
+.cards{display:flex;flex-direction:column;gap:10px;flex:1;min-width:280px}
+.card{display:flex;align-items:center;gap:12px;background:var(--white);border:1px solid var(--hair);border-radius:14px;padding:12px 12px 12px 14px;min-height:48px;position:relative}
+.card.selected::before{content:"";position:absolute;left:-1px;top:7px;bottom:7px;width:3px;background:var(--green-deep);border-radius:2px}
+.card .glyph{flex:none}
+.txt{flex:1;min-width:0}
+.title{font:500 14px/22px;color:var(--ink)}
+.meta{font:12px/20px;color:var(--muted)}
+.actions{display:flex;gap:2px;flex:none}
+.ghost{width:32px;height:32px;display:grid;place-items:center;border:0;background:transparent;color:var(--ink-soft);border-radius:8px;cursor:pointer}
+.ghost:hover{background:var(--plane)}
+.ghost svg{width:16px;height:16px}
+
+/* ── 三态放大 ── */
+.states{display:flex;gap:18px;align-items:flex-start;justify-content:space-around;background:var(--white);border:1px solid var(--hair);border-radius:16px;padding:18px 10px;flex-wrap:wrap}
+.state{display:flex;flex-direction:column;align-items:center;gap:6px}
+.state-name{font-size:11px;color:var(--muted)}
+.tip{font-size:11px;color:var(--muted);max-width:150px;text-align:center}
+
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-top:1px solid var(--hair);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--plane);color:var(--ink-soft)}
+.tag.a{background:rgba(59,93,69,.12);color:var(--green-deep)}
+.tag.b{background:rgba(92,92,99,.12);color:var(--ink-soft)}
+.tag.c{background:rgba(138,138,144,.14);color:var(--muted)}
+code{font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1>左栏入口统一草图 · 整栏视觉与图标归位</h1>
+    <p class="meta">2026-11-13 讨论稿 ｜ 依据 <code>docs/05-设计规范.md</code> 语义 token ｜ 形体为占位，落地换 <code>RailAvatar</code> PNG；Material 字形取自本地 <code>material-symbols/rounded</code></p>
+  </div>
+  <button class="scheme-btn" id="schemeBtn" type="button">切换配色：旧版赭 / 红</button>
+</header>
+
+<div class="note">
+  <b>基线（2026-11-13 核对）：</b>分支 <code>feat/continue-20261105</code>，HEAD = <code>origin/main</code> <code>7d38fb57</code>，0 超前 / 0 落后；工作区未提交 WIP 与轨栏无关。本稿只做视觉对比，不改代码。
+  图标现状按工作树实读校正：空间 / 物料轨钮已是 Material；另含「户外规划」一枚；拍摄场地是面板开关而非外链。
+  第一格称呼本轮保留原样（轨钮「总控」、面板头「活动」），改名搁置，后续再议。
+</div>
+
+<div class="legend">
+  <span><i class="dot-swatch fam-a"></i>A 角色形体族：认人（总控、Bingo）</span>
+  <span><i class="dot-swatch fam-b"></i>B 通用工具族：认动作（Material 实心图标）</span>
+  <span><i class="dot-swatch fam-c"></i>C 人物头像族：认身份（给自己留话）</span>
+</div>
+
+<!-- ══ 一、收起态 ══ -->
+<section>
+  <h2>一、收起态 · 64px 轨（7 枚同一基准）</h2>
+  <p class="sec-sub">触达 40×40，图形槽 28×28，标签 12px；三族只统一尺寸 / 视觉重量 / 配色规则，图形本身不同源。</p>
+  <div class="demo-row">
+    <div class="rail-col">
+
+      <div class="slot">
+        <div class="hit">
+          <div class="glyph ball">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v15a1.5 1.5 0 0 1-1.5 1.5h-3v-5a1.5 1.5 0 0 0-3 0v5h-3A1.5 1.5 0 0 1 5 21V6a3 3 0 0 1 3-3Z" fill="#3B5D45"/><circle cx="9.5" cy="9" r="1.3" fill="#fff"/><circle cx="14.5" cy="9" r="1.3" fill="#fff"/></svg>
+            <span class="lane-dot"></span>
+          </div>
+        </div>
+        <span class="label">总控</span>
+      </div>
+
+      <div class="slot">
+        <div class="hit">
+          <div class="badge awaiting">3</div>
+        </div>
+        <span class="label">Bingo</span>
+      </div>
+
+      <div class="slot">
+        <div class="hit">
+          <div class="glyph soft" style="color:var(--ink-soft)">
+            <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M180-510q-24.75 0-42.37-17.63Q120-545.25 120-570v-210q0-24.75 17.63-42.38Q155.25-840 180-840h210q24.75 0 42.38 17.62Q450-804.75 450-780v210q0 24.75-17.62 42.37Q414.75-510 390-510H180Zm0 390q-24.75 0-42.37-17.63Q120-155.25 120-180v-210q0-24.75 17.63-42.38Q155.25-450 180-450h210q24.75 0 42.38 17.62Q450-414.75 450-390v210q0 24.75-17.62 42.37Q414.75-120 390-120H180Zm390-390q-24.75 0-42.37-17.63Q510-545.25 510-570v-210q0-24.75 17.63-42.38Q545.25-840 570-840h210q24.75 0 42.38 17.62Q840-804.75 840-780v210q0 24.75-17.62 42.37Q804.75-510 780-510H570Zm0 390q-24.75 0-42.37-17.63Q510-155.25 510-180v-210q0-24.75 17.63-42.38Q545.25-450 570-450h210q24.75 0 42.38 17.62Q840-414.75 840-390v210q0 24.75-17.62 42.37Q804.75-120 780-120H570Z"/></svg>
+          </div>
+          <span class="lane-dot"></span>
+        </div>
+        <span class="label">空间</span>
+      </div>
+
+      <div class="slot">
+        <div class="hit">
+          <div class="glyph soft" style="color:var(--ink-soft)">
+            <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M180-80q-24.75 0-42.37-17.63Q120-115.25 120-140v-483q-17-6-28.5-21.39T80-680v-140q0-24.75 17.63-42.38Q115.25-880 140-880h680q24.75 0 42.38 17.62Q880-844.75 880-820v140q0 20.22-11.5 35.61T840-623v483q0 24.75-17.62 42.37Q804.75-80 780-80H180Zm-40-600h680v-140H140v140Zm250 260h180q12.75 0 21.38-8.68 8.62-8.67 8.62-21.5 0-12.82-8.62-21.32-8.63-8.5-21.38-8.5H390q-12.75 0-21.37 8.68-8.63 8.67-8.63 21.5 0 12.82 8.63 21.32 8.62 8.5 21.37 8.5Z"/></svg>
+          </div>
+          <span class="lane-dot idle"></span>
+        </div>
+        <span class="label">物料</span>
+      </div>
+
+      <div class="slot">
+        <div class="hit">
+          <div class="glyph soft" style="color:var(--ink-soft)">
+            <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-267q72 0 121-49t49-121q0-73-49-121.5T480-607q-73 0-121.5 48.5T310-437q0 72 48.5 121T480-267Zm0-60q-48 0-79-31.5T370-437q0-48 31-79t79-31q47 0 78.5 31t31.5 79q0 47-31.5 78.5T480-327ZM140-120q-24 0-42-18t-18-42v-513q0-23 18-41.5t42-18.5h147l55-66q8-11 20-16t26-5h184q14 0 26 5t20 16l55 66h147q23 0 41.5 18.5T880-693v513q0 24-18.5 42T820-120H140Z"/></svg>
+          </div>
+        </div>
+        <span class="label">拍摄场地</span>
+      </div>
+
+      <div class="slot">
+        <div class="hit">
+          <div class="glyph soft" style="color:var(--ink-soft)">
+            <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M324-111.5Q251-143 197-197t-85.5-127Q80-397 80-480t31.5-156Q143-709 197-763t127-85.5Q397-880 480-880t156 31.5Q709-817 763-763t85.5 127Q880-563 880-480t-31.5 156Q817-251 763-197t-127 85.5Q563-80 480-80t-156-31.5ZM437-141v-82q-35 0-59-26t-24-61v-44L149-559q-5 20-7 39.5t-2 39.5q0 130 84.5 227T437-141Zm294-108q44-48 66.5-107.5T820-480q0-106-58-192.5T607-799v18q0 35-24 61t-59 26h-87v87q0 17-13.5 28T393-568h-83v88h258q17 0 28 13t11 30v127h43q29 0 51 17t30 44Z"/></svg>
+          </div>
+        </div>
+        <span class="label">户外规划</span>
+      </div>
+
+      <div class="slot">
+        <div class="hit">
+          <div class="glyph avatar">我<span class="unread">2</span></div>
+        </div>
+        <span class="label">给自己留话</span>
+      </div>
+
+    </div>
+
+    <!-- 展开态卡片 -->
+    <div class="cards">
+
+      <div class="card selected">
+        <div class="glyph ball">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v15a1.5 1.5 0 0 1-1.5 1.5h-3v-5a1.5 1.5 0 0 0-3 0v5h-3A1.5 1.5 0 0 1 5 21V6a3 3 0 0 1 3-3Z" fill="#3B5D45"/><circle cx="9.5" cy="9" r="1.3" fill="#fff"/><circle cx="14.5" cy="9" r="1.3" fill="#fff"/></svg>
+        </div>
+        <div class="txt">
+          <div class="title">活动</div>
+          <div class="meta">活动需求、布置生成与方案确认</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="历史"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M513-492v-171q0-13-8.5-21.5T483-693q-13 0-21.5 8.5T453-663v183q0 6 2 11t6 10l144 149q9 10 22.5 9.5T650-310q9-9 9-22t-9-22L513-492ZM480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-82 31.5-155t86-127.5Q252-817 325-848.5T480-880q82 0 155 31.5t127.5 86Q817-708 848.5-635T880-480q0 82-31.5 155t-86 127.5Q708-143 635-111.5T480-80Z"/></svg></button>
+          <button class="ghost" type="button" aria-label="新建"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M450-450H230q-12.75 0-21.37-8.68-8.63-8.67-8.63-21.5 0-12.82 8.63-21.32 8.62-8.5 21.37-8.5h220v-220q0-12.75 8.68-21.38 8.67-8.62 21.5-8.62 12.82 0 21.32 8.62 8.5 8.63 8.5 21.38v220h220q12.75 0 21.38 8.68 8.62 8.67 8.62 21.5 0 12.82-8.62 21.32-8.63 8.5-21.38 8.5H510v220q0 12.75-8.68 21.37-8.67 8.63-21.5 8.63-12.82 0-21.32-8.63-8.5-8.62-8.5-21.37v-220Z"/></svg></button>
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="badge awaiting">3</div>
+        <div class="txt">
+          <div class="title">Bingo</div>
+          <div class="meta">待评 · 链接 2 · 钉 5（双计数走 tooltip / 面板头，第二轮）</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="glyph soft" style="color:var(--ink-soft)">
+          <svg viewBox="0 -960 960 960" fill="currentColor"><path d="M180-510q-24.75 0-42.37-17.63Q120-545.25 120-570v-210q0-24.75 17.63-42.38Q155.25-840 180-840h210q24.75 0 42.38 17.62Q450-804.75 450-780v210q0 24.75-17.62 42.37Q414.75-510 390-510H180Zm0 390q-24.75 0-42.37-17.63Q120-155.25 120-180v-210q0-24.75 17.63-42.38Q155.25-450 180-450h210q24.75 0 42.38 17.62Q450-414.75 450-390v210q0 24.75-17.62 42.37Q414.75-120 390-120H180Zm390-390q-24.75 0-42.37-17.63Q510-545.25 510-570v-210q0-24.75 17.63-42.38Q545.25-840 570-840h210q24.75 0 42.38 17.62Q840-804.75 840-780v210q0 24.75-17.62 42.37Q804.75-510 780-510H570Zm0 390q-24.75 0-42.37-17.63Q510-155.25 510-180v-210q0-24.75 17.63-42.38Q545.25-450 570-450h210q24.75 0 42.38 17.62Q840-414.75 840-390v210q0 24.75-17.62 42.37Q804.75-120 780-120H570Z"/></svg>
+        </div>
+        <div class="txt">
+          <div class="title">空间</div>
+          <div class="meta">盐官潮乐之城</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="附件"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M728-326q0 103-72.18 174.5-72.17 71.5-175 71.5Q378-80 305.5-151.5T233-326v-380q0-72.5 51.5-123.25T408-880q72 0 123.5 50.75T583-706v360q0 42-30 72t-72.5 30q-42.5 0-72.5-29.67-30-29.68-30-72.33v-340q0-12.75 8.68-21.38 8.67-8.62 21.5-8.62 12.82 0 21.32 8.62 8.5 8.63 8.5 21.38v340q0 17 12.5 29.5t30.64 12.5q18.14 0 30-12.5T523-346v-360q0-48-33.5-81t-81.71-33q-48.21 0-81.5 33.06T293-706v380q0 78 54.97 132T481-140q77.92 0 132.46-54Q668-248 668-326v-360q0-12.75 8.68-21.38 8.67-8.62 21.5-8.62 12.82 0 21.32 8.62 8.5 8.63 8.5 21.38v360Z"/></svg></button>
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="glyph soft" style="color:var(--ink-soft)">
+          <svg viewBox="0 -960 960 960" fill="currentColor"><path d="M180-80q-24.75 0-42.37-17.63Q120-115.25 120-140v-483q-17-6-28.5-21.39T80-680v-140q0-24.75 17.63-42.38Q115.25-880 140-880h680q24.75 0 42.38 17.62Q880-844.75 880-820v140q0 20.22-11.5 35.61T840-623v483q0 24.75-17.62 42.37Q804.75-80 780-80H180Zm-40-600h680v-140H140v140Zm250 260h180q12.75 0 21.38-8.68 8.62-8.67 8.62-21.5 0-12.82-8.62-21.32-8.63-8.5-21.38-8.5H390q-12.75 0-21.37 8.68-8.63 8.67-8.63 21.5 0 12.82 8.63 21.32 8.62 8.5 21.37 8.5Z"/></svg>
+        </div>
+        <div class="txt">
+          <div class="title">物料</div>
+          <div class="meta">5 件待生成</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="glyph soft" style="color:var(--ink-soft)">
+          <svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-267q72 0 121-49t49-121q0-73-49-121.5T480-607q-73 0-121.5 48.5T310-437q0 72 48.5 121T480-267Zm0-60q-48 0-79-31.5T370-437q0-48 31-79t79-31q47 0 78.5 31t31.5 79q0 47-31.5 78.5T480-327ZM140-120q-24 0-42-18t-18-42v-513q0-23 18-41.5t42-18.5h147l55-66q8-11 20-16t26-5h184q14 0 26 5t20 16l55 66h147q23 0 41.5 18.5T880-693v513q0 24-18.5 42T820-120H140Z"/></svg>
+        </div>
+        <div class="txt">
+          <div class="title">拍摄场地</div>
+          <div class="meta">盐官潮乐之城 · 拍完当场判断能不能重建，并出 3D</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="glyph soft" style="color:var(--ink-soft)">
+          <svg viewBox="0 -960 960 960" fill="currentColor"><path d="M324-111.5Q251-143 197-197t-85.5-127Q80-397 80-480t31.5-156Q143-709 197-763t127-85.5Q397-880 480-880t156 31.5Q709-817 763-763t85.5 127Q880-563 880-480t-31.5 156Q817-251 763-197t-127 85.5Q563-80 480-80t-156-31.5ZM437-141v-82q-35 0-59-26t-24-61v-44L149-559q-5 20-7 39.5t-2 39.5q0 130 84.5 227T437-141Zm294-108q44-48 66.5-107.5T820-480q0-106-58-192.5T607-799v18q0 35-24 61t-59 26h-87v87q0 17-13.5 28T393-568h-83v88h258q17 0 28 13t11 30v127h43q29 0 51 17t30 44Z"/></svg>
+        </div>
+        <div class="txt">
+          <div class="title">户外规划</div>
+          <div class="meta">2D 地图 · 3D 场地接管</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="glyph avatar">我</div>
+        <div class="txt">
+          <div class="title">给自己留话</div>
+          <div class="meta">2 条未读</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" aria-label="关闭"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M480-438 270-228q-9 9-21 9t-21-9q-9-9-9-21t9-21l210-210-210-210q-9-9-9-21t9-21q9-9 21-9t21 9l210 210 210-210q9-9 21-9t21 9q9 9 9 21t-9 21L522-480l210 210q9 9 9 21t-9 21q-9 9-21 9t-21-9L480-438Z"/></svg></button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ 二、Bingo D 徽标三态 ══ -->
+<section>
+  <h2>二、Bingo 徽标 · 变体 D（28px 同尺寸圆内数字 / 勾形）</h2>
+  <p class="sec-sub">保留旧版「圆里有数 / 圆里有勾」的识别，本体就是 28px，与其他格形体槽同尺寸；不退回旧版 40px 整圆，不在角上叠第二层徽标。</p>
+  <div class="states">
+    <div class="state"><div class="hit"><div class="badge"></div></div><span class="state-name">待发 to-send</span><span class="tip">中性 hair 描边空圆，不出数</span></div>
+    <div class="state"><div class="hit"><div class="badge awaiting">3</div></div><span class="state-name">待评 awaiting</span><span class="tip">状态色描边 + 光晕，圆内数字；0 不画，&gt;9 显示 9+</span></div>
+    <div class="state"><div class="hit"><div class="badge returned"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 L10 17.5 L19 7.5"/></svg></div></div><span class="state-name">已回执 returned</span><span class="tip">状态色描边 + 勾形，不画数字</span></div>
+  </div>
+  <div class="note" style="margin-top:14px">
+    配色第二轮再定：旧版 = 待评赭 <code>#96651F</code> / 已回执红 <code>#B4443C</code>；语义方案 = 待办红 / 闭环绿 <code>#4A7C59</code>。右上角按钮切换对照。徽标 <code>aria-hidden</code>，状态与计数写进 <code>aria-label</code> 与 <code>data-tip</code>，不只靠颜色区分。
+  </div>
+</section>
+
+<!-- ══ 三、三族归位表 ══ -->
+<section>
+  <h2>三、图标三族归位（工作树现状 → 目标）</h2>
+  <p class="sec-sub">统一的是容器尺寸、视觉重量、配色规则；图形按语义来源归族，不硬画成同一个样。</p>
+  <table>
+    <thead><tr><th style="width:16%">入口</th><th style="width:12%">族</th><th>现状代码（2026-11-13 实读）</th><th>目标图形与状态</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>总控 / 活动</td><td><span class="tag a">A 形体</span></td>
+        <td><code>RailAvatar form="door"</code>，door.png 28px + 白眼；可见名「总控」（轨钮）与「活动」（<code>AGENT_META.door.name</code>）</td>
+        <td>保留形体 + 白眼；状态走 9px <code>RailLaneDot</code>；称呼本轮不改，改名留第二轮</td>
+      </tr>
+      <tr>
+        <td>Bingo</td><td><span class="tag a">A → D 圆徽</span></td>
+        <td><code>RailAvatar form="ball"</code>，ball.png 28px；tone 读 agent 状态机；面板头 <code>mascotOf</code> 换切图</td>
+        <td>轨钮槽换回 28px D 圆徽标（§二）；面板头 mascot 暂留，是否随状态走语义色第二轮定</td>
+      </tr>
+      <tr>
+        <td>空间</td><td><span class="tag b">B Material</span></td>
+        <td>轨钮已是 <code>LayoutGrid</code>（<code>grid_view</code>）26px；cube.png / <code>RailForm.cube</code> 只残留面板头 36px 头像</td>
+        <td>保留 Material；槽内尺寸对齐规范档位；状态走 <code>RailLaneDot</code>；面板头 cube 是否退 Material 第二轮定</td>
+      </tr>
+      <tr>
+        <td>物料</td><td><span class="tag b">B Material</span></td>
+        <td>轨钮已是 <code>Box</code>（<code>inventory_2</code>）26px；pyramid.png / <code>RailForm.pyramid</code> 只残留面板头</td>
+        <td>同上；回形针动作归属物料卡还是输入条第二轮定</td>
+      </tr>
+      <tr>
+        <td>拍摄场地</td><td><span class="tag b">B Material</span></td>
+        <td>自绘描边 camera SVG（stroke 1.6）；行为是面板开关 <code>openCapturePanel</code> / <code>closeCapturePanel</code>，不是外链；无状态点</td>
+        <td>换本地 <code>photo_camera</code>（<code>solid-icons.tsx</code> 已登记 <code>Camera</code>）；meta 是否展示场地名第二轮定</td>
+      </tr>
+      <tr>
+        <td>户外规划</td><td><span class="tag b">B Material</span></td>
+        <td><code>Globe</code>（<code>public</code>）26px；无状态点；开启态按 2D 地图 / 3D 接管任一开启判定</td>
+        <td>对齐槽位基线；状态点 / meta 是否需要，第二轮随户外链路定</td>
+      </tr>
+      <tr>
+        <td>给自己留话</td><td><span class="tag c">C 头像</span></td>
+        <td><code>account-avatars</code> 圆片（预设图 / 首字母 + tone）；红色未读徽标 15px 圆白字，<code>9+</code> 截断</td>
+        <td>与团队面板同片同色；徽标与 Bingo D 徽标同形同尺寸，只配色不同；空成员沿用 <code>is-placeholder</code></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══ 四、参考案例 ══ -->
+<section>
+  <h2>四、成熟产品参考案例对照</h2>
+  <p class="sec-sub">按入口 / 元素列对照对象、可借鉴点与我们的取舍；案例只取通行模式，不照搬对方配色与形体。</p>
+  <table>
+    <thead><tr><th style="width:18%">入口 / 元素</th><th style="width:26%">参考案例</th><th>可借鉴点</th><th>我们的取舍</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Bingo 圆内计数 / 勾形</td>
+        <td>iOS Messages、微信头像未读圆；macOS 头像在线状态环；VS Code 活动栏条目计数；本项目旧版 v2.3.0–v3.5.0</td>
+        <td>计数收进同一颗圆，不另起浮层；闭环用勾形而非叠红点；状态色描边 + 轻光晕</td>
+        <td>沿用变体 D：28px 同尺寸圆，不叠角标；主数进圆，另一路计数进 tooltip / 面板头</td>
+      </tr>
+      <tr>
+        <td>空间 · grid_view</td>
+        <td>Notion 侧栏数据库 / 分组网格；Slack 频道网格入口</td>
+        <td>四宫格表达「一组条目 / 场地概览」，实心字形与列表条目区分开</td>
+        <td>保留 Material 实心；不画描边自拍框；槽内尺寸对齐规范档位</td>
+      </tr>
+      <tr>
+        <td>物料 · inventory_2</td>
+        <td>Linear 附件箱条目；Jira 仓库 / 清单箱体图标</td>
+        <td>箱体表达「物件、规格与模型」；与空间图标同一视觉重量</td>
+        <td>与空间同描同重，不一实心一描边；回形针动作归属第二轮定</td>
+      </tr>
+      <tr>
+        <td>拍摄场地 · photo_camera</td>
+        <td>系统相机 / 相册工具栏的相机入口；图片采集类产品的拍摄动作钮</td>
+        <td>动作型入口用识别度高的相机实心形，不依赖自绘描边</td>
+        <td>换掉现有自绘描边 SVG，登记进本地 Material 表；行为仍是面板开关</td>
+      </tr>
+      <tr>
+        <td>户外规划 · public</td>
+        <td>Google Maps 全局视图；浏览器地球 / 站点入口</td>
+        <td>地球表达「整片场地 / 外部视角」，与单场地、单物件区分层级</td>
+        <td>先对齐槽位基线；状态点 / meta 是否需要第二轮随户外链路定</td>
+      </tr>
+      <tr>
+        <td>给自己留话 · 头像未读</td>
+        <td>微信 / Discord 私聊头像 + 未读圆；团队成员状态头像</td>
+        <td>头像族保持照片 / 首字母圆片；未读信息用右上角小圆承载，白字截断 <code>9+</code></td>
+        <td>未读圆与 Bingo D 徽标同形同尺寸，只配色不同；空成员沿用占位态</td>
+      </tr>
+      <tr>
+        <td>卡片 ghost 动作钮</td>
+        <td>VS Code 活动栏 hover 工具钮；Linear 侧栏条目 hover 浮出动作</td>
+        <td>32×32 触达、16px 图标、ink-soft、hover 转 plane；动作钮不抢标题层级</td>
+        <td>关闭钮恒在最右；其余动作（历史 / 新建 / 附件）按入口排在左侧，不混实心与描边</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══ 五、卡片壳与待定项 ══ -->
+<section>
+  <h2>五、展开卡壳规则与待定项</h2>
+  <table>
+    <thead><tr><th style="width:22%">项</th><th>规则 / 结论</th></tr></thead>
+    <tbody>
+      <tr><td>卡片壳</td><td>白底、1px <code>--hair</code>、圆角 14、内边距 12/16，行高 44–48；左 28 图标槽 + 文字列（标题 14/500 ink，meta 12/20 muted，单行截断）+ 右侧 ghost 钮组（32 触达、16 图标、ink-soft、hover plane），关闭钮恒在最右。</td></tr>
+      <tr><td>选中态</td><td>左缘 3px 绿条（<code>.is-active::before</code>），不做绿底、不绿标题字。</td></tr>
+      <tr><td>双计数</td><td>链接数 L（<code>plans.length</code>）与钉数 P（open 画内钉）分开记；第一轮徽标单计数 L，第二轮按「主数出 P，L 进 tooltip / 面板头摘要」落地。</td></tr>
+      <tr><td>命名</td><td>第一格称呼本轮保留原样（轨钮「总控」、面板头「活动」）；改名搁置，后续再议；内部 id <code>'door'</code> 不动。</td></tr>
+      <tr><td>测试同步</td><td><code>workbench-rail-head.react.test.tsx</code> 旧四形体 / 3 枚 disc 断言已与实现脱节，落地时一并更新。</td></tr>
+      <tr><td>空卡处置</td><td>截图第六行空壳不留：无内容时 plane 底 + hair-soft + faint 图标 + CAP 文案；加载呼吸；失败 err 描边 + ghost 重试。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+<script>
+  const btn = document.getElementById('schemeBtn');
+  btn.addEventListener('click', () => {
+    const semantic = document.body.classList.toggle('semantic');
+    btn.textContent = semantic ? '切换配色：语义红 / 绿' : '切换配色：旧版赭 / 红';
+  });
+</script>
+</body>
+</html>

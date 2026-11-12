@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN" data-canvas-width="1280" data-canvas-height="1790" style="width:1280px;height:1790px;">
+<head>
+<meta charset="utf-8">
+<title>发布 · 分享 · 审校 三方案草图</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:1790px}
+body{font-family:Arial,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;color:#141416;background:#F4F5F7}
+main{width:1280px;height:1790px;padding:28px 32px 24px;display:flex;flex-direction:column;gap:20px}
+:root{
+  --paper:#FFFFFF;--plane:#F4F5F7;--plane-deep:#ECEDEF;--hair:#E4E4E7;--hair-soft:#EFEFF1;
+  --ink:#141416;--ink-soft:#55585F;--muted:#71767E;--faint:#A6AAB2;
+  --green:#4A7C59;--green-deep:#3A6247;--green-pale:#EEF3EF;
+  --warn:#96651F;--warn-pale:#F7F0E2;--err:#B4443C;--blue:#3B6EA5;--blue-pale:#EAF1F8;
+}
+header h1{font-size:24px;line-height:32px;font-weight:700}
+header p{font-size:13px;color:var(--muted);margin-top:5px}
+.kicker{font-size:11px;letter-spacing:.08em;color:var(--green-deep);margin-bottom:6px}
+.draft-note{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--ink-soft);background:#fff;border:1px solid var(--hair);border-radius:10px;padding:8px 12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+
+/* ===== 方案条 ===== */
+.plan{display:grid;grid-template-columns:232px 1fr;gap:20px;background:#fff;border:1px solid var(--hair);border-radius:18px;padding:18px;flex:none}
+.plan-meta{display:flex;flex-direction:column;gap:10px}
+.plan-no{font-size:12px;font-weight:700;color:var(--green-deep);letter-spacing:.06em}
+.plan-name{font-size:18px;font-weight:700;line-height:24px}
+.plan-tag{font-size:13px;color:var(--ink-soft);line-height:19px}
+.plan-points{list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.plan-points li{font-size:12px;color:var(--muted);line-height:17px;padding-left:16px;position:relative}
+.plan-points li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;border-radius:2px;background:var(--green)}
+.plan-points li b{color:var(--ink-soft);font-weight:600}
+
+/* ===== 线框 ===== */
+.stage{display:flex;gap:16px;align-items:stretch;min-height:380px}
+.rail{flex:none;width:52px;background:var(--plane);border-radius:14px;padding:10px 7px;display:flex;flex-direction:column;gap:8px;align-items:center}
+.rail-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--hair);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:11px;position:relative}
+.rail-btn.main{border-color:var(--green);background:var(--green-pale);color:var(--green-deep);font-weight:700}
+.rail-btn.alt{border-color:var(--blue);background:var(--blue-pale);color:var(--blue);font-weight:700}
+.rail-btn.bingo{border-color:var(--warn);background:var(--warn-pale);color:var(--warn);font-weight:700}
+.rail-btn .badge{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;border-radius:8px;background:var(--err);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+.arrow{flex:none;align-self:center;color:var(--muted)}
+
+.wire{flex:1;min-width:0;border:1px solid var(--hair);border-radius:16px;background:var(--plane);padding:14px;display:flex;flex-direction:column;gap:12px}
+.wire-head{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700}
+.wire-head .chip{font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:3px 10px;background:#fff}
+.wire-body{display:flex;flex-direction:column;gap:10px;flex:1;min-width:0}
+.seg{background:#fff;border:1px solid var(--hair);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.seg-title{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+.row{display:flex;gap:8px;flex-wrap:wrap;min-width:0}
+.act{flex:1 1 0;min-width:0;border:1px solid var(--hair);border-radius:10px;padding:9px 11px;background:#fff;overflow:hidden}
+.act .n{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.act .d{font-size:11px;color:var(--muted);margin-top:1px;word-break:break-word}
+.act.done{background:var(--green-pale);border-color:#c6dcc9}
+.act.done .n{color:var(--green-deep)}
+.act.review{background:var(--warn-pale);border-color:#e6d3ac}
+.act.review .n{color:var(--warn)}
+.act.plan{background:#fff;border:1.5px dashed var(--faint)}
+.act.plan .n{color:var(--muted)}
+.act.ghost{background:var(--plane-deep)}
+.act.ghost .n{color:var(--ink-soft)}
+.bingo-bar{display:flex;align-items:center;gap:10px;border:1px solid #e6d3ac;background:var(--warn-pale);border-radius:10px;padding:10px 12px}
+.bingo-bar .status{font-size:13px;font-weight:700;color:var(--warn)}
+.bingo-bar .meta{font-size:11px;color:var(--muted)}
+.bingo-bar .spacer{flex:1}
+.mini-btn{font-size:12px;border:1px solid var(--hair);background:#fff;border-radius:8px;padding:6px 10px;color:var(--ink-soft)}
+.mini-btn.primary{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+.qr{width:46px;height:46px;border:1.5px dashed var(--faint);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:10px;flex:none}
+.foot-row{display:flex;justify-content:flex-end;gap:8px}
+
+/* 方案②三列 */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--plane-deep);border-radius:10px;padding:4px}
+.tab{text-align:center;font-size:12px;font-weight:600;padding:8px 4px;border-radius:8px;color:var(--ink-soft)}
+.tab.on{background:#fff;color:var(--ink)}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex:1;min-height:0;min-width:0}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.col h5{font-size:11px;color:var(--muted);font-weight:600}
+
+/* 方案③双面板 */
+.dual{display:flex;gap:14px;flex:1;min-height:0;min-width:0}
+.dual .wire{flex:1}
+
+footer{font-size:12px;color:var(--ink-soft);background:#fff;border:1px solid var(--hair);border-radius:14px;padding:14px 18px;line-height:19px}
+footer b{color:var(--ink)}
+</style>
+</head>
+<body>
+<main data-canvas-root style="width:1280px;height:1790px;">
+
+  <header>
+    <div class="kicker">SCENDANCE 2026 · 讨论草图 · 未动组件代码</div>
+    <h1>发布 / 分享 / 审校：三个摆法草图</h1>
+    <p>沿用现有工具轨圆形钮区域；评审链接即「送审」，发完写入 Bingo 待审标记，反馈收进 Bingo 面板。下面三套结构，都把审校和分享放在一起考虑。</p>
+    <div class="draft-note"><span class="dot"></span>当前在本地分支 <b>feat/continue-20261105</b> 攒草稿，未推 main，未改生产组件。</div>
+  </header>
+
+  <!-- ============ 方案 ① ============ -->
+  <section class="plan">
+    <div class="plan-meta">
+      <div class="plan-no">方案 ①</div>
+      <div class="plan-name">Canva 式：一颗钮，面板内纵向三段</div>
+      <div class="plan-tag">主钮打开一张大面板，从上到下按「给人看 → 送审 → 带走文件」分段，链接和文件同屏但不混排。</div>
+      <ul class="plan-points">
+        <li><b>单入口</b>：工具轨一颗主钮，替换现有发布钮</li>
+        <li><b>审校独立成段</b>：状态可见，一键跳 Bingo</li>
+        <li><b>文件沉底</b>：下载动作排在面板最后</li>
+      </ul>
+    </div>
+    <div class="stage">
+      <div class="rail">
+        <div class="rail-btn">选</div>
+        <div class="rail-btn">2D</div>
+        <div class="rail-btn">漫</div>
+        <div class="rail-btn">撤</div>
+        <div class="rail-btn main">享</div>
+        <div class="rail-btn bingo">B</div>
+      </div>
+      <svg class="arrow" width="34" height="22" viewBox="0 0 34 22" fill="none"><path d="M2 11h26M22 4l8 7-8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="wire">
+        <div class="wire-head">分享 · 交付 <span class="chip">周末共创工作坊</span> <span class="chip">未发布</span></div>
+        <div class="wire-body">
+          <div class="seg">
+            <div class="seg-title">给对方看 · 在线链接</div>
+            <div class="row">
+              <div class="act done"><div class="n">发布只读页</div><div class="d">版本 · 二维码 · 复制 / 打开</div></div>
+              <div class="act done"><div class="n">只读 3D 链接</div><div class="d">快照内嵌 · 复制 / 打开 / 重生成</div></div>
+            </div>
+            <div class="row">
+              <div class="qr">二维码</div>
+              <div class="act ghost" style="flex:2"><div class="n">手机扫码看到同一版</div><div class="d">发布后出码；后续编辑不改已发布版本</div></div>
+            </div>
+          </div>
+          <div class="seg">
+            <div class="seg-title">送审 · Bingo</div>
+            <div class="bingo-bar">
+              <span class="status">待审 v1</span>
+              <span class="meta">甲方 2 条钉评 · 未回执</span>
+              <span class="spacer"></span>
+              <button class="mini-btn">发评审链接</button>
+              <button class="mini-btn primary">去 Bingo 看反馈</button>
+            </div>
+          </div>
+          <div class="seg">
+            <div class="seg-title">带走文件 · 本地下载</div>
+            <div class="row">
+              <div class="act done"><div class="n">PNG / 机位册</div><div class="d">视角 · 画质可选</div></div>
+              <div class="act done"><div class="n">交接包 HTML</div><div class="d">平面 + 任务表 + 工作单</div></div>
+              <div class="act done"><div class="n">工程备份</div><div class="d">JSON 副本 · 可恢复</div></div>
+            </div>
+            <div class="row">
+              <div class="act plan"><div class="n">CSV 清单</div><div class="d">规划 · 未打通</div></div>
+              <div class="act plan"><div class="n">GeoJSON</div><div class="d">规划 · 未打通</div></div>
+              <div class="act plan"><div class="n">PDF 演示稿</div><div class="d">规划 · 未打通</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 ② ============ -->
+  <section class="plan">
+    <div class="plan-meta">
+      <div class="plan-no">方案 ②</div>
+      <div class="plan-name">PetitMaker 式：弹窗三 Tab 分流</div>
+      <div class="plan-tag">同一颗主钮，弹窗顶部三个页签；审校归在「给客户看」页签内，和对外链接放一块。</div>
+      <ul class="plan-points">
+        <li><b>分组最细</b>：本机 / 对外 / 文件各占一页</li>
+        <li><b>审校依附客户页</b>：链接旁就是送审状态</li>
+        <li><b>面板最长</b>：页签切换多一步操作</li>
+      </ul>
+    </div>
+    <div class="stage">
+      <div class="rail">
+        <div class="rail-btn">选</div>
+        <div class="rail-btn">2D</div>
+        <div class="rail-btn">漫</div>
+        <div class="rail-btn">撤</div>
+        <div class="rail-btn main">享</div>
+        <div class="rail-btn bingo">B</div>
+      </div>
+      <svg class="arrow" width="34" height="22" viewBox="0 0 34 22" fill="none"><path d="M2 11h26M22 4l8 7-8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="wire">
+        <div class="wire-head">保存与分享 <span class="chip">周末共创工作坊</span> <span class="chip">未发布</span></div>
+        <div class="tabs">
+          <div class="tab">存档继续</div>
+          <div class="tab on">给客户看</div>
+          <div class="tab">带走资料</div>
+        </div>
+        <div class="cols3">
+          <div class="col">
+            <h5>本机再编辑</h5>
+            <div class="act done"><div class="n">工程备份 JSON</div><div class="d">场景与活动副本</div></div>
+            <div class="act done"><div class="n">从备份恢复</div><div class="d">预检合并 · 可撤销</div></div>
+            <div class="act done"><div class="n">携带内容勾选</div><div class="d">平面 / 标注 / 备注 / 历史</div></div>
+          </div>
+          <div class="col">
+            <h5>对外链接</h5>
+            <div class="act done"><div class="n">发布只读页</div><div class="d">版本 · 二维码 · 复制</div></div>
+            <div class="act done"><div class="n">只读 3D 链接</div><div class="d">复制 / 打开 / 重生成</div></div>
+            <h5 style="margin-top:4px">送审 Bingo</h5>
+            <div class="bingo-bar" style="flex-direction:column;align-items:stretch;gap:6px">
+              <div><span class="status">待审 v1</span> <span class="meta">· 2 条钉评</span></div>
+              <div class="row">
+                <button class="mini-btn" style="flex:1">发评审链接</button>
+                <button class="mini-btn primary" style="flex:1">去 Bingo</button>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <h5>本地文件</h5>
+            <div class="act done"><div class="n">PNG / 机位册</div><div class="d">视角 · 画质可选</div></div>
+            <div class="act done"><div class="n">交接包 HTML</div><div class="d">平面 + 任务表 + 工作单</div></div>
+            <div class="act plan"><div class="n">CSV / GeoJSON</div><div class="d">规划 · 未打通</div></div>
+            <div class="act plan"><div class="n">PDF 演示稿</div><div class="d">规划 · 未打通</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 ③ ============ -->
+  <section class="plan">
+    <div class="plan-meta">
+      <div class="plan-no">方案 ③</div>
+      <div class="plan-name">Figma 式：分享审校 / 导出 两颗钮分开</div>
+      <div class="plan-tag">链接和送审归一颗钮；下载文件归另一颗钮。入口各管一类，不混排；分享钮带待审红点。</div>
+      <ul class="plan-points">
+        <li><b>分类最干净</b>：协作链接 ≠ 下载文件</li>
+        <li><b>导出直达</b>：高频出图不用先开面板</li>
+        <li><b>入口变两颗</b>：和现状按钮数量接近</li>
+      </ul>
+    </div>
+    <div class="stage">
+      <div class="rail">
+        <div class="rail-btn">选</div>
+        <div class="rail-btn">2D</div>
+        <div class="rail-btn">漫</div>
+        <div class="rail-btn">撤</div>
+        <div class="rail-btn main">享<span class="badge">2</span></div>
+        <div class="rail-btn alt">出</div>
+        <div class="rail-btn bingo">B</div>
+      </div>
+      <svg class="arrow" width="34" height="22" viewBox="0 0 34 22" fill="none"><path d="M2 11h26M22 4l8 7-8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="dual">
+        <div class="wire">
+          <div class="wire-head">分享 · 审校 <span class="chip">待审 2 条</span></div>
+          <div class="wire-body">
+            <div class="act done"><div class="n">发布只读页</div><div class="d">版本 · 二维码 · 复制 / 打开</div></div>
+            <div class="act done"><div class="n">只读 3D 链接</div><div class="d">快照内嵌 · 复制 / 打开</div></div>
+            <div class="bingo-bar">
+              <span class="status">待审 v1</span>
+              <span class="meta">钉评 2 · 未回执</span>
+              <span class="spacer"></span>
+              <button class="mini-btn">评审链接</button>
+              <button class="mini-btn primary">去 Bingo</button>
+            </div>
+          </div>
+        </div>
+        <div class="wire">
+          <div class="wire-head">导出文件</div>
+          <div class="wire-body">
+            <div class="act done"><div class="n">PNG 单帧</div><div class="d">视角 · 画质可选</div></div>
+            <div class="act done"><div class="n">机位册 HTML</div><div class="d">全部机位逐张下载</div></div>
+            <div class="act done"><div class="n">交接包 HTML</div><div class="d">平面 + 任务表 + 工作单</div></div>
+            <div class="act done"><div class="n">工程备份 JSON</div><div class="d">副本 · 可恢复</div></div>
+            <div class="row">
+              <div class="act plan"><div class="n">CSV</div><div class="d">规划</div></div>
+              <div class="act plan"><div class="n">GeoJSON</div><div class="d">规划</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <b>Bingo 结合点（代码已核实）：</b>点「发评审链接」生成 <code>/review/#layout=</code> 快照链，同时写入 <code>needs-review</code> 标记；甲方在评审页落钉、点「完成评审」，回执和钉评汇总出现在 Bingo 面板。分享钮与 Bingo 钮各在工具轨原位，面板内「去 Bingo 看反馈」只是跳转到面板，不新开第二套评审页。<br>
+    <b>不进交付面板：</b>打开资料（素材库）、到场清单留在各自面板；视图操作、撤销重做、氛围留在工具轨。
+  </footer>
+</main>
+</body>
+</html>

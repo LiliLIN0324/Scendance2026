@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>测量工具 · 精简前后对照</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='10' width='18' height='4' rx='1' fill='%232fa8b5'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #ffffff;
+    --hair: #e4e4e7;
+    --ink: #141416;
+    --soft: #55585f;
+    --muted: #71767e;
+    --field: #f4f5f7;
+    --activebg: #eef3ef;
+    --green: #4a7c59;
+    --measure: #2fa8b5;
+    --canvas: #d9e8f0;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #f1f3f5;
+    color: var(--ink);
+    padding: 28px 20px 48px;
+  }
+  .page-max { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+  .sub { font-size: 12px; color: var(--soft); margin: 0 0 22px; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 680px) {
+    .compare { grid-template-columns: 1fr; }
+  }
+
+  .scene {
+    background: var(--canvas);
+    border-radius: 14px;
+    padding: 26px 18px 30px;
+    min-height: 320px;
+    position: relative;
+  }
+  .scene-label {
+    position: absolute; top: 12px; left: 14px;
+    font-size: 11px; font-weight: 600; color: var(--soft);
+    letter-spacing: .04em;
+  }
+
+  /* 浮在画布上的测量卡 */
+  .card {
+    margin: 18px auto 0;
+    width: 268px;
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(20,20,22,.12);
+    padding: 12px;
+  }
+  .card-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .head-block {
+    width: 26px; height: 26px; flex: 0 0 auto;
+    border-radius: 6px; background: var(--measure);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff;
+  }
+  .head-title { font-size: 13px; font-weight: 600; }
+  .head-count { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .head-btn {
+    all: unset; cursor: pointer; width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); border-radius: 6px;
+  }
+  .head-btn:hover { background: var(--field); color: var(--ink); }
+
+  .mode-row { display: flex; gap: 4px; }
+  .mode-btn {
+    all: unset;
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 6px 7px; border-radius: 6px;
+    border: 1px solid var(--hair);
+    background: transparent; color: var(--ink);
+    font-size: 11px; cursor: pointer;
+  }
+  .mode-btn.is-active {
+    background: var(--activebg);
+    border-color: var(--green);
+    color: var(--green);
+    font-weight: 600;
+  }
+  .mode-btn svg { width: 12px; height: 12px; }
+
+  /* 入口钮 + 竖向下拉菜单（图1 范式） */
+  .select { position: relative; }
+  .select-trigger {
+    all: unset; width: 100%; box-sizing: border-box;
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border: 1px solid var(--hair); border-radius: 6px;
+    background: var(--paper); font-size: 11px; color: var(--ink); cursor: pointer;
+  }
+  .select-trigger .ic, .menu-item .ic { width: 12px; height: 12px; flex: 0 0 auto; }
+  .select-trigger .caret { margin-left: auto; color: var(--muted); display: inline-flex; }
+  .menu {
+    margin-top: 6px; border: 1px solid var(--hair); border-radius: 8px; background: var(--paper);
+    padding: 4px; display: grid; gap: 2px; box-shadow: 0 4px 12px rgba(20,20,22,.10);
+  }
+  .menu-item {
+    all: unset; display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; color: var(--ink);
+  }
+  .menu-item.is-active { background: var(--activebg); color: var(--green); font-weight: 600; }
+  .menu-item .check { width: 14px; flex: 0 0 auto; display: inline-flex; }
+  .menu-item .meta { margin-left: auto; color: var(--muted); font-size: 10px; }
+
+  .hint {
+    margin-top: 8px;
+    font-size: 10px; line-height: 1.55; color: var(--soft);
+  }
+  .hint.muted-long { color: var(--muted); }
+
+  .finish {
+    all: unset;
+    margin-top: 8px; width: 100%;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 7px; border-radius: 6px;
+    background: var(--field); color: var(--muted);
+    font-size: 11px; border: 1px solid var(--hair);
+  }
+  .finish.is-disabled { opacity: .5; cursor: not-allowed; }
+  .finish.is-ready { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .note {
+    margin-top: 22px;
+    background: var(--paper); border: 1px solid var(--hair); border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .note h2 { font-size: 13px; margin: 0 0 10px; }
+  .note ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+  .note li { font-size: 12px; color: var(--soft); line-height: 1.5; }
+  .note li b { color: var(--ink); }
+  .tag-old { color: var(--muted); text-decoration: line-through; }
+
+  .block { margin-top: 22px; }
+  .block > h2 { font-size: 13px; margin: 0 0 10px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--paper); border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; }
+  .table th, .table td { border-bottom: 1px solid var(--hair); padding: 9px 12px; text-align: left; vertical-align: top; line-height: 1.5; }
+  .table th { color: var(--soft); font-weight: 600; font-size: 11px; white-space: nowrap; }
+  .table td b { color: var(--ink); }
+  .table tr:last-child td { border-bottom: 0; }
+  .cases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 680px) { .cases { grid-template-columns: 1fr; } }
+  .case-card { background: var(--paper); border: 1px solid var(--hair); border-radius: 14px; padding: 14px 16px; }
+  .case-card h3 { font-size: 12px; margin: 0 0 6px; }
+  .case-card p { font-size: 12px; color: var(--soft); margin: 0 0 8px; line-height: 1.55; }
+  .case-card .take { color: var(--ink); }
+  .case-card .take b { color: var(--green); }
+  .case-card img { width: 100%; height: 128px; object-fit: cover; border-radius: 8px; border: 1px solid var(--hair); margin-bottom: 10px; display: block; }
+  .case-card figcaption { font-size: 10px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="page-max">
+  <h1>测量工具 · 精简前后对照</h1>
+  <p class="sub">右卡点入口钮展开竖向菜单选择模式；提示句跟随当前模式，完成钮只在面积 / 路径出现。</p>
+
+  <div class="compare">
+    <!-- ===== 改造前（现状还原） ===== -->
+    <section class="scene" aria-label="改造前现状">
+      <span class="scene-label">改造前 · 现状</span>
+      <div class="card">
+        <div class="card-head">
+          <span class="head-block" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <rect x="3" y="10" width="18" height="4" rx="1"/>
+              <path d="M7 10v2M11 10v2M15 10v2"/>
+            </svg>
+          </span>
+          <span class="head-title">测量</span>
+          <span class="head-count">0</span>
+          <button class="head-btn" type="button" aria-label="折叠">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <button class="head-btn" type="button" aria-label="关闭">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="mode-row">
+          <button class="mode-btn is-active" type="button">距离</button>
+          <button class="mode-btn" type="button">面积</button>
+          <button class="mode-btn" type="button">路径</button>
+        </div>
+
+        <div class="hint muted-long">
+          按住拖动：距离拉线 · 面积矩形（Shift 正方形）· 路径手绘；单击 = 逐点精细测量。
+        </div>
+        <!-- 距离态不出现完成钮；面积 / 路径下底部为「完成测量（N 点）」禁用钮 -->
+      </div>
+    </section>
+
+    <!-- ===== 改造后（可交互） ===== -->
+    <section class="scene" aria-label="改造后方案">
+      <span class="scene-label">改造后 · 新方案</span>
+      <div class="card">
+        <div class="card-head">
+          <span class="head-block" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <rect x="3" y="10" width="18" height="4" rx="1"/>
+              <path d="M7 10v2M11 10v2M15 10v2"/>
+            </svg>
+          </span>
+          <span class="head-title">测量</span>
+          <span class="head-count">0</span>
+          <button class="head-btn" type="button" aria-label="折叠">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <button class="head-btn" type="button" aria-label="关闭">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="select" id="afterSelect">
+          <button class="select-trigger" id="afterTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="ic" id="triggerIcon"></span>
+            <span id="triggerLabel"></span>
+            <span class="caret" id="triggerCaret">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </button>
+          <div class="menu" id="afterMenu" role="listbox" hidden></div>
+        </div>
+        <div class="hint" id="afterHint"></div>
+        <div id="afterFinishSlot"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="note">
+    <h2>本轮改动要点</h2>
+    <ul>
+      <li><b>入口钮 + 竖向下拉：</b>一个入口钮显示当前模式，点开竖向菜单选择；距离 = 尺子，面积 = 框选矩形，路径 = 折线，选中行带对勾。</li>
+      <li><b>删掉常驻长说明：</b>不再把三种手势堆在一行，只在当前模式下给一句短引导（右卡点入口钮切换查看）。</li>
+      <li><b>完成钮文案缩短：</b><span class="tag-old">完成测量（N 点）</span> → 完成（N 点）；点数不足保持禁用，距离两点自动提交、无需完成钮。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 三模式作用 ===== -->
+  <div class="block">
+    <h2>这三个模式分别量什么</h2>
+    <table class="table">
+      <thead>
+        <tr><th>模式</th><th>点数</th><th>算出的结果</th><th>典型用途</th><th>手势</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>距离</b></td><td>2 点</td>
+          <td>两点之间的直线段长</td>
+          <td>设施间距、净距、边界段长</td>
+          <td>点两点，或拖一条线；够两点自动成线</td>
+        </tr>
+        <tr>
+          <td><b>面积</b></td><td>3–64 点，闭合环</td>
+          <td>围合区域的占地面积</td>
+          <td>场地、分区、展位占地核算</td>
+          <td>拖矩形（Shift 正方形），或逐点描边、点回起点闭合</td>
+        </tr>
+        <tr>
+          <td><b>路径</b></td><td>2–64 点，折线</td>
+          <td>沿走向的折线累计总长</td>
+          <td>步道、排队动线、巡游路线长度</td>
+          <td>按住手绘，或逐点加路点、双击结束</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 成熟案例对照 ===== -->
+  <div class="block">
+    <h2>成熟案例怎么做</h2>
+    <div class="cases">
+      <div class="case-card">
+        <h3>Google 地球 / 地图</h3>
+        <img src="assets/google-maps-measure.jpg" alt="Google 地图测距：两点连线，底部卡片显示总距离">
+        <p>尺子图标进入测量；逐点加点，底部小卡实时显示累计读数；双击末点或勾选 Done 完成；面积用多边形闭合。</p>
+        <p class="take"><b>可借鉴：</b>读数就近显示在轻量卡片上，完成动作很轻（双击 / 勾选），不长篇说明手势。</p>
+      </div>
+      <div class="case-card">
+        <h3>Figma / Miro</h3>
+        <img src="assets/figma-measure-line.jpg" alt="Figma 按住修饰键悬停，对象间红线与即时读数">
+        <p>按住 Alt / Option 悬停对象，即时出红线和横竖读数；不进面板、不留下测量结果。</p>
+        <p class="take"><b>差异：</b>它们是临时间距提示；我们的测量要留存成可回看的标注，所以保留完成钮把结果固定下来。</p>
+      </div>
+      <div class="case-card">
+        <h3>平面规划工具（Visuary 类）</h3>
+        <img src="assets/visuary-plan-measure.jpg" alt="平面规划左侧尺子测量钮，画布上标距离线与房间面积">
+        <p>左轨尺子图标进入测量；距离线和房间面积直接标在图形旁，读数贴着图形走；酷家乐 / 模袋云同类做法为量尺图标 + 点吸附，右键或 Esc 退出。</p>
+        <p class="take"><b>可借鉴：</b>图标入口 + 读数上画布；我们把距离 / 面积 / 路径收进同一张卡，三选一切换。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var ICONS = {
+    ruler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/></svg>',
+    boxSelect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M19 21a2 2 0 0 0 2-2"/><path d="M9 3h1M14 3h1M9 21h1M14 21h1M3 9v1M21 9v1M3 14v1M21 14v1"/></svg>',
+    route: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>'
+  };
+
+  var MODES = {
+    distance: { label: '距离', icon: 'ruler', meta: '2 点', hint: '点两点，或拖一条线', finish: false },
+    area:     { label: '面积', icon: 'boxSelect', meta: '≥3 点', hint: '拖矩形（Shift 正方形），或点选闭合', finish: true, min: 3 },
+    path:     { label: '路径', icon: 'route', meta: '≥2 点', hint: '按住手绘，或逐点单击、双击结束', finish: true, min: 2 }
+  };
+
+  var state = 'path';
+  var menuOpen = false;
+  var draftCount = 0;
+
+  var trigger = document.getElementById('afterTrigger');
+  var triggerIcon = document.getElementById('triggerIcon');
+  var triggerLabel = document.getElementById('triggerLabel');
+  var caret = document.getElementById('triggerCaret');
+  var menu = document.getElementById('afterMenu');
+  var hintEl = document.getElementById('afterHint');
+  var slot = document.getElementById('afterFinishSlot');
+
+  var checkSvg = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  var caretDown = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  var caretUp = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>';
+
+  function render() {
+    var m = MODES[state];
+    triggerIcon.innerHTML = ICONS[m.icon];
+    triggerLabel.textContent = m.label;
+    caret.innerHTML = menuOpen ? caretUp : caretDown;
+    trigger.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
+    menu.hidden = !menuOpen;
+
+    menu.innerHTML = '';
+    Object.keys(MODES).forEach(function (key) {
+      var item = MODES[key];
+      var opt = document.createElement('button');
+      opt.type = 'button';
+      opt.setAttribute('role', 'option');
+      opt.className = 'menu-item' + (key === state ? ' is-active' : '');
+      opt.setAttribute('aria-selected', key === state ? 'true' : 'false');
+      opt.innerHTML =
+        '<span class="check">' + (key === state ? checkSvg : '') + '</span>' +
+        '<span class="ic">' + ICONS[item.icon] + '</span>' +
+        '<span>' + item.label + '</span>' +
+        '<span class="meta">' + item.meta + '</span>';
+      opt.addEventListener('click', function () { state = key; menuOpen = false; render(); });
+      menu.appendChild(opt);
+    });
+
+    hintEl.textContent = m.hint;
+
+    slot.innerHTML = '';
+    if (m.finish) {
+      var disabled = draftCount < m.min;
+      var finish = document.createElement('button');
+      finish.type = 'button';
+      finish.className = 'finish ' + (disabled ? 'is-disabled' : 'is-ready');
+      finish.disabled = disabled;
+      finish.textContent = '完成（' + draftCount + ' 点）';
+      slot.appendChild(finish);
+    }
+  }
+
+  trigger.addEventListener('click', function () { menuOpen = !menuOpen; render(); });
+
+  render();
+</script>
+</body>
+</html>

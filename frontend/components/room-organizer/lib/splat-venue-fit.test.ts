@@ -28,7 +28,7 @@ describe('placeSplatPreview', () => {
     const placed = placeSplatPreview(layout, 'Scendance-M3-MVP', HALL);
     expect(placed.resize).toBeNull();
     expect(placed.note).toContain('没有改这块户外场地');
-    expect(placed.note).toContain('第一人称走进场');
+    expect(placed.note).toContain('第一人称漫游');
     expect(placed.note).not.toContain('校准场地');
   });
 
@@ -66,6 +66,6 @@ describe('placeSplatPreview', () => {
     const placed = placeSplatPreview(layout, '样例厅', HALL);
     expect(placed.resize).toBeNull();
     expect(placed.note).toContain('尺寸保持不动');
-    expect(placed.note).toContain('第一人称走进场');
+    expect(placed.note).toContain('第一人称漫游');
   });
 });

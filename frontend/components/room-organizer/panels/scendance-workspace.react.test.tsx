@@ -223,11 +223,11 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.id).toBe('tool-column');
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
-    // 室内常驻：发布 / 画布工具（抓手·选择）/ 2D·3D / 进入漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
+    // 室内常驻：发布 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
     expect(within(rail).getAllByRole('button')).toHaveLength(15);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
-    // 2026-11-12 统一 2D/3D：这颗钮常亮表示当前模式，aria-label 随模式报「当前 2D 地图 / 3D 场地」。
-    for (const name of ['发布', '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）', /当前 (2D 地图|3D 场地)/, '进入漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
+    // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
+    for (const name of ['发布', '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。
@@ -257,8 +257,8 @@ describe('ScendanceViewTools design column', () => {
     // 撤销/重做在工具组之后，缩小/放大在导出前面。
     expect(order.indexOf('tool-undo')).toBeGreaterThan(order.indexOf('tool-grid'));
     expect(order.indexOf('tool-zoom-in')).toBeLessThan(order.indexOf('tool-export'));
-    expect(rail.querySelector('#tool-walk .sc-walk-label')?.textContent).toBe('第一人称走进场');
-    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称走进场' })).toBeNull();
+    expect(rail.querySelector('#tool-walk .sc-walk-label')?.textContent).toBe('第一人称漫游');
+    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
@@ -266,7 +266,7 @@ describe('ScendanceViewTools design column', () => {
     // 氛围四条在竖列 rail 的弹出菜单里。
     expect(rail.querySelector('.sc-atmosphere-group')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
-    const dimension = within(rail).getByRole('button', { name: /当前 (2D 地图|3D 场地)/ });
+    const dimension = within(rail).getByRole('button', { name: /当前 (2D 平面|3D 场景)/ });
     // 图标体系已迁到 Material Symbol 蒙版 span（sc-material-symbol），不再是 svg。
     expect(dimension.querySelector('.sc-material-symbol')).toBeTruthy();
     expect(dimension.textContent).not.toMatch(/2D|3D/);
@@ -403,7 +403,7 @@ describe('ScendanceViewTools design column', () => {
       expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(within(rail).getByRole('button', { name: '进入漫游' })).toBeTruthy();
+    expect(within(rail).getByRole('button', { name: '第一人称漫游' })).toBeTruthy();
   });
 
   it('keeps the atmosphere controls in view once something is actually changed', () => {
@@ -424,7 +424,7 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 进入漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
+  it('wires 第一人称漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
     const values = contexts();
     const canvas = document.createElement('canvas');
     canvas.id = 'sc-viewport-3d';
@@ -433,7 +433,7 @@ describe('ScendanceViewTools atmosphere menus', () => {
     document.body.appendChild(canvas);
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
-    fireEvent.click(within(rail).getByRole('button', { name: '进入漫游' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '第一人称漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
     expect(walk(makeViewSettings()).view2D).toBe(false);
@@ -444,7 +444,7 @@ describe('ScendanceViewTools atmosphere menus', () => {
     expect(front(makeViewSettings({ walkthroughMode: true })).walkthroughMode).toBe(false);
     expect(requestPointerLock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
-    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称走进场' })).toBeNull();
+    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     canvas.remove();
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '人群' }));

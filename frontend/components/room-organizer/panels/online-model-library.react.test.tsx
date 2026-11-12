@@ -77,7 +77,8 @@ function PlacementWorkspace({ hidden = false }: { hidden?: boolean }) {
     collidingIds: new Set(), highlightedIds: new Set(), catalogQuery, setCatalogQuery,
     recentColors: [], pushColor: () => {}, playCue: () => {},
     history: { canUndo: false, canRedo: false, undo: () => {}, redo: () => {}, clear: () => {}, commitNow: () => {}, truncateTo: () => {} },
-    isReady: true, error: null, gameMode, setGameMode, autoCycleLighting, setAutoCycleLighting };
+    isReady: true, error: null, gameMode, setGameMode, autoCycleLighting, setAutoCycleLighting,
+    exitWalkthrough: () => {} };
   const allSelectedIds = new Set(extraSelectedIds); if (selectedItemId) allSelectedIds.add(selectedItemId);
   return <RoomEditorProvider value={editor}><SelectionProvider value={{ selectedItemId, setSelectedItemId,
     selectedItem: activeFloor.items.find(item => item.id === selectedItemId) ?? null,
