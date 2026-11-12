@@ -1,0 +1,77 @@
+.case-analysis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(24px, 5vw, 64px);
+  max-width: 1180px;
+  margin: clamp(30px, 5vw, 64px) auto;
+  color: #21382e;
+}
+
+.case-analysis[hidden], .case-analysis:empty { display: none; }
+.case-analysis h2, .case-analysis-sources { grid-column: 1 / -1; }
+.case-analysis h2 { margin: 0 0 14px; font-size: clamp(24px, 3vw, 34px); line-height: 1.2; }
+.case-analysis section { border-top: 1px solid #dbe4dd; padding: 18px 0; }
+.case-analysis h3 { margin: 0 0 8px; font-size: 17px; }
+.case-analysis p { margin: 0; color: #40594b; line-height: 1.75; }
+.case-analysis-sources { display: flex; gap: 8px 18px; flex-wrap: wrap; padding-top: 12px; }
+.case-analysis-sources a { text-decoration: underline; text-underline-offset: 4px; }
+
+@media (max-width: 680px) {
+  .case-analysis { grid-template-columns: 1fr; }
+}
+
+.case-analysis.salt-study {
+  display: block;
+  max-width: 1180px;
+  color: #21382e;
+}
+.salt-study .salt-study-header {
+  display: block;
+  padding: clamp(24px, 5vw, 56px) 0;
+  border: 0;
+  border-top: 1px solid #dbe4dd;
+  max-width: none;
+}
+.salt-study .salt-study-header h2 { margin: 0 0 14px; font-size: clamp(30px, 4.7vw, 54px); letter-spacing: -.035em; }
+.salt-study .salt-study-header p, .salt-study .salt-chapter-intro { max-width: 57ch; font-size: clamp(15px, 1.6vw, 19px); }
+.salt-study .salt-chapter { padding: clamp(28px, 5vw, 60px) 0; border-top: 1px solid #dbe4dd; }
+.salt-study .salt-chapter h3, .salt-study .salt-resources h3 {
+  font-size: clamp(24px, 3vw, 38px);
+  line-height: 1.24;
+  letter-spacing: -.025em;
+  margin: 0 0 16px;
+}
+.salt-map-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: clamp(20px, 5vw, 66px); margin-top: 24px; }
+.salt-study .salt-figure { min-width: 0; margin: 0; }
+.salt-figure > a { display: block; overflow: hidden; border-radius: 12px; background: #f3f7f3; }
+.salt-figure img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.salt-study .salt-map img { aspect-ratio: auto; max-height: 560px; object-fit: contain; }
+.salt-study .salt-figure figcaption { display: grid; gap: 4px; margin-top: 12px; font-size: 14px; line-height: 1.6; color: #40594b; }
+.salt-figure figcaption strong { font-size: 16px; color: #21382e; }
+.salt-figure figcaption a { justify-self: start; font-size: 13px; }
+.salt-nodes { margin: 14px 0 0; }
+.salt-nodes > div { border-top: 1px solid #dbe4dd; padding: 12px 0; }
+.salt-study dt, .salt-study h4 { color: #21382e; font-weight: 700; }
+.salt-study dd { margin: 3px 0 0; font-size: 15px; line-height: 1.65; color: #40594b; }
+.salt-study .salt-source { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 14px; }
+.salt-field-note { margin-top: 24px; padding: 18px 22px; border-left: 3px solid #45805e; background: #f4f8f4; }
+.salt-study h4 { font-size: 18px; margin: 0 0 6px; }
+.salt-field-note a, .salt-dates a { margin-left: .6em; }
+.salt-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 4vw, 40px) clamp(14px, 3vw, 32px); margin-top: 24px; }
+.salt-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 30px 0 0; padding: 22px 0 0; border-top: 1px solid #dbe4dd; }
+.salt-dates dt { font-size: clamp(17px, 2vw, 23px); }
+.salt-deliverables { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 3vw, 28px); }
+.salt-deliverables article { border-top: 2px solid #6e9880; padding-top: 14px; }
+.salt-study .salt-resources { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 18px; border: 1px solid #dbe4dd; border-radius: 16px; padding: clamp(18px, 4vw, 36px); }
+.salt-study .salt-resources h3 { margin-bottom: 8px; }
+.salt-resource-links { display: flex; gap: 10px; flex-wrap: wrap; }
+.salt-resource-links a { display: inline-flex; align-items: center; min-height: 44px; border: 1px solid #487459; border-radius: 100px; padding: 8px 14px; text-decoration: none; color: #244b39; }
+.salt-resource-links a[download] { background: #244b39; color: #fff; }
+.salt-study a { text-underline-offset: 4px; }
+.salt-study a:focus-visible { outline: 2px solid #387b58; outline-offset: 3px; }
+@media (max-width: 720px) {
+  .salt-map-layout, .salt-deliverables { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .salt-gallery, .salt-dates { grid-template-columns: 1fr; }
+}

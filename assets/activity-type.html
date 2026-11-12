@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>活动布置指南 · 幕景</title>
+<link rel="stylesheet" href="./site-case-analysis.css">
+<style>
+  :root { --ink: #21382e; --muted: #51665a; --green: #244b39; --line: #dbe4dd; --pale: #edf5ef }
+  * { box-sizing: border-box }
+  html { background: #fff; color: var(--ink) }
+  body { margin: 0; background: #fff; font: 16px/1.65 "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif }
+  a { color: inherit; text-underline-offset: .25em }
+  :focus-visible { outline: 2px solid #387b58; outline-offset: 4px }
+  [hidden] { display: none !important }
+  .wrap { width: min(1180px, calc(100% - clamp(36px, 9vw, 112px))); margin-inline: auto }
+  .navigation { border-bottom: 1px solid var(--line) }
+  .navigation nav, .navigation .links { display: flex; align-items: center; gap: clamp(14px, 3vw, 34px) }
+  .navigation nav { min-height: 69px; justify-content: space-between }
+  .navigation a { text-decoration: none }
+  .navigation a:hover { text-decoration: underline }
+  .brand { display: inline-flex; padding: 5px 10px; color: #fff; background: var(--green); border-radius: 8px }
+  .brand svg { width: 46px; height: 25px }
+  .hero { display: grid; position: relative; isolation: isolate; overflow: hidden; align-items: center; min-height: 310px; background: #fff }
+  .hero.has-photo { min-height: clamp(370px, 49vw, 600px); background: #172d23; color: #fff }
+  .hero-photo, .hero.has-photo::before { position: absolute; inset: 0; width: 100%; height: 100% }
+  .hero-photo { object-fit: cover; object-position: center 56%; z-index: -2 }
+  .hero.has-photo::before { content: ""; z-index: -1; background: linear-gradient(90deg, #14261dea 0%, #14261dbd 37%, #14261d48 77%), linear-gradient(0deg, #14261d72, transparent 32%) }
+  .hero-inner { padding-block: clamp(45px, 7vw, 100px) }
+  .hero .back { display: inline-block; margin-bottom: 24px; font-size: 14px }
+  h1, h2, h3, p, figure { margin: 0 }
+  h1 { margin-bottom: 16px; font-size: clamp(44px, 7.5vw, 100px); line-height: 1.08; letter-spacing: -.035em }
+  h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.2; letter-spacing: -.025em }
+  .lead { max-width: 34em; font-size: clamp(16px, 2vw, 21px); color: var(--muted); line-height: 1.65 }
+  .has-photo .lead { color: #f3faf5 }
+  .button { display: inline-flex; align-items: center; padding: 10px 20px; min-height: 44px; border: 1px solid transparent; border-radius: 100px; background: var(--green); color: #fff; font-weight: 700; text-decoration: none }
+  .button:hover { background: #18392b }
+  .hero .button { margin-top: 24px }
+  .has-photo .button { color: var(--ink); background: #f6fff8 }
+  .has-photo .button:hover { background: #ddf1e2 }
+  .hero-credit { position: absolute; bottom: 15px; right: max(18px, (100% - 1180px) / 2); font-size: 12px; padding: 3px 9px; border-radius: 4px; background: #14261de0; color: #fff }
+  .workflow { padding-block: clamp(42px, 7vw, 100px); border-bottom: 1px solid var(--line) }
+  .workflow:has(.map-preview:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; gap: clamp(24px, 5vw, 70px) }
+  .workflow:not(:has(.map-preview:not([hidden]))) .instructions { max-width: 700px }
+  .map-frame { border: 1px solid var(--line); border-radius: 16px; overflow: hidden }
+  .map-preview h3 { padding: 12px 17px; border-bottom: 1px solid var(--line); font-size: 15px }
+  .map-preview iframe { display: block; width: 100%; height: 615px; border: 0; background: #fff }
+  figcaption { margin-top: 10px; color: var(--muted); font-size: 13px }
+  .workflow h2 { margin-bottom: 18px }
+  .steps { padding: 0; margin: 0 0 24px; list-style: none }
+  .steps li { border-bottom: 1px solid var(--line) }
+  .step { display: flex; gap: 13px; width: 100%; padding: 16px 0; text-align: left; background: transparent; border: 0; color: inherit; font: inherit }
+  button.step:not(:disabled) { cursor: pointer }
+  button.step:not(:disabled):hover { background: var(--pale) }
+  .step:disabled { opacity: 1 }
+  .step-number { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border: 1px solid #9aafa0; border-radius: 50%; font-weight: 700 }
+  .step[aria-pressed=true] .step-number { background: var(--green); color: #fff; border-color: var(--green) }
+  .step strong { display: block; padding-top: 1px; font-size: 18px; line-height: 1.45 }
+  .step-description { display: block; margin-top: 5px; color: var(--muted); font-size: 15px }
+  .example { padding-block: clamp(40px, 6vw, 78px) 0 }
+  .example h2 { margin-bottom: 14px }
+  .example p { max-width: 68ch; color: var(--muted); margin-bottom: 14px }
+  .example a + a { margin-left: 16px }
+  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 24px }
+  .gallery img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 12px }
+  main > .case-analysis { margin-inline: auto; max-width: 1180px }
+  footer { border-top: 1px solid var(--line); padding-block: 24px; margin-top: 52px; font-size: 14px }
+  @media (max-width: 840px) {
+    .workflow:has(.map-preview:not([hidden])) { grid-template-columns: 1fr }
+    .hero.has-photo::before { background: linear-gradient(90deg, #14261de8, #14261d70) }
+  }
+  @media (max-width: 480px) {
+    .navigation .links { font-size: 14px }
+    .hero-credit { max-width: calc(100% - 36px) }
+    .gallery { grid-template-columns: 1fr }
+  }
+</style>
+</head>
+<body>
+<header class="navigation">
+  <nav class="wrap" aria-label="站点导航">
+    <a class="brand" href="/introduction" aria-label="幕景首页"><svg aria-hidden="true" viewBox="0 0 61 32"><use href="./site-lettering.svg#scendance"></use></svg></a>
+    <div class="links">
+      <a href="/introduction#site-cases">活动类型</a>
+      <a href="/introduction?view=inspiration#inspiration">灵感中心</a>
+    </div>
+  </nav>
+</header>
+<main>
+  <section class="hero">
+    <img class="hero-photo" id="photo" alt="" fetchpriority="high" hidden>
+    <div class="wrap hero-inner">
+      <a class="back" href="/introduction#site-cases">← 返回活动类型</a>
+      <h1>活动布置指南</h1>
+      <p class="lead" id="lead">在首页选择一种活动，查看场地布置要点。</p>
+      <a class="button" href="#workflow" id="workflow-jump" hidden>查看布置步骤 ↓</a>
+    </div>
+    <a class="hero-credit" id="photo-credit" hidden></a>
+  </section>
+  <section class="wrap workflow" id="workflow" aria-labelledby="steps-title" hidden>
+    <figure class="map-preview" id="map-preview" hidden>
+      <div class="map-frame">
+        <h3 id="map-title"></h3>
+        <iframe id="workflow-map" title="幕景场地试排"></iframe>
+      </div>
+      <figcaption id="map-note"></figcaption>
+    </figure>
+    <div class="instructions">
+      <h2 id="steps-title">怎么布置</h2>
+      <ol id="steps" class="steps"></ol>
+      <a class="button" id="try" href="/editor">打开工作台 ↗</a>
+    </div>
+  </section>
+  <article class="wrap example" id="example" hidden>
+    <h2 id="example-name"></h2>
+    <p id="example-details"></p>
+    <a id="example-link"></a>
+    <a id="extra-source" hidden></a>
+    <div class="gallery" id="example-gallery" hidden></div>
+  </article>
+  <section class="wrap case-analysis" id="case-analysis" aria-label="案例分析"></section>
+</main>
+<footer><div class="wrap"><a href="/introduction#site-cases">← 返回活动类型</a></div></footer>
+<script type="module">
+  import { activityTypes } from './site-activity-types.mjs';
+  import { inspirationCases } from './site-inspiration.mjs';
+  import { renderCaseAnalysis } from './site-case-analysis.mjs';
+
+  const venueSteps = [
+    ['pan', '按馆号和楼层整理底图', '先在卫星图上辨认馆体与周边道路。拿到当届图纸后，分别核对 1 号馆可分隔的范围、4 号馆上下层，以及各自使用的入口。'],
+    ['area', '分别划出观众区和布展区', '馆方资料把 1 号馆货物入口标在北侧，南侧靠近登录大厅。按这两个方向试圈等候与装卸区，再用当届安排核对路线。'],
+    ['item', '试放导视、服务台和围栏', '用地图试放馆外设施。馆内展位另按当届底图编号。对比全厅和分厅方案时，检查移动一个展位会影响哪些导视与服务点。'],
+    ['label', '把待核事项和图纸版本一起交接', '标明候选入口、待复核的通道宽度和装卸时段。展位发生变更时，用同一馆号和展位编号核对报馆图、展商通知与观众导览。'],
+  ];
+  const mapDemos = {'flower-show':'yuquan', 'tech-conference':'waic', 'expo-venue':'keqiao', 'trade-show':'ciie'};
+  const otherMapSteps = [
+    ['pan', '核对活动场地', '对照公开资料辨认地图上的建筑、道路和周边环境。'],
+    ['area', '画出候选区域', '沿拟使用的边界点出角点，检查相邻区域和设施的关系。'],
+    ['item', '把物料放上图', '在候选位置试放设施，按实际需求调整尺寸和朝向。'],
+    ['label', '标记现场需要复核的位置', '把待确认的位置与问题写在图上，留给下一位读图的人核对。'],
+  ];
+  const type = new URLSearchParams(location.search).get('type');
+  const element = id => document.getElementById(id);
+  const caseUrl = key => '/introduction?view=inspiration&activity=' + encodeURIComponent(key) + '#site-cases';
+
+  if (Object.hasOwn(activityTypes, type)) {
+    const [name, intro, tasks, reference] = activityTypes[type];
+    const matchingCase = Object.entries(inspirationCases).find(([, item]) => item.tag === name);
+    const demoKey = mapDemos[type];
+    const frame = element('workflow-map');
+
+    document.title = name + '布置指南 · 幕景';
+    document.querySelector('h1').textContent = name;
+    element('lead').textContent = intro;
+    if (type === 'flower-show' || type === 'market') {
+      const proposal = document.createElement('a');
+      proposal.href = '/showcase/assets/yuquan-market-proposal.html#materials';
+      proposal.textContent = '查看杭州植物园菊展市集策划与点位照片 ↗';
+      element('lead').after(proposal);
+    }
+    element('steps-title').textContent = '如何布置' + name;
+    element('workflow-jump').hidden = false;
+    element('workflow').hidden = false;
+
+    const steps = type === 'expo-venue' ? venueSteps :
+      demoKey ? otherMapSteps.map(([mode, title, description], index) =>
+        [mode, title, index ? description : tasks[0] + '。']) :
+        tasks.map(title => [null, title, '']);
+    for (const [index, [mode, title, description]] of steps.entries()) {
+      const row = document.createElement('li');
+      const step = document.createElement(mode ? 'button' : 'div');
+      step.className = 'step';
+      const number = document.createElement('span');
+      number.className = 'step-number';
+      number.textContent = index + 1;
+      number.setAttribute('aria-hidden', 'true');
+      const body = document.createElement('span');
+      const label = document.createElement('strong');
+      label.textContent = title;
+      body.append(label);
+      if (description) {
+        const detail = document.createElement('span');
+        detail.className = 'step-description';
+        detail.textContent = description;
+        body.append(detail);
+      }
+      step.append(number, body);
+      row.append(step);
+      element('steps').append(row);
+      if (mode) {
+        step.type = 'button';
+        step.dataset.tool = mode;
+        step.disabled = true;
+        step.setAttribute('aria-controls', frame.id);
+        step.setAttribute('aria-pressed', 'false');
+        step.addEventListener('click', () => {
+          const control = frame.contentDocument?.querySelector('[data-mode="' + mode + '"]');
+          if (!control || control.disabled) return;
+          if (control.getAttribute('aria-pressed') !== 'true') control.click();
+          for (const button of element('steps').querySelectorAll('button')) {
+            button.setAttribute('aria-pressed', String(button === step));
+          }
+        });
+      }
+    }
+
+    if (demoKey) {
+      const demo = inspirationCases[demoKey];
+      element('map-preview').hidden = false;
+      element('map-title').textContent = demo.place + (demoKey === 'keqiao' ? ' · 馆外试排' : ' · 地图试排');
+      element('map-note').textContent = demoKey === 'keqiao'
+        ? 'Esri 卫星影像与 OpenStreetMap 建筑外轮廓。图上区域与物料均为试排，馆内须核对当届场馆图。'
+        : '卫星影像来自 Esri。图上区域与物料均为试排，位置和尺寸以当届图纸及现场核对为准。';
+      element('try').href = caseUrl(demoKey);
+      element('try').textContent = '打开完整地图试排 ↗';
+      frame.addEventListener('load', () => {
+        for (const button of element('steps').querySelectorAll('button')) {
+          const control = frame.contentDocument?.querySelector('[data-mode="' + button.dataset.tool + '"]');
+          if (!control) continue;
+          const sync = () => {
+            button.disabled = control.disabled;
+            button.setAttribute('aria-pressed', String(control.getAttribute('aria-pressed') === 'true'));
+          };
+          new MutationObserver(sync).observe(control, {attributes:true, attributeFilter:['disabled', 'aria-pressed']});
+          sync();
+        }
+      });
+      frame.src = caseUrl(demoKey).replace('#site-cases', '&embed=map');
+    }
+
+    if (matchingCase) {
+      const [key, item] = matchingCase;
+      element('example').hidden = false;
+      element('example-name').textContent = item.name;
+      element('example-details').textContent = item.fact;
+      element('example-link').href = caseUrl(key);
+      element('example-link').textContent = '阅读案例 ↗';
+      const source = element('extra-source');
+      source.href = item.source;
+      source.textContent = '查看活动原文 ↗';
+      source.hidden = false;
+      if (item.photo) {
+        const photo = element('photo');
+        const credit = element('photo-credit');
+        photo.alt = item.name + '的公开资料图';
+        photo.addEventListener('load', () => {
+          photo.hidden = false;
+          document.querySelector('.hero').classList.add('has-photo');
+          credit.hidden = false;
+        }, {once:true});
+        credit.href = item.previewPhotoSource || item.photoSource || item.source;
+        credit.textContent = item.place + ' · ' + item.credit;
+        if (item.previewPhoto) {
+          photo.addEventListener('error', () => {
+            credit.href = item.photoSource || item.source;
+            photo.src = item.photo;
+          }, {once:true});
+        }
+        photo.src = item.previewPhoto || item.photo;
+      }
+      if (item.gallery) {
+        const gallery = element('example-gallery');
+        for (const [src, caption] of item.gallery) {
+          const figure = document.createElement('figure');
+          const photo = document.createElement('img');
+          photo.alt = caption;
+          photo.loading = 'lazy';
+          photo.src = src;
+          photo.addEventListener('error', () => { photo.hidden = true; }, {once:true});
+          const label = document.createElement('figcaption');
+          label.textContent = caption + ' · ' + item.credit;
+          figure.append(photo, label);
+          gallery.append(figure);
+        }
+        gallery.hidden = false;
+      }
+    } else if (reference) {
+      const [title, url, place, fact, extra] = reference;
+      element('example').hidden = false;
+      element('example-name').textContent = title;
+      element('example-details').textContent = place + ' · ' + fact;
+      element('example-link').href = url;
+      element('example-link').textContent = '查看活动原文 ↗';
+      if (extra) {
+        const extraLink = element('extra-source');
+        extraLink.textContent = extra[0] + ' ↗';
+        extraLink.href = extra[1];
+        extraLink.hidden = false;
+      }
+    }
+    renderCaseAnalysis(element('case-analysis'), matchingCase?.[0] ?? type);
+  }
+</script>
+</body>
+</html>
