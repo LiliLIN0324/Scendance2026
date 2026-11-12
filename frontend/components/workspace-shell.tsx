@@ -105,8 +105,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
     if (!workspacePath || !ready) { setOutdoorProjectId(null); return; }
-    // 工作台无任何参数（`/` 或 `/editor` 别名）：室内草稿在用就续室内，否则续最近户外项目
-    // 或起步户外 2D。带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
+    // 工作台无任何参数（`/` 或 `/editor` 别名）：续最近户外项目或起步默认户外 2D。
+    // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
     if (!window.location.search) {
       // 2026-11-13 房间画布退役后右侧只保留户外地图：无参数不再续室内草稿，
       // 一律进最近户外项目或默认户外草稿；显式 ?mode=indoor 入口留待后置清理拆除。

@@ -2,8 +2,9 @@
  * 天地图满铺探针页（H0-b）坐标与瓦片工具。
  *
  * 探针页独立成页，不动现有 AmapVenuePicker 主路径。它按 EPSG:3857 Web 墨卡托
- * 满铺画布加载天地图瓦片（矢量/影像切换 + 注记层叠加），key 只走 /api/tdt-tiles
- * 服务端代理，前端只拼 layer/z/x/y，永不携带 tk。
+ * 满铺画布加载天地图瓦片（矢量/影像切换 + 注记层叠加）：线上浏览器直连
+ * WMTS（NEXT_PUBLIC_TDT_KEY，见 tdtDirectTileUrl），本机 dev 走 /api/tdt-tiles
+ * 服务端代理。
  *
  * 坐标口径：天地图使用 CGCS2000（≈WGS84）。探针页直接吃 WGS84 经纬度，
  * 不与高德 GCJ-02 混算——混用会造成数百米级偏移，探针阶段就分开。
@@ -62,18 +63,69 @@ export function visibleTileGrid(centerLng: number, centerLat: number, zoom: numb
 }
 
 /**
- * 探针瓦片地址：key 只留在服务端，前端直接打同源 /api/tdt-tiles。
- * 返回底图瓦片与对应注记瓦片两个地址——同后缀配对（vec_w+cva_w、img_w+cia_w），
- * 前端各自拉取后在画布上叠加。
+ * 线上前端直连天地图 WMTS 的 key（构建时注入的公开 key）：
+ * 线上不能走 /api/tdt-tiles 服务端代理——天地图 CloudWAF 会拦截境外节点
+ * （Cloudflare 边缘出口）的请求，实测 418「访问被拦截」（2026-11-12）；而
+ * 天地图瓦片带 `Access-Control-Allow-Origin: *`，浏览器直连完全可用，
+ * 3D WebGL 纹理也能用。防滥用靠天地图控制台的域名白名单。
+ * 本机 dev（localhost / 127.0.0.1）仍走 3199 代理（读根 .env.local 的 TDT_KEY）。
+ */
+const TDT_DIRECT_KEY = () => process.env.NEXT_PUBLIC_TDT_KEY?.trim() || '';
+
+/** 本机开发（无 window 为 SSR/测试）一律走代理，保证本地体验与单测可预期。 */
+export function usesLocalTdtProxy(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location?.hostname ?? '';
+  return host === 'localhost' || host === '127.0.0.1' || host === '';
+}
+
+/**
+ * 浏览器直连天地图 WMTS 单瓦片（host t0–t7 按 (x+y)%8 轮询，参数与
+ * functions/api/tdt-env.ts 的 tdtTileUrl 同构）。非浏览器 / 本机 dev /
+ * 未配置 key 时返回 null，调用方回落到 /api/tdt-tiles 同源代理。
+ */
+export function tdtDirectTileUrl(
+  layer: 'vec_w' | 'img_w' | 'cva_w' | 'cia_w',
+  z: number,
+  x: number,
+  y: number,
+  key: string = TDT_DIRECT_KEY(),
+  local: boolean = usesLocalTdtProxy(),
+): string | null {
+  if (!key || local) return null;
+  const params = new URLSearchParams({
+    SERVICE: 'WMTS',
+    REQUEST: 'GetTile',
+    VERSION: '1.0.0',
+    LAYER: layer.slice(0, -2),
+    STYLE: 'default',
+    TILEMATRIXSET: 'w',
+    FORMAT: 'tiles',
+    TILECOL: String(x),
+    TILEROW: String(y),
+    TILEMATRIX: String(z),
+    tk: key,
+  });
+  const host = (x + y) % 8;
+  return `https://t${host}.tianditu.gov.cn/${layer}/wmts?${params.toString()}`;
+}
+
+/**
+ * 探针瓦片地址：线上带 NEXT_PUBLIC_TDT_KEY 时浏览器直连天地图 WMTS
+ * （天地图 CloudWAF 拦境外节点，服务端代理线上拉不到瓦片）；本机 dev / SSR /
+ * 无 key 回落同源 /api/tdt-tiles。返回底图瓦片与对应注记瓦片两个地址——
+ * 同后缀配对（vec_w+cva_w、img_w+cia_w），前端各自拉取后在画布上叠加。
  */
 export interface TdtProbeTilePair { base: string; annotation: string }
 
 export function tdtProbeTileUrl(layer: TdtProbeLayer, z: number, x: number, y: number, base: string = '/api/tdt-tiles'): TdtProbeTilePair {
   const baseLayer = layer === 'vec' ? 'vec_w' : 'img_w';
   const annotationLayer = layer === 'vec' ? 'cva_w' : 'cia_w';
+  const urlFor = (wmtsLayer: 'vec_w' | 'img_w' | 'cva_w' | 'cia_w'): string =>
+    tdtDirectTileUrl(wmtsLayer, z, x, y) ?? `${base}?layer=${wmtsLayer}&z=${z}&x=${x}&y=${y}`;
   return {
-    base: `${base}?layer=${baseLayer}&z=${z}&x=${x}&y=${y}`,
-    annotation: `${base}?layer=${annotationLayer}&z=${z}&x=${x}&y=${y}`,
+    base: urlFor(baseLayer),
+    annotation: urlFor(annotationLayer),
   };
 }
 
@@ -83,7 +135,7 @@ export const TDT_PROBE_ATTRIBUTION = '底图 © 天地图（CGCS2000）· 数据
 /* ---------------- 公开免费图源（无需 key，探针立即可出真图） ---------------- */
 
 /**
- * 探针可用的公开图源。天地图走 /api/tdt-tiles 代理（key 已接入）;
+ * 探针可用的公开图源。天地图线上浏览器直连 / 本机走 /api/tdt-tiles 代理；
  * OSM/Carto 是公开标准瓦片，浏览器直连即可，均带必显署名。
  * 使用边界（规划稿 §5.4）：OSM 官方瓦片受用量政策约束，禁止批量抓取，
  * Carto 2026-09-23 起 key 化（非商用 5M/月、商用 1M/月免费），

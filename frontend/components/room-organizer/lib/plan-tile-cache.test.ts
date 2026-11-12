@@ -150,6 +150,50 @@ describe('BasemapTileCache', () => {
     expect(cache.size).toBe(0);
     expect(cache.get('a.png')).toBeNull();
   });
+
+  it('并发限流：超出 maxInFlight 的请求先排队，结算一个才放行下一个', () => {
+    // 2026-11-12 瓦片风暴修复的护栏：首帧不再把几百个瓦片同时挂上网
+    // （天地图 CloudWAF 会把这种突发整批 403，画布纯白）。
+    const { created, createImage } = fakeImageFactory();
+    const cache = new BasemapTileCache({ maxInFlight: 2, createImage });
+    for (let i = 0; i < 5; i += 1) cache.load(`t${i}.png`, () => {});
+    // 只放行前 2 个，其余 3 个在队列里。
+    expect(created).toHaveLength(2);
+    created[0]!.fireLoad();
+    expect(created).toHaveLength(3);
+    created[1]!.fireError();
+    expect(created).toHaveLength(4);
+    created[2]!.fireLoad();
+    created[3]!.fireLoad();
+    expect(created).toHaveLength(5);
+    // 全部结算后队列清空。
+    created[4]!.fireLoad();
+    expect(created).toHaveLength(5);
+  });
+
+  it('祖先兜底只预取最近一级（不再首帧拉四层金字塔）', () => {
+    const { created, createImage } = fakeImageFactory();
+    const cache = new BasemapTileCache({ createImage });
+    paintBasemapTiles({
+      ctx: { drawImage: () => {} } as unknown as CanvasRenderingContext2D,
+      cache,
+      zoom: 17,
+      centerPx: 0,
+      centerPy: 0,
+      cssW: 256,
+      cssH: 256,
+      tileSize: 256,
+      tiles: [{ x: 0, y: 0 }],
+      urlsFor: zoom => [`z${zoom}.png`],
+      onDirty: () => {},
+    });
+    // 当前级 z17 + 最近一级祖先 z16 排队；z15/z14/z13 不再预取。
+    expect(cache.has('z17.png')).toBe(true);
+    expect(cache.has('z16.png')).toBe(true);
+    expect(cache.has('z15.png')).toBe(false);
+    expect(cache.has('z14.png')).toBe(false);
+    expect(created.length).toBeLessThanOrEqual(2);
+  });
 });
 
 describe('paintBasemapTiles', () => {

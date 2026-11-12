@@ -965,47 +965,146 @@ export function drawConflictMarkers(
 /* ---------------- 搜地点定位钉（B：地图搜索落点） ---------------- */
 
 /**
- * 搜地点定位钉：深色圆头 + 白描边 + 针脚 + 名称标签（白底深字，深浅底图都读得清）。
+ * 地图上的名称徽标：白底 + 细描边 + 轻投影 + 深字（2026-11-12 用户反馈定位钉视觉太丑——
+ * 原来是纯黑胶囊压在白底地图上像贴纸）。深浅底图上都有清晰轮廓，也不抢底图色块。
+ * `bottom` 是胶囊底边 y；超宽用省略号截断（measureText 精确到像素）。
+ */
+function drawMapLabelPill(ctx: CanvasRenderingContext2D, cx: number, bottom: number, text: string, canvasW?: number): void {
+  ctx.save();
+  ctx.font = '11px system-ui, sans-serif';
+  const maxWidth = 240;
+  let shown = text;
+  if (ctx.measureText(shown).width + 20 > maxWidth) {
+    let cut = text.length;
+    while (cut > 1 && ctx.measureText(`${text.slice(0, cut)}…`).width + 20 > maxWidth) cut -= 1;
+    shown = `${text.slice(0, cut)}…`;
+  }
+  const width = Math.min(maxWidth, Math.ceil(ctx.measureText(shown).width) + 20);
+  const height = 20;
+  // 靠近画布左右缘时把胶囊往里挪一点，别被裁成半个圆角。
+  const clampedX = canvasW && canvasW > width + 8
+    ? Math.min(Math.max(cx, width / 2 + 4), canvasW - width / 2 - 4)
+    : cx;
+  const x = clampedX - width / 2;
+  const y = bottom - height;
+  ctx.shadowColor = 'rgba(20,20,22,0.16)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.98)';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.beginPath();
+  ctx.roundRect(x + 0.5, y + 0.5, width - 1, height - 1, 9.5);
+  ctx.strokeStyle = 'rgba(20,20,22,0.14)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#141416';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(shown, clampedX, y + height / 2 + 0.5);
+  ctx.restore();
+}
+
+/**
+ * 搜地点定位钉：白色水滴针（细描边 + 轻投影 + 针心黑点）+ 白底名称标签。
  * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
  */
 export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; label: string }): void {
   const { ctx, viewport } = c;
   const pt = planPointToPixel(pin.point, viewport);
+  const headY = pt.y - 7;
+  const r = 7.5;
   ctx.save();
-  // 针脚
+  // 水滴形：从圆头左下起笔，绕顶到右下，再用两段贝塞尔收成针尖（尖端落在真实坐标上）。
+  // 2026-11-13 用户嫌「大头黑点」笨重：头 8→7.5、针心 3.2→2.4、尾巴收细。
   ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y + 18);
-  ctx.lineTo(pt.x - 6, pt.y + 6);
-  ctx.lineTo(pt.x + 6, pt.y + 6);
+  ctx.moveTo(pt.x - 6.35, headY + 4.1);
+  ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
+  ctx.quadraticCurveTo(pt.x + 4.8, headY + 8.2, pt.x, pt.y + 8.5);
+  ctx.quadraticCurveTo(pt.x - 4.8, headY + 8.2, pt.x - 6.35, headY + 4.1);
   ctx.closePath();
-  ctx.fillStyle = '#141416';
+  ctx.shadowColor = 'rgba(20,20,22,0.22)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 1.8;
+  ctx.fillStyle = '#ffffff';
   ctx.fill();
-  // 圆头
-  ctx.beginPath();
-  ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
-  ctx.fillStyle = '#141416';
-  ctx.fill();
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
+  ctx.shadowColor = 'transparent';
+  // 描边加深（0.14→0.3）：白底/纸面模式下白针身不能只剩一枚黑点浮着。
+  ctx.strokeStyle = 'rgba(20, 20, 22, 0.3)';
+  ctx.lineWidth = 1;
   ctx.stroke();
+  // 针心：小实心点，标出「就是这里」。
   ctx.beginPath();
-  ctx.arc(pt.x, pt.y, 2.4, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
+  ctx.arc(pt.x, headY + 0.5, 2.4, 0, Math.PI * 2);
+  ctx.fillStyle = '#141416';
   ctx.fill();
-  // 名称标签：按字数估宽（不依赖 measureText），深色底衬保证亮底图上也醒目。
-  const text = pin.label;
-  const width = Math.min(260, Math.max(28, text.length * 7 + 12));
-  const labelY = pt.y - 16;
-  ctx.fillStyle = 'rgba(20, 20, 22, 0.86)';
-  ctx.beginPath();
-  ctx.roundRect(pt.x - width / 2, labelY - 18, width, 18, 9);
-  ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '11px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text.length * 7 + 12 > 260 ? `${text.slice(0, 34)}…` : text, pt.x, labelY - 9);
   ctx.restore();
+  // 名称标签：白底细边，挂在针头上方留 6px 呼吸，不压住针身与底图信息。
+  drawMapLabelPill(ctx, pt.x, headY - r - 6, pin.label, viewport.canvasW);
+}
+
+/* ---------------- 搜地点选区（行政区边界，视图辅助） ---------------- */
+
+/**
+ * 搜地点选区：高德同款视觉——半透明蓝填充 + 粗蓝虚线描边 + 顶部名称标签。
+ * 2026-11-12 用户反馈「很多地图上看不清」（旧样式=6% 暗色填充+1.5px 深灰虚线，
+ * 在暗色图/影像图上几乎不可见）→ 改成高德范式：填充是主识别层，矢量/暗色/影像
+ * 底图上都成立；行政区选区与 POI 范围共用本函数，观感一致。
+ * 和定位钉同性质——只帮人看清「这块地到哪儿为止」，不写进 plan，
+ * 不参与统计/交付/冲突判定，换搜索或关掉即消失。
+ */
+export function drawSearchArea(c: PlanCanvasContext, area: { points: readonly PlanPoint[]; label: string; showLabel?: boolean; kind?: 'area' | 'line' }): void {
+  if (area.points.length < (area.kind === 'line' ? 2 : 3)) return;
+  const { ctx, viewport } = c;
+  const px = area.points.map(p => planPointToPixel(p, viewport));
+  ctx.save();
+  ctx.beginPath();
+  px.forEach((pt, index) => {
+    if (index === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  });
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  if (area.kind === 'line') {
+    // 2026-11-13「点道路=道路选区」：开放折线画高德式粗线高亮，不闭合成面。
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.stroke();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#4A6AF0';
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(84, 106, 240, 0.15)';
+    ctx.fill();
+    // 2026-11-13 用户反馈「视觉不和谐」→ 高德同款三细节：①虚线下先走一道白衬实线，
+    // 把选区从粉彩/影像/暗色底图上托起来；②线降细降饱和（3px 电蓝 → 2.5px 柔蓝）；
+    // ③轮廓服务端已做轻抽稀（simplifyRingMeters），不再放大楼宇级锯齿。
+    ctx.lineWidth = 4.25;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.stroke();
+    ctx.setLineDash([8, 6]);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#4A6AF0';
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  // 2026-11-13 用户拍板：POI 出框后中心同时挂着定位钉（钉上胶囊已带名称），
+  // 选区自己的顶部标签让位，避免同名两枚胶囊；行政区选区无钉，标签照常。
+  if (area.showLabel === false) return;
+  // 名称标签挂在选区最高点上方（顶边中点），不挡图形本身；与定位钉同一套白底徽标。
+  let top = px[0]!;
+  let sumX = 0;
+  for (const pt of px) {
+    if (pt.y < top.y) top = pt;
+    sumX += pt.x;
+  }
+  const labelX = Math.min(Math.max(sumX / px.length, 40), viewport.canvasW - 40);
+  drawMapLabelPill(ctx, labelX, top.y - 4, area.label, viewport.canvasW);
 }
 
 /* ---------------- 内部工具 ---------------- */

@@ -154,6 +154,23 @@ export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorag
   return hasOutdoorPlanDraft(projectId, storage) ? projectId : null;
 }
 
+/**
+ * 「这次打开要不要直接进户外 2D」——workspace-shell 用，**纯判定、不落盘**
+ * （2026-11-12 用户拍板：独立整页户外工作台删掉，户外一律在主工作台里开）。
+ * 与 resolveOutdoorProjectId 同口径，但不会顺手创建默认草稿。
+ */
+export function requestsOutdoorMode(search: string, storage?: KeyValueStorage | null): boolean {
+  const query = search.includes('?') ? search.slice(search.lastIndexOf('?')) : search;
+  const params = new URLSearchParams(query);
+  const explicitMode = params.get('mode');
+  if (explicitMode === 'indoor') return false;
+  if (explicitMode === 'outdoor') return true;
+  const projectId = params.get('project')?.trim() ?? '';
+  if (!projectId) return params.get('start') === 'outdoor';
+  if (params.get('start') === 'outdoor') return true;
+  return hasOutdoorPlanDraft(projectId, storage);
+}
+
 /** 最近动过的户外项目 id（`/` 无参数时「续上次」用）；没有户外记录时 null。 */
 export const OUTDOOR_LAST_PROJECT_KEY = 'scendance-outdoor-last-v1';
 
