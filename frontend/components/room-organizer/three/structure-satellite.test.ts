@@ -316,6 +316,35 @@ describe('satellite floor texture', () => {
     expect(maxX).toBeCloseTo(ground / 2, 3);
   });
 
+  it('只铺场地本身：2D 户外抓来的同源地图不再向外多铺一圈「切片」', async () => {
+    // 2026-11-11 用户 m00274：「只做了一个切片。切片我觉得没有必要。就是场地的3d就行了」——
+    // 2D 户外工作台抓的整块地图（data:image + mapGroundPolygon）只贴场地范围，不再沿照片外扩。
+    vi.stubGlobal('Image', class {
+      onload: null | (() => void) = null;
+      onerror: null | (() => void) = null;
+      width = 256;
+      height = 256;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    });
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, makeLayout({
+      satelliteGroundRef: true,
+      floorPlanImage: 'data:image/jpeg;base64,AAAA',
+      mapGroundPolygon: [
+        { lng: 120.14, lat: 30.255 },
+        { lng: 120.142, lat: 30.255 },
+        { lng: 120.142, lat: 30.254 },
+        { lng: 120.14, lat: 30.254 },
+      ],
+      mapGroundFrame: { lng0: 120.14, lat0: 30.255, latMid: 30.2545, scale: 1, latSign: -1 },
+    }));
+    const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh | undefined;
+    expect(floor).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect((floor?.material as THREE.MeshBasicMaterial | undefined)?.map).toBeTruthy();
+    expect(scene.children.some(child => child.userData.satelliteSurroundFade)).toBe(false);
+  });
+
   it('leaves a plain floor when satellite ground is off', () => {
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, makeLayout({

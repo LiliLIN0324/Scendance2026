@@ -26,7 +26,8 @@ export const CSV_EXPORT_HEADERS = [
 
 /** 行数据先按类型次序再按名称排序，导出字节稳定。 */
 const KIND_ORDER: Record<PlanInventoryRow['kind'], number> = {
-  zone: 0, facility: 1, route: 2, node: 3, worker: 4, measurement: 5,
+  // 2026-11-11 用户指令：自由标注排在测量之后。
+  zone: 0, facility: 1, route: 2, node: 3, worker: 4, measurement: 5, annotation: 6,
 };
 
 /** 单元格转义：RFC 4180。 */
@@ -61,7 +62,8 @@ function rowToCells(row: PlanInventoryRow, plan: SitePlanData): string[] {
 
 function kindLabel(kind: PlanInventoryRow['kind']): string {
   const labels: Record<PlanInventoryRow['kind'], string> = {
-    zone: '分区', facility: '设施', route: '动线', node: '出入口', worker: '人员', measurement: '测量',
+    // 2026-11-11 用户指令：自由标注（文本/形状）。
+    zone: '分区', facility: '设施', route: '动线', node: '出入口', worker: '人员', measurement: '测量', annotation: '标注',
   };
   return labels[kind];
 }
@@ -93,6 +95,12 @@ function entityDetail(row: PlanInventoryRow, plan: SitePlanData): { areaM2?: str
       const worker = plan.workers.find(w => w.id === row.id);
       if (!worker) return {};
       return { notes: worker.notes };
+    }
+    // 2026-11-11 用户指令：标注行导出备注列带文本内容（形状行只有 notes）。
+    case 'annotation': {
+      const annotation = (plan.annotations ?? []).find(a => a.id === row.id);
+      if (!annotation) return {};
+      return { notes: annotation.kind === 'note' ? annotation.text : annotation.notes };
     }
     default:
       return {};

@@ -44,6 +44,9 @@ class FakeMap {
 /** 最近一次建出来的 FakeMap，测试用它模拟点击。 */
 let lastMap: FakeMap | null = null;
 
+/** 高德卫星切片层被 setMap 的次数（应为 0：不再默认叠卫星切片）。 */
+let tileLayerCalls = 0;
+
 const AMapStub = {
   PlaceSearch: FakePlaceSearch,
   AutoComplete: FakeAutoComplete,
@@ -54,7 +57,8 @@ const AMapStub = {
     }
   },
   MouseTool: class { on() {} close() {} polygon() {} polyline() {} },
-  TileLayer: { Satellite: class { setMap() {} show() {} } },
+  // 2026-11-11 用户 m00690：选址地图不再默认叠高德卫星切片，这里记录调用次数以便断言。
+  TileLayer: { Satellite: class { setMap() { tileLayerCalls += 1; } show() {} } },
   Polygon: class {
     path: unknown[] = [];
     options: Record<string, unknown>;
@@ -101,9 +105,16 @@ describe('AmapVenuePicker（MAP-01 找地点：联想/竞态/取消）', () => {
   beforeEach(() => {
     FakePlaceSearch.calls = [];
     FakeAutoComplete.calls = [];
+    tileLayerCalls = 0;
     localStorage.setItem('scendance:amap-key', 'test-key');
     localStorage.setItem('scendance:amap-security', 'test-security');
     (window as unknown as { AMap?: unknown }).AMap = AMapStub;
+  });
+
+  it('选址地图不再默认叠高德卫星切片（用户 m00690）', async () => {
+    await renderPicker();
+    await waitFor(() => expect(lastMap).toBeTruthy());
+    expect(tileLayerCalls).toBe(0);
   });
 
   it('连续搜索：慢的旧响应不覆盖新结果', async () => {

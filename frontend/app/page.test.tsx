@@ -164,7 +164,7 @@ function pickCategory(value: 'brief' | 'reference' | 'rebuild'): void {
 
 describe('workspace entry and draft round trips', () => {
   it('loads the editor without a login gate and keeps the draft across the legacy /auth redirect', async () => {
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', '/editor/');
     const rendered = render(<App />);
     expect(screen.queryByRole('heading', { name: '欢迎回来' })).toBeNull();
     // 第一次冷启动要等懒加载编辑器落地，之后才能点开 Agent。
@@ -196,7 +196,7 @@ describe('workspace entry and draft round trips', () => {
   }, 15000);
 
   it('keeps a pending real proposal available for confirmation without regenerating it', async () => {
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', '/editor/');
     const snapshot = { ...activeController.getSnapshot(), configured: true, localRevision: 0, sessionId:proposal.session_id,lease:{projectId,sessionId:proposal.session_id,generation:1,revision:1,expiresAt:'2099-01-01T00:00:00Z'}, user: { id: 'user-test', email: 'editor@example.com' }, writeBlocked: false, status: 'editing' as const, revision: 1, project: { id: projectId, studio_id: 'studio-test', name: '客户方案', revision: 1, scene } };
     vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
     const generate = vi.spyOn(activeController, 'startAgentRun').mockImplementation(async input=>({id:'60000000-0000-4000-8000-000000000001',projectId,requestId:input.requestId,state:'complete',progress:'完成',callCount:1,candidates:[{label:'A',title:'方案',proposal}],evaluation:null,executionMode:'preview',jevEnabled:false,expiresAt:proposal.expires_at}));
@@ -226,16 +226,34 @@ it('passes a safe return destination through the legacy auth route', () => {
 });
 
 
-it('opens an anonymous workspace visit without requiring login or a local query parameter', async () => {
+it('opens the outdoor planning workspace directly at cold root — no "找场地" detour', async () => {
   window.history.replaceState(null, '', '/');
   render(<App />);
-  await screen.findByRole('button', { name: '打开 Bingo Agent' });
+  // 2026-11-11 用户拍板：找场地是工作台里的"搜地点"，不该挡在入口前面。
+  // 根路径无参数 → 直接挂 OutdoorPlanWorkspace（起步锚点平湖秋月，默认草稿 id='default-outdoor'）。
+  // 不调任何 router.replace，也不需要登录。
+  await screen.findByText('正在加载测试工作台');
   expect(navigation.replace).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('密码')).toBeNull();
 });
 
-it('opens the workspace directly after session restoration without another login form', async () => {
+it('keeps the root workspace when there is a recent local draft', async () => {
+  localStorage.setItem('scendance-editor-local-v1', JSON.stringify({ floors: [{ items: [{ id: 'kept' }] }] }));
   window.history.replaceState(null, '', '/');
+  render(<App />);
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
+  expect(navigation.replace).not.toHaveBeenCalled();
+});
+
+it('opens an anonymous workspace at the editor alias without requiring login', async () => {
+  window.history.replaceState(null, '', '/editor/');
+  render(<App />);
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
+  expect(screen.queryByLabelText('密码')).toBeNull();
+});
+
+it('opens the workspace directly after session restoration without another login form', async () => {
+  window.history.replaceState(null, '', '/editor/');
   const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
   vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
   render(<App />);

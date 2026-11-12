@@ -19,6 +19,7 @@ import {
   type PlanAnchor,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { XIHU_LOCAL_CENTER } from './research-area';
 
 /** 最小存储面：测试用 Map mock 即可满足。 */
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -99,6 +100,8 @@ export function saveOutdoorProjectRecord(record: OutdoorProjectRecord, storage?:
   if (!store) return; // 存储不可用：静默降级（编辑仍可用，刷新不保留）。
   try {
     store.setItem(outdoorPlanStorageKey(record.projectId), JSON.stringify(record));
+    // 「最近活动」指针：`/` 无参数时续上次用（见 latestOutdoorProjectId）。
+    store.setItem(OUTDOOR_LAST_PROJECT_KEY, record.projectId);
   } catch {
     // 配额满/隐私模式：静默降级，不阻断编辑。
   }
@@ -117,6 +120,7 @@ export function clearOutdoorProjectRecord(projectId: string, storage?: KeyValueS
   if (!store) return;
   try {
     store.removeItem(outdoorPlanStorageKey(projectId));
+    if (store.getItem(OUTDOOR_LAST_PROJECT_KEY) === projectId) store.removeItem(OUTDOOR_LAST_PROJECT_KEY);
   } catch {
     // 静默降级。
   }
@@ -124,8 +128,10 @@ export function clearOutdoorProjectRecord(projectId: string, storage?: KeyValueS
 
 /**
  * 户外分支判定（workspace-shell 开工前调用）：
- * - `?project=<id>&start=outdoor`（venue-picker「从地图开始」硬跳）→ 户外；
- * - `?project=<id>` 且本机有户外草稿（再次打开户外项目）→ 户外；
+ * - `?project=<id>&mode=outdoor` → 户外（新入口一律带 mode，2026-11-11 用户拍板）；
+ * - `?project=<id>&mode=indoor` → 室内（显式室内入口，不再看本机草稿）；
+ * - `?project=<id>&start=outdoor` → 户外（旧链接兼容）；
+ * - `?project=<id>` 且本机有户外草稿 → 户外（旧链接兼容）；
  * - 其余（无参数 / 室内项目）→ null，走既有室内工作台。
  */
 export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorage | null): string | null {
@@ -133,28 +139,110 @@ export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorag
   // URLSearchParams 只认纯 query，取最后一个 "?" 起的部分解析。
   const query = search.includes('?') ? search.slice(search.lastIndexOf('?')) : search;
   const params = new URLSearchParams(query);
+  const explicitMode = params.get('mode');
   const projectId = params.get('project')?.trim() ?? '';
+  if (explicitMode === 'indoor') return null;
+  if (explicitMode === 'outdoor') {
+    // 显式指定了 outdoor——没给 project 就用默认本机草稿（起步锚点平湖秋月），
+    // 不再强依赖 URL 上 project=。workspace-shell 根路径无参数时也这么走。
+    return projectId || ensureDefaultOutdoorProject(storage);
+  }
   if (!projectId) return null;
   if (params.get('start') === 'outdoor') return projectId;
+  // 2026-11-11 用户拍板：旧 `?project=`（无 mode）过渡期仍按本机草稿嗅探；
+  // 新入口一律带 mode，两个月后连同这段嗅探一起删除，不长期双轨。
   return hasOutdoorPlanDraft(projectId, storage) ? projectId : null;
 }
 
+/** 最近动过的户外项目 id（`/` 无参数时「续上次」用）；没有户外记录时 null。 */
+export const OUTDOOR_LAST_PROJECT_KEY = 'scendance-outdoor-last-v1';
+
+export function latestOutdoorProjectId(storage?: KeyValueStorage | null): string | null {
+  const store = storage ?? safeDefaultStorage();
+  if (!store) return null;
+  try {
+    const id = store.getItem(OUTDOOR_LAST_PROJECT_KEY)?.trim() ?? '';
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+/** 视角记忆（2026-11-11 用户拍板：按项目记住上次是 2D 还是 3D）。 */
+export type OutdoorPlanView = '2d' | '3d';
+
+export function outdoorPlanViewStorageKey(projectId: string): string {
+  return `scendance-outdoor-view-v1:${projectId}`;
+}
+
+export function readOutdoorPlanView(projectId: string, storage?: KeyValueStorage | null): OutdoorPlanView | null {
+  const store = storage ?? safeDefaultStorage();
+  if (!store) return null;
+  try {
+    const raw = store.getItem(outdoorPlanViewStorageKey(projectId));
+    return raw === '2d' || raw === '3d' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveOutdoorPlanView(projectId: string, view: OutdoorPlanView, storage?: KeyValueStorage | null): void {
+  const store = storage ?? safeDefaultStorage();
+  if (!store) return;
+  try {
+    store.setItem(outdoorPlanViewStorageKey(projectId), view);
+  } catch {
+    // 静默降级：视角记忆失败不影响编辑。
+  }
+}
+
 /**
- * 起步规划：100 × 60 m 矩形场地（中心在原点），其余实体为空。
- * 传 anchor（创建活动时选的地点）则带上地理锚点，2D 一打开就是该地点的地图；
- * 不传则锚点缺省，画布走纸面格网（室内/未选地点）。boundary 契约必填 3–64 点，
- * 起步矩形让用户打开即可拖顶点改边界，而不是面对空画布无从下手。
+ * 默认户外工作台 id（2026-11-11 用户拍板：`/` 无参数时直接进户外 2D 规划，
+ * 起步锚点平湖秋月，找场地是工作台里的"搜地点"能力，不该挡在入口前面）。
+ * 它是纯本机草稿——不进云端，不进 projects 列表。用户正式建项目时会在 VenuePicker
+ * 里起新的云端项目并把它重命名。
+ */
+export const DEFAULT_OUTDOOR_PROJECT_ID = 'default-outdoor';
+
+/** 确保默认户外工作台的本机草稿存在；返回它的 id。 */
+export function ensureDefaultOutdoorProject(storage?: KeyValueStorage | null): string {
+  const existing = readOutdoorProjectRecord(DEFAULT_OUTDOOR_PROJECT_ID, storage);
+  if (existing) return DEFAULT_OUTDOOR_PROJECT_ID;
+  const now = new Date().toISOString();
+  saveOutdoorProjectRecord({
+    v: 1,
+    projectId: DEFAULT_OUTDOOR_PROJECT_ID,
+    name: '新活动场地',
+    createdAt: now,
+    updatedAt: now,
+    plan: createStarterOutdoorPlan(),
+  }, storage);
+  return DEFAULT_OUTDOOR_PROJECT_ID;
+}
+
+/**
+ * 默认地理锚点（2026-11-11 用户拍板：户外规划默认有地理位置）：
+ * 「西湖 · 平湖秋月」，GCJ-02，来源如实标 'preset'（产品预置，不是实测）。
+ * 用户重新选址（picker/lookup）后会被真实锚点覆盖。
+ */
+export const DEFAULT_OUTDOOR_PLAN_ANCHOR: PlanAnchor = {
+  lng: XIHU_LOCAL_CENTER.lng,
+  lat: XIHU_LOCAL_CENTER.lat,
+  crs: 'gcj-02',
+  source: 'preset',
+};
+
+/**
+ * 起步规划：零边界起步（2026-11-11 用户拍板「新建项目先不要一上来就开一个场地边界」——
+ * 起步矩形反而制造越界误报），其余实体为空。传 anchor（创建活动时选的地点）则带上地理锚点，
+ * 2D 一打开就是该地点的地图；不传则落 DEFAULT_OUTDOOR_PLAN_ANCHOR（平湖秋月预置锚点）——
+ * 默认铺真地图。用户从物件库「场地边界（重画）」画完闭合才写入边界。
  */
 export function createStarterOutdoorPlan(anchor?: PlanAnchor): SitePlanData {
   return {
     schemaVersion: 1,
-    ...(anchor ? { anchor } : {}),
-    boundary: [
-      { x: -50, y: -30 },
-      { x: 50, y: -30 },
-      { x: 50, y: 30 },
-      { x: -50, y: 30 },
-    ],
+    anchor: anchor ?? DEFAULT_OUTDOOR_PLAN_ANCHOR,
+    boundary: [],
     zones: [],
     facilities: [],
     routes: [],

@@ -1,7 +1,7 @@
 {
   "provider": "3dassets.dev",
   "verifiedAt": "2026-10-03",
-  "sourceFileCount": 279,
+  "sourceFileCount": 290,
   "models": [
     {
       "slug": "american-football-stadium-kit-field-microphone-1129c7a5",
@@ -6141,6 +6141,248 @@
       },
       "glb": "assets/library/model/woodworking-workshop-and-joinery-woodworking-workshop--af108527.glb",
       "thumb": "assets/library/thumb/woodworking-workshop-and-joinery-woodworking-workshop--af108527.webp"
+    },
+    {
+      "slug": "hot-air-balloon-festival-portable-toilet-block-82a4faf8",
+      "name": "Portable Toilet Block (Hot Air Balloon Festival)",
+      "sourceFile": "buildings/hot-air-balloon-festival-portable-toilet-block-82a4faf8.glb",
+      "sourceCategory": "buildings",
+      "width": 2.380000114440918,
+      "depth": 1.325027505569219,
+      "height": 2.4399493255908546,
+      "bytes": 10800,
+      "triangles": 144,
+      "sha256": "729016916b8a3c644413516bce3c7a72ae4aa66f7df912a52d088240e6a3a391",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/38519/v1/model.glb",
+      "page": "https://3dassets.dev/assets/hot-air-balloon-festival-portable-toilet-block-82a4faf8",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/hot-air-balloon-festival-portable-toilet-block-82a4faf8.glb",
+      "thumb": "assets/library/thumb/hot-air-balloon-festival-portable-toilet-block-82a4faf8.webp"
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a",
+      "name": "Portable Toilet Block (Live Music Venue and Festival Stage)",
+      "sourceFile": "buildings/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a.glb",
+      "sourceCategory": "buildings",
+      "width": 3.919999837875366,
+      "depth": 1.2500895047390084,
+      "height": 3.360051182084959,
+      "bytes": 52704,
+      "triangles": 1152,
+      "sha256": "206fd3ca52bdda89d34684aa386e2a984a445051351211ed9bf5e6d195c144c1",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/33929/v1/model.glb",
+      "page": "https://3dassets.dev/assets/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a.glb",
+      "thumb": "assets/library/thumb/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a.webp"
+    },
+    {
+      "slug": "bus-station-and-city-transit-city-bus-single-decker-ddf9a355",
+      "name": "City Bus Single Decker (Bus Station and City Transit)",
+      "sourceFile": "vehicles/bus-station-and-city-transit-city-bus-single-decker-ddf9a355.glb",
+      "sourceCategory": "vehicles",
+      "width": 2.580027528010984,
+      "depth": 12.14005712574117,
+      "height": 2.8899344257313646,
+      "bytes": 43360,
+      "triangles": 956,
+      "sha256": "b8e683b075a1ddc3d065a25a9516186e7df31f54c107bc9688bc7b3402dd2225",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/34194/v1/model.glb",
+      "page": "https://3dassets.dev/assets/bus-station-and-city-transit-city-bus-single-decker-ddf9a355",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/bus-station-and-city-transit-city-bus-single-decker-ddf9a355.glb",
+      "thumb": "assets/library/thumb/bus-station-and-city-transit-city-bus-single-decker-ddf9a355.webp"
+    },
+    {
+      "slug": "long-haul-trucking-and-truck-stop-container-20ft-bc3beca3",
+      "name": "Twenty-foot intermodal container (Long-Haul Trucking and Truck Stop)",
+      "sourceFile": "props/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3.glb",
+      "sourceCategory": "props",
+      "width": 2.5600205033423644,
+      "depth": 6.1595001220703125,
+      "height": 2.750217962254828,
+      "bytes": 43416,
+      "triangles": 852,
+      "sha256": "ca3ed60e6e16aa63ae26e638856fc16c23a1ab4d3057acde3f2cf266e9597993",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/13988/v1/model.glb",
+      "page": "https://3dassets.dev/assets/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3.glb",
+      "thumb": "assets/library/thumb/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3.webp"
+    },
+    {
+      "slug": "golf-course-and-clubhouse-motorised-golf-cart-b754304d",
+      "name": "Motorised Golf Cart (Golf Course and Clubhouse)",
+      "sourceFile": "props/golf-course-and-clubhouse-motorised-golf-cart-b754304d.glb",
+      "sourceCategory": "props",
+      "width": 1.3560066556882884,
+      "depth": 2.2649999856948853,
+      "height": 1.909950099418251,
+      "bytes": 20184,
+      "triangles": 548,
+      "sha256": "1913f9869b72249f6e804ed4bb7ed496d30339e939673c593bff20ee1a10b95a",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/33492/v1/model.glb",
+      "page": "https://3dassets.dev/assets/golf-course-and-clubhouse-motorised-golf-cart-b754304d",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/golf-course-and-clubhouse-motorised-golf-cart-b754304d.glb",
+      "thumb": "assets/library/thumb/golf-course-and-clubhouse-motorised-golf-cart-b754304d.webp"
+    },
+    {
+      "slug": "fire-and-emergency-services-ambulance-f22ce1a5",
+      "name": "Ambulance (Fire and Emergency Services)",
+      "sourceFile": "props/fire-and-emergency-services-ambulance-f22ce1a5.glb",
+      "sourceCategory": "props",
+      "width": 3.3706050472263596,
+      "depth": 6.005670070648193,
+      "height": 2.7600140533990216,
+      "bytes": 145984,
+      "triangles": 4744,
+      "sha256": "96fad995c37ea40aee587b9c6c5e972d6f3b0d142490f3dc990fc344589d26de",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/29900/v1/model.glb",
+      "page": "https://3dassets.dev/assets/fire-and-emergency-services-ambulance-f22ce1a5",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/fire-and-emergency-services-ambulance-f22ce1a5.glb",
+      "thumb": "assets/library/thumb/fire-and-emergency-services-ambulance-f22ce1a5.webp"
+    },
+    {
+      "slug": "city-park-and-playground-bike-rack-c73abcbf",
+      "name": "Five Hoop Bike Rack (City Park and Playground)",
+      "sourceFile": "props/city-park-and-playground-bike-rack-c73abcbf.glb",
+      "sourceCategory": "props",
+      "width": 2.200000047683716,
+      "depth": 0.7200842466935592,
+      "height": 0.7241590206721674,
+      "bytes": 20200,
+      "triangles": 384,
+      "sha256": "0c64c4fd97f8d7c268bc98bcda01420292b0ec10acccb4c44c8be522cb68bc1f",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/33679/v1/model.glb",
+      "page": "https://3dassets.dev/assets/city-park-and-playground-bike-rack-c73abcbf",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/city-park-and-playground-bike-rack-c73abcbf.glb",
+      "thumb": "assets/library/thumb/city-park-and-playground-bike-rack-c73abcbf.webp"
+    },
+    {
+      "slug": "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0",
+      "name": "Site office cabin (Tool Hire Depot and Plant Yard)",
+      "sourceFile": "props/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0.glb",
+      "sourceCategory": "props",
+      "width": 6.079999923706055,
+      "depth": 3.429667431597969,
+      "height": 2.899677806968426,
+      "bytes": 35356,
+      "triangles": 648,
+      "sha256": "019c9070c2fa94098e96bdbee26d2015eeae4c8baca64fcec765fcd8bf386f1d",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/35296/v1/model.glb",
+      "page": "https://3dassets.dev/assets/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0.glb",
+      "thumb": "assets/library/thumb/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0.webp"
+    },
+    {
+      "slug": "bus-station-and-city-transit-street-lamp-2c6420cf",
+      "name": "Street Lamp (Bus Station and City Transit)",
+      "sourceFile": "props/bus-station-and-city-transit-street-lamp-2c6420cf.glb",
+      "sourceCategory": "props",
+      "width": 0.43992064713478585,
+      "depth": 2.0338767443417187,
+      "height": 7.079999923706055,
+      "bytes": 8284,
+      "triangles": 120,
+      "sha256": "45687a7269fb2cde80436d03d7cdc2f16c45fbfa55a593ac3f9cab653fb4981e",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/34226/v1/model.glb",
+      "page": "https://3dassets.dev/assets/bus-station-and-city-transit-street-lamp-2c6420cf",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/bus-station-and-city-transit-street-lamp-2c6420cf.glb",
+      "thumb": "assets/library/thumb/bus-station-and-city-transit-street-lamp-2c6420cf.webp"
+    },
+    {
+      "slug": "bus-station-and-city-transit-traffic-light-4b8313ca",
+      "name": "Traffic Light (Bus Station and City Transit)",
+      "sourceFile": "props/bus-station-and-city-transit-traffic-light-4b8313ca.glb",
+      "sourceCategory": "props",
+      "width": 0.3598742534960979,
+      "depth": 0.4310312081646446,
+      "height": 3.3499999046325684,
+      "bytes": 8948,
+      "triangles": 156,
+      "sha256": "02ac5e5c9016e78f8a88d423bea1d20e1f872e3236780a23765aae99a9f5119c",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/34229/v1/model.glb",
+      "page": "https://3dassets.dev/assets/bus-station-and-city-transit-traffic-light-4b8313ca",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/bus-station-and-city-transit-traffic-light-4b8313ca.glb",
+      "thumb": "assets/library/thumb/bus-station-and-city-transit-traffic-light-4b8313ca.webp"
+    },
+    {
+      "slug": "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941",
+      "name": "Towable tower light (Tool Hire Depot and Plant Yard)",
+      "sourceFile": "props/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941.glb",
+      "sourceCategory": "props",
+      "width": 1.620051679086739,
+      "depth": 2.8300000429153442,
+      "height": 2.593728164836442,
+      "bytes": 59864,
+      "triangles": 1268,
+      "sha256": "a9ade89b4d09c3a077695f9361f940ad227f3c255a4415ec08d4ae60693a2211",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/35330/v1/model.glb",
+      "page": "https://3dassets.dev/assets/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941",
+      "license": {
+        "slug": "cc0-1.0",
+        "name": "CC0 1.0 Universal",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false
+      },
+      "glb": "assets/library/model/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941.glb",
+      "thumb": "assets/library/thumb/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941.webp"
     }
   ],
   "repairs": [

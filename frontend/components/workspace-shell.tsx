@@ -7,7 +7,12 @@ import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
-import { resolveOutdoorProjectId } from '@/components/room-organizer/lib/outdoor-project-store';
+import {
+  ensureDefaultOutdoorProject,
+  latestOutdoorProjectId,
+  resolveOutdoorProjectId,
+} from '@/components/room-organizer/lib/outdoor-project-store';
+import { STORAGE_KEY } from '@/components/room-organizer/lib/constants';
 import { useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
@@ -86,6 +91,41 @@ export function BootSkeleton(): JSX.Element {
   );
 }
 
+/**
+ * 「最近活动」判定（2026-11-11 用户拍板：`/` 无参数时有最近活动就续上次，没有就直接进户外 2D 规划）：
+ * - 本机画布草稿里有物料（室内工作台上次在用）；
+ * - 存过户外规划草稿（最近一次户外项目）。
+ * 坏草稿 / 存储不可用一律按"没有活动"处理。
+ *
+ * 2026-11-11 用户再次拍板：**找场地是工作台里的能力**（搜地点 / 场馆 / 地址），
+ * 不该挡在入口前面。所以根路径无参数时**直接进户外工作台**（起步锚点平湖秋月），
+ * 不先过一个独立的"找场地"页。
+ */
+function hasRecentActivity(): boolean {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { floors?: { items?: unknown[] }[] };
+      if ((parsed.floors?.[0]?.items?.length ?? 0) > 0) return true;
+    }
+  } catch {
+    // 坏草稿按无活动处理。
+  }
+  return latestOutdoorProjectId() !== null;
+}
+
+/**
+ * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板）：
+ * - 有最近的户外项目 → 续那个 projectId（上次的规划继续）；
+ * - 没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
+ * 找场地是工作台里的"搜地点"，不再先跳独立页。
+ */
+function decideDefaultOutdoorProject(): string {
+  const last = latestOutdoorProjectId();
+  if (last) return last;
+  return ensureDefaultOutdoorProject();
+}
+
 export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX.Element {
   const { controller, ready } = useAuth()!;
   const pathname = usePathname();
@@ -99,6 +139,18 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
     if (!workspacePath || !ready) { setOutdoorProjectId(null); return; }
+    // 根路径且没有任何参数：有最近活动就续上次，没有就直接进户外工作台（默认草稿，平湖秋月锚点）。
+    // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
+    if (pathname.replace(/\/$/, '') === '' && !window.location.search) {
+      if (hasRecentActivity()) {
+        // 有最近的室内活动 → 让它走原有的无参路径（续本机画布草稿）。
+        setOutdoorProjectId(null);
+      } else {
+        setOutdoorProjectId(decideDefaultOutdoorProject());
+      }
+      setEditorStarted(true);
+      return;
+    }
     setOutdoorProjectId(resolveOutdoorProjectId(window.location.search));
     setEditorStarted(true);
   }, [workspacePath, ready, pathname]);
@@ -108,8 +160,6 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   }, [entered]);
 
   return <>
-    {/* 本机预览标记：贴在顶栏，浮在底部会压住物料抽屉。 */}
-    {process.env.NEXT_PUBLIC_LOCAL_FIXTURE === '1' && <aside role="status" style={{position:'fixed',top:17,left:'50%',transform:'translateX(-50%)',zIndex:10000,padding:'3px 9px',borderRadius:6,background:'#283f36',color:'#fff',fontSize:11,pointerEvents:'none'}}>独立本地预览 · 测试账号与本地数据库</aside>}
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
     {editorStarted && (outdoorProjectId !== null

@@ -33,6 +33,11 @@ export const ROOM_OBJECT_TAGS = {
   PersonRoute: 'person-route',
   /** 户外 2D 规划在 3D 地面的投影图层（分区色块/设施占地/动线/点位，P2-g）。 */
   PlanFootprint: 'plan-footprint',
+  /**
+   * 主舞台地理瓦片地面（GeoGround，2026-11-12）：退出户外后主 3D 按计划锚点铺的
+   * 真实地图瓦片。不复用 research-basemap 的 tag——两套清理语义要互相独立。
+   */
+  GeoGround: 'geo-ground',
 } as const;
 
 export type RoomObjectTag = (typeof ROOM_OBJECT_TAGS)[keyof typeof ROOM_OBJECT_TAGS];
@@ -178,6 +183,16 @@ export interface RoomBuilderOptions {
   groundY?: number;
   /** Opacity multiplier for stacked floors below the active one. */
   ghostOpacity?: number;
+  /**
+   * 地面交给外部图层（主舞台 GeoGround 地理瓦片）时跳过素色地板与地基；
+   * 墙照建。上层的楼板不受影响（只对传入了该选项的那一层生效）。
+   */
+  skipFloor?: boolean;
+  /**
+   * 跳过外墙与 0.5m 网格面（含在 buildWalls 里）。户外规划项目墙是后置环节
+   * （docs/42），GeoGround 瓦片在场时矩形外墙/网格只剩室内壳残留。
+   */
+  skipWalls?: boolean;
   onTextureLoaded?: () => void;
 }
 
@@ -185,57 +200,59 @@ export function buildRoom(THREE: ThreeModule, options: RoomBuilderOptions): void
   const yOffset = options.yOffset ?? 0;
   const isGhost = options.ghostOpacity !== undefined && options.ghostOpacity < 1;
 
-  const hasFloorOpenings = options.floorOpenings && options.floorOpenings.length > 0;
-  const showFloorPlan = options.showFloorPlan !== false && options.floorPlanOpacity > 0;
-  const useDisplacement = options.floorPlanImage && showFloorPlan && options.floorPlan3DEffect;
+  if (!options.skipFloor) {
+    const hasFloorOpenings = options.floorOpenings && options.floorOpenings.length > 0;
+    const showFloorPlan = options.showFloorPlan !== false && options.floorPlanOpacity > 0;
+    const useDisplacement = options.floorPlanImage && showFloorPlan && options.floorPlan3DEffect;
 
-  // When the floor has stairwell openings we use ShapeGeometry so we can
-  // punch rectangular holes. Otherwise keep the simpler PlaneGeometry
-  // (which also supports displacement subdivision for floor-plan 3D effect).
-  const geometry = hasFloorOpenings && !useDisplacement
-    ? buildFloorGeometryWithOpenings(THREE, options.width, options.depth, options.floorOpenings!)
-    : new THREE.PlaneGeometry(options.width, options.depth, useDisplacement ? 100 : 1, useDisplacement ? 100 : 1);
+    // When the floor has stairwell openings we use ShapeGeometry so we can
+    // punch rectangular holes. Otherwise keep the simpler PlaneGeometry
+    // (which also supports displacement subdivision for floor-plan 3D effect).
+    const geometry = hasFloorOpenings && !useDisplacement
+      ? buildFloorGeometryWithOpenings(THREE, options.width, options.depth, options.floorOpenings!)
+      : new THREE.PlaneGeometry(options.width, options.depth, useDisplacement ? 100 : 1, useDisplacement ? 100 : 1);
 
-  let material: ThreeNS.Material;
-  if (options.floorPlanImage && showFloorPlan) {
-    material = buildFloorPlanMaterial(THREE, options, options.floorPlanImage);
-  } else {
-    // Note: an image-less call must NOT drop the decoded-image cache here —
-    // only floor 0 carries the plan, so in a multi-floor rebuild every upper
-    // floor would wipe the cache floor 0 just warmed and the multi-MB data
-    // URL would re-decode on every other rebuild (#119). The caller clears
-    // the cache via clearFloorPlanImageCache() when the plan is truly gone.
-    material = buildFloorMaterial(THREE, {
-      pattern: options.floorPattern ?? 'solid',
-      color: options.floorColor,
-      roomWidth: options.width,
-      roomDepth: options.depth,
-    });
+    let material: ThreeNS.Material;
+    if (options.floorPlanImage && showFloorPlan) {
+      material = buildFloorPlanMaterial(THREE, options, options.floorPlanImage);
+    } else {
+      // Note: an image-less call must NOT drop the decoded-image cache here —
+      // only floor 0 carries the plan, so in a multi-floor rebuild every upper
+      // floor would wipe the cache floor 0 just warmed and the multi-MB data
+      // URL would re-decode on every other rebuild (#119). The caller clears
+      // the cache via clearFloorPlanImageCache() when the plan is truly gone.
+      material = buildFloorMaterial(THREE, {
+        pattern: options.floorPattern ?? 'solid',
+        color: options.floorColor,
+        roomWidth: options.width,
+        roomDepth: options.depth,
+      });
+    }
+
+    if (isGhost) {
+      material.transparent = true;
+      material.opacity = options.ghostOpacity!;
+    }
+
+    const floor = new THREE.Mesh(geometry, material);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = yOffset;
+    floor.receiveShadow = true;
+    floor.userData.type = ROOM_OBJECT_TAGS.Floor;
+    makeStatic(floor);
+    options.scene.add(floor);
+
+    // Concrete foundation plinth — only on the ground floor. build-mode houses sit on
+    // a low base that extends slightly past the wall plane and grounds the
+    // building visually.
+    if (yOffset === 0 && !options.floorPlanImage) {
+      addFoundation(
+        THREE, options.scene, options.width, options.depth, isGhost ? options.ghostOpacity : undefined, options.groundY
+      );
+    }
   }
 
-  if (isGhost) {
-    material.transparent = true;
-    material.opacity = options.ghostOpacity!;
-  }
-
-  const floor = new THREE.Mesh(geometry, material);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = yOffset;
-  floor.receiveShadow = true;
-  floor.userData.type = ROOM_OBJECT_TAGS.Floor;
-  makeStatic(floor);
-  options.scene.add(floor);
-
-  // Concrete foundation plinth — only on the ground floor. build-mode houses sit on
-  // a low base that extends slightly past the wall plane and grounds the
-  // building visually.
-  if (yOffset === 0 && !options.floorPlanImage) {
-    addFoundation(
-      THREE, options.scene, options.width, options.depth, isGhost ? options.ghostOpacity : undefined, options.groundY
-    );
-  }
-
-  if (!options.floorPlanImage) {
+  if (!options.floorPlanImage && !options.skipWalls) {
     buildWalls(
       THREE,
       options.scene,

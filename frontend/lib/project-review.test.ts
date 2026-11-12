@@ -417,7 +417,7 @@ describe('customer-readable review rendering', () => {
   it.each([
     { type: 'dining-chair' }, { materialId: 'display' as const }, { width: 1.001 }, { depth: 1.001 }, { height: 1.001 },
     { color: '#abcdef' }, { source: 'public_library' as const }, { assetId }, { mirrored: true },
-    { sofaShape: 'L-shape' as const }, { stairsShape: 'winder' as const }, { stairsLeadIn: 2 }, { sillHeight: 0.5 },
+    { sofaShape: 'L-shape' as const }, { tableShape: 'round' as const }, { stairsShape: 'winder' as const }, { stairsLeadIn: 2 }, { sillHeight: 0.5 },
   ])('does not merge materials with distinct raw specification, source or model: %j', patch => {
     const first = makeItem({ id: objectId, type: 'chair', source: 'builtin' });
     const second = makeItem({ ...first, id: 'other-chair', ...patch });

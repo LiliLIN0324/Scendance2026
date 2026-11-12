@@ -167,6 +167,8 @@ export interface PlanOverviewStats {
   workerTotalCount: number;
   /** 固定测量标注数。 */
   measurementCount: number;
+  /** 2026-11-11 用户指令：自由标注（文本/形状）数。 */
+  annotationCount: number;
   /** 待处理问题数：现有四类问题清单（分区/设施/节点/人员）条数合计。 */
   issueCount: number;
   /** H3-b 冲突/缺失条数（人车交叉/共线/通行带压设施/越界/缺宽度/容量待核实）。 */
@@ -199,6 +201,7 @@ export function planOverviewStats(plan: SitePlanData): PlanOverviewStats {
     workerPostCount: plan.workers.length,
     workerTotalCount: plan.workers.reduce((sum, w) => sum + w.count, 0),
     measurementCount: measurements.length,
+    annotationCount: (plan.annotations ?? []).length,
     issueCount,
     conflictCount: conflicts.length,
   };

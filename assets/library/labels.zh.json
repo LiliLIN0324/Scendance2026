@@ -2114,5 +2114,61 @@
   "tattoo-and-piercing-studio-studio-plant-pot-7ee5b536": {
     "name": "宽叶盆栽",
     "bucket": "plants"
+  },
+  "hot-air-balloon-festival-portable-toilet-block-82a4faf8": {
+    "name": "移动厕所（两格）",
+    "bucket": "logistics"
+  },
+  "live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a": {
+    "name": "移动厕所（三格）",
+    "bucket": "logistics"
+  },
+  "bus-station-and-city-transit-city-bus-single-decker-ddf9a355": {
+    "name": "城市公交车",
+    "bucket": "vehicles"
+  },
+  "long-haul-trucking-and-truck-stop-container-20ft-bc3beca3": {
+    "name": "20英尺集装箱",
+    "bucket": "logistics"
+  },
+  "golf-course-and-clubhouse-motorised-golf-cart-b754304d": {
+    "name": "电动高尔夫球车",
+    "bucket": "vehicles"
+  },
+  "fire-and-emergency-services-ambulance-f22ce1a5": {
+    "name": "救护车",
+    "bucket": "vehicles"
+  },
+  "city-park-and-playground-bike-rack-c73abcbf": {
+    "name": "五环自行车架",
+    "bucket": "sports"
+  },
+  "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0": {
+    "name": "场地办公舱房",
+    "bucket": "structure"
+  },
+  "bus-station-and-city-transit-street-lamp-2c6420cf": {
+    "name": "路灯",
+    "bucket": "lighting"
+  },
+  "bus-station-and-city-transit-traffic-light-4b8313ca": {
+    "name": "红绿灯",
+    "bucket": "signage"
+  },
+  "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941": {
+    "name": "可拖行照明塔",
+    "bucket": "lighting"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-d18acb96": {
+    "name": "摩天轮",
+    "bucket": "rides"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-b3ccf619": {
+    "name": "旋转木马",
+    "bucket": "rides"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab": {
+    "name": "旋转飞椅",
+    "bucket": "rides"
   }
 }

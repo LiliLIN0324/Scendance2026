@@ -100,3 +100,36 @@ describe('the conversation that fills the left column', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
+
+describe('the conversation card wired into the left-stack half-card system', () => {
+  // 2026-11-12 左栏半卡片堆栈：与户外/Bingo/拍摄场地同一套交互（is-stack-first/second、is-detached）。
+  it('takes the stack class and the DOM order when it joins the splitter pair', async () => {
+    render(<MemberChat controller={controller} team={team} peerId="user-b" onClose={() => {}}
+      className="is-stack-first" style={{ order: 0 }}/>);
+    await screen.findByText('方案改了两版');
+    const root = document.querySelector('.sc-person-chat') as HTMLElement;
+    expect(root.className).toContain('is-stack-first');
+    expect(root.style.order).toBe('0');
+  });
+
+  it('turns into a detached window with the float bar, the resize handle and the grab header', async () => {
+    const pull = vi.fn();
+    render(<MemberChat controller={controller} team={team} peerId="user-b" onClose={() => {}}
+      className="is-detached" style={{ ['--sc-float-x' as string]: '120px', ['--sc-float-y' as string]: '80px', ['--sc-float-w' as string]: '480px', ['--sc-float-h' as string]: '528px' }}
+      onHeaderPointerDown={pull}
+      floatBar={<div className="sc-agent-float-bar"><strong>私信</strong><span>独立小窗</span><button type="button" aria-label="收回私信面板">收回</button></div>}
+      floatFooter={<div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小"/>}/>);
+    await screen.findByText('方案改了两版');
+    const root = document.querySelector('.sc-person-chat') as HTMLElement;
+    expect(root.className).toContain('is-detached');
+    expect(root.style.getPropertyValue('--sc-float-x')).toBe('120px');
+    expect(screen.getByRole('button', { name: '收回私信面板' })).toBeTruthy();
+    expect(screen.getByRole('separator', { name: '调整独立窗口大小' })).toBeTruthy();
+    // 头部按下交给外部的拖拽状态机；样式同步出现「可以抓」的手势光标。
+    const head = document.querySelector('.sc-person-chat-head') as HTMLElement;
+    expect(head.style.cursor).toBe('grab');
+    expect(head.style.touchAction).toBe('none');
+    fireEvent.pointerDown(head);
+    expect(pull).toHaveBeenCalledOnce();
+  });
+});

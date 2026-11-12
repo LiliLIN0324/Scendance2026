@@ -169,6 +169,29 @@ describe('site plan contract', () => {
     expect(sitePlanDataSchema.safeParse(badAnchor).success).toBe(false);
   });
 
+  it('accepts the preset anchor source (2026-11-11 默认锚点决策) and still rejects unknown sources', () => {
+    const preset = samplePlan();
+    (preset.anchor as { source: string }).source = 'preset';
+    const parsed = sitePlanDataSchema.safeParse(preset);
+    expect(parsed.success).toBe(true);
+
+    const unknown = samplePlan();
+    (unknown.anchor as { source: string }).source = 'guess';
+    expect(sitePlanDataSchema.safeParse(unknown).success).toBe(false);
+  });
+
+  it('allows an empty boundary (2026-11-11 零边界起步：新草稿未画边界) and still rejects oversized rings', () => {
+    const empty = samplePlan();
+    (empty as { boundary: unknown }).boundary = [];
+    const parsed = sitePlanDataSchema.safeParse(empty);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.boundary).toHaveLength(0);
+
+    const oversize = samplePlan();
+    (oversize as { boundary: unknown }).boundary = Array.from({ length: 65 }, (_, i) => ({ x: i, y: 0 }));
+    expect(sitePlanDataSchema.safeParse(oversize).success).toBe(false);
+  });
+
   it('keeps label dictionaries aligned with the enums', () => {
     const data = samplePlan();
     expect(Object.keys(planZoneSemanticLabels)).toContain(data.zones[0].semantic);
@@ -221,6 +244,23 @@ describe('site plan contract', () => {
     const danglingEnd = samplePlan();
     (danglingEnd.routes[0] as { endNodeId?: string }).endNodeId = '66666666-6666-4666-8666-666666666666';
     expect(sitePlanDataSchema.safeParse(danglingEnd).success).toBe(false);
+  });
+
+  it('keeps route color optional and round-trips it when present (2026-11-12 活动包赛道预设)', () => {
+    // 旧数据不带 color：解析成功且不虚构字段（与 opacity / startNodeId 同口径）。
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.routes[0].color).toBeUndefined();
+
+    // 带主题色：小写化往返（与 zone/facility/worker 的 color 同口径）。
+    const colored = samplePlan();
+    (colored.routes[0] as { color?: string }).color = '#9E00FF';
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(colored)));
+    expect(restored.routes[0].color).toBe('#9e00ff');
+
+    // 非法色值照例拒绝。
+    const badColor = samplePlan();
+    (badColor.routes[0] as { color?: string }).color = 'purple';
+    expect(sitePlanDataSchema.safeParse(badColor).success).toBe(false);
   });
 
   it('keeps measurements optional and round-trips them when present (H3-a)', () => {

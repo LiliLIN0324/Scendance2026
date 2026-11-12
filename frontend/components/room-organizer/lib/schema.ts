@@ -27,6 +27,7 @@ import type {
   RoomLayout,
   RoomZone,
   SofaShape,
+  TableShape,
   TerrainSpec,
   WallId,
   WallPattern,
@@ -82,6 +83,7 @@ const WALL_PATTERNS: readonly WallPattern[] = [
 ];
 const ROOF_STYLES: readonly RoofStyle[] = ['none', 'flat', 'gable', 'hipped'];
 const SOFA_SHAPES: readonly SofaShape[] = ['standard', 'L-shape', 'U-shape'];
+const TABLE_SHAPES: readonly TableShape[] = ['round', 'rect'];
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -207,8 +209,6 @@ function isResearchArea(value: unknown): boolean {
   if (bounds.east <= bounds.west || bounds.north <= bounds.south) return false;
   // scanAssetId：底图跟哪套场地扫描走（docs/19）；没有或不是字符串都按手动底图处理。
   if (value.scanAssetId !== undefined && (typeof value.scanAssetId !== 'string' || value.scanAssetId.length === 0 || value.scanAssetId.length > MAX_ID_LENGTH)) return false;
-  // 预置底图（presetId）今天只有整景区一张：白名单防未知值随存档扩散。
-  if (value.presetId !== undefined && value.presetId !== 'xihu-scenic') return false;
   if (typeof value.imageUrl !== 'string') return false;
   return isSatelliteProxyUrl(value.imageUrl) || isStaticBasemapUrl(value.imageUrl);
 }
@@ -284,6 +284,8 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   // default model at lookup time. The retired `stairsDirection` is not
   // checked at all — parseStoredLayout strips it (#410).
   if (v.sofaShape !== undefined && !SOFA_SHAPES.includes(v.sofaShape as SofaShape)) return false;
+  if (v.tableShape !== undefined && !TABLE_SHAPES.includes(v.tableShape as TableShape)) return false;
+  if (v.tableFinish !== undefined && v.tableFinish !== 'linen' && v.tableFinish !== 'bare') return false;
   if (v.stairsShape !== undefined && !isStairsShape(v.stairsShape)) return false;
   if (v.stairsLeadIn !== undefined && !isStairsLeadIn(v.stairsLeadIn)) return false;
   if (!isOptionalString(v.cctvModelId)) return false;
@@ -657,6 +659,8 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   wallRotation: true,
   cameraBracket: true,
   sofaShape: true,
+  tableShape: true,
+  tableFinish: true,
   locked: true,
   mirrored: true,
   stairsShape: true,

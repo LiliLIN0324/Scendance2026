@@ -56,8 +56,6 @@ export interface ResearchArea {
   /** 底图地址。带 west/south/east/north，3D 与 2D 靠这几个值对齐。 */
   imageUrl: string;
   style: ResearchMapStyle;
-  /** 静态预置底图标记（整景区拼图）：半径/样式不重算，图与 bounds 一一对应。 */
-  presetId?: ResearchBasemapPresetId;
 }
 
 const round7 = (value: number): number => Math.round(value * 1e7) / 1e7;
@@ -200,8 +198,6 @@ export function createResearchArea(
 
 /** 换半径或换样式时重算底图，地名与地址不动。 */
 export function researchAreaWith(area: ResearchArea, changes: { radiusM?: number; style?: ResearchMapStyle }): ResearchArea {
-  // 静态预置底图与 bounds 一一对应：换半径会重算出与图片不符的范围，直接不响应。
-  if (area.presetId) return area;
   const radiusM = changes.radiusM ?? area.radiusM;
   const style = changes.style ?? area.style;
   const bounds = boundsAround(area.center, radiusM);
@@ -217,68 +213,29 @@ export function researchAreaWith(area: ResearchArea, changes: { radiusM?: number
   };
 }
 
-/* ---------------- 整景区静态底图（避开 /amap-static 长边 2048 限流） ---------------- */
-
-export type ResearchBasemapPresetId = 'xihu-scenic';
-
-export interface ResearchBasemapPreset {
-  id: ResearchBasemapPresetId;
-  name: string;
-  address: string;
-  /** 预先拼好、随仓库发布的静态图；不经过瓦片代理，也不会被缩到 2048。 */
-  imageUrl: string;
-  /**
-   * 静态图的经纬度四至：它是按 OSM 边界 bbox 在 z15 墨卡托下逐像素裁切的，
-   * 所以这组值同时也是图片的精确覆盖范围——底图尺寸/中心/偏航仍由它与 sceneAnchor 推出。
-   */
-  bounds: GeoBounds;
-  /** z15 下的像素尺寸（只用于报告清晰度，不参与摆放）。 */
-  pixelWidth: number;
-  pixelHeight: number;
-}
-
-/** 西湖风景名胜区：OSM relation/13164471 的 bbox，z15 裁切 2382×2585（4.13 m/px，1.38 MB）。 */
-export const XIHU_SCENIC_PRESET: ResearchBasemapPreset = {
-  id: 'xihu-scenic',
-  name: '西湖风景名胜区',
-  address: '浙江省杭州市西湖区',
-  imageUrl: '/basemap/xihu-scenic-z15.jpg',
-  bounds: { west: 120.0714663, south: 30.1777743, east: 120.1737028, north: 30.2736397 },
-  pixelWidth: 2382,
-  pixelHeight: 2585,
-};
+/* ---------------- 局部片区底图（平湖秋月一带） ---------------- */
 
 /**
  * 局部片区：平湖秋月（GCJ-02）。
  *
- * 暂时不做西湖以外的地方，地图入口就固定在这一小片。原始控制点来自
- * scripts/check-pinghu-qiuyue-coords.ts 的 WGS-84（120.141306, 30.254500），
+ * 原始控制点来自 scripts/check-pinghu-qiuyue-coords.ts 的 WGS-84（120.141306, 30.254500），
  * 经 lib/geo-coords.ts 的 wgs84ToGcj02 换到高德那一套坐标。
  */
 export const XIHU_LOCAL_CENTER = { lng: 120.1460368, lat: 30.2521924 } as const;
 
-/** 局部片区的取景跨度（米）：默认镜头只看平湖秋月周边，不给整片西湖。 */
-export const XIHU_LOCAL_SPAN_M = 1200;
-
 /** 地图入口的名称：整个产品现在只做这一片。 */
 export const XIHU_LOCAL_NAME = '西湖 · 平湖秋月';
 
-/** 预设 → 可直接铺进 3D 的底图。radiusM 只作档位展示，不参与取景（bounds 才是真值）。 */
-export function createPresetResearchArea(preset: ResearchBasemapPreset = XIHU_SCENIC_PRESET): ResearchArea {
-  const size = boundsSizeMeters(preset.bounds);
-  return {
-    name: preset.name,
-    address: preset.address,
-    center: boundsCenter(preset.bounds),
-    radiusM: Math.max(50, Math.min(20000, Math.round(Math.max(size.widthM, size.depthM) / 2))),
-    bounds: { ...preset.bounds },
-    widthM: Math.round(size.widthM),
-    depthM: Math.round(size.depthM),
-    imageUrl: preset.imageUrl,
-    style: RESEARCH_SATELLITE_STYLE,
-    presetId: preset.id,
-  };
-}
+/** 局部片区的取景跨度（米）：默认镜头只看平湖秋月周边，不给整片西湖。 */
+export const XIHU_LOCAL_SPAN_M = 1200;
+
+/** 地图入口用的地点条目：只做本地一片，不做地名检索。 */
+export const XIHU_LOCAL_PLACE: ResearchPlace = {
+  name: XIHU_LOCAL_NAME,
+  address: '浙江省杭州市西湖区孤山路',
+  lng: XIHU_LOCAL_CENTER.lng,
+  lat: XIHU_LOCAL_CENTER.lat,
+};
 
 /** 场地周边一圈的紧凑范围：给壳体自己那张贴地图用。 */
 export function venueBounds(polygon: AmapPoint[], padRatio = 0.25): GeoBounds {

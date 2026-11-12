@@ -82,15 +82,39 @@ describe('BasemapTileCache', () => {
     expect(onReady).toHaveBeenCalledTimes(2);
   });
 
-  it('加载失败会记录 error 且不再回调', () => {
+  it('加载失败会记录 error，并回调监听者让其结算（否则 3D 瓦片队列会永久 pending）', () => {
     const { created, createImage } = fakeImageFactory();
     const cache = new BasemapTileCache({ createImage });
     const onReady = vi.fn();
     cache.load('bad.png', onReady);
     created[0]!.fireError();
-    expect(onReady).not.toHaveBeenCalled();
+    expect(onReady).toHaveBeenCalledTimes(1);
     expect(cache.get('bad.png')).toBeNull();
+    expect(cache.status('bad.png')).toBe('error');
     expect(cache.stats.errors).toBe(1);
+  });
+
+  it('失败的瓦片再次 load 会重试（最多 3 次），成功后就绪', () => {
+    const { created, createImage } = fakeImageFactory();
+    const cache = new BasemapTileCache({ createImage });
+    cache.load('flaky.png', () => {});
+    created[0]!.fireError();
+    const retry = vi.fn();
+    cache.load('flaky.png', retry);
+    created[1]!.fireLoad();
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(cache.get('flaky.png')).not.toBeNull();
+    // 用尽重试后不再重发请求：首次 + 2 次重试 = 3 次 src 赋值。
+    const before = created.length;
+    cache.load('dead.png', () => {});
+    created[before]!.fireError();
+    cache.load('dead.png', () => {});
+    created[before + 1]!.fireError();
+    cache.load('dead.png', () => {});
+    created[before + 2]!.fireError();
+    cache.load('dead.png', () => {});
+    expect(created.length).toBe(before + 3);
+    expect(cache.status('dead.png')).toBe('error');
   });
 
   it('已就绪的 URL 再次 load 时同步回调，不重复发请求', () => {
@@ -165,6 +189,36 @@ describe('paintBasemapTiles', () => {
     expect(result.fallback).toBe(0);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.args).toEqual([0, 0, 256, 256]);
+  });
+
+  it('视图级别超过图源上限时，按上限级取瓦片并等比放大（overzoom）', () => {
+    const { created, createImage } = fakeImageFactory();
+    const cache = new BasemapTileCache({ createImage });
+    cache.load('z19.png', () => {});
+    created[0]!.fireLoad();
+    const { ctx, calls } = makeCtx();
+    const asked: number[] = [];
+    const result = paintBasemapTiles({
+      ctx,
+      cache,
+      // 视图 z21，图源只到 z19：一张 z19 瓦片应被放大 4 倍（256 → 1024）。
+      zoom: 21,
+      tileZoom: 19,
+      centerPx: 512,
+      centerPy: 512,
+      cssW: 1024,
+      cssH: 1024,
+      tileSize: 256,
+      tiles: [{ x: 0, y: 0 }],
+      urlsFor: (zoom: number) => {
+        asked.push(zoom);
+        return ['z19.png'];
+      },
+      onDirty: () => {},
+    });
+    expect(asked).toContain(19);
+    expect(result.drawn).toBe(1);
+    expect(calls[0]!.args).toEqual([0, 0, 1024, 1024]);
   });
 
   it('当前层级缺失但有祖先缓存时，用祖先子区域放大兜底并排入加载', () => {

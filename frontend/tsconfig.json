@@ -40,6 +40,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-browser/types/**/*.ts",
+    ".next-dev-1112/types/**/*.ts",
+    ".next-smoke-packs/types/**/*.ts",
+    ".next-takeover/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts"

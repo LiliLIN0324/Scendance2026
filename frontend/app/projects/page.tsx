@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-provider';
 import { useBackendSession, type Studio, type ProjectSummary } from '@/lib/backend-session';
 import { loadLayout } from '@/components/room-organizer/lib/persistence';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
-import { emptyProjectScene, listMembers, listStudioProjects, preferredStudio, rememberStudio, type StudioMember } from '@/lib/workspace-api';
+import { listMembers, listStudioProjects, preferredStudio, rememberStudio, type StudioMember } from '@/lib/workspace-api';
 import '../workspace.css';
 
 type Panel = 'projects' | 'members' | 'settings';
@@ -31,8 +31,6 @@ export default function ProjectsPage(): JSX.Element {
   const [panel, setPanel] = useState<Panel>('projects');
   const [projectId, setProjectId] = useState('');
   const [creatingStudio, setCreatingStudio] = useState(false);
-  const [creatingProject, setCreatingProject] = useState(false);
-  const [name, setName] = useState('我的活动方案');
   const [studioName, setStudioName] = useState('');
   const [rename, setRename] = useState('');
   const [deleteName, setDeleteName] = useState('');
@@ -85,7 +83,7 @@ export default function ProjectsPage(): JSX.Element {
   useEffect(() => { setDraft(loadLayout()); }, []);
 
   function selectStudio(id: string): void {
-    setStudioId(id); setProjectId(''); setCreatingStudio(false); setCreatingProject(false);
+    setStudioId(id); setProjectId(''); setCreatingStudio(false);
     setDeleting(false); setDeleteName(''); setRemoving(''); setMemberEmail(''); setNotice('');
     if (userId) rememberStudio(userId, id);
   }
@@ -137,12 +135,8 @@ export default function ProjectsPage(): JSX.Element {
           {loadError && <p className="sc-studio-manager-notice" role="alert">{loadError}</p>}
           {!loaded && !loadError && <p role="status">正在加载「{selected.name}」的项目与成员…</p>}
           {panel === 'projects' && <>
-            <div className="sc-studio-manager-heading"><div><p className="sc-studio-manager-eyebrow">{selected.name}</p><h1>{project ? project.name : '项目'}</h1><p>项目归属当前工作室，工作室成员共享访问与编辑权限。</p></div><button className="sc-studio-manager-primary" disabled={busy || !loaded} onClick={() => { setCreatingProject(value => !value); setProjectId(''); }}><Plus size={16} /> 新建项目</button></div>
+            <div className="sc-studio-manager-heading"><div><p className="sc-studio-manager-eyebrow">{selected.name}</p><h1>{project ? project.name : '项目'}</h1><p>项目归属当前工作室，工作室成员共享访问与编辑权限。</p></div><button className="sc-studio-manager-primary" disabled={busy || !loaded} onClick={() => router.replace('/editor/')}><Plus size={16} /> 新建项目</button></div>
             <aside className="sc-studio-manager-notice">{draft && draftItems > 0 ? <>本机画布上还留着「{draft.name}」，{draftItems} 件物料。<Link className="sc-studio-manager-open" href="/editor/">继续上次活动</Link></> : '本机画布还没有草稿。'}<Link className="sc-studio-manager-open" href="/editor/?restore=backup">从本机备份恢复</Link></aside>
-            {creatingProject && <form className="sc-studio-manager-form sc-studio-manager-inset" onSubmit={event => { event.preventDefault(); if (!name.trim() || !loaded) return; void run(async () => {
-              const created = await controller.createProject(studioId, name.trim(), emptyProjectScene());
-              router.push(`/editor/?project=${encodeURIComponent(created.id)}`);
-            }); }}><h2>新建活动方案</h2><p>归属工作室：<strong>{selected.name}</strong></p><p>先起个名字就好。场地尺寸到画布里说一声就有，不必现在量。</p><label>方案名称<input maxLength={120} required value={name} onChange={event => setName(event.target.value)} /></label><button className="sc-studio-manager-primary" disabled={busy || !cloud.writeBlocked || !name.trim()}>创建并打开</button></form>}
             {project ? <section className="sc-studio-manager-project-detail"><button onClick={() => setProjectId('')}>← 返回项目列表</button><dl><div><dt>所属工作室</dt><dd>{selected.name}</dd></div><div><dt>云端版本</dt><dd>V{project.revision}</dd></div></dl><h2>参与人员 <span>{members.length}</span></h2><p>继承「{selected.name}」的全部成员，无需为项目单独分配。</p><ul className="sc-studio-manager-members">{members.map(member => <li key={member.userId}><span className="sc-studio-manager-avatar">{member.displayName.slice(0, 1)}</span><strong>{member.displayName}</strong><span>{roleLabel(member.role)}</span></li>)}</ul><button onClick={() => openPanel('members')}>管理工作室成员</button>{cloud.writeBlocked || cloud.project?.id === project.id ? <Link className="sc-studio-manager-open" href={`/editor/?project=${encodeURIComponent(project.id)}`}>打开方案 <ArrowUpRight size={16} /></Link> : <p>请先释放当前项目的编辑权</p>}{isOwner && <button className="sc-studio-manager-delete-project" disabled={busy || !cloud.writeBlocked} onClick={() => {
               if (!window.confirm(`删除「${project.name}」？项目将被移除，客户分享链接立即失效。`)) return;
               void run(async () => {

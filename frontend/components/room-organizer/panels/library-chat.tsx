@@ -9,7 +9,7 @@ export function LibraryChat({ title, headerAction, children }: {
   return <div className="sc-library-chat">
     <div className="sc-library-chat-title"><h3>{title}</h3>{headerAction}</div>
     <details className="sc-library-chat-disclosure">
-      <summary><MessageSquare size={15} aria-hidden="true"/>Chat<ChevronDown size={14} aria-hidden="true"/></summary>
+      <summary><MessageSquare size={15} aria-hidden="true"/>对话<ChevronDown size={14} aria-hidden="true"/></summary>
       <div className="sc-library-chat-content">{children}</div>
     </details>
   </div>;

@@ -8,7 +8,13 @@ import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementBatchGuard, type CatalogPlacementGuard, type CatalogPlacementResult } from '../lib/catalog-placement-guard';
 import { layoutStore } from '../hooks/use-layout-store';
-import { CATALOG_GROUPS } from '../lib/catalog-taxonomy';
+import { CROWD_TYPES, crowdTypeModelSlugs } from '../lib/crowd-types';
+import { planningIcon } from '../components/outdoor-plan-icons';
+import { CROWD_GROUP_LABEL, MATERIAL_GROUP_LABELS, materialGroupLabel } from '../lib/material-taxonomy';
+import { INFRA_CATEGORY_ORDER, INFRA_ROW_LABEL } from '../lib/oneplan-catalog';
+import { libraryEntries, type LibraryEntry, type OneplanManifest } from '../lib/oneplan-library';
+import { oneplanStickerSrc, oneplanStickerUsesChip, type OneplanStickerDescriptor } from '../lib/oneplan-stickers';
+import { planStickerForModel } from '../lib/plan-icon-for-model';
 import {
   addCustomTag, emptyMaterialLibraryMeta, loadMaterialLibraryMeta, saveMaterialLibraryMeta, toggleAssignment, toggleFavorite,
   type MaterialLibraryMeta,
@@ -16,7 +22,7 @@ import {
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
 import { usePendingMaterials } from '../lib/material-generate';
 import { importLatestPendingMaterials, importPendingMaterial, LUX3D_TASK_POLL_MS } from '../lib/lux3d-import';
-import { filterOnlineModels, loadOnlineModels, onlineBucketLabel } from '../lib/online-models';
+import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { buildStyleBundleItems, findStyleBundle, loadStyleRuns, saveStyleRun, type StyleBundle, type StyleRun } from '../lib/style-bundles';
 import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
@@ -88,6 +94,14 @@ export function onlineModelDisplayName(model: OnlineModel): string {
   return subject || model.name;
 }
 
+function PlanIconBadge({ sticker }: { sticker: OneplanStickerDescriptor }): JSX.Element {
+  return (
+    <span className={`sc-lib-plan-icon${oneplanStickerUsesChip(sticker) ? ' is-chip' : ''}`} aria-hidden="true">
+      <img src={oneplanStickerSrc(sticker)} alt="" width={14} height={14} />
+    </span>
+  );
+}
+
 export interface OnlineModelLibraryProps {
   controller?: BackendSession;
   capturePlacement?: () => CatalogPlacementGuard;
@@ -100,6 +114,12 @@ export interface OnlineModelLibraryProps {
   onAdd(item: CatalogItem): CatalogPlacementResult | void;
   /** 点一套风格：整组一次落进画布（位置与尺寸已算好，带 id/position/rotation）。 */
   onAddSet?(items: FurnitureItem[]): void;
+  /**
+   * 2026-11-12 统一放置流程（用户拍板）：提供了它，鼠标点物料就不再直接落正中，
+   * 而是载入后进入「待放置」（同户外：点哪放哪， Esc/取消放置退出）；
+   * 拖拽到画布仍是拖哪落哪。键盘 Enter 走 onAdd 的键盘放置会话，不受影响。
+   */
+  onArmCatalogItem?(item: CatalogItem): void;
   /** 画布场地尺寸：风格套按它缩放，小场地放不下就不放。 */
   roomSize?: { width: number; depth: number };
   /** 物料卡（三块并排）：我的生成 / 收藏 / 库。 */
@@ -107,17 +127,32 @@ export interface OnlineModelLibraryProps {
   /** 本机 GLB 导入入口，跟着物料轨一起走，不另开一栏。 */
   importSlot?: ReactNode;
   walkRoleSlot?: ReactNode;
+  /** 按人群类型分组的可走动模型；和库内低模可以同时出现。 */
+  walkRoles?: readonly {
+    id: string;
+    name: string;
+    image: string;
+    walkable: boolean;
+    note?: string;
+    crowdType?: string;
+    selected: boolean;
+    onSelect(): void;
+  }[];
   createSlot?: ReactNode;
 }
 
-export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, cardMode = false, importSlot, walkRoleSlot, createSlot }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, onArmCatalogItem, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, cardMode = false, importSlot, walkRoleSlot, walkRoles = [], createSlot }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
   const [placeError, setPlaceError] = useState('');
   const [query, setQuery] = useState('');
-  // 物料卡三块的当前页：我的生成 / 收藏 / 库。三块只是入口，结果都在下方同一块内容区。
-  const [pane, setPane] = useState<'mine' | 'fav' | 'lib' | 'walk'>('lib');
+  // 物料卡四块的当前页：我的生成 / 收藏 / 库 / 不同人群。四块只是入口，结果都在下方同一块内容区。
+  const [pane, setPane] = useState<'mine' | 'fav' | 'lib' | 'crowd'>('lib');
+  const [libSection, setLibSection] = useState<'infra' | 'crowd' | 'recent' | null>('infra');
+  const [libSubgroup, setLibSubgroup] = useState<string | null>(null);
+  const [crowdSection, setCrowdSection] = useState<string | null>(null);
+  const [planEntries, setPlanEntries] = useState<LibraryEntry[]>([]);
   // 一张卡两种高度：收起只露一行素材，展开看完整网格；收起把高度还给下面 chat。
   const [bucket, setBucket] = useState('');
   const [visible, setVisible] = useState(PAGE_SIZE);
@@ -139,8 +174,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller?.config.apiUrl) {
     placementIdentity.current = { controller, apiUrl: controller?.config.apiUrl, epoch: placementIdentity.current.epoch + 1 };
   }
-  const latest = useRef({ disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, busy });
-  latest.current = { disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, busy };
+  const latest = useRef({ disabled, onAdd, onAddSet, onArmCatalogItem, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, busy });
+  latest.current = { disabled, onAdd, onAddSet, onArmCatalogItem, roomSize, controller, capturePlacement, capturePlacementBatch, renderedLayout, busy };
   const placements = useRef(new Set<CatalogPlacementGuard>());
   const batchQueue = useRef<OnlineModel[]>([]);
   const batchGuard = useRef<CatalogPlacementBatchGuard | null>(null);
@@ -155,6 +190,16 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     setGenerated(generatedMaterialCards());
     setStyleRuns(loadStyleRuns(window.localStorage));
     setRecent(loadRecentSlugs(window.localStorage));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/oneplan-icons/manifest.json')
+      .then(response => (response.ok ? response.json() : Promise.reject()))
+      .then((manifest: OneplanManifest) => {
+        if (!cancelled) setPlanEntries(libraryEntries(manifest.assets ?? []));
+      })
+      .catch(() => { /* 类目默认贴纸仍然可用 */ });
+    return () => { cancelled = true; };
   }, []);
   useEffect(() => { const activePlacements = placements.current; alive.current = true; return () => {
     alive.current = false;
@@ -267,7 +312,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     });
   }, [generated, pending, query, bucket, meta.favorites, meta.assignments]);
   const cards = useHorizontalRail<HTMLDivElement>();
-  const reservedTags = CATALOG_GROUPS.map(group => group.label);
+  const reservedTags = MATERIAL_GROUP_LABELS as readonly string[];
   // 最近用过：把 slug 解析回 OnlineModel；库里已下架的条目直接丢。
   const recentModels = useMemo<OnlineModel[]>(() => {
     if (!index) return [];
@@ -336,6 +381,37 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       batchGuard.current.assertCurrent();batchQueue.current.push(model);setQueuedCount(batchQueue.current.length);setPlaceError('');void drainOnline();
     }catch(error){if(alive.current)setPlaceError(error instanceof Error?error.message:'场景状态已变化，请重新添加。');}
   };
+
+  /**
+   * 2026-11-12 统一放置流程：点物料 = 载入后进入「待放置」，点哪放哪（同户外）；
+   * 不再直接落正中。键盘 Enter 路径仍走 addOnline（正中 + 方向键微调会话）。
+   */
+  const armOnline = (model: OnlineModel) => {
+    if (latest.current.disabled) { setPlaceError('当前场景物料已满，请先腾出位置。'); return; }
+    if (latest.current.busy) { setPlaceError('正在处理其他物料，请稍后再试。'); return; }
+    latest.current.busy = model.slug; setBusy(model.slug); setPlaceError('');
+    void loadOnlineCatalogItem(model, latest.current.controller).then(item => {
+      if (!alive.current) return;
+      setRecent(pushRecentSlug(window.localStorage, model.slug));
+      latest.current.onArmCatalogItem?.(item);
+    }).catch((error: unknown) => {
+      if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
+    }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
+  };
+  /** 「我的生成」点选：载入后进「待放置」（同上）。 */
+  const armGenerated = (card: GeneratedCard) => {
+    if (latest.current.disabled || latest.current.busy || importing.current) return;
+    latest.current.busy = card.id; setBusy(card.id); setPlaceError('');
+    void loadStoredAholoCatalogItem(card.id).then(item => {
+      if (!alive.current) return;
+      latest.current.onArmCatalogItem?.(item);
+    }).catch((error: unknown) => {
+      if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
+    }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
+  };
+  /** 点物料：宿主支持「待放置」就走 arm，否则回落旧的直接放置。 */
+  const clickModel = (model: OnlineModel) => (latest.current.onArmCatalogItem ? armOnline(model) : addOnline(model));
+  const clickGenerated = (card: GeneratedCard) => (latest.current.onArmCatalogItem && !card.id.startsWith('pending:') ? armGenerated(card) : placeGenerated(card));
 
   if (loadState === 'loading') {
     return <p className="sc-note" role="status">正在载入线上模型库…</p>;
@@ -412,6 +488,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     const favoriteRows = favoriteModels.length + favoriteGenerated.length;
     // 「库」只装公共素材：收藏过的留给「收藏」，自己的生成物留给「我的生成」，三栏互斥。
     const libraryModels = index.models.filter(model => !meta.favorites.includes(model.slug));
+    // 「不同人群」页直接列素材库里的人物模型（可能一个设施对应多个模型，全部列出，不去重）。
+    const peopleModels = index.models.filter(model => materialGroupLabel(model.bucket) === '不同人群');
     const libraryFiltered = (() => {
       if (!query.trim() && bucket === '__fav') return [];
       if (!query.trim() && bucket === '__generated') return [];
@@ -429,19 +507,69 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       // 最近用过：收藏过的留给「收藏」页，不在库里重复；下架的条目由 recentModels 自动丢。
       const recentInLib = recentModels.filter(model => !meta.favorites.includes(model.slug));
       if (recentInLib.length > 0) groups.push({ key: 'recent', label: '最近用过', models: recentInLib });
-      const byBucket = new Map<string, OnlineModel[]>();
+      // 按基础设施分类分组（物料库与户外规划同一套口径），类目内维持库里的顺序。
+      const byGroup = new Map<string, OnlineModel[]>();
       for (const model of libraryShown) {
-        const list = byBucket.get(model.bucket) ?? [];
-        list.push(model); byBucket.set(model.bucket, list);
+        const key = materialGroupLabel(model.bucket);
+        const list = byGroup.get(key) ?? [];
+        list.push(model); byGroup.set(key, list);
       }
-      for (const [key, models] of byBucket) groups.push({ key, label: onlineBucketLabel(key), models });
+      const order = new Map<string, number>(MATERIAL_GROUP_LABELS.map((label, index) => [label, index]));
+      for (const [key, models] of [...byGroup.entries()].sort((a, b) => {
+        const ai = order.get(a[0]) ?? Number.MAX_SAFE_INTEGER;
+        const bi = order.get(b[0]) ?? Number.MAX_SAFE_INTEGER;
+        return ai - bi;
+      })) groups.push({ key, label: key, models });
     }
+    const searching = Boolean(query.trim());
+    const recentInLib = recentModels.filter(model => !meta.favorites.includes(model.slug));
+    const infraGroups = (() => {
+      const byGroup = new Map<string, OnlineModel[]>();
+      for (const model of libraryModels) {
+        const key = materialGroupLabel(model.bucket);
+        if (key === CROWD_GROUP_LABEL) continue;
+        const list = byGroup.get(key) ?? [];
+        list.push(model);
+        byGroup.set(key, list);
+      }
+      const ordered: { label: string; models: OnlineModel[] }[] = [];
+      const seen = new Set<string>();
+      for (const label of INFRA_CATEGORY_ORDER) {
+        const models = byGroup.get(label);
+        if (models?.length) { ordered.push({ label, models }); seen.add(label); }
+      }
+      for (const [label, models] of byGroup) {
+        if (!seen.has(label) && models.length) ordered.push({ label, models });
+      }
+      return ordered;
+    })();
+    const crowdInLib = libraryModels.filter(model => materialGroupLabel(model.bucket) === CROWD_GROUP_LABEL);
+    const infraCount = infraGroups.reduce((sum, group) => sum + group.models.length, 0);
+    const openSubgroup = libSection === 'infra' ? (libSubgroup === '' ? '' : (libSubgroup ?? infraGroups[0]?.label ?? '')) : '';
+    const TentIcon = planningIcon('tent');
+    const UsersIcon = planningIcon('users');
+    const treeRow = (opts: { level: 'section' | 'sub'; label: string; count: number; open: boolean; icon?: JSX.Element; hint?: string; onToggle: () => void }) => (
+      <button type="button" className={`sc-lib-tree-row is-${opts.level}${opts.open ? ' is-open' : ''}`} aria-expanded={opts.open} aria-label={`${opts.label} ${opts.count}`} onClick={opts.onToggle}>
+        <span className="sc-lib-tree-chevron" aria-hidden="true">{opts.open ? '▾' : '▸'}</span>
+        {opts.icon}
+        <span className="sc-lib-tree-name">{opts.label}</span>
+        {opts.hint && <span className="sc-lib-tree-hint">{opts.hint}</span>}
+        <span className="sc-lib-tree-count">{opts.count}</span>
+      </button>
+    );
     const tile = (model: OnlineModel, withFavorite = false) => {
       const name = onlineModelDisplayName(model);
       const favorited = meta.favorites.includes(model.slug);
       return <li className="sc-lib-tile" key={model.slug}>
-        <button type="button" className="sc-lib-tile-btn" disabled={disabled || (busy !== null && !batchRunning.current)} onClick={() => addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n点击放入空间`}>
-          <span className="sc-lib-tile-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
+        <button type="button" className="sc-lib-tile-btn" disabled={disabled || (busy !== null && !batchRunning.current)}
+          draggable={!disabled && busy === null}
+          onDragStart={event => {
+            if (disabled || busy !== null) { event.preventDefault(); return; }
+            event.dataTransfer.setData(CATALOG_DRAG_MIME, `online:${model.slug}`);
+            event.dataTransfer.effectAllowed = 'copy';
+          }}
+          onClick={() => clickModel(model)} aria-label={`添加${name}`} title={`${model.name}\n拖到场地落下，或点一下再点场地选位`}>
+          <span className="sc-lib-tile-thumb"><span className="sc-lib-tile-photo">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span><PlanIconBadge sticker={planStickerForModel(model, planEntries)}/></span>
           <span className="sc-lib-tile-name">{name}</span>
           {busy === model.slug && <span className="sc-lib-tile-add" role="status">放入中…</span>}
         </button>
@@ -455,8 +583,15 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       const cloudRecord = !pendingCard && !card.shipped ? cloudRecords[card.id] : undefined;
       const cloudState = cloudRecord ? assetCloudLabel(cloudRecord.state, cloudRecord.progress) : '';
       return <li className="sc-lib-tile" key={card.id}>
-        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null} onClick={() => placeGenerated(card)} aria-label={`${pendingCard ? `取回${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={pendingCard ? `${card.name}\n生成中，点一下立即取回` : `${card.name}\n生成的物料${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
-          <span className="sc-lib-tile-thumb">{card.image ? <MaterialThumb src={card.image}/> : <span className="sc-material-thumb-empty">{pendingCard ? <Loader2 className="cr-spin" size={12}/> : '生'}</span>}</span>
+        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null}
+          draggable={!disabled && busy !== null ? false : !pendingCard}
+          onDragStart={event => {
+            if (disabled || busy !== null || pendingCard) { event.preventDefault(); return; }
+            event.dataTransfer.setData(CATALOG_DRAG_MIME, `generated:${card.id}`);
+            event.dataTransfer.effectAllowed = 'copy';
+          }}
+          onClick={() => clickGenerated(card)} aria-label={`${pendingCard ? `取回${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={pendingCard ? `${card.name}\n生成中，点一下立即取回` : `${card.name}\n拖到场地落下，或点一下再点场地选位${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
+          <span className="sc-lib-tile-thumb"><span className="sc-lib-tile-photo">{card.image ? <MaterialThumb src={card.image}/> : <span className="sc-material-thumb-empty">{pendingCard ? <Loader2 className="cr-spin" size={12}/> : '生'}</span>}</span><PlanIconBadge sticker={planStickerForModel({ name: card.name, slug: card.id }, planEntries)}/></span>
           <span className="sc-lib-tile-name">{card.name}{cloudState && <small> · {cloudState}</small>}</span>
         </button>
         {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${card.name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, card.id))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
@@ -474,10 +609,52 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         <button type="button" aria-pressed={pane === 'lib'} onClick={() => setPane('lib')}>物料库</button>
         <button type="button" aria-pressed={pane === 'fav'} onClick={() => setPane('fav')}>收藏</button>
         <button type="button" aria-pressed={pane === 'mine'} onClick={() => setPane('mine')}>我的生成</button>
-        <button type="button" aria-pressed={pane === 'walk'} onClick={() => setPane('walk')}>漫游角色</button>
+        <button type="button" aria-pressed={pane === 'crowd'} onClick={() => setPane('crowd')}>不同人群</button>
       </nav>
       <div className="sc-lib-results" aria-live="polite">
-        {pane === 'walk' ? (walkRoleSlot ?? <p className="sc-lib-empty">暂无可用的漫游角色</p>) : pane === 'fav'
+        {pane === 'crowd' ? <div className="sc-lib-tree" aria-label="不同人群">
+          {CROWD_TYPES.map(type => {
+            const models = crowdTypeModelSlugs(type.id).flatMap(slug => {
+              const model = peopleModels.find(entry => entry.slug === slug);
+              return model ? [model] : [];
+            });
+            const roles = walkRoles.filter(role => (role.crowdType ?? 'performer') === type.id);
+            const count = models.length + roles.length;
+            if (count === 0) return null;
+            const open = crowdSection === type.id;
+            return <div key={type.id} data-crowd-type={type.id}>
+              {treeRow({
+                level: 'section',
+                label: type.name,
+                count,
+                open,
+                icon: <UsersIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
+                hint: type.note,
+                onToggle: () => setCrowdSection(current => current === type.id ? null : type.id),
+              })}
+              {open && <ul className="sc-lib-grid sc-lib-tree-panel" aria-label={`${type.name}模型`}>
+                {roles.map(role => <li className="sc-lib-tile" key={role.id}>
+                  <button type="button" className={`sc-lib-tile-btn${role.selected ? ' is-selected' : ''}`}
+                    aria-pressed={role.selected} disabled={!role.walkable}
+                    aria-label={role.walkable ? `选用${role.name}漫游` : `${role.name}无法漫游`}
+                    title={role.note ?? (role.selected ? '当前角色，右侧「进入漫游」用它' : `点一下换成${role.name}`)}
+                    onClick={role.onSelect}>
+                    <span className="sc-lib-tile-thumb">
+                      <span className="sc-lib-tile-photo">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={role.image} alt={`${role.name}全身预览`} loading="lazy"/>
+                      </span>
+                      <span className="sc-lib-tile-badge">漫游</span>
+                    </span>
+                    <span className="sc-lib-tile-name">{role.name}</span>
+                  </button>
+                </li>)}
+                {models.map(model => tile(model, true))}
+              </ul>}
+            </div>;
+          })}
+          {walkRoles.length === 0 && walkRoleSlot && <div className="sc-lib-tree-panel">{walkRoleSlot}</div>}
+        </div> : pane === 'fav'
           ? (favoriteRows === 0
             ? <p className="sc-lib-empty"><Star size={14} aria-hidden="true"/><span>还没有收藏</span></p>
             : <ul className="sc-lib-grid">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)
@@ -506,23 +683,57 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               <Search size={14} aria-hidden="true"/>
               <input aria-label="搜索全库线上模型" placeholder="搜索库内素材" value={query} onChange={event => setQuery(event.target.value)}/>
             </label>
-            <div className="sc-lib-tools">
-              <div className="sc-lib-chips" role="group" aria-label="物料分类">
-                {chip('', '全部', 0, LayoutGrid, false)}
-                {index.buckets.map(entry => chip(entry.key, entry.label, entry.count, undefined, false))}
+            {searching ? <>
+              <ul className="sc-lib-list">
+                {groups.map(group => <li className="sc-lib-group" key={group.key}>
+                  {group.label && <small><span>{group.label}</span></small>}
+                  <ul className="sc-lib-grid">{group.models.map(modelRow)}</ul>
+                </li>)}
+              </ul>
+              {libraryFiltered.length === 0 && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>没有匹配的模型</span></p>}
+              {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
+            </> : libraryModels.length === 0 ? (
+              <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>库里没有可用的公共素材</span></p>
+            ) : (
+              <div className="sc-lib-tree">
+                {recentInLib.length > 0 && <>
+                  <div className="sc-lib-tree-recent">
+                    {treeRow({ level: 'section', label: '最近用过', count: recentInLib.length, open: libSection === 'recent', onToggle: () => setLibSection(current => current === 'recent' ? 'infra' : 'recent') })}
+                    <button type="button" className="sc-lib-tree-clear" aria-label="清空最近用过" onClick={() => { setRecent(clearRecentSlugs(window.localStorage)); setLibSection('infra'); }}>清空</button>
+                  </div>
+                  {libSection === 'recent' && <ul className="sc-lib-grid sc-lib-tree-panel" role="list" aria-label="最近用过">{recentInLib.map(modelRow)}</ul>}
+                </>}
+                {treeRow({
+                  level: 'section',
+                  label: INFRA_ROW_LABEL,
+                  count: infraCount,
+                  open: libSection === 'infra',
+                  icon: <TentIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
+                  onToggle: () => { setLibSection(current => current === 'infra' ? null : 'infra'); setLibSubgroup(null); },
+                })}
+                {libSection === 'infra' && infraGroups.map(group => <div key={group.label}>
+                  {treeRow({
+                    level: 'sub',
+                    label: group.label,
+                    count: group.models.length,
+                    open: openSubgroup === group.label,
+                    onToggle: () => setLibSubgroup(current => (current ?? infraGroups[0]?.label) === group.label ? '' : group.label),
+                  })}
+                  {openSubgroup === group.label && <ul className="sc-lib-grid sc-lib-tree-panel">{group.models.map(modelRow)}</ul>}
+                </div>)}
+                {treeRow({
+                  level: 'section',
+                  label: CROWD_GROUP_LABEL,
+                  count: crowdInLib.length,
+                  open: libSection === 'crowd',
+                  icon: <UsersIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
+                  onToggle: () => setLibSection(current => current === 'crowd' ? 'infra' : 'crowd'),
+                })}
+                {libSection === 'crowd' && (crowdInLib.length > 0
+                  ? <ul className="sc-lib-grid sc-lib-tree-panel">{crowdInLib.map(modelRow)}</ul>
+                  : <p className="sc-lib-empty"><span>这一类还没有模型</span></p>)}
               </div>
-            </div>
-            <ul className="sc-lib-list">
-              {groups.map(group => <li className="sc-lib-group" key={group.key}>
-                {group.label && <small className={group.key === 'recent' ? 'sc-lib-group-head' : ''}>
-                  <span>{group.label}</span>
-                  {group.key === 'recent' && <button type="button" className="sc-lib-clear-recent" aria-label="清空最近用过" onClick={() => setRecent(clearRecentSlugs(window.localStorage))}>清空</button>}
-                </small>}
-                <ul>{group.models.map(modelRow)}</ul>
-              </li>)}
-            </ul>
-            {groups.every(group => group.models.length === 0) && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>{!query.trim() && !bucket && libraryModels.length === 0 ? '库里没有可用的公共素材' : '没有匹配的模型'}</span></p>}
-            {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
+            )}
           </>}
         {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
         {queuedCount>0 && <p className="sc-material-note" role="status">还有 {queuedCount} 件等待添加。</p>}
@@ -565,7 +776,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           {recentModels.map(model => {
             const name = onlineModelDisplayName(model);
             return <li className="sc-recent-item" key={model.slug}>
-              <button type="button" className="sc-recent-tile" disabled={disabled || (busy !== null && !batchRunning.current)} onClick={() => addOnline(model)} aria-label={`添加${name}`} title={model.name}>
+              <button type="button" className="sc-recent-tile" disabled={disabled || (busy !== null && !batchRunning.current)} onClick={() => clickModel(model)} aria-label={`添加${name}`} title={`${model.name}\n拖到场地落下，或点一下再点场地选位`}>
                 <span className="sc-recent-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
                 <span className="sc-recent-name">{name}</span>
               </button>
@@ -589,14 +800,15 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               if (disabled || busy !== null) { event.preventDefault(); return; }
               event.dataTransfer.setData(CATALOG_DRAG_MIME, `online:${model.slug}`);
               event.dataTransfer.effectAllowed = 'copy';
-              const thumb = event.currentTarget.querySelector('img');
+              const thumb = event.currentTarget.querySelector('.sc-lib-tile-photo img');
               if (thumb) event.dataTransfer.setDragImage(thumb, thumb.clientWidth / 2, thumb.clientHeight / 2);
             }}
-            onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n拖到空间或直接点击添加`}>
+            onClick={() => clickModel(model)} aria-label={`添加${name}`} title={`${model.name}\n拖到空间或直接点击添加`}>
             <span className="sc-material-preview">
-              {model.thumb
+              <span className="sc-lib-tile-photo">{model.thumb
                 ? <MaterialThumb src={model.thumb}/>
-                : <span className="sc-material-thumb-empty">暂无预览</span>}
+                : <span className="sc-material-thumb-empty">暂无预览</span>}</span>
+              <PlanIconBadge sticker={planStickerForModel(model, planEntries)}/>
               {busy === model.slug && <span className="sc-material-add"><Loader2 className="cr-spin" size={12}/></span>}
             </span>
             <span className="sc-material-name">{name}</span>
@@ -615,23 +827,18 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         const cloudState = cloudRecord ? assetCloudLabel(cloudRecord.state, cloudRecord.progress) : '';
         return <div className="sc-material-tile" key={card.id}>
           <button type="button" className="sc-material-card" disabled={disabled || busy !== null || pendingCard}
-            onClick={() => {
-              if (pendingCard || latest.current.disabled || latest.current.busy) return;
-              latest.current.busy = card.id;
-              setBusy(card.id);
-              setPlaceError('');
-              void loadStoredAholoCatalogItem(card.id).then(item => {
-                if (!alive.current) return;
-                latest.current.onAdd(item);
-              }).catch((error: unknown) => {
-                if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
-              }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
+            draggable={!disabled && busy !== null ? false : !pendingCard}
+            onDragStart={event => {
+              if (disabled || busy !== null || pendingCard) { event.preventDefault(); return; }
+              event.dataTransfer.setData(CATALOG_DRAG_MIME, `generated:${card.id}`);
+              event.dataTransfer.effectAllowed = 'copy';
             }}
-            aria-label={`${pendingCard ? `生成中 ${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={`${card.name}\n生成${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
+            onClick={() => clickGenerated(card)} aria-label={`${pendingCard ? `生成中 ${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={`${card.name}\n拖到空间或直接点击添加${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
             <span className="sc-material-preview">
-              {card.image
+              <span className="sc-lib-tile-photo">{card.image
                 ? <MaterialThumb src={card.image}/>
-                : <span className="sc-material-thumb-empty">{busy === card.id ? <Loader2 className="cr-spin" size={14}/> : '生成'}</span>}
+                : <span className="sc-material-thumb-empty">{busy === card.id ? <Loader2 className="cr-spin" size={14}/> : '生成'}</span>}</span>
+              <PlanIconBadge sticker={planStickerForModel({ name: card.name, slug: card.id }, planEntries)}/>
             </span>
             <span className="sc-material-name">{card.name}{cloudState && <small> · {cloudState}</small>}</span>
           </button>

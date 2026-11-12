@@ -49,11 +49,25 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
 import {reviewLocalSeatingWitness,type LocalSeatingReview} from '../lib/local-seating-witness';
+import { eventPreviewScale, isBanquetUtterance, isRoundResizeUtterance, leadOnStandingHall } from '../lib/event-layout-agent';
+import { layoutFurnishing } from '../lib/furnishing-select';
+import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
 import { mergeSeatingAllocation } from '../lib/seating-allocation';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
-import { createPresetResearchArea, createResearchArea, lookupPlace, matchResearchCommand, XIHU_SCENIC_PRESET } from '../lib/research-area';
+import {
+  boundsAround,
+  createResearchArea,
+  lookupPlace,
+  matchResearchCommand,
+  DEFAULT_RESEARCH_RADIUS_M,
+  RESEARCH_SATELLITE_STYLE,
+  XIHU_LOCAL_CENTER,
+  XIHU_LOCAL_NAME,
+  XIHU_LOCAL_PLACE,
+  XIHU_LOCAL_SPAN_M,
+} from '../lib/research-area';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
@@ -73,7 +87,7 @@ import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicabl
 import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
 import { clearLaneActivity, setLaneActivity } from '../lib/lane-status';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
-import { canApplyLayoutGeometry, isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
+import { canApplyLayoutGeometry, isStructuralMarker, materialCount, structuralItemCollides, venueArea } from '../lib/structural-layout';
 import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
@@ -93,12 +107,12 @@ import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
 import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
-import { failOpenLocalStep, finishLocalLayoutRun, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { failOpenLocalStep, finishLocalLayoutRun, notePriorLayoutTool, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
-import { AGENT_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, STYLE_RUNS_KEY, type StyleBundle } from '../lib/style-bundles';
 import { editorItemLimit } from '../lib/scene-presets';
 import {
@@ -209,6 +223,10 @@ interface ProposalView extends PendingPlan {
   skipped?: string[];
   /** 没放进去的件数与原因；有它就按条说，不再只报一个总数。 */
   diagnostics?: PlanDiagnostic[];
+  /** Banquet preview keeps the audit ledger off the card. */
+  receipt?: 'banquet';
+  /** Tables this banquet pass actually placed. */
+  placedTables?: number;
   venueChange?: string;
   removedZones?: number;
   restPreview?: string[];
@@ -227,6 +245,15 @@ interface ProposalView extends PendingPlan {
   localDraftDetails?: string[];
   seatingReview?:LocalSeatingReview;
   existingChanges?: ExistingChangeDescription[];
+}
+
+/** A birthday or banquet session must not keep the launch-party composer example. */
+function isBanquetSession(memory: BriefMemory): boolean {
+  if (memory.furnishing?.source === 'select_furnishing') return true;
+  const table = memory.banquetTable;
+  if (table?.shape || table?.width || table?.peoplePerTable) return true;
+  const occasion = memory.eventIntent?.occasion ?? memory.event ?? '';
+  return /宴|酒会|年会|派对|聚会/.test(occasion);
 }
 
 function seatRequirement(layout: RoomLayout | undefined, floorIndex: number, memory: BriefMemory): { blocked: string | null; warning: string | null } {
@@ -346,6 +373,7 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
     overlapCount: plan.overlapCount, overlapNames: plan.overlapNames, outcome: venueChange && outcome.empty ? { ...outcome, empty: null } : outcome,
     source: 'local', keptLocked: plan.keptLocked, dropped: plan.dropped, blocked: plan.blocked,
     guests: plan.guests ?? null, seats: plan.seats ?? 0, seatPriority: !!plan.seatPriority,
+    ...(plan.receipt === 'banquet' ? { receipt: 'banquet' as const, placedTables: placedBanquetTables(plan, base) } : {}),
     review: plan.kind === 'review', skipped: plan.skipped ?? [], diagnostics: plan.diagnostics ?? [],
     ...(venueChange ? { venueChange } : {}), ...(removedZones ? { removedZones } : {}),
     ...(restPreview.length ? { restPreview } : {}),
@@ -362,6 +390,13 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
     })()),
     ...((plan as PlanProposal & {localDraftDetails?:string[]}).localDraftDetails ? {localDraftDetails:(plan as PlanProposal & {localDraftDetails:string[]}).localDraftDetails} : {}),
   };
+}
+
+function placedBanquetTables(plan: PlanProposal, base?: RoomLayout): number {
+  const candidate = plan.layouts.at(-1);
+  if (!candidate) return 0;
+  const baseIds = new Set(base?.floors.flatMap(floor => floor.items.map(item => item.id)) ?? []);
+  return candidate.floors.reduce((sum, floor, index) => sum + floor.items.filter(item => item.type === 'dining-table' && !item.structuralColumnId && !baseIds.has(item.id) && !structuralItemCollides(item, candidate, index)).length, 0);
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
@@ -443,6 +478,8 @@ interface AgentValue {
   baseName: string | null; issue: FileIssue | null; dragging: boolean;
   /** 对话已收集字段的只读回显（截图钉 2026-10-26 夜：表单不再当第二套生成入口）。 */
   recap: { event: string | null; guests: string | null; dims: string; note: string | null };
+  /** Birthday or banquet: composer examples follow this session, not the launch-party prompt. */
+  banquetChat: boolean;
   /** 画布上已经有一个立起来的场地（墙/门/尺寸都是场地真相）：第 ① 步就算过了。 */
   venueUp: boolean;
   progress: number; failed: boolean; overlapCount: number; bubbles: Bubble[];
@@ -577,6 +614,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const planPixels = useRef<{ width: number; height: number } | null>(null);
   // 人嘴里说过的要素（人数/活动名/布置形态），本地模式下就是回放的唯一真相（云端仍走 studio.brief）。
   const [brief, setBrief] = useState<{ event: string | null; guests: number | null; layoutMode: LayoutMode }>({ event: null, guests: null, layoutMode: 'dining' });
+  const [banquetChat, setBanquetChat] = useState(false);
   // 异步播报里要读最新那句的人数/活动名，不能读 setBrief 之前那一帧的闭包。
   const briefRef = useRef(brief); briefRef.current = brief;
   // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
@@ -850,6 +888,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const nextBrief = { event: nextMemory.event, guests: nextMemory.headcount, layoutMode: nextMemory.layoutMode };
     briefRef.current = nextBrief;
     setBrief(nextBrief);
+    setBanquetChat(isBanquetSession(nextMemory));
     anchorsRef.current = { stage: nextMemory.zoneNeeds.stage === true, checkin: nextMemory.zoneNeeds.checkin === true };
     const loaded = nextId
       ? fromStoredBubbles(readSessionBubbles(getAssistantSessionBodies(sessionScope), nextId))
@@ -864,6 +903,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const next = { event: memory.event, guests: memory.headcount, layoutMode: memory.layoutMode };
     briefRef.current = next;
     setBrief(next);
+    setBanquetChat(isBanquetSession(memory));
   }
 
   function factScaleBound(memory: BriefMemory): boolean {
@@ -1689,6 +1729,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     pushLocalLayoutStep('validate', plan.overlapCount > 0 || plan.blocked ? 'error' : 'done', overlapNote);
     finishLocalLayoutRun();
     phaseRef.current='proposed';setPhase('proposed');
+    if (plan.receipt === 'banquet') return;
     const planView = viewOfLocalPlan(plan, proposalBase.current ?? undefined);
     const tail = planView.review ? '还没落盘。点「确认布置」才挪。' : '还没落盘，点确认才写进画布。';
     const hint = layoutChatHint(plan);
@@ -1929,6 +1970,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false, localDraftNote?:string): Promise<void> {
     if(localDraftNote!==undefined){await runLocalSeatingDraft(token,scale,localDraftNote);return;}
     pushLocalLayoutStep('preview', 'running');
+    const chosen = layoutFurnishing(memoryRef.current.furnishing, memoryRef.current.banquetTable);
+    if (chosen) notePriorLayoutTool('select_furnishing', chosen.reason);
     const before = live.current;
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
@@ -1964,7 +2007,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     let plan: PlanProposal;
     const anchors = anchorsRef.current;
-    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
+    const banquet=memoryRef.current.banquetTable;
+    const perTable=banquet?.peoplePerTable??(memoryRef.current.seatingShape==='ring'&&memoryRef.current.localSeatingAllocation?.status==='shared_desk'?memoryRef.current.localSeatingAllocation.peoplePerDesk:undefined);
+    const tableRequest=banquet||perTable?{...(banquet?.shape?{shape:banquet.shape}:{}),...(banquet?.width!==undefined?{width:banquet.width}:{}),...(banquet?.depth!==undefined?{depth:banquet.depth}:{}),...(perTable?{peoplePerTable:perTable}:{})}:undefined;
+    const furnishing=layoutFurnishing(memoryRef.current.furnishing, banquet);
+    const priorBanquetSeats = furnishing && seatPriority ? priorCardSeats.current : null;
+    try { plan = localPlan({ base: candidateBase, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, ...(memoryRef.current.seatingShape ? { seatingShape: memoryRef.current.seatingShape } : {}), ...(tableRequest ? { table: tableRequest } : {}), ...(furnishing ? { furnishing } : {}), stage: anchors.stage, checkin: anchors.checkin, requireSeats: memoryRef.current.allGuestsSeated === true, requireRest: memoryRef.current.zoneNeeds.rest === true,
       functionalNeeds: { checkin: memoryRef.current.zoneNeeds.checkin, stage: memoryRef.current.zoneNeeds.stage }, mobilityRequired:memoryRef.current.mobilityRequirement?.decision==='needed', ...(memoryRef.current.mobilityRequirement?.decision==='needed'?{mobilityEvidence:memoryRef.current.mobilityRequirement.evidence}:{}) }); }
     catch (error) {
       failOpenLocalStep('这版没出成');
@@ -1977,7 +2025,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const removing = differences.filter(change => change.kind === 'removed' && change.before && !isStructuralMarker(change.before.item)).length;
     const added = differences.filter(change => change.kind === 'added' && change.after && !isStructuralMarker(change.after.item)).length;
     const lockedChanged = differences.filter(change => change.before?.item.locked && !isStructuralMarker(change.before.item)).length;
-    plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}) };
+    plan = { ...plan, removing, added, ...(lockedChanged ? { blocked: `这版会改动 ${lockedChanged} 件锁定物料，请调整后重新生成。` } : {}), ...(furnishing ? { receipt: 'banquet' as const } : {}) };
+    if (priorBanquetSeats !== null && (plan.seats ?? 0) <= priorBanquetSeats && !lockedChanged) {
+      const honest = '室内已经排满，这版加不进更多整桌。';
+      plan = { ...plan, seatPriority: true, blocked: plan.blocked?.includes('加不进更多') ? plan.blocked : `${honest}${plan.blocked ?? ''}` };
+    }
     if(!floorStillCurrent(floorToken)){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
     proposalFloor.current=floorToken;setLocalProposal(withPlanArtifact(withCurrentSeatingReview(plan,null), before)); proposalBase.current = structuredClone(before); shownSteps.current = 0;
     await presentProposal(token);
@@ -2211,7 +2263,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         await runLocal(token,variant,scale,seatPriority,note);
         return;
       }
-      if (studioRef.current?.connection === '项目已连接') {
+      if (studioRef.current?.connection === '项目已连接' && memoryRef.current.furnishing?.source !== 'select_furnishing') {
         if(!cloudScaleMatches(scale)){setPhase('failed');return;}
         suppressCancelledCloudPreview.current=false;
         lastSource.current = 'cloud'; setProgress(1);
@@ -2250,10 +2302,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 生成只有一次触发：对话。这里是被认可后真正跑那一趟的唯一入口，画布上只出预览。 */
   const localDraftIntent = useRef<string|null>(null);
+  /** Seat count on the card before add-seats clears it. `dropProposal` runs first otherwise. */
+  const priorCardSeats = useRef<number | null>(null);
   function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
     if (!sessionScopeIsCurrent()) return;
     if (sessionScope !== 'legacy' && (!isVenueScaleCurrent(memoryRef.current,layoutStore.getState().layout) || !sourceScaleBound(memoryRef.current) || !factScaleBound(memoryRef.current))) { finishLayoutAttempt(false); say({role:'agent',amber:true,text:'场地已变化，请重新说明当前场地尺寸。'}); return; }
-    beginLayoutAttempt(previewUtterance.current || note || label || '', studioRef.current?.connection === '项目已连接');
+    priorCardSeats.current = seatPriority && typeof proposal.current?.seats === 'number' ? proposal.current.seats : null;
+    beginLayoutAttempt(previewUtterance.current || note || label || '', memoryRef.current.furnishing?.source !== 'select_furnishing' && studioRef.current?.connection === '项目已连接');
     localDraftIntent.current=/(?:本地|本机)草案/.test(note)?note:null;
     const token = ++runToken.current;
     if (label) say({ role: 'user', text: label });
@@ -2262,7 +2317,20 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   /** 「这次没出成」那张卡上的重试：拿现在的读数再跑一遍，不另算一个入口。 */
-  function retry(): void { runGeneration('重试', seed.current, localDraftIntent.current??'', readScale()); }
+  function standingHall(): { length: number; width: number } | null {
+    if (!venueIsUp()) return null;
+    return { length: live.current.width, width: live.current.height };
+  }
+  function shellVenueIO(layout: RoomLayout): 'indoor' | 'outdoor' | null {
+    const value = layout.backendSceneV2?.venue?.site?.indoorOutdoor;
+    return value === 'indoor' || value === 'outdoor' ? value : null;
+  }
+  function followUpScale(): Scale {
+    const canvas = readScale();
+    const picked = eventPreviewScale({ ...canvas, fromVenue: venueIsUp() }, memoryRef.current, standingHall());
+    return { length: picked.length, width: picked.width, origin: picked.origin };
+  }
+  function retry(): void { runGeneration('重试', seed.current, localDraftIntent.current??'', followUpScale()); }
   /** 停一下：只收预览，画布退回确认前状态；提案留着，「接着摆」能续上。 */
   function stop(): void {
     if (phaseRef.current !== 'generating' && !generationWait.current) return;
@@ -2290,11 +2358,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
   function regenerate(label = '换一版'): void {
     seed.current += 1;
-    runGeneration(label, seed.current, localDraftIntent.current??(label === '换一版' ? '换一版不同的布局' : ''), readScale());
+    runGeneration(label, seed.current, localDraftIntent.current??(label === '换一版' ? '换一版不同的布局' : ''), followUpScale());
   }
   /** 座位不够时的一点击改法：同一份需求按座位优先重排，仍然只出预览，确认前不落盘。 */
   function addSeats(): void {
-    runGeneration('加座，再排一版', seed.current, '', readScale(), true);
+    runGeneration('加座，再排一版', seed.current, '', followUpScale(), true);
   }
 
   /** T-UI §4-5：导出/交接意图先落预览卡，确认后才在本机直接生成；不跳执行页。 */
@@ -2457,6 +2525,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     if(!queued)say({ role: 'user', text: trimmed });
+    if (isBanquetUtterance(trimmed) || isBanquetSession(memoryRef.current)) setBanquetChat(true);
     if(isPureGreeting(trimmed)){say({role:'agent',text:'你好，我可以帮你梳理活动需求、查看方案或准备布置。'});return;}
     const keepOriginals=preservationIntent(trimmed);
     if(keepOriginals){
@@ -2619,9 +2688,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const beforeSpecs=memoryRef.current;
     const nextSpecs=mergeLocalSeatingSpecs(beforeSpecs.localSeatingSpecs,trimmed);
     const nextAllocation=mergeSeatingAllocation(beforeSpecs.localSeatingAllocation,trimmed);
-    const previousMemory=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation};
+    const nextBanquet=mergeBanquetTable(beforeSpecs.banquetTable,trimmed);
+    const specsUnchanged=JSON.stringify(nextSpecs)===JSON.stringify(beforeSpecs.localSeatingSpecs)&&JSON.stringify(nextAllocation)===JSON.stringify(beforeSpecs.localSeatingAllocation)&&JSON.stringify(nextBanquet)===JSON.stringify(beforeSpecs.banquetTable);
+    const previousMemory=specsUnchanged?beforeSpecs:{...beforeSpecs,localSeatingSpecs:nextSpecs,localSeatingAllocation:nextAllocation,...(nextBanquet?{banquetTable:nextBanquet}:{})};
     if(previousMemory!==beforeSpecs){
-      if(phaseRef.current==='proposed'||phaseRef.current==='paused'){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
+      // Keep the current banquet preview up until a diameter change has a new one.
+      if(!isRoundResizeUtterance(trimmed, beforeSpecs) && (phaseRef.current==='proposed'||phaseRef.current==='paused')){dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
       saveMemory(previousMemory);syncMemory(previousMemory);
     }
     const turnVenueBasis = venueScaleBasis(layoutStore.getState().layout);
@@ -2694,7 +2766,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     const memorySaved=saveMemory(turn.memory);
     releaseTurn();
-    if(unifiedConversation && (phaseRef.current==='proposed'||phaseRef.current==='paused') && !sameRecoveryFormValue({...previousMemory,askedScale:false},{...turn.memory,askedScale:false})) {dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
+    if(unifiedConversation && turn.kind !== 'generate' && (phaseRef.current==='proposed'||phaseRef.current==='paused') && !sameRecoveryFormValue({...previousMemory,askedScale:false},{...turn.memory,askedScale:false})) {dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
     const extraction = turn.extraction;
     const merged = memoryExtraction(turn.memory);
     // 人数 / 类型 / 室内外 / 长宽先写进左栏简报，再决定出不出预览。云端忙也不能把这句漏掉。
@@ -2711,7 +2783,39 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const suffix = briefNote ? ` ${briefNote}` : '';
     const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
     anchorsRef.current = anchors;
-    const scale = scaleFrom(merged);
+    const statedScale = scaleFrom(merged);
+    const chosenScale = eventPreviewScale(statedScale, turn.memory, turn.memory.furnishing ? standingHall() : null);
+    const scale = { ...statedScale, length: chosenScale.length, width: chosenScale.width, origin: chosenScale.origin, fromVenue: chosenScale.keptHall || statedScale.fromVenue };
+    let previewLead = turn.previewLead;
+    if (chosenScale.keptHall && previewLead) {
+      const shellIO = shellVenueIO(live.current);
+      const spokenLength = turn.extraction.lengthM;
+      const spokenWidth = turn.extraction.widthM;
+      const spokenArea = turn.memory.agentVenue ? null : turn.memory.areaM2;
+      const boundFact = venueFacts.capture();
+      const keptMemory = {
+        ...turn.memory,
+        lengthM: chosenScale.length,
+        widthM: chosenScale.width,
+        venueScaleBasis: venueScaleBasis(layoutStore.getState().layout),
+        scaleNeedsReconfirmation: false,
+        ...(boundFact ? { venueFactToken: boundFact } : {}),
+        ...(shellIO ? { venueIO: shellIO } : {}),
+      };
+      delete keptMemory.agentVenue;
+      turn = { ...turn, memory: keptMemory };
+      saveMemory(keptMemory);
+      syncMemory(keptMemory);
+      if (shellIO) { setVenueIO(shellIO); onVenueIOChange?.(shellIO); }
+      setLengthRaw(''); setWidthRaw(''); setDimsTouched(false); setScaleOrigin('canvas');
+      previewLead = leadOnStandingHall(previewLead, { length: chosenScale.length, width: chosenScale.width }, {
+        length: spokenLength,
+        width: spokenWidth,
+        area: spokenArea,
+      });
+    } else if (previewLead && !chosenScale.assumed && /场地没说/.test(previewLead)) {
+      previewLead = previewLead.replace(/场地没说，我先按(?:室内|户外) \S+ 米/, `按现在的场地 ${formatArea(chosenScale.length)}×${formatArea(chosenScale.width)} 米`);
+    }
     const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
     const mentionedZone = (kind: 'stage' | 'checkin', word: RegExp) => turn.memory.unresolvedActivityNeeds.includes(kind) || word.test(trimmed);
     const unspecified = [turn.memory.zoneNeeds.stage === null && !anchors.stage && mentionedZone('stage', /舞台/) ? '舞台' : null,
@@ -2778,7 +2882,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     const cloud = studioRef.current;
-    if (cloud?.connection === '项目已连接') {
+    if (!turn.memory.furnishing && cloud?.connection === '项目已连接') {
       // 连着云就只走云预览。忙或恢复中若退回本地生成，会在云端还没稳时亮一颗确认。
       if (cloud.busy || cloud.recoverable) {
         finishLayoutAttempt(false);
@@ -2804,7 +2908,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const zoneLine = `${zoneBit ? `${zoneBit}先占位。` : ''}${unspecified.length ? `${unspecified.join('、')}尚未说明，这版暂不包含。` : ''}`;
     const rail = lightPlanRail(trimmed);
     const railBit = rail ? `${rail.join('→')}。确认前不落盘。` : '';
-    say({ role: 'agent', text: turn.filledScaleAsk
+    say({ role: 'agent', text: previewLead
+      ? previewLead
+      : turn.filledScaleAsk
       ? `记下了：${summary}${carried}。${zoneLine}${railBit}先出预览，确认后才写入。${suffix}`
       : `按这些先出一版：${summary}${carried}。${zoneLine}${railBit}${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
@@ -2852,7 +2958,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const value: AgentValue = {
     sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,withdrawUnresolvedDialogue,withdrawAllUnresolved,briefBusy,toolPending,processFailed,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
     canForward:(text)=>{const value=text.trim(),session=boundSessionId.current;return !!value&&!!session&&sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===session&&!pendingModelInputs.current.has(value)&&!uncertainInputs.current.has(value);},cancelUnderstanding,
-    cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
+    cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, banquetChat, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
@@ -2878,10 +2984,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
           const candidate = layout.floors.find(value => value.id === floor.id)?.items.find(value => value.id === item.id);
           if (!candidate || !sameRecoveryFormValue(item, candidate)) throw new Error(`圈场地会改变或移除「${item.name}」，本次未应用；请先保留原方案并核对。`);
         }
-        const { west, east, south, north } = XIHU_SCENIC_PRESET.bounds;
+        // 圈在平湖秋月这一片里：自动垫上这一片的卫星底图；圈在别处就沿用现有底图。
+        const localBounds = boundsAround(XIHU_LOCAL_CENTER, XIHU_LOCAL_SPAN_M);
+        const { west, east, south, north } = localBounds;
         const withinWestLake = pick.polygon.every(({ lng, lat }) => lng >= west && lng <= east && lat >= south && lat <= north);
         const researchArea = withinWestLake
-          ? layout.researchArea?.presetId === 'xihu-scenic' ? layout.researchArea : createPresetResearchArea()
+          ? layout.researchArea?.name === XIHU_LOCAL_NAME
+            ? layout.researchArea
+            : createResearchArea(XIHU_LOCAL_PLACE, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE)
           : layout.researchArea;
         onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
         runToken.current++; if (proposal.current) dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0);
@@ -2898,7 +3008,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
           ? '，壳体按圈画真轮廓（非仅外接矩形）'
           : '';
         const satNote = withinWestLake
-          ? '；已在西湖 3D 中聚焦这块区域，蓝线标出活动范围'
+          ? '；已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围'
           : pick.satelliteGround ? '；已开启卫星参考底图'
           : '';
         say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步可在「空间」查看实景，或重新打开地图选址，按采集单拍摄本场素材。` });
@@ -3044,11 +3154,10 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
 /**
  * 左轨那颗常驻「地图」：圈画是这块场地第一步，只藏在简报的一张卡里，收起左栏就找不着了。
  * 再点一次就把浮层收回去，跟简报里那条链共用同一个开关。
+ * （2026-11-12 画布上的「选活动区域」浮条已撤：与这颗常驻钮同开关，浮在 3D 上重复且突兀。）
  */
-export function MapRailButton({ variant = 'rail' }: { variant?: 'rail' | 'canvas' } = {}): JSX.Element {
+export function MapRailButton(): JSX.Element {
   const agent = useAgent();
-  if (variant === 'canvas') return <button type="button" className="sc-geo-toggle" aria-pressed={agent.mapPickerOpen}
-    onClick={agent.startMapVenuePicker}>选活动区域</button>;
   return <nav className="sc-rail-tool-group" aria-label="地图选址">
     <button type="button" className={`sc-rail-tool${agent.mapPickerOpen ? ' is-active' : ''}`} aria-pressed={agent.mapPickerOpen} aria-label="地图选址"
       data-tip="地图" title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={24} aria-hidden="true"/></button>
@@ -3242,18 +3351,21 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   const guests = plan.guests && plan.guests > 0 ? plan.guests : 0;
   const seats = plan.seats ?? 0;
   const short = guests > 0 && seats < guests;
+  const banquet = plan.receipt === 'banquet';
     // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
-    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
-    <div className="ap-outcome" role="note" aria-label="本次结果">
+    {guests > 0 && <p className="ap-seats" id="plan-seats">{banquet
+      ? `放下 ${plan.placedTables ?? 0} 桌 · 座位 ${seats} / ${guests}${short ? ` · 还差 ${guests - seats}` : ' · 够了'}`
+      : short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `识别到 ${seats} 把单人椅，目标 ${guests} 人；座位用途及可用性待核验`}</p>}
+    {!banquet && <div className="ap-outcome" role="note" aria-label="本次结果">
       <p className="ap-outcome-label">本次结果 · {formatArea(plan.candidateArea ?? venueArea(layout))} ㎡</p>
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
-    </div>
+    </div>}
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {short && !plan.localDraftDetails && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
+    {short && !plan.localDraftDetails && (!plan.seatPriority || (banquet && !/加不进更多/.test(plan.blocked ?? ''))) && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
@@ -3262,7 +3374,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
           {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
         </>}
-    <div className="ap-notes">
+    {!banquet && <div className="ap-notes">
       {plan.source === 'local' && plan.added > 0 && <p>新增物料由系统规则生成。</p>}
       {plan.planNotes?.map(line => <p key={line}>{line}</p>)}
       {plan.recolorPreview?.map(line => <p key={line}>{line}</p>)}
@@ -3289,9 +3401,10 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
         <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
       </details>}
       <p>{REFERENCE_SOURCE_UNVERIFIED}</p>
-    </div>
+    </div>}
+    {banquet && short && !plan.localDraftDetails && plan.seatPriority && !/加不进更多/.test(plan.blocked ?? '') && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
     {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
-    {agent.inventoryWorkspace}
+    {!banquet && agent.inventoryWorkspace}
   </div>;
 }
 
@@ -3308,7 +3421,7 @@ export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: s
   material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
 };
 
-export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, bingoSlot, chatSlot }: {
+export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, bingoSlot, chatSlot, className, style, floatBar, floatFooter, onHeaderPointerDown }: {
   onClose?(): void;
   /** 顶栏头像位置：飞入动画从这里起飞/降落。 */
   headerAvatarRef?: RefObject<HTMLSpanElement>;
@@ -3324,6 +3437,16 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   bingoSlot?: ReactNode;
   /** 活动/空间/物料各自的对话区（Bingo 用自带的真对话，不传）。 */
   chatSlot?: ReactNode;
+  /** 2026-11-11：被抓成独立小窗时的额外类名（is-detached，定位与尺寸走 --sc-float-* 变量）。 */
+  className?: string;
+  /** 独立小窗的 CSS 变量（--sc-float-x/y/w/h）。 */
+  style?: React.CSSProperties;
+  /** 独立小窗顶部的拖动条（拖动移动 + 收回按钮由调用方提供）。 */
+  floatBar?: ReactNode;
+  /** 独立小窗右下角的缩放抓手（由调用方提供，定位 absolute）。 */
+  floatFooter?: ReactNode;
+  /** 2026-11-11：住在左栏时按住标题往栏外拖 → 直接抓成独立小窗（由调用方接管拖拽逻辑）。 */
+  onHeaderPointerDown?: (event: React.PointerEvent<HTMLElement>) => void;
 } = {}): JSX.Element {
   const agent = useAgent();
   const studio = useStudioAgent();
@@ -3362,7 +3485,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     stageLine: agent.toolPending ? null : localStageLine,
   });
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
-  const suggestion = useSuggestion(AGENT_INPUT_SUGGESTIONS[activeAgent]);
+  const suggestion = useSuggestion(activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
   const ghostVisible = mode === 'layout' && !draft.trim() && !generating;
   const proposed = agent.state === 'planProposed';
@@ -3389,8 +3512,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     setShowHistory(false);
   }, [assistantSessions.activeId]);
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={activity ? (mode === 'layout' ? agent.state : mode) : activeAgent} data-venue-io={agent.venueIO} aria-label={meta.name} tabIndex={-1}>
-    <header className="ap-head ap-session-head">
+  return <aside id="agent-panel" className={`sc-agent-panel${className ? ` ${className}` : ''}`} style={style} data-state={activity ? (mode === 'layout' ? agent.state : mode) : activeAgent} data-venue-io={agent.venueIO} aria-label={meta.name} tabIndex={-1}>
+    {floatBar}
+    <header className="ap-head ap-session-head" onPointerDown={onHeaderPointerDown}>
       <div className="ap-session-identity">
         <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
           <RailAvatar key={activeAgent} form={meta.form} size={36} />
@@ -3551,7 +3675,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         )}
         {mode === 'layout' && activity && <AgentCapabilityPrompts/>}
         <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }}>
-        <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
+        <label className="sr-only" htmlFor="ap-input">告诉 Bingo 要改的</label>
         {agent.pendingFile && <div className="sc-chat-file">
           <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
           <span className="sc-chat-file-name">{agent.pendingFile.name}</span>
@@ -3559,7 +3683,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" aria-describedby="ap-data-notice ap-plan-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : agent.banquetChat ? '说一句，比如「加座，再排一版」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
@@ -3579,6 +3703,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       </form>
       </>}
+      {floatFooter}
   </aside>;
 }
 

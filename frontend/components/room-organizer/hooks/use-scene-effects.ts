@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type RefObject, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore, type RefObject, type MutableRefObject } from 'react';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -8,6 +8,9 @@ import { floorKeepOut, type KeepOutBuilding } from '../lib/floor-keep-out';
 import { isMapReferenceImage } from '../lib/amap-venue';
 import { hasCollisions } from '../lib/geometry';
 import { mountBand } from '../lib/mount-band';
+import { readPlanGroundSource, subscribePlanGroundSource } from '../lib/plan-basemap-source';
+import { planFootprintShapes } from '../lib/plan-footprint-geometry';
+import { planShellFrame } from '../lib/plan-footprint-geometry';
 import { mapVenueFootprint } from '../lib/scene-anchor';
 import { hasNeighbours, lowestGround } from '../lib/site';
 import { buildingHeight, floorElevation, interiorWallHeight, itemForStorey, storeyHeight } from '../lib/storeys';
@@ -17,7 +20,26 @@ import { structuralItemCollides } from '../lib/structural-layout';
 import { disposeObject, removeAndDispose } from '../three/builder-utils';
 import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
+import {
+  type SiteFrame,
+  type TilePaintCache,
+  coverFrameFromFrustum,
+  frameToBounds,
+  maxZoomForSource,
+  neededMapZoom,
+  paintTiledGround,
+  paintTilePyramid,
+  ringFrame,
+  squareFrame,
+  tileHeight,
+  zoomFromSpan,
+} from '../three/plan-basemap-tiles';
+import {
+  collectPlaceholdersByPropId,
+  createPlanModelLayer,
+} from '../three/plan-model-layer';
 import { buildEntrance } from '../three/entrance';
+import { footprintEdges } from '../three/footprint-outline';
 import { createFurnitureModel } from '../three/furniture-builders';
 import { personWalkBounds, routeIsLoop } from '../lib/person-route';
 import { buildWalkColliders } from '../lib/walk-collision';
@@ -30,17 +52,16 @@ import {
 } from '../three/interior-walls';
 import { clearItemLabels, renderItemLabels } from '../three/item-labels';
 import { applyTimeOfDay } from '../three/lighting';
-import { mountIsoBasemap, setIsoBasemapVisible, type IsoBasemapStatus } from '../three/iso-basemap';
 import { clearMeasurement, clearRoomDimensions, renderMeasurement, renderRoomDimensions } from '../three/measurement';
 import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
 import { buildResearchBasemap, clearGeoCrosses, clearResearchBasemap, buildGeoCrosses, parseGeoCrossParam } from '../three/research-basemap';
-import { buildResearchOverlays } from '../three/research-overlays';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
 import { createPresetStructure } from '../three/scene-presets';
 import { addSignalOverlays } from '../three/signal-overlay';
 import { buildStructureShell } from '../three/structure-builder';
+import { BasemapTileCache } from '../lib/plan-tile-cache';
 import { buildPlanFootprint } from '../three/plan-footprint-builder';
 import { computeFloorOpenings, computeWallOpenings } from '../three/wall-openings';
 import { useGlbAssets } from './use-glb-assets';
@@ -160,10 +181,7 @@ export interface UseSceneEffectsParams {
   wallDraft: { x: number; z: number } | null;
   wallSnapResult: { point: { x: number; z: number }; kind: string } | null;
   measurementPoints: ReadonlyArray<{ x: number; z: number }>;
-  isoRetry?: number;
-  showIso?: boolean;
   showBasemap?: boolean;
-  onIsoStatus?: (status: IsoBasemapStatus) => void;
   /**
    * 户外 2D 规划（P2-g）：有值时把分区/设施/动线/点位摊到 3D 地面上，
    * 与 `layout.width/height` 同一个壳体口径；为 null 时清掉该图层。
@@ -195,16 +213,38 @@ export function useSceneEffects({
   wallDraft,
   wallSnapResult,
   measurementPoints,
-  isoRetry = 0,
-  showIso = true,
   showBasemap = true,
-  onIsoStatus,
   outdoorPlan = null,
 }: UseSceneEffectsParams): void {
-  const showIsoRef = useRef(showIso);
-  showIsoRef.current = showIso;
   const showBasemapRef = useRef(showBasemap);
   showBasemapRef.current = showBasemap;
+
+  // —— GeoGround（2026-11-12）：主舞台地理瓦片地面 ——
+  // 退出户外规划后主 3D 只剩纸面平面（docs/42 主线缺口）。这里按户外计划的锚点把
+  // 真实地图瓦片铺进主舞台：管线复用 three/plan-basemap-tiles（自 outdoor-plan-3d 抽出），
+  // 用父组仿射把 ENU 瓦片变换到壳体世界系，与 buildPlanFootprint 的色块同一把
+  // planShellFrame 尺——瓦片正好垫在色块下面。
+  // 壳体层的激活判定（跳过纸面地板/地基）：有锚点 + 允许底图 + 边界可用。不看 view2D——
+  // 这是结构开关，2D/3D 切换不该重建壳体。
+  const geoGroundShellActive = !!(
+    outdoorPlan?.anchor
+    && showBasemap
+    && (outdoorPlan.boundary.length >= 3)
+    && layout.width >= 1
+    && layout.height >= 1
+    && planShellFrame(outdoorPlan.boundary, { width: layout.width, depth: layout.height }, { clampPoints: false })
+  );
+  const view2DRef = useRef(view.view2D);
+  view2DRef.current = view.view2D;
+  const outdoorPlanRef = useRef(outdoorPlan);
+  outdoorPlanRef.current = outdoorPlan;
+  // 边界顶点变化才重铺瓦片；编辑分区/设施不改边界，不该把瓦片层打掉重来。
+  const geoBoundaryKey = useMemo(
+    () => (outdoorPlan ? outdoorPlan.boundary.map((p) => `${Math.round(p.x * 100)}/${Math.round(p.y * 100)}`).join('|') : ''),
+    [outdoorPlan],
+  );
+  // 图源与户外 2D 画布同一份模块级偏好（覆盖层切图源时 writePlanGroundSource 会通知）。
+  const geoBasemapSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as const);
   const glbAssetsRevision = useGlbAssets(layout);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
 
@@ -315,7 +355,6 @@ export function useSceneEffects({
         activeFloorIndex,
         showAllFloors: view.showAllFloors,
       });
-      setIsoBasemapVisible(scene, showIsoRef.current, showBasemapRef.current);
       const camera = cameraRef.current;
       if (camera) applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
       requestShadowUpdate();
@@ -353,6 +392,8 @@ export function useSceneEffects({
     // 调研底图已在 3D 地面铺一张连续地图；旧的卫星贴地是另一套坐标，
     // 继续当地板贴图会盖住扫描场地，这里只停用它、不删用户数据。
     const legacyGroundMap = !!layout.researchArea && isMapReferenceImage(layout.floorPlanImage);
+    // GeoGround 瓦片在场（户外计划有锚点）：0 层素色地板与地基让位给瓦片地面。
+    const skipGroundFloor = geoGroundShellActive;
     for (const { floor, index } of floorsToRender) {
       const isActive = index === activeFloorIndex;
       const wallOpenings = computeWallOpenings(
@@ -381,8 +422,9 @@ export function useSceneEffects({
         wallOpenings,
         ...(floor.hiddenWalls ? { hiddenWalls: floor.hiddenWalls } : {}),
         floorOpenings,
-        floorPlanImage: index === 0 && !legacyGroundMap ? layout.floorPlanImage ?? null : null,
-          satelliteGroundRef: index === 0 && !legacyGroundMap ? !!layout.satelliteGroundRef : false,
+        ...(index === 0 && skipGroundFloor ? { skipFloor: true, skipWalls: true } : {}),
+        floorPlanImage: index === 0 && !legacyGroundMap && !skipGroundFloor ? layout.floorPlanImage ?? null : null,
+          satelliteGroundRef: index === 0 && !legacyGroundMap && !skipGroundFloor ? !!layout.satelliteGroundRef : false,
         floorPlanOpacity: view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
         floorPlanFitMode: layout.floorPlanFitMode ?? 'stretch',
         floorPlan3DEffect: view.floorPlan3DEffect,
@@ -432,7 +474,7 @@ export function useSceneEffects({
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
     layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
-    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea,
+    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea, geoGroundShellActive,
     layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
     layout.mapGroundPolygon?.length,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
@@ -456,6 +498,256 @@ export function useSceneEffects({
     invalidate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height]);
+
+  // GeoGround（2026-11-12）：主舞台的真实地图瓦片地面。计划有锚点时铺近场金字塔 →
+  // 扩展金字塔 → 远景兜底（与 outdoor-plan-3d 初始铺地同款三阶段），相机移动挂
+  // controls 'change' 补高清瓦片。瓦片 quad 在 ENU 空间落位（three.x=plan.x、
+  // three.z=-plan.y），挂到按 planShellFrame 仿射变换的 geoRoot 组上，正好与
+  // buildPlanFootprint 色块对齐（同一把边界→壳体映射）。图源用与户外 2D 同一份偏好。
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    const plan = outdoorPlanRef.current;
+    const anchor = plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null;
+    if (!THREE || !scene || !anchor || !plan || !showBasemapRef.current || view2DRef.current) return;
+    const siteFrame = ringFrame(plan.boundary);
+    if (siteFrame.width < 4 || siteFrame.depth < 4) return;
+    const source = geoBasemapSource;
+    // ENU → 壳体世界仿射：world.x=(p.x-minX)*scaleX-width/2、world.z=(maxY-p.y)*scaleZ-depth/2。
+    // 与 plan-footprint-builder 的 shapePoint 完全同一把尺（含边界 >100m 的整体压缩）。
+    const minX = siteFrame.cx - siteFrame.width / 2;
+    const maxY = siteFrame.cy + siteFrame.depth / 2;
+    const scaleX = layout.width / siteFrame.width;
+    const scaleZ = layout.height / siteFrame.depth;
+    const geoRoot = new THREE.Group();
+    geoRoot.name = 'geo-ground';
+    geoRoot.userData.type = ROOM_OBJECT_TAGS.GeoGround;
+    geoRoot.scale.set(scaleX, 1, scaleZ);
+    geoRoot.position.set(-minX * scaleX - layout.width / 2, 0, maxY * scaleZ - layout.height / 2);
+    scene.add(geoRoot);
+
+    const disposables: { dispose: () => void }[] = [];
+    const tileKeys = new Set<string>();
+    const tileCache: TilePaintCache = {
+      imageCache: new BasemapTileCache({ max: 1200 }),
+      textures: new Map<string, ThreeNS.Texture>(),
+      fallbackMeshes: new Map<string, ThreeNS.Mesh>(),
+      readyKeys: new Set<string>(),
+    };
+    const focusEnu = { x: siteFrame.cx, y: siteFrame.cy };
+    const preferredZoom = zoomFromSpan(siteFrame.span);
+    const hiZoom = maxZoomForSource(source);
+    const nearFrame = squareFrame(siteFrame.cx, siteFrame.cy, Math.max(siteFrame.span * 1.3, siteFrame.span + 240, 320));
+    const closeFrame = squareFrame(siteFrame.cx, siteFrame.cy, Math.max(siteFrame.span * 2, 1600));
+    const workFrame = squareFrame(siteFrame.cx, siteFrame.cy, Math.max(siteFrame.span * 6, 800));
+    const groundFrame = squareFrame(siteFrame.cx, siteFrame.cy, Math.max(siteFrame.span * 12, 4000));
+    let disposed = false;
+    let shown = false;
+    const showGround = (count: number): void => {
+      if (disposed || shown || count <= 0) return;
+      shown = true;
+      invalidate();
+    };
+    void (async () => {
+      const nearCount = await paintTilePyramid({
+        scene,
+        disposables,
+        closeBounds: frameToBounds(nearFrame, anchor),
+        midBounds: frameToBounds(nearFrame, anchor),
+        farBounds: frameToBounds(nearFrame, anchor),
+        anchor,
+        source,
+        topZoom: hiZoom,
+        isDisposed: () => disposed,
+        loaded: tileKeys,
+        cache: tileCache,
+        focus: focusEnu,
+        closeMaxTiles: 64,
+        parent: geoRoot,
+        tag: ROOM_OBJECT_TAGS.GeoGround,
+      });
+      showGround(nearCount);
+      if (disposed) return;
+      const expandCount = await paintTilePyramid({
+        scene,
+        disposables,
+        closeBounds: frameToBounds(closeFrame, anchor),
+        midBounds: frameToBounds(workFrame, anchor),
+        farBounds: frameToBounds(workFrame, anchor),
+        anchor,
+        source,
+        topZoom: hiZoom,
+        isDisposed: () => disposed,
+        loaded: tileKeys,
+        cache: tileCache,
+        focus: focusEnu,
+        closeMaxTiles: 160,
+        parent: geoRoot,
+        tag: ROOM_OBJECT_TAGS.GeoGround,
+      });
+      showGround(expandCount);
+      if (disposed) return;
+      await paintTiledGround({
+        scene,
+        disposables,
+        bounds: frameToBounds(groundFrame, anchor),
+        anchor,
+        source,
+        preferredZoom: Math.min(preferredZoom - 3, 11),
+        maxTiles: 80,
+        height: tileHeight(8),
+        isDisposed: () => disposed,
+        loaded: tileKeys,
+        mipmaps: false,
+        cache: tileCache,
+        focus: focusEnu,
+        parent: geoRoot,
+        tag: ROOM_OBJECT_TAGS.GeoGround,
+      });
+    })();
+
+    // 相机 LOD（挂点仿 use-scene-effects cutaway effect；节流/单调阈值仿 outdoor-plan-3d loadCloserTiles）。
+    // scale=1（边界 ≤100m 的现行策略下恒成立）时世界坐标就是米；scale<1 的压缩场地
+    // 整体都被等比压了，LOD 用世界距离近似即可，与色块的畸变一致。
+    let lodBusy = false;
+    let lastLodZoom = preferredZoom;
+    let lastLodAt = 0;
+    let lastLodFocus = { x: focusEnu.x, y: focusEnu.y };
+    const worldToEnu = (x: number, z: number): { x: number; y: number } => ({
+      x: (x - geoRoot.position.x) / scaleX,
+      y: -(z - geoRoot.position.z) / scaleZ,
+    });
+    // coverFrameFromFrustum 输出 cy=-z（北朝 y+）的世界框；翻回 plan ENU 框。
+    const worldFrameToEnuFrame = (frame: SiteFrame): SiteFrame => {
+      const west = (frame.cx - frame.width / 2 - geoRoot.position.x) / scaleX;
+      const east = (frame.cx + frame.width / 2 - geoRoot.position.x) / scaleX;
+      const zMin = -frame.cy - frame.depth / 2;
+      const zMax = -frame.cy + frame.depth / 2;
+      const yMin = -(zMax - geoRoot.position.z) / scaleZ;
+      const yMax = -(zMin - geoRoot.position.z) / scaleZ;
+      const width = Math.max(4, east - west);
+      const depth = Math.max(4, yMax - yMin);
+      return { cx: (west + east) / 2, cy: (yMin + yMax) / 2, width, depth, span: Math.max(width, depth) };
+    };
+    const loadCloserTiles = (): void => {
+      if (disposed || lodBusy || view2DRef.current || !showBasemapRef.current) return;
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      const renderer = rendererRef.current;
+      if (!camera || !controls || !renderer) return;
+      const now = performance.now();
+      if (now - lastLodAt < 80) return;
+      const aim = controls.target;
+      const canvasH = renderer.domElement.clientHeight || 600;
+      const needed = neededMapZoom(camera, aim, canvasH, anchor.lat);
+      const cap = maxZoomForSource(source);
+      const zoom = needed >= 15 || needed >= preferredZoom + 0.3
+        ? cap
+        : Math.max(preferredZoom, Math.min(cap, Math.ceil(needed)));
+      const aimEnu = worldToEnu(aim.x, aim.z);
+      const moved = Math.hypot(aimEnu.x - lastLodFocus.x, aimEnu.y - lastLodFocus.y) > 100;
+      if (zoom <= lastLodZoom && !moved && now - lastLodAt < 800) return;
+      const aspect = Math.max(0.2, (renderer.domElement.clientWidth || 800) / Math.max(1, canvasH));
+      const range = Math.min(80000, Math.max(aim.distanceTo(camera.position) * 4, zoom >= cap - 1 ? 1600 : 400));
+      lastLodAt = now;
+      lastLodZoom = Math.max(lastLodZoom, zoom);
+      lastLodFocus = { x: aimEnu.x, y: aimEnu.y };
+      lodBusy = true;
+      const visible = worldFrameToEnuFrame(coverFrameFromFrustum(aim, camera.position, camera.fov, aspect, range, 1.2));
+      const midVisible = worldFrameToEnuFrame(coverFrameFromFrustum(aim, camera.position, camera.fov, aspect, Math.min(80000, range * 2), 1.2));
+      const farVisible = worldFrameToEnuFrame(coverFrameFromFrustum(aim, camera.position, camera.fov, aspect, Math.min(80000, range * 4), 1.2));
+      void paintTilePyramid({
+        scene,
+        disposables,
+        closeBounds: frameToBounds(visible, anchor),
+        midBounds: frameToBounds(midVisible, anchor),
+        farBounds: frameToBounds(farVisible, anchor),
+        anchor,
+        source,
+        topZoom: zoom,
+        isDisposed: () => disposed,
+        loaded: tileKeys,
+        cache: tileCache,
+        focus: { x: aimEnu.x, y: aimEnu.y },
+        closeMaxTiles: 160,
+        parent: geoRoot,
+        tag: ROOM_OBJECT_TAGS.GeoGround,
+      }).finally(() => {
+        lodBusy = false;
+      });
+      invalidate();
+    };
+    loadCloserTiles();
+    const controls = controlsRef.current;
+    controls?.addEventListener('change', loadCloserTiles);
+
+    return () => {
+      disposed = true;
+      controls?.removeEventListener('change', loadCloserTiles);
+      tileCache.textures.forEach((texture) => {
+        try {
+          texture.dispose();
+        } catch {
+          /* 共享纹理释放失败不影响卸载。 */
+        }
+      });
+      tileCache.textures.clear();
+      tileCache.fallbackMeshes.clear();
+      // quad 已随 geoRoot 移除：清 readyKeys/loaded 让重跑时允许重建同一批瓦片
+      // （imageCache 里的位图仍在，重建不回网络）。
+      tileCache.readyKeys.clear();
+      tileKeys.clear();
+      disposables.forEach((item) => {
+        try {
+          item.dispose();
+        } catch {
+          /* 单个资源释放失败不影响卸载。 */
+        }
+      });
+      if (geoRoot.parent === scene) scene.remove(geoRoot);
+      invalidate();
+    };
+    // 锚点 / 图源 / 壳体尺寸 / 边界 / 2D·3D / 扫描隔离变化才重建；普通 plan 编辑不改边界，不重铺。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, invalidate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef,
+    outdoorPlan?.anchor?.lng, outdoorPlan?.anchor?.lat, geoBoundaryKey, geoBasemapSource,
+    layout.width, layout.height, view.view2D, showBasemap]);
+
+  // —— 计划设施 GLB 模型层（2026-11-12，与户外 3D 共享 three/plan-model-layer.ts）——
+  // 退出户外后主 3D 不再只有低模占位：同一批设施落地真模型。glb-assets 缓存是模块级
+  // 单例，户外 3D 已载过的模型零下载。模型组不打 Furniture tag——Furniture effect
+  // 每次 layout 变化 removeTagged 会连模型一起清；组放 (0,0,0)（壳体世界原点已居中，
+  // 内层落位 planModelTransform 与占位体同式，正好垫在色块之上）。
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!THREE || !scene || !outdoorPlan) return;
+    const shapes = planFootprintShapes(outdoorPlan, { width: layout.width, depth: layout.height }, { clampPoints: false });
+    if (!shapes || shapes.props.length === 0) return;
+    const footprintGroup = scene.children.find(
+      (child) => child instanceof THREE.Group && child.userData.type === ROOM_OBJECT_TAGS.PlanFootprint,
+    );
+    const modelLayer = createPlanModelLayer({
+      parent: scene,
+      props: shapes.props,
+      metrics: { width: layout.width, depth: layout.height },
+      placeholders: footprintGroup ? collectPlaceholdersByPropId(footprintGroup) : undefined,
+      isDisposed: () => sceneRef.current !== scene || threeModuleRef.current !== THREE,
+    });
+    // 2026-11-12 用户反馈「物体没放在平面上」：模型底面垫到瓦片金字塔顶（z19=0.048）之上，
+    // 与户外 3D 的 PLAN_LAYER_BASE_Y 同一口径；GeoGround 未激活（室内地板）时 5 cm 悬浮不可感知。
+    modelLayer.group.position.set(0, 0.052, 0);
+    invalidate();
+    return () => {
+      modelLayer.dispose();
+      invalidate();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, invalidate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height, glbAssetsRevision]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -481,10 +773,10 @@ export function useSceneEffects({
 
   // 调研底图单独一层：壳体照旧按米建，底图是这一片区域的路网，铺在壳体下方。
   // 换范围只重铺这张图，不动壳体与物料。
-  const researchKey = layout.researchArea
+  // GeoGround 瓦片在场时让位：两套地理地面语义互斥，瓦片优先（与 legacyGroundMap 同款写法）。
+  const researchKey = layout.researchArea && !geoGroundShellActive
     ? [
       layout.researchArea.imageUrl,
-      layout.researchArea.presetId,
       layout.researchArea.bounds.west, layout.researchArea.bounds.south,
       layout.researchArea.bounds.east, layout.researchArea.bounds.north,
       layout.width, layout.height,
@@ -513,48 +805,6 @@ export function useSceneEffects({
     // researchKey 已经盖住底图与定位要看的全部字段；layout 只是当期的内容。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, invalidate, threeModuleRef, sceneRef, researchKey]);
-
-  const isoMountRef = useRef<ReturnType<typeof mountIsoBasemap> | null>(null);
-  const isoEnabled = !view.view2D && layout.researchArea?.presetId === 'xihu-scenic';
-  useEffect(() => {
-    const THREE = threeModuleRef.current;
-    const scene = sceneRef.current;
-    if (!isReady || !THREE || !scene || !isoEnabled) return;
-    const mount = mountIsoBasemap(THREE, scene, invalidate, status => onIsoStatus?.(status),
-      () => showIsoRef.current, () => showBasemapRef.current);
-    isoMountRef.current = mount;
-    return () => {
-      isoMountRef.current = null;
-      mount.dispose();
-    };
-  }, [isReady, threeModuleRef, sceneRef, isoEnabled, isoRetry, invalidate, onIsoStatus]);
-
-  useEffect(() => {
-    isoMountRef.current?.place(layout);
-    // Same map assets, different anchor or camera context.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, researchKey, isoEnabled, isoRetry]);
-
-  useEffect(() => {
-    const scene = sceneRef.current;
-    if (!scene || !isReady) return;
-    setIsoBasemapVisible(scene, showIso, showBasemap);
-    invalidate();
-  }, [isReady, sceneRef, showIso, showBasemap, invalidate]);
-
-  useEffect(() => {
-    const THREE = threeModuleRef.current;
-    const scene = sceneRef.current;
-    if (!isReady || !THREE || !scene || !showBasemap || !layout.researchArea?.presetId || view.showResearchOverlays !== true) return;
-    const clear = buildResearchOverlays(THREE, scene, layout, { onLoaded: invalidate });
-    invalidate();
-    return () => {
-      clear();
-      invalidate();
-    };
-    // Keep vector visibility independent from the ISO download.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, threeModuleRef, sceneRef, researchKey, isoRetry, showBasemap, view.showResearchOverlays]);
 
   // Separate from the shell: v2 walls/floors never depend on image visibility.
   const referenceImageKey = referenceImage
@@ -781,9 +1031,7 @@ export function useSceneEffects({
       // Around the built mesh, not floor-to-height: a painting hangs at 0.8 m
       // and a window starts at its sill (#376).
       const band = mountBand(item.structuralOpeningId ? item : itemForStorey(item, activeFloor));
-      const geometry = new THREE.BoxGeometry(item.width, band.top - band.bottom, item.depth);
-      const edges = new THREE.EdgesGeometry(geometry);
-      geometry.dispose();
+      const edges = footprintEdges(THREE, item, item.width, band.top - band.bottom, item.depth);
       const outline = new THREE.LineSegments(
         edges,
         new THREE.LineBasicMaterial({ color: accent, linewidth: 2 })

@@ -36,6 +36,12 @@ export interface MaterialSymbolProps extends HTMLAttributes<HTMLSpanElement> {
 export function MaterialSymbol({ name, size = 20, className, style: customStyle, 'aria-label': ariaLabel, 'aria-hidden': ariaHidden, ...props }: MaterialSymbolProps): JSX.Element {
   const opticalSize = Math.max(20, Math.min(48, size));
   const codePoint = MATERIAL_SYMBOL_CODEPOINTS[name];
+  // 2026-11-12：码点表没有的名字会**静默渲染成空白**（户外右轨的 square_foot / expand_more
+  // 就这样空过）。开发态留一条告警，避免再出现「按钮没图标」却查不到原因。
+  if (!codePoint && !ICON_PARK_LOUPE_PATHS[name] && !MATERIAL_SYMBOL_FILLED_SVG_ASSETS.has(name)
+    && typeof console !== 'undefined' && process.env.NODE_ENV !== 'production') {
+    console.warn(`[MaterialSymbol] 未登记的图标名：${name}`);
+  }
   const loupePaths = ICON_PARK_LOUPE_PATHS[name];
   const renderedSvgSize = size * 0.78;
   const materialSvgStyle: CSSProperties = {

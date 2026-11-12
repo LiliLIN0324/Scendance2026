@@ -28,7 +28,7 @@ import {
   type PlanRoute,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { findFacilityTemplate } from './site-plan-facilities';
+import { facilityTypeLabel } from './plan-facility-catalog';
 import {
   facilitySticker,
   nodeSticker,
@@ -142,7 +142,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
       title: '设施',
       entries: facilityKeys.map(templateId => {
         const bucket = facilityMap.get(templateId)!;
-        const templateName = findFacilityTemplate(templateId)?.name ?? templateId;
+        const templateName = facilityTypeLabel(templateId);
         const sizes = [...bucket.sizes];
         return {
           icon: iconOf('tent'),

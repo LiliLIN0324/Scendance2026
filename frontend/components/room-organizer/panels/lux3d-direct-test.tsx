@@ -154,11 +154,13 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
   </>;
 }
 
-function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPreviewScene, initialPrompt }: {
+function DirectTaskPanel({ kind, online, resume, reconPreset, reconFilesSeed, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPreviewScene, initialPrompt }: {
   kind: Kind; online: boolean | null; onHistory: () => void;
   resume: { kind: Kind; taskid: string; prompt: string; startedAt: number } | null;
   /** 地图采集单带过来的这块地：名字填进场景名称，应拍数量贴在素材选择框下面。 */
   reconPreset: { name: string; hint: string } | null;
+  /** 2026-11-12 拍摄场地「直接送重建」带来的原始文件：nonce 变一次填一次素材框与名称。 */
+  reconFilesSeed: { files: File[]; name: string; nonce: number } | null;
   /** 场地重建默认干跑：不打代理、不扣额度；关掉才走真 /world-recon。 */
   mockRecon: boolean;
   onMockRecon: (value: boolean) => void;
@@ -237,6 +239,17 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     setName(reconPreset.name.slice(0, 100));
     setPresetHint(reconPreset.hint);
   }, [kind, reconPreset]);
+
+  // 2026-11-12 拍摄场地「直接送重建」：原始文件直接填进素材框（同一份 seed 只应用一次），名称带过来。
+  const appliedSeed = useRef<typeof reconFilesSeed>(null);
+  const [seedNote, setSeedNote] = useState('');
+  useEffect(() => {
+    if (kind !== 'recon' || !reconFilesSeed || appliedSeed.current === reconFilesSeed) return;
+    appliedSeed.current = reconFilesSeed;
+    setReconFiles(reconFilesSeed.files);
+    setName(`${reconFilesSeed.name} · 现场重建`.slice(0, 100));
+    setSeedNote(`来自拍摄场地：已填入 ${reconFilesSeed.files.length} 个原始文件。`);
+  }, [kind, reconFilesSeed]);
 
   const terminal = detail !== null && TERMINAL.includes(detail.status);
   const busy = submitting || uncertain || Boolean(taskid && !terminal);
@@ -407,7 +420,8 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
         onChange={event => { setReconFiles([...event.target.files ?? []]); event.target.value = ''; }} />
       <p className="sc-note">Insta360 全景或普通视频一段即可；用照片则至少 20 张、绕场地一圈多角度。{mockRecon ? '干跑只校验选文件形状，不上传。' : '素材经本机代理上传至生成引擎。'}</p>
       <p className="sc-warning" role="note">{RECON_MATERIAL_BAN}</p>
-      {presetHint && <p className="sc-note">这块地的采集单：{presetHint}。按单子拍完再拖进来，重建出来的尺度才对得上圈画的范围。</p>}
+        {presetHint && <p className="sc-note">这块地的采集单：{presetHint}。按单子拍完再拖进来，重建出来的尺度才对得上圈画的范围。</p>}
+        {seedNote && <p className="sc-note sc-aholo-from-capture" role="status">{seedNote}{mockRecon ? '当前为干跑模式，不会上传；关干跑并确认扣费后才真调。' : ''}</p>}
       {reconFiles.length > 0 && <p className="sc-note">已选 {reconFiles.length} 个文件{reconFiles.some(file => file.size > 5 * 1024 * 1024) ? '（含较大文件，上传可能需要几分钟）' : ''}</p>}
       <label className="sc-field" htmlFor={`${prefix}-quality`}>重建质量</label>
       <select id={`${prefix}-quality`} value={reconQuality} disabled={busy || mockRecon || online !== true} onChange={event => setReconQuality(event.target.value)}>
@@ -459,7 +473,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   </div>;
 }
 
-export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, reconPreset, openKind }: {
+export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, reconPreset, reconFilesSeed, openKind }: {
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => Promise<void>) | undefined;
   /** 干跑重建成功后挂环境：等同 D0 hangDemoEnvironment。 */
@@ -468,6 +482,8 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   onPreviewShippedScene?: ((assetId: string) => void) | undefined;
   /** 地图采集单「去上传现场素材」带过来的一块地：直接切到场地重建并填好名字。 */
   reconPreset?: { name: string; hint: string } | null;
+  /** 2026-11-12 拍摄场地「直接送重建」带过来的原始文件：nonce 变一次填一次素材框。 */
+  reconFilesSeed?: { files: File[]; name: string; nonce: number } | null;
   /** 生成轨「场地生成」带过来的落点：nonce 变一次就切一次卡。 */
   openKind?: { kind: Kind; nonce: number; prompt?: string } | null;
 }) {
@@ -525,6 +541,14 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     setKind('recon');
     setVisited(previous => previous.includes('recon') ? previous : [...previous, 'recon']);
   }, [reconPreset]);
+  // 2026-11-12 拍摄场地送来的文件：同样直接落在场地重建标签（素材框由 DirectTaskPanel 填）。
+  const openedSeed = useRef<typeof reconFilesSeed>(null);
+  useEffect(() => {
+    if (!reconFilesSeed || openedSeed.current === reconFilesSeed) return;
+    openedSeed.current = reconFilesSeed;
+    setKind('recon');
+    setVisited(previous => previous.includes('recon') ? previous : [...previous, 'recon']);
+  }, [reconFilesSeed]);
   // 生成轨点「物料生成 / 场地生成」时，直接落在对应那组标签上。
   const openedKind = useRef<number | null>(null);
   useEffect(() => {
@@ -602,7 +626,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
       })}
     </div>
     {shownKinds.map(key => <section key={key} id={`aholo-panel-${key}`} aria-label={CAPABILITIES[key].label} role="region" hidden={kind !== key}>
-      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPreviewScene={onPreviewScene} initialPrompt={key === 'world' && openKind?.prompt !== undefined ? { text: openKind.prompt, nonce: openKind.nonce } : undefined}
+      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} reconFilesSeed={reconFilesSeed ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPreviewScene={onPreviewScene} initialPrompt={key === 'world' && openKind?.prompt !== undefined ? { text: openKind.prompt, nonce: openKind.nonce } : undefined}
         unresolved={history.find(item => item.kind === key && !TERMINAL.includes(item.status))} />}
     </section>)}
   </div>;

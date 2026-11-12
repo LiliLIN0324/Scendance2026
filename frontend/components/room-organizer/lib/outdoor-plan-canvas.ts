@@ -17,13 +17,15 @@
 
 import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
 import { planZoneFillAlpha } from './site-plan-editing';
+import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
-import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanSceneObject } from './plan-item-bridge';
+import type { PlanAnnotation, PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
-/** 图层栈从底到顶的绘制顺序（底图由画布组件先铺，业务层依此序叠加；测量标注在最上层）。 */
+/** 图层栈从底到顶的绘制顺序（底图由画布组件先铺，业务层依此序叠加；测量/自由标注在最上层）。 */
 export const PLAN_LAYER_STACK: readonly PlanningLayerKind[] = [
-  'boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure',
+  'boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure', 'annotate',
 ];
 
 /** 视口：中心经纬度 + 缩放级 + 画布 CSS 尺寸。 */
@@ -115,6 +117,7 @@ export function defaultLayerVisibility(): LayerVisibility {
     worker: true,
     node: true,
     measure: true,
+    annotate: true,
   };
 }
 
@@ -225,8 +228,13 @@ export function drawFacilityLayer(
     size: { width: number; depth: number };
     name?: string;
     warning?: boolean;
+    /** 2026-11-11 OnePlan Bench Styling：物件可带自己的颜色/透明度（缺省回落图层色/1）。 */
+    color?: string | undefined;
+    opacity?: number | undefined;
+    /** 2026-11-12 描边样式（OnePlan 同款三态+无描边）：缺省实线；警示态仍优先红虚线。 */
+    strokeStyle?: 'solid' | 'dashed' | 'dotted' | 'none' | undefined;
   }[],
-  opts: { selectedId?: string | null } = {},
+  opts: { selectedId?: string | null; /** 2026-11-12 B3 组选：多选件同样画白圈（名称标签仍只给单选）。 */ selectedIds?: readonly string[] | null } = {},
 ): void {
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.facility;
@@ -235,22 +243,28 @@ export function drawFacilityLayer(
     const center = planPointToPixel(f.position, viewport);
     const w = Math.max(4, f.size.width / metersPerPx);
     const h = Math.max(4, f.size.depth / metersPerPx);
+    // 2026-11-11 OnePlan Bench Styling：设施可带自己的颜色/透明度（缺省回落图层色）。
+    const own = f.color ?? color;
+    const fillAlpha = 0.16 * (f.opacity ?? 1);
     ctx.save();
     ctx.translate(center.x, center.y);
     // 屏幕系 y 向下故取负角；地面语义与 facilityFootprintRing 同一套矩阵：
     // rotationDeg 以东为零、逆时针为正（+90° 时宽边从东转向北）。
     ctx.rotate(-f.rotationDeg * Math.PI / 180);
-    ctx.fillStyle = hexWithAlpha(color, 0.16);
+    ctx.fillStyle = hexWithAlpha(own, fillAlpha);
     ctx.fillRect(-w / 2, -h / 2, w, h);
     if (f.warning) {
       ctx.strokeStyle = '#c0392b';
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
-    } else {
-      ctx.strokeStyle = color;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+    } else if (f.strokeStyle !== 'none') {
+      ctx.strokeStyle = own;
       ctx.lineWidth = 1.2;
+      // 2026-11-12 描边三态+无描边：实线/虚线/点线；restore 会复位 dash。
+      ctx.setLineDash(f.strokeStyle === 'dashed' ? [6, 4] : f.strokeStyle === 'dotted' ? [1.6, 3.2] : []);
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
     }
-    ctx.strokeRect(-w / 2, -h / 2, w, h);
     ctx.restore();
     if (opts.selectedId && f.id === opts.selectedId) {
       ctx.save();
@@ -267,6 +281,71 @@ export function drawFacilityLayer(
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
         ctx.fillText(f.name, center.x, center.y + Math.max(h / 2, 6) + 3);
       }
+    } else if (opts.selectedIds && f.id && opts.selectedIds.includes(f.id)) {
+      // 2026-11-12 B3 组选：白圈同款（无名称标签，多选时不糊一地字）。
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(-f.rotationDeg * Math.PI / 180);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);
+      ctx.restore();
+    }
+  }
+}
+
+/**
+ * 室内 3D 场景的落位投影（2026-11-11 统一视图）：把「物料 + 场地实景扫描」
+ * 的平面落位（plan-item-bridge 算出的 ENU 米制框）画到户外 2D 画布上。
+ *
+ * 口径与 drawFacilityLayer 一致：中心点走 planPointToPixel、尺寸按米/像素换算、
+ * 旋转矩阵同源（屏幕 y 向下故取负角）。
+ * - 物料（item）：半透明填充 + 实线描边 + 下方名称（名字过长就不画，避免糊成一片）。
+ * - 实景扫描（scene）：只画虚线轮廓（它是底，不遮盖上面的物料），中心一个标签。
+ *
+ * 这些对象是**只读展示**：不参与命中测试/交互，不写进 plan，也不导出任何句柄。
+ */
+export function drawSceneObjectsLayer(c: PlanCanvasContext, objects: readonly PlanSceneObject[]): void {
+  if (objects.length === 0) return;
+  const { ctx, viewport } = c;
+  const metersPerPx = planMetersPerPixel(viewport);
+  for (const obj of objects) {
+    const center = planPointToPixel(obj.center, viewport);
+    const w = Math.max(4, obj.width / metersPerPx);
+    const h = Math.max(4, obj.depth / metersPerPx);
+    ctx.save();
+    ctx.translate(center.x, center.y);
+    ctx.rotate(-obj.rotationDeg * Math.PI / 180);
+    if (obj.kind === 'scene') {
+      // 实景扫描：虚线轮廓 + 不填充（它垫在物料底下）。
+      ctx.setLineDash([8, 5]);
+      ctx.strokeStyle = obj.color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = hexWithAlpha(obj.color, 0.14);
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.strokeStyle = obj.color;
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+    }
+    ctx.restore();
+    if (obj.kind === 'scene') {
+      // 场景标签：中心对齐（实景扫描本身通常没有名称，过长的兜底截断）。
+      const label = obj.name.length > 16 ? `${obj.name.slice(0, 15)}…` : obj.name;
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(15,22,32,0.85)';
+      ctx.fillText(label, center.x, center.y);
+    } else if (obj.name.trim().length <= 12) {
+      // 物料名称：画在占地框下方（名字太长就不画，免得相互压字）。
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(15,22,32,0.85)';
+      ctx.fillText(obj.name, center.x, center.y + Math.max(h / 2, 6) + 3);
     }
   }
 }
@@ -325,12 +404,15 @@ export function drawRouteLayer(
     oneWay: boolean;
     name?: string;
     selected?: boolean;
+    /** 2026-11-12 活动包预设：动线主题色（缺省按 kind 取 tokens 色）。 */
+    color?: string | undefined;
   }[],
 ): void {
   const { ctx } = c;
   for (const r of routes) {
     if (r.points.length < 2) continue;
-    const color = PLANNING_ROUTE_KIND_COLORS[r.kind as PlanningRouteKind];
+    // 2026-11-12 活动包赛道预设：动线自带主题色时优先（契约 planRouteSchema.color）。
+    const color = r.color ?? PLANNING_ROUTE_KIND_COLORS[r.kind as PlanningRouteKind];
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = r.kind === 'vehicle' ? 3 : 2;
@@ -372,7 +454,7 @@ export function drawRouteLayer(
  */
 export function drawWorkerLayer(
   c: PlanCanvasContext,
-  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean }[],
+  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined }[],
 ): void {
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.worker;
@@ -380,7 +462,7 @@ export function drawWorkerLayer(
     const pt = planPointToPixel(w.position, viewport);
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = hexWithAlpha(color, 0.85);
+    ctx.fillStyle = hexWithAlpha(w.color ?? color, 0.85);
     ctx.fill();
     ctx.strokeStyle = w.warning ? '#c0392b' : '#fff';
     ctx.lineWidth = w.warning ? 1.6 : 1;
@@ -677,6 +759,172 @@ export function drawMeasureDraft(
     const anchor = cursorPoint ?? draft[draft.length - 1]!;
     const pt = planPointToPixel(anchor, c.viewport);
     drawMeasureLabel(c, readout, pt.x + 12, pt.y - 14);
+  }
+}
+
+/* ---------------- 2026-11-11 用户指令：自由标注（文本 + 形状） ---------------- */
+
+/** 文本标注：深底圆角 pill + 白字（多行），深浅底图都读得清；选中加白描边。 */
+function drawAnnotationNote(
+  c: PlanCanvasContext,
+  at: PlanPoint,
+  text: string,
+  color: string,
+  selected: boolean,
+): void {
+  const { ctx, viewport } = c;
+  const pt = planPointToPixel(at, viewport);
+  const lines = text.split('\n').slice(0, 6);
+  ctx.font = '12px system-ui, sans-serif';
+  const width = Math.max(...lines.map(l => ctx.measureText(l).width), 8) + 16;
+  const height = lines.length * 16 + 10;
+  const x = pt.x - width / 2;
+  const y = pt.y - height / 2;
+  const radius = 6;
+  ctx.save();
+  if (selected) {
+    ctx.beginPath();
+    ctx.roundRect(x - 2.5, y - 2.5, width + 5, height + 5, radius + 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, radius);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  lines.forEach((line, i) => {
+    ctx.fillText(line, pt.x, y + 5 + 8 + i * 16);
+  });
+  ctx.restore();
+}
+
+/**
+ * 固定自由标注（2026-11-11 用户指令）：形状 = 半透明填充 + 实线描边（线段无填充），
+ * 文本 = 深底 pill。图形一律从米制几何现算，缩放不变形；选中加白描边（与动线同口径）。
+ */
+export function drawAnnotationLayer(
+  c: PlanCanvasContext,
+  annotations: readonly (Pick<PlanAnnotation, 'kind' | 'points' | 'radiusM' | 'text' | 'name' | 'color'> & { selected?: boolean })[],
+): void {
+  const { ctx, viewport } = c;
+  for (const a of annotations) {
+    const color = a.color ?? PLANNING_LAYER_COLORS.annotate;
+    const selected = a.selected === true;
+    if (a.kind === 'note') {
+      drawAnnotationNote(c, a.points[0]!, a.text || a.name, color, selected);
+      continue;
+    }
+    ctx.save();
+    if (a.kind === 'circle') {
+      const center = planPointToPixel(a.points[0]!, viewport);
+      const rPx = (a.radiusM ?? 0) / planMetersPerPixel(viewport);
+      if (rPx < 1) { ctx.restore(); continue; }
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
+    } else if (a.kind === 'line') {
+      ctx.beginPath();
+      const from = planPointToPixel(a.points[0]!, viewport);
+      const to = planPointToPixel(a.points[1]!, viewport);
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+    } else {
+      const ring = a.kind === 'rect' ? annotationRectRing(a.points[0]!, a.points[1]!) : a.points;
+      traceRing(c, ring);
+    }
+    if (selected) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4.5;
+      ctx.stroke();
+    }
+    if (a.kind !== 'line') {
+      ctx.fillStyle = hexWithAlpha(color, 0.14);
+      ctx.fill();
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/**
+ * 形状草稿（2026-11-11 用户指令）：rect/circle/line 拖拽中画实时预览（起点 + 指针），
+ * 三角形按已收点画虚线 + 指针橡皮筋；顶点小方块与测量草稿同口径。
+ */
+export function drawAnnotationDraft(
+  c: PlanCanvasContext,
+  draft: readonly PlanPoint[],
+  kind: PlanShapeKind,
+  cursorPoint?: PlanPoint,
+): void {
+  const { ctx } = c;
+  const color = PLANNING_LAYER_COLORS.annotate;
+  if (kind === 'triangle') {
+    // 三角形：已收点虚线相连 + 顶点方块 + 指针橡皮筋（与测量面积草稿同手感）。
+    if (draft.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 5]);
+      tracePolyline(c, draft);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (cursorPoint && draft.length >= 1) {
+      const last = planPointToPixel(draft[draft.length - 1]!, c.viewport);
+      const cursor = planPointToPixel(cursorPoint, c.viewport);
+      ctx.save();
+      ctx.strokeStyle = hexWithAlpha(color, 0.55);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(cursor.x, cursor.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    for (const p of draft) {
+      const pt = planPointToPixel(p, c.viewport);
+      ctx.fillStyle = color;
+      ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+    }
+    return;
+  }
+  // rect/circle/line：起点 + 指针（拖拽中起点已在 draft[0]，预览用指针补第二角）。
+  const a = draft[0];
+  const b = draft.length >= 2 ? draft[1] : cursorPoint;
+  if (!a || !b) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  if (kind === 'rect') {
+    traceRing(c, annotationRectRing(a, b));
+    ctx.stroke();
+  } else if (kind === 'circle') {
+    const center = planPointToPixel(a, c.viewport);
+    const rPx = Math.hypot(b.x - a.x, b.y - a.y) / planMetersPerPixel(c.viewport);
+    if (rPx >= 1) {
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else {
+    const from = planPointToPixel(a, c.viewport);
+    const to = planPointToPixel(b, c.viewport);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+  for (const p of [a]) {
+    const pt = planPointToPixel(p, c.viewport);
+    ctx.fillStyle = color;
+    ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
   }
 }
 

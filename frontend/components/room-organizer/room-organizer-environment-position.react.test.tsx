@@ -62,6 +62,8 @@ it('uses the same checked position write for the numeric control',async()=>{
  render(<RoomOrganizer localWriteCapability={lease.capability}/>);await waitFor(()=>expect(mock.position).toEqual({x:0,y:0,z:0}));
  expect(await screen.findByText('当前编辑权模式暂不支持修改场地标定；标定结果仍需现场核对。')).toBeTruthy();
  expect(mock.calibrationReadOnly).toBe(true);
+ // 工作台默认 2D（2026-11-11 地理优先主线），高斯场景标定是 3D 侧控件，先切到 3D。
+ fireEvent.click(await screen.findByRole('button',{name:'2D / 3D'}));
  fireEvent.click(await screen.findByRole('button',{name:'移动整体场景'}));
  const field=await screen.findByLabelText('高斯场景 X 坐标，米');fireEvent.change(field,{target:{value:'4'}});
  await waitFor(()=>expect(JSON.parse(localStorage.getItem(KEY)!)['env-a'][0].position.x).toBe(4));

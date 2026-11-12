@@ -2,10 +2,10 @@
   "version": 1,
   "provider": "3dassets.dev",
   "license": "CC0-1.0",
-  "count": 529,
-  "placeableCount": 528,
+  "count": 543,
+  "placeableCount": 542,
   "registeredCount": 528,
-  "totalBytes": 48104156,
+  "totalBytes": 50171724,
   "buckets": [
     {
       "key": "seating",
@@ -35,12 +35,12 @@
     {
       "key": "lighting",
       "label": "灯光照明",
-      "count": 22
+      "count": 24
     },
     {
       "key": "signage",
       "label": "标识导视",
-      "count": 25
+      "count": 26
     },
     {
       "key": "people",
@@ -55,7 +55,7 @@
     {
       "key": "logistics",
       "label": "后勤设施",
-      "count": 41
+      "count": 44
     },
     {
       "key": "tools",
@@ -65,7 +65,7 @@
     {
       "key": "sports",
       "label": "运动器材",
-      "count": 35
+      "count": 36
     },
     {
       "key": "plants",
@@ -75,7 +75,7 @@
     {
       "key": "structure",
       "label": "建筑结构",
-      "count": 43
+      "count": 44
     },
     {
       "key": "digital",
@@ -95,12 +95,17 @@
     {
       "key": "vehicles",
       "label": "交通载具",
-      "count": 12
+      "count": 15
     },
     {
       "key": "scenes",
       "label": "完整场景",
       "count": 5
+    },
+    {
+      "key": "rides",
+      "label": "游乐设施",
+      "count": 3
     }
   ],
   "models": [
@@ -5500,6 +5505,72 @@
       ],
       "aliases": [],
       "assetId": "c036a2ae-3f3c-5bc1-8b6d-2e335b81c02b"
+    },
+    {
+      "slug": "theme-park-rides-and-coasters-theme-park-rides-and-coa-d18acb96",
+      "name": "摩天轮",
+      "originalName": "Ferris Wheel (Theme Park Rides and Coasters)",
+      "bucket": "rides",
+      "subcategory": "游乐设施",
+      "width": 16.88,
+      "depth": 19.657,
+      "height": 17.87,
+      "bytes": 614016,
+      "triangles": 13808,
+      "glb": "/showcase/assets/library/model/theme-park-rides-and-coasters-theme-park-rides-and-coa-d18acb96.glb",
+      "thumb": "/showcase/assets/library/thumb/theme-park-rides-and-coasters-theme-park-rides-and-coa-d18acb96.webp",
+      "page": "https://3dassets.dev/assets/theme-park-rides-and-coasters-theme-park-rides-and-coa-d18acb96",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/28655/v1/model.glb",
+      "sha256": "9cca5e4acae11dbfa2d6148d591d2ae4b19333267fdc06f02ba71276a595071f",
+      "license": "CC0-1.0",
+      "sources": [
+        "website-online"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "theme-park-rides-and-coasters-theme-park-rides-and-coa-b3ccf619",
+      "name": "旋转木马",
+      "originalName": "Carousel (Theme Park Rides and Coasters)",
+      "bucket": "rides",
+      "subcategory": "游乐设施",
+      "width": 12.7,
+      "depth": 14.57,
+      "height": 8.74,
+      "bytes": 707224,
+      "triangles": 15620,
+      "glb": "/showcase/assets/library/model/theme-park-rides-and-coasters-theme-park-rides-and-coa-b3ccf619.glb",
+      "thumb": "/showcase/assets/library/thumb/theme-park-rides-and-coasters-theme-park-rides-and-coa-b3ccf619.webp",
+      "page": "https://3dassets.dev/assets/theme-park-rides-and-coasters-theme-park-rides-and-coa-b3ccf619",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/28656/v1/model.glb",
+      "sha256": "7198c6b0d628d038ac8ee01f74af63b481458e5337ee8770db1ed7bfd393768f",
+      "license": "CC0-1.0",
+      "sources": [
+        "website-online"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab",
+      "name": "旋转飞椅",
+      "originalName": "Chair Swing Ride (Theme Park Rides and Coasters)",
+      "bucket": "rides",
+      "subcategory": "游乐设施",
+      "width": 15.3,
+      "depth": 15.3,
+      "height": 11.4,
+      "bytes": 297228,
+      "triangles": 6116,
+      "glb": "/showcase/assets/library/model/theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab.glb",
+      "thumb": "/showcase/assets/library/thumb/theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab.webp",
+      "page": "https://3dassets.dev/assets/theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/28660/v1/model.glb",
+      "sha256": "9b22f9aa199efe81a1ffc04bd9b0448d48adfe1feb6008a6752fb9dc0a21d9c4",
+      "license": "CC0-1.0",
+      "sources": [
+        "website-online"
+      ],
+      "aliases": []
     },
     {
       "slug": "live-music-venue-and-festival-stage-backdrop-banner-fr-7ebd4df6",
@@ -12289,6 +12360,248 @@
       ],
       "aliases": [],
       "assetId": "c30ad2e9-3ed5-5990-b8ce-4e8f815bd8e8"
+    },
+    {
+      "slug": "hot-air-balloon-festival-portable-toilet-block-82a4faf8",
+      "name": "移动厕所（两格）",
+      "originalName": "Portable Toilet Block (Hot Air Balloon Festival)",
+      "bucket": "logistics",
+      "subcategory": "后勤设施",
+      "width": 2.380000114440918,
+      "depth": 1.325027505569219,
+      "height": 2.4399493255908546,
+      "bytes": 10800,
+      "triangles": 144,
+      "glb": "/showcase/assets/library/model/hot-air-balloon-festival-portable-toilet-block-82a4faf8.glb",
+      "thumb": "/showcase/assets/library/thumb/hot-air-balloon-festival-portable-toilet-block-82a4faf8.webp",
+      "page": "https://3dassets.dev/assets/hot-air-balloon-festival-portable-toilet-block-82a4faf8",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/38519/v1/model.glb",
+      "sha256": "729016916b8a3c644413516bce3c7a72ae4aa66f7df912a52d088240e6a3a391",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a",
+      "name": "移动厕所（三格）",
+      "originalName": "Portable Toilet Block (Live Music Venue and Festival Stage)",
+      "bucket": "logistics",
+      "subcategory": "后勤设施",
+      "width": 3.919999837875366,
+      "depth": 1.2500895047390084,
+      "height": 3.360051182084959,
+      "bytes": 52704,
+      "triangles": 1152,
+      "glb": "/showcase/assets/library/model/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a.glb",
+      "thumb": "/showcase/assets/library/thumb/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a.webp",
+      "page": "https://3dassets.dev/assets/live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/33929/v1/model.glb",
+      "sha256": "206fd3ca52bdda89d34684aa386e2a984a445051351211ed9bf5e6d195c144c1",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "bus-station-and-city-transit-city-bus-single-decker-ddf9a355",
+      "name": "城市公交车",
+      "originalName": "City Bus Single Decker (Bus Station and City Transit)",
+      "bucket": "vehicles",
+      "subcategory": "交通载具",
+      "width": 2.580027528010984,
+      "depth": 12.14005712574117,
+      "height": 2.8899344257313646,
+      "bytes": 43360,
+      "triangles": 956,
+      "glb": "/showcase/assets/library/model/bus-station-and-city-transit-city-bus-single-decker-ddf9a355.glb",
+      "thumb": "/showcase/assets/library/thumb/bus-station-and-city-transit-city-bus-single-decker-ddf9a355.webp",
+      "page": "https://3dassets.dev/assets/bus-station-and-city-transit-city-bus-single-decker-ddf9a355",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/34194/v1/model.glb",
+      "sha256": "b8e683b075a1ddc3d065a25a9516186e7df31f54c107bc9688bc7b3402dd2225",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "long-haul-trucking-and-truck-stop-container-20ft-bc3beca3",
+      "name": "20英尺集装箱",
+      "originalName": "Twenty-foot intermodal container (Long-Haul Trucking and Truck Stop)",
+      "bucket": "logistics",
+      "subcategory": "后勤设施",
+      "width": 2.5600205033423644,
+      "depth": 6.1595001220703125,
+      "height": 2.750217962254828,
+      "bytes": 43416,
+      "triangles": 852,
+      "glb": "/showcase/assets/library/model/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3.glb",
+      "thumb": "/showcase/assets/library/thumb/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3.webp",
+      "page": "https://3dassets.dev/assets/long-haul-trucking-and-truck-stop-container-20ft-bc3beca3",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/13988/v1/model.glb",
+      "sha256": "ca3ed60e6e16aa63ae26e638856fc16c23a1ab4d3057acde3f2cf266e9597993",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "golf-course-and-clubhouse-motorised-golf-cart-b754304d",
+      "name": "电动高尔夫球车",
+      "originalName": "Motorised Golf Cart (Golf Course and Clubhouse)",
+      "bucket": "vehicles",
+      "subcategory": "交通载具",
+      "width": 1.3560066556882884,
+      "depth": 2.2649999856948853,
+      "height": 1.909950099418251,
+      "bytes": 20184,
+      "triangles": 548,
+      "glb": "/showcase/assets/library/model/golf-course-and-clubhouse-motorised-golf-cart-b754304d.glb",
+      "thumb": "/showcase/assets/library/thumb/golf-course-and-clubhouse-motorised-golf-cart-b754304d.webp",
+      "page": "https://3dassets.dev/assets/golf-course-and-clubhouse-motorised-golf-cart-b754304d",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/33492/v1/model.glb",
+      "sha256": "1913f9869b72249f6e804ed4bb7ed496d30339e939673c593bff20ee1a10b95a",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "fire-and-emergency-services-ambulance-f22ce1a5",
+      "name": "救护车",
+      "originalName": "Ambulance (Fire and Emergency Services)",
+      "bucket": "vehicles",
+      "subcategory": "交通载具",
+      "width": 3.3706050472263596,
+      "depth": 6.005670070648193,
+      "height": 2.7600140533990216,
+      "bytes": 145984,
+      "triangles": 4744,
+      "glb": "/showcase/assets/library/model/fire-and-emergency-services-ambulance-f22ce1a5.glb",
+      "thumb": "/showcase/assets/library/thumb/fire-and-emergency-services-ambulance-f22ce1a5.webp",
+      "page": "https://3dassets.dev/assets/fire-and-emergency-services-ambulance-f22ce1a5",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/29900/v1/model.glb",
+      "sha256": "96fad995c37ea40aee587b9c6c5e972d6f3b0d142490f3dc990fc344589d26de",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "city-park-and-playground-bike-rack-c73abcbf",
+      "name": "五环自行车架",
+      "originalName": "Five Hoop Bike Rack (City Park and Playground)",
+      "bucket": "sports",
+      "subcategory": "运动器材",
+      "width": 2.200000047683716,
+      "depth": 0.7200842466935592,
+      "height": 0.7241590206721674,
+      "bytes": 20200,
+      "triangles": 384,
+      "glb": "/showcase/assets/library/model/city-park-and-playground-bike-rack-c73abcbf.glb",
+      "thumb": "/showcase/assets/library/thumb/city-park-and-playground-bike-rack-c73abcbf.webp",
+      "page": "https://3dassets.dev/assets/city-park-and-playground-bike-rack-c73abcbf",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/33679/v1/model.glb",
+      "sha256": "0c64c4fd97f8d7c268bc98bcda01420292b0ec10acccb4c44c8be522cb68bc1f",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0",
+      "name": "场地办公舱房",
+      "originalName": "Site office cabin (Tool Hire Depot and Plant Yard)",
+      "bucket": "structure",
+      "subcategory": "建筑结构",
+      "width": 6.079999923706055,
+      "depth": 3.429667431597969,
+      "height": 2.899677806968426,
+      "bytes": 35356,
+      "triangles": 648,
+      "glb": "/showcase/assets/library/model/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0.glb",
+      "thumb": "/showcase/assets/library/thumb/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0.webp",
+      "page": "https://3dassets.dev/assets/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/35296/v1/model.glb",
+      "sha256": "019c9070c2fa94098e96bdbee26d2015eeae4c8baca64fcec765fcd8bf386f1d",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "bus-station-and-city-transit-street-lamp-2c6420cf",
+      "name": "路灯",
+      "originalName": "Street Lamp (Bus Station and City Transit)",
+      "bucket": "lighting",
+      "subcategory": "灯光照明",
+      "width": 0.43992064713478585,
+      "depth": 2.0338767443417187,
+      "height": 7.079999923706055,
+      "bytes": 8284,
+      "triangles": 120,
+      "glb": "/showcase/assets/library/model/bus-station-and-city-transit-street-lamp-2c6420cf.glb",
+      "thumb": "/showcase/assets/library/thumb/bus-station-and-city-transit-street-lamp-2c6420cf.webp",
+      "page": "https://3dassets.dev/assets/bus-station-and-city-transit-street-lamp-2c6420cf",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/34226/v1/model.glb",
+      "sha256": "45687a7269fb2cde80436d03d7cdc2f16c45fbfa55a593ac3f9cab653fb4981e",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "bus-station-and-city-transit-traffic-light-4b8313ca",
+      "name": "红绿灯",
+      "originalName": "Traffic Light (Bus Station and City Transit)",
+      "bucket": "signage",
+      "subcategory": "标识导视",
+      "width": 0.3598742534960979,
+      "depth": 0.4310312081646446,
+      "height": 3.3499999046325684,
+      "bytes": 8948,
+      "triangles": 156,
+      "glb": "/showcase/assets/library/model/bus-station-and-city-transit-traffic-light-4b8313ca.glb",
+      "thumb": "/showcase/assets/library/thumb/bus-station-and-city-transit-traffic-light-4b8313ca.webp",
+      "page": "https://3dassets.dev/assets/bus-station-and-city-transit-traffic-light-4b8313ca",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/34229/v1/model.glb",
+      "sha256": "02ac5e5c9016e78f8a88d423bea1d20e1f872e3236780a23765aae99a9f5119c",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941",
+      "name": "可拖行照明塔",
+      "originalName": "Towable tower light (Tool Hire Depot and Plant Yard)",
+      "bucket": "lighting",
+      "subcategory": "灯光照明",
+      "width": 1.620051679086739,
+      "depth": 2.8300000429153442,
+      "height": 2.593728164836442,
+      "bytes": 59864,
+      "triangles": 1268,
+      "glb": "/showcase/assets/library/model/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941.glb",
+      "thumb": "/showcase/assets/library/thumb/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941.webp",
+      "page": "https://3dassets.dev/assets/tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941",
+      "cdnUrl": "https://cdn.3dassets.dev/assets/35330/v1/model.glb",
+      "sha256": "a9ade89b4d09c3a077695f9361f940ad227f3c255a4415ec08d4ae60693a2211",
+      "license": "CC0-1.0",
+      "sources": [
+        "model200"
+      ],
+      "aliases": []
     }
   ]
 }

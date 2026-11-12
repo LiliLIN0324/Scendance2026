@@ -121,7 +121,7 @@ export function isBriefFactUtterance(text: string): boolean {
   if (!compact) return false;
   const remainder = compact
     .replace(/(?:大约|大概|预计|约|左右)/g, '')
-    .replace(/\d+(?:\.\d+)?(?:人|位|名)/g, '')
+    .replace(/\d+(?:\.\d+)?(?:个)?(?:人|位|名)/g, '')
     .replace(/\d+(?:\.\d+)?(?:米|m)?[×xX*]\d+(?:\.\d+)?(?:米|m)?/g, '')
     .replace(/\d+(?:\.\d+)?(?:平方米|平米|平方公尺|㎡|m²|m2|平)/g, '')
     .replace(/(?:室内|户外|室外|场馆|宴会厅|会议室|大厅|礼堂)/g, '')
@@ -611,7 +611,7 @@ export function parseBriefSentence(raw: string): BriefExtraction {
     }
     rest = rest.replace(dims[0], '-');
   }
-  const headcount = withoutNonTotalHeadcounts(rest).match(/(\d{1,5})(人|位|名)/);
+  const headcount = withoutNonTotalHeadcounts(rest).match(/(\d{1,5})(?:个)?(人|位|名)/);
   if (headcount) {
     const value = Number(headcount[1]);
     if (Number.isFinite(value) && value >= 1 && value <= HEADCOUNT_MAX) found.headcount = value;

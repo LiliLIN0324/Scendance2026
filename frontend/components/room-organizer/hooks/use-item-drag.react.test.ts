@@ -174,15 +174,19 @@ describe('useItemDrag — structural collision rollback', () => {
     result.current.handleDrag('a',-1,0);
     result.current.handleDrag('a',0,0);
     result.current.handleDragEnd('a');
-    expect(actions.bulkSetPositions).toHaveBeenCalledWith(new Map([['a',{x:-1,z:0}],['b',{x:-1,z:2}]]));
-    expect(scene.children.map(g=>g.position.x)).toEqual([-1,-1]);
+    // 2026-11-11 宽松闸门：穿透不再 invalid——wall 内的位置也标 valid 并 commit。
+    // 穿透/冲突提示交给 dragCollisionTint 染红，不阻止停住。
+    expect(actions.bulkSetPositions).toHaveBeenCalledWith(new Map([['a',{x:0,z:0}],['b',{x:0,z:2}]]));
+    expect(scene.children.map(g=>g.position.x)).toEqual([0,0]);
   });
-  it('adds no history mutation when every attempted drop is invalid', () => {
+  it('commits the drop even when far past the lot (规划阶段允许先停住再调)', () => {
     const actions={moveItem:vi.fn(),bulkSetPositions:vi.fn(),updateItem:vi.fn()} as unknown as LayoutActions;
     const floor=makeFloor({items:[makeItem({id:'a',position:{x:0,z:0},locked:false})]});
     const {result}=renderHook(()=>useItemDrag({activeFloor:floor,activeFloorIndex:0,roomWidth:10,roomDepth:8,
       keepOut:[],frontGap:null,actions,allSelectedIds:new Set(['a'])}));
     result.current.handleDragStart('a');result.current.handleDrag('a',100,100);result.current.handleDragEnd('a');
-    expect(actions.bulkSetPositions).not.toHaveBeenCalled();
+    // 2026-11-11 宽松闸门：超远位置也 valid（只有 schema 非法 / openings 对不上才拦），
+    // 越界提示由 setDragCollisionTint 染红；保存/提交前再走 canApplyLayoutGeometry 严格校验。
+    expect(actions.bulkSetPositions).toHaveBeenCalledWith(new Map([['a',{x:100,z:100}]]));
   });
 });

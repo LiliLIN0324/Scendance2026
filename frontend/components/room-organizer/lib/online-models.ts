@@ -1,5 +1,5 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
-import { CATALOG_GROUPS, catalogGroupKey, catalogGroupLabel, matchesCatalogFilter } from './catalog-taxonomy';
+import { MATERIAL_GROUP_LABELS, matchesMaterialGroup, materialGroupLabel } from './material-taxonomy';
 import { isGlbUrl } from './glb-url';
 
 /** Unified, lazily loaded catalogue: Chinese labels with original names for search. */
@@ -29,8 +29,8 @@ export interface OnlineModel {
 }
 
 /**
- * Raw catalogue family names. The rail shows event groups (`catalogGroupLabel`);
- * these stay in search so 「音响乐器」 and 「绿植景观」 still find a model.
+ * 原始家族的中文名（搜索用）。筛选栏显示的是基础设施分类（`onlineBucketLabel`），
+ * 但这些词仍留在搜索索引里，搜「音响乐器」「绿植景观」照样能找到。
  */
 export const ONLINE_BUCKET_LABELS: Readonly<Record<string, string>> = {
   seating: '座椅沙发', tables: '桌台柜台', exhibition: '摊位展陈', stage: '舞台设施',
@@ -38,11 +38,12 @@ export const ONLINE_BUCKET_LABELS: Readonly<Record<string, string>> = {
   storage: '收纳容器', logistics: '后勤设施', tools: '工具设备', sports: '运动器材',
   plants: '绿植景观', structure: '建筑结构', digital: '数码设备', decor: '装饰陈设',
   food: '餐饮用品', vehicles: '交通载具', scenes: '完整场景',
+  rides: '游乐设施',
 };
 
-/** The chip label: an event group, or the raw key when the family is new. */
+/** 筛选项的标签：基础设施分类（物料库与户外规划共用一套口径）。 */
 export function onlineBucketLabel(bucket: string): string {
-  return catalogGroupLabel(bucket);
+  return materialGroupLabel(bucket);
 }
 
 export interface OnlineBucket {
@@ -133,28 +134,30 @@ export function normalizeOnlineModels(raw: unknown): OnlineModel[] {
 }
 
 /**
- * Event groups in catalog order, busiest-within-group already summed.
- * A family that is not in the taxonomy still gets its own chip.
+ * 基础设施分类顺序，类目内按素材数排；未映射的新家族排在最后。
+ * 空分类不出现（没有素材可点），等素材接进来自然出现。
  */
 export function buildOnlineModelIndex(models: readonly OnlineModel[]): OnlineModelIndex {
   const counts = new Map<string, number>();
   for (const model of models) {
     if (!model.bucket) continue;
-    const key = catalogGroupKey(model.bucket);
+    const key = materialGroupLabel(model.bucket);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  const known = new Set<string>(CATALOG_GROUPS.map(group => group.key));
-  const buckets: OnlineBucket[] = CATALOG_GROUPS
-    .filter(group => counts.has(group.key))
-    .map(group => ({ key: group.key, label: group.label, count: counts.get(group.key) ?? 0 }));
-  for (const [key, count] of counts) {
-    if (!known.has(key)) buckets.push({ key, label: onlineBucketLabel(key), count });
-  }
+  const order = new Map<string, number>(MATERIAL_GROUP_LABELS.map((label, index) => [label, index]));
+  const buckets: OnlineBucket[] = [...counts.entries()]
+    .map(([label, count]) => ({ key: label, label, count }))
+    .sort((a, b) => {
+      const ai = order.get(a.key) ?? Number.MAX_SAFE_INTEGER;
+      const bi = order.get(b.key) ?? Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return a.key.localeCompare(b.key, 'zh-Hans-CN');
+    });
   return { models, buckets };
 }
 
 /**
- * Free-text and bucket filter, kept out of the component so the panel stays markup-only.
+ * Free-text and category filter, kept out of the component so the panel stays markup-only.
  * Matching the subcategory and slug as well as the name makes Chinese subcategory words
  * and pasted CDN slugs both searchable.
  */
@@ -165,7 +168,7 @@ export function filterOnlineModels(
 ): OnlineModel[] {
   const needle = query.trim().toLowerCase();
   return models.filter(model => {
-    if (bucket && !matchesCatalogFilter(model.bucket, bucket)) return false;
+    if (bucket && !matchesMaterialGroup(model.bucket, bucket)) return false;
     if (!needle) return true;
     const text = [model.name, model.originalName, model.subcategory, onlineBucketLabel(model.bucket), ONLINE_BUCKET_LABELS[model.bucket], model.slug].join(' ').toLowerCase();
     return needle.split(/\s+/).every(word => text.includes(word));

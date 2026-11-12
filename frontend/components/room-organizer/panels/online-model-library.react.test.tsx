@@ -213,7 +213,7 @@ describe('OnlineModelLibrary', () => {
     const page = render(<PlacementWorkspace/>);
     fireEvent.click(await screen.findByRole('button', { name: '添加Lounge Chaise' }));
     await waitFor(() => expect(ensureGlbAsset).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByRole('button', { name: /^舞台/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
     fireEvent.change(screen.getByLabelText('搜索全库线上模型'), { target: { value: 'hedge' } });
     page.rerender(<PlacementWorkspace hidden/>);
     page.rerender(<PlacementWorkspace/>);
@@ -302,7 +302,7 @@ describe('OnlineModelLibrary', () => {
     fireEvent.dragStart(tile, { dataTransfer });
     expect(dataTransfer.setData).toHaveBeenCalledWith(CATALOG_DRAG_MIME, 'online:seating-chaise');
     // 拖拽跟随图像是物料缩略图本身，而不是整张卡片。
-    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(tile.querySelector('img'), expect.any(Number), expect.any(Number));
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(tile.querySelector('.sc-lib-tile-photo img'), expect.any(Number), expect.any(Number));
     expect(onAdd).not.toHaveBeenCalled();
   });
   it('scrolls categories horizontally with a mouse wheel without changing the filter', async () => {
@@ -416,7 +416,7 @@ describe('OnlineModelLibrary', () => {
     expect(thumbnail.getAttribute('src')).toBe(CATALOGUE[0]!.thumb);
     fireEvent.error(thumbnail);
     expect(tile.textContent).toContain('预览未载入');
-    expect(tile.querySelector('img')).toBeNull();
+    expect(tile.querySelector('.sc-lib-tile-photo img')).toBeNull();
     expect(tile.draggable).toBe(true);
     fireEvent.click(tile);
     await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
@@ -460,12 +460,13 @@ describe('OnlineModelLibrary', () => {
     expect(vi.mocked(loadOnlineModels)).toHaveBeenCalledTimes(2);
   });
 
-  it('narrows the grid to the family whose chip was pressed', async () => {
+  it('narrows the grid to the infra category whose chip was pressed', async () => {
     setup();
     await screen.findByRole('button', { name: '添加Lounge Chaise' });
-    fireEvent.click(screen.getByRole('button', { name: /^舞台/ }));
+    // 家具 = seating；舞台设施与绿植都归到「景点」，所以按 景点 点会同时留下两件。
+    fireEvent.click(screen.getByRole('button', { name: /^家具/ }));
     await waitFor(() => expect(tiles()).toHaveLength(1));
-    expect(tiles()[0]!.getAttribute('aria-label')).toBe('添加Lighting Tower');
+    expect(tiles()[0]!.getAttribute('aria-label')).toBe('添加Lounge Chaise');
   });
 
   it('searches the catalogue as you type, and says when nothing matches', async () => {
@@ -481,12 +482,12 @@ describe('OnlineModelLibrary', () => {
   it('searches across a previously chosen family, then a category click clears the query', async () => {
     setup();
     await screen.findByRole('button', { name: '添加Lounge Chaise' });
-    fireEvent.click(screen.getByRole('button', { name: /^舞台/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
     fireEvent.change(screen.getByLabelText('搜索全库线上模型'), { target: { value: 'hedge' } });
     expect(await screen.findByRole('button', { name: '添加Box Hedge' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
-    expect(screen.getByRole('button', { name: /^舞台/ }).getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(screen.getByRole('button', { name: /^座席/ }));
+    expect(screen.getByRole('button', { name: /^景点/ }).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: /^家具/ }));
     expect((screen.getByLabelText('搜索全库线上模型') as HTMLInputElement).value).toBe('');
     expect(await screen.findByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
     expect(tiles()).toHaveLength(1);
@@ -617,6 +618,7 @@ describe('最近用过', () => {
     expect(screen.queryByText('最近用过')).toBeNull();
     expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();
     // 点一张卡 → 下载成功 → onAdd 被调用 → slug 进最近用过。
+    fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
     fireEvent.click(await screen.findByRole('button', { name: '添加Lighting Tower' }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
     await waitFor(() => expect(screen.getByText('最近用过')).toBeTruthy());
@@ -631,8 +633,23 @@ describe('最近用过', () => {
     vi.mocked(ensureGlbAsset).mockRejectedValueOnce(new Error('网络不可达'));
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
     await screen.findByRole('button', { name: '物料库' });
+    fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
     fireEvent.click(await screen.findByRole('button', { name: '添加Lighting Tower' }));
     await screen.findByRole('alert');
     expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();
+  });
+});
+
+describe('物料库与 2D 目录对齐', () => {
+  it('browses public models as a two-level tree and shows a plan icon on each card', async () => {
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
+    await screen.findByRole('button', { name: '物料库' });
+    expect(screen.getByRole('button', { name: /^基础设施/ }).getAttribute('aria-expanded')).toBe('true');
+    const chaise = screen.getByRole('button', { name: '添加Lounge Chaise' });
+    expect(chaise.querySelector('.sc-lib-plan-icon img')?.getAttribute('src')).toContain('chair');
+    expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
+    const tower = screen.getByRole('button', { name: '添加Lighting Tower' });
+    expect(tower.querySelector('.sc-lib-plan-icon img')?.getAttribute('src')).toContain('stage');
   });
 });

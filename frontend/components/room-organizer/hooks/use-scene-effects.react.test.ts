@@ -5,8 +5,10 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render2DTopDown } from '../canvas-2d/render';
 import { makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import { buildEntrance } from '../three/entrance';
 import { clearGlbAssetCache, ensureGlbAsset } from '../three/glb-assets';
+import { ROOM_OBJECT_TAGS } from '../three/room-builder';
 import { mountReferenceImage, useSceneEffects, type UseSceneEffectsParams } from './use-scene-effects';
 
 vi.mock('../canvas-2d/render', async importOriginal => ({
@@ -202,5 +204,78 @@ describe('main canvas reference effects', () => {
     rerender({ view: { ...input.view, showReferenceImage: false } });
     expect(vi.mocked(buildEntrance)).toHaveBeenCalledOnce();
     expect(count().length).toBeGreaterThan(shown.length);
+  });
+});
+
+describe('main canvas geo ground (GeoGround tiles)', () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+
+  /** 起步计划带预置锚点，但边界是空的——测试补一块 100×60 的矩形场地。 */
+  function geoPlan() {
+    const plan = createStarterOutdoorPlan();
+    plan.boundary = [
+      { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 60 }, { x: 0, y: 60 },
+    ];
+    return plan;
+  }
+
+  /** 瓦片经 BasemapTileCache 的默认 new Image() 加载：stub 成微任务即就绪，不碰网络。 */
+  function stubTileImages() {
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    });
+  }
+
+  it('paints real map tiles under the plan footprint and skips the paper floor', async () => {
+    stubTileImages();
+    const input = params();
+    input.isReady = true;
+    input.outdoorPlan = geoPlan();
+    const { rerender } = renderHook(
+      ({ plan }: { plan: Exclude<UseSceneEffectsParams['outdoorPlan'], undefined> }) => useSceneEffects({ ...input, outdoorPlan: plan }),
+      { initialProps: { plan: input.outdoorPlan as Exclude<UseSceneEffectsParams['outdoorPlan'], undefined> } },
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const scene = input.sceneRef.current!;
+    const ground = scene.children.find((child) => child.userData.type === ROOM_OBJECT_TAGS.GeoGround);
+    expect(ground).toBeDefined();
+    const quads = ground!.children.filter((child) => child.userData.type === ROOM_OBJECT_TAGS.GeoGround);
+    expect(quads.length).toBeGreaterThan(0);
+    // 瓦片组是「边界外接框 → 壳体」的仿射：scale 与 layout 尺寸/边界尺寸一一对应。
+    expect(ground!.scale.x).toBeCloseTo(input.layout.width / 100, 6);
+    expect(ground!.scale.z).toBeCloseTo(input.layout.height / 60, 6);
+    // 瓦片在场：0 层素色地板、地基、矩形外墙与 0.5m 网格面全部让位。
+    expect(scene.children.filter((child) => child.userData.type === ROOM_OBJECT_TAGS.Floor)).toHaveLength(0);
+    expect(scene.children.filter((child) => child.userData.type === ROOM_OBJECT_TAGS.Wall)).toHaveLength(0);
+    // 计划清空（退出户外）：瓦片整组撤走，纸面地板与墙回来。
+    rerender({ plan: null });
+    await act(async () => { await Promise.resolve(); });
+    expect(scene.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.GeoGround)).toBe(false);
+    expect(scene.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.Floor)).toBe(true);
+    expect(scene.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.Wall)).toBe(true);
+  });
+
+  it('does not paint tiles while the main view is 2D', async () => {
+    stubTileImages();
+    const input = params();
+    input.isReady = true;
+    input.outdoorPlan = geoPlan();
+    input.view = makeViewSettings({ view2D: true });
+    renderHook(() => useSceneEffects(input));
+    await act(async () => { await Promise.resolve(); });
+    expect(input.sceneRef.current!.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.GeoGround)).toBe(false);
+  });
+
+  it('keeps the paper floor when the plan has no anchor or the scan is isolated', async () => {
+    const input = params();
+    input.isReady = true;
+    input.outdoorPlan = { ...geoPlan(), anchor: undefined };
+    input.showBasemap = false;
+    renderHook(() => useSceneEffects(input));
+    expect(input.sceneRef.current!.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.GeoGround)).toBe(false);
+    // 无锚点 + 扫描隔离：GeoGround 不激活，纸面地板照旧。
+    expect(input.sceneRef.current!.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.Floor)).toBe(true);
   });
 });

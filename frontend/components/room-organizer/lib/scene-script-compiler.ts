@@ -3,7 +3,9 @@ import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { DIAGNOSTIC_REASON, mergeDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { floorKeepOut } from './floor-keep-out';
 import { buildFurnitureSet, FURNITURE_SETS, type FurnitureSet } from './furniture-sets';
-import { ringCenters, ringDiningSet } from './ring-seating';
+import type { MaterializedFurnishing } from './furnishing-select';
+import { rectDiningSet, ringCenters, ringDiningSet, RING_TABLE_SIDE_M } from './ring-seating';
+import type { TableArrangement } from './table-seat-plan';
 import { hasCollisions, rotatedHalfExtents, type CollisionContext } from './geometry';
 import { randomSuffix } from './ids';
 import {
@@ -45,6 +47,10 @@ export interface SceneScriptCompileContext {
   makeId?: () => string;
   /** Round tables on a ring. Omitted keeps the rectangular dining grid. */
   seatingShape?: 'ring';
+  /** Asset chosen by select_furnishing. The compiler places it and does not pick another. */
+  furnishing?: MaterializedFurnishing;
+  /** Size and seats already decided. The compiler places this set and does not pick another count. */
+  tablePlan?: TableArrangement;
 }
 
 /** One line of the ledger: what a role asked for, what landed, what was refused. */
@@ -347,6 +353,8 @@ export function compileSceneScript(script: SceneScript, context: SceneScriptComp
       refusals,
       ledger,
       ...(context.seatingShape === 'ring' ? { seatingShape: 'ring' as const } : {}),
+      ...(context.tablePlan ? { tablePlan: context.tablePlan } : {}),
+      ...(context.furnishing ? { furnishing: context.furnishing } : {}),
     });
     // Several seating zones: the worst one decides. A zone that could not settle must not be
     // hidden by the next zone reporting a clean pass.
@@ -426,6 +434,8 @@ interface SeatingDeps {
   refusals: SceneScriptRefusal[];
   ledger: (role: SceneScriptZoneRole) => SceneScriptOp;
   seatingShape?: 'ring';
+  tablePlan?: TableArrangement;
+  furnishing?: MaterializedFurnishing;
 }
 
 /**
@@ -447,8 +457,20 @@ type SeatingOutcome = { passes: number; converged: boolean; capacity: number; up
 function fillSeating(script: SceneScript, zone: SceneScriptZone, deps: SeatingDeps): SeatingOutcome {
   const rect = zoneRectOf(zone);
   const mode = script.layoutMode;
-  const ring = deps.seatingShape === 'ring' && mode !== 'desk-chair';
-  const set = mode === 'desk-chair' ? null : ring ? ringDiningSet() : FURNITURE_SETS.find((entry) => entry.key === 'dining');
+  const ring = deps.seatingShape === 'ring' && mode !== 'desk-chair' && deps.tablePlan?.shape !== 'rect';
+  const planned = deps.tablePlan;
+  const chosen = deps.furnishing;
+  const set = mode === 'desk-chair'
+    ? null
+    : chosen
+      ? (chosen.table.tableShape === 'round'
+        ? ringDiningSet({ sideM: chosen.table.width, table: chosen.table, chair: chosen.chair })
+        : rectDiningSet({ width: chosen.table.width, depth: chosen.table.depth, table: chosen.table, chair: chosen.chair }))
+      : ring || planned?.shape === 'round'
+        ? ringDiningSet({ sideM: planned?.shape === 'round' ? planned.width : RING_TABLE_SIDE_M })
+        : planned?.shape === 'rect'
+          ? rectDiningSet({ width: planned.width, depth: planned.depth })
+          : FURNITURE_SETS.find((entry) => entry.key === 'dining');
   const measured = set ? measureSet(set, deps.base, deps.makeId) : measurePair(deps.makeId);
   const asked = zone.count ?? script.guests ?? 0;
   // A build that comes back empty means the set itself cannot exist in this venue (a 2 m

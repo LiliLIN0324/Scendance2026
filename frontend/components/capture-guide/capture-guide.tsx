@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { BrandMark } from '@/components/brand-mark';
 import { MaterialSymbol } from '@/components/room-organizer/panels/material-symbol';
 import {
@@ -180,7 +180,8 @@ function scoreStatItems(score: CaptureScore, scanMode: boolean, scaleMeters: num
   ];
 }
 
-export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; venueName?: string | undefined } = {}): JSX.Element {
+export function CaptureGuide({ onClose, venueName, onSendToRecon, onHeaderPointerDown }: { onClose?: () => void; venueName?: string | undefined; /** 2026-11-12 出 3D 接 Aholo：把现场采集的原始文件交接给「场地重建」面板（拍完当场就能送，不用再手动挑一次文件）。 */ onSendToRecon?: (payload: { files: File[]; name: string }) => void;   /** 2026-11-12 左栏半卡片堆栈：抓着头部拖出独立小窗/换序（仅 workbench 形态的 header）。 */
+  onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void } = {}): JSX.Element {
   const StepContent = onClose ? 'div' : 'main';
   const [selectedMode, setSelectedMode] = useState<CaptureMode | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -188,6 +189,8 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
   const [orbitConfirmed, setOrbitConfirmed] = useState(false);
   const [scaleInput, setScaleInput] = useState('');
   const [frames, setFrames] = useState<AnalyzedImage[]>([]);
+  /** 2026-11-12 出 3D 接 Aholo：现场采集的原始文件（照片原片 / 视频原件）——快检抽帧只是分析样本，重建要吃原件。 */
+  const [reconSourceFiles, setReconSourceFiles] = useState<File[]>([]);
   const [layer, setLayer] = useState<CaptureLayer>('eye');
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>('idle');
   const [gpsError, setGpsError] = useState('');
@@ -363,6 +366,7 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
     if (files.length === 0) return;
     setNotice('');
     let failed = 0;
+    const keptFiles: File[] = [];
     let previous = frames[frames.length - 1] ?? null;
     setBusy({ done: 0, total: files.length, label: '正在快检图片' });
     for (let index = 0; index < files.length; index += 1) {
@@ -375,6 +379,7 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
           heading: headingRef.current,
           at: Date.now() + index,
         });
+        keptFiles.push(file);
         markCaptureStart(analyzed.at ?? Date.now());
         setShotNotice({ verdict: judgeShot(analyzed, previous), thumb: analyzed.thumb });
         setFrames(previousFrames => [...previousFrames, analyzed]);
@@ -385,6 +390,7 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
       setBusy({ done: index + 1, total: files.length, label: `正在快检图片 ${index + 1}/${files.length}` });
     }
     setBusy(null);
+    if (keptFiles.length > 0) setReconSourceFiles(previousFiles => [...previousFiles, ...keptFiles]);
     if (failed > 0) setNotice(`${failed} 张图片无法解码，已跳过。请确认是 JPG / PNG / HEIC 原片。`);
   }
 
@@ -413,6 +419,8 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
         failed += 1;
       } else {
         added += extracted.length;
+        // 2026-11-12 出 3D 接 Aholo：视频原件是重建的最优输入（视频通道实测全胜），抽帧只用于快检。
+        setReconSourceFiles(previousFiles => [...previousFiles, file]);
         markCaptureStart(extracted[0]?.at ?? Date.now());
         const lastFrame = extracted[extracted.length - 1];
         if (lastFrame) {
@@ -451,14 +459,16 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
     setStepIndex(steps.indexOf('score'));
   }
 
-  /** 出重建的硬门槛：三层各 24 个机位，环向覆盖 ≥300°，才允许去评分。 */
+  /** 出重建的交付门槛（展示口径）：三层各 24 个机位、环向覆盖 ≥300°。
+   * 2026-11-12 用户指令：门槛不再阻断评分——评分系统自带 ready/supplement/redo 三态，
+   * 样本不足就该给出「建议补拍/重采」的结论，而不是把「生成评分」按钮焊死。 */
   const GATE_COVERAGE_DEG = 300;
   const gateMissing: string[] = [];
   if (layerCounts.low < TARGET_PER_LAYER) gateMissing.push(`低层还差 ${TARGET_PER_LAYER - layerCounts.low} 张`);
   if (layerCounts.eye < TARGET_PER_LAYER) gateMissing.push(`视线层还差 ${TARGET_PER_LAYER - layerCounts.eye} 张`);
   if (layerCounts.high < TARGET_PER_LAYER) gateMissing.push(`高层还差 ${TARGET_PER_LAYER - layerCounts.high} 张`);
   if (liveCoverage < GATE_COVERAGE_DEG) gateMissing.push(`环向覆盖还差 ${Math.ceil(GATE_COVERAGE_DEG - liveCoverage)}°`);
-  if (onClose && !scaleOk) gateMissing.push('填写一个实测长度');
+  if (onClose && !scaleOk) gateMissing.push('实测长度未填（评分会按缺尺度封顶 69）');
   const gateReady = gateMissing.length === 0;
 
   const canAdvance =
@@ -471,9 +481,9 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
           : currentStep === 'scale'
             ? scaleOk
             : currentStep === 'scan'
-              ? scanFiles.length > 0 && scaleOk
+              ? scanFiles.length > 0
               : currentStep === 'verify'
-                ? gateReady
+                ? frames.length > 0
                 : true;
 
   function advance(): void {
@@ -484,6 +494,11 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
     }
     if (currentStep === 'scan') {
       runScore('scan');
+      return;
+    }
+    // 2026-11-12：失败案例改为可选支线，「出 3D」步直达采集回执（不再强制穿过教育页）。
+    if (currentStep === 'export') {
+      setStepIndex(steps.indexOf('receipt'));
       return;
     }
     setStepIndex(index => Math.min(index + 1, steps.length - 1));
@@ -553,6 +568,7 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
     setOrbitConfirmed(false);
     setScaleInput('');
     setFrames([]);
+    setReconSourceFiles([]);
     setLayer('eye');
     setScanFiles([]);
     setScanCompleteness('unknown');
@@ -580,7 +596,7 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
         : currentStep === 'score'
           ? '出 3D'
           : currentStep === 'export'
-            ? '看失败案例'
+            ? '生成采集回执'
             : currentStep === 'examples'
               ? '生成采集回执'
               : '下一步';
@@ -639,12 +655,14 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
   return (
     <div className={onClose ? 'cg-page is-workbench' : 'cg-page'}>
       <div className="cg-shell">
-        {onClose ? <header className="cg-top">
+        {onClose ? <header className="cg-top" onPointerDown={onHeaderPointerDown}
+          style={onHeaderPointerDown ? { cursor: 'grab', touchAction: 'none' } : undefined}>
           <div className="cg-workbench-title">
             <strong>拍摄场地</strong>
             {venueName && <span title={venueName}>{venueName}</span>}
           </div>
-          <button type="button" className="cg-workbench-close" aria-label="关闭拍摄场地" onClick={onClose}><X size={18} aria-hidden="true" /></button>
+          {/* 2026-11-11 用户指令：左侧展开面板关闭钮统一为 sc-left-close（样式在 globals.css，只在此 workbench 形态渲染）。 */}
+          <button type="button" className="sc-left-close" aria-label="关闭拍摄场地" onClick={onClose}><X size={18} aria-hidden="true" /></button>
         </header> : <header className="cg-top">
           <Link className="cg-brand" href="/" aria-label="回到幕景工作台">
             <BrandMark size={24} />
@@ -958,7 +976,7 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
               </div>
               <div className="cg-tip">
                 <Info size={16} aria-hidden="true" />
-                <span>下一步是现场校验。没有通过这一步，评分按钮不会打开。</span>
+                <span>下一步是现场校验。样本不足也能先出评分，会按「建议补拍 / 重采」给结论。</span>
               </div>
             </>
           )}
@@ -1434,6 +1452,32 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
                 scaleMeters={scaleMeters}
                 gateReady={gateReady}
               />
+              {/* 2026-11-12 出 3D 接 Aholo：照片/视频模式把原始文件直接交接给场地重建面板（scan 模式的
+                  SPZ/PLY/GLB 已是重建产物，走挂载路径不送重建）。 */}
+              {onSendToRecon && selectedMode !== 'scan' && (
+                <section className="cg-card">
+                  <div className="cg-card-head">
+                    <div className="cg-card-title">
+                      <span className="cg-icon"><Box size={20} aria-hidden="true" /></span>
+                      <div>
+                        <strong>直接送重建（Aholo 场地重建）</strong>
+                        <span>把刚检查过的原始文件带去重建面板，不用再手动挑一遍。</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="cg-btn cg-btn--primary"
+                    disabled={reconSourceFiles.length === 0}
+                    data-testid="send-recon"
+                    onClick={() => onSendToRecon({ files: reconSourceFiles, name: venueName?.trim() || '现场采集' })}
+                  >
+                    <Box size={16} aria-hidden="true" />
+                    送重建 · 出 3D（{reconSourceFiles.length} 个原始文件）
+                  </button>
+                  <p className="cg-note">照片带原片、视频带原件；重建面板默认干跑，确认档位与扣费后才会上传。</p>
+                </section>
+              )}
               {/* 付费入口暂不上线：<PriceCard /> */}
             </>
           )}
@@ -1633,44 +1677,50 @@ export function CaptureGuide({ onClose, venueName }: { onClose?: () => void; ven
 
         {currentStep === 'verify' && !gateReady && (!onClose || frames.length > 0) && (
           <p className="cg-gate-hint" data-testid="gate-hint">
-            还差：{gateMissing.join(' · ')}。补够这些机位才能出重建。
+            距交付门槛还差：{gateMissing.join(' · ')}。可以先出评分看结论（不足会按「建议补拍 / 重采」给判断），再决定要不要补。
           </p>
         )}
 
-        {(!onClose || currentStep !== 'mode') && <footer className="cg-foot">
-          {safeIndex > 0 && currentStep !== 'receipt' && (
-            <button type="button" className="cg-btn cg-btn--ghost" onClick={goBack} data-testid="back">
-              <ArrowLeft size={16} aria-hidden="true" />
-              上一步
-            </button>
-          )}
-          {currentStep === 'receipt' ? onClose ? (
-            <button type="button" className="cg-btn cg-btn--primary" onClick={onClose}>返回场地</button>
-          ) : (
-            <Link className="cg-btn cg-btn--primary" href="/">
-              回到工作台
-              <ArrowRight size={16} aria-hidden="true" />
-            </Link>
-          ) : (
-            <button
-              type="button"
-              className="cg-btn cg-btn--primary"
-              onClick={advance}
-              disabled={!canAdvance}
-              data-testid="next"
-            >
-              {busy ? (
-                <Loader2 size={16} aria-hidden="true" />
-              ) : currentStep === 'verify' || currentStep === 'scan' ? (
-                <ShieldCheck size={16} aria-hidden="true" />
-              ) : currentStep === 'score' ? (
-                <Box size={16} aria-hidden="true" />
-              ) : null}
-              {nextLabel}
-              <ArrowRight size={16} aria-hidden="true" />
-            </button>
-          )}
-        </footer>}
+          {(!onClose || currentStep !== 'mode') && <footer className="cg-foot">
+            {safeIndex > 0 && currentStep !== 'receipt' && (
+              <button type="button" className="cg-btn cg-btn--ghost" onClick={goBack} data-testid="back">
+                <ArrowLeft size={16} aria-hidden="true" />
+                上一步
+              </button>
+            )}
+            {currentStep === 'export' && (
+              <button type="button" className="cg-btn cg-btn--ghost" onClick={() => setStepIndex(steps.indexOf('examples'))} data-testid="examples-side">
+                <BookOpen size={16} aria-hidden="true" />
+                看失败案例
+              </button>
+            )}
+            {currentStep === 'receipt' ? onClose ? (
+              <button type="button" className="cg-btn cg-btn--primary" onClick={onClose}>返回场地</button>
+            ) : (
+              <Link className="cg-btn cg-btn--primary" href="/">
+                回到工作台
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="cg-btn cg-btn--primary"
+                onClick={advance}
+                disabled={!canAdvance}
+                data-testid="next"
+              >
+                {busy ? (
+                  <Loader2 size={16} aria-hidden="true" />
+                ) : currentStep === 'verify' || currentStep === 'scan' ? (
+                  <ShieldCheck size={16} aria-hidden="true" />
+                ) : currentStep === 'score' ? (
+                  <Box size={16} aria-hidden="true" />
+                ) : null}
+                {nextLabel}
+                <ArrowRight size={16} aria-hidden="true" />
+              </button>
+            )}
+          </footer>}
       </div>
     </div>
   );

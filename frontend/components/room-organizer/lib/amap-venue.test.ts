@@ -13,6 +13,7 @@ import {
   isMapOutdoorLayout,
   satelliteProxyUrl,
   ensureSatelliteGround,
+  resolveSatellitePolygon,
   rectangleAroundMeters,
   fetchSatelliteGroundDataUrl,
   satelliteMissReason,
@@ -237,6 +238,26 @@ describe('satellite ground backfill', () => {
     expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '室内宴会厅' })).toBe(false);
   });
 
+  it('falls back to the stored scene anchor for a legacy venue with no drawn polygon', async () => {
+    const legacy: RoomLayout = {
+      ...(INITIAL_LAYOUT as RoomLayout),
+      name: '未命名',
+      width: 120,
+      height: 80,
+      sceneAnchor: { lng: 120.141306, lat: 30.2545, orientationDeg: 0, metersPerUnit: 1 },
+    };
+    delete legacy.mapGroundPolygon;
+    delete legacy.mapLngLat;
+    delete legacy.researchArea;
+    delete legacy.floorPlanImage;
+    delete legacy.satelliteGroundRef;
+    const polygon = (await resolveSatellitePolygon(legacy))!;
+    expect(polygon).toHaveLength(4);
+    expect(polygon[0].lat).toBeCloseTo(30.2545 - 80 / 2 / METERS_PER_DEGREE_LAT, 6);
+    expect(polygon[2].lat).toBeCloseTo(30.2545 + 80 / 2 / METERS_PER_DEGREE_LAT, 6);
+    expect(polygon[2].lng - polygon[0].lng).toBeCloseTo(120 / metersPerDegreeLng(30.2545), 6);
+  });
+
   it('builds a localhost proxy url without the key', () => {
     const url = satelliteProxyUrl(lShapePolygon(), 'secret-key');
     expect(url).toContain('http://127.0.0.1:3199/amap-static?');
@@ -320,6 +341,7 @@ describe('satellite ground backfill', () => {
     const legacy = { ...layout };
     delete legacy.mapGroundPolygon;
     delete legacy.mapLngLat;
+    delete legacy.sceneAnchor;
     delete legacy.satelliteGroundRef;
     delete legacy.floorPlanImage;
     const patch = await ensureSatelliteGround(legacy);

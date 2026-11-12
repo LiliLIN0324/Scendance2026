@@ -5,6 +5,7 @@ import {
   isLibraryTemplateId,
   libraryEntries,
   libraryEntryFromAsset,
+  libraryFootprint,
   libraryFacilityTemplate,
   libraryStickerFor,
   libraryTemplateId,
@@ -116,5 +117,57 @@ describe('oneplan-library', () => {
     expect(entries).toHaveLength(2);
     expect(new Set(entries.map(e => e.id)).size).toBe(2);
     expect(new Set(entries.map(e => libraryTemplateId(e))).size).toBe(2);
+  });
+
+  it('比例尺轿车按真实车长落图，座椅不再写成 2×2', () => {
+    const car = libraryEntryFromAsset(asset({
+      kind: 'scale-fg',
+      slug: 'car',
+      name_zh: '轿车',
+      category_zh: '车辆',
+      viewBox: '0 0 24 11',
+    }))!;
+    expect(car.width).toBe(4.5);
+    expect(car.depth).toBe(2.1);
+
+    const rotated = libraryEntryFromAsset(asset({
+      kind: 'scale-fg',
+      slug: 'bus-rotated',
+      name_zh: '巴士（旋转）',
+      category_zh: '车辆',
+      viewBox: '0 0 5.2 24',
+    }))!;
+    expect(rotated.width).toBe(2.6);
+    expect(rotated.depth).toBe(12);
+
+    const chair = libraryEntryFromAsset(asset({
+      kind: 'scale-fg',
+      slug: 'chair',
+      name_zh: '椅子',
+      category_zh: '家具',
+      viewBox: '0 0 20 24',
+    }))!;
+    expect(chair.width).toBe(0.5);
+    expect(chair.depth).toBe(0.6);
+
+    const cone = libraryEntryFromAsset(asset({
+      slug: 'cone',
+      name_zh: '锥桶',
+      category_zh: '交通管理',
+    }))!;
+    expect([cone.width, cone.depth]).toEqual([0.4, 0.4]);
+
+    const unknownIcon = libraryEntryFromAsset({ path: '', kind: 'icon', slug: 'lonely-slug' })!;
+    expect([unknownIcon.width, unknownIcon.depth]).toEqual([1.2, 1.2]);
+  });
+
+  it('libraryFootprint 不把 viewBox 数字当成米', () => {
+    const size = libraryFootprint({
+      slug: 'shipping-container',
+      kind: 'scale-fg',
+      viewBox: '0 0 24 10',
+    });
+    expect(size.width).toBe(6.1);
+    expect(size.depth).toBe(2.5);
   });
 });

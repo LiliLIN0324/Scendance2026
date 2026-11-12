@@ -738,6 +738,17 @@
 .is-browse .sc-lib-tile .sc-lib-star { position:absolute; top:10px; right:10px; width:24px; height:24px; opacity:1; }
 .is-browse .sc-lib-list .sc-lib-group { gap:6px; }
 
+/* 不同人群：按类型列成树，展开后与物料库同款的卡片（低模直接放入场地，漫游角色选为当前角色）。 */
+.sc-lib-tile-badge {
+  position:absolute; left:6px; bottom:6px;
+  padding:1px 5px; border-radius:999px;
+  background:rgba(36,92,74,.86); color:#fff;
+  font-size:10px; line-height:15px; letter-spacing:.02em;
+}
+.is-browse .sc-lib-tile-btn.is-selected { border-color:var(--wk-green); box-shadow:inset 0 0 0 1px var(--wk-green); }
+.is-browse .sc-lib-tile-btn.is-selected .sc-lib-tile-name { color:var(--wk-green-deep); font-weight:600; }
+.is-browse .sc-lib-tile-btn.is-selected .sc-lib-tile-thumb { background:var(--wk-plane); box-shadow:inset 0 0 0 2px var(--wk-green); border-radius:8px; }
+
 /* 本机 GLB：入口就是一格物料卡，桌面上可把单个 .glb 拖进来；说明收进 ⓘ。 */
 .sc-glb-file {
   position: absolute;
@@ -1040,12 +1051,6 @@
   height: 2px; border-radius: 1px; background: var(--wk-green);
 }
 .sc-library-tabs-equal > button:focus-visible { outline: 2px solid var(--wk-green); outline-offset: -2px; border-radius: 4px; }
-.sc-walk-role-card { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
-.sc-walk-role-card > img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; background: #fafafa; border-radius: 9px; }
-.sc-walk-role-card.is-selected > img { outline: 2px solid #245c4a; outline-offset: -2px; }
-.sc-walk-role-card:disabled { cursor: not-allowed; opacity: .55; }
-.sc-walk-role-note { font-size: 11px; line-height: 1.3; color: var(--wk-muted); }
-.sc-walk-role-card.is-selected .sc-walk-role-note { color: #245c4a; font-weight: 600; }
 .sc-library-chat { position: relative; margin-bottom: 6px; }
 .sc-library-chat-title {
   position: absolute; top: 0; left: 0; min-height: 34px;
@@ -1130,3 +1135,122 @@
   color:var(--wk-muted); font-size:10px; line-height:14px; cursor:pointer;
 }
 .sc-recent-clear:hover { color:var(--wk-ink); text-decoration:underline; }
+
+/* 物料库浏览：对齐 2D 目录树，卡片缩略图左下角叠平面图标。 */
+.sc-lib-tile-thumb,
+.sc-material-preview {
+  position: relative;
+}
+.sc-lib-tile-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.sc-lib-plan-icon {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #eef1f4;
+  box-shadow: 0 0 0 1px rgba(20, 24, 32, 0.08);
+  pointer-events: none;
+}
+.sc-lib-plan-icon.is-chip {
+  border-radius: 999px;
+  background: #23252c;
+}
+.sc-lib-plan-icon img {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.sc-lib-tree {
+  display: flex;
+  flex-direction: column;
+  margin: 2px 0 8px;
+}
+.sc-lib-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 2px;
+  border: 0;
+  border-top: 1px solid var(--wk-hair, rgba(20, 24, 32, 0.10));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-lib-tree-row.is-sub {
+  padding: 6px 2px 6px 18px;
+  font-weight: 500;
+}
+.sc-lib-tree-chevron {
+  flex: 0 0 10px;
+  width: 10px;
+  color: var(--wk-muted, #6a717c);
+  font-size: 10px;
+  line-height: 1;
+}
+.sc-lib-tree-row svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  color: var(--wk-muted, #6a717c);
+}
+.sc-lib-tree-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-lib-tree-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+.sc-lib-tree-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--wk-muted, #6a717c);
+}
+.sc-lib-tree-recent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sc-lib-tree-recent .sc-lib-tree-row {
+  flex: 1 1 auto;
+}
+.sc-lib-tree-clear {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--wk-muted, #6a717c);
+  font-size: 11px;
+  cursor: pointer;
+}
+.sc-lib-tree-panel {
+  padding: 4px 0 10px;
+}

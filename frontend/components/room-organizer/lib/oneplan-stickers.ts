@@ -300,9 +300,54 @@ function loadImage(src: string): HTMLImageElement | null {
   return null;
 }
 
+/**
+ * 染色版底形缓存：scale-bg 文件绝大多数是烤死的静态灰（非 currentColor），
+ * SVG 文本替换行不通，这里用离屏画布 source-in 合成把整张剪影染成物件色。
+ * 键 = `src#颜色`；图片未就绪/无 DOM 返回 null（load 完成后的重绘订阅会补画）。
+ */
+const tintedCanvasCache = new Map<string, HTMLCanvasElement>();
+
+/** 染色版贴纸画布（2D 底形与 3D 贴纸占位共用）；图片未就绪/无 DOM 返回 null。 */
+export function getOneplanTintedStickerCanvas(src: string, color: string): HTMLCanvasElement | null {
+  return getTintedStickerCanvas(src, color);
+}
+
+function getTintedStickerCanvas(src: string, color: string): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  const key = `${src}#${color}`;
+  const cached = tintedCanvasCache.get(key);
+  if (cached) return cached;
+  const image = loadImage(src);
+  if (!image) return null;
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(image, 0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, width, height);
+  tintedCanvasCache.set(key, canvas);
+  return canvas;
+}
+
+/** 取已就绪的贴纸图片；未就绪/失败/无 DOM 返回 null。会触发后台加载。 */
+export function getOneplanStickerImage(src: string): HTMLImageElement | null {
+  return loadImage(src);
+}
+
 export interface OneplanStickerDrawOptions {
   /** 0–1，缺省 1；底图较亮时可降透明度让线稿更柔和。 */
   alpha?: number;
+  /**
+   * 2026-11-12 活动包物件主题色：icon 类替换深色芯片（OnePlan 同款彩色圆底），
+   * scale 类把底形剪影染成该色。缺省维持既有深色芯片/灰底形（基建类目不受影响）。
+   */
+  color?: string;
 }
 
 function drawCachedImage(
@@ -344,12 +389,13 @@ export function drawOneplanSticker(
   const image = loadImage(src);
   if (!image) return false;
   if (oneplanStickerUsesChip(resolved)) {
-    // 符号是白色字形（自带白色外环），浅色底图上必须衬深色圆片，否则整块看不见。
+    // 符号是白色字形（自带白色外环），浅色底图上必须衬圆片，否则整块看不见。
+    // 活动包物件用主题色圆底（OnePlan 同款），其余维持深色芯片。
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(x, y, size / 2, 0, Math.PI * 2);
-    ctx.fillStyle = ONEOPLAN_CHIP_FILL;
+    ctx.fillStyle = opts.color ?? ONEOPLAN_CHIP_FILL;
     ctx.fill();
     ctx.restore();
   }
@@ -372,7 +418,7 @@ export function drawOneplanScaleSticker(
   opts: OneplanStickerDrawOptions = {},
 ): boolean {
   const srcs = oneplanScaleSrcs(slug);
-  const bg = loadImage(srcs.bg);
+  const bg = opts.color ? getTintedStickerCanvas(srcs.bg, opts.color) : loadImage(srcs.bg);
   const fg = loadImage(srcs.fg);
   if (!bg && !fg) return false;
   const alpha = opts.alpha ?? 1;

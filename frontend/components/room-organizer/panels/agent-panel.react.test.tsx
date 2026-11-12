@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { backendSceneToLayout } from '../lib/backend-adapter';
+import * as localPlanModule from '../lib/local-plan';
 import { STORAGE_KEY } from '../lib/constants';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
@@ -4100,4 +4102,562 @@ describe('S2 Bingo 审校台：三钮状态台直达', () => {
     // 长链接不进聊天框；复制动作住在审计卡上（复用既有「复制甲方链接」钮）。
     expect(screen.queryByRole('button', { name: '复制评审链接' })).toBeNull();
   });
+});
+
+describe('event layout generation path', () => {
+  it('previews the selected tables locally when a project is connected and the hall is not 20×15', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    render(ui(makeLayout({ id: 'blank-hall', width: 12, height: 8 }), onApply, onPreview));
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(screen.queryByText(/本次没有提交生成/)).toBeNull();
+    expect(screen.getByText(/场地没说/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const tables = preview.floors[0]!.items.filter(item => item.name === '圆桌');
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(item => item.tableShape === 'round' && item.width === 1.4 && item.tableFinish === 'linen')).toBe(true);
+    expect(preview.width).toBeCloseTo(20);
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('keeps a real hall and still places the selected tables', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    const layout = makeLayout({
+      id: 'walled-hall',
+      width: 18,
+      height: 10,
+      floors: [makeFloor({ interiorWalls: [{ id: 'wall-1', x1: -8, z1: -4, x2: 8, z2: -4 }] })],
+    });
+    render(ui(layout, onApply, onPreview));
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/不能只改外框/)).toBeNull();
+    expect(screen.queryByText(/本次没有提交生成/)).toBeNull();
+    expect(screen.queryByText(/场地没说/)).toBeNull();
+    expect(screen.getByText(/按现在的场地 18×10 米/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(18);
+    expect(preview.height).toBeCloseTo(10);
+    expect(preview.floors[0]!.items.some(item => item.name === '圆桌' && item.tableFinish === 'linen')).toBe(true);
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('rebuilds the table when a later diameter follows the headcount answer', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    render(ui(makeLayout({ id: 'follow-size', width: 20, height: 15 }), vi.fn(), onPreview));
+    send('我想办个生日宴');
+    expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    send('80个人');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    onPreview.mockClear();
+    send('圆桌直径2.2米');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const tables = preview.floors[0]!.items.filter(item => item.name === '圆桌');
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(item => item.width === 2.2)).toBe(true);
+    expect(screen.getAllByText(/Ø2\.20/).length).toBeGreaterThan(0);
+    expect(onPreview).toHaveBeenCalled();
+  }, 20000);
+
+  it('keeps a non-rebuildable map hall when the sentence also states 20×15', async () => {
+    studioMock.connection = '项目已连接';
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    const onMemory = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu',
+      name: '西湖·平湖秋月',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌直径2.2米，80人，20米乘15米');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryAllByText(/先出一版可拖的初稿/)).toHaveLength(0);
+    const fullCard = document.getElementById('plan-proposal')!;
+    expect(within(fullCard).getByText(/放下 \d+ 桌 · 座位 \d+ \/ 80 · 够了/)).toBeTruthy();
+    expect(fullCard.textContent).not.toContain('识别到');
+    expect(fullCard.textContent).not.toContain('座位用途及可用性待核验');
+    expect(fullCard.textContent).not.toContain('签到需求尚未确认');
+    expect(document.querySelector('.ap-ghost')?.textContent ?? '').not.toContain('发布会');
+    expect(screen.queryByText(/不能只改外框/)).toBeNull();
+    expect(screen.queryByText(/本次没有提交生成/)).toBeNull();
+    expect(screen.getByText(/你说的 20×15 米这次不改场地/)).toBeTruthy();
+    expect(screen.getByText(/23\.8×16\.1/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+    expect(preview.backendSceneV2).toBe(layout.backendSceneV2);
+    const tables = preview.floors[0]!.items.filter(item => item.name === '圆桌');
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every(item => item.width === 2.2)).toBe(true);
+    const chairs = preview.floors[0]!.items.filter(item => item.type === 'dining-chair' || item.type === 'chair');
+    expect(chairs.length).toBeGreaterThanOrEqual(80);
+    expect(screen.queryByText(/座位 30 \/ 80/)).toBeNull();
+    expect(screen.queryByText(/没有按满员桌数确认/)).toBeNull();
+    const stored = onMemory.mock.calls.at(-1)?.[0];
+    expect(stored.venueIO).toBe('outdoor');
+    expect(stored.lengthM).toBeCloseTo(23.8);
+    expect(stored.widthM).toBeCloseTo(16.1);
+    expect(stored.agentVenue).toBeUndefined();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('does not let a stored area replace a standing hall', async () => {
+    const onPreview = vi.fn();
+    const layout = makeLayout({
+      id: 'walled-area',
+      width: 18,
+      height: 10,
+      floors: [makeFloor({ interiorWalls: [{ id: 'wall-1', x1: -8, z1: -4, x2: 8, z2: -4 }] })],
+    });
+    render(ui(layout, vi.fn(), onPreview));
+    send('300平，想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/不能只改外框/)).toBeNull();
+    expect(screen.getByText(/面积先不折成新场地/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(18);
+    expect(preview.height).toBeCloseTo(10);
+  }, 20000);
+
+  it('stores the outdoor hall instead of an indoor 20×15 assumption', async () => {
+    const onMemory = vi.fn();
+    const layout = makeLayout({
+      id: 'outdoor-hall',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    const stored = onMemory.mock.calls.at(-1)?.[0];
+    expect(stored.venueIO).toBe('outdoor');
+    expect(stored.agentVenue).toBeUndefined();
+    expect(stored.lengthM).toBeCloseTo(23.8);
+    expect(stored.widthM).toBeCloseTo(16.1);
+    expect(typeof stored.venueScaleBasis).toBe('string');
+    expect(stored.venueFactToken?.generation).toEqual(expect.any(String));
+    expect(screen.queryByText(/室内 20×15/)).toBeNull();
+    send('出一版');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
+  }, 20000);
+
+  it('previews an unstated banquet on an activity-scoped standing hall', async () => {
+    const onPreview = vi.fn();
+    const onApply = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-unstated',
+      name: '西湖·平湖秋月',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('想办个八十人圆桌宴');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    expect(screen.queryByText(/不能只改外框/)).toBeNull();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+    expect(preview.floors[0]!.items.some(item => item.name === '圆桌')).toBe(true);
+    expect(onApply).not.toHaveBeenCalled();
+    send('出一版');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
+  }, 20000);
+
+  it('answers headcount on an activity-scoped standing hall without asking for the size again', async () => {
+    const onApply = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-headcount',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('我想办个生日宴');
+    expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    send('80个人');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    expect(screen.queryByText(/请重新说明当前场地尺寸/)).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('previews a birthday on an activity session after 80个人, even if the cloud model asks to confirm', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED', '1');
+    studioMock.connection = '项目已连接';
+    studioMock.controller.briefConversation.mockImplementation(async (message: string) => {
+      if (message.includes('生日')) return { enabled: true, extraction: { event: '生日宴' }, reply: '好的，为您策划生日宴。', unhandled: [], factEvidence: [] };
+      if (message.includes('80')) return { enabled: true, extraction: { event: '发布会', headcount: 80 }, reply: '已记下预计80人参加生日宴。', unhandled: [], factEvidence: [{ key: 'headcount', evidence: '80个人' }] };
+      return { enabled: true, extraction: { event: '发布会' }, reply: '记下发布会。', unhandled: [], factEvidence: [] };
+    });
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-birthday',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('我想办个生日宴');
+    expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    send('80个人');
+    const checklist = await screen.findByText(/这样对吗|确认布置/, undefined, { timeout: 15000 });
+    if (/这样对吗/.test(checklist.textContent ?? '')) {
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      send('确认');
+    }
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.floors[0]!.items.some(item => item.name === '圆桌')).toBe(true);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('does not let a sticky 发布会 or 室内 capture 我想办个生日宴 on an activity session', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED', '1');
+    studioMock.connection = '项目已连接';
+    studioMock.controller.briefConversation.mockImplementation(async (message: string) => {
+      if (message.includes('80')) return { enabled: true, extraction: { event: '发布会', venueIO: 'indoor', headcount: 80 }, reply: '还是这场发布会，室内。', unhandled: [], factEvidence: [] };
+      return { enabled: true, extraction: { event: '发布会', venueIO: 'indoor' }, reply: '继续周末共创的发布会，室内。', unhandled: [], factEvidence: [] };
+    });
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const layout = makeLayout({
+      id: 'pinghu-sticky',
+      name: '西湖·平湖秋月',
+      width: 23.8,
+      height: 16.1,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('我想办个生日宴');
+    const first = await screen.findByText(/这场生日宴大概多少人|这样对吗/, undefined, { timeout: 15000 });
+    expect(first.textContent).not.toContain('已记下你确认的信息');
+    if (/这样对吗/.test(first.textContent ?? '')) {
+      send('确认');
+      expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
+    }
+    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    send('80个人');
+    const next = await screen.findByText(/这样对吗|确认布置/, undefined, { timeout: 15000 });
+    if (/这样对吗/.test(next.textContent ?? '')) send('确认');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+    expect(preview.floors[0]!.items.filter(item => item.type === 'dining-chair' || item.type === 'chair').length).toBeGreaterThanOrEqual(80);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('does not offer 确认布置 when Ø2.2 seating covers at least half but not all 80 people', async () => {
+    studioMock.connection = '项目已连接';
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const layout = makeLayout({
+      id: 'half-hall',
+      width: 14,
+      height: 12,
+      roof: { style: 'hipped', color: '#8a8a8a' },
+    });
+    layout.backendSceneV2 = { venue: { site: { indoorOutdoor: 'outdoor' } } } as NonNullable<RoomLayout['backendSceneV2']>;
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌直径2.2米，80人');
+    await waitFor(() => {
+      const text = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(text).toMatch(/放下 \d+ 桌 · 座位 \d+ \/ 80 · 还差 \d+/);
+      expect(text).toContain('没有按满员桌数确认');
+      expect(text).not.toContain('识别到');
+    }, { timeout: 15000 });
+    await waitFor(() => {
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      const count = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' || item.type === 'chair').length ?? 0;
+      expect(count).toBeGreaterThanOrEqual(40);
+      expect(count).toBeLessThan(80);
+    }, { timeout: 15000 });
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    expect(preview.width).toBeCloseTo(14);
+    expect(preview.height).toBeCloseTo(12);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    const beforeAdd = onPreview.mock.calls.length;
+    fireEvent.click(await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 }));
+    await waitFor(() => {
+      expect(onPreview.mock.calls.length).toBeGreaterThan(beforeAdd);
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      const count = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' || item.type === 'chair').length ?? 0;
+      expect(count).toBeGreaterThan(0);
+      expect(document.getElementById('plan-proposal')).toBeTruthy();
+    }, { timeout: 15000 });
+    const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const seated = after.floors[0]!.items.filter(item => item.type === 'dining-chair' || item.type === 'chair').length;
+    if (seated < 80) {
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      expect(document.getElementById('plan-proposal')?.textContent ?? '').toContain('没有按满员桌数确认');
+    }
+    expect(onApply).not.toHaveBeenCalled();
+    expect(after.width).toBeCloseTo(14);
+    expect(after.height).toBeCloseTo(12);
+  }, 20000);
+
+  it('hides confirm when a 23.8×16.1 map shell rejects Ø2.2 chairs and leftover chairs would make the count look full', async () => {
+    studioMock.connection = '项目已连接';
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const layout = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: { shape: 'rectangle', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' } },
+      objects: [],
+      camera: 'overview',
+      lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 0, z: 0 }, end: { x: 23.8, z: 0 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 23.8, z: 0 }, end: { x: 23.8, z: 16.1 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 23.8, z: 16.1 }, end: { x: 0, z: 16.1 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 0, z: 16.1 }, end: { x: 0, z: 0 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(5), start: { x: 0.4, z: 6.2 }, end: { x: 23.4, z: 6.2 }, thickness: 2, height: 3, kind: 'interior', status: 'confirmed' },
+        ],
+        openings: [],
+        columns: [],
+      },
+      sources: [],
+      dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-columns' });
+    const kept = Array.from({ length: 12 }, (_, index) => makeItem({
+      id: `kept-chair-${index}`,
+      type: 'dining-chair',
+      name: '餐椅',
+      width: 0.45,
+      depth: 0.45,
+      height: 0.9,
+      locked: true,
+      position: { x: -10 + (index % 6) * 0.7, z: 6.5 + Math.floor(index / 6) * 0.7 },
+    }));
+    layout.floors[0]!.items.push(...kept);
+    const keptIds = new Set(kept.map(item => item.id));
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌直径2.2米，80人，20米乘15米');
+    expect(await screen.findByText(/你说的 20×15 米这次不改场地/, undefined, { timeout: 15000 })).toBeTruthy();
+    await screen.findByText(/放下 \d+ 桌 · 座位 \d+ \/ 80 · 还差 \d+/, undefined, { timeout: 15000 });
+    expect(screen.queryAllByText(/先出一版可拖的初稿/)).toHaveLength(0);
+    expect(screen.getAllByText(/先出预览/)).toHaveLength(1);
+    const receipt = document.getElementById('plan-proposal')!;
+    expect(within(receipt).getByText(/放下 \d+ 桌 · 座位 \d+ \/ 80 · 还差 \d+/)).toBeTruthy();
+    expect(receipt.textContent).not.toContain('识别到');
+    for (const phrase of ['座位用途及可用性待核验', '签到需求尚未确认', '舞台需求尚未确认', '对现有物料的改动', '图纸和照片', '未提供库存', '核对这版物料数量', '进场就绪度']) {
+      expect(receipt.textContent).not.toContain(phrase);
+    }
+    expect(within(receipt).getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+    expect(receipt.textContent).toContain('没有按满员桌数确认');
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(document.querySelector('.ap-ghost')?.textContent ?? '').not.toContain('发布会');
+    await waitFor(() => {
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      expect(latest?.width).toBeCloseTo(23.8);
+      expect(latest?.height).toBeCloseTo(16.1);
+      const landed = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id)).length ?? 0;
+      expect(landed).toBeGreaterThan(0);
+      expect(landed).toBeLessThan(80);
+    }, { timeout: 15000 });
+    expect(screen.queryByText(/场地已变化/)).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    const beforeAdd = onPreview.mock.calls.length;
+    fireEvent.click(await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 }));
+    await waitFor(() => {
+      expect(onPreview.mock.calls.length).toBeGreaterThan(beforeAdd);
+      const latest = onPreview.mock.calls.at(-1)?.[0] as RoomLayout | null;
+      const landed = latest?.floors[0]?.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id)).length ?? 0;
+      expect(landed).toBeGreaterThan(0);
+      expect(document.getElementById('plan-proposal')).toBeTruthy();
+    }, { timeout: 15000 });
+    const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const seated = after.floors[0]!.items.filter(item => item.type === 'dining-chair' && !keptIds.has(item.id)).length;
+    if (seated < 80) {
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      expect(document.getElementById('plan-proposal')?.textContent ?? '').toContain('没有按满员桌数确认');
+    }
+    expect(onApply).not.toHaveBeenCalled();
+    expect(after.width).toBeCloseTo(23.8);
+    expect(after.height).toBeCloseTo(16.1);
+  }, 20000);
+
+  it('does not confirm Ø2.2 seats that land outside a smaller shell inside the 23.8×16.1 frame', async () => {
+    studioMock.connection = '项目已连接';
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const id = (n: number) => `00000000-0000-4000-8000-${String(200 + n).padStart(12, '0')}`;
+    const layout = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
+      objects: [],
+      camera: 'overview',
+      lighting: 'neutral',
+      structure: {
+        walls: [
+          { id: id(1), start: { x: 9, z: 6 }, end: { x: 15, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(2), start: { x: 15, z: 6 }, end: { x: 15, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(3), start: { x: 15, z: 11 }, end: { x: 9, z: 11 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+          { id: id(4), start: { x: 9, z: 11 }, end: { x: 9, z: 6 }, thickness: 0.4, height: 3, kind: 'exterior', status: 'confirmed' },
+        ],
+        openings: [],
+        columns: [],
+      },
+      sources: [],
+      dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-shell' });
+    expect(layout.backendVenue?.polygon).toHaveLength(4);
+    expect(layout.floors[0]?.interiorWalls).toHaveLength(4);
+    state.layout = layout;
+    render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    let ghostBeforeCard = '';
+    send('圆桌直径2.2米，80人，20米乘15米');
+    await waitFor(() => {
+      const card = document.getElementById('plan-proposal');
+      const suggestion = document.querySelector('.ap-ghost')?.getAttribute('data-suggestion') ?? '';
+      if (!card && suggestion && !suggestion.includes('发布会')) ghostBeforeCard = suggestion;
+      const text = card?.textContent ?? '';
+      expect(text).toMatch(/放下 \d+ 桌 · 座位 (?!80 \/ 80)\d+ \/ 80 · 还差 \d+/);
+      expect(text).not.toContain('识别到');
+      expect(text).toContain('没有按满员桌数确认');
+    }, { timeout: 15000 });
+    expect(ghostBeforeCard).toContain('加座');
+    expect(ghostBeforeCard).not.toContain('发布会');
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+    expect(screen.getByText(/你说的 20×15 米这次不改场地/)).toBeTruthy();
+    const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const landed = preview.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    expect(preview.width).toBeCloseTo(23.8);
+    expect(preview.height).toBeCloseTo(16.1);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '加座，再排一版' }));
+    await waitFor(() => {
+      const text = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(text).toMatch(/座位 \d+ \/ 80 · 还差/);
+      expect(text).toContain('没有按满员桌数确认');
+    }, { timeout: 15000 });
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    const afterText = document.getElementById('plan-proposal')?.textContent ?? '';
+    const after = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+    const afterChairs = after.floors[0]!.items.filter(item => item.type === 'dining-chair');
+    if (/加不进更多/.test(afterText)) expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
+    else {
+      expect(screen.getByRole('button', { name: '加座，再排一版' })).toBeTruthy();
+      expect(afterChairs.length).toBeGreaterThan(landed.length);
+    }
+    expect(after.width).toBeCloseTo(23.8);
+    expect(onApply).not.toHaveBeenCalled();
+  }, 20000);
+
+  it('adds the full-hall sentence from the card snapshot when the planner repeats 66 seats', async () => {
+    // The planner reply never contains the full-hall sentence and does not set interiorFull.
+    // The sentence can only be prepended in runLocal from the seat count snapshotted in
+    // runGeneration before dropProposal. Ignoring that snapshot leaves the materials line
+    // and the add-seats button on the card.
+    studioMock.connection = '项目已连接';
+    const plannerText = '这间厅按 Ø1.60 米这版坐下 66 人。放下 6 桌、66 座，离 80 人还差 14。没有按满员桌数确认。';
+    expect(plannerText).not.toContain('室内已经排满');
+    expect(plannerText).not.toContain('加不进更多');
+    const onApply = vi.fn();
+    const onPreview = vi.fn();
+    const layout = backendSceneToLayout({
+      schemaVersion: 2,
+      venue: {
+        shape: 'polygon', width: 23.8, depth: 16.1, height: 3, entrances: [], site: { indoorOutdoor: 'outdoor' },
+        polygon: [{ x: 0, z: 0 }, { x: 23.8, z: 0 }, { x: 23.8, z: 16.1 }, { x: 0, z: 16.1 }],
+      },
+      objects: [], camera: 'overview', lighting: 'neutral',
+      structure: { walls: [], openings: [], columns: [] },
+      sources: [], dimensions: [],
+    }, { name: '西湖·平湖秋月', projectId: 'pinghu-66' });
+    const spy = vi.spyOn(localPlanModule, 'localPlan').mockImplementation(input => ({
+      layouts: [input.base],
+      added: 0, removing: 0, keptLocked: 0, dropped: 0,
+      overlapCount: 0, overlapNames: [],
+      blocked: plannerText,
+      guests: 80,
+      seats: 66,
+      via: 'fallback',
+      ...(input.seatPriority ? { seatPriority: true } : {}),
+    }));
+    state.layout = layout;
+    try {
+      render(<LayoutAgentProvider sessionScope={`activity:${layout.id}`} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+      send('圆桌直径2.2米，80人，20米乘15米');
+      const add = await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 });
+      const before = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(before).toContain('座位 66 / 80');
+      expect(before).not.toContain('室内已经排满');
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      fireEvent.click(add);
+      await waitFor(() => {
+        expect(document.getElementById('plan-proposal')?.textContent ?? '').toContain('室内已经排满，这版加不进更多整桌');
+      }, { timeout: 15000 });
+      const after = document.getElementById('plan-proposal')?.textContent ?? '';
+      expect(after).toContain('座位 66 / 80');
+      expect(after).not.toContain('可尝试调整物料规格');
+      expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
+      expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+      expect(onApply).not.toHaveBeenCalled();
+      const seatPass = spy.mock.calls.find(call => call[0]?.seatPriority === true);
+      expect(seatPass).toBeTruthy();
+      expect(spy.mock.results.at(-1)?.value.blocked).toBe(plannerText);
+      expect(spy.mock.results.at(-1)?.value.interiorFull).toBeUndefined();
+      const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
+      expect(preview.width).toBeCloseTo(23.8);
+      expect(preview.height).toBeCloseTo(16.1);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 20000);
 });

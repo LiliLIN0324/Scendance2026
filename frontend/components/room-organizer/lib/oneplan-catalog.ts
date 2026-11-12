@@ -13,7 +13,7 @@
  * 不塞进上面 17 类，免得「基础设施」里冒出一堆节日装饰。
  */
 
-import type { LibraryEntry } from './oneplan-library';
+import type { LibraryEntry, OneplanPackDef } from './oneplan-library';
 
 export interface LibraryCategoryBucket {
   label: string;
@@ -61,8 +61,19 @@ export const INFRA_CATEGORY_ORDER = [
 
 export type InfraCategory = (typeof INFRA_CATEGORY_ORDER)[number];
 
-/** 抓取包里的活动扩展包与图元：单列一段，避免污染基础设施 17 类。 */
-export const EXTRA_ROW_LABEL = '活动包与图元';
+/** 「活动包与图元」段里除去活动包后剩下的图元/未映射条目（树里的二级子组）。 */
+export const EXTRA_ROW_LABEL = '图元与其它';
+
+/** 包物件 categoryZh 的前缀（packEntryFromItem 写入，这里据此识别归组）。 */
+const PACK_CATEGORY_PREFIX = '物件库扩展包 / ';
+
+/** 包物件在目录/搜索里显示的包名（categoryZh 第二段）。 */
+export function packLabelOf(entry: LibraryEntry): string | null {
+  if (!entry.packId) return null;
+  return entry.categoryZh.startsWith(PACK_CATEGORY_PREFIX)
+    ? entry.categoryZh.slice(PACK_CATEGORY_PREFIX.length)
+    : entry.categoryZh;
+}
 
 const BARRIER_SLUG = /barrier|fence|jersey|hoarding|bollard|stanchion|crowd-control/;
 const TRANSPORT_SLUG = /trailer|truck|lorry|bus|shuttle|van|transport|forklift/;
@@ -134,6 +145,9 @@ export function entranceIconItems(entries: readonly LibraryEntry[]): LibraryEntr
 
 /** 某件物件在用户目录里属于哪一段/哪一类（搜索结果分组用）。 */
 export function catalogLabelOf(entry: LibraryEntry): string {
+  // 2026-11-12 活动包物件按包名归组（OnePlan marketplace 口径），不落图元桶。
+  const packLabel = packLabelOf(entry);
+  if (packLabel) return packLabel;
   const label = infraCategoryOf(entry);
   if (label) return label;
   if (entry.categoryZh.includes('出入口与通行图标')) return '入口和通道图标';
@@ -141,19 +155,64 @@ export function catalogLabelOf(entry: LibraryEntry): string {
   return EXTRA_ROW_LABEL;
 }
 
-/** 按用户目录分组搜索结果（顺序：区域段 → 基础设施 17 类 → 扩展包）。 */
+/** 按用户目录分组搜索结果（顺序：区域段 → 基础设施 17 类 → 活动包 → 图元）。 */
 export function groupCatalogResults(entries: readonly LibraryEntry[]): LibraryCategoryBucket[] {
-  const order = ['区域', '入口和通道图标', ...INFRA_CATEGORY_ORDER, EXTRA_ROW_LABEL];
   const map = new Map<string, LibraryEntry[]>();
+  const packOrder: string[] = [];
   for (const entry of entries) {
     const label = catalogLabelOf(entry);
+    if (entry.packId && !packOrder.includes(label)) packOrder.push(label);
     const bucket = map.get(label);
     if (bucket) bucket.push(entry);
     else map.set(label, [entry]);
   }
+  const order = ['区域', '入口和通道图标', ...INFRA_CATEGORY_ORDER, ...packOrder, EXTRA_ROW_LABEL];
   return order
     .filter(label => map.has(label))
     .map(label => ({ label, items: (map.get(label) ?? []).slice().sort(byNameZh) }));
+}
+
+/* ------------------------------------------------------------------ */
+/* 2026-11-12 活动包分桶（树内「活动包与图元」段 + 底部包浏览共用）        */
+/* ------------------------------------------------------------------ */
+
+/** 一个活动包在树里的呈现：包行（2×2 预览 + 件数 + 包名）+ 包内物件行。 */
+export interface PackBucket {
+  id: string;
+  nameZh: string;
+  nameEn: string;
+  source: 'oneplan' | 'original';
+  items: LibraryEntry[];
+  /** 包行预览 chip：前 3 件（OnePlan 预览格是 2×2 的前 3 格 + 「+N」计数格）。 */
+  previews: LibraryEntry[];
+}
+
+/** packs.json + 包物件条目 → 按包分桶（包序 = order；包内保持条目序）。 */
+export function packBuckets(
+  packs: readonly OneplanPackDef[],
+  entries: readonly LibraryEntry[],
+): PackBucket[] {
+  const byPack = new Map<string, LibraryEntry[]>();
+  for (const entry of entries) {
+    if (!entry.packId) continue;
+    const bucket = byPack.get(entry.packId);
+    if (bucket) bucket.push(entry);
+    else byPack.set(entry.packId, [entry]);
+  }
+  return [...packs]
+    .sort((a, b) => a.order - b.order)
+    .map(pack => {
+      const items = byPack.get(pack.id) ?? [];
+      return {
+        id: pack.id,
+        nameZh: pack.name_zh,
+        nameEn: pack.name_en,
+        source: pack.source,
+        items,
+        previews: items.slice(0, 3),
+      };
+    })
+    .filter(bucket => bucket.items.length > 0);
 }
 
 function byNameZh(a: LibraryEntry, b: LibraryEntry): number {

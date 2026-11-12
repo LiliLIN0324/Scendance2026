@@ -12,21 +12,32 @@
 export const GUIDE_STEPS = ['welcome', 'layers', 'edit'] as const;
 export type GuideStep = (typeof GUIDE_STEPS)[number];
 
-export const GUIDE_STEP_CONTENT: Record<GuideStep, { title: string; body: string; cta: string }> = {
+/**
+ * 引导气泡的指向锚点：
+ * - `'canvas'`：画布中上（认识画布/动手绘制的步骤）。
+ * - `'left'`：画布左缘、箭头指向左侧面板——主产品里是左栏
+ *   「添加物件 / 已放置物件」页签，独立工作台里是画布左侧浮窗。
+ */
+export type GuideAnchor = 'canvas' | 'left';
+
+export const GUIDE_STEP_CONTENT: Record<GuideStep, { title: string; body: string; cta: string; anchor: GuideAnchor }> = {
   welcome: {
     title: '这是你的场地画布',
-    body: '底图是真瓦片地图。绿色虚线是场地边界，彩色块是功能分区。先拖动、滚轮缩放，熟悉一下场地。',
+    body: '底图是真地图瓦片，绿色虚线是场地边界，彩色块是功能分区。拖动平移、滚轮缩放先熟悉场地；左上角搜索框可以直接定位地点。',
     cta: '开始浏览',
+    anchor: 'canvas',
   },
   layers: {
-    title: '右侧是图层栈',
-    body: '六类业务图层可独立开关：隐藏的图层只影响显示，全案统计与清单不变。',
-    cta: '试试开关',
+    title: '这边是物件库和已放清单',
+    body: '「添加物件」按分组列出分区、出入口、动线、设施、人员，点一行就选中对应工具；「已放置物件」是清单树：点击定位、右键删除、行内可显隐锁定。',
+    cta: '去看看',
+    anchor: 'left',
   },
   edit: {
-    title: '准备好就可以开始编辑',
-    body: '编辑工具九钮：画边界、编辑顶点、画分区、放设施、拉动线、放节点、布人员、测量，配合撤销随时回退。',
+    title: '点一行物件，到画布动手',
+    body: '在「添加物件」点一行（比如观众区），到画布落件：分区左键加点、双击闭合；设施单击即放，拖角改尺寸、圆柄旋转。放错 Ctrl+Z 随时撤销。',
     cta: '开始规划',
+    anchor: 'canvas',
   },
 };
 

@@ -8,6 +8,7 @@ import {
   TDT_PROBE_TILE,
   lngLatToTileXY,
   metersPerPixel,
+  basemapSourceAttribution,
   probeSourceAttribution,
   publicSourceTileUrl,
   tdtProbeTileUrl,
@@ -77,5 +78,19 @@ describe('tdt probe helpers (H0-b)', () => {
     expect(probeSourceAttribution('carto-dark')).toContain('CARTO');
     expect(probeSourceAttribution('vec')).toContain('天地图');
     expect(probeSourceAttribution('img')).toContain('天地图');
+  });
+
+  it('署名逐档对得上真实数据源（高德三档不挂天地图的名）', () => {
+    expect(basemapSourceAttribution('osm')).toContain('OpenStreetMap');
+    expect(basemapSourceAttribution('carto-light')).toContain('CARTO');
+    expect(basemapSourceAttribution('amap-satellite')).toContain('高德');
+    expect(basemapSourceAttribution('amap-satellite')).toContain('卫星');
+    expect(basemapSourceAttribution('amap-streets')).toContain('高德');
+    expect(basemapSourceAttribution('amap-streets-labels')).toContain('高德');
+    for (const amap of ['amap-satellite', 'amap-streets', 'amap-streets-labels'] as const) {
+      expect(basemapSourceAttribution(amap)).not.toContain('天地图');
+    }
+    expect(basemapSourceAttribution('vec')).toContain('天地图');
+    expect(basemapSourceAttribution('img')).toContain('天地图');
   });
 });

@@ -2,11 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   clearOutdoorProjectRecord,
   createStarterOutdoorPlan,
+  DEFAULT_OUTDOOR_PLAN_ANCHOR,
   hasOutdoorPlanDraft,
+  latestOutdoorProjectId,
+  OUTDOOR_LAST_PROJECT_KEY,
   outdoorPlanStorageKey,
+  outdoorPlanViewStorageKey,
+  readOutdoorPlanView,
   readOutdoorProjectRecord,
   renameOutdoorProject,
   resolveOutdoorProjectId,
+  saveOutdoorPlanView,
   saveOutdoorProjectRecord,
   type KeyValueStorage,
   type OutdoorProjectRecord,
@@ -77,7 +83,8 @@ describe('outdoor-project-store', () => {
 
   it('meta 有效但 plan 坏：记录仍在（判定不丢），plan 宽容回落 null', () => {
     const storage = memoryStorage();
-    const bad = record({ ...samplePlan(), boundary: [] } as unknown as SitePlanData);
+    // 「坏」用真不合法的构造（相邻重复顶点，superRefine 拒）；boundary: [] 自 2026-11-11 起是合法起步。
+    const bad = record({ ...samplePlan(), boundary: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 1 }] } as unknown as SitePlanData);
     storage.setItem(outdoorPlanStorageKey(PID), JSON.stringify(bad));
     const loaded = readOutdoorProjectRecord(PID, storage);
     expect(loaded).not.toBeNull();
@@ -160,24 +167,71 @@ describe('outdoor-project-store', () => {
     it('start=outdoor 之外的 start 值不算户外', () => {
       expect(resolveOutdoorProjectId(`/editor/?project=${PID}&start=indoor`, memoryStorage())).toBeNull();
     });
+
+    it('显式 mode=outdoor 直接命中，不看本机草稿', () => {
+      expect(resolveOutdoorProjectId(`/editor/?project=${PID}&mode=outdoor`, memoryStorage())).toBe(PID);
+    });
+
+    it('显式 mode=indoor 直接进室内，即使本机有户外草稿', () => {
+      const storage = memoryStorage();
+      saveOutdoorProjectRecord(record(null), storage);
+      expect(resolveOutdoorProjectId(`/editor/?project=${PID}&mode=indoor`, storage)).toBeNull();
+    });
+
+    it('mode 优先于旧 start 参数', () => {
+      expect(resolveOutdoorProjectId(`/editor/?project=${PID}&start=outdoor&mode=indoor`, memoryStorage())).toBeNull();
+    });
+  });
+
+  describe('latestOutdoorProjectId（/ 无参数「续上次」）', () => {
+    it('没写过草稿时 null', () => {
+      expect(latestOutdoorProjectId(memoryStorage())).toBeNull();
+    });
+
+    it('最近一次保存的户外项目胜出，清掉它后指针一起走', () => {
+      const storage = memoryStorage();
+      saveOutdoorProjectRecord(record(null), storage);
+      expect(latestOutdoorProjectId(storage)).toBe(PID);
+      clearOutdoorProjectRecord(PID, storage);
+      expect(latestOutdoorProjectId(storage)).toBeNull();
+      expect(storage.getItem(OUTDOOR_LAST_PROJECT_KEY)).toBeNull();
+    });
+  });
+
+  describe('视角记忆（按项目记住 2D/3D）', () => {
+    it('key 按项目隔离，默认没有记录', () => {
+      const storage = memoryStorage();
+      expect(outdoorPlanViewStorageKey(PID)).toBe(`scendance-outdoor-view-v1:${PID}`);
+      expect(readOutdoorPlanView(PID, storage)).toBeNull();
+    });
+
+    it('写入后可读回，坏值回落 null', () => {
+      const storage = memoryStorage();
+      saveOutdoorPlanView(PID, '3d', storage);
+      expect(readOutdoorPlanView(PID, storage)).toBe('3d');
+      storage.setItem(outdoorPlanViewStorageKey(PID), 'top');
+      expect(readOutdoorPlanView(PID, storage)).toBeNull();
+    });
   });
 
   describe('createStarterOutdoorPlan（新户外项目起步）', () => {
-    it('100 × 60 m 起步矩形，面积 6000 m²，契约校验通过', () => {
+    it('零边界起步（2026-11-11 用户拍板：不再自动送起步矩形），契约校验通过', () => {
       const plan = createStarterOutdoorPlan();
       const parsed = sitePlanDataSchema.parse(plan);
-      expect(parsed.boundary).toHaveLength(4);
-      const width = 100; const depth = 60;
-      const xs = plan.boundary.map(p => p.x);
-      const ys = plan.boundary.map(p => p.y);
-      expect(Math.max(...xs) - Math.min(...xs)).toBe(width);
-      expect(Math.max(...ys) - Math.min(...ys)).toBe(depth);
+      expect(parsed.boundary).toHaveLength(0);
       expect(plan.zones).toHaveLength(0);
       expect(plan.facilities).toHaveLength(0);
       expect(plan.routes).toHaveLength(0);
       expect(plan.nodes).toHaveLength(0);
       expect(plan.workers).toHaveLength(0);
-      expect(plan.anchor).toBeUndefined();
+      // 2026-11-11 默认锚点决策：不传 anchor 落预置锚点（平湖秋月，source 'preset'）。
+      expect(plan.anchor).toEqual(DEFAULT_OUTDOOR_PLAN_ANCHOR);
+      expect(plan.anchor?.source).toBe('preset');
+    });
+
+    it('传入 anchor（从地图开始选的地点）时用真实锚点，不落预置', () => {
+      const plan = createStarterOutdoorPlan({ lng: 120.15, lat: 30.25, crs: 'gcj-02', source: 'picker' });
+      expect(plan.anchor).toEqual({ lng: 120.15, lat: 30.25, crs: 'gcj-02', source: 'picker' });
     });
 
     it('起步 plan 可直接落盘并被读回', () => {

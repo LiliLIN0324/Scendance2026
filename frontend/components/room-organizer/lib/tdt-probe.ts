@@ -83,14 +83,36 @@ export const TDT_PROBE_ATTRIBUTION = '底图 © 天地图（CGCS2000）· 数据
 /* ---------------- 公开免费图源（无需 key，探针立即可出真图） ---------------- */
 
 /**
- * 探针可用的公开图源。天地图走 /api/tdt-tiles 代理（待 key）；
+ * 探针可用的公开图源。天地图走 /api/tdt-tiles 代理（key 已接入）;
  * OSM/Carto 是公开标准瓦片，浏览器直连即可，均带必显署名。
  * 使用边界（规划稿 §5.4）：OSM 官方瓦片受用量政策约束，禁止批量抓取，
+ * Carto 2026-09-23 起 key 化（非商用 5M/月、商用 1M/月免费），
  * 重负载需商用瓦片商或自建——探针轻量使用合规，生产另议。
  */
-export type ProbePublicSource = 'osm' | 'carto-light' | 'carto-dark';
+export type ProbePublicSource =
+  | 'osm'
+  | 'carto-light'
+  | 'carto-dark'
+  | 'amap-satellite'
+  | 'amap-streets'
+  | 'amap-streets-labels';
 
-export const PROBE_PUBLIC_SOURCES: readonly ProbePublicSource[] = ['osm', 'carto-light', 'carto-dark'];
+export const PROBE_PUBLIC_SOURCES: readonly ProbePublicSource[] = [
+  'osm',
+  'carto-light',
+  'carto-dark',
+  'amap-satellite',
+  'amap-streets',
+  'amap-streets-labels',
+];
+
+/**
+ * Carto Basemaps key（公开配置，非密钥）：2026-09-23 起 Carto 要求 tile URL 带 ?key=，
+ * 无 key 商用仅保障至 2026-11-30。key 从 NEXT_PUBLIC_CARTO_KEY 读取，可空——
+ * 空时沿用无 key 公开端点（带水印），探针零配置仍可跑。
+ */
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_KEY?.trim() || '';
+const CARTO_QUERY = CARTO_KEY ? `?key=${CARTO_KEY}` : '';
 
 export interface PublicSourceSpec {
   id: ProbePublicSource;
@@ -110,14 +132,38 @@ export const PUBLIC_SOURCE_SPECS: Record<ProbePublicSource, PublicSourceSpec> = 
   'carto-light': {
     id: 'carto-light',
     label: 'Carto 浅色',
-    urlTemplate: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+    urlTemplate: `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${CARTO_QUERY}`,
     attribution: '© OpenStreetMap contributors · © CARTO',
   },
   'carto-dark': {
     id: 'carto-dark',
     label: 'Carto 深色',
-    urlTemplate: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    urlTemplate: `https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${CARTO_QUERY}`,
     attribution: '© OpenStreetMap contributors · © CARTO',
+  },
+  // 2026-11-11 用户 m00xxx：「地图类型-高德那三个能用，补到我的平面下面」。
+  // 高德网页瓦片直连即可用（实测 200 + `Access-Control-Allow-Origin: *`，不需要 key，
+  // 所以能进 canvas 拼图、也能被 capturePlanGround 抓成 3D 地面纹理）。
+  // style 6=卫星、7=街道、8=街道+注记；矢量档最高 z18（z19 返回 100 多字节的空瓦片），
+  // 卫星档真影像也到 z18——z19/z20 返回「此区域无卫星图」灰色占位图（2026-11-12 六城实测同哈希），
+  // 更高级别由 2D 画布 overzoom 拉伸 z18 瓦片，见 outdoor-plan-canvas.tsx 的 mapMaxZoomFor。
+  'amap-satellite': {
+    id: 'amap-satellite',
+    label: '高德卫星',
+    urlTemplate: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+    attribution: '© 高德地图',
+  },
+  'amap-streets': {
+    id: 'amap-streets',
+    label: '高德街道',
+    urlTemplate: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}',
+    attribution: '© 高德地图',
+  },
+  'amap-streets-labels': {
+    id: 'amap-streets-labels',
+    label: '高德街道注记',
+    urlTemplate: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    attribution: '© 高德地图',
   },
 };
 
@@ -132,6 +178,29 @@ export function probeSourceAttribution(source: ProbePublicSource | TdtProbeLayer
     return PUBLIC_SOURCE_SPECS[source as ProbePublicSource].attribution;
   }
   return TDT_PROBE_ATTRIBUTION;
+}
+
+/**
+ * 画布 / 3D 右下角的可见署名（中文，逐档对应真实数据来源）。
+ * 换图源必须换署名：署名写错比不写更糟（高德三档不能挂天地图的名）。
+ */
+export function basemapSourceAttribution(source: ProbePublicSource | TdtProbeLayer): string {
+  switch (source) {
+    case 'osm':
+      return '© OpenStreetMap 贡献者';
+    case 'carto-light':
+    case 'carto-dark':
+      return '© CARTO · © OpenStreetMap 贡献者';
+    case 'amap-satellite':
+      return '© 高德地图 · 卫星影像';
+    case 'amap-streets':
+    case 'amap-streets-labels':
+      return '© 高德地图';
+    case 'img':
+      return '© 天地图影像 · 国家地理信息公共服务平台';
+    default:
+      return '© 天地图矢量 · 国家地理信息公共服务平台';
+  }
 }
 
 /**

@@ -70,18 +70,14 @@ describe('workspace management', () => {
     await ready();
     expect(mocks.businessRequest.mock.calls.every(([path]) => !String(path).includes('studio-a'))).toBe(true);
   });
-  it('creates an editable blank shell from a name alone and offers the local backup route', async () => {
-    mocks.createProject.mockResolvedValue({ id: 'new-project' });
+  it('新建项目直接进户外工作台——不再先找场地也不建室内壳', async () => {
     render(<ProjectsPage />); await ready(); changeStudio('studio-b'); await ready();
     fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
-    // F-01：冷启动不该先逼人量房，米数留给对话①。
-    expect(screen.queryByLabelText('宽 / 米')).toBeNull();
-    expect(screen.getByText('先起个名字就好。场地尺寸到画布里说一声就有，不必现在量。')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '创建并打开' }));
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/editor/?project=new-project'));
-    expect(mocks.createProject).toHaveBeenCalledWith('studio-b', '我的活动方案', expect.objectContaining({
-      venue: { shape: 'rectangle', width: 12, depth: 8, height: 3, entrances: [] }, objects: [], schemaVersion: 1,
-    }));
+    // 2026-11-11 新主线：工作台里就有搜地点的能力，不该先过一个找场地页；
+    // 直接跳 /editor/ → workspace-shell 写 default-outdoor 起步草稿（平湖秋月）→ 挂 OutdoorPlanWorkspace。
+    expect(mocks.replace).toHaveBeenCalledWith('/editor/');
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.createProject).not.toHaveBeenCalled();
     // F-05：换机后停在项目页也能恢复，不必先进工作台。
     expect(screen.getByRole('link', { name: '从本机备份恢复' }).getAttribute('href')).toMatch(/^\/editor\/?\?restore=backup$/);
   });

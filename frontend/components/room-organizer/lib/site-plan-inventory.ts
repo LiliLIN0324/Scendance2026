@@ -12,6 +12,7 @@
  */
 
 import {
+  planAnnotationKindLabels,
   planMeasurementKindLabels,
   planRingAreaM2,
   planRouteKindLabels,
@@ -20,7 +21,7 @@ import {
   type PlanPoint,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { findFacilityTemplate } from './site-plan-facilities';
+import { facilityTypeLabel } from './plan-facility-catalog';
 import { formatAreaM2, formatLengthM, measureValue } from './site-plan-measure';
 import { routeAnchorPoint } from './site-plan-legend';
 import { planConflictIssues } from './site-plan-conflicts';
@@ -28,7 +29,7 @@ import { planFacilityIssues } from './site-plan-facilities';
 import { planNodeIssues, planWorkerIssues } from './site-plan-routes';
 import { planZoneIssues } from './site-plan-editing';
 
-export type PlanInventoryKind = 'zone' | 'facility' | 'route' | 'node' | 'worker' | 'measurement';
+export type PlanInventoryKind = 'zone' | 'facility' | 'route' | 'node' | 'worker' | 'measurement' | 'annotation';
 
 /** 出入口节点类型文案（契约无 labels，组件与清单同源此处）。 */
 export const PLAN_NODE_KIND_LABELS: Record<'entry' | 'exit' | 'both', string> = {
@@ -73,6 +74,8 @@ const KIND_LABELS: Record<PlanInventoryKind, string> = {
   node: '出入口',
   worker: '人员',
   measurement: '测量',
+  // 2026-11-11 用户指令：自由标注（文本/形状）也进清单，可定位可删。
+  annotation: '标注',
 };
 
 /** 类型文案（筛选下拉与清单分组标题共用）。 */
@@ -113,7 +116,7 @@ export function buildPlanInventory(plan: SitePlanData): PlanInventoryRow[] {
       id: facility.id,
       kind: 'facility',
       name: facility.name,
-      typeLabel: findFacilityTemplate(facility.templateId)?.name ?? facility.templateId,
+      typeLabel: facilityTypeLabel(facility.templateId),
       zoneName: facility.zoneId ? zoneNameById.get(facility.zoneId) ?? null : null,
       zoneId: facility.zoneId ?? null,
       metric: `${facility.size.width}×${facility.size.depth} m`,
@@ -178,6 +181,21 @@ export function buildPlanInventory(plan: SitePlanData): PlanInventoryRow[] {
       zoneId: null,
       metric: measurement.kind === 'area' ? formatAreaM2(value) : formatLengthM(value),
       anchor: { x: measurement.points[0]!.x, y: measurement.points[0]!.y },
+      hasIssue: false,
+    });
+  }
+
+  // 2026-11-11 用户指令：自由标注行（文本行显示内容摘要，形状行显示类型）。
+  for (const annotation of plan.annotations ?? []) {
+    rows.push({
+      id: annotation.id,
+      kind: 'annotation',
+      name: annotation.name,
+      typeLabel: planAnnotationKindLabels[annotation.kind],
+      zoneName: null,
+      zoneId: null,
+      metric: annotation.kind === 'note' ? (annotation.text || '—') : planAnnotationKindLabels[annotation.kind],
+      anchor: { x: annotation.points[0]!.x, y: annotation.points[0]!.y },
       hasIssue: false,
     });
   }

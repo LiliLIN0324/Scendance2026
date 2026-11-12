@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 'use client';
 
 import { AlertTriangle, Check, Info, RotateCcw, Satellite, Search, X } from '@/components/solid-icons';
@@ -137,12 +137,8 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
         : [120.5394, 30.4049];
       const map = new AMap.Map(containerRef.current, { zoom: remembered.length >= 3 ? 17 : 15, center, mapStyle: 'amap://styles/whitesmoke' });
       mapRef.current = map;
-      // 选址圈画底图用真卫星层，便于对照；贴地参考另拉静态卫星图。
-      const satellite = AMap.TileLayer?.Satellite
-        ? new AMap.TileLayer.Satellite()
-        : new AMap.TileLayer();
-      satellite.setMap(map);
-      satellite.show();
+      // 2026-11-11 用户 m00690：不要默认进来的高德卫星切片——选址圈画直接用高德底图样式
+      // （mapStyle whitesmoke）即可，不再叠一层 AMap.TileLayer.Satellite 卫星图。
       if (remembered.length >= 3 && AMap.Polygon) {
         try {
           const overlay = new AMap.Polygon({

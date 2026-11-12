@@ -10,6 +10,9 @@
  */
 
 import {
+  BoxSelect,
+  ChevronDown,
+  ChevronUp,
   Copy,
   DoorOpen,
   Download,
@@ -25,11 +28,13 @@ import {
   MapPin,
   Move,
   PenTool,
+  Plus,
   Redo2,
   RotateCw,
   Route as RouteIcon,
   Ruler,
   Shapes,
+  SlidersHorizontal,
   StickyNote,
   Tent,
   TriangleAlert,
@@ -37,6 +42,7 @@ import {
   Undo2,
   UserPlus,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import type { PlanningIconName } from '@/lib/outdoor-plan-tokens';
@@ -70,6 +76,12 @@ export const PLANNING_ICON_COMPONENTS: Record<PlanningIconName, LucideIcon> = {
   'lock-open': LockOpen,
   'rotate-cw': RotateCw,
   copy: Copy,
+  plus: Plus,
+  x: X,
+  'box-select': BoxSelect,
+  'sliders-horizontal': SlidersHorizontal,
+  'chevron-up': ChevronUp,
+  'chevron-down': ChevronDown,
 };
 
 /** 取图标组件：类型上不会越界，回落 shapes 仅作运行时防御。 */

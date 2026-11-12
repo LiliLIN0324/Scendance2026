@@ -4,6 +4,8 @@
  * 户外 2D 规划交互层 UI（H4-b）：渐进引导气泡、导出菜单、毛玻璃分享弹窗。
  *
  * - 纯展示组件，状态逻辑全在 site-plan-guide 纯函数层（可测）。
+ * - 引导气泡按每步的 anchor 指向对应区域（canvas=画布中上、left=左缘箭头指向
+ *   左栏「添加物件/已放置物件」），箭头用旋转方块拼出，不遮目标。
  * - 视觉消费 outdoor-plan-tokens（幕景绿/间距/圆角），毛玻璃用 backdrop-filter。
  * - 选中态对比度：引导/菜单/弹窗的强调色统一品牌绿 + 白字（AA 级），
  *   悬停加深不透明度，主按钮 autoFocus（键盘可达）。
@@ -35,15 +37,18 @@ export interface GuideBubbleProps {
 
 export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss }: GuideBubbleProps) {
   const content = GUIDE_STEP_CONTENT[step];
+  // 2026-11-12 重新做引导：每步带指向锚点——welcome/edit 指画布（箭头朝下），
+  // layers 指左栏页签（箭头朝左）。独立工作台的浮窗也在画布左侧，同款指向成立。
+  const anchoredLeft = content.anchor === 'left';
   return (
     <div
       role="dialog"
       aria-label={`新手引导 ${stepIndex + 1}/${totalSteps}：${content.title}`}
+      data-testid="guide-bubble"
+      data-guide-anchor={content.anchor}
       style={{
         position: 'absolute',
-        left: '50%',
-        top: 24,
-        transform: 'translateX(-50%)',
+        ...(anchoredLeft ? { left: 12, top: 24 } : { left: '50%', top: 24, transform: 'translateX(-50%)' }),
         zIndex: 30,
         width: 340,
         maxWidth: 'calc(100% - 32px)',
@@ -56,6 +61,38 @@ export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss
         fontFamily: 'inherit',
       }}
     >
+      {/* 指向箭头：旋转方块探出气泡边缘，露出两面描边拼成尖端。 */}
+      {anchoredLeft ? (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: -6,
+            top: 36,
+            width: 12,
+            height: 12,
+            transform: 'rotate(45deg)',
+            background: '#ffffff',
+            borderLeft: '1px solid #e4e4e7',
+            borderBottom: '1px solid #e4e4e7',
+          }}
+        />
+      ) : (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            bottom: -6,
+            left: '50%',
+            width: 12,
+            height: 12,
+            transform: 'translateX(-50%) rotate(45deg)',
+            background: '#ffffff',
+            borderRight: '1px solid #e4e4e7',
+            borderBottom: '1px solid #e4e4e7',
+          }}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: PLANNING_SPACING.sm }}>
         <strong style={{ fontSize: 14 }}>{content.title}</strong>
         <span style={{ fontSize: 11, color: '#71767e' }}>{stepIndex + 1}/{totalSteps}</span>
@@ -75,9 +112,14 @@ export interface ExportMenuProps {
   onPick?: (id: ExportItemId) => void;
   /** H5-a：PNG/CSV 已可导出。为 true 时对应菜单项可点（否则仍是「即将上线」禁用）。 */
   enableExports?: boolean;
+  /**
+   * 2026-11-11 交付簇挪到画布左下角后，弹层默认的「向下/右对齐」会掉出屏底——
+   * above-left 让菜单向上翻、左对齐按钮。缺省 below-right 维持原行为。
+   */
+  menuPlacement?: 'below-right' | 'above-left';
 }
 
-export function ExportMenu({ onPick, enableExports = false, variant = 'default' }: ExportMenuProps & { variant?: 'default' | 'toolbar' | 'canvas' }) {
+export function ExportMenu({ onPick, enableExports = false, variant = 'default', menuPlacement = 'below-right' }: ExportMenuProps & { variant?: 'default' | 'toolbar' | 'canvas' }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -131,8 +173,9 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default' 
       {open && (
         <div role="menu" aria-label="导出菜单" style={{
           position: 'absolute',
-          right: 0,
-          top: 'calc(100% + 6px)',
+          ...(menuPlacement === 'above-left'
+            ? { left: 0, bottom: 'calc(100% + 6px)' }
+            : { right: 0, top: 'calc(100% + 6px)' }),
           zIndex: 40,
           minWidth: 220,
           borderRadius: 14,

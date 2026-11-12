@@ -69,12 +69,19 @@ function Card({ selected, onSelect, visual, title, meta }: {
   </button>;
 }
 
-export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlankVenue(): void }): JSX.Element {
+export function VenuePicker({ onClose, onBlankVenue, studioId, initialSelection }: {
+  onClose(): void;
+  onBlankVenue(): void;
+  /** 「新建项目」带过来的工作室：新项目落在这里，不再按最近用的工作室猜。 */
+  studioId?: string;
+  /** 入口默认选中项：独立的「找场地」页直接落「从地图开始」。 */
+  initialSelection?: 'blank' | 'map';
+}): JSX.Element {
   const { controller } = useAuth()!;
   const { user } = useBackendSession(controller);
   const router = useRouter();
   const userId = user?.id ?? '';
-  const [selection, setSelection] = useState<Selection>({ kind: 'blank' });
+  const [selection, setSelection] = useState<Selection>({ kind: initialSelection ?? 'blank' });
   const [cloud, setCloud] = useState<CloudState>({ status: 'loading' });
   const [previews, setPreviews] = useState<Record<string, Scene | 'failed'>>({});
   const [name, setName] = useState(NEW_PROJECT_DEFAULT);
@@ -101,16 +108,17 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
           const created = await controller.businessRequest<Studio>('/studios', 'POST', { requestId: crypto.randomUUID(), name: '个人工作室', displayName: '负责人' });
           studios = [created];
         }
-        const studioId = preferredStudio(userId, studios);
-        rememberStudio(userId, studioId);
-        const projects = (await listStudioProjects(controller, studioId)).slice().sort(byRecent);
-        if (active) setCloud({ status: 'ready', studioId, projects });
+        // 指定工作室优先（/projects 的「新建项目」会带过来）；失效则回落到最近用的那个。
+        const targetStudio = studioId && studios.some(studio => studio.id === studioId) ? studioId : preferredStudio(userId, studios);
+        rememberStudio(userId, targetStudio);
+        const projects = (await listStudioProjects(controller, targetStudio)).slice().sort(byRecent);
+        if (active) setCloud({ status: 'ready', studioId: targetStudio, projects });
       } catch (error) {
         if (active) setCloud({ status: 'error', message: error instanceof Error ? error.message : '方案列表加载失败，请重开弹层。' });
       }
     })();
     return () => { active = false; };
-  }, [controller, userId]);
+  }, [controller, userId, studioId]);
 
   // 项目卡各自拉 scene 画俯视缩略；拉不到就用占位图标，不挡打开。
   useEffect(() => {
@@ -227,13 +235,15 @@ export function VenuePicker({ onClose, onBlankVenue }: { onClose(): void; onBlan
             updatedAt: now,
             plan: createStarterOutdoorPlan(anchor ?? undefined),
           });
-          window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&start=outdoor`);
+          // 新入口一律带 mode（2026-11-11 用户拍板）；旧 `?project=` 无 mode 走草稿嗅探，
+          // 那段过渡兼容两个月后删除，见 outdoor-project-store#resolveOutdoorProjectId。
+          window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&mode=outdoor`);
         })
         .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
       return;
     }
     void controller.createProject(studioId, name.trim(), emptyProjectScene())
-      .then(created => router.push(`/editor/?project=${encodeURIComponent(created.id)}`))
+      .then(created => router.push(`/editor/?project=${encodeURIComponent(created.id)}&mode=indoor`))
       .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
   }
 

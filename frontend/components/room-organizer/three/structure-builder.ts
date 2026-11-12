@@ -1,6 +1,7 @@
 import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { outdoorGroundSize } from '../lib/site';
 import { groundBasemapOpacity, groundBasemapStyleOf } from '../lib/ground-basemap';
+import { canvasFloor } from '../lib/floor-reading';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
@@ -112,8 +113,11 @@ export function buildStructureShell(
 ): void {
   const canonical = layoutGeometryScene(layout);
   const floor = layout.floors[0];
-  const points = canonical.venue.polygon ?? [{ x: 0, z: 0 }, { x: layout.width, z: 0 },
-    { x: layout.width, z: layout.height }, { x: 0, z: layout.height }];
+  const drawn = canvasFloor(layout, 0);
+  // Closed wall loop: the mesh edge is that room. An unclosed loop keeps the
+  // activity outline on screen, and the banquet ledger refuses to count it.
+  const points = drawn.recovered && drawn.floor ? drawn.floor : (canonical.venue.polygon ?? [{ x: 0, z: 0 }, { x: layout.width, z: 0 },
+    { x: layout.width, z: layout.height }, { x: 0, z: layout.height }]);
   const shape = new THREE.Shape();
   points.forEach((p, i) => {
     const x = p.x - layout.width / 2, y = -(p.z - layout.height / 2);
@@ -163,44 +167,51 @@ export function buildStructureShell(
     floorMesh.userData.groundBasemapStyle = basemapStyle;
 
     // 圈外仍是同一张底图，只是更淡。外沿停在照片矩形上，UV 落在 0..1 里，才能看见周边地貌而不是边缘拉丝。
-    const surroundShape = new THREE.Shape();
-    surroundShape.moveTo(photoRect.minX, photoRect.minY);
-    surroundShape.lineTo(photoRect.maxX, photoRect.minY);
-    surroundShape.lineTo(photoRect.maxX, photoRect.maxY);
-    surroundShape.lineTo(photoRect.minX, photoRect.maxY);
-    surroundShape.closePath();
-    const venueHole = new THREE.Path();
-    // hole 绕序与外轮廓相反，避免 ShapeGeometry 挖洞失败
-    for (let i = points.length - 1; i >= 0; i--) {
-      const p = points[i];
-      const x = p.x - layout.width / 2;
-      const y = -(p.z - layout.height / 2);
-      if (i === points.length - 1) venueHole.moveTo(x, y);
-      else venueHole.lineTo(x, y);
+    // 但「地图选址/2D 户外画边界」抓来的底图（plan-ground 的 data:image 快照）只该铺场地本身：
+    // 再往外铺一张大图会变成用户说的「只做了一个切片」，而他要的就是场地自己的 3D（m00274）。
+    // data:image 一定是抓下来的整块场地快照（不是可解析经纬度的 AMap 静态图 URL），一律不外扩。
+    const planGroundCapture = (layout.floorPlanImage ?? '').startsWith('data:image/');
+    let surroundMat: ThreeNS.MeshBasicMaterial | null = null;
+    if (!planGroundCapture) {
+      const surroundShape = new THREE.Shape();
+      surroundShape.moveTo(photoRect.minX, photoRect.minY);
+      surroundShape.lineTo(photoRect.maxX, photoRect.minY);
+      surroundShape.lineTo(photoRect.maxX, photoRect.maxY);
+      surroundShape.lineTo(photoRect.minX, photoRect.maxY);
+      surroundShape.closePath();
+      const venueHole = new THREE.Path();
+      // hole 绕序与外轮廓相反，避免 ShapeGeometry 挖洞失败
+      for (let i = points.length - 1; i >= 0; i--) {
+        const p = points[i];
+        const x = p.x - layout.width / 2;
+        const y = -(p.z - layout.height / 2);
+        if (i === points.length - 1) venueHole.moveTo(x, y);
+        else venueHole.lineTo(x, y);
+      }
+      venueHole.closePath();
+      surroundShape.holes.push(venueHole);
+      const surroundGeometry = new THREE.ShapeGeometry(surroundShape);
+      if (imageBounds && frame) writeGeographicUv(THREE, surroundGeometry, layout.width, layout.height, frame, imageBounds);
+      else writeNormalizedUv(THREE, surroundGeometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
+      surroundMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: basemapFade.outside,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const surroundMesh = new THREE.Mesh(surroundGeometry, surroundMat);
+      surroundMesh.rotation.x = -Math.PI / 2;
+      surroundMesh.position.y = -0.01;
+      surroundMesh.receiveShadow = false;
+      surroundMesh.userData.type = 'floor';
+      if (mappedVenue) surroundMesh.userData.mapVenueGround = true;
+      surroundMesh.userData.satelliteSurroundFade = true;
+      surroundMesh.userData.satelliteGroundRef = true;
+      surroundMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
+      surroundMesh.userData.groundBasemapStyle = basemapStyle;
+      scene.add(surroundMesh);
     }
-    venueHole.closePath();
-    surroundShape.holes.push(venueHole);
-    const surroundGeometry = new THREE.ShapeGeometry(surroundShape);
-    if (imageBounds && frame) writeGeographicUv(THREE, surroundGeometry, layout.width, layout.height, frame, imageBounds);
-    else writeNormalizedUv(THREE, surroundGeometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
-    const surroundMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: basemapFade.outside,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const surroundMesh = new THREE.Mesh(surroundGeometry, surroundMat);
-    surroundMesh.rotation.x = -Math.PI / 2;
-    surroundMesh.position.y = -0.01;
-    surroundMesh.receiveShadow = false;
-    surroundMesh.userData.type = 'floor';
-    if (mappedVenue) surroundMesh.userData.mapVenueGround = true;
-    surroundMesh.userData.satelliteSurroundFade = true;
-    surroundMesh.userData.satelliteGroundRef = true;
-    surroundMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
-    surroundMesh.userData.groundBasemapStyle = basemapStyle;
-    scene.add(surroundMesh);
     // HTMLImageElement 能解开 jpeg 瓦片和 SVG 占位。createImageBitmap 解不开 SVG，
     // 失败时曾经把地面涂成 0x445544（纯橄榄绿），网络里却是 200 的图。
     const url = layout.floorPlanImage!;
@@ -209,10 +220,12 @@ export function buildStructureShell(
       texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.anisotropy = 16;
       satMat.map = texture;
-      surroundMat.map = texture;
       satMat.color = new THREE.Color(0xffffff);
       satMat.needsUpdate = true;
-      surroundMat.needsUpdate = true;
+      if (surroundMat) {
+        surroundMat.map = texture;
+        surroundMat.needsUpdate = true;
+      }
       options.onTextureLoaded?.();
     };
     void loadSatelliteTexture(THREE, url).then(texture => {

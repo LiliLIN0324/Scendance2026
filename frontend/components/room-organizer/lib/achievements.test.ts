@@ -145,13 +145,10 @@ describe('achievements — type/structure predicates', () => {
 });
 
 describe('achievements — catalogue invariants', () => {
-  // The activity workspace contains sample furniture; the legacy predicates
-  // remain testable even though achievement UI is hidden in Scendance.
-  it('the furnished event baseline meets only the item and open-plan predicates', () => {
-    expect(ACHIEVEMENTS.filter((a) => a.isMet(INITIAL_LAYOUT)).map((a) => a.id)).toEqual([
-      'first-steps',
-      'open-plan',
-    ]);
+  // 2026-11-11 新主线：首屏是不摆物料的空场地（先找场地、再在平面上规划），
+  // 所以基线一条都不满足；成就 UI 在幕景里仍是隐藏的。
+  it('the empty event baseline meets no achievement', () => {
+    expect(ACHIEVEMENTS.filter((a) => a.isMet(INITIAL_LAYOUT)).map((a) => a.id)).toEqual([]);
   });
 
   // The porch's door and back wall are structure, so they must not add to the
