@@ -320,3 +320,39 @@ describe('proposeAddition — 对话加物料也只出候选', () => {
     ]);
   });
 });
+
+describe('proposePlan — 课桌式每桌3人（官方课桌规格，2026-11-11 线上走查校准）', () => {
+  const GZ = { widthM: 12.9, depthM: 7.1 };
+  const base: RoomLayout = { name: '广州会议室6', width: GZ.widthM, height: GZ.depthM, floors: [{ id: 'f1', name: '1F', height: 2.8, items: [] }] } as unknown as RoomLayout;
+
+  it('45人每桌3人：官方 1.8m 桌×15 桌、45 椅，座位如实到 45', () => {
+    const proposal = proposePlan({ base, floorIndex: 0, ...GZ, variant: 1, guests: 45, layoutMode: 'desk-chair', peoplePerDesk: 3 });
+    const items = itemsOf(last(proposal));
+    const desks = items.filter(item => item.type === 'desk');
+    const chairs = items.filter(item => item.type === 'chair');
+    expect(desks).toHaveLength(15);
+    expect(chairs).toHaveLength(45);
+    expect(proposal.seats).toBe(45);
+    // 官方规格：桌长 1.8、排距 1.4（桌心距），第一批桌贴北墙内缩 0.35。
+    expect(desks[0]!.width).toBeCloseTo(1.8, 5);
+    const zs = [...new Set(desks.map(item => item.position!.z))].sort((a, b) => a - b);
+    expect(zs.length).toBe(Math.ceil(15 / desks.filter(item => item.position!.z === zs[0]).length));
+    if (zs.length > 1) expect(zs[1]! - zs[0]!).toBeCloseTo(1.4, 5);
+  });
+
+  it('排不下时给「按这版排法最多 N 座」的诚实上限，不硬凑', () => {
+    const tiny: RoomLayout = { name: '小房间', width: 5, height: 4, floors: [{ id: 'f1', name: '1F', height: 2.8, items: [] }] } as unknown as RoomLayout;
+    const proposal = proposePlan({ base: tiny, floorIndex: 0, widthM: 5, depthM: 4, variant: 1, guests: 45, layoutMode: 'desk-chair', peoplePerDesk: 3 });
+    expect(proposal.seats ?? 0).toBeLessThan(45);
+    expect(proposal.seatCeilingNote).toContain('按这版排法最多');
+    expect(proposal.seatCeilingNote).toContain('45');
+    expect(proposal.seatCeilingNote).not.toContain('场地最多');
+  });
+
+  it('不说明每桌人数时保持一人一套（2026-10-27 课室语义不回潮）', () => {
+    const proposal = proposePlan({ base, floorIndex: 0, ...GZ, variant: 1, guests: 12, layoutMode: 'desk-chair' });
+    const items = itemsOf(last(proposal));
+    expect(items.filter(item => item.type === 'desk')).toHaveLength(12);
+    expect(items.filter(item => item.type === 'chair')).toHaveLength(12);
+  });
+});

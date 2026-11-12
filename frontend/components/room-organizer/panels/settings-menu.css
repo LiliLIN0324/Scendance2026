@@ -1,0 +1,38 @@
+/* 设置弹层层级：次要导航链接走浅底小胶囊，与主层级链接拉开差距。
+   本轮不新增「清除密钥 / 清除历史任务」等危险按钮：凭证退出在 cloud-panel，
+   本机方案会话按场删除且存储层不支持整批清空，云端任务无前端删除通道（见组件注释）。 */
+.sc-workbench .sc-settings-pop .sc-settings-link--ghost {
+  background: var(--wk-hair-soft);
+  border-radius: 999px;
+  color: var(--wk-ink-soft);
+}
+.sc-workbench .sc-settings-pop .sc-settings-link--ghost:hover {
+  background: var(--wk-plane-deep);
+  color: var(--wk-ink);
+}
+
+/* 弹层底部 Esc 提示：只标注文档上真实绑定的关闭键。 */
+.sc-settings-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 2px 0;
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--wk-hair);
+  font-size: 11px;
+  color: var(--wk-ink-faint);
+}
+.ap-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 6px;
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}

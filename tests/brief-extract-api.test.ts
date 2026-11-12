@@ -3,6 +3,15 @@ import { createApi } from '../supabase/functions/_shared/api.ts';
 import { z } from 'zod';
 import { database, owner } from './fixtures.ts';
 
+// 2026-11-11 用户拍板：brief 只走百炼大模型——所有 provider 用例统一用百炼环境。
+const bailianSettings: Record<string, string> = {
+  BAILIAN_PRODUCT_ENABLED: '1',
+  BAILIAN_PRODUCT_BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  BAILIAN_PRODUCT_KEY: 'test-key',
+  BAILIAN_PRODUCT_MODEL: 'qwen3.8-max',
+};
+const bailianKeys = (key: string): string | undefined => bailianSettings[key];
+
 describe('activity needs over the authenticated extraction API', () => {
   let fixture: Awaited<ReturnType<typeof database>>;
   beforeAll(async () => { fixture = await database(); }, 30000);
@@ -12,7 +21,7 @@ describe('activity needs over the authenticated extraction API', () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
       event: '讲座', activityNeeds: [{ kind: 'checkin', decision: 'not_needed', evidence: '不用安排接待台' }],
     }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    const api = createApi(fixture.backend, key => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, fetcher);
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '讲座自行入场，不用安排接待台' }),
@@ -32,7 +41,7 @@ describe('activity needs over the authenticated extraction API', () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
       event: '讲座', activityNeeds: [{ kind: 'rest', decision: 'needed', evidence: '必须设休息区' }],
     }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    const api = createApi(fixture.backend, key => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, fetcher);
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '举行一场讲座' }),
@@ -52,7 +61,7 @@ describe('activity needs over the authenticated extraction API', () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }] }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     }));
-    const api = createApi(fixture.backend, key => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, fetcher);
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '签到还没定，休息区怎么安排' }),
@@ -66,7 +75,7 @@ describe('activity needs over the authenticated extraction API', () => {
       event: '讲座', mobilityAssistance: null,
       activityNeeds: [{ kind: 'stage', decision: 'needed', evidence: '有讲台' }],
     }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    const api = createApi(fixture.backend, key => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, fetcher);
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '讲座有讲台' }),
@@ -81,7 +90,60 @@ describe('activity needs over the authenticated extraction API', () => {
     expect(body.extraction.activityNeeds).toHaveLength(1);
   });
 
-  it('does not fall back to another provider when custom configuration is incomplete', async () => {
+  it('主模型欠费(402)时自动兜底到备用供应商并成功', async () => {
+    const settings: Record<string, string> = { ...bailianSettings, AGENT_CHAT_BASE_URL: 'https://custom.example/v1', AGENT_CHAT_KEY: 'backup-key', AGENT_CHAT_MODEL: 'backup-model' };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('quota exhausted', { status: 402 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"event":"讲座"}' } }] })));
+    const api = createApi(fixture.backend, key => settings[key], fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '讲座' }),
+    }));
+    expect(await response.json()).toMatchObject({ enabled: true, extraction: { event: '讲座' } });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[0]![0])).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
+    expect(String(fetcher.mock.calls[1]![0])).toBe('https://custom.example/v1/chat/completions');
+    expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body)).model).toBe('backup-model');
+  });
+
+  it('证据吞空格不再整句作废（2026-11-11 线上事故：「都站着 搭建舞台和签到区」）', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+      activityNeeds: [
+        { kind: 'all_seated', decision: 'not_needed', evidence: '都站着搭建舞台和签到区' },
+        { kind: 'stage', decision: 'needed', evidence: '搭建舞台' },
+        { kind: 'checkin', decision: 'needed', evidence: '签到区' },
+      ],
+    }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '都站着 搭建舞台和签到区' }),
+    }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.extraction.activityNeeds).toEqual(expect.arrayContaining([
+      { kind: 'all_seated', decision: 'not_needed', evidence: '都站着搭建舞台和签到区' },
+      { kind: 'stage', decision: 'needed', evidence: '搭建舞台' },
+      { kind: 'checkin', decision: 'needed', evidence: '签到区' },
+    ]));
+  });
+
+  it('「都站着」识别为全员落座 not_needed（不再要求 crowds 词）', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+      activityNeeds: [{ kind: 'all_seated', decision: 'not_needed', evidence: '都站着' }],
+    }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '都站着' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ enabled: true, extraction: { activityNeeds: [
+      { kind: 'all_seated', decision: 'not_needed', evidence: '都站着' },
+    ] } });
+  });
+
+  it('没有可用供应商时如实报首选供应商的失败原因，不静默', async () => {
     const fetcher = vi.fn<typeof fetch>();
     const settings: Record<string, string> = { AGENT_CHAT_BASE_URL: 'https://custom.example/v1', TOKENDANCE_API_KEY: 'other-provider-key' };
     const api = createApi(fixture.backend, key => settings[key], fetcher);
@@ -94,18 +156,18 @@ describe('activity needs over the authenticated extraction API', () => {
 
   it('uses the configured compatible endpoint and model for extraction', async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"event":"讲座"}' } }] })));
-    const settings: Record<string, string> = { AGENT_CHAT_BASE_URL: 'https://custom.example/v1/', AGENT_CHAT_KEY: 'test-key', AGENT_CHAT_MODEL: 'test-model', TOKENDANCE_API_KEY: 'other-provider-key' };
+    const settings: Record<string, string> = { ...bailianSettings };
     const api = createApi(fixture.backend, key => settings[key], fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '讲座' }),
     }));
     expect(await response.json()).toMatchObject({ enabled: true, extraction: { event: '讲座' } });
-    expect(fetcher.mock.calls[0]![0]).toBe('https://custom.example/v1/chat/completions');
-    expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body)).model).toBe('test-model');
+    expect(fetcher.mock.calls[0]![0]).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
+    expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body)).model).toBe('qwen3.8-max');
   });
 
-  it('uses the opt-in MiniMax profile without unsupported thinking or JSON-mode controls', async () => {
-    const settings: Record<string, string> = { AGENT_CHAT_PROFILE: 'minimax', AGENT_CHAT_BASE_URL: 'https://api.minimax.cn/v1', AGENT_CHAT_KEY: 'fixture', AGENT_CHAT_MODEL: 'MiniMax-M3.1-Flash', AGENT_CHAT_REASONING_EFFORT: 'low' };
+  it('uses the bailian-qwen profile: non-thinking JSON-mode request, reasoning content never echoed', async () => {
+    const settings: Record<string, string> = { ...bailianSettings };
     const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { reasoning_content: 'private reasoning', content: '{"event":"讲座"}' } }] })));
     const api = createApi(fixture.backend, key => settings[key], fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
@@ -114,12 +176,10 @@ describe('activity needs over the authenticated extraction API', () => {
     const body = await response.json();
     expect(body).toMatchObject({ enabled: true, extraction: { event: '讲座' } });
     expect(JSON.stringify(body)).not.toContain('private reasoning');
-    expect(fetcher.mock.calls[0]![0]).toBe('https://api.minimax.cn/v1/chat/completions');
+    expect(fetcher.mock.calls[0]![0]).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
     const sent = JSON.parse(String(fetcher.mock.calls[0]![1]?.body));
-    expect(sent).toMatchObject({ model: 'MiniMax-M3.1-Flash', reasoning_split: true, reasoning_effort: 'low', max_tokens: 2048 });
+    expect(sent).toMatchObject({ model: 'qwen3.8-max', enable_thinking: false, max_tokens: 2048, temperature: 0, response_format: { type: 'json_object' } });
     expect(sent).not.toHaveProperty('thinking');
-    expect(sent).not.toHaveProperty('temperature');
-    expect(sent).not.toHaveProperty('response_format');
   });
 
   it.each([
@@ -128,7 +188,7 @@ describe('activity needs over the authenticated extraction API', () => {
     [{ finish_reason: 'stop', message: { content: '<think>private</think>{"event":"讲座"}' } }, 'MODEL_INVALID_RESPONSE'],
     [{ finish_reason: 'stop', message: { content: null, reasoning_content: 'private' } }, 'MODEL_INVALID_RESPONSE'],
   ])('does not accept incomplete or reasoning-tagged output', async (choice, reason) => {
-    const settings: Record<string, string> = { AGENT_CHAT_PROFILE: 'minimax', AGENT_CHAT_BASE_URL: 'https://api.minimax.cn/v1', AGENT_CHAT_KEY: 'fixture', AGENT_CHAT_MODEL: 'MiniMax-M3.1-Flash' };
+    const settings: Record<string, string> = { ...bailianSettings };
     const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ choices: [choice] })));
     const api = createApi(fixture.backend, key => settings[key], fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
@@ -138,7 +198,7 @@ describe('activity needs over the authenticated extraction API', () => {
   });
 
   it.each([undefined,null,'length','tool_calls'])('requires an explicit completed response for a compatible provider: %s', async finishReason=>{
-    const settings:Record<string,string>={AGENT_CHAT_BASE_URL:'https://custom.example/v1',AGENT_CHAT_KEY:'fixture',AGENT_CHAT_MODEL:'fixture'};
+    const settings:Record<string,string>={...bailianSettings};
     const fetcher=vi.fn<typeof fetch>(async()=>new Response(JSON.stringify({choices:[{finish_reason:finishReason,message:{content:'{"event":"讲座"}'}}]})));
     const api=createApi(fixture.backend,key=>settings[key],fetcher);
     const response=await api(new Request('https://backend.example/brief/extract',{method:'POST',headers:{Authorization:`Bearer ${owner}`,'Content-Type':'application/json'},body:JSON.stringify({message:'讲座'})}));
@@ -146,7 +206,7 @@ describe('activity needs over the authenticated extraction API', () => {
   });
   it('reports a provider body timeout without echoing private data',async()=>{
     const fetcher=vi.fn<typeof fetch>(async()=>new Response(new ReadableStream({start(controller){controller.error(new DOMException('private stream detail','TimeoutError'));}})));
-    const api=createApi(fixture.backend,key=>key==='TOKENDANCE_API_KEY'?'fixture':undefined,fetcher);
+    const api=createApi(fixture.backend,bailianKeys,fetcher);
     const response=await api(new Request('https://backend.example/brief/extract',{method:'POST',headers:{Authorization:`Bearer ${owner}`,'Content-Type':'application/json'},body:JSON.stringify({message:'讲座'})}));
     expect(await response.json()).toEqual({enabled:true,extraction:null,reason:'MODEL_TIMEOUT'});
   });
@@ -157,7 +217,7 @@ describe('activity needs over the authenticated extraction API', () => {
       upstream=init?.signal??undefined;
       upstream?.addEventListener('abort',()=>reject(new DOMException('private abort detail','AbortError')),{once:true});
     }));
-    const api=createApi(fixture.backend,key=>key==='TOKENDANCE_API_KEY'?'fixture':undefined,fetcher);
+    const api=createApi(fixture.backend,bailianKeys,fetcher);
     const pending=api(new Request('https://backend.example/brief/extract',{method:'POST',signal:controller.signal,headers:{Authorization:`Bearer ${owner}`,'Content-Type':'application/json'},body:JSON.stringify({message:'讲座'})}));
     await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledOnce());controller.abort();
     const response=await pending;expect(upstream?.aborted).toBe(true);expect(await response.json()).toEqual({enabled:true,extraction:null,reason:'MODEL_TIMEOUT'});expect(fetcher).toHaveBeenCalledOnce();
@@ -165,7 +225,7 @@ describe('activity needs over the authenticated extraction API', () => {
 
   it('rejects an unsafe provider URL without sending the key or request', async () => {
     const fetcher = vi.fn<typeof fetch>();
-    const settings: Record<string, string> = { AGENT_CHAT_BASE_URL: 'http://external.example/v1', AGENT_CHAT_KEY: 'secret', AGENT_CHAT_MODEL: 'fixture' };
+    const settings: Record<string, string> = { BAILIAN_PRODUCT_ENABLED: '1', BAILIAN_PRODUCT_BASE_URL: 'http://external.example/v1', BAILIAN_PRODUCT_KEY: 'secret', BAILIAN_PRODUCT_MODEL: 'fixture' };
     const api = createApi(fixture.backend, key => settings[key], fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '测试活动' }),
@@ -176,7 +236,7 @@ describe('activity needs over the authenticated extraction API', () => {
 
   it('reports provider status without returning response bodies or exception text', async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response('private-provider-response', { status: 429 }));
-    const api = createApi(fixture.backend, key => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, fetcher);
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
     const request = () => new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '测试活动' }),
     });

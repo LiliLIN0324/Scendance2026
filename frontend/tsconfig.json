@@ -45,7 +45,8 @@
     ".next-takeover/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    ".next-local/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

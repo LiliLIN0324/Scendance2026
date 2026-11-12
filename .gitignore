@@ -115,3 +115,11 @@ frontend/.tmp-iso/
 frontend/.tmp-preview/
 vibe_images/
 
+
+# local scratch 2026-11-11
+/.next/
+/frontend/.next-build/
+frontend/build-run.log
+frontend/local-panel-preview.png
+docs/research/evidence-*/
+/artifacts/

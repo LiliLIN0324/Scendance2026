@@ -3925,25 +3925,22 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
     expect(localStorage.getItem(key)).toBe(before);
     expect(await screen.findByText(/这次需求暂时无法保存在本机/)).toBeTruthy();
   });
-  it('explains when text and scene context may leave the device', () => {
+  it('explains when text may leave the device, without a permanent plan-status line', () => {
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '0');
     try {
       const view = render(ui(makeLayout()));
       expect(screen.getByText('文字识别按本机规则处理。')).toBeTruthy();
-      expect(screen.getByText('当前用本机规则出预览；连接云项目后可云端生成。')).toBeTruthy();
-      expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBe('ap-data-notice ap-plan-notice');
+      expect(screen.queryByText(/本机规则出预览|云端生成会发送/)).toBeNull();
+      expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBe('ap-data-notice');
       vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
       view.rerender(ui(makeLayout()));
       expect(screen.getByText('输入文字可能发送至模型服务。')).toBeTruthy();
-      expect(screen.getByText('当前用本机规则出预览；连接云项目后可云端生成。')).toBeTruthy();
       studioMock.connection = '项目已连接';
       view.rerender(ui(makeLayout()));
       expect(screen.getByText('输入文字可能发送至模型服务。')).toBeTruthy();
-      expect(screen.getByText('云端生成会发送当前场景及部分对话上下文。')).toBeTruthy();
       vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '0');
       view.rerender(ui(makeLayout()));
       expect(screen.getByText('文字识别按本机规则处理。')).toBeTruthy();
-      expect(screen.getByText('云端生成会发送当前场景及部分对话上下文。')).toBeTruthy();
     } finally { vi.unstubAllEnvs(); }
   });
   it('会话头展示标题，能力芯片与输入框可用', () => {

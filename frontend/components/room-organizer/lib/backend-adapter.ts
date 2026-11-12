@@ -38,11 +38,11 @@ export function assertCloudZoneSupport(layout: RoomLayout): void {
 }
 
 const rendererTypes: Record<SceneObject['materialId'], string> = {
-  chair: 'chair', table: 'table', reception: 'counter', backdrop: 'backdrop',
+  chair: 'chair', table: 'table', desk: 'desk', reception: 'counter', backdrop: 'backdrop',
   display: 'bookshelf', partition: 'partition', carpet: 'rug', decoration: 'plant', asset: 'glb-asset',
 };
 const icons: Record<SceneObject['materialId'], string> = {
-  chair: '🪑', table: '▰', reception: '▣', backdrop: '▥', display: '▤',
+  chair: '🪑', table: '▰', desk: '▤', reception: '▣', backdrop: '▥', display: '▤',
   partition: '▯', carpet: '▱', decoration: '✦', asset: '◇',
 };
 

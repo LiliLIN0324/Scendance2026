@@ -89,8 +89,40 @@ export function initialBriefMemory(): BriefMemory {
   return { event: null, headcount: null, headcountMode: null, allGuestsSeated: null, venueIO: null, lengthM: null, widthM: null, areaM2: null, layoutMode: 'dining', layoutModeConfirmed: false, askedScale: false, zoneNeeds: { checkin: null, rest: null, stage: null }, pendingActivityNeeds: [], unresolvedActivityNeeds: [] };
 }
 
-export const isActivityNeedsAnswer = (raw: string): boolean => /^(对|是|确认|没错|是的|好的|可以|不对|不是|否)$/.test(raw.trim());
-export const isUnresolvedNeedsAnswer = (raw: string): boolean => /^(需要|要|是|是的|对|不需要|不要|不用|否|不是)$/.test(raw.trim());
+export const isActivityNeedsAnswer = (raw: string): boolean => /^(对|是|确认|没错|是的|好的|可以|不对|不是|否)$/.test(raw.trim()) || splitConfirmationLead(raw) !== null;
+export const isUnresolvedNeedsAnswer = (raw: string): boolean => /^(需要|要|是|是的|对|不需要|不要|不用|否|不是)$/.test(raw.trim()) || splitConfirmationLead(raw) !== null;
+
+export interface ConfirmationLead {
+  kind: 'affirm' | 'reject';
+  /** 去掉开头答复词与分隔符后的剩余内容；可能为空串。 */
+  rest: string;
+}
+
+/**
+ * 把「确认，需要签到区」这类以答复词开头的句子拆成「答复 + 其余要求」。
+ * 只认答复词后紧跟分隔符的写法；「确认布置」这类短语、疑问句和请求不拆，
+ * 仍走各自的原有门（提案确认/普通理解）。否定词优先于肯定词。
+ */
+export function splitConfirmationLead(raw: string): ConfirmationLead | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const match = /^(不对|不是|不需要|不要|不用|没错|确认|是的|对的|好的|可以|是|对|否|不)(?:((?:[，,。！!、；;：:\s]).*)|(?:需要|要|不用)(.*))?$/.exec(text);
+  if (!match) return null;
+  // 粘连否定（「不需要签到台」）：语义 token 是「不需要」，rest 只取宾语。
+  const rest = (match[3] !== undefined ? match[3] ?? '' : (match[2] ?? '').replace(/^[，,。！!、；;：:\s]+/, '')).trim();
+  if (!rest) return null;
+  const firstClause = rest.split(/[，,。！!、；;：:\s]/)[0] ?? '';
+  if (/[吗么？?]/.test(firstClause)) return null;
+  if (!/^(不对|不是|不需要|不要|不用|否|不)$/.test(match[1]!) && /^(帮我|麻烦|请|能不能|可不可以)/.test(rest)) return null;
+  return { kind: /^(不对|不是|不需要|不要|不用|否|不)$/.test(match[1]!) ? 'reject' : 'affirm', rest };
+}
+
+/** 待确认问题的答复值：拆分出的答复词优先于整句精确匹配。 */
+export function confirmationLeadValue(raw: string): boolean {
+  const lead = splitConfirmationLead(raw);
+  if (lead) return lead.kind === 'affirm';
+  return !/^(不对|不是|否|不需要|不要|不用)$/.test(raw.trim());
+}
 
 /** Counts with object units do not establish how many people will attend. */
 export const hasNonPersonQuantity=(raw:string):boolean=>/(?:\d+(?:\.\d+)?|[零〇一二两三四五六七八九十百千]+)\s*(?:(?:套|把|张|件|只|盏|排|组|台|块)|个\s*(?:椅|桌|凳|座椅|沙发|舞台|灯|柜|屏|物料|设备|家具|展位))/.test(raw);
@@ -327,7 +359,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
     memory.reportedInventory=previous.reportedInventory.map(item=>({...item,status:'needs_review' as const}));
   }
   if((previous.mobilityNeedsClarification || previous.mobilityRequirement?.decision==='unknown') && !previous.pendingActivityNeeds.length && !previous.unresolvedActivityNeeds.length && isUnresolvedNeedsAnswer(raw)){
-    const value=!/^(不需要|不要|不用|否|不是)$/.test(raw.trim());
+    const value=confirmationLeadValue(raw);
     memory.mobilityRequirement={decision:value?'needed':'not_needed',evidence:`${previous.mobilityRequirement?.evidence??''}；用户答复：${raw.trim()}`.slice(0,2000)};memory.mobilityNeedsClarification=false;
     return {kind:'ack',memory,extraction:preExtraction??parseBriefSentence(raw),filledScaleAsk:false,text:value?'已记下行动辅助或轮椅通行需求，实际通行条件仍待核验。':'已记下本场不需要所述行动辅助需求；现场条件仍需核对。'};
   }
@@ -341,7 +373,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   if(seatingDecisions.size===1)memory.allGuestsSeated=[...seatingDecisions][0]!;
   const extraction = preExtraction ?? parseBriefSentence(raw);
   if (previous.pendingActivityNeeds.length && isActivityNeedsAnswer(raw)) {
-    const accepted = !/^(不对|不是|否)$/.test(raw.trim());
+    const accepted = confirmationLeadValue(raw);
     if (accepted) {
       for (const need of previous.pendingActivityNeeds) {
         if (need.kind === 'all_seated') memory.allGuestsSeated = need.value;
@@ -362,7 +394,7 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
     if(!actionable.length && previous.unresolvedActivityNeeds.length>1) return {kind:'ask',memory,extraction,filledScaleAsk:false,text:'请说明你指的是哪项活动需求。'};
     const kind=actionable[0]??previous.unresolvedActivityNeeds[0];
     const remaining=previous.unresolvedActivityNeeds.filter(item=>item!==kind);
-    const value = !/^(不需要|不要|不用|否|不是)$/.test(raw.trim());
+    const value = confirmationLeadValue(raw);
     if (kind === 'all_seated') memory.allGuestsSeated = value;
     else if (kind) memory.zoneNeeds[kind] = value;
     memory.unresolvedActivityNeeds = remaining;

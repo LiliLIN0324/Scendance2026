@@ -38,8 +38,19 @@
   color: #3A3F47;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
 }
+.sc-annotation-guide { padding: 10px 14px; }
 .sc-annotation-guide__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.sc-annotation-guide p { margin: 7px 0; font-size: 12px; line-height: 1.5; }
+.sc-annotation-guide p { margin: 6px 0; font-size: 12px; line-height: 1.5; }
 .sc-annotation-guide__modes, .sc-annotation-guide__types { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-annotation-guide__modes { margin-top: 8px; }
+.sc-annotation-guide__lead { color: #3A3F47; }
+.sc-annotation-guide__hint { color: #71767E; }
+.sc-annotation-guide__section-label { margin: 10px 0 2px !important; font-size: 11px; color: #71767E; }
+.sc-annotation-guide details { margin-top: 8px; font-size: 12px; color: #71767E; }
+.sc-annotation-guide details summary { cursor: pointer; color: #5A6068; }
 .sc-annotation-guide button { border: 1px solid #D9DCE1; border-radius: 6px; padding: 5px 9px; background: #fff; color: #3A3F47; cursor: pointer; font: inherit; font-size: 12px; }
-.sc-annotation-guide button[aria-pressed='true'] { background: #4A7C59; color: #fff; border-color: #4A7C59; }
+/* 用途标签是次级操作：比工具行更轻，避免看起来像预设好的固定模块。 */
+.sc-annotation-guide__types button { background: #F4F5F7; border-color: transparent; color: #5A6068; padding: 4px 9px; }
+.sc-annotation-guide__types button[aria-pressed='true'] { background: #4A7C59; color: #fff; border-color: #4A7C59; }
+.sc-annotation-guide__modes button[aria-pressed='true'] { background: #4A7C59; color: #fff; border-color: #4A7C59; }
+.sc-annotation-guide__header button { background: #fff; }

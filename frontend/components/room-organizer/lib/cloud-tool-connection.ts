@@ -15,14 +15,6 @@ export function understandingLine(modelReady: boolean): string {
   return modelReady ? '输入文字可能发送至模型服务。' : '文字识别按本机规则处理。';
 }
 
-/** 方案生成这一行。本地预览在未连接时仍然可用。 */
-export function planGenerationLine(connection: string | null | undefined): string {
-  if (connection === '项目已连接') return '云端生成会发送当前场景及部分对话上下文。';
-  if (connection === '正在准备工作台') return '正在连接云端方案生成，完成后可重试。当前仍用本机规则出预览。';
-  if (connection === '功能已开放') return '当前用本机规则出预览。登录并取得编辑权后，可改为云端生成。';
-  return '当前用本机规则出预览；连接云项目后可云端生成。';
-}
-
 export type AholoAskKind = 'text' | 'world' | 'recon';
 
 export interface AholoAvailability {

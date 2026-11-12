@@ -121,6 +121,8 @@ import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
 import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
 import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
+import { TourReel } from './onboarding/tour-reel';
+import { onboardingSteps } from './onboarding/onboarding-steps';
 import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import type { ScannedVenue } from './lib/venue-scans';
@@ -223,7 +225,7 @@ import type { GameMode } from './lib/types';
 import { ConfirmModal } from './components/ConfirmModal';
 import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
 import { F3CoachBubble } from './panels/f3-coach-bubble';
-import { usePlanAnnotations, type PlanDrawMode } from './hooks/use-plan-annotations';
+import { usePlanAnnotations } from './hooks/use-plan-annotations';
 import { buildDefaultZoneRects } from '@/lib/auto-zone-apply';
 import { PlanOverlay } from './canvas-2d/plan-overlay';
 import { AnnotationGuide } from './panels/annotation-guide';
@@ -917,8 +919,10 @@ useEffect(() => {
     setHandoffExportRequest(value => value + 1);
   }, []);
   const openMaterialsFromShare = useCallback(() => {
-    document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
-  }, []);
+    // 「打开资料」= 执行页的资料（物料库/制作/点验），不是账户中心；与对话里的 onOpenMaterials 同一去处。
+    setWorkbenchMode('layout');
+    showAgent('material');
+  }, [showAgent]);
   // 底部 Agent 面板收起/恢复：户外 2D 打开时会临时收起，关掉户外后要还原回去，
   // 否则用户切回 3D 会发现下方一排按钮（地图选址/按风格配一套/发送）全没了。
   const agentCloseTimerRef = useRef<number | null>(null);
@@ -2701,6 +2705,23 @@ useEffect(() => {
     environmentsRef.current = defaults;
     setEnvironments(defaults);
   }, [environmentKey, hasMapVenue, layout.id, stopSplat, workspaceWriteGuards]);
+  // 对话里立了明确尺寸的场地后，样例高斯背景就不作数了：场地事实换了空间，
+  // 宴会厅样例不再是这间厅的观感参照（与 hasMapVenue 同一待遇）。只摘样例，
+  // 不动用户自己在场景库选的环境；刷新重挂时 venueScaleRef 为 null，不误摘。
+  const venueScale = `${layout.width}×${layout.height}`;
+  const venueScaleRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = venueScaleRef.current;
+    venueScaleRef.current = venueScale;
+    if (previous === null || previous === venueScale) return;
+    const current = environmentsRef.current;
+    if (!current.some(entry => entry.assetId === DEMO_WORLD_SCENE_ID)) return;
+    const kept = current.filter(entry => entry.assetId !== DEMO_WORLD_SCENE_ID);
+    writeEnvironments(layout.id, kept);
+    environmentsRef.current = kept;
+    setEnvironments(kept);
+    if (!kept.length) stopSplat();
+  }, [layout.id, venueScale, stopSplat]);
   // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
   // 第 3 步：整景区视距（>200 m）下不解码点云，先挂锚点 POI；等到 <100 m 再补挂。
   // 等 splatLodMeasured 才判断，避免相机/控件尚未就绪时把「还没量」误当成近景。
@@ -4199,6 +4220,7 @@ useEffect(() => {
                   aria-expanded={isLaneOpen('material')}
                   aria-controls="agent-panel"
                   aria-label="物料"
+                  data-tour="nav-material"
                   data-tip="物料"
                   onClick={() => toggleAgent('material')}
                 >
@@ -4270,24 +4292,20 @@ useEffect(() => {
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
                 aria-label={planAnnot.drawMode === 'off' ? '规划活动区域' : '结束规划绘制'}
                 aria-pressed={planAnnot.drawMode !== 'off'}
-                data-tip="标注：区/线/疏散/距/门循环切换"
+                data-tip={planAnnot.drawMode === 'off' ? '标注区域、路线、距离或出入口' : '再次点击退出标注'}
                 onClick={() => {
-                  // 首次点击时开一份空草案。
-                  // door（真门标注）已接入：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。
-                  const order: PlanDrawMode[] = ['off', 'zone', 'route', 'fire-route', 'measure', 'door'];
-                  const idx = order.indexOf(planAnnot.drawMode);
-                  const next = order[(idx + 1) % order.length];
+                  // 真开关：已在标注时再点直接退出；未开始则进入区域标注，工具切换走引导面板的 pill。
+                  // door（真门标注）：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。
+                  if (planAnnot.drawMode !== 'off') {
+                    planAnnot.setDrawMode('off');
+                    return;
+                  }
                   if (!planAnnot.draft) planAnnot.startDraft();
                   setView(current => ({ ...current, view2D: true, walkthroughMode: false }));
-                  planAnnot.setDrawMode(next);
+                  planAnnot.setDrawMode('zone');
                 }}
               >
                 <span className="sc-annotation-toggle__label">标注</span>
-                {planAnnot.drawMode === 'zone' && <span className="sc-annotation-toggle__suffix">·区</span>}
-                {planAnnot.drawMode === 'route' && <span className="sc-annotation-toggle__suffix">·线</span>}
-                {planAnnot.drawMode === 'fire-route' && <span className="sc-annotation-toggle__suffix">·疏散</span>}
-                {planAnnot.drawMode === 'measure' && <span className="sc-annotation-toggle__suffix">·距</span>}
-                {planAnnot.drawMode === 'door' && <span className="sc-annotation-toggle__suffix">·门</span>}
               </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
@@ -4440,7 +4458,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -4758,7 +4776,7 @@ useEffect(() => {
               />
             )}
             {/* 第 11 批：正在画区时，底部浮出语义类型选择条（连续画框中随时切换）。 */}
-            {view.view2D && (planAnnot.drawMode === 'zone' || planAnnot.drawMode === 'route' || planAnnot.drawMode === 'measure') && (
+            {view.view2D && planAnnot.drawMode !== 'off' && (
               <AnnotationGuide mode={planAnnot.drawMode} zoneType={zoneType} onModeChange={planAnnot.setDrawMode}
                 onZoneTypeChange={setZoneType} onFinish={() => planAnnot.setDrawMode('off')} />
             )}
@@ -4853,6 +4871,7 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
+            <TourReel steps={onboardingSteps} storageKey="scdance:tour:v1" />
             <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} outdoorStage={outdoorPlan ? { showing3d: outdoor3dTakeover, onSwitch: () => {
               // 2026-11-12 统一 2D/3D（图五 ↔ 图六）＋显式接管开关：覆盖层开＝2D 地图；
               // 接管开＝全屏 3D；两者都关（收起态）＝「切到 3D 场地」直接进全屏接管。

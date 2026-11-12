@@ -275,8 +275,9 @@ export function sceneScriptFromBrief(input: BriefSceneScriptInput): SceneScript 
     north += aisleMinM;
   }
 
-  // Keep the optional check-in band clear of seating.
-  const southBandD = checkin || stage ? 1.6 : 0;
+  // Keep the optional check-in band clear of seating. 课桌式的签到台 1.8×0.6 竖着贴南墙，
+  // 1.0m 带宽就够；1.6m 是宴会/舞台场景的经验值，会把 7.1m 深的小会议室座位区吃掉一截。
+  const southBandD = checkin || stage ? (layoutMode === 'desk-chair' ? 1.0 : 1.6) : 0;
   const south = frame.z + frame.d - gap - southBandD;
   const seatingD = south - north;
   if (seatingD >= 0.5) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, Globe, LayoutTemplate, Plus, Scan, SquareDashed } from '@/components/solid-icons';
-import { useSupervisionMode } from '../hooks/use-supervision-mode';
+import { useSupervisionMode, type SupervisionMode } from '../hooks/use-supervision-mode';
 import {
   getAgentRun,
   pushAgentSteerNote,
@@ -23,6 +23,19 @@ const AGENT_CHAT_META: Record<'space' | 'material', { name: string; placeholder:
   space: { name: '空间', placeholder: '一句话描述场地，如：80 人发布会，室内' },
   material: { name: '物料', placeholder: '一句话描述物件，如：一把户外折叠椅' },
 };
+
+/**
+ * 监督三档与人话说明（语系对齐 petitmaker）。
+ * 模型/供应商由服务端密钥决定：agent-chat-store 运行账本、BackendSession 快照、
+ * assistant/chat 返回契约（仅 status+answer）与本地持久化里都没有可直接读取的当前
+ * 对话模型名字段；provider_model 属逐条重建任务，GenerationCapabilities.model 是
+ * 异步拉取的生成引擎能力，均不代表对话模型。因此摘要只显示监督档，取不到模型名时不编造。
+ */
+const SUPERVISION_OPTIONS: ReadonlyArray<{ value: SupervisionMode; label: string; hint: string }> = [
+  { value: 'strict', label: '严格', hint: '每次改动前都先问你' },
+  { value: 'checkpoint', label: '关键节点', hint: '在计划步骤和大范围改动前询问' },
+  { value: 'auto', label: '自动', hint: '自动执行，无需逐步确认；所有修改均可撤销' },
+];
 
 export interface AgentChatProps {
   agent: ChatAgent;
@@ -49,6 +62,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
   const [run, setRun] = useState(getAgentRun);
   useEffect(() => subscribeAgentRun(() => setRun(getAgentRun())), []);
   const [mode, setMode] = useSupervisionMode();
+  const activeOption = SUPERVISION_OPTIONS.find(option => option.value === mode) ?? SUPERVISION_OPTIONS[1]!;
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -160,19 +174,16 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
                 role="radiogroup"
                 aria-label="监督档位"
               >
-                {([
-                  { value: 'strict' as const, label: '严格', hint: '每件家具摆放前都会问你' },
-                  { value: 'checkpoint' as const, label: '关键节点', hint: '在计划步骤和大范围改动前询问' },
-                  { value: 'auto' as const, label: '自动', hint: '无冲突直接放置，有冲突才问你' },
-                ]).map(opt => (
+                <p className="ap-supervise-summary">
+                  <span className="ap-supervise-summary-kicker">当前监督</span>
+                  <span className="ap-supervise-summary-value">{activeOption.label}</span>
+                </p>
+                {SUPERVISION_OPTIONS.map(opt => (
                   <label
                     key={opt.value}
-                    style={{
-                      display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 0', cursor: 'pointer',
-                      fontSize: 12,
-                    }}
+                    className={`ap-supervise-option${mode === opt.value ? ' is-active' : ''}`}
                   >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span className="ap-supervise-option-row">
                       <input
                         type="radio"
                         name={`supervision-${agent}`}
@@ -180,11 +191,9 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
                         onChange={() => setMode(opt.value)}
                         style={{ accentColor: COLOR_GREEN }}
                       />
-                      <span style={{ fontWeight: mode === opt.value ? 600 : 400, color: '#2b2f36' }}>{opt.label}</span>
+                      <span className="ap-supervise-option-label">{opt.label}</span>
                     </span>
-                    {mode === opt.value && (
-                      <span style={{ paddingLeft: 22, fontSize: 11, color: '#6b7280' }}>{opt.hint}</span>
-                    )}
+                    <span className="ap-supervise-option-hint">{opt.hint}</span>
                   </label>
                 ))}
               </div>
@@ -192,7 +201,10 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
             {/* 物料这一格的左下角就是那颗生成物料星，和生成入口那格同一个入口、同一颗钮。 */}
             {agent === 'material' && <MaterialCreateCell {...(controller ? { controller } : {})} listenForAsk/>}
           </div>
-          <button type="submit" className="ap-send" aria-label="发送" disabled={forwarding || !draft.trim()}><ArrowUp size={18}/></button>
+          <div className="ap-composer-actions">
+            <kbd className="ap-kbd" title="回车发送；Shift+Enter 换行">Enter</kbd>
+            <button type="submit" className="ap-send" aria-label="发送" disabled={forwarding || !draft.trim()}><ArrowUp size={18}/></button>
+          </div>
         </div>
       </form>
     </div>

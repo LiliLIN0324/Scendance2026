@@ -149,6 +149,8 @@ export function classifyLocalLayout(text: string): LocalLayoutClass | null {
   if (!compact || LAYOUT_OTHER_ACTION.test(compact) || REFUSE_LAYOUT.test(compact)) return null;
   if (/(?:不要|不想|别|不围)围/.test(compact) && !/(?:布置|摆一下|摆一版|出一版|先出|摆法)/.test(compact)) return null;
   if (/是什么意思/.test(compact)) return null;
+  // 意见/风险评估类提问不是布置命令（「你觉得我这场布置还有什么风险」曾误触重排）。
+  if (/(?:你觉得|你认为|怎么看|有什么风险|哪些风险|什么风险|有什么问题|哪些问题|什么建议|哪些建议|给点建议|评估一下)/.test(compact)) return null;
   const polite = /能不能|可不可以|行不行|可以帮我|帮我/.test(compact);
   if (/[?？吗]|如何|怎样|怎么|是否|要不要/.test(compact) && !polite) return null;
   if (/(?:消防验收|保证合规|保证不违规|施工图|办证)/.test(compact) && !LAYOUT_STEM.test(compact) && !REVISE_HINT.test(compact)) return 'cannot';

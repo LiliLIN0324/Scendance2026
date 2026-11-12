@@ -19,6 +19,8 @@ export interface Backend {
   agentEvents?: Rpc;
   /** Optional in-memory hook provided only by an explicitly isolated local trial. */
   agentTrialDiagnostic?(actor:string,projectId:string,runId:string,value:AgentTrialDiagnostic):void;
+  /** Injectable monotonic clock for deadline-budget tests; defaults to Date.now in production. */
+  agentClock?: ()=>number;
   upload(path:string,bytes:Uint8Array,mime:string):Promise<void>;
   sign(path:string):Promise<string>;
   readSourceBytes?(path:string):Promise<Uint8Array>;

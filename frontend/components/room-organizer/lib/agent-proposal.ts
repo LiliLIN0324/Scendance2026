@@ -17,6 +17,7 @@ import type { FurnitureItem, RoomLayout, Vec2 } from './types';
 import { buildVenueShell, type ScaleOrigin } from './venue-shell';
 import type { PlanArtifact } from './plan-artifact';
 import {reviewLocalSeatingWitness,type LocalSeatingReview,type LocalSeatingWitness} from './local-seating-witness';
+import { DESK_AISLE_M, DESK_BLOCK_TABLES, DESK_CHAIR_GAP_M, DESK_ROW_PITCH_M, DESK_TABLE_DEPTH_M, DESK_TABLE_GAP_M, DESK_TABLE_WIDTH_M } from '../../../lib/plan-approve';
 
 /**
  * Bingo出布置方案用的两块纯函数：先立场地（T-01 的真相），再在立好的壳体上算一份**没写进画布**的候选。
@@ -76,6 +77,8 @@ export interface PlanInput {
   stage?: boolean;
   /** 缺省不放签到台。发布会等活动或人点了签到才放，放不下就丢这一件。 */
   checkin?: boolean;
+  /** 课桌式每桌坐几人（1–3，官方参考 3；「每桌坐3人」/「一人一套」由记忆带来）。 */
+  peoplePerDesk?: number;
 }
 
 export interface PlanProposal {
@@ -94,6 +97,8 @@ export interface PlanProposal {
   overlapNames: string[];
   /** 候选整体过不了几何闸（例如锁定件和新墙冲突）：确认会被拒，得先说。 */
   blocked: string | null;
+  /** 课桌式官方规格下的诚实上限：按这版排法最多 N 座（要 X）。 */
+  seatCeilingNote?: string;
   /** 这一版按多少人摆的；没说过人数就是 null。 */
   guests?: number | null;
   /** 实际摆出了多少个座位（餐桌一组 4 座 + 散椅），只对完整方案有意义。 */
@@ -327,28 +332,64 @@ function addExtraSeats(input: {
 }
 
 /**
- * 一人一套课桌椅的课室行列：按场地铺「desk + 桌后一把 chair」的格子，
- * 前排贴北（讲台位），放多少套由人数定、场地容量封顶。墙内缩与壳体同款 0.35 m。
+ * 课桌式行列（官方规格，对齐 plan-approve 的 gridDeskRows 与 Hall D5 参考图）：
+ * 桌 1.8×0.6、每桌椅沿桌长三等分、排距 1.4m、每 3 桌一块、块间走道 1.2m。
+ * 返回每桌中心（场地居中坐标，前排贴北）与每把椅的 x 偏移；座位数 = 桌数 × chairsPerDesk。
  */
-function classroomPairSlots(widthM: number, depthM: number, wanted: number): { slots: Vec2[]; cols: number } {
+function classroomDeskRows(
+  widthM: number,
+  depthM: number,
+  wantedDesks: number,
+  chairsPerDesk: number,
+  tableW: number,
+  tableD: number,
+): { desks: Array<{ x: number; z: number; chairXs: number[] }>; cols: number } {
   const wall = 0.35;
-  const chairGap = 0.7;
-  const colGap = 1.7;
-  const rowGap = 2.1;
-  const cols = Math.max(1, Math.floor((widthM - 2 * wall - 1.2) / colGap) + 1);
-  const rows = Math.max(1, Math.floor((depthM - 2 * wall - 0.6 - chairGap) / rowGap) + 1);
-  const total = Math.max(0, Math.min(wanted, cols * rows));
-  const gridW = (cols - 1) * colGap;
-  const gridD = (rows - 1) * rowGap;
+  const rowPitch = DESK_ROW_PITCH_M;
+  const aisle = DESK_AISLE_M;
+  const blockTables = DESK_BLOCK_TABLES;
+  const tableGap = DESK_TABLE_GAP_M;
+  const usableW = widthM - 2 * wall;
+  const usableD = depthM - 2 * wall;
+  // 一排最多几桌：按 block 铺（并桌留工程间隙，块间留官方走道）。
+  let cols = 0;
+  {
+    let xCursor = tableW / 2;
+    let inBlock = 0;
+    while (xCursor + tableW / 2 <= usableW + 1e-6) {
+      cols += 1;
+      inBlock += 1;
+      if (inBlock >= blockTables) {
+        xCursor += tableW / 2 + aisle + tableW / 2;
+        inBlock = 0;
+      } else {
+        xCursor += tableW + tableGap;
+      }
+    }
+  }
+  cols = Math.max(1, cols);
+  // 纵深：第一排贴北，每排占深 = 桌深 + 椅桌隙 + 椅深；排距 1.4m（桌心距）。
+  const chairDepth = 0.5;
+  const rowDepth = tableD + DESK_CHAIR_GAP_M + chairDepth;
+  const rows = Math.max(1, Math.floor((usableD - rowDepth) / rowPitch) + 1);
+  const total = Math.max(0, Math.min(wantedDesks, cols * rows));
+  const gridW = (cols - 1) * (tableW + tableGap);
   const startX = -gridW / 2;
-  const startZ = -gridD / 2 - 0.3;
-  const slots: Vec2[] = [];
+  const startZ = -usableD / 2 + tableD / 2;
+  const desks: Array<{ x: number; z: number; chairXs: number[] }> = [];
   for (let index = 0; index < total; index++) {
     const row = Math.floor(index / cols);
     const col = index % cols;
-    slots.push({ x: Math.round((startX + col * colGap) * 100) / 100, z: Math.round((startZ + row * rowGap) * 100) / 100 });
+    const x = Math.round((startX + col * (tableW + tableGap)) * 100) / 100;
+    const z = Math.round((startZ + row * rowPitch) * 100) / 100;
+    const chairXs: number[] = [];
+    for (let k = 0; k < chairsPerDesk; k++) {
+      const offset = chairsPerDesk === 1 ? 0 : (k - (chairsPerDesk - 1) / 2) * (tableW / chairsPerDesk);
+      chairXs.push(Math.round((x + offset) * 100) / 100);
+    }
+    desks.push({ x, z, chairXs });
   }
-  return { slots, cols };
+  return { desks, cols };
 }
 
 /** 布置提案：读场地（撤掉旧物料）→ 定舞台 → 摆桌椅 → 放绿植 → 检查重叠，全程只算不写。 */
@@ -363,6 +404,8 @@ export function proposePlan(input: PlanInput): PlanProposal {
   let added = 0;
   let dropped = 0;
   let diagnostics: PlanDiagnostic[] = [];
+  /** 官方规格下这一版排法的天花板（课桌式缺口时的人话结论）。 */
+  let seatCeilingNote: string | undefined;
 
   const current0 = base.floors[floorIndex]?.items ?? [];
   const markers = structuralOnly(current0);
@@ -394,21 +437,36 @@ export function proposePlan(input: PlanInput): PlanProposal {
   }
   layouts.push(current);
 
-  // 2 摆桌椅：课室按一人一套铺行列，其余按 dining 物料组放 1–4 组（槽位收在墙内也收在舞台前面）
+  // 2 摆桌椅：课室按官方课桌规格铺行列（1.8m 桌、每桌默认 3 椅、排距 1.4m、块间走道 1.2m），其余按 dining 物料组放 1–4 组（槽位收在墙内也收在舞台前面）
   if (deskChair) {
     const deskEntry = FURNITURE_CATALOG.find(entry => entry.type === 'desk');
     const chairEntry = FURNITURE_CATALOG.find(entry => entry.type === 'chair');
     if (deskEntry && chairEntry) {
-      // 一套 = 一个座位：说了人数就按套数摆，没说就按 1.8 ㎡/人 估。
-      const wanted = input.guests && input.guests > 0 ? input.guests : Math.max(1, Math.floor((widthM * depthM) / 1.8));
-      const { slots, cols } = classroomPairSlots(widthM, depthM, wanted);
-      for (let index = 0; index < slots.length; index++) {
-        const slot = slots[index]!;
-        const desk = { ...deskEntry, id: uid(), position: slot, rotation: 0 } as FurnitureItem;
-        const chair = { ...chairEntry, id: uid(), position: { x: slot.x, z: slot.z + 0.7 }, rotation: Math.PI } as FurnitureItem;
-        accept(tryAdd(base, current, floorIndex, [desk, chair]));
+      // 课桌式默认一人一套（2026-10-27 课室场景语义）；人说了「每桌坐N人」（N≥2）才切官方课桌规格
+      // 1.8×0.6 长桌、每桌 N 椅沿桌长三等分（对齐 plan-approve 与 Hall D5 参考图）。
+      const chairsPerDesk = Math.min(3, Math.max(1, Math.trunc(input.peoplePerDesk ?? 1) || 1));
+      const official = chairsPerDesk >= 2;
+      const deskW = official ? DESK_TABLE_WIDTH_M : (deskEntry.width || 1.2);
+      const deskD = official ? DESK_TABLE_DEPTH_M : (deskEntry.depth || 0.6);
+      const wanted = input.guests && input.guests > 0
+        ? Math.ceil(input.guests / chairsPerDesk)
+        : Math.max(1, Math.floor((widthM * depthM) / (deskW * 3)));
+      const { desks, cols } = classroomDeskRows(widthM, depthM, wanted, chairsPerDesk, deskW, deskD);
+      let desksPlaced = 0;
+      for (let index = 0; index < desks.length; index++) {
+        const slot = desks[index]!;
+        const desk = { ...deskEntry, width: deskW, depth: deskD, id: uid(), position: { x: slot.x, z: slot.z }, rotation: 0 } as FurnitureItem;
+        const chairZ = slot.z + deskD / 2 + DESK_CHAIR_GAP_M + (chairEntry.depth || 0.5) / 2;
+        const chairs = slot.chairXs.map(chairX => ({ ...chairEntry, id: uid(), position: { x: chairX, z: chairZ }, rotation: Math.PI }) as FurnitureItem);
+        accept(tryAdd(base, current, floorIndex, [desk, ...chairs]));
+        desksPlaced += 1;
         // 一排长一帧：80 套别播成 160 帧把预览拖穿。
-        if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
+        if (index % cols === cols - 1 || index === desks.length - 1) layouts.push(current);
+      }
+      // 诚实上限：官方规格这一版排下的座位数就是这版的头；缺口照报，不虚增也不硬凑。
+      const placedSeats = desksPlaced * chairsPerDesk;
+      if (input.guests && input.guests > 0 && placedSeats < input.guests) {
+        seatCeilingNote = `按这版排法最多 ${placedSeats} 座（要 ${input.guests}）；要更多座位得换更小桌型、更大场地或换排布形式。`;
       }
     }
   } else if (input.furnishing?.table.tableShape === 'round' || (!input.furnishing && (input.seatingShape === 'ring' || input.tablePlan?.shape === 'round'))) {
@@ -491,6 +549,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
     layouts, added, removing, keptLocked: locked.length, dropped,
     overlapCount: overlaps.count, overlapNames: overlaps.names, blocked,
     guests: input.guests ?? null, seats, seatPriority, diagnostics,
+    ...(seatCeilingNote ? { seatCeilingNote } : {}),
   };
 }
 

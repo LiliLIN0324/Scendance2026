@@ -27,10 +27,32 @@ describe('bounded agent execution observations',()=>{
   await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:finished});
   const api=createApi(f.backend,()=>undefined);
   const res=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events?after=0`,{headers:{authorization:`Bearer ${owner}`}}));
-  expect(res.status).toBe(200);expect(await res.json()).toEqual({events:[{seq:1,...started},{seq:2,...finished}],nextCursor:2,mayBeIncomplete:true});
+  expect(res.status).toBe(200);expect(await res.json()).toEqual({events:[{seq:1,...started,argsSummary:null,durationMs:null},{seq:2,...finished,argsSummary:null,durationMs:null}],nextCursor:2,mayBeIncomplete:true});
   const empty=await f.backend.agentEvents!(owner,'list',{projectId,id,after:2});expect(empty).toEqual({events:[],nextCursor:2,mayBeIncomplete:true});
   const denied=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events?after=0`,{headers:{authorization:`Bearer ${editor}`}}));expect(denied.status).toBe(404);
   const malformed=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events?after=1&after=2`,{headers:{authorization:`Bearer ${owner}`}}));expect(malformed.status).toBe(422);
+  await f.backend.agent!(owner,'cancel',{projectId,id});
+ });
+ it('persists bounded argsSummary/durationMs and rejects out-of-range values or foreign keys',async()=>{
+  const {project,run,claim}=await setup(),projectId=project.id,id=run.id;
+  const base={tool:'find_free_areas',stage:'started',outcome:null,errorCode:null};
+  const within='x'.repeat(240);
+  // 240-char summary and durationMs 0 are accepted; upper duration bound 300000 accepted.
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,argsSummary:within,durationMs:0}});
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,durationMs:300000}});
+  // Over-length summary rejected.
+  await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,argsSummary:'x'.repeat(241)}})).rejects.toBeTruthy();
+  // Negative and over-cap duration rejected.
+  await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,durationMs:-1}})).rejects.toBeTruthy();
+  await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,durationMs:300001}})).rejects.toBeTruthy();
+  // Whitelist: foreign keys still rejected.
+  await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,arguments:'PRIVATE'}})).rejects.toBeTruthy();
+  await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,PRIVATE:'x'}})).rejects.toBeTruthy();
+  const listed=await f.backend.agentEvents!(owner,'list',{projectId,id,after:0});
+  expect(listed.events).toEqual([
+   {seq:1,...base,argsSummary:within,durationMs:0},
+   {seq:2,...base,argsSummary:null,durationMs:300000},
+  ]);
   await f.backend.agent!(owner,'cancel',{projectId,id});
  });
  it('never treats a rejected candidate or zero accepted candidates as success',()=>{

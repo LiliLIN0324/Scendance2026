@@ -29,6 +29,15 @@ describe('real provider request formats with controlled responses',()=>{
     delete config.AGENT_CHAT_KEY;
     expect(()=>chatRequest(key=>config[key],{messages:[]},{purpose:'brief'})).toThrow('MODEL_PROVIDER_INCOMPLETE');
   });
+  it('shallow-thinking default for the MiniMax agent loop while keeping the brief provider default',()=>{
+    const baseConfig:Record<string,string>={AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash',MINIMAX_AGENT_TOOLS_ENABLED:'1'};
+    const agentBody=JSON.parse(String(chatRequest(key=>baseConfig[key],{messages:[]},{purpose:'agent'}).init.body));
+    expect(agentBody).toMatchObject({reasoning_split:true,reasoning_effort:'low'});
+    const briefBody=JSON.parse(String(chatRequest(key=>baseConfig[key],{messages:[]},{purpose:'brief'}).init.body));
+    expect(briefBody).not.toHaveProperty('reasoning_effort');
+    const overridden=JSON.parse(String(chatRequest(key=>({...baseConfig,AGENT_CHAT_REASONING_EFFORT:'high'})[key],{messages:[]},{purpose:'agent'}).init.body));
+    expect(overridden.reasoning_effort).toBe('high');
+  });
   it('uses documented Hunyuan header, 3.0 LowPoly and async JobId',async()=>{
     const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{expect(init?.headers).toMatchObject({Authorization:'test-key'});expect(JSON.parse(init?.body as string)).toMatchObject({Model:'3.0',GenerateType:'LowPoly'});return response({Response:{JobId:'job-1'}});}) as unknown as Fetcher;
     expect((await hunyuan(env,fetcher).submit('Prop')).JobId).toBe('job-1');
