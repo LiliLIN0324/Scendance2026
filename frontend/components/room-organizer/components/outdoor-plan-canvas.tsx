@@ -226,6 +226,7 @@ import {
 import { alignedTileCenter } from '../lib/basemap-alignment';
 import { planningIcon } from './outdoor-plan-icons';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
+import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
 import { OneplanSticker } from './oneplan-stickers';
 import {
@@ -1265,7 +1266,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (busy) return;
       busy = true;
       try {
-        const pending = listFacilityGenerateLinks(undefined, generationProjectId).filter(link => planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
+        const pending = listFacilityGenerateLinks(undefined, generationProjectId).filter(link => !link.terminal && planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
         if (!pending.length) { if (alive) setFacilityGenerateStatus(null); return; }
         const start = facilityPollCursor.current % pending.length;
         const batch = [...pending.slice(start), ...pending.slice(0, start)].slice(0, 4);
@@ -5668,9 +5669,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     </div>
                     <label style={zoneRowStyle}>
                       事件
-                      <input aria-label={`分区「${zone.name}」事件`} data-testid="zone-event-input"
-                        value={zone.event ?? ''} maxLength={120}
-                        onChange={event => updateZone(zone.id, { event: event.target.value.trim() || undefined })}
+                      <ZoneEventInput key={`${generationProjectId ?? 'local'}:${zone.id}`} name={zone.name}
+                        value={zone.event}
+                        onCommit={value => updateZone(zone.id, { event: value })}
                         style={{ flex: 1, minWidth: 0, fontSize: PLANNING_TYPOGRAPHY.row }} />
                     </label>
                     <label style={zoneRowStyle}>

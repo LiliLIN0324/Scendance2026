@@ -161,6 +161,7 @@ import {
   nextOutdoorBoundarySync,
   seededPlanFromLayout,
   shellVenuePatchFromPlanBoundary,
+  applyOutdoorShellVenuePatch,
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
 import { readOutdoorPlanView } from './lib/outdoor-project-store';
@@ -1715,7 +1716,7 @@ useEffect(() => {
     const patch = shellVenuePatchFromPlanBoundary(base, plan.boundary);
     if (!patch) return;
     commitHistoryNow();
-    actions.applyLayout({ ...base, ...patch, ...(mirrorAnchor ? { sceneAnchor: mirrorAnchor } : {}) });
+    actions.applyLayout({ ...applyOutdoorShellVenuePatch(base, patch), ...(mirrorAnchor ? { sceneAnchor: mirrorAnchor } : {}) });
     // 边界变了就重拼 3D 地面底图（用 2D 当前那张地图：OSM/Carto/天地图）。
     applyOutdoorGroundBasemap(plan);
     if (patch.scaled) notify('平面边界超过 200 m，已按比例缩到壳体可承载的尺寸。', 'info');

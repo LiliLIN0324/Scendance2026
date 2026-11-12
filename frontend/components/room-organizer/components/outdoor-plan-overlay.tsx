@@ -31,7 +31,7 @@ import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
-import { fetchPlaceShape } from '@/components/room-organizer/lib/place-area';
+import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
 import type { BackendSession } from '@/lib/backend-session';
 import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
@@ -208,11 +208,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
   const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(null);
-  // 点击 POI 后挖真实占地轮廓的序号尺：防止新选中被旧请求的迟到结果覆盖。
-  const shapeSeqRef = useRef(0);
-  // 2026-11-12 用户拍板：挖形期间给「正在圈范围…」小提示——Overpass 忙时要排队
-  // 30~50 秒，不提示用户会以为点了没反应；挖到/挖不到/换目标/清除都会收掉。
-  const [shapeLoading, setShapeLoading] = useState(false);
+  const { loading: shapeLoading, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
+    const [west, south, east, north] = shape.bounds;
+    setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
+    setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
+      ...(shape.kind === 'line' ? { kind: 'line' as const } : {}) });
+    canvasApiRef.current?.focusBounds(shape.bounds);
+  });
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
@@ -230,6 +232,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   anchorRef.current = anchor;
   useEffect(() => {
     setGenerateTarget(null);
+    cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
     const record = readOutdoorProjectRecord(slotId);
     // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
     const loaded = normalizePlanFacilityFootprints(
@@ -452,8 +455,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
           onPickArea={area => {
             // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
-            shapeSeqRef.current += 1; // 新选区使旧的 POI 挖形结果过期。
-            setShapeLoading(false); // 行政区边界是现成的，没有挖形在途。
+            cancelPlaceShape(); // Includes the pending retry and in-flight request.
             setPlacePin(null);
             setPlaceArea({ polygon: area.polygon, label: `${area.name} · ${area.level}` });
             canvasApiRef.current?.focusBounds(area.bounds);
@@ -464,47 +466,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
             plan3dApiRef.current?.focusLngLat(place.lng, place.lat);
-            // 2026-11-12（像高德一样点地名框出范围）：钉先落地，后台去 OSM 挖
-            // 这个地点的真实占地。Overpass 忙时要排队几十秒，所以给足预算且
-            // 失败静默保留钉，不打断交互。
-            const seq = shapeSeqRef.current + 1;
-            shapeSeqRef.current = seq;
-            setShapeLoading(true);
-            // 2026-11-13 用户「到底要怎么样能转出来选区」：上游公共镜像间歇抽风
-            // （本机/CF 都会断），一次点击自动重试三轮（间隔 9s）——坏窗口里
-            // 命中率翻几倍；期间「正在圈范围…」提示持续在，换目标/清除即停。
-            const attemptShapeFetch = (attempt: number) => {
-              void fetchPlaceShape(place.name, {
-                near: { lng: place.lng, lat: place.lat },
-              }).then(shape => {
-                if (shapeSeqRef.current !== seq) return; // 期间换了目标：loading 归新目标管
-                if (!shape && attempt < 2) {
-                  window.setTimeout(() => attemptShapeFetch(attempt + 1), 9000);
-                  return;
-                }
-                setShapeLoading(false);
-                if (!shape) return;
-                // 2026-11-13 用户拍板：出框后钉不撤——挪到范围正中继续挂着
-                // （高德同款：蓝框 + 中心定位钉带名称胶囊）；选区顶部标签让位给这枚钉。
-                const [west, south, east, north] = shape.bounds;
-                setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: place.name });
-                setPlaceArea({
-                  polygon: shape.polygon,
-                  label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
-                  ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
-                });
-                canvasApiRef.current?.focusBounds(shape.bounds);
-              }).catch(() => {
-                if (shapeSeqRef.current === seq && attempt < 2) {
-                  window.setTimeout(() => attemptShapeFetch(attempt + 1), 9000);
-                  return;
-                }
-                if (shapeSeqRef.current === seq) setShapeLoading(false);
-              });
-            };
-            attemptShapeFetch(0);
+            // Pin immediately; all background retries belong to this project/place.
+            lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
           }}
-          onClear={() => { shapeSeqRef.current += 1; setShapeLoading(false); setPlacePin(null); setPlaceArea(null); }}
+          onClear={() => { cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); }}
         />
       )}
       {/* 2026-11-12 用户拍板：挖形期间的小提示（Overpass 排队 30~50s，别让用户以为点了没反应）。
