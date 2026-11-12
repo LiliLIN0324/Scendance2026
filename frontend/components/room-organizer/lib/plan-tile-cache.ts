@@ -13,6 +13,13 @@
  *   画面永远是连续的（先糊、后清晰），不会出现白闪；
  * - 新瓦片到达通过 `onDirty` 合并成一次重绘（调用方用 rAF 节流）。
  *
+ * 2026-11-12 请求风暴修复：加上并发限流（maxInFlight，默认 16）。
+ * 此前首帧一次把「当前级 + 四层祖先」的全部瓦片同时挂上网络（双层图源
+ * 约 5×2×可见瓦片数 ≈ 770 个并发请求），天地图 CloudWAF 把这种突发当攻击
+ * 流量整批 403（线上画布纯白、探针页却正常——后者只打一层 154 个）；
+ * OSM 的瓦片用量政策同样禁止这种突发抓取。排队后按 FIFO 限流放行，
+ * 画布渐进出图，对任何图源都友好。
+ *
  * 这个模块不依赖 React，也不假设 `Image` 一定存在（服务端渲染时 `load` 直接视为失败），
  * 因此可以在单测里只测几何与缓存语义。
  */
@@ -68,14 +75,36 @@ export function ancestorTileCrop(
 export class BasemapTileCache {
   private readonly entries = new Map<string, TileEntry>();
   private readonly max: number;
+  /** 同时挂在网上的请求数上限（限流，防瓦片风暴触发图源 WAF/限流）。 */
+  private readonly maxInFlight: number;
+  /** 排队等空位的加载动作（FIFO）：真正给 img.src 赋值。 */
+  private readonly pendingQueue: (() => void)[] = [];
+  private inFlight = 0;
   private readonly createImage: () => HTMLImageElement;
   private readyCount = 0;
   private errorCount = 0;
 
-  constructor(options?: { max?: number; createImage?: () => HTMLImageElement }) {
+  constructor(options?: { max?: number; maxInFlight?: number; createImage?: () => HTMLImageElement }) {
     this.max = options?.max ?? 900;
+    this.maxInFlight = Math.max(1, options?.maxInFlight ?? 16);
     this.createImage =
       options?.createImage ?? (() => new Image() as HTMLImageElement);
+  }
+
+  /** 有并发空位就按 FIFO 放行排队中的加载。 */
+  private pump(): void {
+    while (this.inFlight < this.maxInFlight && this.pendingQueue.length > 0) {
+      const start = this.pendingQueue.shift();
+      if (!start) break;
+      this.inFlight += 1;
+      start();
+    }
+  }
+
+  /** 一个在途请求结算（无论成败），腾出空位放行下一个。 */
+  private settle(): void {
+    this.inFlight = Math.max(0, this.inFlight - 1);
+    this.pump();
   }
 
   /** 已就绪的图片；未就绪返回 null（不触发加载）。 */
@@ -99,6 +128,8 @@ export class BasemapTileCache {
    * `onReady` 在图片就绪**或最终失败**时调用（失败时调用方查 `get()` 仍是 null，
    * 可以走祖先兜底或下一轮重试）——早先失败完全不回调，3D 的瓦片任务队列会永远等不到
    * 结算，`lodBusy` 卡死 → 之后再怎么放大都不再补高清瓦片（表现为「3D 地面一直糊」）。
+   *
+   * 新请求/重试先排队，`pump()` 按并发上限放行后才开始下载（限流见类注释）。
    */
   load(url: string, onReady: () => void): void {
     const existing = this.entries.get(url);
@@ -110,7 +141,8 @@ export class BasemapTileCache {
       existing.status = 'loading';
       existing.attempts += 1;
       existing.listeners.push(onReady);
-      existing.img.src = url;
+      this.pendingQueue.push(() => { existing.img.src = url; });
+      this.pump();
       return;
     }
     let img: HTMLImageElement;
@@ -128,6 +160,7 @@ export class BasemapTileCache {
       const listeners = entry.listeners;
       entry.listeners = [];
       for (const listener of listeners) listener();
+      this.settle();
     };
     img.onerror = () => {
       entry.status = 'error';
@@ -136,8 +169,10 @@ export class BasemapTileCache {
       const listeners = entry.listeners;
       entry.listeners = [];
       for (const listener of listeners) listener();
+      this.settle();
     };
-    img.src = url;
+    this.pendingQueue.push(() => { img.src = url; });
+    this.pump();
     this.trim();
   }
 
@@ -150,6 +185,15 @@ export class BasemapTileCache {
     return { entries: this.entries.size, ready: this.readyCount, errors: this.errorCount };
   }
 
+  /**
+   * 在途 + 排队的请求总数（限流器视角）。>0 表示底图正在补瓦片；
+   * 成败都会经 settle() 结算，所以归零可靠，不会因失败瓦片永远卡住——
+   * 这正是「加载中」提示该用的信号（paintBasemapTiles 的 pending 含失败格，不适合）。
+   */
+  get loadingCount(): number {
+    return this.inFlight + this.pendingQueue.length;
+  }
+
   /** 清空（切换图源时用，避免不同源的同坐标瓦片串味）。 */
   clear(): void {
     for (const entry of this.entries.values()) {
@@ -160,6 +204,9 @@ export class BasemapTileCache {
     this.entries.clear();
     this.readyCount = 0;
     this.errorCount = 0;
+    // 在途的图 handlers 已清空不会再结算；队列作废、空位归零。
+    this.pendingQueue.length = 0;
+    this.inFlight = 0;
   }
 
   private trim(): void {
@@ -276,25 +323,30 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
         const crop = ancestorTileCrop(tileZoom, cell.x, cell.y, depth, tileSize);
         const ancestorUrl = urlsFor(crop.zoom, crop.x, crop.y)[layerIndex];
         if (!ancestorUrl) break;
-        const ancestor = cache.get(ancestorUrl);
-        if (ancestor) {
-          ctx.drawImage(
-            ancestor,
-            crop.sx,
-            crop.sy,
-            crop.size,
-            crop.size,
-            cell.left,
-            cell.top,
-            drawSize,
-            drawSize,
-          );
-          result.fallback += 1;
-          return;
-        }
-        cache.load(ancestorUrl, onDirty);
+      const ancestor = cache.get(ancestorUrl);
+      if (ancestor) {
+        ctx.drawImage(
+          ancestor,
+          crop.sx,
+          crop.sy,
+          crop.size,
+          crop.size,
+          cell.left,
+          cell.top,
+          drawSize,
+          drawSize,
+        );
+        result.fallback += 1;
+        return;
       }
-      result.pending += 1;
+      // 2026-11-12 风暴修复：兜底只预取最近一级（depth=1）祖先。
+      // 旧实现把 depth 1..4 全部排进队列，首帧一次打出「当前级+四层祖先」
+      // （双层图源约 770 个请求）——天地图 CloudWAF 按攻击流量整批拦下，
+      // 线上画布纯白；这也违背 OSM 的瓦片用量政策。更深的祖先只有「已缓存」
+      // 才直接画（比如从上一视图继承下来的），不再预取。
+      if (depth === 1) cache.load(ancestorUrl, onDirty);
+    }
+    result.pending += 1;
     });
   }
 

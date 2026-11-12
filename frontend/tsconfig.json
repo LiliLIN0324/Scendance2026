@@ -41,12 +41,13 @@
     "**/*.tsx",
     ".next-browser/types/**/*.ts",
     ".next-dev-1112/types/**/*.ts",
+    ".next-local/types/**/*.ts",
     ".next-smoke-packs/types/**/*.ts",
     ".next-takeover/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-local/types/**/*.ts"
+    ".next-venue-check/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

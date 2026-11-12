@@ -8,9 +8,8 @@ import {
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
 import {
-  ensureDefaultOutdoorProject,
   latestOutdoorProjectId,
-  resolveOutdoorProjectId,
+  requestsOutdoorMode,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import { STORAGE_KEY } from '@/components/room-organizer/lib/constants';
 import { useAuth } from '@/lib/auth-provider';
@@ -42,15 +41,10 @@ const RoomOrganizer = dynamic(
 );
 
 /**
- * 户外规划工作台（P2-a）：户外项目**完全不挂**室内 RoomOrganizer，
- * 不初始化 three 场景。是否户外由 resolveOutdoorProjectId 判定
- * （?start=outdoor 硬跳 / 本机有该项目的户外草稿），见 outdoor-project-store。
+ * 户外规划（2026-11-12 用户拍板）：**不再有独立的整页户外工作台**。
+ * `?start=outdoor` / `mode=outdoor` 一律进主工作台（RoomOrganizer），
+ * 打开即把户外 2D 卡片开到画布上（左轨/右轨/物件库都在主界面里）。
  */
-const OutdoorPlanWorkspace = dynamic(
-  () => import('@/components/room-organizer/components/outdoor-plan-workspace'),
-  { ssr: false, loading: () => <BootSkeleton /> }
-);
-
 /**
  * 打开工作台时的骨架屏（T-VISUAL-2026）。
  * 不再用绿色进度条：进度条既说不出走到了哪，又给「快好了」的假承诺。
@@ -92,14 +86,12 @@ export function BootSkeleton(): JSX.Element {
 }
 
 /**
- * 「最近活动」判定（2026-11-11 用户拍板：`/` 无参数时有最近活动就续上次，没有就直接进户外 2D 规划）：
+ * 「最近活动」判定（`/` 无参数时有最近活动就续上次，没有就直接开户外 2D）：
  * - 本机画布草稿里有物料（室内工作台上次在用）；
  * - 存过户外规划草稿（最近一次户外项目）。
  * 坏草稿 / 存储不可用一律按"没有活动"处理。
  *
- * 2026-11-11 用户再次拍板：**找场地是工作台里的能力**（搜地点 / 场馆 / 地址），
- * 不该挡在入口前面。所以根路径无参数时**直接进户外工作台**（起步锚点平湖秋月），
- * 不先过一个独立的"找场地"页。
+ * 找场地是工作台里的能力（搜地点 / 场馆 / 地址），不该挡在入口前面。
  */
 function hasRecentActivity(): boolean {
   try {
@@ -114,44 +106,27 @@ function hasRecentActivity(): boolean {
   return latestOutdoorProjectId() !== null;
 }
 
-/**
- * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板）：
- * - 有最近的户外项目 → 续那个 projectId（上次的规划继续）；
- * - 没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
- * 找场地是工作台里的"搜地点"，不再先跳独立页。
- */
-function decideDefaultOutdoorProject(): string {
-  const last = latestOutdoorProjectId();
-  if (last) return last;
-  return ensureDefaultOutdoorProject();
-}
-
 export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX.Element {
   const { controller, ready } = useAuth()!;
   const pathname = usePathname();
   const [editorStarted, setEditorStarted] = useState(false);
   const workspacePath = pathname === '/' || pathname.replace(/\/$/, '') === '/editor';
   const entered = workspacePath && ready;
-  // 户外项目判定（P2-a）：与 editorStarted 同批同步判定，户外命中时不挂 RoomOrganizer。
-  const [outdoorProjectId, setOutdoorProjectId] = useState<string | null>(null);
+  // 本次打开是否直接进户外 2D（不是独立页：户外卡片开在主工作台画布上）。
+  const [startOutdoor, setStartOutdoor] = useState(false);
 
   useEffect(() => {
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
-    if (!workspacePath || !ready) { setOutdoorProjectId(null); return; }
-    // 根路径且没有任何参数：有最近活动就续上次，没有就直接进户外工作台（默认草稿，平湖秋月锚点）。
+    if (!workspacePath || !ready) { setStartOutdoor(false); return; }
+    // 根路径且没有任何参数：有最近活动就续上次（室内），没有就直接开户外 2D（主工作台内）。
     // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
     if (pathname.replace(/\/$/, '') === '' && !window.location.search) {
-      if (hasRecentActivity()) {
-        // 有最近的室内活动 → 让它走原有的无参路径（续本机画布草稿）。
-        setOutdoorProjectId(null);
-      } else {
-        setOutdoorProjectId(decideDefaultOutdoorProject());
-      }
+      setStartOutdoor(!hasRecentActivity());
       setEditorStarted(true);
       return;
     }
-    setOutdoorProjectId(resolveOutdoorProjectId(window.location.search));
+    setStartOutdoor(requestsOutdoorMode(window.location.search));
     setEditorStarted(true);
   }, [workspacePath, ready, pathname]);
 
@@ -162,10 +137,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   return <>
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
-    {editorStarted && (outdoorProjectId !== null
-      ? <OutdoorPlanWorkspace projectId={outdoorProjectId} controller={controller} />
-      : <div hidden={!entered}>
-        <RoomOrganizer isActive={entered} controller={controller} />
-      </div>)}
+    {editorStarted && (
+      <div hidden={!entered}>
+        <RoomOrganizer isActive={entered} controller={controller} startOutdoor={startOutdoor} />
+      </div>
+    )}
   </>;
 }

@@ -15,7 +15,7 @@ import { useAuth } from '../../../lib/auth-provider';
 import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
-import { matchRecentPlaces, rememberPlace, searchPlaces, type PlaceSuggestion } from '../lib/place-search';
+import { matchRecentPlaces, mergePlaceSuggestions, rememberPlace, searchPlaces, type PlaceSuggestion } from '../lib/place-search';
 import { BLANK_VENUE } from '../lib/blank-venue';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 
@@ -158,13 +158,14 @@ export function VenuePicker({ onClose, onBlankVenue, studioId, initialSelection 
     setRecentMatches(matchRecentPlaces(placeQuery));
   }, [placeQuery, place, selection.kind]);
 
-  // 建议栏 = 最近命中（带「最近」标记）+ 搜索结果（按相关度排好，去重）。
-  const placeOptions: { place: PlaceSuggestion; recent: boolean }[] = [
-    ...recentMatches.map(item => ({ place: item, recent: true })),
-    ...suggestions
-      .filter(item => !recentMatches.some(recent => recent.id === item.id))
-      .map(item => ({ place: item, recent: false })),
-  ];
+  // 建议栏 = 最近命中（带「最近」标记）+ 搜索结果（按相关度排好，去重）；
+  // 完全命中的新鲜结果压过「最近」（与 plan-place-search 同口径，见 mergePlaceSuggestions）。
+  const recentIds = new Set(recentMatches.map(item => item.id));
+  const placeOptions: { place: PlaceSuggestion; recent: boolean }[] = mergePlaceSuggestions(
+    placeQuery,
+    recentMatches,
+    suggestions,
+  ).map(item => ({ place: item, recent: recentIds.has(item.id) }));
   const showPlaceList = selection.kind === 'map' && !place
     && (searchingPlace || placeOptions.length > 0 || placeQuery.trim().length >= 2);
 

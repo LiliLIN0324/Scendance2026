@@ -11,6 +11,7 @@ import {
   basemapSourceAttribution,
   probeSourceAttribution,
   publicSourceTileUrl,
+  tdtDirectTileUrl,
   tdtProbeTileUrl,
   visibleTileGrid,
 } from './tdt-probe';
@@ -44,6 +45,22 @@ describe('tdt probe helpers (H0-b)', () => {
     const img = tdtProbeTileUrl('img', 12, 3372, 1690);
     expect(img.base).toContain('layer=img_w');
     expect(img.annotation).toContain('layer=cia_w');
+  });
+
+  it('带 key 且非本机时直连天地图 WMTS（线上分支），tk 只出现在直连地址里', () => {
+    const direct = tdtDirectTileUrl('vec_w', 12, 3372, 1690, 'test-tk', false);
+    expect(direct).toContain('tianditu.gov.cn/vec_w/wmts?');
+    expect(direct).toContain('TILECOL=3372');
+    expect(direct).toContain('TILEMATRIX=12');
+    expect(direct).toContain('tk=test-tk');
+    expect(direct).not.toContain('/api/tdt-tiles');
+    // host 按 (x+y)%8 轮询：(3372+1690)%8 = 6。
+    expect(direct).toContain('t6.tianditu.gov.cn');
+  });
+
+  it('本机 dev / 无 key / SSR 时回落同源代理，不直连', () => {
+    expect(tdtDirectTileUrl('vec_w', 12, 3372, 1690, '', false)).toBeNull();
+    expect(tdtDirectTileUrl('vec_w', 12, 3372, 1690, 'test-tk', true)).toBeNull();
   });
 
   it('builds a tile grid that covers the viewport', () => {

@@ -121,8 +121,6 @@ import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
 import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
 import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
-import { TourReel } from './onboarding/tour-reel';
-import { onboardingSteps } from './onboarding/onboarding-steps';
 import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import type { ScannedVenue } from './lib/venue-scans';
@@ -286,7 +284,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, isolatedWriteSession }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, isActive = true, startOutdoor = false, localWriteCapability, isolatedWriteSession }: { controller?: BackendSession; isActive?: boolean; /** 2026-11-12：直接进户外（?start=outdoor）——开卡即把户外 2D 卡片打开。 */ startOutdoor?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession } = {}): JSX.Element {
   const isolatedRef=useRef<{session:WorkspaceWriteSession;revoked:boolean}|null>(null);
   if(!isolatedRef.current&&isolatedWriteSession)isolatedRef.current={session:isolatedWriteSession,revoked:false};
   else if(isolatedRef.current&&isolatedWriteSession!==isolatedRef.current.session)isolatedRef.current.revoked=true;
@@ -532,12 +530,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 数据同态：草稿按 layout.id 存本机（outdoor-project-store），底图定位继承活动点位。
   // P2-e：左栏户外卡片（图层/信息两页签）由左轨「户外规划」开关控制；
   // 保存态经覆盖层上报后在左轨 foot（主产品保存态原位）显示。
-  const [outdoor2DOpen, setOutdoor2DOpen] = useState(false);
+  const [outdoor2DOpen, setOutdoor2DOpen] = useState(startOutdoor);
   // 2026-11-12 用户反馈「展开后再点收不起来」：outdoorPlanState 常驻后，outdoor2DOpen=false
   // 同时表达「收起」和「3D 接管」两种态，收起被派生成全屏接管。引入显式接管开关：
   // 只有它为 true（且非 2D）才全屏接管；收起＝两者都 false，回工作台。
   const [outdoor3dTakeoverActive, setOutdoor3dTakeoverActive] = useState(false);
-  const [outdoorView, setOutdoorView] = useState<'2d' | '3d'>('3d');
+  const [outdoorView, setOutdoorView] = useState<'2d' | '3d'>(startOutdoor ? '2d' : '3d');
   const applyPresetRef = useRef<(preset: 'iso') => void>(() => undefined);
   // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
@@ -4871,7 +4869,6 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
-            <TourReel steps={onboardingSteps} storageKey="scdance:tour:v1" />
             <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} outdoorStage={outdoorPlan ? { showing3d: outdoor3dTakeover, onSwitch: () => {
               // 2026-11-12 统一 2D/3D（图五 ↔ 图六）＋显式接管开关：覆盖层开＝2D 地图；
               // 接管开＝全屏 3D；两者都关（收起态）＝「切到 3D 场地」直接进全屏接管。
