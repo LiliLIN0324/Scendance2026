@@ -142,7 +142,6 @@ import { buildWalkColliders, walkerClearanceAt } from './lib/walk-collision';
 import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
-import { CanvasHeading } from './panels/canvas-heading';
 import { XIHU_LOCAL_CENTER, XIHU_LOCAL_NAME, XIHU_LOCAL_SPAN_M } from './lib/research-area';
 import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, readonlyComposerDrafts, type AgentId } from './panels/agent-panel';
 import { settlePlacement } from '@/lib/settle-placement';
@@ -4764,7 +4763,7 @@ useEffect(() => {
               <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
               <Lux3dDirectTest reconPreset={aholoReconPreset} reconFilesSeed={aholoReconSeed} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
-            <CanvasHeading view2D={view.view2D} />
+            {/* 房间画布退役：室内「2D 平面 / 容量·座位」浮标不再出镜（地图标题/比例尺由户外 overlay 自带）。 */}
             {/* GeoGround 左下「比例尺+指北针+署名」簇（与户外 3D 同款；OSM ODbL 署名硬要求）。
                 接管态由 OutdoorPlan3D 自带罗盘簇出示，这里不渲染避免双份。 */}
             {!view.view2D && !scanIsolated && !outdoor3dTakeover && outdoorPlan?.anchor && (
