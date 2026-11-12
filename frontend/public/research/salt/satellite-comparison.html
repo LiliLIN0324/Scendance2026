@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>盐官潮乐之城 · 导览图与卫星图对照</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#fff;color:#21382e;font:16px/1.6 "Microsoft YaHei","PingFang SC",sans-serif}main{width:min(1440px,calc(100% - clamp(32px,7vw,100px)));margin:0 auto;padding:34px 0 54px}a{color:#24513c;text-underline-offset:4px}h1{font-size:clamp(30px,5vw,57px);line-height:1.15;margin:22px 0 12px}p{margin:0;color:#476052}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:22px 0}figure{margin:0;min-width:0}h2{font-size:20px;margin:0 0 8px}.image{position:relative;overflow:hidden;border:1px solid #d6e2d9;border-radius:12px;background:#f2f6f1}.guide{aspect-ratio:1080/885}.sat{aspect-ratio:1450/1188}.image img{position:absolute;width:100%;height:auto;display:block;left:0;top:0}.guide img{top:-38.418%}figcaption{font-size:13px;margin-top:6px;color:#476052}.marker{position:absolute;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;border:2px solid white;background:#18392e;color:white;font:inherit;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px #0008}.marker[aria-pressed=true]{background:#a94719;box-shadow:0 0 0 3px #f7bb63}.marker:focus-visible,.pick button:focus-visible{outline:3px solid #c67233;outline-offset:3px}.pick{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.pick button{font:inherit;font-size:14px;padding:6px 11px;color:#244b39;background:white;border:1px solid #b8ccbd;border-radius:25px;cursor:pointer}.pick button[aria-pressed=true]{background:#244b39;color:white}.evidence{border:1px solid #d6e2d9;border-radius:12px;padding:17px 20px;margin:10px 0 18px}.evidence h2{margin:0 0 4px}.evidence a{display:inline-block;margin-top:5px}.foot{font-size:14px}@media(max-width:650px){.pair{grid-template-columns:1fr}.marker{width:28px;height:28px}}
+</style></head>
+<body><main>
+<a href="index.html">← 返回设计资料</a>
+<h1>盐官潮乐之城 · 导览图与卫星图对照</h1>
+<p>点任意编号，两张图会同时标出同一处参照。可以先认水系和过河位置，再找游客服务中心。</p>
+<div class="pair">
+<figure><h2>活动导览图</h2><div class="image guide"><img src="05_赛事与接待/S07-13.png" width="1080" height="1260" alt="弦乐艺术节章程中的盐官度假区导览图"></div><figcaption><a href="05_赛事与接待/S07-13.png">查看未裁切原图</a> · <a href="https://www.beethovencn.com/page110.html?article_id=121">2025 弦乐艺术节章程</a></figcaption></figure>
+<figure><h2>同一片区域的卫星影像</h2><div class="image sat"><img src="salt-esri-satellite.jpg" width="1450" height="1188" alt="盐官古城、东侧水道和南侧钱塘江岸的实际卫星影像"></div><figcaption><a href="salt-esri-satellite.jpg">查看未标注影像</a> · <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=120.523,30.397,120.554,30.419&amp;bboxSR=4326&amp;imageSR=3857&amp;size=1450,1188&amp;format=jpg&amp;f=image">Esri World Imagery · Vantor</a></figcaption></figure>
+</div>
+<div class="pick" role="group" aria-label="选择对照地物"></div>
+<div class="evidence" aria-live="polite"><h2 id="name"></h2><p id="notes"></p><a id="source" hidden>查看出处 ↗</a></div>
+<p class="foot">导览图是示意图，两张图比例不同，编号标的是地物参照位置。卫星图采用 Web Mercator 显示。景区代表点影像元数据显示 2025 年 3 月 23 日、0.5 米，具体入口、停车场现况、临时管制和馆内空间需要当届资料。</p>
+</main>
+<script>
+const marks = [
+  ['钱塘江北岸', [540,1139], [790,927], '古城南边是连续的沿江岸线。用它确认园区与观潮带的相对位置。'],
+  ['观潮大道与东侧水道', [699,740], [1149,539], '大道贴着东侧宽水道的西岸走，能区分古城一侧与水道以东的区域。'],
+  ['潮涌路跨西侧河道', [166,545], [581,292], '古城北侧的东西向道路跨过斜向水道。先认交叉口，再沿水道往南看。'],
+  ['春熙路跨西侧河道', [64,975], [438,771], '在同一条西侧河道靠江的一端，可以看到另一处东西向过河位置。'],
+  ['东侧水道中段桥位', [733,817], [1188,607], '两图均可辨认一条横跨东侧水道的东西向连接。编号用于认桥位，出行仍需当届通行资料。'],
+  ['游客服务中心参考位置', [210,593], [653,360], '导览图把游客中心画在北侧道路与西侧水道之间。卫星影像可对应这一带的弧形前场和圆形地物。酒店联系页也列出拱辰路188号游客服务中心。签到柜台、启用入口和车辆停靠点需现场核对。', 'https://www.yanguanmusicleadvocal.cn/contact.htm'],
+];
+const areas = [document.querySelector('.guide'), document.querySelector('.sat')];
+const picker = document.querySelector('.pick');
+const source = document.getElementById('source');
+const choose = index => {
+  const [name,,,notes,href] = marks[index];
+  document.getElementById('name').textContent = (index + 1) + ' · ' + name;
+  document.getElementById('notes').textContent = notes;
+  source.hidden = !href;
+  if (href) source.href = href;
+  for (const control of document.querySelectorAll('button[data-index]')) control.setAttribute('aria-pressed',String(Number(control.dataset.index) === index));
+};
+for (const [index,[name,guide,sat]] of marks.entries()) {
+  const add = (parent, marker) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.index = index;
+    button.textContent = marker ? index + 1 : (index + 1) + ' ' + name;
+    button.setAttribute('aria-label',(index + 1) + ' ' + name);
+    button.addEventListener('click',() => choose(index));
+    parent.append(button);
+    return button;
+  };
+  for (const [map, point] of [guide,sat].entries()) {
+    const button = add(areas[map],true);
+    button.className = 'marker';
+    button.style.left = 100 * point[0] / (map ? 1450 : 1080) + '%';
+    button.style.top = 100 * (point[1] - (map ? 0 : 340)) / (map ? 1188 : 885) + '%';
+  }
+  add(picker,false);
+}
+choose(0);
+</script>
+</body></html>
