@@ -108,9 +108,25 @@
   3. `RailTeamBlock onOpenChat` 私信入口补同一纯户外双 false 兜底。
 - 复核 `setOutdoor2DOpen(false)` 仅剩两处：切 3D 接管（保留 3D 画面，非空屏）与已加守卫的收起分支。
 - Node24 `tsc --noEmit` exit 0（`tsc-14e.log`）；app 定向 23 通过（`vitest-14e-shell.log`）。
-- **地图 key 现状**：仓库根 `.env.local` 缺失，代理读不到 `LUX3D_API_KEY`（`/health` `keyConfigured:false`）与 `TDT_KEY`；前端 `.env.local` 仅 Supabase。key 文件被 gitignore，不随 main 提交下发，需本机配置或由服务端 functions 持有。2D OSM 直连不受影响；3D aholo / 天地图瓦片仍挂 #13。
+- **地图 key 现状（2026-11-13 晚更新）**：仓库根 `.env.local` 已由本机补齐 `LUX3D_API_KEY` / `TDT_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` 等；代理旧进程重启后 `/health` 返回 `keyConfigured:true`，`/api/tdt-search?keywords=西湖` 200 返回 POI，LUX3D 与天地图搜索链路打通。3D 地面瓦片三层 `paintTilePyramid` count=0 仍挂 #13（独立瓦片渲染链路，非 key 缺失）。
 - **分支差距**：本地 HEAD `76ccbe6f` 落后 `origin/main` 一个提交 `72af5635`（POI 真实轮廓架构 + 选区体验 + 工作树批量入库；含瓦片链路、tdt-probe、aholo 代理改动，并直接删除 A 文件 `outdoor-plan-workspace.tsx`）。本地有未提交在制品（14b/14c 及并行设施模型改动），未合并；合入前先备份。
 - 浏览器自动化：bu 产品浏览器后端 `sending window binding timed out`（守护未挂），cu 桌面会话 `NO_SESSION`；9222 端口非标准 DevTools 端点。真机走查暂由用户手动完成。
+
+### 阶段 14f · 房间画布退役，右侧唯一户外地图 🟡 出镜退役完成，死代码清理后置
+
+- **用户拍板（2026-11-13）**：右侧这套户外地图是工作台**唯一常驻画布**，不是"纯户外专属"；"户外模式"只决定左栏面板（Agent/Bingo/空间/物料/户外规划）形态，右侧去哪都是这套地图 2D/3D。室内房间 three 画布（桌椅/墙体/第一人称漫游/NPC）退役，不再占右侧主画布。
+- 本轮改动（room-organizer.tsx，先让出镜退役、保活管线保留）：
+  1. `.sc-scene-viewport` 容器由"纯户外才隐藏"改为**无条件 `visibility:hidden` + `pointerEvents:none`**：房间 three 组件仍挂载保活（renderer/canvas ref/isReady 被环境、漫游、就绪态逻辑复用），但画面不再出镜。
+  2. 起步 effect 由"仅纯户外进 2D"扩为**所有项目起步进户外 2D**；视角记忆仍只按户外 projectId 回读，室内项目默认 2D。
+  3. 停用房间语境浮标 `CanvasHeading`（室内"2D 平面 + 容量/座位"徽标），移除其 import；地图标题/比例尺由户外 overlay 自带。
+  4. **地图常驻不可收起**：左轨「户外规划」钮的整体收起分支在所有语境禁用（已开启再点保持现状），不再 `setOutdoor2DOpen(false)`；清理随之失效的 `restoreBingo` 回调与 `agentCollapsedByOutdoorRef`。`setOutdoor2DOpen(false)` 仅剩 2D→3D 接管一处（2D/3D 互斥，地图仍在 3D 形态）。
+- 校验：Node24 `tsc --noEmit` exit 0（`tsc-14e.log`）；app 定向 23 通过（`vitest-14e-shell.log`）；户外画布 lib 43 通过（`vitest-14e-b.log`）。
+- **后续清理（未做，避免本轮回归面过大）**：
+  - 彻底卸载 `Viewport` 组件与室内 layout 回写链路（assertLayoutWrite / shellVenuePatchFromPlanBoundary / applyLayout）、three renderer/NPC/墙体/漫游状态；
+  - 室内漫游接管（walkthroughActive）、场景隔离（scanIsolated）、环境加载遮罩、选中物件属性气泡等房间语境浮层的入口收口；
+  - 物料落位从室内 layoutStore 打通到地图（当前室内物料仍写室内草稿、不投影到地图）；
+  - shell 分流（室内草稿续接 / `mode=indoor`）在房间退役后是否还需要保留，复盘后再定。
+- **待真机核对**：任一项目起步右侧即户外地图；左栏 Agent/Bingo/空间/物料/户外规划互切，右侧地图不换、不空白、不残留房间 3D/比例尺/标题；2D↔3D 胶囊直切保持。
 
 ### 1.5 B 初始化耦合事实（2026-11-13 实读）
 
