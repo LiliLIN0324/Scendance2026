@@ -951,8 +951,6 @@ useEffect(() => {
   // 底部 Agent 面板收起/恢复：户外 2D 打开时会临时收起，关掉户外后要还原回去，
   // 否则用户切回 3D 会发现下方一排按钮（地图选址/按风格配一套/发送）全没了。
   const agentCloseTimerRef = useRef<number | null>(null);
-  /** 本次「收起 Bingo」是否由打开户外 2D 触发（只有它触发才在关掉户外时还原）。 */
-  const agentCollapsedByOutdoorRef = useRef(false);
   const closeBingo = useCallback(() => {
     setAgentClosing(true);
     if (agentCloseTimerRef.current !== null) window.clearTimeout(agentCloseTimerRef.current);
@@ -964,15 +962,6 @@ useEffect(() => {
       rail.current?.focus();
     }, 280);
   }, [activeAgent]);
-  /** 撤销一次「收起 Bingo」（含尚未落地的 280ms 延迟收起）。 */
-  const restoreBingo = useCallback(() => {
-    if (agentCloseTimerRef.current !== null) {
-      window.clearTimeout(agentCloseTimerRef.current);
-      agentCloseTimerRef.current = null;
-    }
-    setAgentClosing(false);
-    setAgentCollapsed(false);
-  }, []);
   /** 点同一格收起，点别的格就地换成那个 agent 的卡。私信开着时点格子 = 换回那一格，不是收起整栏。 */
   const toggleAgent = useCallback((id: AgentId) => {
     if (!captureOpen && agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
@@ -2486,7 +2475,7 @@ useEffect(() => {
   const leftStackCards: LeftStackPanelId[] = [
     ...(captureOpen ? ['capture' as const] : []),
     ...(personChat ? ['chat' as const] : []),
-    ...((outdoor2DOpen || outdoor3dTakeover) ? ['outdoor' as const] : []),
+    ...(((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null) ? ['outdoor' as const] : []),
     ...(!captureOpen && !personChat && agentPanelVisible ? ['bingo' as const] : []),
   ];
   leftStackPairRef.current = leftStackCards.length === 2 ? leftStackCards : null;
@@ -4306,42 +4295,31 @@ useEffect(() => {
                 </button>
                 <button
                   type="button"
-                  className={`sc-rail-tool sc-rail-disc${outdoor2DOpen || outdoor3dTakeover ? ' is-active' : ''}`}
-                  aria-pressed={outdoor2DOpen || outdoor3dTakeover}
+                  className={`sc-rail-tool sc-rail-disc${outdoorPanel !== null ? ' is-active' : ''}`}
+                  aria-pressed={outdoorPanel !== null}
                   aria-label="户外规划：在地图上画边界分区动线"
                   data-tip="户外规划 · 地图上画边界分区动线"
                   onClick={() => {
-                    // 2026-11-12 用户反馈「展开后再点收不起来」：3D 接管（全屏「3D 场地」）也算
-                    // 展开中——此前按钮态只跟 outdoor2DOpen 挂钩，接管态下按钮熄灭，再点被误判
-                    // 成「开启」把用户带回 2D 地图。现在任一形态（2D 地图 / 3D 场地）下再点都整体收起。
-                    const outdoorOpen = outdoor2DOpen || outdoor3dTakeover;
-                    if (!outdoorOpen) {
-                      // 进户外规划先清待放置：地图点击只服务边界/分区/动线。
+                    // 2026-11-13 用户拍板：右侧地图是唯一常驻画面，这个钮只控制左栏户外物料面板的
+                    // 展开/收起，不收回地图。面板开 → 再点只收左栏面板（地图保留）；面板收 → 展开。
+                    const panelOpen = outdoorPanel !== null;
+                    if (!panelOpen) {
+                      // 展开左栏户外物料面板；先清待放置：地图点击只服务边界/分区/动线。
                       clearPendingPlacement();
                       setOutdoorPanel('library');
-                      // 开启时默认亮「添加物件」页签（OnePlan Add Objects 同款默认）。
-                      // 2026-11-12 用户拍板（统一 2D/3D 切换）：点「户外规划」进 2D 地图；
-                      // 「3D 场地」＝关覆盖层进全屏接管，覆盖层里不再画 3D。
-                      setOutdoorView('2d');
-                      setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-                      applyPresetRef.current('iso');
-                      if (agentPanelOpen && !agentCollapsed) { agentCollapsedByOutdoorRef.current = true; closeBingo(); }
-                      setOutdoor3dTakeoverActive(false);
-                      setOutdoor2DOpen(true);
+                      // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
+                      if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
+                        setOutdoorView('2d');
+                        setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+                        applyPresetRef.current('iso');
+                        if (agentPanelOpen && !agentCollapsed) closeBingo();
+                        setOutdoor3dTakeoverActive(false);
+                        setOutdoor2DOpen(true);
+                      }
                       return;
                     }
-                    // 2026-11-13 收敛 14c：纯户外项目没有室内场景可回退——地图是右侧唯一画面，
-                    // 整体收起会让户外 overlay 隐藏、室内 Viewport 又已让位，右侧直接空屏。纯户外下禁止收起。
-                    if (isOutdoorProject) return;
-                    setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-                    applyPresetRef.current('iso');
-                    if (agentCollapsedByOutdoorRef.current) {
-                      // 关掉户外回到 3D 时把底部按钮还原（用户 m00274）；原来只收不放。
-                      agentCollapsedByOutdoorRef.current = false;
-                      restoreBingo();
-                    }
-                    setOutdoor3dTakeoverActive(false);
-                    setOutdoor2DOpen(false);
+                    // 面板已开：只收起左栏户外面板，右侧地图保持常驻，不回室内场景、不做空屏回落。
+                    setOutdoorPanel(null);
                   }}
                 >
                   <Globe size={26} aria-hidden="true" />
@@ -4455,7 +4433,7 @@ useEffect(() => {
               style: { order: leftStackFirst === 'chat' ? 0 : 2 },
               onHeaderPointerDown: event => beginLeftStackPull('chat', event),
             } : {})} />}
-          {(outdoor2DOpen || outdoor3dTakeover) && (
+          {((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null) && (
             <aside
               className={`sc-left-drawer sc-float-layer is-outdoor-card${leftStack.detached === 'outdoor' ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
               data-testid="outdoor-left-card"

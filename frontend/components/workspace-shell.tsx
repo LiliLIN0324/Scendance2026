@@ -12,7 +12,6 @@ import {
   latestOutdoorProjectId,
   resolveOutdoorProjectId,
 } from '@/components/room-organizer/lib/outdoor-project-store';
-import { STORAGE_KEY } from '@/components/room-organizer/lib/constants';
 import { useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
@@ -82,24 +81,6 @@ export function BootSkeleton(): JSX.Element {
 }
 
 /**
- * 是否存在本机室内布置草稿（画布里已放物料）。坏草稿 / 存储不可用按"没有"处理。
- * 2026-11-13 收敛 14b：冷根无参时，只有室内草稿在用才续室内；其余情况续最近户外项目
- * 或起步户外 2D 规划——户外草稿归 decideDefaultOutdoorProject 判定，不再混入室内续接条件。
- */
-function hasLocalIndoorDraft(): boolean {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { floors?: { items?: unknown[] }[] };
-      if ((parsed.floors?.[0]?.items?.length ?? 0) > 0) return true;
-    }
-  } catch {
-    // 坏草稿按无活动处理。
-  }
-  return false;
-}
-
-/**
  * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板）：
  * - 有最近的户外项目 → 续那个 projectId（上次的规划继续）；
  * - 没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
@@ -127,12 +108,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     // 工作台无任何参数（`/` 或 `/editor` 别名）：室内草稿在用就续室内，否则续最近户外项目
     // 或起步户外 2D。带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
     if (!window.location.search) {
-      if (hasLocalIndoorDraft()) {
-        // 本机画布草稿有物料 → 续室内工作台（无户外项目语境）。
-        setOutdoorProjectId(null);
-      } else {
-        setOutdoorProjectId(decideDefaultOutdoorProject());
-      }
+      // 2026-11-13 房间画布退役后右侧只保留户外地图：无参数不再续室内草稿，
+      // 一律进最近户外项目或默认户外草稿；显式 ?mode=indoor 入口留待后置清理拆除。
+      setOutdoorProjectId(decideDefaultOutdoorProject());
       setEditorStarted(true);
       return;
     }
