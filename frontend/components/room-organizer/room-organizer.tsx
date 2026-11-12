@@ -85,6 +85,7 @@ import { requestWalkPointerLock } from './lib/walk-engage';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
+import { sceneAnchorFromOutdoorPlan } from './lib/outdoor-venue-sync';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { suggestDropPoint } from './lib/drop-zone';
@@ -1697,9 +1698,12 @@ useEffect(() => {
       applyOutdoorGroundBasemap(plan);
       return;
     }
+    const mirrorAnchor = sceneAnchorFromOutdoorPlan(plan);
+    const baseAnchor = layoutStore.getState().layout.sceneAnchor;
+    const anchorChanged = mirrorAnchor && (!baseAnchor || Math.abs(baseAnchor.lng - mirrorAnchor.lng) > 1e-8 || Math.abs(baseAnchor.lat - mirrorAnchor.lat) > 1e-8 || Math.abs(baseAnchor.metersPerUnit - mirrorAnchor.metersPerUnit) > 1e-8);
     const step = nextOutdoorBoundarySync(outdoorBoundarySyncRef.current, plan);
     outdoorBoundarySyncRef.current = step.state;
-    if (!step.apply) {
+    if (!step.apply && !anchorChanged) {
       // 初次载入只记基线、不动壳体；但 3D 地面还没有一张贴地地图时要补一张。
       // 以前只在「边界变了」才拼图，重开项目 3D 就永远停在素板上（用户报的「3D 场地没地图」）。
       try { workspaceWriteGuards?.assertLayoutWrite(); } catch { return; }
@@ -1711,7 +1715,7 @@ useEffect(() => {
     const patch = shellVenuePatchFromPlanBoundary(base, plan.boundary);
     if (!patch) return;
     commitHistoryNow();
-    actions.applyLayout({ ...base, ...patch });
+    actions.applyLayout({ ...base, ...patch, ...(mirrorAnchor ? { sceneAnchor: mirrorAnchor } : {}) });
     // 边界变了就重拼 3D 地面底图（用 2D 当前那张地图：OSM/Carto/天地图）。
     applyOutdoorGroundBasemap(plan);
     if (patch.scaled) notify('平面边界超过 200 m，已按比例缩到壳体可承载的尺寸。', 'info');
@@ -1732,6 +1736,7 @@ useEffect(() => {
     },
     [layout.id, outdoorPlanState, isOutdoorProject, outdoorProjectIdProp],
   );
+  // V-5 生成/上传由 OutdoorPlanOverlay 原位承接，不跳转旧物料 Agent 或另一工作台。
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
   // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。
   useEffect(() => {
@@ -4544,6 +4549,7 @@ useEffect(() => {
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
               onModeChange={handleOutdoorCanvasMode}
               onPlanChange={handleOutdoorPlanChange}
+              controller={controller}
               onActiveLevelChange={handleOutdoorActiveLevelChange}
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}

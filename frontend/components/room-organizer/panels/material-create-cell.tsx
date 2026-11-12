@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles } from '@/components/solid-icons';
 import { addPendingMaterial, submitMaterialGenerate, subscribeStagedMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
+import { consumeFacilityGenerateLink } from '../lib/facility-generated-models';
 import { CREDIT_CONFIRM_LABEL } from '../lib/site-recon-mock';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -96,6 +97,9 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
       return;
     }
     addPendingMaterial({ id: `pending:${result.taskid}`, name: text, shipped: false });
+    // V-5b/c：画布属性卡「生成一个」发起的这炉——落 taskid↔facility 链接，等画布轮询回填候选。
+    // 云端 lane 够不着本地轮询端点，不消费（staged 链接 10 分钟后自然过期）。
+    consumeFacilityGenerateLink(result.taskid, text);
     setNote('已开始生成。完成后可在「我的生成」查看。');
   }
 
@@ -115,6 +119,8 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
       return;
     }
     addPendingMaterial({ id: `pending:${result.taskid}`, name: imageName || '图片物料', shipped: false });
+    // V-5b/c：画布属性卡「上传图片生成」发起的这炉，同 submitText 落 taskid↔facility 链接。
+    consumeFacilityGenerateLink(result.taskid, imageName || '图片物料');
     setNote('已开始生成。完成后可在「我的生成」查看。');
   }
 

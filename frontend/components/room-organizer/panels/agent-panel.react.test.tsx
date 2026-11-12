@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
+import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { backendSceneToLayout } from '../lib/backend-adapter';
@@ -12,6 +13,10 @@ import { presetModelUrl } from '../lib/scene-presets';
 import { STAGE_PLATFORM_ASSET_ID } from '../lib/stage-platform-plan';
 import * as stagePlatformPlan from '../lib/stage-platform-plan';
 import * as researchArea from '../lib/research-area';
+import * as placeSearch from '../lib/place-search';
+import * as placeArea from '../lib/place-area';
+import * as placeSearchOptions from '../lib/place-search-options';
+import * as roadNetwork from '../lib/road-network';
 import { getAssistantSessionBodies, resetAssistantSessionsStoreForTests, useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { useHistory } from '../hooks/use-history';
 import { useLayoutState } from '../hooks/use-layout-state';
@@ -63,6 +68,7 @@ const studioMock = vi.hoisted(() => ({
 }));
 
 vi.mock('../contexts', () => ({
+  useSelectionOptional: () => null,
   useRoomEditor: () => ({
     layout: state.layout,
     activeFloor: state.layout.floors[0],
@@ -4657,4 +4663,127 @@ describe('event layout generation path', () => {
       spy.mockRestore();
     }
   }, 20000);
+});
+
+describe('outdoor V1–V5 progressive Agent integration', () => {
+  it('自然补充人数替换同一预览、确认只写一次，画布变化使卡片失效', async () => {
+    let plan = createStarterOutdoorPlan();
+    plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
+    plan.nodes = [{ id: 'real-entry', kind: 'both', name: '南入口', notes: '已人工确认', position: { x: 0, y: -70 } }];
+    let current!: NonNullable<ReturnType<typeof useAgent>>;
+    const apply = vi.fn((zones, facilities, routes = [], nodes = []) => { plan = { ...plan, zones: [...plan.zones, ...zones], facilities: [...plan.facilities, ...facilities], routes: [...plan.routes, ...routes], nodes: [...plan.nodes, ...nodes] }; return true; });
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: apply, inspectFacility: () => true }); return null; }
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+    send('我想办45人讲座');
+    await waitFor(() => expect(current.zoneProposal).not.toBeNull());
+    expect(plan.facilities).toHaveLength(0);
+    send('改成60人吧');
+    await waitFor(() => expect(current.zoneProposal?.facilities.filter(f => f.templateId.includes('chair'))).toHaveLength(60));
+    expect(screen.getAllByTestId('outdoor-task-card')).toHaveLength(1);
+    const oldConfirm = current.confirmZoneProposal;
+    send('好');
+    expect(apply).toHaveBeenCalledTimes(1);
+    act(() => oldConfirm()); expect(apply).toHaveBeenCalledTimes(1); expect(current.outdoorTask?.state).toBe('done');
+    expect(current.zoneProposal).toBeNull();
+  });
+  it('没有真实入口只追问下一步；不支持活动不走旧生成器', async () => {
+    const plan = createStarterOutdoorPlan();
+    plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
+    let current!: NonNullable<ReturnType<typeof useAgent>>;
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: vi.fn() }); return null; }
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+    send('45人讲座'); await waitFor(() => expect(current.outdoorTask?.action).toContain('入口'));
+    expect(current.zoneProposal).toBeNull();
+    send('改办100人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('只支持'));
+    expect(current.zoneProposal).toBeNull(); expect(studioMock.generate).not.toHaveBeenCalled();
+  });
+});
+
+describe('outdoor V1–V5 real task-state actions', () => {
+  it('说选第二个立即定位钉，轮廓晚到才写入，当前Agent自然确认候选', async () => {
+    let plan = createStarterOutdoorPlan();
+    const places = [{ id: 'one', name: '一号场地', address: '', lng: 120.16, lat: 30.25 }, { id: 'two', name: '二号场地', address: '', lng: 120.163, lat: 30.25 }];
+    vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue(places);
+    vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
+    let resolve!: (shape: placeArea.PlaceArea | null) => void;
+    vi.spyOn(placeArea, 'fetchPlaceShape').mockImplementation(() => new Promise(done => { resolve = done; }));
+    const preview = vi.fn(); const apply = vi.fn((anchor, boundary) => { plan = { ...plan, anchor, boundary }; return true; });
+    let current!: NonNullable<ReturnType<typeof useAgent>>;
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyVenue: apply, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true, previewVenuePoint: preview }); return null; }
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+    send('在IN77做设计'); await waitFor(() => expect(current.venuePick?.candidates).toHaveLength(2));
+    send('选第二个'); expect(preview).toHaveBeenCalledWith(places[1]); expect(apply).not.toHaveBeenCalled();
+    await act(async () => { resolve({ id: 'outline', name: '二号场地', level: '占地范围', lng: 120.163, lat: 30.25, kind: 'area', polygon: [[120.163,30.25],[120.164,30.25],[120.164,30.251],[120.163,30.251]], bounds: [120.163,30.25,120.164,30.251] }); });
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1)); expect(current.outdoorTask?.state).toBe('done');
+  });
+  it('流动任务真实开启、停止按钮接上画布状态，不篡改计划', () => {
+    const plan = createStarterOutdoorPlan(); plan.routes = [{ id: 'ped', name: '人行', kind: 'pedestrian', points: [{x:0,y:0},{x:100,y:0}], oneWay: false, notes: '' }];
+    const before = JSON.stringify(plan); let current!: NonNullable<ReturnType<typeof useAgent>>;
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true }); return null; }
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+    send('开始模拟'); expect(current.flowSimActive).toBe(true); expect(current.outdoorTask?.state).toBe('working');
+    fireEvent.click(screen.getByRole('button', { name: '停止模拟' })); expect(current.flowSimActive).toBe(false);
+    expect(JSON.stringify(plan)).toBe(before); expect(current.outdoorTask?.state).toBe('stopped');
+  });
+});
+
+
+describe('outdoor V1–V5 unified task epoch regression', () => {
+  function mount() {
+    const plan = createStarterOutdoorPlan();
+    plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
+    plan.nodes = [{ id: 'real-entry', kind: 'both', name: '南入口', notes: '已人工确认', position: { x: 0, y: -70 } }];
+    let current!: NonNullable<ReturnType<typeof useAgent>>;
+    const applyRoutes = vi.fn(() => true); const applyZone = vi.fn(() => true);
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes, applyZoneProposal: applyZone }); return null; }
+    const tree = (scope = 'legacy') => <LayoutAgentProvider sessionScope={scope} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>;
+    const rendered = render(tree());
+    const roads: roadNetwork.RoadSegment[] = [{ id: 'walk', highway: 'footway', name: '真实人行道', points: [[plan.anchor!.lng - 0.005, plan.anchor!.lat], [plan.anchor!.lng + 0.005, plan.anchor!.lat]] }];
+    return { current: () => current, applyRoutes, applyZone, roads, switchProject: () => rendered.rerender(tree('activity:project-b')) };
+  }
+  it('旧路网晚返回不得盖过新60人活动；自然好只应用当前活动', async () => {
+    const app = mount(); let finish!: (value: roadNetwork.RoadNetwork) => void; let signal!: AbortSignal;
+    vi.spyOn(roadNetwork, 'fetchRoadNetwork').mockImplementation((_anchor, _span, options) => { signal = options!.signal!; return new Promise(resolve => { finish = resolve; }); });
+    send('排一下流线'); await waitFor(() => expect(app.current().routeBusy).toBe(true));
+    send('60人讲座'); await waitFor(() => expect(app.current().zoneProposal).not.toBeNull());
+    expect(signal.aborted).toBe(true);
+    await act(async () => { finish({ roads: app.roads }); });
+    expect(app.current().routeProposal).toBeNull(); expect(app.current().zoneProposal).not.toBeNull();
+    expect(screen.getAllByTestId('outdoor-task-card')).toHaveLength(1);
+    send('好'); expect(app.applyZone).toHaveBeenCalledTimes(1); expect(app.applyRoutes).not.toHaveBeenCalled();
+  });
+  it('反向新流线任务立即作废旧活动确认闭包；自然好只应用新流线', async () => {
+    const app = mount(); let finish!: (value: roadNetwork.RoadNetwork) => void;
+    vi.spyOn(roadNetwork, 'fetchRoadNetwork').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    send('60人讲座'); await waitFor(() => expect(app.current().zoneProposal).not.toBeNull());
+    const staleConfirm = app.current().confirmZoneProposal; const staleDismiss = app.current().dismissZoneProposal;
+    send('排一下流线'); act(() => { staleConfirm(); staleDismiss(); });
+    expect(app.applyZone).not.toHaveBeenCalled(); expect(app.current().zoneProposal).toBeNull();
+    await act(async () => { finish({ roads: app.roads }); });
+    await waitFor(() => expect(app.current().routeProposal).not.toBeNull());
+    send('好'); expect(app.applyRoutes).toHaveBeenCalledTimes(1); expect(app.applyZone).not.toHaveBeenCalled();
+  });
+  it('相同场地查询重开也有新epoch；旧搜索忽略abort返回不能复活旧候选', async () => {
+    const app = mount();
+    let old!: (places: placeSearch.PlaceSuggestion[]) => void;
+    const fresh = { id: 'fresh', name: '新候选', address: '', lng: 120.16, lat: 30.25 };
+    const search = vi.spyOn(placeSearch, 'searchPlaces').mockImplementationOnce(() => new Promise(resolve => { old = resolve; })).mockResolvedValue([fresh]);
+    vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
+    send('在IN77做设计'); await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
+    send('在IN77做设计'); await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(app.current().venuePick?.candidates[0]?.id).toBe('fresh'));
+    await act(async () => { old([{ ...fresh, id: 'old', name: '旧候选' }]); });
+    expect(app.current().venuePick?.candidates[0]?.id).toBe('fresh');
+  });
+  it.each(['取消', '切项目'])('%s后即使mock忽略abort并晚返回，也不能复活旧路网任务', async mode => {
+    const app = mount(); let finish!: (value: roadNetwork.RoadNetwork) => void; let signal!: AbortSignal;
+    vi.spyOn(roadNetwork, 'fetchRoadNetwork').mockImplementation((_anchor, _span, options) => { signal = options!.signal!; return new Promise(resolve => { finish = resolve; }); });
+    send('排一下流线'); await waitFor(() => expect(app.current().routeBusy).toBe(true));
+    if (mode === '取消') act(() => app.current().stopOutdoorTask()); else app.switchProject();
+    expect(signal.aborted).toBe(true);
+    await act(async () => { finish({ roads: app.roads }); });
+    expect(app.current().routeProposal).toBeNull(); expect(app.current().zoneProposal).toBeNull();
+    expect(app.applyRoutes).not.toHaveBeenCalled(); expect(app.applyZone).not.toHaveBeenCalled();
+    expect(app.current().outdoorTask?.state).not.toBe('confirm');
+  });
 });

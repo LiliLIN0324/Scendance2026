@@ -12,13 +12,16 @@ import {
 } from './plan-model-layer';
 import {
   loadFacilityModelCandidates,
+  loadFacilityModelOverride,
   resolveFacilityModels,
   selectFacilityModel,
+  selectFacilityModelOverride,
   type FacilityModelCandidate,
   type FacilityModelFit,
 } from '@/components/room-organizer/lib/plan-facility-models';
 import type { PlanPropShape } from '@/components/room-organizer/lib/plan-footprint-geometry';
-import { createCachedGlbModel, disposeOwnedModel, getGlbAssetState } from './glb-assets';
+import { registerGeneratedFacilityModel } from '../lib/facility-generated-models';
+import { createCachedGlbModel, disposeOwnedModel, ensureGlbAsset, getGlbAssetState } from './glb-assets';
 
 vi.mock('./glb-assets', () => ({
   ensureGlbAsset: vi.fn(() => Promise.resolve()),
@@ -41,13 +44,20 @@ vi.mock('@/components/room-organizer/lib/plan-facility-models', () => ({
   resolveFacilityModels: vi.fn(() => [CANDIDATE]),
   selectFacilityModel: vi.fn(() => FITTED),
   loadFacilityModelCandidates: vi.fn(() => Promise.resolve(new Map())),
+  fitFacilityModel: vi.fn(() => ({ scale: 1, swap: false, height: 3 })),
+  selectFacilityModelOverride: vi.fn(),
+  loadFacilityModelOverride: vi.fn(),
 }));
 
 const flush = async (): Promise<void> => {
   for (let round = 0; round < 4; round += 1) await Promise.resolve();
 };
 
-function prop(id: string, overrides: Partial<{ x: number; z: number; width: number; depth: number; rotationDeg: number }> = {}): PlanPropShape {
+function prop(
+  id: string,
+  overrides: Partial<{ x: number; z: number; width: number; depth: number; rotationDeg: number }> = {},
+  modelOverride?: string,
+): PlanPropShape {
   return {
     id,
     templateId: 'oneplan:icon:tent',
@@ -57,6 +67,7 @@ function prop(id: string, overrides: Partial<{ x: number; z: number; width: numb
     width: overrides.width ?? 5,
     depth: overrides.depth ?? 5,
     rotationDeg: overrides.rotationDeg ?? 0,
+    ...(modelOverride !== undefined ? { modelOverride } : {}),
   };
 }
 
@@ -298,6 +309,143 @@ describe('plan model layer assembly', () => {
     expect(layer.group.children[0].userData.planPropId).toBe('p2');
     const disposed = vi.mocked(disposeOwnedModel).mock.calls[0]?.[0];
     expect(disposed?.userData.planPropId).toBe('p1');
+    layer.dispose();
+  });
+});
+
+describe('plan model layer modelOverride (V-5a)', () => {
+  const OVERRIDE: FacilityModelCandidate = {
+    slug: 'override-tent',
+    name: 'override 帐篷',
+    glbUrl: '/showcase/assets/library/model/override-tent.glb',
+    width: 4,
+    depth: 4,
+    height: 2.5,
+  };
+  const metrics = { width: 100, depth: 60 };
+
+  beforeEach(() => {
+    vi.mocked(createCachedGlbModel).mockClear();
+    vi.mocked(disposeOwnedModel).mockClear();
+    vi.mocked(selectFacilityModel).mockClear();
+    vi.mocked(selectFacilityModelOverride).mockClear().mockImplementation((candidates, slug) => {
+      const found = (candidates as readonly FacilityModelCandidate[]).find((candidate) => candidate.slug === slug);
+      return found ? { ...found, scale: 1, swap: false } : null;
+    });
+    vi.mocked(loadFacilityModelCandidates).mockClear().mockImplementation(() => Promise.resolve(new Map()));
+    vi.mocked(loadFacilityModelOverride).mockClear().mockImplementation(() => Promise.resolve(null));
+  });
+
+  it('override 在候选里：直接落 override 模型，不走自动挑选', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, CANDIDATE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(vi.mocked(selectFacilityModelOverride)).toHaveBeenCalledWith([CANDIDATE], CANDIDATE.slug, 5, 5);
+    expect(vi.mocked(selectFacilityModel)).not.toHaveBeenCalled();
+    const item = vi.mocked(createCachedGlbModel).mock.calls[0]?.[0];
+    expect(item?.glbUrl).toBe(CANDIDATE.glbUrl);
+    layer.dispose();
+  });
+
+  it('override 不在 top-N 候选：等在线轮按 slug 全库直查，命中后照落', async () => {
+    vi.mocked(loadFacilityModelOverride).mockImplementation(() => Promise.resolve(OVERRIDE));
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, OVERRIDE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    // 内置同步轮没命中 override：此时一个模型都没落（不急着回退）。
+    expect(layer.group.children).toHaveLength(0);
+    await flush();
+    expect(vi.mocked(loadFacilityModelOverride)).toHaveBeenCalledWith(OVERRIDE.slug);
+    expect(vi.mocked(createCachedGlbModel)).toHaveBeenCalledTimes(1);
+    const item = vi.mocked(createCachedGlbModel).mock.calls[0]?.[0];
+    expect(item?.glbUrl).toBe(OVERRIDE.glbUrl);
+    layer.dispose();
+  });
+
+  it('override 指向不存在的模型：回退自动挑选，不空崩', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, 'no-such-model')],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(vi.mocked(loadFacilityModelOverride)).toHaveBeenCalledWith('no-such-model');
+    // 自动挑选路径接管：selectFacilityModel → FITTED。
+    expect(vi.mocked(selectFacilityModel)).toHaveBeenCalled();
+    const item = vi.mocked(createCachedGlbModel).mock.calls[0]?.[0];
+    expect(item?.glbUrl).toBe(FITTED.glbUrl);
+    layer.dispose();
+  });
+
+  it('syncPositions：override 从 A 切到 B 当场换模型（dispose 旧模型 + 重落），清除回自动也换', async () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({
+      parent,
+      props: [prop('p1', {}, CANDIDATE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    expect(vi.mocked(createCachedGlbModel).mock.calls[0]?.[0]?.glbUrl).toBe(CANDIDATE.glbUrl);
+    expect(disposeOwnedModel).not.toHaveBeenCalled();
+
+    // 切到另一个 override：旧模型 dispose、新模型按 override 落（在线候选轮命中）。
+    const B: FacilityModelCandidate = { ...OVERRIDE, slug: 'override-tent-b', glbUrl: '/showcase/assets/library/model/override-tent-b.glb' };
+    vi.mocked(loadFacilityModelCandidates).mockImplementation(() => Promise.resolve(new Map([['oneplan:icon:tent', [CANDIDATE, B]]])));
+    layer.syncPositions([prop('p1', {}, B.slug)], metrics);
+    expect(disposeOwnedModel).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(vi.mocked(createCachedGlbModel).mock.calls[1]?.[0]?.glbUrl).toBe(B.glbUrl);
+
+    // 清除 override（undefined）：回到自动挑选的模型。
+    layer.syncPositions([prop('p1')], metrics);
+    expect(disposeOwnedModel).toHaveBeenCalledTimes(2);
+    await flush();
+    expect(vi.mocked(createCachedGlbModel).mock.calls[2]?.[0]?.glbUrl).toBe(FITTED.glbUrl);
+    layer.dispose();
+  });
+});
+
+describe('V5 异步载入版本守卫', () => {
+  it('A未下载完就切B：迟到的A不能再落地覆盖B', async () => {
+    let releaseA!: () => void;
+    const blockedA = new Promise<void>(resolve => { releaseA = resolve; });
+    vi.mocked(ensureGlbAsset).mockImplementation(key => key === CANDIDATE.glbUrl ? blockedA : Promise.resolve());
+    const b = { ...CANDIDATE, slug: 'race-b', glbUrl: '/race-b.glb' };
+    vi.mocked(selectFacilityModelOverride).mockImplementation((items, slug) => {
+      const found = items.find(x => x.slug === slug); return found ? { ...found, scale: 1, swap: false } : null;
+    });
+    vi.mocked(loadFacilityModelCandidates).mockResolvedValue(new Map([['oneplan:icon:tent', [CANDIDATE, b]]]));
+    const layer = createPlanModelLayer({ parent: new THREE.Scene(), props: [prop('race', {}, CANDIDATE.slug)], metrics: { width: 100, depth: 60 }, isDisposed: () => false });
+    layer.syncPositions([prop('race', {}, b.slug)], { width: 100, depth: 60 });
+    await flush(); releaseA(); await flush();
+    expect(layer.group.children).toHaveLength(1);
+    const latest = vi.mocked(createCachedGlbModel).mock.calls.at(-1)?.[0];
+    expect(latest?.glbUrl).toBe('/race-b.glb');
+    layer.dispose(); vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
+  });
+  it('刷新后云候选重新授权注册时，已回退模型原位升级，不改modelOverride', async () => {
+    vi.mocked(createCachedGlbModel).mockClear();
+    vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
+    vi.mocked(loadFacilityModelOverride).mockResolvedValue(null);
+    vi.mocked(loadFacilityModelCandidates).mockResolvedValue(new Map());
+    const layer = createPlanModelLayer({ parent: new THREE.Scene(), props: [prop('cloud-refresh', {}, 'generated:refresh')], metrics: { width: 100, depth: 60 }, isDisposed: () => false });
+    await flush();
+    registerGeneratedFacilityModel({ slug: 'generated:refresh', name: '云模型', glbUrl: 'https://assets.example.test/renewed.glb', width: 4, depth: 4, height: 3, facilityId: 'cloud-refresh', facilityName: '帐篷', createdAt: Date.now(), sessionOnly: true });
+    await flush();
+    expect(layer.group.children).toHaveLength(1);
+    expect(vi.mocked(createCachedGlbModel).mock.calls.at(-1)?.[0]?.glbUrl).toBe('https://assets.example.test/renewed.glb');
     layer.dispose();
   });
 });

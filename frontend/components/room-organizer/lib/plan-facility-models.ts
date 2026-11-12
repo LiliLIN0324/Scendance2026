@@ -16,6 +16,7 @@
  *  - `loadFacilityModelCandidates()`：异步，在线物料库兜底（关键词打分 + top N）。
  */
 
+import { findGeneratedFacilityModel } from './facility-generated-models';
 import {
   isPackTemplateId,
   packEntryByTemplateId,
@@ -42,10 +43,16 @@ export interface FacilityModelCandidate {
    * 摩天轮 18m 高本来就是它该有的样子，高度压缩会把地标压成玩具。
    */
   trueScale?: boolean;
+  /**
+   * V-5a：物料库缩略图（CDN 绝对地址或仓库相对路径）——属性卡候选网格用。
+   * 内置映射同步路径拿不到时缺省 undefined，UI 显示名称占位块不空崩。
+   */
+  thumb?: string;
 }
 
-/** 一个设施最多给出几个候选模型。 */
-const MAX_CANDIDATES = 3;
+/** 一个设施最多给出几个候选模型（V-5a：候选缩略图网格提到 5 格）。 */
+export const MAX_FACILITY_MODEL_CANDIDATES = 5;
+const MAX_CANDIDATES = MAX_FACILITY_MODEL_CANDIDATES;
 
 /** 物料库模型的本地同源地址。 */
 function localGlbUrl(slug: string): string {
@@ -620,8 +627,8 @@ const MAX_MODEL_HEIGHT = 4;
 const MAX_HEIGHT_RATIO = 1.2;
 /** 放大上限：模型不放大到超过原尺寸的 2.5 倍，避免小模型被撑成庞然大物。 */
 const MAX_SCALE = 2.5;
-/** 候选排序权重：语义越靠前越优先（面积相近时不让低优先模型抢位）。 */
-const RANK_WEIGHTS = [1, 0.75, 0.55, 0.4];
+/** 候选排序权重：语义越靠前越优先（面积相近时不让低优先模型抢位）。V-5a 候选上限 5，第 5 位与原兜底同权。 */
+const RANK_WEIGHTS = [1, 0.75, 0.55, 0.4, 0.3];
 
 /** 一个模型按占地缩放后的结果。 */
 export interface FacilityModelFit {
@@ -706,6 +713,7 @@ function candidateFromOnline(model: OnlineModel): FacilityModelCandidate {
     width: model.width,
     depth: model.depth,
     height: model.height,
+    ...(model.thumb ? { thumb: model.thumb } : {}),
   };
 }
 
@@ -766,8 +774,17 @@ export async function loadFacilityModelCandidates(
   } catch {
     models = [];
   }
+  // V-5a：内置映射是同步手挑的，候选上没带缩略图；在线索引在手时按 slug 补齐，
+  // 属性卡候选网格就能给绝大多数候选配图（拿不到的显示名称占位块）。
+  const thumbBySlug = new Map<string, string>();
+  for (const model of models) {
+    if (model.thumb && !thumbBySlug.has(model.slug)) thumbBySlug.set(model.slug, model.thumb);
+  }
   for (const templateId of unique) {
-    const builtin = resolveFacilityModels(templateId);
+    const builtin = resolveFacilityModels(templateId).map((candidate) => {
+      const thumb = thumbBySlug.get(candidate.slug);
+      return thumb ? { ...candidate, thumb } : candidate;
+    });
     const kind = planPropKind(templateId);
     const merged = [...builtin];
     // 未映射的杂项不要再用 crate/table 关键词去网上乱配。
@@ -783,4 +800,42 @@ export async function loadFacilityModelCandidates(
     result.set(templateId, merged.slice(0, MAX_CANDIDATES));
   }
   return result;
+}
+
+/**
+ * V-5a：设施的手动模型 override（契约 planFacilitySchema.modelOverride 存物料库 slug）→ 候选。
+ *
+ * 与 selectFacilityModel（自动挑选）并列的取值口径：候选列表里命中哪个 slug 就直接用哪个
+ * （不再按占地重新挑位次），缩放照走 fitFacilityModel。候选列表没有该 slug 时返回 null——
+ * 3D 侧先等在线库按 slug 直查（loadFacilityModelOverride），仍解析不到才回退自动挑选。
+ */
+export function selectFacilityModelOverride(
+  candidates: readonly FacilityModelCandidate[],
+  slug: string,
+  propWidth: number,
+  propDepth: number,
+): (FacilityModelCandidate & FacilityModelFit) | null {
+  const found = candidates.find(candidate => candidate.slug === slug);
+  if (!found) return null;
+  return { ...found, ...fitFacilityModel(propWidth, propDepth, found) };
+}
+
+/**
+ * V-5a：按 slug 在整个物料库直查一个候选（内置映射优先，在线索引兜底）。
+ * 供「override 不在 top-N 候选列表」时兜底解析（候选位次变动 / 生成回填场景）；
+ * 返回 null 表示库里没有这个 slug，调用方回退自动挑选。
+ */
+export async function loadFacilityModelOverride(slug: string): Promise<FacilityModelCandidate | null> {
+  // V-5b/c：生成/导入回填的候选第一优先——它们不在物料库里，库查永远 null。
+  const generated = findGeneratedFacilityModel(slug);
+  if (generated) return generated;
+  // hasOwnProperty 守卫与 resolveFacilityModels 同款：slug 是自由字符串，不能撞上原型链键。
+  if (Object.prototype.hasOwnProperty.call(BUILTIN_MODELS, slug)) return candidateFromBuiltin(slug);
+  try {
+    const index = await loadOnlineModels();
+    const model = index.models.find(entry => entry.slug === slug);
+    return model ? candidateFromOnline(model) : null;
+  } catch {
+    return null;
+  }
 }

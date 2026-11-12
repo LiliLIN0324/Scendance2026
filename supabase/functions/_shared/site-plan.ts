@@ -66,6 +66,11 @@ export const planZoneSchema = z.strictObject({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
   /** 填充透明度 0–1（H2-b）：可选，缺省由渲染层取 tokens 默认 0.22；旧数据不带该字段照常解析。 */
   opacity: z.number().min(0).max(1).optional(),
+  /**
+   * V-3a（2026-11-13 用户拍板「事件挂 zone 加字段」）：这个分区承载的事件（如「潮乐之夜·舞台」）。
+   * 可选——AI 区域提案（zone-event-proposal）写入、属性面板可改；旧数据缺字段照常解析（无需迁移）。
+   */
+  event: z.string().min(1).max(120).optional(),
   /** 所属图层（可选）：缺省归第一层；levels 缺省时不得携带（superRefine 把关）。 */
   levelId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
@@ -100,6 +105,12 @@ export const planFacilitySchema = z.strictObject({
   electricKw: z.number().min(0).max(10000).optional(),
   /** 2026-11-12 描边样式（OnePlan 同款三态+无描边）：实线/虚线/点线/无，缺省实线；旧数据缺字段照常解析。 */
   strokeStyle: z.enum(['solid', 'dashed', 'dotted', 'none']).optional(),
+  /**
+   * V-5a（2026-11-13）3D 模型手动 override：物料库 slug（assets/library/merged.json 主键）。
+   * 可选——缺省走 plan-facility-models 的自动挑选（selectFacilityModel），点属性卡候选缩略图写入、
+   * 「自动」清回 undefined；与 opacity/color 同口径不写 default，旧数据缺字段照常解析（无需迁移）。
+   */
+  modelOverride: z.string().min(1).max(160).optional(),
 });
 export type PlanFacility = z.infer<typeof planFacilitySchema>;
 

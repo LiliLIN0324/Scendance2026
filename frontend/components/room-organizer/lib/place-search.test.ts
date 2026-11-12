@@ -42,12 +42,46 @@ describe('placeSearchUrl', () => {
 });
 
 describe('searchPlaces', () => {
-  it('解析 { places } 契约：id/name/address/lng/lat', async () => {
+  /** 双源 mock：按 URL 分流——/amap-place 回高德载荷、/api/tdt-search 回天地图载荷。 */
+  function dualFetch(amapBody: unknown, tdtBody: unknown, amapStatus = 200, tdtStatus = 200) {
+    return vi.fn(async (...args: unknown[]) => {
+      const url = String(args[0]);
+      if (url.includes('/amap-place')) return jsonResponse(amapBody, amapStatus);
+      return jsonResponse(tdtBody, tdtStatus);
+    });
+  }
+
+  it('解析 { places } 契约：id/name/address/lng/lat（本机双源都回同一载荷，去重后一致）', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(PLACES));
     const places = await searchPlaces('平湖秋月', { fetchImpl, local: true });
-    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(places).toHaveLength(2);
     expect(places[0]).toEqual({ id: 'poi-1', name: '西湖十景(平湖秋月)', address: '西湖北部孤山南麓东端滨湖地带', lng: 120.146169, lat: 30.252176 });
+  });
+
+  it('本机双源：高德在前、天地图补位；同venue不同id按名字+坐标去重', async () => {
+    const fetchImpl = dualFetch(
+      { places: [{ id: 'amap-1', name: '盐官古城-潮乐之城', address: '拱辰路188号', lng: 120.540985, lat: 30.409409 }] },
+      { places: [
+        { id: 'tdt-1', name: '盐官古城-潮乐之城', address: '海宁市盐官镇', lng: 120.540985, lat: 30.409409 },
+        { id: 'tdt-2', name: '盐官镇人民政府', address: '海宁市', lng: 120.558268, lat: 30.451687 },
+      ] },
+    );
+    const places = await searchPlaces('潮乐之城', { fetchImpl, local: true });
+    // 高德源先入列；天地图同名同坐标那条被去重，政府条目补位在后
+    expect(places.map(p => p.id)).toEqual(['amap-1', 'tdt-2']);
+  });
+
+  it('本机双源：一个源挂了（404/异常）另一源照常返回', async () => {
+    const amapDown = dualFetch({ error: 'no place' }, PLACES, 404, 200);
+    expect((await searchPlaces('平湖秋月', { fetchImpl: amapDown, local: true })).map(p => p.id)).toEqual(['poi-1', 'poi-2']);
+    const tdtDown = dualFetch(PLACES, { error: 'x' }, 200, 503);
+    expect((await searchPlaces('平湖秋月', { fetchImpl: tdtDown, local: true })).map(p => p.id)).toEqual(['poi-1', 'poi-2']);
+    const amapBroken = vi.fn(async (...args: unknown[]) => {
+      if (String(args[0]).includes('/amap-place')) throw new Error('network down');
+      return jsonResponse(PLACES);
+    });
+    expect((await searchPlaces('平湖秋月', { fetchImpl: amapBroken, local: true })).map(p => p.id)).toEqual(['poi-1', 'poi-2']);
   });
 
   it('关键词太短/太长不发请求', async () => {
@@ -57,14 +91,18 @@ describe('searchPlaces', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('把 center 透传给服务端（搜「in77」靠它围着画布找）', async () => {
+  it('把 center 透传给天地图源（搜「in77」靠它围着画布找；高德源不带 center）', async () => {
     // vi.fn(async () => …) 推导出零参签名，mock.calls[i]?.[0] 会报 TS2493；
     // 换可变参数让 calls 首参可索引（vitest 运行时本来就记录实参，语义不变）。
     const fetchImpl = vi.fn(async (..._args: unknown[]) => jsonResponse(PLACES));
     await searchPlaces('in77', { fetchImpl, local: true, center: { lng: 120.16, lat: 30.253 } });
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('center=120.160000%2C30.253000');
+    const amapCall = String(fetchImpl.mock.calls.find(c => String(c[0]).includes('/amap-place'))?.[0]);
+    const tdtCall = String(fetchImpl.mock.calls.find(c => String(c[0]).includes('tdt-search'))?.[0]);
+    expect(tdtCall).toContain('center=120.160000%2C30.253000');
+    expect(amapCall).not.toContain('center=');
     await searchPlaces('in77', { fetchImpl, local: true });
-    expect(String(fetchImpl.mock.calls[1]?.[0])).not.toContain('center=');
+    const tdtCall2 = String(fetchImpl.mock.calls.filter(c => String(c[0]).includes('tdt-search')).at(-1)?.[0]);
+    expect(tdtCall2).not.toContain('center=');
   });
 
   it('无结果（404）与网络异常都回空数组，不抛错', async () => {
