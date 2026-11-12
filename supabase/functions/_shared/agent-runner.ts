@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {checkReservedAnnotations} from './agent-annotation-check.ts';
 import { chatProfile, chatRequest, chatUsageProvider, generateProposal } from './providers.ts';
 import { buildProposal, modificationSchema } from './ai.ts';
-import { agentRunRequestSchema, type AgentRunRequest } from './agent-contract.ts';
+import { agentRunRequestSchema, AGENT_PLAN_OBSERVATION_NOTICE, type AgentRunRequest } from './agent-contract.ts';
 import { ApiError, canonical, catalog, sceneWarnings, uuid, type Scene } from './domain.ts';
 import { dimensionConflicts, structuralWarnings } from './structural-geometry.ts';
 import {deskChairLayoutSchema,planDeskChairGroups,type DeskChairLayoutResult} from './agent-seating-layout.ts';
@@ -34,6 +34,11 @@ import {reviewAgentCandidate} from './agent-candidate-review.ts';
 import {trialModelRoundDiagnostic,trialSubmissionDiagnostic,trialValidationDiagnostic,type AgentTrialDiagnostic} from './agent-trial-diagnostic.ts';
 import {agentEventOutcome,agentEventTool,type AgentEvent} from './agent-events.ts';
 import type { Backend } from './backend.ts';
+import {
+  addPlanFacilities,addPlanRoutes,addPlanWorkers,addPlanZones,buildPlanCandidate,createStarterOutdoorPlan,
+  isAllowedFacilityTemplate,planCandidateUncovered,planFacilityInputSchema,planNodeInputSchema,planRouteInputSchema,
+  planWorkerInputSchema,planZoneInputSchema,type AgentPlanCandidate,type PlanDraftAdded,type SitePlanData,
+} from './plan-candidate.ts';
 
 /** Compact only byte-identical, large validation arrays in the model transport.
  * The complete first array remains in an earlier tool receipt; the original
@@ -75,6 +80,11 @@ export function compactRepeatedValidationArrays(messages:Record<string,unknown>[
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
 const preparedCandidateSchema=z.strictObject({preparedId:uuid});
 const validatedCandidateSchema=z.strictObject({validatedId:uuid});
+const planPreparedSchema=z.strictObject({preparedId:uuid});
+const planSubmitItemSchema=z.strictObject({
+  preparedId:uuid.optional(),validatedId:uuid.optional(),
+  title:z.string().min(1).max(100),explanation:z.string().min(1).max(1200),
+}).refine(d=>!!d.preparedId||!!d.validatedId,{message:'户外候选必须引用本次运行的 preparedId 或 validatedId'});
 // Keep runtime parsing per candidate so a malformed sibling does not discard valid candidates.
 // Models nevertheless receive the actual candidate alternatives instead of an unconstrained item.
 const submitToolSchema=z.strictObject({candidates:z.array(z.union([validatedCandidateSchema,preparedCandidateSchema,candidateSchema])).min(1).max(3)});
@@ -90,12 +100,26 @@ const schemas={
   validate_candidate:candidateSchema,
   submit_candidates:z.strictObject({candidates:z.array(z.unknown()).min(1).max(3)}),get_bom:z.strictObject({}),
   start_lux3d_model:z.strictObject({prompt:z.string().trim().min(1).max(200)}),
+  get_outdoor_plan:z.strictObject({}),
+  prepare_plan_zones:z.strictObject({zones:z.array(planZoneInputSchema).max(200)}),
+  prepare_plan_facilities:z.strictObject({facilities:z.array(planFacilityInputSchema).max(2000)}),
+  prepare_plan_routes:z.strictObject({nodes:z.array(planNodeInputSchema).max(100).optional(),routes:z.array(planRouteInputSchema).max(200)}),
+  prepare_plan_workers:z.strictObject({workers:z.array(planWorkerInputSchema).max(500)}),
+  validate_plan_candidate:planPreparedSchema,
+  submit_plan_candidates:z.strictObject({candidates:z.array(planSubmitItemSchema).min(1).max(3)}),
 };
 const descriptions:Record<keyof typeof schemas,string>={get_scene:'读取本次未保存草稿和选中物件。',search_resources:'检索有授权的公共/个人数字模型；空字符串列出目录。返回模型资源引用和标称米制尺寸，不代表实物库存或供应。',search_places:'联网查询高德地点名称和坐标。输入地点关键词而非网址，返回来源、时间和地点；不能证明场地可租、容量、价格或档期，也不是场地平面图。',
   inspect_zone:'读一块矩形场地：返回按米格画的局部平面（墙#、门窗=、柱子O、物件首字母、出入口E）以及该范围内的墙、洞口、柱子、物件（含 id 与坐标）。局部要改之前先看它，不要凭想象推断现状。',
   prepare_seating_candidate:'在本次原场景上试算一人一桌一椅组团，不删除已有物件、不写画布。须明确给数量、桌椅尺寸、间距与边界留距；这些是本次假设，不是库存或规范。返回 requested、placed、shortfall 和缺口原因；有候选时返回本次运行有效的 preparedId，调用 submit_candidates 时用 {preparedId} 提交。不能声称缺口已满足；出口、通行、消防和现场等仍需核验。用户未明确选择时只能作为标明假设的探索方案。',
   prepare_shared_seating_candidate:'仅当 context.seatingAllocation 是经核实的用户明确要求 shared_desk 且 peoplePerDesk 为 2 时，按人数试排每桌两把独立椅子。输入人数、桌椅尺寸、椅间净距、桌椅间距、行列间距与边界留距；返回实际人数、桌数、缺口、假设与运行内 preparedId。保留原场景，仅供预览，不代表实际库存或安全。',
-  find_free_areas:'让引擎寻找候选落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回候选落地中心坐标及到最近标注出入口的距离；结果不证明连续通行或现场条件。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，不保存。valid 为 true 时返回本次运行专用 validatedId，可用 {validatedId} 提交原候选；修改后必须重新检查。valid 只表示候选构建与部分几何检查结果，warnings 和 coverage 仍须查看，不代表通行、安全或规范通过。',submit_candidates:'结束本次运行并提交方案。优先使用本次 validate_candidate 成功返回的 {validatedId}；组团工具使用 {preparedId}；也可提交完整候选 {title,explanation,commands,materialSuggestions?}。每项只能选择其中一种且不得附加字段。JEV关闭提交1个，开启提交3个不同方案；说明性答复可用空 commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'提交 Aholo Lux3D 文生 3D 异步任务（付费，约数分钟）。完成后用户在历史模型面板手动加入场地；本方案不能包含刚提交的物件，不得声称已布置。仅用于参数化六类和现有资源都无法满足的定制物件。'};
+  find_free_areas:'让引擎寻找候选落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回候选落地中心坐标及到最近标注出入口的距离；结果不证明连续通行或现场条件。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，不保存。valid 为 true 时返回本次运行专用 validatedId，可用 {validatedId} 提交原候选；修改后必须重新检查。valid 只表示候选构建与部分几何检查结果，warnings 和 coverage 仍须查看，不代表通行、安全或规范通过。',submit_candidates:'结束本次运行并提交方案。优先使用本次 validate_candidate 成功返回的 {validatedId}；组团工具使用 {preparedId}；也可提交完整候选 {title,explanation,commands,materialSuggestions?}。每项只能选择其中一种且不得附加字段。JEV关闭提交1个，开启提交3个不同方案；说明性答复可用空 commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'提交 Aholo Lux3D 文生 3D 异步任务（付费，约数分钟）。完成后用户在历史模型面板手动加入场地；本方案不能包含刚提交的物件，不得声称已布置。仅用于参数化六类和现有资源都无法满足的定制物件。',
+  get_outdoor_plan:'读取本次运行的户外 2D 草稿（分区/设施/动线/节点/人员计数与锚点）。草稿是待核验快照，读取不代表已用于排布、容量核定或通过安全检查；无锚点时坐标仅为局部米制，不要产出经纬度。',
+  prepare_plan_zones:'在本次户外草稿上试算新增分区批次，不删除已有分区、不写画布。给语义类别、名称与 3–64 个米制顶点；越界只出提示，不自交退化环。返回本次运行有效的 preparedId，提交时用 {preparedId}。数量与边界为本次输入假设，不代表场地容量或通行条件。',
+  prepare_plan_facilities:'在本次户外草稿上试算新增设施批次，不写画布。templateId 必须命中内置模板目录或 oneplan 物件库白名单，未知模板直接报错不要编造；内置尺寸取自模板，oneplan 条目先用占位尺寸、前端落位后再校准。可给位置、朝向、归属分区。返回 preparedId。数字模板不代表实物库存或供应。',
+  prepare_plan_routes:'在本次户外草稿上试算新增出入口节点与动线批次。节点是动线唯一端点来源；起点/终点引用的节点必须存在。宽度可选，缺宽度视为待处理问题，不虚构通行净宽。返回 preparedId。',
+  prepare_plan_workers:'在本次户外草稿上试算新增人员点位批次。给岗位、人数（1–9999）、位置与可选归属分区；人数为本次输入假设，不代表核定容量。返回 preparedId。',
+  validate_plan_candidate:'在户外草稿上复核 prepare_plan_* 得到的候选，不保存。valid 为 true 时返回本次运行专用 validatedId；修改后必须重新检查。valid 仅表示构建与部分几何/引用检查通过，warnings 与 uncovered 仍须查看，不代表通行、消防、无障碍或规范通过。',
+  submit_plan_candidates:'结束本次户外运行并提交 1–3 个户外方案。优先用 validate_plan_candidate 返回的 {validatedId}，否则用 {preparedId}。候选仅预览，只有用户确认后才会落到本机户外平面；不能提前声称已应用。'};
 /** Whitelist-only, truncated argument digest for telemetry. Never stores full geometry, prompts or secrets. */
 function summarizeToolArgs(name:string, raw:string):string|null{
   let args:Record<string,unknown>;
@@ -114,6 +138,12 @@ function summarizeToolArgs(name:string, raw:string):string|null{
     case 'customize_material':picked={resourceId:shortId(args.resourceId),objectCount:Array.isArray(args.objectIds)?args.objectIds.length:undefined};break;
     case 'create_parametric_model':picked={category:typeof args.parameters==='object'&&args.parameters!==null?(args.parameters as Record<string,unknown>).category:undefined};break;
     case 'start_lux3d_model':picked={prompt:typeof args.prompt==='string'?args.prompt.slice(0,40):undefined};break;
+    case 'prepare_plan_zones':picked={count:Array.isArray(args.zones)?args.zones.length:undefined};break;
+    case 'prepare_plan_facilities':picked={count:Array.isArray(args.facilities)?args.facilities.length:undefined};break;
+    case 'prepare_plan_routes':picked={nodes:Array.isArray(args.nodes)?args.nodes.length:undefined,routes:Array.isArray(args.routes)?args.routes.length:undefined};break;
+    case 'prepare_plan_workers':picked={count:Array.isArray(args.workers)?args.workers.length:undefined};break;
+    case 'validate_plan_candidate':return null;
+    case 'submit_plan_candidates':picked={count:Array.isArray(args.candidates)?args.candidates.length:undefined};break;
     default:return null;
   }
   for(const [key,value] of Object.entries(picked))if(value===undefined)delete picked[key];
@@ -136,13 +166,16 @@ const candidateValidationCoverage={status:'partial' as const,
   ]};
 const progressLabels:Record<keyof typeof schemas,string>={get_scene:'正在读取当前场景',search_resources:'正在检索模型资源',search_places:'正在查询地点',
   inspect_zone:'正在读取局部平面',find_free_areas:'正在搜索可落点',prepare_seating_candidate:'正在试排课桌椅',prepare_shared_seating_candidate:'正在试排双人课桌椅',
-  create_parametric_model:'正在创建参数化模型',inspect_materials:'正在读取模型材质',customize_material:'正在创建材质副本',validate_candidate:'正在检查方案',submit_candidates:'正在整理候选方案',get_bom:'正在统计物料清单',start_lux3d_model:'正在提交 Lux3D 生成任务'};
+  create_parametric_model:'正在创建参数化模型',inspect_materials:'正在读取模型材质',customize_material:'正在创建材质副本',validate_candidate:'正在检查方案',submit_candidates:'正在整理候选方案',get_bom:'正在统计物料清单',start_lux3d_model:'正在提交 Lux3D 生成任务',
+  get_outdoor_plan:'正在读取户外平面',prepare_plan_zones:'正在试算新增分区',prepare_plan_facilities:'正在试算新增设施',prepare_plan_routes:'正在试算新增动线',prepare_plan_workers:'正在试算新增人员点位',validate_plan_candidate:'正在检查户外方案',submit_plan_candidates:'正在整理户外候选方案'};
 // 每个工具落在四段工作的哪一段。键是 schemas 的完整键集合，所以新增工具不填这一项
 // 会直接编译不过——阶段归属不能默默退回「看现状」。
 const phaseOfTool:Record<keyof typeof schemas,AgentPhase>={
   get_scene:'survey',inspect_zone:'survey',search_resources:'survey',search_places:'survey',inspect_materials:'survey',get_bom:'survey',
   find_free_areas:'locate',prepare_seating_candidate:'locate',prepare_shared_seating_candidate:'locate',create_parametric_model:'locate',start_lux3d_model:'locate',
-  validate_candidate:'compose',customize_material:'compose',submit_candidates:'deliver'};
+  validate_candidate:'compose',customize_material:'compose',submit_candidates:'deliver',
+  get_outdoor_plan:'survey',prepare_plan_zones:'locate',prepare_plan_facilities:'locate',prepare_plan_routes:'locate',prepare_plan_workers:'locate',
+  validate_plan_candidate:'compose',submit_plan_candidates:'deliver'};
 const tools=Object.entries(schemas).map(([name,schema])=>({type:'function',function:{name,description:descriptions[name as keyof typeof schemas],parameters:z.toJSONSchema(name==='submit_candidates'?submitToolSchema:schema,{io:'input'})}}));
 const baseTools=tools.filter(t=>t.function.name!=='start_lux3d_model');
 /** Bounds are checked against the submitted digital rectangle, not a measured site.
@@ -355,6 +388,15 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   let candidates:Candidate[]=[],lastError:unknown,repair=0,finished=false,consumedSteerTotal=0;
   const preparedSeating=new Map<string,ReturnType<typeof buildProposal>&{title:string;prepared:true}>();
   const validatedCandidates=new Map<string,z.infer<typeof candidateSchema>>();
+  // Outdoor 2D plan working copy (run-scoped memory, never persisted to the site).
+  const outdoorObservation=input.context.planObservation;
+  let outdoorDraft:SitePlanData|null=outdoorObservation?structuredClone(outdoorObservation.plan):null;
+  const outdoorAnchor=outdoorObservation?.anchor??null;
+  const preparedPlans=new Map<string,{draft:SitePlanData;added:PlanDraftAdded;warnings:{code:string;ids:string[]}[]}>();
+  const validatedPlans=new Map<string,{draft:SitePlanData;added:PlanDraftAdded;warnings:{code:string;ids:string[]}[]}>();
+  const outdoorCandidates:{label:'A'|'B'|'C';title:string;planCandidate:AgentPlanCandidate}[]=[];
+  const outdoorToolNames=new Set(['get_outdoor_plan','prepare_plan_zones','prepare_plan_facilities','prepare_plan_routes','prepare_plan_workers','validate_plan_candidate','submit_plan_candidates']);
+  const planCounts=(d:SitePlanData)=>({zones:d.zones.length,facilities:d.facilities.length,routes:d.routes.length,nodes:d.nodes.length,workers:d.workers.length});
   /** Fallback stash: prepared drafts and checked candidates not yet submitted when time runs out. */
   function fallbackStash():Candidate[]{
     const fromPrepared=[...preparedSeating.values()].slice(0,3).map((p,i)=>({...p,label:(['A','B','C'] as const)[i],title:p.title}));
@@ -458,8 +500,8 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     const layoutRecipes=renderRecipes(matchRecipes(`${input.instruction} ${input.context.brief}`));
     // Planning marks are exposed only on the explicit scene tool read. Avoid
     // sending local activity/floor identifiers to the provider as context.
-    const {annotationObservation: _annotationObservation,...modelContext}=input.context;
-    const messages:Record<string,unknown>[]=[{role:'system',content:miniMax?MINIMAX_AGENT_SYSTEM_PROMPT:AGENT_SYSTEM_PROMPT},{role:'user',content:JSON.stringify({instruction:input.instruction,context:modelContext,scene:sceneContext(input.scene),planOverview:sceneDigest(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog,layoutRecipes,...(_annotationObservation?{annotationNotice:'如需查看本次规划草案，请调用 get_scene。规划草案未核验，读取不代表已用于排布或通过安全检查。'}:{})})}];
+    const {annotationObservation: _annotationObservation,planObservation: _planObservation,...modelContext}=input.context;
+    const messages:Record<string,unknown>[]=[{role:'system',content:miniMax?MINIMAX_AGENT_SYSTEM_PROMPT:AGENT_SYSTEM_PROMPT},{role:'user',content:JSON.stringify({instruction:input.instruction,context:modelContext,scene:sceneContext(input.scene),planOverview:sceneDigest(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog,layoutRecipes,...(_planObservation?{planObservation:_planObservation}:{}),...(_annotationObservation?{annotationNotice:'如需查看本次规划草案，请调用 get_scene。规划草案未核验，读取不代表已用于排布或通过安全检查。'}:{})})}];
     /**
      * 每轮刷新的「刚才做了什么」简报，占一条固定位置的消息，内容整条替换、不追加。
      *
@@ -515,7 +557,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         beforeNotes?.();
         // Each earlier preview and handle belongs to the previous user request.
         // The guarded note RPC atomically invalidates stored checkpoints.
-        candidates=[];preparedSeating.clear();validatedCandidates.clear();validated.clear();validatedScores.clear();repair=0;seatingAttempts=0;lastEmptySeating=null;
+        candidates=[];preparedSeating.clear();validatedCandidates.clear();validated.clear();validatedScores.clear();repair=0;seatingAttempts=0;lastEmptySeating=null;preparedPlans.clear();validatedPlans.clear();outdoorCandidates.splice(0,outdoorCandidates.length);
       }
       for(const note of steering.notes??[]){
         userAttendance=readUserAttendance(note)??userAttendance;
@@ -544,7 +586,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       return !!steering.notes?.length;
     }
     async function finishCandidates(list:Candidate[], note?:string, options?:{skipCheck?:boolean}):Promise<void>{
-      if(!list.length)throw lastError??new ApiError('AGENT_NO_VALID_CANDIDATE',422);
+      if(!list.length&&!outdoorCandidates.length)throw lastError??new ApiError('AGENT_NO_VALID_CANDIDATE',422);
       if(!options?.skipCheck)await check();
       const evaluation=input.jevEnabled
         ? (miniMax ? {status:'unavailable' as const,message:'本次预览未调用外部评价服务，可自行比较方案。'}
@@ -554,7 +596,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       await Promise.race([eventChain,new Promise(resolve=>setTimeout(resolve,250))]);
       const partial=list.length<(input.jevEnabled?3:1);
       const fromStash=!candidates.length;
-      await call('finish',{steerTotal:consumedSteerTotal,evaluation,message:note??(partial?'仅部分方案通过检查，可查看有效结果。':undefined),...(fromStash?{candidates:list}:{})});
+      await call('finish',{steerTotal:consumedSteerTotal,evaluation,message:note??(partial?'仅部分方案通过检查，可查看有效结果。':undefined),...(fromStash?{candidates:list}:{}),...(outdoorCandidates.length?{planCandidates:outdoorCandidates}:{})});
     }
     /** Deadline-aware handoff: keep any validated candidate rather than hard-failing the whole run. */
     async function gracefulHandoff(turn:number, reason:string):Promise<void>{
@@ -588,7 +630,14 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(pressure.forceSubmit&&awaitingAnnotation)messages.push({role:'user',content:'先调用 get_scene 读取本次规划草案；本轮未取得返回结果前不要提交候选。'});
       if(forceSubmit)messages.push({role:'user',content:`现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个候选；优先用本次已通过验证的 {validatedId}，组团可用 {preparedId}，否则提交完整候选（title、explanation、commands）。不要继续读取或校验。提交仍需通过程序复核，JEV 方案由用户最终选择。`});
       const available=aholoReady?tools:baseTools;
-      const offered=available.filter(t=>(t.function.name!=='search_places'||placeReady)&&(!miniMax||!forceSubmit||t.function.name==='submit_candidates'));
+      const offered=available.filter(t=>{
+        const name=t.function.name;
+        if(name==='search_places'&&!placeReady)return false;
+        // 户外工具只在请求附带户外 planObservation 时暴露；室内流工具清单保持不变。
+        if(outdoorToolNames.has(name)&&!outdoorObservation)return false;
+        if(miniMax&&forceSubmit&&name!=='submit_candidates'&&name!=='submit_plan_candidates')return false;
+        return true;
+      });
       const { url, init } = chatRequest(env, { messages:compactRepeatedValidationArrays(messages), tools:offered, tool_choice:miniMax?'auto':forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.
       if(new TextEncoder().encode(init.body as string).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
@@ -681,6 +730,71 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               :{scene:input.scene,presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources()};
               const marks=input.context.annotationObservation;
               result=marks===undefined?sceneResult:{...sceneResult,annotationObservation:annotationForModel(marks,input.scene)};
+            }
+            else if(name==='get_outdoor_plan'){
+              if(!outdoorDraft)outdoorDraft=createStarterOutdoorPlan();
+              const d=outdoorDraft;
+              result={plan:{zones:d.zones,facilities:d.facilities,routes:d.routes,nodes:d.nodes,workers:d.workers},counts:planCounts(d),...(outdoorAnchor?{anchor:outdoorAnchor}:{}),notice:AGENT_PLAN_OBSERVATION_NOTICE};
+            }
+            else if(name==='prepare_plan_zones'){
+              if(!outdoorDraft)outdoorDraft=createStarterOutdoorPlan();
+              const a=args as z.infer<typeof schemas.prepare_plan_zones>;
+              const res=addPlanZones(outdoorDraft,a.zones,()=>crypto.randomUUID());
+              outdoorDraft=res.draft;
+              const preparedId=crypto.randomUUID();
+              preparedPlans.set(preparedId,{draft:res.draft,added:res.added,warnings:res.warnings});
+              result={preparedId,counts:planCounts(res.draft),added:res.added,warnings:res.warnings,notice:AGENT_PLAN_OBSERVATION_NOTICE};
+            }
+            else if(name==='prepare_plan_facilities'){
+              if(!outdoorDraft)outdoorDraft=createStarterOutdoorPlan();
+              const a=args as z.infer<typeof schemas.prepare_plan_facilities>;
+              const unknown=a.facilities.find(f=>!isAllowedFacilityTemplate(f.templateId));
+              if(unknown)throw new ApiError('PLAN_UNKNOWN_TEMPLATE',422,{templateId:unknown.templateId});
+              const res=addPlanFacilities(outdoorDraft,a.facilities,()=>crypto.randomUUID());
+              outdoorDraft=res.draft;
+              const preparedId=crypto.randomUUID();
+              preparedPlans.set(preparedId,{draft:res.draft,added:res.added,warnings:res.warnings});
+              result={preparedId,counts:planCounts(res.draft),added:res.added,warnings:res.warnings,notice:AGENT_PLAN_OBSERVATION_NOTICE};
+            }
+            else if(name==='prepare_plan_routes'){
+              if(!outdoorDraft)outdoorDraft=createStarterOutdoorPlan();
+              const a=args as z.infer<typeof schemas.prepare_plan_routes>;
+              const res=addPlanRoutes(outdoorDraft,a.nodes??[],a.routes,()=>crypto.randomUUID());
+              outdoorDraft=res.draft;
+              const preparedId=crypto.randomUUID();
+              preparedPlans.set(preparedId,{draft:res.draft,added:res.added,warnings:res.warnings});
+              result={preparedId,counts:planCounts(res.draft),added:res.added,warnings:res.warnings,notice:AGENT_PLAN_OBSERVATION_NOTICE};
+            }
+            else if(name==='prepare_plan_workers'){
+              if(!outdoorDraft)outdoorDraft=createStarterOutdoorPlan();
+              const a=args as z.infer<typeof schemas.prepare_plan_workers>;
+              const res=addPlanWorkers(outdoorDraft,a.workers,()=>crypto.randomUUID());
+              outdoorDraft=res.draft;
+              const preparedId=crypto.randomUUID();
+              preparedPlans.set(preparedId,{draft:res.draft,added:res.added,warnings:res.warnings});
+              result={preparedId,counts:planCounts(res.draft),added:res.added,warnings:res.warnings,notice:AGENT_PLAN_OBSERVATION_NOTICE};
+            }
+            else if(name==='validate_plan_candidate'){
+              const a=args as z.infer<typeof schemas.validate_plan_candidate>;
+              const saved=preparedPlans.get(a.preparedId)??validatedPlans.get(a.preparedId);
+              if(!saved)throw new ApiError('PLAN_CANDIDATE_NOT_FOUND',422,{preparedId:a.preparedId});
+              const validatedId=crypto.randomUUID();
+              validatedPlans.set(validatedId,saved);
+              result={validatedId,valid:true,warnings:saved.warnings,uncovered:planCandidateUncovered,counts:planCounts(saved.draft),notice:AGENT_PLAN_OBSERVATION_NOTICE};
+            }
+            else if(name==='submit_plan_candidates'){
+              const a=args as z.infer<typeof schemas.submit_plan_candidates>;
+              const accepted:{title:string;planCandidate:AgentPlanCandidate}[]=[];
+              const errors:{code:string;ids:string[]}[]=[];
+              for(const ref of a.candidates){
+                const handle=ref.validatedId??ref.preparedId!;
+                const saved=ref.validatedId?validatedPlans.get(ref.validatedId):preparedPlans.get(ref.preparedId!);
+                if(!saved){errors.push({code:'PLAN_CANDIDATE_NOT_FOUND',ids:[handle]});continue;}
+                accepted.push({title:ref.title,planCandidate:buildPlanCandidate(saved.draft,saved.added,ref.explanation,saved.warnings,outdoorAnchor)});
+              }
+              if(!accepted.length)throw new ApiError('INVALID_TOOL_INPUT',422,{errors});
+              accepted.slice(0,3).forEach((candidate,index)=>outdoorCandidates.push({label:(['A','B','C'] as const)[index],title:candidate.title,planCandidate:candidate.planCandidate}));
+              result={accepted:accepted.length,...(errors.length?{errors}:{}),notice:AGENT_PLAN_OBSERVATION_NOTICE};
             }
             else if(name==='search_places')result=await searchAgentPlaces(env,args,fetcher);
             else if(name==='search_resources') {
@@ -954,7 +1068,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       try{
         const list=candidates.length?candidates:fallbackStash();
         if(list.length){
-          await call('finish',{steerTotal:consumedSteerTotal,evaluation:null,message:'运行时间预算不足，保留已通过检查的候选',candidates:list});
+          await call('finish',{steerTotal:consumedSteerTotal,evaluation:null,message:'运行时间预算不足，保留已通过检查的候选',candidates:list,...(outdoorCandidates.length?{planCandidates:outdoorCandidates}:{})});
           finished=true;
           return;
         }

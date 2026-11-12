@@ -30,6 +30,11 @@ export function useSelection(): SelectionContextValue {
   return ctx;
 }
 
+/** 面板在缺少 SelectionProvider 的测试壳/独立挂载下取用选区；返回 null 时定位动作降级为不动作。 */
+export function useSelectionOptional(): SelectionContextValue | null {
+  return useContext(SelectionContext);
+}
+
 export interface SelectionProviderProps {
   value: SelectionContextValue;
   children: ReactNode;

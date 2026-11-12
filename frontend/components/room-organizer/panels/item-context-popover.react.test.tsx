@@ -6,6 +6,7 @@ import { SelectionProvider, type SelectionContextValue } from '../contexts/selec
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { MAX_ITEM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
 import { ENTRANCE_DOOR_ID } from '../lib/street';
+import { subscribeComposerPrefill, resetComposerPrefillBusForTests } from './composer-prefill-bus';
 import { ItemContextPopover } from './item-context-popover';
 import type { FurnitureItem } from '../lib/types';
 
@@ -23,8 +24,9 @@ function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
   };
 }
 
-function setup(selected: FurnitureItem, embedded = false) {
-  const floor = { ...INITIAL_LAYOUT.floors[0]!, items: [selected] };
+function setup(selected: FurnitureItem, embedded = false, options: { extras?: string[]; all?: string[]; extraItems?: FurnitureItem[] } = {}) {
+  const extraItems = options.extraItems ?? [];
+  const floor = { ...INITIAL_LAYOUT.floors[0]!, items: [selected, ...extraItems] };
   const editor = {
     layout: { ...INITIAL_LAYOUT, floors: [floor] },
     actions: { setLocked: vi.fn(), resizeItem: vi.fn(), moveItem: vi.fn(), setRotation: vi.fn(), setColor: vi.fn(), updateItem: vi.fn() },
@@ -33,13 +35,15 @@ function setup(selected: FurnitureItem, embedded = false) {
     activeFloorIndex: 0,
     history: { commitNow: vi.fn() },
   } as unknown as RoomEditorContextValue;
+  const extras = new Set(options.extras ?? []);
+  const all = new Set(options.all ?? [selected.id, ...(options.extras ?? [])]);
   const selection: SelectionContextValue = {
     selectedItemId: selected.id,
     setSelectedItemId: vi.fn(),
     selectedItem: selected,
-    extraSelectedIds: new Set<string>(),
+    extraSelectedIds: extras,
     setExtraSelectedIds: vi.fn(),
-    allSelectedIds: new Set<string>(),
+    allSelectedIds: all,
     selectOnly: vi.fn(),
   };
   const tree = (current: FurnitureItem, currentEditor: RoomEditorContextValue) => (
@@ -262,12 +266,84 @@ describe('manual selected item dimensions', () => {
     expect(editor.actions.resizeItem).toHaveBeenCalledOnce();
   });
 
-  it('reports a resize refused by the existing scene boundary instead of submitting a silent no-op', () => {
+  it('accepts an out-of-bounds resize at canvas time under the lenient interaction gate, leaving strict checks to save/submit', () => {
+    // 2026-11-11 地理优先主线：画布交互闸门放宽为 layoutGeometryIsAcceptable，越界/冲突
+    // 先放行、由 UI 红框/collectLayoutGeometryWarnings 提示；canApplyLayoutGeometry 严格
+    // 校验只留在保存/提交路径（use-item-placement），见 layout-reducer.caps.test.ts。
     const editor = setup(placed({ source: 'builtin', type: 'table', position: { x: 0, z: 0 } }));
-    const original = JSON.stringify(editor.layout), input = screen.getByRole('spinbutton', { name: '宽 / 米' });
+    const input = screen.getByRole('spinbutton', { name: '宽 / 米' });
     fireEvent.change(input, { target: { value: '12' } }); fireEvent.blur(input);
-    expect(screen.getByRole('alert').textContent).toContain('这个尺寸无法应用');
-    expect(editor.actions.resizeItem).not.toHaveBeenCalled(); expect(editor.history.commitNow).not.toHaveBeenCalled();
-    expect(JSON.stringify(editor.layout)).toBe(original);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('placed-1', 'width', 12);
+    expect(editor.history.commitNow).toHaveBeenCalledOnce();
+  });
+});
+
+describe('local AI action entry', () => {
+  afterEach(() => {
+    cleanup();
+    resetComposerPrefillBusForTests();
+  });
+
+  it('prefills a single-item scope note plus chip instruction through the bus, without sending', () => {
+    const prefill = vi.fn();
+    const unsubscribe = subscribeComposerPrefill(prefill);
+    setup(placed({ name: '主沙发' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '挪开重叠' }));
+
+    expect(prefill).toHaveBeenCalledExactlyOnceWith('针对选中的 1 件物料：主沙发。把叠在一起的物料挪开');
+    unsubscribe();
+  });
+
+  it('prefills a typed instruction on Enter and clears the local draft', () => {
+    const prefill = vi.fn();
+    const unsubscribe = subscribeComposerPrefill(prefill);
+    setup(placed({ name: '主沙发' }));
+
+    const input = screen.getByRole('textbox', { name: '局部调整说明' });
+    fireEvent.change(input, { target: { value: '往左挪半米' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(prefill).toHaveBeenCalledExactlyOnceWith('针对选中的 1 件物料：主沙发。往左挪半米');
+    expect((input as HTMLInputElement).value).toBe('');
+    unsubscribe();
+  });
+
+  it('lists extra selected items in the scope note and truncates beyond four names', () => {
+    const prefill = vi.fn();
+    const unsubscribe = subscribeComposerPrefill(prefill);
+    const extras = Array.from({ length: 6 }, (_, index) => placed({ id: `extra-${index}`, name: `边椅${index + 1}` }));
+    setup(placed({ name: '主桌' }), false, {
+      extraItems: extras,
+      extras: extras.map(item => item.id),
+      all: ['placed-1', ...extras.map(item => item.id)],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '评估这块布局' }));
+
+    expect(prefill).toHaveBeenCalledExactlyOnceWith(
+      '针对选中的 7 件物料：主桌、边椅1、边椅2、边椅3 等 7 件。评估这块布局有没有更合适的摆法',
+    );
+    unsubscribe();
+  });
+
+  it('disables the whole local AI entry for a locked item and does not prefill', () => {
+    const prefill = vi.fn();
+    const unsubscribe = subscribeComposerPrefill(prefill);
+    setup(placed({ locked: true }));
+
+    expect((screen.getByRole('textbox', { name: '局部调整说明' }) as HTMLInputElement).disabled).toBe(true);
+    for (const label of ['挪开重叠', '换成同类物料', '评估这块布局']) {
+      expect((screen.getByRole('button', { name: label }) as HTMLButtonElement).disabled).toBe(true);
+    }
+    fireEvent.click(screen.getByRole('button', { name: '挪开重叠' }));
+    expect(prefill).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('keeps the prefill button disabled while the custom input is empty', () => {
+    setup(placed({ name: '主沙发' }));
+    expect((screen.getByRole('button', { name: '预填' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

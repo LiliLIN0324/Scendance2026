@@ -860,6 +860,8 @@ export interface OutdoorPlanCanvasHandle {
   ): boolean;
   /** 3D 编辑时用来同步预览、选中态和正在画/放的草稿。 */
   getEditVisuals(): PlanEditVisuals;
+  /** 2026-11-12 B3 一期：当前户外选区 id（zone/facility/route/node/worker/annotation + 组选设施）；无选空数组。 */
+  getSelectedIds(): string[];
 }
 
 /** 3D 倾斜地图用来叠当前编辑预览（草稿折线、幽灵占位）。 */
@@ -2393,6 +2395,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           ghostMarker: null,
         },
       };
+    },
+    getSelectedIds: () => {
+      const picked = [selectedZoneRef.current, selectedFacilityRef.current, selectedRouteRef.current, selectedNodeRef.current, selectedWorkerRef.current, selectedAnnotationRef.current, ...multiSelectedFacilityIdsRef.current];
+      return [...new Set(picked.filter((id): id is string => !!id))];
     },
   }));
 

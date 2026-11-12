@@ -4,6 +4,8 @@ import { materialSuggestionSchema } from './agent-material-contract.ts';
 import { modelSuggestionSchema } from './ai.ts';
 import { AGENT_PHASES } from './agent-progress.ts';
 import { activityTaskRunRequestSchema, activityTaskRunSchema, modelGeneratedTextNoticeSchema } from './activity-task-contract.ts';
+import { planAnchorSchema, sitePlanDataSchema, AGENT_PLAN_OBSERVATION_NOTICE } from './site-plan.ts';
+import { agentPlanCandidateSchema } from './plan-candidate.ts';
 
 const seatingEvidence=z.string().trim().min(1).max(200);
 export const agentSeatingAllocationSchema=z.discriminatedUnion('status',[
@@ -40,6 +42,17 @@ export const agentAnnotationObservationSchema=z.discriminatedUnion('status',[
   }
   if(points>1000)ctx.addIssue({code:'custom',message:'too many annotation points'});
 });
+// Outdoor 2D plan draft attached as an observation: a frozen local snapshot,
+// never a verified site fact, capacity figure or clearance result. Optional
+// end-to-end so older clients and legacy workers ignore the field entirely.
+export { AGENT_PLAN_OBSERVATION_NOTICE };
+export const agentPlanObservationSchema=z.strictObject({
+  plan:sitePlanDataSchema,
+  anchor:planAnchorSchema.nullable().optional(),
+  selected:z.array(uuid).max(50).optional(),
+  planHash:z.string().min(1).max(128).optional(),
+  notice:z.literal(AGENT_PLAN_OBSERVATION_NOTICE),
+});
 export const agentContextSchema=z.strictObject({
   brief:z.string().max(12000).default(''),acceptedDecisions:z.array(z.string().max(1000)).max(20).default([]),
   recentMessages:z.array(z.strictObject({role:z.enum(['user','assistant']),text:z.string().max(3000)})).max(12).default([]),
@@ -47,6 +60,7 @@ export const agentContextSchema=z.strictObject({
   seatingAllocation:agentSeatingAllocationSchema.optional(),
   seatingSpecs:agentSeatingSpecsSchema.optional(),
   annotationObservation:agentAnnotationObservationSchema.optional(),
+  planObservation:agentPlanObservationSchema.optional(),
 });
 export const agentRunRequestSchema=z.strictObject({
   ...leaseSchema.shape,requestId:uuid,localRevision:z.number().int().nonnegative(),scene:sceneSchema,
@@ -73,7 +87,9 @@ export const agentRunSchema=z.object({
   modelText:modelGeneratedTextNoticeSchema.optional(),
   /** 这一趟工作推进到哪一段（四段工作）。可空：没有阶段账的老记录与活动任务运行都没有这条，界面就不显示阶段。 */
   phase:z.enum(AGENT_PHASES).nullish(),
-  candidates:z.array(z.object({label:z.enum(['A','B','C']),title:z.string(),proposal:agentProposalSchema})).max(3),
+  candidates:z.array(z.object({label:z.enum(['A','B','C']),title:z.string(),proposal:agentProposalSchema,planCandidate:agentPlanCandidateSchema.optional()})).max(3),
+  /** 户外平面候选：与 scene proposals 并列的独立清单，未确认前不落户外平面。 */
+  planCandidates:z.array(agentPlanCandidateSchema).max(3).optional(),
   evaluation:agentEvaluationSchema.nullable(),errorCode:z.string().optional(),message:z.string().optional(),
   executionMode:z.enum(['preview','direct']),jevEnabled:z.boolean(),expiresAt:z.string(),
   /** 这趟一共收到过几条运行中改道备注；活动任务运行没有这条通道，缺省为 0。 */

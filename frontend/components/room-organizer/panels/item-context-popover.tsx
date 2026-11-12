@@ -12,7 +12,9 @@ import { editorItemLimit } from '../lib/scene-presets';
 import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { MaterialGlyph, NumberField } from './scendance-workspace';
 import { routeIsLoop, routeLength } from '../lib/person-route';
+import { requestComposerPrefill } from './composer-prefill-bus';
 import type { FurnitureItem, PersonAction, WalkRoute } from '../lib/types';
+import './item-context-popover.css';
 
 export interface ItemContextPopoverProps {
   embedded?: boolean;
@@ -106,13 +108,60 @@ function provenanceLine(item: FurnitureItem): string | null {
   return null;
 }
 
+const AI_SCOPE_NAME_LIMIT = 4;
+
+/** 局部动作可点选的保守指令；label 给人看，draft 是预填进 composer 的句子。 */
+const LOCAL_ACTION_CHIPS: Array<{ label: string; draft: string }> = [
+  { label: '挪开重叠', draft: '把叠在一起的物料挪开' },
+  { label: '换成同类物料', draft: '换成同类的其他物料' },
+  { label: '评估这块布局', draft: '评估这块布局有没有更合适的摆法' },
+];
+
+/**
+ * 把主选物件 + 圈选/Shift 加选解析成去重、截断的名称清单。
+ * 拖拽中的 marquee 草稿框不会进 selection，只有释放后落进 allSelectedIds 的才算作用域。
+ */
+function describeSelectionScope(
+  floorItems: readonly FurnitureItem[],
+  primary: FurnitureItem,
+  extraIds: ReadonlySet<string>,
+): { count: number; names: string[] } {
+  const byId = new Map(floorItems.map(entry => [entry.id, entry]));
+  const ids: string[] = [primary.id];
+  for (const id of extraIds) {
+    if (id !== primary.id) ids.push(id);
+  }
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const id of ids) {
+    const name = (byId.get(id)?.name ?? (id === primary.id ? primary.name : '')).trim();
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      names.push(name);
+    }
+  }
+  return { count: ids.length, names };
+}
+
+/** 作用域备注：单件 / 多选 / 无名兜底三种写法；名称最多列 4 件，超出补「等 N 件」。 */
+function buildScopeNote(scope: { count: number; names: string[] }): string {
+  if (scope.names.length === 0) return '针对当前选中的物料。';
+  const shown = scope.names.slice(0, AI_SCOPE_NAME_LIMIT);
+  const more = scope.count - shown.length;
+  const list = shown.join('、');
+  return `针对选中的 ${scope.count} 件物料：${more > 0 ? `${list} 等 ${scope.count} 件` : list}。`;
+}
+
 export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element {
   const { layout, actions, pushColor, activeFloor, activeFloorIndex, history } = useRoomEditor();
-  const { selectedItem: item } = useSelection();
+  const { selectedItem: item, extraSelectedIds, allSelectedIds } = useSelection();
   // 名称草稿：与尺寸草稿同一套「回车/失焦才提交」的习惯（#P0-3）
   const [nameDraft, setNameDraft] = useState(item?.name ?? '');
+  // 局部 AI 动作的内联说明草稿；只经总线预填到既有 composer，不在弹层里发送。
+  const [aiDraft, setAiDraft] = useState('');
   useEffect(() => {
     setNameDraft(item?.name ?? '');
+    setAiDraft('');
   }, [item?.id, item?.name]);
   if (!item) return <></>;
   const commitName = (): void => {
@@ -128,6 +177,20 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   const structuralSize = !!item.structuralOpeningId || !!item.structuralColumnId;
   const entranceSize = !!item.venueEntranceId || item.id === ENTRANCE_DOOR_ID;
   const protectedStructure = !!layout.backendSceneV2 && structuralSize;
+  // 局部 AI 动作作用域：主选 + 已落定的圈选/加选；marquee 草稿框此刻还没进 selection。
+  const scopeIds = allSelectedIds.size > 0 ? allSelectedIds : extraSelectedIds;
+  const scope = describeSelectionScope(activeFloor.items, item, scopeIds);
+  const scopeNote = buildScopeNote(scope);
+  const scopeMissing = scope.names.length === 0;
+  const aiEntryDisabled = locked || protectedStructure;
+  const submitAiAction = (instruction: string): void => {
+    if (aiEntryDisabled || scopeMissing) return;
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+    // 只预填：作用域备注 + 指令，经总线进既有 composer；不自动发送，仍走原提案审批链。
+    requestComposerPrefill(`${scopeNote}${trimmed}`);
+    setAiDraft('');
+  };
   const isPerson = item.type === 'person';
   const position = item.position ?? { x: 0, z: 0 };
   const rotation = ((item.rotation ?? 0) * 180 / Math.PI % 360 + 360) % 360;
@@ -158,6 +221,36 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
       <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={16}/> : <Unlock size={16}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
       {protectedStructure && <p className="sc-warning">门窗和柱子的尺寸、位置请在结构面板中核对修改。</p>}
       {props.hasCollision && <p className="sc-warning">物料可能重叠或超出场地，请检查位置。</p>}
+      <section className="sc-ai-local" aria-label="局部 AI 动作">
+        <h3>让 AI 按这块调整</h3>
+        {scopeMissing ? <p className="sc-warning" role="alert">没有可识别的选中物件，先在画布上点选一件再试。</p> : <>
+          <div className="sc-ai-local-row">
+            <input
+              aria-label="局部调整说明"
+              className="sc-ai-local-input"
+              placeholder="只调整选中的物件…"
+              maxLength={120}
+              value={aiDraft}
+              disabled={aiEntryDisabled}
+              onChange={event => setAiDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') { event.preventDefault(); submitAiAction(aiDraft); }
+              }}
+            />
+            <button type="button" className="sc-button" disabled={aiEntryDisabled || !aiDraft.trim()} onClick={() => submitAiAction(aiDraft)}>预填</button>
+          </div>
+          <div className="sc-ai-chips" role="group" aria-label="局部动作">
+            {LOCAL_ACTION_CHIPS.map(chip => <button
+              key={chip.label}
+              type="button"
+              className="chip btn-outline sc-ai-chip"
+              disabled={aiEntryDisabled}
+              onClick={() => submitAiAction(chip.draft)}
+            >{chip.label}</button>)}
+          </div>
+          <p className="sc-note">指令只预填到对话框，复核后再发送；改动仍走提案确认，不降低确认档位。</p>
+        </>}
+      </section>
       <section><h3>物料尺寸</h3><div className="sc-dimension-grid">
         {DIMENSIONS.map(dimension => <DimensionInput key={`${layout.id ?? 'local'}:${activeFloor.id}:${item.id}:${dimension.key}:${locked}`}
           label={dimension.label} value={item[dimension.key]} min={dimension.min} disabled={locked || structuralSize || entranceSize} onCommit={value => {
