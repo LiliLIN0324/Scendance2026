@@ -1,0 +1,352 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>杭州菊花艺术展研究档案 · 幕景</title><style>:root{--ink:#20352c;--muted:#4c6057;--line:#d8e0da;--green:#22543d;--soft:#f4f7f3;--water:#dfebee;--gold:#efd8a4}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-padding-top:88px}
+body{margin:0;background:#fff;color:var(--ink);font:16px/1.65 "Microsoft YaHei","Noto Sans SC","PingFang SC",sans-serif}
+a{color:var(--green);text-underline-offset:3px}
+button,input{font:inherit}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #ae6e25;outline-offset:3px}
+h1,h2,h3,p,figure{margin:0}
+h1{font-size:clamp(3rem,7vw,6.2rem);letter-spacing:-.055em;line-height:1.04}
+h2{font-size:clamp(1.8rem,4vw,3.1rem);letter-spacing:-.035em;line-height:1.2}
+h3{font-size:1.15rem;line-height:1.4}
+.wrap{width:min(1140px,calc(100% - 52px));margin-inline:auto}
+nav{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line)}
+.nav{display:flex;gap:clamp(12px,3vw,30px);align-items:center;min-height:62px;white-space:nowrap;overflow:auto}
+.nav a{font-size:.875rem;text-decoration:none;color:var(--ink)}
+.nav a:first-child{font-size:1.12rem;font-weight:800}
+.hero{display:grid;grid-template-columns:minmax(0,.93fr) minmax(0,1.07fr);gap:46px;align-items:center;padding-block:56px 62px}
+.hero figure img{aspect-ratio:1.24;object-fit:cover;border-radius:8px}
+.eyebrow{color:var(--green);font-size:.82rem;font-weight:750;margin-bottom:14px}
+.lead{max-width:68ch;color:var(--muted);margin-top:18px}
+.hero .lead{max-width:36ch}
+.button,button{display:inline-block;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:7px 13px;font-size:.88rem;font-weight:700;text-decoration:none}
+.primary,.variants button[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff}
+.hero .button{margin-top:25px;padding:10px 15px}
+.band,.chapter{padding-block:48px 54px}
+.band{background:#fff;border-block:1px solid var(--line)}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.maps,.evidence,.decision-grid,.steps,.trial,.story,.source-list{margin-top:24px}
+img{display:block;width:100%;height:auto}
+figcaption,.caption{font-size:.83rem;color:var(--muted);line-height:1.55;margin-top:8px}
+figcaption a,.lead a,.story a{margin-left:.35em}
+.map{position:relative;overflow:hidden;isolation:isolate;border-radius:8px;background:#dae5de}
+.map img{width:100%;height:100%;position:absolute;inset:0;object-fit:fill}
+.map.region{aspect-ratio:1.11}
+.map.approach{aspect-ratio:1.11}
+.park-map{aspect-ratio:1260/1157}
+.park-layout,.market-workspace{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:24px;margin-top:24px;align-items:start}
+.park-legend{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin:0;padding-left:27px;font-weight:700}
+.park-legend li::marker{color:var(--green)}
+.park-map .park-pin{transform:translate(-50%,-50%);display:block}
+.park-pin i{display:none}
+.park-pin span{display:grid;place-items:center;padding:0;width:20px;height:20px;border-radius:50%;border:1px solid #fff;background:#154735;color:#fff;font-weight:800}
+.market-workspace figure .actions{margin:0 0 10px}
+.market-plan{position:relative;height:clamp(280px,37vw,365px);border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#f3f5f0;font-size:clamp(.7rem,1.25vw,.9rem);font-weight:750}
+.market-edge,.market-path,.market-workshop,.market-queue,.market-back,.market-stalls{position:absolute;display:grid;place-items:center;text-align:center}
+.market-edge{top:0;left:0;right:0;height:16%;background:#dce8d9;color:var(--green)}
+.market-path{bottom:0;left:0;right:0;height:22%;background:#dfeaf0;border-top:2px dashed #87a7b0;padding:3px;line-height:1.2}
+.market-path span{font-size:.85em;font-weight:500}
+.market-stalls{top:29%;left:5%;width:53%;height:33%;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,1fr);gap:5px}
+.market-stalls span{align-self:stretch;display:grid;place-items:center;background:#e3eddf;border:1px solid #7d9a7c;border-radius:4px;padding:3px;line-height:1.15}
+.market-workshop{top:27%;right:5%;width:30%;height:20%;background:#e7deef;border:1px solid #a392b0;border-radius:4px;padding:3px}
+.market-queue{right:5%;top:71%;height:18%;width:32%;background:#ffe0cd;border:2px dashed #a84926;border-radius:4px;padding:3px}
+.market-plan[data-layout="b"] .market-queue{top:49%;height:18%;background:#f4e8c9;border-color:#956824}
+.market-back{top:17%;right:6%;height:8%;font-size:.9em;color:var(--muted)}
+.market-review{padding-top:12px;border-top:2px solid var(--green)}
+.market-review>p{margin-top:7px;color:var(--muted)}
+.map canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+.pin{display:flex;align-items:center;gap:4px;position:absolute;z-index:2;left:calc(var(--x) * 1%);top:calc(var(--y) * 1%);transform:translate(-5px,-6px);font-size:clamp(.61rem,1vw,.76rem);white-space:nowrap}
+.pin i{width:10px;height:10px;border:2px solid white;border-radius:50%;background:#f5c16b}
+.pin span,.north{background:#172f25;color:#fff;border-radius:4px;padding:1px 5px}
+.pin.lake i{display:none}
+.north{position:absolute;right:10px;top:10px;font-size:.75rem}
+details{border-top:1px solid var(--line);margin-top:20px;padding-top:12px}
+summary{cursor:pointer;font-weight:750}
+details p{margin:10px 0}
+iframe{border:1px solid var(--line);width:100%;height:clamp(320px,58vw,600px);margin-top:12px}
+.evidence{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:25px}
+.evidence img{border-radius:8px}
+.plan-image{position:relative}
+.plan-marker{position:absolute;top:73%;left:55%;transform:translate(-50%,0);border-radius:4px;background:var(--green);color:white;padding:2px 7px;font-size:.75rem;white-space:nowrap}
+.plan-marker::before{content:"";position:absolute;bottom:100%;left:50%;height:12px;border-left:2px solid var(--green)}
+.photos{grid-template-columns:1fr;align-content:start;gap:15px}
+.photos img{aspect-ratio:2.0;object-fit:cover}
+.photo-notes{margin-top:24px}
+.photo-notes img{aspect-ratio:1.6;object-fit:contain;background:var(--soft);border-radius:8px}
+.site-detail{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:25px;align-items:start;margin-top:32px}
+.site-sketch{position:relative;display:grid;grid-template-columns:1fr 1.2fr;grid-template-rows:1fr 1.3fr auto;gap:12px;padding:36px 16px 16px;min-height:224px;background:var(--soft);border:1px solid var(--line);border-radius:8px}
+.site-sketch div{display:grid;place-items:center;border-radius:5px;padding:6px;text-align:center;font-size:.87rem;font-weight:750}
+.fine-rain{grid-column:1;grid-row:1;background:var(--water);border:1px dashed #7b9da5}
+.pearl{grid-column:1;grid-row:2;background:var(--water);border:1px dashed #7b9da5}
+.main-pool{grid-column:2;grid-row:2;background:var(--water);border:1px solid #7b9da5}
+.south-gallery{grid-column:2;grid-row:3;background:#e3eddf;border:1px solid #7d9a7c}
+.site-notes article+article{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.site-notes p,.build-spec dd{color:var(--muted)}
+.activity-points{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:24px}
+.activity-points article{padding:16px;border:1px solid var(--line);border-radius:8px}
+.activity-points article>p:last-child{color:var(--muted);margin-top:7px}
+.activity-place{color:var(--green);font-size:.85rem;font-weight:750;margin-bottom:5px}
+.build-spec{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:10px 14px;margin-bottom:0}
+.build-spec dt{font-weight:750}
+.build-spec dd{margin:0}
+.decision-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.decision-grid article{border-top:2px solid var(--green);padding-top:12px}
+.decision-grid p,.story p,.steps span,.trial-input p{color:var(--muted);margin-top:6px}
+.steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px 32px;padding-left:24px}
+.steps li{padding-left:4px}
+.steps li::marker{color:var(--green);font-weight:800}
+.steps span{display:block}
+.trial{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:26px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:25px}
+.actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+.layout{margin-top:12px;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#f3f5ee}
+.pool,.lane,.route{padding:9px 12px}
+.pool{background:var(--water);font-weight:750}
+.rail{display:flex;justify-content:space-between;align-items:center;gap:8px;border-block:1px solid #b2c4b8;padding:0 8px;background:#f0ede0;font-size:.72rem;color:#405b4b}
+.rail i{width:12px;height:14px;background:#776e56}
+.lane{display:flex;justify-content:flex-start;align-items:center;min-height:43px;border-bottom:1px solid #ffffffb0;font-size:.9rem;font-weight:750}
+.lane span:first-child{flex:0 0 7.5em}
+.display{background:#e5c174}
+.pots{display:grid;grid-template-columns:repeat(6,17px);gap:4px}
+.pots i{width:17px;height:17px;border-radius:50%;background:#a96a23;border:2px solid #fff1c9}
+.pots i:nth-child(3n){background:#a9543b}
+.layout[data-variant="A"] .pots{grid-template-columns:repeat(3,17px)}
+.stopping{background:#f4e7c6}
+.walking{background:#d9ebdc}
+.flow{letter-spacing:.14em;color:#35654b}
+.layout[data-variant="A"] .display{min-height:70px}
+.layout[data-variant="B"] .walking{min-height:70px}
+.route{background:#edf2ec;color:var(--muted);border-top:1px dashed #659276;font-size:.78rem}
+.route-figure{margin-top:25px}
+.route-diagram{border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:10px}
+.route-row{display:grid;grid-template-columns:4em 1fr auto 1fr auto 1fr;align-items:center;gap:8px;font-size:clamp(.71rem,2vw,.91rem)}
+.route-row span{background:#e3eddf;padding:8px 4px;border-radius:4px;text-align:center}
+.route-row.service span{background:#f6edda;border:1px dashed #a08350}
+.trial-input p{font-size:.92rem}
+form{display:grid;gap:6px;margin-top:10px}
+label{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.86rem}
+input{width:80px;flex:none;border:1px solid #a7b9ac;border-radius:5px;padding:4px 6px;color:var(--ink)}
+output{display:block;font-size:.86rem;background:#edf5ed;border-radius:6px;padding:9px;margin-top:4px}
+.note{margin-top:22px;padding:14px 16px;border-left:3px solid #688675;background:var(--soft)}
+.story{max-width:77ch}
+.story p+p{margin-top:12px}
+.source-list{padding-left:20px}
+@media(max-width:760px){.wrap{width:calc(100% - 34px)}.hero,.evidence,.photo-notes,.site-detail,.trial,.maps,.decision-grid,.steps{grid-template-columns:1fr}.hero{gap:24px;padding-block:32px}.band,.chapter{padding-block:32px}.trial{padding:16px}.hero figure img{aspect-ratio:1.65}.decision-grid{gap:15px}.route-row{gap:4px}}
+@media print{nav,.actions,#westlake-3d,.hero .button{display:none}.band,.chapter,.hero{padding-block:24px}.trial,.evidence{break-inside:avoid}}
+@media(max-width:760px){.activity-points,.park-layout,.market-workspace{grid-template-columns:1fr}}
+
+.research{max-width:1080px;padding:44px 0}.research header{border-bottom:2px solid #22543d;padding-bottom:22px}
+.research h1{font-size:clamp(2rem,5.5vw,4rem)}.research h2{margin:32px 0 12px;font-size:clamp(1.55rem,4vw,2.4rem)}
+.research h3{margin:24px 0 9px;color:#24533e}.research p{margin:9px 0}.research li+li{margin-top:8px}
+.research table{width:100%;border-collapse:collapse;font-size:.87rem;line-height:1.55;margin:12px 0;table-layout:fixed}
+.research th,.research td{border:1px solid #d8e0da;padding:8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.research th{background:#edf3ed}.research table th:first-child{width:22%}.research table a{white-space:normal}
+.research :target{background:#f3f6ee}.research .jump{display:flex;gap:8px 16px;flex-wrap:wrap;margin-top:16px}
+</style></head><body>
+<nav aria-label="研究目录"><div class="wrap nav"><a href="/introduction#site-cases">幕景官网</a><a href="./yuquan-market-proposal.html#research">返回市集策划</a><a href="#fixed-sites">玉泉展陈</a><a href="#procurement">采购与养护</a><a href="#venues">六个分会场</a></div></nav>
+<main class="wrap research"><header><p class="eyebrow">杭州植物园 · 场地与活动研究</p><h1>杭州菊花艺术展研究档案</h1>
+<p class="lead">从主会场真实展陈与历届活动，到招标、布展、换花与撤场。每条资料保留适用地点、年份和来源。</p>
+<div class="jump"><a class="button primary" href="./yuquan-exhibit-study.html#restoration">看玉泉复原与试排</a><a class="button" href="./yuquan-market-proposal.html#maps">回路线与鸟瞰</a><a class="button" href="./yuquan-market-proposal.html#survey">回现场补拍表</a></div></header>
+<h2 id="overview">这届活动能查到什么</h2>
+<table>
+<thead>
+<tr>
+<th>事项</th>
+<th>公开证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>届次和时间</td>
+<td>2026 年 11 月 3 日在杭州植物园启幕。开幕报道写主会场展至 11 月底。拱墅桥西分会场报道明确至 11 月 30 日，其余分会场结束时间应分开核。 <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">杭州网开幕报道</a> · <a href="https://www.hzzx.gov.cn/cshz/content/2026-11/04/content_9366947.htm">杭州政协网展期报道</a> · <a href="https://jrsh.hangzhou.com.cn/content/2026-11/03/content_9366564.html">桥西分会场</a></td>
+</tr>
+<tr>
+<td>主场位置</td>
+<td>杭州植物园，重点展陈在玉泉鱼跃景区及园内其他节点。高德杭州植物园 POI 为桃源岭 1 号，原始坐标 120.117009°E、30.252910°N，按高德坐标体系记录为 GCJ-02。北门在玉古路，园区代表点与北门、玉泉各小品的位置分别处理。 <a href="https://ditu.amap.com/place/B023B09LTB">高德地点</a> · <a href="https://www.hzzx.gov.cn/cshz/content/2026-11/04/content_9366947.htm">入园线路报道</a></td>
+</tr>
+<tr>
+<td>展区和规模</td>
+<td>全城 1 个主会场、6 个分会场，共 9 万余盆、700 余品种。主场四类展陈是精品品种菊、菊艺小品、生态阳台、创意微花园。精品菊分布于鱼乐园长廊、晴空细雨池和古珍珠泉畔。总量口径属于全城，主场精品菊报道为 1500 余盆。 <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">主场及分场报道</a></td>
+</tr>
+<tr>
+<td>园内活动</td>
+<td>报道列有西泠印社书画印展与讲座、浙江大学参与的真菌科普展、浙江省林业局公益赠花活动等。西泠印社、浙江大学等按公开内容关联各自活动，整届统筹名单另核。 <a href="https://ori.hangzhou.com.cn/ornews/content/2026-11/03/content_9366688.htm">活动报道</a></td>
+</tr>
+<tr>
+<td>既有技术</td>
+<td>现场报道记录了植物园使用 Rokid AI 眼镜做观众导览，定位后触发讲解。现有证据针对游客体验，布展团队的排期、物料与施工协作工具尚待核。 <a href="https://ori.hangzhou.com.cn/ornews/content/2026-11/03/content_9366688.htm">设备与用途</a></td>
+</tr>
+<tr>
+<td>园方角色</td>
+<td>园方公开预算材料列有植物收集、展示、科普和园林管理职责。花卉苗木项目的采购公告转载将园方列为采购人。该角色不延伸为各分会场采购人、总包方或本届唯一主办方。 <a href="https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web3174/site/attach/0/966cb6ea21bd4e4993d85486e506037c.pdf">园方职责</a> · <a href="https://www.yfbzb.com/inviteBid/detail/20260923_634008580.html">采购公告转载</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="fixed-sites">鱼乐园长廊的固定条件与当届摆放线索</h2>
+<p><strong>市集与展期活动。</strong> 开幕资料列便民市集、集章、金石传拓、赠花及专题活动，尚未核到便民摊位数、摊区和开放时段。开幕现场走访将「杭花花」文创店定位在南瓜马车景观后方的小花园。市科协记录「伞下乾坤」在植物资源馆临展厅自 9 月 10 日开展，展期覆盖菊展。同一份科协记录确认 9 月科普文创市集曾设在玉泉鱼跃，11 月便民市集另待当届地图。 <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">当届活动报道</a> · <a href="https://tidenews.com.cn/news.html?id=3604230">开幕日现场走访</a> · <a href="https://www.hkx.org.cn/mindex/gzdt/13963.html">市科协活动记录</a></p>
+<ul>
+<li><strong>可放进底图的条件。</strong> 2024 年公开报道记录主景鱼池长约 20 米、宽约 10 米，廊墙和鱼池周边有常设科普展板，南苑门可通往植物资源馆。尺寸只作量级对照。正式试排前拍科普牌、柱间和转角同框，测扣除固定障碍后的可用净宽，确认读牌是否会形成第二个停留点。南苑门在游客线路中出现，作业通行权限待核。 <a href="https://www.hzzx.gov.cn/cshz/content/2024-05/13/content_8728215.htm">园方亲子路线报道</a></li>
+<li><strong>展陈分届。</strong> 2025 年报道确认同样三处品种菊展点并记录百菊展台。2026 年开幕报道确认三处展陈，开幕前预告称品种菊长廊约 200 米。预告未给测量范围，试排不据此推算轴距、通行净宽或逐盆密度。 <a href="https://zjnews.zjol.com.cn/yc/qmt/202510/t20251030_31315961.shtml">2025当届展陈</a> · <a href="https://hznews.hangzhou.com.cn/chengshi/content/2026-11/01/content_9363470.htm">2026开幕前介绍</a></li>
+<li><strong>入口邻近展陈。</strong> 2026 年开幕采访将猫形小品放在玉泉观鱼入口，另一篇当届走访记录《菊月邀》在玉泉门口并提到淳安县住建局选送。两条材料可用于提醒核对入口停留，不据此给两组小品画精确点位或填制作、养护岗位。 <a href="https://ori.hangzhou.com.cn/ornews/content/2026-11/03/content_9366688.htm">开幕采访</a> · <a href="https://tidenews.com.cn/news.html?id=3610368">当届走访</a></li>
+</ul>
+<h2 id="subvenues">七处场地怎么记</h2>
+<p>本案例的布置范围先取西湖西北侧、杭州植物园北部玉泉鱼跃景区内的鱼乐园长廊及相邻园路。此前杭州网报道，从植物园北门步行 300 多米可到玉泉鱼跃。园内布置时另核长廊的可用净宽、花箱位置、台阶与通行关系。 <a href="https://hznews.hangzhou.com.cn/shehui/content/2021-10/06/content_8067379.htm">北门至玉泉鱼跃</a> · <a href="https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web3028/site/attach/0/151d29ff0e604621bc3f92e2405a7216.pdf">西湖景区公开文物名录</a></p>
+<table>
+<thead>
+<tr>
+<th>组织单元</th>
+<th>报道所列物理地点</th>
+<th>后续核对</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>植物园主会场</td>
+<td>西湖区杭州植物园</td>
+<td>核对各展陈节点、实际人行入口及活动位置</td>
+</tr>
+<tr>
+<td>拱墅区分会场</td>
+<td><a href="#qiaoxi">桥西历史街区</a></td>
+<td>已核老墙门、活态馆广场和纱厂书画展。其余点位与审批待核。</td>
+</tr>
+<tr>
+<td>萧山区分会场</td>
+<td><a href="#jiangsi">江寺公园</a></td>
+<td>已取得采购文件和中标公告。五个观赏组团与八项招标任务各有口径，现场签发图待核。</td>
+</tr>
+<tr>
+<td>钱塘区分会场</td>
+<td><a href="#dongsha">东沙湖公园</a></td>
+<td>场地与园内参考点已核。分场展陈边界、停靠点与布展责任待核。</td>
+</tr>
+<tr>
+<td>临安区分会场</td>
+<td><a href="#qianwang">钱王陵园</a></td>
+<td>已核区新闻办现场图及既有文保系统，实际展区边界与布置分工待核。</td>
+</tr>
+<tr>
+<td>建德市分会场</td>
+<td><a href="#yueping">月坪公园</a></td>
+<td>已核门区、百步园和中环线用途，供应方与具体展架位置待核。</td>
+</tr>
+<tr>
+<td>运河湾分会场</td>
+<td><a href="#yunhewan">东岸·大运汇</a></td>
+<td>已核菊景，另列庙会预告，现场节目落位和滨水边界待核。</td>
+</tr>
+</tbody>
+</table>
+<p>临平公园同时有独立菊花活动的报道。本届公布的六处分场名单未列临平，不把它并入同一个项目。 <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">分场总表</a> · <a href="https://www.hzzx.gov.cn/cshz/content/2026-11/05/content_9367397.htm">临平公园活动报道</a></p>
+<h2 id="procurement">从招标线索看到的真实工作</h2>
+<ol>
+<li><strong>采购与到货。</strong> 2026 年花卉苗木招标公告的可见转载列杭州植物园为采购人，列预算与最高限价同为 121.67 万元，履约期三个月，按采购方通知分批供货。金额只对应这项采购公告，实际合同金额、供应商与供货验收记录仍待原件确认。 <a href="https://www.yfbzb.com/inviteBid/detail/20260923_634008580.html">采购公告转载</a></li>
+<li><strong>设计、安装、养护与撤展。</strong> 另一个同届项目的公告转载列整体花展设计、植物配备、现场布置安装、展期养护和撤展。上城区展台成交结果转载列杭州向阳园林景观工程有限公司，价格 32.0569 万元，撤展依甲方通知。具体展台、签章合同和履约待核。三个项目分开记录，避免把不同标项的角色和金额合并。 <a href="https://m.bidcenter.com.cn/news-1-442758687.html">整体服务招标转载</a> · <a href="https://www.yfbzb.com/winbid/detail/20261008_636408246.html">上城区展台成交公示转载</a></li>
+<li><strong>往届可比流程。</strong> 2025 年西湖区布展项目转载披露深化设计、制作安装、养护、移除和场地清理，列设计与安装的不同期限。它可用于研究工作先后，不适用于推定 2026 年时限。2025 年曾有花展延至 12 月 1 日的报道，可单独用于研究延展对养护与撤展的影响。 <a href="https://www.bidcenter.com.cn/newscontent-381566593-1.html">2025 年采购转载</a> · <a href="https://www.hzzx.gov.cn/cshz/content/2025-11/21/content_9128747.htm">延期报道</a></li>
+<li><strong>开放期间的变化。</strong> 开幕报道记录园外出现排队，浙江在线记录当天遇雨。两条都是现场观察。队列时序、分时客流、应急调整、养护频率与复盘记录目前缺原件。 <a href="https://ori.hangzhou.com.cn/ornews/content/2026-11/03/content_9366688.htm">开幕报道</a> · <a href="https://zjnews.zjol.com.cn/zjnews/202611/t20261104_32007236.shtml">雨天报道</a></li>
+</ol>
+<p>公开活动稿列杭州市园林文物局、杭州西湖风景名胜区管理委员会主办，杭州植物园等单位承办。各展点的执行分工、采购原件及完整附件、园内施工图和审核版本、分批到货与补花台账、逐时客流、雨天预案、验收与撤展记录仍待核。 <a href="https://feng.ifeng.com/c/8xl12iv5JVJ">活动稿主承办信息</a></p>
+<p><strong>按项目号回查。</strong> 园方苗木采购编号为 330116260010160000037-HY202609001，开标时间为 2026 年 10 月 13 日。转载索引见 10 月 14 日中标结果公告题名，正文与附件尚未取到。上城区展台另有 JGJG2026GKFW412 的合同公告索引，摘录列运输、布置、展期养护、设备维护、撤展外运与绿化恢复。该合同索引的适用范围是上城区展台，长廊的分工、布置图和签收仍待核。 <a href="https://zj.zhaobiao.lanyancloud.com/notice/b46f379c19804d54">园方项目编号</a> · <a href="https://new.zhaobiao.cn/ts_i_0202_s_0_a_31_t_06010028_p_1.html">结果公告索引</a> · <a href="https://www.qianlima.com/bid-640974642.html">上城区合同公告详情</a> · <a href="https://www.qianlima.com/gjxx/35756_30_4">可见摘录</a></p>
+<p><strong>往届同园换花记录。</strong> 钱江晚报 2012 年当届采访记录园方发现花叶腐坏后及时换花，也记下花期延长后的撤展和筛花赠送安排。这给幕景试排提供了真实业务触发条件。2026 年长廊的具体补花批次、时段、走向及回执仍未核到。 <a href="https://news.yuanlin.com/detail/20121127/128921.htm">往届采访转载</a></p>
+<p><strong>2026 场地更新与往届客流。</strong> 原玉泉泳池改为展览小花园，于 2026 年 6 月开园，毗邻玉泉鱼跃、山水园和植物资源馆。11 月开幕报道将菊展的小花园场景定位于南瓜马车后方，并描述黄菊沿山水点缀。小花园和鱼乐园长廊分别归档，旧泳池影像只供历史对照。2025 年记者记录玉泉过道与拍照点拥挤，园方公开了后续导视、通道和必要时限流等安排。2024 年青芝坞、西门观众路线留作历史参照。当前开放状态、净宽、实际补花路线及园方采用措施仍待核。 <a href="https://hznews.hangzhou.com.cn/chengshi/content/2026-06/25/content_9244793.htm">小花园开园</a> · <a href="https://pic.hangzhou.com.cn/hzyx/content/content_9285859.html">小花园实景</a> · <a href="https://www.thepaper.cn/newsDetail_forward_34397322">当届菊展节点</a> · <a href="https://jrsh.hangzhou.com.cn/content/2025-11/05/content_9117703.html">2025 园方回应</a> · <a href="https://hznews.hangzhou.com.cn/chengshi/content/2024-11/07/content_8810147.htm">2024 备选路线</a></p>
+<p><strong>同场地的花架对照。</strong> 2026 年 4 月杜鹃展在玉泉鱼乐池两侧用不同高度的中式花架陈列 60 余盆精品杜鹃。秋季菊展若想演示花材前后排的高度，可以用花架作为试排选项。实际架高、承重、盆径和当届落位仍要核对。 <a href="https://hwyst.hangzhou.com.cn/mtld/content/2026-04/14/content_9206010.htm">杜鹃展开幕及园方说明</a></p>
+<h2 id="workflow">对幕景产品的具体价值</h2>
+<p>这个样本补的是<strong>园林环境里的临时展陈与多点运营</strong>。相较已有的室内展馆样本，它加入了园路和水岸、花材批次、展期养护、天气与跨场地变更。</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>幕景可补的基础功能</th>
+<th>智能化候选功能与验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>策展与定点</td>
+<td>园区地图、既有园路和设施锁定、园艺小品与导视物料、多方案切换</td>
+<td>从公开展区说明提取候选节点并保留出处。找不到实际位置的条目停在待定位，测试时核对系统有无擅自补点。</td>
+</tr>
+<tr>
+<td>供货与布展</td>
+<td>展区与物料关联、批次、安装和撤展状态、按分场查看</td>
+<td>从可授权采购清单提取材料与单位，对比已到货、待安装和缺量。人工核对名称、单位、批次及原文页码。</td>
+</tr>
+<tr>
+<td>展期维护</td>
+<td>养护和更换任务、开放状态、备选导览</td>
+<td>模拟一组花材更换或临时关闭节点，生成待核的导览改动与交接清单。由园艺、运营和活动人员独立核对漏项。</td>
+</tr>
+<tr>
+<td>多场地联动</td>
+<td>一个项目管理多个场地，保留各自负责方、版本和时间</td>
+<td>在合规使用的主场和一个分场之间调整一件展陈，核对系统是否只改目标场地，是否说明牵涉的到货与导览变更。</td>
+</tr>
+</tbody>
+</table>
+<p>OnePlan 的 SoulFest 案例可以对照单园区节庆的摆位与交接，Tour of Britain 可以对照跨场地管理。幕景的进一步价值在于把文本手册、材料批次与空间对象对应，再由团队确认版本与变更。 <a href="https://www.oneplan.io/case-studies/soulfest-oneplan-how-oneplan-is-helping-small-teams-plan-large-events/">SoulFest 案例</a> · <a href="https://www.oneplan.io/case-studies/how-the-tour-of-britain-was-planned-in-oneplan/">Tour of Britain 案例</a></p>
+<p><strong>可公开演示。</strong> 用幕景自制的园林示范场景录一段「园林花展布置与换花」操作。显示园路、三个展陈点和一次补花变更，让旁观者指出改了哪批物料、哪处节点、谁需要确认。画面标为自制演示。采用真实植物园场地、活动素材或项目成效时，逐项核实可用范围和证据。</p>
+<p>《华中建筑》2022 年论文图 1 记录玉泉现状的主池和相邻庭院，并提供亭廊实景。可和当届公开照片对照，用于复原长廊展示方式。晴空细雨池与古珍珠泉畔有当届展陈记录，具体池边及摆盆位置尚不能逐一落图。区位图采用 Esri 影像，植物园南、北门与曲院风荷北门使用高德地图的代表点。2026 年菊展 1003M 接驳从黄龙体育中心总站至植物园南门，图上虚线连接导航点，仅示方向。 <a href="https://www.fx361.com/page/2022/0211/13999637.shtml">玉泉现状图</a> · <a href="https://hk.trip.com/moments/detail/hangzhou-14-156687742/">当届现场照片</a> · <a href="https://tidenews.com.cn/news.html?id=3604230">当届接驳</a></p>
+<p><strong>玉泉试排案例。</strong> 文物调查表第 141 项将鱼乐园题匾定位在主池南侧亭廊，古珍珠泉在西侧内园，晴空细雨池在古珍珠泉以北。案例页把三处关系画出，暂未将两个泉池的展陈边逐一落图。调查表与 2024 年报道给出的主池尺寸口径不同，工程比例等实测。试排取长廊一个柱间，用 L-01 演示摆放、断面对照和补花交接。 <a href="./yuquan-exhibit-study.html">玉泉案例研究</a> · <a href="https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web3028/site/attach/0/130d29cd6c7e4a758eca7b4cde84df84.pdf">玉泉三泉调查表</a></p>
+
+<h2 id="venues">六个分会场详档</h2><p>东沙湖公园、江寺公园、桥西历史街区、钱王陵园、月坪公园与东岸·大运汇按各自证据记录。代表点供定位，展陈边界待现场复核。</p>
+<h3 id="dongsha">东沙湖公园（钱塘菊展分会场）</h3>
+<p><strong>活动和归属。</strong> 钱塘发布于 2026 年 11 月 4 日公布，第十二届杭州菊花艺术展钱塘分会场在东沙湖公园举办，展出 150 余种菊花，展期至 11 月 30 日。其活动编号为 EV076，与西湖区杭州植物园主会场 PL007 是两处独立场地。区融媒体中心为发布方，场地审批、花材供应、布展及展期养护团队仍待当届文件。 <a href="https://weibo.com/2/detail/5361546007937364">钱塘发布现场视频</a> · <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">主会场与六处分会场</a></p>
+<p><strong>位置和固定设施。</strong> 高德给出园内酷玩沙滩坐标东经 120.485590、北纬 30.310622，按 GCJ-02 推定并换算为近似 WGS84 东经 120.481182、北纬 30.313011。对照卫星图，标记落在西侧内湾浅色沙地，可作为公园位置参照。花展展示边界、进场门、停车装卸及小火车停靠范围待核。市园林绿化规划将东沙湖公园二期列为综合公园项目，不能据建设分期反推花展临时占用。 <a href="https://www.amap.com/place/B0LDMC9POR">高德地物</a> · <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=120.4748,30.307,120.4888,30.3175&amp;bboxSR=4326&amp;imageSR=4326&amp;size=1200,900&amp;format=jpg&amp;f=image">影像对照</a> · <a href="https://www.hangzhou.gov.cn/module/download/downfile.jsp?classid=0&amp;filename=77a60f82ef864a4ab33f9d3aa78bedc1.pdf">杭州园林绿化规划</a></p>
+<p><strong>实际展陈与运营。</strong> 11 月 6 日现场走访拍到沿湖步道的菊艺展陈，并记有环湖观光小火车。游览资料描述彩虹跑道沿线布置造型菊，9 月的场地报道将彩虹跑道作为固定设施。2025 年开园报道另列配套停车场、水上运动及橙小野小程序。小程序的公开用途是游客服务，采购、上图、设备维护和现场交接使用何种系统尚未核到。 <a href="https://www.52hrtt.com/global/n/w/info/F1793092460952">当届走访及现场照片</a> · <a href="https://feng.ifeng.com/c/8xlwqCAWolc">分场导览</a> · <a href="https://www.hzzx.gov.cn/cshz/content/2026-09/20/content_9311736.htm">彩虹跑道</a> · <a href="https://www.hzzx.gov.cn/cshz/content/2025-04/29/content_8984845.htm">开园及服务说明</a></p>
+<p><strong>幕景待验演练。</strong> 选一处经核对的环湖断面，分别标注固定跑道、展期拍照停留区、小火车交会点和拟定补花路。用一次移位比较导视、养护任务和游客地图哪些要更新。若缺当届车辆线路或入口尺寸，保留待定位条目。官网研究可引用区融媒体原页及自制布置对照，现场画面复用与发布权限须逐项核实。OnePlan 北澳大利亚艺术节的场地图可参考临时设施与永久地物分层及不同团队查同一版图的做法。 <a href="https://www.oneplan.io/case-studies/north-australia-festival-arts/">北澳大利亚艺术节</a></p>
+<h3 id="jiangsi">江寺公园（萧山菊展分会场）</h3>
+<p><strong>场地。</strong> 高德将江寺公园标为萧山区萧然南路 158 号。Mapcarta 基于开放地图地物 W154267018 给出公园代表点，WGS84 东经 120.26694°、北纬 30.16565°。萧山博物馆的活动原页另确认江寺有浙东运河萧山展示馆。室内馆、园区、各届临时花展各自保留用途。入口、池岸维护空间与临设范围以当届图为准。 <a href="https://ditu.amap.com/place/B023B02ZEA">高德地址</a> · <a href="https://mapcarta.com/W154267018">开放地图代表点</a> · <a href="https://xsbwg.xsnet.cn/contents/156/37847.html">萧山博物馆活动原页</a></p>
+<p><strong>采购与组织。</strong> 中国政府采购网项目 330109261010030000030-DFJW2026-CG005 由杭州市萧山区市政绿化养护保障中心采购，杭州绿茵园林花卉有限公司中标，217.6 万元是含江寺菊展及其他花事的项目总价。公开附件第三部分列江寺菊展八项采购任务。开幕报道另以五个观赏组团介绍当届景观。 <a href="https://www.ccgp.gov.cn/cggg/dfgg/zbgg/202609/t20260909_27299407.htm">中标公告</a> · <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">开幕现场及主题组团</a> · <a href="https://feng.ifeng.com/c/8xl12iv5JVJ">场景细节</a></p>
+<table>
+<thead>
+<tr>
+<th>采购任务位置</th>
+<th>可核要求</th>
+<th>幕景可试排的内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>北入口牌坊、北大门石柱周边</td>
+<td>门面装饰和近门花境分别列项，配发光字与夜景造型。</td>
+<td>分开标既有牌坊、进门视线、临时展陈与通行。</td>
+</tr>
+<tr>
+<td>莲花广场</td>
+<td>大象绿雕；广场外围展示架拟摆 200 盆精品菊，配品种介绍牌。</td>
+<td>比较拍照停留、读展签和绕行。200 盆属于采购要求。</td>
+</tr>
+<tr>
+<td>咏柳桥及池岸</td>
+<td>竹筏、宋式灯笼、岸边悬崖菊和池南羊形小品等分别列项。开幕稿也记录池畔瑞羊与竹筏。</td>
+<td>先把水面、桥与岸边分层。设备维护和作业到达作为待确认项。</td>
+</tr>
+<tr>
+<td>假山、葫芦广场、南门、园内花境</td>
+<td>四处各自列明花材或小品；园内花境点位由采购方另定。</td>
+<td>给未定点位留任务，单独记南门和假山周围的通过条件。</td>
+</tr>
+</tbody>
+</table>
+<p><strong>养护和撤场。</strong> 江寺菊展在采购文件中要求约一个月养护，常规撤展需移除与恢复原状。园内花境单列为例外，池南羊形小品暂存并按采购方要求拟在春节期间再用。实际验收、补花台账、临电交接和在用管理系统尚未取得。 <a href="https://zcy-gov-open-doc.oss-cn-north-2-gov-1.aliyuncs.com/1024FPA/330102/10013336500/20268/4ae37620-bf2a-4742-8c0f-83acd14d8f1b.doc">政府采购附件原件</a></p>
+<p><strong>幕景待验演练。</strong> 以莲花广场与池岸两个节点为起点，把招标对象、数量、位置和养护任务绑到同一版图。模拟撤展时，分别回读一般移除、保留花境、暂存再用三种处置。案例可引用公开采购条件及开幕稿，实际布置和履约结论须有独立证据。对照 OnePlan 艺术节对固定条件及临时设施的表达。 <a href="https://www.oneplan.io/case-studies/north-australia-festival-arts/">北澳大利亚艺术节</a></p>
+<h3 id="qiaoxi">桥西历史街区（拱墅菊展分会场）</h3>
+<p><strong>场地。</strong> 拱墅区大运河文化研究院的公开介绍将街区定位于拱宸桥西，列桥弄街、桥西直街、居民里弄和五个博物馆及展示馆。Mapcarta 基于开放地图地物 W457632693 给出 WGS84 东经 120.13315°、北纬 30.31988°，作为街区代表点。省大运河遗产保护规划另有保护分区，街区代表点和保护范围均只供场地参照，实际展陈与临设边界待核。 <a href="https://www.gongshu.gov.cn/art/2024/4/30/art_1229789753_59080391.html">区大运河文化研究院</a> · <a href="https://mapcarta.com/W457632693">开放地图代表点</a> · <a href="https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web3210/site/attach/0/c9022532d9754139962f48286d5f147d.pdf">省级遗产保护规划</a></p>
+<p><strong>展点和角色。</strong> 当届报道确认沿街 12 处节点。老墙门由浙大城市学院环境设计系师生团队打造，以竹编串联三个段落。手工艺活态馆广场可核九件手工艺菊花浮雕，书画展在通益公纱厂旧址内。另有开幕日现场图文将展陈定位到拱宸桥西侧街区沿线，列展期至 11 月 30 日。现场照片可供节点辨识；整届项目的施工、养护与验收分工待核。 <a href="https://hwyst.hangzhou.com.cn/xwfb/content/2026-11/11/content_9370180.htm">场景与团队报道</a> · <a href="https://jrsh.hangzhou.com.cn/content/2026-11/03/content_9366564.html">开幕日现场和展期</a></p>
+<p><strong>幕景待验演练。</strong> 将里弄通行、广场停留和室内书画展分别画进同一街区图。先问清老墙门是否允许固定、搬运可用时段和通道，再落竹编物件。模拟把一处停留点挪到宽处，核对居民通行、布展交接与观众导视是否随同一版更新。报馆、实际运输入口、固定方式、撤场签收及现用协作系统尚缺。官网研究可链接当届报道和保护规划，再用自制示意说明布置决策。 <a href="https://www.oneplan.io/case-studies/north-australia-festival-arts/">北澳大利亚艺术节</a></p>
+<h3 id="qianwang">钱王陵园（临安菊展分会场）</h3>
+<p><strong>场地。</strong> 临安区衣锦街 338 号，市级公开介绍记录太庙山、牌坊和钱王祠。高德园内钱王祠代表点为东经 119.725502°、北纬 30.235717°，按 GCJ-02 处理，近似换算 WGS84 为 119.720609°、30.238196°。点位用于定位陵园，菊展入口和场地边界另待核对。 <a href="https://stb.hangzhou.gov.cn/art/2020/7/23/art_1229052385_52354100.html">杭州市公开介绍</a> · <a href="https://www.amap.com/place/B0FFFDIBGY">高德地点</a></p>
+<p><strong>当届证据。</strong> 临安区新闻办 10 月 31 日发布钱王陵分会场启幕现场图。报道描述松林与牌坊周边的菊景，造型包含大象、孔雀等。照片可用于匹配背景和造型节点。现有发布尚未给到场地签发图、临设固定点、物料运入路径、承包方、补花安排或撤展验收。 <a href="https://www.sina.cn/news/detail/5360085452196313.html">临安发布原帖</a> · <a href="https://feng.ifeng.com/c/8xl12iv5JVJ">当届展陈介绍</a></p>
+<p><strong>已有系统与幕景待验。</strong> 2024 年《临安年鉴》记载前一年的钱王陵数字孪生及文物安全工作，菊展有无借用这套系统待核。先把牌坊、既有树木、候选菊艺和观众停留面分层。假设一组花饰需离开牌坊近处，在有权使用的底图上模拟移位，记录管理方许可、现场固定方式及撤场复位。验证时看不同权限的团队能否对照同一版场地条件和物件清单。网站研究可引用现场报道和年鉴，布置图用自制试排示意。 <a href="https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web2242/site/attach/0/e84e7d1f54614729a98663e170e1cc28.pdf">临安年鉴</a> · <a href="https://www.oneplan.io/case-studies/behind-the-plan-data-management/">OnePlan 巴黎 2024 数据管理</a></p>
+<h3 id="yueping">月坪公园（建德菊展分会场）</h3>
+<p><strong>场地。</strong> 建德市新安江街道新安路月坪公园。百度公园 POI 的原始 BD09MC 值约 13278816.16、3415686.06，折算 BD09LL 为东经 119.284337°、北纬 29.480187°，近似 WGS84 为 119.272896°、29.476400°。卫星图可对照公园所在山体，两个门、百步园展架和中环线当届摆放边界待核。 <a href="https://map.baidu.com/mobile/webapp/place/detail/qt%3Dninf%26uid%3D2e00c5dd8f565f1dd7851f46/">百度地点</a> · <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=119.267,29.473,119.277,29.4805&amp;bboxSR=4326&amp;imageSR=4326&amp;size=1200,900&amp;format=jpg&amp;f=image">Esri 影像</a></p>
+<p><strong>展陈和分工。</strong> 当届本地报道写 10 月 31 日开幕、展至 11 月 30 日，市市政园林服务中心承办、杭州植物园提供专业指导。按主题菊艺小品、南北门节点、百步园品种菊与展架、中环线沿线花境分四类。建德市公开绩效自评表将月坪公园列入 2023 年山体公园绿地清卫保洁。2026 供应商及实际装卸、搭建、养护、撤展签收和协作系统仍缺当届资料。 <a href="https://17.jdzjw.com/bendi/102.html">当届现场报道</a> · <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">杭州日报分场报道</a> · <a href="https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web2210/site/attach/0/fbf3596734274700b158f7a541e61987.pdf">建德市绩效资料</a></p>
+<p><strong>幕景待验。</strong> 按四类展陈建立独立分区。用一处门景、一段中环线、一个百步园展架演练移动花组时如何同时更新导览和养护。模拟记录展架朝向、替换批次、作业到达线和复位确认。要让设计师能复核差异，仍需现场点位、可用断面和园方操作时段。公开案例可以用报道中的展陈节点做解释，再用假设演练展示工作方式。 <a href="https://www.oneplan.io/case-studies/north-australia-festival-arts/">OnePlan 北澳大利亚艺术节</a></p>
+<h3 id="yunhewan">东岸·大运汇（运河湾菊展分会场）</h3>
+<p><strong>场地。</strong> 拱墅区丽水路与京杭大运河之间的滨水街区。百度商业街 POI 的原始 BD09MC 值约 13374637.16、3525874.73，折算 BD09LL 为东经 120.145103°、北纬 30.342549°，近似 WGS84 为 120.133916°、30.338639°。影像可对照运河东岸建筑带。公开设计报道列两宗地块及码头、停车规划；使用现状和当届活动边界需另核。桥西历史街区是另一处菊展分会场。 <a href="https://map.baidu.com/mobile/webapp/place/detail/qt%3Dninf%26uid%3D35fdfffb444fcae54054d71b/">百度地点</a> · <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=120.1270,30.3330,120.1430,30.3450&amp;bboxSR=4326&amp;imageSR=4326&amp;size=1200,900&amp;format=jpg&amp;f=image">Esri 影像</a> · <a href="https://zzhz.zjol.com.cn/ycpd/jrbd/202302/t20230224_25462439.shtml">设计公示报道</a></p>
+<p><strong>已观察与预告。</strong> 当届报道列滨水咖啡杯花瀑及鲜花舞台。11 月 6 日庙会稿描述街区已有菊景，并预告 11 月 12–15 日的集章、市集、手作和鱼灯等。庙会预告用于核计划日期和节目类型，实际节目、巡游线与摊位点待当届记录。5 月走访明确街区由杭州市商旅运河集团旗下运河投发公司打造，菊展、庙会的施工、审批、排程与运营系统仍缺可核原件。 <a href="https://hznews.hangzhou.com.cn/wenti/content/2026-11/04/content_9366713.htm">当届菊展报道</a> · <a href="https://ori.hangzhou.com.cn/ornews/content/2026-11/06/content_9368068.htm">同期庙会预告</a> · <a href="https://ori.hangzhou.com.cn/ornews/content/2026-05/26/content_9229196.htm">开发及开店报道</a></p>
+<p><strong>幕景待验。</strong> 用同一底图保留已证实的菊展节点，把同期节目、市集和游客停留放进可切换的时间方案。模拟市集布点后，核对滨水步行、装卸口和花艺养护是否互相占用。让场地方与两个活动的运营角色逐项确认边界和交接版本。可公开引用菊展报道与庙会预告，分别说明已观察的景观与计划中的活动。 <a href="https://www.oneplan.io/inspiration/riverside-festival/">OnePlan Riverside Festival</a></p>
+
+</main></body></html>
