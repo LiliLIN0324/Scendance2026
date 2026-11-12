@@ -9,6 +9,7 @@
  */
 
 import { usesLocalPlaceProxy } from './place-search';
+import { isDisplayablePlaceShape, isPersistablePlaceShape } from './place-shape-quality';
 
 export interface PlaceArea {
   id: string;
@@ -103,7 +104,7 @@ export async function searchAreas(keywords: string, options: AreaSearchOptions =
   const doFetch = options.fetchImpl ?? fetch;
   try {
     const response = await doFetch(placeAreaUrl(query, options.near, options.limit ?? 3, local), {
-      signal: options.signal ?? AbortSignal.timeout(8000),
+      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
     // 同名行政区全国有多份（西湖区在杭州、南昌各一个）：服务端已按 near 远近排过，
@@ -134,7 +135,7 @@ type ShapeCacheEntry = { t: number; area: PlaceArea };
 function shapeCacheKey(name: string, near: { lng: number; lat: number } | null | undefined): string {
   const queryName = name.split('|')[0].trim().toLowerCase();
   const at = near && Number.isFinite(near.lng) && Number.isFinite(near.lat)
-    ? `${near.lng.toFixed(2)},${near.lat.toFixed(2)}`
+    ? `${near.lng.toFixed(4)},${near.lat.toFixed(4)}`
     : '';
   return `${queryName}|${at}`;
 }
@@ -170,6 +171,25 @@ function writeShapeCache(key: string, area: PlaceArea): void {
 }
 
 /**
+ * 读本地轮廓缓存（不发网）：只有可信面轮廓才返回，垃圾 3 点 line 当作没有。
+ * 供搜索下拉把「已经挖到过轮廓」的 POI 提前。
+ */
+export function peekCachedPlaceShape(
+  name: string,
+  near?: { lng: number; lat: number } | null,
+): PlaceArea | null {
+  const query = name.trim();
+  if (query.length < 2) return null;
+  try {
+    if (typeof window === 'undefined') return null;
+  } catch {
+    return null;
+  }
+  const cached = readShapeCache(shapeCacheKey(query, near));
+  return cached && isPersistablePlaceShape(cached) ? cached : null;
+}
+
+/**
  * 点了一个地点建议后，从 OSM 挖这个地点的**真实占地多边形**
  * （商场/公园/景区在 OSM 里多为面要素；高德商圈框的公开等价物）。
  * 服务端三路并发抢答（photon 精确链 / way 按名 / relation 按名）+ 镜像熔断，
@@ -184,7 +204,7 @@ export async function fetchPlaceShape(
   if (query.length < 2 || query.length > 60) return null;
   const cacheKey = shapeCacheKey(query, options.near);
   const cached = options.cache === false ? null : readShapeCache(cacheKey);
-  if (cached) return cached;
+  if (cached && isDisplayablePlaceShape(cached)) return cached;
   const local = options.local ?? usesLocalPlaceProxy();
   const doFetch = options.fetchImpl ?? fetch;
   const params = new URLSearchParams({ name: query });
@@ -196,7 +216,7 @@ export async function fetchPlaceShape(
     : `/api/place-shape?${params.toString()}`;
   try {
     // 服务端预算：单台 Overpass 25s × 熔断轮换，三路并发抢答；给足 85s 兜底。
-    const response = await doFetch(url, { signal: options.signal ?? AbortSignal.timeout(85000) });
+    const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(85000)]) : AbortSignal.timeout(85000) });
     if (!response.ok) return null;
     const body = await response.json() as { shape?: { id?: string; name?: string; kind?: string; polygon?: [number, number][]; bounds?: number[] } | null };
     const raw = body?.shape;
@@ -230,7 +250,9 @@ export async function fetchPlaceShape(
       polygon,
       ...(raw.kind === 'line' ? { kind: 'line' as const } : {}),
     };
-    if (options.cache !== false) writeShapeCache(cacheKey, area);
+    // 3 点 kind:line 等垃圾几何不当占地：不写缓存，调用方保留定位钉。
+    if (!isDisplayablePlaceShape(area)) return null;
+    if (options.cache !== false && isPersistablePlaceShape(area)) writeShapeCache(cacheKey, area);
     return area;
   } catch {
     return null;

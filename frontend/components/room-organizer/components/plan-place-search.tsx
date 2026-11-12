@@ -20,13 +20,19 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } f
 import { Search, X } from 'lucide-react';
 import {
   matchRecentPlaces,
-  mergePlaceSuggestions,
   recentPlaces,
   rememberPlace,
   searchPlaces,
   type PlaceSuggestion,
 } from '@/components/room-organizer/lib/place-search';
-import { searchAreas, type PlaceArea } from '@/components/room-organizer/lib/place-area';
+import { peekCachedPlaceShape, searchAreas, type PlaceArea } from '@/components/room-organizer/lib/place-area';
+import {
+  buildPlaceSearchOptions,
+  fetchPlaceShapeHints,
+  hintedOutlineNames,
+  type PlaceSearchOption,
+} from '@/components/room-organizer/lib/place-search-options';
+import { normalizeOutlineName } from '@/components/room-organizer/lib/place-shape-quality';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -47,9 +53,6 @@ export interface PlanPlaceSearchProps {
   testIdPrefix?: string;
 }
 
-type Option =
-  | { kind: 'area'; area: PlaceArea }
-  | { kind: 'place'; place: PlaceSuggestion };
 
 export default function PlanPlaceSearch({
   onPick,
@@ -64,6 +67,7 @@ export default function PlanPlaceSearch({
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<PlaceSuggestion[]>([]);
   const [areas, setAreas] = useState<PlaceArea[]>([]);
+  const [outlinedNames, setOutlinedNames] = useState<Set<string>>(new Set());
   const [recent, setRecent] = useState<PlaceSuggestion[]>([]);
   const [active, setActive] = useState(-1);
   const [busy, setBusy] = useState(false);
@@ -92,6 +96,7 @@ export default function PlanPlaceSearch({
     if (keyword.length < 2) {
       setHits([]);
       setAreas([]);
+      setOutlinedNames(new Set());
       setBusy(false);
       return undefined;
     }
@@ -99,16 +104,24 @@ export default function PlanPlaceSearch({
     setBusy(true);
     const timer = window.setTimeout(() => {
       const nearPoint = nearLng != null && nearLat != null ? { lng: nearLng, lat: nearLat } : null;
+      const hintsRequest = fetchPlaceShapeHints(keyword, { signal: controller.signal });
       Promise.all([
-        // 带上「当前看的地方」：天地图地名搜索只在小范围 mapBound 内出结果，
-        // 没有提示点时 geocoder 会把 in77 猜到大同（2026-11-12 实测），围着画布搜就能命中。
         searchPlaces(keyword, { signal: controller.signal, center: nearPoint }),
         areaEnabledRef.current ? searchAreas(keyword, { signal: controller.signal, near: nearPoint }) : Promise.resolve([]),
       ])
         .then(([found, foundAreas]) => {
           if (controller.signal.aborted) return;
-          setHits(found);
-          setAreas(foundAreas);
+          setHits(found); setAreas(foundAreas);
+          const names = new Set<string>();
+          for (const place of found) {
+            if (peekCachedPlaceShape(place.name, { lng: place.lng, lat: place.lat })) names.add(normalizeOutlineName(place.name.split('|')[0] ?? ''));
+          }
+          setOutlinedNames(names);
+          // 先显示快结果，再异步提升已有轮廓；库存慢/不可达不能拖住整张下拉。
+          void hintsRequest.then(hints => {
+            if (controller.signal.aborted) return;
+            setOutlinedNames(new Set([...names, ...hintedOutlineNames(hints)]));
+          });
         })
         .finally(() => {
           if (!controller.signal.aborted) setBusy(false);
@@ -121,19 +134,16 @@ export default function PlanPlaceSearch({
   }, [query, nearLng, nearLat]);
 
   const keyword = query.trim();
-  const options: Option[] = (() => {
-    const list: Option[] = [];
-    for (const area of areas) list.push({ kind: 'area', area });
-    const recentMatches = keyword ? matchRecentPlaces(keyword) : recent;
-    // 完全命中的新鲜结果压过「最近」：否则旧 geocoder 兜底点（如 in77→大同）
-    // 会以同名「最近」身份排在真 POI 前面，回车默认第一条又飞回假点。
-    for (const place of mergePlaceSuggestions(keyword, recentMatches, hits)) {
-      list.push({ kind: 'place', place });
-    }
-    return list;
-  })();
+  const recentMatches = keyword ? matchRecentPlaces(keyword) : recent;
+  const options: PlaceSearchOption[] = buildPlaceSearchOptions({
+    query: keyword,
+    areas,
+    places: hits,
+    recent: recentMatches,
+    outlinedNames,
+  });
 
-  function chooseOption(option: Option) {
+  function chooseOption(option: PlaceSearchOption) {
     if (option.kind === 'area') {
       setQuery(option.area.name);
       setPicked(option.area.name);
@@ -266,7 +276,7 @@ export default function PlanPlaceSearch({
                 onMouseEnter={() => setActive(index)}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => chooseOption(option)}
-                className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : ''}`}
+                className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}`}
               >
                 {option.kind === 'area' ? (
                   <>
@@ -280,7 +290,10 @@ export default function PlanPlaceSearch({
                   </>
                 ) : (
                   <>
-                    <span className="sc-plan-place-search-option-name">{option.place.name}</span>
+                    <span className="sc-plan-place-search-option-name">
+                      {option.place.name}
+                      {option.hasOutline && <span className="sc-plan-place-search-badge">有轮廓</span>}
+                    </span>
                     {option.place.address && (
                       <span className="sc-plan-place-search-option-address">{option.place.address}</span>
                     )}

@@ -88,7 +88,7 @@ export async function searchPlaces(keywords: string, options: PlaceSearchOptions
   const local = options.local ?? usesLocalPlaceProxy();
   const doFetch = options.fetchImpl ?? fetch;
   const limit = options.limit ?? 6;
-  const signal = options.signal ?? AbortSignal.timeout(8000);
+  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000);
   try {
     if (!local) {
       const response = await doFetch(placeSearchUrl(query, limit, false, options.center ?? null), { signal });
