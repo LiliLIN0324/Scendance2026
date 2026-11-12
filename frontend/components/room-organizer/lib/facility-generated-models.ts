@@ -31,7 +31,7 @@ export interface GeneratedFacilityModel {
 }
 
 const REGISTRY_KEY = 'scendance:facility-generated-models';
-const REGISTRY_LIMIT = 20;
+const REGISTRY_LIMIT = 2000; // 与单份计划设施上限一致，不在第21个模型时悄悄丢已选模型。
 
 function storage(): Storage | null {
   if (typeof window === 'undefined') return null;
@@ -182,10 +182,11 @@ export interface FacilityGenerateLink {
   /** 候选回填时用的名字（生成框里那份原话/图片名）。 */
   name: string;
   submittedAt: number;
+  lane?: 'direct' | 'cloud';
 }
 
 const LINKS_KEY = 'scendance:facility-generate-links';
-const LINKS_LIMIT = 12;
+const LINKS_LIMIT = 2000; // 云模型刷新需要任务身份重新授权，不能把已选模型的链接挤掉。
 /** 与 lux3d-import 的任务号校验同口径（那边没导出，这里同规格复制）。 */
 const LINK_TASKID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -251,6 +252,15 @@ function removeFacilityGenerateLink(taskid: string): void {
   emitLinks();
 }
 
+/** 户外原位生成：以提交当刻捕获的设施身份绑定，绝不消费全局 staged 链接。 */
+export function attachFacilityGenerateTask(input: FacilityGenerateLink): boolean {
+  if (!isPersistedLink(input)) return false;
+  links = [{ ...input }, ...links.filter(item => item.taskid !== input.taskid)].slice(0, LINKS_LIMIT);
+  writeLinks();
+  emitLinks();
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // resolve：一轮轮询 = 查任务详情 → 完成就落盘入库 + 注册候选
 // ---------------------------------------------------------------------------
@@ -261,7 +271,12 @@ export const FACILITY_GENERATE_POLL_MS = 15_000;
 export interface FacilityGenerateResolveOptions {
   /** 测试里替掉全局 fetch（透传给 fetchLux3dTask）。 */
   fetchImpl?: typeof fetch;
+  cloud?: {
+    getGenerationJob(id: string): Promise<{ state: string; asset_id: string | null }>;
+    authorizeAsset(id: string): Promise<{ url: string; name: string }>;
+  };
 }
+
 
 export type FacilityGenerateResolveResult =
   | { state: 'pending'; message: string }
@@ -274,6 +289,37 @@ export async function resolveFacilityGenerateLink(
 ): Promise<FacilityGenerateResolveResult> {
   const link = links.find(item => item.taskid === taskid);
   if (!link) return { state: 'failed', message: '这条生成任务已失效，请重新生成。' };
+
+  if (link.lane === 'cloud') {
+    const existing = findGeneratedFacilityModel(`generated:${taskid}`);
+    if (existing) return { state: 'imported', model: existing };
+    if (!options.cloud) return { state: 'pending', message: '请连接原云项目后取回模型。' };
+    try {
+      const job = await options.cloud.getGenerationJob(taskid);
+      if (job.state === 'submit_unknown') return { state: 'pending', message: '提交结果未知，请先核对任务记录与费用，不要重复生成。' };
+      if (['failed', 'rejected'].includes(job.state)) {
+        removeFacilityGenerateLink(taskid);
+        return { state: 'failed', message: '云任务未成功，请核对生成记录。' };
+      }
+      if (!['ready', 'added'].includes(job.state) || !job.asset_id) return { state: 'pending', message: `云端生成中 · ${job.state}` };
+      const asset = await options.cloud.authorizeAsset(job.asset_id);
+      const { ensureGlbAsset, getGlbAssetState } = await import('../three/glb-assets');
+      await ensureGlbAsset(job.asset_id, asset.url);
+      const state = getGlbAssetState(job.asset_id);
+      if (state?.status !== 'ready' || !state.dimensions) return { state: 'pending', message: '模型已完成，正在读取尺寸…' };
+      const model: GeneratedFacilityModel = {
+        slug: `generated:${taskid}`, name: link.name, glbUrl: asset.url,
+        ...state.dimensions, facilityId: link.facilityId, facilityName: link.facilityName,
+        createdAt: Date.now(), sessionOnly: true,
+      };
+      // 云端签名 URL 有效期有限：不把它当永久公开地址落盘。
+      registerGeneratedFacilityModel(model);
+      // 保留持久化任务身份，刷新后重新授权 URL；当前会话由上面的 registry 快返止轮询。
+      return { state: 'imported', model };
+    } catch (error) {
+      return { state: 'pending', message: error instanceof Error ? error.message : '云模型暂未取回，请稍后重试。' };
+    }
+  }
 
   // 动态引：本模块被 plan-facility-models（纯 lib）静态引用，three/重依赖只在轮询时进包。
   const [{ fetchLux3dTask, glbOutputOf }, { loadAholoCatalogItem }] = await Promise.all([

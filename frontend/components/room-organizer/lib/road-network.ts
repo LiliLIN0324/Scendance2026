@@ -103,7 +103,7 @@ export async function fetchRoadNetwork(
     ? `http://127.0.0.1:3199/api/road-network?${params.toString()}`
     : `/api/road-network?${params.toString()}`;
   // Overpass 忙时要排队：给足 50s 预算，失败回空路网（调用方回「路网暂时拿不到」）。
-  const response = await doFetch(url, { signal: options.signal ?? AbortSignal.timeout(50000) });
+  const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(50000)]) : AbortSignal.timeout(50000) });
   if (!response.ok) return { roads: [] };
   return { roads: parseRoadNetwork(await response.json()) };
 }

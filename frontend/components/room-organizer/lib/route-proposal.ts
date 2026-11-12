@@ -29,17 +29,31 @@ export function matchRouteCommand(text: string): 'auto' | null {
   return null;
 }
 
-/** 折线在 bbox（ENU 米）内的连续段：出界的点断开，不足 2 点的段丢弃。 */
+/** Liang–Barsky 线段裁剪：两端都在框外但穿过场地的稀疏 OSM 道路也要保留。 */
 function clipRunsToBBox(points: PlanPoint[], bbox: { west: number; south: number; east: number; north: number }): PlanPoint[][] {
   const runs: PlanPoint[][] = [];
   let current: PlanPoint[] = [];
-  for (const point of points) {
-    const inside = point.x >= bbox.west && point.x <= bbox.east && point.y >= bbox.south && point.y <= bbox.north;
-    if (inside) current.push(point);
-    else if (current.length > 0) { runs.push(current); current = []; }
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1]!; const b = points[i]!;
+    const dx = b.x - a.x; const dy = b.y - a.y;
+    let lo = 0; let hi = 1; let valid = true;
+    for (const [p, q] of [[-dx, a.x - bbox.west], [dx, bbox.east - a.x], [-dy, a.y - bbox.south], [dy, bbox.north - a.y]] as [number, number][]) {
+      if (Math.abs(p) < 1e-9) { if (q < 0) valid = false; continue; }
+      const t = q / p;
+      if (p < 0) lo = Math.max(lo, t); else hi = Math.min(hi, t);
+      if (lo > hi) valid = false;
+    }
+    if (!valid) { if (current.length > 1) runs.push(current); current = []; continue; }
+    const start = { x: a.x + lo * dx, y: a.y + lo * dy };
+    const end = { x: a.x + hi * dx, y: a.y + hi * dy };
+    const tail = current[current.length - 1];
+    if (tail && Math.hypot(tail.x - start.x, tail.y - start.y) > 0.01) { if (current.length > 1) runs.push(current); current = []; }
+    if (!current.length) current.push(start);
+    if (Math.hypot(start.x - end.x, start.y - end.y) > 0.01) current.push(end);
+    if (hi < 1) { if (current.length > 1) runs.push(current); current = []; }
   }
-  if (current.length > 0) runs.push(current);
-  return runs.filter(run => run.length >= 2);
+  if (current.length > 1) runs.push(current);
+  return runs;
 }
 
 /** 线段相交（参数法），返回交点；共线/端点搭接不算入口交点。 */
@@ -50,7 +64,7 @@ function segmentIntersection(a1: PlanPoint, a2: PlanPoint, b1: PlanPoint, b2: Pl
   if (Math.abs(denom) < 1e-9) return null;
   const t = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / denom;
   const u = ((b1.x - a1.x) * d1y - (b1.y - a1.y) * d1x) / denom;
-  if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return null;
+  if (t < -1e-8 || t > 1 + 1e-8 || u < -1e-8 || u > 1 + 1e-8) return null;
   return { x: a1.x + t * d1x, y: a1.y + t * d1y };
 }
 
@@ -83,6 +97,7 @@ function decimate(points: PlanPoint[], maxPoints = 128): PlanPoint[] {
   const stride = Math.ceil(points.length / maxPoints);
   const out: PlanPoint[] = [];
   for (let i = 0; i < points.length; i += stride) out.push(points[i]!);
+  if (out[out.length - 1] !== points[points.length - 1]) out.push(points[points.length - 1]!);
   return out;
 }
 
@@ -137,11 +152,8 @@ export function buildRouteProposal(
     if (!routeClass) continue;
     const enu = roadToEnu(road, anchor);
     let lengthM = 0;
-    for (let i = 0; i < enu.length - 1; i += 1) {
-      const mx = (enu[i]!.x + enu[i + 1]!.x) / 2;
-      const my = (enu[i]!.y + enu[i + 1]!.y) / 2;
-      if (mx < bbox.west || mx > bbox.east || my < bbox.south || my > bbox.north) continue;
-      lengthM += Math.hypot(enu[i + 1]!.x - enu[i]!.x, enu[i + 1]!.y - enu[i]!.y);
+    for (const run of clipRunsToBBox(enu, bbox)) for (let i = 1; i < run.length; i += 1) {
+      lengthM += Math.hypot(run[i]!.x - run[i - 1]!.x, run[i]!.y - run[i - 1]!.y);
     }
     if (lengthM < 5) continue;
     byClass[routeClass].push({ road, enu, lengthM });
@@ -182,6 +194,7 @@ export function buildRouteProposal(
       const crossings = dedupePoints(boundaryCrossings(points, boundary), NODE_DEDUPE_M).slice(0, 2);
       for (const crossing of crossings) {
         if (nodes.length >= NODE_CAP) break;
+        if (nodes.some(node => Math.hypot(node.position.x - crossing.x, node.position.y - crossing.y) < NODE_DEDUPE_M)) continue;
         const nodeName = `${road.name || label}口`;
         nodes.push({
           id: idFactory(),

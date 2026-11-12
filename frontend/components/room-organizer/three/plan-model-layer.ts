@@ -17,6 +17,7 @@
  */
 
 import * as THREE from 'three';
+import { findGeneratedFacilityModel, subscribeGeneratedFacilityModels } from '../lib/facility-generated-models';
 import {
   createCachedGlbModel,
   disposeOwnedModel,
@@ -161,23 +162,32 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
   const placedPropIds = new Set<string>();
   /** V-5a：prop.id → 落位时的 modelOverride（含 undefined）；syncPositions 据此发现 override 变化换模型。 */
   const placedOverrides = new Map<string, string | undefined>();
+  const placedUrls = new Map<string, string>();
   let placeholders = deps.placeholders;
+  let currentProps = deps.props;
+  let currentMetrics = deps.metrics;
+  const generations = new Map<string, number>();
   let run = 0;
   run += 1;
   const initialRun = run;
 
   const placeModel = (
     prop: PlanPropShape,
-    metrics: PlanMetrics,
+    _metrics: PlanMetrics,
     candidate: FacilityModelCandidate & FacilityModelFit,
   ): void => {
     if (placedPropIds.has(prop.id)) return;
+    const generation = (generations.get(prop.id) ?? 0) + 1;
+    generations.set(prop.id, generation);
     placedPropIds.add(prop.id);
     placedOverrides.set(prop.id, prop.modelOverride);
+    placedUrls.set(prop.id, candidate.glbUrl);
     const item = candidateItemFor(prop, candidate);
     void ensureGlbAsset(candidate.glbUrl, candidate.glbUrl)
       .then(() => {
-        if (deps.isDisposed() || run !== initialRun) return;
+        if (deps.isDisposed() || run !== initialRun || generations.get(prop.id) !== generation || currentProps.find(p => p.id === prop.id)?.modelOverride !== prop.modelOverride) return;
+        const liveProp = currentProps.find(p => p.id === prop.id);
+        if (!liveProp) return;
         const model = createCachedGlbModel(item, false);
         if (!model) return;
         if (deps.isDisposed() || run !== initialRun) {
@@ -190,7 +200,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
           const shrink = shrinkFactorFor(prop, candidate, dims);
           if (shrink < 1) model.scale.multiplyScalar(shrink);
         }
-        const transform = planModelTransform(prop, metrics, candidate.swap);
+        const transform = planModelTransform(liveProp, currentMetrics, candidate.swap);
         model.position.set(transform.position[0], transform.position[1], transform.position[2]);
         model.rotation.y = transform.rotationY;
         model.name = `plan-model-${prop.kind}`;
@@ -200,7 +210,8 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
         if (placeholder) placeholder.visible = false;
       })
       .catch(() => {
-        /* 模型拉不到（404 / CORS / 解析失败）：静默保留占位体（低模或 2D 贴纸）。 */
+        if (generations.get(prop.id) === generation) { placedPropIds.delete(prop.id); placedOverrides.delete(prop.id); }
+        /* 模型拉不到时保留占位，后续可重试。 */
       });
   };
 
@@ -229,7 +240,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     candidatesByTemplate?: ReadonlyMap<string, readonly FacilityModelCandidate[]> | undefined,
   ): void => {
     props.forEach((prop) => {
-      if (placedPropIds.has(prop.id)) return;
+      if (placedPropIds.has(prop.id) || !currentProps.some(p => p.id === prop.id && p.modelOverride === prop.modelOverride)) return;
       const candidates = candidatesByTemplate?.get(prop.templateId) ?? resolveFacilityModels(prop.templateId);
       const overrideSlug = prop.modelOverride;
       if (overrideSlug) {
@@ -241,7 +252,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
         if (!candidatesByTemplate) return; // 内置同步轮没命中：等在线候选轮再兜底，不急着回退。
         void loadFacilityModelOverride(overrideSlug)
           .then((candidate) => {
-            if (deps.isDisposed() || run !== initialRun || placedPropIds.has(prop.id)) return;
+            if (deps.isDisposed() || run !== initialRun || placedPropIds.has(prop.id) || !currentProps.some(p => p.id === prop.id && p.modelOverride === overrideSlug)) return;
             if (candidate) {
               placeModel(prop, metrics, { ...candidate, ...fitFacilityModel(prop.width, prop.depth, candidate) });
               return;
@@ -249,7 +260,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
             placeAuto(prop, metrics, candidates);
           })
           .catch(() => {
-            if (deps.isDisposed() || run !== initialRun || placedPropIds.has(prop.id)) return;
+            if (deps.isDisposed() || run !== initialRun || placedPropIds.has(prop.id) || !currentProps.some(p => p.id === prop.id && p.modelOverride === overrideSlug)) return;
             placeAuto(prop, metrics, candidates);
           });
         return;
@@ -278,6 +289,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     metrics: PlanMetrics,
     nextPlaceholders?: ReadonlyMap<string, THREE.Object3D> | undefined,
   ): void => {
+    currentProps = props; currentMetrics = metrics;
     if (nextPlaceholders) placeholders = nextPlaceholders;
     const pending = props.filter((prop) => !placedPropIds.has(prop.id));
     if (pending.length === 0) return;
@@ -293,9 +305,22 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
       });
   };
 
+  const unsubscribeRegistry = subscribeGeneratedFacilityModels(() => {
+    if (deps.isDisposed() || run !== initialRun) return;
+    for (const prop of currentProps) {
+      const generated = prop.modelOverride ? findGeneratedFacilityModel(prop.modelOverride) : null;
+      if (!generated || (placedPropIds.has(prop.id) && placedUrls.get(prop.id) === generated.glbUrl)) continue;
+      for (const child of group.children.filter(child => child.userData.planPropId === prop.id)) { disposeOwnedModel(child); child.parent?.remove(child); }
+      placedPropIds.delete(prop.id); placedOverrides.delete(prop.id);
+      generations.set(prop.id, (generations.get(prop.id) ?? 0) + 1);
+      placeModel(prop, currentMetrics, { ...generated, ...fitFacilityModel(prop.width, prop.depth, generated) });
+    }
+  });
+
   return {
     group,
     syncPositions(props, metrics) {
+      currentProps = props; currentMetrics = metrics;
       syncPlanModelPositions(group, props, metrics);
       // V-5a：override 变化（设置/切换/清除）→ 旧的已落模型当场 dispose 换新，不整层重挂。
       const changed = props.filter(
@@ -308,6 +333,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
           disposeOwnedModel(placed);
           placed.parent?.remove(placed);
         }
+        generations.set(prop.id, (generations.get(prop.id) ?? 0) + 1);
         placedPropIds.delete(prop.id);
         placedOverrides.delete(prop.id);
       }
@@ -323,6 +349,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     },
     placeNew,
     dispose() {
+      unsubscribeRegistry();
       run += 1;
       group.children.slice().forEach((child) => disposeOwnedModel(child));
       group.parent?.remove(group);

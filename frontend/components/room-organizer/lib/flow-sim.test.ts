@@ -66,3 +66,24 @@ describe('flow-sim（V-4b 流动模拟）', () => {
     expect(polylineLength(LINE.points)).toBe(100);
   });
 });
+
+describe('相接流线分流与单向约束', () => {
+  const branch = route('branch', 'pedestrian', [{ x: 50, y: 0 }, { x: 50, y: 20 }]);
+  it('主线内部接点可分流到子口，子口端点能返回主线，不跨人车分类', () => {
+    const walker = { routeIndex: 0, dist: 49, dir: 1 as const, speed: 2 };
+    const moved = stepFlowWalkers([walker], [LINE, branch], 1)[0]!;
+    expect(moved.routeIndex).toBe(1); expect(moved.dist).toBeCloseTo(1);
+    const back = stepFlowWalkers([{ ...walker, routeIndex: 1, dist: 1, dir: -1 }], [LINE, branch], 1)[0]!;
+    expect(back.routeIndex).toBe(0); expect(back.dist).toBeGreaterThan(49);
+    expect(stepFlowWalkers([walker], [LINE, { ...branch, kind: 'vehicle' }], 1)[0]!.routeIndex).toBe(0);
+  });
+  it('单向不生逆行，不能从单向路终点逆向接入；长帧仍在有效弧长范围', () => {
+    const oneWay = { ...LINE, oneWay: true };
+    expect(createFlowWalkers([oneWay]).every(w => w.dir === 1)).toBe(true);
+    const ending = { ...branch, points: [{ x: 50, y: 20 }, { x: 50, y: 0 }], oneWay: true };
+    expect(stepFlowWalkers([{ routeIndex: 0, dist: 49, dir: 1, speed: 2 }], [LINE, ending], 1)[0]!.routeIndex).toBe(0);
+    for (const w of stepFlowWalkers(createFlowWalkers([oneWay, branch]), [oneWay, branch], 100000)) {
+      expect(w.dist).toBeGreaterThanOrEqual(0); expect(w.dist).toBeLessThanOrEqual(polylineLength([oneWay, branch][w.routeIndex]!.points));
+    }
+  });
+});

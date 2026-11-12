@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearGeneratedFacilityModelsForTests,
+  attachFacilityGenerateTask,
   consumeFacilityGenerateLink,
   findGeneratedFacilityModel,
   listFacilityGenerateLinks,
@@ -15,6 +16,7 @@ import { loadAholoCatalogItem } from './aholo-model-placement';
 
 // resolve 的落盘段动态引这两个模块：loadAholoCatalogItem 背后是 three/glb-assets +
 // 本机代理网络，测试里 mock 成纯数据；fetchLux3dTask/glbOutputOf 走真的（吃 fetchImpl 替身）。
+vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn(async () => {}), getGlbAssetState: () => ({ status: 'ready', dimensions: { width: 6, depth: 4, height: 3 } }) }));
 vi.mock('./aholo-model-placement', () => ({
   loadAholoCatalogItem: vi.fn(),
 }));
@@ -72,13 +74,13 @@ describe('生成模型注册表（V-5b/c 候选回填）', () => {
     expect(localStorage.getItem('scendance:facility-generated-models')).toBe('[]');
   });
 
-  it('超出上限丢最旧的', () => {
+  it('超过旧20条限制仍保留已选设施模型的持久化元数据', () => {
     for (let index = 0; index < 22; index += 1) {
       registerGeneratedFacilityModel(model({ slug: `generated:${index}`, createdAt: Date.now() + index }));
     }
     const all = listGeneratedFacilityModels();
-    expect(all).toHaveLength(20);
-    expect(findGeneratedFacilityModel('generated:0')).toBeNull();
+    expect(all).toHaveLength(22);
+    expect(findGeneratedFacilityModel('generated:0')).not.toBeNull();
     expect(findGeneratedFacilityModel('generated:21')).not.toBeNull();
   });
 
@@ -206,5 +208,25 @@ describe('resolveFacilityGenerateLink（轮询取件）', () => {
     const result = await resolveFacilityGenerateLink('4475964', { fetchImpl });
     expect(result.state).toBe('failed');
     expect(listFacilityGenerateLinks()).toHaveLength(0);
+  });
+});
+
+describe('户外云生成取件与未知结果保护', () => {
+  it('按原设施回填、签名URL不落盘、任务身份保留供刷新重新授权；当前会话不重复请求', async () => {
+    attachFacilityGenerateTask({ taskid: 'cloud-ready-check', lane: 'cloud', facilityId: 'cloud-stage', facilityName: '舞台', name: '云舞台', submittedAt: Date.now() });
+    const cloud = { getGenerationJob: vi.fn(async () => ({ state: 'ready', asset_id: 'asset-ready' })), authorizeAsset: vi.fn(async () => ({ url: 'https://assets.example.test/model.glb?sign=fixture', name: '云舞台' })) };
+    const result = await resolveFacilityGenerateLink('cloud-ready-check', { cloud });
+    expect(result.state).toBe('imported');
+    expect(findGeneratedFacilityModel('generated:cloud-ready-check')?.facilityId).toBe('cloud-stage');
+    expect(localStorage.getItem('scendance:facility-generated-models')).not.toContain('sign=fixture');
+    expect(listFacilityGenerateLinks('cloud-stage')).toHaveLength(1);
+    await resolveFacilityGenerateLink('cloud-ready-check', { cloud }); expect(cloud.getGenerationJob).toHaveBeenCalledTimes(1);
+  });
+  it('submit_unknown不是失败可重试：保留原任务并明确提醒，不能暗示可以再次扣额度', async () => {
+    attachFacilityGenerateTask({ taskid: 'cloud-unknown-check', lane: 'cloud', facilityId: 'unknown-stage', facilityName: '舞台', name: '未知', submittedAt: Date.now() });
+    const cloud = { getGenerationJob: vi.fn(async () => ({ state: 'submit_unknown', asset_id: null })), authorizeAsset: vi.fn() };
+    const result = await resolveFacilityGenerateLink('cloud-unknown-check', { cloud });
+    expect(result).toEqual({ state: 'pending', message: expect.stringContaining('不要重复生成') });
+    expect(listFacilityGenerateLinks('unknown-stage')).toHaveLength(1); expect(cloud.authorizeAsset).not.toHaveBeenCalled();
   });
 });

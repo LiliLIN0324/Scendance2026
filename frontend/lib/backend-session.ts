@@ -113,6 +113,13 @@ export interface BackendConfig {
   error: string | null;
 }
 
+/** Explicit fixture-only private box preview, never a production HTTP exception. */
+function isDevelopmentFixtureHost(host: string): boolean {
+  if (process.env.NODE_ENV === 'production' || process.env.NEXT_PUBLIC_LOCAL_FIXTURE !== '1') return false;
+  if (!/^(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(host)) return false;
+  try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').hostname === host; } catch { return false; }
+}
+
 /** Only public configuration belongs in a browser bundle. Verified guests can persist in this browser; lease identities never do. */
 export function getBackendConfig(input?: { url?: string; anonKey?: string }): BackendConfig {
   const url = (input?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
@@ -123,7 +130,7 @@ export function getBackendConfig(input?: { url?: string; anonKey?: string }): Ba
   else {
     try {
       const parsed = new URL(url);
-      const local = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) || isDevelopmentFixtureHost(parsed.hostname);
       if ((parsed.protocol !== "https:" && !(local && parsed.protocol === "http:")) || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
         error = "Supabase URL 必须是 HTTPS 项目地址；本地服务可使用 HTTP。";
       }
@@ -341,7 +348,7 @@ export class BackendSession {
     // accept an independent URL that could receive the user's access token.
     try {
       const project=new URL(this.config.url),api=new URL(this.config.apiUrl);
-      const local=['localhost','127.0.0.1','[::1]'].includes(project.hostname);
+      const local=(['localhost','127.0.0.1','[::1]'].includes(project.hostname) || isDevelopmentFixtureHost(project.hostname));
       if(!this.config.configured || (project.protocol!=='https:' && !(local&&project.protocol==='http:')) ||
         project.username || project.password || project.pathname!=='/' || project.search || project.hash ||
         api.origin!==project.origin || api.username || api.password || api.search || api.hash ||
@@ -993,7 +1000,7 @@ export class BackendSession {
     let url: URL;
     try { url = new URL(asset.url); }
     catch { throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null); }
-    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || isDevelopmentFixtureHost(url.hostname);
     if ((url.protocol !== "https:" && !(local && url.protocol === "http:")) || url.username || url.password || url.hash) {
       throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
     }
@@ -1602,7 +1609,7 @@ export class BackendSession {
     const result = await this.request<{id: string; url: string}>(`/assets/${uuid.parse(assetId)}/url`, "POST", undefined, this.captureRequestScope(), false);
     if (result.id !== assetId || typeof result.url !== 'string') throw new SceneApiError("INVALID_RESPONSE", 502, null);
     const url = new URL(result.url);
-    if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)))) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && (['localhost','127.0.0.1','[::1]'].includes(url.hostname) || isDevelopmentFixtureHost(url.hostname))))) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return url.href;
   }
   async createReconstruction(input: ReconstructionInput): Promise<ReconstructionJob> {

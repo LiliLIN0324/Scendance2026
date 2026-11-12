@@ -30,6 +30,8 @@ import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { fetchPlaceShape } from '@/components/room-organizer/lib/place-area';
+import type { BackendSession } from '@/lib/backend-session';
+import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
 import OutdoorViewSwitch from '@/components/room-organizer/components/outdoor-view-switch';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
@@ -116,7 +118,7 @@ export interface OutdoorPlanOverlayProps {
    * room-organizer 侧接线：记 facility 链接 + 预填左栏物料生成框（仍须确认额度）；
    * 提交成功后画布轮询回填候选首位。只读分享页等不传，按钮缺省 no-op。
    */
-  onOpenMaterialGenerate?: (facilityId: string, kind: 'text' | 'image') => void;
+  controller?: BackendSession | undefined;
 }
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
@@ -157,7 +159,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onViewChange,
   dormant = false,
   inspectorHostId,
-  onOpenMaterialGenerate,
+  controller,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
@@ -207,6 +209,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 搜地点（用户 m04938 / m05472）：左上角「和地图 App 一样」的搜索框，组件本体在
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
+  const [generateTarget, setGenerateTarget] = useState<{ facilityId: string; facilityName: string; kind: 'text' | 'image' } | null>(null);
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
@@ -232,6 +235,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const anchorRef = useRef(anchor);
   anchorRef.current = anchor;
   useEffect(() => {
+    setGenerateTarget(null);
     const record = readOutdoorProjectRecord(slotId);
     const loaded = record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan();
     if (!loaded.anchor && !anchorRef.current) {
@@ -242,42 +246,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotId]);
 
-  // V-1c（2026-11-13）：chat 场地确认 / 地图圈画换场地后，壳体会带着新锚点重新播种
-  // （room-organizer 的 outdoorSeedPlan 随 layout 重算）——但本组件只在挂载时吃 seedPlan
-  // （防每次 layout 编辑都重置画布）。这里守一道「场地签名」：锚点或边界形状变了才重播种
-  // （换场地=清空重开，与「新建/换场地」同语义），同一场地内的普通编辑不动草稿。
-  // 重播种后顺带把视野框进新边界（V-1d 相机框选）。
-  const venueSignature = (source: SitePlanData | null | undefined): string | null =>
-    source?.anchor
-      ? `${source.anchor.lng.toFixed(6)},${source.anchor.lat.toFixed(6)}|${source.boundary.length}|${Math.round(source.boundary[0]?.x ?? 0)},${Math.round(source.boundary[0]?.y ?? 0)}`
-      : null;
-  const venueSigRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (venueSigRef.current === null) {
-      venueSigRef.current = venueSignature(plan) ?? venueSignature(seedPlan);
-      return;
-    }
-    const sig = venueSignature(seedPlan);
-    if (!sig || !seedPlan?.anchor || sig === venueSigRef.current) return;
-    venueSigRef.current = sig;
-    setPlan(seedPlan);
-    // 旧场地的视图残留（定位钉/选区）一并清掉；视野飞进新边界。
-    setPlacePin(null);
-    setPlaceArea(null);
-    setShapeLoading(false);
-    let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
-    for (const point of seedPlan.boundary) {
-      const geo = enuToLngLat(point.x, point.y, seedPlan.anchor.lng, seedPlan.anchor.lat);
-      west = Math.min(west, geo.lng); east = Math.max(east, geo.lng);
-      south = Math.min(south, geo.lat); north = Math.max(north, geo.lat);
-    }
-    const focusAnchor = seedPlan.anchor;
-    requestAnimationFrame(() => {
-      canvasApiRef.current?.focusBounds([west, south, east, north]);
-      plan3dApiRef.current?.focusLngLat(focusAnchor.lng, focusAnchor.lat);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seedPlan, plan]);
+  // SitePlanData 是户外唯一正源。seedPlan 只在初次载入时播种；
+  // 不能把 3D 壳体镜像反过来重播种（会清空刚确认的设施/流线，且把真边界缩成 100m）。
 
   // 保存管线：同户外项目工作台（400ms 防抖 + 卸载 flush）；状态经 onSaveStateChange
   // 上报给 room-organizer，在左轨 foot（主产品保存态原位）显示。
@@ -287,8 +257,25 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 气泡确认后 provider 调这里；plan 经 ref 每帧取最新，注册一次终身有效。
   useEffect(() => {
     agent?.registerRouteBridge?.({
+      applyVenue: (anchor, boundary) => {
+        const applied = canvasApiRef.current?.applyVenue(anchor, boundary) ?? false;
+        if (applied) {
+          setPlacePin(null); setPlaceArea(null);
+          const geos = boundary.map(point => enuToLngLat(point.x, point.y, anchor.lng, anchor.lat));
+          canvasApiRef.current?.focusBounds([
+            Math.min(...geos.map(p => p.lng)), Math.min(...geos.map(p => p.lat)),
+            Math.max(...geos.map(p => p.lng)), Math.max(...geos.map(p => p.lat)),
+          ]);
+        }
+        return applied;
+      },
+      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
+      clearVenuePreview: () => { setPlacePin(null); setPlaceArea(null); },
+      cancelVenueBoundary: () => canvasApiRef.current?.setMode('view'),
+      inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
+      beginVenueBoundary: anchor => canvasApiRef.current?.beginVenueBoundary(anchor) ?? false,
       applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
-      applyZoneProposal: (zones, facilities) => canvasApiRef.current?.applyZoneProposal(zones, facilities) ?? false,
+      applyZoneProposal: (zones, facilities, routes, nodes) => canvasApiRef.current?.applyZoneProposal(zones, facilities, routes, nodes) ?? false,
       getPlan: () => planRef.current,
     });
     return () => agent?.registerRouteBridge?.(null);
@@ -388,6 +375,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       data-view={view}
       style={{ position: 'absolute', inset: 0, zIndex: 30, background: dormant ? 'transparent' : 'var(--sc-surface, #ffffff)', color: 'var(--sc-ink, #141416)', ...(dormant ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}) }}
     >
+      {generateTarget && <OutdoorFacilityGenerate
+        key={`${slotId}:${generateTarget.facilityId}:${generateTarget.kind}`}
+        target={generateTarget} controller={controller} onClose={() => setGenerateTarget(null)} />}
       {!dormant && guide.activeStep && (
         <GuideBubble
           step={guide.activeStep}
@@ -408,6 +398,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             // 业务图层在两种形态下照常叠加。
             base={geoHidden ? 'floor' : 'map'}
             onPlanChange={setPlan}
+            onVenueBoundaryApplied={agent?.manualOutdoorVenueApplied}
             {...(onHistoryChange ? { onHistoryChange } : {})}
             {...(onModeChange ? { onModeChange: mode => onModeChange(mode === 'select' ? 'select' : 'view') } : {})}
             {...(onInspectorChange ? { onInspectorChange } : {})}
@@ -425,7 +416,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
-            {...(onOpenMaterialGenerate ? { onOpenMaterialGenerate } : {})}
+            generationController={controller}
+            onOpenMaterialGenerate={(facilityId, kind) => {
+              const facility = plan.facilities.find(item => item.id === facilityId);
+              if (facility) setGenerateTarget({ facilityId, facilityName: facility.name, kind });
+            }}
             {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>

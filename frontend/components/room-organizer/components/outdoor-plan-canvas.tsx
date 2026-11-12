@@ -1,4 +1,7 @@
 'use client';
+import { boundaryAtNewAnchor, canReanchorOutdoorPlan } from '../lib/outdoor-plan-protection';
+
+import type { BackendSession } from '@/lib/backend-session';
 
 /**
  * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
@@ -146,6 +149,7 @@ import {
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
 import {
   FACILITY_GENERATE_POLL_MS,
+  findGeneratedFacilityModel,
   getFacilityGenerateLinksRevision,
   getGeneratedFacilityModelsRevision,
   listFacilityGenerateLinks,
@@ -317,6 +321,7 @@ export interface OutdoorPlanCanvasProps {
   onViewChange?: (next: View) => void;
   /** H2-b：编辑提交回调（边界更新/顶点移动/新增分区/分区样式）。不传则只读浏览。 */
   onPlanChange?: (plan: SitePlanData) => void;
+  onVenueBoundaryApplied?: ((anchor: NonNullable<SitePlanData['anchor']>) => void) | undefined;
   /**
    * P2-c：图层栈与编辑浮窗的外挂宿主元素 id（左栏卡片）。传了则 portal 过去
    * （inline 卡片样式，宿主不存在时自动回落画布内浮窗）；缺省浮窗留在画布内。
@@ -391,7 +396,7 @@ export interface OutdoorPlanCanvasProps {
    * V-3c（2026-11-13）区域提案预览：虚线分区 + 物料幽灵，应用前不进 plan。
    * 「应用」走 handle.applyZoneProposal（commitPlan 可撤销）。
    */
-  zoneProposal?: { zones: PlanZone[]; facilities: PlanFacility[] } | null;
+  zoneProposal?: { zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null;
   /**
    * V-4b（2026-11-13）流动模拟：非 null 时在给定流线上跑 2D 行人动画（66ms 步进），
    * 密度按每 10m 人数着色。纯视图动画——不写 plan，置 null 即停。
@@ -411,6 +416,7 @@ export interface OutdoorPlanCanvasProps {
    * 独立只读分享页（plan-share）不传：按钮保留、回调缺省 no-op（?. 调用）。
    */
   onOpenMaterialGenerate?: (facilityId: string, kind: 'text' | 'image') => void;
+  generationController?: BackendSession | undefined;
 }
 
 const TILE = 256;
@@ -891,9 +897,12 @@ export interface OutdoorPlanCanvasHandle {
   /** 2026-11-12 选区：把视野框到 `[west, south, east, north]`（只动视图，不改 plan/anchor）。 */
   focusBounds(bounds: [number, number, number, number]): void;
   /** V-2d：应用流线提案（合并 routes/nodes 进 plan，commitPlan 可撤销）；空提案回 false。 */
+  applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean;
+  inspectFacility(id: string): boolean;
+  beginVenueBoundary(anchor: NonNullable<SitePlanData['anchor']>): boolean;
   applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean;
   /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
-  applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[]): boolean;
+  applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[], routes?: PlanRoute[], nodes?: PlanNode[]): boolean;
   /** 当前 2D 视口（切 3D 时用来对着同一中心把地图斜起来）。 */
   getView(): PlanViewport;
   /** 当前绘制/浏览模式：3D 里非浏览态要关掉左键环绕，把点击交给编辑。 */
@@ -952,6 +961,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onVisibilityChange,
   onViewChange,
   onPlanChange,
+  onVenueBoundaryApplied,
   panelsHostId,
   infoPanelHostId,
   libraryPanelHostId,
@@ -970,6 +980,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   flowSimRoutes,
   sceneObjects,
   onOpenMaterialGenerate,
+  generationController,
 }: OutdoorPlanCanvasProps, ref) {
   // 浮窗外挂宿主（左栏卡片）：宿主 DOM 在覆盖层首帧后才有，effect 后解析；
   // 查不到（左栏收起/未渲染）时 PanelPortal 自动回落画布内浮窗。
@@ -1042,7 +1053,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // V-2d：流线提案预览（同一路数；应用走 handle.applyRoutes，预览本身不进 plan）。
   const routeProposalRef = useRef<{ routes: PlanRoute[]; nodes: PlanNode[] } | null>(routeProposal ?? null);
   // V-3c：区域提案预览（同一路数；应用走 handle.applyZoneProposal，预览本身不进 plan）。
-  const zoneProposalRef = useRef<{ zones: PlanZone[]; facilities: PlanFacility[] } | null>(zoneProposal ?? null);
+  const zoneProposalRef = useRef<{ zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null>(zoneProposal ?? null);
   // V-4b：流动模拟（walkers 状态放 ref，ticker 步进后整帧重绘；模拟不写 plan）。
   const flowSimRef = useRef<{ walkers: FlowWalker[]; routes: PlanRoute[] } | null>(null);
 
@@ -1225,49 +1236,45 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setFacilityModelCandidates(current => (current?.templateId === templateId ? { templateId, items } : current));
       })
       .catch(() => {
-        /* 在线候选拉不到：网格只显示「自动」位，不空崩。 */
+        if (!alive) return;
+        // 在线库故障也不能吞掉本次生成/导入的候选。
+        setFacilityModelCandidates({ templateId, items: listGeneratedFacilityModels(facility?.id) });
       });
     return () => { alive = false; };
   }, [selectedFacilityId, plan, generatedModelsRevision]);
 
-  /**
-   * V-5b/c：选中设施的生成任务轮询。链接在 recordFacilityGenerateLink 时落库（含 localStorage），
-   * 换选再回来接着轮；imported → 候选首位回填（注册表订阅刷新网格），failed → 消息并清链接。
-   */
+  /** V5：按当前计划取回任务（不要求先点中），刷新后自动重新授权云模型。 */
   const [facilityGenerateStatus, setFacilityGenerateStatus] = useState<{ facilityId: string; name: string; message: string } | null>(null);
+  const facilityPollCursor = useRef(0);
   useEffect(() => {
-    if (!selectedFacilityId) {
-      setFacilityGenerateStatus(null);
-      return undefined;
-    }
-    let alive = true;
-    let busy = false;
+    let alive = true; let busy = false;
     const tick = async () => {
       if (busy) return;
       busy = true;
       try {
-        for (const link of listFacilityGenerateLinks(selectedFacilityId)) {
-          const result = await resolveFacilityGenerateLink(link.taskid);
+        const pending = listFacilityGenerateLinks().filter(link => planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
+        if (!pending.length) { if (alive) setFacilityGenerateStatus(null); return; }
+        const start = facilityPollCursor.current % pending.length;
+        const batch = [...pending.slice(start), ...pending.slice(0, start)].slice(0, 4);
+        facilityPollCursor.current += batch.length;
+        for (const link of batch) {
+          if (!alive) return;
+          const result = await resolveFacilityGenerateLink(link.taskid, generationController ? { cloud: generationController } : {});
           if (!alive) return;
           if (result.state === 'imported') {
-            setFacilityGenerateStatus(null);
-            setEditMessage(`「${result.model.name}」生成完成，已回填「${result.model.facilityName}」候选首位，点候选即可切 3D 模型。`);
+            if (link.facilityId === selectedFacilityId) setFacilityGenerateStatus(null);
+            setEditMessage(`「${result.model.name}」已回填「${result.model.facilityName}」候选；选候选才更换模型。`);
           } else if (result.state === 'failed') {
-            setFacilityGenerateStatus(null);
+            if (link.facilityId === selectedFacilityId) setFacilityGenerateStatus(null);
             setEditMessage(`「${link.name}」${result.message}`);
-          } else {
-            setFacilityGenerateStatus({ facilityId: link.facilityId, name: link.name, message: result.message });
-          }
+          } else if (link.facilityId === selectedFacilityId) setFacilityGenerateStatus({ facilityId: link.facilityId, name: link.name, message: result.message });
         }
-        if (alive && listFacilityGenerateLinks(selectedFacilityId).length === 0) setFacilityGenerateStatus(null);
-      } finally {
-        busy = false;
-      }
+      } finally { busy = false; }
     };
     void tick();
     const timer = window.setInterval(() => { void tick(); }, FACILITY_GENERATE_POLL_MS);
     return () => { alive = false; window.clearInterval(timer); };
-  }, [selectedFacilityId, facilityGenerateLinksRevision, generatedModelsRevision]);
+  }, [selectedFacilityId, facilityGenerateLinksRevision, generatedModelsRevision, generationController, plan.facilities]);
 
   /** V-5b/c：本机 GLB 直传兜底（≤10MB，会话内有效）。缓存键 local-glb:* 与室内导入同链路。 */
   const glbImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -1343,6 +1350,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const infoPanelRef = useRef<HTMLDivElement>(null);
 
   function setMode(next: PlanningEditMode) {
+    if (next !== 'boundary') pendingVenueAnchorRef.current = undefined;
     modeRef.current = next;
     draftRef.current = [];
     previewRingRef.current = null;
@@ -2047,6 +2055,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 7c) V-3c：区域提案预览（虚线分区 + 物料幽灵）——同上，应用前不进 plan。
     if (zoneProposalRef.current) {
       drawZoneProposalLayer({ ctx: planCtx, viewport }, zoneProposalRef.current);
+      if (zoneProposalRef.current.routes?.length) drawRouteProposalLayer({ ctx: planCtx, viewport }, { routes: zoneProposalRef.current.routes, nodes: zoneProposalRef.current.nodes ?? [] });
     }
     // 7d) V-4b：流动模拟（行人点 + 密度着色）——纯视图动画，不写 plan。
     if (flowSimRef.current) {
@@ -2498,25 +2507,48 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     canRedo: () => redoRef.current.length > 0,
     focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
     focusBounds: (bounds: [number, number, number, number]) => focusBounds(bounds),
+    inspectFacility: id => {
+      const facility = planRef.current.facilities.find(item => item.id === id);
+      if (!facility) return false;
+      if (facility.levelId) setActiveLevelId(facility.levelId);
+      setMode('select'); selectFacility(id); setInspectorPanel('selection', true);
+      setInspectorCollapsed(current => ({ ...current, selection: false }));
+      return true;
+    },
+    beginVenueBoundary: anchor => {
+      if (!canReanchorOutdoorPlan(planRef.current, anchor)) { setEditMessage('已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变。'); return false; }
+      pendingVenueAnchorRef.current = anchor;
+      focusLngLat(anchor.lng, anchor.lat, 17);
+      setMode('boundary');
+      setEditMessage('没有真实轮廓：请在地图上逐点圈出场地，闭合后才会写入新锚点与边界；Esc 取消。');
+      return true;
+    },
+    applyVenue: (anchor, boundary) => {
+      if (!checkBoundaryRing(boundary).ok || !canReanchorOutdoorPlan(planRef.current, anchor)) return false;
+      commitPlan({ ...planRef.current, anchor, boundary });
+      return true;
+    },
     /** V-2d：应用流线提案（合并进 plan，走 commitPlan 可撤销）；成功返回 true。 */
     applyRoutes: (routes: PlanRoute[], nodes: PlanNode[]) => {
       const current = planRef.current;
       if (routes.length === 0 && nodes.length === 0) return false;
       commitPlan({
         ...current,
-        routes: [...current.routes, ...routes],
-        nodes: [...current.nodes, ...nodes],
+        routes: [...current.routes, ...routes.map(route => ({ ...route, ...activeLevelStamp() }))],
+        nodes: [...current.nodes, ...nodes.map(node => ({ ...node, ...activeLevelStamp() }))],
       });
       return true;
     },
     /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
-    applyZoneProposal: (zones: PlanZone[], facilities: PlanFacility[]) => {
+    applyZoneProposal: (zones: PlanZone[], facilities: PlanFacility[], routes: PlanRoute[] = [], nodes: PlanNode[] = []) => {
       const current = planRef.current;
       if (zones.length === 0 && facilities.length === 0) return false;
       commitPlan({
         ...current,
-        zones: [...current.zones, ...zones],
-        facilities: [...current.facilities, ...facilities],
+        zones: [...current.zones, ...zones.map(zone => ({ ...zone, ...activeLevelStamp() }))],
+        facilities: [...current.facilities, ...facilities.map(facility => ({ ...facility, ...activeLevelStamp() }))],
+        routes: [...current.routes, ...routes.map(route => ({ ...route, ...activeLevelStamp() }))],
+        nodes: [...current.nodes, ...nodes.map(node => ({ ...node, ...activeLevelStamp() }))],
       });
       return true;
     },
@@ -2829,16 +2861,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(null);
   }
 
+  const pendingVenueAnchorRef = useRef<SitePlanData['anchor']>(undefined);
+
   function closeDraft() {
     const draftPoints = draftRef.current;
     const current = planRef.current;
     if (modeRef.current === 'boundary') {
-      const check = checkBoundaryRing(draftPoints);
+      const nextAnchor = pendingVenueAnchorRef.current;
+      if (nextAnchor && !canReanchorOutdoorPlan(current, nextAnchor)) { setEditMessage('规划已有内容变化，本次不改变地理锚点；请新建户外活动后选址。'); setMode('view'); return; }
+      const priorAnchor = current.anchor ?? { lng: DEFAULT_ANCHOR_LNG, lat: DEFAULT_ANCHOR_LAT };
+      const boundary = nextAnchor ? boundaryAtNewAnchor(draftPoints, priorAnchor, nextAnchor) : draftPoints;
+      const check = checkBoundaryRing(boundary);
       if (!check.ok) {
         setEditMessage(check.issue.message);
         return;
       }
-      commitPlan({ ...current, boundary: draftPoints.map(p => ({ x: p.x, y: p.y })) });
+      commitPlan({ ...current, ...(nextAnchor ? { anchor: nextAnchor } : {}), boundary: boundary.map(p => ({ x: p.x, y: p.y })) });
+      if (nextAnchor) onVenueBoundaryApplied?.(nextAnchor);
+      pendingVenueAnchorRef.current = undefined;
       setMode('view');
       setEditMessage(`边界已更新（约 ${Math.round(check.areaM2)} m²）。`);
       return;
@@ -2868,7 +2908,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
   }
 
-  function updateZone(id: string, patch: Partial<Pick<PlanZone, 'name' | 'color' | 'opacity'>>) {
+  function updateZone(id: string, patch: Partial<Pick<PlanZone, 'name' | 'color' | 'opacity' | 'event'>>) {
     const current = planRef.current;
     commitPlan({ ...current, zones: current.zones.map(zone => (zone.id === id ? { ...zone, ...patch } : zone)) });
   }
@@ -5504,6 +5544,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       />
                     </div>
                     <label style={zoneRowStyle}>
+                      事件
+                      <input aria-label={`分区「${zone.name}」事件`} data-testid="zone-event-input"
+                        value={zone.event ?? ''} maxLength={120}
+                        onChange={event => updateZone(zone.id, { event: event.target.value.trim() || undefined })}
+                        style={{ flex: 1, minWidth: 0, fontSize: PLANNING_TYPOGRAPHY.row }} />
+                    </label>
+                    <label style={zoneRowStyle}>
                       透明度
                       <input
                         aria-label={`分区「${zone.name}」透明度`}
@@ -5782,7 +5829,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           「{facilityGenerateStatus.name}」{facilityGenerateStatus.message}，完成后自动回填候选首位。
                         </div>
                       ) : null}
-                      {/* V-5b/c 生成/上传/导入入口：生成与图片经 onOpenMaterialGenerate 外发到主线物料生成框
+                      {/* V-5b/c 生成/上传/导入入口：生成与图片经 onOpenMaterialGenerate 打开户外原位生成框
                           （仍须确认额度）；GLB 直传走本机导入兜底（会话内有效），完成即回填候选首位。 */}
                       <div style={{ display: 'flex', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.xs }}>
                         <input

@@ -43,8 +43,8 @@ export function createFlowWalkers(routes: readonly PlanRoute[]): FlowWalker[] {
       const seed = routeIndex * 100 + i;
       walkers.push({
         routeIndex,
-        dist: total * (i / count) + pseudoRandom(seed) * 4,
-        dir: i % 2 === 0 ? 1 : -1,
+        dist: total > 0 ? (total * (i / count) + pseudoRandom(seed) * 4) % total : 0,
+        dir: route.oneWay || i % 2 === 0 ? 1 : -1,
         speed: 1.0 + pseudoRandom(seed + 7) * 0.3,
       });
     }
@@ -77,19 +77,61 @@ export function pointAtDistance(points: readonly { x: number; y: number }[], t: 
   return points[points.length - 1]!;
 }
 
-/** 步进一帧：按 dt 秒推进每个 walker，端点回绕（双向）。返回新数组（不 mutations）。 */
+/** 点投影到折线，返回沿线弧长与距离。 */
+function projectOnRoute(point: { x: number; y: number }, route: PlanRoute): { dist: number; gap: number } {
+  let best = { dist: 0, gap: Infinity }; let walked = 0;
+  for (let i = 1; i < route.points.length; i += 1) {
+    const a = route.points[i - 1]!; const b = route.points[i]!;
+    const dx = b.x - a.x; const dy = b.y - a.y; const len = Math.hypot(dx, dy);
+    const t = len ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (len * len))) : 0;
+    const gap = Math.hypot(point.x - a.x - t * dx, point.y - a.y - t * dy);
+    if (gap < best.gap) best = { dist: walked + len * t, gap };
+    walked += len;
+  }
+  return best;
+}
+
+/** 步进一帧：相接的子口/驳线可分流，不再在每条线上独立回绕。仍只是预览，不写 plan。 */
 export function stepFlowWalkers(walkers: readonly FlowWalker[], routes: readonly PlanRoute[], dt: number): FlowWalker[] {
+  if (!Number.isFinite(dt) || dt <= 0) return [...walkers];
+  const lengths = routes.map(route => polylineLength(route.points));
   return walkers.map((walker, index) => {
     const route = routes[walker.routeIndex];
-    if (!route) return walker;
-    const total = polylineLength(route.points);
-    if (total <= 0) return walker;
-    let dist = walker.dist + walker.dir * walker.speed * dt;
-    if (dist > total) dist = dist - total;
-    if (dist < 0) dist = dist + total;
-    // 回绕时保持方向（环形巡游语义；折返语义留给 3D 真行走引擎）
-    void index;
-    return { ...walker, dist };
+    const total = lengths[walker.routeIndex] ?? 0;
+    if (!route || total <= 0) return walker;
+    const dir = route.oneWay ? 1 : walker.dir;
+    const start = ((walker.dist % total) + total) % total;
+    const advance = walker.speed * Math.max(0, Number.isFinite(dt) ? dt : 0);
+    // 每个候选接点＝另一条线端点落在当前线上，或当前端点落在另一条线上。
+    const junctions: { at: number; target: number; to: number; remaining: number }[] = [];
+    routes.forEach((other, target) => {
+      if (target === walker.routeIndex || other.kind !== route.kind || !(lengths[target]! > 0)) return;
+      for (const to of [0, lengths[target]!]) {
+        if (other.oneWay && to > 0) continue;
+        const point = pointAtDistance(other.points, to);
+        const hit = projectOnRoute(point, route);
+        const ahead = (hit.dist - start) * dir;
+        // 主线内部接点按固定比例分流；端点处必须接驳。0.5m 容差对应子口 0.1m 四舍五入。
+        if (hit.gap <= 0.5 && ahead > 1e-5 && ahead <= advance && (index % 3 === 0 || hit.dist < 0.01 || hit.dist > total - 0.01)) {
+          junctions.push({ at: hit.dist, target, to, remaining: advance - ahead });
+        }
+      }
+      const end = dir === 1 ? total : 0;
+      const ahead = (end - start) * dir;
+      if (ahead < -1e-5 || ahead > advance) return;
+      const hit = projectOnRoute(pointAtDistance(route.points, end), other);
+      if (hit.gap <= 0.5 && !(other.oneWay && hit.dist > lengths[target]! - 0.01)) junctions.push({ at: end, target, to: hit.dist, remaining: advance - Math.max(0, ahead) });
+    });
+    junctions.sort((a, b) => Math.abs(a.at - start) - Math.abs(b.at - start) || a.target - b.target);
+    const turn = junctions[0];
+    if (turn) {
+      const target = routes[turn.target]!; const length = lengths[turn.target]!;
+      const nextDir: 1 | -1 = target.oneWay || turn.to < 0.01 ? 1 : turn.to > length - 0.01 ? -1 : index % 2 === 0 ? 1 : -1;
+      const dist = ((turn.to + nextDir * turn.remaining) % length + length) % length;
+      return { ...walker, routeIndex: turn.target, dir: nextDir, dist };
+    }
+    const dist = ((start + dir * advance) % total + total) % total;
+    return { ...walker, dir, dist };
   });
 }
 

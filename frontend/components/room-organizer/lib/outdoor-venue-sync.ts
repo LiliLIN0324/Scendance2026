@@ -328,11 +328,30 @@ export function trueFootprintBoundary(
     const y = (lat - anchor.lat) * 111132.92;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     if (Math.abs(x) > 4900 || Math.abs(y) > 4900) return null;
-    points.push({ x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+    const point = { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+    const prior = points[points.length - 1];
+    if (!prior || Math.hypot(point.x - prior.x, point.y - prior.y) >= 0.5) points.push(point);
   }
+  if (points.length > 1 && Math.hypot(points[0]!.x - points[points.length - 1]!.x, points[0]!.y - points[points.length - 1]!.y) < 0.5) points.pop();
+  if (points.length < 3) return null;
   const stride = Math.max(1, Math.ceil(points.length / maxPoints));
   if (stride === 1) return points;
   const out: PlanPoint[] = [];
   for (let i = 0; i < points.length; i += stride) out.push(points[i]!);
   return out.length >= 3 ? out : null;
+}
+/** 户外规划锚点/真实边界 → 旧场景镜像的西北角原点；不改变 SitePlan 正源。 */
+export function sceneAnchorFromOutdoorPlan(plan: Pick<SitePlanData, 'anchor' | 'boundary'>): RoomLayout['sceneAnchor'] | null {
+  if (!plan.anchor || plan.boundary.length < 3) return null;
+  const shell = planBoundaryToShellVenue(plan.boundary);
+  if (!shell) return null;
+  const west = Math.min(...plan.boundary.map(point => point.x));
+  const north = Math.max(...plan.boundary.map(point => point.y));
+  return {
+    lng: plan.anchor.lng + west / metersPerDegreeLng(plan.anchor.lat),
+    lat: plan.anchor.lat + north / 111132.92,
+    orientationDeg: 0,
+    metersPerUnit: 1 / shell.scale,
+    source: plan.anchor.source,
+  };
 }

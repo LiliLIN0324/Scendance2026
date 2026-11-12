@@ -7,11 +7,11 @@ const FETCH_BAD_PORTS=new Set([1,7,9,11,13,15,17,19,20,21,22,23,25,37,42,43,53,6
 export const isFetchBlockedPort=(port:number):boolean=>FETCH_BAD_PORTS.has(port);
 
 /** The optional predicate allows deterministic retry tests; it is not a network fallback. */
-export async function listenLocalFetchSafe(server:Server,port:number,blocked:(port:number)=>boolean=isFetchBlockedPort):Promise<AddressInfo>{
+export async function listenLocalFetchSafe(server:Server,port:number,blocked:(port:number)=>boolean=isFetchBlockedPort,host='127.0.0.1'):Promise<AddressInfo>{
   if(port!==0&&blocked(port))throw new Error('Requested loopback port is blocked by Fetch');
   for(let attempt=0;attempt<16;attempt++){
     const listening=once(server,'listening');
-    server.listen(port,'127.0.0.1');
+    server.listen(port,host);
     await listening;
     const address=server.address();
     if(!address||typeof address==='string'){

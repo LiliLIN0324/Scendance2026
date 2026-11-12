@@ -1,3 +1,5 @@
+import { outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
+import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 /**
  * V-4a（2026-11-13）：子出入口提案（纯函数，预览不落盘）。
  *
@@ -56,7 +58,7 @@ export interface SubEntranceProposal {
  * 分区 → 子出入口 + 驳线草案。没有分区或没有流线回 null（调用方提示先排流线/分区）。
  */
 export function buildSubEntranceProposal(
-  plan: Pick<SitePlanData, 'zones' | 'routes' | 'nodes'>,
+  plan: Pick<SitePlanData, 'zones' | 'routes' | 'nodes'> & Partial<Pick<SitePlanData, 'boundary' | 'facilities'>>,
   idFactory: () => string = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `s-${Math.random().toString(36).slice(2)}`),
 ): SubEntranceProposal | null {
   if (plan.zones.length === 0 || plan.routes.length === 0) return null;
@@ -76,7 +78,13 @@ export function buildSubEntranceProposal(
     }
     for (const sample of samples) {
       for (const route of plan.routes) {
+        if (route.kind !== 'pedestrian') continue; // 不把观众驳线接到车行/装卸线上。
         const hit = nearestPointOnPolyline(sample, route.points);
+        const points = [sample, hit.point];
+        const strips = outdoorCorridorStrips(points, 2);
+        if (plan.boundary && strips.some(strip => facilityPlacementIssues(strip, plan.boundary!).length)) continue;
+        if ((plan.facilities ?? []).some(f => strips.some(strip => outdoorRingsOverlap(strip, facilityFootprintRing(f))))) continue;
+        if (plan.routes.some(r => r.kind !== 'pedestrian' && outdoorCorridorStrips(r.points, (r.widthM ?? 4) + 2).some(road => strips.some(strip => outdoorRingsOverlap(strip, road))))) continue;
         if (!bestSpur || hit.dist < bestSpur.dist) {
           bestSpur = { nodePos: sample, routePoint: hit.point, dist: hit.dist, route };
         }
