@@ -1148,7 +1148,9 @@ function renderStory(projectKey) {
   if (projectKey === 'yuquan') {
     const proposal = caseElement('a','','查看完整策划、路线和点位照片 ↗');
     proposal.href = '/showcase/assets/yuquan-market-proposal.html#materials';
-    info.append(caseElement('p'), proposal);
+    const evidence = caseElement('a','','阅读菊展研究档案 ↗');
+    evidence.href = '/showcase/assets/yuquan-research-dossier.html';
+    info.append(caseElement('p'), proposal, '　', evidence);
   }
   story.replaceChildren(media,info);
   renderCaseAnalysis(section.querySelector('#site-case-analysis'),projectKey);
