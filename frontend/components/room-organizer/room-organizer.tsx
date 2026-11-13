@@ -52,9 +52,11 @@ import {
   clampFloatRect,
   defaultLeftStackState,
   detachLeftStackPanel,
+  dockBandFromRect,
   dockLeftStackPanel,
   detachedIndexOf,
   isLeftStackDetached,
+  pointInDockBand,
   raiseLeftStackPanel,
   ratioFromPointer,
   readLeftStackState,
@@ -624,6 +626,8 @@ useEffect(() => {
   // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
   const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
   const [leftStackDragging, setLeftStackDragging] = useState(false);
+  /** 拖拽中的浮窗指针正停在左栏停靠吸附带内：用于高亮停靠槽位（成熟可停靠面板的 ghost 占位）。 */
+  const [leftStackDockHover, setLeftStackDockHover] = useState(false);
   const leftStackHydratedRef = useRef(false);
   const leftStackColumnRef = useRef<HTMLDivElement | null>(null);
   const leftStackViewportRef = useRef({ width: 1280, height: 800 });
@@ -666,12 +670,11 @@ useEffect(() => {
   }, []);
   useEffect(() => {
     // 2026-11-11 用户纠正：不要按钮弹出——直接抓住面板标题「拽出来」。左栏内纵向拖超过阈值则换上下顺序。
-    const overColumn = (clientX: number, clientY: number) => {
-      const box = leftStackColumnRef.current?.getBoundingClientRect();
-      if (!box) return false;
-      // 要拖回栏内偏里的位置才收回，避免刚抓出来一点就弹回去。
-      return clientX >= box.left + 8 && clientX <= box.right - 24 && clientY >= box.top - 8 && clientY <= box.bottom + 8;
-    };
+    // 停靠吸附带：列实体在全浮走时会收成 0 宽，直接用它的矩形判命中会区间自相矛盾；
+    // 空栏态用目标栏宽兜底出一条沿轨边的吸附带，成熟可停靠面板靠近边缘即命中槽位。
+    const dockBand = () =>
+      dockBandFromRect(leftStackColumnRef.current?.getBoundingClientRect() ?? null, leftColumnWidth, leftStackViewportRef.current.height);
+    const overDock = (clientX: number, clientY: number) => pointInDockBand(dockBand(), clientX, clientY);
     const onMove = (event: PointerEvent) => {
       const drag = leftStackDragRef.current;
       if (!drag) return;
@@ -705,12 +708,17 @@ useEffect(() => {
           setLeftStack(current => withLeftStackRect(detachLeftStackPanel(current, panel, leftStackViewportRef.current), panel, rect));
           return;
         }
-        // 左栏内上下拖 → 两个面板换顺序（只在开关双面板时生效）。
+        // 左栏内上下拖 → 上下换序：被拖的若在下面就提到首位；被拖的若在上面，就把对手提到首位。
         if (!drag.pulled && Math.abs(dy) > 48 && Math.abs(dy) > Math.abs(dx) * 1.4) {
           drag.reordered = true;
-          const pair = leftStackPairRef.current;
-          const other = pair?.find(id => id !== (drag.panel ?? leftStack.first));
-          if (other) setLeftStack(current => swapLeftStackOrder(current, other));
+          if (drag.panel) {
+            const dragged = drag.panel;
+            setLeftStack(current => {
+              const other = leftStackPairRef.current?.find(id => id !== dragged);
+              const newTop = current.first === dragged ? (other ?? dragged) : dragged;
+              return swapLeftStackOrder(current, newTop);
+            });
+          }
         }
         return;
       }
@@ -721,30 +729,46 @@ useEffect(() => {
           : { width: drag.rect.width + (event.clientX - drag.startX), height: drag.rect.height + (event.clientY - drag.startY) }),
       }, leftStackViewportRef.current);
       setLeftStack(current => withLeftStackRect(current, panel, next));
+      // 只有跟着指针走的 move 小窗参与停靠吸附高亮；缩放 / 拆分不判断槽位。
+      if (drag.kind === 'move') {
+        const hover = overDock(event.clientX, event.clientY);
+        setLeftStackDockHover(prev => (prev === hover ? prev : hover));
+      }
     };
     const stop = (event: PointerEvent) => {
       const drag = leftStackDragRef.current;
       if (!drag) return;
       leftStackDragRef.current = null;
+      document.body.classList.remove('sc-panel-dragging');
       setLeftStackDragging(false);
-      // 小窗拖回左栏范围内松手 → 收回左栏（只收当前拖拽的这一枚，其他浮窗不动）。
+      setLeftStackDockHover(false);
+      // 小窗拖回左栏吸附带内松手 → 收回左栏（只收当前拖拽的这一枚，其他浮窗不动）。
       const dockPanel = drag.kind === 'move' ? drag.panel : undefined;
-      if (dockPanel && overColumn(event.clientX, event.clientY)) {
+      if (dockPanel && overDock(event.clientX, event.clientY)) {
         setLeftStack(current => dockLeftStackPanel(current, dockPanel));
       }
+    };
+    // 拖拽期间拦掉原生文本选择：selectstart 一发起就取消，配合 body 上的静态禁选类。
+    const onSelectStart = (event: Event) => {
+      if (leftStackDragRef.current) event.preventDefault();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', stop);
     window.addEventListener('pointercancel', stop);
+    document.addEventListener('selectstart', onSelectStart);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', stop);
       window.removeEventListener('pointercancel', stop);
+      document.removeEventListener('selectstart', onSelectStart);
+      document.body.classList.remove('sc-panel-dragging');
     };
-  }, [leftStack.rects]);
+  }, [leftStack.rects, leftColumnWidth]);
   const beginLeftStackDrag = useCallback((kind: 'split' | 'move' | 'resize', panel: LeftStackPanelId | undefined, event: React.PointerEvent) => {
     event.preventDefault();
     event.stopPropagation();
+    document.body.classList.add('sc-panel-dragging');
+    window.getSelection()?.removeAllRanges();
     // 点按/拖动一枚已浮着的小窗时把它抬到最上层（成熟浮窗惯例：后点的盖在前面上）。
     if (kind === 'move' && panel) setLeftStack(current => raiseLeftStackPanel(current, panel));
     leftStackDragRef.current = {
@@ -760,6 +784,11 @@ useEffect(() => {
   const beginLeftStackPull = useCallback((panel: LeftStackPanelId, event: React.PointerEvent) => {
     if ((event.target as HTMLElement).closest('button, input, select, textarea, a, [role="button"]')) return;
     if (event.button !== 0) return;
+    // 阻止默认文本选择与冒泡，避免按住标题拖拽时扫选到卡片正文。
+    event.preventDefault();
+    event.stopPropagation();
+    document.body.classList.add('sc-panel-dragging');
+    window.getSelection()?.removeAllRanges();
     leftStackDragRef.current = {
       kind: 'pull',
       panel,
@@ -4291,7 +4320,7 @@ useEffect(() => {
             {capacityText}
           </span>
         </div>
-        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${dockColumnOccupied ? '' : ' is-empty-dock'}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
+        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging ? ' is-panel-dragging' : ''}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
@@ -4441,7 +4470,8 @@ useEffect(() => {
             </svg>
             <span>拍摄场地</span>
           </button>}
-          <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}${dockColumnOccupied ? '' : ' is-empty-dock'}`}>
+          <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}`}>
+          {leftStackDragging && leftStackDockHover && !dockColumnOccupied && <div className="sc-dock-ghost" aria-hidden="true">放回左栏</div>}
           {capturePanel !== 'new' && <aside ref={capturePanelRef} aria-hidden={!captureOpen}
             className={`sc-workbench-capture${isLeftStackDetached(leftStack, 'capture') ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
             style={{

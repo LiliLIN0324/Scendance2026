@@ -1493,6 +1493,26 @@ body {
   font-size: var(--sc-type-meta, 12px); cursor: pointer;
 }
 .sc-agent-float-bar button:hover { color: var(--sc-ink); border-color: var(--sc-accent); }
+/* 拖拽面板/浮窗/分隔条期间整个工作台禁选文字，避免扫选到卡片正文（成熟可停靠面板惯例）。 */
+/* body 类在 pointerdown 时同步挂上，不等 React 下一帧渲染，拦住 mousedown 阶段就开始的选区。 */
+body.sc-panel-dragging,
+body.sc-panel-dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sc-workspace.is-panel-dragging,
+.sc-workspace.is-panel-dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* 可拖拽的标题条/工具条基础上就不参与文本选择。 */
+.sc-left-heading,
+.ap-session-head,
+.sc-person-chat-head,
+.sc-agent-float-bar {
+  user-select: none;
+  -webkit-user-select: none;
+}
 .sc-float-resize {
   position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
   cursor: nwse-resize; touch-action: none;
@@ -1532,6 +1552,23 @@ body {
 }
 .sc-left-column.is-empty-dock { background: transparent; border-right: 0; }
 .sc-left-column.is-empty-dock .sc-left-card-resizer { display: none; }
+/* 拖拽浮窗靠近左栏时的停靠槽位高亮：空栏收起态在悬停瞬间临时展开轨道露出 ghost 占位；
+   已停靠态给栏体描边上色，松手落入槽位即收回。 */
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-empty-dock.is-dock-hover {
+  grid-template-columns: var(--sc-nav-rail-width) var(--sc-left-card-width, 320px) minmax(0, 1fr);
+}
+.sc-left-column.is-dock-hover {
+  background: color-mix(in oklab, var(--wk-paper) 92%, var(--sc-accent) 8%);
+  border-right: 1px solid var(--sc-accent);
+}
+.sc-left-column.is-empty-dock.is-dock-hover { background: transparent; border-right: 0; }
+.sc-dock-ghost {
+  position: absolute; inset: 10px 12px; border: 1.5px dashed var(--sc-accent);
+  border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  background: color-mix(in oklab, var(--sc-accent) 8%, transparent);
+  color: var(--sc-accent-ink); font-size: var(--sc-type-meta, 12px); font-weight: 600;
+  pointer-events: none; z-index: 5;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-data-host {
   border: 0; border-radius: 0; background: transparent;
 }

@@ -13,9 +13,11 @@ import {
   defaultFloatRect,
   defaultLeftStackState,
   detachLeftStackPanel,
+  dockBandFromRect,
   dockLeftStackPanel,
   isLeftStackDetached,
   normalizeLeftStackState,
+  pointInDockBand,
   raiseLeftStackPanel,
   ratioFromPointer,
   readLeftStackState,
@@ -168,5 +170,40 @@ describe('left stack layout state', () => {
     expect(ratioFromPointer(300, 100, 800)).toBeCloseTo(0.25, 5);
     expect(ratioFromPointer(700, 100, 800)).toBeCloseTo(0.75, 5);
     expect(ratioFromPointer(0, 0, 0)).toBe(0.5);
+  });
+});
+
+describe('停靠吸附带 dockBandFromRect / pointInDockBand', () => {
+  const OPEN_RECT = { left: 64, right: 384, top: 58, bottom: 750, width: 320, height: 692 };
+  const COLLAPSED_RECT = { left: 64, right: 64, top: 0, bottom: 0, width: 0, height: 0 };
+
+  it('栏体展开时吸附带就是列实体矩形', () => {
+    const band = dockBandFromRect(OPEN_RECT, 320, 800);
+    expect(band).toEqual({ left: 64, right: 384, top: 58, bottom: 750 });
+  });
+
+  it('全浮走栏体收成 0 宽时，沿轨边兜底出一条栏宽的吸附带，纵向铺满视口', () => {
+    const band = dockBandFromRect(COLLAPSED_RECT, 320, 800);
+    expect(band.left).toBe(64);
+    expect(band.right).toBe(384);
+    expect(band.top).toBe(0);
+    expect(band.bottom).toBe(800);
+  });
+
+  it('拿不到列元素时回退到轨左缘 64px 起的兜底带', () => {
+    const band = dockBandFromRect(null, 240, 720);
+    expect(band.left).toBe(64);
+    expect(band.right).toBe(64 + Math.max(240, 220));
+    expect(band.bottom).toBe(720);
+  });
+
+  it('命中判定：带内（左缘留 4px、上下留 8px 容错）为真，越界为假', () => {
+    const band = dockBandFromRect(OPEN_RECT, 320, 800);
+    expect(pointInDockBand(band, 68, 100)).toBe(true);
+    expect(pointInDockBand(band, 64, 100)).toBe(false);
+    expect(pointInDockBand(band, 380, 50)).toBe(true);
+    expect(pointInDockBand(band, 400, 100)).toBe(false);
+    expect(pointInDockBand(band, 100, 50)).toBe(true);
+    expect(pointInDockBand(band, 100, 40)).toBe(false);
   });
 });

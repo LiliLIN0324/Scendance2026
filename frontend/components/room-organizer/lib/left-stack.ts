@@ -50,6 +50,38 @@ export const LEFT_STACK_MAX_DETACHED = 2;
 /** 新弹出的小窗相对前一枚的级联错位（px），保证两枚标题条都露得出来。 */
 export const LEFT_STACK_CASCADE_OFFSET = 28;
 
+/** 停靠吸附带的屏幕矩形（指针坐标可直接命中）。 */
+export interface DockBandRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * 由列元素矩形推导停靠吸附带。列在全浮走时会收成 0 宽，此时用兜底栏宽出一条沿轨边的命中带；
+ * 列实体太小（收起 / 空壳）时纵向边界回退到整个视口高度，避免命中区间自相矛盾（左缘 > 右缘）。
+ */
+export function dockBandFromRect(
+  rect: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null,
+  fallbackWidth: number,
+  viewportHeight: number,
+): DockBandRect {
+  const bandLeft = rect?.left ?? 64;
+  const openEnough = rect != null && rect.width > 40 && rect.height > 120;
+  return {
+    left: bandLeft,
+    right: openEnough ? rect.right : bandLeft + Math.max(fallbackWidth, 220),
+    top: openEnough ? rect.top : 0,
+    bottom: openEnough ? rect.bottom : viewportHeight,
+  };
+}
+
+/** 指针是否落在停靠吸附带内（左右留 4px、上下留 8px 容错）。 */
+export function pointInDockBand(band: DockBandRect, x: number, y: number): boolean {
+  return x >= band.left + 4 && x <= band.right && y >= band.top - 8 && y <= band.bottom + 8;
+}
+
 const FALLBACK_VIEWPORT = { width: 1280, height: 800 };
 
 const PANEL_IDS: readonly LeftStackPanelId[] = ['outdoor', 'bingo', 'capture', 'chat'];
