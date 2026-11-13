@@ -14,6 +14,7 @@ import type { PlanFacility, PlanPoint } from '../../../../supabase/functions/_sh
 import type { FurnitureItem, RoomLayout } from './types';
 import { resolveFacilityTarget } from './plan-facility-mapping';
 import { buildFacility, type PlanFacilityTemplate } from './site-plan-facilities';
+import { inferWorkerZoneId } from './site-plan-routes';
 import {
   framePoint,
   hexOrUndefined,
@@ -57,6 +58,7 @@ export function migrateFacilities(
   layout: Pick<RoomLayout, 'width' | 'height' | 'floors'>,
   boundary: readonly PlanPoint[],
   gen: MigrationUuidGen = () => crypto.randomUUID(),
+  zones: readonly { id: string; polygon: readonly PlanPoint[] }[] = [],
 ): FacilityMigrationResult {
   const frame = makeFrame(boundary, layout.width, layout.height);
   const facilities: PlanFacility[] = [];
@@ -76,6 +78,8 @@ export function migrateFacilities(
     }
 
     const position = framePoint(frame, item.position.x, item.position.z);
+    // 归属分区：中心点落点命中，口径与 worker/node 一致；都不含则留空。
+    const zoneId = inferWorkerZoneId(position, zones);
     const color = hexOrUndefined(item.color);
     const name = (item.name ?? '').trim().slice(0, 60) || FALLBACK_NAME;
     const rotationDegValue = rotationDeg(item);
@@ -95,6 +99,7 @@ export function migrateFacilities(
       position,
       rotationDeg: rotationDegValue,
       name,
+      ...(zoneId ? { zoneId } : {}),
       ...(color ? { color } : {}),
       notes: '',
     }, boundary, facilities);

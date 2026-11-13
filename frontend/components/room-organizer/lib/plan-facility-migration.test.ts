@@ -116,4 +116,28 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
 
     expect(result.facilities).toHaveLength(2);
   });
+
+  it('落点命中分区带 zoneId，区外物件归属留空（口径与 worker/node 一致）', () => {
+    const zones = [
+      { id: 'a1000000-0000-4000-8000-000000000001', name: '一区', polygon: [{ x: 0, y: 8 }, { x: 5, y: 8 }, { x: 5, y: 4 }, { x: 0, y: 4 }] },
+    ];
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          // {x:2,z:2} → 平面 (1,7)，落在一区矩形内
+          makeItem({ id: 't1', type: 'toilet', name: '洗手间', position: { x: 2, z: 2 } }),
+          // {x:16,z:14} → 平面 (8,1)，在一区矩形外
+          makeItem({ id: 'b1', type: 'bed', name: '床', position: { x: 16, z: 14 } }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), zones);
+
+    expect(result.facilities).toHaveLength(2);
+    const [inside, outside] = result.facilities;
+    expect(inside!.zoneId).toBe(zones[0].id);
+    expect(outside!.zoneId).toBeUndefined();
+  });
 });
