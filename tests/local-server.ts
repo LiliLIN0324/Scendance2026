@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { database, owner, editor, outsider } from './fixtures.ts';
 import { createApi } from '../supabase/functions/_shared/api.ts';
+import { createConversationApi } from '../supabase/functions/_shared/conversation-api.ts';
 import { ApiError } from '../supabase/functions/_shared/domain.ts';
 import {trialModelRoundDiagnostic,trialSubmissionDiagnostic,trialValidationDiagnostic,type AgentTrialDiagnostic} from '../supabase/functions/_shared/agent-trial-diagnostic.ts';
 
@@ -29,6 +30,9 @@ export function safeLocalAgentTrace(usage:unknown):LocalAgentTraceEntry[] {
 }
 
 export interface LocalServerOptions {
+  /** Exercise the actual dedicated deployment boundary in transport integration tests. */
+  dedicatedConversation?: boolean;
+  conversationHandler?: (request: Request) => Promise<Response>;
   /** Explicit private box host for browser acceptance; default remains loopback. */
   privateHost?: string;
   /** Explicitly passed by the isolated development runner; never reads production credentials. */
@@ -110,6 +114,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
     pendingRuns.add(task);void task.then(()=>pendingRuns.delete(task),()=>pendingRuns.delete(task));
   }:undefined;
   const api = createApi(backend, env, aiFetcher, waitUntil);
+  const conversationApi = options.conversationHandler ?? (options.dedicatedConversation ? createConversationApi(backend, env, aiFetcher) : api);
   const server = createServer(async (req, res) => {
     // 浏览器直连本机服务要过跨域与私有网络两道预检，Node 侧集成测试走不到这里。
     const origin = req.headers.origin;
@@ -141,7 +146,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
           const data=JSON.parse(body.toString()) as {provider?:unknown;kind?:unknown};unsupportedImage=data?.provider==='aholo'&&data?.kind==='image';
         }catch{/* Let the normal API validate malformed requests. */}
         const authorizedFixture=!!sessions.get((req.headers.authorization??'').replace(/^Bearer /,''))&&req.headers.apikey===testPublicKey;
-        response = unsupportedImage&&authorizedFixture?Response.json({error:{code:'LOCAL_LUX3D_IMAGE_UNAVAILABLE'}},{status:400}):await api(new Request(address, {
+        response = unsupportedImage&&authorizedFixture?Response.json({error:{code:'LOCAL_LUX3D_IMAGE_UNAVAILABLE'}},{status:400}):await (conversationRoute?conversationApi:api)(new Request(address, {
           method: req.method ?? 'GET', headers, signal:cancelled.signal,
           ...(body.length ? { body } : {}),
         }));

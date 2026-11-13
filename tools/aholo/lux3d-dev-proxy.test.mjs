@@ -12,6 +12,17 @@ const MIB = 1024 * 1024;
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const JPEG = 'data:image/jpeg;base64,/9j/';
 const response = body => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+test('site-context uses the Pages handler and preserves validation status', async t => {
+  const { request, calls } = await fixture(t, () => response({ elements: [] }));
+  const invalid = await request('/api/site-context?radius=200');
+  assert.equal(invalid.status, 400);
+  assert.equal(calls.length, 0);
+  const valid = await request('/api/site-context?lng=120.15&lat=30.25&radius=200');
+  assert.equal(valid.status, 200);
+  assert.equal(valid.body.schemaVersion, 1);
+  assert.equal(valid.body.complete, true);
+  assert.equal(calls.length, 1);
+});
 const luxResponse = d => response({ c: '0', d });
 
 async function fixture(t, responder = () => { throw new Error('Unexpected upstream request'); }, options = {}) {

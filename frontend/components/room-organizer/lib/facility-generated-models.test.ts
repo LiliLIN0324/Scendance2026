@@ -155,21 +155,22 @@ describe('resolveFacilityGenerateLink（轮询取件）', () => {
     expect(listFacilityGenerateLinks('facility-1')).toHaveLength(1);
   });
 
-  it('生成失败（status 4）删链接并报原因', async () => {
+  it('生成失败（status 4）保留终态任务与关联，不再轮询', async () => {
     seedLink();
     const fetchImpl = vi.fn(async () => taskResponse(4));
     const result = await resolveFacilityGenerateLink('4475964', { fetchImpl });
     expect(result).toMatchObject({ state: 'failed' });
     expect(result.state === 'failed' && result.message).toContain('生成失败');
-    expect(listFacilityGenerateLinks()).toHaveLength(0);
+    expect(listFacilityGenerateLinks()[0]).toMatchObject({taskid:'4475964',terminal:{status:'4'}});
+    await resolveFacilityGenerateLink('4475964',{fetchImpl});expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('完成但没有 GLB 产物：删链接报「产物里没有 GLB」', async () => {
+  it('完成但没有 GLB 产物：保留终态关联报「产物里没有 GLB」', async () => {
     seedLink();
     const fetchImpl = vi.fn(async () => taskResponse(3, ['https://cos.example.com/preview.png']));
     const result = await resolveFacilityGenerateLink('4475964', { fetchImpl });
     expect(result.state === 'failed' && result.message).toContain('没有 GLB');
-    expect(listFacilityGenerateLinks()).toHaveLength(0);
+    expect(listFacilityGenerateLinks()[0]?.terminal?.status).toBe('completed_without_glb');
   });
 
   it('完成且带 GLB：落盘入库、注册 generated:<taskid> 候选、删链接', async () => {
@@ -201,13 +202,13 @@ describe('resolveFacilityGenerateLink（轮询取件）', () => {
     expect(listFacilityGenerateLinks('facility-1')).toHaveLength(1);
   });
 
-  it('模型本身坏掉：failed 删链接，不留死链', async () => {
+  it('模型本身坏掉：保留终态关联、不重复取件', async () => {
     seedLink();
     vi.mocked(loadAholoCatalogItem).mockRejectedValueOnce(new Error('模型没有量出尺寸，请重新落盘。'));
     const fetchImpl = vi.fn(async () => taskResponse(3, [SIGNED_GLB]));
     const result = await resolveFacilityGenerateLink('4475964', { fetchImpl });
     expect(result.state).toBe('failed');
-    expect(listFacilityGenerateLinks()).toHaveLength(0);
+    expect(listFacilityGenerateLinks()[0]?.terminal?.status).toBe('completed_unusable');
   });
 });
 
@@ -238,4 +239,12 @@ it('新任务与候选按原项目隔离，即使复制计划沿用设施ID也�
   }
   expect(listFacilityGenerateLinks('same-id', 'project-a').map(link => link.taskid)).toEqual(['project-a']);
   expect(listGeneratedFacilityModels('same-id', 'project-b').map(item => item.slug)).toEqual(['generated:project-b']);
+});
+
+it('cloud failed/rejected retains task/project identity across reload and no longer polls terminal jobs',async()=>{
+ attachFacilityGenerateTask({taskid:'cloud-terminal-history',projectId:'original-project',facilityId:'f',facilityName:'舞台',name:'舞台',submittedAt:1,lane:'cloud'});
+ const cloud={getGenerationJob:vi.fn().mockResolvedValue({state:'failed',asset_id:null}),authorizeAsset:vi.fn()};
+ expect((await resolveFacilityGenerateLink('cloud-terminal-history',{cloud})).state).toBe('failed');
+ expect(JSON.parse(localStorage.getItem('scendance:facility-generate-links')!).find((x:{taskid:string})=>x.taskid==='cloud-terminal-history')).toMatchObject({projectId:'original-project',terminal:{status:'failed'}});
+ await resolveFacilityGenerateLink('cloud-terminal-history',{cloud});expect(cloud.getGenerationJob).toHaveBeenCalledTimes(1);expect(cloud.authorizeAsset).not.toHaveBeenCalled();
 });
