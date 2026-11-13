@@ -2491,6 +2491,11 @@ useEffect(() => {
   const leftStackSecond: LeftStackPanelId | null = leftStackPair && leftStackFirst ? (leftStackPair.find(id => id !== leftStackFirst) ?? null) : null;
   // 双卡片堆栈：成对的两张都还在栏内才分上下；任一被抓成小窗，留在栏内的那张独占整栏。
   const leftStackSplit = !!leftStackPair && leftStackPair.every(id => !isLeftStackDetached(leftStack, id));
+  // 栏内实际还占着位置的卡片：已浮成独立小窗的不算。抽屉非收起时也占栏。
+  // 全浮走时左栏只留一个白底空壳——此时把列宽/底/调节条收起，fixed 浮窗仍挂在列内不受影响。
+  const dockedCards = leftStackCards.filter(id => !isLeftStackDetached(leftStack, id));
+  const drawerDocked = !sidebarCollapsed && !captureOpen;
+  const dockColumnOccupied = dockedCards.length > 0 || drawerDocked;
   // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
   // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
   // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
@@ -4286,7 +4291,7 @@ useEffect(() => {
             {capacityText}
           </span>
         </div>
-        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
+        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${dockColumnOccupied ? '' : ' is-empty-dock'}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
@@ -4436,7 +4441,7 @@ useEffect(() => {
             </svg>
             <span>拍摄场地</span>
           </button>}
-          <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
+          <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}${dockColumnOccupied ? '' : ' is-empty-dock'}`}>
           {capturePanel !== 'new' && <aside ref={capturePanelRef} aria-hidden={!captureOpen}
             className={`sc-workbench-capture${isLeftStackDetached(leftStack, 'capture') ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
             style={{
