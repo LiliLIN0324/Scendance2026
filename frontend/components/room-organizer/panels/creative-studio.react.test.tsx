@@ -3253,7 +3253,8 @@ describe('complete local backup transactions', () => {
     const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
     renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
-    expect(screen.getByText(/已有活动暂不可打开/)).toBeTruthy();
+    // 2026-11-13 用户指令：暂停提示已从面板删掉，只保留「新建可用」这条行为。
+    expect(screen.queryByText(/已有活动暂不可打开/)).toBeNull();
     expect((screen.getByRole('button',{name:'新建活动'}) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'独立活动集成演练'}});
     fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
@@ -3301,7 +3302,7 @@ describe('complete local backup transactions', () => {
     expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
     expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
   });
-  it('keeps the original layout when the new activity cannot be stored or another tab holds the source lock', async () => {
+  it('keeps the original layout when the new activity cannot be stored, and still creates it while another page holds the source lock', async () => {
     expect(localRestoreAvailable()).toBe(false);
     const complete=vi.fn();
     const stored=JSON.stringify(layout);localStorage.setItem(STORAGE_KEY, stored);
@@ -3318,15 +3319,17 @@ describe('complete local backup transactions', () => {
     expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
     expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
     vi.mocked(Storage.prototype.setItem).mockRestore();
+    // 2026-11-14 用户指令：两个页面允许同时打开同一项目，另一页面的编辑锁不再拦截新建/恢复。
     const nativeRequest=navigator.locks.request.bind(navigator.locks);
     vi.spyOn(navigator.locks,'request').mockImplementation((name,options,callback)=>{
       if(name===`scendance:source-editor:${projectId}`&&options?.mode==='exclusive')return Promise.resolve(callback(null));
       return nativeRequest(name,options,callback);
     });
     fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
-    expect(await screen.findByText(/另一编辑页面使用/)).toBeTruthy();
-    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(projectId);
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(stored);
+    await waitFor(()=>expect(complete).toHaveBeenCalledOnce());
+    const coexisting=JSON.parse(screen.getByTestId('backup-layout').textContent!) as RoomLayout;
+    expect(coexisting.id).not.toBe(projectId);
+    expect(parseLayoutJson(localStorage.getItem(STORAGE_KEY)!)?.id).toBe(coexisting.id);
   });
   it('does not replace the current activity after its write lease is released', async () => {
     expect(localRestoreAvailable()).toBe(false);

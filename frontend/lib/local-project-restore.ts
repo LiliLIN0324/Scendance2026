@@ -1,7 +1,26 @@
 export const LOCAL_RESTORE_PAUSED = '本机备份恢复暂不可用；请保留备份文件和当前活动，恢复保障完成后再使用。';
+/**
+ * 本机备份恢复（读任意备份文件回填当前工作区）仍然停着：备份面板的入口还是「恢复暂不可用」，
+ * 那条链路一打开就会和面板写死的暂停文案打架，所以闸门保持关闭。
+ */
 export function localRestoreAvailable(): boolean { return false; }
+/**
+ * 2026-11-13（用户拍板 A）：活动之间来回切换是另一件事——新建活动之后旧归档卡此前一律 disabled，
+ * 用户反馈「点不了」。切换走的是「读归档 → 校验 → 恢复 → 可撤销」这条已完整实现并有测试的通道，
+ * 只是被全局恢复闸门一起锁掉了。这里单独放行活动切换，文件恢复保持暂停。
+ */
+export function localActivitySwitchAvailable(): boolean { return true; }
+/**
+ * 活动切换本身是一次受控的本机恢复：在这段调用栈里暂时放行被暂停的恢复提交。
+ * 只有切换入口会开这个作用域，备份面板读用户挑的文件仍旧走不通。
+ */
+let activitySwitchDepth = 0;
+export async function withActivitySwitch<T>(task: () => Promise<T>): Promise<T> {
+  activitySwitchDepth += 1;
+  try { return await task(); } finally { activitySwitchDepth -= 1; }
+}
 export function requireLocalRestoreAvailable(): void {
-  if (!localRestoreAvailable()) throw new Error(LOCAL_RESTORE_PAUSED);
+  if (!localRestoreAvailable() && activitySwitchDepth === 0) throw new Error(LOCAL_RESTORE_PAUSED);
 }
 
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';

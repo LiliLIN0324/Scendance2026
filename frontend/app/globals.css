@@ -809,18 +809,15 @@ body {
 .sc-outdoor-takeover [data-testid='outdoor-plan-3d'] { position: absolute; inset: 0; }
 /* 漫游态户外 overlay 让位：漫游相机/人物在主场景上，overlay 不透明会整个挡住画面（现存缺口顺手修）。 */
 .sc-workbench.is-walkthrough [data-testid='outdoor-overlay'] { display: none !important; }
-/* GeoGround 瓦片地面的图源署名（主画布 3D 态右下角，OSM ODbL 要求可见）。 */
-.sc-geo-scale-north { position: absolute; left: 14px; bottom: 16px; z-index: 2; display: flex; align-items: flex-end; gap: 10px; pointer-events: none; }
+/* GeoGround/户外 3D 角标簇（2026-11-14 用户指令「2D/3D 同步统一」）：
+   左下 = 比例尺 + 署名同行；右下 = 白色圆角罗盘卡（与 2D「指北针|地图」卡同一套设计）。 */
+.sc-geo-scale-north { position: absolute; left: 14px; bottom: 14px; z-index: 2; display: flex; align-items: flex-end; gap: 12px; pointer-events: none; }
 .sc-geo-scale-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.sc-geo-scale-label { color: #1f2933; font-size: 11px; line-height: 14px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
-.sc-geo-scale-bar { height: 3px; width: 80px; background: #1f2933; box-shadow: 0 0 0 1px #fff; }
-.sc-geo-compass-dial { width: 36px; height: 36px; border-radius: 50%; background: rgba(255, 255, 255, .92); box-shadow: 0 1px 4px rgba(15, 23, 42, .25); display: flex; align-items: center; justify-content: center; }
-.sc-geo-compass-needle { width: 22px; height: 22px; transform-origin: 50% 50%; position: relative; }
-.sc-geo-compass-tri { position: absolute; left: 9px; width: 0; height: 0; border-left: 2px solid transparent; border-right: 2px solid transparent; }
-.sc-geo-compass-tri.is-north { top: 1px; border-bottom: 11px solid #c0392b; }
-.sc-geo-compass-tri.is-south { bottom: 1px; border-top: 11px solid #334155; }
-.sc-geo-compass-n { position: absolute; left: 50%; top: -11px; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: #c0392b; text-shadow: 0 0 2px #fff; }
-.sc-geo-attribution-pill { position: absolute; left: 140px; bottom: 16px; z-index: 2; padding: 2px 8px; border-radius: 6px; background: rgba(18, 20, 26, .45); color: rgba(255, 255, 255, .86); font-size: 11px; line-height: 16px; pointer-events: none; }
+.sc-geo-scale-label { color: #22262e; font-size: 11px; font-weight: 500; line-height: 14px; text-shadow: 0 0 3px #fff, 0 1px 2px rgba(255, 255, 255, .8); }
+.sc-geo-scale-bar { height: 2px; width: 80px; background: #22262e; box-shadow: 0 0 0 1px rgba(255, 255, 255, .85), 0 1px 3px rgba(15, 23, 42, .18); }
+.sc-geo-attribution-text { color: rgba(34, 38, 46, .74); font-size: 11px; line-height: 16px; text-shadow: 0 0 3px #fff, 0 1px 2px rgba(255, 255, 255, .8); padding-bottom: 1px; }
+.sc-geo-compass-card { position: absolute; right: 16px; bottom: 14px; z-index: 2; width: 46px; height: 46px; border-radius: 12px; background: rgba(255, 255, 255, .96); border: 1px solid rgba(20, 22, 28, .10); box-shadow: 0 4px 14px rgba(20, 20, 22, 0.12); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.sc-geo-compass-needle { width: 20px; height: 28px; transform-origin: 50% 50%; display: flex; align-items: center; justify-content: center; }
 .sc-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sc-canvas-dot { color: var(--faint); }
 .sc-canvas-tip { position: absolute; right: 20px; top: 17px; padding-right: 24px; pointer-events: none; }
@@ -1404,6 +1401,10 @@ body {
   display: flex; flex-direction: column; pointer-events: auto;
 }
 .sc-left-column.has-tool > .sc-agent-panel { flex: 1 1 auto; }
+/* 2026-11-13 用户指令：户外规划左栏卡片默认收起，点左轨「户外规划」才展开。
+   收起时只做视觉隐藏（DOM 常驻，画布浮窗宿主仍挂得上）；上面几条 display:flex
+   与卡片自带的行内 display 都会盖掉 [hidden] 的 UA 样式，所以这里必须 !important。 */
+.sc-workbench .is-docked-layout .sc-left-column > .sc-left-drawer.is-outdoor-card[hidden] { display: none !important; }
 /* 2026-11-12 半卡片堆栈泛化（用户拍板：左栏所有卡片统一交互）：堆栈态的第一张卡吃
    --sc-left-stack-percent（分隔条拖动改这个变量），第二张吃剩余；不再限定户外/Bingo 两张。
    特异性必须压过 1336 行的 flex:1 1 auto !important 与各卡自己的 flex 规则。 */

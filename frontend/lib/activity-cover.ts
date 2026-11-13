@@ -41,3 +41,8 @@ export async function ensureActivityCover(projectId: string): Promise<boolean> {
     return await saveActivityCover(projectId, captureStageCover());
   } catch { return false; }
 }
+
+/** 2026-11-14 归档卡右键删除：封面一并清掉。封面是装饰，清理失败不拦归档删除主流程。 */
+export async function deleteActivityCover(projectId: string): Promise<void> {
+  try { await updateSourceForm(coverKey(projectId), () => undefined); } catch { /* 封面清理失败不影响归档删除。 */ }
+}

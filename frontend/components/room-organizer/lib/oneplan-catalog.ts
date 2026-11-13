@@ -1,5 +1,5 @@
 /**
- * OnePlan 式物件库目录（左栏「区域、路线及交通 / 基础设施 / 劳动力」三段）。
+ * OnePlan 式物件库目录（左栏「区域、路线及交通 / 基础设施 / 工作人员」三段）。
  *
  * 用户口径（m05190 原文）：一点进户外规划就是三行带按钮——
  * 1. 区域、路线及交通 → 区域 / 入口和通道图标 / 路线
@@ -23,8 +23,8 @@ export interface LibraryCategoryBucket {
 /** 第一段：区域、路线及交通（按钮不是物件，按工具/图标两组处理）。 */
 export const AREA_ROW_LABEL = '区域、路线及交通';
 
-/** 第三段：劳动力角色（点击后进入「布人员」模式，岗位名就是按钮名）。 */
-export const LABOR_ROW_LABEL = '劳动力';
+/** 第三段：工作人员角色（点击后进入「布人员」模式，岗位名就是按钮名）。 */
+export const LABOR_ROW_LABEL = '工作人员';
 export const LABOR_ROLES = [
   '自定义点',
   '消防',

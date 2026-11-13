@@ -27,7 +27,7 @@ import { proposeOutdoorStyle } from "../lib/outdoor-style-preview";
 import type { StyleBundle } from "../lib/style-bundles";
 import { fetchRoadNetwork } from "../lib/road-network";
 import { checkBoundaryRing } from "../lib/site-plan-editing";
-import { buildRouteProposal } from "../lib/route-proposal";
+import { buildRouteProposal, roadFetchPlanForBoundary } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
 
@@ -90,6 +90,29 @@ export function explicitProposalApproval(message: string): boolean {
     text,
   );
 }
+/** 裸机器错误码到人话的映射；人类可读的报错文案原样通过，不进这张表。 */
+const ERROR_CODE_NOTICES: Record<string, string> = {
+  NETWORK_ERROR: "网络连接没有完成，本次未执行；请检查网络后再试。",
+  INVALID_RESPONSE: "服务商返回了无法核对的内容，本次未执行；请稍后重试。",
+  INVALID_CREDENTIALS: "服务商拒绝了这个密钥，可能已被吊销；本次未执行。",
+  CONFIGURATION_MISSING: "服务配置缺失，本次未执行；请先完成配置再试。",
+  CONVERSATION_API_NOT_CONFIGURED: "会话服务未配置，本次未执行；请先完成配置再试。",
+  CLOUD_OPERATION_BUSY: "云端正忙，本次未执行；请稍后重试。",
+  AI_BUSY: "生成任务正忙，本次未执行；请稍后重试。",
+  GENERATION_BUSY: "生成任务正忙，本次未执行；请稍后重试。",
+  SESSION_CHANGED: "会话已切换，本次未执行；请回到当前活动再试。",
+  CANVAS_PROJECT_MISMATCH: "画布项目已变化，本次未执行。",
+  CLOUD_WRITE_BLOCKED: "云端写入被暂停，本次未执行。",
+  ASSET_UPLOAD_TIMEOUT: "等待响应超时，本次未执行；请稍后重试。",
+  ASSET_UPLOAD_ABORTED: "上传已中止，本次未执行。",
+};
+
+/** 整句都是 ALL_CAPS 机器码时换成人话（未知码走兜底），别把 NETWORK_ERROR 这种词裸给用户看。 */
+function friendlyErrorNotice(text: string): string {
+  if (!/^[A-Z][A-Z0-9_]*$/u.test(text)) return text;
+  return ERROR_CODE_NOTICES[text] ?? "请求没有完成，本次未执行；请稍后重试。";
+}
+
 export function useOutdoorAgentWorkflow(input: {
   scope: string;
   bridge: () => OutdoorAgentBridge | null;
@@ -123,6 +146,7 @@ export function useOutdoorAgentWorkflow(input: {
   const [busy, setBusy] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [notice, setNotice] = useState("");
+  const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   const refsRef = useRef<OutdoorTurn["references"]>([]);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
@@ -150,11 +174,13 @@ export function useOutdoorAgentWorkflow(input: {
     phase: OutdoorTaskProgress["state"] = "ready",
     extra: Partial<OutdoorTaskProgress> = {},
   ) {
-    setNotice(action);
+    const friendly = friendlyErrorNotice(action);
+    setNotice(friendly);
+    setNoticeKind(phase === "blocked" ? "error" : "info");
     callbacks.current.status({
       intent: OUTDOOR_STAGE_LABELS[stateRef.current.stage],
       state: phase,
-      action,
+      action: friendly,
       steps: stateRef.current.completed.map((s) => OUTDOOR_STAGE_LABELS[s]),
       ...extra,
     });
@@ -626,18 +652,15 @@ export function useOutdoorAgentWorkflow(input: {
         });
         await mapContext(job.controller.signal);
         if (!live(job)) return;
-        const xs = plan.boundary.map((p) => p.x),
-          ys = plan.boundary.map((p) => p.y);
         if (!plan.anchor)
           throw new Error("活动还没有真实锚点，请先定位并确认范围。");
+        // 2026-11-14 测试修正：路网 bbox 按边界真实地理位置取（边界可离锚点很远）。
+        const roadPlan = roadFetchPlanForBoundary(plan.boundary, plan.anchor);
         const roads = bridge.roadNetwork
           ? bridge.roadNetwork()
           : await fetchRoadNetwork(
-              plan.anchor,
-              Math.max(
-                Math.max(...xs) - Math.min(...xs),
-                Math.max(...ys) - Math.min(...ys),
-              ) + 200,
+              roadPlan.center,
+              roadPlan.spanM,
               { signal: job.controller.signal },
             );
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
@@ -1031,6 +1054,7 @@ export function useOutdoorAgentWorkflow(input: {
           (error instanceof Error && error.message === "UNAUTHENTICATED"))
       ) {
         const owner = callbacks.current.controller()?.getSnapshot?.().user;
+        const alreadyLoggedIn = Boolean(owner && !owner.is_anonymous);
         persist({
           ...stateRef.current,
           pendingLogin: {
@@ -1039,8 +1063,29 @@ export function useOutdoorAgentWorkflow(input: {
             ...(owner && !owner.is_anonymous ? { ownerId: owner.id } : {}),
           },
         });
+        // 2026-11-14 用户指令：已登录还撞 401 = 凭证失效，不是没登录——文案不再虚假承诺「登录即可用模型」。
         status(
-          "登录后才能使用当前Agent模型。刚才需求与场地草稿已保留；请打开现有账户中心正常登录，再继续这条需求。不会使用匿名身份调用模型。",
+          alreadyLoggedIn
+            ? "登录状态已失效，请重新登录；场地草稿已保存。"
+            : "登录后即可使用当前 Agent 模型，场地草稿已保存。",
+          "blocked",
+        );
+      } else if (
+        live(job) &&
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code?: string }).code === "AGENT_UNDERSTANDING_DISABLED"
+      ) {
+        // 2026-11-14 用户指令：模型未配置不是登录问题——登录恢复流程里撞到它就把登录卡摘掉，终止循环。
+        if (stateRef.current.pendingLogin) {
+          const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
+          persist(kept);
+        }
+        status(
+          error instanceof Error
+            ? error.message
+            : "当前环境未开启 Agent 理解模型，规划未变。",
           "blocked",
         );
       } else if (live(job))
@@ -1210,7 +1255,15 @@ export function useOutdoorAgentWorkflow(input: {
       status("已选定真实库候选，尚未摆放；请补充对应分区和总数量。", "ready");
     },
     notice,
+    noticeKind,
     loginRequired: Boolean(state.pendingLogin),
+    // 2026-11-14 用户指令：登录完成后这张卡要跟着变——已登录时切换为「继续这次搜索」。
+    loginSatisfied:
+      Boolean(state.pendingLogin) &&
+      (() => {
+        const user = callbacks.current.controller()?.getSnapshot?.().user;
+        return Boolean(user && !user.is_anonymous);
+      })(),
     authChanged: (nextActor: string | null) => {
       const pending = stateRef.current.pendingLogin;
       cancel({

@@ -89,8 +89,6 @@ function Harness() {
   return (
     <OutdoorWorkflowCard
       flow={flow}
-      onSearch={vi.fn()}
-      onSupplement={vi.fn()}
     />
   );
 }
@@ -739,13 +737,13 @@ it("未登录错误保留原句和草稿，正规账户中心入口可操作，�
     await flow.handle("先找IN77，核对活动区域");
   });
   expect(flow.loginRequired).toBe(true);
-  expect(flow.notice).toContain("登录后才能");
+  expect(flow.notice).toContain("登录后即可");
   expect(flow.state.pendingLogin?.message).toBe("先找IN77，核对活动区域");
   expect(JSON.stringify(plan)).toBe(before);
   const request = vi.fn();
   window.addEventListener("scendance:request-account-login", request);
   const open = [...host.querySelectorAll("button")].find(
-    (b) => b.textContent === "打开账户中心登录",
+    (b) => b.textContent === "前往登录",
   )!;
   act(() => open.click());
   expect(request).toHaveBeenCalledOnce();

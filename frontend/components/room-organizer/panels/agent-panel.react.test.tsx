@@ -1489,6 +1489,9 @@ beforeEach(() => {
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
 
+/** 「你可以做什么」默认收起：要用能力卡的用例先点开这行标题。 */
+const expandCapabilityCards = () => { fireEvent.click(screen.getByRole('button', { name: '你可以做什么' })); };
+
 describe('T-04 delivery narrative in the Agent panel', () => {
   it('T3 封门：评审模式右栏不再渲染钉议卡槽，面板内没有「打开客户评审」', () => {
     callbacks.workbenchMode = 'review';
@@ -2003,6 +2006,7 @@ describe('T-UI visible interaction', () => {
     useRealLayoutStore=true;const onApply=vi.fn(),onPreview=vi.fn();
     const base=makeLayout({width:12,height:9,floors:[makeFloor({id:'floor-a'}),makeFloor({id:'floor-b'})]});state.layout=base;layoutStore.setState({layout:base,activeFloorIndex:0});
     render(<LayoutAgentProvider callbacks={callbacks} onApply={onApply} onPreview={onPreview}><AgentPanel/></LayoutAgentProvider>);
+    expandCapabilityCards();
     fireEvent.click(within(screen.getByRole('group',{name:'你可以做什么'})).getByRole('button',{name:/按风格配一套/}));
     fireEvent.click(screen.getByRole('button',{name:'按奶油会客配一套'}));const confirm=await screen.findByRole('button',{name:'确认布置'},{timeout:15000}),previous=onPreview.mock.calls.at(-1)?.[0];
     act(()=>{layoutStore.setState({activeFloorIndex:1});layoutStore.setState({activeFloorIndex:0});fireEvent.click(confirm);});
@@ -2039,6 +2043,7 @@ describe('T-UI visible interaction', () => {
     const onApply = vi.fn(), onPreview = vi.fn();
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    expandCapabilityCards();
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
@@ -2064,6 +2069,7 @@ describe('T-UI visible interaction', () => {
     const onApply = vi.fn();
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    expandCapabilityCards();
     fireEvent.click(within(screen.getByRole('group', { name: '你可以做什么' })).getByRole('button', { name: /按风格配一套/ }));
     fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
     const confirm = await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
@@ -2081,6 +2087,7 @@ describe('T-UI visible interaction', () => {
     const locked = makeItem({ id: 'locked-chair', type: 'chair', name: '锁定椅', position: { x: 7, z: 5 }, locked: true });
     const base = makeLayout({ width: 20, height: 16, floors: [makeFloor({ items: [locked] })] });
     const view = render(ui(base, onApply, onPreview));
+    expandCapabilityCards();
     fireEvent.click(within(screen.getByRole('group', { name: '你可以做什么' })).getByRole('button', { name: /按风格配一套/ }));
     fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
     await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
@@ -2107,6 +2114,7 @@ describe('T-UI visible interaction', () => {
     }
     try {
       render(<HistoryHarness/>);
+      expandCapabilityCards();
       fireEvent.click(within(screen.getByRole('group', { name: '你可以做什么' })).getByRole('button', { name: /按风格配一套/ }));
       fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
       fireEvent.click(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 }));
@@ -2121,6 +2129,7 @@ describe('T-UI visible interaction', () => {
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
     const node = (zoneDraftRevision: number) => <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply} zoneDraftRevision={zoneDraftRevision}><AgentPanel/></LayoutAgentProvider>;
     const view = render(node(0));
+    expandCapabilityCards();
     fireEvent.click(within(screen.getByRole('group', { name: '你可以做什么' })).getByRole('button', { name: /按风格配一套/ }));
     fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
     const confirm = await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
@@ -2132,11 +2141,32 @@ describe('T-UI visible interaction', () => {
 
   it('keeps map选址 on the 活动 face together with the style chip', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
+    expandCapabilityCards();
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
     fireEvent.click(within(group).getByRole('button', { name: /地图选址/ }));
     expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
+  });
+
+  it('keeps the capability cards collapsed by default and remembers the choice', () => {
+    state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    // 默认收起：能力卡不占对话区，只剩一行标题。
+    const toggle = screen.getByRole('button', { name: '你可以做什么' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('group', { name: '你可以做什么' })).toBeNull();
+    fireEvent.click(toggle);
+    // 展开后卡片挂出；选择写进本机，下次保持。
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
+    expect(localStorage.getItem('sc.ap-capabilities-open')).toBe('1');
+    cleanup();
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    expect(screen.getByRole('button', { name: '你可以做什么' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: '你可以做什么' }));
+    expect(screen.queryByRole('group', { name: '你可以做什么' })).toBeNull();
+    expect(localStorage.getItem('sc.ap-capabilities-open')).toBe('0');
   });
 
   it('keeps the left rail on 布置 and sends review or delivery elsewhere', async () => {
@@ -3961,6 +3991,7 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
   });
   it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
+    expandCapabilityCards();
     expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
     const input = screen.getByLabelText('告诉 Agent 要改的');
     input.focus();
@@ -3989,6 +4020,7 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     // 会话历史与新开随生成主对话一起归活动脸。
     expect(screen.getByRole('button', { name: '会话历史' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '新开会话' })).toBeTruthy();
+    expandCapabilityCards();
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
@@ -4021,14 +4053,14 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
   });
 
-  it('假分派控件与话术全部消失，空态改成统一的先说一句引导', () => {
+  it('假分派控件与话术全部消失，空态不再挂引导句', () => {
     state.layout = INITIAL_LAYOUT;
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
     expect(screen.queryByRole('group', { name: '这场对话里找谁说' })).toBeNull();
     expect(screen.queryByRole('group', { name: '一起说的 agent' })).toBeNull();
     expect(screen.queryByText('分派结果')).toBeNull();
     expect(screen.queryByText('先说一句，我来分派')).toBeNull();
-    expect(screen.getByText('先说一句就行')).toBeTruthy();
+    expect(screen.queryByText('先说一句就行')).toBeNull();
     // 输入框不再有点名分支的中性 placeholder 话术。
     const input = screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;
     expect(input.placeholder).not.toContain('选中的 agent');
@@ -4885,6 +4917,7 @@ describe('registered capabilities through the atomic outdoor Agent',()=>{
  });
  it.each([false,true])('style capability prefill -> submit -> picker uses one contract (atomic=%s)',async atomic=>{
   if(atomic)mountCommon();else render(ui(makeLayout()));
+  expandCapabilityCards();
   fireEvent.click(within(screen.getByRole('group',{name:'你可以做什么'})).getByRole('button',{name:/按风格配一套/}));
   const input=screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;expect(input.value).toBe('帮我按这块场地的气质配一套现成风格');expect(screen.queryByRole('dialog',{name:'按风格配一套'})).toBeNull();
   fireEvent.keyDown(input,{key:'Enter'});expect(await screen.findByRole('dialog',{name:'按风格配一套'})).toBeTruthy();expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();

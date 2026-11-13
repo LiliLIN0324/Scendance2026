@@ -255,6 +255,14 @@ export function basemapSourceAttribution(source: ProbePublicSource | TdtProbeLay
   }
 }
 
+/** 画布比例尺旁的短图源名（图三范式：比例尺 + 图源名同行；2026-11-14 用户指令）。 */
+export function basemapSourceDisplayName(source: ProbePublicSource | TdtProbeLayer): string {
+  if ((PROBE_PUBLIC_SOURCES as readonly string[]).includes(source)) {
+    return PUBLIC_SOURCE_SPECS[source as ProbePublicSource].label;
+  }
+  return source === 'img' ? '天地图影像' : '天地图矢量';
+}
+
 /**
  * 兜底占位瓦片：当服务端没有 key / 拉不到真瓦片时，在画布上画一块程序化色块网格，
  * 让「满铺 + 缩放 + 拖拽 + 图层切换」交互仍可被验证。网格颜色随 x/y 与图层变化，

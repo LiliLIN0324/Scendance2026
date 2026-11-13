@@ -509,6 +509,31 @@ describe("backend session contract", () => {
     expect(reopened.getSnapshot().user).toBeNull();
   });
 
+  it("2026-11-14 remembers the account: refreshes an expired cookie session on boot instead of asking for login", async () => {
+    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
+    const account=new BackendSession(config);sessions.push(account);
+    queue(auth);await account.signIn('test@example.com','password-test-only');
+    // 把存档会话改回「昨天签发、access token 已过期」——真实用户隔天打开本地工作台的形态。
+    const name='sb-example-auth-token';
+    const raw=document.cookie.split('; ').find(c => c.startsWith(`${name}=`));
+    if (!raw) throw new Error('auth cookie was not written');
+    const stored=JSON.parse(Buffer.from(decodeURIComponent(raw.slice(name.length+1)).replace(/^base64-/,''),'base64').toString('utf8'));
+    stored.expires_at=Math.floor(Date.now()/1000)-300;
+    document.cookie=`${name}=${encodeURIComponent('base64-'+Buffer.from(JSON.stringify(stored)).toString('base64'))}; path=/`;
+    mockFetch.mockClear();
+    const reopened=new BackendSession(config);sessions.push(reopened);
+    // getSession 回存档 → 临期刷新（rotate）→ 用新 token 验证身份。
+    queue({ ...auth, access_token:'access-rotated-test', refresh_token:'refresh-rotated-test' });
+    queue(auth.user);
+    await reopened.restoreSession();
+    expect(request(0).url).toBe(`${base}/auth/v1/token?grant_type=refresh_token`);
+    expect(request(1).url).toBe(`${base}/auth/v1/user`);
+    expect(reopened.getSnapshot().user).toEqual(auth.user);
+    // 后续请求带刷新后的 access token，不再弹登录卡。
+    queue(authorizedAsset);await reopened.authorizeAsset(assetId);
+    expect(request(2).options.headers).toMatchObject({Authorization:'Bearer access-rotated-test'});
+  });
+
   it("rejects a revoked cookie session after server verification", async () => {
     const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
     const first=new BackendSession(config);sessions.push(first);

@@ -54,7 +54,12 @@ export function registerSourceEditor(scope: string): SourceEditorLease {
   editors.add(lease); sourceEditors.set(scope, editors);
   return lease;
 }
-/** Refuse an occupied scope immediately; never restore without cross-tab protection. */
+/**
+ * 2026-11-14 用户指令：允许两个页面同时打开同一项目。另一页面持有的编辑锁
+ * 不再拦截恢复——独占锁空闲时照常获取（并发恢复仍被串行化），被占用时直接
+ * 继续；各页面后续保存按记录最后写入者为准。仅本页面自己尚有未完成写入的
+ * 租约时仍拒绝，避免覆盖本页进行中的保存。
+ */
 export async function withSourceRestoreLock<T>(scopes: string[], restore: () => Promise<T>): Promise<T> {
   if (typeof navigator === 'undefined' || !navigator.locks) throw new Error('此浏览器无法保护其他页面的本地资料，请使用支持 Web Locks 的浏览器恢复备份。');
   const unique = [...new Set(scopes)].sort();
@@ -62,10 +67,7 @@ export async function withSourceRestoreLock<T>(scopes: string[], restore: () => 
     const scope = unique[index];
     if (scope === undefined) return restore();
     if (sourceEditors.get(scope)?.size) throw new Error('该项目正被另一编辑页面使用，请关闭那个页面后重试恢复。');
-    return navigator.locks.request(sourceLockName(scope), { mode: 'exclusive', ifAvailable: true }, async lock => {
-      if (!lock) throw new Error('该项目正被另一编辑页面使用，请关闭那个页面后重试恢复。');
-      return acquire(index + 1);
-    });
+    return navigator.locks.request(sourceLockName(scope), { mode: 'exclusive', ifAvailable: true }, async () => acquire(index + 1));
   }
   return acquire(0);
 }

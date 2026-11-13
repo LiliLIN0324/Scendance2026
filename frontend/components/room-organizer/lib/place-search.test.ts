@@ -155,6 +155,20 @@ describe('placeRelevance / rankPlaces（模糊排序）', () => {
     expect(placeRelevance(place('a', '西湖十景(平湖秋月)'), '西湖 十景')).toBeGreaterThan(60);
   });
 
+  it('多词段查询（「杭州IN77」）：含全部词段的真 POI 压过只含「杭州」的行政区，仍低于整串包含', () => {
+    const q = '杭州IN77';
+    const mall = place('mall', '杭州湖滨银泰in77'); // 含全部词段（夹了别的字）→ 72 档
+    const mallBranch = place('branch', 'IN77购物中心'); // 只含 in77 → 30 档
+    const admin = place('admin', '杭州市'); // 只含 杭州 → 30 档 + 字数补分
+    const exact = place('exact', '杭州in77'); // 整串包含 → 76 档，仍应最高
+    const none = place('none', '国家加工食品质量监督检验中心(杭州)'); // 只含 杭州
+    expect(placeRelevance(mall, q)).toBeGreaterThan(placeRelevance(admin, q));
+    expect(placeRelevance(mall, q)).toBeGreaterThan(placeRelevance(mallBranch, q));
+    expect(placeRelevance(mall, q)).toBeGreaterThan(placeRelevance(none, q));
+    expect(placeRelevance(exact, q)).toBeGreaterThan(placeRelevance(mall, q));
+    expect(rankPlaces([admin, mallBranch, mall, none, exact], q).map(item => item.id)).toEqual(['exact', 'mall', 'admin', 'branch', 'none']);
+  });
+
   it('rankPlaces 把最相关的排前面，同分保持原序', () => {
     const places = [place('1', '杭州大剧院'), place('2', '西湖十景(平湖秋月)'), place('3', '平湖秋月')];
     expect(rankPlaces(places, '平湖秋月').map(item => item.id)).toEqual(['3', '2', '1']);

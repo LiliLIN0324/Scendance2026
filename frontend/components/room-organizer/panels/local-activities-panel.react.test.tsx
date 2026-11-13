@@ -106,24 +106,21 @@ describe('local activity creation and switching', () => {
     name();submit();expect(await screen.findByText(/草稿在准备期间发生变化/)).toBeTruthy();
     expect(ui.actions.createFreshActivity).toHaveBeenCalledOnce();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.layout).toBe(original);
   });
-  it('keeps opening paused while creating a fresh activity stays available', async () => {
+  it('keeps file restore paused while archive switching is open', async () => {
+    // 2026-11-13 用户拍板 A：文件恢复仍停着，但「切回旧活动」单独放行。
     expect(restoreAvailability.localRestoreAvailable()).toBe(false);
+    expect(restoreAvailability.localActivitySwitchAvailable()).toBe(true);
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const ui = setup();
-    expect(screen.getByText(/已有活动暂不可打开/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '恢复保障说明' }));
-    expect(await screen.findByText(/打开已有活动或从备份文件恢复暂不可用/)).toBeTruthy();
+    expect(screen.queryByText(/已有活动暂不可打开/)).toBeNull();
     const form = screen.getByRole('form', { name: '新建活动' });
     expect(form.querySelector('fieldset')!.disabled).toBe(false);
     expect((screen.getByRole('button', { name: '新建活动' }) as HTMLButtonElement).disabled).toBe(false);
     const open = await screen.findByRole('button', { name: `打开活动「${target.name}」` });
-    expect((open as HTMLButtonElement).disabled).toBe(true);
+    expect((open as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(open);
-    expect(ui.actions.prepareBackup).not.toHaveBeenCalled();
-    expect(archiveLocalActivity).not.toHaveBeenCalled(); expect(readLocalActivity).not.toHaveBeenCalled();
-    expect(ui.actions.restoreBackup).not.toHaveBeenCalled(); expect(ui.actions.createFreshActivity).not.toHaveBeenCalled();
-    expect(ui.onComplete).not.toHaveBeenCalled();
-    expect(ui.layout).toBe(original);
+    await waitFor(() => expect(ui.actions.prepareBackup).toHaveBeenCalledOnce());
+    expect(archiveLocalActivity).toHaveBeenCalledOnce();
   });
   it('splits the create card and the archive list for their outside entry points', async () => {
     const actions: LocalProjectBackupActions = {
@@ -147,14 +144,17 @@ describe('local activity creation and switching', () => {
     ], unreadableProjectIds: [] });
     render(<LocalActivitiesPanel mode="list" layout={original} actions={actions} currentStatus="有改动待保存"/>);
     const cards = await waitFor(() => screen.getAllByRole('listitem'));
-    expect(cards[0].getAttribute('aria-label')).toBe(`当前活动「${original.name}」`);
-    expect(cards[0].textContent).toContain('1 件');
-    expect(cards[0].textContent).toContain('有改动待保存');
+    // 2026-11-13：横向滑轨的顺序是「新建入口 → 当前活动 → 最近活动」。
+    expect(cards[0].getAttribute('aria-label')).toBeNull();
+    expect(cards[1].getAttribute('aria-label')).toBe(`当前活动「${original.name}」`);
+    // 当前卡不再报「缺/齐 X 件」，只留真需要提醒的保存状态。
+    expect(cards[1].textContent).not.toContain('1 件');
+    expect(cards[1].textContent).toContain('有改动待保存');
     expect(screen.getByText('当前')).toBeTruthy();
     // 当前卡 + 一张归档卡 + 末尾「新建活动」拼贴卡。
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getByRole('button', { name: `打开活动「${target.name}」` })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '新建活动，空白画布直接进入工作台' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '新建活动，自动命名并直接进入空白画布' })).toBeTruthy();
   });
 
   it('hides the archives that belong to another team and takes them out of the count', async () => {
@@ -198,7 +198,7 @@ describe('local activity creation and switching', () => {
     };
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [{ ...listedTarget(), preview: target }], unreadableProjectIds: [] });
     const view = render(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
-    const archived = (): Element | undefined => view.container.querySelectorAll('.sc-local-activities-list li')[1];
+    const archived = (): Element | undefined => view.container.querySelectorAll('.sc-local-activities-list li')[2];
     expect(await screen.findByText(target.name)).toBeTruthy();
     expect(archived()?.querySelector('.sc-activity-thumb-canvas')).toBeTruthy();
     expect(archived()?.querySelector('.sc-activity-thumb-image')).toBeNull();
@@ -244,7 +244,7 @@ describe('local activity creation and switching', () => {
     expect(ui.layout).toBe(original);expect(ui.onComplete).not.toHaveBeenCalled();expect(screen.queryByText(/已打开「/)).toBeNull();
   });
 
-  it.skipIf(!restoreAvailability.localRestoreAvailable())('opens a target only after the current archive completes and accepts its legitimate restore scope change once', async () => {
+  it('opens a target only after the current archive completes and accepts its legitimate restore scope change once', async () => {
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const pending = deferred<ReturnType<typeof archiveResult>>();
     vi.mocked(archiveLocalActivity).mockImplementationOnce(() => pending.promise);
@@ -255,21 +255,20 @@ describe('local activity creation and switching', () => {
     const args = vi.mocked(archiveLocalActivity).mock.calls[0]!;
     await act(async () => { pending.resolve(archiveResult(args[0], args[1], args[2])); });
     await waitFor(() => expect(ui.onComplete).toHaveBeenCalledOnce());
-    expect(readLocalActivity).toHaveBeenCalledWith(targetId);expect(ui.actions.restoreBackup).toHaveBeenCalledWith(parseLocalProjectBackupJson(backupText(target)),expect.any(Function));
+    expect(readLocalActivity).toHaveBeenCalledWith(targetId);expect(ui.actions.restoreBackup).toHaveBeenCalledWith(parseLocalProjectBackupJson(backupText(target)),expect.any(Function),'activity-switch');
     expect(ui.layout.id).toBe(targetId);expect(screen.getByText(/已打开「演练目标活动」/)).toBeTruthy();
   });
 
-  it('shows unreadable archives and does not open them while restoration is paused', async () => {
-    expect(restoreAvailability.localRestoreAvailable()).toBe(false);
+  it('shows unreadable archives but still lets the readable ones be opened', async () => {
     const storedList = { activities: [listedTarget()], unreadableProjectIds: ['house-unreadable-original'] };
     vi.mocked(listLocalActivities).mockResolvedValue(storedList);
     const ui = setup();expect(await screen.findByText(/有1份活动无法读取，资料已保留/)).toBeTruthy();
     const open = screen.getByRole('button', { name: `打开活动「${target.name}」` });
-    expect((open as HTMLButtonElement).disabled).toBe(true);
+    expect((open as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(open);
-    expect(archiveLocalActivity).not.toHaveBeenCalled();expect(readLocalActivity).not.toHaveBeenCalled();
-    expect(ui.actions.restoreBackup).not.toHaveBeenCalled();expect(ui.layout).toBe(original);expect(ui.onComplete).not.toHaveBeenCalled();
-    expect(storedList).toEqual({ activities: [listedTarget()], unreadableProjectIds: ['house-unreadable-original'] });
+    await waitFor(() => expect(ui.actions.prepareBackup).toHaveBeenCalledOnce());
+    expect(archiveLocalActivity).toHaveBeenCalledOnce();
+    expect(storedList.unreadableProjectIds).toEqual(['house-unreadable-original']);
   });
 
   it('invalidates pre-restore writes after layout edits, A→B→A or unmount and never restores an old operation', async () => {
@@ -347,7 +346,7 @@ describe('local activity creation and switching', () => {
     expect(screen.getByRole('textbox', { name: '新活动名称' })).toHaveProperty('value', '演练新活动');
   });
 
-  it('makes the whole archive card one native button and does not open it while restoration is paused', async () => {
+  it('makes the whole archive card one native button', async () => {
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
     const actions: LocalProjectBackupActions = {
       prepareBackup: vi.fn(async () => backupText(original)), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
@@ -358,14 +357,13 @@ describe('local activity creation and switching', () => {
     // 旧的内嵌小「打开」按钮已消失，整张卡（含封面）都在这颗 button 里。
     expect(view.container.querySelector('.sc-activity-open')).toBeNull();
     expect(card.querySelector('.sc-activity-thumb')).toBeTruthy();
-    expect((card as HTMLButtonElement).disabled).toBe(true);
+    expect((card as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(card);
-    expect(actions.prepareBackup).not.toHaveBeenCalled();
-    expect(readLocalActivity).not.toHaveBeenCalled();
-    expect(actions.restoreBackup).not.toHaveBeenCalled();
+    await waitFor(() => expect(actions.prepareBackup).toHaveBeenCalledOnce());
+    expect(readLocalActivity).toHaveBeenCalledWith(targetId);
   });
 
-  it('creates a blank activity from the gallery tile, refuses an empty name and collapses the tile afterwards', async () => {
+  it('creates a blank activity straight from the gallery tile with an auto name, no naming form', async () => {
     let current = original;
     const onComplete = vi.fn();
     const actions: LocalProjectBackupActions = {
@@ -375,24 +373,18 @@ describe('local activity creation and switching', () => {
       undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
     };
     render(<LocalActivitiesPanel mode="list" layout={current} actions={actions} onComplete={onComplete}/>);
+    // 2026-11-13 用户指令：不再先弹输入框，点一下就自动命名并建好。
     expect(screen.queryByRole('form', { name: '画廊内联新建活动' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '新建活动，空白画布直接进入工作台' }));
-    const tileForm = await screen.findByRole('form', { name: '画廊内联新建活动' });
-    fireEvent.submit(tileForm);
-    expect(await screen.findByText('请填写新活动名称。')).toBeTruthy();
-    expect(actions.prepareBackup).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByRole('textbox', { name: '画廊新活动名称' }), { target: { value: '画廊新画布' } });
-    fireEvent.submit(tileForm);
+    fireEvent.click(screen.getByRole('button', { name: '新建活动，自动命名并直接进入空白画布' }));
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(actions.createFreshActivity).toHaveBeenCalledOnce();
     expect(actions.restoreBackup).not.toHaveBeenCalled();
     const candidate = vi.mocked(actions.createFreshActivity!).mock.calls[0]![0];
-    expect(candidate.layout.name).toBe('画廊新画布');
+    expect(candidate.layout.name).toMatch(/^新活动 \d{2}-\d{2} \d{2}:\d{2}$/);
     expect(candidate.layout.floors.flatMap(floor => floor.items)).toHaveLength(0);
-    expect(screen.queryByRole('form', { name: '画廊内联新建活动' })).toBeNull();
   });
 
-  it('prints readiness short words 齐/缺 on every card instead of the old object-count wording', async () => {
+  it('keeps the count wording off every gallery card', async () => {
     vi.mocked(listLocalActivities).mockResolvedValue({ activities: [
       { ...listedTarget() },
       { projectId: 'house-local-activity-empty', name: '演练空活动', archivedAt: '2026-10-01T03:00:00Z', itemCount: 0 },
@@ -403,10 +395,49 @@ describe('local activity creation and switching', () => {
     const view = render(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
     await screen.findByText('演练空活动');
     expect(view.container.textContent).not.toContain('个物件');
-    const ready = view.container.querySelectorAll('.sc-activity-meta em.is-ready');
-    const low = view.container.querySelectorAll('.sc-activity-meta em.is-low');
-    expect(ready).toHaveLength(2);
-    expect(low).toHaveLength(1);
-    expect(low[0]!.textContent).toBe('缺');
+    // 2026-11-13 用户要求：卡上不显示「缺/齐 N 件 · 时间」这一类状态行，当前卡与归档卡一律不画。
+    expect(view.container.querySelector('.sc-activity-meta')).toBeNull();
+    expect(view.container.textContent).not.toContain('件 ·');
+  });
+
+  it('folds the rail gallery into one pill and only spreads the card wall after it is opened', async () => {
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
+    const actions: LocalProjectBackupActions = {
+      prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+    };
+    const view = render(<LocalActivitiesPanel mode="list" compact layout={original} actions={actions}/>);
+    const island = view.container.querySelector('.sc-activity-group')!;
+    const pill = screen.getByRole('button', { name: /最近活动/ });
+    // 收起时只有一颗胶囊，卡片墙不铺开；点开才展开。
+    expect(pill.getAttribute('aria-expanded')).toBe('false');
+    expect(island.classList.contains('is-open')).toBe(false);
+    expect(island.classList.contains('is-island')).toBe(true);
+    await screen.findByText('演练目标活动');
+    fireEvent.click(pill);
+    expect(screen.getByRole('button', { name: /最近活动/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(island.classList.contains('is-open')).toBe(true);
+    // 折叠不吞掉列表：卡片与新建入口都在，只是默认收着。
+    expect(screen.getByRole('button', { name: `打开活动「${target.name}」` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '新建活动，自动命名并直接进入空白画布' })).toBeTruthy();
+  });
+
+  it('renames from the pill name area and only expands from the count + chevron area', async () => {
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [], unreadableProjectIds: [] });
+    const actions: LocalProjectBackupActions = {
+      prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+    };
+    const onRenameCurrent = vi.fn();
+    render(<LocalActivitiesPanel mode="list" compact layout={original} actions={actions} onRenameCurrent={onRenameCurrent}/>);
+    const toggle = screen.getByRole('button', { name: /最近活动/ });
+    fireEvent.click(screen.getByRole('button', { name: /重命名当前活动/ }));
+    const input = await screen.findByRole('textbox', { name: '重命名当前活动' });
+    fireEvent.change(input, { target: { value: '  西湖团建  ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onRenameCurrent).toHaveBeenCalledWith('西湖团建');
+    expect(screen.queryByRole('textbox', { name: '重命名当前活动' })).toBeNull();
+    // 右侧计数+箭头只负责展开/收起，不触发改名。
+    fireEvent.click(toggle);
+    expect(onRenameCurrent).toHaveBeenCalledTimes(1);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 });

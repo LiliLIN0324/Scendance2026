@@ -127,10 +127,16 @@ export async function understandOutdoorTurn(input: {
     input.signal,
     "outdoor_v1",
   );
-  if (response.status !== "ok")
-    throw new Error(
-      `当前Agent理解不可用（${response.status}），规划未变；请稍后重试或用当前任务卡选择下一步。`,
+  if (response.status !== "ok") {
+    const error = new Error(
+      response.status === "disabled"
+        ? "当前环境未开启 Agent 理解模型（本机未配置 AGENT_CHAT），规划未变；可用当前任务卡继续，或为本机配置模型后重试。"
+        : `当前Agent理解不可用（${response.status}），规划未变；点「重试」再试一次，或用当前任务卡选择下一步。`,
     );
+    // 2026-11-14 用户指令：模型未配置不是登录问题——打标记码让工作流把登录卡摘掉，终止「登录→重试→还不行」循环。
+    if (response.status === "disabled") (error as Error & { code?: string }).code = "AGENT_UNDERSTANDING_DISABLED";
+    throw error;
+  }
   let raw: unknown;
   try {
     raw = JSON.parse(response.answer.replace(/^```(?:json)?\s*|\s*```$/g, ""));

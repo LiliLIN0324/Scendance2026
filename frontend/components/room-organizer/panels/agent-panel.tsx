@@ -19,9 +19,8 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, Clock, Download, FileImage, HelpCircle, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { ArrowUp, Check, ChevronDown, Clock, Copy, Download, FileImage, HelpCircle, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, Pencil, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
@@ -78,7 +77,7 @@ import { normalizeOutlineName } from '../lib/place-shape-quality';
 import { isPersistablePlaceShape } from '../lib/place-shape-quality';
 import { trueFootprintBoundary } from '../lib/outdoor-venue-sync';
 import { fetchRoadNetwork } from '../lib/road-network';
-import { buildRouteProposal, matchRouteCommand, type RouteProposal } from '../lib/route-proposal';
+import { buildRouteProposal, matchRouteCommand, roadFetchPlanForBoundary, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
 import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-outdoor-agent-workflow';
 import { OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
@@ -141,7 +140,7 @@ import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
 import { CapabilitySuggestionCards } from './capability-suggestion-cards';
-import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, OUTDOOR_PLACE_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, STYLE_RUNS_KEY, type StyleBundle } from '../lib/style-bundles';
 import { editorItemLimit } from '../lib/scene-presets';
 import {
@@ -157,7 +156,7 @@ import {
   replaceAssistantSessionBodies,
   useAssistantSessions, scopedAssistantStorage,
 } from '../hooks/use-assistant-sessions';
-import { SessionHistoryOverlay } from './session-history-panel';
+import { SessionHistoryOverlay, markSessionSeen, sessionUnreadSince, type SessionStatus } from './session-history-panel';
 import { RailAvatar, type RailForm } from './rail-avatar';
 import type { RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
@@ -524,9 +523,13 @@ interface AgentValue {
   historyReviewRequired: boolean;
   reviewDialogueHistory(): void;
   acceptFreshSession(id:string):void;
+  /** 2026-11-14 用户指令：原位编辑最近一条用户消息并按新话重新走理解管线。 */
+  resendEditedLast(text:string):void;
   retainedOtherSessionProposal:boolean;
   withdrawRetainedOtherSessionProposal():void;
   unresolvedDialogue: readonly string[];
+  /** 2026-11-14 用户指令：历史列表按会话标红点——任一条对话未完结（含本页内其他会话的）即算错误。 */
+  hasUnresolvedDialogue(id: string): boolean;
   withdrawUnresolvedDialogue(text:string): void;
   withdrawAllUnresolved(): void;
   briefBusy: boolean;
@@ -614,7 +617,7 @@ interface AgentValue {
   reviewNow(): void;
   /** S2-2：一键生成钉评链接，气泡回链。离线导出降级为分享菜单次选项。 */
   issueReviewLink(): void;
-  acceptFile(file: File): void; retryFile(): void; pickFile(): void;
+  acceptFile(file: File): void; retryFile(): void; pickFile(accept?: string): void;
   /** 选进来、还没发出去的图纸/照片：挂在输入框上，点发送才读进场地。 */
   pendingFile: { name: string; url: string } | null;
   removePendingFile(): void;
@@ -851,6 +854,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const reviewedHistorySessionRef=useRef<string|null>(null);
   const setReviewedHistory=(id:string|null)=>{reviewedHistorySessionRef.current=id;setReviewedHistorySession(id);};
   const freshSessionProof=useRef<string|null>(null);
+  // 2026-11-14 用户指令：原位编辑最近一条用户消息——文本已在原位替换，send 的回显按此标记抑制一次。
+  const resendEchoSkipRef=useRef<string|null>(null);
   const isHistoryReviewRequired=()=>!!onDialogueHistoryReview && (!boundSessionId.current||getActiveAssistantSessionId(sessionScope)!==boundSessionId.current||reviewedHistorySessionRef.current!==boundSessionId.current);
   const historyReviewRequired=isHistoryReviewRequired();
   function acceptFreshSession(id:string):void {
@@ -865,7 +870,24 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     runToken.current++;briefTurnSequence.current++;pendingCandidates?.invalidate();dropProposal();
     if(!onDialogueHistoryReview?.(id)){say({role:'agent',amber:true,text:'当前活动或会话正在变化，请稍后重新核对。'});return;}
     setReviewedHistory(id);phaseRef.current='idle';setPhase('idle');setProgress(0);
-    say({role:'agent',text:'已按当前记录重新开始；旧预览已收回，请重新生成并核对方案。'});
+    // 2026-11-14 用户指令：核对成功不再出声（自动核对后这句话每次切会话都会弹，是噪音）。
+  }
+  /** 2026-11-14 用户指令：最近一条用户消息原位编辑——替换气泡文本后按新话重走理解管线；
+      send 的原话回显由 resendEchoSkipRef 抑制，不产生第二条重复气泡。 */
+  function resendEditedLast(text: string): void {
+    const id = boundSessionId.current;
+    const trimmed = text.trim();
+    if (!id || !trimmed || !sessionScopeIsCurrent()) return;
+    if (briefRequest.current || generationWait.current || generationQueuedRef.current || studioRef.current?.busy || outdoorWorkflow.busy) { say({ role: 'agent', amber: true, text: '当前任务仍在处理，等它停稳后再改最后一句。' }); return; }
+    const last = [...bubblesRef.current].reverse().find(b => b.role === 'user');
+    if (!last) return;
+    if (last.text.trim() === trimmed) return;
+    resendEchoSkipRef.current = trimmed;
+    const next = bubblesRef.current.map(b => (b.id === last.id ? { ...b, text: trimmed } : b));
+    bubblesRef.current = next;
+    setBubbles(next);
+    persistBubbles(id, next);
+    void send(trimmed).finally(() => { if (resendEchoSkipRef.current === trimmed) resendEchoSkipRef.current = null; });
   }
   /** 导出对话交接前的静默核对：与「按当前记录重新开始」同一套判定，只是不出声、不重置进度。 */
   function freezeDialogueForExport(): boolean {
@@ -978,6 +1000,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => {
     if (!sessionScopeIsCurrent()) return;
+    // 2026-11-14 原位编辑重发：这句话已在原位替换，回显按标记抑制一次，避免两条重复气泡。
+    if (bubble.role === 'user' && resendEchoSkipRef.current && bubble.text.trim() === resendEchoSkipRef.current) {
+      resendEchoSkipRef.current = null;
+      return;
+    }
     // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
     const text = foldConflictBubble(bubble.text);
     const prev = bubblesRef.current;
@@ -1059,12 +1086,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const nextMemory = (nextId && (sessionMemories.current.get(nextId) ?? readBriefMemory(nextId, scopedAssistantStorage(sessionScope)))) || initialBriefMemory();
     memoryRef.current = nextMemory;
     onBriefMemoryChange?.(nextMemory,nextId);
-    if(nextId&&freshSessionProof.current===nextId){
-      freshSessionProof.current=null;
-      // A fresh conversation must not inherit a previous conversation's cloud
-      // candidate or discard an unknown run while granting its exemption.
+    // 2026-11-14 用户指令：点开会话即自动核对，「待核对」卡不再出现。
+    // 原本只有新会话走这条路；现在所有会话绑定都自动核对。安全性不变：
+    // discardPreviewForHistoryReview 只在旧运行结果「已知且已完成」时才放弃，
+    // 未知/进行中的任务会拒绝——那种罕见场合仍回退到手动「按当前记录重新开始」卡。
+    if(nextId){
       if((!studioRef.current||studioRef.current.discardPreviewForHistoryReview())&&onDialogueHistoryReview?.(nextId))setReviewedHistory(nextId);
-    } else freshSessionProof.current=null;
+    }
+    freshSessionProof.current=null;
     const nextBrief = { event: nextMemory.event, guests: nextMemory.headcount, layoutMode: nextMemory.layoutMode };
     briefRef.current = nextBrief;
     setBrief(nextBrief);
@@ -1721,14 +1750,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setOutdoorTask({ intent: '根据真实道路安排流线和出入口', state: 'working', action: '读取场地周边路网', steps: ['读取当前场地边界'] });
     setRouteBusy(true);
     try {
-      let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
-      for (const point of plan.boundary) {
-        west = Math.min(west, point.x); east = Math.max(east, point.x);
-        south = Math.min(south, point.y); north = Math.max(north, point.y);
-      }
-      const spanM = Math.max(east - west, north - south) * 0.75 + 300;
+      // 2026-11-14 测试修正：路网 bbox 按边界真实地理位置取（边界可离锚点很远），不再锚点居中。
+      const { center, spanM } = roadFetchPlanForBoundary(plan.boundary, plan.anchor);
       say({ role: 'agent', text: '正在读这一带的路网，排一版人流/车流/后勤流线和出入口…' });
-      const { roads } = await fetchRoadNetwork({ lng: plan.anchor.lng, lat: plan.anchor.lat }, spanM, { signal: controller.signal });
+      const { roads } = await fetchRoadNetwork(center, spanM, { signal: controller.signal });
       if (!currentOutdoorTask(epoch, 'route') || controller.signal.aborted || outdoorRequestRef.current !== controller) return;
       if (JSON.stringify(routeBridgeRef.current?.getPlan()) !== base) {
         setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '读取期间场地发生变化，旧结果已丢弃，请重新生成', steps: [], prompts: ['排一下流线'] });
@@ -3038,6 +3063,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(!queued&&callbacks.workbenchMode==='layout'&&routeBridgeRef.current?.applyPlan){
       if(attachment){setPendingFile(attachment);say({role:'agent',amber:true,text:'附件尚未结构化进入地图理解，未上传或声称已读图；文件保留在输入框。室内信息请先依图核对并画出真实区域/门口，设施GLB请用当前设施的原位上传。'});if(!trimmed)return;}
       say({role:'user',text:trimmed});
+      // 2026-11-14 用户指令：排流线/排入口是确定性规则命令（读真实路网 → 提案），不依赖理解模型——
+      // 本地无模型、模型暂时不可用都要能跑；放在工作流模型理解之前拦截（此前这分支在桥接模式下是死代码）。
+      if(matchRouteCommand(trimmed)){await proposeRoutePlan();return;}
       if(venuePick&&!venuePick.loading&&!venuePick.picking){
         const ordinal=trimmed.match(/(?:第|选|用|就)([一二三四五12345])(?:个|项)?/u)?.[1];
         const index=ordinal?('一二三四五'.includes(ordinal)?'一二三四五'.indexOf(ordinal):Number(ordinal)-1):-1;
@@ -3632,7 +3660,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
 
   const value: AgentValue = {
-    sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,withdrawUnresolvedDialogue,withdrawAllUnresolved,briefBusy,toolPending,processFailed,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
+    sessionScope, isSessionCurrent: sessionScopeIsCurrent, historyReviewRequired,reviewDialogueHistory,acceptFreshSession,resendEditedLast,retainedOtherSessionProposal:!!proposal.current&&proposalSessionRef.current!==boundSessionId.current,withdrawRetainedOtherSessionProposal:()=>{if(proposal.current&&proposalSessionRef.current!==boundSessionId.current){dropProposal();setPhase('idle');say({role:'agent',text:'已撤回其他会话中未确认的旧方案。'});}},unresolvedDialogue,hasUnresolvedDialogue:(id:string)=>(incompleteDialogueTurns.current.get(id)?.size??0)>0,withdrawUnresolvedDialogue,withdrawAllUnresolved,briefBusy,toolPending,processFailed,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
     canForward:(text)=>{const value=text.trim(),session=boundSessionId.current;return !!value&&!!session&&sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===session&&!pendingModelInputs.current.has(value)&&!uncertainInputs.current.has(value);},cancelUnderstanding,
     cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, banquetChat, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
@@ -3687,7 +3715,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     outdoorWorkflow,outdoorBridgeReady,searchOutdoorVenue,
     registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after); },
     exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
-    acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
+    acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); },
+    // 浮窗里「图片 / 文件」各自限定 accept；不传时回到全量白名单（老入口行为不变）。
+    pickFile: (accept?: string) => { const input = fileInput.current; if (!input) return; input.accept = accept ?? DEFAULT_FILE_ACCEPT; input.click(); },
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
     removePendingFile: () => setPendingFile(null),
     send, say, rainOn: view.weather === 'rain',
@@ -3699,7 +3729,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
   return <AgentContext.Provider value={value}>
     {children}
-    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void stageFile(file); }}/>
+    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept={DEFAULT_FILE_ACCEPT} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void stageFile(file); }}/>
   </AgentContext.Provider>;
 }
 
@@ -3913,11 +3943,34 @@ function ZoneConfirmCard({ proposal, busy, onConfirm, onDismiss }: {
   </section>;
 }
 
+const CAPABILITY_PANEL_OPEN_KEY = 'sc.ap-capabilities-open';
+
+/**
+ * 「你可以做什么」能力卡：默认收起，只留一行标题，不把对话区占着；展开后卡片挂出。
+ * 展开的选择记在本机，之后保持常驻。首帧与 SSR 一致，读本机选择放在渲染后。
+ */
 function AgentCapabilityPrompts({ onPrefill }: { onPrefill(text: string): void }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  // 渲染后再读本机选择：首帧与 SSR 一致，避免水合不一致。
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CAPABILITY_PANEL_OPEN_KEY) === '1') setOpen(true);
+    } catch { /* 读不到就保持收起 */ }
+  }, []);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    try { window.localStorage.setItem(CAPABILITY_PANEL_OPEN_KEY, next ? '1' : '0'); } catch { /* 存不住就只在本会话生效 */ }
+  };
   return (
-    <div id="ap-capabilities" className="ap-capabilities">
-      <p className="ap-capability-label">你可以做什么</p>
-      <CapabilitySuggestionCards onPrefill={onPrefill}/>
+    <div id="ap-capabilities" className={`ap-capabilities${open ? '' : ' is-collapsed'}`}>
+      <button type="button" className="ap-capability-toggle" aria-expanded={open} aria-controls="ap-capability-cards" onClick={toggle}>
+        <span className="ap-capability-label">你可以做什么</span>
+        <ChevronDown size={14} aria-hidden="true" className="ap-capability-chevron"/>
+      </button>
+      <div id="ap-capability-cards" hidden={!open}>
+        <CapabilitySuggestionCards onPrefill={onPrefill}/>
+      </div>
     </div>
   );
 }
@@ -4034,16 +4087,66 @@ function ToolCallTrace({ line, rows, understanding, onStop }: {
   </section>;
 }
 
-function Bubbles({ agent, reviewOnly = false, onPickOption }: { agent: AgentValue; reviewOnly?: boolean; onPickOption: (text: string) => void }): JSX.Element {
+function Bubbles({ agent, reviewOnly = false, onPickOption, onResendMessage }: { agent: AgentValue; reviewOnly?: boolean; onPickOption: (text: string) => void; onResendMessage?: (text: string) => void }): JSX.Element {
   const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
+  // 2026-11-14 用户指令：气泡 hover 出「复制 / 编辑」；编辑只给最近一条用户消息，
+  // 且在原位变成 chat 框——发送即替换这句话并重新走理解管线（不回填底部输入框）。
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const lastUserBubbleId = [...list].reverse().find(bubble => bubble.role === 'user')?.id ?? null;
+  const copyMessage = (bubble: AgentValue['bubbles'][number]): void => {
+    void navigator.clipboard?.writeText(bubble.text).catch(() => {});
+    setCopiedId(bubble.id);
+    window.setTimeout(() => setCopiedId(current => (current === bubble.id ? null : current)), 1200);
+  };
+  const copyButton = (bubble: AgentValue['bubbles'][number]) => (
+    <button type="button" aria-label={copiedId === bubble.id ? '已复制' : '复制这条消息'} onClick={() => copyMessage(bubble)}>
+      {copiedId === bubble.id ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+    </button>
+  );
+  const submitEdit = (): void => {
+    const value = editDraft.trim();
+    if (!value) return;
+    setEditingId(null);
+    onResendMessage?.(value);
+  };
   return <>{list.map((bubble, bubbleIndex) => {
     const followups = bubble.role === 'agent' ? parseFollowUpOptions(bubble.text) : [];
     const laterUserTexts = list.slice(bubbleIndex + 1).filter(b => b.role === 'user').map(b => b.text.trim());
     const pickedOption = followups.find(option => laterUserTexts.includes(option));
     const settled = pickedOption !== undefined;
     return bubble.role === 'user'
-    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
-    : <div key={bubble.id} className="ap-turn"><div className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>
+    ? <div key={bubble.id} className="ap-bubble-wrap is-user">
+      {editingId === bubble.id ? (
+        <form className="ap-msg-edit" onSubmit={event => { event.preventDefault(); submitEdit(); }}>
+          <textarea
+            value={editDraft}
+            rows={2}
+            autoFocus
+            maxLength={600}
+            aria-label="编辑这条消息"
+            onChange={event => setEditDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.nativeEvent.isComposing) return;
+              if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitEdit(); }
+              else if (event.key === 'Escape') { event.preventDefault(); setEditingId(null); }
+            }}
+          />
+          <div className="ap-msg-edit-actions">
+            <button type="button" className="chip" onClick={() => setEditingId(null)}>取消</button>
+            <button type="submit" className="chip btn-primary" disabled={!editDraft.trim()}>发送</button>
+          </div>
+        </form>
+      ) : (<>
+        <div className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
+        <div className="ap-msg-actions">
+          {copyButton(bubble)}
+          {onResendMessage && bubble.id === lastUserBubbleId && <button type="button" aria-label="编辑这条消息" data-tip="编辑后重新发送" onClick={() => { setEditingId(bubble.id); setEditDraft(bubble.text); }}><Pencil size={14} aria-hidden="true"/></button>}
+        </div>
+      </>)}
+    </div>
+    : <div key={bubble.id} className="ap-bubble-wrap"><div className="ap-turn"><div className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>
         {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
           ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
           : <span key={index} className="ap-agent-line">{block.text}</span>)}
@@ -4068,6 +4171,8 @@ function Bubbles({ agent, reviewOnly = false, onPickOption }: { agent: AgentValu
       )}
       {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
       {bubble.materialQueries?.map(query=><MaterialCandidatesPanel key={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}:${bubble.id}:${query}`} query={query} onOpenLibrary={()=>agent.callbacks.onOpenMaterials()}/>)}
+      </div>
+      <div className="ap-msg-actions">{copyButton(bubble)}</div>
     </div>;
   })}</>;
 }
@@ -4118,6 +4223,66 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtorLike | null {
   const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtorLike; webkitSpeechRecognition?: SpeechRecognitionCtorLike };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
+
+/**
+ * 加号（上传图片/资料）：和麦克风同一套**线性**图标。
+ * 原来这里是一颗实心 Material ⓘ（灰圆盘），跟旁边的线条图标不是一个语言。
+ */
+function PlusLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+/** 模型位与菜单里的尖角/对勾：同一套线条，避免又混进实心 Material 图形。 */
+function ChevronDownLineIcon({ size = 13, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
+      <path d="M6 9.5 12 15.5 18 9.5" />
+    </svg>
+  );
+}
+
+function CheckLineIcon({ size = 14, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
+      <path d="M5 12.5 10 17.5 19 6.5" />
+    </svg>
+  );
+}
+
+/** 加号浮窗里的两项：图片 / 文件，仍是同一套线条。 */
+function ImageLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <circle cx="8.5" cy="9.5" r="1.6" />
+      <path d="M4 17.5 9.8 12l4.2 4.2 2.6-2.4L20 17.6" />
+    </svg>
+  );
+}
+
+function FileLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
+      <path d="M14 3.5H7.5A2 2 0 0 0 5.5 5.5v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3.5V8h4.5" />
+    </svg>
+  );
+}
+
+/**
+ * 模型位按钮的固定文案。2026-11-14 用户指令：槽位选择并入「智能」菜单后，
+ * 按钮本身仍叫「智能」，菜单里列服务端 chat/capabilities 下发的真实槽位，
+ * 点选经 setActiveProvider 做请求级切换（对话/摘要/Agent 工具循环都跟随）。
+ */
+const CURRENT_MODEL_LABEL = '智能';
+
+/** 附件白名单：图片 + 图纸/PDF。加号浮窗会按「图片 / 文件」临时收窄，取消选择后回到这份全量。 */
+const DEFAULT_FILE_ACCEPT = 'image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg';
 
 /** 麦克风图标：仓库 solid-icons 未收录，本地内联一笔，Stroke 跟其他线性图标一致。 */
 function MicIcon({ size = 18, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
@@ -4336,13 +4501,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const agent = useAgent();
   const studio = useStudioAgent();
   // 请求级模型槽位：可选项来自服务端 capabilities；状态在 StudioContext 内会话内存共享。
+  // 2026-11-14 用户指令：槽位列表并进 composer 的「智能」菜单；底部独立槽位栏拆除。
   const providerSlots = studio?.chatProviders?.providers ?? null;
   const activeProviderId = studio?.activeProvider ?? 'default';
-  const activeProviderSlot = providerSlots?.find(p => p.id === activeProviderId) ?? null;
-  // 模型槽位浮层：堆栈矮卡里面板自身 overflow:hidden 会裁掉上弹菜单，因此挂到 body 层定位。
-  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
-  const providerAnchorRef = useRef<HTMLButtonElement>(null);
-  const providerMenuRef = useRef<HTMLDivElement>(null);
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
   // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
@@ -4351,9 +4512,68 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const mode = agent.callbacks.workbenchMode;
   const draftKey=JSON.stringify([agent.sessionScope,assistantSessions.activeId]);
   const [draftState,setDraftState]=useState(()=>({key:draftKey,value:volatileComposerDrafts.get(draftKey)??''}));
-  const [footDetailOpen,setFootDetailOpen]=useState(false);
+  const [footDetailOpen]=useState(false);
+  /* 动作行上的两枚浮窗（模型位 / 加号）共用一个「当前打开的是谁」，同时只开一个。
+     模型位「智能」菜单里列服务端下发的真实模型槽位（2026-11-14 用户指令）。 */
+  const [openMenu,setOpenMenu]=useState<'model'|'add'|null>(null);
+  const menuRowRef=useRef<HTMLDivElement|null>(null);
+  useEffect(()=>{
+    if(!openMenu) return;
+    const onDown=(event:PointerEvent)=>{ if(!menuRowRef.current?.contains(event.target as Node)) setOpenMenu(null); };
+    const onKey=(event:KeyboardEvent)=>{ if(event.key==='Escape') setOpenMenu(null); };
+    document.addEventListener('pointerdown',onDown,true);
+    document.addEventListener('keydown',onKey);
+    return ()=>{ document.removeEventListener('pointerdown',onDown,true); document.removeEventListener('keydown',onKey); };
+  },[openMenu]);
   const draft=draftState.key===draftKey ? draftState.value : volatileComposerDrafts.get(draftKey)??'';
   const setDraft=(value:string)=>{ if(value)volatileComposerDrafts.set(draftKey,value);else volatileComposerDrafts.delete(draftKey);setDraftState({key:draftKey,value}); };
+  // 2026-11-14 用户指令：历史整层接管对话区时，输入框里直接回车 = 在当前项目开一个新会话，
+  // 并把这句话发进新会话（对齐 VS Code chat）。openSession 的绑定在 provider effect 里完成，
+  // 同一次事件里 send 仍会落到旧会话——所以先记账，等 canForward 为真（绑定完成）再补发。
+  const pendingFreshSendRef = useRef<{ text: string } | null>(null);
+  const submitComposer = (): void => {
+    if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return;
+    if (draft.trim() && showHistory) {
+      const created = assistantSessions.openSession();
+      if (created?.verifiedFresh) agent.acceptFreshSession(created.id);
+      setShowHistory(false);
+      pendingFreshSendRef.current = { text: draft };
+      setDraft('');
+      inputRef.current?.focus();
+      return;
+    }
+    void agent.send(draft);
+    setDraft('');
+  };
+  useEffect(() => {
+    const pending = pendingFreshSendRef.current;
+    if (!pending) return;
+    if (!agent.canForward(pending.text)) {
+      // 活动已切换等异常：放弃补发，避免把话发进不可核对的会话。
+      if (!agent.isSessionCurrent()) pendingFreshSendRef.current = null;
+      return;
+    }
+    pendingFreshSendRef.current = null;
+    void agent.send(pending.text);
+  }, [agent]);
+  // 2026-11-14 用户指令：历史列表四态——已读(无点)/错误(红点)/未读(蓝点)/进行中(绿点)。
+  // 未读=本机 seen 时间戳晚于会话最后更新；切走的会话补记 seen，避免自己刚看过的内容亮蓝。
+  const resolveSessionStatus = (session: { id: string; updatedAt: number }): SessionStatus => {
+    if (session.id === assistantSessions.activeId) {
+      if (agent.state === 'generating' || agent.briefBusy || agent.understanding || agent.generationQueued > 0) return 'active';
+      if (agent.failed) return 'error';
+      return 'idle';
+    }
+    if (agent.hasUnresolvedDialogue(session.id)) return 'error';
+    if (sessionUnreadSince(session.id, session.updatedAt)) return 'unread';
+    return 'idle';
+  };
+  const lastActiveForSeenRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = lastActiveForSeenRef.current;
+    lastActiveForSeenRef.current = assistantSessions.activeId;
+    if (prev && prev !== assistantSessions.activeId) markSessionSeen(prev);
+  }, [assistantSessions.activeId]);
   const restoredCancellation=useRef<number|null>(null);
   useEffect(()=>{const cancelled=agent.cancelledInput;if(!cancelled||restoredCancellation.current===cancelled.id)return;restoredCancellation.current=cancelled.id;if(!draft.trim())setDraft(cancelled.text);},[agent.cancelledInput]);
   // 语音转文字：点一下开始拾音、再点停止；结果 append 到现有 draft 后，不覆盖。
@@ -4383,42 +4603,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   useEffect(() => () => { recognitionRef.current?.abort(); recognitionRef.current = null; }, []);
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // 浮层定位：默认向上贴着锚点；上方空间不足或向下更宽裕时改为向下。关闭时不占用定位。
-  const providerMenuStyle = useMemo<CSSProperties>(() => {
-    if (!providerMenuOpen) return {};
-    const anchor = providerAnchorRef.current?.getBoundingClientRect();
-    if (!anchor || (anchor.width === 0 && anchor.height === 0)) return {};
-    const menuW = 266; const gap = 6; const estH = 232;
-    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - menuW - 8));
-    const above = anchor.top - gap >= estH || anchor.bottom + estH > window.innerHeight - 8;
-    return {
-      position: 'fixed',
-      left,
-      width: menuW,
-      ...(above ? { bottom: window.innerHeight - anchor.top + gap } : { top: anchor.bottom + gap }),
-    };
-  }, [providerMenuOpen]);
-  // 点击浮层外部 / Esc / 滚动或缩放时收起。
-  useEffect(() => {
-    if (!providerMenuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (target && (providerAnchorRef.current?.contains(target) || providerMenuRef.current?.contains(target))) return;
-      setProviderMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setProviderMenuOpen(false); };
-    const onDismiss = () => setProviderMenuOpen(false);
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('resize', onDismiss);
-    window.addEventListener('scroll', onDismiss, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('resize', onDismiss);
-      window.removeEventListener('scroll', onDismiss, true);
-    };
-  }, [providerMenuOpen]);
   // 树外入口（选中物件弹层）经预填总线把指令送进既有 composer：
   // 并入现有草稿（空格追加、不覆盖），聚焦输入框；不自动发送，仍走原提案审批链。
   useEffect(() => subscribeComposerPrefill((text) => {
@@ -4453,13 +4637,16 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     stageLine: agent.toolPending ? null : localStageLine,
   });
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
-  const suggestion = useSuggestion(activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
+  // 户外开局（还没选地点）：引导句换成场地搜索那一套，Tab 一次填整句。
+  const outdoorPlaceStage = activeAgent === 'door' && agent.outdoorBridgeReady && !agent.venuePick && agent.outdoorWorkflow.state.stage === 'place';
+  const suggestion = useSuggestion(activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : outdoorPlaceStage ? OUTDOOR_PLACE_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
   // 待确认 / 暂停 / 圈选态让位给状态专属 placeholder，不再打例句。
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
-  const ghostVisible = !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
+  // ghost 两处开：无户外桥（老室内流）照旧；户外开局（还没选地点）也开——引导句指向场地搜索。
+  const ghostVisible = (outdoorPlaceStage || !agent.outdoorBridgeReady) && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
   const composerPlaceholder = agent.outdoorBridgeReady ? (agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
@@ -4564,15 +4751,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       </div>
     </header>
     <div className="ap-body">
-      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
+      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} resolveStatus={resolveSessionStatus} onSelect={id => { markSessionSeen(id); /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
-      {demo && <p className="ap-demo-note" role="note">本机试用 · {modelEnabled() && studio?.controller ? '可尝试智能对话，是否可用以实际运行结果为准。' : '当前对话使用本机规则理解，其他能力以实际运行结果为准。'}</p>}
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
-      {/* T2：空态话术按脸分——活动脸是布置引导，Bingo 脸是审校引导，不再共用「先说一句」。 */}
-      {mode === 'layout' && agent.state !== 'generating' && (bingo ? agent.bubbles.filter(b => b.review).length === 0 : agent.bubbles.length === 0) && <div className="ap-lead">
-        <p className="ap-lead-title">{bingo ? '这边只管审校' : '先说一句就行'}</p>
-        <p className="ap-lead-body">{bingo ? '点「立即体检」查看几何问题，或准备客户评审。对方的意见保存在对方浏览器，不会自动回到这里。' : '点一句例子，或自己说；听懂了会回显，确认后才写进画布。'}</p>
+      {/* 空态引导句只剩 Bingo 脸要：活动脸的对话流自己说话，不再挂静态引导。 */}
+      {bingo && mode === 'layout' && agent.state !== 'generating' && agent.bubbles.filter(b => b.review).length === 0 && <div className="ap-lead">
+        <p className="ap-lead-title">这边只管审校</p>
+        <p className="ap-lead-body">点「立即体检」查看几何问题，或准备客户评审。对方的意见保存在对方浏览器，不会自动回到这里。</p>
       </div>}
       {activity && mode === 'layout' && !agent.outdoorBridgeReady && isPlanHome(agent.state, layout, agent.proposal !== null) && (
         <PlanHome
@@ -4584,8 +4770,16 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>
-      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onSearch={agent.searchOutdoorVenue} onSupplement={()=>inputRef.current?.focus()}/>}
+      <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onResendMessage={bingo ? undefined : text => agent.resendEditedLast(text)}/>
+      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow}/>}
+      {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
+      {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
+        summary={agent.routeProposal.summary}
+        routes={agent.routeProposal.routes.length}
+        busy={agent.routeBusy}
+        onConfirm={() => agent.confirmRouteProposal()}
+        onDismiss={() => agent.dismissRouteProposal()}
+      />}
       {agent.outdoorTask && (!agent.outdoorBridgeReady||agent.venuePick) && <OutdoorTaskCard task={agent.outdoorTask}
         canStop={Boolean(agent.venuePick?.loading || agent.venuePick?.picking || agent.routeBusy || agent.flowSimActive)}
         onInspectFacility={agent.inspectOutdoorFacility} onStop={agent.stopOutdoorTask} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}>
@@ -4664,7 +4858,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             </div>
           </>}
         </section>}
-        {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
+        {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={() => agent.pickFile()}>换个文件</button></> : <button type="button" className="chip is-on" onClick={() => agent.pickFile()}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
             没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
         {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0}/>}
@@ -4746,14 +4940,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           />
         )}
         {mode === 'layout' && activity && <AgentCapabilityPrompts onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }}>
+        <form id="composer" className="ap-composer ap-composer-panel" onSubmit={event => { event.preventDefault(); submitComposer(); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <div className="ap-composer-field ap-panel-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
-          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return; void agent.send(draft); setDraft(''); }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
         }}/>
         {agent.pendingFile && <div className="sc-chat-file ap-file-chip">
           <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
@@ -4763,72 +4957,73 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         {agent.sessionSaveFailed && <p role="status" className="ap-field-note">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
-        <button type="button" className="ap-foot-info ap-panel-info" aria-expanded={footDetailOpen} aria-label="数据与隐私说明" onClick={() => setFootDetailOpen(current => !current)}><Info size={12} aria-hidden="true"/></button>
-        {showMic ? (
-          <button
-            type="button"
-            className={`ap-send ap-panel-send ap-mic${listening ? ' is-listening' : ''}`}
-            aria-label={listening ? '停止语音输入' : '语音输入'}
-            aria-pressed={listening}
-            data-tour="chat-mic"
-            disabled={!speechSupported}
-            onClick={toggleMic}
-          >
-            <MicIcon size={18} aria-hidden="true" />
-          </button>
-        ) : (
-          <button type="submit" className="ap-send ap-panel-send" aria-label="发送" data-tour="chat-send" disabled={!canSend}><ArrowUp size={18}/></button>
-        )}
-        </div>
-        {providerSlots && (
-          <div className="ap-composer-bar">
-            <div className="ap-composer-left">
-              <div className={`ap-provider${providerMenuOpen ? ' is-open' : ''}`}>
-                <button
-                  ref={providerAnchorRef}
-                  type="button"
-                  className="ap-provider-summary"
-                  aria-expanded={providerMenuOpen}
-                  onClick={() => setProviderMenuOpen(open => !open)}
-                >
-                  <span className="ap-supervise-dot" aria-hidden="true"/>
-                  <span className="ap-provider-summary-label">{activeProviderSlot ? activeProviderSlot.label : '默认（按服务端配置）'}</span>
-                </button>
-                {createPortal(
-                  <div
-                    ref={providerMenuRef}
-                    className={`ap-provider-menu${providerMenuOpen ? ' is-open' : ''}`}
-                    role="radiogroup"
-                    aria-label="模型槽位"
-                    style={providerMenuStyle}
-                  >
-                    {providerSlots.map(slot => {
-                      const active = activeProviderId === slot.id;
-                      const disabled = !slot.configured || !!studio?.busy;
-                      return (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          disabled={disabled}
-                          onClick={() => {
-                            studio?.setActiveProvider(slot.id);
-                            setProviderMenuOpen(false);
-                          }}
-                        >
-                          <span className="ap-provider-label">{slot.label}{!slot.agentTools && <small>仅对话/摘要</small>}</span>
-                          <span className="ap-provider-model">{slot.configured ? slot.model : '未配置'}</span>
-                        </button>
-                      );
-                    })}
-                  </div>,
-                  document.body,
-                )}
-              </div>
-            </div>
+        <div className="ap-panel-row" ref={menuRowRef}>
+          {/* 加号：先开浮窗，再从浮窗里选「图片」或「文件」——分开 accept，选完照旧进同一条 stageFile 链路。 */}
+          <div className="ap-add-picker">
+            <button type="button" className="ap-panel-add" aria-haspopup="menu" aria-expanded={openMenu === 'add'} aria-label="添加文件" data-tour="chat-attach" title="添加文件" onClick={() => setOpenMenu(open => open === 'add' ? null : 'add')}>
+              <PlusLineIcon size={16} aria-hidden="true"/>
+            </button>
+            {openMenu === 'add' && <div className="ap-add-menu" role="menu" aria-label="添加文件">
+              <button type="button" role="menuitem" className="ap-add-item" onClick={() => { setOpenMenu(null); agent.pickFile('image/png,image/jpeg,image/webp'); }}>
+                <ImageLineIcon size={16} aria-hidden="true"/><span>图片</span>
+              </button>
+              <button type="button" role="menuitem" className="ap-add-item" onClick={() => { setOpenMenu(null); agent.pickFile('.pdf,.dxf,.dwg'); }}>
+                <FileLineIcon size={16} aria-hidden="true"/><span>文件</span>
+              </button>
+            </div>}
           </div>
-        )}
+          <div className="ap-panel-actions">
+            {/* 模型位「智能」：菜单列服务端下发的真实模型槽位（chat/capabilities），
+                点选即切换对话/摘要/Agent 工具循环的 provider（请求级切换）。
+                2026-11-14 用户指令：原底部独立槽位栏并进这里，不再单摆。 */}
+            <div className="ap-model-picker">
+              <button type="button" className="ap-model-trigger" aria-haspopup="menu" aria-expanded={openMenu === 'model'} aria-label={`模型：${CURRENT_MODEL_LABEL}`} data-tour="chat-model" onClick={() => setOpenMenu(open => open === 'model' ? null : 'model')}>
+                <span className="ap-model-trigger-name">{CURRENT_MODEL_LABEL}</span>
+                <ChevronDownLineIcon size={13} aria-hidden="true"/>
+              </button>
+              {openMenu === 'model' && <div className="ap-model-menu" role="radiogroup" aria-label="模型槽位">
+                {providerSlots ? providerSlots.map(slot => {
+                  const active = activeProviderId === slot.id;
+                  return (
+                    <button key={slot.id} type="button" role="radio" aria-checked={active} className="ap-model-item" disabled={!slot.configured || !!studio?.busy} onClick={() => { studio?.setActiveProvider(slot.id); setOpenMenu(null); }}>
+                      <span className="ap-provider-label">{slot.label}{!slot.agentTools && <small>仅对话/摘要</small>}</span>
+                      {active ? <CheckLineIcon size={14} aria-hidden="true"/> : <span className="ap-provider-model">{slot.configured ? slot.model : '未配置'}</span>}
+                    </button>
+                  );
+                }) : (
+                  <p className="ap-model-empty">登录后这里按服务端配置显示可用模型；当前请求仍走默认链路。</p>
+                )}
+              </div>}
+            </div>
+            {/* 户外任务进行中：发送位变成中止钮，请求的取消入口从任务卡挪到这里。 */}
+            {agent.outdoorWorkflow.busy || agent.outdoorWorkflow.simulating ? (
+              <button
+                type="button"
+                className="ap-send ap-panel-send is-stop"
+                aria-label="中止当前请求"
+                data-tour="chat-send"
+                onClick={() => agent.outdoorWorkflow.cancel()}
+              >
+                <Square size={18} aria-hidden="true"/>
+              </button>
+            ) : showMic ? (
+              <button
+                type="button"
+                className={`ap-send ap-panel-send ap-mic${listening ? ' is-listening' : ''}`}
+                aria-label={listening ? '停止语音输入' : '语音输入'}
+                aria-pressed={listening}
+                data-tour="chat-mic"
+                disabled={!speechSupported}
+                onClick={toggleMic}
+              >
+                <MicIcon size={18} aria-hidden="true" />
+              </button>
+            ) : (
+              <button type="submit" className="ap-send ap-panel-send" aria-label="发送" data-tour="chat-send" disabled={!canSend}><ArrowUp size={18}/></button>
+            )}
+          </div>
+        </div>
+        </div>
         <p className="ap-foot">
           <span id="ap-data-notice" className="ap-foot-detail" hidden={!footDetailOpen}>{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
           <span className="ap-foot-detail" hidden={!footDetailOpen}>未发送的草稿只暂存在当前页面，刷新或关闭后会丢失。</span>

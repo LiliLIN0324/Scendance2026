@@ -19,7 +19,11 @@ const publicHost = process.env.SCENDANCE_DEV_PRIVATE_HOST || '127.0.0.1';
 if (!/^(127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(publicHost)) throw new Error('Preview host must be a private IPv4 address.');
 const origins = [`http://${publicHost}:${webPort}`, `http://127.0.0.1:${webPort}`, `http://localhost:${webPort}`];
 const permitted = new Set(['DEEPSEEK_API_KEY', 'AI_MAX_REQUEST_CENTS', 'RECONSTRUCTION_MAX_REQUEST_CENTS',
-  'HUNYUAN_API_KEY', 'HUNYUAN_API_MODE', 'GENERATION_MAX_TASK_CENTS', 'HUNYUAN_TERMS_URL', 'HUNYUAN_TERMS_REVIEWED_AT']);
+  'HUNYUAN_API_KEY', 'HUNYUAN_API_MODE', 'GENERATION_MAX_TASK_CENTS', 'HUNYUAN_TERMS_URL', 'HUNYUAN_TERMS_REVIEWED_AT',
+  // 2026-11-14：Agent 对话模型配置透传——本机配了 AGENT_CHAT_KEY + ASSISTANT_CHAT_ENABLED=1 时
+  // 本地也能用「Agent 理解」（户外 understanding / brief 抽取）；不配则保持 disabled 并给出可行动文案。
+  'ASSISTANT_CHAT_ENABLED', 'BRIEF_CONVERSATION_ENABLED', 'AGENT_CHAT_KEY', 'AGENT_CHAT_BASE_URL',
+  'AGENT_CHAT_MODEL', 'AGENT_CHAT_PROFILE', 'AGENT_CHAT_REASONING_EFFORT', 'MINIMAX_AGENT_TOOLS_ENABLED']);
 const server = await startLocalServer(port, undefined, { dataDirectory, origins, privateHost: publicHost, env: key =>
   permitted.has(key) ? process.env[key] ?? (key === 'RECONSTRUCTION_MAX_REQUEST_CENTS' ? '200' : undefined) : undefined });
 
@@ -46,7 +50,7 @@ if (!(await server.db.query('select id from scene_private.projects limit 1')).ro
 // without a shell (EINVAL). The shell only wraps the one command below; every argument is plain.
 const windows = process.platform === 'win32';
 const frontend = spawn(windows ? 'npm.cmd' : 'npm', ['--prefix','frontend','run','dev','--','--hostname',publicHost === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0','--port',String(webPort)], {
-  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1',SCENDANCE_DEV_PUBLIC_ORIGIN:origins[0]},
+  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1',SCENDANCE_DEV_PUBLIC_ORIGIN:origins[0]},
 });
 let stopping = false, working = false;
 const worker = setInterval(async () => {

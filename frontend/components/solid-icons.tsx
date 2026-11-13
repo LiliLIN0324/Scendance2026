@@ -65,6 +65,7 @@ export const Lock = makeSolidIcon('lock');
 export const LockKeyhole = makeSolidIcon('lock_person');
 export const Map = makeSolidIcon('map');
 export const MapPin = makeSolidIcon('location_on');
+export const Pin = makeSolidIcon('push_pin');
 export const Maximize2 = makeSolidIcon('fullscreen');
 export const MessageCirclePlus = makeSolidIcon('add_comment');
 export const MessageSquare = makeSolidIcon('chat');

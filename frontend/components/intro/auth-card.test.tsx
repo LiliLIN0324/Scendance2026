@@ -132,11 +132,11 @@ it('registers and verifies an email inside the card before authenticating', asyn
   expect(screen.getByRole('button', { name: /秒后可重新发送/ }).hasAttribute('disabled')).toBe(true);
   mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'otp_expired' }), { status: 403 }));
   fireEvent.change(screen.getByLabelText('六位验证码'), { target: { value: '012345' } });
-  fireEvent.click(screen.getByRole('button', { name: '验证并进入工作室' }));
+  fireEvent.click(screen.getByRole('button', { name: '验证并进入工作台' }));
   expect((await screen.findByRole('alert')).textContent).toContain('验证码已失效');
   expect(onAuthenticated).not.toHaveBeenCalled();
   mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'new-user' } })));
-  fireEvent.click(screen.getByRole('button', { name: '验证并进入工作室' }));
+  fireEvent.click(screen.getByRole('button', { name: '验证并进入工作台' }));
   await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
 });
 

@@ -187,6 +187,7 @@ import {
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
 import { nearestRingEdge, planGridStepM, snapPointToGrid } from '../lib/site-plan-snap';
+import { encodeStageCover } from '@/lib/stage-cover';
 import {
   PLAN_MEASURE_MAX_VERTICES,
   buildMeasurement,
@@ -754,43 +755,32 @@ function niceScaleMeters(metersPerPx: number, targetPx: number): { meters: numbe
 }
 
 /**
- * P2-i：画布左下角常驻比例尺 + 指北针。
- * 2026-11-11 用户指令「按范式改」：对齐 Google/高德式比例尺——无底盒、细线两端竖须、
- * 文字白描边（亮暗底图都可读）、小指北针；不再自制 i/尺子按钮（空间标定/光照 HUD 属室内，户外态由 CSS 隐藏）。
- * 与导出 PNG（site-plan-png 的 scaleBarMeters/northArrowGeometry）同口径：比例尺按当前缩放级
- * 真实换算，指北针固定「地图北向上」；瓦片底图与纸面底图都画，隐藏项由图层栈控制时不影响。
+ * P2-i：画布左下角常驻比例尺 + 图源署名（2026-11-14 用户指令定稿：
+ * 左下同一行 = [2D|3D] 胶囊（DOM，left 12 bottom 14）+ 比例尺 + 完整署名文字（画布 left 152 让位胶囊；
+ * 不用短图源名）；指北针在右下「指北针|地图」双段卡（DOM，outdoor-plan-overlay），画布右下不再画角标。
+ * 样式对齐 Google 式：细线两端竖须、柔和白色光晕（shadowBlur，不再粗白描边）、深字。
+ * 与导出 PNG（site-plan-png 的 scaleBarMeters）同口径：比例尺按当前缩放级真实换算。
  */
-function drawScaleAndNorth(ctx: CanvasRenderingContext2D, viewport: PlanViewport, cssW: number, cssH: number) {
+function drawScaleAttribution(ctx: CanvasRenderingContext2D, viewport: PlanViewport, cssW: number, cssH: number, source: CanvasBasemapSource | null) {
   const mPerPx = planMetersPerPixel(viewport);
   if (!Number.isFinite(mPerPx) || mPerPx <= 0) return;
   const { meters } = niceScaleMeters(mPerPx, 96);
-  const barPx = Math.max(24, Math.min(meters / mPerPx, Math.max(24, cssW - 170)));
+  const barPx = Math.max(24, Math.min(meters / mPerPx, Math.max(24, cssW - 380)));
   const label = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
-  const left = 14;
-  const barY = cssH - 18;
+  const left = 152; // 让位左下 [2D|3D] 胶囊（left 12 + 胶囊宽 ~128 + 间距 12）
+  const barY = cssH - 24; // 与胶囊垂直中线对齐
   ctx.save();
   ctx.lineCap = 'butt';
-  // 标准范式：文字白描边（halo）+ 深字，线上下短须——亮暗底图都可读。
-  ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif';
+  ctx.font = '500 11px "Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
   ctx.textBaseline = 'alphabetic';
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.strokeText(label, left, barY - 8);
-  ctx.fillStyle = 'rgba(30, 32, 38, 0.92)';
-  ctx.fillText(label, left, barY - 8);
-  // 细线：白描边打底 + 深色主线，两端竖须。
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.beginPath();
-  ctx.moveTo(left, barY);
-  ctx.lineTo(left + barPx, barY);
-  ctx.moveTo(left, barY - 5);
-  ctx.lineTo(left, barY + 5);
-  ctx.moveTo(left + barPx, barY - 5);
-  ctx.lineTo(left + barPx, barY + 5);
-  ctx.stroke();
+  // 柔和白色光晕（blur，不再粗白描边）——亮暗底图都可读且不发糊。
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+  ctx.shadowBlur = 3;
+  ctx.fillStyle = 'rgba(28, 32, 40, 0.88)';
+  ctx.fillText(label, left, barY - 7);
+  // 细线两端竖须：深色 2px 主线（自带白色光晕）。
   ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(30, 32, 38, 0.92)';
+  ctx.strokeStyle = 'rgba(28, 32, 40, 0.88)';
   ctx.beginPath();
   ctx.moveTo(left, barY);
   ctx.lineTo(left + barPx, barY);
@@ -799,40 +789,13 @@ function drawScaleAndNorth(ctx: CanvasRenderingContext2D, viewport: PlanViewport
   ctx.moveTo(left + barPx, barY - 5);
   ctx.lineTo(left + barPx, barY + 5);
   ctx.stroke();
-  // 指北针：小三角 + N（地图北向上，固定）。
-  const nx = left + barPx + 26;
-  const ny = barY - 6;
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.beginPath();
-  ctx.moveTo(nx, ny - 12);
-  ctx.lineTo(nx - 6, ny + 2);
-  ctx.lineTo(nx + 6, ny + 2);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(30, 32, 38, 0.92)';
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeText('N', nx, barY + 10);
-  ctx.fillText('N', nx, barY + 10);
-  ctx.restore();
-}
-
-/** 图源署名（右下角，Google/OnePlan 同款范式；OSM ODbL 要求可见署名）。
- *  文案随图源走（`basemapSourceAttribution`），高德三档不再挂天地图的名。 */
-function drawAttribution(ctx: CanvasRenderingContext2D, source: CanvasBasemapSource, cssW: number, cssH: number) {
-  const text = basemapSourceAttribution(source);
-  ctx.save();
-  ctx.font = '10px system-ui, -apple-system, "Segoe UI", sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'right';
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  const x = cssW - 74; // 让开右下角图源切换圆钮（right 24 + 34 宽）
-  const y = cssH - 14;
-  ctx.strokeText(text, x, y);
-  ctx.fillStyle = 'rgba(30, 32, 38, 0.78)';
-  ctx.fillText(text, x, y);
+  // 署名文字：跟在比例尺后同行（瓦片源才署名；纸面无图源不署名）。
+  if (source) {
+    const text = basemapSourceAttribution(source);
+    ctx.font = '10px "Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(28, 32, 40, 0.62)';
+    ctx.fillText(text, left + barPx + 20, barY - 7);
+  }
   ctx.restore();
 }
 
@@ -955,6 +918,11 @@ export interface OutdoorPlanCanvasHandle {
   zoomBy(direction: 1 | -1): void;
   /** 当前业务层画布截图 dataURL（无 canvas 时 null）。 */
   captureImage(): string | null;
+  /**
+   * 2026-11-14 活动封面：底图瓦片+业务层的舞台合成截图（encodeStageCover 口径 640×380）。
+   * captureImage 只画业务层（透明底），封面要的是用户眼前那张带瓦片的完整画面。
+   */
+  captureStageImage(): string | null;
   /** 撤销（与画布顶部「撤销」钮、Ctrl+Z 同源）。 */
   undo(): void;
   /** 重做（撤销的反向；新编辑会清空重做栈）。 */
@@ -1269,7 +1237,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [openPackId, setOpenPackId] = useState<string | null>(null);
   
   /**
-   * P2-k 目录（用户 m05190）：进户外规划就是三段行——区域、路线及交通 / 基础设施 / 劳动力。
+   * P2-k 目录（用户 m05190）：进户外规划就是三段行——区域、路线及交通 / 基础设施 / 工作人员（原叫「劳动力」，2026-11-14 改名）。
    * 2026-11-11 用户指令（m00575）：一级段与二级子组**都要能同时展开多个**——
    * 以前 `librarySection`/`librarySubgroup` 是单选（手风琴），点开「电力」会把「照明」收掉，
    * 用户要对比几类设备时只能来回点。现改为「展开集合」：一级存 section id，
@@ -2145,10 +2113,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
     }
 
-    // 6) P2-i：常驻比例尺 + 指北针（画在最上层，任何底图/图层组合下都在同一位置）。
-    drawScaleAndNorth(planCtx, viewport, cssW, cssH);
-    // 图源署名：纸面模式无图源不画；瓦片源按许可要求常驻右下角（Google/OnePlan 同款范式）。
-    if (baseModeRef.current !== 'floor') drawAttribution(planCtx, sourceRef.current, cssW, cssH);
+    // 6) P2-i：常驻比例尺 + 署名（左下，跟 2D/3D 胶囊同一行；2026-11-14 用户指令定稿）。
+    //    右下 = 「指北针|地图」双段卡（DOM，outdoor-plan-overlay），画布右下不再画角标。
+    //    纸面模式无图源不画署名。
+    drawScaleAttribution(planCtx, viewport, cssW, cssH, baseModeRef.current !== 'floor' ? sourceRef.current : null);
 
     // 7) P2-k：搜地点落钉（纯视图辅助，不进 plan、不参与统计与冲突）。
     // 7a) 先画选区面（行政区边界），再画钉——钉压在上面不会被浅填充吞掉。
@@ -2644,11 +2612,30 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     });
   }
 
+  // 舞台合成截图：底图+业务层两张 device 像素画布 1:1 叠进离屏画布，先铺纸底
+  // （JPEG 无透明通道，空底图直接 encode 会透成黑底），再走 encodeStageCover 出封面。
+  function captureStageImage(): string | null {
+    const baseCanvas = baseCanvasRef.current, planCanvas = planCanvasRef.current;
+    if (!baseCanvas || !planCanvas) return null;
+    const width = baseCanvas.width || planCanvas.width, height = baseCanvas.height || planCanvas.height;
+    if (!width || !height) return null;
+    const composite = document.createElement('canvas');
+    composite.width = width; composite.height = height;
+    const ctx = composite.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#f5f6f7';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(baseCanvas, 0, 0);
+    ctx.drawImage(planCanvas, 0, 0);
+    return encodeStageCover(composite);
+  }
+
   // P2-g：对外命令句柄（室内工具排通用钮转发：撤销/重做/缩放/截图）。
   // 不写依赖数组：每次渲染重建，句柄永远拿到当帧的闭包（这些函数都读 ref，成本可忽略）。
   useImperativeHandle(ref, () => ({
     zoomBy: (direction: 1 | -1) => zoomBy(direction),
     captureImage: () => planCanvasRef.current?.toDataURL('image/png') ?? null,
+    captureStageImage: () => captureStageImage(),
     undo: () => undoPlan(),
     redo: () => redoPlan(),
     canUndo: () => historyRef.current.length > 0,
@@ -7812,7 +7799,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         </>
                       )}
 
-                      {/* 3. 劳动力 → 9 个岗位行（OnePlan Workforce 彩色图标镜像） */}
+                      {/* 3. 工作人员 → 9 个岗位行（OnePlan Workforce 图标；主题色走物件库同一张调色板，同岗位永远同色） */}
                       {renderOneplanGroupHeader({ id: 'labor', label: LABOR_ROW_LABEL, count: LABOR_ROLES.length, icon: 'users' })}
                       {openLibrarySections.includes('labor') && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -7835,7 +7822,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                     height: 22,
                                     flex: '0 0 auto',
                                     borderRadius: 999,
-                                    background: '#23252c',
+                                    background: libraryEntryColor({ slug: sticker.slug }),
+                                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.28)',
                                   }}
                                 >
                                   <img src={oneplanStickerSrc(sticker)} alt="" width={16} height={16} loading="lazy" style={{ display: 'block' }} />

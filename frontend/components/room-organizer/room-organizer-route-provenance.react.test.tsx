@@ -36,7 +36,8 @@ async function start(){
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));
  const view=render(<StrictMode><RoomOrganizer/></StrictMode>);
  await screen.findByLabelText('告诉 Agent 要改的');
- fireEvent.click(screen.getByRole('button',{name:'规划活动区域'}));
+ // 2026-11-13 左轨「标注」钮已按用户指令移除：测试改走 hook 直入（与原按钮同序 startDraft→zone）。
+ act(()=>{captured.annotation!.startDraft();captured.annotation!.setDrawMode('zone');});
  fireEvent.click(await screen.findByRole('button',{name:'画路线'}));
  await waitFor(()=>expect(captured.annotation?.drawMode).toBe('route'));
  const canvas=[...view.container.querySelectorAll('canvas')].find(item=>item.style.display==='block');

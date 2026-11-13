@@ -607,6 +607,9 @@ function drawFloor(
   }
 }
 
+/** 网格最小屏幕间距（CSS px）：0.5m 一格挤进 3px 以下时线线相叠只剩灰雾。 */
+const MIN_GRID_CELL_PX = 3;
+
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   layout: RoomLayout,
@@ -614,6 +617,9 @@ function drawGrid(
   offsetY: number,
   scale: number
 ): void {
+  // LOD 门控：场地级布局（检索框选的规划区可达百米宽）缩进缩略图/缩小视图后，
+  // 0.5m 一格不足 3px——整张网格直接不画，保住边界与内容的可读性（2026-11-14）。
+  if (GRID_SIZE_METERS * scale < MIN_GRID_CELL_PX) return;
   ctx.strokeStyle = '#ddd';
   ctx.lineWidth = 1;
   // Anchor the grid to the world centre (0,0) so the drawn cells line up with
