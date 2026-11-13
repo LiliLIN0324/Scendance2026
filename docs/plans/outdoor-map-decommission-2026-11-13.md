@@ -79,13 +79,15 @@
 - **回滚**：墙体作为独立物料类别挂在物料库后置开关，未接住前旧室内墙 draft 不出现在地图语境。
 - **前置侦察（2026-11-13，字段级映射对照）**：
   - **物料 `FurnitureItem` → `PlanFacility`**：`position {x,z}` → `position {x,y}`（z 转 y）；`rotation`（弧度）→ `rotationDeg`（度，×180/π；符号口径参照 `floor-reading.ts:166` 既有换算，取反方向以 plan 渲染为准）；`name/color/notes` 直带。**尺寸口径**：plan 实体 `size` 由模板 footprint 反推（`facilityTemplateSize`/`facility-footprint-lock`），`addPlanFacilities` 入参不带 width/depth；室内 `width/depth/height` 不直接落 2D plan，仅作对照快照参考，height 归 3D 模型层。**模板口径**：`templateId` 必须过 `isAllowedFacilityTemplate` 白名单，否则 `UNKNOWN_TEMPLATE` 跳过；`type/assetId/materialId` 到白名单模板的映射见下方目录对照。室内 item 无显式 `zoneId`，迁移时复用 `inferWorkerZoneId` 落点命中口径补归属；悬空 zoneId 会被 `UNKNOWN_ZONE` 跳过。
-  - **目录映射对照（2026-11-13，硬卡点）**：plan 设施目录仅 8 类 `PlanPropKind`（tent/stage/kiosk/foodTruck/toilet/post/bin/misc）+ `oneplan:` slug 库；室内 `FurnitureType` 约 80 种以家居/室内物件为主，两套语义不对等。可直接对齐：`toilet`→`toilet`、`stage/backdrop`→`stage`；`person` 迁 `workers`（非 facility）；`fence/partition` 归待决墙体口径。其余家居/装饰类（chair/table/sofa/bed/desk/wardrobe/fridge/plant/...）在户外设施目录无对应模板，回落口径待产品定：`misc` 占位 / 转 `annotation` / 丢弃；`glb-asset`（带 `assetId/glbUrl`）可走 `modelOverride`，但 `templateId` 仍需回落白名单。映射表动工前对照 `oneplan-catalog`/`site-plan-facilities` 敲定，不在迁移器里硬猜。
+  - **目录映射对照（2026-11-13，硬卡点）**：plan 设施目录仅 8 类 `PlanPropKind`（tent/stage/kiosk/foodTruck/toilet/post/bin/misc）+ `oneplan:` slug 库；室内 `FurnitureType` 约 80 种以家居/室内物件为主，两套语义不对等。可直接对齐：`toilet`→`toilet`、`stage/backdrop`→`stage`；`person` 迁 `workers`（非 facility）；`fence/partition` 归待决墙体口径。其余家居/装饰类（chair/table/sofa/bed/desk/wardrobe/fridge/plant/...）在户外设施目录无对应模板，**已拍板回落 `misc` 占位**：保留名称/颜色/坐标，尺寸走 misc 兜底；`glb-asset`（带 `assetId/glbUrl`）走 `modelOverride`，`templateId` 回落白名单。映射表动工前对照 `oneplan-catalog`/`site-plan-facilities` 敲定，不在迁移器里硬猜。
   - **室内特化字段待决策**：WiFi/CCTV/vision cone（`isWiFiAccessPoint/isCCTV/signalRange/hasVisionCone/visionRange/visionFov/cctvModelId`）、`elevation/glbUrl/glbNode/wallId/structuralOpeningId/structuralColumnId/source/price/handoff`——2D `SitePlanData` 不承载，迁移时落 `notes` 或留 3D 层，不扩既有字段签名。
   - **分区 `RoomZone` → `PlanZone`**：矩形 `{x,z,w,d}` 展开 4 点闭合环 polygon；`zoneType` 对齐 plan 9 类 semantic；`color/name` 直带。
   - **动线 `WalkRoute` → `PlanRoute`**：points `{x,z}` → `{x,y}`；旧 `structuralOpeningId/venueEntranceId` 映射到 `nodes`，不留在墙体/物料数据。
   - **楼层 `FloorLayout[]` → `PlanLevel[]`**：户外先合成单个默认层，`items` 平铺；多层映射随 levels 接线。
-  - **缺口（plan 侧尚无对应实体）**：① 墙体 `InteriorWall`（线段 `x1,z1,x2,z2` + `thickness/height/kind/status`）契约无 walls 集合，待决独立 `walls` vs facility 模板类（见上「待决子项」）；② `floorPlanImage/opacity/fitMode` 背景图归 R2/视图记忆，不进 `SitePlanData`（3d 已登记）。
+  - **缺口（plan 侧尚无对应实体）**：① 墙体 `InteriorWall`（线段 `x1,z1,x2,z2` + `thickness/height/kind/status`）契约无 walls 集合，**已拍板：新增独立 `walls` 折线集合**（扩 `SitePlanData`，需单独评审），不归 facility 模板类；② `floorPlanImage/opacity/fitMode` 背景图归 R2/视图记忆，不进 `SitePlanData`（3d 已登记）。
   - **约束**：迁移走纯函数 + 对照快照单，复用 `facility-footprint-lock`；不改 `SitePlanData` 既有字段与 routeBridge 九方法签名。
+  - **本轮落地（2026-11-13，纯函数层，未接壳体、不拆旧链）**：`lib/plan-layout-migration.ts` 的 `migrateLayoutToPlan(layout, boundary, gen)` 先迁三类口径无歧义实体——zones（矩形→四点闭合环 + 室内 zoneType→plan semantic 映射表，不命中回落 `reserved`）、workers（`type='person'` 点位，count=1）、routes（`walkRoute.points`→pedestrian，`oneWay = !loop`）；实体一律经 `buildZone/buildWorker/buildRoute` 工厂构建，失败进 `skipped` 不留半成品；坐标复用 bridge 壳体→平面逆变换。6 条对照快照单测绿，tsc 0。
+  - **下一轮（M2 续）**：① facility 迁移器（无对应模板回落 `misc` 占位，glb-asset 挂 `modelOverride`）；② 独立 `walls` 集合契约字段 + 墙体线段迁移；③ 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用等）落 `notes` 还是留 3D 层终稿。
 
 
 #### M3 会话 / 历史 / 导出解耦（关键路径）⬜
