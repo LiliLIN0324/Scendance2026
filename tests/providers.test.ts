@@ -1,6 +1,6 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect,vi } from 'vitest';
 import { database,owner,scene,chair,session } from './fixtures.ts';
-import { chatRequest,generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
+import { chatRequest,chatUsageProvider,generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
 import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 import { packGltf } from '../supabase/functions/_shared/models.ts';
 import { tetrahedron } from './model-fixture.ts';
@@ -37,6 +37,37 @@ describe('real provider request formats with controlled responses',()=>{
     expect(briefBody).not.toHaveProperty('reasoning_effort');
     const overridden=JSON.parse(String(chatRequest(key=>({...baseConfig,AGENT_CHAT_REASONING_EFFORT:'high'})[key],{messages:[]},{purpose:'agent'}).init.body));
     expect(overridden.reasoning_effort).toBe('high');
+  });
+  it('uses the documented OpenAI Next chat completions path without MiniMax-only fields',()=>{
+    const config:Record<string,string>={OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_MODEL:'deepseek-v4.1-flash',AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'mini-fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash',MINIMAX_AGENT_TOOLS_ENABLED:'1'};
+    const {url,init}=chatRequest(key=>config[key],{messages:[],max_tokens:1024,response_format:{type:'json_object'}},{purpose:'brief'});
+    expect(url).toBe('https://api.openai-next.com/v1/chat/completions');
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer onk-fixture');
+    const body=JSON.parse(String(init.body));
+    expect(body).toMatchObject({model:'deepseek-v4.1-flash',thinking:{type:'disabled'},max_tokens:1024,response_format:{type:'json_object'}});
+    expect(body).not.toHaveProperty('reasoning_split');
+    expect(body).not.toHaveProperty('reasoning_effort');
+    expect(body).not.toHaveProperty('max_completion_tokens');
+    expect(JSON.stringify(body)).not.toContain('mini-fixture');
+  });
+  it('labels isolated OpenAI Next usage as custom and keeps MiniMax usage on a raw dual-key env',()=>{
+    const both:Record<string,string>={OPENAI_NEXT_API_KEY:'onk-fixture',AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'mini-fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash'};
+    expect(chatUsageProvider(key=>both[key])).toBe('minimax');
+    const isolated={OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_MODEL:'deepseek-v4.1-flash'};
+    expect(chatUsageProvider(key=>isolated[key])).toBe('custom');
+  });
+  it('does not silently send agent-tool MiniMax traffic through OpenAI Next when both keys exist',()=>{
+    const config:Record<string,string>={OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_MODEL:'deepseek-v4.1-flash',AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'mini-fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash',MINIMAX_AGENT_TOOLS_ENABLED:'1'};
+    const {url,init}=chatRequest(key=>config[key],{messages:[]},{purpose:'agent'});
+    expect(url).toBe('https://api.minimax.cn/v1/chat/completions');
+    const body=JSON.parse(String(init.body));
+    expect(body).toMatchObject({model:'MiniMax-M3.1-Flash',reasoning_split:true});
+    expect(body.thinking).toBeUndefined();
+  });
+  it('rejects an undocumented OpenAI Next base before sending',()=>{
+
+    const config:Record<string,string>={OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_BASE_URL:'https://example.test/v1'};
+    expect(()=>chatRequest(key=>config[key],{messages:[]})).toThrow('MODEL_PROVIDER_URL_INVALID');
   });
   it('uses documented Hunyuan header, 3.0 LowPoly and async JobId',async()=>{
     const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{expect(init?.headers).toMatchObject({Authorization:'test-key'});expect(JSON.parse(init?.body as string)).toMatchObject({Model:'3.0',GenerateType:'LowPoly'});return response({Response:{JobId:'job-1'}});}) as unknown as Fetcher;
