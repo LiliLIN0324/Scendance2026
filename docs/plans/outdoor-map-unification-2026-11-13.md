@@ -266,6 +266,39 @@
 - **验证：** `tsc --noEmit` exit 0；底图定向批次 77 条全绿（tile-cache / alignment / ground-basemap / ground-capture / 2d render / 3d basemap-tiles / tdt-probe）；真机刷新后 2D 高德完整出图（西湖、白堤、孤山、省博、POI 标注），`底图加载中` 消退、console 0 error，刷新后偏好保留。
 - **遗留（未动）：** 3D 地面瓦片仍 `count=0` 兜底浅蓝灰空屏，属 #13 独立债（three 纹理环节待查），与本次 2D 修复无关；左下「2 Issues」为既有区域/物料/节点校验徽章，非底图故障。
 
+### 阶段 14o · #13 3D 空屏深挖：旧「count=0」基线被推翻，锁定近场高清瓦片未落地 🟡 排查中，临时探针未提交
+
+- **推翻旧基线：** 早先认为 3D 网格 count=0、readyKeys 空。本轮清缓存重启 dev（3210）用 DOM dataset 探针取到运行时事实：底图组 `basemapRoot` 建成 130 个网格、129 块挂 256×256 纹理、`readyKeys=129`、组 `visible=true`、渲染循环稳态活跃（`loop=true`）、单实例，可见 WebGL 画布 1420×772 归属 `outdoor-takeover`。
+- **已排除环节：**
+  - 网络/CORS/解码/tainted：手动 `new Image()`（`crossOrigin=anonymous`）加载高德瓦片 `state=ok, naturalWidth=256`；画到离屏 canvas `getImageData` 返回 `[210,232,185,255]`（绿地），不 tainted。
+  - 组件未挂载 / loop 未跑：接管容器内 3D div 与 webgl2 canvas 均在 DOM，mount effect 跑到 `loop()`，稳态 `loop=true`。
+  - 双实例残留：3D 态 DOM 仅 1 个 `outdoor-plan-3d` 节点；其余 hidden canvas 属 2D overlay 与主舞台/室内残留。
+  - 几何绕序：顶点 `sw→se→ne→nw`、index `[0,1,2,0,2,3]`，叉乘法线朝 `+Y`，正面朝上，无背面剔除问题。
+  - resize/尺寸：`ResizeObserver` 正常，可见 canvas 1420×772 有尺寸；缓存类 `BasemapTileCache` 的 `get/load/status` 接口齐全（`stats` 是 **getter** 不是方法，探针误调 `stats()` 报 `stats is not a function` 仅诊断噪音，不影响渲染）。
+- **新定位（未定论）：** 近场高清瓦片没有落到相机脚下。只统计带纹理 mesh 时，最近一块距 `target(5,0,-4)` 仍有 **137.9 m**，近场百米内无纹理；`performance.getEntriesByType('resource')` 全量仅 12 条高德瓦片，层级 `z=14/15/16/18`、**缺 z17**，近场 z18 仅 1 块；请求 `duration ≈ 10.8 s`、`transferSize ≈ 300 B`，疑似批量并发被限流/挂起，8s 超时兜底置 error 后不再重试。待核：3D 接管时 `canvasEditApiRef.current.current` 是否就绪、是否真的复用了 2D 共享缓存实例（否则 3D 用独立缓存、首波请求全挂）；对照主舞台 `use-scene-effects.ts` GeoGround 同管线为何能出图。
+- **探针陷阱（避免重踩）：** `bu.js` 只支持同步返回；组件运行 realm 与探针读取的 `window` 不一致，闭包内 `window.__scene3d/__tileCache/__render3d` 读不到，可靠观测通路是把状态写进 `stage.dataset`。瓦片走 `<img>` 标签，不在 `network_requests` 的 XHR/fetch 记录里，须用 performance resource。
+- **未提交杂物：** `outdoor-plan-3d.tsx` 内 dbg* 临时 dataset/window 探针，根因定位后必须全部移除。
+
+### 阶段 14p · #13 复核二：3D 非空屏，残留为近场清晰度不足（发糊）🟡 排查结论，临时探针未提交
+
+- **真机截屏纠正旧判断：** dev 3210 稳态 3D 画面已出底图（草地/道路白线/建筑图标/©高德），卡车、桌椅、蓝色场地边界框、罗盘、比例尺均在；2D 同样出图。**不是旧记录的"浅蓝灰兜底空屏"**，共同可见缺陷是近场瓦片清晰度不够、整体发糊。
+- **运行时取证（dataset 探针）：** 缓存 `size=193, loading=0, ready=193, errors=0`；`placeOk=129, placeNull=0, disposedSkip=0, dupSkip=0`；层级分布 `zoomOk={11:72, 13:2, 14:2, 15:2, 16:2, 17:49}`。近场 z17 网格 51 块，最近一块中心 ENU(-89, 105)、距 target(5,4) 137.9 m——**该距离是网格中心到目标的距离，不是网格没覆盖目标**。
+- **选片地理正确：** 最近网格 key `17:109279:53970`；anchor `120.14604,30.25219` 的 z17 小数瓦片坐标 `(109279.84, 53970.90)`，落同一块瓦片。四角 ENU `sw(-221,-27) se(43,-27) ne(43,237) nw(-221,237)`，**目标 (5,4) 落在四角范围内**，几何覆盖脚下。
+- **纹理已上传 GPU：** 近场网格 `hasMap=true, version=1, complete=true, 256×256, src=webrd01.is.autonavi.com, visible=true, renderOrder=80`；材质不透明、FrontSide、mesh position=0，无遮挡（有 anchor 时不垫 paper 平面，grid 在 y=0、瓦片 y=0.04）。
+- **纠正一个量级误记：** z17 杭州瓦片边长约 **264 m**（赤道 z17≈305 m×cos30°），不是早先笔记里的 3.05 m；3.05 m 是把 256 像素当米。z17 ≈ 1 m/px，7 m 俯视下偏糊属分辨率不足，不是网格错位。
+- **残留根因（画质项，非空屏 bug）：** `maxZoomForSource('amap-streets')=17` 是有意退档（注释：高德再高一档发虚）；近场只到 z17、远景 z11 糊图铺满，观感偏糊。候选优化：把街道档封顶试提 z18（`plan-ground-capture` 注释 z18 仍是真图、z19 才空；手动测 z18 `218559,107942` 256×256 秒达），真机验 z18 不回空瓦片后再定。
+- **待清理：** `outdoor-plan-3d.tsx` 全部 dbg* dataset/window 探针；`plan-basemap-tiles.ts` 临时计数字段 `placeOk/placeNull/disposedSkip/dupSkip/zoomOk` 与 `userData.tileKey/tileUrl`（定位完回退或评估为正式遥测）。本轮无正式代码修复。
+
+### 阶段 14q · 探针清理 + z18 提级 + M4 出入口收尾 🟡 代码完成，本地验收通过，未提交
+
+- **探针清理（步骤①）：** 两个诊断文件改动全是探针、无正式修复，已 `git checkout --` 回 HEAD；grep 复核无 `dbg/placeOk/zoomOk/tileKey` 残留（命中的 `tileKeys`/`tileUrlFor` 为正常代码）。
+- **z18 提级（步骤③）：** `maxZoomForSource` 中 `amap-streets`/`amap-streets-labels` 封顶 17→**18**（注释更新：z18 仍真图、z19 才回空瓦片）；`amap-venue.ts` 卫星档 zoom 为独立口径未动。真机 3D 已出现 z18 请求（4 块），2D/3D 均出图。近场观感发糊仍属远景 z11 糊图主导的画质调优项，非空屏阻塞。
+- **验收（步骤②）：** Node24 `tsc --noEmit` 退出 0；底图定向 7 文件 **77 用例绿**（tiles 5 / cache 18 / alignment 4 / ground 3 / capture 8 / tdt-probe 11 / 2d-render 28）；`site-plan-routes` 12 绿、`tests/site-plan` 契约 16 绿。不新增 #12 基线回归。
+- **M4 归属分区：** 契约 `PlanNode` 新增可选 `zoneId`（`z.strictObject` 允许写入），superRefine 补节点 zoneId 存在性校验（对齐 worker/facility）；纯函数层新增 `inferNodeZoneId`（复用 `planPointInRing` 口径）与 `buildNode`（落点范围校验、显式 zoneId 优先且必须存在、否则按落点推断、边界越界放行 + issue，返回结构对齐 `buildWorker`）；画布 `placeNodeAt` 改走 `buildNode` 自动归属；属性卡补「归属分区」下拉可显式覆盖（`updateNode` 补丁类型加 `zoneId`）。
+- **M4 前置选类型：** 目录「入口和通道图标」下由单节点行改为 entry/exit/both 三型直选（`nodeKind` state + `nodeKindRef` 双写，对齐动线 kind 胶囊）；`NODE_KIND_OPTIONS`/`nodeKindLabel` 模块级常量，幽灵绘制与放置命名同源。推翻 2026-11-11「节点类型只在编辑器调」的旧口径（规划 M4 §条目 2 明确前置直选）。
+- **稳定面红线：** 未动 routeBridge 九方法签名、未改 `SitePlanData` 既有字段（仅为 `PlanNode` 向后兼容地新增可选 `zoneId`）、未换会话 scope。
+- **未做（下一批，并入 #25 全量走查）：** M5 智能体桥接扩充（workers/measurements/annotations/levels/单条 facility）、M1 五钮地图化；目录三型钮深层点击真机走查留到全链路验收。
+
 ### 1.5 B 初始化耦合事实（2026-11-13 实读）
 
 - `RoomOrganizer` 签名 :291：`{ controller, isActive, localWriteCapability, isolatedWriteSession }`，无户外项目 id 入参。

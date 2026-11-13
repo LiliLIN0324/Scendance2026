@@ -227,11 +227,11 @@ describe('ScendanceViewTools design column', () => {
     expect(within(rail).getAllByRole('button')).toHaveLength(13);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
     // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
-    for (const name of ['发布', '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
+    for (const name of ['发布', '选择工具', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。
-    const selectButton = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
+    const selectButton = within(rail).getByRole('button', { name: '选择工具' }) as HTMLButtonElement;
     expect(selectButton.disabled).toBe(false);
     expect(selectButton.getAttribute('aria-pressed')).toBe('true');
     expect(rail.querySelector('#tool-satellite')).toBeNull();
@@ -276,7 +276,7 @@ describe('ScendanceViewTools design column', () => {
   // 2026-11-11 OnePlan 画布工具菜单：抓手 H / 选择 S。
   it('2026-11-11 OnePlan 画布工具菜单：抓手 H / 选择 S', () => {
     const { values, rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
+    const select = within(rail).getByRole('button', { name: '选择工具' }) as HTMLButtonElement;
     expect(select.disabled).toBe(false);
     expect(select.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(select);
@@ -290,7 +290,7 @@ describe('ScendanceViewTools design column', () => {
   // 2026-11-12 统一 2D/3D 后沿用菜单语义：抓手/选择仍是一把真开关，只是经由菜单切换。
   it('toggles 选择工具 via the canvas-tool menu instead of disabling it', () => {
     const { values, rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
+    const select = within(rail).getByRole('button', { name: '选择工具' }) as HTMLButtonElement;
     expect(select.disabled).toBe(false);
     expect(select.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(select);
@@ -300,7 +300,7 @@ describe('ScendanceViewTools design column', () => {
     // 关掉之后是「抓手浏览」：仍然可点，菜单里再点「选择工具」就是重新启用。
     const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
     render(<Providers values={off}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
-    const offSelect = screen.getByRole('button', { name: '画布工具：抓手浏览中 · 点击切换（H 抓手 / S 选择）' }) as HTMLButtonElement;
+    const offSelect = screen.getByRole('button', { name: '抓手工具' }) as HTMLButtonElement;
     expect(offSelect.disabled).toBe(false);
     expect(offSelect.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(offSelect);
@@ -312,7 +312,7 @@ describe('ScendanceViewTools design column', () => {
     // 在走动里它不是当前工具：菜单里点「选择工具」就是退出走动回到选择。
     const walking = contexts(makeLayout(), makeViewSettings({ walkthroughMode: true }));
     render(<Providers values={walking}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: '画布工具：选择物体中 · 点击切换（H 抓手 / S 选择）' }));
+    fireEvent.click(screen.getByRole('button', { name: '选择工具' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /选择工具/ }));
     expect(walking.setView).toHaveBeenCalledTimes(1);
   });

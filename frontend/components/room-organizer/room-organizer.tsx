@@ -162,7 +162,6 @@ import {
   shellVenuePatchFromPlanBoundary,
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
-import { readOutdoorPlanView } from './lib/outdoor-project-store';
 import { filterPlanByLevel } from './lib/plan-levels';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
@@ -540,7 +539,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 同时表达「收起」和「3D 接管」两种态，收起被派生成全屏接管。引入显式接管开关：
   // 只有它为 true（且非 2D）才全屏接管；收起＝两者都 false，回工作台。
   const [outdoor3dTakeoverActive, setOutdoor3dTakeoverActive] = useState(false);
-  const [outdoorView, setOutdoorView] = useState<'2d' | '3d'>('2d');
   const applyPresetRef = useRef<(preset: 'iso') => void>(() => undefined);
   // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
@@ -554,7 +552,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setOutdoor2DOpen(true);
     setOutdoor3dTakeoverActive(false);
     setOutdoorPanel('library');
-    if (isOutdoorProject) setOutdoorView(readOutdoorPlanView(outdoorProjectIdProp!) ?? '2d');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outdoorProjectIdProp, isOutdoorProject]);
   // 2026-11-11：保存态不再上左轨 foot（用户指令去掉「户外草稿·已存」文字）——保存管线本身不变。
@@ -612,11 +609,7 @@ useEffect(() => {
       const open = !outdoorInspector.openTabs[tab];
       outdoorOverlayRef.current?.setInspector(open, tab);
     },
-    view: outdoorView,
-    setCanvasView: (next: '2d' | '3d') => {
-      setOutdoorView(next);
-    },
-  } : null), [outdoor2DOpen, outdoorHistory, outdoorView, outdoorCanvasMode, outdoorInspector]);
+  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorInspector]);
   // 2026-11-11 用户要求：Bingo 与户外规划同开时——中间分隔要清楚、可上下换序、可拖动改高度、
   // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
   const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
@@ -849,7 +842,6 @@ useEffect(() => {
       setOutdoor3dTakeoverActive(false);
       setOutdoor2DOpen(true);
       setOutdoorPanel('library');
-      setOutdoorView('2d');
     }
     if (id === 'material') setWorkbenchMode('layout');
     // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
@@ -2455,11 +2447,9 @@ useEffect(() => {
       if (outdoor2DOpen) {
         setOutdoor2DOpen(false);
         setOutdoor3dTakeoverActive(true);
-        setOutdoorView('2d');
         setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
       } else if (!outdoor3dTakeoverActive) {
         setOutdoor3dTakeoverActive(true);
-        setOutdoorView('2d');
         setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
       }
       return;
@@ -2468,7 +2458,6 @@ useEffect(() => {
     setOutdoor3dTakeoverActive(false);
     setOutdoor2DOpen(true);
     setOutdoorPanel('library');
-    setOutdoorView('2d');
   };
   // 2026-11-12 用户拍板：左栏所有卡片统一「半卡片」交互（拖把手调高/收起/拖出独立小窗）。
   // 当前可见的堆栈成员：≤2 张时参与比例调节；>2 张（拍摄向导+私聊+户外同开的极端组合）
@@ -4357,7 +4346,6 @@ useEffect(() => {
                       setOutdoorPanel('library');
                       // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
                       if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
-                        setOutdoorView('2d');
                         setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
                         applyPresetRef.current('iso');
                         if (agentPanelOpen && !agentCollapsed) closeBingo();
@@ -4382,7 +4370,6 @@ useEffect(() => {
                 setOutdoor3dTakeoverActive(false);
                 setOutdoor2DOpen(true);
                 setOutdoorPanel('library');
-                setOutdoorView('2d');
               }
               setChatPeerId(current => current === member.userId ? null : member.userId);
             }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -4598,7 +4585,6 @@ useEffect(() => {
               onActiveLevelChange={handleOutdoorActiveLevelChange}
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
-              view={outdoorView}
               lengthUnit={view.lengthUnit}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
               dormant={!outdoor2DOpen}

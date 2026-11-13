@@ -1,7 +1,7 @@
 'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
-import { Check, Hand } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
@@ -261,9 +261,6 @@ interface ViewToolsProps {
     zoomBy(direction: 1 | -1): void;
     /** 导出 PNG：户外走 2D 规划快照（不抓 3D 帧），无 plan 时返回 false。 */
     exportPng?(): boolean;
-    /** 覆盖层当前视角：2D 地图 / 3D 场地是同一份规划的两种看法，工具排始终走规划画布。 */
-    view?: '2d' | '3d';
-    setCanvasView?(view: '2d' | '3d'): void;
     /** 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自一张卡，这里给出各自的展开态（右轨按下态）。 */
     inspectorTabs?: Record<'measure' | 'annotate' | 'selection', boolean>;
     setInspector?(tab: 'measure' | 'annotate' | 'selection'): void;
@@ -305,6 +302,17 @@ const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string; symbol: st
   // 正面机位是环绕预设，不是走进去。人视这个名字会让人以为已经是第一人称。
   { id: 'front', label: '正面机位', symbol: 'crop_square' },
 ];
+// 抓手浏览：直手窄掌（四指竖直、掌心弧收窄），路径内联、不另装图标包；与右轨线性描边同族 1.8px。
+function HandStopIcon({ size }: { size: number }): JSX.Element {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 13v-7.5a1.5 1.5 0 0 1 3 0v6.5"/>
+      <path d="M11 5.5v-2a1.5 1.5 0 1 1 3 0v8.5"/>
+      <path d="M14 5.5a1.5 1.5 0 0 1 3 0v6.5"/>
+      <path d="M17 7.5a1.5 1.5 0 0 1 3 0v8.5a6 6 0 0 1 -6 6h-2h.208a6 6 0 0 1 -5.012 -2.7a69.74 69.74 0 0 1 -.196 -.3c-.312 -.479 -1.407 -2.388 -3.286 -5.728a1.5 1.5 0 0 1 .536 -2.022a1.867 1.867 0 0 1 2.28 .28l1.47 1.47"/>
+    </svg>
+  );
+}
 function MoveSceneIcon(): JSX.Element {
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 3v18M3 12h18M12 3l-2 2m2-2 2 2m-2 16-2-2m2 2 2-2M3 12l2-2m-2 2 2 2m16-2-2-2m2 2-2 2"/>
@@ -530,7 +538,9 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const outdoorSelectOn = outdoor?.canvasMode === 'select';
   const canvasSelectOn = outdoor != null ? outdoorSelectOn : view.selectMode;
   const selectActive = canvasSelectOn && (outdoor != null || (!view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode));
-  const canvasToolTip = `画布工具：${outdoor != null ? (outdoorSelectOn ? '选择设施' : '抓手浏览') : view.selectMode ? '选择物体' : '抓手浏览'}中 · 点击切换（H 抓手 / S 选择）`;
+  const canvasToolState = outdoor != null ? (outdoorSelectOn ? '选择设施' : '抓手浏览') : view.selectMode ? '选择物体' : '抓手浏览';
+  const canvasToolTip = canvasSelectOn ? `${canvasToolState} · 切到抓手` : `${canvasToolState} · 切到选择`;
+  const canvasToolLabel = canvasSelectOn ? '选择工具' : '抓手工具';
   const addFloorBlocked = !!layout.backendSceneV2 && activeFloorIndex >= layout.floors.length - 1;
   const floorBlockMessage = '当前结构场景暂不支持新增、删除或调整楼层。';
   const changeVisibleFloor = (delta: -1 | 1) => {
@@ -670,6 +680,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   return (
     /* 圆钮贴在画布右上角。所有工具都是一级钮，没有省略号菜单；只有导出还带一层选项弹层。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
+      {/* 2026-11-13 M1：户外地图接管后楼层是室内结构概念，右轨楼层钮隐藏；户外方案层（levels）切换走画布自身的图层面板。 */}
+      {!outdoorEditing && (
       <div className="sc-floor-switcher" role="group" aria-label={`楼层切换，当前第 ${activeFloorIndex + 1} 层`}>
         {addFloorBlocked && <span role="note" style={{ maxWidth: 140, padding: '4px 6px', borderRadius: 6, background: '#F4F5F7', color: '#4A7C59', fontSize: 11, lineHeight: 1.3 }}>{floorBlockMessage}</span>}
         <span className="sc-floor-switcher-label" aria-hidden="true">{activeFloorIndex + 1}F</span>
@@ -682,6 +694,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           </button>
         </div>
       </div>
+      )}
       {!(publishHidden || outdoorEditing) && (<>
         <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/>
         <span className="sc-tool-sep" aria-hidden="true"/>
@@ -692,12 +705,12 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       {/* 2026-11-11 用户指令：OnePlan 画布工具菜单——按钮图标随当前工具（抓手/选择），
           点开弹层两行（图标 + 名称 + 快捷键徽标 + ✓ 当前项），H/S 快捷键直达。 */}
       <div className="sc-tool-menu" ref={selectMenuRef}>
-        <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolTip} aria-pressed={selectActive} aria-haspopup="menu" aria-expanded={selectMenuOpen} aria-controls="tool-select-panel" className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { setSelectMenuOpen(open => !open); setMapTypeOpen(false); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <Hand size={20} strokeWidth={2} />}
+        <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} aria-haspopup="menu" aria-expanded={selectMenuOpen} aria-controls="tool-select-panel" className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { setSelectMenuOpen(open => !open); setMapTypeOpen(false); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+          {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <HandStopIcon size={20} />}
         </button>
         {selectMenuOpen && <div id="tool-select-panel" className="sc-tool-pop" role="menu" aria-label="画布工具">
           <button type="button" role="menuitemradio" aria-checked={!canvasSelectOn} className={`sc-canvas-tool-row${!canvasSelectOn ? ' is-active' : ''}`} onClick={chooseHandTool}>
-            <Hand size={15} strokeWidth={2} />
+            <HandStopIcon size={15} />
             <span>抓手工具</span>
             <span className="sc-tool-key" aria-hidden="true">H</span>
             {!canvasSelectOn && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
@@ -737,11 +750,13 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         <MaterialSymbol name="layers" />
       </button>}
       {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
-      <button type="button" id="tool-walk" aria-label={view.walkthroughMode ? '退出漫游' : '第一人称漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
+      {/* 2026-11-13 M1：户外地图是环绕轨道视角，未接第一人称漫游句柄；户外态禁用并保留提示，不回退室内漫游壳。 */}
+      <button type="button" id="tool-walk" aria-label={outdoorEditing ? '户外地图为环绕视角，暂不支持第一人称漫游' : view.walkthroughMode ? '退出漫游' : '第一人称漫游'} aria-pressed={!outdoorEditing && view.walkthroughMode} data-tip={outdoorEditing ? '户外地图为环绕视角，暂不支持第一人称漫游' : undefined} disabled={outdoorEditing} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} style={outdoorEditing ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => { if (!outdoorEditing) toggleWalk(!view.walkthroughMode); }}>
         <MaterialSymbol name="footprint" />
         <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称漫游'}</span>
       </button>
-      <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
+      {/* 2026-11-13 M1：户外画布放置时由纯函数按网格自动吸附，没有独立吸附开关；户外态禁用该钮。 */}
+      <button type="button" id="tool-grid" data-tip={outdoorEditing ? '户外地图放置时自动按网格吸附' : '网格吸附'} aria-label={outdoorEditing ? '网格吸附（户外地图自动吸附）' : '网格吸附'} aria-pressed={!outdoorEditing && view.snapToGrid} disabled={outdoorEditing} className={view.snapToGrid ? 'is-active' : ''} style={outdoorEditing ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => { if (!outdoorEditing) toggle('snapToGrid'); }}>
         <GridSnapIcon active={view.snapToGrid} />
       </button>
       {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。

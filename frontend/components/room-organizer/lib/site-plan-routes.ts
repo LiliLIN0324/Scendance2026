@@ -125,6 +125,58 @@ export function reverseRoute(route: PlanRoute): PlanRoute {
 
 /* ---------------- 出入口节点 ---------------- */
 
+/** 按落点自动推断节点归属分区（第一个包含落点的分区；都不含返回 undefined）。口径与 inferWorkerZoneId 一致。 */
+export function inferNodeZoneId(pt: PlanPoint, zones: readonly { id: string; polygon: readonly PlanPoint[] }[]): string | undefined {
+  return zones.find(zone => zone.polygon.length >= 3 && planPointInRing(pt, zone.polygon))?.id;
+}
+
+export interface BuildNodeInput {
+  kind: PlanNode['kind'];
+  name?: string;
+  position: PlanPoint;
+  /** 不传时按落点自动归属分区（inferNodeZoneId）。 */
+  zoneId?: string | undefined;
+  levelId?: string | undefined;
+  notes?: string;
+  id?: string;
+}
+
+/**
+ * 落一个出入口节点：类型/落点合法才提交；落点在边界外放行但随结果返回提示；
+ * 自动归属按落点所在分区（显式 zoneId 优先且必须存在）。与 buildWorker 同一「放行 + 提示」策略。
+ */
+export function buildNode(
+  input: BuildNodeInput,
+  boundary: readonly PlanPoint[],
+  zones: readonly { id: string; name: string; polygon: readonly PlanPoint[] }[] = [],
+): PlanRouteEditResult<PlanNode> {
+  if (!pointInRange(input.position)) {
+    return { ok: false, issue: { code: 'out-of-range', message: '出入口节点超出场地坐标系 ±5000 m 范围。', at: input.position } };
+  }
+  const zoneId = input.zoneId ?? inferNodeZoneId(input.position, zones);
+  if (zoneId && !zones.some(zone => zone.id === zoneId)) {
+    return { ok: false, issue: { code: 'unknown-zone', message: '归属分区不存在。' } };
+  }
+  const issues: PlanEditIssue[] = [];
+  if (boundary.length >= 3 && !planPointInRing(input.position, boundary)) {
+    issues.push({ code: 'out-of-boundary', message: '出入口节点落在场地边界之外。', at: input.position });
+  }
+  const fallbackName = input.kind === 'exit' ? '出口' : input.kind === 'both' ? '出入口' : '入口';
+  const name = (input.name ?? fallbackName).trim();
+  if (name.length === 0) return { ok: false, issue: { code: 'unknown-zone', message: '节点名不能为空。' } };
+  if (name.length > 60) return { ok: false, issue: { code: 'unknown-zone', message: '节点名过长（≤60 字）。' } };
+  const node: PlanNode = {
+    id: input.id ?? crypto.randomUUID(),
+    kind: input.kind,
+    name,
+    position: { x: input.position.x, y: input.position.y },
+    ...(zoneId !== undefined ? { zoneId } : {}),
+    ...(input.levelId !== undefined ? { levelId: input.levelId } : {}),
+    notes: input.notes ?? '',
+  };
+  return issues.length > 0 ? { ok: true, value: node, issues } : { ok: true, value: node };
+}
+
 export interface MoveNodeResult {
   node: PlanNode;
   /** 引用该节点的路线（端点坐标已随动到节点新位置）。 */

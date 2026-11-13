@@ -1264,7 +1264,7 @@ body {
   display: block; width: 13px; height: 13px;
 }
 /* 角标：对齐成员未读圆 `.sc-rail-member-badge`，15px 圆、err 底白字 10px、右上角落位。 */
-.sc-bingo-corner {
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
   position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px;
   padding: 0 3px; box-sizing: border-box; border-radius: 999px;
   background: var(--err, #B4443C); color: #fff;
@@ -1279,11 +1279,12 @@ body {
   background: var(--wk-plane); border: 1px solid var(--wk-hair); color: var(--wk-ink-soft);
   font-size: 8px; font-weight: 600; line-height: 1.5; letter-spacing: .02em; white-space: nowrap;
 }
-.sc-bingo-badge[data-status="awaiting"] {
+/* 状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、描边/数字退回中性色。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="awaiting"] {
   border-color: var(--warn); color: var(--warn);
   box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
 }
-.sc-bingo-badge[data-status="returned"] {
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="returned"] {
   border-color: var(--err); color: var(--err);
   box-shadow: 0 0 0 3px rgba(180, 68, 60, 0.22);
 }

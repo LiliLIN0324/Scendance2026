@@ -7,12 +7,9 @@ import {
   latestOutdoorProjectId,
   OUTDOOR_LAST_PROJECT_KEY,
   outdoorPlanStorageKey,
-  outdoorPlanViewStorageKey,
-  readOutdoorPlanView,
   readOutdoorProjectRecord,
   renameOutdoorProject,
   resolveOutdoorProjectId,
-  saveOutdoorPlanView,
   saveOutdoorProjectRecord,
   type KeyValueStorage,
   type OutdoorProjectRecord,
@@ -196,22 +193,6 @@ describe('outdoor-project-store', () => {
       clearOutdoorProjectRecord(PID, storage);
       expect(latestOutdoorProjectId(storage)).toBeNull();
       expect(storage.getItem(OUTDOOR_LAST_PROJECT_KEY)).toBeNull();
-    });
-  });
-
-  describe('视角记忆（按项目记住 2D/3D）', () => {
-    it('key 按项目隔离，默认没有记录', () => {
-      const storage = memoryStorage();
-      expect(outdoorPlanViewStorageKey(PID)).toBe(`scendance-outdoor-view-v1:${PID}`);
-      expect(readOutdoorPlanView(PID, storage)).toBeNull();
-    });
-
-    it('写入后可读回，坏值回落 null', () => {
-      const storage = memoryStorage();
-      saveOutdoorPlanView(PID, '3d', storage);
-      expect(readOutdoorPlanView(PID, storage)).toBe('3d');
-      storage.setItem(outdoorPlanViewStorageKey(PID), 'top');
-      expect(readOutdoorPlanView(PID, storage)).toBeNull();
     });
   });
 
