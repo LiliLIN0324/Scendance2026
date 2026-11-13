@@ -82,6 +82,7 @@ export function migrateFacilities(
     const zoneId = inferWorkerZoneId(position, zones);
     const color = hexOrUndefined(item.color);
     const name = (item.name ?? '').trim().slice(0, 60) || FALLBACK_NAME;
+    const notes = (item.notes ?? '').trim().slice(0, 500);
     const rotationDegValue = rotationDeg(item);
     const templateId = target.kind === 'builtin'
       ? target.templateId
@@ -101,7 +102,7 @@ export function migrateFacilities(
       name,
       ...(zoneId ? { zoneId } : {}),
       ...(color ? { color } : {}),
-      notes: '',
+      notes,
     }, boundary, facilities);
 
     if (built.ok) {

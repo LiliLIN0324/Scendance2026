@@ -140,4 +140,23 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
     expect(inside!.zoneId).toBe(zones[0].id);
     expect(outside!.zoneId).toBeUndefined();
   });
+
+  it('物料备注保真透传，超长按契约 500 截断', () => {
+    const longNotes = '备'.repeat(520);
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'c1', type: 'chair', name: '折叠椅', position: { x: 2, z: 2 }, notes: '预留电源，实物待确认' }),
+          makeItem({ id: 'b1', type: 'bed', name: '床', position: { x: 6, z: 6 }, notes: longNotes }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities[0]!.notes).toBe('预留电源，实物待确认');
+    expect(result.facilities[1]!.notes).toHaveLength(500);
+    expect(result.facilities[1]!.notes).toBe('备'.repeat(500));
+  });
 });

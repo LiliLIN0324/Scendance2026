@@ -57,7 +57,7 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
       ...SHELL,
       floors: [makeFloor({
         items: [
-          makeItem({ id: 'p1', type: 'person', name: '引导员', position: { x: 2, z: 4 }, color: '#b3628c' }),
+          makeItem({ id: 'p1', type: 'person', name: '引导员', position: { x: 2, z: 4 }, color: '#b3628c', notes: '负责入口核验' }),
           makeItem({ id: 'c1', type: 'chair', name: '椅子', position: { x: 1, z: 1 } }),
         ],
       })],
@@ -71,6 +71,7 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     expect(worker.count).toBe(1);
     expect(worker.position).toEqual({ x: 1, y: 6 });
     expect(worker.color).toBe('#b3628c');
+    expect(worker.notes).toBe('负责入口核验');
   });
 
   it('人员行走动线迁成步行路线，闭环=双向、折返=单向', () => {

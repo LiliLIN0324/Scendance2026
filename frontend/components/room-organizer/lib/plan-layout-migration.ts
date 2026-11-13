@@ -141,13 +141,14 @@ export function migrateLayoutToPlan(
     const position = framePoint(frame, item.position.x, item.position.z);
     const role = (item.name ?? '').trim() || FALLBACK_WORKER_ROLE;
     const workerColor = hexOrUndefined(item.color);
+    const workerNotes = (item.notes ?? '').trim().slice(0, 500);
     const builtWorker = buildWorker({
       id: gen(),
       role,
       count: 1,
       position,
       ...(workerColor ? { color: workerColor } : {}),
-      notes: '',
+      notes: workerNotes,
     }, boundary, zones);
     if (builtWorker.ok) {
       workers.push(builtWorker.value);
