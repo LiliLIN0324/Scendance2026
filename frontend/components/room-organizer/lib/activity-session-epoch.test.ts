@@ -19,3 +19,27 @@ describe('同步活动会话代次',()=>{
   tracker.stop();tracker.stop();expect(tracker.capture()).toBeNull();
  });
 });
+
+describe('注入外部身份源（M3a project 源）',()=>{
+ it('scope 取自定义源；切项目旧 token 失效、epoch 前进，同项目不失效',()=>{
+  const store=createLayoutStore({layout:makeLayout({id:'A'}),activeFloorIndex:0});
+  let scope='project:alpha';
+  const listeners=new Set<()=>void>();
+  const source={getScope:()=>scope,subscribe:(l:()=>void)=>{listeners.add(l);return()=>{listeners.delete(l);};}};
+  const tracker=createActivitySessionTracker(store,source);tracker.start();
+  const original=tracker.capture();
+  expect(original?.scope).toBe('project:alpha');
+  expect(tracker.isCurrent(original)).toBe(true);
+  // 同项目内普通变化：源 scope 不变，不失效。
+  listeners.forEach(l=>l());
+  expect(tracker.isCurrent(original)).toBe(true);
+  // 切到另一项目：旧 token 失效，新 token epoch 更大。
+  scope='project:beta';listeners.forEach(l=>l());
+  expect(tracker.isCurrent(original)).toBe(false);
+  const latest=tracker.capture();
+  expect(latest?.scope).toBe('project:beta');
+  expect(tracker.isCurrent(latest)).toBe(true);
+  expect(latest!.epoch).toBeGreaterThan(original!.epoch);
+  tracker.stop();
+ });
+});
