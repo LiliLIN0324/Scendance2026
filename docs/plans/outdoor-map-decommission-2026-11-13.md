@@ -89,7 +89,15 @@
   - **本轮落地（2026-11-13，纯函数层，未接壳体、不拆旧链）**：`lib/plan-layout-migration.ts` 的 `migrateLayoutToPlan(layout, boundary, gen)` 先迁三类口径无歧义实体——zones（矩形→四点闭合环 + 室内 zoneType→plan semantic 映射表，不命中回落 `reserved`）、workers（`type='person'` 点位，count=1）、routes（`walkRoute.points`→pedestrian，`oneWay = !loop`）；实体一律经 `buildZone/buildWorker/buildRoute` 工厂构建，失败进 `skipped` 不留半成品；坐标复用 bridge 壳体→平面逆变换。6 条对照快照单测绿，tsc 0。
   - **facility 映射表已落码（2026-11-13）**：`lib/plan-facility-mapping.ts` 的 `resolveFacilityTarget(type)` 分四档——① `builtin`：`toilet`→`toilet-2.4x1.2`、`backdrop`→`stage-platform-8x6`；② `oneplan`：座椅（chair/armchair/dining-chair/bench/garden-bench/sofa）、桌台（table/dining-table/coffee-table/side-table/picnic-table/desk）、绿化（plant/flowerpot/bush/rose-bush/hedge/flowerbed/tulips/sunflower）、照明（lamppost）、电子安防（wifi/router/cctv/security-camera/computer）、餐饮后勤（fridge/bbq）、水景（pool/pond/birdbath）、交通件（stairs）对齐白名单 slug；③ `misc`：其余纯室内家居/装饰与未知 legacy 回落占位；④ `skip`：partition/fence/door/window 归下一轮 walls 集合，person 分流 workers。守卫单测：每条内置映射命中模板目录、每条 oneplan 映射命中可放置白名单；5 绿。**执行器下一轮接**：按档位调 `buildFacility`，misc 走动态模板 2×2 兜底，glb-asset 的 `glbUrl/assetId` 挂 `modelOverride`。
   - **facility 执行器已落码（2026-11-13）**：`lib/plan-facility-migration.ts` 的 `migrateFacilities(layout, boundary, gen)` 消费映射表四档调 `buildFacility`——builtin 直连内置模板；oneplan 保留 slug、纯函数层走 misc 兜底 2×2（落位后由 libraryEntry 校准尺寸/图标）；misc 动态兜底模板；skip（墙体/人员）进 skipped。坐标复用迁移帧逆变换，弧度→角度取反换算，无落点进 skipped；室内 item 无 zoneId，归属留空待落点命中补。6 条对照单测绿。**未接壳体、不拆旧链**。
-  - **下一轮（M2 续）**：① facility 接线：oneplan 条目尺寸/图标接 libraryEntry 校准，`glb-asset` 的 `glbUrl/assetId` 挂契约 `modelOverride`；② 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用/price/handoff 等）落 `notes` 还是留 3D 层终稿；③ 独立 `walls` 集合契约字段 + 墙体线段迁移。
+  - **总入口合并 + 共享帧模块（2026-11-13）**：抽出 `lib/plan-migration-frame.ts`（`MigrationFrame/makeFrame/framePoint/hexOrUndefined/MigrationUuidGen`）供两个执行器共用，解除 layout↔facility 循环 import；`migrateLayoutToPlan` 返回值并入 `facilities`，facility skip 以 `source:'facility'` 进主 `skipped`。M2 三组 lib 共 18 绿（layout 7 + mapping 5 + facility 6），tsc 0。
+  - **walls 独立集合契约草案（2026-11-13 评审稿，未改 `site-plan.ts` 代码）**：
+    - **集合**：`SitePlanData` 新增可选 `walls` 数组（旧数据不带照常解析，对齐 `measurements/annotations` 可选口径）；建议上限 500。
+    - **实体字段草案**（对齐 route/node/facility 既有 schema 风格）：`id:uuid`；`kind: 'exterior'|'interior'`（缺省 `interior`）；`status?: 'detected'|'inferred'|'confirmed'`；`name: 1–60`（缺省兜底「墙体」）；`points: PlanPoint[2]`（线段两端，一期只落单线段，对齐室内现状 `x1/z1/x2/z2`）；`thicknessM?: 正数≤5`；`heightM?: 正数≤100`（2D 不投影高度，留 3D 层引用）；`color?` 十六进制；`zoneId?: uuid`（归属分区，存在性校验对齐 facility/worker/node）；`levelId?: uuid`（纳入图层引用校验）；`notes ≤500` 默认 `''`。
+    - **不载** `structuralOpeningId/venueEntranceId`：开口映射到 `nodes`，墙链在节点坐标留口，不封堵节点；门/窗作为开口/节点处理，不建成墙实体。
+    - **契约同步项**：`sitePlanDataSchema` 集合去重 id 纳入 walls；`levelRefs` 与悬空 zoneId 校验纳入 walls；**`routeBridge` 九方法签名与既有字段不变**。
+    - **迁移口径**：`InteriorWall` 两端点经迁移帧逆变换；`thickness/height` 直带可选；`kind/status` 枚举对齐；现 skip 档的 partition/fence/door/window 开工时改投 walls（door/window 转 node 开口）。
+    - **待评审拍板**：① 线段（2 点）一期够不够，是否预留折线 2–N 点；② 厚度/高度 2D 是否承载还是纯 3D 引用；③ 墙与 zone/facility 碰撞/遮挡校验是否一期进 superRefine；④ 集合上限。
+  - **下一轮（M2 续）**：① facility 接线：oneplan 条目尺寸/图标接 libraryEntry 校准，`glb-asset` 的 `glbUrl/assetId` 挂契约 `modelOverride`；② 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用/price/handoff 等）落 `notes` 还是留 3D 层终稿；③ walls 评审通过后落 schema + 线段迁移纯函数。
 
 
 #### M3 会话 / 历史 / 导出解耦（关键路径）⬜

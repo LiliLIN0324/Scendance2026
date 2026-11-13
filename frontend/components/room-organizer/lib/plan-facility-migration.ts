@@ -19,7 +19,7 @@ import {
   hexOrUndefined,
   makeFrame,
   type MigrationUuidGen,
-} from './plan-layout-migration';
+} from './plan-migration-frame';
 
 /** 纯函数层兜底占地（米）；与 `PLAN_PROP_SIZE.misc` 同值。 */
 const FALLBACK_WIDTH = 2;
