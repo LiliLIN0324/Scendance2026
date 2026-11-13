@@ -1007,7 +1007,7 @@ export interface PlanEditVisuals {
 
 export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, OutdoorPlanCanvasProps>(function OutdoorPlanCanvas({
   plan,
-  source = 'osm',
+  source = 'amap-streets',
   base = 'map',
   initialView,
   visibility,
@@ -1659,7 +1659,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onActiveLevelChange?.(activeLevelIdRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { sourceRef.current = source; draw(); }, [source]);
+  useEffect(() => {
+    sourceRef.current = source;
+    // 换图源必须清空瓦片缓存：旧源在途请求的 handler 作废、加载计数归零，
+    // 否则旧瓦片继续占并发空位、「底图加载中」不消退，不同源同坐标瓦片还会串味。
+    basemapCacheRef.current?.clear();
+    draw();
+  }, [source]);
   useEffect(() => {
     if (visibility) {
       setLayerState(visibility);

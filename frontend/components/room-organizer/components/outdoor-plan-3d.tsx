@@ -215,7 +215,7 @@ export interface OutdoorPlan3DProps {
 
 export default function OutdoorPlan3D({
   plan,
-  source = 'osm',
+  source = 'amap-streets',
   sceneObjects,
   onReady,
   mapView,

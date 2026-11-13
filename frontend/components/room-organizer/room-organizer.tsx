@@ -1748,7 +1748,7 @@ useEffect(() => {
     return () => window.clearTimeout(timer);
   }, [outdoorPlan, outdoor3dWarm]);
   // GeoGround 瓦片地面（2026-11-12）与户外 2D 同一份图源偏好；署名随源切换。
-  const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as const);
+  const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
   // 左下「比例尺+指北针+署名」簇的 DOM refs（与户外 3D 同款组件，下方 effect 驱动更新）。
   const geoScaleLabelRef = useRef<HTMLSpanElement | null>(null);
   const geoScaleBarRef = useRef<HTMLDivElement | null>(null);

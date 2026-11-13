@@ -23,7 +23,7 @@ import { GuideBubble, useGuide } from '@/components/room-organizer/components/ou
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
 import { OutdoorDeliveryPanel } from '@/components/room-organizer/components/outdoor-delivery-panel';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
-import { writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
+import { readPlanGroundSource, writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
 import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
@@ -162,7 +162,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const plan3dApiRef = useRef<OutdoorPlan3DApi | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
-  const [source, setSource] = useState<CanvasBasemapSource>('osm');
+  // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
+  const [source, setSource] = useState<CanvasBasemapSource>(() => readPlanGroundSource());
   const [plan, setPlan] = useState<SitePlanData | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');

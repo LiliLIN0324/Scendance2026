@@ -235,6 +235,37 @@
 - **真机复核（dev 3210，2026-11-13）：** 硬刷新后 2D 地图规划面正常出图（绿边界/紫分区/舞台图元/OSM 版权/2D·3D 胶囊/N 指北针/比例尺）；本轮第二次刷新瓦片成功加载，#13 直连 OSM `ERR_CONNECTION_TIMED_OUT` 属偶发网络超时，非硬空屏。`.sc-scene-viewport` 仍 visibility=hidden 保活，console `Too many active WebGL contexts` 旁证室内 three 上下文仍驻留（#23 卸载目标）。简报「空白空间」钮在新会话态不出镜。seam 退役后首次热更新曾报旧 chunk 残留 `isolatedRef is not defined`，硬刷新（带 query 绕过 HMR 缓存）后消失；残留两条 hydration mismatch 为既有基线警告，非本轮引入。右轨在位：tool-select/measure/annotate/selection/walk/grid/undo/redo/zoom-out/zoom-in。
 - **遗留边界：** 对话内 `startBlankVenue`（agent-panel:1863）函数体、`agent-chat.tsx:140/141` 加号菜单「新建空白空间/从模板开始」、`space-panel:99/160/275`、`scene-presets-panel:58/96/97` 仍 `createBlankVenue`/`createHardFinishHall`/`loadScenePreset` 立室内壳，深绑 layoutStore/onApply，归 #27（C 层隔离会话/历史/物料/导出后并入地图草稿）。B 层 `isOutdoorProject` 生产恒真，false 侧室内镜像回写待 C 层隔离后物理删。
 
+### 阶段 14m · 合入 main（#110）收口 + 墙体方案 B 拍板 🟡 merge 已入库，墙体实体化后置 C 层
+
+- **基底：** 本地先合入 `origin/main`，merge commit `2cb342c2 Merge remote-tracking branch 'origin/main'`；父一 `ca3cf83d`（我方去室内化在制品），父二 `a095f1c3 fix(outdoor): complete safe V1–V5 planning and model task flow (#110)`。
+- **唯一冲突：** `components/outdoor-plan-overlay.tsx`（UU）。文件内冲突标记已清，三方核对——工作树同时保留我方改动（`lengthUnit` prop :113/:158、`onExportCsv` 传 `lengthUnit` :374、交付入口收敛）与 #110 新接线（`OutdoorFacilityGenerate` :36/:389-391、`useAgentOptional` :37/:161、`registerRouteBridge` :253-277）；`deliverySlot`/ReactNode 已随我方侧移除，无残留。`useAgentOptional` 由 `agent-panel.tsx:605` 导出；`OutdoorTaskCard` 由 agent-panel:4444 挂载，不在 overlay。
+- **校验：** Node24 清 `tsconfig.tsbuildinfo` 后全量 `tsc --noEmit` **exit 0**。定向 vitest 137 全绿：site-plan-routes 10 / csv 9 / measure 15 / legend 12 / facility-generated-models 20 / protection 3 / route-proposal 7 / sub-entrance 4（80）；venue-intent 6 / event-turn 2 / place-search-options 8 / zone-event-proposal 4 / event-logic 6 / store 23 / task-card 1 / facility-generate 7（57）。merge 后 tracked 工作区干净，余未跟踪临时产物（`.verify-*`/`.run-ts-*`/截图/日志）待提交前清理。
+- **墙体方案拍板（用户原话：「墙作为物料应该是实体的」）：** 定 **方案 B——墙 = 独立构件实体物料**，不是分区描边（方案 A 弃用）。心智模型：一张大地图 → 画墙围合 → 墙内放物体；墙归物料库一类物料实例。
+  - 契约方向（待 C 层依赖隔离后落地，本轮不动 schema）：墙体作为独立实体，点列折线 + 厚度 + 高度 + 可选门位；可不闭合、墙两侧均可放物体、参与碰撞/遮挡判定。落点挂 `zoneId` 归属分区（与 facility/worker 同一套归属口径）。
+  - 与出入口协同：墙链在出入口 `nodes` 坐标处留开口，不得封堵节点；旧室内 `structuralOpeningId`/`venueEntranceId`（layout-reducer:1155）迁移时映射到地图 `nodes`，不留在墙体数据。
+  - 待决：墙体是新增独立 `walls` 集合，还是作为 `facilities` 的一种模板类别（矩形 vs 折线几何）——落地前对照 facility 物料模板体系定。
+- **出入口工具现状核对（实读契约 + `site-plan-routes.ts` + `outdoor-plan-canvas.tsx`）：**
+  - 契约：`nodes`（`kind` entry/exit/both，position/name/levelId/notes）；`routes`（`kind` pedestrian/vehicle/service，points 折线 + oneWay + 可选 widthM + startNodeId/endNodeId 引用节点，禁止悬空）。节点是动线唯一端点来源。
+  - 纯函数：`buildRoute`（几何 + 节点存在校验）、`reverseRoute`（点列倒序 + 互换端点引用）、`movePlanNode`（引用路线端点随动）、`detachNodeFromRoutes`（删节点剥离引用保留几何）、`nodeRouteRefs`（起终点分列）、`planNodeIssues`（未连接节点警示）。
+  - 画布：工具箱「入口和通道图标」组 → 出入口节点行（`startAreaTool('node')`）；「路线」组分列人行/车辆/后勤；`placeNodeAt` 连续放置、自动编号；属性卡改名/切类型/删除；拖动随动；端点吸附节点；图例/清单/统计/导出 GeoJSON·CSV·PDF·PNG 均消费 nodes。
+  - 两个小缺口（归 #24 地图能力接入择机补）：① 创建节点不能前置选类型（`nodeKindRef` 恒 `entry`，出口/两用需放下后在属性卡改，建议像动线三类那样工具箱直选）；② 节点不归属分区（人员有 `inferWorkerZoneId`，节点无）。
+
+### 阶段 14n · 2D 底图空白修复（缺省高德 + 偏好保留 + 切源清缓存）🟡 代码完成，未提交
+
+- **现象：** 2D 规划面底图空白、停在「底图加载中…」；网络面板 OSM 瓦片（`tile.openstreetmap.org`）大量 `inflight` 挂起，少数 `ok`。单请求 PowerShell 可通，判定为浏览器批量并发被 OSM 限流，非断网。
+- **根因（两处代码缺陷 + 缺省源不可达）：**
+  1. `outdoor-plan-overlay.tsx` 的 `source` state 初始硬编码 `'osm'`，mount 后写偏好的 effect 又把 `osm` 写回存储，冲掉用户已选图源（实测存储被回写成 `osm`）。
+  2. `outdoor-plan-canvas.tsx` 切图源的 effect 只更新 `sourceRef` 并重绘，未调 `BasemapTileCache.clear()`；旧源在途请求 handler/队列/`inFlight` 不归零，「加载中」不消退，不同源同坐标瓦片还会串味。
+  3. 缺省 OSM/Carto 为 WGS-84 直连源，国内网络批量并发不可靠。
+- **修复：**
+  - overlay 初始值改 `() => readPlanGroundSource()`，读已存偏好；写入偏好逻辑不变。
+  - canvas `[source]` effect 内 `basemapCacheRef.current?.clear()` 后再 `draw()`。
+  - 缺省源与各处 SSR/未传兜底默认对齐 `amap-streets`（高德街道，GCJ-02 网格，与场地锚点同坐标系；`basemap-alignment` 已按 `amap-*` 分支原样返回，不偏移；免 key、带 CORS 头）。用户仍可在底图面板切回其他源。
+  - 测试 `plan-ground-capture.test.ts` 缺省断言同步为 `amap-streets`。
+- **改动文件：** `outdoor-plan-overlay.tsx`、`outdoor-plan-canvas.tsx`、`outdoor-plan-3d.tsx`、`hooks/use-scene-effects.ts`、`lib/plan-basemap-source.ts`、`lib/plan-ground-capture.test.ts`、`panels/scendance-workspace.tsx`、`room-organizer.tsx`（8 文件，22 增 12 删）。
+- **验证：** `tsc --noEmit` exit 0；底图定向批次 77 条全绿（tile-cache / alignment / ground-basemap / ground-capture / 2d render / 3d basemap-tiles / tdt-probe）；真机刷新后 2D 高德完整出图（西湖、白堤、孤山、省博、POI 标注），`底图加载中` 消退、console 0 error，刷新后偏好保留。
+- **遗留（未动）：** 3D 地面瓦片仍 `count=0` 兜底浅蓝灰空屏，属 #13 独立债（three 纹理环节待查），与本次 2D 修复无关；左下「2 Issues」为既有区域/物料/节点校验徽章，非底图故障。
+
 ### 1.5 B 初始化耦合事实（2026-11-13 实读）
 
 - `RoomOrganizer` 签名 :291：`{ controller, isActive, localWriteCapability, isolatedWriteSession }`，无户外项目 id 入参。
