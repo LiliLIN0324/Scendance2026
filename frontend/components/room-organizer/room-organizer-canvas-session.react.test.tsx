@@ -54,12 +54,13 @@ it.each(['two','three'] as const)('rejects a stale %s gesture after same-batch A
 });
 
 it('disconnects the old 2D canvas observer and observes the replacement after an activity switch',async()=>{
- const a=activity('observer-A'),b=activity('observer-B');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ const a=activity('observer-A');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
+ // M3a：会话身份绑 projectId（prop），切换项目经 rerender 换 outdoorProjectId 驱动失效。
+ const view=render(<RoomOrganizer outdoorProjectId="observer-A"/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
  // 2026-11-11 起工作台默认就是 2D 平面（地理优先主线），不必再点「2D / 3D」切进来。
  const oldCanvas=document.querySelector('#sc-viewport-3d')?.previousElementSibling;expect(oldCanvas?.tagName).toBe('CANVAS');
  await waitFor(()=>expect(observed.some(entry=>entry.targets.includes(oldCanvas!))).toBe(true));
- act(()=>layoutStore.setState({layout:b,activeFloorIndex:0}));
+ act(()=>view.rerender(<RoomOrganizer outdoorProjectId="observer-B"/>));
  await waitFor(()=>{const next=document.querySelector('#sc-viewport-3d')?.previousElementSibling;expect(next).toBeTruthy();expect(next).not.toBe(oldCanvas);expect(observed.some(entry=>entry.targets.includes(next!))).toBe(true);});
  expect(observed.some(entry=>entry.targets.includes(oldCanvas!)&&entry.disconnected)).toBe(true);
 });
