@@ -19,7 +19,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, ChevronDown, Clock, Copy, Download, FileImage, HelpCircle, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, Pencil, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
+import { ArrowUp, Check, ChevronDown, Clock, Copy, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, Pencil, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
@@ -114,7 +114,7 @@ import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
-  checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
+  checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
   isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutGenerateCommand, lightPlanRail, mentionsUnsupportedSeating, normalizeOralSize, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, parseSafeDirectionalMove, parseSafeRotation, parseSafeRecolor, pendingPlanOf,
   prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type RevisionRequest, type VenueIO,
@@ -4614,7 +4614,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const recognitionRef = useRef<SpeechRecognitionInstanceLike | null>(null);
   const [listening, setListening] = useState(false);
   const speechSupported = getSpeechRecognitionCtor() !== null;
-  const demo = isDemoBackend();
   // 第 8 批：真实运行账本（云端 AgentRun 写进来的真步骤/真轮数）。
   const runState = useAgentRun();
   const items = materialCount(activeFloor.items);
@@ -4770,7 +4769,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onResendMessage={bingo ? undefined : text => agent.resendEditedLast(text)}/>
+      <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
       {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow}/>}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard

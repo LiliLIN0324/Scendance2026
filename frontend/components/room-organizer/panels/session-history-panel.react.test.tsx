@@ -99,9 +99,10 @@ describe('session history panel', () => {
 
   it('toggles a favorite and asks before deleting', () => {
     render(<Harness />);
-    const star = screen.getByRole('button', { name: '收藏 茶歇' });
+    // 2026-11-14 favorite UI 语义改为置顶（图钉 hover 显示，aria-label 同步改名）。
+    const star = screen.getByRole('button', { name: '置顶 茶歇' });
     fireEvent.click(star);
-    expect(screen.getByRole('button', { name: '取消收藏 茶歇' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '取消置顶 茶歇' }).getAttribute('aria-pressed')).toBe('true');
     expect(within(list()).getAllByRole('button', { name: /^(发布会|茶歇)/ })[0]?.textContent).toContain('茶歇');
 
     fireEvent.click(screen.getByRole('button', { name: '删除 茶歇' }));
