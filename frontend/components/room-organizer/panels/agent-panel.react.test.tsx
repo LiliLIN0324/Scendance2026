@@ -4867,3 +4867,45 @@ describe('registered capabilities through the atomic outdoor Agent',()=>{
   expect(current.venuePick).toBeNull();expect(within(await screen.findByRole('region',{name:'尚未处理的要求'})).getByText('活动签到怎么安排，门必须保持打开')).toBeTruthy();
  });
 });
+
+describe('bounded neighboring capability ownership regressions',()=>{
+ function mountNear(){
+  let current!:NonNullable<ReturnType<typeof useAgent>>;let plan=createStarterOutdoorPlan();plan.boundary=[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}];plan.zones=[{id:'22222222-2222-4222-8222-222222222222',name:'展览区',notes:'',semantic:'reserved',purpose:'exhibition',environment:'outdoor',polygon:[{x:10,y:10},{x:60,y:10},{x:60,y:60},{x:10,y:60}]}];plan.facilities=[{id:'11111111-1111-4111-8111-111111111111',zoneId:plan.zones[0]!.id,templateId:'market-booth',name:'真实展位',position:{x:20,y:20},rotationDeg:0,size:{width:3,depth:3},notes:''}];
+  const apply=vi.fn((next:typeof plan,expected:string)=>{if(JSON.stringify(plan)!==expected)return false;plan=next;return true}),download=vi.fn(()=>true);
+  function Probe(){current=useAgent()!;useEffect(()=>{current.registerRouteBridge({getPlan:()=>plan,projectId:()=> 'near-project',applyPlan:apply,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true,exportPlanDraft:download} as Parameters<typeof current.registerRouteBridge>[0]);return()=>current.registerRouteBridge(null)},[]);return null}
+  studioMock.controller.assistantChat.mockResolvedValue({status:'ok',answer:JSON.stringify({action:'ask',reply:'约束仍需核对，未修改。',references:[],facts:{}})});
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);return {current:()=>current,plan:()=>plan,apply,download};
+ }
+ it.each(['按风格配一套。门保持打开','按风格配一套并保持入口畅通','先不按风格配一套'])('NEAR standalone matcher must not swallow: %s',async text=>{
+  const {resolveCommonCapability}=await import('../lib/agent-common-capabilities');expect(resolveCommonCapability(text)).toEqual({handled:false});
+ });
+ it('NEAR full mixed door constraint reaches model rather than being reduced to a style picker',async()=>{
+  const app=mountNear();send('按风格配一套。门保持打开');await act(async()=>{await Promise.resolve()});expect(app.current().stylePickerOpen).toBe(false);expect(studioMock.controller.assistantChat).toHaveBeenCalledWith('按风格配一套。门保持打开',expect.any(Array),expect.any(AbortSignal));expect(app.apply).not.toHaveBeenCalled();
+ });
+ it('NEAR named palette after a completed model turn remains actionable',async()=>{
+  const app=mountNear();send('继续核对本场需求');await waitFor(()=>expect(studioMock.controller.assistantChat).toHaveBeenCalledOnce());await waitFor(()=>expect(app.current().outdoorWorkflow.busy).toBe(false));send('按松木户外配一套');await act(async()=>{await Promise.resolve()});await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('style'));expect(app.apply).not.toHaveBeenCalled();
+ });
+ it('NEAR initial named palette only recolors after explicit approval once',async()=>{
+  const app=mountNear(),before=structuredClone(app.plan());send('按松木户外配一套');await act(async()=>{await Promise.resolve()});await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('style'));expect(app.apply).not.toHaveBeenCalled();send('确认应用');await waitFor(()=>expect(app.apply).toHaveBeenCalledOnce());expect(app.plan().facilities).toHaveLength(before.facilities.length);expect({...app.plan().facilities[0],color:undefined}).toEqual({...before.facilities[0],color:undefined});expect(app.plan().boundary).toEqual(before.boundary);expect(studioMock.generate).not.toHaveBeenCalled();expect(state.apply).not.toHaveBeenCalled();
+ });
+
+ it('NEAR declining a style must not cancel an existing scope proposal',async()=>{
+  const app=mountNear();studioMock.controller.assistantChat.mockResolvedValueOnce({status:'ok',answer:JSON.stringify({action:'scope',reply:'',references:[],facts:{}})});send('先核对实际活动范围');await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('scope'));send('先不按风格配一套');await act(async()=>{await Promise.resolve()});expect(app.current().outdoorWorkflow.proposal?.kind).toBe('scope');expect(app.current().stylePickerOpen).toBe(false);
+ });
+ it('NEAR export retains raw door requirement and only downloads the approved current plan once',async()=>{
+  const app=mountNear();send('门必须保持打开');await waitFor(()=>expect(studioMock.controller.assistantChat).toHaveBeenCalledOnce());await waitFor(()=>expect(app.current().outdoorWorkflow.busy).toBe(false));const expected=JSON.stringify(app.plan());send('导出给搭建方。');await screen.findByRole('button',{name:'确认导出'});expect(app.download).not.toHaveBeenCalled();send('确认导出');expect(app.download).toHaveBeenCalledOnce();expect(app.download).toHaveBeenCalledWith(expected,expect.objectContaining({requirements:expect.arrayContaining(['门必须保持打开'])}));act(()=>app.current().confirmExport());expect(app.download).toHaveBeenCalledOnce();expect(studioMock.exportActivity).not.toHaveBeenCalled();expect(app.apply).not.toHaveBeenCalled();
+ });
+ it.each(['在入口怎么安排签到，门必须保持打开','在门口怎么安排签到，门必须保持打开'])('NEAR entry question must not fabricate a venue: %s',async text=>{
+  const {matchVenueCommand}=await import('../lib/venue-intent');expect(matchVenueCommand(text)).toBeNull();
+ });
+});
+
+
+describe('bounded neighboring location question regression',()=>{
+ it('EDGE location question still goes to a fabricated venue rather than preserving the mixed requirement',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'门约束需保留。',unhandled:[{kind:'other',evidence:'门必须保持打开'}],factEvidence:[]});
+  let current!:NonNullable<ReturnType<typeof useAgent>>;function Probe(){current=useAgent()!;return null}render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('在入口怎么安排签到，门必须保持打开');await act(async()=>{await Promise.resolve();await Promise.resolve()});
+  expect(current.venuePick).toBeNull();
+ });
+});

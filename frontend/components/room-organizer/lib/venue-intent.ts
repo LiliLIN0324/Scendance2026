@@ -43,6 +43,9 @@ export function matchVenueCommand(text: string): string | null {
   const trimmed = text.trim();
   if (trimmed.length < 4 || trimmed.length > 120) return null;
   if (!new RegExp(VENUE_ACTION).test(trimmed)) return null;
+  // A how/whether planning question describes an operation, not a complete place name.
+  // Keep its entire constraints for understanding rather than searching a noun fragment.
+  if (/(?:怎么|如何|怎样|是否|能否)/u.test(trimmed)) return null;
   // 在/去/到 + 地名（非贪婪，可含 -·）+ 可选方位尾巴 + 可选连接词（去/来/再）+ 动作动词
   // 「在潮乐之城去做设计」地名与动作之间隔了「去」，必须放宽。
   const pattern = new RegExp(

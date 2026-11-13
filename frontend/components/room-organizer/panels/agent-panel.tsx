@@ -3010,8 +3010,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(common.handled){
         say({role:'user',text:trimmed});
         if(common.id==='export'){setStylePickerOpen(false);proposeExport();return;}
-        outdoorWorkflow.cancel();
-        if(common.selection==='open'){setStylePickerOpen(true);say({role:'agent',text:'先选一套现成色板预览。户外只对现有设施配色，不凭风格新增家具或猜占地；逐区布置仍复用真实物料库。'});}
+        if(common.selection==='open'){outdoorWorkflow.cancel();setStylePickerOpen(true);say({role:'agent',text:'先选一套现成色板预览。户外只对现有设施配色，不凭风格新增家具或猜占地；逐区布置仍复用真实物料库。'});}
         else placeStyleBundleNow(common.selection);
         return;
       }

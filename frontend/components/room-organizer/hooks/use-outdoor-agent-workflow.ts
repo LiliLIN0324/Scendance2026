@@ -999,7 +999,17 @@ export function useOutdoorAgentWorkflow(input: {
         await confirm();
         return true;
       }
+      const constraintBefore = JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed});
       await act(turn, message);
+      // A neutral clarification is not cancellation or authorization. Only the unchanged
+      // scope checkpoint may remain pending; never retain a geometric/model proposal
+      // across unstructured new requirements. Cancel/new facts/new actions still invalidate.
+      if (turn.action === "ask" && previousProposal?.kind === "scope" && live(job) &&
+          previousProposal.base === JSON.stringify(callbacks.current.bridge()?.getPlan()) &&
+          constraintBefore === JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed})) {
+        proposalRef.current = {...previousProposal,epoch:job.epoch};
+        setProposal(proposalRef.current);
+      }
     } catch (error) {
       if (
         live(job) &&
