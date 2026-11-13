@@ -1,3 +1,4 @@
+import {OUTDOOR_AGENT_SYSTEM_PROMPT,outdoorTurnSchema} from './outdoor-agent-response-contract.ts';
 import {z} from 'zod';
 import {ApiError} from './domain.ts';
 import {chatProfile,chatRequest} from './providers.ts';
@@ -11,7 +12,7 @@ const sensitive=/(?:https?:\/\/|www\.|\b(?:data|blob|file):|(?:api[_ -]?key|acce
 function privateOrLink(value:string):boolean{return sensitive.test(value);}
 
 /** One read-only provider attempt. No tools, retries, search, scene or requirement writes. */
-export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;signal?:AbortSignal;timeoutMs?:number}):Promise<AssistantChatResult>{
+export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number}):Promise<AssistantChatResult>{
  // Never log raw errors, bodies, prompts, endpoints, headers, model names or configuration.
  // One categorical event per request; response contract and fail-closed behavior stay unchanged.
  let reported=false;
@@ -21,7 +22,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  };
  const fail=(status:'disabled'|'invalid'|'unavailable'|'timeout'|'provider_error'):AssistantChatResult=>({status,answer:null});
  if(!input.enabled)return fail('disabled');
- const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history});
+ const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history,...(input.responseMode?{responseMode:input.responseMode}:{})});
  if(!parsed.success||privateOrLink(parsed.data.message)||parsed.data.history.some(item=>privateOrLink(item.text)))return fail('invalid');
  if(input.signal?.aborted){diagnose('cancelled');return fail('provider_error');}
  const timeoutMs=input.timeoutMs??25000;
@@ -46,7 +47,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
   // MiniMax M3.1 uses max_completion_tokens; do not alter the shared provider
   // behavior of existing workflows just to support this read-only request.
   const tokenLimit=chatProfile(input.env,'brief')==='minimax'?{max_completion_tokens:1024}:{max_tokens:1024};
-  const {url,init}=chatRequest(input.env,{messages:[{role:'system',content:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
+  const {url,init}=chatRequest(input.env,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
   const operation=(async():Promise<AssistantChatResult>=>{
    try{
     const raw=await fetchJson(url,{...init,signal:controller.signal},input.fetcher,100_000,timeoutMs);
@@ -69,6 +70,11 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
     // Only absent/null means no call; reject every non-null payload, including []/malformed values.
     const toolOutput=(choice.message.tool_calls!==undefined&&choice.message.tool_calls!==null)||(choice.message.function_call!==undefined&&choice.message.function_call!==null);
     if(/<\/?think>/i.test(answer)||toolOutput||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(answer)){diagnose('unsupported_output');return fail('provider_error');}
+    if(parsed.data.responseMode==='outdoor_v1'){
+     let value:unknown;try{value=JSON.parse(answer);}catch{diagnose('invalid_shape');return fail('provider_error');}
+     const checked=outdoorTurnSchema.safeParse(value);if(!checked.success){diagnose('invalid_shape');return fail('provider_error');}
+     return {status:'ok',answer:JSON.stringify(checked.data)};
+    }
     return {status:'ok',answer};
    }catch(error){
     if(error instanceof Error&&error.name==='TimeoutError'){diagnose('timeout');return fail('timeout');}

@@ -4880,7 +4880,7 @@ describe('bounded neighboring capability ownership regressions',()=>{
   const {resolveCommonCapability}=await import('../lib/agent-common-capabilities');expect(resolveCommonCapability(text)).toEqual({handled:false});
  });
  it('NEAR full mixed door constraint reaches model rather than being reduced to a style picker',async()=>{
-  const app=mountNear();send('按风格配一套。门保持打开');await act(async()=>{await Promise.resolve()});expect(app.current().stylePickerOpen).toBe(false);expect(studioMock.controller.assistantChat).toHaveBeenCalledWith('按风格配一套。门保持打开',expect.any(Array),expect.any(AbortSignal));expect(app.apply).not.toHaveBeenCalled();
+  const app=mountNear();send('按风格配一套。门保持打开');await act(async()=>{await Promise.resolve()});expect(app.current().stylePickerOpen).toBe(false);expect(studioMock.controller.assistantChat).toHaveBeenCalledWith('按风格配一套。门保持打开',expect.any(Array),expect.any(AbortSignal),'outdoor_v1');expect(app.apply).not.toHaveBeenCalled();
  });
  it('NEAR named palette after a completed model turn remains actionable',async()=>{
   const app=mountNear();send('继续核对本场需求');await waitFor(()=>expect(studioMock.controller.assistantChat).toHaveBeenCalledOnce());await waitFor(()=>expect(app.current().outdoorWorkflow.busy).toBe(false));send('按松木户外配一套');await act(async()=>{await Promise.resolve()});await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('style'));expect(app.apply).not.toHaveBeenCalled();
