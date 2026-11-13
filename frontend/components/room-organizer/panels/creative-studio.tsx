@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
-import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
+import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun, type AgentRunInput, type ChatCapabilities, type ChatProviderId } from '@/lib/backend-session';
 import { humanRecipeId } from '@/lib/recipe-display';
 import { deriveSeededVariants, recipeHash as promptRecipeHash } from '@/lib/recipe-proposal';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -229,6 +229,7 @@ interface StudioValue extends LocalProjectBackupActions {
   busy: boolean; preparing: boolean; notice: string; connection: string; generate(message?: string, options?: {intent?:'model'; requirePreview?: true; seatingAllocation?:AgentRunInput['context']['seatingAllocation'] | undefined; seatingSpecs?:AgentRunInput['context']['seatingSpecs'] | undefined}): Promise<UnchangedRunResult|void>;
   messages: Message[]; expanded: boolean; setExpanded(value: boolean): void; preview: Preview | null; stale: boolean; expired: boolean;
   jevEnabled: boolean; setJevEnabled(value:boolean):void; run: AgentRun | null; candidates: CandidatePreview[]; selectCandidate(label: 'A'|'B'|'C'):void; cancelRun():Promise<void>; recoverRun():Promise<void>; recoverable:boolean;
+  chatProviders: ChatCapabilities | null; activeProvider: ChatProviderId; setActiveProvider(value: ChatProviderId): void;
   applyPreview(): Promise<void>; discardPreview(): void; discardPreviewForHistoryReview(): boolean;
   candidateRequirementError(base: RoomLayout, candidate: RoomLayout): string | null;
   candidateAnnotationAdvisory(candidate:Preview):string|null;
@@ -246,7 +247,7 @@ export function useCreativeBriefState(): CreativeBriefState | null {
 }
 /** v2.4 AgentPanel：只取出方案需要的那几项（复用现有 AI 生成，不新增算法）。
  *  云端提案现在也要在Bingo栏里「确认布置 / 撤回」，所以把预览与确认这几项一起放出来。 */
-export function useStudioAgent(): Pick<StudioValue, 'generate'|'busy'|'run'|'connection'|'notice'|'controller'|'brief'|'setBrief'|'hasSavedBrief'
+export function useStudioAgent(): Pick<StudioValue, 'generate'|'busy'|'run'|'connection'|'notice'|'controller'|'brief'|'setBrief'|'hasSavedBrief'|'chatProviders'|'activeProvider'|'setActiveProvider'
   |'preview'|'stale'|'expired'|'recoverable'|'selectCandidate'|'applyPreview'|'discardPreview'|'discardPreviewForHistoryReview'|'cancelRun'|'exportActivity'|'exportCloudMaterialDraft'|'cloudMaterialDraftAvailable'|'candidateRequirementError'|'candidateAnnotationAdvisory'|'setCandidateInventory'|'getBoundCandidateInventory'|'getSessionInventory'|'rememberSessionInventory'|'canRememberSessionInventory'|'applyRecovery'|'applyRecoveryReview'|'reviewingApplyRecovery'|'reviewApplyRecovery'|'acknowledgeApplyRecovery'>|null { return useContext(StudioContext); }
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 export function useMaterialCheckinState(): MaterialCheckinState { return useStudio().checkins; }
@@ -466,6 +467,15 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   function retryBrief():void { if(briefStorage.current.ready)void saveBrief(scope,undefined,undefined,sourceWriteGuard).catch(()=>{});else setBriefLoadAttempt(value=>value+1); }
   const [expanded,setExpanded]=useState(false);
   const [jevEnabled,setJevEnabled]=useState(false);
+  // 请求级 provider 选择：仅会话内存，不写 localStorage；可选项来自服务端 capabilities。
+  const [chatProviders,setChatProviders]=useState<ChatCapabilities|null>(null);
+  const [activeProvider,setActiveProvider]=useState<ChatProviderId>('default');
+  useEffect(()=>{
+    if(!cloud.user){setChatProviders(null);return;}
+    let alive=true;
+    controller.getChatCapabilities().then(value=>{if(alive)setChatProviders(value);}).catch(()=>{if(alive)setChatProviders(null);});
+    return()=>{alive=false;};
+  },[controller,cloud.user?.id]);
   const [run,setRun]=useState<AgentRun|null>(null);
   const [candidates,setCandidates]=useState<CandidatePreview[]>([]);
   const [recoverable,setRecoverable]=useState(false);
@@ -1779,7 +1789,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       try{rememberRun(marker,submittedScope);}catch{throw new Error('无法保存任务编号，尚未提交。请恢复浏览器本机存储后重试。');}
       requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;dispatchedRequestId=marker.requestId;
       if(annotationObservation)say(annotationObservation.status==='ready'?'本次将提供规划标注供模型读取；标注尚未核验，提供不代表已经用于排布或安全检查。':'本次无法完整读取规划标注，模型不会据此检查区域、路线或入口。');
-      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{}),...(planObservation?{planObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview'});
+      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{}),...(planObservation?{planObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:'preview',...(activeProvider!=='default'?{provider:activeProvider}:{})});
       creationResponded=true;
       if(cancelledRequest.current===marker.requestId){
         if(agentScopeRef.current===submittedScope){
@@ -1967,7 +1977,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     }finally{materialDraftExportPending.current=false;}
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,captureImage,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,createFreshActivity,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateAnnotationAdvisory,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,captureImage,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,createFreshActivity,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,chatProviders,activeProvider,setActiveProvider,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateAnnotationAdvisory,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}><UnsavedSourceNotice scope={scope}/>{children}</StudioContext.Provider>;
 }
 

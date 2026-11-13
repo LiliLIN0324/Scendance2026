@@ -60,6 +60,9 @@ const studioMock = vi.hoisted(() => ({
   recoverable: false,
   applyRecovery: null as null | { projectId: string; revision: number; proposalId: string; outcome: 'pending' | 'committed' | 'cleanup_failed' },
   connection: '离线引导',
+  chatProviders: null as null | { active: { agent: string; brief: string }; providers: { id: string; label: string; configured: boolean; agentTools: boolean; model: string }[] },
+  activeProvider: 'default' as string,
+  setActiveProvider: vi.fn(),
   controller: { briefExtract: vi.fn(), briefConversation: vi.fn(), assistantChat: vi.fn() },
   applyRecoveryReview: null as null | { status: 'base_matches' | 'candidate_matches' | 'unknown'; message: string },
   reviewingApplyRecovery: false,
@@ -510,6 +513,42 @@ describe('single-agent input bridge',()=>{
     fireEvent.click(screen.getByRole('button',{name:'停止等待'}));await screen.findByText(/服务商可能仍在处理或计费/);
     fireEvent.click(screen.getByRole('button',{name:'检查转交'}));expect(result).toHaveBeenLastCalledWith(false);
     expect(studioMock.controller.briefExtract).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('请求级模型槽位控件（活动脸小景）', () => {
+  const providerFixture = () => ({
+    active: { agent: 'default', brief: 'default' },
+    providers: [
+      { id: 'default', label: '默认（按服务端配置）', configured: true, agentTools: true, model: 'deepseek-flash' },
+      { id: 'bailian', label: '百炼 Qwen', configured: false, agentTools: false, model: '未配置' },
+      { id: 'tokendance', label: 'Tokendance 网关', configured: true, agentTools: true, model: 'deepseek-v4.1-flash' },
+      { id: 'deepseek', label: 'DeepSeek 官方', configured: true, agentTools: true, model: 'deepseek-flash' },
+    ],
+  });
+  afterEach(() => {
+    studioMock.chatProviders = null;
+    studioMock.activeProvider = 'default';
+    studioMock.setActiveProvider.mockClear();
+  });
+
+  it('活动脸在输入条旁渲染槽位菜单，已配置可点、未配置置灰，点选写入状态', () => {
+    studioMock.chatProviders = providerFixture();
+    studioMock.activeProvider = 'default';
+    render(ui(makeLayout()));
+    const menu = screen.getByRole('radiogroup', { name: '模型槽位' });
+    const tokendance = within(menu).getByRole('radio', { name: /Tokendance 网关/ }) as HTMLButtonElement;
+    expect(tokendance.disabled).toBe(false);
+    const bailian = within(menu).getByRole('radio', { name: /百炼 Qwen/ }) as HTMLButtonElement;
+    expect(bailian.disabled).toBe(true);
+    fireEvent.click(tokendance);
+    expect(studioMock.setActiveProvider).toHaveBeenCalledWith('tokendance');
+  });
+
+  it('Bingo 审校台不渲染模型槽位控件', () => {
+    studioMock.chatProviders = providerFixture();
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo" /></LayoutAgentProvider>);
+    expect(screen.queryByRole('radiogroup', { name: '模型槽位' })).toBeNull();
   });
 });
 

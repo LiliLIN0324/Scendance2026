@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {checkReservedAnnotations} from './agent-annotation-check.ts';
 import { chatProfile, chatRequest, chatUsageProvider, generateProposal } from './providers.ts';
+import { chatProviderConfigured, chatProviderView } from './chat-provider.ts';
 import { buildProposal, modificationSchema } from './ai.ts';
 import { agentRunRequestSchema, AGENT_PLAN_OBSERVATION_NOTICE, type AgentRunRequest } from './agent-contract.ts';
 import { ApiError, canonical, catalog, sceneWarnings, uuid, type Scene } from './domain.ts';
@@ -295,6 +296,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   const rpc=backend.agent!;
   const start=await rpc(actor,'start',{projectId,id});if(!start.claimed)return;
   const input=agentRunRequestSchema.parse(start.input),deadline=Date.parse(start.deadline),claim=start.claim;
+  // 请求级 provider 选择；所选槽位未配置时回退基础 env（默认链）。
+  const requestedProvider=input.provider??'default';
+  const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider);
   const now=backend.agentClock ?? Date.now;
   // Best effort, ordered and bounded: failed/missing observations never alter an operation.
   let eventChain:Promise<unknown>=Promise.resolve(),eventCount=0;
@@ -403,7 +407,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     if(fromPrepared.length)return fromPrepared;
     return [...validatedCandidates.values()].slice(0,3).map((raw,i)=>({...raw,label:(['A','B','C'] as const)[i],title:typeof raw.title==='string'?raw.title:'布置方案'}) as Candidate);
   }
-  const miniMax=chatProfile(env)==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
+  const miniMax=chatProfile(runEnv)==='minimax'&&runEnv('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
   try {
     if(input.context.annotationObservation!==undefined&&(env('AGENT_ANNOTATION_OBSERVATION_ENABLED')!=='1'||env('DEEPSEEK_AGENT_MODE')==='legacy'))throw new ApiError('AGENT_ANNOTATION_UNAVAILABLE',503);
     const resources=await readSceneResources(backend,actor,input.scene);
@@ -417,9 +421,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(!Number.isSafeInteger(initialNotes.steerTotal)||initialNotes.steerTotal!<0)throw new ApiError('AGENT_STEERING_GUARD_UNAVAILABLE',503);
       consumedSteerTotal=initialNotes.steerTotal!;
       if(initialNotes.notes?.length)throw new ApiError('AGENT_STEERING_CHANGED',409);
-      const proposal=await generateProposal({...input,projectId,mode:'modify',instruction:JSON.stringify({instruction:input.instruction,context:input.context})},env,async attempt=>{await check();await call('step',{progress:`兼容模式生成方案（${attempt+1}/2）`});},fetcher,resources);
+      const proposal=await generateProposal({...input,projectId,mode:'modify',instruction:JSON.stringify({instruction:input.instruction,context:input.context})},runEnv,async attempt=>{await check();await call('step',{progress:`兼容模式生成方案（${attempt+1}/2）`});},fetcher,resources);
       await check();
-      await call('usage',{usage:{provider:chatUsageProvider(env),mode:'legacy',usage:proposal.usage}});
+      await call('usage',{usage:{provider:chatUsageProvider(runEnv),mode:'legacy',usage:proposal.usage}});
       const review=reviewAgentCandidate(input.scene,proposal.scene,input.selectedIds,proposal.commands.length>0,userPreserve);
       if(review.status==='violated')throw new ApiError('CANDIDATE_GEOMETRY_CONFLICT',422,review.violations);
       const warnings=proposal.commands.length?[...proposal.warnings,{code:'SAFETY_CHECKS_UNKNOWN',ids:[]},...(input.context.seatingAllocation?[{code:'SEATING_ALLOCATION_UNVERIFIED',ids:[]}]:[]),...(hasSeatingSpecs?[{code:'SEATING_SPECS_UNVERIFIED',ids:[]}]:[])]:proposal.warnings;
@@ -638,7 +642,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         if(miniMax&&forceSubmit&&name!=='submit_candidates'&&name!=='submit_plan_candidates')return false;
         return true;
       });
-      const { url, init } = chatRequest(env, { messages:compactRepeatedValidationArrays(messages), tools:offered, tool_choice:miniMax?'auto':forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
+      const { url, init } = chatRequest(runEnv, { messages:compactRepeatedValidationArrays(messages), tools:offered, tool_choice:miniMax?'auto':forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.
       if(new TextEncoder().encode(init.body as string).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
       const requestStarted=now(),remainingMs=Math.max(0,Math.min(900000,deadline-requestStarted));
@@ -659,7 +663,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         if(!checked.success)batchProblems.set(item.id,{...safeError(checked.error),hint:'请按该工具的参数格式修正后重新调用。'});
       }}
       const counts=miniMax?z.object({prompt_tokens:z.number().nonnegative().optional(),completion_tokens:z.number().nonnegative().optional(),total_tokens:z.number().nonnegative().optional()}).safeParse(reply.usage):null;
-      await call('usage',{usage:{provider:chatUsageProvider(env),turn,usage:miniMax?(counts?.success?counts.data:{}):reply.usage}});await check();
+      await call('usage',{usage:{provider:chatUsageProvider(runEnv),turn,usage:miniMax?(counts?.success?counts.data:{}):reply.usage}});await check();
       // A note can arrive while the model is responding. Its tool calls have not
       // executed yet, so discard this stale turn and plan again, not its effects.
       if(await consumeSteering()){
