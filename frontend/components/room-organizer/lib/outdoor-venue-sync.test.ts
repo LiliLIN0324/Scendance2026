@@ -251,4 +251,54 @@ describe('seededPlanFromLayout', () => {
     const plan = seededPlanFromLayout({ width: 20, height: 10, mapLngLat: { lng: 120.15, lat: 30.25 } })!;
     expect(plan.anchor).toEqual({ lng: 120.15, lat: 30.25, crs: 'gcj-02', source: 'asset-geo' });
   });
+
+  // V-1c（2026-11-13）：chat 场地确认/地图圈画写入真实 GCJ 足迹时，2D 边界=真轮廓（真实米数）。
+  it('有 mapGroundPolygon + 锚点时边界用真实足迹（米数≈GCJ 差换算），锚点 source=lookup', () => {
+    const anchor = { lng: 120.54, lat: 30.40 };
+    // 以锚点为中心 ±0.0045°lng（≈425m）×±0.004°lat（≈445m）的四边形
+    const plan = seededPlanFromLayout({
+      width: 10,
+      height: 10,
+      mapLngLat: anchor,
+      mapGroundPolygon: [
+        { lng: anchor.lng - 0.0045, lat: anchor.lat - 0.004 },
+        { lng: anchor.lng + 0.0045, lat: anchor.lat - 0.004 },
+        { lng: anchor.lng + 0.0045, lat: anchor.lat + 0.004 },
+        { lng: anchor.lng - 0.0045, lat: anchor.lat + 0.004 },
+      ],
+    })!;
+    expect(plan.anchor?.source).toBe('lookup');
+    const xs = plan.boundary.map(point => point.x);
+    const ys = plan.boundary.map(point => point.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(380); // 真米数，不是缩到壳体的影子
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(440);
+    expect(Math.max(...xs.map(Math.abs))).toBeLessThan(4900);
+  });
+
+  it('足迹超出 ±4900m（城市级行政区）不采信，退回壳体轮廓', () => {
+    const plan = seededPlanFromLayout({
+      width: 10,
+      height: 10,
+      mapLngLat: { lng: 120.54, lat: 30.40 },
+      mapGroundPolygon: [
+        { lng: 120.40, lat: 30.30 },
+        { lng: 120.70, lat: 30.30 },
+        { lng: 120.70, lat: 30.50 },
+        { lng: 120.40, lat: 30.50 },
+      ],
+    })!;
+    const xs = plan.boundary.map(point => point.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(10, 1); // 壳体 10m 矩形
+  });
+
+  it('足迹顶点过多时抽稀到 64（契约上界）', () => {
+    const anchor = { lng: 120.54, lat: 30.40 };
+    const many = Array.from({ length: 300 }, (_, i) => ({
+      lng: anchor.lng + 0.002 * Math.cos(i / 10),
+      lat: anchor.lat + 0.002 * Math.sin(i / 10),
+    }));
+    const plan = seededPlanFromLayout({ width: 10, height: 10, mapLngLat: anchor, mapGroundPolygon: many })!;
+    expect(plan.boundary.length).toBeLessThanOrEqual(64);
+    expect(plan.boundary.length).toBeGreaterThanOrEqual(3);
+  });
 });

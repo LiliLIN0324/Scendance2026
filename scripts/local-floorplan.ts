@@ -15,10 +15,12 @@ if (relative(root, dataDirectory).startsWith('..') || dataDirectory === resolve(
 }
 const port = Number(process.env.SCENDANCE_DEV_API_PORT ?? 54336);
 const webPort = Number(process.env.SCENDANCE_DEV_WEB_PORT ?? 3026);
-const origins = [`http://127.0.0.1:${webPort}`, `http://localhost:${webPort}`];
+const publicHost = process.env.SCENDANCE_DEV_PRIVATE_HOST || '127.0.0.1';
+if (!/^(127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(publicHost)) throw new Error('Preview host must be a private IPv4 address.');
+const origins = [`http://${publicHost}:${webPort}`, `http://127.0.0.1:${webPort}`, `http://localhost:${webPort}`];
 const permitted = new Set(['DEEPSEEK_API_KEY', 'AI_MAX_REQUEST_CENTS', 'RECONSTRUCTION_MAX_REQUEST_CENTS',
   'HUNYUAN_API_KEY', 'HUNYUAN_API_MODE', 'GENERATION_MAX_TASK_CENTS', 'HUNYUAN_TERMS_URL', 'HUNYUAN_TERMS_REVIEWED_AT']);
-const server = await startLocalServer(port, undefined, { dataDirectory, origins, env: key =>
+const server = await startLocalServer(port, undefined, { dataDirectory, origins, privateHost: publicHost, env: key =>
   permitted.has(key) ? process.env[key] ?? (key === 'RECONSTRUCTION_MAX_REQUEST_CENTS' ? '200' : undefined) : undefined });
 
 if (!(await server.db.query('select id from scene_private.projects limit 1')).rows.length) {
@@ -43,8 +45,8 @@ if (!(await server.db.query('select id from scene_private.projects limit 1')).ro
 // Windows resolves npm through npm.cmd, and Node ≥18.20.2 / ≥20.12 / ≥24 refuse to spawn a .cmd
 // without a shell (EINVAL). The shell only wraps the one command below; every argument is plain.
 const windows = process.platform === 'win32';
-const frontend = spawn(windows ? 'npm.cmd' : 'npm', ['--prefix','frontend','run','dev','--','--hostname','127.0.0.1','--port',String(webPort)], {
-  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1'},
+const frontend = spawn(windows ? 'npm.cmd' : 'npm', ['--prefix','frontend','run','dev','--','--hostname',publicHost === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0','--port',String(webPort)], {
+  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1',SCENDANCE_DEV_PUBLIC_ORIGIN:origins[0]},
 });
 let stopping = false, working = false;
 const worker = setInterval(async () => {
