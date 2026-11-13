@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { AuthCard } from '@/components/intro/auth-card';
-import { DoorOpen, FolderOpen, Images, MoreHorizontal, RefreshCw, UserRound, UsersRound, X } from '@/components/solid-icons';
+import { DoorOpen, FolderOpen, Images, MoreHorizontal, RefreshCw, Settings, UserRound, UsersRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -26,9 +26,10 @@ import { SceneThumb } from './scene-thumb';
 import {OriginalSceneReviewPanel,type OriginalMoveConfirmation} from './original-scene-review-panel';
 import type {LocalWriteCapability} from '@/lib/local-write-lease';
 import type {ActivitySessionToken} from '../lib/activity-session-epoch';
-import type { RoomLayout } from '../lib/types';
+import type { DisplayUnit, RoomLayout } from '../lib/types';
+import { formatLength } from '../lib/display-units';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string } }
+interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: { lengthUnit: DisplayUnit; showMeasurements: boolean }; onPreferenceChange?: (patch: { lengthUnit?: DisplayUnit; showMeasurements?: boolean }) => void }
 
 /** 点在对话框边框外（背后遮罩）才关。面板里的点击、按钮都不关。 */
 export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): void {
@@ -37,6 +38,8 @@ export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): voi
     && event.clientY >= box.top && event.clientY <= box.bottom;
   if (!inside) event.currentTarget.close();
 }
+
+type AccountSection = 'projects' | 'assets' | 'team' | 'settings';
 
 const PREVIEW_LIMIT = 12;
 const ORIGINAL_SCENE_SUBMISSION_ENABLED:boolean=false;
@@ -63,9 +66,11 @@ function updatedLabel(value: string | undefined): string {
   return `${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)} 更新`;
 }
 
-export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote }: Props): JSX.Element {
+export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
+  const preferences = preferencesProp ?? { lengthUnit: 'm' as DisplayUnit, showMeasurements: true };
+  const onPreferenceChange = onPreferenceChangeProp ?? (() => undefined);
   const cloud = useBackendSession(controller);
   const requestedProjectId = useSearchParams()?.get('project');
   const router = useRouter();
@@ -85,7 +90,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const openedRequest = useRef('');
   const actionPending = useRef(false);
   const projectedCreation=useRef<{base:RoomLayout;projectId:string}|null>(null);
-  const [section, setSection] = useState('projects');
+  const [section, setSection] = useState<AccountSection>('projects');
   // 成员页要取云端团队数据：第一次点开才挂载，之后一直留着，避免反复打列表。
   const [teamMounted, setTeamMounted] = useState(false);
   const [query, setQuery] = useState('');
@@ -197,7 +202,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
     openedOpenRequest.current = openRequest.serial;
-    setSection(openRequest.section);
+    setSection(openRequest.section as AccountSection);
     if (!dialog.current?.open) { setAccountOpen(true); dialog.current?.showModal(); }
   }, [openRequest]);
   useEffect(() => {
@@ -620,6 +625,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       </div>
       {teamNav}
       {cloud.user && <nav className="sc-account-side-links" aria-label="账户分区">
+        <button type="button" aria-label="设置" aria-pressed={section === 'settings'} onClick={() => setSection('settings')}><Settings size={14} aria-hidden="true"/>设置</button>
         <button type="button" aria-label="物料" aria-pressed={section === 'assets'} onClick={() => setSection('assets')}><Images size={14} aria-hidden="true"/>物料</button>
         <button type="button" aria-label="团队与权限" aria-pressed={section === 'team'} onClick={() => setSection('team')}><UsersRound size={14} aria-hidden="true"/>团队与权限</button>
       </nav>}
@@ -627,7 +633,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       <div className="sc-account-main">
       {section !== 'projects' && <nav className="sc-account-subnav" aria-label="账户导航">
         <button type="button" aria-label="我的项目" onClick={() => setSection('projects')}>← 项目</button>
-        <span className="sc-account-subnav-current">{section === 'assets' ? '物料' : '团队与权限'}</span>
+        <span className="sc-account-subnav-current">{section === 'assets' ? '物料' : section === 'team' ? '团队与权限' : section === 'settings' ? '设置' : ''}</span>
       </nav>}
       <div className="sc-account-body">
       <section hidden={section !== 'projects'} aria-label="我的项目">
@@ -778,6 +784,36 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       <section hidden={section !== 'assets'} aria-label="账户物料"><div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>物料</h3><InfoTip label="物料说明"><strong>与物料面板同一套分类</strong><span>我的生成 / 收藏 / 库，和画布里的物料面板保持一致。</span></InfoTip></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录后查看物料。</p>}</section>
       <section hidden={section !== 'team'} aria-label="团队与权限">
         {teamMounted && <AccountTeamPanel key={`team-${userId ?? 'local'}`} controller={controller}/>}
+      </section>
+      <section hidden={section !== 'settings'} aria-label="设置">
+        <div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>设置</h3></div></div>
+        <div className="sc-settings-prefs">
+          <div className="sc-settings-group">
+            <div className="sc-settings-row">
+              <div className="sc-settings-row-main"><strong>显示单位</strong><small>标注、属性面板与导出清单的尺寸读数跟随；场景数据仍按米存储。</small></div>
+              <div className="sc-settings-row-actions">
+                <div className="sc-unit-seg" role="group" aria-label="显示单位">
+                  <button type="button" aria-pressed={preferences.lengthUnit === 'm'} onClick={() => onPreferenceChange({ lengthUnit: 'm' })}>米 · m</button>
+                  <button type="button" aria-pressed={preferences.lengthUnit === 'ft'} onClick={() => onPreferenceChange({ lengthUnit: 'ft' })}>英尺 · ft</button>
+                </div>
+              </div>
+            </div>
+            <div className="sc-settings-row">
+              <div className="sc-settings-row-main"><strong>换算示例</strong><small>{formatLength(12, 'm')} ≈ {formatLength(12, 'ft')}（英尺保留一位小数）。</small></div>
+            </div>
+          </div>
+          <div className="sc-settings-group">
+            <div className="sc-settings-row">
+              <div className="sc-settings-row-main"><strong>尺寸标注</strong><small>在画布上显示场地与物件的尺寸读数。</small></div>
+              <div className="sc-settings-row-actions">
+                <label className="sc-switch">
+                  <input type="checkbox" checked={preferences.showMeasurements} onChange={event => onPreferenceChange({ showMeasurements: event.target.checked })} />
+                  <i></i>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
       {/* 项目相关提示只挂在项目页，别跟到团队 / 物料里吵。 */}
       {section === 'projects' && conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}

@@ -26,6 +26,9 @@ export type PlanAnnotationKind = PlanAnnotation['kind'];
 /** 形状四类（note 是文本，不走形状草稿）。 */
 export type PlanShapeKind = Exclude<PlanAnnotationKind, 'note'>;
 export const PLAN_SHAPE_KINDS: readonly PlanShapeKind[] = ['rect', 'circle', 'triangle', 'line'];
+/** 形状描边档位：thin 细线 / thick 粗线；旧数据缺省按细线。 */
+export type PlanAnnotationStrokeWidth = NonNullable<PlanAnnotation['strokeWidth']>;
+export const PLAN_ANNOTATION_STROKE_WIDTHS: readonly PlanAnnotationStrokeWidth[] = ['thin', 'thick'];
 
 /** 形状草稿收齐所需点数：rect/circle/line 2 点、triangle 3 点（与契约口径同源）。 */
 export function planShapeDraftTarget(kind: PlanShapeKind): number {
@@ -115,6 +118,7 @@ export interface BuildAnnotationInput {
   radiusM?: number;
   text?: string;
   color?: string;
+  strokeWidth?: PlanAnnotationStrokeWidth;
   notes?: string;
   id?: string;
 }
@@ -132,6 +136,7 @@ export function buildAnnotation(input: BuildAnnotationInput): PlanEditResult<Pla
     notes: input.notes ?? '',
     ...(input.kind === 'circle' ? { radiusM: input.radiusM } : {}),
     ...(input.color ? { color: input.color } : {}),
+    ...(input.strokeWidth ? { strokeWidth: input.strokeWidth } : {}),
   };
   return { ok: true, value: annotation };
 }

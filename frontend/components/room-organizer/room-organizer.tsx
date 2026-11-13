@@ -61,7 +61,6 @@ import {
   type LeftStackPanelId,
   type LeftStackState,
 } from './lib/left-stack';
-import type { WorkspaceWriteSession } from '@/lib/workspace-write-session';
 import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
@@ -244,7 +243,8 @@ import { generateSuggestions, type ActivitySuggestion } from '@/lib/suggestions'
 
 const WorkbenchCaptureGuide = dynamic(() => import('@/components/capture-guide/capture-guide').then(module => module.CaptureGuide));
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
-import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import type { CatalogItem, DisplayUnit, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import { readLocalPreferences, writeLocalPreferences, type LocalPreferences } from './lib/account-preferences';
 import type { SplatPaint } from './three/splat-preview';
 
 function zoomCamera(
@@ -288,12 +288,8 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, isolatedWriteSession, outdoorProjectId: outdoorProjectIdProp }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession; outdoorProjectId?: string | null } = {}): JSX.Element {
-  const isolatedRef=useRef<{session:WorkspaceWriteSession;revoked:boolean}|null>(null);
-  if(!isolatedRef.current&&isolatedWriteSession)isolatedRef.current={session:isolatedWriteSession,revoked:false};
-  else if(isolatedRef.current&&isolatedWriteSession!==isolatedRef.current.session)isolatedRef.current.revoked=true;
-  const assertIsolatedSession=isolatedRef.current?()=>{const current=isolatedRef.current!;if(current.revoked)throw new Error('本机编辑会话已变化。');current.session.assertCapability(localWriteCapability);}:undefined;
-  const workspaceWriteGuards = useWorkspaceWriteGuards(localWriteCapability,assertIsolatedSession);
+export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, outdoorProjectId: outdoorProjectIdProp }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; outdoorProjectId?: string | null } = {}): JSX.Element {
+  const workspaceWriteGuards = useWorkspaceWriteGuards(localWriteCapability);
   const dropActive = useRef(isActive);
   useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
@@ -405,7 +401,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
   const activeStoreyHeight = storeyHeight(activeFloor);
   const { recent: recentColors, pushColor } = useRecentColors();
-  const [view, setView] = useState<ViewSettings>(INITIAL_VIEW_SETTINGS);
+  const [view, setView] = useState<ViewSettings>(() => {
+    const local = readLocalPreferences(undefined);
+    return { ...INITIAL_VIEW_SETTINGS, lengthUnit: local.unit, showMeasurements: local.showMeasurements };
+  });
   const referenceImage = useReferenceImage(layout);
   const [referenceOpenRequest, setReferenceOpenRequest] = useState(0);
   const referenceEntryRef = useRef<HTMLButtonElement>(null);
@@ -1750,7 +1749,7 @@ useEffect(() => {
     return () => window.clearTimeout(timer);
   }, [outdoorPlan, outdoor3dWarm]);
   // GeoGround 瓦片地面（2026-11-12）与户外 2D 同一份图源偏好；署名随源切换。
-  const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as const);
+  const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
   // 左下「比例尺+指北针+署名」簇的 DOM refs（与户外 3D 同款组件，下方 effect 驱动更新）。
   const geoScaleLabelRef = useRef<HTMLSpanElement | null>(null);
   const geoScaleBarRef = useRef<HTMLDivElement | null>(null);
@@ -3234,6 +3233,49 @@ useEffect(() => {
     setView((previous) => ({ ...previous, [key]: !previous[key] }));
   }, []);
 
+  // 偏好变更：先落本机兜底，登录态再异步回写账号；回写失败不挡画布。
+  const updatePreference = useCallback((patch: { lengthUnit?: DisplayUnit; showMeasurements?: boolean }) => {
+    const next: ViewSettings = { ...view, ...patch };
+    setView(next);
+    const snapshot = controller.getSnapshot();
+    writeLocalPreferences(snapshot.user?.id ?? null, { unit: next.lengthUnit, showMeasurements: next.showMeasurements });
+    if (snapshot.user && !snapshot.user.is_anonymous) {
+      controller.savePreferences({ unit: next.lengthUnit, showMeasurements: next.showMeasurements }).catch(() => {
+        /* 云端回写失败时保留本机兜底，不打断画布操作。 */
+      });
+    }
+  }, [view, controller]);
+
+  // 登录态拉取账号偏好并合并回本机；登出回到本机兜底。
+  const preferencesSyncedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const syncFromRemote = async () => {
+      const snapshot = controller.getSnapshot();
+      const userId = snapshot.user?.id ?? null;
+      if (preferencesSyncedFor.current === userId) return;
+      preferencesSyncedFor.current = userId;
+      if (!snapshot.user || snapshot.user.is_anonymous) {
+        const local = readLocalPreferences(userId);
+        setView(previous => ({ ...previous, lengthUnit: local.unit, showMeasurements: local.showMeasurements }));
+        return;
+      }
+      try {
+        const remote = await controller.getPreferences();
+        const local: LocalPreferences = {
+          unit: remote.unit === 'ft' ? 'ft' : 'm',
+          showMeasurements: typeof remote.showMeasurements === 'boolean' ? remote.showMeasurements : true,
+        };
+        writeLocalPreferences(userId, local);
+        setView(previous => ({ ...previous, lengthUnit: local.unit, showMeasurements: local.showMeasurements }));
+      } catch {
+        /* 云端不可用，保留本机兜底。 */
+      }
+    };
+    const stop = controller.subscribe(() => { void syncFromRemote(); });
+    void syncFromRemote();
+    return () => { stop(); };
+  }, [controller]);
+
   // Furniture clipboard (#153): copy normalizes the selection around its
   // centroid; paste rebuilds it on the ACTIVE floor (cross-floor paste is the
   // point), settled/clamped, unlocked, and selected — one undo entry.
@@ -4183,7 +4225,7 @@ useEffect(() => {
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={isolatedRef.current ? () => { assertIsolatedSession?.(); isolatedRef.current!.session.assertSessionWrite(); } : workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
+      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || !sessionToken) return;
         briefCaptureEpoch.current++;
         const prior=agentBriefRef.current;
@@ -4367,7 +4409,7 @@ useEffect(() => {
               </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
-              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements }} onPreferenceChange={updatePreference} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}
@@ -4556,6 +4598,7 @@ useEffect(() => {
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
               view={outdoorView}
               onViewChange={setOutdoorView}
+              lengthUnit={view.lengthUnit}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
               dormant={!outdoor2DOpen}
               // 2026-11-12「3D 的时候也要可编辑」：接管态把右轨三张工具卡的出镜宿主交给画布，
@@ -4935,7 +4978,7 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

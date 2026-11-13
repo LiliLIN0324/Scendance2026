@@ -2117,7 +2117,7 @@ describe('T-UI visible interaction', () => {
     expect(within(brief).queryByRole('textbox')).toBeNull();
     // 简报里能点的只有「这块场地从哪来」这一组。
     const actions = within(brief).getAllByRole('button');
-    expect(actions.map(button => visibleText(button.textContent))).toEqual(['地图圈画', '空白空间 · 12 × 8 m']);
+    expect(actions.map(button => visibleText(button.textContent))).toEqual(['地图圈画']);
   });
 
   it('offers the map next to the drawings and opens it over the canvas', () => {
@@ -2128,7 +2128,7 @@ describe('T-UI visible interaction', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 量出同一块场地的两条路并列，不再一个在左栏一个在左轨。
-    expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['图纸与照片', '地图圈画', '空白空间 · 12 × 8 m']);
+    expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['图纸与照片', '地图圈画']);
     expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
     fireEvent.click(within(ways).getByRole('button', { name: /地图圈画/ }));
     const overlay = screen.getByRole('dialog', { name: '地图选址' });
@@ -3716,35 +3716,6 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(document.body.textContent).not.toContain('预览先作废');
     expect(within(screen.getByLabelText('活动简报')).getByText(/15 × 10 m/)).toBeTruthy();
-  });
-
-  it('starts a blank 12 × 8 venue from the brief link in one click', async () => {
-    const onApply = vi.fn();
-    render(<LocalHarness initial={makeLayout({ floors: [makeFloor({ items: [] })] })} onApply={onApply} brief/>);
-    const brief = screen.getByLabelText('活动简报');
-    expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
-
-    fireEvent.click(within(brief).getByRole('button', { name: /空白空间 · 12 × 8 m/ }));
-    expect(await screen.findByText(/空白空间立好了：12 × 8 m/)).toBeTruthy();
-    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
-    const applied = onApply.mock.calls[0]![0] as RoomLayout;
-    expect(applied.width).toBe(12);
-    expect(applied.height).toBe(8);
-    expect(applied.scenePreset).toBeUndefined();
-    expect(applied.backendSceneV2?.structure.walls).toHaveLength(4);
-    expect(within(brief).getByText(/12 × 8 m/)).toBeTruthy();
-    expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
-  });
-
-  it('refuses to replace existing locked items and zones with a blank venue', async () => {
-    const onApply = vi.fn(), initial = seatLayout({ locked: true });
-    initial.floors[0]!.zones = [{ id: 'rest', name: '休息区', x: -2, z: -2, w: 1, d: 1, color: '#4A7C59' }];
-    const before = structuredClone(initial);
-    render(<LocalHarness initial={initial} onApply={onApply} brief/>);
-    fireEvent.click(within(screen.getByLabelText('活动简报')).getByRole('button', { name: /空白空间 · 12 × 8 m/ }));
-    expect(await screen.findByText(/2 件物料、1 个区域/)).toBeTruthy();
-    expect(onApply).not.toHaveBeenCalled();
-    expect(initial).toEqual(before);
   });
 
   it('still previews and asks for confirmation when the sentence also names people', async () => {

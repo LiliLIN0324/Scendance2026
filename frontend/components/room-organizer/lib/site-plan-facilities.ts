@@ -115,6 +115,59 @@ export function facilityContainsPoint(
   return Math.abs(u) <= facility.size.width / 2 + eps && Math.abs(v) <= facility.size.depth / 2 + eps;
 }
 
+/** 占地盒几何入参（结构与 PlanFacility 的占地字段一致）。 */
+export interface FacilityFootprintBox {
+  position: PlanPoint;
+  rotationDeg: number;
+  size: { width: number; depth: number };
+}
+
+/** 旋转矩形的局部边方向单位向量（u 沿宽、v 沿深）。 */
+function footprintAxes(rotationDeg: number): readonly PlanPoint[] {
+  const theta = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  return [
+    { x: cos, y: sin },
+    { x: -sin, y: cos },
+  ];
+}
+
+/** 占地盒在给定单位轴上的投影区间；marginM 沿局部 u/v 各外扩该米数。 */
+function projectFootprint(box: FacilityFootprintBox, marginM: number, axis: PlanPoint): { min: number; max: number } {
+  const hw = box.size.width / 2 + marginM;
+  const hd = box.size.depth / 2 + marginM;
+  const [u, v] = footprintAxes(box.rotationDeg);
+  let min = Infinity;
+  let max = -Infinity;
+  for (const [lu, lv] of [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]] as const) {
+    const wx = box.position.x + lu * u.x + lv * v.x;
+    const wy = box.position.y + lu * u.y + lv * v.y;
+    const d = wx * axis.x + wy * axis.y;
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  return { min, max };
+}
+
+/**
+ * 两个设施占地矩形是否相交（SAT 分离轴定理，覆盖任意旋转的凸矩形）。
+ * 替代旧的「角点/中心 probe 落入对方」点-矩形近似，避免十字重叠漏判、贴边误判。
+ * marginM > 0 时把盒 a 沿自身宽/深方向各外扩该米数，作为所需安全间距；0 为纯占地相交。
+ */
+export function facilitiesFootprintsIntersect(a: FacilityFootprintBox, b: FacilityFootprintBox, marginM = 0): boolean {
+  const ma = Math.max(0, marginM);
+  const eps = 1e-9;
+  const axes = [...footprintAxes(a.rotationDeg), ...footprintAxes(b.rotationDeg)];
+  for (const axis of axes) {
+    const pa = projectFootprint(a, ma, axis);
+    const pb = projectFootprint(b, 0, axis);
+    // 任一分离轴上投影不重叠即不相交；eps 与 facilityContainsPoint 同口径（含边界）。
+    if (pa.max < pb.min - eps || pb.max < pa.min - eps) return false;
+  }
+  return true;
+}
+
 /** 设施占地相对场地边界的问题清单；边界点/贴边不算越界（与分区同口径）。 */
 export function facilityPlacementIssues(
   footprint: readonly PlanPoint[],

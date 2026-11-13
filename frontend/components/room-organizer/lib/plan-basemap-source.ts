@@ -50,8 +50,11 @@ export function readPlanGroundSource(): PlanGroundSource {
   } catch {
     // 隐私模式 / 无 localStorage 时用缺省。
   }
-  cached = 'osm';
-  return 'osm';
+  // 缺省用高德街道：OSM/Carto 为 WGS-84 直连源，在国内网络下浏览器批量并发瓦片易被
+  // 限流挂起（首帧整批 inflight、底图空白）；高德瓦片是 GCJ-02 网格、与场地锚点同坐标系，
+  // 不需 key 且带 CORS 头（见 tdt-probe.ts）。用户仍可在底图面板切回其他源。
+  cached = 'amap-streets';
+  return 'amap-streets';
 }
 
 export function writePlanGroundSource(value: string | null | undefined): void {

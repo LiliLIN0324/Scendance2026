@@ -127,11 +127,11 @@ export const planRouteInputSchema = z.strictObject({
   notes: z.string().max(500).default(''),
 });
 
-export type PlanZoneInput = z.infer<typeof planZoneInputSchema>;
-export type PlanFacilityInput = z.infer<typeof planFacilityInputSchema>;
-export type PlanWorkerInput = z.infer<typeof planWorkerInputSchema>;
-export type PlanNodeInput = z.infer<typeof planNodeInputSchema>;
-export type PlanRouteInput = z.infer<typeof planRouteInputSchema>;
+export type PlanZoneInput = z.input<typeof planZoneInputSchema>;
+export type PlanFacilityInput = z.input<typeof planFacilityInputSchema>;
+export type PlanWorkerInput = z.input<typeof planWorkerInputSchema>;
+export type PlanNodeInput = z.input<typeof planNodeInputSchema>;
+export type PlanRouteInput = z.input<typeof planRouteInputSchema>;
 
 /* ---------------- 工作副本 ---------------- */
 

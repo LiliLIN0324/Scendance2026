@@ -1252,6 +1252,25 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
+/* Bingo 圆徽标：28px 与其他图标槽同尺寸；三态——待发空圆 / 待评数字 / 已回执勾形。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
+  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
+  box-sizing: border-box; border-radius: 50%;
+  border: 1.5px solid var(--wk-hair); background: var(--wk-paper);
+  color: var(--wk-ink-soft); font-size: 11px; font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
+  display: block; width: 13px; height: 13px;
+}
+.sc-bingo-badge[data-status="awaiting"] {
+  border-color: var(--warn); color: var(--warn);
+  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
+}
+.sc-bingo-badge[data-status="returned"] {
+  border-color: var(--err); color: var(--err);
+  box-shadow: 0 0 0 3px rgba(180, 68, 60, 0.22);
+}
 /* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }
 .sc-rail-avatar-tilt {
@@ -1682,11 +1701,6 @@ body {
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;
   padding: 4px; border-radius: var(--r-md); background: var(--wk-paper); border: 1px solid var(--wk-hair);
   box-shadow: var(--e1);
-}
-/* 户外交付簇挪到画布左下角（outdoor-canvas-actions.bl）后，发布/分享弹层改向上+右对齐，
-   否则按右轨语境向左弹会被画布左缘裁掉。 */
-.sc-workbench .sc-outdoor-actions-bl .sc-tool-pop {
-  right: auto; left: 0; top: auto; bottom: calc(100% + 8px);
 }
 /* 户外右上三张工具卡（测量 / 标注 / 属性，2026-11-12）：卡头与关闭钮的悬停/焦点态。
    重置写在类里而不是 inline all:unset —— inline all:unset 优先级高于类规则，会把 hover 背景一起压掉。 */

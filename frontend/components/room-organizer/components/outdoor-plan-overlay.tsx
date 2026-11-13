@@ -11,7 +11,7 @@
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -23,7 +23,7 @@ import { GuideBubble, useGuide } from '@/components/room-organizer/components/ou
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
 import { OutdoorDeliveryPanel } from '@/components/room-organizer/components/outdoor-delivery-panel';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
-import { writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
+import { readPlanGroundSource, writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
 import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
@@ -50,6 +50,7 @@ import {
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { DisplayUnit } from '../lib/types';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
 
 /** 图源循环顺序（右下图标钮弹出面板选图源）。 */
@@ -90,11 +91,6 @@ export interface OutdoorPlanOverlayProps {
   /** 2026-11-11 图层：活动层切换上报（3D 地面图层据此只镜像当前层；含初次载入的初始层）。 */
   onActiveLevelChange?: (levelId: string) => void;
   /**
-   * P4-c：交付簇里的「发布」槽位。发布卡片由 room-organizer 传进来（ShareMenu variant="canvas"），
-   * 卡片本体只实现一次——用户反馈「导出 分享 发布 应该是一起的」。
-   */
-  deliverySlot?: ReactNode;
-  /**
    * P2-g 反向播种：3D 已圈好的场地（`layout.backendVenue`）投影成的起步平面。
    * 只在**该槽位还没有户外草稿**时使用；有草稿时草稿优先（用户自己画过的东西不覆盖）。
    */
@@ -118,6 +114,8 @@ export interface OutdoorPlanOverlayProps {
    * 接管态由 room-organizer 提供（透传给画布，portal 出隐藏覆盖层）；2D 态不传。
    */
   inspectorHostId?: string;
+  /** 清单/读数显示单位；工程底稿仍存米。缺省米。 */
+  lengthUnit?: DisplayUnit;
   /**
    * V-5b/c（2026-11-13）：属性卡「模型」区的生成/上传入口外发（透传给 OutdoorPlanCanvas）。
    * room-organizer 侧接线：记 facility 链接 + 预填左栏物料生成框（仍须确认额度）；
@@ -158,19 +156,21 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onInspectorChange,
   onPlanChange,
   onActiveLevelChange,
-  deliverySlot,
   seedPlan,
   sceneObjects,
   view: controlledView,
   dormant = false,
   inspectorHostId,
-  controller, onViewChange,
+  lengthUnit = 'm',
+  controller,
+  onViewChange,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const plan3dApiRef = useRef<OutdoorPlan3DApi | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
-  const [source, setSource] = useState<CanvasBasemapSource>('osm');
+  // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
+  const [source, setSource] = useState<CanvasBasemapSource>(() => readPlanGroundSource());
   const [plan, setPlan] = useState<SitePlanData | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -405,7 +405,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
 
   const deliveryHandlers = {
     onExportPng: () => exportPlanPng(),
-    onExportCsv: () => { if (plan) downloadPlanCsv(plan, exportStem); },
+    onExportCsv: () => { if (plan) downloadPlanCsv(plan, exportStem, lengthUnit); },
     onExportGeoJson: () => { if (plan) downloadPlanGeoJson(plan, exportStem); },
     onPrintDeck: printDeck,
   };
@@ -514,22 +514,21 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           正在圈范围…
         </div>
       )}
-      {/* 2D/3D 切换改到左下角：右上角被工作台右侧圆钮和楼层芯片挡住，点不到。
-          bottom 56 避开画布左下角的比例尺盒（P2-i，占 bottom 10–48）；弹层全部向上翻
-          （ExportMenu menuPlacement + .sc-outdoor-actions-bl CSS 覆盖 ShareMenu 的 sc-tool-pop）。 */}
-      <div
-        data-testid="outdoor-canvas-actions"
-        className="sc-outdoor-actions-bl"
-        style={{ position: 'absolute', left: 148, bottom: 56, zIndex: 4, display: plan ? 'flex' : 'none', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}
-      >
-        {/* 轨上相机快捷钮：本轮先接当前视角出 PNG，视角 / 画质参数后定。 */}
+      {/* 右上角唯一交付入口：打开统一交付面板（分享 / 导出 / 发布都在面板内）。
+          左下只留 2D/3D 胶囊（由 room-organizer 独立挂载），本覆盖层不再放相机 / 分享快捷钮。 */}
+      {plan && (
         <button
           type="button"
-          data-testid="outdoor-camera-quick"
-          aria-label="相机快捷导出当前视角"
-          data-tip="快捷导出当前视角"
-          onClick={() => exportPlanPng()}
+          id="tool-outdoor-share"
+          data-testid="outdoor-share"
+          aria-label="分享与导出本方案"
+          data-tip="分享 / 导出方案"
+          onClick={() => setShareOpen(true)}
           style={{
+            position: 'absolute',
+            top: 16,
+            right: 72,
+            zIndex: 4,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -542,47 +541,16 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             cursor: 'pointer',
             boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
             fontFamily: 'inherit',
+            pointerEvents: 'auto',
           }}
         >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-            <circle cx="12" cy="13" r="4" />
+            <path d="M12 15V3" />
+            <path d="m7 8 5-5 5 5" />
+            <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
           </svg>
         </button>
-        <button
-          type="button"
-          id="tool-outdoor-share"
-          data-testid="outdoor-share"
-          aria-label="分享这张平面图"
-          data-tip="分享平面图"
-          onClick={() => setShareOpen(true)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            height: 34,
-            padding: '0 16px',
-            borderRadius: 999,
-            border: '1px solid transparent',
-            background: PLANNING_SURFACE.panelText,
-            color: '#ffffff',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(20, 20, 22, 0.16)',
-            fontFamily: 'inherit',
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 3h6v6" />
-            <path d="M10 14 21 3" />
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-          </svg>
-          分享
-        </button>
-        {/* P4-c：发布卡片由 room-organizer 传进来，和导出/分享同排同位置。 */}
-        {deliverySlot}
-      </div>
+      )}
       {/* 右下：底图选择（OnePlan 的 Select a map）+ 隐藏底图 + 重看引导。
           2026-11-11 用户指令：整簇往右挪（right 80→24），贴近画布右缘；
           只动右下簇，右上交付簇的 right:80 是给 3D 楼层切换芯片让位的，不动。 */}

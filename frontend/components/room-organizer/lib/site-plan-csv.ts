@@ -15,7 +15,8 @@ import {
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 import { buildPlanInventory, type PlanInventoryRow } from './site-plan-inventory';
-import { formatAreaM2, formatLengthM } from './site-plan-measure';
+import { formatArea, formatLength } from './display-units';
+import type { DisplayUnit } from './types';
 
 /** 14 字段表头（中文名对齐执行交接口径）。 */
 export const CSV_EXPORT_HEADERS = [
@@ -36,8 +37,14 @@ export function csvEscape(value: string): string {
   return value;
 }
 
-/** 每行导出为 14 列。坐标列保留 2 位小数；问题标记 ✓/空。 */
-function rowToCells(row: PlanInventoryRow, plan: SitePlanData): string[] {
+/** 表头随显示单位切换面积/长度文案；坐标列是 ENU 米制定位基准，始终保留 (m)。 */
+function headersFor(unit: DisplayUnit): readonly string[] {
+  if (unit === 'm') return CSV_EXPORT_HEADERS;
+  return CSV_EXPORT_HEADERS.map(h => h === '面积 (m²)' ? '面积 (ft²)' : h === '长度 (m)' ? '长度 (ft)' : h);
+}
+
+/** 每行导出为 14 列。坐标列保留 2 位小数（米制基准）；问题标记 ✓/空。 */
+function rowToCells(row: PlanInventoryRow, plan: SitePlanData, unit: DisplayUnit): string[] {
   const anchorLngLat = plan.anchor
     ? enuAnchorToLngLat(row.anchor, plan.anchor.lng, plan.anchor.lat)
     : { lng: '', lat: '' };
@@ -50,8 +57,8 @@ function rowToCells(row: PlanInventoryRow, plan: SitePlanData): string[] {
     csvEscape(row.metric),
     row.anchor.x.toFixed(2),
     row.anchor.y.toFixed(2),
-    detail.areaM2 ?? '',
-    detail.lengthM ?? '',
+    detail.areaM2 != null ? formatArea(detail.areaM2, unit) : '',
+    detail.lengthM != null ? formatLength(detail.lengthM, unit) : '',
     row.hasIssue ? '✓' : '',
     row.id,
     anchorLngLat.lng,
@@ -68,13 +75,13 @@ function kindLabel(kind: PlanInventoryRow['kind']): string {
   return labels[kind];
 }
 
-/** 各类型补充读数与备注（面积/长度按实体真实几何现算，不重复 metric 概括）。 */
-function entityDetail(row: PlanInventoryRow, plan: SitePlanData): { areaM2?: string; lengthM?: string; notes?: string } {
+/** 各类型补充读数与备注（面积/长度按实体真实几何现算，米制数值；展示格式化在行构造层按单位处理）。 */
+function entityDetail(row: PlanInventoryRow, plan: SitePlanData): { areaM2?: number; lengthM?: number; notes?: string } {
   switch (row.kind) {
     case 'zone': {
       const zone = plan.zones.find(z => z.id === row.id);
       if (!zone) return {};
-      return { areaM2: formatAreaM2(planRingAreaM2(zone.polygon)), notes: zone.notes };
+      return { areaM2: planRingAreaM2(zone.polygon), notes: zone.notes };
     }
     case 'facility': {
       const facility = plan.facilities.find(f => f.id === row.id);
@@ -84,7 +91,7 @@ function entityDetail(row: PlanInventoryRow, plan: SitePlanData): { areaM2?: str
     case 'route': {
       const route = plan.routes.find(r => r.id === row.id);
       if (!route) return {};
-      return { lengthM: formatLengthM(planRouteLengthM(route.points)), notes: route.notes };
+      return { lengthM: planRouteLengthM(route.points), notes: route.notes };
     }
     case 'node': {
       const node = plan.nodes.find(n => n.id === row.id);
@@ -116,21 +123,21 @@ function enuAnchorToLngLat(p: { x: number; y: number }, anchorLng: number, ancho
   };
 }
 
-/** 导出完整 CSV 文本（BOM + 表头 + 数据行，`\r\n` 行尾对齐 Excel）。 */
-export function buildPlanCsv(plan: SitePlanData): string {
+/** 导出完整 CSV 文本（BOM + 表头 + 数据行，`\r\n` 行尾对齐 Excel）。读数跟随显示单位，坐标与底稿仍存米。 */
+export function buildPlanCsv(plan: SitePlanData, unit: DisplayUnit = 'm'): string {
   const rows = buildPlanInventory(plan)
     .slice()
     .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name, 'zh-CN'));
   const lines = [
-    CSV_EXPORT_HEADERS.map(h => csvEscape(h)).join(','),
-    ...rows.map(row => rowToCells(row, plan).join(',')),
+    headersFor(unit).map(h => csvEscape(h)).join(','),
+    ...rows.map(row => rowToCells(row, plan, unit).join(',')),
   ];
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
 }
 
 /** 触发浏览器下载（Blob + a[download]）。文件名带日期与实体数，对账友好。 */
-export function downloadPlanCsv(plan: SitePlanData, filenameBase = 'site-plan'): string {
-  const csv = buildPlanCsv(plan);
+export function downloadPlanCsv(plan: SitePlanData, filenameBase = 'site-plan', unit: DisplayUnit = 'm'): string {
+  const csv = buildPlanCsv(plan, unit);
   const date = new Date().toISOString().slice(0, 10);
   const filename = `${filenameBase}-${date}.csv`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

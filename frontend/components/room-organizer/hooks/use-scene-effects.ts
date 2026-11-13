@@ -244,7 +244,7 @@ export function useSceneEffects({
     [outdoorPlan],
   );
   // 图源与户外 2D 画布同一份模块级偏好（覆盖层切图源时 writePlanGroundSource 会通知）。
-  const geoBasemapSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as const);
+  const geoBasemapSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
   const glbAssetsRevision = useGlbAssets(layout);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
 
@@ -1328,8 +1328,8 @@ export function useSceneEffects({
       clearRoomDimensions(scene);
       return;
     }
-    renderRoomDimensions(THREE, scene, layout.width, layout.height, activeFloorY);
-  }, [isReady, invalidate, threeModuleRef, sceneRef, view.showMeasurements, layout.width, layout.height, activeFloorY]);
+    renderRoomDimensions(THREE, scene, layout.width, layout.height, view.lengthUnit, activeFloorY);
+  }, [isReady, invalidate, threeModuleRef, sceneRef, view.showMeasurements, view.lengthUnit, layout.width, layout.height, activeFloorY]);
 
   // Item labels
   // 物件多时标签降级成圆点，只有选中/高亮的那几件继续显示名字。
@@ -1428,6 +1428,7 @@ export function useSceneEffects({
         selectedItemId,
         extraSelectedIds,
         showMeasurements: view.showMeasurements,
+        lengthUnit: view.lengthUnit,
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
         ...(referenceImage ? { referenceImage } : {}),

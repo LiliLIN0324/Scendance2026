@@ -194,6 +194,10 @@ export const PLANNING_ICONS = [
   'sliders-horizontal', // 工具与属性浮窗（选中物体属性）
   'chevron-up', // 浮窗收起
   'chevron-down', // 浮窗展开
+  'square', // 标注形状 · 矩形
+  'circle', // 标注形状 · 圆形
+  'triangle-shape', // 标注形状 · 三角形（区别于 triangle-alert 警示）
+  'minus', // 标注形状 · 线段
 ] as const;
 
 export type PlanningIconName = (typeof PLANNING_ICONS)[number];

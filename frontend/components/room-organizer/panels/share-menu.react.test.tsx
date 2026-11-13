@@ -118,6 +118,11 @@ describe('项目大纲', () => {
     expect(outline.zones).toEqual(['签到区']);
     expect(outline.variants).toEqual([{ name: '方案 A', active: true }, { name: '方案 B', active: false }]);
   });
+
+  it('converts the outline size to feet when the display unit is ft', () => {
+    const outline = planOutline({ ...sampleLayout(), width: 12.5, height: 6 }, 'ft');
+    expect(outline.size).toBe('41.0 × 19.7 ft');
+  });
 });
 
 function sampleLayout(): RoomLayout {

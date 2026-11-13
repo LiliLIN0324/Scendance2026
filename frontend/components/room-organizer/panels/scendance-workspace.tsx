@@ -225,7 +225,6 @@ interface ViewToolsProps {
   environmentView?: SplatDisplayMode;
   environmentViewEnabled?: boolean;
   onEnvironmentViewChange?(mode: SplatDisplayMode): void;
-  onApplyPreset(preset: CameraPreset): void;
   onZoom(direction: '+' | '-'): void;
   /**
    * Exports the current view as a PNG. In 3D the chosen preset frame and
@@ -297,8 +296,8 @@ const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }
   { label: '夜', hour: 21, title: '夜晚' },
 ];
 /**
- * 三个机位是同一层切换，所以右轨只放一颗钮：图标就是当前机位，点一下换下一个。
- * 顺序按「先看整体、再看平面、最后看立面」排，初次点开落到俯视这种最常用的检查机位。
+ * 成图可选的固定机位：顺序按「先看整体、再看平面、最后看立面」排。
+ * 只用于导出效果图的视角选择与机位册，右轨不再放轮换按钮。
  */
 const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string; symbol: string }> = [
   { id: 'iso', label: '整体', symbol: 'explore' },
@@ -326,10 +325,6 @@ function FloorTriangle({ direction }: { direction: 'up' | 'down' }): JSX.Element
     : 'M12 20.8c2.6 0 5.2-4.5 7.1-8.4 1.8-3.6.2-6.2-3.5-6.2H8.4c-3.7 0-5.3 2.6-3.5 6.2 1.9 3.9 4.5 8.4 7.1 8.4Z';
   return <svg aria-hidden="true" className={`sc-floor-triangle is-${direction}`} viewBox="0 0 24 24" focusable="false"><path d={path}/></svg>;
 }
-function presetAt(preset: CameraPreset) {
-  const entry = ANGLE_PRESETS.find(candidate => candidate.id === preset) ?? ANGLE_PRESETS[0];
-  return { current: entry, next: ANGLE_PRESETS[(ANGLE_PRESETS.indexOf(entry) + 1) % ANGLE_PRESETS.length] };
-}
 const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string; symbol: string }> = [
   { id: 'current', label: '跟随当前', symbol: 'photo_camera' },
   ...ANGLE_PRESETS,
@@ -342,7 +337,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -352,7 +347,6 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
   // 这里只剩纯室内场景的平面/立体兜底切换。
   const showing3D = !view.view2D;
-  const [preset, setPreset] = useState<CameraPreset>('iso');
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [lightingOpen, setLightingOpen] = useState(false);
@@ -527,7 +521,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   const mapTypeMenuRef = useRef<HTMLDivElement>(null);
   // 2026-11-12 用户指令：GeoGround 态补回「地图切换」——主 3D 瓦片图源与户外 2D 同一份偏好联动。
-  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as (typeof PLAN_GROUND_SOURCES)[number]);
+  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as (typeof PLAN_GROUND_SOURCES)[number]);
   const [groundSourceOpen, setGroundSourceOpen] = useState(false);
   const groundSourceMenuRef = useRef<HTMLDivElement>(null);
   const selectMenuRef = useRef<HTMLDivElement>(null);
@@ -537,13 +531,6 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const canvasSelectOn = outdoor != null ? outdoorSelectOn : view.selectMode;
   const selectActive = canvasSelectOn && (outdoor != null || (!view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode));
   const canvasToolTip = `画布工具：${outdoor != null ? (outdoorSelectOn ? '选择设施' : '抓手浏览') : view.selectMode ? '选择物体' : '抓手浏览'}中 · 点击切换（H 抓手 / S 选择）`;
-  const { current: angleNow, next: angleNext } = presetAt(preset);
-  const choosePreset = (next: CameraPreset) => {
-    setView(current => ({ ...current, view2D: false, walkthroughMode: false }));
-    onApplyPreset(next);
-    setPreset(next);
-  };
-  const cyclePreset = () => choosePreset(angleNext.id);
   const addFloorBlocked = !!layout.backendSceneV2 && activeFloorIndex >= layout.floors.length - 1;
   const floorBlockMessage = '当前结构场景暂不支持新增、删除或调整楼层。';
   const changeVisibleFloor = (delta: -1 | 1) => {
@@ -695,8 +682,10 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
           </button>
         </div>
       </div>
-      {publishHidden ? null : <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} openRequest={shareOpenRequest} closeSignal={shareClose}/>}
-      <span className="sc-tool-sep" aria-hidden="true"/>
+      {!(publishHidden || outdoorEditing) && (<>
+        <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/>
+        <span className="sc-tool-sep" aria-hidden="true"/>
+      </>)}
       {sceneMoveEnabled && <button type="button" id="tool-move-scene" data-tip={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '移动整体场景 · 坐标轴 · 再点切无轴' : '移动整体场景 · 无轴 · 再点完成'} aria-label={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '切换到无轴移动' : '完成移动整体场景'} aria-pressed={sceneMoveActive} className={sceneMoveActive ? 'is-active' : ''} onClick={() => onSceneMoveModeChange?.(sceneMoveMode === 'off' ? 'gizmo' : sceneMoveMode === 'gizmo' ? 'numeric' : 'off')}>
         <MoveSceneIcon />
       </button>}
@@ -751,12 +740,6 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       <button type="button" id="tool-walk" aria-label={view.walkthroughMode ? '退出漫游' : '第一人称漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
         <MaterialSymbol name="footprint" />
         <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称漫游'}</span>
-      </button>
-      <button type="button" id="tool-preset" data-tip={`视角：${angleNow.label} · 点一下切到${angleNext.label}`} aria-label={`视角切换：当前${angleNow.label}，点击切到${angleNext.label}`} onClick={cyclePreset}>
-        <MaterialSymbol name={angleNow.symbol} />
-      </button>
-      <button type="button" id="tool-dims" data-tip="尺寸（单位 m）" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
-        <MaterialSymbol name="straighten" />
       </button>
       <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
         <GridSnapIcon active={view.snapToGrid} />
@@ -846,7 +829,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={outdoorEditing ? false : view.view2D} onClick={() => (outdoorEditing ? outdoor!.zoomBy(1) : onZoom('+'))}>
         <MaterialSymbol name="iconpark_zoom_in_solid" />
       </button>
-      {onExportImage && <div className="sc-tool-menu" ref={exportMenuRef}>
+      {onExportImage && !outdoorEditing && <div className="sc-tool-menu" ref={exportMenuRef}>
         <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); setMapTypeOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <MaterialSymbol name="photo_camera" />
         </button>
