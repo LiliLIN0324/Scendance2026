@@ -15,7 +15,18 @@ const delayMs=rawDelay===undefined?5000:Number(rawDelay);
 if(!Number.isSafeInteger(delayMs)||delayMs<0||delayMs>130000)throw new Error('LOCAL_BRIEF_STUB_DELAY_MS 须为 0 至 130000 的整数。');
 const stubModel=createLocalAgentModel({briefMode:(rawMode??'valid') as 'valid'|'invalid'|'slow',delayMs});
 
-const server = await startLocalServer(54329, stubModel, {fixtureKind:'agent-model-stub'});
+// 前端 dev 独立起在 loopback 端口（默认 3210），桩必须把该来源加入 CORS 白名单，
+// 否则浏览器登录被跨域拦截（NetworkError）；保留历史默认端口兼容既有集成用法。
+const webPort=Number(process.env.SCENDANCE_DEV_WEB_PORT ?? 3210);
+const origins=[
+  `http://127.0.0.1:${webPort}`,
+  `http://localhost:${webPort}`,
+  'http://127.0.0.1:3018',
+  'http://localhost:3018',
+  'http://localhost:3000',
+];
+
+const server = await startLocalServer(54329, stubModel, {fixtureKind:'agent-model-stub', origins});
 await server.rpc(owner, 'projects.create', { studioId: studio, name: '智能建造联调项目', scene: scene() });
 console.log('LOCAL AGENT FIXTURE: real API + migrated PGlite + stub model. Data resets on exit.');
 console.log(`Local brief stub mode: ${rawMode??'valid'} (no real provider)`);
