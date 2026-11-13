@@ -1,0 +1,4 @@
+# bench runtime artifacts + snapshots (regenerate on demand; never commit)
+raw/
+results.json
+catalog.json
