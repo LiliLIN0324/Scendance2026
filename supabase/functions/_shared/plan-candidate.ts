@@ -106,6 +106,7 @@ export const planWorkerInputSchema = z.strictObject({
   position: planPointInput,
   zoneId: uuid.optional(),
   color: colorOptional,
+  gender: z.enum(['male', 'female']).optional(),
   notes: z.string().max(500).default(''),
 });
 
@@ -274,6 +275,7 @@ export function addPlanWorkers(draft: SitePlanData, inputs: PlanWorkerInput[], g
       id, role: input.role, count: input.count, position: input.position,
       ...(input.zoneId !== undefined ? { zoneId: input.zoneId } : {}),
       ...(input.color !== undefined ? { color: input.color } : {}),
+      ...(input.gender !== undefined ? { gender: input.gender } : {}),
       notes: input.notes,
     }));
     added.workerIds.push(id);

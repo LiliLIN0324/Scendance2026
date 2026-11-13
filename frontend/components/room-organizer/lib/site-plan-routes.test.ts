@@ -162,6 +162,16 @@ describe('site-plan workers (H2-d)', () => {
     expect(emptyRole.ok).toBe(false);
   });
 
+  it('stores gender on labor people and drops it on 自定义点', () => {
+    const person = buildWorker({ role: '经理', count: 1, position: { x: 30, y: 30 }, gender: 'female' }, BOUNDARY, ZONES);
+    expect(person.ok).toBe(true);
+    if (person.ok) expect(person.value.gender).toBe('female');
+
+    const pin = buildWorker({ role: '自定义点', count: 1, position: { x: 30, y: 30 }, gender: 'female' }, BOUNDARY, ZONES);
+    expect(pin.ok).toBe(true);
+    if (pin.ok) expect(pin.value.gender).toBeUndefined();
+  });
+
   it('infers the containing zone by point-in-ring', () => {
     expect(inferWorkerZoneId({ x: 30, y: 30 }, ZONES)).toBe(ZONES[0].id);
     expect(inferWorkerZoneId({ x: 20, y: 90 }, ZONES)).toBe(ZONES[1].id);

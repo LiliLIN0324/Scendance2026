@@ -27,6 +27,8 @@ export const WALK_ROLES: readonly WalkRole[] = [
   { assetId: '7a9f1e21-8c34-4d51-a004-b00000000004', name: '明女', image: '/assets/avatars/walk-ming-f.jpg', walkable: true },
   { assetId: '7a9f1e21-8c34-4d51-a005-b00000000005', name: '明男', image: '/assets/avatars/walk-ming-m.jpg', walkable: true },
   { assetId: '7a9f1e21-8c34-4d51-a006-b00000000006', name: '宋男', image: '/assets/avatars/walk-song-m.jpg', walkable: true },
+  // 下列五条是制服漫游的占位卡片（people05 尚未真正出模），不要当成已入库 Aholo。
+  // 劳动力 8 岗 × 男女的预留槽在 labor-gender.ts，出模验收前 ready=false。
   { assetId: '7a9f1e21-8c34-4d51-a007-b00000000007', name: '保安', image: '/assets/avatars/walk-security.jpg', walkable: true, crowdType: 'security' },
   { assetId: '7a9f1e21-8c34-4d51-a008-b00000000008', name: '警察', image: '/assets/avatars/walk-police.jpg', walkable: true, crowdType: 'police' },
   { assetId: '7a9f1e21-8c34-4d51-a009-b00000000009', name: '志愿者', image: '/assets/avatars/walk-volunteer.jpg', walkable: true, crowdType: 'volunteer' },

@@ -37,6 +37,14 @@ export const LABOR_ROLES = [
   '志愿者',
 ] as const;
 
+/** 劳动力第一项：自定义点是落点工具，不是小人，没有性别、也不出人物模型。 */
+export const CUSTOM_POINT_ROLE = '自定义点' as const;
+export type LaborRole = (typeof LABOR_ROLES)[number];
+export type LaborPersonRole = Exclude<LaborRole, typeof CUSTOM_POINT_ROLE>;
+export const LABOR_PERSON_ROLES = LABOR_ROLES.filter(
+  (role): role is LaborPersonRole => role !== CUSTOM_POINT_ROLE,
+);
+
 /** 第二段：基础设施 17 类，顺序按用户给的原文。 */
 export const INFRA_ROW_LABEL = '基础设施';
 export const INFRA_CATEGORY_ORDER = [

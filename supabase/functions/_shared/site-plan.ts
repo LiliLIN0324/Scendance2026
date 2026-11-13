@@ -177,6 +177,8 @@ export const planNodeSchema = z.strictObject({
 export type PlanNode = z.infer<typeof planNodeSchema>;
 
 /** 人员点位：岗位、人数、颜色点位，按区汇总走 zoneId（可选）。 */
+export const planWorkerGenders = ['male', 'female'] as const;
+export type PlanWorkerGender = (typeof planWorkerGenders)[number];
 export const planWorkerSchema = z.strictObject({
   id: z.uuid(),
   allocationKey: z.string().max(500).optional(),
@@ -188,6 +190,12 @@ export const planWorkerSchema = z.strictObject({
   position: planPointSchema,
   zoneId: z.uuid().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
+  /**
+   * 劳动力岗位的性别属性（可选）：男 male / 女 female。
+   * 旧快照不带该字段照常解析；解析层缺省按 male，不改写旧数据。
+   * 「自定义点」不是小人，不应写入该字段。
+   */
+  gender: z.enum(planWorkerGenders).optional(),
   /** 所属图层（可选）：缺省归第一层。 */
   levelId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
