@@ -64,6 +64,15 @@ describe('只读活动聊天',()=>{
    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(value);const result=await answerAssistantChat({...input,enabled:true,env,fetcher});expect(result).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();
   }
  });
+ it.each([
+  {tool_calls:[{type:'function',function:{name:'write_scene',arguments:'{}'}}],function_call:null},
+  {tool_calls:null,function_call:{name:'write_scene',arguments:'{}'}},
+  {tool_calls:null,function_call:{}},
+  {tool_calls:'malformed',function_call:null},
+ ])('rejects real or malformed tool metadata even with a stop text answer: %j',async metadata=>{
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json({choices:[{finish_reason:'stop',message:{content:'不应执行工具。',...metadata}}]}));
+  expect(await answerAssistantChat({...input,enabled:true,env,fetcher})).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();
+ });
  it('times out without retry even if the provider ignores abort',async()=>{
   const fetcher=vi.fn<typeof fetch>().mockImplementation(()=>new Promise(()=>{}));
   expect(await answerAssistantChat({...input,enabled:true,env,fetcher,timeoutMs:5})).toEqual({status:'timeout',answer:null});expect(fetcher).toHaveBeenCalledOnce();

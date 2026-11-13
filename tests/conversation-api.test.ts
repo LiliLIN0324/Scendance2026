@@ -44,6 +44,17 @@ describe('narrow conversation Edge route',()=>{
   expect(await chat.json()).toEqual({status:'ok',answer:'可以先核对场地。'});expect(fetcher).toHaveBeenCalledTimes(2);
   for(const [url,init] of fetcher.mock.calls){expect(String(url)).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');expect(JSON.parse(String(init?.body))).toMatchObject({model:'qwen-example',enable_thinking:false});}
  });
+ it.each([
+  {message:'你好，请用一句话告诉我你能怎样帮我规划户外活动。',answer:'我可以协助核对活动范围、分区与设施方案，确认后才应用。'},
+  {message:'先搜IN77候选，不默认商场轮廓是活动范围。',answer:JSON.stringify({action:'search',query:'IN77',reply:'先搜索候选，活动边界待你核对。',references:[],facts:{}})},
+ ])('accepts documented Bailian text completion with null tool metadata: $message',async({message,answer})=>{
+  const backend={user:vi.fn(async()=> 'user'),scene:vi.fn()} as unknown as Backend;
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json({choices:[{finish_reason:'stop',index:0,message:{role:'assistant',content:answer,function_call:null,tool_calls:null}}],usage:{prompt_tokens:22,completion_tokens:18,total_tokens:40}}));
+  const result=await createConversationApi(backend,env,fetcher)(make('/functions/v1/conversation-api/assistant/chat',{message,history:[]}));
+  expect(result.status).toBe(200);const body=await result.json();expect(body).toEqual({status:'ok',answer});expect(fetcher).toHaveBeenCalledOnce();expect(backend.scene).not.toHaveBeenCalled();
+  const sent=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(sent).toMatchObject({model:'qwen-example',enable_thinking:false,max_tokens:1024});expect(sent.tools).toBeUndefined();expect(sent.response_format).toBeUndefined();
+  if(message.includes('IN77'))expect(JSON.parse(body.answer)).toMatchObject({action:'search',query:'IN77',references:[]});
+ });
  it('defaults closed after authentication while preserving CORS and never dispatching',async()=>{
   const backend={user:vi.fn(async()=> 'user')} as unknown as Backend,fetcher=vi.fn<typeof fetch>();
   const config={...settings};delete config.CONVERSATION_API_ENABLED;

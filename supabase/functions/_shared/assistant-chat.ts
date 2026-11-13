@@ -56,7 +56,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
      const code=business.data.base_resp.status_code;
      diagnose('provider_status',Number.isSafeInteger(code)&&Math.abs(code)<=1_000_000_000?{providerCode:code}:{});return fail('provider_error');
     }
-    const provider=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({finish_reason:z.string().nullish(),message:z.object({content:z.string().nullish(),tool_calls:z.unknown().optional()})})).length(1)}).parse(raw);
+    const provider=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({finish_reason:z.string().nullish(),message:z.object({content:z.string().nullish(),tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(raw);
     const choice=provider.choices[0],answer=choice.message.content?.trim();
     if(choice.finish_reason!=='stop'){
      const reason=choice.finish_reason;
@@ -65,7 +65,10 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
     }
     if(!answer){diagnose('empty_answer');return fail('provider_error');}
     if(answer.length>3000){diagnose('answer_too_long');return fail('provider_error');}
-    if(/<\/?think>/i.test(answer)||choice.message.tool_calls!==undefined||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(answer)){diagnose('unsupported_output');return fail('provider_error');}
+    // DashScope documents null tool/function metadata on normal stop text completions.
+    // Only absent/null means no call; reject every non-null payload, including []/malformed values.
+    const toolOutput=(choice.message.tool_calls!==undefined&&choice.message.tool_calls!==null)||(choice.message.function_call!==undefined&&choice.message.function_call!==null);
+    if(/<\/?think>/i.test(answer)||toolOutput||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(answer)){diagnose('unsupported_output');return fail('provider_error');}
     return {status:'ok',answer};
    }catch(error){
     if(error instanceof Error&&error.name==='TimeoutError'){diagnose('timeout');return fail('timeout');}
