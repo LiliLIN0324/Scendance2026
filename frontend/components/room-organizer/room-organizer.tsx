@@ -51,10 +51,15 @@ import { applyGuardedWorkspaceReplacement, useWorkspaceWriteGuards } from './lib
 import {
   clampFloatRect,
   defaultLeftStackState,
+  detachLeftStackPanel,
+  dockLeftStackPanel,
+  detachedIndexOf,
+  isLeftStackDetached,
+  raiseLeftStackPanel,
   ratioFromPointer,
   readLeftStackState,
   swapLeftStackOrder,
-  withLeftStackDetached,
+  toggleLeftStackDetached,
   withLeftStackRatio,
   withLeftStackRect,
   writeLeftStackState,
@@ -696,7 +701,7 @@ useEffect(() => {
           drag.rect = rect;
           drag.startX = event.clientX;
           drag.startY = event.clientY;
-          setLeftStack(current => withLeftStackRect(withLeftStackDetached(current, panel), panel, rect));
+          setLeftStack(current => withLeftStackRect(detachLeftStackPanel(current, panel, leftStackViewportRef.current), panel, rect));
           return;
         }
         // 左栏内上下拖 → 两个面板换顺序（只在开关双面板时生效）。
@@ -721,11 +726,10 @@ useEffect(() => {
       if (!drag) return;
       leftStackDragRef.current = null;
       setLeftStackDragging(false);
-      // 小窗拖回左栏范围内松手 → 收回左栏（只在当前确实是浮着的那个面板上生效）。
-      if (drag.kind === 'move' && drag.panel && overColumn(event.clientX, event.clientY)) {
-        const panel = drag.panel;
-        // 注意 withLeftStackDetached 传同一个 panel 是幂等的，收回要显式传 null。
-        setLeftStack(current => (current.detached === panel ? withLeftStackDetached(current, null) : current));
+      // 小窗拖回左栏范围内松手 → 收回左栏（只收当前拖拽的这一枚，其他浮窗不动）。
+      const dockPanel = drag.kind === 'move' ? drag.panel : undefined;
+      if (dockPanel && overColumn(event.clientX, event.clientY)) {
+        setLeftStack(current => dockLeftStackPanel(current, dockPanel));
       }
     };
     window.addEventListener('pointermove', onMove);
@@ -740,6 +744,8 @@ useEffect(() => {
   const beginLeftStackDrag = useCallback((kind: 'split' | 'move' | 'resize', panel: LeftStackPanelId | undefined, event: React.PointerEvent) => {
     event.preventDefault();
     event.stopPropagation();
+    // 点按/拖动一枚已浮着的小窗时把它抬到最上层（成熟浮窗惯例：后点的盖在前面上）。
+    if (kind === 'move' && panel) setLeftStack(current => raiseLeftStackPanel(current, panel));
     leftStackDragRef.current = {
       kind,
       ...(panel ? { panel } : {}),
@@ -763,17 +769,19 @@ useEffect(() => {
     setLeftStackDragging(true);
   }, [leftStack.rects]);
   const toggleLeftStackDetach = useCallback((panel: LeftStackPanelId) => {
-    setLeftStack(current => withLeftStackDetached(current, current.detached === panel ? null : panel));
+    setLeftStack(current => toggleLeftStackDetached(current, panel, leftStackViewportRef.current));
   }, []);
   // 可见卡对的实际计算在 outdoor3dTakeover 声明之后（需要它的值），见 leftStackCards。
-  /** 抓出来的小窗：位置/尺寸从 --sc-float-* 变量给，CSS 里 !important 的 inset 才不会把内联定位抹掉。 */
+  /** 抓出来的小窗：位置/尺寸/层级从 --sc-float-* 变量给，CSS 里 !important 的 inset 才不会把内联定位抹掉。 */
   const leftStackFloatStyle = (panel: LeftStackPanelId): React.CSSProperties => {
     const rect = leftStack.rects[panel];
+    const zIndex = 120 + Math.max(0, detachedIndexOf(leftStack, panel));
     return {
       ['--sc-float-x' as string]: `${rect.x}px`,
       ['--sc-float-y' as string]: `${rect.y}px`,
       ['--sc-float-w' as string]: `${rect.width}px`,
       ['--sc-float-h' as string]: `${rect.height}px`,
+      ['--sc-float-z' as string]: zIndex,
     } as React.CSSProperties;
   };
   // P2-g 反向播种：3D 已经圈好的场地直接成为 2D 平面的起步边界（同一个场地的两个视图）。
@@ -2480,7 +2488,8 @@ useEffect(() => {
     ? (leftStackPair.includes(leftStack.first) ? leftStack.first : leftStackPair[0])
     : null;
   const leftStackSecond: LeftStackPanelId | null = leftStackPair && leftStackFirst ? (leftStackPair.find(id => id !== leftStackFirst) ?? null) : null;
-  const leftStackSplit = !!leftStackPair && !leftStack.detached;
+  // 双卡片堆栈：成对的两张都还在栏内才分上下；任一被抓成小窗，留在栏内的那张独占整栏。
+  const leftStackSplit = !!leftStackPair && leftStackPair.every(id => !isLeftStackDetached(leftStack, id));
   // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
   // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
   // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
@@ -4428,9 +4437,9 @@ useEffect(() => {
           </button>}
           <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
           {capturePanel !== 'new' && <aside ref={capturePanelRef} aria-hidden={!captureOpen}
-            className={`sc-workbench-capture${leftStack.detached === 'capture' ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
+            className={`sc-workbench-capture${isLeftStackDetached(leftStack, 'capture') ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
             style={{
-              ...(leftStack.detached === 'capture' ? leftStackFloatStyle('capture') : leftStackSplit && leftStackFirst === 'capture' ? { order: 0 } : leftStackSplit && leftStackSecond === 'capture' ? { order: 2 } : {}),
+              ...(isLeftStackDetached(leftStack, 'capture') ? leftStackFloatStyle('capture') : leftStackSplit && leftStackFirst === 'capture' ? { order: 0 } : leftStackSplit && leftStackSecond === 'capture' ? { order: 2 } : {}),
             }}
             aria-label="场地采集" tabIndex={-1} hidden={!captureOpen}
             onKeyDown={event => {
@@ -4438,7 +4447,7 @@ useEffect(() => {
               event.stopPropagation();
               closeCapturePanel();
             }}>
-            {leftStack.detached === 'capture' && <div
+            {isLeftStackDetached(leftStack, 'capture') && <div
               className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
               onPointerDown={event => beginLeftStackDrag('move', 'capture', event)}
             >
@@ -4446,8 +4455,8 @@ useEffect(() => {
               <button type="button" aria-label="收回拍摄场地面板" title="收回左栏" onClick={() => toggleLeftStackDetach('capture')}><Minimize2 size={12}/>收回</button>
             </div>}
             <WorkbenchCaptureGuide key={layout.id ?? layout.name} venueName={hasMapVenue ? layout.name?.split(' · ')[0] : undefined} onClose={closeCapturePanel} onSendToRecon={handleCaptureSendToRecon}
-              {...(leftStack.detached === 'capture' ? { onHeaderPointerDown: event => beginLeftStackDrag('move', 'capture', event) } : leftStackSplit ? { onHeaderPointerDown: event => beginLeftStackPull('capture', event) } : {})} />
-            {leftStack.detached === 'capture' && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'capture', event)} />}
+              {...(isLeftStackDetached(leftStack, 'capture') ? { onHeaderPointerDown: event => beginLeftStackDrag('move', 'capture', event) } : { onHeaderPointerDown: event => beginLeftStackPull('capture', event) })} />
+            {isLeftStackDetached(leftStack, 'capture') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'capture', event)} />}
           </aside>}
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed || captureOpen ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -4457,43 +4466,45 @@ useEffect(() => {
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {!captureOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}
-            {...(leftStack.detached === 'chat' ? {
+            {...(isLeftStackDetached(leftStack, 'chat') ? {
               className: 'is-detached', style: leftStackFloatStyle('chat'),
               floatBar: <div className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`} onPointerDown={event => beginLeftStackDrag('move', 'chat', event)}>
                 <strong>私信</strong><span>独立小窗</span><span className="spacer" />
                 <button type="button" aria-label="收回私信面板" title="收回左栏" onClick={() => toggleLeftStackDetach('chat')}><Minimize2 size={12}/>收回</button>
               </div>,
               floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'chat', event)} />,
-            } : leftStackSplit ? {
-              className: leftStackFirst === 'chat' ? 'is-stack-first' : 'is-stack-second',
-              style: { order: leftStackFirst === 'chat' ? 0 : 2 },
+            } : {
+              ...(leftStackSplit ? {
+                className: leftStackFirst === 'chat' ? 'is-stack-first' : 'is-stack-second',
+                style: { order: leftStackFirst === 'chat' ? 0 : 2 },
+              } : {}),
               onHeaderPointerDown: event => beginLeftStackPull('chat', event),
-            } : {})} />}
+            })} />}
           {((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null) && (
             <aside
-              className={`sc-left-drawer sc-float-layer is-outdoor-card${leftStack.detached === 'outdoor' ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
+              className={`sc-left-drawer sc-float-layer is-outdoor-card${isLeftStackDetached(leftStack, 'outdoor') ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
               data-testid="outdoor-left-card"
               style={{
                 position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
                 // 堆栈态高度交给 CSS（is-stack-first 吃 --sc-left-stack-percent，第二张吃剩余）；
                 // 独占/无对时占满。独立小窗时位置尺寸从 --sc-float-* 来。
-                ...(leftStack.detached === 'outdoor'
+                ...(isLeftStackDetached(leftStack, 'outdoor')
                   ? {}
                   : leftStackSplit && (leftStackFirst === 'outdoor' || leftStackSecond === 'outdoor')
                     ? { order: leftStackFirst === 'outdoor' ? 0 : 2 }
                     : { height: '100%' }),
-                ...(leftStack.detached === 'outdoor' ? leftStackFloatStyle('outdoor') : {}),
+                ...(isLeftStackDetached(leftStack, 'outdoor') ? leftStackFloatStyle('outdoor') : {}),
               }}
             >
               <div
                 className="sc-left-heading is-oneplan-head"
-                onPointerDown={leftStack.detached === 'outdoor'
+                onPointerDown={isLeftStackDetached(leftStack, 'outdoor')
                   ? event => beginLeftStackDrag('move', 'outdoor', event)
-                  : leftStackSplit ? event => beginLeftStackPull('outdoor', event) : undefined}
-                style={leftStack.detached === 'outdoor' || leftStackSplit ? { cursor: 'grab', touchAction: 'none' } : undefined}
-                title={leftStackSplit ? '抓住这里往左栏外拖，可以变成独立小窗；上下拖可以换顺序' : undefined}
+                  : event => beginLeftStackPull('outdoor', event)}
+                style={{ cursor: 'grab', touchAction: 'none' }}
+                title="抓住这里往左栏外拖，可以变成独立小窗；上下拖可以换顺序"
               >
-                {leftStack.detached === 'outdoor' && <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--sc-muted)' }}>户外规划 · 独立窗口</span>}
+                {isLeftStackDetached(leftStack, 'outdoor') && <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--sc-muted)' }}>户外规划 · 独立窗口</span>}
                 <button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><X size={18}/></button>
               </div>
               {/* 2026-11-11 图层行宿主（Level = 独立设计方案，非楼层高度）：
@@ -4513,7 +4524,7 @@ useEffect(() => {
 
                 <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
               </div>
-              {leftStack.detached === 'outdoor' && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'outdoor', event)} />}
+              {isLeftStackDetached(leftStack, 'outdoor') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'outdoor', event)} />}
             </aside>
           )}
           {leftStackSplit && (
@@ -4537,7 +4548,7 @@ useEffect(() => {
               </div>
             </div>
           )}
-          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(leftStack.detached === 'bingo' ? {} : leftStackSplit ? { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) } : {})} {...(leftStack.detached === 'bingo' ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(leftStack.detached === 'bingo' ? {
+          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
                 floatBar: (
                   <div
                     className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}

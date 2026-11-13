@@ -14,7 +14,12 @@
 
 /** 左栏堆栈成员：户外规划卡 / Bingo 会话卡 / 拍摄场地卡 / 成员私聊卡。 */
 export type LeftStackPanelId = 'outdoor' | 'bingo' | 'capture' | 'chat';
-export type LeftStackDetached = LeftStackPanelId | null;
+
+/**
+ * 独立小窗列表：数组顺序就是层叠顺序——队首压在最底下，队尾浮在最上面。
+ * 点击 / 拖拽某枚小窗时把它挪到队尾（抬层级），成熟浮窗（Figma / Teams 弹出聊天）同款惯例。
+ */
+export type LeftStackDetachedList = LeftStackPanelId[];
 
 export interface LeftStackRect {
   x: number;
@@ -28,8 +33,8 @@ export interface LeftStackState {
   first: LeftStackPanelId;
   /** 共存时第一张卡占的高度比例（0..1），第二张吃剩下的。 */
   ratio: number;
-  /** 抓出来变成独立小窗的面板（同一时间只允许一个）。 */
-  detached: LeftStackDetached;
+  /** 抓出来变成独立小窗的面板；最多同时两枚可见（见 LEFT_STACK_MAX_DETACHED）。 */
+  detached: LeftStackDetachedList;
   rects: Record<LeftStackPanelId, LeftStackRect>;
 }
 
@@ -40,18 +45,23 @@ export const LEFT_STACK_FLOAT_MIN_WIDTH = 280;
 export const LEFT_STACK_FLOAT_MIN_HEIGHT = 240;
 /** 独立小窗离视口边缘至少要留的空隙。 */
 export const LEFT_STACK_FLOAT_MARGIN = 8;
+/** 同时浮在画布上的独立小窗上限：再多标题条就互相盖住、够不到抓手了。 */
+export const LEFT_STACK_MAX_DETACHED = 2;
+/** 新弹出的小窗相对前一枚的级联错位（px），保证两枚标题条都露得出来。 */
+export const LEFT_STACK_CASCADE_OFFSET = 28;
 
 const FALLBACK_VIEWPORT = { width: 1280, height: 800 };
 
 const PANEL_IDS: readonly LeftStackPanelId[] = ['outdoor', 'bingo', 'capture', 'chat'];
 
 /** 各卡独立小窗的默认落位：户外/会话沿用原位，拍摄场地与私聊卡居中偏右一点。 */
-export function defaultFloatRect(panel: LeftStackPanelId, viewport: { width: number; height: number } = FALLBACK_VIEWPORT): LeftStackRect {
+export function defaultFloatRect(panel: LeftStackPanelId, viewport: { width: number; height: number } = FALLBACK_VIEWPORT, cascadeIndex = 0): LeftStackRect {
   const width = Math.max(LEFT_STACK_FLOAT_MIN_WIDTH, Math.min(480, Math.round(viewport.width * 0.4)));
   const height = Math.max(LEFT_STACK_FLOAT_MIN_HEIGHT, Math.min(720, Math.round(viewport.height * 0.66)));
   const shift = panel === 'outdoor' ? -24 : panel === 'bingo' ? 0 : panel === 'capture' ? 24 : 48;
-  const x = Math.max(LEFT_STACK_FLOAT_MARGIN, Math.round(viewport.width / 2 - width - 24 + shift));
-  return { x, y: 72, width, height };
+  const x = Math.max(LEFT_STACK_FLOAT_MARGIN, Math.round(viewport.width / 2 - width - 24 + shift + cascadeIndex * LEFT_STACK_CASCADE_OFFSET));
+  const y = Math.max(LEFT_STACK_FLOAT_MARGIN, 72 + cascadeIndex * Math.round(LEFT_STACK_CASCADE_OFFSET * 0.7));
+  return { x, y, width, height };
 }
 
 /** 流程默认：第一张卡在上、各半（用户确认的「一半一半」）。 */
@@ -59,7 +69,7 @@ export function defaultLeftStackState(viewport: { width: number; height: number 
   return {
     first: 'outdoor',
     ratio: 0.5,
-    detached: null,
+    detached: [],
     rects: {
       outdoor: defaultFloatRect('outdoor', viewport),
       bingo: defaultFloatRect('bingo', viewport),
@@ -101,15 +111,24 @@ function isRect(value: unknown): value is LeftStackRect {
 }
 
 /**
- * 读盘进来的东西可能是老版本/手改的，一律容错回默认值。
- * 旧版 `order: 'outdoor-first' | 'bingo-first'` 映射成 `first: 'outdoor' | 'bingo'`；
- * 旧版 rects 只有户外/会话两键，拍摄场地与私聊卡补默认值。
+ * 存档容错：旧版 `detached` 是单个面板 id（字符串），新版是数组；
+ * 非法值、越界 id、重复 id 一律过滤，超过上限只留前两枚（最早弹出的先被挤回栏内）。
  */
+function normalizeDetached(raw: unknown): LeftStackDetachedList {
+  const list: unknown[] = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : [];
+  const seen = new Set<LeftStackPanelId>();
+  for (const entry of list) {
+    if (isPanelId(entry) && !seen.has(entry)) seen.add(entry);
+    if (seen.size >= LEFT_STACK_MAX_DETACHED) break;
+  }
+  return [...seen];
+}
+
 export function normalizeLeftStackState(input: unknown, viewport?: { width: number; height: number }): LeftStackState {
   const fallback = defaultLeftStackState(viewport);
   if (!input || typeof input !== 'object') return fallback;
   const raw = input as Record<string, unknown> & Partial<LeftStackState> & { order?: unknown };
-  const detached: LeftStackDetached = isPanelId(raw.detached) ? raw.detached : null;
+  const detached = normalizeDetached(raw.detached);
   const first = isPanelId(raw.first)
     ? raw.first
     : raw.order === 'bingo-first' ? 'bingo' : raw.order === 'outdoor-first' ? 'outdoor' : fallback.first;
@@ -165,9 +184,73 @@ export function withLeftStackRatio(state: LeftStackState, ratio: number): LeftSt
   return { ...state, ratio: next };
 }
 
-export function withLeftStackDetached(state: LeftStackState, panel: LeftStackDetached): LeftStackState {
-  if (state.detached === panel) return state;
-  return { ...state, detached: panel };
+/** 某张卡当前是否浮成独立小窗。 */
+export function isLeftStackDetached(state: LeftStackState, panel: LeftStackPanelId): boolean {
+  return state.detached.includes(panel);
+}
+
+/** 小窗在层叠序里的下标（队尾 = 最上层）；不在列表里返回 -1。 */
+export function detachedIndexOf(state: LeftStackState, panel: LeftStackPanelId): number {
+  return state.detached.indexOf(panel);
+}
+
+/** 抬到最上层：挪到队尾；本来就在最上或不在列表里则原样返回。 */
+export function raiseLeftStackPanel(state: LeftStackState, panel: LeftStackPanelId): LeftStackState {
+  const index = state.detached.indexOf(panel);
+  if (index < 0 || index === state.detached.length - 1) return state;
+  const detached = [...state.detached];
+  detached.splice(index, 1);
+  detached.push(panel);
+  return { ...state, detached };
+}
+
+/** 收回左栏：从小窗列表移除；本来就在栏内则原样返回。 */
+export function dockLeftStackPanel(state: LeftStackState, panel: LeftStackPanelId): LeftStackState {
+  if (!state.detached.includes(panel)) return state;
+  return { ...state, detached: state.detached.filter(id => id !== panel) };
+}
+
+/**
+ * 抓成独立小窗：已浮着则抬到最上层；否则入队尾。
+ * 超过上限时把队首（压在最底下的那枚）挤回左栏；新窗相对当前最上一枚做级联错位，
+ * 两枚标题条都露得出来，不会叠死在同一个位置。
+ */
+export function detachLeftStackPanel(
+  state: LeftStackState,
+  panel: LeftStackPanelId,
+  viewport?: { width: number; height: number },
+): LeftStackState {
+  if (state.detached.includes(panel)) return raiseLeftStackPanel(state, panel);
+  const prevTop = state.detached[state.detached.length - 1];
+  let detached = [...state.detached, panel];
+  if (detached.length > LEFT_STACK_MAX_DETACHED) {
+    detached = detached.slice(detached.length - LEFT_STACK_MAX_DETACHED);
+  }
+  let rects = state.rects;
+  if (prevTop) {
+    const topRect = state.rects[prevTop];
+    const shifted = clampFloatRect(
+      {
+        ...state.rects[panel],
+        x: topRect.x + LEFT_STACK_CASCADE_OFFSET,
+        y: topRect.y + Math.round(LEFT_STACK_CASCADE_OFFSET * 0.7),
+      },
+      viewport ?? FALLBACK_VIEWPORT,
+    );
+    rects = { ...rects, [panel]: shifted };
+  }
+  return { ...state, detached, rects };
+}
+
+/** 标题条「收回」/ 抓手再点一次：浮着收回栏内，栏内抓成小窗。 */
+export function toggleLeftStackDetached(
+  state: LeftStackState,
+  panel: LeftStackPanelId,
+  viewport?: { width: number; height: number },
+): LeftStackState {
+  return state.detached.includes(panel)
+    ? dockLeftStackPanel(state, panel)
+    : detachLeftStackPanel(state, panel, viewport);
 }
 
 export function withLeftStackRect(state: LeftStackState, panel: LeftStackPanelId, rect: LeftStackRect): LeftStackState {
