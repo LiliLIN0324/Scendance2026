@@ -5,11 +5,24 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { REVIEW_SHARE_PIN_STORAGE_KEY, appendReviewSharePin } from '../../review-share-page/share-pins';
 import { BINGO_MARK_KEY, BINGO_RETURN_KEY } from '../lib/bingo-status';
 import { BingoRailButton } from './bingo-rail-button';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHARE = 'aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa';
+
+const pinDraft = {
+  itemId: null,
+  x: 1,
+  y: 0,
+  z: -2,
+  offset: null,
+  camera: {
+    position: [3.4, 2.8, 0.4] as const,
+    target: [1, 0, -2] as const,
+  },
+};
 
 function mark(projectKey = 'local-draft', shareId = SHARE) {
   return {
@@ -30,11 +43,22 @@ function seedAwaiting(count: number) {
   localStorage.setItem(BINGO_MARK_KEY, JSON.stringify(plans));
 }
 
+function seedPin(planKey: string, status: 'open' | 'resolved' = 'open') {
+  const result = appendReviewSharePin(localStorage, { planKey, text: '通道再宽', draft: pinDraft });
+  expect(result.ok).toBe(true);
+  if (status === 'resolved') {
+    const raw = localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY);
+    const file = JSON.parse(raw ?? '{}') as { byPlan: Record<string, { status: string }[]> };
+    file.byPlan[planKey]?.forEach(pin => { pin.status = 'resolved'; });
+    localStorage.setItem(REVIEW_SHARE_PIN_STORAGE_KEY, JSON.stringify(file));
+  }
+}
+
 afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
-describe('Bingo 左轨入口 · 三态圆徽标', () => {
-  it('待发：空圆，无数字无勾，状态写进 aria-label', () => {
+describe('Bingo 左轨入口 · 三态圆徽标 + 双计数角标', () => {
+  it('待发：空圆，无数字无勾无角标，状态写进 aria-label', () => {
     const onOpen = vi.fn();
     render(<BingoRailButton open onOpen={onOpen} />);
     const button = screen.getByRole('button', { name: '收反馈，待发' });
@@ -47,6 +71,7 @@ describe('Bingo 左轨入口 · 三态圆徽标', () => {
     expect(badge?.getAttribute('data-status')).toBe('to-send');
     expect(badge?.getAttribute('data-count')).toBeNull();
     expect(badge?.querySelector('svg')).toBeNull();
+    expect(badge?.querySelector('.sc-bingo-corner')).toBeNull();
     expect(button.querySelector('img')).toBeNull();
     expect(badge?.textContent ?? '').toBe('');
     expect(button.getAttribute('data-tip')).toMatch(/待发/);
@@ -56,28 +81,57 @@ describe('Bingo 左轨入口 · 三态圆徽标', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
-  it('待评：圆内显示未回执链接数，超过 9 收束为 9+', () => {
-    seedAwaiting(1);
+  it('待评：主圆出未读钉 P，角标出未回执链接 L', () => {
+    localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([mark()]));
+    seedPin(SHARE, 'open');
     render(<BingoRailButton open={false} onOpen={vi.fn()} />);
-    const one = screen.getByRole('button', { name: /待评，1 份链接/ });
-    const badge = one.querySelector('.sc-bingo-badge');
+    const button = screen.getByRole('button', { name: /待评，1 份链接，1 条未读钉/ });
+    const badge = button.querySelector('.sc-bingo-badge');
     expect(badge?.getAttribute('data-status')).toBe('awaiting');
     expect(badge?.getAttribute('data-count')).toBe('1');
-    expect(badge?.textContent).toBe('1');
+    const corner = badge?.querySelector('.sc-bingo-corner');
+    expect(corner?.textContent).toBe('1');
     expect(badge?.querySelector('svg')).toBeNull();
   });
 
-  it('待评计数 10 时显示 9+', () => {
+  it('待评无钉：主圆留空，角标仍出链接数', () => {
+    seedAwaiting(1);
+    render(<BingoRailButton open={false} onOpen={vi.fn()} />);
+    const button = screen.getByRole('button', { name: /待评，1 份链接/ });
+    const badge = button.querySelector('.sc-bingo-badge');
+    expect(badge?.getAttribute('data-count')).toBeNull();
+    expect(badge?.querySelector('.sc-bingo-corner')?.textContent).toBe('1');
+  });
+
+  it('待评链接 10 时角标收束为 9+，已解决钉不计入 P', () => {
     seedAwaiting(10);
+    seedPin('plan-0', 'resolved');
     render(<BingoRailButton open={false} onOpen={vi.fn()} />);
     const button = screen.getByRole('button', { name: /待评，10 份链接/ });
     const badge = button.querySelector('.sc-bingo-badge');
-    expect(badge?.getAttribute('data-count')).toBe('9+');
-    expect(badge?.textContent).toBe('9+');
+    expect(badge?.getAttribute('data-count')).toBeNull();
+    expect(badge?.querySelector('.sc-bingo-corner')?.textContent).toBe('9+');
   });
 
-  it('已回执：圆内画勾，不再出数字', () => {
-    localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([mark('local-draft')]));
+  it('已回执：圆内画勾，角标出未读钉 P；L 不再出', () => {
+    localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([mark()]));
+    localStorage.setItem(BINGO_RETURN_KEY, JSON.stringify({
+      version: 1,
+      planKey: 'local-draft',
+      at: '2026-10-31T08:00:00.000Z',
+      href: '/review/',
+    }));
+    seedPin(SHARE, 'open');
+    render(<BingoRailButton open={false} onOpen={vi.fn()} />);
+    const button = screen.getByRole('button', { name: /已回执，1 条未读钉/ });
+    const badge = button.querySelector('.sc-bingo-badge');
+    expect(badge?.getAttribute('data-status')).toBe('returned');
+    expect(badge?.querySelector('svg')).toBeTruthy();
+    expect(badge?.querySelector('.sc-bingo-corner')?.textContent).toBe('1');
+  });
+
+  it('已回执且无未读钉：勾形闭环，不带角标', () => {
+    localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([mark()]));
     localStorage.setItem(BINGO_RETURN_KEY, JSON.stringify({
       version: 1,
       planKey: 'local-draft',
@@ -90,6 +144,7 @@ describe('Bingo 左轨入口 · 三态圆徽标', () => {
     expect(badge?.getAttribute('data-status')).toBe('returned');
     expect(badge?.getAttribute('data-count')).toBeNull();
     expect(badge?.querySelector('svg')).toBeTruthy();
+    expect(badge?.querySelector('.sc-bingo-corner')).toBeNull();
     expect(badge?.textContent ?? '').toBe('');
   });
 

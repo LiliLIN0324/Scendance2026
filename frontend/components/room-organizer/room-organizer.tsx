@@ -4332,10 +4332,13 @@ useEffect(() => {
                   aria-expanded={captureOpen}
                   onClick={captureOpen ? closeCapturePanel : openCapturePanel}
                 >
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
-                    <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
-                  </svg>
+                  <span className="sc-rail-capture-icon" aria-hidden="true">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
+                      <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
+                    </svg>
+                    <span className="sc-rail-3d-tag">3D</span>
+                  </span>
                   <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
                 </button>
                 <button

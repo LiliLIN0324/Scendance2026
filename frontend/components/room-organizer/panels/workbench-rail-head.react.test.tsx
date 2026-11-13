@@ -33,6 +33,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     // 空间、物料、拍摄场地、户外规划共用圆钮；标签沿用「拍完当场判断能不能重建，并出 3D」。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
     expect(primary).toContain('aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"');
+    expect(primary).toContain('sc-rail-3d-tag');
     expect(primary).toContain('onClick={captureOpen ? closeCapturePanel : openCapturePanel}');
     expect(primary).toContain('data-tip="空间"');
     expect(primary).toContain('data-tip="物料"');

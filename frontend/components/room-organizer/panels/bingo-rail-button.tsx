@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { countOpenFeedbackPins, readBingoPlanFeedback } from '../lib/bingo-feedback';
 import {
-  bingoBallLabel,
   bingoPhaseLabel,
   emptyBingoSnapshot,
   readBingoSnapshot,
@@ -17,7 +17,7 @@ function badgeCount(count: number): string {
 
 /**
  * 左轨第二格：Bingo / 评审收藏。
- * 圆徽标沿用旧版三态——待发空圆、待评圆内数字（未回执链接数）、已回执勾形；
+ * 圆徽标三态——待发空圆、待评主圆出未读钉 P + 角标出未回执链接 L、已回执勾形 + 角标未读钉 P；
  * 圆体 28px，与其他轨钮图标槽同尺寸。状态与计数写进 aria-label / data-tip，不只靠颜色。
  */
 export function BingoRailButton({ open, onOpen, buttonRef }: {
@@ -43,11 +43,31 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
     };
   }, [sync]);
 
+  const storage = typeof window === 'undefined' ? null : window.localStorage;
+  const plans = snapshot.plans;
+  // L：尚未回执的评审链接份数；P：这些方案下未闭环画内钉总数。
+  const linkCount = plans.filter(plan => !plan.returned).length;
+  const pinCount = plans.reduce(
+    (sum, plan) => sum + countOpenFeedbackPins(readBingoPlanFeedback(plan, storage)),
+    0,
+  );
+
   const phase = snapshot.phase;
-  const count = phase === 'awaiting' ? snapshot.plans.length : 0;
-  const countText = badgeCount(count);
-  const label = bingoBallLabel(snapshot);
-  const tip = `Bingo · ${bingoPhaseLabel(phase)}${count > 0 ? ` · ${count} 份链接` : ''}`;
+  const mainCount = phase === 'awaiting' ? badgeCount(pinCount) : '';
+  const cornerCount = phase === 'awaiting'
+    ? badgeCount(linkCount)
+    : phase === 'returned'
+      ? badgeCount(pinCount)
+      : '';
+
+  const labelParts = [bingoPhaseLabel(phase)];
+  if (linkCount > 0) labelParts.push(`${linkCount} 份链接`);
+  if (pinCount > 0) labelParts.push(`${pinCount} 条未读钉`);
+  const label = `收反馈，${labelParts.join('，')}`;
+  const tipParts = ['Bingo', bingoPhaseLabel(phase)];
+  if (pinCount > 0) tipParts.push(`${pinCount} 条未读钉`);
+  if (linkCount > 0) tipParts.push(`${linkCount} 份链接`);
+  const tip = tipParts.join(' · ');
 
   return (
     <button
@@ -63,7 +83,7 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
       <span
         className="sc-bingo-badge"
         data-status={phase}
-        {...(countText ? { 'data-count': countText } : {})}
+        {...(mainCount ? { 'data-count': mainCount } : {})}
         aria-hidden="true"
       >
         {phase === 'returned' ? (
@@ -79,7 +99,10 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
             <path d="M5 12.5 10 17.5 19 7.5" />
           </svg>
         ) : (
-          countText
+          mainCount
+        )}
+        {cornerCount && (
+          <span className="sc-bingo-corner" data-count={cornerCount}>{cornerCount}</span>
         )}
       </span>
       <span className="sc-rail-label" aria-hidden="true">Bingo</span>
