@@ -1,5 +1,5 @@
 'use client';
-import { isFreshActivityId, localRestoreAvailable, proveFreshActivityScopeUnused, requireLocalRestoreAvailable, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
+import { isFreshActivityId, localRestoreAvailable, proveFreshActivityScopeUnused, requireLocalRestoreAvailable, withActivitySwitch, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 
 import { ArrowLeft, ArrowUp, Check, Loader2, Maximize2, Minimize2, RefreshCw, SlidersHorizontal, Sparkles, Trash2, X } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
@@ -189,7 +189,7 @@ function downloadReadonlyBrief(json:string,kind:'original'|'draft'):void {
   finally{setTimeout(()=>URL.revokeObjectURL(url),0);}
 }
 export interface LocalProjectBackupActions {
-  prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void): Promise<void>; createFreshActivity?(candidate: LocalProjectRestoreCandidate, assertSwitchCurrent?: () => void): Promise<void>; undoRestore(): Promise<void>;
+  prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void,purpose?:'activity-switch'): Promise<void>; createFreshActivity?(candidate: LocalProjectRestoreCandidate, assertSwitchCurrent?: () => void): Promise<void>; undoRestore(): Promise<void>;
   backupPending: boolean; canUndoRestore: boolean;
 }
 interface StudioValue extends LocalProjectBackupActions {
@@ -971,8 +971,14 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       });
     } finally {endBackupOperation();}
   }
-  async function restoreBackup(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void):Promise<void> {
+  async function restoreBackup(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void,purpose?:'activity-switch'):Promise<void> {
+    // 活动互相切换走单独的放行闸门（读的是本机归档，不是用户挑的备份文件）；
+    // 其余调用（备份面板读文件）仍停在恢复暂停上。
+    if(purpose==='activity-switch')return withActivitySwitch(()=>restoreBackupNow(candidate,assertSwitchCurrent));
     requireLocalRestoreAvailable();
+    return restoreBackupNow(candidate,assertSwitchCurrent);
+  }
+  async function restoreBackupNow(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void):Promise<void> {
     assertSwitchCurrent?.();
     invalidateReviewSource();
     assertLocalRestore();

@@ -81,6 +81,17 @@ export function localAmapPlaceUrl(keywords: string, limit: number): string {
   return `http://127.0.0.1:3199/amap-place?${params.toString()}`;
 }
 
+/**
+ * 检索超时（ms）。
+ *
+ * 本机（`local=true`）走 3199 代理的「高德 + 天地图」双源并发：两条链路都要出站往返，
+ * 且代理侧在缺 Web 服务 key 时还要回源线上 Pages Function。实测本机并发约 7.5s
+ * （单发只要 1.7s），8s 的硬超时会把它掐成 ERR_ABORTED，界面随即误报「没有候选」——
+ * 真实场地其实查得到。因此本机留足余量，线上是单源同源请求，仍用原来的 8s。
+ */
+const LOCAL_SEARCH_TIMEOUT_MS = 20000;
+const REMOTE_SEARCH_TIMEOUT_MS = 8000;
+
 /** 检索失败（网络/404/超时）一律回空数组——调用方只当作「没建议」，不弹错。 */
 export async function searchPlaces(keywords: string, options: PlaceSearchOptions = {}): Promise<PlaceSuggestion[]> {
   const query = keywords.trim();
@@ -88,7 +99,8 @@ export async function searchPlaces(keywords: string, options: PlaceSearchOptions
   const local = options.local ?? usesLocalPlaceProxy();
   const doFetch = options.fetchImpl ?? fetch;
   const limit = options.limit ?? 6;
-  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000);
+  const timeoutMs = local ? LOCAL_SEARCH_TIMEOUT_MS : REMOTE_SEARCH_TIMEOUT_MS;
+  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
   try {
     if (!local) {
       const response = await doFetch(placeSearchUrl(query, limit, false, options.center ?? null), { signal });
@@ -129,9 +141,18 @@ function normalizeText(value: string): string {
 }
 
 /**
+ * 把查询拆成「连续汉字 / 连续字母数字」词段：「杭州IN77」→ ['杭州', 'in77']。
+ * 只用于多词段相关度加分；单词段查询（「in77」「西湖区」）走原有整串匹配，行为不变。
+ */
+function queryTokens(q: string): string[] {
+  return q.match(/\p{Script=Han}+|[a-z0-9]+/gu) ?? [];
+}
+
+/**
  * 给候选打一个 0–100 的相关度分（越大越靠前）：
  * 名称完全等于 100、名称前缀 88、名称包含 76、地址包含 52、名字字数差得少再补 0–8。
- * 关键词为空时原序返回。
+ * 多词段查询（如「杭州IN77」）加两档：名字含全部词段 72（「杭州湖滨银泰in77」），
+ * 只含部分词段 30（只含「杭州」的行政区）——都低于整串包含，不抢精确命中的位置。
  */
 export function placeRelevance(place: PlaceSuggestion, query: string): number {
   const q = normalizeText(query);
@@ -143,6 +164,12 @@ export function placeRelevance(place: PlaceSuggestion, query: string): number {
   else if (name.startsWith(q)) score = 88;
   else if (name.includes(q)) score = 76;
   else if (address.includes(q)) score = 52;
+  const tokens = queryTokens(q);
+  if (tokens.length > 1) {
+    const matched = tokens.filter(token => name.includes(token)).length;
+    if (matched === tokens.length) score = Math.max(score, 72);
+    else if (matched > 0) score = Math.max(score, 30);
+  }
   const lengthSavings = Math.max(0, 8 - Math.max(0, name.length - q.length));
   return score + lengthSavings;
 }

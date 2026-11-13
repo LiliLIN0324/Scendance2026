@@ -8,7 +8,7 @@ import { productionPlanSchema } from '../../supabase/functions/_shared/productio
 import { makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { backendSceneToLayout, layoutToBackendScene } from '../components/room-organizer/lib/backend-adapter';
 import { INITIAL_BRIEF } from '../components/room-organizer/lib/creative-brief';
-import { createLocalActivityBackup, archiveLocalActivity, listLocalActivities, readLocalActivity } from './local-activities';
+import { createLocalActivityBackup, archiveLocalActivity, deleteLocalActivity, listLocalActivities, readLocalActivity } from './local-activities';
 import { createLocalProjectBackup, createLocalProjectBackupV3, LOCAL_PROJECT_BACKUP_V1_COVERAGE, parseLocalProjectBackupJson, type LocalProjectBackupV3 } from './local-project-backup';
 import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
 
@@ -73,7 +73,8 @@ beforeEach(() => {
   vi.mocked(readSourceRecord).mockImplementation(async key => structuredClone(records.get(JSON.stringify(key))) as never);
   vi.mocked(updateSourceForm).mockImplementation(async (key, update) => {
     const storageKey = JSON.stringify(key), next = update(structuredClone(records.get(storageKey)));
-    records.set(storageKey, structuredClone(next));
+    // updateSourceFormInternal：update 返回 undefined = store.delete（删除语义，与真库一致）。
+    if (next === undefined) records.delete(storageKey); else records.set(storageKey, structuredClone(next));
     return structuredClone(next) as never;
   });
   vi.mocked(listSourceRecords).mockImplementation(async namespace => [...records].flatMap(([storageKey, value]) => {
@@ -204,6 +205,19 @@ describe('complete local activity archives', () => {
     expect((await listLocalActivities()).activities[0].cover).toBe('data:image/jpeg;base64,AAAA');
     records.set(JSON.stringify(['local-activity-cover', projectId]), { dataUrl: 'javascript:alert(1)', capturedAt: createdAt });
     expect((await listLocalActivities()).activities[0].cover).toBeUndefined();
+  });
+
+  it('2026-11-14 右键删除：归档记录与封面一并清除，无效编号拒绝且不落库', async () => {
+    const original = backup();
+    await archiveLocalActivity(JSON.stringify(original), projectId);
+    records.set(JSON.stringify(['local-activity-cover', projectId]), { dataUrl: 'data:image/jpeg;base64,AAAA', capturedAt: createdAt });
+    expect((await listLocalActivities()).activities).toHaveLength(1);
+    await deleteLocalActivity(projectId);
+    expect(records.has(address())).toBe(false);
+    expect(records.has(JSON.stringify(['local-activity-cover', projectId]))).toBe(false);
+    expect((await listLocalActivities()).activities).toHaveLength(0);
+    await expect(deleteLocalActivity('')).rejects.toThrow();
+    expect(records.size).toBe(0);
   });
 });
 

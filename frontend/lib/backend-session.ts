@@ -705,9 +705,17 @@ export class BackendSession {
         this.captureRecovery(data.session);
           return;
       }
-      const user = await this.verifyUser(data.session.access_token);
+      let session = data.session;
+      // 2026-11-14 登录态记忆：autoRefreshToken 是关的，getSession 只回存档不刷新——
+      // 隔夜/隔小时打开时存档里的 access token 已过期，直接 verifyUser 必 401 弹登录卡，
+      // 90 天持久 cookie 形同虚设。照 accessToken() 的口径：临期先补一次刷新再验证。
+      if (session.expires_at && session.expires_at * 1000 <= Date.now() + 30_000) {
+        const refreshed = await this.supabase.auth.refreshSession();
+        if (!refreshed.error && refreshed.data.session) session = refreshed.data.session;
+      }
+      const user = await this.verifyUser(session.access_token);
       if (epoch !== this.epoch) return;
-      this.tokens = { access: data.session.access_token, refresh: data.session.refresh_token, expiresAt: (data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000 };
+      this.tokens = { access: session.access_token, refresh: session.refresh_token, expiresAt: (session.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000 };
       this.update({ user, status: "ready", error: null });
     } catch (error) {
       if (epoch !== this.epoch) return;

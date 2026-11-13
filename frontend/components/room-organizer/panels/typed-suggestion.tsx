@@ -17,6 +17,9 @@ function prefersStill(): boolean {
 /** Once this session is a banquet, the composer must not keep offering the launch-party example. */
 export const BANQUET_INPUT_SUGGESTIONS = ['加座，再排一版', '圆桌再小一号', '换一版'] as const;
 
+/** 户外开局（还没选定地点）：引导句指向场地搜索，Tab 一次填整句再发送。 */
+export const OUTDOOR_PLACE_SUGGESTIONS = ['先找杭州IN77，核对其中本次可用的活动范围', '帮我找一个能办市集的户外场地', '在西湖边找一块能办活动的场地'] as const;
+
 export const AGENT_INPUT_SUGGESTIONS: Record<ChatAgent, readonly string[]> = {
   door: ['80 人发布会，室内 12×9，安排签到和主舞台', '按奶油会客配一套', '这场活动的目标和限制是……'],
   bingo: ['80 人发布会，室内 12×9，安排签到和主舞台', '按墨金发布配一套', '按奶油会客配一套'],

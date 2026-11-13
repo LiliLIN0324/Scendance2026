@@ -44,10 +44,11 @@
     ".next-local/types/**/*.ts",
     ".next-smoke-packs/types/**/*.ts",
     ".next-takeover/types/**/*.ts",
+    ".next-venue-check/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-venue-check/types/**/*.ts"
+    ".next-port3000/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

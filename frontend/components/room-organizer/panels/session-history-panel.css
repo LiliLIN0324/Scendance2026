@@ -1,4 +1,6 @@
-/* 方案会话：默认只在 History overlay 内展开（见 agent-panel.css）。 */
+/* 方案会话：默认只在 History overlay 内展开（见 agent-panel.css）。
+   2026-11-14 用户指令「图二图三」：会话行=纯文本单行（对齐 ZCode 侧栏范式），
+   时间戳/操作钮退到悬停与按下态；项目分组走文件夹行；裸「+」新会话钮。 */
 .sc-session-history {
   display: flex;
   flex-direction: column;
@@ -34,23 +36,44 @@
   line-height: var(--lh-h3, 24px);
   font-weight: 600;
 }
+/* 图二：裸「+」钮（无文字胶囊）。 */
 .sc-session-new {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   flex: none;
+  width: 28px;
   height: 28px;
-  padding: 0 8px;
+  padding: 0;
   border: 0;
   border-radius: var(--r-sm, 10px);
   background: transparent;
-  color: var(--wk-ink, #141416);
-  font: inherit;
-  font-size: var(--fs-p2, 12px);
-  font-weight: 600;
+  color: var(--wk-ink-soft, #71767e);
   cursor: pointer;
 }
-.sc-session-new:hover { background: var(--wk-plane, #f4f5f7); }
+.sc-session-new:hover { background: var(--wk-plane, #f4f5f7); color: var(--wk-ink, #141416); }
+/* 分组头：文件夹行（图三）。 */
+.sc-session-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin: 4px 12px 0;
+}
+.sc-session-group-head .sc-session-group { flex: 1; min-width: 0; margin: 0; }
+.sc-session-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 8px 12px 2px;
+  color: var(--wk-ink-soft, #71767e);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.sc-session-group svg { flex: none; opacity: 0.75; }
+.sc-session-group span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-session-search {
   display: flex;
   align-items: center;
@@ -77,7 +100,7 @@
 .sc-session-list {
   list-style: none;
   margin: 0;
-  padding: 0 6px 8px;
+  padding: 0 6px 8px 24px;
   overflow: auto;
   min-height: 0;
   max-height: 196px;
@@ -86,22 +109,21 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 2px;
-  padding: 4px 4px 4px 6px;
+  padding: 0 4px 0 6px;
   border-radius: 8px;
 }
 .sc-session-row.is-active { background: var(--wk-green-pale, #eef3ef); }
 .sc-session-row.is-confirming { grid-template-columns: minmax(0, 1fr); }
 .sc-session-row.is-confirming .sc-session-confirm { grid-column: 1 / -1; justify-content: flex-end; padding-bottom: 2px; }
 .sc-session-row.is-renaming { outline: 1.5px solid var(--wk-green, #4a7c59); outline-offset: -1px; }
+/* 标题 + last-edit 时间两行；状态/置顶共用行首同一槽位。 */
 .sc-session-open {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 0;
+  gap: 6px;
   width: 100%;
   min-width: 0;
-  padding: 2px 4px;
+  padding: 3px 4px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -109,18 +131,55 @@
   text-align: left;
   cursor: pointer;
 }
-.sc-session-open strong {
+.sc-session-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+.sc-session-text strong {
   max-width: 100%;
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sc-session-open small {
+.sc-session-text small {
+  max-width: 100%;
+  overflow: hidden;
   color: var(--wk-muted, #71767e);
-  font-size: var(--fs-p2, 12px);
-  line-height: var(--lh-p2, 20px);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* 四态槽位：已读=空；错误=红点；未读=蓝点；进行中=绿点；置顶图钉悬停替换。 */
+.sc-session-dot {
+  flex: none;
+  width: 14px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+}
+.sc-session-dot-face {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.sc-session-dot.is-error { visibility: visible; color: var(--err, #b4443c); }
+.sc-session-dot.is-unread { visibility: visible; color: #3b82f6; }
+.sc-session-dot.is-active { visibility: visible; color: var(--wk-green, #4a7c59); }
+.sc-session-dot > .sc-material-symbol { visibility: hidden; }
+.sc-session-row:hover .sc-session-dot.is-pinned,
+.sc-session-row:focus-within .sc-session-dot.is-pinned { visibility: visible; color: var(--wk-ink-soft, #71767e); }
+.sc-session-row:hover .sc-session-dot.is-pinned .sc-session-dot-face,
+.sc-session-row:focus-within .sc-session-dot.is-pinned .sc-session-dot-face { display: none; }
+.sc-session-row:hover .sc-session-dot.is-pinned > .sc-material-symbol,
+.sc-session-row:focus-within .sc-session-dot.is-pinned > .sc-material-symbol { visibility: visible; }
 .sc-session-rename {
   box-sizing: border-box;
   width: 100%;
@@ -139,6 +198,12 @@
   flex: none;
   gap: 0;
 }
+/* 操作钮退到悬停/按下态（图三的干净行面）。 */
+.sc-session-actions { opacity: 0; transition: opacity 0.12s ease; }
+.sc-session-row:hover .sc-session-actions,
+.sc-session-row:focus-within .sc-session-actions,
+.sc-session-row.is-active .sc-session-actions,
+.sc-session-row.is-confirming .sc-session-actions { opacity: 1; }
 .sc-session-actions button,
 .sc-session-confirm button {
   display: inline-flex;
@@ -177,3 +242,48 @@
   font-size: var(--fs-p2, 12px);
 }
 .sc-session-save { color: var(--err, #b4443c); }
+/* 「展开显示 / 收起」（图三）。 */
+.sc-session-expand {
+  flex: none;
+  align-self: flex-start;
+  margin: 0 12px 8px 24px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wk-muted, #71767e);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sc-session-expand:hover { background: var(--wk-plane, #f4f5f7); color: var(--wk-ink, #141416); }
+
+/* 2026-11-13 用户指令：历史按项目分组，当前项目在最上面。
+   2026-11-14 重排：分组说明移进 hover title，不再占行；只读行同样是纯文本单行。 */
+.sc-session-group-block { margin-top: 4px; }
+.sc-session-row.is-readonly { display: block; padding: 0; }
+.sc-session-row.is-readonly details { padding: 0; }
+.sc-session-row.is-readonly summary {
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.sc-session-row.is-readonly summary::-webkit-details-marker { display: none; }
+.sc-session-row.is-readonly summary:hover { background: var(--wk-plane, #f4f5f7); }
+.sc-session-row.is-readonly summary strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-session-row.is-readonly details p {
+  margin: 4px 0 0;
+  color: var(--wk-ink-soft, #71767e);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}

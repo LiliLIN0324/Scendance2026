@@ -653,18 +653,26 @@ export function createServer({
   }
 
   async function fetchProdAmapPlace(keywords, limit) {
-    try {
-      const params = new URLSearchParams({ keywords, limit: String(limit) });
-      const res = await fetch(`https://scendance-scene-planner-ewz.pages.dev/api/amap-place?${params}`, {
-        signal: AbortSignal.timeout(20000),
-        headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0' },
-      });
-      if (!res.ok) return [];
-      const body = await res.json();
-      return Array.isArray(body?.places) ? body.places : [];
-    } catch {
-      return [];
+    // 线上 /api/amap-place 实测间歇 502（2026-11-13，约四成，502 那次固定 ~8s 才回）。
+    // 失败重试一发：最坏 8s+0.3s+8s=16.3s，仍在客户端 20s 本机超时内；重试通常 3–6s 就成功。
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (attempt > 0) await wait(300);
+      try {
+        const params = new URLSearchParams({ keywords, limit: String(limit) });
+        const res = await fetch(`https://scendance-scene-planner-ewz.pages.dev/api/amap-place?${params}`, {
+          signal: AbortSignal.timeout(20000),
+          headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0' },
+        });
+        if (!res.ok) continue;
+        const body = await res.json();
+        const places = Array.isArray(body?.places) ? body.places : [];
+        if (places.length) return places;
+      } catch {
+        // 网络异常等下一发；两发都空则按「没结果」处理
+      }
     }
+    return [];
   }
 
   function amapPoisToPlaces(body, keywords) {

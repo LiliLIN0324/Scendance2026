@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {makeFloor,makeLayout} from './lib/__testfixtures__/fixtures';
 import {layoutStore} from './hooks/use-layout-store';
@@ -18,7 +18,8 @@ beforeEach(()=>{Object.defineProperty(HTMLDialogElement.prototype,'close',{confi
 afterEach(()=>{cleanup();captured.annotation=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});vi.restoreAllMocks();vi.unstubAllGlobals();vi.unstubAllEnvs();localStorage.clear();});
 it.each([['画区域','zone'],['量距离','measure'],['标出入口','door']] as const)('关闭实验时，无楼层快照的离线工作台仍能%s',async(label,kind)=>{
  const layout=makeLayout({id:'offline-drawing',width:20,height:20,roof:{style:'none'},floors:[makeFloor({id:'floor-one'})]});layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));
- const view=render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的');fireEvent.click(screen.getByRole('button',{name:'规划活动区域'}));fireEvent.click(await screen.findByRole('button',{name:label}));
+ // 2026-11-13 左轨「标注」钮已按用户指令移除：测试改走 hook 直入（与原按钮同序 startDraft→zone）。
+ const view=render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的');act(()=>{captured.annotation!.startDraft();captured.annotation!.setDrawMode('zone');});fireEvent.click(await screen.findByRole('button',{name:label}));
  const canvas=[...view.container.querySelectorAll('canvas')].find(item=>item.style.display==='block');expect(canvas).toBeTruthy();
  if(kind==='zone'){fireEvent.pointerDown(canvas!,{button:0,clientX:100,clientY:100});fireEvent.pointerUp(canvas!,{button:0,clientX:200,clientY:200});}
  else if(kind==='measure'){fireEvent.pointerDown(canvas!,{button:0,clientX:100,clientY:100});fireEvent.pointerDown(canvas!,{button:0,clientX:200,clientY:200});}

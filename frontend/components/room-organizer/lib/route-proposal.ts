@@ -9,6 +9,7 @@
 
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import { routeClassForHighway, routeClassLabel, type RoadSegment, type RouteClass } from './road-network';
+import { enuToLngLat } from './outdoor-plan-canvas';
 import type { PlanNode, PlanPoint, PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 各类流线条数上限（提案保持克制，用户可手画补足）。 */
@@ -124,6 +125,27 @@ export interface RouteProposal {
   routes: PlanRoute[];
   nodes: PlanNode[];
   summary: { pedestrian: number; vehicle: number; service: number; entrances: number };
+}
+
+/** 2026-11-14 测试修正：路网请求以「边界的真实地理位置」为基准取 bbox——
+ *  边界可以画在离锚点很远的地方（框选任意处），以锚点为圆心会整个错过边界，
+ *  裁剪后全部道路被丢，回「路网暂时拿不到」。 */
+export function roadFetchPlanForBoundary(
+  boundary: PlanPoint[],
+  anchor: { lng: number; lat: number },
+): { center: { lng: number; lat: number }; spanM: number } {
+  let west = Infinity; let south = Infinity; let east = -Infinity; let north = -Infinity;
+  for (const point of boundary) {
+    const geo = enuToLngLat(point.x, point.y, anchor.lng, anchor.lat);
+    west = Math.min(west, geo.lng); east = Math.max(east, geo.lng);
+    south = Math.min(south, geo.lat); north = Math.max(north, geo.lat);
+  }
+  const spanLat = (north - south) * 111132.92;
+  const spanLng = (east - west) * metersPerDegreeLng((south + north) / 2);
+  return {
+    center: { lng: (west + east) / 2, lat: (south + north) / 2 },
+    spanM: Math.round(Math.max(spanLat, spanLng) * 0.75 + 300),
+  };
 }
 
 export interface BuildRouteProposalInput {

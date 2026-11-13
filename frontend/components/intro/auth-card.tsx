@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, KeyRound, LockKeyhole } from '@/components/solid-icons';
+import { ArrowRight, KeyRound } from '@/components/solid-icons';
 import { useState, type FormEvent } from 'react';
 import { useEmailCooldown } from '@/lib/auth-provider';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -113,7 +113,7 @@ export function AuthCard({ controller, onAuthenticated, onEnter, ready = true, a
         <button type="button" aria-pressed={signUp} disabled={busy} onClick={() => changeMode(true)}>Sign up · 注册</button>
       </div>}
       <h2 className="sc-auth-title">{cloud.user ? '欢迎来到幕景' : verificationEmail ? '确认你的邮箱' : signUp ? '创建你的工作室' : '欢迎回来'}</h2>
-      <p className="sc-auth-copy">{cloud.user ? '一个空间，装下你的下一场相聚。' : verificationEmail ? `请输入发送至 ${verificationEmail} 的六位验证码。` : signUp ? '确认邮箱后，即可拥有独立的场景工作室。' : '登录后，继续你的场景。'}</p>
+      <p className="sc-auth-copy">{cloud.user ? '一个空间，装下你的下一场相聚。' : verificationEmail ? `请输入发送至 ${verificationEmail} 的六位验证码。` : signUp ? '确认邮箱后即可使用。' : '登录后，继续你的场景。'}</p>
 
       {cloud.user ? (
         <div className="sc-auth-signed-in">
@@ -147,7 +147,7 @@ export function AuthCard({ controller, onAuthenticated, onEnter, ready = true, a
               <input id="sc-auth-password" name="password" type="password" autoComplete={signUp ? 'new-password' : 'current-password'} minLength={signUp ? 12 : undefined} placeholder={signUp ? '至少 12 位' : '输入你的密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required />
             </>}
             {(error || authError) && <p className="sc-auth-error" role="alert">{error || authError}</p>}
-            <button className="sc-auth-primary" type="submit" disabled={!ready || !cloud.configured || busy}>{busy ? (signUp ? '正在处理…' : '正在登录…') : !ready ? '正在恢复会话…' : verificationEmail ? '验证并进入工作室' : signUp ? '创建账号' : '登录并进入工作台'}<ArrowRight size={16} aria-hidden="true" /></button>
+            <button className="sc-auth-primary" type="submit" disabled={!ready || !cloud.configured || busy}>{busy ? (signUp ? '正在处理…' : '正在登录…') : !ready ? '正在恢复会话…' : verificationEmail ? '验证并进入工作台' : signUp ? '创建账号' : '登录并进入工作台'}<ArrowRight size={16} aria-hidden="true" /></button>
           </form>
           <div className="sc-auth-links">
             {verificationEmail ? <>
@@ -164,10 +164,9 @@ export function AuthCard({ controller, onAuthenticated, onEnter, ready = true, a
           {!cloud.configured && <p className="sc-auth-offline" role="status">登录服务尚未配置，暂时只能本地体验。</p>}
           <div className="sc-auth-separator"><span>或</span></div>
           <button className="sc-auth-secondary" type="button" onClick={() => { void enterAsGuest(); }} disabled={busy || !ready || !cloud.configured}>{guestBusy ? '正在进入…' : '访客进入'}<ArrowRight size={16} aria-hidden="true" /></button>
-          <p className="sc-auth-note">无需注册，享有普通用户功能。访客身份保留在此浏览器，退出或清除浏览器数据后失效。</p>
+          <p className="sc-auth-note">无需注册，访客身份保留在此浏览器。</p>
         </>
       )}
-      <div className="sc-auth-footer"><LockKeyhole size={16} aria-hidden="true" /><span>每位用户拥有独立身份与私有项目</span></div>
     </section>
   );
 }

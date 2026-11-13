@@ -461,3 +461,34 @@ it('paints a round banquet table as an ellipse and keeps a rectangular dining ta
   expect(rect.ellipses).toEqual([]);
   expect(rect.footprints.some(args => args[2] !== args[3])).toBe(true);
 });
+
+// 2026-11-14 活动卡缩略图（PlanThumb 320×190, padding 6）里，场地级布局（检索框选的规划区，
+// 宽可达百米）的 0.5m 网格每格不足 1px——线线相叠只剩灰雾。网格按 LOD 门控：格子不足
+// 3px 整张不画；正常尺寸布局的网格照旧。
+describe('grid density gate', () => {
+  const paint = (width: number, height: number) => {
+    const calls: Record<string, number> = {};
+    const count = (key: string) => { calls[key] = (calls[key] ?? 0) + 1; };
+    const methods = {
+      beginPath: () => count('beginPath'), stroke: () => count('stroke'),
+      moveTo: () => count('moveTo'), fillRect: () => count('fillRect'),
+      measureText: () => ({ width: 12 }),
+    };
+    const ctx = new Proxy(methods, { get: (target, key) => target[key as keyof typeof methods] ?? (() => {}) });
+    const canvas = { width: 320, height: 190, clientWidth: 320, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const floor = makeFloor(), layout = makeLayout({ width, height, floors: [floor] });
+    render2DTopDown({ canvas, layout, floor, selectedItemId: null, showMeasurements: false, showWiFiSignals: false, hasCollision: () => false, padding: 6 });
+    return calls;
+  };
+  it('keeps the 0.5m grid on a default-sized room thumbnail', () => {
+    const calls = paint(10, 8);
+    // scale ≈ 22.25 px/m → cell ≈ 11px：竖 21 + 横 17 条网格线之外只剩墙线等少量描边。
+    expect(calls.stroke ?? 0).toBeGreaterThanOrEqual(30);
+  });
+  it('drops the sub-pixel grid on a venue-scale thumbnail but still paints floor and walls', () => {
+    const calls = paint(100, 90);
+    // scale ≈ 1.98 px/m → cell ≈ 1px：网格整张不画，只剩房间墙线（4 边）等描边。
+    expect(calls.stroke ?? 0).toBeLessThan(10);
+    expect(calls.fillRect ?? 0).toBeGreaterThan(0);
+  });
+});

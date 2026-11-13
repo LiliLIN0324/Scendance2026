@@ -1,9 +1,13 @@
-.sc-local-activities{display:grid;gap:16px;font-size:12px}
+/* 2026-11-13 用户反馈「里面的内容太大了，稍微收小一点」：整卡字号/行高/内边距各收紧一档，
+   画廊列宽 190→118 让 270px 左栏能排两列（缩略图不再一张占满整栏），卡高约降三成。 */
+.sc-local-activities{display:grid;gap:12px;font-size:12px}
 .sc-activity-group{background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:10px;overflow:hidden}
-.sc-activity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--wk-hair)}
-.sc-activity-head h3{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.sc-activity-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-bottom:1px solid var(--wk-hair)}
+.sc-activity-head h3{margin:0;font-size:13px;font-weight:600;letter-spacing:-.01em}
 .sc-activity-head .sc-settings-title{gap:6px;flex-wrap:wrap}
-.sc-activity-form{padding:14px 16px 16px}
+/* 「N 个」胶囊：原来继承 22px 行高撑到 26px 高，比旁边的字还抢眼，收成 18px 小胶囊。 */
+.sc-local-activities .sc-settings-count.is-chip{padding:1px 7px;line-height:16px}
+.sc-activity-form{padding:12px}
 .sc-local-activities fieldset{border:0;margin:0;padding:0;min-width:0;display:grid;gap:12px}
 .sc-local-activities fieldset:disabled{opacity:1}
 .sc-local-activities .sc-field{display:grid;gap:6px;margin:0;font-size:11px;color:var(--sc-muted)}
@@ -15,19 +19,33 @@
 .sc-activity-refresh{display:grid;place-items:center;flex:none;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--sc-muted)}
 .sc-activity-refresh:hover:not(:disabled){background:var(--wk-plane-deep);color:var(--wk-ink)}
 .sc-activity-refresh:disabled{opacity:1;color:var(--faint)}
-.sc-activity-status{margin:0;padding:14px 16px;font-size:12px;line-height:1.7;color:var(--sc-muted)}
-/* 图像优先：每份归档先给三维定格，名称与日期退到图下；旧归档没有定格时退回平面缩略图。 */
-.sc-local-activities-list{list-style:none;margin:0;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
-.sc-local-activities-list li{display:flex;flex-direction:column;min-width:0;background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:10px;overflow:hidden}
+.sc-activity-status{margin:0;padding:10px 12px;font-size:11px;line-height:1.6;color:var(--sc-muted)}
+/* 图像优先：每份归档先给三维定格，名称与日期退到图下；旧归档没有定格时退回平面缩略图。
+   2026-11-13 用户指令：多个活动改成**一条横向滑轨**——最左新建入口、第二张当前活动、
+   再往右是最近的活动；卡片固定 136px 不换行，超出部分横向滚动。 */
+/* 注意：滑轨带 scroll-snap 时，snapport 默认贴着 padding box 边，首卡会被 snap 吃掉
+   padding-left（实测 scrollLeft≈12 顶掉 12px 左内边距，卡片看起来贴左边缘）。
+   用 scroll-padding 把内边距算进 snapport，左缘间距才真的留得出来。 */
+.sc-local-activities-list{list-style:none;margin:0;padding:8px 8px 10px 12px;display:flex;align-items:stretch;gap:8px;
+  overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  scroll-padding-left:12px;scroll-padding-right:8px;
+  scrollbar-width:thin;scrollbar-color:var(--wk-hair) transparent}
+.sc-local-activities-list::-webkit-scrollbar{height:5px}
+.sc-local-activities-list::-webkit-scrollbar-thumb{background:var(--wk-hair);border-radius:999px}
+.sc-local-activities-list::-webkit-scrollbar-track{background:transparent}
+/* 卡宽不写死 136：默认态要「正好两张整卡」，不多不少半个。
+   宽度 = (内容宽 − 卡片间距 8) / 2，随左栏拖宽（240–480）自适应；第三张起点正好落在列表右缘，
+   不露半个头，靠 5px 细滚动条与横向滑动提示后面还有。 */
+.sc-local-activities-list li{flex:0 0 calc((100% - 8px) / 2);width:calc((100% - 8px) / 2);scroll-snap-align:start;display:flex;flex-direction:column;min-width:0;background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:10px;overflow:hidden}
 .sc-activity-thumb{position:relative;aspect-ratio:320/190;background:var(--wk-plane);overflow:hidden}
 .sc-activity-thumb-canvas,.sc-activity-thumb-image{display:block;width:100%;height:auto}
 .sc-activity-thumb-image{height:100%;object-fit:cover}
 .sc-activity-thumb-empty{display:grid;place-items:center;width:100%;height:100%;color:var(--wk-muted)}
-.sc-activity-current{position:absolute;top:8px;left:8px;padding:2px 7px;border-radius:999px;background:var(--wk-ink);color:var(--wk-paper);font-size:10px;line-height:16px}
-.sc-activity-card-body{display:grid;gap:4px;padding:10px 12px 12px;min-width:0}
+.sc-activity-current{position:absolute;top:5px;left:5px;padding:1px 5px;border-radius:999px;background:var(--wk-ink);color:var(--wk-paper);font-size:9px;line-height:13px}
+.sc-activity-card-body{display:grid;gap:2px;padding:7px 8px 8px;min-width:0}
 /* 活动名可能是整条地址：最多两行，超出省略，悬停看全名。 */
-.sc-activity-card-body strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:12px;line-height:1.45;font-weight:600;overflow-wrap:anywhere}
-.sc-activity-card-body>span{display:block;font-size:11px;line-height:1.5;color:var(--sc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-activity-card-body strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:11px;line-height:1.4;font-weight:600;overflow-wrap:anywhere}
+.sc-activity-card-body>span{display:block;font-size:10px;line-height:1.45;color:var(--sc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 整卡可点：button 样式清零后铺满 li，hover/focus 只动底与内圈，不引新色。 */
 .sc-activity-card-clickable{display:flex;flex-direction:column;min-width:0;width:100%;padding:0;margin:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:10px;outline:none;transition:background-color .12s ease}
 .sc-activity-card-clickable:disabled{cursor:default;opacity:.6}
@@ -35,22 +53,37 @@
 .sc-local-activities-list li:has(.sc-activity-card-clickable:hover:not(:disabled)){background:var(--wk-plane)}
 .sc-activity-card-clickable:focus-visible{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--wk-green) 45%,transparent)}
 .sc-activity-card-clickable:disabled{cursor:default;opacity:.6}
-/* 状态短词：齐用品牌绿，缺用弱灰，色值全部取自现有 token。 */
-.sc-activity-meta{display:flex;align-items:center;gap:6px}
-.sc-activity-meta em{font-style:normal;display:inline-grid;place-items:center;min-width:20px;height:16px;padding:0 5px;border-radius:999px;font-size:10px;line-height:16px}
-.sc-activity-meta em.is-ready{background:color-mix(in srgb,var(--wk-green) 14%,var(--wk-paper));color:var(--wk-green)}
-.sc-activity-meta em.is-low{background:var(--wk-plane-deep);color:var(--sc-muted)}
-/* 末尾拼贴卡：虚线描边，内联命名表单复用面板字号体系。选择器带 li 以压过上面列表 li 的通用实线规则。 */
-.sc-local-activities-list li.sc-activity-tile{border:1px dashed var(--sc-line);border-radius:10px;background:transparent;min-height:96px;display:flex;color:var(--sc-muted)}
-.sc-activity-tile-add{width:100%;min-height:96px;border:0;background:none;box-shadow:none;color:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:12px;cursor:pointer;border-radius:10px}
-.sc-local-activities-list li.sc-activity-tile:has(.sc-activity-tile-add:hover:not(:disabled)){background:var(--wk-plane);color:var(--wk-green)}
+/* 2026-11-13 用户两次要求：卡片上不显示「缺/齐 N 件 · 时间」。meta 行现在只用于「有改动待保存」这类提醒。 */
+.sc-activity-meta{display:flex;align-items:center;gap:4px}
+/* 2026-11-13 用户反馈「新建活动视觉可以好看些、应该居中」：
+   ① 按钮原来只有 min-height:72，被网格拉高后仍顶在上边——改 height:100% 才真正垂直居中；
+   ② 加号改成圆形底台（白底 + 发丝边 + 轻投影），文字与图标成一组、间距 6px；
+   ③ 卡片给一点浅底，和白色活动卡拉开层次，虚线仍保留“空位”语义，hover 时转品牌绿。 */
+.sc-local-activities-list li.sc-activity-tile{border:1px dashed var(--sc-line);border-radius:10px;background:color-mix(in srgb,var(--wk-plane-deep) 55%,var(--wk-paper));min-height:72px;display:flex;color:var(--wk-ink-soft)}
+.sc-activity-tile-add{width:100%;height:100%;min-height:72px;border:0;background:none;box-shadow:none;color:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:11px;cursor:pointer;border-radius:10px}
+.sc-activity-tile-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:999px;background:var(--wk-paper);border:1px solid var(--wk-hair);color:var(--wk-ink-soft);box-shadow:0 1px 2px rgba(16,24,22,.06)}
+.sc-local-activities-list li.sc-activity-tile:has(.sc-activity-tile-add:hover:not(:disabled)){background:var(--wk-plane-deep);color:var(--wk-green)}
 .sc-activity-tile-add:disabled{cursor:default;opacity:.6}
-.sc-activity-tile-form{width:100%;display:grid;gap:8px;padding:12px}
-.sc-activity-tile-form input{width:100%;min-width:0;height:34px;padding:0 10px;font-size:12px}
-.sc-activity-tile-actions{display:flex;gap:8px}
-.sc-activity-tile-actions button{height:30px;padding:0 12px;font-size:12px;border-radius:7px}
-.sc-activity-tile-actions button[type="button"]{background:var(--wk-paper);border:1px solid var(--sc-line);box-shadow:none;color:var(--sc-muted)}
+.sc-local-activities-list li.sc-activity-tile{position:relative;overflow:visible}
+.sc-activity-tile-create:disabled{opacity:.5;cursor:default}
 .sc-local-activities>.sc-handoff-error{margin:0}
-/* 恢复保障未就绪是常驻状态而非报错：短词 + 折叠详情，不占显眼红块。 */
-.sc-restore-paused{margin:0;display:flex;align-items:center;gap:6px;font-size:11px;line-height:1.5;color:var(--sc-muted)}
-@media(max-width:480px){.sc-activity-head,.sc-activity-form,.sc-activity-status{padding-left:12px;padding-right:12px}.sc-local-activities-list{padding:10px;gap:10px}}
+/* 灵动岛折叠：轨道画廊默认只留一颗小胶囊，点开才铺开卡片墙。收起时内容退出 Tab 序与朗读。 */
+.sc-activity-group.is-island{border-radius:14px}
+.sc-activity-group.is-island:not(.is-open){background:var(--wk-plane)}
+/* 2026-11-13 用户指令：胶囊拆两区——左「图标+活动名」点一下改名，右「N 个 + 箭头」点一下展开/收起。 */
+.sc-activity-island-bar{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;padding:3px 5px 3px 4px;border-radius:11px;background:none;color:inherit}
+.sc-activity-island-main{flex:1;min-width:0;display:flex;align-items:center;gap:6px;padding:1px 4px 1px 2px;border:0;border-radius:8px;background:none;box-shadow:none;color:inherit;font:inherit;text-align:left;cursor:text}
+.sc-activity-island-toggle{flex:none;display:flex;align-items:center;gap:5px;padding:1px 2px;border:0;border-radius:8px;background:none;box-shadow:none;color:inherit;font:inherit;cursor:pointer}
+.sc-activity-island-main:hover,.sc-activity-island-toggle:hover{background:var(--wk-plane-deep)}
+.sc-activity-island-main:focus-visible,.sc-activity-island-toggle:focus-visible,.sc-activity-island-rename:focus-visible{outline:2px solid color-mix(in srgb,var(--wk-green) 45%,transparent);outline-offset:-1px}
+.sc-activity-island-rename{flex:1;min-width:0;height:24px;padding:0 6px;border:1px solid var(--wk-ink-soft);border-radius:6px;background:var(--wk-paper);color:var(--wk-ink);font:inherit;font-size:12px}
+.sc-activity-island-mark{display:grid;place-items:center;flex:none;width:20px;height:20px;border-radius:999px;overflow:hidden;background:var(--wk-paper);color:var(--sc-muted)}
+.sc-activity-island-mark img{width:100%;height:100%;object-fit:cover}
+.sc-activity-island-name{flex:1;min-width:0;font-size:12px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-activity-island-bar .sc-settings-count{flex:none}/* 0fr→1fr 让高度跟着内容走；收起时 visibility 隐藏，子元素不再可聚焦。 */
+.sc-activity-island-body{display:grid;grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows .22s ease,opacity .18s ease,visibility 0s linear .22s}
+.sc-activity-group.is-island.is-open .sc-activity-island-body{grid-template-rows:1fr;opacity:1;visibility:visible;transition:grid-template-rows .22s ease,opacity .18s ease}
+.sc-activity-island-clip{overflow:hidden;min-height:0}
+.sc-activity-group.is-island.is-open .sc-activity-island-clip{border-top:1px solid var(--wk-hair)}
+@media (prefers-reduced-motion:reduce){.sc-activity-island-body,.sc-activity-group.is-island.is-open .sc-activity-island-body{transition:none}}
+@media(max-width:480px){.sc-activity-head,.sc-activity-form,.sc-activity-status{padding-left:10px;padding-right:10px}.sc-local-activities-list{padding:8px;gap:8px}}

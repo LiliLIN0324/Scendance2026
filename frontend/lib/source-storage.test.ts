@@ -31,7 +31,7 @@ describe('native source editor restore protection',()=>{
     await editor.release();await expect(queued).rejects.toThrow('取消');expect(wrote).toBe(false);expect(editor.acquired).toBe(false);
     vi.unstubAllGlobals();
   });
-  it('rejects unsupported browsers, live editors, and a lock held by another page',async()=>{
+  it('rejects unsupported browsers and live editors, and proceeds when another page holds the lock',async()=>{
     vi.stubGlobal('navigator',{});
     await expect(withSourceRestoreLock(['one'],async()=>1)).rejects.toThrow('Web Locks');
     const request=vi.fn(async(_name:string,options:LockOptions,callback:(lock:Lock|null)=>unknown)=>callback(options.mode==='shared'?{} as Lock:null));
@@ -39,7 +39,8 @@ describe('native source editor restore protection',()=>{
     const editor=registerSourceEditor('one');
     await expect(withSourceRestoreLock(['one'],async()=>1)).rejects.toThrow('另一编辑页面');
     await editor.release();
-    await expect(withSourceRestoreLock(['one'],async()=>1)).rejects.toThrow('另一编辑页面');
+    // 2026-11-14 用户指令：两个页面允许同时打开同一项目，另一页面的编辑锁不再拦截恢复。
+    await expect(withSourceRestoreLock(['one'],async()=>1)).resolves.toBe(1);
     expect(request).toHaveBeenCalledWith('scendance:source-editor:one',expect.objectContaining({mode:'exclusive',ifAvailable:true}),expect.any(Function));
     vi.unstubAllGlobals();
   });

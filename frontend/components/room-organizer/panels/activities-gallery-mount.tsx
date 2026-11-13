@@ -12,8 +12,10 @@ import { LocalActivitiesPanel } from './local-activities-panel';
 
 export function ActivitiesGalleryMount(): JSX.Element | null {
   const studio = useLocalProjectBackup();
-  const { layout } = useRoomEditor();
+  const { layout, actions } = useRoomEditor();
   // 正常壳内 StudioProvider 必在；脱离 Provider 的渲染（如孤立测试）静默不挂，不抛错。
   if (!studio) return null;
-  return <LocalActivitiesPanel mode="list" layout={layout} actions={studio}/>;
+  // 轨道画廊按「灵动岛」折叠：收起时只占一颗胶囊的高度，把左栏让给对话。
+  // 2026-11-13 用户指令：点胶囊左侧改名 —— 文字写回布局名（走 layout store，和属性面板同一条写路径）。
+  return <LocalActivitiesPanel mode="list" compact layout={layout} actions={studio} onRenameCurrent={name => actions.setName(name)}/>;
 }

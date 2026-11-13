@@ -1,9 +1,11 @@
-/* 「你可以做什么」建议卡：缩略图 + 落点虚线圈 + 一句话；点卡体预填指令，不发送。 */
-.cs-card-row { display: flex; flex-direction: column; gap: 8px; }
+/* 「你可以做什么」建议卡：缩略图 + 落点虚线圈 + 一句话；点卡体预填指令，不发送。
+   2026-11-13 用户反馈「展开时占的地方有点大」：缩略图 88×62→56×40、内边距 8→6、
+   行距 8→6、卡内次按钮高 26→22，单卡高约 78→52（两张省 ~50px），句描述也不再被挤成两行。 */
+.cs-card-row { display: flex; flex-direction: column; gap: 6px; }
 
 .cs-card {
-  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
-  padding: 8px;
+  display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
+  padding: 6px;
   border: 1px solid var(--wk-hair);
   border-radius: var(--r-md);
   background: var(--wk-paper);
@@ -17,7 +19,7 @@
 /* 缩略图：复用 PlanThumb 底图，虚线圈只做视觉落点示意，不找真坐标。 */
 .cs-thumb {
   position: relative; flex: 0 0 auto;
-  width: 88px; height: 62px;
+  width: 56px; height: 40px;
   border-radius: var(--r-sm);
   overflow: hidden;
   background: var(--wk-plane-deep);
@@ -40,21 +42,21 @@
 }
 .cs-thumb-ring--offset { left: 64%; top: 56%; width: 44%; }
 
-.cs-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cs-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .cs-card-title { display: flex; align-items: center; gap: 5px; font-size: var(--fs-p2); font-weight: 600; color: var(--wk-ink); }
 .cs-card-title svg { flex: 0 0 auto; color: var(--wk-ink-soft); }
 .cs-card-desc {
-  font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted);
+  font-size: 11px; line-height: 15px; color: var(--wk-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* 卡内小次按钮：原 picker 动作，降一级处理。 */
 .cs-card-action {
   flex: 0 0 auto;
-  display: inline-flex; align-items: center; min-height: 26px; padding: 3px 10px;
+  display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px;
   border: 1px solid var(--wk-hair); border-radius: 999px;
   background: var(--wk-paper); color: var(--wk-ink-soft);
-  font-size: var(--fs-cap); font-weight: 500; white-space: nowrap;
+  font-size: 11px; font-weight: 500; white-space: nowrap;
   cursor: pointer;
   transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec);
 }

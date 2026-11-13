@@ -12,7 +12,7 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -131,6 +131,8 @@ export interface OutdoorPlanOverlayHandle {
   getCanvasApi(): OutdoorPlanCanvasHandle | null;
   /** 业务层画布截图 dataURL（无画布时 null）。 */
   captureImage(): string | null;
+  /** 2026-11-14 舞台合成截图（底图瓦片+业务层，封面口径）；无画布时 null。 */
+  captureStageImage(): string | null;
   /** 按当前 plan 导出 PNG（与右侧导出菜单的 PNG 同一口径）；无 plan 时返回 false。 */
   exportPng(): boolean;
   undo(): void;
@@ -160,6 +162,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onViewChange,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
+  // 2026-11-13（用户指令）：在 chat 里搜地点，地图左上角的「搜地点」框要同步出同一批候选，
+  // 两处检索口径一致，不用在地图框里再输入一遍。这里只做只读同步：
+  // 地图框里选中仍然只是「飞过去 + 落钉」，不改 plan / anchor；真要锚定场地走对话里的确认卡。
+  const venueSearchSync = useMemo(() => {
+    const pick = agent?.venuePick;
+    if (!pick || !pick.query.trim() || pick.loading) return null;
+    return { query: pick.query, hits: pick.candidates };
+  }, [agent?.venuePick?.query, agent?.venuePick?.candidates, agent?.venuePick?.loading]);
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
   // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
@@ -351,6 +361,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     },
     getCanvasApi: () => canvasApiRef.current,
     captureImage: () => canvasApiRef.current?.captureImage() ?? null,
+    captureStageImage: () => canvasApiRef.current?.captureStageImage() ?? null,
     exportPng: () => exportPlanPng(),
     undo: () => canvasApiRef.current?.undo(),
     redo: () => canvasApiRef.current?.redo(),
@@ -457,6 +468,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       {plan && (
         <PlanPlaceSearch
           testIdPrefix="outdoor-place-search"
+          {...(venueSearchSync ? { sync: venueSearchSync } : {})}
           near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
           onPickArea={area => {
             // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
@@ -626,35 +638,55 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* 2026-11-11 用户拍板：底部只留一枚图标钮（OnePlan 侧样）；隐藏底图/重看引导收进面板行。 */}
-          <button
-            type="button"
-            id="tool-outdoor-source"
-            data-testid="outdoor-source-cycle"
-            aria-label={`底图：${currentSource.label}${geoHidden ? '（当前纸面）' : ''}（点选图源/关闭底图/重看引导）`}
-            aria-expanded={mapPickerOpen}
-            aria-haspopup="dialog"
-            data-tip={`底图${geoHidden ? ' · 已关闭' : ` · ${currentSource.label}`}`}
-            onClick={() => setMapPickerOpen(value => !value)}
+          {/* 2026-11-14 用户指令（图一范式）：右下角改「指北针 | 地图」双段白卡——指北针段是
+              北向指示（地图北恒向上，静态图形），地图段沿用原图源切换钮；隐藏底图/重看引导收进面板行。 */}
+          <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: 999,
-              border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+              display: 'flex',
+              alignItems: 'stretch',
+              borderRadius: 14,
               background: PLANNING_SURFACE.panelBg,
-              color: PLANNING_SURFACE.panelText,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
+              border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
               boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
-              fontFamily: 'inherit',
+              overflow: 'hidden',
             }}
           >
-            <span aria-hidden style={{ opacity: 0.75 }}>{geoHidden ? '▢' : '◱'}</span>
-          </button>
+            <div
+              aria-hidden="true"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, padding: '6px 0' }}
+            >
+              <svg width="20" height="28" viewBox="0 0 20 28" fill="none">
+                <path d="M10 1 L15.5 13 L10 10.4 L4.5 13 Z" fill="#1d4ed8" />
+                <path d="M10 27 L15.5 15 L10 17.6 L4.5 15 Z" fill="#4b5563" />
+              </svg>
+            </div>
+            <div aria-hidden="true" style={{ width: 1, margin: '7px 0', background: PLANNING_SURFACE.panelBorder }} />
+            <button
+              type="button"
+              id="tool-outdoor-source"
+              data-testid="outdoor-source-cycle"
+              aria-label={`底图：${currentSource.label}${geoHidden ? '（当前纸面）' : ''}（点选图源/关闭底图/重看引导）`}
+              aria-expanded={mapPickerOpen}
+              aria-haspopup="dialog"
+              data-tip={`底图${geoHidden ? ' · 已关闭' : ` · ${currentSource.label}`}`}
+              onClick={() => setMapPickerOpen(value => !value)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 44,
+                border: 'none',
+                background: 'transparent',
+                color: PLANNING_SURFACE.panelText,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              <span aria-hidden style={{ opacity: 0.75 }}>{geoHidden ? '▢' : '◱'}</span>
+            </button>
+          </div>
         </div>
       </div>
       {plan && (

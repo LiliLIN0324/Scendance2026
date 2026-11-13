@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>户外任务卡 · 八阶段脸预览</title>
+<style>
+  :root{
+    --paper:#FFFFFF; --plane-deep:#ECEDEF; --hair:#E4E4E7; --hair-soft:#EFEFF1;
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --green:#4A7C59; --green-deep:#35624A; --green-pale:#EEF3EF; --warn:#96651F; --err:#B4443C;
+    --r-sm:10px; --r-md:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:28px 32px 48px;background:#F4F5F3;font-family:Inter,Arial,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink)}
+  h1{font-size:18px;font-weight:600;margin:0 0 6px}
+  .sub{font-size:12px;color:var(--muted);margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,380px);gap:22px;align-items:start}
+  .slot{display:flex;flex-direction:column;gap:6px}
+  .tag{font-size:11px;color:var(--faint);letter-spacing:.02em}
+  /* ── 卡外壳：与线上 ap-card / ap-status-card 同参 ── */
+  .wf-card{border:1px solid var(--hair);border-radius:var(--r-md);background:var(--paper);padding:12px 12px 12px;display:flex;flex-direction:column;gap:9px}
+  .wf-card .head{display:flex;align-items:center;justify-content:space-between}
+  .wf-card .head strong{font-size:13px;font-weight:700}
+  .thumb{width:100%;height:auto;display:block;border-radius:10px;border:1px solid var(--hair-soft)}
+  .caption{margin:0;display:flex;gap:6px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--ink-soft)}
+  .caption svg{flex:none;margin-top:3px;color:var(--muted)}
+  .progress{height:6px;border-radius:999px;background:#fff;border:1px solid var(--hair-soft);overflow:hidden}
+  .progress i{display:block;height:100%;width:36%;border-radius:inherit;background:repeating-linear-gradient(45deg,var(--green) 0 5px,color-mix(in srgb,var(--green) 42%,#fff) 5px 10px);animation:stripe 900ms linear infinite}
+  @keyframes stripe{to{background-position:14.14px 0}}
+  @media (prefers-reduced-motion: reduce){.progress i{animation:none}}
+  .error{display:flex;gap:7px;padding:8px 10px;border:1px solid color-mix(in srgb,var(--err) 32%,var(--hair));border-radius:var(--r-sm);background:color-mix(in srgb,var(--err) 8%,#fff);font-size:12px;line-height:1.5;color:var(--err)}
+  .actions{display:flex;flex-wrap:wrap;gap:8px}
+  .btn-primary{border:0;border-radius:var(--r-sm);background:var(--green);color:#fff;font-size:12px;padding:7px 12px;cursor:pointer}
+  .btn-ghost{border:1px solid var(--hair);border-radius:var(--r-sm);background:#fff;color:var(--ink-soft);font-size:12px;padding:7px 12px;cursor:pointer}
+</style>
+</head>
+<body>
+<h1>户外任务卡 · 八阶段脸（同一外壳，随阶段换图注 + 缩略图变体）</h1>
+<p class="sub">外壳 = 阶段戳 + 地图缩略 + 一行图注（+ 主操作区）。缩略图先用自绘示意，真实几何出来后逐步替换。V-1～V-5 各占一段。</p>
+<div class="grid">
+
+  <!-- 工作态样例（place 正在处理） -->
+  <div class="slot"><span class="tag">通用 · 正在处理态（busy 时头部戳+条纹进度）</span>
+    <section class="wf-card">
+      <header class="head"><strong>正在处理 · 搜索目标地点</strong></header>
+      <div class="progress"><i></i></div>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <path d="M36 22 C 90 40, 120 78, 196 88 S 268 96, 300 92" stroke="#F4ECD9" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M140 24 C 150 52, 168 70, 210 88" stroke="#F4ECD9" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <rect x="60" y="40" width="44" height="30" rx="4" fill="#C9DCC0"/><rect x="212" y="34" width="52" height="26" rx="4" fill="#C9DCC0"/>
+        <rect x="236" y="100" width="40" height="20" rx="4" fill="#C9DCC0"/><rect x="118" y="96" width="34" height="22" rx="4" fill="#D8CDB4"/>
+        <rect x="118" y="52" width="110" height="62" rx="8" fill="none" stroke="#4A7C59" stroke-width="2.5" stroke-dasharray="7 6"/>
+        <circle cx="173" cy="83" r="5" fill="#4A7C59"/>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>正在为你检索地点并核对可用范围…</p>
+    </section>
+  </div>
+
+  <!-- ① place -->
+  <div class="slot"><span class="tag">① place 搜索目标地点 · V-1（已上线）</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 搜索目标地点</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <path d="M36 22 C 90 40, 120 78, 196 88 S 268 96, 300 92" stroke="#F4ECD9" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M140 24 C 150 52, 168 70, 210 88" stroke="#F4ECD9" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <rect x="60" y="40" width="44" height="30" rx="4" fill="#C9DCC0"/><rect x="212" y="34" width="52" height="26" rx="4" fill="#C9DCC0"/>
+        <rect x="236" y="100" width="40" height="20" rx="4" fill="#C9DCC0"/><rect x="118" y="96" width="34" height="22" rx="4" fill="#D8CDB4"/>
+        <rect x="118" y="52" width="110" height="62" rx="8" fill="none" stroke="#4A7C59" stroke-width="2.5" stroke-dasharray="7 6"/>
+        <circle cx="173" cy="83" r="5" fill="#4A7C59"/>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>请核对活动实际范围，自动为你框选项目区域</p>
+    </section>
+  </div>
+
+  <!-- ② scope 待你核对 -->
+  <div class="slot"><span class="tag">② scope 核对具体活动范围 · V-1（待你核对脸）</span>
+    <section class="wf-card">
+      <header class="head"><strong>待你核对 · 核对具体活动范围</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <path d="M36 22 C 90 40, 120 78, 196 88 S 268 96, 300 92" stroke="#F4ECD9" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <rect x="60" y="40" width="44" height="30" rx="4" fill="#C9DCC0"/><rect x="212" y="34" width="52" height="26" rx="4" fill="#C9DCC0"/>
+        <rect x="118" y="96" width="34" height="22" rx="4" fill="#D8CDB4"/>
+        <rect x="86" y="38" width="150" height="72" rx="6" fill="color-mix(in srgb,#4A7C59 14%,#fff)" stroke="#4A7C59" stroke-width="2.5"/>
+        <rect x="82" y="34" width="8" height="8" fill="#fff" stroke="#4A7C59" stroke-width="2"/><rect x="232" y="34" width="8" height="8" fill="#fff" stroke="#4A7C59" stroke-width="2"/>
+        <rect x="82" y="106" width="8" height="8" fill="#fff" stroke="#4A7C59" stroke-width="2"/><rect x="232" y="106" width="8" height="8" fill="#fff" stroke="#4A7C59" stroke-width="2"/>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>已框出项目区域，确认后写进方案；也可只取其中一部分</p>
+      <div class="actions"><button class="btn-primary">确认并应用这一版</button><button class="btn-ghost">只取一部分</button></div>
+    </section>
+  </div>
+
+  <!-- ③ zones -->
+  <div class="slot"><span class="tag">③ zones 分区用途 · V-3</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 分区用途与室内外依据</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="40" y="24" width="112" height="70" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <rect x="158" y="24" width="122" height="42" rx="6" fill="#F2E3C2" stroke="#fff" stroke-width="2"/>
+        <rect x="158" y="72" width="122" height="40" rx="6" fill="#BFD9E8" stroke="#fff" stroke-width="2"/>
+        <rect x="40" y="100" width="240" height="14" rx="4" fill="#E3D9C0" stroke="#fff" stroke-width="2"/>
+        <text x="62" y="62" font-size="11" fill="#35624A">观众区</text><text x="176" y="48" font-size="11" fill="#96651F">表演区</text>
+        <text x="176" y="95" font-size="11" fill="#3D6C8C">餐饮区</text><text x="60" y="111" font-size="10" fill="#7A6F52">后勤带</text>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>按活动用途划分功能分区，室内外依据随区标注</p>
+      <div class="actions"><button class="btn-primary">预览分区</button><button class="btn-ghost">在同地图画真实分区</button></div>
+    </section>
+  </div>
+
+  <!-- ④ main-routes -->
+  <div class="slot"><span class="tag">④ main-routes 主要入口与通道 · V-2</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 主要入口与通道</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="118" y="46" width="96" height="52" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <rect x="228" y="30" width="52" height="30" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <path d="M18 128 C 60 112, 92 96, 132 78" stroke="#4A7C59" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path d="M132 78 L 122 80 M132 78 L 128 88" stroke="#4A7C59" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path d="M300 40 C 270 56, 246 62, 218 66" stroke="#55585F" stroke-width="5" stroke-dasharray="10 7" fill="none" stroke-linecap="round"/>
+        <path d="M218 66 L 228 58 M218 66 L 229 70" stroke="#55585F" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path d="M300 118 C 262 112, 232 108, 206 102" stroke="#96651F" stroke-width="3.5" stroke-dasharray="3 6" fill="none" stroke-linecap="round"/>
+        <circle cx="132" cy="78" r="5" fill="#fff" stroke="#35624A" stroke-width="2.5"/>
+        <circle cx="300" cy="40" r="5" fill="#fff" stroke="#55585F" stroke-width="2.5"/>
+        <circle cx="300" cy="118" r="5" fill="#fff" stroke="#96651F" stroke-width="2.5"/>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>沿真实路网排人流（绿）/车流（灰）/后勤（点线）与出入口</p>
+      <div class="actions"><button class="btn-primary">预览流线</button><button class="btn-ghost">标出已知入口</button></div>
+    </section>
+  </div>
+
+  <!-- ⑤ objects -->
+  <div class="slot"><span class="tag">⑤ objects 物料排布 · V-3</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 按用途复用我的物料</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="40" y="24" width="112" height="70" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <rect x="158" y="24" width="122" height="42" rx="6" fill="#F2E3C2" stroke="#fff" stroke-width="2"/>
+        <g fill="#fff" stroke="#4A7C59" stroke-width="1.5">
+          <rect x="54" y="36" width="9" height="9" rx="2"/><rect x="70" y="36" width="9" height="9" rx="2"/><rect x="86" y="36" width="9" height="9" rx="2"/><rect x="102" y="36" width="9" height="9" rx="2"/><rect x="118" y="36" width="9" height="9" rx="2"/>
+          <rect x="54" y="56" width="9" height="9" rx="2"/><rect x="70" y="56" width="9" height="9" rx="2"/><rect x="86" y="56" width="9" height="9" rx="2"/><rect x="102" y="56" width="9" height="9" rx="2"/><rect x="118" y="56" width="9" height="9" rx="2"/>
+        </g>
+        <g fill="#fff" stroke="#96651F" stroke-width="1.5">
+          <circle cx="182" cy="40" r="6"/><circle cx="206" cy="40" r="6"/><circle cx="230" cy="40" r="6"/><circle cx="254" cy="40" r="6"/>
+        </g>
+        <rect x="176" y="56" width="64" height="6" rx="3" fill="#96651F" opacity=".55"/>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>按分区复用我的物料自动排布，也可先检索物料库</p>
+      <div class="actions"><button class="btn-primary">预览排布</button><button class="btn-ghost">检索我的物料库</button></div>
+    </section>
+  </div>
+
+  <!-- ⑥ sub-routes -->
+  <div class="slot"><span class="tag">⑥ sub-routes 子入口与支线 · V-4</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 物件间隙的子入口与支线</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="118" y="46" width="96" height="52" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <rect x="40" y="30" width="52" height="34" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <path d="M18 128 C 60 112, 92 96, 132 78" stroke="#4A7C59" stroke-width="4" fill="none" stroke-linecap="round" opacity=".6"/>
+        <path d="M132 78 C 110 66, 92 60, 76 58" stroke="#35624A" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M132 78 C 118 96, 108 106, 96 112" stroke="#35624A" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M132 78 C 156 66, 176 62, 196 62" stroke="#35624A" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <rect x="72" y="52" width="9" height="9" rx="2" fill="#fff" stroke="#35624A" stroke-width="2"/>
+        <rect x="91" y="107" width="9" height="9" rx="2" fill="#fff" stroke="#35624A" stroke-width="2"/>
+        <rect x="192" y="57" width="9" height="9" rx="2" fill="#fff" stroke="#35624A" stroke-width="2"/>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>补齐物件间隙的子出入口与支线，散场不再挤主门</p>
+      <div class="actions"><button class="btn-primary">预览支线</button></div>
+    </section>
+  </div>
+
+  <!-- ⑦ people -->
+  <div class="slot"><span class="tag">⑦ people 岗位人数与活动路径 · V-4</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 岗位、人数与活动路径</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="118" y="46" width="96" height="52" rx="6" fill="#C9DCC0" stroke="#fff" stroke-width="2"/>
+        <path d="M30 120 C 70 100, 110 84, 150 74 S 220 62, 250 58" stroke="#7FA8C9" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
+        <g fill="#4A7C59"><circle cx="60" cy="106" r="2.6"/><circle cx="72" cy="101" r="2.6"/><circle cx="86" cy="94" r="2.6"/><circle cx="98" cy="90" r="2.6"/><circle cx="112" cy="84" r="2.6"/><circle cx="126" cy="79" r="2.6"/><circle cx="142" cy="75" r="2.6"/><circle cx="156" cy="71" r="2.6"/><circle cx="170" cy="68" r="2.6"/><circle cx="184" cy="66" r="2.6"/><circle cx="198" cy="64" r="2.6"/><circle cx="212" cy="62" r="2.6"/></g>
+        <g fill="#96651F"><rect x="120" y="42" width="10" height="10" rx="2" transform="rotate(45 125 47)"/><rect x="206" y="90" width="10" height="10" rx="2" transform="rotate(45 211 95)"/></g>
+        <text x="134" y="51" font-size="10" fill="#7A5A17">保安</text><text x="220" y="100" font-size="10" fill="#7A5A17">医疗</text>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>岗位、人数与活动路径；可开流动示意看散场节奏</p>
+      <div class="actions"><button class="btn-primary">预览岗位路径</button><button class="btn-ghost">开流动示意</button></div>
+    </section>
+  </div>
+
+  <!-- ⑧ refine-3d -->
+  <div class="slot"><span class="tag">⑧ refine-3d 同规划 3D 深化 · V-5</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 同规划 3D 深化</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="48" y="36" width="52" height="30" rx="4" fill="#C9DCC0"/>
+        <rect x="230" y="92" width="44" height="22" rx="4" fill="#C9DCC0"/>
+        <g>
+          <path d="M150 52 L 186 40 L 222 52 L 186 64 Z" fill="#9DBB92"/>
+          <path d="M150 52 L 186 64 L 186 100 L 150 88 Z" fill="#6F9770"/>
+          <path d="M186 64 L 222 52 L 222 88 L 186 100 Z" fill="#4A7C59"/>
+        </g>
+        <text x="168" y="84" font-size="10" fill="#fff">主舞台</text>
+      </svg>
+      <p class="caption"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>选中设施换模型、原位上传或生成（费用单独确认）</p>
+      <div class="actions"><button class="btn-primary">比较模型候选</button><button class="btn-ghost">原位生成</button></div>
+    </section>
+  </div>
+
+  <!-- 错误态样例 -->
+  <div class="slot"><span class="tag">附 · 错误态（红色语义块，已上线）</span>
+    <section class="wf-card">
+      <header class="head"><strong>当前任务 · 搜索目标地点</strong></header>
+      <svg class="thumb" viewBox="0 0 320 150">
+        <rect width="320" height="150" fill="#DDE8D2"/>
+        <path d="M0 118 C 60 108, 120 126, 180 120 S 290 132, 320 124 L320 150 L0 150 Z" fill="#BFD9E8"/>
+        <rect x="118" y="52" width="110" height="62" rx="8" fill="none" stroke="#4A7C59" stroke-width="2.5" stroke-dasharray="7 6"/>
+      </svg>
+      <div class="error"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><p>网络连接没有完成，本次未执行；请检查网络后再试。</p></div>
+    </section>
+  </div>
+
+</div>
+</body>
+</html>

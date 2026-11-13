@@ -44,11 +44,13 @@
   position: absolute; inset: 0; z-index: 8; margin: 0; padding: 0; border: 0;
   background: transparent; cursor: default;
 }
+/* 2026-11-14 用户指令（对齐 VS Code chat）：历史整层接管对话区——不再 1/3 高浮条被卡片遮住；
+   点会话进入对话，右上 ✕ 回到对话。 */
 .ap-history-panel {
-  position: absolute; top: 0; left: 8px; right: 8px; z-index: 9;
-  max-height: 33.333%; min-height: 0; overflow: hidden;
-  border: 1px solid var(--wk-hair); border-radius: var(--r-md);
-  background: var(--paper); box-shadow: 0 8px 28px rgba(20, 20, 22, 0.08);
+  position: absolute; inset: 0; z-index: 9;
+  min-height: 0; overflow: hidden;
+  border: 0; border-radius: 0;
+  background: var(--paper); box-shadow: none;
 }
 .ap-history-panel .sc-session-history.is-overlay {
   max-height: none; height: 100%; border-bottom: 0;
@@ -142,6 +144,38 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-guide-chip small { display: block; font-size: var(--fs-cap); color: var(--ap-grey); }
 /* 用户行 = 墨色气泡（右上收口）：与 AI 浅灰气泡拉开身份差，聊天气泡感的核心。 */
 .ap-user { align-self: flex-end; max-width: 88%; background: var(--wk-ink); color: #fff; border-radius: 14px 14px 4px 14px; padding: 8px 12px; display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; }
+/* 2026-11-14 用户指令：气泡 hover 出「复制 / 编辑」；编辑钮只给最近一条用户消息。
+   wrap 接管对齐（气泡的 align-self 相对新父级），行动钮藏到 hover 才出。 */
+.ap-bubble-wrap { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
+.ap-bubble-wrap.is-user { align-items: flex-end; }
+.ap-bubble-wrap .ap-user { max-width: 88%; }
+.ap-msg-actions {
+  display: flex; gap: 2px; height: 22px; margin-top: 3px;
+  opacity: 0; transition: opacity 0.12s ease; pointer-events: none;
+}
+.ap-bubble-wrap.is-user .ap-msg-actions { justify-content: flex-end; }
+.ap-bubble-wrap:hover .ap-msg-actions,
+.ap-bubble-wrap:focus-within .ap-msg-actions { opacity: 1; pointer-events: auto; }
+.ap-msg-actions button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 22px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--wk-ink-soft, #71767e); cursor: pointer;
+}
+.ap-msg-actions button:hover { background: var(--wk-plane, #f4f5f7); color: var(--wk-ink, #141416); }
+.ap-msg-actions button.is-copied { color: var(--wk-green-deep, #35624A); }
+/* 原位编辑框：气泡位置就地变成 chat 框，发送=替换这句话并重新走理解管线。 */
+.ap-msg-edit {
+  display: flex; flex-direction: column; gap: 6px;
+  width: min(420px, 100%); box-sizing: border-box;
+  padding: 8px; border: 1.5px solid var(--wk-green, #4a7c59); border-radius: 12px;
+  background: var(--wk-paper, #fff);
+}
+.ap-msg-edit textarea {
+  font: inherit; font-size: 13.5px; line-height: 1.45; color: var(--wk-ink, #141416);
+  background: transparent; border: 0; outline: none; resize: none; min-height: 44px;
+  overflow-wrap: anywhere;
+}
+.ap-msg-edit-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .ap-user strong { font-weight: 500; display: block; word-break: break-word; }
 .ap-user.is-file strong { font-weight: 600; }
 .ap-user small { display: block; font-size: var(--fs-cap); color: rgba(255, 255, 255, .64); }
@@ -169,6 +203,28 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-pending-x:hover, .ap-pending-x:focus-visible { color: var(--wk-ink); background: var(--wk-paper); outline: none; }
 .sc-agent-panel .ap-status-card .btn-primary { width: 100%; }
 .sc-agent-panel .ap-status-card .btn-primary:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); cursor: not-allowed; }
+/* 户外渐进任务卡：进行中是不定时长条纹进度（只表达在跑，不编执行时长）；报错是红色语义块，不裸显机器错误码。 */
+.ap-task-progress { height: 6px; border-radius: 999px; background: var(--wk-plane); border: 1px solid var(--wk-hair-soft); overflow: hidden; }
+.ap-task-progress::before { content: ''; display: block; height: 100%; width: 36%; border-radius: inherit; background: repeating-linear-gradient(45deg, var(--green) 0 5px, color-mix(in srgb, var(--green) 42%, var(--wk-paper)) 5px 10px); animation: ap-task-stripes 900ms linear infinite; }
+@keyframes ap-task-stripes { to { background-position: 14.14px 0; } }
+.ap-task-error { display: flex; align-items: flex-start; gap: 7px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--err) 32%, var(--wk-hair)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--err) 8%, var(--wk-paper)); font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--err); }
+.ap-task-error svg { flex: none; margin-top: 3px; }
+.ap-task-error p { margin: 0; }
+.ap-task-retry {
+  flex: none; align-self: center; margin-left: auto;
+  padding: 2px 10px; border: 1px solid color-mix(in srgb, var(--err) 40%, var(--wk-hair)); border-radius: 999px;
+  background: transparent; color: var(--err); font: inherit; font-size: var(--fs-cap); font-weight: 600; cursor: pointer;
+}
+.ap-task-retry:hover { background: color-mix(in srgb, var(--err) 10%, transparent); }
+.ap-task-retry:disabled { opacity: 0.5; cursor: not-allowed; }
+/* AC 式任务卡：上幅自绘地图缩略 + 图注一行；缩略是示意，不声称真实轮廓。 */
+.ap-task-map { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--wk-hair-soft); }
+.ap-task-caption { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+/* 图标既有 svg 也有 MaterialSymbol span（13px 高、inline line-height:1）：
+   文字行高 ≈18px，两者都补 3px 顶距才能与首行文字光学居中。 */
+.ap-task-caption svg,
+.ap-task-caption .sc-material-symbol { flex: none; margin-top: 3px; color: var(--wk-muted); }
+@media (prefers-reduced-motion: reduce) { .ap-task-progress::before { animation: none; } }
 .ap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-bottom: 1px solid var(--wk-hair-soft); padding-bottom: 10px; }
 .ap-field { display: flex; flex-direction: column; gap: 3px; position: relative; }
 .ap-field-label { font-size: var(--fs-cap); color: var(--ap-grey); }
@@ -178,6 +234,17 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-choices, .ap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .ap-capabilities { flex: 0 0 auto; margin: 0 12px 8px; padding: 0 2px; display: flex; flex-direction: column; gap: 6px; }
 .ap-capability-label { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); font-weight: 500; }
+/* 收起时只剩这一行标题：能力卡不该一直占着对话区。 */
+.ap-capability-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  width: 100%; margin: 0; padding: 1px 0;
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.ap-capability-toggle:hover .ap-capability-label { color: var(--wk-ink-soft); }
+.ap-capability-toggle:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; border-radius: var(--r-sm); }
+.ap-capability-chevron { flex: 0 0 auto; color: var(--wk-ink-faint); transition: transform var(--dur-1) var(--ease-spec); }
+.ap-capabilities.is-collapsed .ap-capability-chevron { transform: rotate(-90deg); }
+#ap-capability-cards[hidden] { display: none; }
 .ap-capability-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .ap-capability-chip svg { flex: 0 0 auto; color: var(--wk-ink-soft); }
 .sc-agent-panel .chip.is-on { border-color: var(--ap-green); background: var(--ap-pale2); color: var(--ap-deep); }
@@ -258,7 +325,11 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* ── 输入区：面板底部固定条 ──
    四格同一条：贴面板底边、左右与卡片同内边距，只保留上缘一条分隔线；
    不再用圆角 + 阴影的悬浮卡片，避免看起来浮在面板中间。 */
-.ap-composer { margin: 0; border: 0; border-top: 1px solid var(--wk-hair); border-radius: 0; background: var(--wk-paper); padding: 8px 12px 8px; display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; transition: border-color var(--dur-1) var(--ease-spec); }
+.ap-composer { margin: 0; border: 0; border-top: 1px solid var(--wk-hair); border-radius: 0; background: var(--wk-paper); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; transition: border-color var(--dur-1) var(--ease-spec); }
+/* 活动脸这一条：不铺灰底、也不留上缘分隔线——分界只交给输入卡自己的描边与投影，
+   底条与面板同色，看着不像「贴了一条工具栏」。空间/物料对话仍走原纸面条。 */
+.ap-composer.ap-composer-panel,
+.ap-composer.ap-composer-panel:focus-within { background: transparent; border-top-color: transparent; }
 .ap-tools { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: 100%; }
 .ap-tool-chip { display: inline-flex; align-items: center; gap: 6px; margin: 0; max-width: 100%; padding: 4px 10px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); font-size: 12px; line-height: 1.4; color: var(--wk-ink); }
 .ap-tool-chip.is-running { background: var(--wk-plane); }
@@ -287,6 +358,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-composer:focus-within { border-top-color: var(--wk-ink-soft); }
 .ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 88px; }
 .ap-composer textarea:focus, .ap-composer textarea:focus-visible { outline: none; box-shadow: none; }
+/* composer 栏仍被 agent-chat / member-chat 复用（agent-panel 本体的独立槽位栏已并入「智能」菜单）。 */
 .ap-composer-bar { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 .ap-composer-left { display: flex; align-items: center; gap: 6px; min-width: 0; justify-self: start; }
 .ap-composer-bar > .ap-send { justify-self: end; }
@@ -297,16 +369,8 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-supervise > summary:hover { background: var(--wk-plane); color: var(--wk-ink); }
 .ap-supervise-dot { width: 6px; height: 6px; border-radius: 50%; background: #4A7C59; flex: none; }
 .ap-supervise-menu { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 4; min-width: 200px; max-width: calc(100vw - 48px); max-height: min(50vh, 320px); overflow-y: auto; padding: 8px 10px; border: 1px solid var(--wk-hair); border-radius: 8px; background: var(--wk-paper); box-shadow: var(--e1); }
-/* 模型槽位：文字胶囊触发，菜单经 Portal 挂到 body 层 fixed 定位，避免堆栈矮卡 overflow 裁剪。 */
-.ap-provider { position: relative; display: inline-flex; flex: none; }
-.ap-provider-summary { display: inline-flex; align-items: center; gap: 4px; max-width: 180px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; font-size: 12px; color: var(--wk-muted); cursor: pointer; white-space: nowrap; }
-.ap-provider-summary:hover, .ap-provider-summary[aria-expanded="true"] { background: var(--wk-plane); color: var(--wk-ink); }
-.ap-provider-summary-label { overflow: hidden; text-overflow: ellipsis; }
-.ap-provider-menu { position: fixed; z-index: 60; min-width: 220px; max-width: calc(100vw - 48px); max-height: min(50vh, 320px); overflow-y: auto; padding: 8px 10px; border: 1px solid var(--wk-hair); border-radius: 8px; background: var(--wk-paper); box-shadow: var(--e1); display: flex; flex-direction: column; gap: 4px; visibility: hidden; pointer-events: none; }
-.ap-provider-menu.is-open { visibility: visible; pointer-events: auto; }
-.ap-provider-menu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 6px; border: none; border-radius: 6px; background: transparent; color: var(--wk-ink); font-size: var(--fs-cap); text-align: left; white-space: nowrap; }
-.ap-provider-menu button:hover:not(:disabled) { background: var(--wk-plane); }
-.ap-provider-menu button:disabled { opacity: .5; cursor: not-allowed; }
+/* 模型槽位行：2026-11-14 起并进「智能」菜单（ap-model-menu），独立槽位栏已拆除；
+   行内 label/model 复用这两个类。 */
 .ap-provider-label { overflow: hidden; text-overflow: ellipsis; }
 .ap-provider-label small { font-weight: 400; margin-left: 6px; opacity: .7; }
 .ap-provider-model { color: var(--wk-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; flex: none; }
@@ -328,10 +392,10 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* 布置轨同款：空输入时把引导句逐字打在框里，按 Tab 填整句。 */
 .ap-composer-field { position: relative; display: flex; min-height: 92px; }
 .ap-composer-field textarea { position: relative; z-index: 1; width: 100%; }
-.ap-ghost { position: absolute; z-index: 0; left: 0; top: 0; right: 0; color: var(--wk-ink-faint, #9aa0a6); opacity: .72; pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p2); font-weight: 400; line-height: var(--lh-p2); }
-/* 四格共用：提示可点，点一下只把整句填进框里，不替人发送。不进 Tab 序列。 */
+/* 引导句与真实文字同一内边距、同一字号，打字机效果不会歪开。 */
+.ap-ghost { position: absolute; z-index: 0; left: 0; top: 0; right: 0; padding: 12px 14px 6px; color: var(--wk-ink-faint, #9aa0a6); opacity: .72; pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p1); font-weight: 400; line-height: var(--lh-p1); }
 button.ap-ghost {
-  width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent;
+  width: 100%; margin: 0; padding: 12px 14px 6px; border: 0; border-radius: 0; background: transparent;
   font-family: inherit; font-weight: 400; text-align: left; color: inherit; cursor: text;
   pointer-events: none;
 }
@@ -993,22 +1057,62 @@ button.ap-ghost {
 .sc-space-library-menu summary[data-tip]:hover::after,
 .sc-space-library-menu summary[data-tip]:focus-visible::after { opacity: 1; }
 
-/* ── 发送键双态：空态麦克风 / 有字箭头；圆钮绝对定位在输入框内部右下角 ─────────── */
+/* ── 活动脸输入卡：白纸 + 1px 描边 + 12px 圆角 ───────────────────────────────
+   卡内分两段：上面是打字区，下面是一条动作行（左 ⓘ、右发送/麦克风）走正常流，
+   不再用绝对定位压在留白里——留白因此被动作行占住，卡片上下不再头轻脚重。 */
 .ap-panel-field { position: relative; }
-.ap-panel-field textarea { padding: 26px 44px 36px 26px; }
-/* 左下 ⓘ 与右下圆钮同一基线、同一边距。 */
-.ap-panel-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; }
+.ap-composer-field.ap-panel-field {
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #DEDFE3;
+  border-radius: 12px;
+  background: var(--wk-paper);
+  box-shadow: 0 1px 2px rgba(20, 20, 22, .05);
+  transition: border-color var(--dur-1) var(--ease-spec), box-shadow var(--dur-1) var(--ease-spec);
+}
+.ap-composer-field.ap-panel-field:focus-within { border-color: #C7C9CF; box-shadow: 0 1px 3px rgba(20, 20, 22, .08); }
+.ap-panel-field textarea { min-height: 64px; padding: 12px 14px 6px; }
+/* 占位句比默认浏览器灰更实一点：它是这条输入框唯一的说明，得读得清。 */
+.ap-panel-field textarea::placeholder { color: #8A8E96; opacity: 1; }
+/* 两行高的框里滚第三行很常见：滚动条会突然出现把版面挤歪，索性收起来，滚轮照旧可用。 */
+.ap-panel-field textarea { scrollbar-width: none; }
+.ap-panel-field textarea::-webkit-scrollbar { width: 0; height: 0; }
+/* 动作行：与文字同一 14px 左轴；ⓘ 26px 圆形热区，和右侧圆钮垂直居中。 */
+.ap-panel-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 7px 6px; }
+/* 动作行左端：加号（上传图片/资料）。与右端麦克风同一套裸图标 + hover 浅底。 */
+.ap-panel-add { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: transparent; color: var(--wk-muted); cursor: pointer; transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec); }
+.ap-panel-add:hover { background: var(--plane-deep); color: var(--wk-ink); }
+/* 加号浮窗：贴在加号上方、左对齐；只放「图片 / 文件」两项，不写解释句。 */
+.ap-add-picker { position: relative; display: flex; align-items: center; }
+.ap-add-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6; min-width: 132px; padding: 4px; border: 1px solid #DEDFE3; border-radius: 10px; background: var(--wk-paper); box-shadow: 0 6px 20px rgba(20, 20, 22, .10); }
+.ap-add-item { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--wk-ink); font-size: 13px; line-height: 1.3; text-align: left; cursor: pointer; }
+.ap-add-item:hover { background: var(--plane-deep); }
+.ap-add-item svg { flex: none; color: var(--wk-muted); }
+/* 动作行右端集群：模型位 + 麦克风/发送。 */
+.ap-panel-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+/* 模型位：一颗安静的胶囊，只有当前档位「智能」+ 尖角；点开是一张只有一项的菜单。 */
+.ap-model-picker { position: relative; display: flex; align-items: center; }
+.ap-model-trigger { display: inline-flex; align-items: center; gap: 2px; height: 26px; margin: 0; padding: 0 6px 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--wk-muted); font: inherit; font-size: 12px; line-height: 1; cursor: pointer; transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec); }
+.ap-model-trigger:hover { background: var(--plane-deep); color: var(--wk-ink); }
+.ap-model-trigger[aria-expanded="true"] { background: var(--plane-deep); color: var(--wk-ink); }
+.ap-model-trigger-name { white-space: nowrap; }
+.ap-model-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 6; min-width: 240px; max-height: min(50vh, 320px); overflow-y: auto; padding: 4px; border: 1px solid #DEDFE3; border-radius: 10px; background: var(--wk-paper); box-shadow: 0 6px 20px rgba(20, 20, 22, .10); }
+.ap-model-item:disabled { opacity: .5; cursor: not-allowed; }
+/* capabilities 只在登录后拉取：未登录/拉取失败时菜单给解释文案，不留一个像是「模型被删了」的空壳项。 */
+.ap-model-empty { padding: 7px 8px; font-size: 12px; line-height: 1.5; color: var(--wk-muted); }
+.ap-model-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--wk-ink); font-size: 13px; line-height: 1.3; text-align: left; cursor: pointer; }
+.ap-model-item:hover { background: var(--plane-deep); }
+.ap-model-item-name { white-space: nowrap; }
+.ap-panel-info { width: 26px; height: 26px; padding: 0; align-items: center; justify-content: center; border-radius: 999px; color: var(--wk-muted); transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec); }
+.ap-panel-info:hover { background: var(--plane-deep); color: var(--wk-ink-soft); }
+.ap-panel-info[aria-expanded="true"] { background: var(--plane-deep); color: var(--wk-ink); }
 /* 附件条 / 排队提示 / 告警 / 存盘失败：全部浮层盖在输入区上方，出现消失不撑高 composer、不顶歪圆钮与 ⓘ 基线。 */
-.ap-file-chip { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; }
-.ap-field-note { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; margin: 0; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
-.ap-field-alert { position: absolute; top: 2px; left: 2px; right: 44px; z-index: 3; padding: 6px 8px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); box-shadow: var(--e1); font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-ink-soft); }
+.ap-file-chip { position: absolute; top: 8px; left: 8px; right: 48px; z-index: 3; }
+.ap-field-note { position: absolute; top: 8px; left: 12px; right: 48px; z-index: 3; margin: 0; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
+.ap-field-alert { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3; padding: 6px 8px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); box-shadow: var(--e1); font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-ink-soft); }
 .ap-field-alert p { margin: 0 0 6px; }
 .ap-field-alert button { margin: 0 6px 0 0; }
 .ap-panel-field .ap-panel-send {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 2;
   width: 30px;
   height: 30px;
   margin: 0;
@@ -1020,12 +1124,16 @@ button.ap-ghost {
 }
 .ap-panel-field .ap-panel-send:hover:not(:disabled) { transform: none; }
 .ap-panel-field .ap-panel-send:disabled { background-color: #FFFFFF; color: #A6AAB2; cursor: default; }
-/* 空态麦克风：中性浅底描边，不抢发送色。 */
-.ap-panel-field .ap-panel-send.ap-mic { background-color: #FFFFFF; border-color: #E4E4E7; color: #55585F; }
-.ap-panel-field .ap-panel-send.ap-mic:hover:not(:disabled) { background-color: #ECEDEF; color: #141416; }
-.ap-panel-field .ap-panel-send.ap-mic:disabled { color: #A6AAB2; background-color: #FFFFFF; opacity: .5; cursor: not-allowed; }
-.ap-panel-field .ap-panel-send.ap-mic.is-listening { background-color: #96651F; border-color: transparent; color: #FFFFFF; animation: ap-mic-pulse 1.2s ease-in-out infinite; }
-.ap-panel-field .ap-panel-send.ap-mic.is-listening:hover:not(:disabled) { background-color: #96651F; color: #FFFFFF; }
+/* 空态麦克风：不画描边圆钮——它和动作行左端的 ⓘ 一样是工具，裸图标 + hover 浅底才统一；
+   只有真能发出去时才换墨黑实心圆（那是唯一的主动作）。 */
+.ap-panel-field .ap-panel-send.ap-mic { background-color: transparent; border-color: transparent; color: var(--wk-ink-soft); }
+.ap-panel-field .ap-panel-send.ap-mic:hover:not(:disabled) { background-color: var(--plane-deep); color: var(--wk-ink); }
+.ap-panel-field .ap-panel-send.ap-mic:disabled { background-color: transparent; color: var(--wk-ink-faint); opacity: 1; cursor: not-allowed; }
+.ap-panel-field .ap-panel-send.ap-mic.is-listening { background-color: color-mix(in srgb, var(--warn) 16%, var(--wk-paper)); border-color: transparent; color: var(--warn); animation: ap-mic-pulse 1.2s ease-in-out infinite; }
+.ap-panel-field .ap-panel-send.ap-mic.is-listening:hover:not(:disabled) { background-color: color-mix(in srgb, var(--warn) 24%, var(--wk-paper)); color: var(--warn); }
+/* 请求进行中：发送位换成墨底中止钮（白方块），与激活态发送同一语言。 */
+.ap-panel-field .ap-panel-send.is-stop { background-color: var(--wk-ink); border-color: transparent; color: #fff; }
+.ap-panel-field .ap-panel-send.is-stop:hover:not(:disabled) { background-color: #2A2C31; color: #fff; }
 @keyframes ap-mic-pulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 32%, transparent); }
   50% { box-shadow: 0 0 0 7px transparent; }

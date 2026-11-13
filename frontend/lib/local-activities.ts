@@ -2,7 +2,7 @@ import { canonical } from '../../supabase/functions/_shared/domain';
 import { mergeMaterialCheckinLedgers } from '../../supabase/functions/_shared/material-checkin-contract';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../components/room-organizer/lib/initial-layout';
 import { MAX_NAME_LENGTH } from '../components/room-organizer/lib/schema';
-import { readActivityCovers } from './activity-cover';
+import { deleteActivityCover, readActivityCovers } from './activity-cover';
 import {
   createLocalProjectBackupV3, parseLocalProjectBackupJson,
   type LocalProjectBackupV3, type ValidatedLocalProjectRestoreCandidate,
@@ -94,6 +94,12 @@ export async function archiveLocalActivity(text: string, expectedProjectId: stri
 export async function readLocalActivity(projectId: string): Promise<ValidatedLocalProjectRestoreCandidate> {
   const backup = checkedArchive(await readSourceRecord<unknown>(activityKey(projectId)), projectId);
   return parseLocalProjectBackupJson(JSON.stringify(backup));
+}
+
+/** 2026-11-14 归档卡右键删除：归档记录与封面一并清除；确认弹窗由 UI 层负责。 */
+export async function deleteLocalActivity(projectId: string): Promise<void> {
+  await updateSourceForm(activityKey(projectId), () => undefined);
+  await deleteActivityCover(projectId);
 }
 
 /** Thumbnails draw floors only; keeping attachments or embedded scene copies would pin them in list state. */

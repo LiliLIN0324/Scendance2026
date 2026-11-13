@@ -226,6 +226,7 @@
     display: flex; justify-content: flex-end; width: 100%;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field { min-height: 44px; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field.ap-panel-field { min-height: 0; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field + .ap-composer-bar { padding-top: 2px; }
   /* iOS 聚焦时 16px 起才不自动放大整页 */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field textarea,

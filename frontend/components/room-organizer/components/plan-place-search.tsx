@@ -51,6 +51,21 @@ export interface PlanPlaceSearchProps {
   placeholder?: string;
   /** 便于验收脚本定位；默认 `plan-place-search`。 */
   testIdPrefix?: string;
+  /**
+   * 与对话侧场地检索同步过来的查询与候选（2026-11-13 用户指令）：
+   * 在 chat 里搜「杭州 IN77」，地图左上角这个搜索框要同步显示同一批候选，
+   * 不用在地图框里重新输入一遍。传 null / 不传 = 不同步，保持原有独立检索。
+   */
+  sync?: { query: string; hits: readonly PlaceSuggestion[] } | null;
+}
+
+/** 同一批候选判定：id / 名字 / 坐标一致就算没变，避免每次同步都重写 state。 */
+function samePlaces(a: readonly PlaceSuggestion[], b: readonly PlaceSuggestion[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((place, index) => {
+    const other = b[index];
+    return !!other && place.id === other.id && place.name === other.name && place.lng === other.lng && place.lat === other.lat;
+  });
 }
 
 
@@ -63,6 +78,7 @@ export default function PlanPlaceSearch({
   width = 320,
   placeholder = '搜地点 / 场馆 / 地址，地图飞过去',
   testIdPrefix = 'plan-place-search',
+  sync = null,
 }: PlanPlaceSearchProps) {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<PlaceSuggestion[]>([]);
@@ -91,6 +107,10 @@ export default function PlanPlaceSearch({
   const areaEnabledRef = useRef(typeof onPickArea === 'function');
   areaEnabledRef.current = typeof onPickArea === 'function';
 
+  // 对话侧同步过来的查询与候选（2026-11-13）：只读同步，本框不自己再检索同一批词。
+  const syncQuery = sync?.query ?? '';
+  const syncHits = sync?.hits;
+
   useEffect(() => {
     const keyword = query.trim();
     if (keyword.length < 2) {
@@ -100,6 +120,9 @@ export default function PlanPlaceSearch({
       setBusy(false);
       return undefined;
     }
+    // 同一批候选已经由对话侧给过来了就别再检索一遍：省一次出站往返，
+    // 也避免本机双源慢响应把下拉清空。关键词被用户改过则照常检索。
+    if (syncHits && syncHits.length > 0 && keyword === syncQuery.trim()) return undefined;
     const controller = new AbortController();
     setBusy(true);
     const timer = window.setTimeout(() => {
@@ -131,7 +154,20 @@ export default function PlanPlaceSearch({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query, nearLng, nearLat]);
+  }, [query, nearLng, nearLat, syncQuery, syncHits]);
+
+  // 2026-11-13：对话侧（chat）搜到的地点同步到地图左上角这个搜索框——
+  // 用户在 chat 里打「杭州 IN77」，这里要显示同一批候选，不必重新输入一遍。
+  // 声明在检索 effect 之后，保证同一次提交里「清空旧命中」先于「写入同步命中」。
+  useEffect(() => {
+    const keyword = syncQuery.trim();
+    if (!keyword) return;
+    setQuery(syncQuery);
+    setHits(prev => (samePlaces(prev, syncHits ?? []) ? prev : [...(syncHits ?? [])]));
+    setBusy(false);
+    setOpen(true);
+    setFocused(true); // 灵动岛展开；不展开的话收缩态看不到这批候选。
+  }, [syncQuery, syncHits]);
 
   const keyword = query.trim();
   const recentMatches = keyword ? matchRecentPlaces(keyword) : recent;
