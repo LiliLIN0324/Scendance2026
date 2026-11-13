@@ -671,8 +671,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const sessionScopeIsCurrent = () => {
     try { if (sessionCurrentRef.current && !sessionCurrentRef.current()) return false; } catch { return false; }
     if (sessionScope === 'legacy') return true;
-    const id = layoutStore.getState().layout.id;
-    return sessionScope === (id ? `activity:${id}` : 'draft:unidentified');
+    // M3a：会话身份由壳体 isSessionCurrent（projectId 源）把关，不再回读室内 layout.id。
+    return true;
   };
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
   const studioRef = useRef(studio); studioRef.current = studio;
