@@ -190,4 +190,46 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     });
     expect(result.skipped.some(s => s.source === 'facility' && s.sourceId === 'd1')).toBe(true);
   });
+
+  it('空布局（无楼层）五类实体全空，不抛错', () => {
+    const layout = makeLayout({ ...SHELL, floors: [] });
+
+    const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
+
+    expect(result.zones).toHaveLength(0);
+    expect(result.workers).toHaveLength(0);
+    expect(result.routes).toHaveLength(0);
+    expect(result.facilities).toHaveLength(0);
+    expect(result.skipped).toHaveLength(0);
+  });
+
+  it('人员空名回落通用角色「人员」', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({ id: 'p1', type: 'person', name: '   ', position: { x: 2, z: 4 } })],
+      })],
+    });
+
+    const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
+
+    expect(result.workers).toHaveLength(1);
+    expect(result.workers[0]!.role).toBe('人员');
+  });
+
+  it('分区非法十六进制色丢弃，不带脏颜色进 plan', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        zones: [{ id: 'z1', name: '一区', color: 'blue', zoneType: 'reserved', x: 2, z: 2, w: 3, d: 3 }],
+      })],
+    });
+
+    const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
+
+    expect(result.zones).toHaveLength(1);
+    // 非法色在迁移层被丢弃，工厂按语义回落默认灰；脏色「blue」不得进入 plan。
+    expect(result.zones[0]!.color).not.toBe('blue');
+    expect(result.zones[0]!.color).toBe('#8b9aa6');
+  });
 });
