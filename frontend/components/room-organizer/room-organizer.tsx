@@ -4514,6 +4514,7 @@ useEffect(() => {
                 style={{ cursor: 'grab', touchAction: 'none' }}
                 title="抓住这里往左栏外拖，可以变成独立小窗；上下拖可以换顺序"
               >
+                {!isLeftStackDetached(leftStack, 'outdoor') && <strong>户外规划</strong>}
                 <button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><X size={18}/></button>
               </div>
               {/* 2026-11-11 图层行宿主（Level = 独立设计方案，非楼层高度）：
