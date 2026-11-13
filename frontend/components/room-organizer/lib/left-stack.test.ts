@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LEFT_STACK_CASCADE_OFFSET,
   LEFT_STACK_FLOAT_MARGIN,
   LEFT_STACK_FLOAT_MIN_HEIGHT,
   LEFT_STACK_FLOAT_MIN_WIDTH,
+  LEFT_STACK_MAX_DETACHED,
   LEFT_STACK_RATIO_MAX,
   LEFT_STACK_RATIO_MIN,
   LEFT_STACK_STORAGE_KEY,
@@ -10,13 +12,18 @@ import {
   clampRatio,
   defaultFloatRect,
   defaultLeftStackState,
+  detachLeftStackPanel,
+  dockLeftStackPanel,
+  isLeftStackDetached,
   normalizeLeftStackState,
+  raiseLeftStackPanel,
   ratioFromPointer,
   readLeftStackState,
   swapLeftStackOrder,
-  withLeftStackDetached,
+  toggleLeftStackDetached,
   withLeftStackRatio,
   writeLeftStackState,
+  type LeftStackState,
 } from './left-stack';
 
 function fakeStorage(seed?: string) {
@@ -38,11 +45,11 @@ function fakeStorage(seed?: string) {
 const VIEWPORT = { width: 1440, height: 900 };
 
 describe('left stack layout state', () => {
-  it('默认户外在上、五五分，四张卡的独立小窗矩形都落在视口里', () => {
+  it('默认户外在上、五五分，没有浮着的小窗，四张卡的独立小窗矩形都落在视口里', () => {
     const state = defaultLeftStackState(VIEWPORT);
     expect(state.first).toBe('outdoor');
     expect(state.ratio).toBe(0.5);
-    expect(state.detached).toBeNull();
+    expect(state.detached).toEqual([]);
     for (const panel of ['outdoor', 'bingo', 'capture', 'chat'] as const) {
       const rect = state.rects[panel];
       expect(rect.width).toBeGreaterThanOrEqual(LEFT_STACK_FLOAT_MIN_WIDTH);
@@ -69,13 +76,51 @@ describe('left stack layout state', () => {
     expect(swapLeftStackOrder(once, 'bingo')).toBe(once);
   });
 
-  it('同一时间只留一个独立小窗，四张卡都能被抓出来', () => {
-    const outdoors = withLeftStackDetached(defaultLeftStackState(VIEWPORT), 'outdoor');
-    expect(outdoors.detached).toBe('outdoor');
-    for (const panel of ['bingo', 'capture', 'chat'] as const) {
-      expect(withLeftStackDetached(outdoors, panel).detached).toBe(panel);
-    }
-    expect(withLeftStackDetached(outdoors, null).detached).toBeNull();
+  it('最多同时两枚独立小窗：第二枚入列，第三枚把最早弹出的那枚挤回栏内', () => {
+    const first = detachLeftStackPanel(defaultLeftStackState(VIEWPORT), 'outdoor', VIEWPORT);
+    expect(first.detached).toEqual(['outdoor']);
+    expect(isLeftStackDetached(first, 'outdoor')).toBe(true);
+
+    const second = detachLeftStackPanel(first, 'bingo', VIEWPORT);
+    expect(second.detached).toEqual(['outdoor', 'bingo']);
+
+    // 第三枚超出上限：队首 outdoor 被挤走，bingo 与新入列的 capture 留下。
+    const third = detachLeftStackPanel(second, 'capture', VIEWPORT);
+    expect(third.detached).toHaveLength(LEFT_STACK_MAX_DETACHED);
+    expect(third.detached).toEqual(['bingo', 'capture']);
+    expect(isLeftStackDetached(third, 'outdoor')).toBe(false);
+  });
+
+  it('新窗相对当前最上一枚级联错位，两枚标题条都露得出来', () => {
+    const first = detachLeftStackPanel(defaultLeftStackState(VIEWPORT), 'outdoor', VIEWPORT);
+    const second = detachLeftStackPanel(first, 'bingo', VIEWPORT);
+    const top = first.rects.outdoor;
+    const next = second.rects.bingo;
+    expect(next.x).toBeGreaterThan(top.x);
+    expect(next.y).toBeGreaterThan(top.y);
+    expect(next.x - top.x).toBe(LEFT_STACK_CASCADE_OFFSET);
+  });
+
+  it('抬层级：点按小窗把它挪到队尾（最上层）；本来就在最上则幂等', () => {
+    const state = detachLeftStackPanel(detachLeftStackPanel(defaultLeftStackState(VIEWPORT), 'outdoor', VIEWPORT), 'bingo', VIEWPORT);
+    expect(state.detached).toEqual(['outdoor', 'bingo']);
+    const raised = raiseLeftStackPanel(state, 'outdoor');
+    expect(raised.detached).toEqual(['bingo', 'outdoor']);
+    expect(raiseLeftStackPanel(raised, 'outdoor')).toBe(raised);
+  });
+
+  it('收回栏内：dock 只移除指定那枚，其他浮窗保留；本来就在栏内则幂等', () => {
+    const state = detachLeftStackPanel(detachLeftStackPanel(defaultLeftStackState(VIEWPORT), 'outdoor', VIEWPORT), 'bingo', VIEWPORT);
+    const docked = dockLeftStackPanel(state, 'outdoor');
+    expect(docked.detached).toEqual(['bingo']);
+    expect(dockLeftStackPanel(docked, 'chat')).toBe(docked);
+  });
+
+  it('toggle：浮着收回栏内，栏内抓成小窗', () => {
+    const base = defaultLeftStackState(VIEWPORT);
+    const detached = toggleLeftStackDetached(base, 'bingo', VIEWPORT);
+    expect(detached.detached).toEqual(['bingo']);
+    expect(toggleLeftStackDetached(detached, 'bingo', VIEWPORT).detached).toEqual([]);
   });
 
   it('小窗被夹回视口：位置越界归位、尺寸不缩破下限', () => {
@@ -90,24 +135,28 @@ describe('left stack layout state', () => {
     const fallback = normalizeLeftStackState({ order: 'sideways', ratio: 'tall', detached: 'camera', rects: { outdoor: { x: 0 } } }, VIEWPORT);
     expect(fallback.first).toBe('outdoor');
     expect(fallback.ratio).toBe(0.5);
-    expect(fallback.detached).toBeNull();
+    expect(fallback.detached).toEqual([]);
     expect(fallback.rects.outdoor).toEqual(defaultFloatRect('outdoor', VIEWPORT));
   });
 
-  it('旧版 order 存档兼容：outdoor-first/bingo-first 映射成 first，缺的新卡矩形补默认', () => {
-    const legacy = normalizeLeftStackState({ order: 'bingo-first', ratio: 0.4, detached: null, rects: { outdoor: { x: 10, y: 20, width: 300, height: 400 }, bingo: { x: 10, y: 20, width: 300, height: 400 } } }, VIEWPORT);
+  it('旧版单 id 存档迁移成数组；数组存档去重并截断到上限', () => {
+    const legacy = normalizeLeftStackState({ order: 'bingo-first', ratio: 0.4, detached: 'bingo', rects: { outdoor: { x: 10, y: 20, width: 300, height: 400 }, bingo: { x: 10, y: 20, width: 300, height: 400 } } }, VIEWPORT);
     expect(legacy.first).toBe('bingo');
     expect(legacy.ratio).toBe(0.4);
+    expect(legacy.detached).toEqual(['bingo']);
     expect(legacy.rects.outdoor).toEqual({ x: 10, y: 20, width: 300, height: 400 });
     expect(legacy.rects.capture).toEqual(defaultFloatRect('capture', VIEWPORT));
     expect(legacy.rects.chat).toEqual(defaultFloatRect('chat', VIEWPORT));
+
+    const list = normalizeLeftStackState({ detached: ['chat', 'chat', 'capture', 'outdoor'] }, VIEWPORT);
+    expect(list.detached).toEqual(['chat', 'capture']);
   });
 
   it('读写本地存储：坏 JSON 与空值都回落，好值原样回来', () => {
     const storage = fakeStorage();
     expect(readLeftStackState(storage, VIEWPORT)).toEqual(defaultLeftStackState(VIEWPORT));
 
-    const custom = { ...defaultLeftStackState(VIEWPORT), first: 'bingo' as const, ratio: 0.32, detached: 'bingo' as const };
+    const custom: LeftStackState = { ...defaultLeftStackState(VIEWPORT), first: 'bingo', ratio: 0.32, detached: ['bingo'] };
     writeLeftStackState(custom, storage);
     expect(readLeftStackState(storage, VIEWPORT)).toEqual(custom);
 
