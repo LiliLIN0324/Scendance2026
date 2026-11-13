@@ -88,6 +88,18 @@
 - **验证**：会话切换 / 历史撤销重做 / 导出三套定向测试；切项目不串会话；历史回滚只动 plan。
 - **回滚**：解耦期间保留 layoutStore 影子双写；任一环节地图侧异常，回退读 layout 投影。
 
+##### M3 实测侦察（2026-11-13，动工前代码复核）
+- **身份来源**：`outdoorProjectId` 由 `workspace-shell` 解析——云项目 id / `latestOutdoorProjectId` / `DEFAULT_OUTDOOR_PROJECT_ID`（`'default-outdoor'`）；仅未就绪（`!workspacePath || !ready`）时为 null。`onBindProject`（壳体 :3944）会把 projectId 写进 `layout.id`（`actions.applyLayout({...before, id})`），但本地草稿的 `layout.id` 是 `withHouseId` 房 id，不等于户外草稿 id，二者不对齐。
+- **会话键现状**：壳体 `sessionScope = layout.id ? activity:${layout.id} : draft:unidentified`（:319）；`getStoreSessionScope()`（:374）直读 `layoutStore.getState().layout.id`；`isScopedSessionCurrent`（:3964）、`scopedPreview`/`scopedApply`（:4038/:4042）、`agent-panel.tsx:675` 各有一处 `activity:${id}` 拼接。助理会话存储按任意 scope 字符串分桶（`key.scope.<encodeURIComponent(scope)>`），`activity:` 仅命名约定，可换 `project:`；换桶后旧室内草稿会话不回读（G2 已登记，过渡期可接受）。
+- **三 tracker 数据流**（`lib/*-epoch.ts`，均 `useSyncExternalStore` 订阅 layoutStore）：
+  - activity：`activityScope(layout.id)` 派生 scope；scope 变 epoch++；同活动普通编辑不失效；stop/start 旧 token 不复活；store 替换不复用旧订阅。
+  - floor：scope 同 layout.id，另带 `activeFloorIndex`/`layout.floors[floorIndex].id`；WeakMap 按 store 共享 tracker。地图语境应改绑 `plan.levels`（户外方案层），非室内 floors。
+  - venue fact：basis=`venueScaleBasis(layout)` 几何；basis 变 epoch++；`isVenueFactMemoryCurrent` 只读判据。地图语境应改绑 plan 边界/面积/锚点几何。
+- **消费面**：三 tracker 贯穿壳体 97 处——拖拽授权（:1488–1505）、评审链接（:884–905）、提案预览/应用（:4038/:4042/:3571/:3637）、导出校验（:4170–4177/:2118–2121）、环境写对账（:4847–4851）、就绪态（:2372）、空间面板 `venueFactScope`（:4550）、会话历史复核（:4015–4033）。
+- **3a 成套边界（不可拆两半提交）**：activity tracker 的 scope 源、壳体 `sessionScope`/`getStoreSessionScope`/各守卫拼接、`agent-panel:675` 必须同批改；否则 `isCurrent` 与 scope 比对失败，所有会话守卫拒绝、提案/导出/拖拽全灭。floor/venue 的 plan 重映射可作为 3a 内后续小步，但依赖 plan `levels`/几何接线稳定（M2 落地后更稳）；过渡期这两个 tracker 可暂留 layout 影子 basis，先不拆订阅源。
+- **测试覆盖（改 tracker/scope 必须同步）**：`activity-session-epoch.{test.ts,react.test.tsx}`、`floor-session-epoch.{test.ts,react.test.tsx}`、`venue-fact-epoch.{test.ts,strict.react.test.tsx}`、`room-organizer-switch-guard/session-generation/venue-epoch/canvas-session`、`use-assistant-sessions-active`、`agent-panel.react.test.tsx`（:1691 未识别草稿入新项目）。
+- **草稿槽口径**：会话 scope 回退槽统一用 `DEFAULT_OUTDOOR_PROJECT_ID`（`default-outdoor`）；overlay 内 `LOCAL_DRAFT_SLOT='local-draft'` + 兜底 UUID `88888888-...` 是画布未挂项目的临时态，不进会话键。
+
 #### M4 出入口工具收尾 ✅ 代码完成（本地未提交，目录三型点击走查并入 #25）
 - **目的**：补齐已盘点的两个小缺口。
 - 1. 创建节点前置选类型（入口 / 出口 / 两用），工具箱直选（对齐动线三类分列），不再放下后改属性卡。✅ 目录三型 `NODE_KIND_OPTIONS` 分列，`nodeKind` state + `nodeKindRef` 双写。
