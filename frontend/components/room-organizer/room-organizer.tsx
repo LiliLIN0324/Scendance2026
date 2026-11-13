@@ -286,12 +286,8 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, isolatedWriteSession, outdoorProjectId: outdoorProjectIdProp }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; isolatedWriteSession?: WorkspaceWriteSession; outdoorProjectId?: string | null } = {}): JSX.Element {
-  const isolatedRef=useRef<{session:WorkspaceWriteSession;revoked:boolean}|null>(null);
-  if(!isolatedRef.current&&isolatedWriteSession)isolatedRef.current={session:isolatedWriteSession,revoked:false};
-  else if(isolatedRef.current&&isolatedWriteSession!==isolatedRef.current.session)isolatedRef.current.revoked=true;
-  const assertIsolatedSession=isolatedRef.current?()=>{const current=isolatedRef.current!;if(current.revoked)throw new Error('本机编辑会话已变化。');current.session.assertCapability(localWriteCapability);}:undefined;
-  const workspaceWriteGuards = useWorkspaceWriteGuards(localWriteCapability,assertIsolatedSession);
+export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, outdoorProjectId: outdoorProjectIdProp }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; outdoorProjectId?: string | null } = {}): JSX.Element {
+  const workspaceWriteGuards = useWorkspaceWriteGuards(localWriteCapability);
   const dropActive = useRef(isActive);
   useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
@@ -4223,7 +4219,7 @@ useEffect(() => {
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={isolatedRef.current ? () => { assertIsolatedSession?.(); isolatedRef.current!.session.assertSessionWrite(); } : workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
+      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || !sessionToken) return;
         briefCaptureEpoch.current++;
         const prior=agentBriefRef.current;
