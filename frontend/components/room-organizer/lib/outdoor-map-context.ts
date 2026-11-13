@@ -20,6 +20,13 @@ import {
   facilityPlacementIssues,
   facilityFootprintRing,
 } from "./site-plan-facilities";
+import {
+  bounds,
+  boundsIntersect,
+  geometryDistance,
+  isValidGeometry,
+} from "@/lib/site-intelligence/geometry";
+import type { Geometry } from "@/lib/site-intelligence/types";
 import { enuToLngLat } from "./outdoor-plan-canvas";
 import { planPointInRing } from "./site-plan-editing";
 import {
@@ -93,12 +100,15 @@ export function createOutdoorMapContext() {
             .map((n) => planObjectId(projectId, "entrance", n.id)),
         },
       });
-      const issued = buildModelContext(snapshot, {
-        maxObjects: 8,
-        maxRelations: 8,
-        maxChars: 3400,
-        compact: true,
-      });
+      const sourceSnapshot = snapshot;
+      const issue = (maxChars: number) =>
+        buildModelContext(sourceSnapshot, {
+          maxObjects: 8,
+          maxRelations: 8,
+          maxChars,
+          compact: true,
+        });
+      const issued = issue(3400);
       return {
         version: snapshot.revision,
         status:
@@ -109,6 +119,7 @@ export function createOutdoorMapContext() {
               : "partial",
         text: JSON.stringify(issued),
         issued,
+        issue,
         featureIds: issued.objects
           .filter((o) => !o.reference.id.startsWith("plan:"))
           .map((o) => o.reference.id),
@@ -437,49 +448,100 @@ export function createOutdoorMapContext() {
           })
           .map((r) => planObjectId(snapshot!.projectId, "route", r.id)),
       ]);
-      const check = buildSiteSnapshot({
-        projectId: snapshot.projectId,
-        geometryRevision: planVersion(next),
-        plan: next,
-        mapEvidence: cached.evidence,
-      });
-      for (const relation of check.relations) {
-        if (
-          ![
-            "entrance-blocked",
-            "barrier-conflict",
-            "route-blocked",
-            "overlaps",
-          ].includes(relation.type)
-        )
-          continue;
-        const a = check.features.find((f) => f.id === relation.from)!,
-          b = check.features.find((f) => f.id === relation.to)!;
-        const planned = changed.has(a.id)
-          ? a
-          : changed.has(b.id)
-            ? b
-            : undefined;
-        if (!planned) continue;
-        const other = planned.id === a.id ? b : a;
-        if (other.evidence.source === "user-plan") continue;
-        const indoors = next.zones.some(
-          (z) =>
-            z.environment === "indoor" &&
-            z.geometrySource === "user-confirmed" &&
-            planned.geometry.points.every((p) => planPointInRing(p, z.polygon)),
+      // Safety is intentionally independent of the 240-object/relationship/model-context limits.
+      // Read every accepted known map obstacle, not the limited reasoning snapshot.
+      if (
+        changed.size &&
+        (!snapshot.coverage.scope ||
+          cached.evidence.warnings.some((w) =>
+            /omitted|feature limit|element_limit_reached|query.limited|upstream_query_incomplete|oversized|budget exhausted/i.test(
+              w,
+            ),
+          ))
+      )
+        throw new Error(
+          "相关地图安全证据被截断或未对齐，不能按缺失即无障碍放行；请缩小范围重新取得完整证据并核对后再安排。",
         );
-        if (other.kind === "building" && indoors) continue;
-        if (
-          other.kind === "building" ||
-          other.kind === "barrier" ||
-          other.kind === "entrance"
-        )
-          throw new Error(
-            `“${planned.name}”与地图依据“${other.name || other.id}”${other.kind === "entrance" ? "门前净空" : "建筑/障碍"}冲突。请核对室内层级/真实通道，或调整物件/路线后重算；未应用。`,
+      const planned: Array<{
+        id: string;
+        name: string;
+        kind: "facility" | "route";
+        geometry: Geometry;
+        widthM: number;
+      }> = [
+        ...next.facilities
+          .filter((f) =>
+            changed.has(planObjectId(snapshot!.projectId, "facility", f.id)),
+          )
+          .map((f) => ({
+            id: f.id,
+            name: f.name,
+            kind: "facility" as const,
+            geometry: {
+              type: "polygon" as const,
+              points: facilityFootprintRing(f),
+            },
+            widthM: 0,
+          })),
+        ...next.routes
+          .filter((r) =>
+            changed.has(planObjectId(snapshot!.projectId, "route", r.id)),
+          )
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            kind: "route" as const,
+            geometry: { type: "line" as const, points: r.points },
+            widthM: r.widthM ?? 3,
+          })),
+      ];
+      let cost = 0;
+      for (const object of planned) {
+        const box = bounds(object.geometry),
+          clearance = Math.max(1.5, object.widthM / 2 + 0.1);
+        for (const other of cached.evidence.features.filter((f) =>
+          ["building", "barrier", "entrance"].includes(f.kind),
+        )) {
+          if (!isValidGeometry(other.geometry))
+            throw new Error("地图安全证据无效，未应用；请重新核对相关障碍。");
+          if (
+            !boundsIntersect(
+              {
+                minX: box.minX - clearance,
+                minY: box.minY - clearance,
+                maxX: box.maxX + clearance,
+                maxY: box.maxY + clearance,
+              },
+              bounds(other.geometry),
+            )
+          )
+            continue;
+          cost += object.geometry.points.length * other.geometry.points.length;
+          if (cost > 2000000)
+            throw new Error(
+              "相关地图安全证据检查预算已截断，未应用；请缩小本轮安排范围。",
+            );
+          const indoors = next.zones.some(
+            (z) =>
+              z.environment === "indoor" &&
+              z.geometrySource === "user-confirmed" &&
+              object.geometry.points.every((p) =>
+                planPointInRing(p, z.polygon),
+              ),
           );
+          if (other.kind === "building" && indoors) continue;
+          if (other.kind === "entrance" && object.kind === "route") continue; // A pedestrian access line may intentionally connect a known door.
+          const threshold =
+            other.kind === "entrance"
+              ? 1.5
+              : object.widthM / 2 + (other.kind === "barrier" ? 0.1 : 0);
+          if (geometryDistance(object.geometry, other.geometry) <= threshold)
+            throw new Error(
+              `“${object.name}”与地图依据“${other.name || other.id}”${other.kind === "entrance" ? "门前净空" : "建筑/障碍"}冲突。请核对室内层级/真实通道，或调整物件/路线后重算；未应用。`,
+            );
+        }
       }
-      return check.coverage.complete
+      return cached.evidence.complete
         ? [
             "地图为OSM结构化证据，不含底图像素阅读，也不代表权属、现场通行或安全认证。",
           ]

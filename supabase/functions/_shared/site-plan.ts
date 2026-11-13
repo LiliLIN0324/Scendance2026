@@ -177,6 +177,7 @@ export type PlanNode = z.infer<typeof planNodeSchema>;
 /** 人员点位：岗位、人数、颜色点位，按区汇总走 zoneId（可选）。 */
 export const planWorkerSchema = z.strictObject({
   id: z.uuid(),
+  allocationKey: z.string().max(500).optional(),
   role: z.string().min(1).max(60),
   audience: z.enum(['visitors','staff','security','performers','service']).optional(),
   routeIds: z.array(z.uuid()).max(20).optional(),

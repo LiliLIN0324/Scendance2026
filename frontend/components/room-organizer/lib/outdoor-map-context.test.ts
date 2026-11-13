@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import { createOutdoorMapContext } from "./outdoor-map-context";
 import { createStarterOutdoorPlan } from "./outdoor-project-store";
+import { validateWorkflowPlan } from "./outdoor-agent-planning";
 import { understandOutdoorTurn } from "./outdoor-agent-understanding";
 import { emptyOutdoorFlow, type OutdoorTurn } from "./outdoor-agent-contract";
 import { validateModelReferences } from "@/lib/site-intelligence";
@@ -214,4 +215,157 @@ it("引用地图上的真实门会驱动设施避让提案；不把高亮当理�
   );
   expect(() => adapter.validate(plan, next)).not.toThrow();
   expect(plan.facilities[0]!.position).toEqual({ x: 8, y: 0 });
+});
+
+it("正常两区100人6展板和5个真实候选必须在整份请求预算内，保持候选ID顺序", async () => {
+  plan.zones.push({
+    ...plan.zones[0]!,
+    id: crypto.randomUUID(),
+    name: "室外展览区",
+    purpose: "exhibition",
+    polygon: [
+      { x: -30, y: -25 },
+      { x: -2, y: -25 },
+      { x: -2, y: 25 },
+      { x: -30, y: 25 },
+    ],
+  });
+  const adapter = createOutdoorMapContext(),
+    map = await adapter.load(
+      "project-a",
+      plan,
+      [plan.zones[1]!.id],
+      true,
+      new AbortController().signal,
+    );
+  const state = emptyOutdoorFlow("project-a");
+  state.stage = "objects";
+  state.brief = {
+    event: "户外市集与草坪演出",
+    guests: 100,
+    zones: plan.zones.map((z) => ({
+      name: z.name,
+      purpose: z.purpose!,
+      environment: "outdoor",
+      evidence: z.name,
+    })),
+    items: [
+      {
+        zone: "室外展览区",
+        query: "展板",
+        count: 6,
+        evidence: "展览区放6个展板",
+      },
+    ],
+    people: [],
+  };
+  const candidates = Array.from({ length: 5 }, (_, i) => ({
+    id: `real-personal-asset-${i}-stable-id`,
+    name: `真实展板候选${i + 1}：铝合金双面立式宣传展示展架室外活动专用，需核对固定及防风`,
+    width: 1.2,
+    depth: 0.5,
+    height: 2,
+  }));
+  const controller = {
+    assistantChat: vi.fn(async (message, history) => {
+      assistantChatRequestSchema.parse({ message, history });
+      const serialized = history.map((h: { text: string }) => h.text).join("");
+      for (const c of candidates) expect(serialized).toContain(c.id);
+      expect(serialized.indexOf(candidates[1]!.id)).toBeGreaterThan(
+        serialized.indexOf(candidates[0]!.id),
+      );
+      expect(serialized).toContain("户外市集与草坪演出");
+      expect(serialized).toContain("100");
+      return {
+        status: "ok" as const,
+        answer: JSON.stringify({
+          action: "ask",
+          reply: "核对第二个",
+          references: [],
+          facts: {},
+        }),
+      };
+    }),
+  };
+  await understandOutdoorTurn({
+    message: "就选第二个展板，放6个",
+    state,
+    plan,
+    selected: [plan.zones[1]!.id],
+    map,
+    libraryChoices: candidates,
+    controller,
+    signal: new AbortController().signal,
+  });
+  expect(controller.assistantChat).toHaveBeenCalledOnce();
+});
+it("237个无关旧设施不能挤掉已知地图门并让新舞台穿门", async () => {
+  const stage = plan.facilities[0]!;
+  plan.facilities = Array.from({ length: 237 }, (_, i) => ({
+    ...stage,
+    id: crypto.randomUUID(),
+    name: `旧物${i}`,
+    position: { x: 100 + i * 3, y: 100 },
+    size: { width: 0.2, depth: 0.2 },
+  }));
+  const adapter = createOutdoorMapContext();
+  await adapter.load("project-a", plan, [], true, new AbortController().signal);
+  const next = { ...plan, facilities: [...plan.facilities, stage] };
+  expect(() => validateWorkflowPlan(plan, next)).not.toThrow();
+  expect(() => adapter.validate(plan, next)).toThrow(/门前净空|证据.*截断/);
+});
+
+it("地图必要几何截断不能只警告后放行新设施", async () => {
+  const original = fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const res = await original(...args);
+      const body = await res.json();
+      return new Response(
+        JSON.stringify({
+          ...body,
+          complete: false,
+          warnings: ["element_limit_reached"],
+        }),
+      );
+    }),
+  );
+  const adapter = createOutdoorMapContext();
+  await adapter.load("project-a", plan, [], true, new AbortController().signal);
+  const next = {
+    ...plan,
+    facilities: plan.facilities.map((f) => ({
+      ...f,
+      position: { x: 20, y: 0 },
+    })),
+  };
+  expect(() => adapter.validate(plan, next)).toThrow("证据被截断");
+});
+
+it("访客身份不调用模型，必须正常账户登录而非匿名续跑", async () => {
+  const controller = {
+    getSnapshot: () => ({ user: { id: "guest-user", is_anonymous: true } }),
+    assistantChat: vi.fn(async () => ({ status: "ok" as const, answer: "{}" })),
+  };
+  const adapter = createOutdoorMapContext(),
+    map = await adapter.load(
+      "project-a",
+      plan,
+      [],
+      true,
+      new AbortController().signal,
+    );
+  await expect(
+    understandOutdoorTurn({
+      message: "找IN77",
+      state: emptyOutdoorFlow("project-a"),
+      plan,
+      selected: [],
+      map,
+      controller,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow("UNAUTHENTICATED");
+  expect(controller.assistantChat).not.toHaveBeenCalled();
 });

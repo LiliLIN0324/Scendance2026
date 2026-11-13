@@ -8,6 +8,7 @@ import { createStarterOutdoorPlan } from "../lib/outdoor-project-store";
 import { useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import type {
+  OutdoorMapContext,
   OutdoorAgentBridge,
   OutdoorTurn,
 } from "../lib/outdoor-agent-contract";
@@ -310,8 +311,8 @@ it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单�
     nodes: [
       {
         id: crypto.randomUUID(),
-        name: "已核对活动主入口",
-        kind: "entry",
+        name: "已核对活动双向主出入口",
+        kind: "both",
         verification: "user-confirmed",
         position: { x: 5, y: 35 },
         notes: "",
@@ -492,7 +493,7 @@ it("地图依据版本变化使当前提案失效，不能改写引用revision�
   let version = "map-one";
   bridge.mapContext = async () => ({
     version,
-    status: "partial",
+    status: "partial" as const,
     text: "known structured context",
     featureIds: [],
     unknowns: [],
@@ -626,3 +627,200 @@ it("图片生成只是同设施表单入口；候选第几个不能冒充物件�
   expect(flow.notice).toContain("数字依据");
   expect(apply).not.toHaveBeenCalled();
 });
+
+it.each([
+  "先不要应用，我再想想",
+  "如果人数没问题再应用",
+  "确认之前不要应用",
+  "可以吗？",
+])("模型confirm不得把否定/条件/询问授为确认：%s", async (text) => {
+  await action("scope");
+  await turn(
+    text,
+    response(
+      "confirm",
+      {},
+      { confirmationEvidence: text.includes("不要应用") ? "不要应用" : text },
+    ),
+  );
+  expect(apply).not.toHaveBeenCalled();
+  expect(flow.state.confirmedBoundary).toBeNull();
+});
+it.each(["取消", "切项目", "新任务"])(
+  "确认等地图时%s，即便桥忽略abort且迟到同版本也不应用",
+  async (mode) => {
+    await confirmScope();
+    bridge.mapContext = vi.fn(async () => ({
+      version: "same-map",
+      status: "partial" as const,
+      text: "{}",
+      unknowns: [],
+      featureIds: [],
+    }));
+    await turn(
+      "室外展览区",
+      response("zones", {
+        zones: [
+          {
+            name: "展览区",
+            purpose: "exhibition",
+            environment: "outdoor",
+            evidence: "室外展览区",
+          },
+        ],
+      }),
+    );
+    expect(flow.proposal).not.toBeNull();
+    apply.mockClear();
+    let resolve!: (value: OutdoorMapContext) => void;
+    bridge.mapContext = vi.fn(
+      () =>
+        new Promise<OutdoorMapContext>((r) => {
+          resolve = r;
+        }),
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = flow.confirmProposal(flow.proposal!);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    if (mode === "取消") act(() => flow.cancel());
+    else if (mode === "切项目") {
+      scope = "project-b";
+      mount();
+    } else await action("scope");
+    await act(async () => {
+      resolve({
+        version: "same-map",
+        status: "partial" as const,
+        text: "{}",
+        unknowns: [],
+        featureIds: [],
+      });
+      await pending;
+    });
+    expect(apply).not.toHaveBeenCalled();
+    if (mode === "新任务") expect(flow.proposal?.kind).toBe("scope");
+    else expect(flow.proposal).toBeNull();
+    expect(plan.zones).toHaveLength(0);
+  },
+);
+
+it("未登录错误保留原句和草稿，正规账户中心入口可操作，登录身份变化后显式恢复", async () => {
+  understand.mockRejectedValueOnce(
+    Object.assign(new Error("UNAUTHENTICATED"), { code: "UNAUTHENTICATED" }),
+  );
+  const before = JSON.stringify(plan);
+  await act(async () => {
+    await flow.handle("先找IN77，核对活动区域");
+  });
+  expect(flow.loginRequired).toBe(true);
+  expect(flow.notice).toContain("登录后才能");
+  expect(flow.state.pendingLogin?.message).toBe("先找IN77，核对活动区域");
+  expect(JSON.stringify(plan)).toBe(before);
+  const request = vi.fn();
+  window.addEventListener("scendance:request-account-login", request);
+  const open = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent === "打开账户中心登录",
+  )!;
+  act(() => open.click());
+  expect(request).toHaveBeenCalledOnce();
+  window.removeEventListener("scendance:request-account-login", request);
+  act(() => flow.authChanged("signed-in-user"));
+  expect(flow.state.pendingLogin?.message).toBe("先找IN77，核对活动区域");
+  understand.mockResolvedValueOnce(response("ask"));
+  await act(async () => {
+    await flow.resumeAfterLogin();
+  });
+  expect(understand).toHaveBeenCalledTimes(2);
+  expect(understand.mock.calls[1]![0]).toBe("先找IN77，核对活动区域");
+  expect(flow.loginRequired).toBe(false);
+  expect(apply).not.toHaveBeenCalled();
+});
+it("登录待恢复原句不跟到其他活动；取消后不能复活", async () => {
+  understand.mockRejectedValueOnce(new Error("UNAUTHENTICATED"));
+  await act(async () => {
+    await flow.handle("找IN77");
+  });
+  expect(flow.loginRequired).toBe(true);
+  scope = "project-b";
+  mount();
+  expect(flow.loginRequired).toBe(false);
+  scope = "project-a";
+  mount();
+  expect(flow.loginRequired).toBe(true);
+  act(() => flow.cancel());
+  await act(async () => {
+    await flow.resumeAfterLogin();
+  });
+  expect(understand).toHaveBeenCalledOnce();
+});
+it("入口核对不能推断出口；卡片显式核对双向出入口经预览再应用", async () => {
+  await confirmScope();
+  plan = {
+    ...plan,
+    zones: [
+      {
+        id: crypto.randomUUID(),
+        name: "展览区",
+        semantic: "reserved",
+        polygon: ring,
+        notes: "",
+      },
+    ],
+    nodes: [
+      {
+        id: crypto.randomUUID(),
+        name: "东口",
+        kind: "entry",
+        verification: "unverified",
+        position: { x: 0, y: 35 },
+        notes: "",
+      },
+    ],
+  };
+  await turn(
+    "展览区安排2个保安",
+    response("people", {
+      people: [
+        {
+          role: "保安",
+          zone: "展览区",
+          count: 2,
+          audience: "security",
+          evidence: "2个保安",
+        },
+      ],
+    }),
+  );
+  expect(flow.state.stage).toBe("people");
+  await act(async () => {
+    await flow.action(
+      "verify-access",
+      undefined,
+      plan.nodes[0]!.id,
+      undefined,
+      "both",
+    );
+  });
+  expect(plan.nodes[0]!.kind).toBe("entry");
+  expect(flow.proposal, flow.notice).not.toBeNull();
+  await action("confirm");
+  expect(plan.nodes[0]!.kind).toBe("both");
+  expect(plan.nodes[0]!.verification).toBe("user-confirmed");
+  expect(flow.state.stage).toBe("people");
+});
+
+it.each(["没问题", "同意这版方案", "就按它落下去吧"])(
+  "明确肯定仍绑定当前一版：%s",
+  async (text) => {
+    await action("scope");
+    await act(async () => {
+      await flow.handle(text);
+    });
+    expect(apply).toHaveBeenCalledOnce();
+    expect(flow.state.stage).toBe("zones");
+  },
+);

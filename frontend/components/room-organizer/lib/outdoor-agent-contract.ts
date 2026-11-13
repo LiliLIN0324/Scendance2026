@@ -66,7 +66,11 @@ export const outdoorTurnSchema = z.strictObject({
   facts: z
     .strictObject({
       access: z
-        .strictObject({ id: z.string().min(1).max(160), evidence })
+        .strictObject({
+          id: z.string().min(1).max(160),
+          kind: z.enum(["entry", "exit", "both"]).optional(),
+          evidence,
+        })
         .optional(),
       event: z.strictObject({ value: z.string().max(80), evidence }).optional(),
       guests: z
@@ -137,6 +141,7 @@ export interface OutdoorFlowState {
   brief: OutdoorBrief;
   confirmedBoundary: string | null;
   completed: OutdoorStage[];
+  pendingLogin?: { message: string; planVersion: string; ownerId?: string };
 }
 export function emptyOutdoorFlow(scope: string): OutdoorFlowState {
   return {
@@ -250,7 +255,7 @@ export function mergeOutdoorFacts(
       people: merge(
         state.brief.people,
         facts.people,
-        (p) => `${p.zone}:${p.role}`,
+        (p) => `${p.zone}:${p.role}:${p.audience}`,
       ),
     },
   };
@@ -277,6 +282,10 @@ export interface OutdoorMapContext {
   featureIds: string[];
   planIds?: string[];
   issued?: import("@/lib/site-intelligence/context").ModelContext;
+  /** Issue a fresh immutable context within the whole request budget; never trim an issued object. */
+  issue?(
+    maxChars: number,
+  ): import("@/lib/site-intelligence/context").ModelContext;
   sourceIds?: Record<string, string>;
   unknowns: string[];
 }

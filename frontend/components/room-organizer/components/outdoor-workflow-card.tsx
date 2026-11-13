@@ -39,7 +39,7 @@ export function OutdoorWorkflowCard({
           {OUTDOOR_STAGE_LABELS[flow.state.stage]}
         </strong>
         {(flow.busy || flow.simulating) && (
-          <button type="button" onClick={flow.cancel}>
+          <button type="button" onClick={() => flow.cancel()}>
             {flow.simulating ? "停止流动示意" : "取消本次请求"}
           </button>
         )}
@@ -86,7 +86,7 @@ export function OutdoorWorkflowCard({
           >
             确认并应用这一版
           </button>
-          <button type="button" onClick={flow.cancel}>
+          <button type="button" onClick={() => flow.cancel()}>
             撤回预览
           </button>
           {flow.proposal.kind === "scope" && (
@@ -132,20 +132,70 @@ export function OutdoorWorkflowCard({
             : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
         </button>
       )}
+      {flow.loginRequired && (
+        <div role="status">
+          <p>已保留需求：{flow.state.pendingLogin?.message}</p>
+          <button
+            type="button"
+            onClick={() =>
+              window.dispatchEvent(new Event("scendance:request-account-login"))
+            }
+          >
+            打开账户中心登录
+          </button>
+          <button
+            type="button"
+            disabled={flow.busy}
+            onClick={() => void flow.resumeAfterLogin()}
+          >
+            已正常登录，继续刚才需求
+          </button>
+        </div>
+      )}
       {!flow.proposal &&
         !flow.busy &&
-        ["main-routes", "objects"].includes(flow.state.stage) &&
+        ["main-routes", "objects", "sub-routes", "people"].includes(
+          flow.state.stage,
+        ) &&
         flow.unverifiedEntrances.slice(0, 1).map((n) => (
           <div key={n.id}>
             <p>
               “{n.name}
-              ”仍待核对：位置是规划意图/地图候选，不代表真实门和可通行权限。
+              ”需核对真实通行及进出方向：入口不自动等于出口，不代表安全认证。
             </p>
             <button
               type="button"
               onClick={() => void flow.action("verify-access", undefined, n.id)}
             >
               我已核对“{n.name}”可供本活动通行，预览标记
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void flow.action(
+                  "verify-access",
+                  undefined,
+                  n.id,
+                  undefined,
+                  "exit",
+                )
+              }
+            >
+              我已核对为仅出口，预览标记
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void flow.action(
+                  "verify-access",
+                  undefined,
+                  n.id,
+                  undefined,
+                  "both",
+                )
+              }
+            >
+              我已核对为双向出入口，预览标记
             </button>
           </div>
         ))}
@@ -279,7 +329,7 @@ export function OutdoorWorkflowCard({
           继续补充要求
         </button>
         {flow.proposal && (
-          <button type="button" onClick={flow.cancel}>
+          <button type="button" onClick={() => flow.cancel()}>
             取消本次预览
           </button>
         )}

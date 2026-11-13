@@ -230,8 +230,8 @@ describe("户外用途、真实库、人员几何守卫", () => {
         nodes: [
           {
             id: crypto.randomUUID(),
-            name: "核实人员入口",
-            kind: "entry",
+            name: "核实人员双向出入口",
+            kind: "both",
             verification: "user-confirmed",
             position: { x: 10, y: 10 },
             notes: "",
@@ -340,4 +340,158 @@ it("设施新占地不得覆盖既有人员岗位", () => {
     ],
   };
   expect(clearForObject(f, staffed, p.zones[0]!)).toBe(false);
+});
+
+const roleFixture = () => {
+  const p = proposeUseZones(base(), { ...brief, zones: [brief.zones[0]!] });
+  const node = {
+    id: crypto.randomUUID(),
+    name: "已核对双向口",
+    kind: "both" as const,
+    verification: "user-confirmed" as const,
+    position: { x: 10, y: 10 },
+    notes: "",
+  };
+  return {
+    ...p,
+    nodes: [node],
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        name: "双向人行",
+        kind: "pedestrian" as const,
+        points: [
+          { x: 10, y: 10 },
+          { x: 30, y: 10 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+};
+it("同区域保安2改3替换而不累加；新增其他岗位不重复旧brief", () => {
+  const p = roleFixture();
+  const need = {
+    role: "保安",
+    zone: "展览区",
+    count: 2,
+    audience: "security" as const,
+    evidence: "2保安",
+  };
+  const a = proposeRoleWorkers(p, { ...brief, people: [need] });
+  const b = proposeRoleWorkers(a, {
+    ...brief,
+    people: [{ ...need, count: 3, evidence: "3保安" }],
+  });
+  expect(b.workers).toHaveLength(1);
+  expect(b.workers[0]!.count).toBe(3);
+  expect(b.workers[0]!.id).toBe(a.workers[0]!.id);
+  const c = proposeRoleWorkers(b, {
+    ...brief,
+    people: [
+      { ...need, count: 3 },
+      { ...need, role: "工作人员", audience: "staff", count: 1 },
+    ],
+  });
+  expect(c.workers).toHaveLength(2);
+  expect(c.workers.reduce((n, w) => n + w.count, 0)).toBe(4);
+});
+it("单向区到入口只能出不能入，不得安排岗位；反向无出场也不得通过", () => {
+  const p = roleFixture();
+  p.nodes[0]!.position = { x: 0, y: 10 };
+  p.zones[0]!.polygon = [
+    { x: 40, y: 5 },
+    { x: 60, y: 5 },
+    { x: 60, y: 20 },
+    { x: 40, y: 20 },
+  ];
+  p.routes[0]!.points = [
+    { x: 50, y: 10 },
+    { x: 0, y: 10 },
+  ];
+  p.routes[0]!.oneWay = true;
+  const req = {
+    ...brief,
+    people: [
+      {
+        role: "保安",
+        zone: "展览区",
+        count: 2,
+        audience: "security" as const,
+        evidence: "2保安",
+      },
+    ],
+  };
+  expect(() => proposeRoleWorkers(p, req)).toThrow(/接驳|入场|出场/);
+  p.routes[0]!.points.reverse();
+  expect(() => proposeRoleWorkers(p, req)).toThrow(/接驳|入场|出场/);
+});
+
+it("有向入场与独立出口闭环可安排岗位，保存关联真实进出路径", () => {
+  const p = roleFixture();
+  const z = p.zones[0]!;
+  const entry = {
+      ...p.nodes[0]!,
+      kind: "entry" as const,
+      position: { x: 0, y: 10 },
+    },
+    exit = {
+      ...p.nodes[0]!,
+      id: crypto.randomUUID(),
+      kind: "exit" as const,
+      position: { x: 0, y: 20 },
+    };
+  const incoming = {
+    ...p.routes[0]!,
+    oneWay: true,
+    points: [
+      { x: 0, y: 10 },
+      { x: 50, y: 10 },
+    ],
+  };
+  const outgoing = {
+    ...incoming,
+    id: crypto.randomUUID(),
+    points: [
+      { x: 50, y: 10 },
+      { x: 0, y: 20 },
+    ],
+  };
+  const next = proposeRoleWorkers(
+    {
+      ...p,
+      zones: [
+        {
+          ...z,
+          polygon: [
+            { x: 40, y: 5 },
+            { x: 60, y: 5 },
+            { x: 60, y: 20 },
+            { x: 40, y: 20 },
+          ],
+        },
+      ],
+      nodes: [entry, exit],
+      routes: [incoming, outgoing],
+    },
+    {
+      ...brief,
+      people: [
+        {
+          role: "保安",
+          zone: "展览区",
+          count: 2,
+          audience: "security",
+          evidence: "2保安",
+        },
+      ],
+    },
+  );
+  expect(next.workers).toHaveLength(1);
+  expect(new Set(next.workers[0]!.routeIds)).toEqual(
+    new Set([incoming.id, outgoing.id]),
+  );
+  expect(next.workers[0]!.position).toEqual({ x: 50, y: 10 });
 });

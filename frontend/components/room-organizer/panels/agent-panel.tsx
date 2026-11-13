@@ -987,7 +987,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(!controller?.getSnapshot||!controller.subscribe)return;
     let actor=controller.getSnapshot().user?.id??null;
     return controller.subscribe(()=>{
-      const next=controller.getSnapshot().user?.id??null;if(next===actor)return;actor=next;outdoorWorkflow.cancel();stopOutdoorTask();
+      const next=controller.getSnapshot().user?.id??null;if(next===actor)return;actor=next;outdoorWorkflow.authChanged(next);stopOutdoorTask();
       pendingCandidates?.invalidate();
       briefTurnSequence.current++;runToken.current++;
       researchRequest.current?.abort();

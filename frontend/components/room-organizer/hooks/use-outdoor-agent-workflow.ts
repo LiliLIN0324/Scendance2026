@@ -73,6 +73,20 @@ function readState(scope: string): OutdoorFlowState {
   } catch {}
   return emptyOutdoorFlow(scope);
 }
+/** Confirmation is an authorization boundary, never delegated to model classification. */
+function explicitProposalApproval(message: string): boolean {
+  const text = message.normalize("NFKC").trim();
+  const withoutPositive = text.replace(/(?:没|没有)问题/gu, "");
+  if (
+    /不|没|别|勿|拒绝|取消|暂|等|如果|除非|假如|若|再|之前|以后|但是|不过|还是|是否|能否|吗|么|[?？“”"'`]|例如|比如|他说|她说/u.test(
+      withoutPositive,
+    )
+  )
+    return false;
+  return /^(?:这个安排没问题[,，]?)?(?:就按(?:它|这个|这版|当前方案)(?:来|执行|应用|落下去)(?:吧)?|(?:我|我们)?(?:同意|确认|批准|确定)(?:应用|执行)?(?:(?:当前|这|这一)?(?:版|方案|提案))?(?:吧)?|(?:请)?(?:应用|执行)(?:(?:这|这一|当前)?(?:版|方案|提案))?(?:吧)?|好|好的|可以|就这版|没问题|没有问题|同意这版方案|确认这版方案|就这样)[。!！]?$/u.test(
+    text,
+  );
+}
 export function useOutdoorAgentWorkflow(input: {
   scope: string;
   bridge: () => OutdoorAgentBridge | null;
@@ -162,20 +176,26 @@ export function useOutdoorAgentWorkflow(input: {
     scope: string;
   }) {
     return (
+      token.current === job.epoch &&
       !job.controller.signal.aborted &&
       scopeRef.current === job.scope &&
       callbacks.current.current(job.epoch)
     );
   }
-  function cancel() {
+  function cancel(options?: { preservePendingLogin?: boolean }) {
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
     abort.current?.abort();
+    callbacks.current.begin(); // Invalidate the shared outer task epoch as well as this hook.
     token.current = null;
     proposalRef.current = null;
     setProposal(null);
     setModels(null);
     setBusy(false);
+    if (!options?.preservePendingLogin) {
+      const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
+      persist(kept);
+    }
     status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
   }
   useEffect(() => {
@@ -225,6 +245,7 @@ export function useOutdoorAgentWorkflow(input: {
     const map = bridge?.mapContext
       ? await bridge.mapContext(signal)
       : unknownMap;
+    if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
     mapRef.current = map;
     return map;
   }
@@ -275,14 +296,26 @@ export function useOutdoorAgentWorkflow(input: {
       status("当前规划已变化，旧提案已失效；请基于最新场地重算。", "blocked");
       return;
     }
+    const check = abort.current;
+    const confirmationScope = scopeRef.current;
+    const owns = () =>
+      Boolean(
+        check &&
+          !check.signal.aborted &&
+          abort.current === check &&
+          token.current === p.epoch &&
+          proposalRef.current === p &&
+          scopeRef.current === confirmationScope &&
+          callbacks.current.current(p.epoch),
+      );
+    if (!owns()) return;
     // Re-read map version before accepting any proposal that relied on map context.
     if (bridge?.mapContext && p.mapVersion !== "map:unavailable") {
-      const check = abort.current ?? new AbortController();
       let map: OutdoorMapContext;
       try {
-        map = await bridge.mapContext(check.signal);
+        map = await bridge.mapContext(check!.signal);
       } catch (error) {
-        if (check.signal.aborted || !callbacks.current.current(p.epoch)) return;
+        if (!owns()) return;
         status(
           error instanceof Error
             ? error.message
@@ -291,8 +324,8 @@ export function useOutdoorAgentWorkflow(input: {
         );
         return;
       }
+      if (!owns()) return;
       if (
-        !callbacks.current.current(p.epoch) ||
         p.mapVersion !== map.version ||
         p.base !== JSON.stringify(bridge.getPlan())
       ) {
@@ -326,6 +359,7 @@ export function useOutdoorAgentWorkflow(input: {
       );
       return;
     }
+    if (!owns() || p.base !== JSON.stringify(bridge?.getPlan())) return;
     if (!bridge?.applyPlan?.(p.next, p.base)) {
       status("画布当前不可写或保存身份变化，未应用；原规划保留。", "blocked");
       return;
@@ -336,7 +370,14 @@ export function useOutdoorAgentWorkflow(input: {
       persist({ ...stateRef.current, confirmedBoundary: boundaryKey(p.next) });
       nextStage("scope");
     } else if (p.kind === "verify-access") {
-      persist({ ...stateRef.current, stage: "objects" });
+      persist({
+        ...stateRef.current,
+        stage: ["sub-routes", "people", "refine-3d"].includes(
+          stateRef.current.stage,
+        )
+          ? stateRef.current.stage
+          : "objects",
+      });
     } else if (p.kind === "model") {
       persist({ ...stateRef.current, stage: "refine-3d" });
     } else nextStage(p.kind);
@@ -528,7 +569,11 @@ export function useOutdoorAgentWorkflow(input: {
           throw new Error("地图空间工具尚未接通，未执行。");
         offer(
           bridge.proposeSpatialEdit(turn, plan),
-          turn.action === "adjust" ? (stateRef.current.stage==="refine-3d"?"model":"objects") : "main-routes",
+          turn.action === "adjust"
+            ? stateRef.current.stage === "refine-3d"
+              ? "model"
+              : "objects"
+            : "main-routes",
           turn.action === "adjust"
             ? "按真实对象关系调整设施"
             : "入口连接真实相邻道路",
@@ -630,12 +675,26 @@ export function useOutdoorAgentWorkflow(input: {
           throw new Error("核对入口需绑定本轮真实引用，未修改。");
         if (!target || !plan.nodes.some((n) => n.id === target))
           throw new Error("请选中要核对的具体入口；无法把“这个”猜成某扇门。");
+        if (
+          turn.facts.access?.kind &&
+          turn.facts.access.kind !== "entry" &&
+          !/出|exit/i.test(turn.facts.access.evidence)
+        )
+          throw new Error(
+            "出口/出入口方向需要用户明确核对，未从仅入口推断出口。",
+          );
         offer(
           {
             ...plan,
             nodes: plan.nodes.map((n) =>
               n.id === target
-                ? { ...n, verification: "user-confirmed" as const }
+                ? {
+                    ...n,
+                    ...(turn.facts.access?.kind
+                      ? { kind: turn.facts.access.kind }
+                      : {}),
+                    verification: "user-confirmed" as const,
+                  }
                 : n,
             ),
           },
@@ -855,12 +914,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   async function handle(message: string): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
-    if (
-      /^(?:好|好的|可以|确认|应用|就这版|确定)[。！!]?$/u.test(
-        message.trim(),
-      ) &&
-      proposalRef.current
-    ) {
+    if (explicitProposalApproval(message) && proposalRef.current) {
       await confirm();
       return true;
     }
@@ -917,11 +971,16 @@ export function useOutdoorAgentWorkflow(input: {
           JSON.stringify(plan)
       )
         return true;
+      if (stateRef.current.pendingLogin) {
+        const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
+        persist(kept);
+      }
       callbacks.current.bridge()?.highlightReferences?.(turn.references);
       // Ordinary model output cannot grant confirmation or fees on the user's behalf.
       if (turn.action === "confirm") {
         if (
           !previousProposal ||
+          !explicitProposalApproval(message) ||
           !turn.confirmationEvidence ||
           !message.includes(turn.confirmationEvidence)
         ) {
@@ -938,7 +997,27 @@ export function useOutdoorAgentWorkflow(input: {
       }
       await act(turn, message);
     } catch (error) {
-      if (live(job))
+      if (
+        live(job) &&
+        error &&
+        typeof error === "object" &&
+        (("code" in error && error.code === "UNAUTHENTICATED") ||
+          (error instanceof Error && error.message === "UNAUTHENTICATED"))
+      ) {
+        const owner = callbacks.current.controller()?.getSnapshot?.().user;
+        persist({
+          ...stateRef.current,
+          pendingLogin: {
+            message,
+            planVersion: planVersion(plan),
+            ...(owner && !owner.is_anonymous ? { ownerId: owner.id } : {}),
+          },
+        });
+        status(
+          "登录后才能使用当前Agent模型。刚才需求与场地草稿已保留；请打开现有账户中心正常登录，再继续这条需求。不会使用匿名身份调用模型。",
+          "blocked",
+        );
+      } else if (live(job))
         status(
           error instanceof Error
             ? error.message
@@ -1018,6 +1097,7 @@ export function useOutdoorAgentWorkflow(input: {
     choice?: number,
     reference?: string,
     query?: string,
+    accessKind?: "entry" | "exit" | "both",
   ) {
     if (renderedToken !== token.current || renderedScope !== scopeRef.current) {
       status("这张操作卡已过期，请使用当前任务卡；未执行。", "blocked");
@@ -1040,11 +1120,31 @@ export function useOutdoorAgentWorkflow(input: {
           action,
           reply: "",
           references: refs,
-          facts: {},
+          facts:
+            accessKind && reference
+              ? {
+                  access: {
+                    id: reference,
+                    kind: accessKind,
+                    evidence:
+                      accessKind === "both"
+                        ? "已核对双向出入口"
+                        : accessKind === "exit"
+                          ? "已核对出口"
+                          : "已核对入口",
+                  },
+                }
+              : {},
           ...(choice !== undefined ? { choice } : {}),
           ...(query ? { query } : {}),
         },
-        "",
+        accessKind === "both"
+          ? "已核对双向出入口"
+          : accessKind === "exit"
+            ? "已核对出口"
+            : accessKind
+              ? "已核对入口"
+              : "",
       );
     } catch (error) {
       status(
@@ -1071,9 +1171,51 @@ export function useOutdoorAgentWorkflow(input: {
       status("已选定真实库候选，尚未摆放；请补充对应分区和总数量。", "ready");
     },
     notice,
+    loginRequired: Boolean(state.pendingLogin),
+    authChanged: (nextActor: string | null) => {
+      const pending = stateRef.current.pendingLogin;
+      cancel({
+        preservePendingLogin: Boolean(
+          pending &&
+            (!pending.ownerId || !nextActor || pending.ownerId === nextActor),
+        ),
+      });
+    },
+    resumeAfterLogin: async () => {
+      if (
+        renderedScope !== scopeRef.current ||
+        renderedToken !== token.current
+      ) {
+        status("这张恢复卡已过期，未恢复其他任务。", "blocked");
+        return;
+      }
+      const pending = stateRef.current.pendingLogin,
+        plan = callbacks.current.bridge()?.getPlan();
+      if (!pending || !plan) return;
+      if (
+        pending.ownerId &&
+        callbacks.current.controller()?.getSnapshot?.().user?.id !==
+          pending.ownerId
+      ) {
+        status("请以原账户登录后恢复这条需求；未跨账户执行。", "blocked");
+        return;
+      }
+      if (pending.planVersion !== planVersion(plan)) {
+        status(
+          "登录期间活动规划已变化；原需求仍保留，请结合当前场地重新说明，未自动恢复旧操作。",
+          "blocked",
+        );
+        return;
+      }
+      await handle(pending.message);
+    },
     unverifiedEntrances: (
       callbacks.current.bridge()?.getPlan()?.nodes ?? []
-    ).filter((n) => n.verification !== "user-confirmed"),
+    ).filter(
+      (n) =>
+        n.verification !== "user-confirmed" ||
+        (stateRef.current.stage === "people" && n.kind === "entry"),
+    ),
     handle,
     action,
     cancel,

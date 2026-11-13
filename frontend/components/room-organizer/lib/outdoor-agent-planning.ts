@@ -1,3 +1,4 @@
+import { personnelAccess } from "./outdoor-personnel-access";
 import type {
   PlanPoint,
   PlanZone,
@@ -327,72 +328,11 @@ export function proposeInventoryObjects(
   validateWorkflowDemand(next, brief);
   return { plan: next, used };
 }
-function distanceToRoute(p: PlanPoint, points: PlanPoint[]): number {
-  let best = Infinity;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1]!,
-      b = points[i]!,
-      dx = b.x - a.x,
-      dy = b.y - a.y,
-      t = Math.max(
-        0,
-        Math.min(
-          1,
-          ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1),
-        ),
-      );
-    best = Math.min(best, Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy));
-  }
-  return best;
-}
 export function reachablePedestrianRoutes(
   plan: SitePlanData,
   audience: NonNullable<PlanWorker["audience"]>,
 ): SitePlanData["routes"] {
-  const routes = plan.routes.filter(
-    (r) =>
-      r.kind === "pedestrian" &&
-      (r.audiences
-        ? r.audiences.includes(audience)
-        : ["visitors", "staff", "security"].includes(audience)),
-  );
-  const reachable = new Set(
-    routes
-      .filter((r) =>
-        plan.nodes.some(
-          (n) =>
-            n.kind !== "exit" &&
-            n.verification === "user-confirmed" &&
-            n.levelId === r.levelId &&
-            distanceToRoute(n.position, r.points) <= 1,
-        ),
-      )
-      .map((r) => r.id),
-  );
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const r of routes) {
-      if (reachable.has(r.id)) continue;
-      if (
-        routes.some(
-          (other) =>
-            reachable.has(other.id) &&
-            r.levelId === other.levelId &&
-            ([r.points[0]!, r.points[r.points.length - 1]!].some(
-              (p) => distanceToRoute(p, other.points) <= 0.5,
-            ) ||
-              [other.points[0]!, other.points[other.points.length - 1]!].some(
-                (p) => distanceToRoute(p, r.points) <= 0.5,
-              )),
-        )
-      ) {
-        reachable.add(r.id);
-        grew = true;
-      }
-    }
-  }
-  return routes.filter((r) => reachable.has(r.id));
+  return personnelAccess(plan, audience).routes;
 }
 /** Clip centre lines into the confirmed activity polygon; geometry is not a right-of-way grant. */
 export function clipWorkflowRoutes(
@@ -471,7 +411,7 @@ export function proposeRoleWorkers(
     throw new Error(
       "服务、保安、工作人员、表演人员分别多少、负责哪个区？我会按岗位和已确认进出路径安排，不随机撒人。",
     );
-  const workers: PlanWorker[] = [];
+  const workers: PlanWorker[] = [...plan.workers];
   for (const need of brief.people) {
     const matchesZones = plan.zones.filter(
       (z) => z.id === need.zone || z.name === need.zone,
@@ -480,26 +420,27 @@ export function proposeRoleWorkers(
       throw new Error("分区名称重复，请引用唯一真实分区，不自动猜第一个。");
     const zone = matchesZones[0];
     if (!zone) throw new Error(`请明确“${need.role}”负责的真实区域。`);
-    const eligible = reachablePedestrianRoutes(plan, need.audience).filter(
-      (r) =>
-        r.points.some((p) => planPointInRing(p, zone.polygon)) ||
-        plan.nodes.some(
-          (n) =>
-            planPointInRing(n.position, zone.polygon) &&
-            r.points.some(
-              (p) => Math.hypot(p.x - n.position.x, p.y - n.position.y) < 1,
-            ),
-        ),
+    const access = personnelAccess(plan, need.audience);
+    const eligible = access.routes.filter((r) =>
+      r.points.some(
+        (p) =>
+          planPointInRing(p, zone.polygon) &&
+          access.paths(p, r.levelId) !== null,
+      ),
     );
     if (!eligible.length)
       throw new Error(
-        `“${zone.name}”尚无${need.audience === "service" ? "后勤" : "人行"}接驳，请先安排子流线/子入口；不会把岗位放到不连通的区域。`,
+        `“${zone.name}”尚无同时满足入场与出场的${need.audience === "service" ? "后勤" : "人行"}接驳，请先安排子流线/子入口；不会把岗位放到不连通的区域。`,
       );
     const point = eligible
       .flatMap((r) => r.points)
       .find(
         (p) =>
           planPointInRing(p, zone.polygon) &&
+          access.paths(
+            p,
+            eligible.find((r) => r.points.includes(p))?.levelId,
+          ) !== null &&
           !plan.facilities.some((f) =>
             planPointInRing(p, facilityFootprintRing(f)),
           ),
@@ -508,20 +449,44 @@ export function proposeRoleWorkers(
       throw new Error(
         `“${zone.name}”的岗位通道被物件占用，请先调整物件/子路线。`,
       );
+    const allocationKey = JSON.stringify([
+      zone.id,
+      need.role.normalize("NFKC").trim(),
+      need.audience,
+    ]);
+    const matches = (w: PlanWorker) =>
+      w.allocationKey === allocationKey ||
+      (!w.allocationKey &&
+        w.zoneId === zone.id &&
+        w.role === need.role &&
+        w.audience === need.audience &&
+        w.notes.startsWith("岗位分配提案"));
+    const old = workers.find(matches);
+    for (let i = workers.length - 1; i >= 0; i--)
+      if (matches(workers[i]!)) workers.splice(i, 1);
     workers.push({
-      id: id(),
+      id: old?.id ?? id(),
+      allocationKey,
       role: need.role,
       count: need.count,
       zoneId: zone.id,
       audience: need.audience,
-      routeIds: eligible.map((r) => r.id),
+      routeIds: [
+        ...new Set([
+          ...(access.paths(
+            point,
+            eligible.find((r) => r.points.includes(point))?.levelId,
+          ) ?? []),
+          ...eligible.filter((r) => r.points.includes(point)).map((r) => r.id),
+        ]),
+      ],
       activityZoneIds: [zone.id],
       position: point,
       notes:
         "岗位分配提案；数量来自用户，活动范围为关联分区，进出限关联路线；非排班或安全认证。",
     });
   }
-  return { ...plan, workers: [...plan.workers, ...workers] };
+  return { ...plan, workers };
 }
 export function validateWorkflowPlan(
   base: SitePlanData,

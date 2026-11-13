@@ -1012,3 +1012,5 @@ describe('CloudPanel section entry points', () => {
     expect(screen.getByText('当前 · 草稿')).toBeTruthy();
   });
 });
+
+it('Agent鉴权引导打开既有账户登录浮窗，不换页或使用访客身份',()=>{const anonymous=new BackendSession(getBackendConfig({url:'https://example.supabase.co',anonKey:'sb_publishable_test'}));const load=vi.fn();render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={load}/>);act(()=>window.dispatchEvent(new Event('scendance:request-account-login')));expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);expect(screen.getByRole('button',{name:'登录并进入工作台'})).toBeTruthy();expect(push).not.toHaveBeenCalled();expect(load).not.toHaveBeenCalled();expect(anonymous.getSnapshot().user).toBeNull();anonymous.dispose();});
