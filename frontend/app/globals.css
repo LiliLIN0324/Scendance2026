@@ -1272,8 +1272,11 @@ body {
   display: grid; place-items: center; text-align: center;
   border: 2px solid var(--wk-paper, #F7F5F0); font-variant-numeric: tabular-nums;
 }
-/* 拍摄场地图标 + 右下「3D」小副标。 */
-.sc-rail-capture-icon { position: relative; display: grid; place-items: center; width: 26px; height: 26px; }
+/* 拍摄场地图标 + 右下「3D」小副标。图标槽 span 必须用与 Bingo 角标同链的选择器复活，
+   否则被窄轨 `button > span{display:none}`（只该藏文字标签）连带藏掉，相机不显示。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon {
+  position: relative; display: grid; place-items: center; width: 26px; height: 26px; flex: none;
+}
 .sc-rail-3d-tag {
   position: absolute; right: -9px; bottom: -7px; padding: 0 3px; border-radius: 5px;
   background: var(--wk-plane); border: 1px solid var(--wk-hair); color: var(--wk-ink-soft);
