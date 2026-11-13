@@ -3,7 +3,7 @@ import {createConversationApi} from '../supabase/functions/_shared/conversation-
 import {createApi} from '../supabase/functions/_shared/api.ts';
 import type {Backend} from '../supabase/functions/_shared/backend.ts';
 
-const settings:Record<string,string>={CONVERSATION_API_ENABLED:'1',BRIEF_CONVERSATION_ENABLED:'0',ASSISTANT_CHAT_ENABLED:'0',BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_PROFILE:'minimax',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-example',ALLOWED_ORIGINS:'https://example.test'};
+const settings:Record<string,string>={CONVERSATION_API_ENABLED:'1',BRIEF_CONVERSATION_ENABLED:'0',ASSISTANT_CHAT_ENABLED:'0',BAILIAN_PRODUCT_ENABLED:'1',AGENT_CHAT_PROFILE:'bailian-qwen',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'fixture-secret',BAILIAN_PRODUCT_MODEL:'qwen-example',ALLOWED_ORIGINS:'https://example.test'};
 const env=(key:string)=>settings[key];
 const make=(path:string,body:unknown,auth=true,origin='https://example.test')=>new Request(`https://edge.test${path}`,{method:'POST',headers:{'content-type':'application/json',origin,...(auth?{authorization:'Bearer fixture'}:{})},body:JSON.stringify(body)});
 const completion=(content:string)=>Response.json({choices:[{finish_reason:'stop',message:{content}}]});
