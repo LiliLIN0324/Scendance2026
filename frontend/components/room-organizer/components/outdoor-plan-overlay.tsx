@@ -1,4 +1,5 @@
 'use client';
+import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
 
 /**
  * 户外 2D 规划覆盖层（P2-e · 融进 3D 页面框架）：**本组件只负责画布本体**——
@@ -269,6 +270,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   useEffect(() => {
     agent?.registerRouteBridge?.({
       projectId:()=>slotId,
+      exportPlanDraft:(expected,context)=>{const current=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!current||JSON.stringify(current)!==expected)return false;downloadOutdoorPlanDraft(current,slotId,context);return true;},
       beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);return true;},
       applyPlan:(next,expected)=>{const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;if(ok){setPlacePin(null);setPlaceArea(null);}return ok;},
       selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
@@ -306,7 +308,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       getPlan: () => canvasApiRef.current?.getEditVisuals().plan??planRef.current,
     });
     return () => agent?.registerRouteBridge?.(null);
-  }, [agent]);
+  }, [agent,slotId]);
   const libraryAssetSignature=JSON.stringify(plan?.facilities.filter(f=>f.sourceAssetId).map(f=>[f.id,f.sourceAssetId,f.modelOverride])??[]);
   useEffect(()=>{const p=planRef.current;if(!p)return;const request=new AbortController();void restoreOutdoorLibraryModels(controller??null,slotId,p,request.signal).catch(()=>{/* unavailable models stay visibly unavailable; no generated fallback */});return()=>request.abort();},[slotId,controller,libraryAssetSignature]);
   const pendingSaveRef = useRef<number | null>(null);

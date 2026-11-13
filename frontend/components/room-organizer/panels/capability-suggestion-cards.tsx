@@ -1,4 +1,5 @@
 'use client';
+import { STYLE_CAPABILITY_PREFILL } from '../lib/style-bundles';
 
 import { Map as MapIcon, MapPin, Palette } from '@/components/solid-icons';
 import { useRoomEditor } from '../contexts';
@@ -41,7 +42,7 @@ export function CapabilitySuggestionCards({ onPrefill }: CapabilitySuggestionCar
       id: 'style',
       title: '按风格配一套',
       desc: '按场地气质配现成风格',
-      prefill: '帮我按这块场地的气质配一套现成风格',
+      prefill: STYLE_CAPABILITY_PREFILL,
       actionLabel: agent.stylePickerOpen ? '收起风格套' : '选风格',
       action: () => { if (agent.stylePickerOpen) agent.closeStylePicker(); else agent.startStylePicker(); },
       active: agent.stylePickerOpen,

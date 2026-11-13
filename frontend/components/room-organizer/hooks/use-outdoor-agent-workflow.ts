@@ -23,13 +23,15 @@ import {
   clipWorkflowRoutes,
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary } from "../lib/outdoor-personal-library";
+import { proposeOutdoorStyle } from "../lib/outdoor-style-preview";
+import type { StyleBundle } from "../lib/style-bundles";
 import { fetchRoadNetwork } from "../lib/road-network";
 import { buildRouteProposal } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
 
 export interface OutdoorWorkflowProposal {
-  kind: OutdoorStage | "verify-access" | "model";
+  kind: OutdoorStage | "verify-access" | "model" | "style";
   label: string;
   base: string;
   mapVersion: string;
@@ -74,7 +76,7 @@ function readState(scope: string): OutdoorFlowState {
   return emptyOutdoorFlow(scope);
 }
 /** Confirmation is an authorization boundary, never delegated to model classification. */
-function explicitProposalApproval(message: string): boolean {
+export function explicitProposalApproval(message: string): boolean {
   const text = message.normalize("NFKC").trim();
   const withoutPositive = text.replace(/(?:没|没有)问题/gu, "");
   if (
@@ -378,6 +380,8 @@ export function useOutdoorAgentWorkflow(input: {
           ? stateRef.current.stage
           : "objects",
       });
+    } else if (p.kind === "style") {
+      // Cosmetic only: do not advance or confirm any venue/layout stage.
     } else if (p.kind === "model") {
       persist({ ...stateRef.current, stage: "refine-3d" });
     } else nextStage(p.kind);
@@ -1090,6 +1094,19 @@ export function useOutdoorAgentWorkflow(input: {
       if (live(job)) setBusy(false);
     }
   }
+  async function previewStyle(bundle: StyleBundle) {
+    if(renderedToken!==token.current||renderedScope!==scopeRef.current){status('色板所属任务已变化，请在当前活动重新预览。','blocked');return;}
+    const bridge=callbacks.current.bridge(),base=bridge?.getPlan();
+    if(!base){status('当前活动规划尚未载入，未创建风格预览。','blocked');return;}
+    const baseVersion=JSON.stringify(base),job=start();refsRef.current=[];
+    try{
+      await mapContext(job.controller.signal);
+      if(!live(job))return;
+      if(JSON.stringify(callbacks.current.bridge()?.getPlan())!==baseVersion)throw new Error('规划已变化，请重新选择色板预览。');
+      offer(proposeOutdoorStyle(base,bundle),'style',`「${bundle.name}」现有设施配色`,job,['仅改设施主色；不新增物件、不改变尺寸/占地/通路，不承诺GLB原材质可换色。']);
+    }catch(error){if(live(job))status(error instanceof Error?error.message:'配色预览无法核对，未修改。','blocked');}
+    finally{if(live(job))setBusy(false);}
+  }
   const renderedToken = token.current;
   const renderedScope = input.scope;
   async function action(
@@ -1220,6 +1237,7 @@ export function useOutdoorAgentWorkflow(input: {
     action,
     cancel,
     confirmProposal: confirm,
+    previewStyle,
     offerBoundary,
     manualBoundary,
     manualApplied,

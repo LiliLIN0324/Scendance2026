@@ -311,6 +311,7 @@ export interface OutdoorAgentBridge {
   getPlan(): SitePlanData | null;
   projectId?(): string;
   selectedIds?(): string[];
+  exportPlanDraft?(expected: string, context: import("./outdoor-plan-handoff").OutdoorDraftContext): boolean;
   applyPlan?(next: SitePlanData, expected: string): boolean;
   previewBoundary?(
     anchor: NonNullable<SitePlanData["anchor"]>,

@@ -68,6 +68,7 @@ import {
   XIHU_LOCAL_PLACE,
   XIHU_LOCAL_SPAN_M,
 } from '../lib/research-area';
+import { resolveCommonCapability } from '../lib/agent-common-capabilities';
 import { matchVenueCommand } from '../lib/venue-intent';
 import { searchPlaces, type PlaceSuggestion } from '../lib/place-search';
 import { fetchPlaceShape, searchAreas, peekCachedPlaceShape } from '../lib/place-area';
@@ -78,9 +79,9 @@ import { trueFootprintBoundary } from '../lib/outdoor-venue-sync';
 import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
-import { useOutdoorAgentWorkflow } from '../hooks/use-outdoor-agent-workflow';
+import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-outdoor-agent-workflow';
 import { OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
-import type { OutdoorAgentBridge } from '../lib/outdoor-agent-contract';
+import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
 import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
@@ -763,6 +764,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const [progress, setProgress] = useState(0);
   // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
   const [exportPreview, setExportPreview] = useState(false);
+  const outdoorExportRef=useRef<{base:string;scope:string;session:string|null;projectId:string;epoch:number;brief:OutdoorBrief;requirements:string[]}|null>(null);
+  useEffect(()=>{outdoorExportRef.current=null;setExportPreview(false);},[sessionScope]);
+
   // 提案只活在这里：layout 一个字节都不动，所以自动存档、撤销栈、别人的选中态都不受影响。
   const proposal = useRef<PlanProposal | null>(null);
   const proposalSessionRef=useRef<string|null>(null);
@@ -1292,6 +1296,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 风格套先构造完整候选，确认前不修改画布。 */
   function placeStyleBundleNow(bundle: StyleBundle): void {
+    if(routeBridgeRef.current?.applyPlan){setStylePickerOpen(false);outdoorExportRef.current=null;setExportPreview(false);void outdoorWorkflow.previewStyle(bundle);return;}
+
     if (phase === 'generating') {
       say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再配一套。' });
       return;
@@ -2860,14 +2866,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   /** 生成中、云端忙、恢复中、预览过期或基线变了：最后一帧没稳，不亮任何确认。 */
   function previewUnsettled(): boolean {
     const current = studioRef.current;
-    if (phaseRef.current === 'generating' || phaseRef.current === 'paused') return true;
+    if (phaseRef.current === 'generating' || phaseRef.current === 'paused' || outdoorWorkflow.busy || outdoorTask?.state === 'working') return true;
     if (current?.busy || current?.recoverable) return true;
     return !!(current?.preview && (current.stale || current.expired));
   }
 
   /** Export reads the applied layout; a visible candidate is a different version. */
   function pendingCandidateBlocksExport(): boolean {
-    return proposal.current !== null || !!studioRef.current?.preview;
+    return proposal.current !== null || !!studioRef.current?.preview || !!outdoorWorkflow.proposal;
   }
 
   function refusePendingCandidateExport(): boolean {
@@ -2883,11 +2889,32 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', amber: true, text: '这一版还没稳，确认先不亮。等预览停住再说导出。' });
       return;
     }
+    const bridge=routeBridgeRef.current;
+    if(bridge?.applyPlan){
+      const plan=bridge.getPlan();if(!plan){say({role:'agent',amber:true,text:'当前活动规划尚未载入，不能导出旧场景。'});return;}
+      outdoorExportRef.current={base:JSON.stringify(plan),scope:sessionScope,session:boundSessionId.current,projectId:bridge.projectId?.()??sessionScope,epoch:outdoorEpochRef.current,brief:structuredClone(outdoorWorkflow.state.brief),requirements:bubblesRef.current.filter(b=>b.role==='user').map(b=>b.text)};
+      setExportPreview(true);say({role:'agent',text:'将导出当前户外规划JSON草案（范围、分区、设施、通路、岗位与已记录需求）。只在本机下载，不发送搭建方；未知和未核验条件仍保留。确认前不下载。'});return;
+    }
+    outdoorExportRef.current=null;
     setExportPreview(true);
     say({ role: 'agent', text: '执行资料草案使用执行页已保存的手工需求、物料、制作和点验，不完整包含本次对话需求。请对照当前对话及现场条件核对后再交付。' });
   }
 
   function confirmExport(): void {
+    const snapshot=outdoorExportRef.current,bridge=routeBridgeRef.current;
+    if(snapshot||bridge?.applyPlan){
+      if(!snapshot||!bridge?.applyPlan||!sessionScopeIsCurrent()||snapshot.scope!==sessionScope||snapshot.session!==boundSessionId.current||snapshot.epoch!==outdoorEpochRef.current||snapshot.projectId!==(bridge.projectId?.()??sessionScope)||snapshot.base!==JSON.stringify(bridge.getPlan())){
+        outdoorExportRef.current=null;setExportPreview(false);say({role:'agent',amber:true,text:'规划已变化或导出卡已过期，请重新预览后确认；没有导出其他版本。'});return;
+      }
+      if(refusePendingCandidateExport()||previewUnsettled())return;
+      if(!bridge.exportPlanDraft){say({role:'agent',amber:true,text:'当前画布的户外草案导出尚未接通；不会改用旧场景导出。'});return;}
+      try{
+        const ok=bridge.exportPlanDraft(snapshot.base,{brief:snapshot.brief,requirements:snapshot.requirements});
+        if(!ok){outdoorExportRef.current=null;setExportPreview(false);say({role:'agent',amber:true,text:'规划已变化，请重新预览再导出；未生成旧版文件。'});return;}
+        outdoorExportRef.current=null;setExportPreview(false);say({role:'agent',text:'当前户外规划草案已发起本机下载，未对外发送；请核对需求、真实通路、实物库存与现场条件，不能作为安全认证。'});
+      }catch{say({role:'agent',amber:true,text:'户外草案下载未完成，请保留规划并核对浏览器下载权限后重试。'});}
+      return;
+    }
     if (refusePendingCandidateExport()) return;
     if (previewUnsettled()) { setExportPreview(false); say({role:'agent',amber:true,text:'当前方案仍在处理，请完成后再导出。'}); return; }
     setExportPreview(false);
@@ -2922,6 +2949,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   function dismissExport(): void {
+    outdoorExportRef.current=null;
     setExportPreview(false);
     say({ role: 'agent', text: '好，先不导出。要导的时候说一声就行。' });
   }
@@ -2971,6 +2999,23 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (attachment) setPendingFile(null);
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
+    // A registered common capability is not an outdoor geometry/model intent. Unknown/mixed
+    // input stays intact for the same domain Agent; never fall through to legacy layout generators.
+    if(exportPreview&&(outdoorExportRef.current||routeBridgeRef.current?.applyPlan)){
+      if(!queued&&!attachment&&(explicitProposalApproval(trimmed)||/^(?:请)?确认导出[。!！]?$/u.test(trimmed))){say({role:'user',text:trimmed});confirmExport();return;}
+      outdoorExportRef.current=null;setExportPreview(false);
+    }
+    if(!queued&&!attachment&&routeBridgeRef.current?.applyPlan){
+      const common=resolveCommonCapability(trimmed,window.localStorage);
+      if(common.handled){
+        say({role:'user',text:trimmed});
+        if(common.id==='export'){setStylePickerOpen(false);proposeExport();return;}
+        outdoorWorkflow.cancel();
+        if(common.selection==='open'){setStylePickerOpen(true);say({role:'agent',text:'先选一套现成色板预览。户外只对现有设施配色，不凭风格新增家具或猜占地；逐区布置仍复用真实物料库。'});}
+        else placeStyleBundleNow(common.selection);
+        return;
+      }
+    }
     // The single visible outdoor workbench dispatches through the contextual domain workflow.
     // Legacy layout/keyword planners remain only for legacy integrations without the atomic plan bridge.
     if(!queued&&callbacks.workbenchMode==='layout'&&routeBridgeRef.current?.applyPlan){
@@ -3582,7 +3627,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
     venuePickerOpen, startVenuePicker: () => setVenuePickerOpen(true), closeVenuePicker: () => setVenuePickerOpen(false),
     stylePickerOpen,
-    startStylePicker: () => { setStylePickerOpen(true); setMapPickerOpen(false); setVenuePickerOpen(false); },
+    startStylePicker: () => { if(routeBridgeRef.current?.applyPlan)outdoorWorkflow.cancel();setStylePickerOpen(true); setMapPickerOpen(false); setVenuePickerOpen(false); },
     closeStylePicker: () => setStylePickerOpen(false),
     placeStyleBundle: placeStyleBundleNow,
     applyMapVenuePick: applyVenuePick,
@@ -4596,14 +4641,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {agent.exportPreview && <div className="ap-card ap-export-card" id="export-preview">
         <span className="ap-blocked-stamp"><Download size={12} aria-hidden="true"/>导出</span>
         <strong>导出执行资料草案</strong>
-        <p className="ap-blocked-note">包含执行页已保存的手工需求、物料工作单、制作计划和数量点验；不完整包含对话需求，交付前请逐项核对。</p>
-        {agent.proposal || !!studio?.preview
+        <p className="ap-blocked-note">{agent.outdoorBridgeReady?'当前SitePlanData与记录需求的本机JSON草案；不发送、不冻结认证，规划变化后需重新预览。':'包含执行页已保存的手工需求、物料工作单、制作计划和数量点验；不完整包含对话需求，交付前请逐项核对。'}</p>
+        {agent.proposal || !!studio?.preview || !!agent.outdoorWorkflow.proposal
           ? <p className="ap-blocked-note" role="status">当前有尚未应用的方案预览；请先确认布置或撤回预览，再导出。</p>
-          : generating || paused || agent.cloudBusy || agent.recovering || agent.cloudStale || !!studio?.applyRecovery
+          : generating || paused || agent.outdoorWorkflow.busy || agent.cloudBusy || agent.recovering || agent.cloudStale || !!studio?.applyRecovery
           ? <p className="ap-blocked-note" role="status">这一版还没稳，确认先不亮。</p>
-          : studio?.cloudMaterialDraftAvailable ? <p className="ap-blocked-note">云项目暂不支持此执行资料草案，可先导出下方物料草案。</p>
+          : !agent.outdoorBridgeReady && studio?.cloudMaterialDraftAvailable ? <p className="ap-blocked-note">云项目暂不支持此执行资料草案，可先导出下方物料草案。</p>
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
-        {studio?.cloudMaterialDraftAvailable && !agent.proposal && !studio.preview && !generating && !paused && !agent.cloudBusy && !agent.recovering && !agent.cloudStale && !studio.applyRecovery && <>
+        {!agent.outdoorBridgeReady && studio?.cloudMaterialDraftAvailable && !agent.proposal && !studio.preview && !generating && !paused && !agent.cloudBusy && !agent.recovering && !agent.cloudStale && !studio.applyRecovery && <>
           <button type="button" className="chip" onClick={agent.confirmCloudMaterialDraft}>导出当前场景物料清单草案</button>
           <p className="ap-blocked-note">本机快照，未冻结；不含完整需求、点验及场地方确认。模型与实物库存、现场条件均需核验。</p>
         </>}
@@ -4624,7 +4669,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {/* 活动脸统管活动级选址与布置风格套；Bingo 不再保留布置生成入口。 */}
         {mode === 'layout' && activity && agent.stylePickerOpen && (
           <StyleBundlePanel
-            disabled={generating}
+            paletteOnly={agent.outdoorBridgeReady}
+            disabled={generating||agent.outdoorWorkflow.busy}
             onClose={agent.closeStylePicker}
             onPick={bundle => agent.placeStyleBundle(bundle)}
           />

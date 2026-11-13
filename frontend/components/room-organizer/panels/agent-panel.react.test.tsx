@@ -4809,3 +4809,61 @@ describe('outdoor contextual workflow production Provider dispatch',()=>{
   send('45人草坪演出');await waitFor(()=>expect(current.outdoorWorkflow.notice).toContain('disabled'));expect(current.zoneProposal).toBeNull();expect(current.outdoorWorkflow.proposal).toBeNull();expect(apply).not.toHaveBeenCalled();expect(studioMock.generate).not.toHaveBeenCalled();
  });
 });
+
+
+describe('registered capabilities through the atomic outdoor Agent',()=>{
+ function mountCommon(facilities=false){
+  let current!:NonNullable<ReturnType<typeof useAgent>>;
+  let plan=createStarterOutdoorPlan();plan.boundary=[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}];
+  if(facilities){plan.zones=[{id:'22222222-2222-4222-8222-222222222222',name:'展览区',notes:'',semantic:'reserved',purpose:'exhibition',environment:'outdoor',polygon:[{x:10,y:10},{x:60,y:10},{x:60,y:60},{x:10,y:60}]}];plan.facilities=[{id:'11111111-1111-4111-8111-111111111111',zoneId:plan.zones[0]!.id,templateId:'market-booth',name:'现有展位',position:{x:20,y:20},rotationDeg:0,size:{width:3,depth:3},notes:''}];}
+  const apply=vi.fn((next:typeof plan,expected:string)=>{if(JSON.stringify(plan)!==expected)return false;plan=next;return true;});
+  const download=vi.fn(()=>true);let projectId='capability-project';
+  function Probe(){current=useAgent()!;useEffect(()=>{current.registerRouteBridge({getPlan:()=>plan,projectId:()=>projectId,applyPlan:apply,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true,exportPlanDraft:download} as Parameters<typeof current.registerRouteBridge>[0]);return()=>current.registerRouteBridge(null);},[]);return null;}
+  studioMock.controller.assistantChat.mockResolvedValue({status:'ok',answer:JSON.stringify({action:'ask',reply:'请继续核对本次活动。',references:[],facts:{}})});
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  return {current:()=>current,plan:()=>plan,switchProject:()=>{projectId='other-project';},change:()=>{plan={...plan,boundary:[{x:0,y:0},{x:81,y:0},{x:81,y:70},{x:0,y:70}]};},apply,download};
+ }
+ it('registered export previews current SitePlanData and downloads only after confirmation, never the legacy scene',async()=>{
+  const app=mountCommon();const before=JSON.stringify(app.plan());send('导出给搭建方');
+  const button=await screen.findByRole('button',{name:'确认导出'});
+  expect(app.current().exportPreview).toBe(true);expect(app.download).not.toHaveBeenCalled();expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+  fireEvent.click(button);expect(app.download).toHaveBeenCalledWith(before,expect.objectContaining({brief:expect.any(Object),requirements:expect.any(Array)}));
+  expect(studioMock.exportActivity).not.toHaveBeenCalled();expect(app.apply).not.toHaveBeenCalled();
+ });
+ it('an export confirmation cannot silently download a different plan after the preview',async()=>{
+  const app=mountCommon();send('导出给搭建方');const button=await screen.findByRole('button',{name:'确认导出'});app.change();fireEvent.click(button);
+  expect(app.download).not.toHaveBeenCalled();expect(studioMock.exportActivity).not.toHaveBeenCalled();expect(await screen.findByText(/规划已变化.*重新预览/)).toBeTruthy();
+ });
+ it('same geometry in a different project still invalidates the export receipt',async()=>{
+  const app=mountCommon();send('导出给搭建方');const button=await screen.findByRole('button',{name:'确认导出'});app.switchProject();fireEvent.click(button);expect(app.download).not.toHaveBeenCalled();expect(studioMock.exportActivity).not.toHaveBeenCalled();
+ });
+ it('natural confirmation downloads only the current export, while negation never grants permission',async()=>{
+  const app=mountCommon();send('导出给搭建方');await screen.findByRole('button',{name:'确认导出'});send('先不要导出，我再想想');await waitFor(()=>expect(app.current().exportPreview).toBe(false));expect(app.download).not.toHaveBeenCalled();
+  await waitFor(()=>expect(app.current().outdoorWorkflow.busy).toBe(false));send('导出给搭建方');await screen.findByRole('button',{name:'确认导出'});send('确认导出');expect(app.download).toHaveBeenCalledOnce();expect(studioMock.exportActivity).not.toHaveBeenCalled();
+ });
+ it('an unapplied outdoor proposal blocks export instead of serializing the wrong version',async()=>{
+  const app=mountCommon();studioMock.controller.assistantChat.mockResolvedValueOnce({status:'ok',answer:JSON.stringify({action:'scope',reply:'',references:[],facts:{}})});send('先核对实际活动场地');await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('scope'));send('导出给搭建方');expect(app.current().exportPreview).toBe(false);expect(app.download).not.toHaveBeenCalled();expect(app.current().outdoorWorkflow.proposal?.kind).toBe('scope');
+ });
+ it.each([false,true])('style capability prefill -> submit -> picker uses one contract (atomic=%s)',async atomic=>{
+  if(atomic)mountCommon();else render(ui(makeLayout()));
+  fireEvent.click(within(screen.getByRole('group',{name:'你可以做什么'})).getByRole('button',{name:/按风格配一套/}));
+  const input=screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;expect(input.value).toBe('帮我按这块场地的气质配一套现成风格');expect(screen.queryByRole('dialog',{name:'按风格配一套'})).toBeNull();
+  fireEvent.keyDown(input,{key:'Enter'});expect(await screen.findByRole('dialog',{name:'按风格配一套'})).toBeTruthy();expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+ });
+ it('atomic style is a same-plan cosmetic proposal, not a legacy furniture template',async()=>{
+  const app=mountCommon(true);const before=structuredClone(app.plan());send('按风格配一套');
+  const picker=await screen.findByRole('dialog',{name:'按风格配一套'});fireEvent.click(within(picker).getByRole('button',{name:'按松木户外配一套'}));
+  await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('style'));
+  expect(app.plan()).toEqual(before);expect(app.apply).not.toHaveBeenCalled();send('好');await waitFor(()=>expect(app.apply).toHaveBeenCalledOnce());
+  expect(app.plan().facilities).toHaveLength(1);expect(app.plan().facilities[0]?.color).toBeTruthy();expect({...app.plan().facilities[0],color:undefined}).toEqual({...before.facilities[0],color:undefined});
+  expect(app.plan().boundary).toEqual(before.boundary);expect(studioMock.generate).not.toHaveBeenCalled();expect(state.apply).not.toHaveBeenCalled();
+ });
+ it('a mixed checkin question keeps the door requirement and never fabricates a venue called 怎么',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+  studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'签到可先核对入场方式；门的开启要求需要保留并现场核验。',unhandled:[{kind:'other',evidence:'门必须保持打开'}],factEvidence:[]});
+  let current!:NonNullable<ReturnType<typeof useAgent>>;function Probe(){current=useAgent()!;return null;}
+  state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('活动签到怎么安排，门必须保持打开');await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledOnce());
+  expect(current.venuePick).toBeNull();expect(within(await screen.findByRole('region',{name:'尚未处理的要求'})).getByText('活动签到怎么安排，门必须保持打开')).toBeTruthy();
+ });
+});

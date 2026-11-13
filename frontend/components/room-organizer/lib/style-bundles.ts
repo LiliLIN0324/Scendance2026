@@ -311,6 +311,8 @@ export function loadStyleRuns(storage?: StorageLike): StyleRun[] {
   }
 }
 
+export const STYLE_CAPABILITY_PREFILL = '帮我按这块场地的气质配一套现成风格';
+
 /** 「按奶油会客配一套」→ 对应套；只说「按风格配一套」→ 打开选单。 */
 export function matchStyleBundleCommand(text: string, storage?: StorageLike): StyleBundle | 'open' | null {
   const compact = text.replace(/\s+/g, '');
@@ -325,7 +327,7 @@ export function matchStyleBundleCommand(text: string, storage?: StorageLike): St
     const tip = bundle.prompt.replace(/\s+/g, '');
     if (tip.length >= 4 && compact.includes(tip) && /(配|放|风格)/.test(compact)) return bundle;
   }
-  if (/按风格配一套|配一套风格|风格配一套/.test(compact)) return 'open';
+  if (compact === STYLE_CAPABILITY_PREFILL || /按风格配一套|配一套风格|风格配一套/.test(compact)) return 'open';
   return null;
 }
 
