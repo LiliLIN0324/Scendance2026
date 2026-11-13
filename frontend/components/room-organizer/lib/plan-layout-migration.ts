@@ -1,8 +1,8 @@
 /**
  * M2：旧室内布局（`RoomLayout`）→ 户外 plan 实体的一次性迁移纯函数层。
  *
- * 范围（2026-11-13 拍板）：本轮先迁**分区 / 人员 / 动线**三类口径无歧义的实体；
- * - 物料 `FurnitureItem` → facility：目录映射与 misc 占位回落下一轮接；
+ * 范围（2026-11-13 拍板）：本模块迁**分区 / 人员 / 动线**三类口径无歧义的实体；
+ * - 物料 `FurnitureItem` → facility：见独立执行器 `plan-facility-migration.ts`（消费 `plan-facility-mapping` 四档）；
  * - 墙体 `InteriorWall`：契约独立 `walls` 集合，扩字段评审后再接。
  *
  * 口径：
@@ -55,13 +55,13 @@ export interface LayoutMigrationResult {
 }
 
 /** 壳体 → 平面逆变换帧（与 `plan-item-bridge.shellToPlan` 同公式）。 */
-interface MigrationFrame {
+export interface MigrationFrame {
   bounds: NonNullable<ReturnType<typeof planBoundaryBounds>> | null;
   scaleX: number;
   scaleZ: number;
 }
 
-function makeFrame(boundary: readonly PlanPoint[], shellWidth: number, shellDepth: number): MigrationFrame {
+export function makeFrame(boundary: readonly PlanPoint[], shellWidth: number, shellDepth: number): MigrationFrame {
   const bounds = planBoundaryBounds(boundary);
   const usable = bounds !== null
     && Number.isFinite(shellWidth) && Number.isFinite(shellDepth)
@@ -75,7 +75,7 @@ function makeFrame(boundary: readonly PlanPoint[], shellWidth: number, shellDept
 }
 
 /** 壳体点（x 东、z 南）→ 平面点（x 东、y 北）；边界退化时退成直接翻轴。 */
-function framePoint(frame: MigrationFrame, x: number, z: number): PlanPoint {
+export function framePoint(frame: MigrationFrame, x: number, z: number): PlanPoint {
   if (frame.bounds === null || !Number.isFinite(x) || !Number.isFinite(z)) return planPointOfScene(x, z);
   const { bounds, scaleX, scaleZ } = frame;
   return {
@@ -99,7 +99,7 @@ function zonePolygon(frame: MigrationFrame, zone: RoomZone): PlanPoint[] {
   return corners.map(([x, z]) => framePoint(frame, x, z));
 }
 
-function hexOrUndefined(color: string | undefined): string | undefined {
+export function hexOrUndefined(color: string | undefined): string | undefined {
   return color !== undefined && HEX_COLOR.test(color) ? color : undefined;
 }
 
