@@ -20,7 +20,8 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
 import { ArrowUp, Check, Clock, Download, FileImage, HelpCircle, Info, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
@@ -2993,7 +2994,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       await prior;await waitForGeneration();if(!current())return;
       briefRequest.current=request;setUnderstanding(true);
       const cancelled=new Promise<never>((_,reject)=>request.controller.signal.addEventListener('abort',()=>reject(new DOMException('已停止等待','AbortError')),{once:true}));
-      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal),cancelled]);
+      const provider=studioRef.current?.activeProvider;
+      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined),cancelled]);
       if(!current())return;
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
       else {
@@ -3365,9 +3367,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const resolverMemory = staleScale ? {...previousMemory,lengthM:null,widthM:null,areaM2:null,scaleNeedsReconfirmation:true,previousVenueScale,pendingGeneration:undefined} : previousMemory;
     let turn: Awaited<ReturnType<typeof resolveBriefTurn>>;
     try {
+      const provider=studioRef.current?.activeProvider;
       turn = await resolveBriefTurn(trimmed, resolverMemory, {
         venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
-      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined);
+      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined);
       if(turn.modelNotice?.includes('可能仍会计费'))uncertainInputs.current.add(trimmed);
       if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
     } catch (error) { setProcessFailed('understanding'); releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
@@ -4332,6 +4335,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
 } = {}): JSX.Element {
   const agent = useAgent();
   const studio = useStudioAgent();
+  // 请求级模型槽位：可选项来自服务端 capabilities；状态在 StudioContext 内会话内存共享。
+  const providerSlots = studio?.chatProviders?.providers ?? null;
+  const activeProviderId = studio?.activeProvider ?? 'default';
+  const activeProviderSlot = providerSlots?.find(p => p.id === activeProviderId) ?? null;
+  // 模型槽位浮层：堆栈矮卡里面板自身 overflow:hidden 会裁掉上弹菜单，因此挂到 body 层定位。
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
+  const providerAnchorRef = useRef<HTMLButtonElement>(null);
+  const providerMenuRef = useRef<HTMLDivElement>(null);
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
   // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
@@ -4372,6 +4383,42 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   useEffect(() => () => { recognitionRef.current?.abort(); recognitionRef.current = null; }, []);
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // 浮层定位：默认向上贴着锚点；上方空间不足或向下更宽裕时改为向下。关闭时不占用定位。
+  const providerMenuStyle = useMemo<CSSProperties>(() => {
+    if (!providerMenuOpen) return {};
+    const anchor = providerAnchorRef.current?.getBoundingClientRect();
+    if (!anchor || (anchor.width === 0 && anchor.height === 0)) return {};
+    const menuW = 266; const gap = 6; const estH = 232;
+    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - menuW - 8));
+    const above = anchor.top - gap >= estH || anchor.bottom + estH > window.innerHeight - 8;
+    return {
+      position: 'fixed',
+      left,
+      width: menuW,
+      ...(above ? { bottom: window.innerHeight - anchor.top + gap } : { top: anchor.bottom + gap }),
+    };
+  }, [providerMenuOpen]);
+  // 点击浮层外部 / Esc / 滚动或缩放时收起。
+  useEffect(() => {
+    if (!providerMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && (providerAnchorRef.current?.contains(target) || providerMenuRef.current?.contains(target))) return;
+      setProviderMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setProviderMenuOpen(false); };
+    const onDismiss = () => setProviderMenuOpen(false);
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onDismiss);
+    window.addEventListener('scroll', onDismiss, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onDismiss);
+      window.removeEventListener('scroll', onDismiss, true);
+    };
+  }, [providerMenuOpen]);
   // 树外入口（选中物件弹层）经预填总线把指令送进既有 composer：
   // 并入现有草稿（空格追加、不覆盖），聚焦输入框；不自动发送，仍走原提案审批链。
   useEffect(() => subscribeComposerPrefill((text) => {
@@ -4733,6 +4780,55 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           <button type="submit" className="ap-send ap-panel-send" aria-label="发送" data-tour="chat-send" disabled={!canSend}><ArrowUp size={18}/></button>
         )}
         </div>
+        {providerSlots && (
+          <div className="ap-composer-bar">
+            <div className="ap-composer-left">
+              <div className={`ap-provider${providerMenuOpen ? ' is-open' : ''}`}>
+                <button
+                  ref={providerAnchorRef}
+                  type="button"
+                  className="ap-provider-summary"
+                  aria-expanded={providerMenuOpen}
+                  onClick={() => setProviderMenuOpen(open => !open)}
+                >
+                  <span className="ap-supervise-dot" aria-hidden="true"/>
+                  <span className="ap-provider-summary-label">{activeProviderSlot ? activeProviderSlot.label : '默认（按服务端配置）'}</span>
+                </button>
+                {createPortal(
+                  <div
+                    ref={providerMenuRef}
+                    className={`ap-provider-menu${providerMenuOpen ? ' is-open' : ''}`}
+                    role="radiogroup"
+                    aria-label="模型槽位"
+                    style={providerMenuStyle}
+                  >
+                    {providerSlots.map(slot => {
+                      const active = activeProviderId === slot.id;
+                      const disabled = !slot.configured || !!studio?.busy;
+                      return (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={disabled}
+                          onClick={() => {
+                            studio?.setActiveProvider(slot.id);
+                            setProviderMenuOpen(false);
+                          }}
+                        >
+                          <span className="ap-provider-label">{slot.label}{!slot.agentTools && <small>仅对话/摘要</small>}</span>
+                          <span className="ap-provider-model">{slot.configured ? slot.model : '未配置'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>,
+                  document.body,
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <p className="ap-foot">
           <span id="ap-data-notice" className="ap-foot-detail" hidden={!footDetailOpen}>{understandingLine(Boolean(modelEnabled() && studio?.controller))}</span>
           <span className="ap-foot-detail" hidden={!footDetailOpen}>未发送的草稿只暂存在当前页面，刷新或关闭后会丢失。</span>

@@ -16,6 +16,7 @@ import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, rando
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import { chatModelName, chatProfile, chatRequest, generateProposal } from './providers.ts';
+import { chatCapabilities, chatProviderConfigured, chatProviderView, type ChatProviderId } from './chat-provider.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefConversation, parseModelBrief, BRIEF_CONVERSATION_PROMPT, BRIEF_EXTRACT_PROMPT, BRIEF_PROVIDER_TIMEOUT_MS } from './brief-extract-contract.ts';
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
@@ -128,6 +129,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         catch(e) {if(e instanceof ApiError) throw e; throw new ApiError('INVALID_JSON');}
       };
       if(path==='/health' && method==='GET') return respond({ok:true,schemaVersion:1,supportedSchemaVersions:[1,2]});
+      if(path==='/chat/capabilities' && method==='GET') return respond(chatCapabilities(env,(view,purpose)=>chatModelName(view,{purpose})));
       if(path==='/share/read' && method==='POST') {
         const input=z.strictObject({token:z.string().regex(/^[a-f0-9]{64}$/)}).parse(await json());
         const tokenHash=await sha256(input.token);
@@ -150,7 +152,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(env('ASSISTANT_CHAT_ENABLED')!=='1')return respond({status:'disabled',answer:null});
         const input=assistantChatRequestSchema.safeParse(await json());
         if(!input.success)return respond({status:'invalid',answer:null});
-        return respond(await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal}));
+        return respond(await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default'}));
       }
       if(path==='/brief/extract' && method==='POST') {
         // Guarded dispatch is deliberately unavailable until the real provider
@@ -170,18 +172,28 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         // → Tokendance 网关 → DeepSeek 官方。
         // 前一级失败（欠费/限流/超时/输出坏/证据不匹配）自动切下一级；客户端主动取消不重试；
         // 全部失败如实报「首选供应商的失败原因」，绝不静默无模型。
-        const briefViews: Array<Record<string,string>> = [];
-        if(env('BAILIAN_PRODUCT_ENABLED')==='1')briefViews.push({BAILIAN_PRODUCT_ENABLED:'1'});
-        briefViews.push({BAILIAN_PRODUCT_ENABLED:'0'});
+        const requestedProvider:ChatProviderId=input.provider??'default';
+        // 显式选中已配置槽位：只尝试该槽位，不跨槽兜底，失败如实报该 provider 错误。
+        // 未配置（防御性）或缺省：沿用现有逐级兜底链。
+        const pinnedProvider=requestedProvider!=='default'&&chatProviderConfigured(env,requestedProvider);
+        const chainViews: Array<Record<string,string>> = [];
+        if(env('BAILIAN_PRODUCT_ENABLED')==='1')chainViews.push({BAILIAN_PRODUCT_ENABLED:'1'});
+        chainViews.push({BAILIAN_PRODUCT_ENABLED:'0'});
         // 自定义端点也失败（如弱模型证据不匹配）时，显式落到 Tokendance 网关：
         // chatRequest 只在 AGENT_CHAT_* 全空时才走网关，这里用视图级覆盖强制腾开。
-        if(env('TOKENDANCE_API_KEY'))briefViews.push({
+        if(env('TOKENDANCE_API_KEY'))chainViews.push({
           BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_PROFILE:'',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',
         });
         // 最后一级：DeepSeek 官方端点（同时清空网关 key 才会走到）。
-        if(env('DEEPSEEK_API_KEY'))briefViews.push({
+        if(env('DEEPSEEK_API_KEY'))chainViews.push({
           BAILIAN_PRODUCT_ENABLED:'0',AGENT_CHAT_PROFILE:'',AGENT_CHAT_BASE_URL:'',AGENT_CHAT_KEY:'',AGENT_CHAT_MODEL:'',TOKENDANCE_API_KEY:'',
         });
+        const viewEnvFromRecord=(record:Record<string,string>):Env=>(key:string)=>{
+          const override=record[key];return override===undefined?env(key):override;
+        };
+        const briefViews: Array<{viewEnv:Env, record:Record<string,string>}> = pinnedProvider
+          ? [{viewEnv:chatProviderView(env,requestedProvider), record:{}}]
+          : chainViews.map(record=>({viewEnv:viewEnvFromRecord(record), record}));
         const briefReasons:string[]=[];
         let briefReply:Response|null=null;
         const briefFailure=(error:unknown):string=>{
@@ -199,11 +211,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           if(error instanceof Error&&['TimeoutError','AbortError'].includes(error.name))return 'MODEL_TIMEOUT';
           return 'MODEL_REQUEST_FAILED';
         };
-        for(const view of briefViews){
-          const viewEnv=(key:Parameters<typeof env>[0]):string|undefined=>{
-            const override=(view as Record<string,unknown>)[key];
-            return override===undefined?env(key):override as string;
-          };
+        for(const {viewEnv, record} of briefViews){
           try{
             const userContent='history' in input?JSON.stringify({message:input.message,history:input.history}):input.message;
             // The existing MiniMax profile forwards token fields unchanged. Keep
@@ -220,7 +228,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             // 主力车道（百炼/AGENT_CHAT，含 MiniMax 推理模型）给 90s；
             // 紧急兜底视图（主动清空 AGENT_CHAT_BASE_URL 的网关/官方端点）压到 25s，
             // 全链最坏 90+25+25=140s，低于 Edge 免费版 150s 墙钟上限。
-            const providerTimeout=view.AGENT_CHAT_BASE_URL===''?25_000:BRIEF_PROVIDER_TIMEOUT_MS;
+            const providerTimeout=record.AGENT_CHAT_BASE_URL===''?25_000:BRIEF_PROVIDER_TIMEOUT_MS;
             const providerResponse=await fetchJson(url,{...init,signal:request.signal},fetcher,100_000,providerTimeout);
             if(conversation){
               const checked=z.object({base_resp:z.object({status_code:z.number().int()}).passthrough().optional(),choices:z.array(z.object({message:z.object({tool_calls:z.unknown().optional(),function_call:z.unknown().optional()})})).length(1)}).parse(providerResponse);
@@ -339,10 +347,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             if(!z.strictObject({capability:z.literal('annotation_preview_guard'),version:z.literal(1)}).safeParse(annotationGuard).success)
               throw new ApiError('AGENT_ANNOTATION_GUARD_UNAVAILABLE',503);
           }
-          const miniMaxPreview=!activity&&chatProfile(env)==='minimax'&&env('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&env('DEEPSEEK_AGENT_MODE')!=='legacy';
+          const requestedProvider:ChatProviderId=!activity&&'provider' in input?(input.provider??'default'):'default';
+          const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider);
+          const miniMaxPreview=!activity&&chatProfile(runEnv)==='minimax'&&runEnv('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&runEnv('DEEPSEEK_AGENT_MODE')!=='legacy';
           // Check the configured provider itself before reserving a run. Custom
           // providers and the official fallback do not require a gateway key.
-          chatRequest(env,{messages:[]},miniMaxPreview?{purpose:'agent'}:undefined);
+          chatRequest(runEnv,{messages:[]},miniMaxPreview?{purpose:'agent'}:undefined);
           // A run without the atomic steering guard cannot safely publish a
           // candidate. Probe its version before creating or billing anything.
           if(!backend.agentGuardReady)throw new ApiError('AGENT_STEERING_GUARD_UNAVAILABLE',503);

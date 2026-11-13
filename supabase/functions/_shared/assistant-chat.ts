@@ -2,6 +2,7 @@ import {OUTDOOR_AGENT_SYSTEM_PROMPT,outdoorTurnSchema} from './outdoor-agent-res
 import {z} from 'zod';
 import {ApiError} from './domain.ts';
 import {chatProfile,chatRequest} from './providers.ts';
+import {chatProviderConfigured,chatProviderView,type ChatProviderId} from './chat-provider.ts';
 import {fetchJson,type Env,type Fetcher} from './http.ts';
 import {assistantChatRequestSchema,type AssistantChatResult} from './assistant-chat-contract.ts';
 
@@ -12,7 +13,7 @@ const sensitive=/(?:https?:\/\/|www\.|\b(?:data|blob|file):|(?:api[_ -]?key|acce
 function privateOrLink(value:string):boolean{return sensitive.test(value);}
 
 /** One read-only provider attempt. No tools, retries, search, scene or requirement writes. */
-export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number}):Promise<AssistantChatResult>{
+export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId}):Promise<AssistantChatResult>{
  // Never log raw errors, bodies, prompts, endpoints, headers, model names or configuration.
  // One categorical event per request; response contract and fail-closed behavior stay unchanged.
  let reported=false;
@@ -27,16 +28,19 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  if(input.signal?.aborted){diagnose('cancelled');return fail('provider_error');}
  const timeoutMs=input.timeoutMs??25000;
  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>110000)return fail('invalid');
- const productSelector=input.env('BAILIAN_PRODUCT_ENABLED');
+ const requested:ChatProviderId=input.provider??'default';
+ // 所选槽位未配置时回退基础 env（默认链）；前端能力清单已置灰未配置项，正常不会选到。
+ const viewEnv=requested!=='default'&&!chatProviderConfigured(input.env,requested)?input.env:chatProviderView(input.env,requested);
+ const productSelector=viewEnv('BAILIAN_PRODUCT_ENABLED');
  if(productSelector && productSelector!=='0' && productSelector!=='1')return fail('unavailable');
  const product=productSelector==='1';
- const base=input.env(product?'BAILIAN_PRODUCT_BASE_URL':'AGENT_CHAT_BASE_URL'),key=input.env(product?'BAILIAN_PRODUCT_KEY':'AGENT_CHAT_KEY'),model=input.env(product?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
+ const base=viewEnv(product?'BAILIAN_PRODUCT_BASE_URL':'AGENT_CHAT_BASE_URL'),key=viewEnv(product?'BAILIAN_PRODUCT_KEY':'AGENT_CHAT_KEY'),model=viewEnv(product?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
  if(base||key||model){
   if(!base?.trim()||!key?.trim()||!model?.trim())return fail('unavailable');
   let url:URL;try{url=new URL(base);}catch{return fail('unavailable');}
   const local=url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname);
   if((!local&&url.protocol!=='https:')||url.username||url.password||url.search||url.hash)return fail('unavailable');
- }else if(product||(!input.env('TOKENDANCE_API_KEY')&&!input.env('DEEPSEEK_API_KEY')))return fail('unavailable');
+ }else if(product||(!viewEnv('TOKENDANCE_API_KEY')&&!viewEnv('DEEPSEEK_API_KEY')))return fail('unavailable');
  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
  let reportAbort:(value:AssistantChatResult)=>void=()=>{};
  const cancelled=new Promise<AssistantChatResult>(resolve=>{reportAbort=resolve;});
@@ -49,8 +53,8 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
   // Structured outdoor turns include evidence and references. MiniMax also
   // spends this completion budget on reasoning before emitting the JSON.
   const completionBudget = parsed.data.responseMode === 'outdoor_v1' ? 4096 : 1024;
-  const tokenLimit=chatProfile(input.env,'brief')==='minimax'?{max_completion_tokens:completionBudget}:{max_tokens:completionBudget};
-  const {url,init}=chatRequest(input.env,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
+  const tokenLimit=chatProfile(viewEnv,'brief')==='minimax'?{max_completion_tokens:completionBudget}:{max_tokens:completionBudget};
+  const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
   const operation=(async():Promise<AssistantChatResult>=>{
    try{
     const raw=await fetchJson(url,{...init,signal:controller.signal},input.fetcher,100_000,timeoutMs);

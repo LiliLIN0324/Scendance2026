@@ -10,6 +10,7 @@ import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../..
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
 import { briefExtractRequestSchema, briefExtractResponseSchema, briefConversationRequestSchema, briefConversationResponseSchema, parseBriefConversation, type BriefExtractResponse, type BriefConversationResponse } from "../../supabase/functions/_shared/brief-extract-contract";
 import { assistantChatRequestSchema, assistantChatResponseSchema, type AssistantChatResult } from "../../supabase/functions/_shared/assistant-chat-contract";
+import { chatProviderSchema, type ChatProviderId } from "../../supabase/functions/_shared/chat-provider";
 import { canonical, sha256, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
@@ -23,7 +24,8 @@ import {localWriteCapabilityGuard,type LocalWriteCapability} from './local-write
 import {sameRecoveryFormValue} from './recovery-form-value';
 export { SceneApiError };
 export type { AgentRun };
-export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
+export type { ChatProviderId };
+export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode" | "provider">;
 export type ActivityTaskRunInput = Pick<ActivityTaskRunRequest, "requestId" | "instruction" | "activityContext">;
 export type { ActivityTaskRun };
 export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
@@ -259,6 +261,10 @@ const generationJobSchema = z.object({
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 const generationCapabilitiesSchema = z.object({ model: z.string(), textToModel: z.boolean(), imageToModel: z.boolean(), texture: z.boolean(), textureRequiresImage: z.literal(true), aholoTextToModel: z.boolean().default(false), aholoImageToModel: z.boolean().default(false) });
 export type GenerationCapabilities = z.infer<typeof generationCapabilitiesSchema>;
+const chatProviderCapabilitySchema = z.object({ id: chatProviderSchema, label: z.string(), configured: z.boolean(), agentTools: z.boolean(), model: z.string() });
+const chatCapabilitiesSchema = z.object({ active: z.object({ agent: chatProviderSchema.nullable(), brief: chatProviderSchema.nullable() }), providers: z.array(chatProviderCapabilitySchema) });
+export type ChatCapabilities = z.infer<typeof chatCapabilitiesSchema>;
+export type ChatProviderCapability = z.infer<typeof chatProviderCapabilitySchema>;
 interface PaidRequest<T> { fingerprint: string; promise?: Promise<T>; result?: T }
 interface RequestScope {
   projectId: string | null;
@@ -1492,15 +1498,15 @@ export class BackendSession {
     return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', check => this.client.startActivityTaskRun(projectId, body,check));
   }
   /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
-  async briefExtract(message: string, signal?: AbortSignal): Promise<BriefExtractResponse> {
-    const input = briefExtractRequestSchema.parse({ message });
+  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId): Promise<BriefExtractResponse> {
+    const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}) });
     const dispatch=this.scopedDispatchGuard(false);
     const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch,true);
     dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
-  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal):Promise<BriefConversationResponse> {
-    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history});
+  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId):Promise<BriefConversationResponse> {
+    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{})});
     const client=this.conversationClient();
     if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1518,8 +1524,8 @@ export class BackendSession {
     return result;
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1"): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}) });
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1642,6 +1648,10 @@ export class BackendSession {
   }
   async getGenerationCapabilities(): Promise<GenerationCapabilities> {
     return generationCapabilitiesSchema.parse(await this.businessRequest('/generation/capabilities'));
+  }
+  /** 服务端已配置的 chat provider 槽位；不含密钥值，前端只能在 configured 项间选择。 */
+  async getChatCapabilities(): Promise<ChatCapabilities> {
+    return chatCapabilitiesSchema.parse(await this.businessRequest('/chat/capabilities'));
   }
   async uploadGenerationReference(file: File): Promise<{ id: string }> {
     this.assertCanvasProjectMatch();

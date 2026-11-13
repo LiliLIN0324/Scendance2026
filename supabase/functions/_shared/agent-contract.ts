@@ -6,6 +6,7 @@ import { AGENT_PHASES } from './agent-progress.ts';
 import { activityTaskRunRequestSchema, activityTaskRunSchema, modelGeneratedTextNoticeSchema } from './activity-task-contract.ts';
 import { planAnchorSchema, sitePlanDataSchema, AGENT_PLAN_OBSERVATION_NOTICE } from './site-plan.ts';
 import { agentPlanCandidateSchema } from './plan-candidate.ts';
+import { chatProviderSchema, type ChatProviderId } from './chat-provider.ts';
 
 const seatingEvidence=z.string().trim().min(1).max(200);
 export const agentSeatingAllocationSchema=z.discriminatedUnion('status',[
@@ -66,7 +67,10 @@ export const agentRunRequestSchema=z.strictObject({
   ...leaseSchema.shape,requestId:uuid,localRevision:z.number().int().nonnegative(),scene:sceneSchema,
   selectedIds:z.array(uuid).max(50),instruction:z.string().trim().min(1).max(6000),context:agentContextSchema.default({brief:'',acceptedDecisions:[],recentMessages:[]}),
   jevEnabled:z.boolean().default(false),executionMode:z.enum(['preview','direct']).default('preview'),
+  /** 请求级 provider 选择；缺省 default 走服务端默认链。仅可选择已配置槽位。 */
+  provider:chatProviderSchema.optional(),
 });
+export type { ChatProviderId };
 export type AgentRunRequest=z.infer<typeof agentRunRequestSchema>;
 // Keep the Scene parser unchanged: absent kind must not change stored request fingerprints.
 export const agentDispatchRequestSchema=z.union([activityTaskRunRequestSchema,agentRunRequestSchema]);
