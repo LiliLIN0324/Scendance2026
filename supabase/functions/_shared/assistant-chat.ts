@@ -1,7 +1,7 @@
 import {OUTDOOR_AGENT_SYSTEM_PROMPT,outdoorTurnSchema} from './outdoor-agent-response-contract.ts';
 import {z} from 'zod';
 import {ApiError} from './domain.ts';
-import {chatProfile,chatRequest} from './providers.ts';
+import {chatProfile,chatRequest,resolveOpenAINextBase} from './providers.ts';
 import {CHAT_PROVIDER_IDS,chatProviderConfigured,chatProviderView,resolveActiveProvider,type ChatProviderId} from './chat-provider.ts';
 import {fetchJson,type Env,type Fetcher} from './http.ts';
 import {assistantChatRequestSchema,type AssistantChatResult} from './assistant-chat-contract.ts';
@@ -25,19 +25,30 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  if(!parsed.success||privateOrLink(parsed.data.message)||parsed.data.history.some(item=>privateOrLink(item.text)))return fail('invalid');
  const timeoutMs=input.timeoutMs??25000;
  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>110000)return fail('invalid');
- // 2026-11-14 配额兜底：请求槽位/默认链失败（配额、密钥、模型名等快速失败）时，按 chatRequest
- // 优先级在其余已配置槽位间自动重试（与 brief 可插拔兜底链同思想）。timeout 不兜底——预算
- // 翻倍太久；invalid 是请求本身的问题，也不兜底。首个槽位=显式选择，未选择时按默认链解析。
- const first:ChatProviderId=input.provider??(resolveActiveProvider(input.env,'brief')??'default');
- const rest=CHAT_PROVIDER_IDS.filter(id=>id!=='default'&&id!==first&&chatProviderConfigured(input.env,id));
+ // 2026-11-14 起：OpenAI Next 作为默认均衡槽时不静默串到 MiniMax/网关等其它槽位。
+ // conversation-api / scene-api 在客户端未选槽时会传入 provider:'default'，这与未传等价，
+ // 需先解析为实际活动槽，不能把 'default' 当成可再串试 MiniMax 的字面槽位。
+ // 显式选择的非 default 槽位同样不跨槽重试。未配置 OpenAI Next 时，保留原配额兜底链。
+ // timeout / invalid 从不兜底。
+ const requested=input.provider;
+ const pinned=requested!==undefined&&requested!=='default';
+ const first:ChatProviderId=pinned?requested:(resolveActiveProvider(input.env,'brief')??'default');
+ const openaiNextDefault=!pinned&&chatProviderConfigured(input.env,'openai-next');
+ const rest=(pinned||openaiNextDefault)?[]:CHAT_PROVIDER_IDS.filter(id=>id!=='default'&&id!==first&&id!=='openai-next'&&chatProviderConfigured(input.env,id));
  const candidates=[first,...rest];
  if(input.signal?.aborted){diagnose(first,'cancelled');return fail('provider_error');}
  const attemptOnSlot=async(slot:ChatProviderId,viewEnv:Env):Promise<AssistantChatResult>=>{
   const productSelector=viewEnv('BAILIAN_PRODUCT_ENABLED');
   if(productSelector && productSelector!=='0' && productSelector!=='1'){diagnose(slot,'configuration_error');return fail('unavailable');}
   const product=productSelector==='1';
+  const openaiNextKey=viewEnv('OPENAI_NEXT_API_KEY')?.trim();
+  if(openaiNextKey){
+   try{resolveOpenAINextBase(viewEnv);}catch{diagnose(slot,'configuration_error');return fail('unavailable');}
+  }
   const base=viewEnv(product?'BAILIAN_PRODUCT_BASE_URL':'AGENT_CHAT_BASE_URL'),key=viewEnv(product?'BAILIAN_PRODUCT_KEY':'AGENT_CHAT_KEY'),model=viewEnv(product?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
-  if(base||key||model){
+  if(openaiNextKey){
+   // Isolated OpenAI Next view already cleared MiniMax/custom keys. Skip those checks.
+  }else if(base||key||model){
    if(!base?.trim()||!key?.trim()||!model?.trim()){diagnose(slot,'configuration_error');return fail('unavailable');}
    let url:URL;try{url=new URL(base);}catch{diagnose(slot,'configuration_error');return fail('unavailable');}
    const local=url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname);
@@ -56,7 +67,10 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
    // spends this completion budget on reasoning before emitting the JSON.
    const completionBudget = parsed.data.responseMode === 'outdoor_v1' ? 4096 : 1024;
    const tokenLimit=chatProfile(viewEnv,'brief')==='minimax'?{max_completion_tokens:completionBudget}:{max_tokens:completionBudget};
-   const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
+   // outdoor_v1 is a JSON contract. OpenAI-compatible slots honor response_format;
+   // the MiniMax adapter strips this field and keeps its own token/reasoning shape.
+   const structured=parsed.data.responseMode==='outdoor_v1'?{response_format:{type:'json_object' as const}}:{};
+   const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit,...structured},{purpose:'brief'});
    const operation=(async():Promise<AssistantChatResult>=>{
     try{
      const raw=await fetchJson(url,{...init,signal:controller.signal},input.fetcher,100_000,timeoutMs);

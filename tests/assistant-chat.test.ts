@@ -82,6 +82,24 @@ describe('只读活动聊天',()=>{
   const result=answerAssistantChat({...input,enabled:true,env,fetcher,signal:controller.signal,timeoutMs:1000});controller.abort();
   expect(await result).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();
  });
+ it('defaults to OpenAI Next and does not silently fall through to MiniMax',async()=>{
+  const config:Record<string,string>={...values,OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_MODEL:'deepseek-v4.1-flash',AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash'};
+  const warning=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  try{
+   for(const provider of [undefined,'default'] as const){
+    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response('quota',{status:429}));
+    expect((await answerAssistantChat({...input,enabled:true,env:key=>config[key],fetcher,provider}))).toEqual({status:'provider_error',answer:null});
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0]![0])).toBe('https://api.openai-next.com/v1/chat/completions');
+    const sent=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));
+    expect(sent).toMatchObject({model:'deepseek-v4.1-flash',thinking:{type:'disabled'},max_tokens:1024});
+    expect(sent.reasoning_split).toBeUndefined();
+    expect(sent.max_completion_tokens).toBeUndefined();
+    expect(warning).toHaveBeenCalledWith('assistant_chat_failure',expect.objectContaining({slot:'openai-next',reason:'http_error',httpStatus:429}));
+    warning.mockClear();
+   }
+  }finally{warning.mockRestore();}
+ });
  it('uses existing MiniMax profile without sending tools and does not send when already cancelled',async()=>{
   const config={...values,AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash'};
   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(response('请先核对签到方式。'));
@@ -95,14 +113,14 @@ describe('只读活动聊天',()=>{
 describe('provider failure diagnostic redaction (no live model)',()=>{
  const secret='PRIVATE_RESPONSE_OR_PROMPT_MARKER';
  it.each([
-  ['http',()=>new Response(secret,{status:429}),{reason:'http_error',httpStatus:429}],
-  ['JSON',()=>new Response(secret),{reason:'invalid_json'}],
-  ['shape',()=>Response.json({error:secret}),{reason:'invalid_shape'}],
-  ['provider business code',()=>Response.json({base_resp:{status_code:1005,status_msg:secret}}),{reason:'provider_status',providerCode:1005}],
-  ['truncated',()=>response(secret,'length'),{reason:'output_truncated',finishReason:'length'}],
-  ['untrusted finish reason',()=>response(secret,secret),{reason:'finish_reason',finishReason:'unknown'}],
-  ['empty',()=>response(''),{reason:'empty_answer'}],
-  ['reasoning',()=>response(`<think>${secret}</think>`),{reason:'unsupported_output'}],
+  ['http',()=>new Response(secret,{status:429}),{slot:'custom',reason:'http_error',httpStatus:429}],
+  ['JSON',()=>new Response(secret),{slot:'custom',reason:'invalid_json'}],
+  ['shape',()=>Response.json({error:secret}),{slot:'custom',reason:'invalid_shape'}],
+  ['provider business code',()=>Response.json({base_resp:{status_code:1005,status_msg:secret}}),{slot:'custom',reason:'provider_status',providerCode:1005}],
+  ['truncated',()=>response(secret,'length'),{slot:'custom',reason:'output_truncated',finishReason:'length'}],
+  ['untrusted finish reason',()=>response(secret,secret),{slot:'custom',reason:'finish_reason',finishReason:'unknown'}],
+  ['empty',()=>response(''),{slot:'custom',reason:'empty_answer'}],
+  ['reasoning',()=>response(`<think>${secret}</think>`),{slot:'custom',reason:'unsupported_output'}],
  ] as const)('records only categorical evidence for %s',async(_name,make,expected)=>{
   const warning=vi.spyOn(console,'warn').mockImplementation(()=>{});
   try{
@@ -119,7 +137,7 @@ describe('provider failure diagnostic redaction (no live model)',()=>{
   try{
    const fetcher=vi.fn<typeof fetch>().mockRejectedValue(new Error(secret));
    expect(await answerAssistantChat({...input,enabled:true,env,fetcher})).toEqual({status:'provider_error',answer:null});
-   expect(warning).toHaveBeenCalledExactlyOnceWith('assistant_chat_failure',{reason:'transport_error'});
+   expect(warning).toHaveBeenCalledExactlyOnceWith('assistant_chat_failure',{slot:'custom',reason:'transport_error'});
    expect(fetcher).toHaveBeenCalledOnce();
   }finally{warning.mockRestore();}
  });
