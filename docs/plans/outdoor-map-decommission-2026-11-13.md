@@ -56,18 +56,16 @@
 
 ### M 线 · 迁建（地图侧把能力接住）
 
-#### M1 五钮地图化 ⬜
+#### M1 五钮地图化 ✅ 代码完成（本地未提交，真机 2D/3D 已走查）
 - **目的**：楼层 / 漫游 / 网格 / 测量 / 标注回调从 layoutStore 改派到地图 canvas / 3D 句柄；属性选择桥接收尾。
-- **现状**：楼层 = `activeFloor` + `actions`（useLayoutState）；漫游 = `walkthroughActive = walkthroughMode && !view2D`；网格 = `view.snapToGrid`；measure/annotate/selection 已经 inspector 桥接 overlay。
-- **地图侧承接点**：`OutdoorPlanCanvasHandle`（`setMode` / `setInspector` / 缩放 / 选中巡检）、`OutdoorPlan3DApi`（漫游 / 镜头）；地图契约 `levels`（分层）、网格吸附在画布交互层。
-- **改动**：
-  1. 楼层钮 → 地图 `levels` 切换（`onActiveLevelChange` 已有桥接，补齐上/下钮与芯片）。
-  2. 漫游钮 → 地图第一人称 / 视角漫游能力（3D 接管态）；无地图漫游时钮置灰而非走室内 walkthrough。
-  3. 网格吸附 → 画布吸附开关状态挂地图 plan / 本地偏好，不再读室内 view state。
-  4. 测量 / 标注 → 确认 inspector 桥在 2D/3D 两态都可达。
-- **前置**：无（可与 M3 并行）。
-- **验证**：定向组件测试覆盖五钮按下态与改派目标；真机逐钮点按，地图侧有响应、不触发室内壳体动作。
-- **回滚**：回调仍保留室内兜底分支，地图侧未接住的钮回退原链路；开关按钮级独立。
+- **落地（实读户外能力后定）**：
+  1. 楼层钮：户外态**隐藏**。户外 `levels` 是独立方案层（非室内楼层高度），切换走画布自身左栏图层面板 + `onActiveLevelChange` 既有桥接；右轨室内 `activeFloorIndex` 楼层钮不再露出。
+  2. 漫游钮：户外态**禁用**并提示「户外地图为环绕视角，暂不支持第一人称漫游」；不触发室内 walkthrough/pointer lock。户外 3D 是环绕轨道，无第一人称句柄。
+  3. 网格吸附钮：户外态**禁用**并提示「放置时自动按网格吸附」；画布放置由 `snapPointToGrid` 纯函数自动吸附，无独立吸附开关可挂。
+  4. 测量 / 标注 / 属性（selection）：既有 `setInspector` 三卡桥在 2D/3D 两态可达，按下态走 `outdoorInspector.openTabs`，核对通过。
+- **未接住的钮**：置灰/隐藏并保留提示，不回退室内壳；室内兜底分支原样保留供纯室内场景。
+- **验证**：tsc 0；真机 2D/3D 复核——楼层钮不出镜、漫游/网格禁用带提示、测量/标注/属性可点、底图出图、console 空。
+- **遗留**：户外第一人称漫游、独立网格吸附开关属后续地图能力，本批不虚构承接。
 
 #### M2 物料与墙体落地 ⬜
 - **目的**：物料放置 / 选中 / 归入地图 facility 体系；墙体作为实体物料入契约并渲染、参与围合与碰撞。
@@ -90,20 +88,34 @@
 - **验证**：会话切换 / 历史撤销重做 / 导出三套定向测试；切项目不串会话；历史回滚只动 plan。
 - **回滚**：解耦期间保留 layoutStore 影子双写；任一环节地图侧异常，回退读 layout 投影。
 
-#### M4 出入口工具收尾 ⬜
+#### M4 出入口工具收尾 ✅ 代码完成（本地未提交，目录三型点击走查并入 #25）
 - **目的**：补齐已盘点的两个小缺口。
-- 1. 创建节点前置选类型（入口 / 出口 / 两用），工具箱直选（对齐动线三类分列），不再放下后改属性卡。
-- 2. 节点归属分区：落点 `inferNodeZoneId`（复用 `inferWorkerZoneId` 口径），可显式覆盖。
+- 1. 创建节点前置选类型（入口 / 出口 / 两用），工具箱直选（对齐动线三类分列），不再放下后改属性卡。✅ 目录三型 `NODE_KIND_OPTIONS` 分列，`nodeKind` state + `nodeKindRef` 双写。
+- 2. 节点归属分区：落点 `inferNodeZoneId`（复用 `inferWorkerZoneId` 口径），可显式覆盖。✅ 契约 `PlanNode.zoneId` 可选 + 存在性校验；纯函数 `buildNode`；`placeNodeAt` 自动归属，属性卡下拉显式覆盖。
 - **前置**：无。
-- **验证**：`site-plan-routes.test` / 画布交互测试补类型前置与归属用例。
+- **验证**：`site-plan-routes.test` 12 绿（buildNode/inferNodeZoneId 归属/越界/坏分区/越界坐标/空名）；`tests/site-plan.test` 16 绿（节点悬空 zoneId 拒绝）；tsc 0。
 
-#### M5 智能体工具桥接扩充 ⬜（跑在新构造上，不依赖 R 线）
+#### M5 智能体工具桥接扩充 ✅ 桥方法面完成（本地未提交；提案生成/确认卡链属后续研究层）
 - **目的**：把画布已有、但尚未暴露给智能体的写能力，逐条补成 canvas `handle` + `routeBridge` 工具方法，供后续 Agent 研究调用。沿用既有范式：**预览态不进 plan → 确认后 `commitPlan` 写入、可撤销**；每个工具带纯函数校验与问题提示。
-- **现状（实读）**：手动提交链路已在画布内走 `commitPlan`，缺的只是对外桥接入口。
-  - 已接给 agent：选址边界 `applyVenue`、地点预览 `previewVenuePoint`、动线+节点 `applyRoutes`、分区+物料提案 `applyZoneProposal`、物料巡检 `inspectFacility`、读 plan `getPlan`。
-  - **待接入**：人员布点 `workers`（`buildWorker` 纯函数 + `placeWorkerAt` 已有）、测量 `measurements`（:4254 提交已有）、标注 `annotations`（:4301 提交已有）、楼层 `levels` 切换、单条 facility 增 / 删 / 改（现仅批量提案）；墙体工具随 M2 落地后接入。
-- **原则**：只新增桥接方法，不改既有九方法签名、不改 `SitePlanData` 既有字段；工具入参复用契约类型。
+- **已接给 agent（九方法保持原样未动）**：选址边界 `applyVenue`、地点预览 `previewVenuePoint`、动线+节点 `applyRoutes`、分区+物料提案 `applyZoneProposal`、物料巡检 `inspectFacility`、读 plan `getPlan`。
+- **本批新增桥方法（canvas handle → overlay 转发 → bridge 类型两处 → AgentValue 工具表入口，四层同形）**：
+  - `applyWorkers(workers)`：handle 内逐条 `buildWorker` 校验（岗位/人数/范围/归属分区），合法才合并，全非法/空回 false。
+  - `applyMeasurements(measurements)`：逐条 `buildMeasurement` 几何校验；`applyAnnotations(annotations)`：逐条 `buildAnnotation` 几何校验。
+  - `getLevels()` / `setActiveLevel(levelId)`：读楼层方案列表、切层（不存在回 false），复用 `switchLevel`。
+  - `addFacility(facility)` / `removeFacility(id)` / `updateFacility(id, patch)`：单条物料增/删/改，复用 `deleteFacility`/`updateFacility`，id 不存在回 false。
+- **原则守住**：只新增桥方法，未改既有九方法签名、未改 `SitePlanData` 既有字段；入参复用契约 `PlanWorker/PlanMeasurement/PlanAnnotation/PlanLevel/PlanFacility` 类型。
+- **遗留（后续切片）**：对话内各实体的提案生成 + 预览确认卡链（参照 route/zone 的 `propose*Plan`/confirm/dismiss）、墙体工具随 M2 落地后接入。
+- **验证**：tsc 0；`site-plan-routes` 12 绿、契约 `tests/site-plan` 16 绿、底图定向 77 绿；agent-panel 组件测试基线 40 失败为 #12 既有债，stash 对照未新增回归。
 - **前置**：无（与 M1 / M4 并行）；墙体部分随 M2。
+
+#### 残留死代码清除 ✅ 本地完成（对抗性计数通过，未提交）
+- **背景**：用户质疑编辑器内存在两套地图 tsx / 两处图层。静态代码 + 真机 DOM 双重核查结论：编辑器内 2D 画布 `outdoor-plan-canvas`（经 overlay 挂一次）、3D 场地 `outdoor-plan-3d`（壳体接管层挂一次）；图层行 `outdoor-levels-row` 只渲染一份，左栏/右栏面板是同一画布的不同 portal 落点。
+- **本轮已清（受控编辑器态不可达的旧自治 3D / 视图记忆链）**：
+  1. `outdoor-plan-overlay.tsx` 删除内部旧 `OutdoorPlan3D` 挂载分支、`plan3dApiRef`、`mapView/captureMapView`、切 3D 拍视口 effect、缩放/选址聚焦的 3D 旁路；3D 唯一由壳体全屏接管实例负责。
+  2. 退役旧自治视图状态：壳体 `outdoorView` / `setCanvasView` 动作 / `readOutdoorPlanView` 持久化读回；overlay `view` prop、uncontrolled 视图态；`scendance-workspace` 动作接口里的 `view?/setCanvasView?` 声明。
+  3. `outdoor-project-store.ts` 删除已无生产调用的 `readOutdoorPlanView` / `saveOutdoorPlanView` / `outdoorPlanViewStorageKey` / `OutdoorPlanView` 类型及对应单测。
+- **保留待 R2（依赖 M3，不可本轮硬删）**：壳体 `.sc-scene-viewport` 室内保活容器与 three/2D 上下文、室内 layout 回写镜像链——renderer/canvas ref 仍被环境、漫游、就绪态逻辑复用，随 R2/R3/R4 卸载。
+- **对抗性验收**：tsc `--noEmit` exit 0；前端定向 148 绿（store 21 / routes 12 / measure 15 / annotate 20 / 底图与画布 80）+ 根契约 16 绿；agent-panel react 40 failed / 378 passed / 1 skipped，与 #12 基线一致，无新增回归。真机 2D/3D：户外活跃 3D 仅 1 个、overlay 接管态隐藏、图层行 1 份；室内保活 webgl 祖先链 `visibility:hidden` 不出镜；console 0 报错；2D/3D 高德底图均出图。
 - **验证**：每个新工具补 agent 调用定向测试（预览 → 确认 → 撤销 / 回滚）；`getPlan()` 快照比对基线不破。
 
 ### R 线 · 退役（室内壳体卸载，依赖对应 M 完成）

@@ -163,34 +163,6 @@ export function latestOutdoorProjectId(storage?: KeyValueStorage | null): string
   }
 }
 
-/** 视角记忆（2026-11-11 用户拍板：按项目记住上次是 2D 还是 3D）。 */
-export type OutdoorPlanView = '2d' | '3d';
-
-export function outdoorPlanViewStorageKey(projectId: string): string {
-  return `scendance-outdoor-view-v1:${projectId}`;
-}
-
-export function readOutdoorPlanView(projectId: string, storage?: KeyValueStorage | null): OutdoorPlanView | null {
-  const store = storage ?? safeDefaultStorage();
-  if (!store) return null;
-  try {
-    const raw = store.getItem(outdoorPlanViewStorageKey(projectId));
-    return raw === '2d' || raw === '3d' ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveOutdoorPlanView(projectId: string, view: OutdoorPlanView, storage?: KeyValueStorage | null): void {
-  const store = storage ?? safeDefaultStorage();
-  if (!store) return;
-  try {
-    store.setItem(outdoorPlanViewStorageKey(projectId), view);
-  } catch {
-    // 静默降级：视角记忆失败不影响编辑。
-  }
-}
-
 /**
  * 默认户外工作台 id（2026-11-11 用户拍板：`/` 无参数时直接进户外 2D 规划，
  * 起步锚点平湖秋月，找场地是工作台里的"搜地点"能力，不该挡在入口前面）。

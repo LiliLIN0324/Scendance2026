@@ -7,6 +7,7 @@ import {
   sitePlanDataSchema,
   sitePlanHash,
   sitePlanSnapshotSchema,
+  type PlanNode,
   type SitePlanSnapshot,
 } from '../supabase/functions/_shared/site-plan.ts';
 
@@ -134,6 +135,10 @@ describe('site plan contract', () => {
     const dangling = samplePlan();
     dangling.workers[0].zoneId = '77777777-7777-4777-8777-777777777777';
     expect(sitePlanDataSchema.safeParse(dangling).success).toBe(false);
+
+    const danglingNode = samplePlan();
+    (danglingNode.nodes[0] as PlanNode).zoneId = '77777777-7777-4777-8777-777777777777';
+    expect(sitePlanDataSchema.safeParse(danglingNode).success).toBe(false);
 
     const shortRoute = samplePlan();
     shortRoute.routes[0].points = [{ x: 0, y: 0 }];

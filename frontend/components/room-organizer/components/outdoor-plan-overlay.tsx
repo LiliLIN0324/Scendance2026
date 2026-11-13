@@ -16,8 +16,6 @@ import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
-import OutdoorPlan3D, { type OutdoorPlan3DApi } from '@/components/room-organizer/components/outdoor-plan-3d';
-import type { PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { GuideBubble, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
@@ -39,9 +37,7 @@ import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
-  readOutdoorPlanView,
   readOutdoorProjectRecord,
-  saveOutdoorPlanView,
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -95,8 +91,6 @@ export interface OutdoorPlanOverlayProps {
    * 只读展示层——透传给 OutdoorPlanCanvas，不参与命中测试/交互。
    */
   sceneObjects?: readonly PlanSceneObject[] | undefined;
-  /** 受控视角：同一份规划的 2D 地图 / 3D 场地，只换看法，功能不变。 */
-  view?: '2d' | '3d';
   /**
    * 2026-11-12 接管态保活隐藏：全屏 OutdoorPlan3D 接管画布时，本覆盖层**保持挂载**
    * （2D 画布编辑桥 pointerFromPlan 要用它的句柄与布局），但它自己的 2D 画面/浮层
@@ -152,7 +146,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onActiveLevelChange,
   seedPlan,
   sceneObjects,
-  view: controlledView,
   dormant = false,
   inspectorHostId,
   lengthUnit = 'm',
@@ -160,7 +153,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
-  const plan3dApiRef = useRef<OutdoorPlan3DApi | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
   // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
   const [source, setSource] = useState<CanvasBasemapSource>(() => readPlanGroundSource());
@@ -176,28 +168,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 用户显式「隐藏底图」的形态。geoHidden = true 时切纸面，业务图层不受影响。
   const [geoHidden, setGeoHidden] = useState(false);
   // 2D 画布始终挂载（左栏图层/测量/标注都 portal 到它上面）。
-  // 切到 3D：把当前 2D 地图按同一中心斜起来（OutdoorPlan3D），不是跳到另一套工作台场景。
-  const [uncontrolledView, setUncontrolledView] = useState<'2d' | '3d'>(() => controlledView ?? readOutdoorPlanView(slotId) ?? '2d');
-  const view = controlledView ?? uncontrolledView;
-  const [mapView, setMapView] = useState<PlanViewport | null>(null);
-  const captureMapView = () => {
-    const next = canvasApiRef.current?.getView();
-    if (next && next.canvasW > 0 && next.canvasH > 0) setMapView(next);
-  };
-  const viewSlotRef = useRef(slotId);
-  useEffect(() => {
-    if (controlledView !== undefined) return;
-    if (viewSlotRef.current === slotId) return;
-    viewSlotRef.current = slotId;
-    setUncontrolledView(readOutdoorPlanView(slotId) ?? '2d');
-  }, [slotId, controlledView]);
-  useEffect(() => { saveOutdoorPlanView(slotId, view); }, [slotId, view]);
-  useEffect(() => {
-    if (view !== '3d') return undefined;
-    const frame = requestAnimationFrame(captureMapView);
-    return () => cancelAnimationFrame(frame);
-  // 只在切进 3D 时拍一次视口；编辑规划时不要改 mapView，否则整场 3D 会重建、镜头被重置。
-  }, [view]);
+  // 3D 场地由壳体全屏 OutdoorPlan3D 唯一接管；本覆盖层只保留 2D 画布编辑桥，不再自挂 3D 实例。
 
   // 搜地点（用户 m04938 / m05472）：左上角「和地图 App 一样」的搜索框，组件本体在
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
@@ -272,6 +243,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       beginVenueBoundary: anchor => canvasApiRef.current?.beginVenueBoundary(anchor) ?? false,
       applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
       applyZoneProposal: (zones, facilities, routes, nodes) => canvasApiRef.current?.applyZoneProposal(zones, facilities, routes, nodes) ?? false,
+      applyWorkers: workers => canvasApiRef.current?.applyWorkers(workers) ?? false,
+      applyMeasurements: measurements => canvasApiRef.current?.applyMeasurements(measurements) ?? false,
+      applyAnnotations: annotations => canvasApiRef.current?.applyAnnotations(annotations) ?? false,
+      getLevels: () => canvasApiRef.current?.getLevels() ?? [],
+      setActiveLevel: levelId => canvasApiRef.current?.setActiveLevel(levelId) ?? false,
+      addFacility: facility => canvasApiRef.current?.addFacility(facility) ?? false,
+      removeFacility: id => canvasApiRef.current?.removeFacility(id) ?? false,
+      updateFacility: (id, patch) => canvasApiRef.current?.updateFacility(id, patch) ?? false,
       getPlan: () => planRef.current,
     });
     return () => agent?.registerRouteBridge?.(null);
@@ -333,8 +312,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 不写依赖数组：每帧重建，句柄永远拿到当帧闭包（内部读的都是 ref/最新 state）。
   useImperativeHandle(ref, () => ({
     zoomBy: (direction: 1 | -1) => {
-      if (view === '3d') plan3dApiRef.current?.zoomBy(direction);
-      else canvasApiRef.current?.zoomBy(direction);
+      canvasApiRef.current?.zoomBy(direction);
     },
     getCanvasApi: () => canvasApiRef.current,
     captureImage: () => canvasApiRef.current?.captureImage() ?? null,
@@ -379,12 +357,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
 
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
   // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜。
-  const canvasHidden = dormant || view === '3d';
+  const canvasHidden = dormant;
 
   return (
     <div
       data-testid="outdoor-overlay"
-      data-view={view}
       style={{ position: 'absolute', inset: 0, zIndex: 30, background: dormant ? 'transparent' : 'var(--sc-surface, #ffffff)', color: 'var(--sc-ink, #141416)', ...(dormant ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}) }}
     >
       {generateTarget && <OutdoorFacilityGenerate
@@ -438,11 +415,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           />
         </div>
       )}
-      {plan && view === '3d' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-          <OutdoorPlan3D plan={plan} source={source} sceneObjects={sceneObjects} apiRef={plan3dApiRef} canvasApiRef={canvasApiRef} {...(mapView ? { mapView } : {})} />
-        </div>
-      )}
       {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
           选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。 */}
       {plan && (
@@ -456,13 +428,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             setPlacePin(null);
             setPlaceArea({ polygon: area.polygon, label: `${area.name} · ${area.level}` });
             canvasApiRef.current?.focusBounds(area.bounds);
-            plan3dApiRef.current?.focusLngLat(area.lng, area.lat);
           }}
           onPick={place => {
             setPlaceArea(null);
             setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
-            plan3dApiRef.current?.focusLngLat(place.lng, place.lat);
             // 2026-11-12（像高德一样点地名框出范围）：钉先落地，后台去 OSM 挖
             // 这个地点的真实占地。Overpass 忙时要排队几十秒，所以给足预算且
             // 失败静默保留钉，不打断交互。

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanNode, PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
 import {
+  buildNode,
   buildRoute,
   buildWorker,
   detachNodeFromRoutes,
+  inferNodeZoneId,
   inferWorkerZoneId,
   movePlanNode,
   nodeRouteRefs,
@@ -194,5 +196,41 @@ describe('site-plan workers (H2-d)', () => {
     expect(issues[0].workerId).toBe(workers[0].id);
     expect(issues[0].issue.code).toBe('out-of-boundary');
     expect(planWorkerIssues({ boundary: [], workers })).toHaveLength(0);
+  });
+});
+
+describe('site-plan nodes (buildNode 归属分区)', () => {
+  it('builds a node with automatic zone attribution and boundary hints', () => {
+    const inZone = buildNode({ kind: 'entry', name: '入口 1', position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(inZone.ok).toBe(true);
+    if (!inZone.ok) return;
+    expect(inZone.value.zoneId).toBe(ZONES[0].id);
+    expect(inZone.issues).toBeUndefined();
+
+    const explicit = buildNode({ kind: 'exit', name: '出口 1', position: { x: 30, y: 30 }, zoneId: ZONES[1].id }, BOUNDARY, ZONES);
+    expect(explicit.ok).toBe(true);
+    if (!explicit.ok) return;
+    expect(explicit.value.zoneId).toBe(ZONES[1].id);
+
+    const outside = buildNode({ kind: 'both', name: '出入口 1', position: { x: 250, y: 60 } }, BOUNDARY, ZONES);
+    expect(outside.ok).toBe(true);
+    if (!outside.ok) return;
+    expect(outside.value.zoneId).toBeUndefined();
+    expect(outside.issues?.[0].code).toBe('out-of-boundary');
+
+    const badZone = buildNode({ kind: 'entry', name: '入口 2', position: { x: 30, y: 30 }, zoneId: 'a9999999-0000-4000-8000-000000000000' }, BOUNDARY, ZONES);
+    expect(firstIssue(badZone).code).toBe('unknown-zone');
+
+    const outOfRange = buildNode({ kind: 'entry', name: '入口 3', position: { x: 6000, y: 0 } }, BOUNDARY, ZONES);
+    expect(firstIssue(outOfRange).code).toBe('out-of-range');
+
+    const emptyName = buildNode({ kind: 'entry', name: '   ', position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(emptyName.ok).toBe(false);
+  });
+
+  it('infers the containing zone by point-in-ring', () => {
+    expect(inferNodeZoneId({ x: 30, y: 30 }, ZONES)).toBe(ZONES[0].id);
+    expect(inferNodeZoneId({ x: 20, y: 90 }, ZONES)).toBe(ZONES[1].id);
+    expect(inferNodeZoneId({ x: 150, y: 90 }, ZONES)).toBeUndefined();
   });
 });

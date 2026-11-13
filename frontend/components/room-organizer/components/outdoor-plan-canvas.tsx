@@ -172,6 +172,7 @@ import {
 } from '../lib/facility-footprint-lock';
 import {
   PLAN_ROUTE_MAX_VERTICES,
+  buildNode,
   buildRoute,
   buildWorker,
   detachNodeFromRoutes,
@@ -303,7 +304,10 @@ import {
   planRouteLengthM,
   planZoneSemanticLabels,
   planZoneSemantics,
+  type PlanAnnotation,
   type PlanFacility,
+  type PlanLevel,
+  type PlanMeasurement,
   type PlanNode,
   type PlanPoint,
   type PlanRoute,
@@ -889,6 +893,14 @@ const ANNOTATE_SHAPE_META: Record<PlanShapeKind, string> = {
   line: '2 点',
 };
 
+/** M4：出入口三型前置直选（工具箱目录分列，对齐动线三类），标签与放置命名同源。 */
+const NODE_KIND_OPTIONS: { kind: PlanNode['kind']; label: string }[] = [
+  { kind: 'entry', label: '入口' },
+  { kind: 'exit', label: '出口' },
+  { kind: 'both', label: '出入口' },
+];
+const nodeKindLabel = (kind: PlanNode['kind']): string => NODE_KIND_OPTIONS.find(o => o.kind === kind)?.label ?? '入口';
+
 /** H4-a 类型胶囊：清单行的「图标+类型」药丸，色从图层色派生（withAlphaHex），不另立色值。 */
 function TypeCapsule({ kind, label }: { kind: PlanInventoryKind; label: string }) {
   const Icon = planningIcon(INVENTORY_KIND_ICONS[kind]);
@@ -956,6 +968,25 @@ export interface OutdoorPlanCanvasHandle {
   applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean;
   /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
   applyZoneProposal(zones: PlanZone[], facilities: PlanFacility[], routes?: PlanRoute[], nodes?: PlanNode[]): boolean;
+  /** M5：应用人员布点提案（逐条 buildWorker 校验后合并，commitPlan 可撤销）；全非法/空回 false。 */
+  applyWorkers(workers: PlanWorker[]): boolean;
+  /** M5：应用测量提案（逐条 buildMeasurement 校验后合并）；全非法/空回 false。 */
+  applyMeasurements(measurements: PlanMeasurement[]): boolean;
+  /** M5：应用标注提案（逐条 buildAnnotation 校验后合并）；全非法/空回 false。 */
+  applyAnnotations(annotations: PlanAnnotation[]): boolean;
+  /** M5：读当前楼层列表。 */
+  getLevels(): PlanLevel[];
+  /** M5：切到指定楼层（不存在回 false）。 */
+  setActiveLevel(levelId: string): boolean;
+  /** M5：单条设施新增（buildFacility 校验后合并）；校验不过回 false。 */
+  addFacility(facility: PlanFacility): boolean;
+  /** M5：单条设施删除；不存在回 false。 */
+  removeFacility(id: string): boolean;
+  /** M5：单条设施属性改；不存在回 false。 */
+  updateFacility(id: string, patch: Partial<Pick<PlanFacility,
+    'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride'
+    | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
+  >> & { size?: { width: number; depth: number } }): boolean;
   /** 当前 2D 视口（切 3D 时用来对着同一中心把地图斜起来）。 */
   getView(): PlanViewport;
   /** 当前绘制/浏览模式：3D 里非浏览态要关掉左键环绕，把点击交给编辑。 */
@@ -1241,8 +1272,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [facilityMenu, setFacilityMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [facilityIssues, setFacilityIssues] = useState<PlanFacilityIssue[]>([]);
   const [routeKind, setRouteKind] = useState<PlanningRouteKind>('pedestrian');
-  // 2026-11-11 OnePlan 纯度：oneWay/草稿计数/节点类型/人数的纯 UI 态随图层伴随项移除——
-  // 画布逻辑读各自的 ref（draw 侧真值），oneWay/类型/人数改在选中实体编辑器里调。
+  // M4（2026-11-13）：出入口类型在工具箱前置直选（ref + state 双写，对齐动线 kind）；
+  // oneWay/人数的纯 UI 态仍在选中实体编辑器里调，画布逻辑读各自的 ref（draw 侧真值）。
+  const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('entry');
   const [, setRouteDraftCount] = useState(0);
   const [workerRole, setWorkerRole] = useState('安保');
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -2064,8 +2096,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       drawAnnotationDraft({ ctx: planCtx, viewport }, annotateDraftRef.current, annotateShapeRef.current, annotateCursorRef.current ?? undefined, annotateColorRef.current, annotateStrokeWidthRef.current);
     }
     if (activeMode === 'node' && nodeGhostRef.current) {
-      const names = { entry: '入口', exit: '出口', both: '出入口' } as const;
-      drawNodeGhost({ ctx: planCtx, viewport }, nodeKindRef.current, names[nodeKindRef.current], nodeGhostRef.current);
+      drawNodeGhost({ ctx: planCtx, viewport }, nodeKindRef.current, nodeKindLabel(nodeKindRef.current), nodeGhostRef.current);
     }
 
     // 5) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；叠加在所有图层之上。
@@ -2642,6 +2673,89 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
       return true;
     },
+    /** M5：合并人员布点进 plan（commitPlan 可撤销）；逐条 buildWorker 校验，全非法/空回 false。 */
+    applyWorkers: (workers: PlanWorker[]) => {
+      const current = planRef.current;
+      if (workers.length === 0) return false;
+      const valid: PlanWorker[] = [];
+      for (const worker of workers) {
+        const result = buildWorker(
+          {
+            role: worker.role, count: worker.count, position: worker.position, notes: worker.notes, id: worker.id,
+            ...(worker.zoneId !== undefined ? { zoneId: worker.zoneId } : {}),
+            ...(worker.color !== undefined ? { color: worker.color } : {}),
+          },
+          current.boundary,
+          current.zones,
+        );
+        if (result.ok) valid.push(result.value);
+      }
+      if (valid.length === 0) return false;
+      commitPlan({ ...current, workers: [...current.workers, ...valid.map(worker => ({ ...worker, ...activeLevelStamp() }))] });
+      return true;
+    },
+    /** M5：合并测量进 plan；逐条 buildMeasurement 几何校验，全非法/空回 false。 */
+    applyMeasurements: (measurements: PlanMeasurement[]) => {
+      const current = planRef.current;
+      if (measurements.length === 0) return false;
+      const valid: PlanMeasurement[] = [];
+      for (const measurement of measurements) {
+        const result = buildMeasurement({
+          kind: measurement.kind, name: measurement.name, points: measurement.points, id: measurement.id,
+          ...(measurement.notes ? { notes: measurement.notes } : {}),
+        });
+        if (result.ok) valid.push(result.value);
+      }
+      if (valid.length === 0) return false;
+      commitPlan({ ...current, measurements: [...(current.measurements ?? []), ...valid.map(measurement => ({ ...measurement, ...activeLevelStamp() }))] });
+      return true;
+    },
+    /** M5：合并标注进 plan；逐条 buildAnnotation 几何校验，全非法/空回 false。 */
+    applyAnnotations: (annotations: PlanAnnotation[]) => {
+      const current = planRef.current;
+      if (annotations.length === 0) return false;
+      const valid: PlanAnnotation[] = [];
+      for (const annotation of annotations) {
+        const result = buildAnnotation({
+          kind: annotation.kind, name: annotation.name, points: annotation.points,
+          text: annotation.text, notes: annotation.notes, id: annotation.id,
+          ...(annotation.radiusM !== undefined ? { radiusM: annotation.radiusM } : {}),
+          ...(annotation.color !== undefined ? { color: annotation.color } : {}),
+          ...(annotation.strokeWidth !== undefined ? { strokeWidth: annotation.strokeWidth } : {}),
+        });
+        if (result.ok) valid.push(result.value);
+      }
+      if (valid.length === 0) return false;
+      commitPlan({ ...current, annotations: [...(current.annotations ?? []), ...valid.map(annotation => ({ ...annotation, ...activeLevelStamp() }))] });
+      return true;
+    },
+    /** M5：读当前楼层列表。 */
+    getLevels: () => planLevels(planRef.current),
+    /** M5：切到指定楼层；不存在回 false。 */
+    setActiveLevel: (levelId: string) => {
+      if (!planLevels(planRef.current).some(level => level.id === levelId)) return false;
+      switchLevel(levelId);
+      return true;
+    },
+    /** M5：单条设施新增；id 已存在回 false。校验在提案侧 buildFacility 完成。 */
+    addFacility: (facility: PlanFacility) => {
+      const current = planRef.current;
+      if (current.facilities.some(f => f.id === facility.id)) return false;
+      commitPlan({ ...current, facilities: [...current.facilities, { ...facility, ...activeLevelStamp() }] });
+      return true;
+    },
+    /** M5：单条设施删除；不存在回 false。 */
+    removeFacility: (id: string) => {
+      if (!planRef.current.facilities.some(f => f.id === id)) return false;
+      deleteFacility(id);
+      return true;
+    },
+    /** M5：单条设施属性改；不存在回 false。 */
+    updateFacility: (id: string, patch) => {
+      if (!planRef.current.facilities.some(f => f.id === id)) return false;
+      updateFacility(id, patch);
+      return true;
+    },
     getView: () => currentViewport(),
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
@@ -3201,7 +3315,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     } else if (tool === 'zone') {
       setEditMessage('画区域：在场地内单击加顶点，双击或靠近首点闭合；Esc 结束。');
     } else if (tool === 'node') {
-      setEditMessage('放入口/出口：单击地图落一个节点，可连续放；Esc 结束。');
+      setEditMessage('放入口/出口/出入口：单击地图落一个节点，可连续放；Esc 结束。');
     } else {
       setEditMessage('画路线：单击加路径点，双击完成；Esc 结束。');
     }
@@ -4087,21 +4201,30 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`动线「${result.value.name}」已添加${snapHint}；继续画下一条或 Esc 结束。`);
   }
 
-  /** 放节点模式单击：自动编号命名，连续放置。 */
+  /** 放节点模式单击：类型取当前工具箱选择，落点自动归属分区，自动编号命名，连续放置。 */
   function placeNodeAt(pt: PlanPoint) {
     const current = planRef.current;
-    const names = { entry: '入口', exit: '出口', both: '出入口' } as const;
-    const node: PlanNode = {
-      id: crypto.randomUUID(),
-      kind: nodeKindRef.current,
-      name: `${names[nodeKindRef.current]} ${viewPlan().nodes.length + 1}`,
-      position: { x: pt.x, y: pt.y },
-      ...activeLevelStamp(),
-      notes: '',
-    };
+    const view = viewPlan();
+    const stamp = activeLevelStamp();
+    const result = buildNode(
+      {
+        kind: nodeKindRef.current,
+        name: `${nodeKindLabel(nodeKindRef.current)} ${view.nodes.length + 1}`,
+        position: pt,
+        ...(stamp.levelId !== undefined ? { levelId: stamp.levelId } : {}),
+      },
+      view.boundary,
+      view.zones,
+    );
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    const node = result.value;
     commitPlan({ ...current, nodes: [...current.nodes, node] });
     selectNode(node.id);
-    setEditMessage(`已放置「${node.name}」，继续单击放置或 Esc 结束。`);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
+    setEditMessage(`已放置「${node.name}」${hint}；继续单击放置或 Esc 结束。`);
   }
 
   /** 布人员模式单击：岗位/人数取面板值，落点自动归属分区（当前层分区）；连续放置。 */
@@ -4152,7 +4275,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage('动线已删除。');
   }
 
-  function updateNode(id: string, patch: Partial<Pick<PlanNode, 'name' | 'kind'>>) {
+  function updateNode(id: string, patch: Partial<Pick<PlanNode, 'name' | 'kind' | 'zoneId'>>) {
     const current = planRef.current;
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
     commitPlan({ ...current, nodes: current.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)) });
@@ -5331,6 +5454,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   })();
   // 面板内点击不再冒泡到画布（否则勾选/选模板/点按钮会在面板对应画布位置误加草稿点或放置实体）。
   const stopPanelMouse = (event: React.MouseEvent) => event.stopPropagation();
+  // 滚轮同理：面板经 portal 挂到地图舞台外的宿主，若让 wheel 沿 React 树冒泡回 stage，
+  // 会被当成地图缩放。成熟地图产品（Leaflet / Mapbox / 高德）的滚轮缩放只绑地图视口，
+  // 侧栏滚动只滚动侧栏、不带动地图。面板根节点在此截断冒泡。
+  const stopPanelWheel = (event: React.WheelEvent) => event.stopPropagation();
   // 两张卡各有宿主：图层卡看 layerPanelHost，规划信息卡看 infoPanelHost——
   // 之前共用一个开关，规划信息的宿主（Bingo 里）缺席时会用「外挂态」样式却渲染在画布流里，拉成顶部横条。
   const panelInline = !!layerPanelHost;
@@ -6506,6 +6633,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <option value="both">出入口（两用）</option>
                         </select>
                       </label>
+                      <label style={zoneRowStyle}>
+                        归属分区
+                        <select
+                          aria-label="选中出入口归属分区"
+                          value={selectedNode.zoneId ?? ''}
+                          onChange={event => updateNode(selectedNode.id, { zoneId: event.target.value || undefined })}
+                          style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                        >
+                          <option value="">（自动 / 无）</option>
+                          {levelView.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                        </select>
+                      </label>
                       <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
                         {refs.startRoutes.length === 0 && refs.endRoutes.length === 0
                           ? '未连接任何动线（红点警示）。'
@@ -6628,8 +6767,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setFacilityMenu({ x: event.clientX, y: event.clientY, id: target.id });
       }}
       onWheel={e => {
-        // React 合成 wheel 在部分浏览器为 passive 监听，preventDefault 会告警；
-        // 缩放改走原生非 passive 监听（挂载时注册、卸载时移除）。
+        // 视口边界（对标 Leaflet / Mapbox：滚轮缩放只挂地图视口本身）。
+        // 左侧物件库 / 已放置 / 信息等面板经 createPortal 挂在舞台 DOM 之外的左栏宿主，
+        // React 合成事件仍沿 React 树冒泡回 stage；这里按 DOM 包含关系挡掉——
+        // 只有滚轮起点确实落在地图舞台内才缩放，侧栏列表照常自己滚动，地图不跟着动。
+        const stage = stageRef.current;
+        if (!stage || !stage.contains(e.target as Node)) return;
         if (!e.nativeEvent.defaultPrevented) zoomBy(e.deltaY < 0 ? 1 : -1);
       }}
       onDragOver={event => {
@@ -6794,6 +6937,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           onMouseDown={stopPanelMouse}
           onMouseUp={stopPanelMouse}
           onDoubleClick={stopPanelMouse}
+          onWheel={stopPanelWheel}
         >
           <div
             style={{
@@ -7010,7 +7154,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
       {/* H3-c 规划信息面板：宿主在 Bingo 面板里；Bingo 收起时整块不渲染（不再在画布顶部拉成横条）。 */}
       {!(infoPanelHostId && !infoPanelHost) && <PanelPortal host={infoPanelHost}>
-      <div ref={infoPanelRef} style={infoPanelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
+      <div ref={infoPanelRef} style={infoPanelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} onWheel={stopPanelWheel}>
         <button
           type="button"
           data-testid="info-panel-toggle"
@@ -7178,7 +7322,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       </PanelPortal>}
 
       <PanelPortal host={layerPanelHost}>
-      <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse}>
+      <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} onWheel={stopPanelWheel}>
         {/* 2026-11-11 OnePlan Placed Objects 镜像：头部计数 + 按类型分组的文件夹树。
             旧「图层栈与编辑/浏览/撤销/提示」清理掉——撤销走右栏工具排，浏览回 Esc，
             放置工具全在物件库页签（区域/入口/路线/基建/劳动力），本页签只管「画了什么」。 */}
@@ -7417,6 +7561,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             onMouseDown={stopPanelMouse}
             onMouseUp={stopPanelMouse}
             onDoubleClick={stopPanelMouse}
+            onWheel={stopPanelWheel}
             data-testid="outdoor-library-panel"
           >
             {/* 2026-11-11：顶层页签已按 OnePlan 分工（左栏=添加物件/已放置物件），卡片内不再嵌套页签。 */}
@@ -7542,14 +7687,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '入口和通道图标', label: '入口和通道图标', count: libraryEntranceIcons.length + 1, icon: 'door-open' })}
                           {openLibrarySubgroups.includes('areas:入口和通道图标') && (
                             <>
-                              {renderOneplanItemRow({
-                                key: 'catalog-node-row',
-                                testId: 'catalog-area-node',
-                                label: '出入口节点',
-                                active: mode === 'node',
-                                onClick: () => armOrDisarm(mode === 'node', () => startAreaTool('node')),
-                                icon: <NodeToolIcon size={16} aria-hidden color={PLANNING_LAYER_COLORS.access} />,
-                              })}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                {NODE_KIND_OPTIONS.map(option => {
+                                  const nodeActive = mode === 'node' && nodeKind === option.kind;
+                                  return renderOneplanItemRow({
+                                    key: `node-${option.kind}`,
+                                    testId: `catalog-node-${option.kind}`,
+                                    label: option.label,
+                                    active: nodeActive,
+                                    onClick: () => armOrDisarm(nodeActive, () => { nodeKindRef.current = option.kind; setNodeKind(option.kind); draw(); startAreaTool('node'); }),
+                                    icon: <NodeToolIcon size={16} aria-hidden color={PLANNING_LAYER_COLORS.access} />,
+                                  });
+                                })}
+                              </div>
                               {renderOneplanStickerRows(libraryEntranceIcons)}
                             </>
                           )}
@@ -7800,6 +7950,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <PanelPortal host={inspectorPanelHost}>
           <div
             data-testid="outdoor-inspector-stack"
+            onWheel={stopPanelWheel}
             style={{
               position: 'absolute', right: 96, top: 12, zIndex: 6,
               pointerEvents: 'auto',
@@ -7818,6 +7969,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   role="complementary"
                   aria-label={`${card.label}卡片`}
                   className="sc-outdoor-toolcard"
+                  onWheel={stopPanelWheel}
                   style={{
                     flex: '0 0 auto',
                     display: 'flex', flexDirection: 'column', minHeight: 0,
