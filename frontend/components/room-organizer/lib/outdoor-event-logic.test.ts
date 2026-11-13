@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildZoneEventProposal } from './zone-event-proposal';
-import { outdoorEventIssue } from './outdoor-event-logic';
+import { outdoorEventIssue, outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { planPointInRing } from './site-plan-editing';
 import type { PlanPoint, PlanNode, PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
@@ -67,4 +67,29 @@ describe('户外活动逻辑/几何守卫', () => {
     const route: PlanRoute = { id: 'v', kind: 'vehicle', name: '车行', points: [{ x: 0, y: -20 }, { x: 0, y: 20 }], widthM: 6, oneWay: false, notes: '' };
     expect(build('讲座', 45, tiny, [{ ...south, position: { x: 0, y: -20 } }], [route])).toBeNull();
   });
+});
+
+describe('public-size 80x70 site and off-centre boundary portals',()=>{
+ const ring=[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}];
+ it.each([{x:80,y:17.3},{x:80,y:33},{x:0,y:42.7},{x:22.3,y:0},{x:47.2,y:70}])('45 seats and a full-width connected ingress at %j',position=>{
+  const p=build('讲座',45,ring,[{...south,position}]);
+  expect(p).not.toBeNull();expect(p!.facilities.filter(f=>f.templateId.includes('chair'))).toHaveLength(45);
+  for(const r of p!.routes??[])for(const strip of outdoorCorridorStrips(r.points,r.widthM??3))expect(facilityPlacementIssues(strip,ring)).toEqual([]);
+ });
+ it('keeps an existing 36.1m entry-connected pedestrian corridor clear instead of rejecting the first region only',()=>{
+  const position={x:80,y:33};const route:PlanRoute={id:'existing-walk',name:'人行',kind:'pedestrian',points:[position,{x:43.9,y:33}],widthM:3,oneWay:false,notes:''};
+  const p=build('讲座',45,ring,[{...south,position}],[route]);expect(p).not.toBeNull();
+  for(const f of p!.facilities)for(const strip of outdoorCorridorStrips(route.points,3))expect(outdoorRingsOverlap(strip,facilityFootprintRing(f))).toBe(false);
+ });
+});
+
+it('outside portal and corner portal without 3m clearance remain rejected, rather than snapping or weakening safety',()=>{
+ const ring=[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}];
+ expect(build('讲座',45,ring,[{...south,position:{x:80.2,y:33}}])).toBeNull();
+ expect(build('讲座',45,ring,[{...south,position:{x:80,y:0.2}}])).toBeNull();
+});
+it('translated ENU anchors do not turn an 80x70m site into a different scale',()=>{
+ const ring=[{x:410,y:-230},{x:490,y:-230},{x:490,y:-160},{x:410,y:-160}];
+ const p=build('讲座',45,ring,[{...south,position:{x:490,y:-197}}]);expect(p).not.toBeNull();
+ for(const z of p!.zones)expect(facilityPlacementIssues(z.polygon,ring)).toEqual([]);
 });

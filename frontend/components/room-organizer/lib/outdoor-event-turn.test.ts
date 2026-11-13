@@ -13,3 +13,12 @@ describe('同一户外任务的自然需求补充', () => {
     expect(parseOutdoorEventTurn('60人', null)).toBeNull();
   });
 });
+
+it('only continues site/entry supplements for the current blocked event; preserves prior intent and does not intercept questions/models',()=>{
+ const text='场地已画好，入口在东侧，签到放入口内侧，舞台在远端';
+ expect(parseOutdoorEventTurn(text,'讲座',true)).toEqual({event:'讲座',headcount:null});
+ expect(parseOutdoorEventTurn(text,'讲座',false)).toBeNull();
+ expect(parseOutdoorEventTurn('为什么入口放这里？','讲座',true)).toBeNull();
+ expect(parseOutdoorEventTurn('看看舞台的模型','讲座',true)).toBeNull();
+ expect(parseOutdoorEventTurn('取消活动','讲座',true)).toBeNull();
+});

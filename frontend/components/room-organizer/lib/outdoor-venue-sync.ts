@@ -355,3 +355,9 @@ export function sceneAnchorFromOutdoorPlan(plan: Pick<SitePlanData, 'anchor' | '
     source: plan.anchor.source,
   };
 }
+
+/** Only geometry belongs to RoomLayout; scaled/simplified are diagnostics, not persisted fields.
+ * Spreading the whole patch makes strict save readback fail after schema normalization. */
+export function applyOutdoorShellVenuePatch(layout: RoomLayout, patch: ShellVenuePatch): RoomLayout {
+  return { ...layout, width: patch.width, height: patch.height, backendVenue: patch.backendVenue };
+}

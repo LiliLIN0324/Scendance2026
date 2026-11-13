@@ -72,18 +72,24 @@ export function buildSubEntranceProposal(
     // 不会钉在角上）；取离最近流线最近者作子口位置。
     let bestSpur: { nodePos: PlanPoint; routePoint: PlanPoint; dist: number; route: PlanRoute } | null = null;
     const samples: PlanPoint[] = [];
+    const boundaryNodes=plan.nodes.filter(n=>n.verification!=='unverified'&&zone.polygon.some((a,i)=>{const hit=nearestPointOnSegment(n.position,a,zone.polygon[(i+1)%zone.polygon.length]!);return Math.hypot(hit.x-n.position.x,hit.y-n.position.y)<=1;}));
+    const verifiedIndoor=boundaryNodes.filter(n=>n.verification==='user-confirmed');
+    if(zone.environment==='indoor'&&!verifiedIndoor.length){skippedFar++;continue;}
     for (let i = 0; i < zone.polygon.length; i += 1) {
       const next = zone.polygon[(i + 1) % zone.polygon.length]!;
       samples.push({ x: (zone.polygon[i]!.x + next.x) / 2, y: (zone.polygon[i]!.y + next.y) / 2 }, zone.polygon[i]!);
     }
-    for (const sample of samples) {
+    for (const sample of zone.environment==='indoor'?verifiedIndoor.map(n=>n.position):boundaryNodes.length?boundaryNodes.map(n=>n.position):samples) {
       for (const route of plan.routes) {
         if (route.kind !== 'pedestrian') continue; // 不把观众驳线接到车行/装卸线上。
+        if(!boundaryNodes.length&&zone.environment!=='indoor'&&[...plan.nodes,...nodes].some(n=>Math.hypot(n.position.x-sample.x,n.position.y-sample.y)<=NODE_DEDUPE_M))continue;
         const hit = nearestPointOnPolyline(sample, route.points);
+        if(hit.dist<0.1)continue;
         const points = [sample, hit.point];
         const strips = outdoorCorridorStrips(points, 2);
         if (plan.boundary && strips.some(strip => facilityPlacementIssues(strip, plan.boundary!).length)) continue;
         if ((plan.facilities ?? []).some(f => strips.some(strip => outdoorRingsOverlap(strip, facilityFootprintRing(f))))) continue;
+        if(plan.zones.some(other=>other.id!==zone.id&&['performance','exhibition'].includes(other.purpose??'')&&strips.some(strip=>outdoorRingsOverlap(strip,other.polygon))))continue;
         if (plan.routes.some(r => r.kind !== 'pedestrian' && outdoorCorridorStrips(r.points, (r.widthM ?? 4) + 2).some(road => strips.some(strip => outdoorRingsOverlap(strip, road))))) continue;
         if (!bestSpur || hit.dist < bestSpur.dist) {
           bestSpur = { nodePos: sample, routePoint: hit.point, dist: hit.dist, route };
@@ -93,18 +99,23 @@ export function buildSubEntranceProposal(
     if (!bestSpur || bestSpur.dist > MAX_SPUR_M) { skippedFar += 1; continue; }
     // 与既有节点太近不重复立
     const tooClose = [...plan.nodes, ...nodes].some(node => Math.hypot(node.position.x - bestSpur.nodePos.x, node.position.y - bestSpur.nodePos.y) <= NODE_DEDUPE_M);
-    if (tooClose) continue;
+    const reuse=boundaryNodes.find(n=>Math.hypot(n.position.x-bestSpur.nodePos.x,n.position.y-bestSpur.nodePos.y)<=1);
+    if (tooClose&&!reuse) continue;
     const label = zone.name.slice(0, 40);
-    nodes.push({
-      id: idFactory(),
+    const nodeId=reuse?.id??idFactory();
+    if(!reuse)nodes.push({
+      id: nodeId,
+      verification: 'user-confirmed',
       kind: 'both',
       name: `${label}口`,
       position: { x: Math.round(bestSpur.nodePos.x * 10) / 10, y: Math.round(bestSpur.nodePos.y * 10) / 10 },
-      notes: 'AI 子出入口提案：分区边界接驳主流线（V-4a）',
+      notes: '活动子口位置提案（不是地图上的实体建筑门）：分区边界接驳主流线（V-4a）',
     });
     routes.push({
       id: idFactory(),
       kind: bestSpur.route.kind,
+      startNodeId:nodeId,
+      audiences:zone.purpose==='performance'?['performers','staff','security']:zone.purpose==='service'?['service','staff','security']:['visitors','staff','security'],
       name: `${label}驳线`,
       points: [
         { x: Math.round(bestSpur.nodePos.x * 10) / 10, y: Math.round(bestSpur.nodePos.y * 10) / 10 },

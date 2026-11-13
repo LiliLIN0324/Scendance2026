@@ -178,6 +178,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
 
   // /auth 已改成「进工作台 + 自动弹登录浮窗」；标记只在 ?login=1 时置位。
   const loginRequested = useRef(false);
+  useEffect(()=>{const openLogin=()=>{loginRequested.current=true;setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();};window.addEventListener('scendance:request-account-login',openLogin);return()=>window.removeEventListener('scendance:request-account-login',openLogin);},[]);
+
   useEffect(() => {
     setProjects([]); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
     setScenePreviews({});setReadOnlyProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
