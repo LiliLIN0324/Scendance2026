@@ -80,8 +80,8 @@ describe('plan-basemap-source', () => {
     window.localStorage.clear();
   });
 
-  it('缺省是 osm，写进去能读回来', () => {
-    expect(readPlanGroundSource()).toBe('osm');
+  it('缺省是高德街道，写进去能读回来', () => {
+    expect(readPlanGroundSource()).toBe('amap-streets');
     writePlanGroundSource('carto-dark');
     expect(readPlanGroundSource()).toBe('carto-dark');
     expect(window.localStorage.getItem('scendance-plan-basemap-source-v1')).toBe('carto-dark');

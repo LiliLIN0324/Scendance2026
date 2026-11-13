@@ -521,7 +521,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   const mapTypeMenuRef = useRef<HTMLDivElement>(null);
   // 2026-11-12 用户指令：GeoGround 态补回「地图切换」——主 3D 瓦片图源与户外 2D 同一份偏好联动。
-  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'osm' as (typeof PLAN_GROUND_SOURCES)[number]);
+  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as (typeof PLAN_GROUND_SOURCES)[number]);
   const [groundSourceOpen, setGroundSourceOpen] = useState(false);
   const groundSourceMenuRef = useRef<HTMLDivElement>(null);
   const selectMenuRef = useRef<HTMLDivElement>(null);
