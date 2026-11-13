@@ -75,18 +75,48 @@ function parsePlaces(body: unknown): PlaceSuggestion[] {
   return places;
 }
 
+/** 本机 3199 代理的高德地名检索（`/amap-place`，与线上 /api/amap-place 同契约）。 */
+export function localAmapPlaceUrl(keywords: string, limit: number): string {
+  const params = new URLSearchParams({ keywords: keywords.trim(), limit: String(limit) });
+  return `http://127.0.0.1:3199/amap-place?${params.toString()}`;
+}
+
 /** 检索失败（网络/404/超时）一律回空数组——调用方只当作「没建议」，不弹错。 */
 export async function searchPlaces(keywords: string, options: PlaceSearchOptions = {}): Promise<PlaceSuggestion[]> {
   const query = keywords.trim();
   if (query.length < 2 || query.length > 80) return [];
   const local = options.local ?? usesLocalPlaceProxy();
   const doFetch = options.fetchImpl ?? fetch;
+  const limit = options.limit ?? 6;
+  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000);
   try {
-    const response = await doFetch(placeSearchUrl(query, options.limit ?? 6, local, options.center ?? null), {
-      signal: options.signal ?? AbortSignal.timeout(8000),
-    });
-    if (!response.ok) return [];
-    return rankPlaces(parsePlaces(await response.json()), query);
+    if (!local) {
+      const response = await doFetch(placeSearchUrl(query, limit, false, options.center ?? null), { signal });
+      if (!response.ok) return [];
+      return rankPlaces(parsePlaces(await response.json()), query);
+    }
+    // 本机双源合并（2026-11-13）：新 POI（如「潮乐之城」）天地图常不收录，高德才有——
+    // 两源都打，高德在前、天地图补位，按「名字+坐标」去重；任一源 404/503/超时只丢该源。
+    const settled = await Promise.allSettled([
+      doFetch(localAmapPlaceUrl(query, limit), { signal }),
+      doFetch(placeSearchUrl(query, limit, true, options.center ?? null), { signal }),
+    ]);
+    const seen = new Set<string>();
+    const merged: PlaceSuggestion[] = [];
+    for (const entry of settled) {
+      if (entry.status !== 'fulfilled' || !entry.value.ok) continue;
+      try {
+        for (const place of parsePlaces(await entry.value.json())) {
+          const key = `${normalizeText(place.name)}|${place.lng.toFixed(4)},${place.lat.toFixed(4)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(place);
+        }
+      } catch {
+        // 坏响应体（HTML 错误页等）只丢该源，不影响另一源
+      }
+    }
+    return rankPlaces(merged, query);
   } catch {
     return [];
   }

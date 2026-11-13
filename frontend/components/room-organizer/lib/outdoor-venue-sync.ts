@@ -1,5 +1,6 @@
 import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from './types';
+import { metersPerDegreeLng } from './tdt-probe-scale';
 
 /**
  * 户外 2D 规划 ↔ 3D 场地壳体联动（P2-g 数据打通）。
@@ -263,6 +264,11 @@ export function seededPlanFromVenue(
  * 反向播种的 layout 入口：直接用 3D 场景的权威尺寸（`layout.width/height`）当壳体，
  * `backendVenue.polygon` 只在「顶点确实落在壳体内」时采信——模板场景压根没有
  * `backendVenue`，只有宽高；老数据也可能带着和宽高不同尺度的多边形。
+ *
+ * V-1c（2026-11-13）：有真实 GCJ 足迹（chat 场地确认/地图圈画写入 `mapGroundPolygon`）
+ * 且有锚点时，2D 边界用**真实米数**（相对锚点的 ENU），壳体交给 planBoundaryToShellVenue
+ * 等比缩——「选区=真轮廓」，不再是缩到 100m 的壳体影子。足迹超 ±5000m 契约（城市级）
+ * 或缺锚点则退回壳体轮廓（老路径不变）。
  */
 export function seededPlanFromLayout(layout: {
   width: number;
@@ -270,10 +276,30 @@ export function seededPlanFromLayout(layout: {
   backendVenue?: { shape?: string | undefined; polygon?: readonly { x: number; z: number }[] | null | undefined } | null | undefined;
   sceneAnchor?: { lng: number; lat: number } | null | undefined;
   mapLngLat?: { lng: number; lat: number } | null | undefined;
+  mapGroundPolygon?: readonly { lng: number; lat: number }[] | null | undefined;
 }): SitePlanData | null {
   const width = layout.width;
   const depth = layout.height;
   if (!Number.isFinite(width) || !Number.isFinite(depth) || width < 2 || depth < 2) return null;
+  const anchor = layout.sceneAnchor ?? layout.mapLngLat ?? null;
+  const footprint = layout.mapGroundPolygon;
+  if (anchor && Number.isFinite(anchor.lng) && Number.isFinite(anchor.lat)
+    && Array.isArray(footprint) && footprint.length >= 3) {
+    const boundary = trueFootprintBoundary(footprint, anchor);
+    if (boundary) {
+      const plan: SitePlanData = {
+        schemaVersion: 1,
+        boundary,
+        zones: [],
+        facilities: [],
+        routes: [],
+        nodes: [],
+        workers: [],
+      };
+      plan.anchor = { lng: anchor.lng, lat: anchor.lat, crs: 'gcj-02', source: 'lookup' };
+      return plan;
+    }
+  }
   const polygon = layout.backendVenue?.polygon;
   const polygonFits = Array.isArray(polygon) && polygon.length >= 3
     && polygon.every(point => Number.isFinite(point.x) && Number.isFinite(point.z)
@@ -282,4 +308,50 @@ export function seededPlanFromLayout(layout: {
     ? { width, depth, polygon }
     : { width, depth };
   return seededPlanFromVenue(venue, layout.sceneAnchor ?? layout.mapLngLat ?? null);
+}
+
+/**
+ * V-1c：真实 GCJ 足迹 → ENU 米边界（相对锚点），顶点抽稀到 64（契约上界）。
+ * 抽稀用等步长——place-shape 已经做过 Douglas-Peucker，这里只做降采样。
+ * 任何顶点跑出 ±4900m（±5000 契约留余量）就整体不采信，调用方退回壳体轮廓。
+ */
+export function trueFootprintBoundary(
+  polygon: readonly { lng: number; lat: number }[],
+  anchor: { lng: number; lat: number },
+  maxPoints = 64,
+): PlanPoint[] | null {
+  if (polygon.length < 3) return null;
+  const kx = metersPerDegreeLng(anchor.lat);
+  const points: PlanPoint[] = [];
+  for (const { lng, lat } of polygon) {
+    const x = (lng - anchor.lng) * kx;
+    const y = (lat - anchor.lat) * 111132.92;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (Math.abs(x) > 4900 || Math.abs(y) > 4900) return null;
+    const point = { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+    const prior = points[points.length - 1];
+    if (!prior || Math.hypot(point.x - prior.x, point.y - prior.y) >= 0.5) points.push(point);
+  }
+  if (points.length > 1 && Math.hypot(points[0]!.x - points[points.length - 1]!.x, points[0]!.y - points[points.length - 1]!.y) < 0.5) points.pop();
+  if (points.length < 3) return null;
+  const stride = Math.max(1, Math.ceil(points.length / maxPoints));
+  if (stride === 1) return points;
+  const out: PlanPoint[] = [];
+  for (let i = 0; i < points.length; i += stride) out.push(points[i]!);
+  return out.length >= 3 ? out : null;
+}
+/** 户外规划锚点/真实边界 → 旧场景镜像的西北角原点；不改变 SitePlan 正源。 */
+export function sceneAnchorFromOutdoorPlan(plan: Pick<SitePlanData, 'anchor' | 'boundary'>): RoomLayout['sceneAnchor'] | null {
+  if (!plan.anchor || plan.boundary.length < 3) return null;
+  const shell = planBoundaryToShellVenue(plan.boundary);
+  if (!shell) return null;
+  const west = Math.min(...plan.boundary.map(point => point.x));
+  const north = Math.max(...plan.boundary.map(point => point.y));
+  return {
+    lng: plan.anchor.lng + west / metersPerDegreeLng(plan.anchor.lat),
+    lat: plan.anchor.lat + north / 111132.92,
+    orientationDeg: 0,
+    metersPerUnit: 1 / shell.scale,
+    source: plan.anchor.source,
+  };
 }

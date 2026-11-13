@@ -21,7 +21,7 @@ import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import type { PlanSceneObject } from './plan-item-bridge';
-import type { PlanAnnotation, PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanAnnotation, PlanFacility, PlanNode, PlanPoint, PlanRoute, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 图层栈从底到顶的绘制顺序（底图由画布组件先铺，业务层依此序叠加；测量/自由标注在最上层）。 */
 export const PLAN_LAYER_STACK: readonly PlanningLayerKind[] = [
@@ -1013,6 +1013,142 @@ function drawMapLabelPill(ctx: CanvasRenderingContext2D, cx: number, bottom: num
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(shown, clampedX, y + height / 2 + 0.5);
+  ctx.restore();
+}
+
+/**
+ * V-2d：流线提案预览层（虚线 + 出入口圆点）——应用前不进 plan、不参与统计，
+ * 纯视图辅助（与搜地点钉同语义）。三类各用一色虚线，出入口黑圆白环「口」标。
+ */
+export function drawRouteProposalLayer(
+  c: PlanCanvasContext,
+  proposal: { routes: Pick<PlanRoute, 'kind' | 'points'>[]; nodes: Pick<PlanNode, 'kind' | 'position'>[] },
+): void {
+  const { ctx, viewport } = c;
+  ctx.save();
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([9, 7]);
+  for (const route of proposal.routes) {
+    ctx.strokeStyle = ROUTE_PROPOSAL_COLORS[route.kind] ?? ROUTE_PROPOSAL_COLORS.pedestrian!;
+    ctx.beginPath();
+    route.points.forEach((point, index) => {
+      const px = planPointToPixel(point, viewport);
+      if (index === 0) ctx.moveTo(px.x, px.y);
+      else ctx.lineTo(px.x, px.y);
+    });
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.font = '600 10px Inter, system-ui, sans-serif';
+  for (const node of proposal.nodes) {
+    const px = planPointToPixel(node.position, viewport);
+    ctx.beginPath();
+    ctx.arc(px.x, px.y, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20, 20, 22, 0.82)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('口', px.x, px.y + 0.5);
+  }
+  ctx.restore();
+}
+
+/** 提案预览用色：蓝=车行 绿=人行 琥珀=后勤。 */
+export const ROUTE_PROPOSAL_COLORS: Record<PlanRoute['kind'], string> = {
+  vehicle: '#0668e5',
+  pedestrian: '#1a9e5c',
+  service: '#b7791f',
+};
+
+/**
+ * V-3c：区域提案预览层（虚线矩形 + 语义名 + 物料幽灵块）——应用前不进 plan、不参与统计，
+ * 纯视图辅助。zone 虚线用提案自带色，物料画半透明幽灵矩形（与放置幽灵同语义）。
+ */
+export function drawZoneProposalLayer(
+  c: PlanCanvasContext,
+  proposal: {
+    zones: Pick<PlanZone, 'semantic' | 'name' | 'polygon' | 'color' | 'event'>[];
+    facilities: Pick<PlanFacility, 'name' | 'position' | 'size'>[];
+  },
+): void {
+  const { ctx, viewport } = c;
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  for (const zone of proposal.zones) {
+    ctx.strokeStyle = zone.color ?? '#5a6472';
+    ctx.beginPath();
+    zone.polygon.forEach((point, index) => {
+      const px = planPointToPixel(point, viewport);
+      if (index === 0) ctx.moveTo(px.x, px.y);
+      else ctx.lineTo(px.x, px.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    const first = planPointToPixel(zone.polygon[0]!, viewport);
+    ctx.setLineDash([]);
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
+    ctx.fillStyle = zone.color ?? '#5a6472';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(zone.event ?? zone.name, first.x + 4, first.y - 4);
+    ctx.setLineDash([8, 6]);
+  }
+  ctx.setLineDash([]);
+  for (const facility of proposal.facilities) {
+    const px = planPointToPixel(facility.position, viewport);
+    const w = facility.size.width / planMetersPerPixel(viewport);
+    const h = facility.size.depth / planMetersPerPixel(viewport);
+    ctx.fillStyle = 'rgba(20, 20, 22, 0.28)';
+    ctx.fillRect(px.x - w / 2, px.y - h / 2, w, h);
+    ctx.strokeStyle = 'rgba(20, 20, 22, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px.x - w / 2, px.y - h / 2, w, h);
+  }
+  ctx.restore();
+}
+
+/**
+ * V-4b：流动模拟层（行人点沿流线移动 + 密度着色）——纯视图动画，不写 plan。
+ * 密度=每 10m 点数：浅(<0.8)→深(>1.6) 两档间用 alpha 插值，色随流线类别。
+ */
+export function drawFlowSimulationLayer(
+  c: PlanCanvasContext,
+  sim: {
+    routes: Pick<PlanRoute, 'kind' | 'points'>[];
+    walkerPoints: PlanPoint[];
+    density: number[];
+  },
+): void {
+  const { ctx, viewport } = c;
+  ctx.save();
+  sim.routes.forEach((route, index) => {
+    const density = sim.density[index] ?? 0;
+    // 密度 alpha：0.25（稀）→ 0.85（密），在 0.8–1.6 人/10m 区间线性插值
+    const ratio = Math.max(0, Math.min(1, (density - 0.8) / 0.8));
+    ctx.globalAlpha = 0.25 + ratio * 0.6;
+    ctx.lineWidth = 2.5 + ratio * 2;
+    ctx.strokeStyle = ROUTE_PROPOSAL_COLORS[route.kind] ?? ROUTE_PROPOSAL_COLORS.pedestrian!;
+    ctx.beginPath();
+    route.points.forEach((point, i) => {
+      const px = planPointToPixel(point, viewport);
+      if (i === 0) ctx.moveTo(px.x, px.y);
+      else ctx.lineTo(px.x, px.y);
+    });
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(20, 20, 22, 0.85)';
+  for (const point of sim.walkerPoints) {
+    const px = planPointToPixel(point, viewport);
+    ctx.beginPath();
+    ctx.arc(px.x, px.y, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 

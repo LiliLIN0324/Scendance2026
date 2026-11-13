@@ -13,6 +13,14 @@ export function localGlbKey(id: string): string {
   return `${LOCAL_GLB_KEY_PREFIX}${id}`;
 }
 
+/** 会话内一次性的新缓存键（crypto.randomUUID 优先，回退时间戳 36 进制）。 */
+export function newLocalGlbKey(): string {
+  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : Date.now().toString(36);
+  return localGlbKey(random);
+}
+
 export const NOT_GLB_MESSAGE = '只支持单文件 .glb；.gltf 常带外部贴图或 .bin，导入后无法独立打开。';
 export const EMPTY_GLB_MESSAGE = '文件是空的，没有可导入的模型。';
 export const TOO_LARGE_GLB_MESSAGE = 'GLB 超过 10 MB，请先在建模软件里压缩或减面后再导入。';

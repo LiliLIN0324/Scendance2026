@@ -230,4 +230,29 @@ describe('设施 → 3D 物件（planPropKind / facilityProp）', () => {
     expect(shapes.props[0]!.rotationDeg).toBe(90);
     expect(shapes.facilities.map(facility => facility.id)).toEqual(shapes.props.map(prop => prop.id));
   });
+
+  it('V-5a：facility.modelOverride 原样透传进 3D 物件，缺省不落键', () => {
+    const frame = planShellFrame(square, { width: 20, depth: 10 })!;
+    const slug = 'mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea';
+    const base = {
+      id: 'f1',
+      templateId: 'tent-3x3',
+      name: '后勤帐篷',
+      position: { x: 5, y: 5 },
+      rotationDeg: 0,
+      size: { width: 3, depth: 3 },
+    };
+    // 旧数据（无 override）：prop 上不出现 modelOverride 键，走自动挑选语义。
+    const plain = facilityProp(base, frame);
+    expect('modelOverride' in plain).toBe(false);
+    expect(plain.modelOverride).toBeUndefined();
+    // 手动 override：原样透传，plan-model-layer 据此优先落 override 模型。
+    const overridden = facilityProp({ ...base, modelOverride: slug }, frame);
+    expect(overridden.modelOverride).toBe(slug);
+    // planFootprintShapes 全链透传（2D plan → 3D props 一条线）。
+    const shapes = planFootprintShapes(makePlan({
+      facilities: [{ ...base, modelOverride: slug, notes: '' }],
+    } as unknown as SitePlanData), { width: 20, depth: 10 })!;
+    expect(shapes.props[0]!.modelOverride).toBe(slug);
+  });
 });
