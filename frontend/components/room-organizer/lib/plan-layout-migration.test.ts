@@ -121,12 +121,15 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
 
     // 坏动线那个人仍有落点，落成点位；只其动线退化。无落点人员不进 workers。
+    // person 在 facility 侧按分流档跳过（归属 workers），故同批再记两条 facility skip。
     expect(result.workers).toHaveLength(1);
     expect(result.workers[0]!.id).toBe('u-1');
     expect(result.routes).toHaveLength(0);
     expect(result.skipped.map(s => `${s.source}:${s.sourceId}`)).toEqual([
       'worker:p-nopos',
       'route:p-route-bad',
+      'facility:p-nopos',
+      'facility:p-route-bad',
     ]);
   });
 
@@ -156,5 +159,34 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
 
     expect(result.zones).toHaveLength(1);
     expect(result.workers).toHaveLength(1);
+  });
+
+  it('总入口一并迁 facility：builtin 落内置模板、misc 占位、skip 档进 facility skipped', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 't1', type: 'toilet', name: '洗手间', position: { x: 2, z: 2 } }),
+          makeItem({ id: 'b1', type: 'bed', name: '床', position: { x: 6, z: 6 } }),
+          makeItem({ id: 'd1', type: 'door', name: '门', position: { x: 1, z: 1 } }),
+        ],
+      })],
+    });
+
+    const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities).toHaveLength(2);
+    const byName = Object.fromEntries(result.facilities.map(f => [f.name, f]));
+    expect(byName['洗手间']!).toMatchObject({
+      templateId: 'toilet-2.4x1.2',
+      position: { x: 1, y: 7 },
+      size: { width: 2.4, depth: 1.2 },
+    });
+    expect(byName['床']!).toMatchObject({
+      templateId: 'misc',
+      position: { x: 3, y: 5 },
+      size: { width: 2, depth: 2 },
+    });
+    expect(result.skipped.some(s => s.source === 'facility' && s.sourceId === 'd1')).toBe(true);
   });
 });
