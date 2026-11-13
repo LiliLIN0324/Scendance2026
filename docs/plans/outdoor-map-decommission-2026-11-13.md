@@ -87,7 +87,8 @@
   - **缺口（plan 侧尚无对应实体）**：① 墙体 `InteriorWall`（线段 `x1,z1,x2,z2` + `thickness/height/kind/status`）契约无 walls 集合，**已拍板：新增独立 `walls` 折线集合**（扩 `SitePlanData`，需单独评审），不归 facility 模板类；② `floorPlanImage/opacity/fitMode` 背景图归 R2/视图记忆，不进 `SitePlanData`（3d 已登记）。
   - **约束**：迁移走纯函数 + 对照快照单，复用 `facility-footprint-lock`；不改 `SitePlanData` 既有字段与 routeBridge 九方法签名。
   - **本轮落地（2026-11-13，纯函数层，未接壳体、不拆旧链）**：`lib/plan-layout-migration.ts` 的 `migrateLayoutToPlan(layout, boundary, gen)` 先迁三类口径无歧义实体——zones（矩形→四点闭合环 + 室内 zoneType→plan semantic 映射表，不命中回落 `reserved`）、workers（`type='person'` 点位，count=1）、routes（`walkRoute.points`→pedestrian，`oneWay = !loop`）；实体一律经 `buildZone/buildWorker/buildRoute` 工厂构建，失败进 `skipped` 不留半成品；坐标复用 bridge 壳体→平面逆变换。6 条对照快照单测绿，tsc 0。
-  - **下一轮（M2 续）**：① facility 迁移器（无对应模板回落 `misc` 占位，glb-asset 挂 `modelOverride`）；② 独立 `walls` 集合契约字段 + 墙体线段迁移；③ 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用等）落 `notes` 还是留 3D 层终稿。
+  - **facility 映射表已落码（2026-11-13）**：`lib/plan-facility-mapping.ts` 的 `resolveFacilityTarget(type)` 分四档——① `builtin`：`toilet`→`toilet-2.4x1.2`、`backdrop`→`stage-platform-8x6`；② `oneplan`：座椅（chair/armchair/dining-chair/bench/garden-bench/sofa）、桌台（table/dining-table/coffee-table/side-table/picnic-table/desk）、绿化（plant/flowerpot/bush/rose-bush/hedge/flowerbed/tulips/sunflower）、照明（lamppost）、电子安防（wifi/router/cctv/security-camera/computer）、餐饮后勤（fridge/bbq）、水景（pool/pond/birdbath）、交通件（stairs）对齐白名单 slug；③ `misc`：其余纯室内家居/装饰与未知 legacy 回落占位；④ `skip`：partition/fence/door/window 归下一轮 walls 集合，person 分流 workers。守卫单测：每条内置映射命中模板目录、每条 oneplan 映射命中可放置白名单；5 绿。**执行器下一轮接**：按档位调 `buildFacility`，misc 走动态模板 2×2 兜底，glb-asset 的 `glbUrl/assetId` 挂 `modelOverride`。
+  - **下一轮（M2 续）**：① facility 执行器（消费 `plan-facility-mapping` 四档，misc 动态模板占位，glb-asset 挂 `modelOverride`，特化字段落 notes）；② 独立 `walls` 集合契约字段 + 墙体线段迁移；③ 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用等）落 `notes` 还是留 3D 层终稿。
 
 
 #### M3 会话 / 历史 / 导出解耦（关键路径）⬜
