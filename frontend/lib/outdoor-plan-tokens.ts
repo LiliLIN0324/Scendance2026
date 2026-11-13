@@ -99,7 +99,7 @@ export const PLANNING_TYPOGRAPHY = {
 /**
  * 面板表面色（H4-a 建立，v5 收敛冷石画廊白）：画布左右面板 / 输入控件 / 激活态 /
  * 选中态 / 状态文案的唯一来源。值对齐主产品设计规范 docs/05-设计规范.md §一.1
- * 与 globals.css 的 CSS 变量（--paper/--hair/--ink/--plane/--green/--warn/--err），
+ * 与 globals.css 的 CSS 变量（--paper/--hair/--ink/--plane/--green/--green-deep/--warn/--err），
  * 户外规划不再是独立深色产品——视觉完全服从主产品「冷石画廊白」：
  * 纯白纸面、发丝线分区、近黑墨字、品牌绿仅点睛（选中/激活）。
  * rgba 允许（面板底/选中底），hex 一律小写。
@@ -117,6 +117,8 @@ export const PLANNING_SURFACE = {
   activeBg: '#eef3ef',
   /** 选中描边 = --green #4A7C59。 */
   selectedBorder: '#4a7c59',
+  /** 选中文字 = --green-deep #35624A（docs/05：品牌绿 hover / 选中文字）。 */
+  selectedText: '#35624a',
   /** 选中底 = 品牌绿 12% 透明。 */
   selectedBg: 'rgba(74, 124, 89, 0.12)',
   /** 警示文字 = --warn #96651F。 */

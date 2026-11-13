@@ -594,7 +594,7 @@ const optStyle: React.CSSProperties = {
 const optOnStyle: React.CSSProperties = {
   background: PLANNING_SURFACE.activeBg,
   borderColor: PLANNING_SURFACE.selectedBorder,
-  color: '#3a6247',
+  color: PLANNING_SURFACE.selectedText,
   fontWeight: 600,
 };
 
