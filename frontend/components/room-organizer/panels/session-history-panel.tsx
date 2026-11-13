@@ -269,7 +269,7 @@ function ReadonlySessionGroup({ label, hint, sessions, query, readBubbles }: {
   hint: string;
   sessions: readonly AssistantSession[];
   query: string;
-  readBubbles(sessionId: string): { id: string; role: string; text: string }[];
+  readBubbles(sessionId: string): readonly { id: string; role: string; text: string }[];
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const rows = filterAssistantSessions(sortAssistantSessions(sessions), query);
@@ -339,7 +339,7 @@ export function SessionHistoryOverlay({ open, onClose, onSelect, assertWrite, sc
           variant="overlay"
           heading={currentHeading}
           onClose={onClose}
-          resolveStatus={resolveStatus}
+          {...(resolveStatus ? { resolveStatus } : {})}
           sessions={sessions.visible}
           totalCount={sessions.totalCount}
           activeId={sessions.activeId}
