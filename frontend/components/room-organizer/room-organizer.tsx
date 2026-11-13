@@ -4496,6 +4496,15 @@ useEffect(() => {
                 ...(isLeftStackDetached(leftStack, 'outdoor') ? leftStackFloatStyle('outdoor') : {}),
               }}
             >
+              {isLeftStackDetached(leftStack, 'outdoor') && (
+                <div
+                  className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
+                  onPointerDown={event => beginLeftStackDrag('move', 'outdoor', event)}
+                >
+                  <strong>户外规划</strong><span>独立小窗</span><span className="spacer" />
+                  <button type="button" aria-label="收回户外规划面板" title="收回左栏" onClick={() => toggleLeftStackDetach('outdoor')}><Minimize2 size={12}/>收回</button>
+                </div>
+              )}
               <div
                 className="sc-left-heading is-oneplan-head"
                 onPointerDown={isLeftStackDetached(leftStack, 'outdoor')
@@ -4504,7 +4513,6 @@ useEffect(() => {
                 style={{ cursor: 'grab', touchAction: 'none' }}
                 title="抓住这里往左栏外拖，可以变成独立小窗；上下拖可以换顺序"
               >
-                {isLeftStackDetached(leftStack, 'outdoor') && <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--sc-muted)' }}>户外规划 · 独立窗口</span>}
                 <button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={() => setOutdoorPanel(null)}><X size={18}/></button>
               </div>
               {/* 2026-11-11 图层行宿主（Level = 独立设计方案，非楼层高度）：
