@@ -165,7 +165,7 @@ export function migrateLayoutToPlan(
     }
   }
 
-  const facilityResult = migrateFacilities(layout, boundary, gen);
+  const facilityResult = migrateFacilities(layout, boundary, gen, zones);
   for (const skip of facilityResult.skipped) {
     skipped.push({ source: 'facility', sourceId: skip.sourceId, reason: skip.reason });
   }
