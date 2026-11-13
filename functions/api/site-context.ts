@@ -1,4 +1,4 @@
-import { wgs84ToGcj02 } from "./geo-gcj";
+import { wgs84ToGcj02 } from "./geo-gcj.ts";
 const ENDPOINTS = [
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass-api.de/api/interpreter",

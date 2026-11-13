@@ -46,7 +46,10 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
   // This branch's existing provider profile forwards token fields unchanged.
   // MiniMax M3.1 uses max_completion_tokens; do not alter the shared provider
   // behavior of existing workflows just to support this read-only request.
-  const tokenLimit=chatProfile(input.env,'brief')==='minimax'?{max_completion_tokens:1024}:{max_tokens:1024};
+  // Structured outdoor turns include evidence and references. MiniMax also
+  // spends this completion budget on reasoning before emitting the JSON.
+  const completionBudget = parsed.data.responseMode === 'outdoor_v1' ? 4096 : 1024;
+  const tokenLimit=chatProfile(input.env,'brief')==='minimax'?{max_completion_tokens:completionBudget}:{max_tokens:completionBudget};
   const {url,init}=chatRequest(input.env,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit},{purpose:'brief'});
   const operation=(async():Promise<AssistantChatResult>=>{
    try{

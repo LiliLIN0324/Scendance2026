@@ -28,6 +28,7 @@ export interface OutdoorFlowState {
   brief: OutdoorBrief;
   confirmedBoundary: string | null;
   completed: OutdoorStage[];
+  pendingBoundary?: { anchor: NonNullable<SitePlanData["anchor"]>; boundary: SitePlanData["boundary"]; name: string; base: string } | undefined;
   pendingLogin?: { message: string; planVersion: string; ownerId?: string };
 }
 export function emptyOutdoorFlow(scope: string): OutdoorFlowState {
