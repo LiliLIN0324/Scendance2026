@@ -163,6 +163,7 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
   - 前端户外 + M2 + 契约组 84 绿（walk-boundary 13、three/outdoor 9、walk-engage 6、use-outdoor-walk 3、facility-migration 13、layout-migration 10、routes 12、footprint-lock 18）。
   - 根契约组 25 绿（site-plan 16、models 9）。
   - `agent-panel` 全量 39 failed / 403 passed / 1 skipped 为 #12 已知基线债，本轮不顺手清、不混入去耦合回归。
+- 根 `tests/` 全量快照（非去耦合定向范围）：18 failed / 1432 passed / 10 skipped（132 文件）。失败集中在后端配置预飞、资产库计数、守卫 RLS、简报供应商 mock（`config` 2、`hunyuan-config` 7、`merged-library` 3、`agent-guard-readiness` 2、`brief-conversation-api` 2、`brief-extract-api` 1、`database` 1、`asset-upload` suite 1），属缺 env / 本地资产未齐 / 在途智能体线的既有基线债；本轮源码改动仅 `5b9fae2e` 三处形参补 `| undefined`（纯注解、零运行分支），未触碰这些域。去耦合定向口径仍以前列 84 + 25 绿为准。
 
 ### 10.2 零引用复核（#70）
 
@@ -179,6 +180,8 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 | use-item-placement | 2 | use-item-drag | 5 |
 
 `structural-layout`(44)、`opening-snap`(17) 引用面最大，断链风险高，均留待 R3 成套退役。
+
+另扫到一批座位编排 / 布置域（`local-seating-*`、`ring-seating`、`table-seat-plan`、`seating-allocation`、`seat-requirement`、`builders-seating`、`catalog-placement-*`、`aholo/online-model-placement`、`plan-crowd/scene/splat-placement`、`placement-rules/settle-placement`）：户外 plan 侧目前只接住 facility / worker / route / zone，座位编排尚未被地图侧接住，属 R3/R4 拆旧对象，门禁下不单独删、不做零引用裁决。
 
 ### 10.3 纯函数测试加固（#71，本地 commit `ed9a4758` / `636b2a8a`）
 
