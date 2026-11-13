@@ -173,7 +173,7 @@ export function consumeFacilityGenerateLink(taskid: string, name: string): boole
 }
 
 // ---------------------------------------------------------------------------
-// 持久化链接表：轮询按 taskid 找设施；导入完成/失败后删掉
+// 持久化链接表：轮询按 taskid 找设施；直连成功消费，终态失败留存核对记录
 // ---------------------------------------------------------------------------
 
 export interface FacilityGenerateLink {
@@ -186,6 +186,8 @@ export interface FacilityGenerateLink {
   name: string;
   submittedAt: number;
   lane?: 'direct' | 'cloud';
+  /** Verified terminal job, retained for fee/history traceability (not proof of refund). */
+  terminal?: { status: string; message: string; checkedAt: number };
 }
 
 const LINKS_KEY = 'scendance:facility-generate-links';
@@ -200,7 +202,8 @@ function isPersistedLink(value: unknown): value is FacilityGenerateLink {
     && typeof link.facilityId === 'string' && Boolean(link.facilityId)
     && typeof link.facilityName === 'string'
     && typeof link.name === 'string' && Boolean(link.name)
-    && typeof link.submittedAt === 'number' && Number.isFinite(link.submittedAt);
+    && typeof link.submittedAt === 'number' && Number.isFinite(link.submittedAt)
+    && (!link.terminal || (['failed', 'rejected', '4', '6', 'completed_without_glb', 'completed_unusable'].includes(link.terminal.status) && typeof link.terminal.message === 'string' && Number.isFinite(link.terminal.checkedAt)));
 }
 
 function readLinks(): FacilityGenerateLink[] {
@@ -247,6 +250,13 @@ export function listFacilityGenerateLinks(facilityId?: string, projectId?: strin
   return facilityId ? all.filter(link => link.facilityId === facilityId) : all;
 }
 
+export function markFacilityGenerateTerminal(taskid: string, status: string, message: string): void {
+  const link = links.find(item => item.taskid === taskid);
+  if (!link || link.terminal || !['failed', 'rejected', '4', '6', 'completed_without_glb', 'completed_unusable'].includes(status)) return;
+  links = links.map(item => item.taskid === taskid ? { ...item, terminal: { status, message, checkedAt: Date.now() } } : item);
+  writeLinks(); emitLinks();
+}
+
 function removeFacilityGenerateLink(taskid: string): void {
   const next = links.filter(link => link.taskid !== taskid);
   if (next.length === links.length) return;
@@ -258,7 +268,8 @@ function removeFacilityGenerateLink(taskid: string): void {
 /** 户外原位生成：以提交当刻捕获的设施身份绑定，绝不消费全局 staged 链接。 */
 export function attachFacilityGenerateTask(input: FacilityGenerateLink): boolean {
   if (!isPersistedLink(input)) return false;
-  links = [{ ...input }, ...links.filter(item => item.taskid !== input.taskid)].slice(0, LINKS_LIMIT);
+  const terminal = links.find(item => item.taskid === input.taskid)?.terminal;
+  links = [{ ...input, ...(terminal ? { terminal } : {}) }, ...links.filter(item => item.taskid !== input.taskid)].slice(0, LINKS_LIMIT);
   writeLinks();
   emitLinks();
   return true;
@@ -292,6 +303,7 @@ export async function resolveFacilityGenerateLink(
 ): Promise<FacilityGenerateResolveResult> {
   const link = links.find(item => item.taskid === taskid);
   if (!link) return { state: 'failed', message: '这条生成任务已失效，请重新生成。' };
+  if (link.terminal) return { state: 'failed', message: link.terminal.message };
 
   if (link.lane === 'cloud') {
     const existing = findGeneratedFacilityModel(`generated:${taskid}`);
@@ -301,8 +313,8 @@ export async function resolveFacilityGenerateLink(
       const job = await options.cloud.getGenerationJob(taskid);
       if (job.state === 'submit_unknown') return { state: 'pending', message: '提交结果未知，请先核对任务记录与费用，不要重复生成。' };
       if (['failed', 'rejected'].includes(job.state)) {
-        removeFacilityGenerateLink(taskid);
-        return { state: 'failed', message: '云任务未成功，请核对生成记录。' };
+        markFacilityGenerateTerminal(taskid, job.state, '云任务未成功，请核对生成记录与费用；不会自动重发。');
+        return { state: 'failed', message: '云任务未成功，请核对生成记录与费用；不会自动重发。' };
       }
       if (!['ready', 'added'].includes(job.state) || !job.asset_id) return { state: 'pending', message: `云端生成中 · ${job.state}` };
       const asset = await options.cloud.authorizeAsset(job.asset_id);
@@ -346,13 +358,14 @@ export async function resolveFacilityGenerateLink(
     };
   }
   if (detail.status === 4 || detail.status === 6) {
-    removeFacilityGenerateLink(taskid);
-    return { state: 'failed', message: `${detail.statusLabel}，请回到生成入口重试。` };
+    markFacilityGenerateTerminal(taskid, String(detail.status), `${detail.statusLabel}；请核对费用，再显式确认新一轮。`);
+    return { state: 'failed', message: `${detail.statusLabel}；请核对费用，再显式确认新一轮。` };
   }
 
+  if (detail.status !== 3) return { state: 'pending', message: '任务状态尚不能核对为终态，保留原任务。' };
   const glbUrl = glbOutputOf(detail.outputs);
   if (!glbUrl) {
-    removeFacilityGenerateLink(taskid);
+    markFacilityGenerateTerminal(taskid, 'completed_without_glb', '任务已完成，但产物里没有 GLB 模型。');
     return { state: 'failed', message: '任务已完成，但产物里没有 GLB 模型。' };
   }
 
@@ -374,9 +387,9 @@ export async function resolveFacilityGenerateLink(
     return { state: 'imported', model };
   } catch (error) {
     const message = error instanceof Error ? error.message : '模型入库失败，请重试。';
-    // 代理暂时连不上保留链接（与 lux3d-import 的可重试口径一致）；模型本身有问题就不留死链。
+    // 代理暂时连不上保留链接（与 lux3d-import 的可重试口径一致）；模型本身有问题则留存终态关联，不再轮询。
     if (/代理|超时|稍后/.test(message)) return { state: 'pending', message };
-    removeFacilityGenerateLink(taskid);
+    markFacilityGenerateTerminal(taskid, 'completed_unusable', message);
     return { state: 'failed', message };
   }
 }

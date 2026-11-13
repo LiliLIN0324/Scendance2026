@@ -20,14 +20,15 @@ function StyleThumb({ bundle, small = false }: { bundle: StyleBundle; small?: bo
   </span>;
 }
 
-export function StyleBundlePanel({ disabled = false, note, onPick, onClose }: {
+export function StyleBundlePanel({ disabled = false, paletteOnly = false, note, onPick, onClose }: {
   disabled?: boolean;
+  paletteOnly?: boolean;
   note?: string;
   onPick(bundle: StyleBundle): void;
   onClose?(): void;
 }): JSX.Element {
   const [tick, setTick] = useState(0);
-  const bundles = useMemo(() => listStyleBundles(window.localStorage), [tick]);
+  const bundles = useMemo(() => listStyleBundles(window.localStorage).filter(b=>!paletteOnly||!['home-office','bedroom'].includes(b.setKey)), [tick,paletteOnly]);
   const custom = bundles.filter(bundle => bundle.custom);
   const presets = bundles.filter(bundle => !bundle.custom);
   const [prompt, setPrompt] = useState('');
@@ -53,7 +54,7 @@ export function StyleBundlePanel({ disabled = false, note, onPick, onClose }: {
     <header className="sc-style-panel-head">
       <div>
         <strong>按风格配一套</strong>
-        <p>选一套气质，或写一句提示词存成自己的风格。</p>
+        <p>{paletteOnly?'现有设施配色预览；不新增模板物件、不改变占地或通路。':'选一套气质，或写一句提示词存成自己的风格。'}</p>
       </div>
       {onClose && <button type="button" className="sc-style-panel-close" aria-label="关闭风格套" onClick={onClose}>收起</button>}
     </header>
@@ -114,7 +115,7 @@ export function StyleBundlePanel({ disabled = false, note, onPick, onClose }: {
       <label className="sc-style-field sc-style-prompt-field">
         <textarea aria-label="描述想要的空间氛围" value={prompt} maxLength={80} disabled={disabled} placeholder="比如：雾蓝色、安静克制，带一点金属感，适合新品发布会" onChange={event => setPrompt(event.target.value)}/>
       </label>
-      <fieldset className="sc-style-sets">
+      {!paletteOnly && <fieldset className="sc-style-sets">
         <legend>这套主要用在</legend>
         <div className="sc-style-set-chips">
           {STYLE_SET_OPTIONS.map(option => <button
@@ -125,8 +126,8 @@ export function StyleBundlePanel({ disabled = false, note, onPick, onClose }: {
             onClick={() => setSetKey(option.key)}
           >{option.label}</button>)}
         </div>
-      </fieldset>
-      <button type="submit" className="sc-style-save-act" disabled={disabled || !prompt.trim()}>让 Bingo 按这个感觉配一套</button>
+      </fieldset>}
+      <button type="submit" className="sc-style-save-act" disabled={disabled || !prompt.trim()}>{paletteOnly?'预览这套配色':'让 Bingo 按这个感觉配一套'}</button>
       {(formNote || note) && <p className="sc-style-note" role="status">{formNote || note}</p>}
     </form>
   </div>;

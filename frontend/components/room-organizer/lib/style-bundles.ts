@@ -311,21 +311,23 @@ export function loadStyleRuns(storage?: StorageLike): StyleRun[] {
   }
 }
 
+export const STYLE_CAPABILITY_PREFILL = '帮我按这块场地的气质配一套现成风格';
+
 /** 「按奶油会客配一套」→ 对应套；只说「按风格配一套」→ 打开选单。 */
 export function matchStyleBundleCommand(text: string, storage?: StorageLike): StyleBundle | 'open' | null {
-  const compact = text.replace(/\s+/g, '');
-  if (!compact) return null;
-  const bundles = listStyleBundles(storage);
-  for (const bundle of bundles) {
-    if ((compact.includes(bundle.name) || compact.includes(bundle.prompt.replace(/\s+/g, '')))
-      && /(配一套|放一套|这一套)/.test(compact)) return bundle;
+  // A shortcut is a complete affirmative registered command, never a substring
+  // classifier. Anything outside this grammar stays intact for the same Agent.
+  const compact = text.normalize('NFKC').replace(/\s+/g, '').replace(/[。!！]$/u, '');
+  const body = compact.replace(/^(?:请帮我|帮我|请)/u, '');
+  if (!body) return null;
+  const prefillBody = STYLE_CAPABILITY_PREFILL.replace(/^(?:请帮我|帮我|请)/u, '');
+  if ([prefillBody, '按风格配一套', '配一套风格', '风格配一套'].includes(body)) return 'open';
+  for (const bundle of listStyleBundles(storage)) {
+    for (const label of [bundle.name, bundle.prompt].map(value => value.replace(/\s+/g, ''))) {
+      if (!label) continue;
+      if ([`按${label}配一套`, `按${label}放一套`, `${label}这一套`].includes(body)) return bundle;
+    }
   }
-  // 「按雾蓝极简发布会配一套」：提示词片段也能命中自存/内置 prompt。
-  for (const bundle of bundles) {
-    const tip = bundle.prompt.replace(/\s+/g, '');
-    if (tip.length >= 4 && compact.includes(tip) && /(配|放|风格)/.test(compact)) return bundle;
-  }
-  if (/按风格配一套|配一套风格|风格配一套/.test(compact)) return 'open';
   return null;
 }
 

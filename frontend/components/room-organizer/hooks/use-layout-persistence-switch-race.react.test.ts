@@ -8,6 +8,10 @@ import {useLayoutPersistence} from './use-layout-persistence';
 import {useLayoutState} from './use-layout-state';
 import {layoutStore} from './use-layout-store';
 import type {RoomLayout} from '../lib/types';
+import { INITIAL_LAYOUT } from '../lib/initial-layout';
+import { seededPlanFromLayout, sceneAnchorFromOutdoorPlan } from '../lib/outdoor-venue-sync';
+import { DEFAULT_OUTDOOR_PLAN_ANCHOR } from '../lib/outdoor-project-store';
+import { applyOutdoorShellVenuePatch, shellVenuePatchFromPlanBoundary } from '../lib/outdoor-venue-sync';
 
 describe('activity transition and pending autosave observation',()=>{
  beforeEach(()=>{localStorage.clear();window.history.replaceState(null,'','/');vi.useFakeTimers();});
@@ -85,4 +89,36 @@ describe('activity transition and pending autosave observation',()=>{
   expect(layoutStore.getState().layout.id).toBe('race-a');expect(layoutStore.getState().layout.width).toBe(a.width+1);
   expect(hook.result.current.persistence.saveError).not.toBeNull();
  });
+});
+
+describe('public initial shell persistence', () => {
+ beforeEach(()=>{localStorage.clear();vi.useFakeTimers();});
+ afterEach(()=>{cleanup();vi.useRealTimers();});
+it('reproduces public fresh-workbench refusal: shell diagnostic flags are not persisted layout fields', () => {
+ const initial={...structuredClone(INITIAL_LAYOUT),id:'public-original'};
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(initial));layoutStore.setState({layout:initial,activeFloorIndex:0});
+ const onHydrate=(saved:RoomLayout)=>layoutStore.getState().actions.applyLayout(saved);
+ const hook=renderHook(()=>{const state=useLayoutState();return {...state,persistence:useLayoutPersistence({layout:state.layout,onHydrate,debounceMs:100,layoutSource:layoutStore})};});
+ const before=layoutStore.getState().layout;
+ const patch=shellVenuePatchFromPlanBoundary(before,seededPlanFromLayout(before)!.boundary)!;
+ act(()=>layoutStore.setState({layout:{...before,...patch}}));
+ // This is the exact production error, with no auth/API involved.
+ act(()=>expect(()=>hook.result.current.persistence.flushPendingBeforeSwitch()).toThrow('保存结果无法核对'));
+ expect(layoutStore.getState().layout.id).toBe('public-original');
+});
+
+it('saves the real startup shell mirror without diagnostics and preserves the original activity', () => {
+ const initial={...structuredClone(INITIAL_LAYOUT),id:'public-original'};
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(initial));layoutStore.setState({layout:initial,activeFloorIndex:0});
+ const onHydrate=(saved:RoomLayout)=>layoutStore.getState().actions.applyLayout(saved);
+ const hook=renderHook(()=>{const state=useLayoutState();return {...state,persistence:useLayoutPersistence({layout:state.layout,onHydrate,debounceMs:100,layoutSource:layoutStore})};});
+ const before=layoutStore.getState().layout;
+ const patch=shellVenuePatchFromPlanBoundary(before,seededPlanFromLayout(before)!.boundary)!;
+ const sceneAnchor=sceneAnchorFromOutdoorPlan({...seededPlanFromLayout(before)!,anchor:DEFAULT_OUTDOOR_PLAN_ANCHOR})!;
+ act(()=>layoutStore.setState({layout:{...applyOutdoorShellVenuePatch(before,patch),sceneAnchor}}));
+ act(()=>{ const verify=hook.result.current.persistence.flushPendingBeforeSwitch();expect(verify).toEqual(expect.any(Function));expect(verify).not.toThrow(); });
+ expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject({id:initial.id,name:initial.name,floors:initial.floors});
+ expect(layoutStore.getState().layout).not.toHaveProperty('scaled');
+ expect(layoutStore.getState().layout).not.toHaveProperty('simplified');
+});
 });

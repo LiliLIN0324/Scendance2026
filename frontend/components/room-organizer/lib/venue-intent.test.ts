@@ -38,3 +38,5 @@ describe('matchVenueCommand（V-1a 场地意图）', () => {
     expect(matchVenueCommand('调研西湖')).toBeNull();
   });
 });
+
+it.each(['活动签到怎么安排，门必须保持打开','收到物料怎么安排','知道舞台怎么布置'])('compound words must not introduce a fabricated venue: %s',text=>{expect(matchVenueCommand(text)).toBeNull();});

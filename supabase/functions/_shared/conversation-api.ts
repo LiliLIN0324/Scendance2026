@@ -6,7 +6,15 @@ import type {Env,Fetcher} from './http.ts';
 export function createConversationApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
  // These overrides are scoped to this handler; the existing scene-api keeps
  // its own environment and all existing BRIEF_REQUEST_GUARD behavior.
- const enabledApi=createApi(backend,key=>['BRIEF_CONVERSATION_ENABLED','ASSISTANT_CHAT_ENABLED','BAILIAN_PRODUCT_ENABLED'].includes(key)?'1':env(key),fetcher);
+ // The configured ordinary MiniMax adapter owns this deployment when selected.
+ // Do not let stale product-Bailian flags override it or retry unrelated providers.
+ const minimax=env('AGENT_CHAT_PROFILE')==='minimax';
+ const enabledApi=createApi(backend,key=>{
+  if(['BRIEF_CONVERSATION_ENABLED','ASSISTANT_CHAT_ENABLED'].includes(key))return '1';
+  if(minimax&&key==='BAILIAN_PRODUCT_ENABLED')return '0';
+  if(minimax&&['TOKENDANCE_API_KEY','DEEPSEEK_API_KEY'].includes(key))return '';
+  return env(key);
+ },fetcher);
  const disabledApi=createApi(backend,key=>key==='ASSISTANT_CHAT_ENABLED'?'0':env(key),fetcher);
  return async(request:Request):Promise<Response>=>{
   const url=new URL(request.url),prefix='/functions/v1/conversation-api';

@@ -1,4 +1,6 @@
 'use client';
+import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
+import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan } from '../lib/outdoor-plan-protection';
 
 import type { BackendSession } from '@/lib/backend-session';
@@ -230,6 +232,7 @@ import {
 import { alignedTileCenter } from '../lib/basemap-alignment';
 import { planningIcon } from './outdoor-plan-icons';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
+import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
 import { OneplanSticker } from './oneplan-stickers';
 import {
@@ -412,6 +415,8 @@ export interface OutdoorPlanCanvasProps {
    * V-3c（2026-11-13）区域提案预览：虚线分区 + 物料幽灵，应用前不进 plan。
    * 「应用」走 handle.applyZoneProposal（commitPlan 可撤销）。
    */
+  workflowPreview?:SitePlanData|null;
+  evidenceHighlights?:OutdoorEvidenceHighlight[];
   zoneProposal?: { zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null;
   /**
    * V-4b（2026-11-13）流动模拟：非 null 时在给定流线上跑 2D 行人动画（66ms 步进），
@@ -962,6 +967,8 @@ export interface OutdoorPlanCanvasHandle {
   /** 2026-11-12 选区：把视野框到 `[west, south, east, north]`（只动视图，不改 plan/anchor）。 */
   focusBounds(bounds: [number, number, number, number]): void;
   /** V-2d：应用流线提案（合并 routes/nodes 进 plan，commitPlan 可撤销）；空提案回 false。 */
+  applyWorkflowPlan(next:SitePlanData,expected:string):boolean;
+  openFacilityUpload(id:string):boolean;
   applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean;
   inspectFacility(id: string): boolean;
   beginVenueBoundary(anchor: NonNullable<SitePlanData['anchor']>): boolean;
@@ -1061,6 +1068,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   searchArea,
   routeProposal,
   zoneProposal,
+  workflowPreview, evidenceHighlights,
   flowSimRoutes,
   sceneObjects,
   onOpenMaterialGenerate,
@@ -1138,6 +1146,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // V-2d：流线提案预览（同一路数；应用走 handle.applyRoutes，预览本身不进 plan）。
   const routeProposalRef = useRef<{ routes: PlanRoute[]; nodes: PlanNode[] } | null>(routeProposal ?? null);
   // V-3c：区域提案预览（同一路数；应用走 handle.applyZoneProposal，预览本身不进 plan）。
+  const workflowPreviewRef=useRef(workflowPreview);workflowPreviewRef.current=workflowPreview;
+  const evidenceHighlightsRef=useRef(evidenceHighlights);evidenceHighlightsRef.current=evidenceHighlights;
   const zoneProposalRef = useRef<{ zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null>(zoneProposal ?? null);
   // V-4b：流动模拟（walkers 状态放 ref，ticker 步进后整帧重绘；模拟不写 plan）。
   const flowSimRef = useRef<{ walkers: FlowWalker[]; routes: PlanRoute[] } | null>(null);
@@ -1346,7 +1356,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (busy) return;
       busy = true;
       try {
-        const pending = listFacilityGenerateLinks(undefined, generationProjectId).filter(link => planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
+        const pending = listFacilityGenerateLinks(undefined, generationProjectId).filter(link => !link.terminal && planRef.current.facilities.some(f => f.id === link.facilityId) && !findGeneratedFacilityModel(`generated:${link.taskid}`));
         if (!pending.length) { if (alive) setFacilityGenerateStatus(null); return; }
         const start = facilityPollCursor.current % pending.length;
         const batch = [...pending.slice(start), ...pending.slice(0, start)].slice(0, 4);
@@ -2174,6 +2184,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       drawRouteProposalLayer({ ctx: planCtx, viewport }, routeProposalRef.current);
     }
     // 7c) V-3c：区域提案预览（虚线分区 + 物料幽灵）——同上，应用前不进 plan。
+    const workflow=workflowPreviewRef.current;
+    if(workflow){
+      const changed=<T extends {id:string}>(next:T[],before:T[])=>next.filter(a=>JSON.stringify(a)!==JSON.stringify(before.find(b=>b.id===a.id)));
+      drawZoneProposalLayer({ctx:planCtx,viewport},{zones:changed(workflow.zones,current.zones),facilities:changed(workflow.facilities,current.facilities)});
+      drawRouteProposalLayer({ctx:planCtx,viewport},{routes:changed(workflow.routes,current.routes),nodes:changed(workflow.nodes,current.nodes)});
+      for(const worker of changed(workflow.workers,current.workers)){const pt=planPointToPixel(worker.position,viewport);planCtx.save();planCtx.setLineDash([4,3]);planCtx.strokeStyle=PLANNING_SURFACE.panelText;planCtx.beginPath();planCtx.arc(pt.x,pt.y,7,0,Math.PI*2);planCtx.stroke();planCtx.fillStyle=PLANNING_SURFACE.panelText;planCtx.fillText(`${worker.role} ×${worker.count}（预览）`,pt.x+9,pt.y);planCtx.restore();}
+    }
+    for(const highlight of evidenceHighlightsRef.current??[]){
+      const pts=highlight.geometry.points.map(p=>planPointToPixel(p,viewport));if(!pts.length)continue;
+      planCtx.save();planCtx.strokeStyle=PLANNING_SURFACE.panelText;planCtx.lineWidth=3;planCtx.setLineDash([6,4]);planCtx.beginPath();
+      if(highlight.geometry.type==='point')planCtx.arc(pts[0]!.x,pts[0]!.y,11,0,Math.PI*2);
+      else{planCtx.moveTo(pts[0]!.x,pts[0]!.y);for(const pt of pts.slice(1))planCtx.lineTo(pt.x,pt.y);if(highlight.geometry.type==='polygon')planCtx.closePath();}
+      planCtx.stroke();planCtx.restore();
+    }
     if (zoneProposalRef.current) {
       drawZoneProposalLayer({ ctx: planCtx, viewport }, zoneProposalRef.current);
       if (zoneProposalRef.current.routes?.length) drawRouteProposalLayer({ ctx: planCtx, viewport }, { routes: zoneProposalRef.current.routes, nodes: zoneProposalRef.current.nodes ?? [] });
@@ -2241,6 +2265,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     zoneProposalRef.current = zoneProposal ?? null;
     drawRef.current();
   }, [zoneProposal]);
+  useEffect(()=>{draw();},[workflowPreview,evidenceHighlights]);
   // V-4b：流动模拟 ticker——流线集合变化（或停止）时重建 walkers；跑动期 66ms 步进重绘。
   useEffect(() => {
     if (!flowSimRoutes || flowSimRoutes.length === 0) {
@@ -2646,6 +2671,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage('没有真实轮廓：请在地图上逐点圈出场地，闭合后才会写入新锚点与边界；Esc 取消。');
       return true;
     },
+    applyWorkflowPlan:(next,expected)=>{
+      const current=planRef.current;if(JSON.stringify(current)!==expected||!next.anchor||!canReanchorOutdoorPlan(current,next.anchor))return false;
+      try{validateWorkflowPlan(current,next);}catch{return false;}
+      commitPlan(next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
+    },
+    openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
       if (!checkBoundaryRing(boundary).ok || !canReanchorOutdoorPlan(planRef.current, anchor)) return false;
       commitPlan({ ...planRef.current, anchor, boundary });
@@ -6041,9 +6072,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     </div>
                     <label style={zoneRowStyle}>
                       事件
-                      <input aria-label={`分区「${zone.name}」事件`} data-testid="zone-event-input"
-                        value={zone.event ?? ''} maxLength={120}
-                        onChange={event => updateZone(zone.id, { event: event.target.value.trim() || undefined })}
+                      <ZoneEventInput key={`${generationProjectId ?? 'local'}:${zone.id}`} name={zone.name}
+                        value={zone.event}
+                        onCommit={value => updateZone(zone.id, { event: value })}
                         style={{ flex: 1, minWidth: 0, fontSize: PLANNING_TYPOGRAPHY.row }} />
                     </label>
                     <label style={zoneRowStyle}>

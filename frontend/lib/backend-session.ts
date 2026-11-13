@@ -1518,8 +1518,8 @@ export class BackendSession {
     return result;
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history });
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1"): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);

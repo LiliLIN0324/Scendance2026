@@ -31,6 +31,8 @@ const VENUE_NON_NAMES = new Set([
 /** 动作动词壳：场地名后面必须跟着「做这件事」的动词才算场地意图。 */
 const VENUE_ACTION = '(?:做|搞|出|排|设计|布置|规划|办|生成|落实|落地|安排)';
 /** 地名段：汉字/字母/数字 + 连字符与间隔号（「盐官古城-潮乐之城」）。 */
+// A preposition must start a clause or follow an explicit request/subject, not the suffix of 签到/收到/知道.
+const VENUE_INTRO = '(?:^|[\\s，,。；;！？!?]|(?:请|帮我|我们|我|想|打算|准备|计划|活动))(?:在|去|到)';
 const VENUE_NAME_PART = '[\\u4e00-\\u9fa5A-Za-z0-9\\-·]';
 
 /**
@@ -41,16 +43,19 @@ export function matchVenueCommand(text: string): string | null {
   const trimmed = text.trim();
   if (trimmed.length < 4 || trimmed.length > 120) return null;
   if (!new RegExp(VENUE_ACTION).test(trimmed)) return null;
+  // A how/whether planning question describes an operation, not a complete place name.
+  // Keep its entire constraints for understanding rather than searching a noun fragment.
+  if (/(?:怎么|如何|怎样|是否|能否)/u.test(trimmed)) return null;
   // 在/去/到 + 地名（非贪婪，可含 -·）+ 可选方位尾巴 + 可选连接词（去/来/再）+ 动作动词
   // 「在潮乐之城去做设计」地名与动作之间隔了「去」，必须放宽。
   const pattern = new RegExp(
-    `(?:在|去|到)\\s*(${VENUE_NAME_PART}{2,24}?)\\s*(?:里|内|那边|那|这)?\\s*(?:去|来|再)?(?=${VENUE_ACTION})`,
+    `${VENUE_INTRO}\\s*(${VENUE_NAME_PART}{2,24}?)\\s*(?:里|内|那边|那|这)?\\s*(?:去|来|再)?(?=${VENUE_ACTION})`,
     'u',
   );
   const match = trimmed.match(pattern);
   if (!match?.[1]) {
     // 只有方位没有地名：可能在说场地但没说清——由调用方决定要不要反问。
-    if (/(?:在|去|到)(?:哪里|哪儿|哪)/u.test(trimmed)) return 'ask';
+    if (new RegExp(`${VENUE_INTRO}(?:哪里|哪儿|哪)`, 'u').test(trimmed)) return 'ask';
     return null;
   }
   // 疑问/占位指代先判：抓到的是「哪个地方」这类词就直接回 ask，不进地名清洗。
