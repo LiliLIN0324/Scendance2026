@@ -151,3 +151,51 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 
 1. 旧云项目 `/editor/?project=<id>` 无 mode 读旧室内 schema 的迁移 / 降级策略（只读提示或一次性投影到 plan）——未定。
 2. 第三人称 / 坐姿等人物漫游能力属三期新对话，不在本去耦合线。
+
+## 10. 2026-11-14 夜间基线复核记录
+
+> 执行前提：main 基底本地推进；G2/G3 门禁维持不变，未拆任何旧链、未合 wip 隔离切片。
+
+### 10.1 基线结果（清 `*.tsbuildinfo` 后干净编译为准）
+
+- 前端 `tsc --noEmit`：**exit 0**。夜间曾出现两次单文件类型错（可选 `provider`/`model` 形参漏 `| undefined`，`exactOptionalPropertyTypes` 下调用方传 `T|undefined` 不兼容），已在本地 commit `5b9fae2e` 对齐到 `chatModelAllowed` 的 `string|null|undefined` 口径；纯类型收窄，运行侧空值仍由既有判空兜底，不改契约 / bridge 签名。
+- 定向 vitest 全绿、无新增红：
+  - 前端户外 + M2 + 契约组 84 绿（walk-boundary 13、three/outdoor 9、walk-engage 6、use-outdoor-walk 3、facility-migration 13、layout-migration 10、routes 12、footprint-lock 18）。
+  - 根契约组 25 绿（site-plan 16、models 9）。
+  - `agent-panel` 全量 39 failed / 403 passed / 1 skipped 为 #12 已知基线债，本轮不顺手清、不混入去耦合回归。
+
+### 10.2 零引用复核（#70）
+
+对 §3.6 十四室内模块逐个统计**非测试生产源码**引用文件数，结果全部 ≥1，与盘点一致，当前基底无可直接删项：
+
+| 模块 | 生产引用 | 模块 | 生产引用 |
+|---|---|---|---|
+| use-walkthrough | 6 | drop-zone | 2 |
+| use-walk-avatar | 1 | layout-reducer | 7 |
+| walk-collision | 8 | wall-openings | 6 |
+| interior-walls | 9 | opening-snap | 17 |
+| walk-seat | 1 | wall-snap | 3 |
+| use-npcs | 4 | structural-layout | 44 |
+| use-item-placement | 2 | use-item-drag | 5 |
+
+`structural-layout`(44)、`opening-snap`(17) 引用面最大，断链风险高，均留待 R3 成套退役。
+
+### 10.3 纯函数测试加固（#71，本地 commit `ed9a4758` / `636b2a8a`）
+
+未改实现、未动壳体，只钉住既有兜底分支：
+
+- facility 迁移：空 / 纯空白名回落「通用物件」、超长名截 60、非法 hex 色丢弃、NaN 旋转归零、空布局退空。
+- layout 迁移：空布局五类实体全空、人员空角色回落「人员」、分区非法色丢弃后工厂按语义回落默认灰。
+- 映射表：类型 `trim` 归一、空串 / 纯空白回落 misc、`glb-asset` 回落 misc。
+
+### 10.4 回写机制与处置口径（夜间实记）
+
+- 智能体线（wip）文件被另一并行会话持有缓冲，会反复回写 main 工作树 / index：已观察到 `agent-resolver`、`backend-session`、`agent-panel`、`creative-studio`、`use-outdoor-agent-workflow`、`outdoor-agent-understanding`、`agent-panel.react.test`、`brief-extract-contract`、`chat-provider.test` 等多批浮现。
+- 处置：对单文件 `git restore --staged --worktree -- <file>`（同时清 index 与工作树，`--worktree` 默认不清 index）；恢复后必须 `git status --short` 复查 tracked，排除 `??` 与被回写半状态污染的 tsc 诊断。
+- 提交前只 `git add` 本轮有意改动，不夹带 `.dsh` 手册在途更新与 wip 残留。
+
+### 10.5 门禁维持状态
+
+- G2（walls 契约 / M2 续接线 / 3a 剩余 tracker / 智能体 model 槽位）仍隔离在 wip，等 #110 V1–V5 确认。
+- G3（R1–R4 壳体退役、`onApply(RoomLayout)` 签名改造）仍 blocked，等智能体提案全部经 routeBridge 落地、M3 成套接住。
+- 夜间未推进任何拆旧；关键路径仍是 `M3 → R2 → R3 → R4`。
