@@ -61,7 +61,7 @@ for(const key of ['SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY']) {
 }
 if(present('GENERATION_WORKER_SECRET')) {
   if(Buffer.byteLength(env.GENERATION_WORKER_SECRET,'utf8')<32) problem('GENERATION_WORKER_SECRET','must contain at least 32 bytes; generate a random token');
-  if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY','DEEPSEEK_API_KEY','TOKENDANCE_API_KEY','HUNYUAN_API_KEY','AGENT_CHAT_KEY','BAILIAN_PRODUCT_KEY'].some(key=>present(key) && env[key]===env.GENERATION_WORKER_SECRET)) problem('GENERATION_WORKER_SECRET','must be independent from API keys');
+  if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY','DEEPSEEK_API_KEY','TOKENDANCE_API_KEY','HUNYUAN_API_KEY','AGENT_CHAT_KEY','BAILIAN_PRODUCT_KEY','OPENAI_NEXT_API_KEY'].some(key=>present(key) && env[key]===env.GENERATION_WORKER_SECRET)) problem('GENERATION_WORKER_SECRET','must be independent from API keys');
 }
 // A custom chat provider and the older reconstruction/gateway integration are
 // separate services. AI_MAX_REQUEST_CENTS is shared, not evidence of either key.
@@ -94,6 +94,18 @@ if(chatExplicit) {
   validateChat(chatKeys,profile);
 }
 if(productBailian)validateChat(['BAILIAN_PRODUCT_BASE_URL','BAILIAN_PRODUCT_KEY','BAILIAN_PRODUCT_MODEL'],'bailian-qwen');
+const openaiNextKey=present('OPENAI_NEXT_API_KEY');
+const openaiNextExplicit=['OPENAI_NEXT_API_KEY','OPENAI_NEXT_BASE_URL','OPENAI_NEXT_MODEL'].some(key=>present(key));
+if(openaiNextExplicit && !openaiNextKey) problem('OPENAI_NEXT_API_KEY','must be set when OpenAI Next is configured');
+if(present('OPENAI_NEXT_BASE_URL')) {
+  try {
+    const url=new URL(env.OPENAI_NEXT_BASE_URL);
+    const host=url.hostname.toLowerCase();
+    const path=url.pathname.replace(/\/+$/,'');
+    if(url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw new Error();
+    if(!['api.openai-next.com','us.api.openai-next.com'].includes(host) || (path && path!=='/v1')) throw new Error();
+  } catch { problem('OPENAI_NEXT_BASE_URL','must be a documented OpenAI Next HTTPS /v1 endpoint'); }
+}
 const legacyAiActive=mode==='full' || present('TOKENDANCE_API_KEY') || present('DEEPSEEK_API_KEY') || (present('AI_MAX_REQUEST_CENTS') && !chatExplicit && !productBailian);
 const ai=legacyAiActive?group(['TOKENDANCE_API_KEY','DEEPSEEK_API_KEY','AI_MAX_REQUEST_CENTS'],true):false;
 const generation=group(['HUNYUAN_API_KEY','GENERATION_MAX_TASK_CENTS','HUNYUAN_TERMS_URL','HUNYUAN_TERMS_REVIEWED_AT'],mode==='full');

@@ -167,15 +167,13 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const conversation='responseMode' in input;
         const emptyConversation={reply:null,unhandled:[],factEvidence:[]} as const;
         if(conversation && env('BRIEF_CONVERSATION_ENABLED')!=='1')return respond({enabled:false,extraction:null,...emptyConversation});
-        // 2026-11-11 用户拍板（三十三轮修订）：可插拔多云端大模型 + 兜底链——
-        // 尝试顺序：百炼(启用时) → 自定义兼容端点(AGENT_CHAT_*，AGENT_CHAT_PROFILE=minimax 时即 MiniMax)
+        // 2026-11-14：OpenAI Next 为默认均衡槽时只打该槽，不静默串 MiniMax/网关。
+        // 未配置 OpenAI Next 且未显式选槽时，保留原兜底链：百炼(启用时) → AGENT_CHAT_*（minimax 即 MiniMax）
         // → Tokendance 网关 → DeepSeek 官方。
-        // 前一级失败（欠费/限流/超时/输出坏/证据不匹配）自动切下一级；客户端主动取消不重试；
-        // 全部失败如实报「首选供应商的失败原因」，绝不静默无模型。
+        // 显式选中已配置槽位：只尝试该槽位，失败如实报该 provider 错误。
         const requestedProvider:ChatProviderId=input.provider??'default';
-        // 显式选中已配置槽位：只尝试该槽位，不跨槽兜底，失败如实报该 provider 错误。
-        // 未配置（防御性）或缺省：沿用现有逐级兜底链。
         const pinnedProvider=requestedProvider!=='default'&&chatProviderConfigured(env,requestedProvider);
+        const defaultOpenAINext=requestedProvider==='default'&&chatProviderConfigured(env,'openai-next');
         const chainViews: Array<Record<string,string>> = [];
         if(env('BAILIAN_PRODUCT_ENABLED')==='1')chainViews.push({BAILIAN_PRODUCT_ENABLED:'1'});
         chainViews.push({BAILIAN_PRODUCT_ENABLED:'0'});
@@ -191,8 +189,8 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const viewEnvFromRecord=(record:Record<string,string>):Env=>(key:string)=>{
           const override=record[key];return override===undefined?env(key):override;
         };
-        const briefViews: Array<{viewEnv:Env, record:Record<string,string>}> = pinnedProvider
-          ? [{viewEnv:chatProviderView(env,requestedProvider), record:{}}]
+        const briefViews: Array<{viewEnv:Env, record:Record<string,string>}> = (pinnedProvider||defaultOpenAINext)
+          ? [{viewEnv:chatProviderView(env,pinnedProvider?requestedProvider:'openai-next'), record:{}}]
           : chainViews.map(record=>({viewEnv:viewEnvFromRecord(record), record}));
         const briefReasons:string[]=[];
         let briefReply:Response|null=null;

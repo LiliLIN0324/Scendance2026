@@ -94,6 +94,26 @@ export function aholoLux3d(env: Env, fetcher: Fetcher = fetch) {
 export const CHAT_API_KEY_ENV = 'TOKENDANCE_API_KEY';
 const CHAT_URL = 'https://tokendance.space/gateway/v1/chat/completions';
 const CHAT_MODEL = 'deepseek-v4.1-flash';
+/** Documented OpenAI Next Credits OpenAI-compatible base and balanced default model. */
+export const OPENAI_NEXT_DEFAULT_BASE = 'https://api.openai-next.com/v1';
+export const OPENAI_NEXT_DEFAULT_MODEL = 'deepseek-v4.1-flash';
+const OPENAI_NEXT_HOSTS = new Set(['api.openai-next.com', 'us.api.openai-next.com']);
+
+export function openaiNextModel(env: Env): string {
+  return env('OPENAI_NEXT_MODEL')?.trim() || OPENAI_NEXT_DEFAULT_MODEL;
+}
+
+/** Validate and normalize a documented OpenAI Next base to origin + /v1. */
+export function resolveOpenAINextBase(env: Env): string {
+  const raw = env('OPENAI_NEXT_BASE_URL')?.trim() || OPENAI_NEXT_DEFAULT_BASE;
+  let parsed: URL;
+  try { parsed = new URL(raw); } catch { throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503); }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503);
+  if (!OPENAI_NEXT_HOSTS.has(parsed.hostname.toLowerCase())) throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503);
+  const path = parsed.pathname.replace(/\/+$/, '');
+  if (path && path !== '/v1') throw new ApiError('MODEL_PROVIDER_URL_INVALID', 503);
+  return `${parsed.origin}/v1`;
+}
 /** Gateway not configured: fall back to the DeepSeek official endpoint, shared with reconstruction. */
 const OFFICIAL_CHAT_URL = 'https://api.deepseek.com/chat/completions';
 const OFFICIAL_CHAT_MODEL = 'deepseek-flash';
@@ -106,11 +126,25 @@ export function chatProfile(env: Env, purpose?: 'brief' | 'agent'): string | und
 }
 /** Usage labels are fixed categories; never persist the configured endpoint or model. */
 export function chatUsageProvider(env: Env): 'minimax' | 'custom' | 'deepseek' {
+  // Usage labels are a fixed DB category set; do not add a new enum value here.
+  // Isolated OpenAI Next views clear AGENT_CHAT_* and are labeled custom, never MiniMax.
+  // Raw envs that still have a complete MiniMax/custom slot keep that slot's label.
+  const agentChatComplete=!!(env('AGENT_CHAT_BASE_URL')?.trim()&&env('AGENT_CHAT_KEY')?.trim()&&env('AGENT_CHAT_MODEL')?.trim());
+  if (env('OPENAI_NEXT_API_KEY')?.trim() && !agentChatComplete) return 'custom';
   if (chatProfile(env) === 'minimax') return 'minimax';
   return env('AGENT_CHAT_BASE_URL') ? 'custom' : 'deepseek';
 }
 /** The exact model id this request will run on, for honest self-identification. */
+function openaiNextChatActive(env: Env, purpose?: 'brief' | 'agent'): boolean {
+  if (!env('OPENAI_NEXT_API_KEY')?.trim()) return false;
+  const agentChatComplete=!!(env('AGENT_CHAT_BASE_URL')?.trim()&&env('AGENT_CHAT_KEY')?.trim()&&env('AGENT_CHAT_MODEL')?.trim());
+  // Brief/assistant defaults to OpenAI Next. Agent tools, proposal and activity-task
+  // keep the existing MiniMax/custom path unless that slot was cleared (isolated view).
+  return purpose==='brief' || !agentChatComplete;
+}
+
 export function chatModelName(env: Env, options?: { purpose?: 'brief' | 'agent' }): string {
+  if (openaiNextChatActive(env, options?.purpose)) return openaiNextModel(env);
   const productBailian=options?.purpose==='brief' && env('BAILIAN_PRODUCT_ENABLED')==='1';
   const customModel = env(productBailian?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
   if (customModel?.trim()) return customModel.trim();
@@ -120,13 +154,24 @@ export function chatModelName(env: Env, options?: { purpose?: 'brief' | 'agent' 
 }
 
 /**
- * OpenAI-compatible chat request. Priority: any OpenAI-compatible provider
+ * OpenAI-compatible chat request. Priority: OpenAI Next (`OPENAI_NEXT_API_KEY`,
+ * default `https://api.openai-next.com/v1` + `deepseek-v4.1-flash`) → any OpenAI-compatible provider
  * (`AGENT_CHAT_BASE_URL` + `AGENT_CHAT_KEY` + `AGENT_CHAT_MODEL`) → Tokendance gateway →
  * DeepSeek official endpoint (`DEEPSEEK_API_KEY`, same key as reconstruction). Keeping endpoints,
  * models and keys in one place stops the call sites from drifting. Switching
  * providers is a `supabase secrets set` away and takes effect immediately, no redeploy.
  */
 export function chatRequest(env: Env, body: Record<string, unknown>, options?: { purpose?: 'brief' | 'agent' }): { url: string; init: RequestInit } {
+  const openaiNextKey = env('OPENAI_NEXT_API_KEY')?.trim();
+  if (openaiNextKey && openaiNextChatActive(env, options?.purpose)) {
+    const base = resolveOpenAINextBase(env);
+    // Standard OpenAI-compatible JSON. Do not attach MiniMax-only fields
+    // (reasoning_split / max_completion_tokens / reasoning_effort).
+    return { url: `${base}/chat/completions`, init: {
+      method: 'POST', headers: { Authorization: `Bearer ${openaiNextKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, model: openaiNextModel(env), thinking: { type: 'disabled' } }),
+    } };
+  }
   const productBailian=options?.purpose==='brief' && env('BAILIAN_PRODUCT_ENABLED')==='1';
   const customBase = env(productBailian?'BAILIAN_PRODUCT_BASE_URL':'AGENT_CHAT_BASE_URL'), customKey = env(productBailian?'BAILIAN_PRODUCT_KEY':'AGENT_CHAT_KEY'), customModel = env(productBailian?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
   const profile = chatProfile(env,options?.purpose);
