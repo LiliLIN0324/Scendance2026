@@ -77,6 +77,15 @@
 - **前置**：M1 选中 / 放置桥接稳定；M3 物料历史可落 plan。
 - **验证**：墙放置 / 拖动 / 开门 / 围合内放物 / 碰撞提示的纯函数测试；2D 渲染 + 3D 投影对照；导出 GeoJSON/CSV/PDF/PNG 含墙体。
 - **回滚**：墙体作为独立物料类别挂在物料库后置开关，未接住前旧室内墙 draft 不出现在地图语境。
+- **前置侦察（2026-11-13，字段级映射对照）**：
+  - **物料 `FurnitureItem` → `PlanFacility`**：`position {x,z}` → `position {x,y}`（z 转 y）；`rotation`（弧度）→ `rotationDeg`（度，×180/π；符号口径参照 `floor-reading.ts:166` 既有换算，取反方向以 plan 渲染为准）；`width/depth` → `size {width,depth}`；`height` 不落 2D plan，归 3D 模型层（`modelOverride`/scale）；`type/assetId/materialId` → `templateId`；`name/color/notes` 直带。室内 item 无显式 `zoneId`，迁移时复用 `inferWorkerZoneId` 落点命中口径补归属。
+  - **室内特化字段待决策**：WiFi/CCTV/vision cone（`isWiFiAccessPoint/isCCTV/signalRange/hasVisionCone/visionRange/visionFov/cctvModelId`）、`elevation/glbUrl/glbNode/wallId/structuralOpeningId/structuralColumnId/source/price/handoff`——2D `SitePlanData` 不承载，迁移时落 `notes` 或留 3D 层，不扩既有字段签名。
+  - **分区 `RoomZone` → `PlanZone`**：矩形 `{x,z,w,d}` 展开 4 点闭合环 polygon；`zoneType` 对齐 plan 9 类 semantic；`color/name` 直带。
+  - **动线 `WalkRoute` → `PlanRoute`**：points `{x,z}` → `{x,y}`；旧 `structuralOpeningId/venueEntranceId` 映射到 `nodes`，不留在墙体/物料数据。
+  - **楼层 `FloorLayout[]` → `PlanLevel[]`**：户外先合成单个默认层，`items` 平铺；多层映射随 levels 接线。
+  - **缺口（plan 侧尚无对应实体）**：① 墙体 `InteriorWall`（线段 `x1,z1,x2,z2` + `thickness/height/kind/status`）契约无 walls 集合，待决独立 `walls` vs facility 模板类（见上「待决子项」）；② `floorPlanImage/opacity/fitMode` 背景图归 R2/视图记忆，不进 `SitePlanData`（3d 已登记）。
+  - **约束**：迁移走纯函数 + 对照快照单，复用 `facility-footprint-lock`；不改 `SitePlanData` 既有字段与 routeBridge 九方法签名。
+
 
 #### M3 会话 / 历史 / 导出解耦（关键路径）⬜
 - **目的**：把最深的三处对 layout 的依赖从壳体剥到地图 plan / projectId，为 R2/R3 拆壳铺路。
