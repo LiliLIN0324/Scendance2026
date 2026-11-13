@@ -2432,6 +2432,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       if (event.key !== 'Escape') return;
+      // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
+      if (inField || target?.isContentEditable) return;
       if (modeRef.current === 'view') {
         // 2026-11-12 B2：浏览态 Esc = 取消组选（OnePlan 同语义；单选清空沿用既有行为不变）。
         clearMultiSelection();
@@ -5634,6 +5636,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             role="listbox"
             aria-label="测量类型"
             data-testid="measure-menu"
+            onWheel={stopPanelWheel}
             style={{
               marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
               background: PLANNING_SURFACE.panelBg,
@@ -5785,6 +5788,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           role="listbox"
           aria-label="标注形状"
           data-testid="annotate-shape-menu"
+          onWheel={stopPanelWheel}
           style={{
             marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
             background: PLANNING_SURFACE.panelBg,
@@ -6737,6 +6741,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       onMouseLeave={handleStageMouseLeave}
       onDoubleClick={handleStageDoubleClick}
       onContextMenu={event => {
+        // 视口边界（与 onWheel 同口径）：面板经 portal 挂在舞台 DOM 之外，右键合成事件仍沿 React 树冒泡，
+        // 目标不在舞台子树内直接忽略，避免在面板里右键误退画布草稿或弹出层级菜单。
+        const stageGate = stageRef.current;
+        if (!stageGate || !stageGate.contains(event.target as Node)) return;
         // P2-l（用户 m05374）：画区域/边界时右键 = 移除上一个节点；其余模式右键点中设施 = 层级菜单。
         if (modeRef.current === 'zone' || modeRef.current === 'boundary' || modeRef.current === 'route') {
           const draft = draftRef.current;
@@ -6884,6 +6892,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             boxShadow: '0 12px 32px rgba(20, 20, 22, 0.28)',
           }}
           onMouseDown={stopPanelMouse}
+          onWheel={stopPanelWheel}
           onContextMenu={event => event.preventDefault()}
         >
           {(
