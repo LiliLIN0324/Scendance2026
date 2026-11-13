@@ -96,8 +96,13 @@
     - **不载** `structuralOpeningId/venueEntranceId`：开口映射到 `nodes`，墙链在节点坐标留口，不封堵节点；门/窗作为开口/节点处理，不建成墙实体。
     - **契约同步项**：`sitePlanDataSchema` 集合去重 id 纳入 walls；`levelRefs` 与悬空 zoneId 校验纳入 walls；**`routeBridge` 九方法签名与既有字段不变**。
     - **迁移口径**：`InteriorWall` 两端点经迁移帧逆变换；`thickness/height` 直带可选；`kind/status` 枚举对齐；现 skip 档的 partition/fence/door/window 开工时改投 walls（door/window 转 node 开口）。
-    - **待评审拍板**：① 线段（2 点）一期够不够，是否预留折线 2–N 点；② 厚度/高度 2D 是否承载还是纯 3D 引用；③ 墙与 zone/facility 碰撞/遮挡校验是否一期进 superRefine；④ 集合上限。
+    - **待评审拍板（附推荐口径，仍待确认，未定案不进 `site-plan.ts`）**：
+      ① **线段 vs 折线**：推荐一期 `points: PlanPoint[2]` 单线段，对齐室内 `x1/z1/x2/z2` 现状；schema 不预留 2–N 折线，二期确有 L 形/多段墙需求再扩。
+      ② **厚度/高度承载**：推荐 `thicknessM` 2D 承载（墙体占地宽度影响摆放与越界判定）；`heightM` 纯 3D 层引用，2D 不投影、不参与平面校验。
+      ③ **碰撞/遮挡校验**：推荐一期只做坐标范围与边界越界校验，不进墙-墙/墙-设施碰撞遮挡；遮挡与压叠判定留二期。
+      ④ **集合上限**：推荐 500（对齐 workers 500 量级，远低于 facilities 2000）。
   - **下一轮（M2 续）**：① facility 接线：oneplan 条目尺寸/图标接 libraryEntry 校准，`glb-asset` 的 `glbUrl/assetId` 挂契约 `modelOverride`；② 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用/price/handoff 等）落 `notes` 还是留 3D 层终稿；③ walls 评审通过后落 schema + 线段迁移纯函数。
+  - **收尾复核（2026-11-13）**：facility 落点归属分区已落地（#58，提交 `d7711524`），中心点击中 `inferWorkerZoneId`，与 worker/node 同口径；M2 三组 lib 19 绿、tsc 0；agent-panel 全量对照基线 **39 failed / 403 passed / 1 skipped（443）**，失败数未增、零扩散。剩余 M2 项均被前置决策或库上下文阻塞：oneplan 真实占地需 manifest 条目（纯函数层反推不可得，只能留注入点）；`modelOverride` 契约存物料库 slug、非 glbUrl，assetId↔slug 对应关系待核；特化字段归属与 walls 四问待拍板。M3 成套边界不可拆两半，floor/venue tracker 重映射等 plan levels/几何稳定并经智能体线确认后成套推进。
 
 
 #### M3 会话 / 历史 / 导出解耦（关键路径）⬜
