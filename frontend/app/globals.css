@@ -1525,6 +1525,13 @@ body {
   pointer-events: none;
 }
 .sc-workbench .is-docked-layout.is-mode-rail:not(.has-left-column) > .sc-left-column { display: none; }
+/* 所有卡片都浮成独立小窗、抽屉也收起：左栏只剩白底空壳。列保留挂载以容纳 fixed 浮窗，
+   但把中间轨道宽度、底色、分隔线和宽度调节条收起，画布补满左侧。 */
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-empty-dock {
+  grid-template-columns: var(--sc-nav-rail-width) 0 minmax(0, 1fr);
+}
+.sc-left-column.is-empty-dock { background: transparent; border-right: 0; }
+.sc-left-column.is-empty-dock .sc-left-card-resizer { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-data-host {
   border: 0; border-radius: 0; background: transparent;
 }
