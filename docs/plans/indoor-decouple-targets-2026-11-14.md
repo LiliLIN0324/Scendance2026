@@ -202,3 +202,6 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 - G2（walls 契约 / M2 续接线 / 3a 剩余 tracker / 智能体 model 槽位）仍隔离在 wip，等 #110 V1–V5 确认。
 - G3（R1–R4 壳体退役、`onApply(RoomLayout)` 签名改造）仍 blocked，等智能体提案全部经 routeBridge 落地、M3 成套接住。
 - 夜间未推进任何拆旧；关键路径仍是 `M3 → R2 → R3 → R4`。
+- 任务链成套阻塞关系（夜间复核）：#29 M2 walls 接线 blocked by #30；#48 3a 可达部分已落地（遗留 floor/venue 影子），#49 3b 历史快照 blocked by #48，#50 3c 导出/写守卫、#51 3d 回写镜像随 #49 成套；#48–#51 互相成套，不能在 main 单独抽离。R 线 #23/#27/#32/#33 全部等 M3 接住后退役。
+- 夜间本侧本地提交（未 push，攒好一次性推）：`5b9fae2e` 类型止血、`ed9a4758` facility/layout 迁移边界、`636b2a8a` 映射边界、`d582af79` 迁移坐标帧边界、`48866ccb`/`cd98d24c` 文档登记。验收：前端 tsc exit 0；定向 11 文件 139 绿（含新 frame 6、facilities 43）；根契约 site-plan 16 + models 9 绿。
+- 真机探针受既存 3D 主线程 CDP op-lock 阻塞（navigate/js 排队超时），非本轮改动所致；运行时背书由 tsc + 定向测试承担，真机 undo/redo/图层走查留待页面空闲或用户醒后补。
