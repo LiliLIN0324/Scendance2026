@@ -153,9 +153,9 @@ export function zoomFromSpan(spanM: number): number {
 }
 
 export function maxZoomForSource(source: CanvasBasemapSource): number {
-  // 3D 默认用图源真正有高清瓦片的最高级；高德最近一档发虚，退一档。
+  // 3D 默认用图源真正有高清瓦片的最高级；高德街道 z18 仍为真图（z19 才回空瓦片）。
   if (source === 'amap-satellite') return 18;
-  if (source === 'amap-streets' || source === 'amap-streets-labels') return 17;
+  if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
   if (source === 'vec' || source === 'img') return 18;
   return 19;
 }

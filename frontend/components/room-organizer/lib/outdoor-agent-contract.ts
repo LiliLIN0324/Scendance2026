@@ -223,6 +223,39 @@ export interface OutdoorAgentBridge {
     routes?: SitePlanData["routes"],
     nodes?: SitePlanData["nodes"],
   ): boolean;
+  applyWorkers?(workers: SitePlanData["workers"]): boolean;
+  applyMeasurements?(
+    measurements: NonNullable<SitePlanData["measurements"]>,
+  ): boolean;
+  applyAnnotations?(
+    annotations: NonNullable<SitePlanData["annotations"]>,
+  ): boolean;
+  getLevels?(): NonNullable<SitePlanData["levels"]>;
+  setActiveLevel?(levelId: string): boolean;
+  addFacility?(facility: SitePlanData["facilities"][number]): boolean;
+  removeFacility?(id: string): boolean;
+  updateFacility?(
+    id: string,
+    patch: Partial<
+      Pick<
+        SitePlanData["facilities"][number],
+        | "name"
+        | "notes"
+        | "rotationDeg"
+        | "color"
+        | "opacity"
+        | "strokeStyle"
+        | "modelOverride"
+        | "vendorName"
+        | "vendorZone"
+        | "inDate"
+        | "inTime"
+        | "outDate"
+        | "outTime"
+        | "electricKw"
+      >
+    > & { size?: { width: number; depth: number } },
+  ): boolean;
   inspectFacility?(id: string): boolean;
   models?(id: string): Promise<OutdoorModelChoice[]>;
   selectModel?(id: string, slug: string, expected: string): boolean;

@@ -84,14 +84,16 @@ it("主线缺省高德与已有图源偏好保留，同时单位导出和Agent�
   writePlanGroundSource("amap-satellite");
   const plan = createStarterOutdoorPlan(),
     before = JSON.stringify(plan),
-    onView = vi.fn();
+    onView = vi.fn(),
+    onPlan = vi.fn();
   const props = {
     projectId: "merge-regression",
     seedPlan: plan,
     lengthUnit: "ft" as const,
     onViewChange: onView,
+    onPlanChange: onPlan,
   };
-  const view = render(<Overlay {...props} view="2d" />);
+  render(<Overlay {...props} />);
   expect(state.canvas?.source).toBe("amap-satellite");
   expect(readPlanGroundSource()).toBe("amap-satellite");
   act(() => state.bridge!.setView!("3d"));
@@ -103,20 +105,22 @@ it("主线缺省高德与已有图源偏好保留，同时单位导出和Agent�
     expect(state.bridge!.applyPlan!(plan, before)).toBe(true);
   });
   expect(state.apply).toHaveBeenCalledWith(plan, before);
-  view.rerender(<Overlay {...props} view="3d" />);
-  expect(state.three?.source).toBe("amap-satellite");
-  expect(JSON.stringify(state.three?.plan)).toBe(before);
+  // 3D 由壳层接管，覆盖层不再自挂实例；计划与图源偏好仍上报给那一份 3D。
+  expect(state.three).toBeNull();
+  expect(screen.queryByTestId("merge-3d")).toBeNull();
+  expect(JSON.stringify(onPlan.mock.calls.at(-1)?.[0])).toBe(before);
 });
-it("切换图源不改规划，且共享给同plan的3D视角与原子Agent桥", () => {
+it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3D与原子Agent桥", () => {
   writePlanGroundSource("amap-streets");
   const plan = createStarterOutdoorPlan(),
-    before = JSON.stringify(plan);
-  const view = render(
+    before = JSON.stringify(plan),
+    onPlan = vi.fn();
+  render(
     <Overlay
       projectId="merge-source"
       seedPlan={plan}
-      view="2d"
       lengthUnit="m"
+      onPlanChange={onPlan}
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: /^底图：/ }));
@@ -124,15 +128,9 @@ it("切换图源不改规划，且共享给同plan的3D视角与原子Agent桥",
   expect(state.canvas?.source).toBe("carto-dark");
   expect(readPlanGroundSource()).toBe("carto-dark");
   expect(JSON.stringify(state.bridge!.getPlan())).toBe(before);
-  view.rerender(
-    <Overlay
-      projectId="merge-source"
-      seedPlan={plan}
-      view="3d"
-      lengthUnit="m"
-    />,
-  );
-  expect(state.three?.source).toBe("carto-dark");
-  expect(JSON.stringify(state.three?.plan)).toBe(before);
+  expect(state.three).toBeNull();
+  expect(JSON.stringify(onPlan.mock.calls.at(-1)?.[0])).toBe(before);
   expect(state.bridge?.applyPlan).toBeTypeOf("function");
+  expect(state.bridge?.applyWorkers).toBeTypeOf("function");
+  expect(state.bridge?.getLevels).toBeTypeOf("function");
 });

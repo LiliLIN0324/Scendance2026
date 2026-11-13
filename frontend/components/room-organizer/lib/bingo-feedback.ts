@@ -85,6 +85,11 @@ export function readBingoPlanFeedback(
   };
 }
 
+/** 未闭环钉数：resolved 不计；旧侧栏评论无状态，按未闭环计。 */
+export function countOpenFeedbackPins(feedback: BingoPlanFeedback): number {
+  return feedback.pins.filter(pin => pin.pinStatus !== 'resolved').length;
+}
+
 export function feedbackSummaryLabel(feedback: BingoPlanFeedback, returned: boolean): string {
   if (feedback.sharePinCount > 0) {
     return `甲方 ${feedback.sharePinCount} 条画内钉评`;

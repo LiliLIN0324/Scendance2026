@@ -163,7 +163,6 @@ import {
   applyOutdoorShellVenuePatch,
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
-import { readOutdoorPlanView } from './lib/outdoor-project-store';
 import { filterPlanByLevel } from './lib/plan-levels';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
@@ -180,7 +179,8 @@ import { readPlanGroundSource, subscribePlanGroundSource } from './lib/plan-base
 import { publicSourceTileUrl, basemapSourceAttribution } from './lib/tdt-probe';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
-import { useActivitySessionTracker, type ActivitySessionToken } from './lib/activity-session-epoch';
+import { useActivitySessionTracker, activityScope, type ActivityScopeSource, type ActivitySessionToken } from './lib/activity-session-epoch';
+import { projectSessionScope } from './lib/project-session-scope';
 import { useFloorSessionTracker, type FloorSessionToken } from './lib/floor-session-epoch';
 import { validateCandidateApply } from './lib/candidate-apply-validation';
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
@@ -318,8 +318,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const frameViewportRef = useRef(() => {});
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
-  const sessionScope = layout.id ? `activity:${layout.id}` : 'draft:unidentified';
-  const activitySession = useActivitySessionTracker(layoutStore);
+  const sessionScope = projectSessionScope(outdoorProjectIdProp);
+  // M3a：活动会话身份源绑地图 projectId（props），不再订阅室内 layout.id；
+  // projectId 变化由 React 重渲染重建 source，旧会话 token 随之失效。
+  const activityScopeSource = useMemo<ActivityScopeSource>(() => ({
+    getScope: () => projectSessionScope(outdoorProjectIdProp),
+    subscribe: () => () => undefined,
+  }), [outdoorProjectIdProp]);
+  const activitySession = useActivitySessionTracker(layoutStore, activityScopeSource);
   const sessionToken = activitySession.token;
   const pendingCandidateRegistry=useMemo(()=>createPendingCandidateRegistry(),[]);
   const pendingCandidates=useMemo(()=>bindPendingCandidateRegistry(pendingCandidateRegistry,sessionToken,()=>activitySession.isCurrent(sessionToken)),[pendingCandidateRegistry,sessionToken,activitySession.isCurrent]);
@@ -373,10 +379,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [agentBriefRecord, setAgentBriefRecord] = useState<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
   const agentBriefRef = useRef<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
   const agentBriefMemory = agentBriefRecord?.scope === sessionScope && agentBriefRecord.epoch === sessionToken?.epoch && agentBriefRecord.chatEpoch===chatTransitionEpoch.current && agentBriefRecord.sessionId!==null && agentBriefRecord.sessionId===getActiveAssistantSessionId(sessionScope) ? agentBriefRecord.memory : null;
-  const getStoreSessionScope = () => {
-    const id = layoutStore.getState().layout.id;
-    return id ? `activity:${id}` : 'draft:unidentified';
-  };
+  const getStoreSessionScope = () => projectSessionScope(outdoorProjectIdProp);
   const getActiveBrief = () => {
     const scope = getStoreSessionScope();
     return activitySession.isCurrent(sessionToken) && agentBriefRef.current?.scope === scope && agentBriefRef.current.epoch === sessionToken?.epoch && agentBriefRef.current.chatEpoch===chatTransitionEpoch.current && agentBriefRef.current.sessionId!==null && agentBriefRef.current.sessionId===getActiveAssistantSessionId(scope)
@@ -541,7 +544,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 同时表达「收起」和「3D 接管」两种态，收起被派生成全屏接管。引入显式接管开关：
   // 只有它为 true（且非 2D）才全屏接管；收起＝两者都 false，回工作台。
   const [outdoor3dTakeoverActive, setOutdoor3dTakeoverActive] = useState(false);
-  const [outdoorView, setOutdoorView] = useState<'2d' | '3d'>('2d');
   const applyPresetRef = useRef<(preset: 'iso') => void>(() => undefined);
   // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
@@ -555,7 +557,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setOutdoor2DOpen(true);
     setOutdoor3dTakeoverActive(false);
     setOutdoorPanel('library');
-    if (isOutdoorProject) setOutdoorView(readOutdoorPlanView(outdoorProjectIdProp!) ?? '2d');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outdoorProjectIdProp, isOutdoorProject]);
   // 2026-11-11：保存态不再上左轨 foot（用户指令去掉「户外草稿·已存」文字）——保存管线本身不变。
@@ -613,11 +614,7 @@ useEffect(() => {
       const open = !outdoorInspector.openTabs[tab];
       outdoorOverlayRef.current?.setInspector(open, tab);
     },
-    view: outdoorView,
-    setCanvasView: (next: '2d' | '3d') => {
-      setOutdoorView(next);
-    },
-  } : null), [outdoor2DOpen, outdoorHistory, outdoorView, outdoorCanvasMode, outdoorInspector]);
+  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorInspector]);
   // 2026-11-11 用户要求：Bingo 与户外规划同开时——中间分隔要清楚、可上下换序、可拖动改高度、
   // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
   const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
@@ -850,7 +847,6 @@ useEffect(() => {
       setOutdoor3dTakeoverActive(false);
       setOutdoor2DOpen(true);
       setOutdoorPanel('library');
-      setOutdoorView('2d');
     }
     if (id === 'material') setWorkbenchMode('layout');
     // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
@@ -2456,11 +2452,9 @@ useEffect(() => {
       if (outdoor2DOpen) {
         setOutdoor2DOpen(false);
         setOutdoor3dTakeoverActive(true);
-        setOutdoorView('2d');
         setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
       } else if (!outdoor3dTakeoverActive) {
         setOutdoor3dTakeoverActive(true);
-        setOutdoorView('2d');
         setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
       }
       return;
@@ -2469,7 +2463,6 @@ useEffect(() => {
     setOutdoor3dTakeoverActive(false);
     setOutdoor2DOpen(true);
     setOutdoorPanel('library');
-    setOutdoorView('2d');
   };
   // 2026-11-12 用户拍板：左栏所有卡片统一「半卡片」交互（拖把手调高/收起/拖出独立小窗）。
   // 当前可见的堆栈成员：≤2 张时参与比例调节；>2 张（拍摄向导+私聊+户外同开的极端组合）
@@ -3974,8 +3967,7 @@ useEffect(() => {
     }
   }, []);
   const isScopedSessionCurrent = useCallback(() => {
-    const id = layoutStore.getState().layout.id;
-    return activitySession.isCurrent(sessionToken) && (id ? `activity:${id}` : 'draft:unidentified') === sessionScope;
+    return activitySession.isCurrent(sessionToken) && getStoreSessionScope() === sessionScope;
   }, [activitySession.isCurrent, sessionToken, sessionScope]);
   const captureSeatingAllocation = () => {
     const record=agentBriefRef.current,chatId=getActiveAssistantSessionId(sessionScope),epoch=chatTransitionEpoch.current;
@@ -4046,12 +4038,10 @@ useEffect(() => {
     return true;
   };
   const scopedPreview = useCallback((candidate: RoomLayout | null) => {
-    const id = layoutStore.getState().layout.id;
-    if (activitySession.isCurrent(sessionToken) && (id ? `activity:${id}` : 'draft:unidentified') === sessionScope) onPreviewAi(candidate);
+    if (activitySession.isCurrent(sessionToken) && getStoreSessionScope() === sessionScope) onPreviewAi(candidate);
   }, [onPreviewAi, sessionScope, activitySession.isCurrent, sessionToken]);
   const scopedApply = useCallback((next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }) => {
-    const id = layoutStore.getState().layout.id;
-    if (!activitySession.isCurrent(sessionToken) || (id ? `activity:${id}` : 'draft:unidentified') !== sessionScope) throw new Error('活动已切换，请重新核对方案。');
+    if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对方案。');
     onApplyCreative(next, options);
   }, [onApplyCreative, sessionScope, activitySession.isCurrent, sessionToken]);
   const openAholoWorkflow = useCallback((kind: 'world' | 'recon' = 'world', prompt?: string) => {
@@ -4151,7 +4141,7 @@ useEffect(() => {
     blocker:scope=>{
       if(pendingEnvironmentPositionRef.current)return '场地位置尚待核对，请先保留并处理候选，再切换活动。';
       if(unsavedSourceDrafts(scope).length)return '有未保存的图片原件，请先保存或导出，再切换活动。';
-      if(readonlyComposerDrafts(`activity:${scope}`).length)return '有未发送的活动对话，请先发送或保留草稿，再切换活动。';
+      if(readonlyComposerDrafts(sessionScope).length)return '有未发送的活动对话，请先发送或保留草稿，再切换活动。';
       for(const [kind,label] of [['brief','活动需求'],['creative-conversation','未发送对话']] as const){
         const draft=readLiveReadonlyDraft(scope,kind);
         if(draft.status==='unavailable')return `${label}当前无法完整核对，未切换活动。`;
@@ -4333,10 +4323,13 @@ useEffect(() => {
                   aria-expanded={captureOpen}
                   onClick={captureOpen ? closeCapturePanel : openCapturePanel}
                 >
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
-                    <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
-                  </svg>
+                  <span className="sc-rail-capture-icon" aria-hidden="true">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
+                      <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
+                    </svg>
+                    <span className="sc-rail-3d-tag">3D</span>
+                  </span>
                   <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
                 </button>
                 <button
@@ -4355,7 +4348,6 @@ useEffect(() => {
                       setOutdoorPanel('library');
                       // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
                       if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
-                        setOutdoorView('2d');
                         setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
                         applyPresetRef.current('iso');
                         if (agentPanelOpen && !agentCollapsed) closeBingo();
@@ -4380,7 +4372,6 @@ useEffect(() => {
                 setOutdoor3dTakeoverActive(false);
                 setOutdoor2DOpen(true);
                 setOutdoorPanel('library');
-                setOutdoorView('2d');
               }
               setChatPeerId(current => current === member.userId ? null : member.userId);
             }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -4558,7 +4549,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(sessionScope.startsWith("activity:") ? { venueFactScope: sessionScope } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(layout.id ? { venueFactScope: activityScope(layout.id) } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -4596,8 +4587,7 @@ useEffect(() => {
               onActiveLevelChange={handleOutdoorActiveLevelChange}
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
-              view={outdoorView}
-              onViewChange={setOutdoorView}
+              onViewChange={handleOutdoorViewSwitch}
               lengthUnit={view.lengthUnit}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
               dormant={!outdoor2DOpen}

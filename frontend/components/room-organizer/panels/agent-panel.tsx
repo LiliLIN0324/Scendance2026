@@ -86,7 +86,7 @@ import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
 import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
-import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanAnnotation, PlanFacility, PlanLevel, PlanMeasurement, PlanWorker, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
@@ -501,6 +501,22 @@ interface AgentValue {
   outdoorTask: OutdoorTaskProgress | null;
   stopOutdoorTask(): void;
   inspectOutdoorFacility(id: string): void;
+  /** M5：确认后写入人员布点（bridge applyWorkers，commitPlan 可撤销）；未接上或空提案回 false。 */
+  applyOutdoorWorkers(workers: PlanWorker[]): boolean;
+  /** M5：确认后写入测量；未接上或空提案回 false。 */
+  applyOutdoorMeasurements(measurements: PlanMeasurement[]): boolean;
+  /** M5：确认后写入标注；未接上或空提案回 false。 */
+  applyOutdoorAnnotations(annotations: PlanAnnotation[]): boolean;
+  /** M5：读当前楼层列表；未接上回空数组。 */
+  getOutdoorLevels(): PlanLevel[];
+  /** M5：切到指定楼层；不存在或未接上回 false。 */
+  setOutdoorLevel(levelId: string): boolean;
+  /** M5：单条设施新增；id 已存在或未接上回 false。 */
+  addOutdoorFacility(facility: PlanFacility): boolean;
+  /** M5：单条设施删除；不存在或未接上回 false。 */
+  removeOutdoorFacility(id: string): boolean;
+  /** M5：单条设施属性改；不存在或未接上回 false。 */
+  updateOutdoorFacility(id: string, patch: Partial<Pick<PlanFacility, 'name'|'notes'|'rotationDeg'|'color'|'opacity'|'strokeStyle'|'modelOverride'|'vendorName'|'vendorZone'|'inDate'|'inTime'|'outDate'|'outTime'|'electricKw'>> & { size?: { width: number; depth: number } }): boolean;
   manualOutdoorVenueApplied(anchor: NonNullable<SitePlanData['anchor']>): void;
   sessionScope: string;
   isSessionCurrent(): boolean;
@@ -662,8 +678,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const sessionScopeIsCurrent = () => {
     try { if (sessionCurrentRef.current && !sessionCurrentRef.current()) return false; } catch { return false; }
     if (sessionScope === 'legacy') return true;
-    const id = layoutStore.getState().layout.id;
-    return sessionScope === (id ? `activity:${id}` : 'draft:unidentified');
+    // M3a：会话身份由壳体 isSessionCurrent（projectId 源）把关，不再回读室内 layout.id。
+    return true;
   };
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
   const studioRef = useRef(studio); studioRef.current = studio;
@@ -3642,6 +3658,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       setOutdoorTask({ intent: '手动确认真实场地', state: 'done', action: '手画边界已闭合并写入同一份规划；2D/3D 同步，可撤销', steps: ['地点已确认', '手画闭合并通过边界校验', '提交锚点与边界'], prompts: ['排一下流线'] });
     },
     inspectOutdoorFacility: id => { if (!routeBridgeRef.current?.inspectFacility?.(id)) setOutdoorTask(current => current ? { ...current, state: 'blocked', action: '该设施已不在当前户外方案，请重新选择画布中的设施', focusFacilityId: undefined } : null); },
+    applyOutdoorWorkers: workers => routeBridgeRef.current?.applyWorkers?.(workers) ?? false,
+    applyOutdoorMeasurements: measurements => routeBridgeRef.current?.applyMeasurements?.(measurements) ?? false,
+    applyOutdoorAnnotations: annotations => routeBridgeRef.current?.applyAnnotations?.(annotations) ?? false,
+    getOutdoorLevels: () => routeBridgeRef.current?.getLevels?.() ?? [],
+    setOutdoorLevel: levelId => routeBridgeRef.current?.setActiveLevel?.(levelId) ?? false,
+    addOutdoorFacility: facility => routeBridgeRef.current?.addFacility?.(facility) ?? false,
+    removeOutdoorFacility: id => routeBridgeRef.current?.removeFacility?.(id) ?? false,
+    updateOutdoorFacility: (id, patch) => routeBridgeRef.current?.updateFacility?.(id, patch) ?? false,
     stopOutdoorTask,
     routeProposal,
     routeBusy,

@@ -1255,7 +1255,7 @@ body {
 /* Bingo 圆徽标：28px 与其他图标槽同尺寸；三态——待发空圆 / 待评数字 / 已回执勾形。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
   display: grid; place-items: center; width: 28px; height: 28px; flex: none;
-  box-sizing: border-box; border-radius: 50%;
+  box-sizing: border-box; border-radius: 50%; position: relative;
   border: 1.5px solid var(--wk-hair); background: var(--wk-paper);
   color: var(--wk-ink-soft); font-size: 11px; font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1263,11 +1263,31 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
   display: block; width: 13px; height: 13px;
 }
-.sc-bingo-badge[data-status="awaiting"] {
+/* 角标：对齐成员未读圆 `.sc-rail-member-badge`，15px 圆、err 底白字 10px、右上角落位。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
+  position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px;
+  padding: 0 3px; box-sizing: border-box; border-radius: 999px;
+  background: var(--err, #B4443C); color: #fff;
+  font-size: 10px; font-weight: 600; line-height: 1;
+  display: grid; place-items: center; text-align: center;
+  border: 2px solid var(--wk-paper, #F7F5F0); font-variant-numeric: tabular-nums;
+}
+/* 拍摄场地图标 + 右下「3D」小副标。图标槽 span 必须用与 Bingo 角标同链的选择器复活，
+   否则被窄轨 `button > span{display:none}`（只该藏文字标签）连带藏掉，相机不显示。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon {
+  position: relative; display: grid; place-items: center; width: 26px; height: 26px; flex: none;
+}
+.sc-rail-3d-tag {
+  position: absolute; right: -9px; bottom: -7px; padding: 0 3px; border-radius: 5px;
+  background: var(--wk-plane); border: 1px solid var(--wk-hair); color: var(--wk-ink-soft);
+  font-size: 8px; font-weight: 600; line-height: 1.5; letter-spacing: .02em; white-space: nowrap;
+}
+/* 状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、描边/数字退回中性色。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="awaiting"] {
   border-color: var(--warn); color: var(--warn);
   box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
 }
-.sc-bingo-badge[data-status="returned"] {
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="returned"] {
   border-color: var(--err); color: var(--err);
   box-shadow: 0 0 0 3px rgba(180, 68, 60, 0.22);
 }

@@ -101,13 +101,13 @@ code{font-size:12px}
 </header>
 
 <div class="note">
-  <b>基线（2026-11-13 核对）：</b>分支 <code>feat/continue-20261105</code>，HEAD = <code>origin/main</code> <code>7d38fb57</code>，0 超前 / 0 落后；工作区未提交 WIP 与轨栏无关。本稿只做视觉对比，不改代码。
+  <b>基线（2026-11-13 二次核对）：</b>分支 <code>main</code>，HEAD = <code>origin/main</code> <code>6e73d28f</code>，0 超前 / 0 落后；较上次基线合入的提交以户外 2D/3D 规划链路为主，<b>左轨入口结构与图标未变</b>。本稿只做视觉对比，不改代码。
   图标现状按工作树实读校正：空间 / 物料轨钮已是 Material；另含「户外规划」一枚；拍摄场地是面板开关而非外链。
-  第一格称呼本轮保留原样（轨钮「总控」、面板头「活动」），改名搁置，后续再议。
+  第一格定位为<b>唯一 Agent「小景」</b>；代码现名（轨钮「总控」、面板头「活动」）本轮保留不动，是否回改留第二轮。
 </div>
 
 <div class="legend">
-  <span><i class="dot-swatch fam-a"></i>A 角色形体族：认人（总控、Bingo）</span>
+  <span><i class="dot-swatch fam-a"></i>A 角色形体族：唯一 Agent 小景</span>
   <span><i class="dot-swatch fam-b"></i>B 通用工具族：认动作（Material 实心图标）</span>
   <span><i class="dot-swatch fam-c"></i>C 人物头像族：认身份（给自己留话）</span>
 </div>
@@ -126,7 +126,7 @@ code{font-size:12px}
             <span class="lane-dot"></span>
           </div>
         </div>
-        <span class="label">总控</span>
+        <span class="label">小景</span>
       </div>
 
       <div class="slot">
@@ -191,8 +191,8 @@ code{font-size:12px}
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v15a1.5 1.5 0 0 1-1.5 1.5h-3v-5a1.5 1.5 0 0 0-3 0v5h-3A1.5 1.5 0 0 1 5 21V6a3 3 0 0 1 3-3Z" fill="#3B5D45"/><circle cx="9.5" cy="9" r="1.3" fill="#fff"/><circle cx="14.5" cy="9" r="1.3" fill="#fff"/></svg>
         </div>
         <div class="txt">
-          <div class="title">活动</div>
-          <div class="meta">活动需求、布置生成与方案确认</div>
+          <div class="title">小景</div>
+          <div class="meta">唯一 Agent · 活动需求、布置生成与方案确认</div>
         </div>
         <div class="actions">
           <button class="ghost" type="button" aria-label="历史"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M513-492v-171q0-13-8.5-21.5T483-693q-13 0-21.5 8.5T453-663v183q0 6 2 11t6 10l144 149q9 10 22.5 9.5T650-310q9-9 9-22t-9-22L513-492ZM480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-82 31.5-155t86-127.5Q252-817 325-848.5T480-880q82 0 155 31.5t127.5 86Q817-708 848.5-635T880-480q0 82-31.5 155t-86 127.5Q708-143 635-111.5T480-80Z"/></svg></button>
@@ -302,9 +302,9 @@ code{font-size:12px}
     <thead><tr><th style="width:16%">入口</th><th style="width:12%">族</th><th>现状代码（2026-11-13 实读）</th><th>目标图形与状态</th></tr></thead>
     <tbody>
       <tr>
-        <td>总控 / 活动</td><td><span class="tag a">A 形体</span></td>
-        <td><code>RailAvatar form="door"</code>，door.png 28px + 白眼；可见名「总控」（轨钮）与「活动」（<code>AGENT_META.door.name</code>）</td>
-        <td>保留形体 + 白眼；状态走 9px <code>RailLaneDot</code>；称呼本轮不改，改名留第二轮</td>
+        <td>小景（唯一 Agent）</td><td><span class="tag a">A 形体</span></td>
+        <td><code>RailAvatar form="door"</code>，door.png 28px + 白眼；代码可见名「总控」（轨钮）与「活动」（<code>AGENT_META.door.name</code>）</td>
+        <td>唯一保留的形体槽；状态走 9px <code>RailLaneDot</code>；产品定位名「小景」，代码现名本轮不动，回改时机留第二轮</td>
       </tr>
       <tr>
         <td>Bingo</td><td><span class="tag a">A → D 圆徽</span></td>
@@ -348,6 +348,18 @@ code{font-size:12px}
     <thead><tr><th style="width:18%">入口 / 元素</th><th style="width:26%">参考案例</th><th>可借鉴点</th><th>我们的取舍</th></tr></thead>
     <tbody>
       <tr>
+        <td>助手 / Agent 身份槽 · 小景</td>
+        <td>Slack 侧栏 bot 头像（圆角头像 + bot 标记）；Discord 机器人头像；Notion AI 条目 sparkle；ChatGPT 侧栏助手字形</td>
+        <td>助手位用圆角头像式形体，与下方工具图标在轮廓上分层；不与工具钮同一直方实心族</td>
+        <td>只此一枚保留手绘形体 + 白眼；其余入口不补 mascot；形体资产修整单列清单</td>
+      </tr>
+      <tr>
+        <td>工具功能槽 · 同族实心</td>
+        <td>VS Code 活动栏（同族实心、同尺寸、同重量）；Linear 侧栏条目图标；Notion 侧栏页面 / 数据库 / 模板；Slack 频道列表</td>
+        <td>同一列工具钮用同一字形库、同一填充与尺寸档；图形只表达动作 / 对象，不带角色脸</td>
+        <td>空间 / 物料 / 拍摄场地 / 户外规划四枚走本地 Material 同族；26px 现状对齐到规范 20 / 24 档</td>
+      </tr>
+      <tr>
         <td>Bingo 圆内计数 / 勾形</td>
         <td>iOS Messages、微信头像未读圆；macOS 头像在线状态环；VS Code 活动栏条目计数；本项目旧版 v2.3.0–v3.5.0</td>
         <td>计数收进同一颗圆，不另起浮层；闭环用勾形而非叠红点；状态色描边 + 轻光晕</td>
@@ -389,6 +401,12 @@ code{font-size:12px}
         <td>32×32 触达、16px 图标、ink-soft、hover 转 plane；动作钮不抢标题层级</td>
         <td>关闭钮恒在最右；其余动作（历史 / 新建 / 附件）按入口排在左侧，不混实心与描边</td>
       </tr>
+      <tr>
+        <td>领域面板内部工具 · 例外族</td>
+        <td>本项目户外面板已落地的 Lucide 线条族（<code>outdoor-plan-icons.ts</code>）；Figma / Miro 画布工具栏线条图标</td>
+        <td>面板内编辑工具可走独立线条族作领域例外，与左轨入口区分场景</td>
+        <td>这套线条不抬进左轨；左轨户外规划入口仍用 Material <code>public</code> 地球</td>
+      </tr>
     </tbody>
   </table>
 </section>
@@ -402,7 +420,7 @@ code{font-size:12px}
       <tr><td>卡片壳</td><td>白底、1px <code>--hair</code>、圆角 14、内边距 12/16，行高 44–48；左 28 图标槽 + 文字列（标题 14/500 ink，meta 12/20 muted，单行截断）+ 右侧 ghost 钮组（32 触达、16 图标、ink-soft、hover plane），关闭钮恒在最右。</td></tr>
       <tr><td>选中态</td><td>左缘 3px 绿条（<code>.is-active::before</code>），不做绿底、不绿标题字。</td></tr>
       <tr><td>双计数</td><td>链接数 L（<code>plans.length</code>）与钉数 P（open 画内钉）分开记；第一轮徽标单计数 L，第二轮按「主数出 P，L 进 tooltip / 面板头摘要」落地。</td></tr>
-      <tr><td>命名</td><td>第一格称呼本轮保留原样（轨钮「总控」、面板头「活动」）；改名搁置，后续再议；内部 id <code>'door'</code> 不动。</td></tr>
+      <tr><td>命名</td><td>第一格定位为唯一 Agent「小景」；代码现名（轨钮「总控」、面板头「活动」）本轮保留不动，回改时机留第二轮；内部 id <code>'door'</code> 不动。</td></tr>
       <tr><td>测试同步</td><td><code>workbench-rail-head.react.test.tsx</code> 旧四形体 / 3 枚 disc 断言已与实现脱节，落地时一并更新。</td></tr>
       <tr><td>空卡处置</td><td>截图第六行空壳不留：无内容时 plane 底 + hair-soft + faint 图标 + CAP 文案；加载呼吸；失败 err 描边 + ghost 重试。</td></tr>
     </tbody>

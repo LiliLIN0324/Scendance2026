@@ -168,6 +168,8 @@ export const planNodeSchema = z.strictObject({
   position: planPointSchema,
   verification: z.enum(['unverified','user-confirmed','map-evidenced']).optional(),
   evidenceIds: z.array(z.string().max(160)).max(12).optional(),
+  /** 归属分区（可选）：不传时按落点所在分区自动归属；与人员 zoneId 同一口径。 */
+  zoneId: z.uuid().optional(),
   /** 所属图层（可选）：缺省归第一层。 */
   levelId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
@@ -304,6 +306,11 @@ export const sitePlanDataSchema = z.strictObject({
   for (const worker of plan.workers) {
     if (worker.zoneId && !zoneIds.has(worker.zoneId.toLowerCase())) {
       ctx.addIssue({ code: 'custom', message: `人员 ${worker.role} 的归属分区不存在` });
+    }
+  }
+  for (const node of plan.nodes) {
+    if (node.zoneId && !zoneIds.has(node.zoneId.toLowerCase())) {
+      ctx.addIssue({ code: 'custom', message: `出入口 ${node.name} 的归属分区不存在` });
     }
   }
   const nodeIds = new Set(plan.nodes.map(node => node.id.toLowerCase()));
