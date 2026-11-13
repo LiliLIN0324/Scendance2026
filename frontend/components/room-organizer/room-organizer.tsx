@@ -87,7 +87,7 @@ import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough, type WalkViewMode } from './hooks/use-walkthrough';
 import { useWalkAvatar } from './hooks/use-walk-avatar';
-import { requestWalkPointerLock } from './lib/walk-engage';
+import { requestOutdoorWalkPointerLock, requestWalkPointerLock } from './lib/walk-engage';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
@@ -555,6 +555,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
   const [outdoor3dWarm, setOutdoor3dWarm] = useState(false);
+  // 一期户外第一人称漫游启用态：独立于室内 walkthroughMode 的信号，避免翻旧链路
+  // 把 OutdoorPlan3D 卸载；控制器与边界钳制自管在户外 3D 组件内。
+  const [outdoorWalkActive, setOutdoorWalkActive] = useState(false);
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>('library');
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
@@ -604,6 +607,14 @@ useEffect(() => {
       return same ? current : next;
     });
   }, []);
+  /**
+   * 一期户外漫游进出收口：独立状态位，不碰室内 walkthroughMode。指针锁必须在按钮
+   * 点击手势内同步发起（晚一个 render 手势就没了），控制器在 OutdoorPlan3D 内自管。
+   */
+  const toggleOutdoorWalk = useCallback((on: boolean) => {
+    if (on) requestOutdoorWalkPointerLock();
+    setOutdoorWalkActive(on);
+  }, []);
   // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
   const outdoorActions = useMemo(() => ((outdoor2DOpen || !!outdoorPlanState) ? {
     canUndo: outdoorHistory.canUndo,
@@ -621,7 +632,13 @@ useEffect(() => {
       const open = !outdoorInspector.openTabs[tab];
       outdoorOverlayRef.current?.setInspector(open, tab);
     },
-  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorInspector]);
+    // 一期户外漫游：启用态 / 是否处于可步行的 3D 视图 / 进出收口（按钮手势内发起指针锁）。
+    walkActive: outdoorWalkActive,
+    // 注意：memo 在 outdoorPlan / scanIsolated 声明之前执行，这里只能引用前置状态；
+    // 实景隔离 / 无 plan 时 takeover 本身不成立，按钮态由下游接管条件兜底。
+    walkIn3D: outdoor3dTakeoverActive && !outdoor2DOpen && !walkthroughActive,
+    toggleWalk: (on: boolean) => toggleOutdoorWalk(on),
+  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorInspector, outdoorWalkActive, outdoor3dTakeoverActive, walkthroughActive, toggleOutdoorWalk]);
   // 2026-11-11 用户要求：Bingo 与户外规划同开时——中间分隔要清楚、可上下换序、可拖动改高度、
   // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
   const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
@@ -2481,6 +2498,11 @@ useEffect(() => {
   // 2026-11-12 用户拍板（统一 2D/3D）：有户外计划时关掉覆盖层就是接管 3D（图六），
   // 不再看 view2D 落「主舞台平面平铺图」（图三已废）——漫游/实景隔离仍不接管。
   const outdoor3dTakeover = outdoor3dTakeoverActive && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive && !scanIsolated;
+  // 离开户外 3D 接管（切 2D / 实景隔离 / 收起）时收口户外漫游态：控制器随
+  // walkEnabled=false 清理指针锁与监听，这里只把独立信号复位。
+  useEffect(() => {
+    if (!outdoor3dTakeoverActive || outdoor2DOpen || scanIsolated) setOutdoorWalkActive(false);
+  }, [outdoor3dTakeoverActive, outdoor2DOpen, scanIsolated]);
   // 2026-11-13 定稿：2D/3D 胶囊固定在画布左下动作簇，2D 覆盖层与 3D 接管同一入口；
   // 右轨 44px 竖轨不再纳横排文字胶囊。状态机沿用原 outdoorStage.onSwitch 的三态流转。
   const handleOutdoorViewSwitch = (next: '2d' | '3d') => {
@@ -2606,6 +2628,12 @@ useEffect(() => {
   }, [setView, setGameMode]);
   /** 右侧 tool-walk 与场地卡共用：进 = startWalk（带当前角色），出 = 收漫游。 */
   function toggleWalkthrough(on: boolean) {
+    // 户外 3D 接管视图：走独立的一期裸步行链路，不翻室内 walkthroughMode（否则
+    // OutdoorPlan3D 会被 walkthroughActive 卸载）；2D 平面与室内态仍走旧路径。
+    if (outdoor3dTakeover && outdoorPlan && !scanIsolated) {
+      toggleOutdoorWalk(on);
+      return;
+    }
     if (on) { startWalk(); return; }
     exitWalkthrough();
   }
@@ -4788,6 +4816,8 @@ useEffect(() => {
                   apiRef={outdoorPlan3DRef}
                   canvasApiRef={outdoorCanvasBridgeRef}
                   active={outdoor3dTakeover}
+                  walkEnabled={outdoorWalkActive}
+                  onWalkExit={() => setOutdoorWalkActive(false)}
                 />
               </div>
             )}

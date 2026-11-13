@@ -82,6 +82,8 @@ import {
   readSiteCalibration,
 } from '@/components/room-organizer/lib/site-capture';
 import type { FurnitureItem } from '@/components/room-organizer/lib/types';
+import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-engage';
+import { useOutdoorWalk } from '@/components/room-organizer/hooks/use-outdoor-walk';
 import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -211,6 +213,13 @@ export interface OutdoorPlan3DProps {
    * 动画会明显顿一下）。active=false 时只推进瓦片 LOD、不提交渲染；切回来即用当前镜头。
    */
   active?: boolean;
+  /**
+   * 一期户外第一人称漫游启用态：外层独立信号（不翻旧室内 `walkthroughMode` 链路）。
+   * 为真时停用 OrbitControls、挂 PointerLockControls，步行钳制在 `plan.boundary` 内。
+   */
+  walkEnabled?: boolean;
+  /** 漫游退出收口（第二次 Esc 或再点漫游钮），交外层把启用态置回 false。 */
+  onWalkExit?: () => void;
 }
 
 export default function OutdoorPlan3D({
@@ -222,11 +231,17 @@ export default function OutdoorPlan3D({
   apiRef,
   canvasApiRef,
   active = true,
+  walkEnabled = false,
+  onWalkExit,
 }: OutdoorPlan3DProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement | null>(null);
   // 保活态：隐藏时仍旧跑 LOD，但不渲染（不可见的 GPU 耗时没意义）。
   const activeRef = useRef(active);
   activeRef.current = active;
+  // 漫游态镜像给挂载在 three 场景上的指针事件闭包读，避免重跑挂载 effect 掉指针锁。
+  const walkEnabledRef = useRef(walkEnabled);
+  walkEnabledRef.current = walkEnabled;
+  const walkCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   // 组件级引用（renderer/scene 本体在 mount effect 里）：captureImage 同步抓帧用。
@@ -291,6 +306,17 @@ export default function OutdoorPlan3D({
     return () => { apiRef.current = null; };
   }, [apiRef, zoomByStep, focusLngLat, captureImage]);
 
+  // 一期裸第一人称步行：指针锁 / WASD / 边界钳制自管在本组件内，旧室内
+  // walkthroughMode 链路不动；退出由 onWalkExit 交外层收口。
+  useOutdoorWalk({
+    enabled: walkEnabled,
+    canvasRef: walkCanvasRef,
+    cameraRef,
+    orbitRef: controlsRef,
+    boundary: plan.boundary,
+    onExit: onWalkExit,
+  });
+
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return undefined;
@@ -334,6 +360,8 @@ export default function OutdoorPlan3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     rendererRef.current = renderer;
     stage.appendChild(renderer.domElement);
+    renderer.domElement.id = OUTDOOR_WALK_CANVAS_ID;
+    walkCanvasRef.current = renderer.domElement;
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
@@ -1135,6 +1163,8 @@ export default function OutdoorPlan3D({
     };
 
     const onPointerDown = (event: PointerEvent): void => {
+      // 漫游态：左键让给指针锁视角，不进 2D 编辑桥手势。
+      if (walkEnabledRef.current) return;
       if (event.button !== 0) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
@@ -1167,6 +1197,7 @@ export default function OutdoorPlan3D({
       }
     };
     const onPointerMove = (event: PointerEvent): void => {
+      if (walkEnabledRef.current) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
       const drawing = api.getMode() !== 'view';
@@ -1179,6 +1210,7 @@ export default function OutdoorPlan3D({
       syncEditVisuals();
     };
     const onPointerUp = (event: PointerEvent): void => {
+      if (walkEnabledRef.current) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
       if (pointerEditing || api.getMode() !== 'view') {
@@ -1349,6 +1381,7 @@ export default function OutdoorPlan3D({
       renderer?.dispose();
       rendererRef.current = null;
       sceneRef.current = null;
+      walkCanvasRef.current = null;
       if (canvas && canvas.parentNode === stage) stage.removeChild(canvas);
     };
     // 图源 / 初始视口变化才重建场景；规划线的增改走 syncFootprint，避免编辑时镜头被重置。
@@ -1411,6 +1444,28 @@ export default function OutdoorPlan3D({
           }}
         >
           还没有场地边界：切回 2D 画一圈，这里就会立起你的场地
+        </div>
+      )}
+      {walkEnabled && (
+        <div
+          data-testid="outdoor-walk-hud"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: 20,
+            transform: 'translateX(-50%)',
+            zIndex: 3,
+            padding: '6px 12px',
+            borderRadius: 10,
+            background: 'rgba(18, 20, 26, 0.72)',
+            color: '#fff',
+            fontSize: 12,
+            lineHeight: '18px',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          WASD / 方向键行走 · Shift 加速 · Esc 退出漫游
         </div>
       )}
       {groundState === 'paper' && (

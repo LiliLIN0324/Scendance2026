@@ -1,9 +1,17 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WALK_CANVAS_ID, adoptWalkPointerLock, requestWalkPointerLock, walkPointerLocked } from './walk-engage';
+import {
+  OUTDOOR_WALK_CANVAS_ID,
+  WALK_CANVAS_ID,
+  adoptWalkPointerLock,
+  requestOutdoorWalkPointerLock,
+  requestWalkPointerLock,
+  walkPointerLocked,
+} from './walk-engage';
 
 afterEach(() => {
   document.getElementById(WALK_CANVAS_ID)?.remove();
+  document.getElementById(OUTDOOR_WALK_CANVAS_ID)?.remove();
 });
 
 describe('requestWalkPointerLock', () => {
@@ -40,8 +48,23 @@ describe('requestWalkPointerLock', () => {
   });
 });
 
-describe('adoptWalkPointerLock', () => {
-  it('marks controls locked when the button already captured the pointer', () => {
+describe('requestOutdoorWalkPointerLock', () => {
+  it('asks the outdoor 3D canvas for the lock from the rail-button gesture', () => {
+    const canvas = document.createElement('canvas');
+    canvas.id = OUTDOOR_WALK_CANVAS_ID;
+    const request = vi.fn(() => Promise.resolve());
+    canvas.requestPointerLock = request as HTMLCanvasElement['requestPointerLock'];
+    document.body.appendChild(canvas);
+    expect(requestOutdoorWalkPointerLock()).toBe('requested');
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a missing outdoor canvas without throwing', () => {
+    expect(requestOutdoorWalkPointerLock()).toBe('missing');
+  });
+});
+
+describe('adoptWalkPointerLock', () => {  it('marks controls locked when the button already captured the pointer', () => {
     const canvas = document.createElement('canvas');
     canvas.id = WALK_CANVAS_ID;
     document.body.appendChild(canvas);

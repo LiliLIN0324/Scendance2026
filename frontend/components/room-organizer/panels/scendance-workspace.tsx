@@ -267,6 +267,13 @@ interface ViewToolsProps {
     /** 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（「选择」钮按下态与切换；S/H 快捷键同源）。 */
     canvasMode?: 'view' | 'select';
     setCanvasMode?(mode: 'view' | 'select'): void;
+    /**
+     * 2026-11-13 一期户外第一人称漫游：独立于室内 `walkthroughMode` 的启用信号。
+     * `walkIn3D` 仅在户外 3D 接管视图为真（2D 平面仍禁用）；`toggleWalk` 在按钮手势内收口。
+     */
+    walkActive?: boolean;
+    walkIn3D?: boolean;
+    toggleWalk?(on: boolean): void;
   } | null;
   /**
    * GeoGround（2026-11-12）：主画布 3D 地面由户外计划的地理瓦片接管时置真。
@@ -352,6 +359,12 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const sceneMoveActive = sceneMoveMode !== 'off';
   const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
   const outdoorEditing = outdoor != null;
+  // 一期户外漫游：只有户外 3D 接管视图可进；2D 平面保持旧禁用行为。按下态读独立信号，
+  // 不翻室内 view.walkthroughMode。
+  const outdoorWalkOn = outdoor?.walkActive ?? false;
+  const outdoorWalkAllowed = outdoor?.walkIn3D ?? false;
+  const walkDisabled = outdoorEditing && !outdoorWalkAllowed;
+  const walkPressed = outdoorEditing ? outdoorWalkOn : view.walkthroughMode;
   // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
   // 这里只剩纯室内场景的平面/立体兜底切换。
   const showing3D = !view.view2D;
@@ -750,10 +763,16 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         <MaterialSymbol name="layers" />
       </button>}
       {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
-      {/* 2026-11-13 M1：户外地图是环绕轨道视角，未接第一人称漫游句柄；户外态禁用并保留提示，不回退室内漫游壳。 */}
-      <button type="button" id="tool-walk" aria-label={outdoorEditing ? '户外地图为环绕视角，暂不支持第一人称漫游' : view.walkthroughMode ? '退出漫游' : '第一人称漫游'} aria-pressed={!outdoorEditing && view.walkthroughMode} data-tip={outdoorEditing ? '户外地图为环绕视角，暂不支持第一人称漫游' : undefined} disabled={outdoorEditing} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} style={outdoorEditing ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => { if (!outdoorEditing) toggleWalk(!view.walkthroughMode); }}>
+      {/* 2026-11-13 一期：户外 3D 接管视图解除禁用，挂裸第一人称步行；户外 2D 平面与室内态行为不变。 */}
+      <button type="button" id="tool-walk" aria-label={walkDisabled ? '户外地图为环绕视角，暂不支持第一人称漫游' : walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} data-tip={walkDisabled ? '户外地图为环绕视角，暂不支持第一人称漫游' : undefined} disabled={walkDisabled} className={walkPressed ? 'is-active is-walk' : 'is-walk'} style={walkDisabled ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => {
+        if (outdoorEditing) {
+          if (outdoorWalkAllowed) outdoor?.toggleWalk?.(!outdoorWalkOn);
+          return;
+        }
+        toggleWalk(!view.walkthroughMode);
+      }}>
         <MaterialSymbol name="footprint" />
-        <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称漫游'}</span>
+        <span className="sc-walk-label" aria-hidden="true">{walkPressed ? '退出漫游' : '第一人称漫游'}</span>
       </button>
       {/* 2026-11-13 M1：户外画布放置时由纯函数按网格自动吸附，没有独立吸附开关；户外态禁用该钮。 */}
       <button type="button" id="tool-grid" data-tip={outdoorEditing ? '户外地图放置时自动按网格吸附' : '网格吸附'} aria-label={outdoorEditing ? '网格吸附（户外地图自动吸附）' : '网格吸附'} aria-pressed={!outdoorEditing && view.snapToGrid} disabled={outdoorEditing} className={view.snapToGrid ? 'is-active' : ''} style={outdoorEditing ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => { if (!outdoorEditing) toggle('snapToGrid'); }}>

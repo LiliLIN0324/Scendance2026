@@ -5,13 +5,14 @@
  * again" dead end).
  */
 export const WALK_CANVAS_ID = 'sc-viewport-3d';
+/** 户外 3D 接管组件的画布 id：户外第一人称漫游（一期）在这个画布上抢指针锁。 */
+export const OUTDOOR_WALK_CANVAS_ID = 'sc-outdoor-viewport-3d';
 
 export type WalkLockRequest = 'locked' | 'requested' | 'missing' | 'refused';
 
-export function requestWalkPointerLock(doc: Document = document): WalkLockRequest {
-  const canvas = doc.getElementById(WALK_CANVAS_ID);
+function requestLockOnCanvas(canvas: HTMLElement | null, doc: Document): WalkLockRequest {
   if (!(canvas instanceof HTMLCanvasElement)) return 'missing';
-  if (canvas.ownerDocument.pointerLockElement === canvas) return 'locked';
+  if (doc.pointerLockElement === canvas) return 'locked';
   try {
     // No options object: three's PointerLockControls.lock() passes
     // `{ unadjustedMovement }`, which throws in browsers that only accept
@@ -25,6 +26,20 @@ export function requestWalkPointerLock(doc: Document = document): WalkLockReques
   } catch {
     return 'refused';
   }
+}
+
+export function requestWalkPointerLock(doc: Document = document): WalkLockRequest {
+  const canvas = doc.getElementById(WALK_CANVAS_ID);
+  return requestLockOnCanvas(canvas, doc);
+}
+
+/**
+ * 户外漫游入口：和室内同一条手势规则——必须在右轨按钮的点击回调里同步发起，
+ * 晚一个 render 用户手势就没了，浏览器会拒绝指针锁。
+ */
+export function requestOutdoorWalkPointerLock(doc: Document = document): WalkLockRequest {
+  const canvas = doc.getElementById(OUTDOOR_WALK_CANVAS_ID);
+  return requestLockOnCanvas(canvas, doc);
 }
 
 export function walkPointerLocked(canvas: HTMLCanvasElement | null): boolean {
