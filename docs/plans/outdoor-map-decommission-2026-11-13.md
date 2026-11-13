@@ -81,6 +81,9 @@
 #### M3 会话 / 历史 / 导出解耦（关键路径）⬜
 - **目的**：把最深的三处对 layout 的依赖从壳体剥到地图 plan / projectId，为 R2/R3 拆壳铺路。
 - **3a 会话**：scope 键从 `activity:${layout.id}` 改为 `project:${outdoorProjectId ?? LOCAL_DRAFT_SLOT}`；三个 tracker（活动 / 楼层 / 场地事实）订阅源从 layoutStore 换到 plan / project 状态；助理会话、brief memory 的 scope+epoch 匹配口径同步改。
+  - **3a-1 地基 ✅（本地提交 `59355a23`，未推 main）**：`projectSessionScope(projectId)` 纯函数（云 id → `project:${id}`，空 → `project:${DEFAULT_OUTDOOR_PROJECT_ID}`）；`createActivitySessionTracker`/`useActivitySessionTracker` 增加可选 `ActivityScopeSource`，缺省仍走 layoutStore 影子旧行为；补注入路径单测。tsc 0，epoch/会话定向 24 绿。**未接壳体**。
+  - **3a-2 成套接线 ⬜**：壳体 `sessionScope`/`getStoreSessionScope`/`isScopedSessionCurrent`/`:4038`/`:4042` 去掉 `layout.id` 拼接；activity tracker 注入 project source；`agent-panel.tsx:675` 第二道 layout.id scope 比对改走 `isSessionCurrent`/project 判据；同步 react 测试断言。floor/venue 过渡期暂留影子。必须与守卫拼接同批改，不可拆半提交（否则 `isCurrent` 全灭）。
+  - **3a-2 改动前基线对照（2026-11-13，3a-1 提交后复跑）**：switch-guard 1 ✓、canvas-session 7 ✓；session-generation 4 ✓ / 2 既有失败（headcount exportable、old zone preview A→B→A）；venue-epoch 0 ✓ / 1 既有失败（geometry change undo）。3 个失败均在全量基线缓冲 `.verify-full-batch.txt` 内，属 #12 室内布局/场地尺寸债，非 3a-1 引入。接线后复跑须保持这 3 个失败不扩散、其余不红。
 - **3b 历史**：`useHistory` 快照对象从 `RoomLayout` 换成 `SitePlanData` 快照；apply 回写 plan（经 overlay/commitPlan 通路），不再 `actions.applyLayout`；物料增删 / 选中 / 墙操作的 `commitHistoryNow` 改挂 plan 历史。
 - **3c 导出 / 写守卫**：导出消费 plan（已有 CSV/GeoJSON/PNG/PDF 链路）；写守卫断言从 `assertLayoutWrite` 换成 plan 写权限；环境 / 场地核对前置改为地图语境。
 - **3d 回写镜像退役**：`handleOutdoorPlanChange` 的 false 侧 layout patch（`shellVenuePatchFromPlanBoundary`）在真侧正源稳定后删除；`applyOutdoorGroundBasemap` 对 layout 的 `floorPlanImage`/`sceneAnchor` 写入改挂 plan / 视图记忆。
