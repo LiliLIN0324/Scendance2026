@@ -131,6 +131,8 @@ export const PLANNING_TEXT = {
   soft: '#55585f',
   /** 弱化说明 = --muted #71767E。 */
   muted: '#71767e',
+  /** 占位 / 禁用灰 = --faint #A6AAB2，比 muted 更浅，仅占位与禁用态。 */
+  faint: '#a6aab2',
 } as const;
 
 /** 图标尺寸（H4-a）：图例条目 / 类型胶囊 / 工具按钮三档（px）。 */
@@ -138,6 +140,29 @@ export const PLANNING_ICON_SIZES = {
   legend: 12,
   capsule: 11,
   tool: 12,
+} as const;
+
+/**
+ * 分段控件共享尺度（2026-11-13 收口）：画布左下「2D / 3D」胶囊与左栏
+ * 「添加物件 / 已放置物件」页签同属 B 墨黑分段范式——激活段近黑墨实底白字、
+ * 非激活次级墨字；两处只允许圆角形态不同（浮层短胶囊全圆角 / 内嵌宽分段小圆角），
+ * 高度 / 字号 / 字重 / 内边距一律从本档取，不再各自写裸值。
+ */
+export const PLANNING_SEGMENTED = {
+  /** 段内高度（px）。 */
+  height: 34,
+  /** 容器内边距（px）。 */
+  containerPadding: 3,
+  /** 段间距（px）。 */
+  gap: 3,
+  /** 浮层短胶囊：全圆角。 */
+  radiusPill: 999,
+  /** 内嵌宽分段：容器圆角（px）。 */
+  radiusInline: PLANNING_RADIUS.md,
+  /** 分段字号（px），介于面板正文与标题之间的强调档。 */
+  fontSize: 13,
+  activeWeight: 600,
+  inactiveWeight: 500,
 } as const;
 
 /**

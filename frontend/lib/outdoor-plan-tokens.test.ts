@@ -7,7 +7,9 @@ import {
   PLANNING_ICONS,
   PLANNING_LAYER_COLORS,
   PLANNING_LAYER_ICONS,
+  PLANNING_SEGMENTED,
   PLANNING_SURFACE,
+  PLANNING_TEXT,
   PLANNING_TYPOGRAPHY,
   withAlphaHex,
 } from './outdoor-plan-tokens';
@@ -27,6 +29,13 @@ describe('outdoor 2D planning visual tokens (H4-a)', () => {
     expect(PLANNING_SURFACE.selectedBorder).toBe('#4a7c59');
   });
 
+  it('keeps text tiers aligned to global ink/ink-soft/muted/faint variables', () => {
+    expect(PLANNING_TEXT.soft).toBe('#55585f');
+    expect(PLANNING_TEXT.muted).toBe('#71767e');
+    // 占位 / 禁用灰对齐全局 --faint #A6AAB2。
+    expect(PLANNING_TEXT.faint).toBe('#a6aab2');
+  });
+
   it('derives rgba from hex via withAlphaHex without inventing new colours', () => {
     expect(withAlphaHex('#c98a2c', 0.14)).toBe('rgba(201, 138, 44, 0.14)');
     expect(withAlphaHex(PLANNING_LAYER_COLORS.boundary, 0.5)).toBe('rgba(53, 98, 74, 0.5)');
@@ -38,6 +47,17 @@ describe('outdoor 2D planning visual tokens (H4-a)', () => {
     expect(PLANNING_ICON_SIZES.capsule).toBeLessThanOrEqual(PLANNING_ICON_SIZES.legend);
     expect(PLANNING_ICON_SIZES.tool).toBeLessThanOrEqual(13);
     expect(PLANNING_ICON_SIZES.legend).toBeGreaterThanOrEqual(11);
+  });
+
+  it('shares one segmented-control scale across the 2D/3D pill and the placed/library tabs', () => {
+    expect(PLANNING_SEGMENTED.height).toBe(34);
+    expect(PLANNING_SEGMENTED.fontSize).toBe(13);
+    expect(PLANNING_SEGMENTED.activeWeight).toBe(600);
+    expect(PLANNING_SEGMENTED.inactiveWeight).toBe(500);
+    expect(PLANNING_SEGMENTED.activeWeight).toBeGreaterThan(PLANNING_SEGMENTED.inactiveWeight);
+    expect(PLANNING_SEGMENTED.radiusPill).toBe(999);
+    expect(PLANNING_SEGMENTED.containerPadding).toBe(3);
+    expect(PLANNING_SEGMENTED.gap).toBe(3);
   });
 
   it('registers resolvable kebab-case icon names only (layer-group was unresolvable)', () => {
