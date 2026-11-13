@@ -94,6 +94,28 @@ describe('BasemapTileCache', () => {
     expect(cache.stats.errors).toBe(1);
   });
 
+  it('挂起的瓦片超时按失败结算：既不触发 load 也不触发 error 时，仍回调监听者并腾空位', () => {
+    vi.useFakeTimers();
+    try {
+      const { createImage } = fakeImageFactory();
+      const cache = new BasemapTileCache({ createImage, timeoutMs: 9000 });
+      const onReady = vi.fn();
+      cache.load('hang.png', onReady);
+      expect(cache.status('hang.png')).toBe('loading');
+      expect(cache.get('hang.png')).toBeNull();
+      expect(onReady).not.toHaveBeenCalled();
+      expect(cache.loadingCount).toBe(1);
+      vi.advanceTimersByTime(9000);
+      expect(cache.status('hang.png')).toBe('error');
+      expect(cache.get('hang.png')).toBeNull();
+      expect(onReady).toHaveBeenCalledTimes(1);
+      expect(cache.stats.errors).toBe(1);
+      expect(cache.loadingCount).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('失败的瓦片再次 load 会重试（最多 3 次），成功后就绪', () => {
     const { created, createImage } = fakeImageFactory();
     const cache = new BasemapTileCache({ createImage });

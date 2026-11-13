@@ -32,10 +32,15 @@ interface TileEntry {
   listeners: (() => void)[];
   /** 2026-11-12：失败重试次数（OSM 会偶发断连/限流，错一次就永久空白太脆）。 */
   attempts: number;
+  /** 下载超时定时器：境外源 TCP 挂起时 onload/onerror 都不触发，靠它兜底判失败结算。 */
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 /** 单张瓦片最多尝试次数（首次 + 2 次重试）。 */
 const MAX_TILE_ATTEMPTS = 3;
+
+/** 单张瓦片下载超时（ms）：超时按失败结算，避免不可达源把在途计数永远占住、底图永久转圈。 */
+const DEFAULT_TILE_TIMEOUT_MS = 9000;
 
 /** 上一级瓦片在「当前瓦片」里的裁剪区域（用于兜底放大）。 */
 export interface AncestorTileCrop {
@@ -81,14 +86,43 @@ export class BasemapTileCache {
   private readonly pendingQueue: (() => void)[] = [];
   private inFlight = 0;
   private readonly createImage: () => HTMLImageElement;
+  private readonly timeoutMs: number;
   private readyCount = 0;
   private errorCount = 0;
 
-  constructor(options?: { max?: number; maxInFlight?: number; createImage?: () => HTMLImageElement }) {
+  constructor(options?: { max?: number; maxInFlight?: number; createImage?: () => HTMLImageElement; timeoutMs?: number }) {
     this.max = options?.max ?? 900;
     this.maxInFlight = Math.max(1, options?.maxInFlight ?? 16);
     this.createImage =
       options?.createImage ?? (() => new Image() as HTMLImageElement);
+    this.timeoutMs = options?.timeoutMs ?? DEFAULT_TILE_TIMEOUT_MS;
+  }
+
+  /** 清掉某条目挂起的超时定时器（若有）。 */
+  private disarmTimer(entry: TileEntry): void {
+    if (entry.timer !== null) {
+      clearTimeout(entry.timer);
+      entry.timer = null;
+    }
+  }
+
+  /** 放行下载后启动超时计时；排队期间不计时（排队不算网络挂起）。 */
+  private armTimer(entry: TileEntry): void {
+    this.disarmTimer(entry);
+    if (this.timeoutMs <= 0 || typeof setTimeout === 'undefined') return;
+    entry.timer = setTimeout(() => this.failEntry(entry), this.timeoutMs);
+  }
+
+  /** 把条目判为失败：清定时器、结算监听者并腾空位（onerror 与超时共用此路径）。 */
+  private failEntry(entry: TileEntry): void {
+    if (entry.status !== 'loading') return;
+    this.disarmTimer(entry);
+    entry.status = 'error';
+    this.errorCount += 1;
+    const listeners = entry.listeners;
+    entry.listeners = [];
+    for (const listener of listeners) listener();
+    this.settle();
   }
 
   /** 有并发空位就按 FIFO 放行排队中的加载。 */
@@ -141,7 +175,7 @@ export class BasemapTileCache {
       existing.status = 'loading';
       existing.attempts += 1;
       existing.listeners.push(onReady);
-      this.pendingQueue.push(() => { existing.img.src = url; });
+      this.pendingQueue.push(() => { existing.img.src = url; this.armTimer(existing); });
       this.pump();
       return;
     }
@@ -151,10 +185,11 @@ export class BasemapTileCache {
     } catch {
       return;
     }
-    const entry: TileEntry = { img, status: 'loading', listeners: [onReady], attempts: 1 };
+    const entry: TileEntry = { img, status: 'loading', listeners: [onReady], attempts: 1, timer: null };
     this.entries.set(url, entry);
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      this.disarmTimer(entry);
       entry.status = 'ready';
       this.readyCount += 1;
       const listeners = entry.listeners;
@@ -162,16 +197,8 @@ export class BasemapTileCache {
       for (const listener of listeners) listener();
       this.settle();
     };
-    img.onerror = () => {
-      entry.status = 'error';
-      this.errorCount += 1;
-      // 失败也要结算监听者：调用方据此结束等待（否则 Promise 永远 pending）。
-      const listeners = entry.listeners;
-      entry.listeners = [];
-      for (const listener of listeners) listener();
-      this.settle();
-    };
-    this.pendingQueue.push(() => { img.src = url; });
+    img.onerror = () => this.failEntry(entry);
+    this.pendingQueue.push(() => { img.src = url; this.armTimer(entry); });
     this.pump();
     this.trim();
   }
@@ -200,6 +227,7 @@ export class BasemapTileCache {
       entry.listeners = [];
       entry.img.onload = null;
       entry.img.onerror = null;
+      this.disarmTimer(entry);
     }
     this.entries.clear();
     this.readyCount = 0;
@@ -218,6 +246,7 @@ export class BasemapTileCache {
         entry.listeners = [];
         entry.img.onload = null;
         entry.img.onerror = null;
+        this.disarmTimer(entry);
       }
       this.entries.delete(oldestKey);
     }
