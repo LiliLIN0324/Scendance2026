@@ -85,6 +85,14 @@
   - **3a-2 成套接线 ✅（本地落地，未推 main）**：壳体 `sessionScope`/`getStoreSessionScope`/`isScopedSessionCurrent`/`scopedPreview`/`scopedApply` 去掉 `layout.id` 拼接；activity tracker 注入 project source（`activityScopeSource`，dep `[outdoorProjectIdProp]`，subscribe no-op，项目切换经 rerender 重建旧 token 失效）；`agent-panel.tsx:675` 第二道 layout.id scope 比对改由 `isSessionCurrent` 把关。composer 草稿读取对齐 `sessionScope`；`venueFactScope` 透传回退到 layout 影子 activity 键（venue 链过渡期留影，3c 重映射）。floor/venue tracker 订阅源未拆。同步 canvas-session observer 用例：切换改由 rerender 换 `outdoorProjectId` 驱动。
   - **3a-2 接线后复跑（2026-11-13）**：tsc exit 0；activity/project tracker 9 绿、floor/venue/assistant-active 15 绿、venue-facts-panel 5 绿、根代表契约（local-persistence/site-plan/delivery-contract）82 绿；壳体守卫 3 既有失败（headcount、zone preview A→B→A、venue geometry undo）/12 绿，与基线一致不扩散；agent-panel 40 failed / 378 passed / 1 skipped，与 #12 基线持平。残留 `layout.id` 读取均属环境对账、评审链接、回写镜像、venue/floor 影子域，归 3b/3c/3d。
   - **3a-2 改动前基线对照（2026-11-13，3a-1 提交后复跑）**：switch-guard 1 ✓、canvas-session 7 ✓；session-generation 4 ✓ / 2 既有失败（headcount exportable、old zone preview A→B→A）；venue-epoch 0 ✓ / 1 既有失败（geometry change undo）。3 个失败均在全量基线缓冲 `.verify-full-batch.txt` 内，属 #12 室内布局/场地尺寸债，非 3a-1 引入。接线后复跑须保持这 3 个失败不扩散、其余不红。
+  - **3a 残留审计（2026-11-13 复核）**：壳体主活动会话链路已全部走 `projectSessionScope`——`sessionScope`/`getStoreSessionScope`/`isScopedSessionCurrent`/`scopedPreview`/`scopedApply`/`onBindProject` 守卫/`LayoutAgentProvider sessionScope`/provider `key` 均无 `activity:${layout.id}` 拼接。生产代码里残留的 `activity:` 键拼接按域登记，均属后续切片、非 3a 漏拆：
+    - `creative-studio.tsx` 内部 `chatScope`（:498/:561/:601/:616/:1804，`activity:${layout.id|base.id|selected.layout.id}`）：Bingo 工作台会话订阅；随 3c/3d 把 provider 传入 scope 与内部 chatScope 统一到 project 身份。
+    - `bingo-audit-card.tsx` `scopeKey`（:185/:186，`activity:${projectKey}`）：评审卡审计键，归评审链接/R3-R4 域。
+    - `venue-facts-panel.tsx:15` / `space-panel.tsx:170` `venueFactScope`：3c 场地事实重映射域。
+    - `floor-session-epoch.ts:18` scope：3a 遗留影子，等 M2 plan.levels 接住后重绑。
+    - `scene-delivery-panel.tsx:338` 导出 note scope：3c/R4 导出链路域。
+    - 环境偏好键 `writeEnvironments/readEnvironments/clearEnvironment` 按 `layout.id` 分桶（壳体 :2708–2869/:2408–2419/:4860）：R2 卸 three/场景链路域。
+    - 评审链接 `identity().scope = layout.id`（壳体 :4147）：评审链接域。
 - **3b 历史**：`useHistory` 快照对象从 `RoomLayout` 换成 `SitePlanData` 快照；apply 回写 plan（经 overlay/commitPlan 通路），不再 `actions.applyLayout`；物料增删 / 选中 / 墙操作的 `commitHistoryNow` 改挂 plan 历史。
   - **3b 前置侦察（2026-11-13）**：plan 侧历史已在 `outdoor-plan-canvas.tsx` 内部闭环——`historyRef`/`redoRef` 为 `SitePlanData[]`（上限 `UNDO_LIMIT=30`），`commitPlan` 推入旧快照，`undoPlan`/`redoPlan` 回放，覆盖 facility/zone/route/annotation/worker/组选操作，并经 `onHistoryChange` 上报 canUndo/canRedo 给壳体 `outdoorActions.undo/redo`。壳体另一套 `useHistory(layout, actions.applyLayout)`（:1595）仍服务尚未迁 plan 的室内物料/墙/灯光/事件操作。**迁移随 M2 物料/墙落 plan 后进行**；`useHistory` hook 本身已是泛型 `<T>`，不绑 RoomLayout，换类型只在壳体调用点。
 - **3c 导出 / 写守卫**：导出消费 plan（已有 CSV/GeoJSON/PNG/PDF 链路）；写守卫断言从 `assertLayoutWrite` 换成 plan 写权限；环境 / 场地核对前置改为地图语境。
@@ -190,7 +198,7 @@ M5 智能体工具桥接扩充（独立，不依赖 R 线）
 | 物料归属丢失 | 室内 items/墙迁 plan 时 zoneId/尺寸/旋转错位 | M2 纯函数迁移单 + 对照快照测试；footprint 锁（`facility-footprint-lock`）复用 |
 | 五钮地图语境不可用 | 地图缺对应能力时硬切，钮失效 | M1 逐颗接，未接住的钮置灰并保留提示，不回退室内壳 |
 | 基线债混淆 | #12 既有失败被当成新回归 | 每片对照基线失败清单；只堵新增回归 |
-| 瓦片/网络 | #13 OSM 偶发超时 | 另线排查，不计入去室内化验收 |
+| 瓦片/网络 | #13 OSM 偶发超时；#52 已加 2D 瓦片 9s 超时兜底（挂起按失败结算、在途计数归零，转圈消退）；未做健康探测自动回退可达源，境外不可达源仍只判失败、回退纸面 | 另线底图韧性，不计入去室内化验收 |
 
 ## 7.5 合 main 给智能体线（#110 V1–V5）的交接边界
 
