@@ -23,7 +23,7 @@ import {
   type GuideState,
   type GuideStep,
 } from '../lib/site-plan-guide';
-import { PLANNING_SPACING } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_SPACING, PLANNING_TYPOGRAPHY } from '@/lib/outdoor-plan-tokens';
 
 /* ---------------- 渐进引导气泡 ---------------- */
 
@@ -95,9 +95,9 @@ export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: PLANNING_SPACING.sm }}>
         <strong style={{ fontSize: 14 }}>{content.title}</strong>
-        <span style={{ fontSize: 11, color: '#71767e' }}>{stepIndex + 1}/{totalSteps}</span>
+        <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: '#71767e' }}>{stepIndex + 1}/{totalSteps}</span>
       </div>
-      <p style={{ margin: `0 0 ${PLANNING_SPACING.md}px`, fontSize: 12, lineHeight: '20px', color: '#55585f' }}>{content.body}</p>
+      <p style={{ margin: `0 0 ${PLANNING_SPACING.md}px`, fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: '20px', color: '#55585f' }}>{content.body}</p>
       <div style={{ display: 'flex', gap: PLANNING_SPACING.sm, justifyContent: 'flex-end' }}>
         <button type="button" onClick={onDismiss} style={secondaryButtonStyle}>跳过引导</button>
         <button type="button" onClick={onComplete} autoFocus style={primaryButtonStyle}>{content.cta}</button>
@@ -153,7 +153,7 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default',
                 border: '1px solid #e4e4e7',
                 background: '#ffffff',
                 color: '#141416',
-                fontSize: 12,
+                fontSize: PLANNING_TYPOGRAPHY.panel,
                 fontWeight: 600,
                 cursor: 'pointer',
                 boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
@@ -167,7 +167,7 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default',
         {variant === 'toolbar'
           ? <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>⤓</span>
           : variant === 'canvas'
-            ? <span aria-hidden style={{ fontSize: 12 }}>导出</span>
+            ? <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.panel }}>导出</span>
             : '导出/分享'}
       </button>
       {open && (
@@ -200,7 +200,7 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default',
                 style={enabled ? menuItemEnabledStyle : menuItemStyle}
               >
                 <span style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>{item.label}</span>
-                <span style={{ display: 'block', fontSize: 11, color: '#71767e', marginTop: 2 }}>{item.hint}{enabled ? '' : ' · 即将上线'}</span>
+                <span style={{ display: 'block', fontSize: PLANNING_TYPOGRAPHY.row, color: '#71767e', marginTop: 2 }}>{item.hint}{enabled ? '' : ' · 即将上线'}</span>
               </button>
             );
           })}
@@ -266,7 +266,7 @@ export function ShareDialog({ open, onClose, content, shareLink, onPrintDeck }: 
           <button type="button" onClick={onClose} aria-label="关闭" style={iconButtonStyle}>×</button>
         </div>
         {content.lines.map((line, index) => (
-          <p key={index} style={{ margin: `0 0 ${PLANNING_SPACING.sm}px`, fontSize: 12, lineHeight: '20px', color: index === 0 ? '#141416' : '#55585f' }}>
+          <p key={index} style={{ margin: `0 0 ${PLANNING_SPACING.sm}px`, fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: '20px', color: index === 0 ? '#141416' : '#55585f' }}>
             {line}
           </p>
         ))}
@@ -276,7 +276,7 @@ export function ShareDialog({ open, onClose, content, shareLink, onPrintDeck }: 
               readOnly
               value={shareLink.length > 72 ? shareLink.slice(0, 48) + '…' + shareLink.slice(-12) : shareLink}
               aria-label="分享链接"
-              style={{ flex: 1, background: 'transparent', border: 'none', color: '#141416', fontSize: 11, fontFamily: 'ui-monospace, monospace', outline: 'none', minWidth: 0 }}
+              style={{ flex: 1, background: 'transparent', border: 'none', color: '#141416', fontSize: PLANNING_TYPOGRAPHY.row, fontFamily: 'ui-monospace, monospace', outline: 'none', minWidth: 0 }}
               onFocus={event => event.currentTarget.select()}
             />
             <button type="button" onClick={() => { void navigator.clipboard?.writeText(shareLink); setCopied(true); }} style={primaryButtonStyle}>
@@ -336,7 +336,7 @@ const primaryButtonStyle: React.CSSProperties = {
   background: '#141416',
   color: '#ffffff',
   fontWeight: 600,
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   lineHeight: '20px',
   cursor: 'pointer',
   font: 'inherit',
@@ -349,7 +349,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   border: '1px solid #e4e4e7',
   background: 'transparent',
   color: '#141416',
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   lineHeight: '20px',
   cursor: 'pointer',
   font: 'inherit',

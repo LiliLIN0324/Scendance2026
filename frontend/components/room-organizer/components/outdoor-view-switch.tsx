@@ -15,7 +15,7 @@
  * testid 前缀：`${prefix}-toggle` / `${prefix}-2d` / `${prefix}-3d`。
  */
 
-import { PLANNING_SURFACE, PLANNING_TEXT } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_SEGMENTED, PLANNING_SURFACE, PLANNING_TEXT } from '@/lib/outdoor-plan-tokens';
 
 export type OutdoorPlanView = '2d' | '3d';
 
@@ -47,8 +47,8 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
         display: 'inline-grid',
         gridTemplateColumns: '1fr 1fr',
         gap: 0,
-        padding: 3,
-        borderRadius: 999,
+        padding: PLANNING_SEGMENTED.containerPadding,
+        borderRadius: PLANNING_SEGMENTED.radiusPill,
         background: PLANNING_SURFACE.panelBg,
         border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
         boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
@@ -58,11 +58,11 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
         aria-hidden="true"
         style={{
           position: 'absolute',
-          top: 3,
-          left: 3,
-          width: 'calc(50% - 3px)',
-          height: 34,
-          borderRadius: 999,
+          top: PLANNING_SEGMENTED.containerPadding,
+          left: PLANNING_SEGMENTED.containerPadding,
+          width: `calc(50% - ${PLANNING_SEGMENTED.containerPadding}px)`,
+          height: PLANNING_SEGMENTED.height,
+          borderRadius: PLANNING_SEGMENTED.radiusPill,
           background: PLANNING_SURFACE.panelText,
           transform: reducedMotion ? undefined : `translateX(${activeIndex * 100}%)`,
           transition: reducedMotion ? 'none' : 'transform 200ms cubic-bezier(.2,0,0,1)',
@@ -80,15 +80,15 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
             style={{
               position: 'relative',
               zIndex: 1,
-              height: 34,
+              height: PLANNING_SEGMENTED.height,
               minWidth: 60,
               padding: '0 14px',
-              borderRadius: 999,
+              borderRadius: PLANNING_SEGMENTED.radiusPill,
               border: 'none',
               background: 'transparent',
               color: active ? '#ffffff' : PLANNING_TEXT.soft,
-              fontSize: 13.5,
-              fontWeight: active ? 600 : 500,
+              fontSize: PLANNING_SEGMENTED.fontSize,
+              fontWeight: active ? PLANNING_SEGMENTED.activeWeight : PLANNING_SEGMENTED.inactiveWeight,
               letterSpacing: '.02em',
               cursor: 'pointer',
               fontFamily: 'inherit',

@@ -3411,7 +3411,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: PLANNING_SPACING.xs,
           width: '100%',
           padding: '5px 6px',
           paddingLeft: 30,
@@ -3450,18 +3450,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           display: 'flex',
           alignItems: 'center',
           width: '100%',
-          gap: 8,
+          gap: PLANNING_SPACING.xs,
           padding: '7px 2px',
           color: PLANNING_SURFACE.panelText,
-          fontSize: 13,
+          fontSize: PLANNING_TYPOGRAPHY.panel,
           fontWeight: 600,
           borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}`,
         }}
       >
-        <span aria-hidden style={{ fontSize: 10, width: 10 }}>{open ? '▾' : '▸'}</span>
-        <Icon size={14} aria-hidden color={PLANNING_SURFACE.panelText} />
+        <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{open ? '▾' : '▸'}</span>
+        <Icon size={PLANNING_ICON_SIZES.legend} aria-hidden color={PLANNING_SURFACE.panelText} />
         <span style={{ flex: 1 }}>{input.label}</span>
-        <span style={{ opacity: 0.65, fontWeight: 400, fontSize: 11 }}>{input.count}</span>
+        <span style={{ opacity: 0.65, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.row }}>{input.count}</span>
       </button>
     );
   }
@@ -3483,7 +3483,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           display: 'flex',
           alignItems: 'center',
           width: '100%',
-          gap: 8,
+          gap: PLANNING_SPACING.xs,
           padding: '6px 2px',
           paddingLeft: 18,
           color: PLANNING_SURFACE.panelText,
@@ -3491,10 +3491,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           fontWeight: 600,
         }}
       >
-        <span aria-hidden style={{ fontSize: 10, width: 10 }}>{open ? '▾' : '▸'}</span>
-        {Icon && <Icon size={13} aria-hidden color={PLANNING_SURFACE.panelText} />}
+        <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{open ? '▾' : '▸'}</span>
+        {Icon && <Icon size={PLANNING_ICON_SIZES.legend} aria-hidden color={PLANNING_SURFACE.panelText} />}
         <span style={{ flex: 1 }}>{input.label}</span>
-        <span style={{ opacity: 0.65, fontWeight: 400, fontSize: 11 }}>{input.count}</span>
+        <span style={{ opacity: 0.65, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.row }}>{input.count}</span>
       </button>
     );
   }
@@ -3577,7 +3577,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               : undefined,
             icon: packChipNode(entry),
             trailing: placeLabel
-              ? <span aria-hidden style={{ fontSize: 10, opacity: 0.6, flex: '0 0 auto' }}>{placeLabel}</span>
+              ? <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.6, flex: '0 0 auto' }}>{placeLabel}</span>
               : undefined,
           });
         })}
@@ -3630,7 +3630,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }}
         >
           {pack.previews.map(preview => packChipNode(preview, 22, preview.id))}
-          {hiddenCount > 0 && <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.75 }}>+{hiddenCount}</span>}
+          {hiddenCount > 0 && <span style={{ fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, opacity: 0.75 }}>+{hiddenCount}</span>}
         </span>
         <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
           <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
@@ -3640,7 +3640,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             {pack.items.length} 件物件
           </span>
         </span>
-        <span aria-hidden style={{ fontSize: 10, width: 10, flex: '0 0 auto' }}>{open ? '▾' : '▸'}</span>
+        <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10, flex: '0 0 auto' }}>{open ? '▾' : '▸'}</span>
       </button>
     );
   }
@@ -5623,9 +5623,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {!outdoorInspectorActive && (
         <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs }}>
           <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: PLANNING_LAYER_COLORS.measure }} />
-          <span style={{ fontWeight: 600, fontSize: 13 }}>测量</span>
+          <span style={{ fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.panel }}>测量</span>
           <span style={{ flex: 1 }} />
-          <span style={{ opacity: 0.6, fontSize: 11 }}>{levelView.measurements?.length ?? 0}</span>
+          <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{levelView.measurements?.length ?? 0}</span>
         </div>
       )}
       {/* 2026-11-12 变体2：紧凑工具条——图标入口钮 + 右侧读数小标签；点开竖向下拉切模式，入口记住上次默认。 */}
@@ -5651,7 +5651,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 }}
               >
                 <TriggerIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                <span aria-hidden style={{ opacity: 0.55, fontSize: 10, display: 'inline-flex' }}>{measureMenuOpen ? '▾' : '▸'}</span>
+                <span aria-hidden style={{ opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.hint, display: 'inline-flex' }}>{measureMenuOpen ? '▾' : '▸'}</span>
               </button>
               <span
                 aria-hidden
@@ -5754,7 +5754,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             type="button"
             aria-label={`删除测量「${m.name}」`}
             className="sc-danger-quiet"
-            style={{ cursor: 'pointer', fontSize: 11 }}
+            style={{ cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.row }}
             onClick={event => { event.stopPropagation(); deleteMeasurement(m.id); }}
           >
             删除
@@ -5775,9 +5775,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {!outdoorInspectorActive && (
         <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs }}>
           <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: PLANNING_LAYER_COLORS.annotate }} />
-          <span style={{ fontWeight: 600, fontSize: 13 }}>标注</span>
+          <span style={{ fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.panel }}>标注</span>
           <span style={{ flex: 1 }} />
-          <span style={{ opacity: 0.6, fontSize: 11 }}>{levelView.annotations?.length ?? 0}</span>
+          <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{levelView.annotations?.length ?? 0}</span>
         </div>
       )}
       {/* 2026-11-13 A2 唤出式工具条：文本 T 常驻；形状四类收进父钮白色下拉菜单；去掉两层 tab 与长说明段。 */}
@@ -5809,7 +5809,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             >
               <ShapeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
               <span>{planAnnotationKindLabels[annotateShape]}</span>
-              <span aria-hidden style={{ opacity: 0.55, fontSize: 10, display: 'inline-flex' }}>{annotateMenuOpen ? '▾' : '▸'}</span>
+              <span aria-hidden style={{ opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.hint, display: 'inline-flex' }}>{annotateMenuOpen ? '▾' : '▸'}</span>
             </button>
           );
         })()}
@@ -5946,7 +5946,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             type="button"
             aria-label={`删除标注「${a.name}」`}
             className="sc-danger-quiet"
-            style={{ cursor: 'pointer', fontSize: 11 }}
+            style={{ cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.row }}
             onClick={event => { event.stopPropagation(); deleteAnnotation(a.id); }}
           >
             删除
@@ -5976,13 +5976,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /* 2026-11-12 室内多选胶囊移植（panels/viewport.tsx SelectionChip 同款观感）：
      组选浮层锚在组包围盒顶边中点上方（view state 驱动跟随平移缩放），拖组会话中隐藏。
      成组/存为组合不搬——SitePlan 契约没有 groups/组合概念。 */
-  const chipPillStyle: React.CSSProperties = { padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: 11, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' };
+  const chipPillStyle: React.CSSProperties = { padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.row, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' };
   const chipAlignRowStyle: React.CSSProperties = { padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 2, borderRadius: 999, color: 'var(--pc-paper, #141416)' };
-  const chipButtonStyle: React.CSSProperties = { border: '1px solid', borderRadius: 999, background: 'transparent', color: 'inherit', fontWeight: 700, fontSize: 10, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap' };
+  const chipButtonStyle: React.CSSProperties = { border: '1px solid', borderRadius: 999, background: 'transparent', color: 'inherit', fontWeight: 700, fontSize: PLANNING_TYPOGRAPHY.hint, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap' };
   // 删除动作 danger 变体：深底胶囊用 demolish 红（--pc-demolish），描边同色降透明。
   const chipDangerButtonStyle: React.CSSProperties = { ...chipButtonStyle, color: 'var(--pc-demolish, #E45248)', borderColor: 'rgba(228, 82, 72, 0.55)' };
   // 计数徽章：深底胶囊上的半透明白底小丸，件数居中。
-  const chipCountBadgeStyle: React.CSSProperties = { minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.16)', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '18px' };
+  const chipCountBadgeStyle: React.CSSProperties = { minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.16)', color: '#fff', fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 700, lineHeight: '18px' };
   const chipIconButtonStyle: React.CSSProperties = { width: 22, height: 22, display: 'grid', placeItems: 'center', borderRadius: 7, background: 'transparent', color: 'inherit', border: '1.5px solid transparent', cursor: 'pointer', opacity: 0.9, padding: 0 };
   /** 组选胶囊锚点：组包围盒顶边中点 → 屏幕像素（每次渲染按当前视口现算，跟随平移/缩放/对齐后的新包围盒）。 */
   const multiGroupChipPx = (() => {
@@ -6006,7 +6006,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 {multiSelectedFacilityIds.length >= 2 && (
                   <div data-testid="facility-multi-panel" style={{ marginTop: PLANNING_SPACING.xs }}>
                     <div style={{ fontWeight: 700, fontSize: 14, color: PLANNING_SURFACE.panelText }}>已选 {multiSelectedFacilityIds.length} 件设施</div>
-                    <div style={{ marginTop: 2, fontSize: 12, opacity: 0.72 }}>
+                    <div style={{ marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.panel, opacity: 0.72 }}>
                       拖组内任意一件整组移动 · 角柄整组缩放 · 方向键微调 · Ctrl+D 复制 · Delete 删除
                     </div>
                     <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.sm }}>
@@ -6382,7 +6382,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             setEditMessage(`「${selectedFacility.name}」已恢复自动挑选 3D 模型。`);
                           }}
                         >
-                          <span style={{ fontSize: 12, color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>自动</span>
+                          <span style={{ fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>自动</span>
                         </button>
                         {(facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId
                           ? facilityModelCandidates.items
@@ -6411,7 +6411,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                               />
                             ) : null}
-                            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 4px 2px', fontSize: 10, lineHeight: '12px', color: PLANNING_SURFACE.panelText, textShadow: candidate.thumb ? '0 1px 2px rgba(0,0,0,0.6)' : 'none', pointerEvents: 'none' }}>
+                            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 4px 2px', fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: '12px', color: PLANNING_SURFACE.panelText, textShadow: candidate.thumb ? '0 1px 2px rgba(0,0,0,0.6)' : 'none', pointerEvents: 'none' }}>
                               <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.name}</span>
                             </span>
                           </button>
@@ -6419,7 +6419,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       </div>
                       {/* V-5b/c 生成中状态行：轮询到待取回任务时给一句可读进度，完成后自动消失。 */}
                       {facilityGenerateStatus && facilityGenerateStatus.facilityId === selectedFacility.id ? (
-                        <div role="status" style={{ marginTop: PLANNING_SPACING.xs, fontSize: 12, lineHeight: '16px', color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>
+                        <div role="status" style={{ marginTop: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: '16px', color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>
                           「{facilityGenerateStatus.name}」{facilityGenerateStatus.message}，完成后自动回填候选首位。
                         </div>
                       ) : null}
@@ -6853,7 +6853,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {basemapLoading && (
         <div className="pc-top-chip absolute left-1/2" style={{ top: 14, transform: 'translateX(-50%)', zIndex: 26, pointerEvents: 'none' }}>
           <div className="pc-glass pc-glass--dark" role="status" aria-live="polite"
-            style={{ padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: 11, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' }}>
+            style={{ padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.row, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' }}>
             <span className="pc-basemap-loading__spinner" aria-hidden="true" />
             底图加载中…
           </div>
@@ -6999,16 +6999,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             onClick={() => { setLevelMenuOpen(open => !open); setRenamingLevelId(null); setDeleteArmLevelId(null); }}
             style={{
               all: 'unset',
-              display: 'flex', alignItems: 'center', gap: 6,
+              display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs,
               padding: '4px 6px', borderRadius: PLANNING_RADIUS.sm,
-              color: PLANNING_SURFACE.panelText, fontSize: 15,
+              color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel,
               cursor: 'pointer', minWidth: 0, flex: levelsPanelHost ? '1 1 0%' : '0 1 auto',
             }}
           >
-            <LevelRowIcon size={18} />
+            <LevelRowIcon size={PLANNING_ICON_SIZES.tool} />
             <span data-testid="levels-active-level-name" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{activeLevelName}</span>
             <span data-testid="levels-level-count" style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>({activeLevelIndex + 1}/{levelList.length})</span>
-            <span aria-hidden style={{ fontSize: 10, opacity: 0.55, marginLeft: 'auto' }}>{levelMenuOpen ? '▾' : '▸'}</span>
+            <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.55, marginLeft: 'auto' }}>{levelMenuOpen ? '▾' : '▸'}</span>
           </button>
           {!readOnly && (
             <button
@@ -7020,9 +7020,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               style={{
                 all: 'unset',
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: 26, height: 26, borderRadius: 8,
+                width: 24, height: 24, borderRadius: PLANNING_RADIUS.sm,
                 border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                color: PLANNING_SURFACE.panelText, fontSize: 16, cursor: 'pointer',
+                color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel, cursor: 'pointer',
               }}
             >
               +
@@ -7165,7 +7165,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               position: 'absolute', left: px.x, top: px.y, transform: 'translate(-50%, -50%)', zIndex: 5,
               minWidth: 150, maxWidth: 320, padding: '6px 8px', borderRadius: 6,
               border: `1.5px solid ${PLANNING_LAYER_COLORS.annotate}`, background: PLANNING_SURFACE.panelBg,
-              color: PLANNING_SURFACE.panelText, fontSize: 12, fontFamily: 'system-ui, sans-serif',
+              color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel, fontFamily: 'system-ui, sans-serif',
               outline: 'none', resize: 'both', boxShadow: '0 2px 10px rgba(20, 20, 22, 0.16)',
             }}
           />
@@ -7369,13 +7369,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         <button
           type="button"
           onClick={() => setPanelOpen(open => !open)}
-          style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontWeight: 600 }}
+          style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, width: '100%', padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontWeight: 600 }}
           aria-expanded={panelOpen}
         >
-          <LibraryFooterIcon size={14} aria-hidden color={PLANNING_SURFACE.panelText} />
+          <LibraryFooterIcon size={PLANNING_ICON_SIZES.legend} aria-hidden color={PLANNING_SURFACE.panelText} />
           <span style={{ flex: 1 }}>已放置物件</span>
           <span style={{ opacity: 0.7, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.hint }}>({inventoryRows.length}/{libraryTotal})</span>
-          <span aria-hidden style={{ fontSize: 10 }}>{panelOpen ? '▾' : '▸'}</span>
+          <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint }}>{panelOpen ? '▾' : '▸'}</span>
         </button>
         {panelOpen && (
           <>
@@ -7428,7 +7428,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             {/* 底图作为图层栈最底层，开关同时作用于 2D 画布和 3D 场地。 */}
             <div style={{ marginTop: PLANNING_SPACING.xs }}>
               <div style={{ display: "flex", alignItems: "center", gap: PLANNING_SPACING.xs }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, padding: "3px 4px", color: PLANNING_SURFACE.panelText, fontSize: 13 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: PLANNING_SPACING.xs, flex: 1, minWidth: 0, padding: "3px 4px", color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row }}>
                   <span aria-hidden style={{ width: 16, height: 16, flex: "0 0 auto", borderRadius: 4, background: "#8aa0ad", boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.55)" }} />
                   <span style={{ flex: 1 }}>底图</span>
                 </div>
@@ -7464,15 +7464,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       title={`展开/收起${folder.label}`}
                       onClick={() => setOpenFolders(prev => ({ ...prev, [folder.key]: !open }))}
                       style={{
-                        all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                        all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs,
                         flex: 1, minWidth: 0, padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm,
-                        color: PLANNING_SURFACE.panelText, fontSize: 13, fontWeight: 400,
+                        color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 400,
                       }}
                     >
-                      <span aria-hidden style={{ fontSize: 10, width: 10 }}>{open ? '▾' : '▸'}</span>
+                      <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{open ? '▾' : '▸'}</span>
                       {renderLayerEntityIcon(folder.rows[0])}
                       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.label}</span>
-                      <span style={{ opacity: 0.6, fontSize: 11 }}>{folder.rows.length}</span>
+                      <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{folder.rows.length}</span>
                     </button>
                     <input
                       type="checkbox"
@@ -7522,12 +7522,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   data-testid="placed-folder-boundary"
                   aria-expanded={openFolders['boundary'] !== false}
                   onClick={() => setOpenFolders(prev => ({ ...prev, boundary: !(prev.boundary !== false) }))}
-                  style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontSize: 13, fontWeight: 400 }}
+                  style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, flex: 1, minWidth: 0, padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 400 }}
                 >
-                  <span aria-hidden style={{ fontSize: 10, width: 10 }}>{openFolders['boundary'] !== false ? '▾' : '▸'}</span>
+                  <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{openFolders['boundary'] !== false ? '▾' : '▸'}</span>
                   <span aria-hidden style={{ width: 16, height: 16, flex: '0 0 auto', borderRadius: 4, background: PLANNING_LAYER_COLORS.boundary, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />
                   <span style={{ flex: 1 }}>场地边界</span>
-                  <span style={{ opacity: 0.6, fontSize: 11 }}>{plan.boundary.length}</span>
+                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{plan.boundary.length}</span>
                 </button>
                 <input
                   type="checkbox"
@@ -7736,7 +7736,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                     label: option.label,
                                     active: nodeActive,
                                     onClick: () => armOrDisarm(nodeActive, () => { nodeKindRef.current = option.kind; setNodeKind(option.kind); draw(); startAreaTool('node'); }),
-                                    icon: <NodeToolIcon size={16} aria-hidden color={PLANNING_LAYER_COLORS.access} />,
+                                    icon: <NodeToolIcon size={PLANNING_ICON_SIZES.tool} aria-hidden color={PLANNING_LAYER_COLORS.access} />,
                                   });
                                 })}
                               </div>
@@ -7902,7 +7902,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 color: PLANNING_SURFACE.panelText,
               }}
             >
-              <LibraryFooterIcon size={14} aria-hidden color={PLANNING_SURFACE.panelText} />
+              <LibraryFooterIcon size={PLANNING_ICON_SIZES.legend} aria-hidden color={PLANNING_SURFACE.panelText} />
               物件库
               <span style={{ opacity: 0.7, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.hint }}>
                 {libraryStatus === 'ready' ? `${libraryTotal} 件` : libraryStatus === 'loading' ? '载入中…' : ''}
@@ -7932,7 +7932,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             accent: PLANNING_LAYER_COLORS.measure,
             count: levelView.measurements?.length ?? 0,
             testId: 'outdoor-inspector-card-measure',
-            body: measureZone ?? <div style={{ opacity: 0.6, fontSize: 12 }}>只读浏览时不能测量。</div>,
+            body: measureZone ?? <div style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.panel }}>只读浏览时不能测量。</div>,
           },
           {
             key: 'annotate',
@@ -7940,7 +7940,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             accent: PLANNING_LAYER_COLORS.annotate,
             count: levelView.annotations?.length ?? 0,
             testId: 'outdoor-inspector-card-annotate',
-            body: annotateZone ?? <div style={{ opacity: 0.6, fontSize: 12 }}>只读浏览时不能标注。</div>,
+            body: annotateZone ?? <div style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.panel }}>只读浏览时不能标注。</div>,
           },
           {
             key: 'selection',
@@ -7954,7 +7954,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               ? selectionInspectorZone
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 4px', textAlign: 'left', color: PLANNING_TEXT.muted }}>
-                  <span style={{ fontSize: 12, lineHeight: 1.6 }}>还没选中物件。点下面类型快速开始，或直接在图上点选查看属性。</span>
+                  <span style={{ fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: 1.6 }}>还没选中物件。点下面类型快速开始，或直接在图上点选查看属性。</span>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs }}>
                     <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('zone')}>分区</button>
                     <button
@@ -8054,7 +8054,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         <span
                           aria-hidden
                           // 2026-11-12 用户采纳视觉建议：计数角标随卡片主题色（与图标块同源），不再用灰底。
-                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: withAlphaHex(card.accent, 0.14), color: card.accent, fontSize: 10, fontWeight: 600, lineHeight: '18px', textAlign: 'center' }}
+                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: withAlphaHex(card.accent, 0.14), color: card.accent, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, lineHeight: '18px', textAlign: 'center' }}
                         >
                           {card.count}
                         </span>

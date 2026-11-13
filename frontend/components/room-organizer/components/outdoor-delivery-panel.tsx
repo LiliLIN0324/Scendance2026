@@ -23,7 +23,7 @@ import {
   type DeliveryAudience,
   type DeliveryExportId,
 } from '../lib/site-plan-guide';
-import { PLANNING_RADIUS, PLANNING_SPACING, PLANNING_SURFACE, PLANNING_TEXT } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_RADIUS, PLANNING_SPACING, PLANNING_SURFACE, PLANNING_TEXT, PLANNING_TYPOGRAPHY } from '@/lib/outdoor-plan-tokens';
 
 /* ---------------- 回调面（宿主注入已接通后端） ---------------- */
 
@@ -188,7 +188,7 @@ export function OutdoorDeliveryPanel({
           <strong style={{ fontSize: 17, fontWeight: 700 }}>分享</strong>
           <span style={chipStyle}>{activityName || '未命名方案'}</span>
           <span style={chipStyle}>未发布</span>
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: PLANNING_TEXT.muted }}>发布不通知对方，链接由你自己发</span>
+          <span style={{ marginLeft: 'auto', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted }}>发布不通知对方，链接由你自己发</span>
           <button type="button" onClick={onClose} aria-label="关闭" style={iconButtonStyle}>×</button>
         </header>
 
@@ -211,7 +211,7 @@ export function OutdoorDeliveryPanel({
                     borderRadius: 8,
                     padding: '7px 8px',
                     font: 'inherit',
-                    fontSize: 12,
+                    fontSize: PLANNING_TYPOGRAPHY.panel,
                     fontWeight: 600,
                     color: audience === aud.id ? PLANNING_SURFACE.panelText : PLANNING_TEXT.muted,
                     cursor: 'pointer',
@@ -222,15 +222,15 @@ export function OutdoorDeliveryPanel({
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 10, color: '#a6aab2', margin: `0 2px ${PLANNING_SPACING.md}px`, lineHeight: '15px' }}>
+            <p style={{ fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.faint, margin: `0 2px ${PLANNING_SPACING.md}px`, lineHeight: '15px' }}>
               {DELIVERY_AUDIENCES.find(aud => aud.id === audience)?.note}
             </p>
 
             {visibleSegments.map(seg => (
               <section key={seg.id} style={{ marginBottom: PLANNING_SPACING.md }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: PLANNING_TEXT.muted, letterSpacing: '.05em', marginBottom: 7, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 700, color: PLANNING_TEXT.muted, letterSpacing: '.05em', marginBottom: 7, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {seg.title}
-                  <span style={{ fontWeight: 400, color: '#a6aab2' }}>{seg.tag}</span>
+                  <span style={{ fontWeight: 400, color: PLANNING_TEXT.faint }}>{seg.tag}</span>
                 </div>
 
                 {seg.id === 'online' && (
@@ -280,7 +280,7 @@ export function OutdoorDeliveryPanel({
                       <button type="button" disabled style={disabledBtnStyle}>去 Bingo</button>
                     </div>
                     <div style={linkBoxStyle}>
-                      <input readOnly value="/review/#layout=待接通" aria-label="评审链接" style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 11, color: PLANNING_TEXT.muted, outline: 'none', minWidth: 0, fontFamily: 'ui-monospace, monospace' }} />
+                      <input readOnly value="/review/#layout=待接通" aria-label="评审链接" style={{ flex: 1, border: 'none', background: 'transparent', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted, outline: 'none', minWidth: 0, fontFamily: 'ui-monospace, monospace' }} />
                       <button type="button" disabled style={disabledBtnStyle}>复制</button>
                       <button type="button" disabled style={disabledBtnStyle}>打开对方所见</button>
                     </div>
@@ -346,17 +346,17 @@ export function OutdoorDeliveryPanel({
                     {/* 工程备份：不在交付清单，归设置 · 存档 */}
                     <div style={noteRowStyle}>
                       <div style={mainStyle}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: PLANNING_TEXT.soft }}>工程备份</div>
-                        <div style={{ fontSize: 11, color: PLANNING_TEXT.muted, marginTop: 1 }}>存档与恢复在「设置 · 存档」管理，不随交付导出</div>
+                        <div style={{ fontSize: PLANNING_TYPOGRAPHY.panel, fontWeight: 600, color: PLANNING_TEXT.soft }}>工程备份</div>
+                        <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted, marginTop: 1 }}>存档与恢复在「设置 · 存档」管理，不随交付导出</div>
                       </div>
                     </div>
 
                     {/* 规划中折叠区：未接通链路，不参与导出计数 */}
                     <div style={futureStyle}>
                       <button type="button" aria-expanded={futureOpen} aria-label="展开规划中格式" onClick={() => setFutureOpen(value => !value)} style={futureHeadStyle}>
-                        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: PLANNING_TEXT.soft }}>规划中</span>
-                        <span style={{ fontSize: 10, color: '#a6aab2' }}>待后续版本 · {futureDeliveryExports.length} 项</span>
-                        <span style={{ color: '#a6aab2', fontSize: 14, transform: futureOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>›</span>
+                        <span style={{ flex: 1, textAlign: 'left', fontSize: PLANNING_TYPOGRAPHY.panel, fontWeight: 600, color: PLANNING_TEXT.soft }}>规划中</span>
+                        <span style={{ fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.faint }}>待后续版本 · {futureDeliveryExports.length} 项</span>
+                        <span style={{ color: PLANNING_TEXT.faint, fontSize: 14, transform: futureOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>›</span>
                       </button>
                       {futureOpen && (
                         <div style={{ padding: `0 ${PLANNING_SPACING.md}px ${PLANNING_SPACING.sm}px`, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -367,7 +367,7 @@ export function OutdoorDeliveryPanel({
                                 <div style={mainStyle}>
                                   <div style={{ ...nameStyle, color: PLANNING_TEXT.muted }}>{item.label}</div>
                                   <div style={descStyle}>{item.desc}</div>
-                                  <div style={{ fontSize: 10, color: PLANNING_TEXT.muted, marginTop: 2 }}>{item.disabledHint}</div>
+                                  <div style={{ fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.muted, marginTop: 2 }}>{item.disabledHint}</div>
                                 </div>
                               </div>
                             </div>
@@ -403,7 +403,7 @@ export function OutdoorDeliveryPanel({
                     </svg>
                   )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: PLANNING_TEXT.muted }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted }}>
                 <span>方案预览</span>
                 <span>{summaryMeta}</span>
               </div>
@@ -411,26 +411,26 @@ export function OutdoorDeliveryPanel({
 
             <div style={qrRowStyle}>
               <div style={qrStyle}>二维码</div>
-              <div style={{ fontSize: 11, color: PLANNING_TEXT.muted, lineHeight: '17px' }}>
+              <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted, lineHeight: '17px' }}>
                 发布后这里出二维码，手机扫码看到的就是同一版；后续编辑不改已发布版本。
               </div>
             </div>
 
             <div style={statStyle}>
               <div style={statRowStyle}>
-                <span style={{ ...dotStyle, background: '#a6aab2' }} />
+                <span style={{ ...dotStyle, background: PLANNING_TEXT.faint }} />
                 <span style={statKeyStyle}>方案网页</span>
-                <span style={{ flex: 1, color: PLANNING_TEXT.soft, fontSize: 12 }}>未发布</span>
+                <span style={{ flex: 1, color: PLANNING_TEXT.soft, fontSize: PLANNING_TYPOGRAPHY.panel }}>未发布</span>
               </div>
               <div style={statRowStyle}>
-                <span style={{ ...dotStyle, background: '#a6aab2' }} />
+                <span style={{ ...dotStyle, background: PLANNING_TEXT.faint }} />
                 <span style={statKeyStyle}>3D 漫游</span>
-                <span style={{ flex: 1, color: PLANNING_TEXT.soft, fontSize: 12 }}>未生成</span>
+                <span style={{ flex: 1, color: PLANNING_TEXT.soft, fontSize: PLANNING_TYPOGRAPHY.panel }}>未生成</span>
               </div>
               <div style={statRowStyle}>
-                <span style={{ ...dotStyle, background: '#a6aab2' }} />
+                <span style={{ ...dotStyle, background: PLANNING_TEXT.faint }} />
                 <span style={statKeyStyle}>评审</span>
-                <span style={{ flex: 1, color: PLANNING_TEXT.soft, fontSize: 12 }}>未送审</span>
+                <span style={{ flex: 1, color: PLANNING_TEXT.soft, fontSize: PLANNING_TYPOGRAPHY.panel }}>未送审</span>
               </div>
             </div>
           </div>
@@ -438,7 +438,7 @@ export function OutdoorDeliveryPanel({
 
         {/* 底部主钮 */}
         <footer style={{ padding: `${PLANNING_SPACING.md}px ${PLANNING_SPACING.xl}px`, borderTop: `1px solid ${PLANNING_SURFACE.fieldBg}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 12, color: PLANNING_TEXT.muted }}>已选 {selectedCount} 项</span>
+          <span style={{ fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_TEXT.muted }}>已选 {selectedCount} 项</span>
           <button
             type="button"
             disabled={selectedCount === 0}
@@ -457,7 +457,7 @@ export function OutdoorDeliveryPanel({
 /* ---------------- 内联样式（复用 tokens，冷石画廊白） ---------------- */
 
 const chipStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: PLANNING_TYPOGRAPHY.row,
   color: PLANNING_TEXT.muted,
   border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
   borderRadius: 999,
@@ -494,7 +494,7 @@ const disabledActStyle: React.CSSProperties = {
 const actRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 };
 const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0 };
 const nameStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600 };
-const descStyle: React.CSSProperties = { fontSize: 11, color: PLANNING_TEXT.muted, marginTop: 2, lineHeight: '15px' };
+const descStyle: React.CSSProperties = { fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted, marginTop: 2, lineHeight: '15px' };
 const iconTileStyle: React.CSSProperties = { width: 30, height: 30, borderRadius: 9, background: PLANNING_SURFACE.fieldBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: PLANNING_TEXT.soft, flex: 'none' };
 
 const rowActionsStyle: React.CSSProperties = { display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 };
@@ -504,7 +504,7 @@ const primaryBtnStyle: React.CSSProperties = {
   background: '#141416',
   color: '#fff',
   fontWeight: 600,
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   lineHeight: '20px',
   borderRadius: 10,
   padding: '7px 11px',
@@ -516,7 +516,7 @@ const secondaryBtnStyle: React.CSSProperties = {
   border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
   background: '#fff',
   color: PLANNING_TEXT.soft,
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   lineHeight: '20px',
   borderRadius: 9,
   padding: '7px 11px',
@@ -528,7 +528,7 @@ const disabledBtnStyle: React.CSSProperties = {
   border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
   background: PLANNING_SURFACE.fieldBg,
   color: PLANNING_TEXT.muted,
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   lineHeight: '20px',
   borderRadius: 9,
   padding: '7px 11px',
@@ -548,7 +548,7 @@ const checkStyle: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   color: '#fff',
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   padding: 0,
 };
 
@@ -560,7 +560,7 @@ const arrowStyle: React.CSSProperties = {
   height: 24,
   border: 'none',
   background: 'transparent',
-  color: '#a6aab2',
+  color: PLANNING_TEXT.faint,
   fontSize: 14,
   cursor: 'pointer',
   display: 'flex',
@@ -578,11 +578,11 @@ const subStyle: React.CSSProperties = {
   gap: 9,
 };
 
-const subLabelStyle: React.CSSProperties = { fontSize: 10, color: PLANNING_TEXT.muted, fontWeight: 600, marginBottom: 5 };
+const subLabelStyle: React.CSSProperties = { fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.muted, fontWeight: 600, marginBottom: 5 };
 const optsStyle: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6 };
 
 const optStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: PLANNING_TYPOGRAPHY.row,
   border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
   background: '#fff',
   borderRadius: 8,
@@ -641,7 +641,7 @@ const statusStyle: React.CSSProperties = {
 };
 
 const statusTitleStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: PLANNING_SURFACE.warnText };
-const statusMetaStyle: React.CSSProperties = { fontSize: 11, color: PLANNING_TEXT.muted };
+const statusMetaStyle: React.CSSProperties = { fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted };
 
 const linkBoxStyle: React.CSSProperties = {
   display: 'flex',
@@ -674,13 +674,15 @@ const qrRowStyle: React.CSSProperties = {
 const qrStyle: React.CSSProperties = {
   width: 64,
   height: 64,
-  border: '1.5px dashed #a6aab2',
+  borderWidth: '1.5px',
+  borderStyle: 'dashed',
+  borderColor: PLANNING_TEXT.faint,
   borderRadius: 10,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  color: '#a6aab2',
-  fontSize: 10,
+  color: PLANNING_TEXT.faint,
+  fontSize: PLANNING_TYPOGRAPHY.hint,
   flex: 'none',
 };
 
@@ -697,7 +699,7 @@ const statRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 9,
-  fontSize: 12,
+  fontSize: PLANNING_TYPOGRAPHY.panel,
   padding: '6px 0',
   borderBottom: `1px solid ${PLANNING_SURFACE.fieldBg}`,
 };

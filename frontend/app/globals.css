@@ -1805,32 +1805,34 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
-/* 2026-11-11 户外左栏页签 = OnePlan 分段式页签（Add Objects/Placed Objects 同款）：
-   灰底描边容器 + 两枚等宽胶囊，激活深底白字加粗。 */
+/* 2026-11-13 户外左栏页签 = OnePlan 分段式页签（Add Objects/Placed Objects 同款）：
+   与画布左下 2D/3D 胶囊同属 B 墨黑分段范式（尺度走 outdoor-plan-tokens PLANNING_SEGMENTED）：
+   白纸面 + 发丝线容器；激活近黑墨实底白字、非激活次级墨字。 */
 .sc-left-context.is-oneplan-tabs {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   margin: 0 10px 8px;
-  padding: 4px;
+  padding: 3px;
   border: 1px solid var(--wk-hair, #e4e4e7);
-  border-radius: 10px;
-  background: #f1f2f4;
+  border-radius: var(--r-sm, 10px);
+  background: var(--wk-paper, #ffffff);
 }
 .sc-left-context.is-oneplan-tabs button {
   flex: 1;
-  height: 36px;
+  height: 34px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-sm, 10px);
   background: transparent;
-  color: var(--sc-ink, #141416);
+  color: var(--wk-ink-soft, #55585f);
   font: inherit;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
 }
 .sc-left-context.is-oneplan-tabs button[aria-pressed="true"] {
-  background: var(--sc-ink, #141416);
+  background: var(--wk-ink, #141416);
   color: #ffffff;
-  font-weight: 700;
+  font-weight: 600;
 }
 .sc-left-heading.is-oneplan-head {
   justify-content: flex-end;

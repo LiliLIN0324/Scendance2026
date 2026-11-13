@@ -39,7 +39,7 @@ import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
-import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_SURFACE, PLANNING_TYPOGRAPHY } from '@/lib/outdoor-plan-tokens';
 import {
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
@@ -547,7 +547,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
               fontFamily: 'inherit',
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 700, color: PLANNING_SURFACE.panelText, padding: '2px 4px 4px' }}>选择底图</div>
+            <div style={{ fontSize: PLANNING_TYPOGRAPHY.panel, fontWeight: 700, color: PLANNING_SURFACE.panelText, padding: '2px 4px 4px' }}>选择底图</div>
             {SOURCE_CYCLE.map(option => {
               const active = option.id === source;
               return (
@@ -568,7 +568,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                     border: `1px solid ${active ? PLANNING_SURFACE.selectedBorder : 'transparent'}`,
                     background: active ? PLANNING_SURFACE.selectedBg : 'transparent',
                     color: PLANNING_SURFACE.panelText,
-                    fontSize: 12,
+                    fontSize: PLANNING_TYPOGRAPHY.panel,
                     fontWeight: active ? 600 : 500,
                     cursor: 'pointer',
                     textAlign: 'left',
@@ -576,7 +576,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                   }}
                 >
                   <span>{option.label}</span>
-                  {active && <span style={{ fontSize: 11, opacity: 0.85 }}>当前</span>}
+                  {active && <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, opacity: 0.85 }}>当前</span>}
                 </button>
               );
             })}
@@ -592,7 +592,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                 border: `1px solid ${geoHidden ? PLANNING_SURFACE.selectedBorder : 'transparent'}`,
                 background: geoHidden ? PLANNING_SURFACE.selectedBg : PLANNING_SURFACE.fieldBg,
                 color: PLANNING_SURFACE.panelText,
-                fontSize: 12,
+                fontSize: PLANNING_TYPOGRAPHY.panel,
                 fontWeight: 600,
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -613,7 +613,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                 border: 'none',
                 background: 'transparent',
                 color: PLANNING_SURFACE.panelText,
-                fontSize: 11,
+                fontSize: PLANNING_TYPOGRAPHY.row,
                 opacity: 0.75,
                 cursor: 'pointer',
                 textAlign: 'left',
