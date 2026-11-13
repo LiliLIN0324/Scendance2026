@@ -1,13 +1,15 @@
 # 侧边栏入口统一设计方案（讨论稿 · 2026-11-12，11-13 复核校正）
 
-> 状态：规划讨论，未动代码。落地顺序见 §7；按既定偏好本地攒好、tsc + 测试 + 真机验收通过后再一次性推 main，不逐小改开 PR。
+> 状态：规划讨论；首个代码改动（Bingo 徽标）已合入 main。后续按既定偏好本地攒好、tsc + 测试 + 真机验收通过后再一次性推 main，不逐小改开 PR。
 > 对照素材：两张截图——收起轨图标列、展开态对话卡列表；设计依据 `docs/05-设计规范.md`（v2.5.12）与可视稿 `docs/visual-2026/design-spec-2026.html`。
 >
 > **本轮已拍板（2026-11-12）**：
 > 1. Bingo 第一轮先恢复旧版「圆 + 圆内数字」形制，但本体保持 28px 与其他格同尺寸（草图变体 D），不退回旧版 40px 整圆；配色 / 双计数等细节第二轮再调；
 > 2. 双计数：第一轮单计数（链接数 L，对齐旧版 `plans.length`）；评审链接数与画内钉未读数第二轮同时体现（方案见 §5.4）；
-> 3. ~~第一格 Agent 定名「小景」~~ **改名搁置（2026-11-13）**：本轮保留原称呼——轨钮可见名「总控」、面板头注册表 `AGENT_META.door.name`「活动」；不做全量替换，后续再议；
-> 4. 候选草图：`docs/visual-2026/bingo-badge-sketch-2026-11-12.html`（旧版还原 + A/B/C/D 四版变体，可切换两套配色）；整栏草图 `docs/visual-2026/sidebar-rail-unification-sketch-2026-11-13.html`。
+> 3. 第一格是**唯一 Agent**，产品定位名「**小景**」；代码现名本轮保留不动——轨钮可见名「总控」、面板头 `AGENT_META.door.name`「活动」，是否回改、何时回改留第二轮；其余入口按工具 / 动作族安排图标（§4）；
+> 4. 候选草图：`docs/visual-2026/bingo-badge-sketch-2026-11-12.html`（旧版还原 + A/B/C/D 四版变体，可切换两套配色）；整栏草图 `docs/visual-2026/sidebar-rail-unification-sketch-2026-11-13.html`；图标候选对照 `docs/visual-2026/icon-options-sketch-2026-11-13.html`。
+>
+> **落地进展（2026-11-13，已随 main 合入）**：Bingo 轨钮已按变体 D 改回三态圆徽标——`panels/bingo-rail-button.tsx` 改读 `readBingoSnapshot`：待发空圆 / 待评圆内 L 数字（0 不画、>9 出 `9+`）/ 已回执勾形；圆体 28px 与其他槽同尺寸；移除 ball 形体与 `RailLaneDot`，状态与计数写进 `aria-label` / `data-tip`。配套改动：`app/globals.css` 增 `.sc-bingo-badge` 三态规则，`panels/mobile-shell.css` 28px 槽选择器纳入徽标，两个轨钮测试同步更新（旧 cube/pyramid、disc=3 断言一并校正为现状）。tsc 干净；bingo 5 文件 34 测试 + 轨钮头 7 测试通过。回执配色（旧版 err 红 vs 闭环 ok 绿）与双计数（画内钉未读数 P 进徽标）留第二轮；其余入口本轮未动。
 
 ## 0. 范围与入口清单
 
@@ -140,14 +142,26 @@
 
 | 族 | 入口 | 图形 | 规则 |
 |---|---|---|---|
-| A 角色形体 | 总控 door、Bingo ball | 复用 `RailAvatar` 28px + 白眼体系 | 轨钮上只剩这两枚形体；`cube` / `pyramid` 两枚 PNG 与 `RailForm` 残留于 `AGENT_META` 与面板头 36px 头像，是否一起退成 Material 列入第二轮讨论，不在本轮动画法 |
+| A 角色形体 | 小景 door（唯一 Agent） | 复用 `RailAvatar` 28px + 白眼体系 | 轨钮上只保留这一枚形体；Bingo 按 D 方案退为 28px 状态圆徽标，不再占 ball 形体槽；`cube` / `pyramid` 两枚 PNG 与 `RailForm` 残留于 `AGENT_META` 与面板头 36px 头像，是否一起退成 Material 列入第二轮讨论，不在本轮动画法 |
 | B 通用 UI | 空间（`grid_view`）、物料（`inventory_2`）、户外规划（`public`）、拍摄场地（待换 `photo_camera`） | 本地 Material Symbols 实心图标，`solid-icons.tsx` 注册 | 现状空间 / 物料 / 户外已是 Material；拍摄场地换掉自绘描边 SVG；28 槽内图形收至 78%–90% 视觉缩放，`currentColor` 取色；尺寸档对齐规范 20 / 24，现状 26px 一并核齐 |
 | C 人物头像 | 给自己留话 | 保留 `account-avatars` 1:1 圆片（预设图 / 首字母 + tone 分色） | 与「团队与权限」面板头像同片同色，两处必然对得上 |
 
 ### 4.2 备选方案（不推荐，列出供讨论）
 
-- **方案 2 · 全部 Material 同族**：两枚角色形体也退成实心图标，放弃角色身份。与品牌形体资产（§一.4 左轨入口、标志门厅）冲突，不推荐。
+- **方案 2 · 全部 Material 同族**：唯一形体也退成实心图标，放弃角色身份。与品牌形体资产（§一.4 左轨入口、标志门厅）冲突，不推荐。
 - **方案 3 · 给场地和人补软形体**：让各枚都长成 mascot。成本高，且人物头像有真实身份语义，不该被卡通形体覆盖，不推荐。
+
+### 4.3 图标安排与成熟案例对照
+
+定位：第一格小景是唯一 Agent，走身份槽；其余是工具 / 动作 / 真人入口，按族归位。成熟产品的通行分法与可借鉴点：
+
+| 分组 | 我们的入口 | 成熟案例 | 可借鉴点 |
+|---|---|---|---|
+| 助手 / Agent 身份槽 | 小景 door | Slack 侧栏 bot 头像（圆角头像 + bot 标记）；Discord 机器人头像；Notion AI 条目 sparkle；ChatGPT 侧栏助手字形 | 助手位用圆角头像式形体，与下方工具图标在轮廓上分层；不与工具钮同一直方实心族 |
+| 工具功能槽（同族实心） | 空间 `grid_view`、物料 `inventory_2`、拍摄场地 `photo_camera`、户外规划 `public` | VS Code 活动栏（同族实心、同尺寸、同视觉重量）；Linear 侧栏条目图标；Notion 侧栏页面 / 数据库 / 模板图标；Slack 频道列表 | 同一列工具钮用同一字形库、同一填充与尺寸档；图形只表达动作 / 对象，不带角色脸 |
+| 状态 / 通知徽标 | Bingo D 圆 | iOS Messages、微信、Discord 未读圆；macOS 头像在线状态环；VS Code 活动栏条目计数 | 计数收进同一颗 28px 圆；闭环用勾形；状态色描边 + 轻光晕；不另起浮层角标 |
+| 真人身份槽 | 给自己留话 | 微信 / Discord 私聊头像 + 未读圆；团队成员状态头像 | 头像族保留照片 / 首字母圆片；未读圆与 Bingo 徽标同形同尺寸，只配色不同 |
+| 领域面板内部工具 | 户外面板工具栏 | 本项目已落地的 Lucide 线条族（`outdoor-plan-icons.ts`）；Figma / Miro 画布工具栏线条图标 | 面板内工具可走独立线条族作领域例外；不把这套线条拉进左轨 |
 
 ## 5. Bingo 圆数字徽标恢复方案
 
@@ -225,7 +239,7 @@
 - 现行数据层：`frontend/components/room-organizer/lib/bingo-status.ts`、`bingo-feedback.ts`
 - 现行状态轨：`frontend/components/room-organizer/lib/lane-status.ts`
 - 画内钉：`frontend/components/room-organizer/lib/review-pins.ts`（`countOpenPins` / `ReviewPinStatus = open | resolved`）
-- 现行轨钮组装：`frontend/components/room-organizer/room-organizer.tsx` 4198–4289（`sc-mode-rail` → `sc-rail-head` → `sc-mode-rail-primary` → `RailTeamBlock`）
-- 图标注册表：`frontend/components/solid-icons.tsx`（Material 映射）、`panels/material-symbol.tsx`（字形 / mask SVG 渲染）、`panels/kind-icons.tsx`（概念→图标统一映射）
-- 候选草图：`docs/visual-2026/bingo-badge-sketch-2026-11-12.html`（旧版还原 + 变体 A/B/C/D，配色可切换）；整栏统一草图：`docs/visual-2026/sidebar-rail-unification-sketch-2026-11-13.html`（收起轨 + 展开卡壳 + D 徽标三态 + 三族归位表）
-- 基线核对（2026-11-13 复核）：分支 `feat/continue-20261105`，HEAD = `origin/main` `7d38fb57`，0 ahead / 0 behind；远端另有 `renovate/lock-file-maintenance` 分支，与轨栏无关。工作区 10 个已跟踪文件未提交改动（显示单位 / 漫游退出收口 / 网格吸附 / 设置菜单 / 后端会话等，非轨栏），另有一批未跟踪文档与草图，按偏好本地攒着不推。
+- 现行轨钮组装：`frontend/components/room-organizer/room-organizer.tsx` 4292–4375（`sc-mode-rail` → `sc-rail-head` → `sc-mode-rail-primary` → `RailTeamBlock`）
+- 图标注册表：`frontend/components/solid-icons.tsx`（Material 映射，`Camera`=`photo_camera` 已登记）、`panels/material-symbol.tsx`（字形 / mask SVG 渲染）、`panels/kind-icons.tsx`（概念→图标统一映射）；户外面板内部工具钮用独立 Lucide 线条族 `components/outdoor-plan-icons.ts`（领域例外，不进左轨）
+- 候选草图：`docs/visual-2026/bingo-badge-sketch-2026-11-12.html`（旧版还原 + 变体 A/B/C/D，配色可切换）；整栏统一草图：`docs/visual-2026/sidebar-rail-unification-sketch-2026-11-13.html`（收起轨 + 展开卡壳 + D 徽标三态 + 三族归位表 + 参考案例）；图标候选对照：`docs/visual-2026/icon-options-sketch-2026-11-13.html`（每入口多枚本地 Material 字形备选 + 风格方向 + 案例表）
+- 基线核对（2026-11-13 二次复核）：分支已切回 `main`，HEAD = `origin/main` `6e73d28f`，0 ahead / 0 behind；较上次基线 `7d38fb57` 合入 24 个提交，主体是户外 2D/3D 规划链路、场地轮廓、偏好与单位、站点改版；**左轨入口结构与图标未变**（仍为 brand + Bingo / 空间 / 物料 / 拍摄场地 / 户外规划 + 团队块）。工作区仅 1 个已跟踪文件未提交：`components/outdoor-plan-3d.tsx`（户外在制品，非轨栏）；方案与草图文档已随 main 入库。
