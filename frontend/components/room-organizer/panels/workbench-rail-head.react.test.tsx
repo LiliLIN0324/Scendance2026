@@ -26,12 +26,12 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(primary).not.toContain('aria-label="空间与物料"');
     const spaceBlock = source.slice(space, material);
     const materialBlock = source.slice(material, primaryEnd);
-    expect(spaceBlock).toContain('<RailAvatar form="cube"');
-    expect(materialBlock).toContain('<RailAvatar form="pyramid"');
+    expect(spaceBlock).toContain('<LayoutGrid size={26}');
+    expect(materialBlock).toContain('<Box size={26}');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 空间、物料与工作台内的拍摄入口共用圆钮；标签沿用「拍完当场判断能不能重建，并出 3D」。
-    expect(primary.match(/sc-rail-disc/g)).toHaveLength(3);
+    // 空间、物料、拍摄场地、户外规划共用圆钮；标签沿用「拍完当场判断能不能重建，并出 3D」。
+    expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
     expect(primary).toContain('aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"');
     expect(primary).toContain('onClick={captureOpen ? closeCapturePanel : openCapturePanel}');
     expect(primary).toContain('data-tip="空间"');
@@ -61,7 +61,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     const bingoSource = readFileSync(join(here, 'bingo-rail-button.tsx'), 'utf8');
     const brandSource = readFileSync(join(here, 'workbench-brand-toggle.tsx'), 'utf8');
     expect(bingoSource).toContain('sc-rail-disc');
-    expect(bingoSource).toContain('<RailAvatar form="ball"');
+    expect(bingoSource).toContain('sc-bingo-badge');
     expect(brandSource).toContain('<RailAvatar form="door"');
     for (const icon of ['door', 'ball', 'pyramid', 'cube']) {
       expect(existsSync(join(here, '../../../public/assets/rail', `${icon}.png`))).toBe(true);

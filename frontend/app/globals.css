@@ -1252,6 +1252,25 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
+/* Bingo 圆徽标：28px 与其他图标槽同尺寸；三态——待发空圆 / 待评数字 / 已回执勾形。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
+  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
+  box-sizing: border-box; border-radius: 50%;
+  border: 1.5px solid var(--wk-hair); background: var(--wk-paper);
+  color: var(--wk-ink-soft); font-size: 11px; font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
+  display: block; width: 13px; height: 13px;
+}
+.sc-bingo-badge[data-status="awaiting"] {
+  border-color: var(--warn); color: var(--warn);
+  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
+}
+.sc-bingo-badge[data-status="returned"] {
+  border-color: var(--err); color: var(--err);
+  box-shadow: 0 0 0 3px rgba(180, 68, 60, 0.22);
+}
 /* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }
 .sc-rail-avatar-tilt {

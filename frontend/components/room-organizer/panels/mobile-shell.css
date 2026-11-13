@@ -171,7 +171,8 @@
   }
   /* 图标槽统一 28×28，四个形体在同一基线上 */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark,
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-avatar {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-avatar,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
     display: grid; flex: none; width: 28px; height: 28px; margin: 0;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-label,
