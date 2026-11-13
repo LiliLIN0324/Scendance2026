@@ -64,6 +64,15 @@ describe('只读活动聊天',()=>{
    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(value);const result=await answerAssistantChat({...input,enabled:true,env,fetcher});expect(result).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();
   }
  });
+ it.each([
+  {tool_calls:[{type:'function',function:{name:'write_scene',arguments:'{}'}}],function_call:null},
+  {tool_calls:null,function_call:{name:'write_scene',arguments:'{}'}},
+  {tool_calls:null,function_call:{}},
+  {tool_calls:'malformed',function_call:null},
+ ])('rejects real or malformed tool metadata even with a stop text answer: %j',async metadata=>{
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json({choices:[{finish_reason:'stop',message:{content:'不应执行工具。',...metadata}}]}));
+  expect(await answerAssistantChat({...input,enabled:true,env,fetcher})).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();
+ });
  it('times out without retry even if the provider ignores abort',async()=>{
   const fetcher=vi.fn<typeof fetch>().mockImplementation(()=>new Promise(()=>{}));
   expect(await answerAssistantChat({...input,enabled:true,env,fetcher,timeoutMs:5})).toEqual({status:'timeout',answer:null});expect(fetcher).toHaveBeenCalledOnce();
@@ -79,5 +88,39 @@ describe('只读活动聊天',()=>{
   expect((await answerAssistantChat({...input,enabled:true,env:key=>config[key as keyof typeof config],fetcher})).status).toBe('ok');
   const sent=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(sent).toMatchObject({model:'MiniMax-M3.1-Flash',max_completion_tokens:1024,reasoning_split:true});expect(sent.tools).toBeUndefined();
   const cancel=new AbortController();cancel.abort();fetcher.mockClear();expect((await answerAssistantChat({...input,enabled:true,env,fetcher,signal:cancel.signal})).status).toBe('provider_error');expect(fetcher).not.toHaveBeenCalled();
+ });
+});
+
+
+describe('provider failure diagnostic redaction (no live model)',()=>{
+ const secret='PRIVATE_RESPONSE_OR_PROMPT_MARKER';
+ it.each([
+  ['http',()=>new Response(secret,{status:429}),{reason:'http_error',httpStatus:429}],
+  ['JSON',()=>new Response(secret),{reason:'invalid_json'}],
+  ['shape',()=>Response.json({error:secret}),{reason:'invalid_shape'}],
+  ['provider business code',()=>Response.json({base_resp:{status_code:1005,status_msg:secret}}),{reason:'provider_status',providerCode:1005}],
+  ['truncated',()=>response(secret,'length'),{reason:'output_truncated',finishReason:'length'}],
+  ['untrusted finish reason',()=>response(secret,secret),{reason:'finish_reason',finishReason:'unknown'}],
+  ['empty',()=>response(''),{reason:'empty_answer'}],
+  ['reasoning',()=>response(`<think>${secret}</think>`),{reason:'unsupported_output'}],
+ ] as const)('records only categorical evidence for %s',async(_name,make,expected)=>{
+  const warning=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  try{
+   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(make());
+   expect(await answerAssistantChat({...input,message:secret,enabled:true,env,fetcher})).toEqual({status:'provider_error',answer:null});
+   expect(warning).toHaveBeenCalledExactlyOnceWith('assistant_chat_failure',expected);
+   const recorded=JSON.stringify(warning.mock.calls);
+   for(const value of [secret,values.AGENT_CHAT_KEY,values.AGENT_CHAT_BASE_URL,values.AGENT_CHAT_MODEL])expect(recorded).not.toContain(value);
+   expect(fetcher).toHaveBeenCalledOnce();
+  }finally{warning.mockRestore();}
+ });
+ it('does not expose arbitrary exception details or change failure when logging is unavailable',async()=>{
+  const warning=vi.spyOn(console,'warn').mockImplementation(()=>{throw new Error('log unavailable');});
+  try{
+   const fetcher=vi.fn<typeof fetch>().mockRejectedValue(new Error(secret));
+   expect(await answerAssistantChat({...input,enabled:true,env,fetcher})).toEqual({status:'provider_error',answer:null});
+   expect(warning).toHaveBeenCalledExactlyOnceWith('assistant_chat_failure',{reason:'transport_error'});
+   expect(fetcher).toHaveBeenCalledOnce();
+  }finally{warning.mockRestore();}
  });
 });

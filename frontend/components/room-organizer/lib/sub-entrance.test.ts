@@ -58,7 +58,9 @@ describe('buildSubEntranceProposal（V-4a 子出入口）', () => {
     const nearZone = zone('z1', '观众区', [{ x: -100, y: 60 }, { x: 100, y: 60 }, { x: 100, y: 160 }, { x: -100, y: 160 }]);
     const existing = node('node-1', '已有口', { x: 0, y: 60 }); // 就在最佳子口位
     const proposal = buildSubEntranceProposal({ zones: [nearZone], routes: [MAIN], nodes: [existing] }, ids);
-    expect(proposal).toBeNull(); // 唯一分区的最佳位被占 → 整案 null
+    expect(proposal?.nodes).toHaveLength(0); // 已有真实规划子口优先复用，不能另造重复门
+    expect(proposal?.routes).toHaveLength(1); // 仍补缺失接驳，不因去重把区域留成孤岛
+    expect(proposal?.routes[0]?.startNodeId).toBe(existing.id)
     expect(buildSubEntranceProposal({ zones: [], routes: [MAIN], nodes: [] }, ids)).toBeNull();
     expect(buildSubEntranceProposal({ zones: [nearZone], routes: [], nodes: [] }, ids)).toBeNull();
   });

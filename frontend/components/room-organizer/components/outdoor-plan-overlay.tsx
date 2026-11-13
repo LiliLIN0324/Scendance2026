@@ -1,4 +1,5 @@
 'use client';
+import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
 
 /**
  * 户外 2D 规划覆盖层（P2-e · 融进 3D 页面框架）：**本组件只负责画布本体**——
@@ -29,8 +30,13 @@ import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
-import { fetchPlaceShape } from '@/components/room-organizer/lib/place-area';
+import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
 import type { BackendSession } from '@/lib/backend-session';
+import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
+import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
+import { boundaryKey } from '../lib/outdoor-agent-contract';
+import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
+import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
 import { PLANNING_SURFACE } from '@/lib/outdoor-plan-tokens';
@@ -111,6 +117,7 @@ export interface OutdoorPlanOverlayProps {
    * 提交成功后画布轮询回填候选首位。只读分享页等不传，按钮缺省 no-op。
    */
   controller?: BackendSession | undefined;
+  onViewChange?:(view:'2d'|'3d')=>void;
 }
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
@@ -150,6 +157,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   inspectorHostId,
   lengthUnit = 'm',
   controller,
+  onViewChange,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
@@ -178,11 +186,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
   const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(null);
-  // 点击 POI 后挖真实占地轮廓的序号尺：防止新选中被旧请求的迟到结果覆盖。
-  const shapeSeqRef = useRef(0);
-  // 2026-11-12 用户拍板：挖形期间给「正在圈范围…」小提示——Overpass 忙时要排队
-  // 30~50 秒，不提示用户会以为点了没反应；挖到/挖不到/换目标/清除都会收掉。
-  const [shapeLoading, setShapeLoading] = useState(false);
+  const { loading: shapeLoading, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
+    const [west, south, east, north] = shape.bounds;
+    setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
+    setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
+      ...(shape.kind === 'line' ? { kind: 'line' as const } : {}) });
+    canvasApiRef.current?.focusBounds(shape.bounds);
+  }, JSON.stringify(plan?.boundary ?? []));
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
@@ -200,6 +210,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   anchorRef.current = anchor;
   useEffect(() => {
     setGenerateTarget(null);
+    cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
     const record = readOutdoorProjectRecord(slotId);
     // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
     const loaded = normalizePlanFacilityFootprints(
@@ -218,12 +229,34 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
 
   // 保存管线：同户外项目工作台（400ms 防抖 + 卸载 flush）；状态经 onSaveStateChange
   // 上报给 room-organizer，在左轨 foot（主产品保存态原位）显示。
+  const mapContextRef=useRef(createOutdoorMapContext());
+  const [evidenceHighlights,setEvidenceHighlights]=useState<OutdoorEvidenceHighlight[]>([]);
+  useEffect(()=>{mapContextRef.current.invalidate();setEvidenceHighlights([]);},[slotId]);
+  const flowRef=useRef(agent?.outdoorWorkflow);flowRef.current=agent?.outdoorWorkflow;
+  const viewChangeRef=useRef(onViewChange);viewChangeRef.current=onViewChange;
   const planRef = useRef<SitePlanData | null>(plan);
   planRef.current = plan;
   // V-2d/V-3c：把「应用流线/应用区域」的画布入口与当前 plan 读取口注册给 chat agent——
   // 气泡确认后 provider 调这里；plan 经 ref 每帧取最新，注册一次终身有效。
   useEffect(() => {
     agent?.registerRouteBridge?.({
+      projectId:()=>slotId,
+      exportPlanDraft:(expected,context)=>{const current=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!current||JSON.stringify(current)!==expected)return false;downloadOutdoorPlanDraft(current,slotId,context);return true;},
+      beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);return true;},
+      applyPlan:(next,expected)=>{const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;if(ok){setPlacePin(null);setPlaceArea(null);}return ok;},
+      selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
+      previewBoundary:(anchor,boundary)=>{const polygon=boundary.map(p=>{const ll=enuToLngLat(p.x,p.y,anchor.lng,anchor.lat);return [ll.lng,ll.lat] as [number,number];});setPlaceArea({polygon,label:'候选活动范围（待核对）'});if(polygon.length){const lngs=polygon.map(p=>p[0]),lats=polygon.map(p=>p[1]);canvasApiRef.current?.focusBounds([Math.min(...lngs),Math.min(...lats),Math.max(...lngs),Math.max(...lats)]);}},
+      setView:next=>{viewChangeRef.current?.(next);},
+      models:async id=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return[];const result=await loadFacilityModelCandidates([f.templateId]);const own=listGeneratedFacilityModels(id,slotId);const current=f.modelOverride?findGeneratedFacilityModel(f.modelOverride):null;if(current&&current.projectId===slotId&&!own.some(m=>m.slug===current.slug))own.unshift(current);return[...own.map(m=>({slug:m.slug,name:m.name,source:'此设施已有/上传模型',width:m.width,depth:m.depth,height:m.height})),...(result.get(f.templateId)??[]).map(m=>({slug:m.slug,name:m.name,source:'现有公共物料库',width:m.width,depth:m.depth,height:m.height}))].slice(0,5);},
+      openGenerate:(id,kind)=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return false;setGenerateTarget({facilityId:id,facilityName:f.name,kind});return true;},
+      openUpload:id=>canvasApiRef.current?.openFacilityUpload(id)??false,
+      mapContext:async signal=>{const p=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!p)throw new Error('当前活动尚未载入');return mapContextRef.current.load(slotId,p,canvasApiRef.current?.getSelectedIds()??[],flowRef.current?.state.confirmedBoundary===boundaryKey(p),signal);},
+      proposeZones:(p,brief)=>mapContextRef.current.zones(p,brief),
+      roadNetwork:()=>mapContextRef.current.roads(),
+      proposeSpatialEdit:(turn,p)=>mapContextRef.current.spatial(turn,p),
+      validateCurrentReferences:refs=>mapContextRef.current.validateReferences(refs),
+      validateMapPlan:(base,next)=>mapContextRef.current.validate(base,next),
+      highlightReferences:refs=>setEvidenceHighlights(mapContextRef.current.highlights(refs)),
       applyVenue: (anchor, boundary) => {
         const applied = canvasApiRef.current?.applyVenue(anchor, boundary) ?? false;
         if (applied) {
@@ -251,10 +284,12 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       addFacility: facility => canvasApiRef.current?.addFacility(facility) ?? false,
       removeFacility: id => canvasApiRef.current?.removeFacility(id) ?? false,
       updateFacility: (id, patch) => canvasApiRef.current?.updateFacility(id, patch) ?? false,
-      getPlan: () => planRef.current,
+      getPlan: () => canvasApiRef.current?.getEditVisuals().plan ?? planRef.current,
     });
     return () => agent?.registerRouteBridge?.(null);
-  }, [agent]);
+  }, [agent,slotId]);
+  const libraryAssetSignature=JSON.stringify(plan?.facilities.filter(f=>f.sourceAssetId).map(f=>[f.id,f.sourceAssetId,f.modelOverride])??[]);
+  useEffect(()=>{const p=planRef.current;if(!p)return;const request=new AbortController();void restoreOutdoorLibraryModels(controller??null,slotId,p,request.signal).catch(()=>{/* unavailable models stay visibly unavailable; no generated fallback */});return()=>request.abort();},[slotId,controller,libraryAssetSignature]);
   const pendingSaveRef = useRef<number | null>(null);
   const flushSave = useCallback(() => {
     const current = planRef.current;
@@ -404,6 +439,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(placePin ? { searchPin: placePin } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
+            workflowPreview={agent?.outdoorWorkflow?.proposal?.next??null}
+            evidenceHighlights={evidenceHighlights}
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
             generationController={controller}
@@ -423,8 +460,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
           onPickArea={area => {
             // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
-            shapeSeqRef.current += 1; // 新选区使旧的 POI 挖形结果过期。
-            setShapeLoading(false); // 行政区边界是现成的，没有挖形在途。
+            cancelPlaceShape(); // Includes the pending retry and in-flight request.
             setPlacePin(null);
             setPlaceArea({ polygon: area.polygon, label: `${area.name} · ${area.level}` });
             canvasApiRef.current?.focusBounds(area.bounds);
@@ -433,47 +469,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             setPlaceArea(null);
             setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
-            // 2026-11-12（像高德一样点地名框出范围）：钉先落地，后台去 OSM 挖
-            // 这个地点的真实占地。Overpass 忙时要排队几十秒，所以给足预算且
-            // 失败静默保留钉，不打断交互。
-            const seq = shapeSeqRef.current + 1;
-            shapeSeqRef.current = seq;
-            setShapeLoading(true);
-            // 2026-11-13 用户「到底要怎么样能转出来选区」：上游公共镜像间歇抽风
-            // （本机/CF 都会断），一次点击自动重试三轮（间隔 9s）——坏窗口里
-            // 命中率翻几倍；期间「正在圈范围…」提示持续在，换目标/清除即停。
-            const attemptShapeFetch = (attempt: number) => {
-              void fetchPlaceShape(place.name, {
-                near: { lng: place.lng, lat: place.lat },
-              }).then(shape => {
-                if (shapeSeqRef.current !== seq) return; // 期间换了目标：loading 归新目标管
-                if (!shape && attempt < 2) {
-                  window.setTimeout(() => attemptShapeFetch(attempt + 1), 9000);
-                  return;
-                }
-                setShapeLoading(false);
-                if (!shape) return;
-                // 2026-11-13 用户拍板：出框后钉不撤——挪到范围正中继续挂着
-                // （高德同款：蓝框 + 中心定位钉带名称胶囊）；选区顶部标签让位给这枚钉。
-                const [west, south, east, north] = shape.bounds;
-                setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: place.name });
-                setPlaceArea({
-                  polygon: shape.polygon,
-                  label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
-                  ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
-                });
-                canvasApiRef.current?.focusBounds(shape.bounds);
-              }).catch(() => {
-                if (shapeSeqRef.current === seq && attempt < 2) {
-                  window.setTimeout(() => attemptShapeFetch(attempt + 1), 9000);
-                  return;
-                }
-                if (shapeSeqRef.current === seq) setShapeLoading(false);
-              });
-            };
-            attemptShapeFetch(0);
+            // Pin immediately. Retries, abort, and the centered outline stay on this project/place.
+            lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
           }}
-          onClear={() => { shapeSeqRef.current += 1; setShapeLoading(false); setPlacePin(null); setPlaceArea(null); }}
+          onClear={() => { cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); }}
         />
       )}
       {/* 2026-11-12 用户拍板：挖形期间的小提示（Overpass 排队 30~50s，别让用户以为点了没反应）。
