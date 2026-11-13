@@ -26,6 +26,7 @@ import { readOutdoorPersonalLibrary } from "../lib/outdoor-personal-library";
 import { proposeOutdoorStyle } from "../lib/outdoor-style-preview";
 import type { StyleBundle } from "../lib/style-bundles";
 import { fetchRoadNetwork } from "../lib/road-network";
+import { checkBoundaryRing } from "../lib/site-plan-editing";
 import { buildRouteProposal } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
@@ -196,7 +197,7 @@ export function useOutdoorAgentWorkflow(input: {
     setBusy(false);
     if (!options?.preservePendingLogin) {
       const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
-      persist(kept);
+      persist({ ...kept, pendingBoundary: undefined });
     }
     status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
   }
@@ -369,7 +370,7 @@ export function useOutdoorAgentWorkflow(input: {
     proposalRef.current = null;
     setProposal(null);
     if (p.kind === "scope") {
-      persist({ ...stateRef.current, confirmedBoundary: boundaryKey(p.next) });
+      persist({ ...stateRef.current, confirmedBoundary: boundaryKey(p.next), pendingBoundary: undefined });
       nextStage("scope");
     } else if (p.kind === "verify-access") {
       persist({
@@ -403,6 +404,7 @@ export function useOutdoorAgentWorkflow(input: {
       stage: "scope",
       confirmedBoundary: null,
       completed: ["place"],
+      pendingBoundary: { anchor, boundary, name, base: JSON.stringify(base) },
     });
     callbacks.current.bridge()?.previewBoundary?.(anchor, boundary);
     try {
@@ -534,6 +536,16 @@ export function useOutdoorAgentWorkflow(input: {
     const original = JSON.stringify(plan);
     try {
       if (turn.action === "scope") {
+        const candidate = stateRef.current.pendingBoundary;
+        if (candidate && candidate.base === JSON.stringify(plan)) {
+          offerBoundary(candidate.anchor, candidate.boundary, candidate.name);
+          return;
+        }
+        if (!checkBoundaryRing(plan.boundary).ok) {
+          persist({ ...stateRef.current, stage: "place", pendingBoundary: undefined, completed: [] });
+          status("当前没有可核对的活动边界，请重新搜索地点并选择候选，或在地图圈出实际范围。");
+          return;
+        }
         persist({ ...stateRef.current, stage: "scope" });
         offer(plan, "scope", "当前地图活动范围", job, [
           "确认的是本次活动范围，不是地图产权或消防认证。",

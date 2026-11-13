@@ -790,6 +790,18 @@ export function createServer({
         const close = () => controller.abort(); res.once('close', close);
         try { result = await shapeRequestBudget.run(AbortSignal.any([controller.signal, AbortSignal.timeout(65000)]), () => fetchPlaceShape(url.searchParams)); }
         finally { res.off('close', close); controller.abort(); }
+      } else if (req.method === 'GET' && url.pathname === '/api/site-context') {
+        const { handleSiteContext } = await import('../../functions/api/site-context.ts');
+        const controller = new AbortController();
+        const close = () => controller.abort();
+        res.once('close', close);
+        try {
+          const response = await handleSiteContext(new Request(url, { signal: controller.signal }), fetchImpl);
+          send(res, response.status, await response.json(), origin, key);
+          return;
+        } finally {
+          res.off('close', close);
+        }
       } else if (req.method === 'GET' && url.pathname === '/api/road-network') {
         // 路网矢量（V-2a，dev-only，对齐 functions/api/road-network.ts）：
         // 流线自动生成的道路几何来源——Overpass way["highway"] 按 bbox，

@@ -6,6 +6,26 @@ const request=(path='/assistant/chat',body:unknown={message:'先搜IN77候选，
 const backend={user:vi.fn(async()=> 'fixture-user')} as unknown as Backend;
 const completion=(content:string)=>Response.json({choices:[{finish_reason:'stop',message:{content,tool_calls:null,function_call:null}}]});
 describe('explicit MiniMax conversation ownership',()=>{
+ it('gives outdoor structured turns a bounded reasoning and JSON budget', async () => {
+  const answer = JSON.stringify({ action: 'search', reply: '先找场地候选。', query: '杭州IN77', references: [], facts: {} });
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(completion(answer));
+  const result = await createConversationApi(backend, k => settings[k], fetcher)(request('/assistant/chat', {
+   message: '杭州IN77办45人讲座', history: [], responseMode: 'outdoor_v1',
+  }));
+  expect(await result.json()).toEqual({ status: 'ok', answer });
+  const body = JSON.parse(String(fetcher.mock.calls[0]![1]?.body));
+  expect(body.max_completion_tokens).toBe(4096);
+  expect(body.reasoning_split).toBe(true);
+  expect(fetcher).toHaveBeenCalledOnce();
+ });
+ it('still rejects truncated outdoor JSON without retrying', async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ choices: [{ finish_reason: 'length', message: { content: '{"action":"search"' } }] }));
+  const result = await createConversationApi(backend, k => settings[k], fetcher)(request('/assistant/chat', {
+   message: '杭州IN77办45人讲座', history: [], responseMode: 'outdoor_v1',
+  }));
+  expect(await result.json()).toEqual({ status: 'provider_error', answer: null });
+  expect(fetcher).toHaveBeenCalledOnce();
+ });
  it('uses existing ordinary MiniMax adapter despite stale enabled Bailian config',async()=>{
   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(completion('先核对候选，不应用。'));
   expect(await (await createConversationApi(backend,k=>settings[k],fetcher)(request())).json()).toEqual({status:'ok',answer:'先核对候选，不应用。'});

@@ -33,7 +33,7 @@ const nextConfig = {
       // 本机 next dev 没有 Functions，转发到 3199 本机代理，见 tools/aholo/lux3d-dev-proxy.mjs。
       ...(process.env.NODE_ENV === 'development'
         ? [
-          ...['tdt-tiles', 'tdt-search', 'tdt-area', 'place-shape', 'place-shape-hints', 'road-network'].map(name => ({ source: `/api/${name}`, destination: `http://127.0.0.1:3199/api/${name}` })),
+          ...['tdt-tiles', 'tdt-search', 'tdt-area', 'place-shape', 'place-shape-hints', 'road-network', 'site-context'].map(name => ({ source: `/api/${name}`, destination: `http://127.0.0.1:3199/api/${name}` })),
           { source: '/api/amap-place', destination: 'http://127.0.0.1:3199/amap-place' },
         ]
         : []),

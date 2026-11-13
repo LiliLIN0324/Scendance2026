@@ -168,6 +168,28 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(plan.anchor?.lng).toBe(120.1);
   expect(flow.state.stage).toBe("zones");
 });
+it("刷新后重新预览未确认候选，仍需显式确认才写入", async () => {
+  plan = { ...plan, boundary: [] };
+  const anchor = { ...plan.anchor!, lng: 120.1 };
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  act(() => root.unmount());
+  root = createRoot(host);
+  mount();
+  expect(flow.proposal).toBeNull();
+  await action("scope");
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(apply).not.toHaveBeenCalled();
+  await action("confirm");
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.state.pendingBoundary).toBeUndefined();
+});
+it("旧记录没有候选和边界时回到场地搜索", async () => {
+  plan = { ...plan, boundary: [] };
+  await action("scope");
+  expect(flow.state.stage).toBe("place");
+  expect(host.textContent).toContain("重新搜索地点");
+  expect(apply).not.toHaveBeenCalled();
+});
 it("未确认活动边界不能跳过到库布置，保留本句自然补充", async () => {
   await turn(
     "户外市集45人，展览区6个展板",
