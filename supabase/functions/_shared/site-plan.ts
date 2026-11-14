@@ -44,8 +44,8 @@ export const planLevelSchema = z.strictObject({
 });
 export type PlanLevel = z.infer<typeof planLevelSchema>;
 
-/** 分区语义：户外活动 9 类，预留区与既有室内 keep-out 语义一致。 */
-export const planZoneSemantics = ['stage', 'audience', 'parking', 'loading', 'checkin', 'queue', 'medical', 'vip', 'reserved'] as const;
+/** 分区语义：户外活动 9 类 + 室内区域（2026-11-14 用户指令「建筑给室内分区，设计别做进室内」）。 */
+export const planZoneSemantics = ['stage', 'audience', 'parking', 'loading', 'checkin', 'queue', 'medical', 'vip', 'reserved', 'indoor'] as const;
 export const planZoneSemanticLabels: Record<(typeof planZoneSemantics)[number], string> = {
   stage: '舞台区',
   audience: '观众区',
@@ -56,6 +56,7 @@ export const planZoneSemanticLabels: Record<(typeof planZoneSemantics)[number], 
   medical: '医疗点',
   vip: 'VIP 区',
   reserved: '预留区',
+  indoor: '室内区域',
 };
 
 export const planZoneSchema = z.strictObject({
@@ -266,6 +267,18 @@ export const sitePlanDataSchema = z.strictObject({
   workers: z.array(planWorkerSchema).max(500),
   /** 固定测量标注（H3-a，可选）：旧数据不带该字段照常解析。 */
   measurements: z.array(planMeasurementSchema).max(200).optional(),
+  /** 2026-11-14 用户指令「建筑给室内分区，设计别做进室内」：边界内建筑足迹=室内禁区（可选）。
+   *  从 OSM building 自动识别；排物件/排支线自动避开，2D 灰色块渲染。旧数据不带照常解析。 */
+  buildings: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(80),
+        name: z.string().max(60).optional(),
+        points: z.array(planPointSchema).min(3).max(200),
+      }),
+    )
+    .max(300)
+    .optional(),
   /** 2026-11-11 用户指令：自由标注（文本 + 形状，可选）：旧数据不带该字段照常解析。 */
   annotations: z.array(planAnnotationSchema).max(500).optional(),
 }).superRefine((plan, ctx) => {

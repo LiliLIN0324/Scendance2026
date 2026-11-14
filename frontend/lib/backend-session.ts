@@ -712,6 +712,16 @@ export class BackendSession {
       if (session.expires_at && session.expires_at * 1000 <= Date.now() + 30_000) {
         const refreshed = await this.supabase.auth.refreshSession();
         if (!refreshed.error && refreshed.data.session) session = refreshed.data.session;
+        else if (refreshed.error && refreshed.error.status === 400) {
+          // 400 = 凭据本体被拒（invalid_grant：refresh token 被轮换/吊销），存档已是死账。
+          // 清掉本地会话（signOut local 顺带清 sb-* cookie）走干净未登录登录卡，
+          // 别拿过期 access token 继续撞 verifyUser 401 落 blocked。
+          await this.supabase.auth.signOut({ scope: "local" });
+          if (epoch !== this.epoch) return;
+          this.tokens = null;
+          this.update({ user: null, recoveryReady: false, status: "signed_out", writeBlocked: true, error: null });
+          return;
+        }
       }
       const user = await this.verifyUser(session.access_token);
       if (epoch !== this.epoch) return;

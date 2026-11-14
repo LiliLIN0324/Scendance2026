@@ -78,6 +78,8 @@ export const PLANNING_ZONE_COLORS = {
   medical: '#c0392b',
   vip: '#b3628c',
   reserved: '#8b9aa6',
+  /** 2026-11-14 用户指令「建筑给室内分区」：室内区域 = 深灰蓝（与建筑禁区灰块呼应）。 */
+  indoor: '#4d5866',
 } as const;
 
 export type PlanningZoneSemantic = keyof typeof PLANNING_ZONE_COLORS;

@@ -16,7 +16,8 @@
  */
 
 import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
-import { planZoneFillAlpha } from './site-plan-editing';
+import { planZoneFillAlpha, defaultZoneColor } from './site-plan-editing';
+import type { PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
 import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
@@ -171,6 +172,34 @@ export function drawBoundaryLayer(
 }
 
 /**
+ * 2026-11-14 用户指令「建筑给室内分区」：建筑足迹 = 室内禁区，深灰块 + 名称标注。
+ * 排物件/排支线自动避开；画在分区层之下（分区半透明色块压上去仍可辨）。
+ */
+export function drawBuildingLayer(
+  c: PlanCanvasContext,
+  buildings: readonly { id: string; name?: string | undefined; points: readonly PlanPoint[] }[],
+): void {
+  const { ctx } = c;
+  for (const building of buildings) {
+    if (building.points.length < 3) continue;
+    traceRing(c, building.points);
+    ctx.fillStyle = "rgba(46,52,64,0.62)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(232,238,244,0.75)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    const label = zoneLabelPixel(c, building.points);
+    if (label) {
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(236,241,246,0.92)";
+      ctx.fillText(building.name || "室内 · 禁区", label.x, label.y);
+    }
+  }
+}
+
+/**
  * 分区：填充色 + 名称标注；分区自带色/透明度优先（H2-b）。
  * warning 为 true 时改红虚线描边（越界/重叠警示，分区数据本身保留原色）。
  */
@@ -180,6 +209,9 @@ export function drawZoneLayer(
     polygon: readonly PlanPoint[];
     name: string;
     color?: string | undefined;
+    // 2026-11-14 用户报「2D 分区全绿、3D 正常」：2D 图层此前回落到单一图层绿，
+    // 面板/图例/3D 用的是语义色板——补齐同一套回落（zone.color ?? 语义色 ?? 图层色）。
+    semantic?: PlanningZoneSemantic | undefined;
     opacity?: number | undefined;
     warning?: boolean | undefined;
   }[],
@@ -187,7 +219,7 @@ export function drawZoneLayer(
   const { ctx } = c;
   for (const zone of zones) {
     if (zone.polygon.length < 3) continue;
-    const fill = zone.color ?? PLANNING_LAYER_COLORS.zone;
+    const fill = zone.color ?? defaultZoneColor(zone.semantic ?? "reserved") ?? PLANNING_LAYER_COLORS.zone;
     traceRing(c, zone.polygon);
     ctx.fillStyle = hexWithAlpha(fill, planZoneFillAlpha({ opacity: zone.opacity }));
     ctx.fill();

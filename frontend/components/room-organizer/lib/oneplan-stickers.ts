@@ -89,6 +89,8 @@ export const ZONE_STICKERS: Record<PlanningZoneSemantic, OneplanStickerDescripto
   medical: { kind: 'icon', slug: 'first-aid-point', icon: 'shapes' },
   vip: { kind: 'icon', slug: 'vip', icon: 'shapes' },
   reserved: { kind: 'area', slug: 'generic', icon: 'shapes' },
+  // 2026-11-14 用户指令「建筑给室内分区」：室内区域面域贴纸。
+  indoor: { kind: 'area', slug: 'generic', icon: 'shapes' },
 };
 
 /** 设施模板（site-plan-facilities 的 8 个内置 templateId）→ 贴纸。 */

@@ -2061,17 +2061,157 @@ function parseRoadWires(payload) {
   return roads;
 }
 
+/* 2026-11-14：建筑足迹（way["building"]）——「室内禁区」几何来源，随路网查询一并返回。 */
+const ROADNET_CACHE = new Map();
+
+/** 建筑种子：窗口期真实抓取的 OSM building 存 .local-dev/roadnet-seed.json，死窗兜底用。 */
+let buildingSeedCache = null;
+async function loadBuildingSeed() {
+  if (buildingSeedCache) return buildingSeedCache;
+  try {
+    const raw = await readFile(new URL('../../.local-dev/roadnet-seed.json', import.meta.url), 'utf8');
+    const parsed = JSON.parse(raw);
+    buildingSeedCache = Array.isArray(parsed?.buildings) ? parsed.buildings : [];
+  } catch {
+    buildingSeedCache = [];
+  }
+  return buildingSeedCache;
+}
+function parseBuildingWires(payload) {
+  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  const buildings = [];
+  for (const el of elements) {
+    if (el?.type !== 'way' || !Array.isArray(el.geometry) || !el.tags?.building) continue;
+    const points = [];
+    for (const node of el.geometry) {
+      if (!Number.isFinite(node?.lon) || !Number.isFinite(node?.lat)) continue;
+      const gcj = tdtWgs84ToGcj02(node.lon, node.lat);
+      points.push([Number(gcj.lng.toFixed(6)), Number(gcj.lat.toFixed(6))]);
+    }
+    if (points.length < 3) continue;
+    buildings.push({
+      id: `osm:W${el.id ?? buildings.length}`,
+      name: String(el.tags.name ?? ''),
+      points,
+    });
+  }
+  return buildings;
+}
+
 async function fetchRoadNetwork(searchParams) {
   const lat = Number(searchParams.get('lat'));
   const lng = Number(searchParams.get('lng'));
   const spanRaw = Number(searchParams.get('span') ?? 1200);
   const span = Number.isFinite(spanRaw) ? Math.min(5000, Math.max(200, spanRaw)) : 1200;
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { roads: [] };
+  // 2026-11-14：成功结果缓存 10 分钟——Overpass 瞬时坏窗口不再反复打断流程。
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)},${span}`;
+  const cached = ROADNET_CACHE.get(cacheKey);
+  if (cached && cached.until > Date.now()) return cached.value;
   const halfDegLat = span / 111132.92;
   const halfDegLng = span / (Math.cos(lat * Math.PI / 180) * 111319.49);
-  const query = `[out:json][timeout:20];way["highway"](${(lat - halfDegLat).toFixed(6)},${(lng - halfDegLng).toFixed(6)},${(lat + halfDegLat).toFixed(6)},${(lng + halfDegLng).toFixed(6)});out geom;`;
-  const payload = await overpass(query);
-  return { roads: payload ? parseRoadWires(payload) : [] };
+  // 2026-11-14：建筑种子优先——本地已有该区域的真实 OSM 建筑就不再等 Overpass
+  //（坏窗口镜像重试 70s+ 会烧光前端 90s 预算；种子是窗口期真实抓取的数据，非编造）。
+  const seedBuildings = await loadBuildingSeed();
+  const seedNear = seedBuildings.filter(b => {
+    const [lng0, lat0] = b.points[0] ?? [];
+    return Number.isFinite(lat0) && Math.abs(lat0 - lat) * 111 < 3 && Math.abs(lng0 - lng) * 90 < 3;
+  });
+  const query = `[out:json][timeout:20];(way["highway"](${(lat - halfDegLat).toFixed(6)},${(lng - halfDegLng).toFixed(6)},${(lat + halfDegLat).toFixed(6)},${(lng + halfDegLng).toFixed(6)});way["building"](${(lat - halfDegLat).toFixed(6)},${(lng - halfDegLng).toFixed(6)},${(lat + halfDegLat).toFixed(6)},${(lng + halfDegLng).toFixed(6)}););out geom;`;
+  // 全镜像熔断中就别再挨台烧 20s×3 的超时预算了，直接走高德兜底。
+  const now = Date.now();
+  const overpassLive = OVERPASS_ENDPOINTS.some(ep => (endpointCooldown.get(ep) ?? 0) <= now);
+  const payload = overpassLive ? await overpass(query) : null;
+  let roads = payload ? parseRoadWires(payload) : [];
+  // 2026-11-14 用户指令「建筑给室内分区」：building 足迹随路网一并返回（仅 Overpass 源有）。
+  let buildings = payload ? parseBuildingWires(payload) : [];
+  if (!buildings.length && seedNear.length) buildings = seedNear;
+  // 2026-11-14：Overpass 全镜像被网络卡死/熔断时 → 高德路径规划兜底，别让流线整段废。
+  // 根 .env.local 的 AMAP_STATIC_KEY 是 Web 服务类型 key，步行/驾车 direction 返回沿真实道路的 GCJ 折线（免偏移换算）。
+  if (!roads.length) {
+    const fallback = await amapRoadNetwork(lat, lng, span);
+    if (fallback?.length) roads = fallback;
+  }
+  console.log('[road-network] lat/lng/span', lat.toFixed(4), lng.toFixed(4), span, 'roads', roads.length, 'buildings', buildings.length, 'seedNear', seedNear.length, 'overpassLive', overpassLive);
+  const result = { roads, ...(buildings.length ? { buildings } : {}) };
+  // 2026-11-14：只缓存「带建筑」的结果——高德兜底（无建筑）不缓存，下次自动重试 Overpass 拿建筑。
+  if (buildings.length) {
+    ROADNET_CACHE.set(cacheKey, { until: Date.now() + 600_000, value: result });
+  }
+  return result;
+}
+
+/* 2026-11-14：高德路径规划兜底路网。网格撒点 → 相邻点步行（footway=人行）+ 四角⇄中心驾车（secondary=车行），
+   折线即真实道路几何；Amap 原生 GCJ-02，直接当路网段用。结果进程内缓存，失败静默回 null（上层回 0 路）。 */
+const AMAP_DIRECTION_CACHE = new Map();
+
+async function amapDirection(key, mode, origin, destination) {
+  const cacheKey = `${mode}:${origin}:${destination}`;
+  const cached = AMAP_DIRECTION_CACHE.get(cacheKey);
+  if (cached) return cached;
+  const url = `https://restapi.amap.com/v3/direction/${mode}?origin=${origin}&destination=${destination}&key=${key}`;
+  try {
+    const res = await shapeFetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (String(body?.status) !== '1') return null;
+    const path = body?.route?.paths?.[0];
+    if (!Array.isArray(path?.steps) || !path.steps.length) return null;
+    const points = [];
+    for (const step of path.steps) {
+      for (const pair of String(step.polyline).split(';')) {
+        const [lng, lat] = pair.split(',').map(Number);
+        if (Number.isFinite(lng) && Number.isFinite(lat)) points.push([lng, lat]);
+      }
+    }
+    if (points.length < 2) return null;
+    const value = { points };
+    AMAP_DIRECTION_CACHE.set(cacheKey, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+async function amapRoadNetwork(lat, lng, span) {
+  const key = await readEnvFile('AMAP_STATIC_KEY', new URL('../../.env.local', import.meta.url));
+  if (!key) return null;
+  const halfDegLat = span / 111132.92;
+  const halfDegLng = span / (Math.cos(lat * Math.PI / 180) * 111319.49);
+  const N = 3;
+  const lats = Array.from({ length: N }, (_, i) => lat - halfDegLat + (2 * halfDegLat * i) / (N - 1));
+  const lngs = Array.from({ length: N }, (_, i) => lng - halfDegLng + (2 * halfDegLng * i) / (N - 1));
+  const pts = [];
+  for (const la of lats) for (const ln of lngs) pts.push(`${ln.toFixed(6)},${la.toFixed(6)}`);
+  const pairs = [];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const idx = r * N + c;
+      if (c + 1 < N) pairs.push([pts[idx], pts[idx + 1]]);
+      if (r + 1 < N) pairs.push([pts[idx], pts[idx + N]]);
+    }
+  }
+  const center = pts[4];
+  const jobs = pairs.map(([a, b]) => amapDirection(key, 'walking', a, b).then(r => (r ? { kind: 'footway', points: r.points } : null)));
+  for (const corner of [pts[0], pts[2], pts[6], pts[8]]) {
+    jobs.push(amapDirection(key, 'driving', corner, center).then(r => (r ? { kind: 'secondary', points: r.points } : null)));
+    jobs.push(amapDirection(key, 'driving', center, corner).then(r => (r ? { kind: 'secondary', points: r.points } : null)));
+  }
+  const settled = [];
+  for (let i = 0; i < jobs.length; i += 4) {
+    settled.push(...(await Promise.allSettled(jobs.slice(i, i + 4))));
+  }
+  const roads = [];
+  const seen = new Set();
+  for (const out of settled) {
+    const seg = out.status === 'fulfilled' ? out.value : null;
+    if (!seg) continue;
+    const fingerprint = seg.points.map(p => p.join(',')).join(';').slice(0, 240);
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    roads.push({ id: `amap:${roads.length}`, highway: seg.kind, name: '', points: roadDecimate(seg.points) });
+  }
+  return roads.length ? roads : null;
 }
 
 async function readEnvFile(name, fileUrl) {

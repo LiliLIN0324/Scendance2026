@@ -156,19 +156,60 @@ export async function understandOutdoorTurn(input: {
       },
       issuedForTurn,
     );
-    if (!checked.ok)
-      throw new Error(
-        `地图/规划引用无效或不是本轮发出对象：${checked.errors.join("；")}`,
-      );
+    if (!checked.ok) {
+      // 2026-11-14 用户拍板「引用无效不该是死路，要有追问」：
+      // ①剥掉无效引用与悬空 referenceId（下游 zones() 能兜底自动排布），能继续就继续；
+      // ②动作本身绑着坏对象（operation 的 target/reference）时无法安全继续 → 转成
+      //   action=ask 的追问回复，不再甩红错卡卡死对话。
+      const validIds = new Set(issuedForTurn.objects.map(o => o.reference.id));
+      const validRefs = turn.references.filter(ref => ref.revision === issuedForTurn.revision && validIds.has(ref.id));
+      const sanitizedFacts = turn.facts?.zones
+        ? {
+            ...turn.facts,
+            zones: turn.facts.zones.map(zone =>
+              zone.referenceId && !validIds.has(zone.referenceId)
+                ? { ...zone, referenceId: undefined }
+                : zone,
+            ),
+          }
+        : turn.facts;
+      const sanitized: OutdoorTurn = {
+        ...turn,
+        references: validRefs,
+        ...(turn.facts?.zones ? { facts: sanitizedFacts } : {}),
+      };
+      const targetBad = turn.operation?.targetId ? !validIds.has(turn.operation.targetId) : false;
+      const refBad = turn.operation?.referenceId ? !validIds.has(turn.operation.referenceId) : false;
+      if (targetBad || refBad) {
+        return {
+          ...sanitized,
+          operation: undefined,
+          action: "ask",
+          reply: `${turn.reply || "这句话里有我没找到的对象"}——你提到的对象在当前地图/规划里不存在（可能是旧引用）。请用名称再说一次，或先在画布上选中它；刚才这句我没有执行。`,
+        };
+      }
+      return sanitized;
+    }
   } else
     for (const ref of turn.references) {
       if (
         ref.layer === "plan" &&
         (ref.revision !== version || !compact.some((o) => o.id === ref.id))
       )
-        throw new Error("规划对象引用已过期或不明确，未执行，请重新选中。");
+        // 2026-11-14 同口径：引用过期转追问，不死路。
+        return {
+          ...turn,
+          operation: undefined,
+          action: "ask",
+          reply: `${turn.reply || "这句话里有我没找到的对象"}——你引用的规划对象已过期或不在当前方案，请重新说明，或先在画布上选中它；刚才这句我没有执行。`,
+        };
       if (ref.layer === "map")
-        throw new Error("当前没有已发出的地图上下文，无法接受地图引用。");
+        return {
+          ...turn,
+          operation: undefined,
+          action: "ask",
+          reply: "当前没有可用的地图上下文，处理不了地图引用；请先用文字说明对象，或重新定位场地后再说一次。",
+        };
     }
   return turn;
 }
