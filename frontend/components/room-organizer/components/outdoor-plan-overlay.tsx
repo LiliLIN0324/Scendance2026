@@ -179,6 +179,26 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [shareOpen, setShareOpen] = useState(false);
   const guide = useGuide(GUIDE_STORAGE_KEY);
+  const [guideHidden, setGuideHidden] = useState(false);
+  const showGuide = !dormant && !guideHidden && Boolean(guide.activeStep);
+  useEffect(() => {
+    if (!showGuide) return;
+    const hideOnOutsideAction = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest('[data-guide-anchor]')) return;
+      setGuideHidden(true);
+    };
+    // Capture window events so map gestures and tools rendered through portals also count.
+    window.addEventListener('pointerdown', hideOnOutsideAction, true);
+    window.addEventListener('wheel', hideOnOutsideAction, { capture: true, passive: true });
+    window.addEventListener('click', hideOnOutsideAction, true);
+    window.addEventListener('input', hideOnOutsideAction, true);
+    return () => {
+      window.removeEventListener('pointerdown', hideOnOutsideAction, true);
+      window.removeEventListener('wheel', hideOnOutsideAction, true);
+      window.removeEventListener('click', hideOnOutsideAction, true);
+      window.removeEventListener('input', hideOnOutsideAction, true);
+    };
+  }, [showGuide]);
   // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
   // 不再把「OSM」这种图源缩写塞进室内工具排里让人猜。
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
@@ -255,7 +275,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);return true;},
       applyPlan:(next,expected)=>{const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;if(ok){setPlacePin(null);setPlaceArea(null);}return ok;},
       selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
-      previewBoundary:(anchor,boundary)=>{const polygon=boundary.map(p=>{const ll=enuToLngLat(p.x,p.y,anchor.lng,anchor.lat);return [ll.lng,ll.lat] as [number,number];});setPlaceArea({polygon,label:'候选活动范围（待核对）'});if(polygon.length){const lngs=polygon.map(p=>p[0]),lats=polygon.map(p=>p[1]);canvasApiRef.current?.focusBounds([Math.min(...lngs),Math.min(...lats),Math.max(...lngs),Math.max(...lats)]);}},
+      previewBoundary: (anchor, boundary) => {
+        setPlacePin(null);
+        setPlaceArea(null);
+        if (!boundary.length) return;
+        const points = boundary.map(point => enuToLngLat(point.x, point.y, anchor.lng, anchor.lat));
+        const lngs = points.map(point => point.lng);
+        const lats = points.map(point => point.lat);
+        canvasApiRef.current?.focusBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)]);
+      },
       setView:next=>{viewChangeRef.current?.(next);},
       models:async id=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return[];const result=await loadFacilityModelCandidates([f.templateId]);const own=listGeneratedFacilityModels(id,slotId);const current=f.modelOverride?findGeneratedFacilityModel(f.modelOverride):null;if(current&&current.projectId===slotId&&!own.some(m=>m.slug===current.slug))own.unshift(current);return[...own.map(m=>({slug:m.slug,name:m.name,source:'此设施已有/上传模型',width:m.width,depth:m.depth,height:m.height})),...(result.get(f.templateId)??[]).map(m=>({slug:m.slug,name:m.name,source:'现有公共物料库',width:m.width,depth:m.depth,height:m.height}))].slice(0,5);},
       openGenerate:(id,kind)=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return false;setGenerateTarget({facilityId:id,facilityName:f.name,kind});return true;},
@@ -413,7 +441,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       {generateTarget && <OutdoorFacilityGenerate
         key={`${slotId}:${generateTarget.facilityId}:${generateTarget.kind}`}
         target={generateTarget} projectId={slotId} controller={controller} onClose={() => setGenerateTarget(null)} />}
-      {!dormant && guide.activeStep && (
+      {showGuide && guide.activeStep && (
         <GuideBubble
           step={guide.activeStep}
           stepIndex={GUIDE_STEPS.indexOf(guide.activeStep)}
@@ -451,6 +479,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
             workflowPreview={agent?.outdoorWorkflow?.proposal?.next??null}
+            workflowScopePreview={agent?.outdoorWorkflow?.proposal?.kind === 'scope'}
+            mapEditHighlight={agent?.outdoorWorkflow?.appliedHighlight ?? null}
             evidenceHighlights={evidenceHighlights}
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
@@ -618,7 +648,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             <button
               type="button"
               data-testid="map-picker-restart-guide"
-              onClick={() => { guide.restart(); setMapPickerOpen(false); }}
+              onClick={() => { guide.restart(); setGuideHidden(false); setMapPickerOpen(false); }}
               style={{
                 padding: '6px 9px',
                 borderRadius: 9,
