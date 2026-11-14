@@ -256,3 +256,15 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 - 根契约组 2 文件 **25 绿**：`site-plan` 16、`models` 9。
 - 既有户外组 3 文件 **26 绿**：`outdoor-walk-boundary` 13、`walk-engage` 6、`outdoor-map-context` 7。
 - 合计 20 文件 212 绿，exit 全 0，无新增红。另一会话浮现的 untracked 测试对（`outdoor-walk-view` / `outdoor-route-follower` / `outdoor-route-proximity` / `outdoor-interaction-target`）未纳入本侧口径。
+
+### 10.8 远端基底影子复核（origin/main，只读 grep，含测试口径）
+
+对齐丽丽新 main 后复核 §3 耦合域落点，与台账判断一致、无漂移：
+
+- M3a 主体已落地：`projectSessionScope` 3 文件、`assistant-scope-registry` 2 文件，会话身份改绑 projectId。
+- #48 遗留影子仍在远端：`useFloorSessionTracker` 5 文件、`floor-session-epoch` 10 文件、`venueFactScope` 2 文件；floor/venue 影子 tracker 未随 M2 plan.levels / plan 几何接住，继续 blocked。
+- 二分概念：`isOutdoorProject` 远端仅剩壳体 `room-organizer.tsx` 1 文件（定义/分支），其余已收敛；R4 退役点不变。
+- 壳体 persistence 链路仍驻留：`layout.id` 绑定 96 文件（含 persistence hook、场景效果、参考图、云附件等），R3/R4 拆旧面未缩小。
+- 远端 `site-plan.ts` 仍无 walls 集合；M2 walls 契约/迁移仍在 wip，main 不可接。
+
+**结论**：G1 安全面在新基底上复核无新增零引用可删项；阻塞链 `M3 → R2 → R3 → R4` 与 #48–#51 成套关系维持不变。
