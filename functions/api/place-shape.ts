@@ -1,6 +1,7 @@
 import { wgs84ToGcj02 } from './geo-gcj';
+import { placeStockConfig, type PlaceStockEnv } from './place-stock-config';
 
-type Context = { request: Request };
+type Context = { request: Request; env: PlaceStockEnv };
 
 /**
  * POI 真实轮廓：GET /api/place-shape?name=湖滨银泰in77&near=120.160119,30.25296
@@ -633,9 +634,50 @@ function acceptShape(shape: PlaceShape | null): PlaceShape | null {
   return shape && isDisplayablePlaceShape(shape) ? shape : null;
 }
 
+async function lookupPlaceStock(
+  nameNorm: string,
+  near: ReturnType<typeof parseNear>,
+  env: PlaceStockEnv,
+  fetchImpl: typeof fetch,
+): Promise<PlaceShape | null> {
+  const stock = placeStockConfig(env);
+  if (!stock || !nameNorm) return null;
+  const withoutCity = (value: string) => value.replace(/^(?:杭州市|杭州)/u, '');
+  const query = withoutCity(nameNorm);
+  if (!query) return null;
+  try {
+    const params = new URLSearchParams({
+      name_norm: `eq.${nameNorm}`,
+      select: 'id,name,kind,polygon,bounds',
+      limit: '10',
+    });
+    const response = await fetchImpl(`${stock.url}?${params}`, {
+      headers: stock.headers,
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!response.ok) return null;
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows)) return null;
+    const matches = rows.filter((row): row is PlaceShape => {
+      if (typeof row?.id !== 'string' || typeof row.name !== 'string' || row.kind !== 'area'
+        || !isPersistablePlaceShape(row) || !Array.isArray(row.bounds) || row.bounds.length !== 4
+        || !row.bounds.every(Number.isFinite)) return false;
+      const canonical = withoutCity(normalizeShapeName(row.name));
+      if (canonical !== query && !(/^[a-z]+[0-9]+$/i.test(query) && canonical.endsWith(query))) return false;
+      const [west, south, east, north] = row.bounds;
+      return west < east && south < north && (!near ||
+        (near.lng >= west - 0.01 && near.lng <= east + 0.01 && near.lat >= south - 0.01 && near.lat <= north + 0.01));
+    });
+    return matches.length === 1 ? matches[0]! : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function handlePlaceShape(
   request: Request,
   fetchImpl: typeof fetch = fetch,
+  env: PlaceStockEnv = {},
 ): Promise<Response> {
   const budget = AbortSignal.any([request.signal, AbortSignal.timeout(65000)]);
   const transport = fetchImpl;
@@ -653,10 +695,13 @@ export async function handlePlaceShape(
   // 检索名只取「名称 | 地址」的名称段：地址尾巴会污染 photon 匹配与 Overpass 按名正则，
   // 是「只有 in77 出框、大部分地点不出框」的主因之一（2026-11-13 用户要求大部分搜索带框）。
   const queryName = name.split('|')[0].trim() || name;
-  const cacheKey = `${normalizeShapeName(queryName)}|${near ? `${near.lng.toFixed(4)},${near.lat.toFixed(4)}` : ''}`;
+  const nameNorm = normalizeShapeName(queryName);
+  const cacheKey = `${nameNorm}|${near ? `${near.lng.toFixed(4)},${near.lat.toFixed(4)}` : ''}`;
   const cached = shapeCache.get(cacheKey);
   if (cached && isDisplayablePlaceShape(cached)) return json({ shape: cached }, 200);
   if (cached) shapeCache.delete(cacheKey); // 缓存里的垃圾几何（如 3 点 line）丢掉，重新挖
+  const stocked = await lookupPlaceStock(nameNorm, near, env, fetchImpl);
+  if (stocked) return json({ shape: cacheShape(cacheKey, stocked) }, 200);
   // 五路抢答（2026-11-13「点哪儿框哪儿」改造）：空间命中是主路径——点的坐标就在
   // 建筑/园区里，按点查面不看名字，结构上保证「点建筑=建筑选区」；way/rel 按名兜底；
   // 全落空再查最近道路段画线型选区（点道路=道路选区）。
@@ -692,4 +737,4 @@ function json(body: unknown, status: number, cacheable = true): Response {
   });
 }
 
-export const onRequestGet = (context: Context): Promise<Response> => handlePlaceShape(context.request);
+export const onRequestGet = (context: Context): Promise<Response> => handlePlaceShape(context.request, fetch, context.env);
