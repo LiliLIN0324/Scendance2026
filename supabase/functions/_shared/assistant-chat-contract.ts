@@ -7,6 +7,6 @@ export const assistantChatRequestSchema=z.strictObject({message:chatText,respons
 });
 export const assistantChatResponseSchema=z.discriminatedUnion('status',[
  z.strictObject({status:z.literal('ok'),answer:z.string().trim().min(1).max(3000)}),
- z.strictObject({status:z.enum(['disabled','invalid','unavailable','timeout','provider_error']),answer:z.null()}),
+ z.strictObject({status:z.enum(['disabled','invalid','unavailable','timeout','provider_error','quota_exhausted']),answer:z.null()}),
 ]);
 export type AssistantChatResult=z.infer<typeof assistantChatResponseSchema>;

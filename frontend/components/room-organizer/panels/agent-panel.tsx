@@ -3027,7 +3027,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
       else {
         if(result.status==='timeout'||result.status==='provider_error')uncertainInputs.current.add(text);
-        const message=result.status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':result.status==='disabled'||result.status==='unavailable'?'活动问答暂未启用，问题已保留。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
+        const message=result.status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':result.status==='disabled'||result.status==='unavailable'?'活动问答暂未启用，问题已保留。':result.status==='quota_exhausted'?'该模型额度已用完或欠费，请在上方切换其它模型，或联系管理员充值。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
         say({role:'agent',amber:true,text:message});
       }
     } catch {

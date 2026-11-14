@@ -16,10 +16,10 @@ function privateOrLink(value:string):boolean{return sensitive.test(value);}
 export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId;model?:string|null|undefined}):Promise<AssistantChatResult>{
  // Never log raw errors, bodies, prompts, endpoints, headers, model names or configuration.
  // One categorical event per slot attempt; response contract and fail-closed behavior stay unchanged.
- const diagnose=(slot:ChatProviderId,reason:'cancelled'|'provider_status'|'output_truncated'|'finish_reason'|'empty_answer'|'answer_too_long'|'unsupported_output'|'timeout'|'http_error'|'invalid_json'|'response_too_large'|'invalid_shape'|'transport_error'|'configuration_error'|'slot_skipped',fields:{httpStatus?:number;providerCode?:number;finishReason?:'length'|'content_filter'|'tool_calls'|'function_call'|'unknown'}={})=>{
+ const diagnose=(slot:ChatProviderId,reason:'cancelled'|'provider_status'|'output_truncated'|'finish_reason'|'empty_answer'|'answer_too_long'|'unsupported_output'|'timeout'|'http_error'|'invalid_json'|'response_too_large'|'invalid_shape'|'transport_error'|'configuration_error'|'slot_skipped'|'quota_exhausted',fields:{httpStatus?:number;providerCode?:number;finishReason?:'length'|'content_filter'|'tool_calls'|'function_call'|'unknown'}={})=>{
   try{console.warn('assistant_chat_failure',{slot,reason,...fields});}catch{/* observability cannot alter request outcome */}
  };
- const fail=(status:'disabled'|'invalid'|'unavailable'|'timeout'|'provider_error'):AssistantChatResult=>({status,answer:null});
+ const fail=(status:'disabled'|'invalid'|'unavailable'|'timeout'|'provider_error'|'quota_exhausted'):AssistantChatResult=>({status,answer:null});
  if(!input.enabled)return fail('disabled');
  const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history,...(input.responseMode?{responseMode:input.responseMode}:{})});
  if(!parsed.success||privateOrLink(parsed.data.message)||parsed.data.history.some(item=>privateOrLink(item.text)))return fail('invalid');
@@ -102,6 +102,12 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
      return {status:'ok',answer};
     }catch(error){
      if(error instanceof Error&&error.name==='TimeoutError'){diagnose(slot,'timeout');return fail('timeout');}
+     if(error instanceof ApiError&&error.code==='PROVIDER_QUOTA_EXHAUSTED'){
+      // Out of quota/balance: report it honestly and do not silently switch slots.
+      const parsed=z.object({status:z.number().int().min(400).max(599)}).safeParse(error.details);
+      diagnose(slot,'quota_exhausted',parsed.success?{httpStatus:parsed.data.status}:{});
+      return fail('quota_exhausted');
+     }
      if(error instanceof ApiError&&error.code==='PROVIDER_HTTP_ERROR'){
       // Strip upstream body before recording only the bounded HTTP status.
       const parsed=z.object({status:z.number().int().min(400).max(599)}).safeParse(error.details);

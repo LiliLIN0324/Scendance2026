@@ -90,20 +90,16 @@ describe('activity needs over the authenticated extraction API', () => {
     expect(body.extraction.activityNeeds).toHaveLength(1);
   });
 
-  it('主模型欠费(402)时自动兜底到备用供应商并成功', async () => {
+  it('主模型额度不足(402)时如实报额度耗尽，不自动兜底到备用供应商', async () => {
     const settings: Record<string, string> = { ...bailianSettings, AGENT_CHAT_BASE_URL: 'https://custom.example/v1', AGENT_CHAT_KEY: 'backup-key', AGENT_CHAT_MODEL: 'backup-model' };
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response('quota exhausted', { status: 402 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"event":"讲座"}' } }] })));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('quota exhausted', { status: 402 }));
     const api = createApi(fixture.backend, key => settings[key], fetcher);
     const response = await api(new Request('https://backend.example/brief/extract', {
       method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '讲座' }),
     }));
-    expect(await response.json()).toMatchObject({ enabled: true, extraction: { event: '讲座' } });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(await response.json()).toEqual({ enabled: true, extraction: null, reason: 'PROVIDER_QUOTA_EXHAUSTED' });
+    expect(fetcher).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[0]![0])).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
-    expect(String(fetcher.mock.calls[1]![0])).toBe('https://custom.example/v1/chat/completions');
-    expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body)).model).toBe('backup-model');
   });
 
   it('证据吞空格不再整句作废（2026-11-11 线上事故：「都站着 搭建舞台和签到区」）', async () => {
@@ -245,5 +241,16 @@ describe('activity needs over the authenticated extraction API', () => {
     expect(await (await api(request())).json()).toEqual({ enabled: true, extraction: null, reason: 'MODEL_REQUEST_FAILED' });
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: 'private-invalid-json' } }] })));
     expect(await (await api(request())).json()).toEqual({ enabled: true, extraction: null, reason: 'MODEL_INVALID_JSON' });
+  });
+
+  it('classifies an exhausted quota as PROVIDER_QUOTA_EXHAUSTED without exposing the body', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('private-quota-body', { status: 402 }));
+    const api = createApi(fixture.backend, bailianKeys, fetcher);
+    const response = await api(new Request('https://backend.example/brief/extract', {
+      method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: '测试活动' }),
+    }));
+    const body = await response.json();
+    expect(body).toEqual({ enabled: true, extraction: null, reason: 'PROVIDER_QUOTA_EXHAUSTED' });
+    expect(JSON.stringify(body)).not.toContain('private-quota-body');
   });
 });

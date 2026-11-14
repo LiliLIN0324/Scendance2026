@@ -64,6 +64,17 @@ describe('只读活动聊天',()=>{
    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(value);const result=await answerAssistantChat({...input,enabled:true,env,fetcher});expect(result).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();
   }
  });
+ it('reports out-of-quota as quota_exhausted, stops before another slot, and does not leak the body',async()=>{
+  const secret='PRIVATE_QUOTA_BODY_MARKER';
+  const warning=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  try{
+   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response(secret,{status:402}));
+   expect(await answerAssistantChat({...input,enabled:true,env,fetcher})).toEqual({status:'quota_exhausted',answer:null});
+   expect(fetcher).toHaveBeenCalledOnce();
+   expect(warning).toHaveBeenCalledWith('assistant_chat_failure',expect.objectContaining({slot:'custom',reason:'quota_exhausted',httpStatus:402}));
+   expect(JSON.stringify(warning.mock.calls)).not.toContain(secret);
+  }finally{warning.mockRestore();}
+ });
  it.each([
   {tool_calls:[{type:'function',function:{name:'write_scene',arguments:'{}'}}],function_call:null},
   {tool_calls:null,function_call:{name:'write_scene',arguments:'{}'}},
