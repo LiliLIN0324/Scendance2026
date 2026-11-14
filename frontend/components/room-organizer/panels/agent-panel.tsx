@@ -3,6 +3,7 @@
 import { validateCandidateApply } from '../lib/candidate-apply-validation';
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { agentErrorView } from '@/lib/agent-error-view';
 import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 
 /**
@@ -3041,14 +3042,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         const retryable = result.status==='timeout'||result.status==='provider_error';
         if(retryable)uncertainInputs.current.add(text);
         const status=result.status;
-        const message=status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':status==='disabled'||status==='unavailable'?'活动问答暂未启用，问题已保留。':status==='quota_exhausted'?'该模型额度已用完或欠费，请在上方切换其它模型，或联系管理员充值。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
+        const view=agentErrorView(status);
         // 按既定口径：所有错误卡都保留「重试云端理解 / 改一句再说」；重试是手动重发同一句，不会自动换到其它模型。
         const retry = () => { if (!briefRequest.current) void send(text, true); };
-        const alert = status==='invalid' ? { stamp:'输入需调整', tone:'muted' as const, retry }
-          : status==='disabled'||status==='unavailable' ? { stamp:'暂未启用', tone:'muted' as const, retry }
-          : status==='quota_exhausted' ? { stamp:'额度不足', tone:'warn' as const, retry }
-          : { stamp:'智能理解', tone:'warn' as const, retry };
-        say({role:'agent',amber:true,text:message,alert});
+        const alert = { stamp: view.stamp, tone: view.tone, retry };
+        say({role:'agent',amber:true,text:view.message,alert});
       }
     } catch {
       if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
