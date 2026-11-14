@@ -2471,6 +2471,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return () => observer.disconnect();
   }, [draw]);
 
+  // 地图舞台滚轮/触控板捏合：passive:false 才能 preventDefault 拦住浏览器原生页面滚动
+  // 与捏合(Ctrl+wheel)页面缩放。原生动作若不拦截，会和地图缩放叠加，把画布布局/投影挤错位，
+  // 表现为放大后周边点位看似消失。缩放走指针锚定（zoomAtPoint），指针下的点保持不动。
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!stage.contains(event.target as Node)) return;
+      event.preventDefault();
+      zoomAtPoint(event.deltaY < 0 ? 1 : -1, event.clientX, event.clientY);
+    };
+    stage.addEventListener('wheel', onWheel, { passive: false });
+    return () => stage.removeEventListener('wheel', onWheel);
+  }, [zoomAtPoint]);
+
   // 2026-11-11 用户 m00249：从 3D 切回 2D（画布重挂载）时以**场地边界**为中心并按边界适配缩放，
   // 不要每次都落回 plan.anchor（预置锚点是西湖正中）zoom 16。只在首次挂载时做一次；
   // 调用方显式给了 zoom（如截图导出）才让位。
@@ -2740,6 +2755,48 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         floor ? FLOOR_MIN_ZOOM : MAP_MIN_ZOOM,
         floor ? FLOOR_MAX_ZOOM : MAP_MAX_ZOOM,
       ),
+    });
+  }
+
+  /**
+   * 指针锚定缩放：缩放后指针下的地图点保持不动（对标 Leaflet / Mapbox），
+   * 不再围绕画面中心把周边点位径向甩出画外。室内平面底没有经纬度投影，回退中心锚。
+   */
+  function zoomAtPoint(dir: number, clientX?: number, clientY?: number) {
+    const v = viewRef.current;
+    const floor = baseModeRef.current === 'floor';
+    const nextZoom = clamp(
+      v.zoom + dir,
+      floor ? FLOOR_MIN_ZOOM : MAP_MIN_ZOOM,
+      floor ? FLOOR_MAX_ZOOM : MAP_MAX_ZOOM,
+    );
+    if (nextZoom === v.zoom) return;
+    if (floor) {
+      commitView({ ...v, zoom: nextZoom });
+      return;
+    }
+    const stage = stageRef.current;
+    const W = stage?.clientWidth ?? 0;
+    const H = stage?.clientHeight ?? 0;
+    const rect = stage?.getBoundingClientRect();
+    const px = rect && clientX !== undefined && clientY !== undefined
+      ? { x: clientX - rect.left, y: clientY - rect.top }
+      : { x: W / 2, y: H / 2 };
+    const dx = px.x - W / 2;
+    const dy = px.y - H / 2;
+    const world = 2 ** v.zoom * TILE;
+    const world2 = 2 ** nextZoom * TILE;
+    // 与 pan() 同一套小角度线性近似：先取指针相对中心的经纬度，缩放后再把中心挪到
+    // 「指针仍落在同一屏幕位置」所需的偏移，避免自造墨卡托反解把纬度带飞。
+    const cosLat = Math.cos(v.lat * Math.PI / 180);
+    const ptrLng = v.lng + dx / world * 360;
+    const ptrLat = v.lat - dy / world * 360 * cosLat;
+    const nextLng = ptrLng - dx / world2 * 360;
+    const nextLat = ptrLat + dy / world2 * 360 * cosLat;
+    commitView({
+      lng: clamp(nextLng, -180, 180),
+      lat: clamp(nextLat, -85, 85),
+      zoom: nextZoom,
     });
   }
 
@@ -7326,15 +7383,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         clearMultiSelection(false);
         if (!layerLocked('facility')) selectFacility(target.id);
         setContextMenu({ surface: 'stage-facility', x: event.clientX, y: event.clientY, facilityId: target.id });
-      }}
-      onWheel={e => {
-        // 视口边界（对标 Leaflet / Mapbox：滚轮缩放只挂地图视口本身）。
-        // 左侧物件库 / 已放置 / 信息等面板经 createPortal 挂在舞台 DOM 之外的左栏宿主，
-        // React 合成事件仍沿 React 树冒泡回 stage；这里按 DOM 包含关系挡掉——
-        // 只有滚轮起点确实落在地图舞台内才缩放，侧栏列表照常自己滚动，地图不跟着动。
-        const stage = stageRef.current;
-        if (!stage || !stage.contains(e.target as Node)) return;
-        if (!e.nativeEvent.defaultPrevented) zoomBy(e.deltaY < 0 ? 1 : -1);
       }}
       onDragOver={event => {
         // H2-c：拖模板到画布 → 幽灵占地跟随（占地预览）。
