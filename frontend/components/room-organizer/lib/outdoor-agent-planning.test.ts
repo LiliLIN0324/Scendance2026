@@ -71,7 +71,7 @@ describe("户外用途、真实库、人员几何守卫", () => {
       }).zones[0]!.environment,
     ).toBe("indoor");
   });
-  it("狭长场地拒绝过大真实物料，未保存半版/替换假尺寸", () => {
+  it("狭长场地拒绝过大真实物料，未保存半版/替换假尺寸", async () => {
     const plan = proposeUseZones(
       {
         ...base(),
@@ -88,7 +88,7 @@ describe("户外用途、真实库、人员几何守卫", () => {
       },
       { ...brief, zones: [brief.zones[0]!] },
     );
-    expect(() =>
+    await expect(
       proposeInventoryObjects(
         plan,
         {
@@ -110,7 +110,7 @@ describe("户外用途、真实库、人员几何守卫", () => {
           },
         ],
       ),
-    ).toThrow("放不下");
+    ).rejects.toThrow("放不下");
     expect(plan.facilities).toHaveLength(0);
   });
   it("凹形区域不跨凹口布置；不可分离的不规则分区要明确失败", () => {
@@ -132,7 +132,7 @@ describe("户外用途、真实库、人员几何守卫", () => {
       expect(String(error)).toMatch(/不规则|分区|边界/);
     }
   });
-  it("公共目录不冒充我的库，歧义候选不随便用第一个", () => {
+  it("内置库可参与排布；同名不同物件仍要求具体名称", async () => {
     const plan = proposeUseZones(base(), {
       ...brief,
       zones: [brief.zones[0]!],
@@ -151,22 +151,26 @@ describe("户外用途、真实库、人员几何守卫", () => {
       modelSlug: "generated:real",
       available: true,
     };
-    expect(() =>
-      proposeInventoryObjects(plan, req, [{ ...item, source: "built-in" }]),
-    ).toThrow("真实物料库");
-    expect(() =>
+    // 2026-11-14「按主题排物件」起，内置 OnePlan 物件库与个人库同权参与落位（见 7b565ccc）；
+    // 原先「公共目录不冒充我的库」的断言随功能反转，这里验证的只剩后半句：同名歧义不替你选。
+    const builtIn = await proposeInventoryObjects(plan, req, [
+      { ...item, source: "built-in" },
+    ]);
+    expect(builtIn.plan.facilities).toHaveLength(1);
+    expect(builtIn.used[0]!.source).toBe("built-in");
+    await expect(
       proposeInventoryObjects(plan, req, [
         item,
         { ...item, id: "b", name: "展板B" },
       ]),
-    ).toThrow("具体名称");
+    ).rejects.toThrow("具体名称");
   });
-  it("库内占地与来源、混合用途、角色路径在保存读回时不丢", () => {
+  it("库内占地与来源、混合用途、角色路径在保存读回时不丢", async () => {
     const plan = proposeUseZones(base(), {
       ...brief,
       zones: [brief.zones[0]!],
     });
-    const out = proposeInventoryObjects(
+    const out = await proposeInventoryObjects(
       plan,
       {
         ...brief,
@@ -290,10 +294,10 @@ it("观众容量不足或表演缺观众区给具体修正，不假装活动已�
   expect(() => validateWorkflowDemand(stage, brief)).toThrow("观众区域");
 });
 
-const realInventoryFixture = () => {
-  const p = proposeUseZones(base(), { ...brief, zones: [brief.zones[0]!] });
-  return proposeInventoryObjects(
-    p,
+const realInventoryFixture = async () => {
+  const zonePlan = proposeUseZones(base(), { ...brief, zones: [brief.zones[0]!] });
+  const { plan } = await proposeInventoryObjects(
+    zonePlan,
     {
       ...brief,
       items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
@@ -310,10 +314,66 @@ const realInventoryFixture = () => {
         available: true,
       },
     ],
-  ).plan;
+  );
+  return plan;
 };
-it("改变区域边界也重验未修改设施，不能把原有物件留在区外", () => {
-  const p = realInventoryFixture();
+it("逐区落位会上报进度文案，取消信号在区间生效", async () => {
+  const plan = proposeUseZones(base(), { ...brief, zones: [brief.zones[0]!] });
+  const phases: string[] = [];
+  const out = await proposeInventoryObjects(
+    plan,
+    {
+      ...brief,
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    },
+    [
+      {
+        id: "real",
+        name: "展板",
+        source: "personal",
+        width: 2,
+        depth: 1,
+        height: 2,
+        modelSlug: "generated:real",
+        available: true,
+      },
+    ],
+    undefined,
+    { onPhase: (phase) => phases.push(phase) },
+  );
+  expect(phases).toHaveLength(1);
+  expect(phases[0]).toContain("展览区");
+  expect(phases[0]).toContain("展板");
+  expect(out.plan.facilities).toHaveLength(1);
+
+  const aborted = new AbortController();
+  aborted.abort();
+  await expect(
+    proposeInventoryObjects(
+      plan,
+      {
+        ...brief,
+        items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+      },
+      [
+        {
+          id: "real",
+          name: "展板",
+          source: "personal",
+          width: 2,
+          depth: 1,
+          height: 2,
+          modelSlug: "generated:real",
+          available: true,
+        },
+      ],
+      undefined,
+      { signal: aborted.signal },
+    ),
+  ).rejects.toThrow("已取消");
+});
+it("改变区域边界也重验未修改设施，不能把原有物件留在区外", async () => {
+  const p = await realInventoryFixture();
   const next = {
     ...p,
     zones: p.zones.map((z) => ({
@@ -323,8 +383,8 @@ it("改变区域边界也重验未修改设施，不能把原有物件留在区�
   };
   expect(() => validateWorkflowPlan(p, next)).toThrow("物件占地");
 });
-it("设施新占地不得覆盖既有人员岗位", () => {
-  const p = realInventoryFixture();
+it("设施新占地不得覆盖既有人员岗位", async () => {
+  const p = await realInventoryFixture();
   const f = p.facilities[0]!;
   const staffed = {
     ...p,

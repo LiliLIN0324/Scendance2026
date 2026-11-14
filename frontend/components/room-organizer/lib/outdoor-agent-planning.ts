@@ -239,6 +239,18 @@ export const OBJECTS_LAYOUT_LABELS: Record<ObjectsLayoutStrategy, string> = {
 };
 
 /** 分区内的候选落位（按策略排序）：grid=行列扫、center=离分区中心螺旋、perimeter=贴边一圈+网格兜底。 */
+/** 简易包围盒（min/max），禁区预筛用。 */
+function bboxLoose(ring: readonly PlanPoint[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  let minX = Infinity;let minY = Infinity;let maxX = -Infinity;let maxY = -Infinity;
+  for (const p of ring) {if (p.x < minX) minX = p.x;if (p.y < minY) minY = p.y;if (p.x > maxX) maxX = p.x;if (p.y > maxY) maxY = p.y;}
+  return { minX, minY, maxX, maxY };
+}
+function bBoxesIntersect(a: { minX: number; minY: number; maxX: number; maxY: number }, b: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
+  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+function pointInBBox(p: PlanPoint, b: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
+  return p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
+}
 function zonePlacementCandidates(
   zone: PlanZone,
   strategy: ObjectsLayoutStrategy,
@@ -281,13 +293,19 @@ function zonePlacementCandidates(
   return grid;
 }
 
-export function proposeInventoryObjects(
+export async function proposeInventoryObjects(
   plan: SitePlanData,
   brief: OutdoorBrief,
   library: OutdoorLibraryItem[],
   id: () => string = () => crypto.randomUUID(),
-  options?: { strategy?: ObjectsLayoutStrategy; buildings?: PlanPoint[][] | undefined },
-): { plan: SitePlanData; used: OutdoorLibraryItem[] } {
+  options?: {
+    strategy?: ObjectsLayoutStrategy;
+    buildings?: PlanPoint[][] | undefined;
+    /** 2026-11-14 用户指令「进度条要显示在干嘛」：逐区落位的真实进度回调（async 化让出主线程刷新 UI）。 */
+    onPhase?: ((phase: string) => void) | undefined;
+    signal?: AbortSignal | undefined;
+  },
+): Promise<{ plan: SitePlanData; used: OutdoorLibraryItem[] }> {
   if (!brief.items.length)
     throw new Error(
       "各区需要哪些物件、各多少？例如“展览区6个展板、表演区1个舞台2只音响”。将先检索你的真实物料库，不自动生成。",
@@ -297,9 +315,16 @@ export function proposeInventoryObjects(
   const buildings = options?.buildings ?? [];
   // 室内区域（用户手画的 indoor 语义分区）同样是禁区。
   const indoorZones = plan.zones.filter(z => z.environment === "indoor");
+  // 2026-11-14 性能：禁区包围盒预筛——逐候选只对 bbox 相交的少数禁区做环运算（323 栋×900 候选×39 物件的逐顶点环运算实测冻结主线程）。
+  const buildingBBoxes = buildings.map(ring => ({ ring, bbox: bboxLoose(ring) }));
+  const indoorZoneBBoxes = indoorZones.map(zone => ({ zone, bbox: bboxLoose(zone.polygon) }));
   let next = { ...plan, facilities: [...plan.facilities] };
   const used: OutdoorLibraryItem[] = [];
   for (const need of brief.items) {
+    // 2026-11-14 用户指令「进度条要显示在干嘛」：每区让出主线程一帧，让状态文字与进度条真实刷新。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (options?.signal?.aborted)
+      throw new Error("已取消本次物件排布。");
     const matchesZones = plan.zones.filter(
       (z) => z.id === need.zone || z.name === need.zone,
     );
@@ -341,6 +366,7 @@ export function proposeInventoryObjects(
     }
     const material = matches[0]!;
     used.push(material);
+    options?.onPhase?.(`正在落位：${zone.name} · ${material.name} × ${need.count}`);
     const allocationKey = `${zone.id}:${need.query}`;
     const allocated = next.facilities.filter(
       (f) => f.allocationKey === allocationKey,
@@ -394,12 +420,13 @@ export function proposeInventoryObjects(
             notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
           };
           if (clearForObject(facility, next, zone)) {
-            // 建筑禁区 + 室内区域：落点在室内、或占地与建筑/室内分区相交 → 该候选作废（换下一个）。
-            if (buildings.some(ring => planPointInRing(position, ring))) continue;
+            // 建筑禁区 + 室内区域：包围盒预筛后仅对相交者做环运算（性能，见 bboxLoose）。
             const footprint = facilityFootprintRing(facility);
-            if (buildings.some(ring => outdoorRingsOverlap(footprint, ring))) continue;
-            if (indoorZones.some(z => planPointInRing(position, z.polygon))) continue;
-            if (indoorZones.some(z => outdoorRingsOverlap(footprint, z.polygon))) continue;
+            const footprintBBox = bboxLoose(footprint);
+            if (buildingBBoxes.some(b => pointInBBox(position, b.bbox) && planPointInRing(position, b.ring))) continue;
+            if (indoorZoneBBoxes.some(z => pointInBBox(position, z.bbox) && planPointInRing(position, z.zone.polygon))) continue;
+            if (buildingBBoxes.some(b => bBoxesIntersect(footprintBBox, b.bbox) && outdoorRingsOverlap(footprint, b.ring))) continue;
+            if (indoorZoneBBoxes.some(z => bBoxesIntersect(footprintBBox, z.bbox) && outdoorRingsOverlap(footprint, z.zone.polygon))) continue;
             found = facility;
           }
         }
