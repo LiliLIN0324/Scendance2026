@@ -7,12 +7,14 @@ export function createConversationApi(backend:Backend,env:Env,fetcher:Fetcher=fe
  // These overrides are scoped to this handler; the existing scene-api keeps
  // its own environment and all existing BRIEF_REQUEST_GUARD behavior.
  // The configured ordinary MiniMax adapter owns this deployment when selected.
- // Do not let stale product-Bailian flags override it or retry unrelated providers.
+ // Stale product-Bailian flags are suppressed here. DeepSeek official and Tokendance
+ // gateway slots stay readable so an explicitly selected slot can reach upstream.
+ // Cross-slot fallback is prevented in assistant-chat itself: pinned slots never
+ // retry another slot, and the OpenAI Next default leaves the remaining slot list empty.
  const minimax=env('AGENT_CHAT_PROFILE')==='minimax';
  const enabledApi=createApi(backend,key=>{
   if(['BRIEF_CONVERSATION_ENABLED','ASSISTANT_CHAT_ENABLED'].includes(key))return '1';
   if(minimax&&key==='BAILIAN_PRODUCT_ENABLED')return '0';
-  if(minimax&&['TOKENDANCE_API_KEY','DEEPSEEK_API_KEY'].includes(key))return '';
   return env(key);
  },fetcher);
  const disabledApi=createApi(backend,key=>key==='ASSISTANT_CHAT_ENABLED'?'0':env(key),fetcher);
