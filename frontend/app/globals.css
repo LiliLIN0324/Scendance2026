@@ -2327,9 +2327,9 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   overflow-y: auto;
 }
 .sc-plan-place-search-option {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
   width: 100%;
   padding: 8px 10px;
   border: 0;
@@ -2340,6 +2340,28 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   text-align: left;
   cursor: pointer;
 }
+/* 序号列（2026-11-15 用户指令）：从上往下 1/2/3…，chat 卡只给前三个标题时按号对得上。 */
+.sc-plan-place-search-option > .sc-plan-place-search-option-no {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(20, 20, 22, 0.06);
+  color: var(--sc-muted, #71767e);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.sc-plan-place-search-option > .sc-plan-place-search-option-name { grid-column: 2; }
+.sc-plan-place-search-option > .sc-plan-place-search-option-address { grid-column: 2; }
 .sc-plan-place-search-option[aria-selected='true'] {
   background: rgba(20, 20, 22, 0.055);
 }

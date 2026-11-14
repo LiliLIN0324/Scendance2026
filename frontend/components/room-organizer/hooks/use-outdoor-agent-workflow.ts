@@ -10,6 +10,7 @@ import {
   type OutdoorAgentBridge,
   type OutdoorFlowState,
   type OutdoorMapContext,
+  type OutdoorMapEditHighlight,
   type OutdoorModelChoice,
   type OutdoorLibraryItem,
   type OutdoorStage,
@@ -60,6 +61,30 @@ export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   people: "岗位、人数与活动路径",
   "refine-3d": "同规划3D深化",
 };
+
+const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
+  scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
+  zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
+  "main-routes": "请核对地图上蓝色标记的主通道和候选入口。选中路线后可拖动路线转折点绕开障碍，也可把候选入口移到实际门口。",
+};
+
+function changedIds<T extends { id: string }>(before: readonly T[], after: readonly T[]): string[] {
+  const previous = new Map(before.map(item => [item.id, item]));
+  return after.filter(item => JSON.stringify(item) !== JSON.stringify(previous.get(item.id))).map(item => item.id);
+}
+
+function mapEditHighlight(kind: OutdoorWorkflowProposal["kind"], before: SitePlanData, after: SitePlanData): OutdoorMapEditHighlight | null {
+  switch (kind) {
+    case "scope":
+      return { kind };
+    case "zones":
+      return { kind, zoneIds: changedIds(before.zones, after.zones) };
+    case "main-routes":
+      return { kind, routeIds: changedIds(before.routes, after.routes), nodeIds: changedIds(before.nodes, after.nodes) };
+    default:
+      return null;
+  }
+}
 const stages = Object.keys(OUTDOOR_STAGE_LABELS) as OutdoorStage[];
 const unknownMap: OutdoorMapContext = {
   version: "map:unavailable",
@@ -204,6 +229,7 @@ export function useOutdoorAgentWorkflow(input: {
   const [proposal, setProposal] = useState<OutdoorWorkflowProposal | null>(
     null,
   );
+  const [appliedHighlight, setAppliedHighlight] = useState<OutdoorMapEditHighlight | null>(null);
   const proposalRef = useRef(proposal);
   proposalRef.current = proposal;
   const [models, setModels] = useState<{
@@ -260,6 +286,7 @@ export function useOutdoorAgentWorkflow(input: {
     });
   }
   function start() {
+    setAppliedHighlight(null);
     setSimulating(false);
     refsRef.current = [];
     abort.current?.abort();
@@ -286,6 +313,7 @@ export function useOutdoorAgentWorkflow(input: {
     );
   }
   function cancel(options?: { preservePendingLogin?: boolean }) {
+    setAppliedHighlight(null);
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
     abort.current?.abort();
@@ -302,6 +330,7 @@ export function useOutdoorAgentWorkflow(input: {
     status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
   }
   useEffect(() => {
+    setAppliedHighlight(null);
     abort.current?.abort();
     token.current = null;
     setProposal(null);
@@ -378,6 +407,9 @@ export function useOutdoorAgentWorkflow(input: {
     };
     proposalRef.current = p;
     setProposal(p);
+    if (kind === "scope" && next.anchor) {
+      callbacks.current.bridge()?.previewBoundary?.(next.anchor, next.boundary);
+    }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
   }
   async function confirm(expected?: OutdoorWorkflowProposal) {
@@ -497,6 +529,7 @@ export function useOutdoorAgentWorkflow(input: {
       status("画布当前不可写或保存身份变化，未应用；原规划保留。", "blocked");
       return;
     }
+    setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
     proposalRef.current = null;
     setProposal(null);
     if (p.kind === "scope") {
@@ -516,8 +549,12 @@ export function useOutdoorAgentWorkflow(input: {
     } else if (p.kind === "model") {
       persist({ ...stateRef.current, stage: "refine-3d" });
     } else nextStage(p.kind);
+    const mapEditHint = MAP_EDIT_HINTS[p.kind];
+    const nextStep = OUTDOOR_STAGE_LABELS[stateRef.current.stage];
     status(
-      `已应用「${p.label}」。下一步：${OUTDOOR_STAGE_LABELS[stateRef.current.stage]}；也可直接补充要求或回退修改。`,
+      mapEditHint
+        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。`
+        : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。`,
       "done",
     );
   }
@@ -536,7 +573,6 @@ export function useOutdoorAgentWorkflow(input: {
       completed: ["place"],
       pendingBoundary: { anchor, boundary, name, base: JSON.stringify(base) },
     });
-    callbacks.current.bridge()?.previewBoundary?.(anchor, boundary);
     try {
       // 2026-11-14 用户拍板「以第一个选区为准」：换边界时旧内容按新边界重新安置（越界随场淘汰，
       // 整批可撤销），不再让「分区越出已确认活动边界」把换场卡死；锚点位移则旧场内容整体清空。
@@ -733,7 +769,10 @@ export function useOutdoorAgentWorkflow(input: {
     };
     persist(mergeOutdoorFacts(stateRef.current, normalized, message));
     if (turn.action === "ask") {
-      status(turn.reply || "请补充当前活动需求；没有修改规划。", "blocked");
+      // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
+      // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
+      callbacks.current.say(turn.reply || "请补充当前活动需求；没有修改规划。");
+      status("需要你补充一句，见对话；规划未变。", "ready");
       return;
     }
     const job = start();
@@ -1553,6 +1592,7 @@ export function useOutdoorAgentWorkflow(input: {
   return {
     state,
     proposal,
+    appliedHighlight: state.scope === input.scope ? appliedHighlight : null,
     models,
     busy,
     simulating,
@@ -1568,6 +1608,11 @@ export function useOutdoorAgentWorkflow(input: {
     },
     notice,
     noticeKind,
+    /** 低风险提示条倒计时收场用：只清提示文本，不动任务状态。 */
+    dismissNotice: () => {
+      setNotice("");
+      setNoticeKind("info");
+    },
     loginRequired: Boolean(state.pendingLogin),
     // 2026-11-14 用户指令：登录完成后这张卡要跟着变——已登录时切换为「继续这次搜索」。
     loginSatisfied:

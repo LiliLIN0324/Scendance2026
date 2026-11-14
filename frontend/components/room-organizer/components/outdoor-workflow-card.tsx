@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Map as MapIcon, TriangleAlert } from "@/components/solid-icons";
 import {
   OUTDOOR_STAGE_LABELS,
@@ -16,6 +16,19 @@ const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
   "sub-routes": "补齐物件间隙的子出入口与支线，散场不再挤主门",
   people: "岗位、人数与活动路径；可开流动示意看散场节奏",
   "refine-3d": "选中设施换模型、原位上传或生成（费用单独确认）",
+};
+
+/** 2026-11-15 对标谷地工坊的建议体系：每阶段给可点的「下一句」，点即填进输入框，
+ *  不用自己想措辞。只做预填不做提交——发送仍是用户按键确认的动作。 */
+const STAGE_PROMPTS: Record<OutdoorStage, readonly string[]> = {
+  place: ["在杭州西湖边办一场周末市集", "先找杭州 IN77，核对可用的活动范围"],
+  scope: ["就用这个范围", "范围往北扩一点"],
+  zones: ["按活动用途分区", "签到区和观众区放北侧"],
+  "main-routes": ["排一下流线和出入口", "入口放在正门，别走地下车库"],
+  objects: ["签到区摆 2 张桌子", "舞台区配音响和背景板"],
+  "sub-routes": ["补一下子出入口", "散场支线也排一下"],
+  people: ["展览区 2 名保安、表演区 3 名工作人员"],
+  "refine-3d": ["给舞台换个模型", "开流动模拟看散场"],
 };
 
 /** 底图共享层：地表/水系/道路/街区，各阶段变体只追加自己的覆盖层。 */
@@ -165,10 +178,37 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
 
 export function OutdoorWorkflowCard({
   flow,
+  onPrefill,
+  onCancelPreview,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
+  /** 「下一句」建议芯片的预填回调：点芯片只填输入框，发送仍是用户按键确认。 */
+  onPrefill?: ((text: string) => void) | undefined;
+  /** 2026-11-15 用户拍板：撤回预览要在对话流留「已放弃」徽章——按钮经此回调，
+   *  由面板调 cancel() 并补一条决策留痕气泡；不传则保持原直调 cancel() 的行为。 */
+  onCancelPreview?: (() => void) | undefined;
 }) {
   const [libraryQuery, setLibraryQuery] = useState("");
+  // 低风险提示条倒计时收场（对标谷地工坊「8 秒后自动按下」）：非错误提示、空闲且无待确认
+  // 提案时才启动倒计时；「预览已就绪，核对后确认」这类要等动作的提示不自动消失。
+  const [noticeCountdown, setNoticeCountdown] = useState<number | null>(null);
+  useEffect(() => {
+    if (!flow.notice || flow.noticeKind === "error" || flow.busy || flow.proposal) {
+      setNoticeCountdown(null);
+      return;
+    }
+    setNoticeCountdown(8);
+    const timer = window.setInterval(() => {
+      setNoticeCountdown((value) => (value === null ? null : value - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [flow.notice, flow.noticeKind, flow.busy, flow.proposal]);
+  useEffect(() => {
+    if (noticeCountdown !== null && noticeCountdown <= 0) {
+      setNoticeCountdown(null);
+      flow.dismissNotice();
+    }
+  }, [noticeCountdown, flow.dismissNotice]);
   const actions: Partial<
     Record<typeof flow.state.stage, OutdoorTurn["action"]>
   > = {
@@ -217,6 +257,9 @@ export function OutdoorWorkflowCard({
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
           {flow.notice || STAGE_CAPTIONS[flow.state.stage]}
+          {noticeCountdown !== null && noticeCountdown > 0 && (
+            <span className="ap-task-countdown" aria-hidden="true"> · {noticeCountdown}s 后收起</span>
+          )}
         </p>
       )}
       {flow.state.brief.event && (
@@ -233,6 +276,17 @@ export function OutdoorWorkflowCard({
               <li key={w}>{w}</li>
             ))}
           </ul>
+          {flow.proposal.kind === "scope" && (
+            <button
+              type="button"
+              disabled={flow.busy}
+              onClick={() =>
+                flow.proposal && flow.manualBoundary(flow.proposal)
+              }
+            >
+              在地图上重画实际活动范围
+            </button>
+          )}
           <button
             className="btn-primary"
             type="button"
@@ -243,7 +297,10 @@ export function OutdoorWorkflowCard({
           >
             确认并应用这一版
           </button>
-          <button type="button" onClick={() => flow.cancel()}>
+          <button
+            type="button"
+            onClick={() => (onCancelPreview ? onCancelPreview() : flow.cancel())}
+          >
             撤回预览
           </button>
           {/* 2026-11-14 用户指令「给我几个方案」：物件排布方案循环切换（行列/居中/沿边），确认哪版算哪版。 */}
@@ -256,16 +313,6 @@ export function OutdoorWorkflowCard({
               }}
             >
               换一种排法
-            </button>
-          )}
-          {flow.proposal.kind === "scope" && (
-            <button
-              type="button"
-              onClick={() =>
-                flow.proposal && flow.manualBoundary(flow.proposal)
-              }
-            >
-              只用其中一部分，重新圈范围
             </button>
           )}
         </div>
@@ -465,10 +512,23 @@ export function OutdoorWorkflowCard({
       )}
       {flow.proposal && (
         <footer>
-          <button type="button" onClick={() => flow.cancel()}>
+          <button
+            type="button"
+            onClick={() => (onCancelPreview ? onCancelPreview() : flow.cancel())}
+          >
             取消本次预览
           </button>
         </footer>
+      )}
+      {/* 「下一句」建议芯片（谷地工坊式）：空闲且无待确认提案时给，忙碌/确认中不出。 */}
+      {onPrefill && !flow.busy && !flow.proposal && (STAGE_PROMPTS[flow.state.stage]?.length ?? 0) > 0 && (
+        <div className="ap-stage-prompts" role="group" aria-label="下一句建议">
+          {STAGE_PROMPTS[flow.state.stage]!.map((text) => (
+            <button key={text} type="button" className="ap-stage-prompt" onClick={() => onPrefill(text)}>
+              {text}
+            </button>
+          ))}
+        </div>
       )}
     </section>
     {flow.loginRequired && (

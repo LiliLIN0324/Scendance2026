@@ -423,6 +423,14 @@ export function clearAgentSteerNotes(): void {
   commitRun({ ...run, steerNotes: [] });
 }
 
+/** 撤回一条还没送达的备注（按序号）：队列里拿掉，对应的上屏气泡一并消失。 */
+export function removeAgentSteerNote(index: number): void {
+  if (!Number.isInteger(index) || index < 0 || index >= run.steerNotes.length) return;
+  const steerNotes = run.steerNotes.slice();
+  steerNotes.splice(index, 1);
+  commitRun({ ...run, steerNotes });
+}
+
 /**
  * 把「云端一共收到几条改道备注」写进账本。
  *

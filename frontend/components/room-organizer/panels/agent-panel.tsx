@@ -19,20 +19,21 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, ChevronDown, Clock, Copy, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, Pencil, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
+import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
-import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
+import { toolTraceRows } from '../lib/tool-trace';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
-import { MaterialCandidatesPanel } from './material-candidates-panel';
+import { Bubbles, GenProgress, ToolCallTrace, type Bubble } from './agent-bubbles';
+import { ProposalCard, type ProposalDecision } from './agent-proposal-card';
+import { RouteConfirmCard, VenueConfirmCard, ZoneConfirmCard } from './agent-confirm-cards';
 import { CandidateInventoryPanel } from './candidate-inventory-panel';
 import { checkCandidateInventory, type CandidateInventory } from '../lib/candidate-inventory';
 import {captureOriginalPreservation,isStandalonePreservationInstruction,preservationIntent,reviewOriginalPreservation} from '../lib/original-preservation';
-import { ModelTextDisclosure } from './model-text-disclosure';
 import { hasMixedUtilityCommand } from '../lib/utility-shortcut-boundary';
 import {reviewLocalRoutes,type LocalRouteInput,type LocalRouteReview} from '../../../lib/local-route-review';
 import { applyLayoutCommand, applyLayoutCommandWithRefusals, completeLayoutError } from '../../../lib/build-command';
@@ -45,7 +46,7 @@ import type { LayoutPlanDraft, ZoneSemanticType } from '../../../lib/plan-annota
 import type {UserRouteProvenance} from '../hooks/use-plan-annotations';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { localPlanKey } from '../../review-share-page/load-plan';
-import { useRoomEditor, useSelectionOptional } from '../contexts';
+import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { countOverlaps, proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { planLocalDeskChairDraft, planLocalSharedDeskDraft } from '../lib/local-seating-draft';
@@ -94,7 +95,6 @@ import { VenuePicker } from './venue-picker';
 import { cloudBriefMessage, cloudSeatingAllocation, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, splitConfirmationLead, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { type PlanDiagnostic } from '../lib/diagnostics';
 import { checkEntranceBlocks } from '../lib/entrance-block-check';
-import { PlanPreview } from './plan-preview';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { localPlan } from '../lib/local-plan';
@@ -122,19 +122,14 @@ import {
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
 import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
-import {
-  groupChangeItems, proposalChangeItems, proposalChangeSummary, proposalZoneCount,
-  type ProposalChangeItem, type ProposalChangeKind, type ProposalChangeSummary,
-} from '../lib/proposal-change-groups';
+import { proposalChangeItems, proposalChangeSummary, proposalZoneCount, type ProposalChangeItem, type ProposalChangeSummary } from '../lib/proposal-change-groups';
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
 import { aholoChatStep, understandingLine } from '../lib/cloud-tool-connection';
-import { parseFollowUpOptions, segmentBubbleBlocks } from '../lib/bubble-text';
 import { layoutChatHint, revisionRefusalText } from '../lib/layout-feedback';
 import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
-import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import { BingoAuditCard } from './bingo-audit-card';
-import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushLocalLayoutStep, requestAgentStop, resetAgentRun } from './agent-chat-store';
+import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushAgentSteerNote, pushLocalLayoutStep, removeAgentSteerNote, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { subscribeComposerPrefill } from './composer-prefill-bus';
 import { AgentRunPanel, useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
@@ -162,7 +157,6 @@ import { RailAvatar, type RailForm } from './rail-avatar';
 import type { RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
-import { BoundaryLineNote, FollowupChips, type BoundaryContext } from './proposal-followup-chips';
 import './agent-panel.css';
 
 const MASCOT_DIR = '/assets/assistant/qingguang-3d';
@@ -175,30 +169,8 @@ const forceFail = () => process.env.NODE_ENV !== 'production' && typeof window !
   && new URL(window.location.href).searchParams.get('agentFail') === '1';
 
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
-export type Bubble = {
-  id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
-  /** Only model-authored conversation may be used as model history. */
-  modelConversation?: boolean;
-  materialQueries?: readonly string[];
-  /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
-  long?: boolean;
-  /** 选进来的图纸/照片：跟这条消息一起留在聊天区，不是只把文件名当一行字。 */
-  image?: string;
-  /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
-  action?: { label: string; run(): void };
-  /**
-   * 「要不要我帮你圈区」提议卡：AI 给完硬建议、末尾问一句时挂这个。
-   * 渲染成品牌绿描边小卡 + 「好，帮我圈」按钮；落盘时函数被丢，回读不会重现按钮。
-   */
-  zoneApply?: { run(): void };
-  /** S2 T2：审校台专属气泡（体检回执/钉评指路）。Bingo 脸只回放这类，活动脸回放全部。 */
-  review?: boolean;
-  /**
-   * 失败/未启用卡片外壳：带 alert 的 agent 消息渲染成图1错误卡（标签 + 摘要 + 动作），
-   * 而不是旧的裸竖线气泡。retry 为运行时闭包，落盘时丢弃，回放不重现按钮。
-   */
-  alert?: { stamp: string; tone?: 'warn' | 'muted'; retry?: () => void };
-};
+/** 气泡类型与渲染层一起抽到 ./agent-bubbles；这里只保留对外导出，避免外部引用断裂。 */
+export type { Bubble };
 
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
@@ -243,7 +215,7 @@ function isExplicitSizeOnly(text: string): boolean {
  * 待确认的那一版布置。本地候选和云端 AI 提案在右栏共用同一张卡、同一颗绿钮：
  * 卡片只认这几个数，谁来提案都得先预览、由人点「确认布置」才落盘。
  */
-interface ProposalView extends PendingPlan {
+export interface ProposalView extends PendingPlan {
   /** 这次运行的结果账单：放进/挪动/撤掉、被拒原因、没动件数与空结果原因。 */
   outcome: RunOutcome;
   source: 'local' | 'cloud';
@@ -513,6 +485,8 @@ export interface LayoutAgentCallbacks {
 interface AgentValue {
   outdoorTask: OutdoorTaskProgress | null;
   stopOutdoorTask(): void;
+  /** 2026-11-15 用户拍板：桥接态撤回预览在对话流留决策徽章（谷地工坊「已批准/已放弃」同款）。 */
+  sayDecisionBadge(decision: 'approved' | 'rejected' | 'cancelled', text: string): void;
   inspectOutdoorFacility(id: string): void;
   /** M5：确认后写入人员布点（bridge applyWorkers，commitPlan 可撤销）；未接上或空提案回 false。 */
   applyOutdoorWorkers(workers: PlanWorker[]): boolean;
@@ -1807,7 +1781,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     const ok = routeBridgeRef.current?.applyRoutes(proposal.routes, proposal.nodes) ?? false;
     if (ok) { routeTicketRef.current = null; routeProposalBaseRef.current = null; setRouteProposal(null); setOutdoorTask({ intent: '安排流线和出入口', state: 'done', action: '已应用，可整批撤销', steps: ['虚线预览', '用户确认', '写入正式流线与入口'], prompts: ['45 人讲座', '80 人市集'] }); }
-    if (ok) say({ role: 'agent', text: `已应用 ${proposal.routes.length} 条流线和 ${proposal.nodes.length} 个出入口——虚线变实线了，Ctrl+Z 可整批撤销。` });
+    if (ok) say({ role: 'agent', decision: 'approved', text: `已应用 ${proposal.routes.length} 条流线和 ${proposal.nodes.length} 个出入口——虚线变实线了，Ctrl+Z 可整批撤销。` });
     else say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），提案先留着；打开户外规划再说一次「排流线」。' });
   }
 
@@ -1816,7 +1790,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!ticket || ticket.proposal !== routeProposal || !currentOutdoorTask(ticket.epoch, 'route')) return;
     beginOutdoorTask(null);
     setOutdoorTask(current => current ? { ...current, state: 'stopped', action: '已放弃预览，未写入' } : null);
-    say({ role: 'agent', text: '这版流线提案已放弃，画布上的虚线撤掉了。' });
+    say({ role: 'agent', decision: 'rejected', text: '这版流线提案已放弃，画布上的虚线撤掉了。' });
   }
 
   // V-3：区域→事件→物料提案——brief 里的活动名/人数进配比，出入口决定入场朝向。
@@ -1869,7 +1843,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     const ok = routeBridgeRef.current?.applyZoneProposal(proposal.zones, proposal.facilities, proposal.routes, proposal.nodes) ?? false;
     if (ok) { zoneTicketRef.current = null; zoneProposalBaseRef.current = null; setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'done', action: '已应用。选设施可切模型/生成/上传；选区域可编辑事件', steps: ['区域物料预览', '用户确认', '写入同一份户外规划'], focusFacilityId: (proposal.facilities.find(f => f.name.includes('舞台')) ?? proposal.facilities[0])?.id, prompts: ['补子出入口', '开始模拟'] }); }
-    if (ok) say({ role: 'agent', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
+    if (ok) say({ role: 'agent', decision: 'approved', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
     else say({ role: 'agent', amber: true, text: '画布还没准备好（户外规划卡没开？），提案先留着；打开户外规划再说一次「分区」。' });
   }
 
@@ -1878,7 +1852,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!ticket || ticket.proposal !== zoneProposal || !currentOutdoorTask(ticket.epoch, 'zone')) return;
     beginOutdoorTask(null);
     setOutdoorTask(current => current ? { ...current, state: 'stopped', action: '已放弃预览，未写入' } : null);
-    say({ role: 'agent', text: '这版分区提案已放弃，画布上的虚线撤掉了。' });
+    say({ role: 'agent', decision: 'rejected', text: '这版分区提案已放弃，画布上的虚线撤掉了。' });
   }
 
   // V-4a：子出入口提案——给每个分区接驳最近的主流线（复用 routeProposal 确认卡与 applyRoutes）。
@@ -3713,6 +3687,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     },
     inspectOutdoorFacility: id => { if (!routeBridgeRef.current?.inspectFacility?.(id)) setOutdoorTask(current => current ? { ...current, state: 'blocked', action: '该设施已不在当前户外方案，请重新选择画布中的设施', focusFacilityId: undefined } : null); },
     applyOutdoorWorkers: workers => routeBridgeRef.current?.applyWorkers?.(workers) ?? false,
+    sayDecisionBadge: (decision, text) => { say({ role: 'agent', decision, text }); },
     applyOutdoorMeasurements: measurements => routeBridgeRef.current?.applyMeasurements?.(measurements) ?? false,
     applyOutdoorAnnotations: annotations => routeBridgeRef.current?.applyAnnotations?.(annotations) ?? false,
     getOutdoorLevels: () => routeBridgeRef.current?.getLevels?.() ?? [],
@@ -3884,90 +3859,9 @@ export function MapRailButton(): JSX.Element {
   </nav>;
 }
 
-/** 活动脸的快捷能力：活动级选址 + 风格套。S1 后这里是唯一的布置生成对话入口。 */
-/** V-1b 场地回显确认卡：候选来自双源检索；点选=确认真实场地并走 V-1c 锚定链。 */
-function VenueConfirmCard({ state, onPick, onDismiss }: {
-  state: { query: string; candidates: PlaceSuggestion[]; loading: boolean; picking: string | null };
-  onPick: (place: PlaceSuggestion) => void;
-  onDismiss: () => void;
-}): JSX.Element {
-  return <section className="ap-card ap-venue-card" aria-label="场地确认">
-    <p className="ap-lead-title">我理解为「{state.query}」，设为场地？</p>
-    <p className="ap-lead-body">点一个候选确认是真实场地；确认后我会立壳、铺底图并把边界框出来。都不是就换个说法再说一句（可带上城市）。</p>
-    {state.loading && <p className="ap-agent-line" role="status">正在找「{state.query}」的候选场地…</p>}
-    {!state.loading && state.candidates.length === 0 && <p className="ap-agent-line">没搜到候选场地。换个说法再说一句，或点右栏「地图选址」手动圈。</p>}
-    {state.picking && <p role="status">正在查找真实边界（最多约 85 秒）；超时将转为手画，不会编造边界。</p>}
-    {state.candidates.length > 0 && <div className="ap-option-pick">
-      {state.candidates.map(place => (
-        <button
-          key={place.id}
-          type="button"
-          className="ap-option-row"
-          disabled={state.picking !== null}
-          onClick={() => onPick(place)}
-        >
-          <span className="ap-venue-option-text">
-            <span className="ap-venue-option-name">{place.name}</span>
-            {place.address && <span className="ap-venue-option-addr">{place.address}</span>}
-          </span>
-          {state.picking === place.name && <span className="ap-option-row-mark">确认中…</span>}
-        </button>
-      ))}
-    </div>}
-    {!state.loading && state.candidates.length > 0 && (
-      <button type="button" className="chip" onClick={onDismiss}>都不是，换个说法</button>
-    )}
-  </section>;
-}
-
-/** V-2d 流线提案确认卡：虚线预览在画布上，应用才 commitPlan（整批可撤销）。 */
-function RouteConfirmCard({ summary, routes, busy, onConfirm, onDismiss }: {
-  summary: { pedestrian: number; vehicle: number; service: number; entrances: number };
-  routes: number;
-  busy: boolean;
-  onConfirm: () => void;
-  onDismiss: () => void;
-}): JSX.Element {
-  return <section className="ap-card ap-venue-card" aria-label="流线提案确认">
-    <p className="ap-lead-title">这版流线要应用吗？</p>
-    <p className="ap-lead-body">草拟 {routes} 条（人行 {summary.pedestrian} · 车行 {summary.vehicle} · 后勤 {summary.service}）+ {summary.entrances} 个出入口。画布上的虚线是预览——应用后变实线，Ctrl+Z 可整批撤销。</p>
-    <div className="ap-option-pick">
-      <button type="button" className="ap-option-row" disabled={busy} onClick={onConfirm}>
-        <span className="ap-venue-option-text"><span className="ap-venue-option-name">应用这版流线</span></span>
-        {busy && <span className="ap-option-row-mark">应用中…</span>}
-      </button>
-      <button type="button" className="ap-option-row" disabled={busy} onClick={onDismiss}>
-        <span className="ap-venue-option-text"><span className="ap-venue-option-name">放弃这版</span></span>
-      </button>
-    </div>
-  </section>;
-}
-
-/** V-3 区域提案确认卡：虚线分区+物料幽灵在画布，应用才 commitPlan（整批可撤销）。 */
-function ZoneConfirmCard({ proposal, busy, onConfirm, onDismiss }: {
-  proposal: ZoneEventProposal;
-  busy: boolean;
-  onConfirm: () => void;
-  onDismiss: () => void;
-}): JSX.Element {
-  return <section className="ap-card ap-venue-card" aria-label="区域提案确认">
-    <p className="ap-lead-title">这版分区要应用吗？</p>
-    <p className="ap-lead-body">草拟 {proposal.summary.zones} 个区域 + {proposal.summary.facilities} 件物料（签到→观众→舞台按入场朝向分带）。画布上的虚线框是预览——应用后变实线，Ctrl+Z 可整批撤销。</p>
-    {proposal.summary.warnings?.map(warning => <p className="ap-lead-body" key={warning}>{warning}</p>)}
-    <div className="ap-option-pick">
-      <button type="button" className="ap-option-row" disabled={busy} onClick={onConfirm}>
-        <span className="ap-venue-option-text"><span className="ap-venue-option-name">应用这版分区</span></span>
-        {busy && <span className="ap-option-row-mark">应用中…</span>}
-      </button>
-      <button type="button" className="ap-option-row" disabled={busy} onClick={onDismiss}>
-        <span className="ap-venue-option-text"><span className="ap-venue-option-name">放弃这版</span></span>
-      </button>
-    </div>
-  </section>;
-}
-
 const CAPABILITY_PANEL_OPEN_KEY = 'sc.ap-capabilities-open';
 
+/** 活动脸的快捷能力：活动级选址 + 风格套。S1 后这里是唯一的布置生成对话入口。 */
 /**
  * 「你可以做什么」能力卡：默认收起，只留一行标题，不把对话区占着；展开后卡片挂出。
  * 展开的选择记在本机，之后保持常驻。首帧与 SSR 一致，读本机选择放在渲染后。
@@ -4070,168 +3964,6 @@ export function VenuePickerOverlay(): JSX.Element | null {
   </div>;
 }
 
-function ToolCallTrace({ line, rows, understanding, onStop }: {
-  line: string | null;
-  rows: ReturnType<typeof toolTraceRows>;
-  understanding: boolean;
-  onStop(): void;
-}): JSX.Element | null {
-  const status = toolChipStatus(line);
-  const running = rows.some(row => row.status === 'running') || status === 'running';
-  const failed = [...rows].reverse().find(row => row.status === 'error');
-  const [opened, setOpened] = useState(running);
-  useEffect(() => { setOpened(running); }, [running]);
-  if (!line && rows.length === 0 && !failed) return null;
-  return <section className="ap-tools" aria-label="工具调用">
-    {line && status && <p role="status" className={`ap-tool-chip is-${status}`}>
-      <span className="ap-tool-state">{toolStatusWord(status)}</span>
-      <span>{line}</span>
-      {understanding && line === '正在理解活动需求…' && <button type="button" onClick={onStop}>停止等待</button>}
-    </p>}
-    {!line && failed && <p role="status" className="ap-tool-chip is-error">
-      <span className="ap-tool-state">未完成</span>
-      <button type="button" onClick={() => setOpened(value => !value)}>{failed.result || failed.name}</button>
-    </p>}
-    {rows.length > 0 && <details open={opened} onToggle={event => setOpened(event.currentTarget.open)}>
-      <summary>执行过程</summary>
-      <ol className="ap-tool-rows">
-        {rows.map((row, index) => <li key={row.id} className={`ap-tool-row is-${row.status}`}>
-          <span className="ap-tool-row-no" aria-hidden="true">{index + 1}</span>
-          <div className="ap-tool-row-body">
-            <div className="ap-tool-row-line">
-              <span className="ap-tool-row-name">{row.name}</span>
-              <span className="ap-tool-row-stat">{toolStatusWord(row.status)}</span>
-            </div>
-            <div className="ap-tool-row-detail">{row.result}</div>
-          </div>
-        </li>)}
-      </ol>
-    </details>}
-  </section>;
-}
-
-function Bubbles({ agent, reviewOnly = false, onPickOption, onResendMessage }: { agent: AgentValue; reviewOnly?: boolean; onPickOption: (text: string) => void; onResendMessage?: (text: string) => void }): JSX.Element {
-  const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
-  // 2026-11-14 用户指令：气泡 hover 出「复制 / 编辑」；编辑只给最近一条用户消息，
-  // 且在原位变成 chat 框——发送即替换这句话并重新走理解管线（不回填底部输入框）。
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState('');
-  const lastUserBubbleId = [...list].reverse().find(bubble => bubble.role === 'user')?.id ?? null;
-  const copyMessage = (bubble: AgentValue['bubbles'][number]): void => {
-    void navigator.clipboard?.writeText(bubble.text).catch(() => {});
-    setCopiedId(bubble.id);
-    window.setTimeout(() => setCopiedId(current => (current === bubble.id ? null : current)), 1200);
-  };
-  const copyButton = (bubble: AgentValue['bubbles'][number]) => (
-    <button type="button" aria-label={copiedId === bubble.id ? '已复制' : '复制这条消息'} onClick={() => copyMessage(bubble)}>
-      {copiedId === bubble.id ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-    </button>
-  );
-  const submitEdit = (): void => {
-    const value = editDraft.trim();
-    if (!value) return;
-    setEditingId(null);
-    onResendMessage?.(value);
-  };
-  return <>{list.map((bubble, bubbleIndex) => {
-    const followups = bubble.role === 'agent' ? parseFollowUpOptions(bubble.text) : [];
-    const laterUserTexts = list.slice(bubbleIndex + 1).filter(b => b.role === 'user').map(b => b.text.trim());
-    const pickedOption = followups.find(option => laterUserTexts.includes(option));
-    const settled = pickedOption !== undefined;
-    return bubble.role === 'user'
-    ? <div key={bubble.id} className="ap-bubble-wrap is-user">
-      {editingId === bubble.id ? (
-        <form className="ap-msg-edit" onSubmit={event => { event.preventDefault(); submitEdit(); }}>
-          <textarea
-            value={editDraft}
-            rows={2}
-            autoFocus
-            maxLength={600}
-            aria-label="编辑这条消息"
-            onChange={event => setEditDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.nativeEvent.isComposing) return;
-              if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitEdit(); }
-              else if (event.key === 'Escape') { event.preventDefault(); setEditingId(null); }
-            }}
-          />
-          <div className="ap-msg-edit-actions">
-            <button type="button" className="chip" onClick={() => setEditingId(null)}>取消</button>
-            <button type="submit" className="chip btn-primary" disabled={!editDraft.trim()}>发送</button>
-          </div>
-        </form>
-      ) : (<>
-        <div className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
-        <div className="ap-msg-actions">
-          {copyButton(bubble)}
-          {onResendMessage && bubble.id === lastUserBubbleId && <button type="button" aria-label="编辑这条消息" data-tip="编辑后重新发送" onClick={() => { setEditingId(bubble.id); setEditDraft(bubble.text); }}><Pencil size={14} aria-hidden="true"/></button>}
-        </div>
-      </>)}
-    </div>
-    : <div key={bubble.id} className="ap-bubble-wrap"><div className="ap-turn">{bubble.alert ? (
-      <section className={`ap-card ap-error-card${bubble.alert.tone === 'muted' ? ' is-muted' : ''}`} role="alert">
-        <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>{bubble.alert.stamp}</span>
-        <div className={`ap-error-body${bubble.long ? ' is-long' : ''}`}>
-          {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
-            ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
-            : <span key={index} className="ap-agent-line">{block.text}</span>)}
-        </div>
-        <div className="ap-error-actions">
-          {bubble.alert.retry && <button type="button" className="chip" onClick={bubble.alert.retry}><RotateCw size={14} aria-hidden="true"/>重试云端理解</button>}
-          <button type="button" className="chip btn-outline" onClick={() => document.getElementById('ap-input')?.focus()}>改一句再说</button>
-        </div>
-      </section>
-    ) : (
-      <div className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>
-        {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
-          ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
-          : <span key={index} className="ap-agent-line">{block.text}</span>)}
-      </div>
-    )}
-      {followups.length > 0 && (
-        <div className="ap-option-pick" role="group" aria-label="可选回复">
-          {followups.map(option => {
-            const picked = option === pickedOption;
-            return <button key={option} type="button" className={`ap-option-row${picked ? ' is-picked' : ''}${settled && !picked ? ' is-dim' : ''}`} disabled={settled} onClick={() => onPickOption(option)}>
-              <span className="ap-option-row-cap">{option}</span>
-              {picked && <span className="ap-option-row-mark"><Check size={11} aria-hidden="true"/>已选</span>}
-            </button>;
-          })}
-        </div>
-      )}
-      {bubble.zoneApply && (
-        <div className="ap-zone-proposal">
-          <span className="ap-blocked-stamp"><SquareDashed size={12} aria-hidden="true"/>圈区域</span>
-          <p className="ap-zone-proposal__hint">要不要直接在 2D 上把提议的区域圈出来？</p>
-          <button type="button" className="ap-zone-proposal__btn" onClick={bubble.zoneApply.run}>好，帮我圈</button>
-        </div>
-      )}
-      {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
-      {bubble.materialQueries?.map(query=><MaterialCandidatesPanel key={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}:${bubble.id}:${query}`} query={query} onOpenLibrary={()=>agent.callbacks.onOpenMaterials()}/>)}
-      </div>
-      <div className="ap-msg-actions">{copyButton(bubble)}</div>
-    </div>;
-  })}</>;
-}
-
-function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: boolean; hidden?: boolean }): JSX.Element | null {
-  // 真实步骤时间线在场时，这套写死的步骤条让位——不同时摆两套进度。
-  if (hidden) return null;
-  return <div className={`ap-card ap-progress-card${paused ? ' is-paused' : ''}`} id="gen-progress">
-    <span className="ap-progress-stamp"><Clock size={12} aria-hidden="true"/>{paused ? '已暂停' : '生成中'}</span>
-    <p className="ap-progress-note">{paused ? '布置预览已暂停' : '正在准备布置预览'}</p>
-    <div className="ap-progress-actions">
-      {paused
-        ? <>
-            <button type="button" className="chip" onClick={agent.resume}>接着摆</button>
-            <button type="button" className="chip btn-outline" onClick={agent.withdrawProposal}>不要了</button>
-          </>
-        : <button type="button" className="ap-link" onClick={agent.stop}>停一下</button>}
-    </div>
-  </div>;
-}
-
 /** One overlap refusal, not the long double sentence confirm used to paste twice. */
 function foldConflictBubble(text: string): string {
   const count = text.match(/有 (\d+) 件物料存在冲突/);
@@ -4241,9 +3973,7 @@ function foldConflictBubble(text: string): string {
   return `${count[1]} 件没写上。${reason}。这次没有写入。`;
 }
 
-/** 这一轮候选卡上的决策留痕：批准 / 拒绝，只活在当前面板内存里，不落后端。 */
-type ProposalDecision = 'approved' | 'rejected';
-
+/** 决策留痕类型随提案卡搬到 ./agent-proposal-card；面板 useState 经此导入。 */
 /* ── Web Speech API 最小本地收口：TS DOM 库未带 SpeechRecognition，类型只在本文件内，不写全局 d.ts。 ── */
 interface SpeechRecognitionAlternativeLike { transcript: string }
 interface SpeechRecognitionResultLike { isFinal: boolean; 0: SpeechRecognitionAlternativeLike }
@@ -4311,168 +4041,6 @@ function MicIcon({ size = 18, 'aria-hidden': ariaHidden }: { size?: number; 'ari
 }
 
 /**
- * 提案分组清单：新增 / 挪动 / 撤掉 三组可点条目，点选只做选中定位，
- * 不挂任何单件批准/拒绝按钮；整版二元决策仍由卡片底部按钮行负责。
- */
-function ProposalChangeList({ items, summary, onLocate }: {
-  items: ProposalChangeItem[];
-  summary: ProposalChangeSummary;
-  onLocate(id: string): void;
-}): JSX.Element {
-  const groups = groupChangeItems(items);
-  const meta: { kind: ProposalChangeKind; title: string }[] = [
-    { kind: 'added', title: '新增' },
-    { kind: 'moved', title: '挪动' },
-    { kind: 'removed', title: '撤掉' },
-  ];
-  const summaryParts = [`改动 ${summary.total} 处`];
-  if (summary.zoneCount != null) summaryParts.push(`涉及 ${summary.zoneCount} 个区域`);
-  if (summary.elapsedMs != null) summaryParts.push(`用时 ${formatDurationClock(summary.elapsedMs)}`);
-  return (
-    <div className="ap-change-list">
-      <p className="ap-note ap-change-summary">{summaryParts.join(' · ')}</p>
-      {meta.map(({ kind, title }) => {
-        const entries = groups[kind];
-        if (entries.length === 0) return null;
-        return (
-          <details className="ap-change-group" key={kind}>
-            <summary>{title}（{entries.length}）</summary>
-            <ul>
-              {entries.map(entry => (
-                <li key={entry.id}>
-                  <button type="button" className="ap-change-item" onClick={() => onLocate(entry.id)}>
-                    {entry.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 预览态：主钮「确认布置」，次钮「不用」；决策后原地留成徽章，一屏只留一个深主钮。 */
-function ProposalCard({ agent, onPrefill, decision, onApprove, onReject }: {
-  agent: AgentValue;
-  onPrefill?: (text: string) => void;
-  decision?: ProposalDecision | null;
-  onApprove?: () => void;
-  onReject?: () => void;
-}): JSX.Element | null {
-  const { layout } = useRoomEditor();
-  const selection = useSelectionOptional();
-  const plan = agent.proposal;
-  if (!plan) return null;
-  const names = plan.overlapNames.slice(0, 3).join('、');
-  const review = !!plan.review;
-  const guests = plan.guests && plan.guests > 0 ? plan.guests : 0;
-  const seats = plan.seats ?? 0;
-  const short = guests > 0 && seats < guests;
-  const banquet = plan.receipt === 'banquet';
-  const followupCtx: BoundaryContext = { guests, seats, short, banquet, review };
-    // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
-    const hold = agent.cloudBusy || agent.recovering;
-  // 紧凑统计：座位 / 场地 / 物料 三件，数字大标签小。
-  const areaValue = formatArea(plan.candidateArea ?? venueArea(layout));
-  const placedCount = plan.outcome.placed ?? 0;
-  const removedCount = plan.outcome.removed ?? 0;
-  const movedCount = plan.outcome.moved ?? 0;
-  // 状态徽章：绿=已干净，橙=待核验。一行排开，不写长段落。
-  type Pill = { tone: 'ok' | 'warn'; label: string };
-  const pills: Pill[] = [];
-  if (plan.overlapCount > 0) pills.push({ tone: 'warn', label: `${plan.overlapCount} 件重叠` });
-  else if (!plan.blocked) pills.push({ tone: 'ok', label: '无重叠' });
-  if (short) pills.push({ tone: 'warn', label: `座位还差 ${guests - seats}` });
-  else if (guests > 0) pills.push({ tone: 'ok', label: '座位够了' });
-  if (plan.seatingAllocationUnverified || plan.seatingSpecsUnverified || plan.seatingHeadcountUnverified) {
-    pills.push({ tone: 'warn', label: '座位待核验' });
-  }
-  if (plan.safetyChecksUnknown) pills.push({ tone: 'warn', label: '安全待核' });
-  if (plan.entranceWarning) pills.push({ tone: 'warn', label: '门口净区待查' });
-  const pillRow = pills.slice(0, 5);
-  return <div className="ap-card ap-plan" id="plan-proposal" data-tour="proposal-card">
-    <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
-    {layout && !plan.comparisonOnly && <div className="ap-plan-thumb" aria-hidden="true"><PlanPreview layout={layout}/></div>}
-    {guests > 0 && !banquet && <div className="ap-seats-meter" aria-hidden="true"><div className="ap-seats-meter-fill" style={{ width: `${Math.min(100, Math.round((seats / Math.max(guests, 1)) * 100))}%` }} data-short={short ? 'true' : undefined}/></div>}
-    <div className="ap-stats ap-plan-stats">
-      {banquet && <div className="ap-stat"><b>{plan.placedTables ?? 0}</b><span>桌</span></div>}
-      {guests > 0 && <div className="ap-stat" data-short={short ? 'true' : undefined}>
-        <b>{seats}<span className="ap-stat-of">/{guests}</span></b>
-        <span>{banquet ? '座位' : '座位 / 目标'}</span>
-      </div>}
-      <div className="ap-stat"><b>{areaValue}</b><span>㎡ 场地</span></div>
-      {(placedCount > 0 || removedCount > 0 || movedCount > 0) && <div className="ap-stat">
-        <b>{placedCount > 0 ? `+${placedCount}` : '·'}{removedCount > 0 ? ` -${removedCount}` : ''}{movedCount > 0 ? ` 挪${movedCount}` : ''}</b>
-        <span>新增 / 撤掉</span>
-      </div>}
-    </div>
-    {pillRow.length > 0 && <div className="ap-pills" role="status">
-      {pillRow.map(pill => <span key={pill.label} className={`ap-pill ap-pill-${pill.tone}`}>{pill.label}</span>)}
-    </div>}
-    {plan.changeItems && plan.changeItems.length > 0 && plan.changeSummary && (
-      <ProposalChangeList
-        items={plan.changeItems}
-        summary={plan.changeSummary}
-        onLocate={id => selection?.selectOnly(id, { keepPanel: true })}
-      />
-    )}
-    <BoundaryLineNote plan={plan} ctx={followupCtx}/>
-    {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
-    {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
-    {short && !plan.localDraftDetails && (!plan.seatPriority || (banquet && !/加不进更多/.test(plan.blocked ?? ''))) && <div className="ap-error-actions ap-seat-fix"><button type="button" className="chip btn-outline" onClick={agent.addSeats}>加座，再排一版</button></div>}
-    {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
-    {agent.inventoryBlocked && <p role="alert">{agent.inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
-    {hold
-      ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
-      : decision === 'approved'
-        ? <div className="ap-decision-row" aria-label="本版已批准">
-            <span className="ap-decision-badge is-approved"><Check size={14} aria-hidden="true"/>已批准</span>
-          </div>
-        : decision === 'rejected'
-          ? <div className="ap-decision-row" aria-label="本版已拒绝">
-              <span className="ap-decision-badge is-rejected"><X size={14} aria-hidden="true"/>你拒绝了</span>
-            </div>
-          : <>
-          {!plan.blocked && !agent.inventoryBlocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" data-tour="confirm-plan" onClick={() => { onApprove?.(); agent.confirmProposal(); }}>确认布置</button>}
-          <div id="cta-hint" className="ap-error-actions">
-            <button type="button" className="chip btn-outline" onClick={() => { onReject?.(); agent.withdrawProposal(); }}>不用</button>
-            {!review && <button type="button" className="chip btn-outline" onClick={() => agent.regenerate()}>换一版</button>}
-          </div>
-          <FollowupChips plan={plan} ctx={followupCtx} onPrefill={onPrefill}/>
-        </>}
-    {!banquet && <div className="ap-notes">
-      {plan.source === 'local' && plan.added > 0 && <p className="ap-note">新增物料由系统规则生成。</p>}
-      {plan.planNotes?.map(line => <p className="ap-note" key={line}>{line}</p>)}
-      {plan.recolorPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
-      {plan.rotationPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
-      {plan.scalePreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
-      {plan.movementPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
-      {plan.restPreview?.map(line => <p className="ap-note" key={line}>{line}；通行和消防条件待核验。</p>)}
-      {short && !plan.localDraftDetails && plan.seatPriority && <p className="ap-note" id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
-      {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
-      {plan.seatingReview?.status==='broken' && <p className="ap-note" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
-      {plan.seatingReview?.status==='unknown' && <p className="ap-note" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
-      {plan.localDraftDetails?.map(line=><p className="ap-note" key={line}>{line}</p>)}
-      {plan.seatWarning && <p className="ap-note">{plan.seatWarning}</p>}
-      {plan.seatCeilingNote && <p className="ap-note" role="status">{plan.seatCeilingNote}</p>}
-      {plan.annotationWarning && <p className="ap-note" role="status">{plan.annotationWarning}</p>}
-      {plan.functionalWarnings?.map(message => <p className="ap-note" key={message}>{message}</p>)}
-      {!!plan.existingChanges?.length && <details className="ap-existing-changes">
-        <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
-        <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
-        <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
-      </details>}
-      <p className="ap-note">{REFERENCE_SOURCE_UNVERIFIED}</p>
-    </div>}
-    {banquet && short && !plan.localDraftDetails && plan.seatPriority && !/加不进更多/.test(plan.blocked ?? '') && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
-    {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
-    {!banquet && agent.inventoryWorkspace}
-  </div>;
-}
-
-/**
  * 左轨四个工作入口：活动（内部 id 沿用 'door'）、Bingo 审校、空间、物料。
  * 活动是唯一的 Agent；其他入口同时提供人工操作与可逐步接入的工具能力。
  */
@@ -4484,6 +4052,16 @@ export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: s
   space: { name: '空间', form: 'cube', role: '选址后的场地结构、图纸与环境' },
   material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
 };
+
+/** 状态头小计时器（对标谷地工坊「施工中 0:XX」）：1s 心跳自走，卸载即停。 */
+function HeadRunClock({ startedAt }: { startedAt: number }): JSX.Element {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick(value => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <span className="ap-head-clock">{formatDurationClock(Date.now() - startedAt)}</span>;
+}
 
 export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, bingoSlot, chatSlot, className, style, floatBar, floatFooter, onHeaderPointerDown }: {
   onClose?(): void;
@@ -4530,7 +4108,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const [showHistory, setShowHistory] = useState(false);
   // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
   const [proposalDecision, setProposalDecision] = useState<ProposalDecision | null>(null);
-  const { layout, activeFloor } = useRoomEditor();
+  const { layout, activeFloor, actions: layoutActions } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const draftKey=JSON.stringify([agent.sessionScope,assistantSessions.activeId]);
   const [draftState,setDraftState]=useState(()=>({key:draftKey,value:volatileComposerDrafts.get(draftKey)??''}));
@@ -4591,6 +4169,15 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const pendingFreshSendRef = useRef<{ text: string } | null>(null);
   const submitComposer = (): void => {
     if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return;
+    // 云端布局运行中：Enter 不是新指令，是「为下一步添加备注」——塞进运行账本，
+    // 由工作线程在下一轮思考前取走（creative-studio deliverSteerNotes）。可撤回。
+    if (runState.scope === 'layout' && runState.isRunning) {
+      if (!draft.trim()) return;
+      pushAgentSteerNote(draft);
+      setDraft('');
+      inputRef.current?.focus();
+      return;
+    }
     if (draft.trim() && showHistory) {
       const created = assistantSessions.openSession();
       if (created?.verifiedFresh) agent.acceptFreshSession(created.id);
@@ -4674,6 +4261,16 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const speechSupported = getSpeechRecognitionCtor() !== null;
   // 第 8 批：真实运行账本（云端 AgentRun 写进来的真步骤/真轮数）。
   const runState = useAgentRun();
+  // 「还原到本轮开始」：云端布局开跑瞬间快照整盘 RoomLayout，收尾卡一键写回。
+  // 还原本身走 applyLayout → 会进编辑器撤销栈，Ctrl+Z 能撤掉这次还原，不另设栈。
+  const runStartLayoutRef = useRef<RoomLayout | null>(null);
+  const cloudRunWasRunningRef = useRef(false);
+  const cloudRunRunning = runState.scope === 'layout' && runState.isRunning;
+  useEffect(() => {
+    const was = cloudRunWasRunningRef.current;
+    cloudRunWasRunningRef.current = cloudRunRunning;
+    if (!was && cloudRunRunning) runStartLayoutRef.current = layout;
+  }, [cloudRunRunning, layout]);
   const items = materialCount(activeFloor.items);
   // 空会话要让人先看见顶上那句指路，别一进来就滚到底。
   useEffect(() => {
@@ -4710,6 +4307,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     : generating ? '为下一步添加备注'
     : proposed ? '或用文字回答'
     : paused ? '补充说明后继续'
+    : planShown ? '说一句想调整的，比如「舞台往左挪两米」'
     : mode === 'review' ? '说一句，比如「准备客户评审」'
     : mode === 'delivery' ? '说一句，比如「导出给搭建方」'
     : agent.banquetChat ? '说一句，比如「加座，再排一版」'
@@ -4769,6 +4367,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <h1 className="ap-session-title" title={activity ? sessionTitle : meta.name}>{activity ? sessionTitle : meta.name}</h1>
         {headStatus && <span className={`ap-head-status ap-head-status--${headStatus.tone}`} role="status">
           {headStatus.icon}<span>{headStatus.label}</span>
+          {headStatus.tone === 'run' && runState.isRunning && runState.startedAt > 0 && <HeadRunClock startedAt={runState.startedAt} />}
         </span>}
       </div>
       <div className="ap-session-actions">
@@ -4827,8 +4426,21 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      <Bubbles agent={agent} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
-      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow}/>}
+      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
+      {/* 运行中排队备注上屏（对标谷地工坊）：写了还没送达的备注挂「下一步」标签，可撤回；
+          送达后由运行条「已送达 N 条」接手，这里只显示未送达的。 */}
+      {activity && runState.isRunning && runState.scope === 'layout' && runState.steerNotes.length > 0 && (
+        <div className="ap-steer-queue" role="list" aria-label="待送达备注">
+          {runState.steerNotes.map((note, index) => (
+            <div key={`${index}-${note}`} role="listitem" className="ap-steer-note">
+              <span className="ap-steer-note-tag">下一步</span>
+              <span className="ap-steer-note-text">{note}</span>
+              <button type="button" className="ap-steer-note-undo" aria-label={`撤回备注：${note}`} onClick={() => removeAgentSteerNote(index)}>撤回</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}
@@ -4836,6 +4448,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         busy={agent.routeBusy}
         onConfirm={() => agent.confirmRouteProposal()}
         onDismiss={() => agent.dismissRouteProposal()}
+        onCancelTask={() => agent.stopOutdoorTask()}
       />}
       {agent.outdoorTask && (!agent.outdoorBridgeReady||agent.venuePick) && <OutdoorTaskCard task={agent.outdoorTask}
         canStop={Boolean(agent.venuePick?.loading || agent.venuePick?.picking || agent.routeBusy || agent.flowSimActive)}
@@ -4852,6 +4465,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         busy={agent.routeBusy}
         onConfirm={() => agent.confirmRouteProposal()}
         onDismiss={() => agent.dismissRouteProposal()}
+        onCancelTask={() => agent.stopOutdoorTask()}
       />}
       {/* V-3 区域提案确认卡：虚线分区+物料幽灵在画布，应用才写入（可撤销）。 */}
       {!agent.venuePick && !agent.routeProposal && agent.zoneProposal && <ZoneConfirmCard
@@ -4859,12 +4473,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         busy={agent.zoneBusy}
         onConfirm={() => agent.confirmZoneProposal()}
         onDismiss={() => agent.dismissZoneProposal()}
+        onCancelTask={() => agent.stopOutdoorTask()}
       />}
       </OutdoorTaskCard>}
       {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {/* 云端真跑时由 AgentRunPanel 接管：真步骤时间线 + 停止确认行 + 过往任务归档；
-          processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。 */}
-      {activity && mode === 'layout' && <AgentRunPanel scope="layout" controls steerInputId="ap-input"/>}
+          processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。
+          onRestoreStart：收尾卡「还原到本轮开始」——开跑瞬间的整盘快照一键写回。 */}
+      {activity && mode === 'layout' && <AgentRunPanel scope="layout" controls steerInputId="ap-input" onRestoreStart={runStartLayoutRef.current ? () => { const snapshot = runStartLayoutRef.current; if (!snapshot) return false; layoutActions.applyLayout(snapshot); return true; } : undefined}/>}
       {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card ap-blocked-card" aria-label="历史需求待核对">
         <span className="ap-blocked-stamp"><Lock size={12} aria-hidden="true"/>待核对</span>
         <p className="ap-blocked-note">当前记录还未核对。</p>
@@ -4918,7 +4534,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={() => agent.pickFile()}>换个文件</button></> : <button type="button" className="chip is-on" onClick={() => agent.pickFile()}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
             没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
-        {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0}/>}
+        {(generating || paused) && <GenProgress paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0} onResume={agent.resume} onWithdraw={agent.withdrawProposal} onStop={agent.stop}/>}
         {agent.state === 'generateFailed' && <section id="inline-error" className="ap-card ap-error-card" role="alert">
           <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>未完成</span>
           <p className="ap-error-summary">这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
@@ -4935,7 +4551,23 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             <button type="button" className="chip btn-outline" onClick={() => { agent.dismissModelFailure(); document.getElementById('ap-input')?.focus(); }}>改一句再说</button>
           </div>
         </section>}
-        {proposed && <ProposalCard agent={agent} decision={proposalDecision} onApprove={() => setProposalDecision('approved')} onReject={() => setProposalDecision('rejected')} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        {proposed && <ProposalCard
+          plan={agent.proposal}
+          decision={proposalDecision}
+          cloudBusy={agent.cloudBusy}
+          recovering={agent.recovering}
+          inventoryBlocked={agent.inventoryBlocked}
+          inventoryInvalid={agent.inventoryInvalid}
+          exportPreview={agent.exportPreview}
+          inventoryWorkspace={agent.inventoryWorkspace}
+          onAddSeats={agent.addSeats}
+          onConfirm={agent.confirmProposal}
+          onWithdraw={agent.withdrawProposal}
+          onRegenerate={agent.regenerate}
+          onApprove={() => setProposalDecision('approved')}
+          onReject={() => setProposalDecision('rejected')}
+          onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}
+        />}
         {!proposed && proposalDecision === 'rejected' && (
           <section className="ap-card ap-plan ap-decision-card" aria-label="本版已拒绝">
             <span className="ap-decision-badge is-rejected"><X size={14} aria-hidden="true"/>你拒绝了</span>
