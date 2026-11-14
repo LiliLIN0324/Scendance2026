@@ -21,7 +21,7 @@ describe('explicit MiniMax conversation ownership',()=>{
  it('still rejects truncated outdoor JSON without retrying', async () => {
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ choices: [{ finish_reason: 'length', message: { content: '{"action":"search"' } }] }));
   const result = await createConversationApi(backend, k => settings[k], fetcher)(request('/assistant/chat', {
-   message: '杭州IN77办45人讲座', history: [], responseMode: 'outdoor_v1',
+   message: '杭州IN77办45人讲座', history: [], responseMode: 'outdoor_v1', provider: 'minimax',
   }));
   expect(await result.json()).toEqual({ status: 'provider_error', answer: null });
   expect(fetcher).toHaveBeenCalledOnce();
@@ -34,15 +34,34 @@ describe('explicit MiniMax conversation ownership',()=>{
  });
  it('never falls back to stale Bailian, gateway or DeepSeek after a failed MiniMax chat',async()=>{
   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response('fixture-denied',{status:400}));
-  expect(await (await createConversationApi(backend,k=>settings[k],fetcher)(request())).json()).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();expect(fetcher.mock.calls[0]![0]).toBe('https://api.minimax.io/v1/chat/completions');
+  expect(await (await createConversationApi(backend,k=>settings[k],fetcher)(request('/assistant/chat',{message:'先核对候选，不应用。',history:[],provider:'minimax'}))).json()).toEqual({status:'provider_error',answer:null});expect(fetcher).toHaveBeenCalledOnce();expect(fetcher.mock.calls[0]![0]).toBe('https://api.minimax.io/v1/chat/completions');
  });
  it('fails closed when the selected MiniMax configuration is incomplete',async()=>{
   const config={...settings};delete config.AGENT_CHAT_KEY;const fetcher=vi.fn<typeof fetch>();
-  expect(await (await createConversationApi(backend,k=>config[k],fetcher)(request())).json()).toEqual({status:'unavailable',answer:null});expect(fetcher).not.toHaveBeenCalled();
+  expect(await (await createConversationApi(backend,k=>config[k],fetcher)(request('/assistant/chat',{message:'先核对候选，不应用。',history:[],provider:'minimax'}))).json()).toEqual({status:'unavailable',answer:null});expect(fetcher).not.toHaveBeenCalled();
  });
  it('brief failure makes only one MiniMax attempt, even with all old provider credentials present',async()=>{
   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response('fixture-denied',{status:400}));
-  const result=await (await createConversationApi(backend,k=>settings[k],fetcher)(request('/brief/extract',{message:'户外展览100人',responseMode:'conversation_v1',history:[]}))).json();expect(result.extraction).toBeNull();expect(fetcher).toHaveBeenCalledOnce();
+  const result=await (await createConversationApi(backend,k=>settings[k],fetcher)(request('/brief/extract',{message:'户外展览100人',responseMode:'conversation_v1',history:[],provider:'minimax'}))).json();expect(result.extraction).toBeNull();expect(fetcher).toHaveBeenCalledOnce();
   expect(fetcher.mock.calls[0]![0]).toBe('https://api.minimax.io/v1/chat/completions');const body=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(body.max_completion_tokens).toBe(2048);expect(body.reasoning_split).toBe(true);expect(body.enable_thinking).toBeUndefined();
+ });
+});
+
+describe('explicit DeepSeek official and Tokendance gateway slots stay reachable',()=>{
+ it('calls the DeepSeek official endpoint when that slot is selected',async()=>{
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(completion('先核对候选，不应用。'));
+  const result=await createConversationApi(backend,k=>settings[k],fetcher)(request('/assistant/chat',{message:'先核对候选，不应用。',history:[],provider:'deepseek'}));
+  expect(await result.json()).toEqual({status:'ok',answer:'先核对候选，不应用。'});
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0]![0]).toBe('https://api.deepseek.com/chat/completions');
+  const body=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(body).toMatchObject({model:'deepseek-flash'});
+ });
+ it('calls the Tokendance gateway when that slot is selected',async()=>{
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(completion('先核对候选，不应用。'));
+  const result=await createConversationApi(backend,k=>settings[k],fetcher)(request('/assistant/chat',{message:'先核对候选，不应用。',history:[],provider:'tokendance'}));
+  expect(await result.json()).toEqual({status:'ok',answer:'先核对候选，不应用。'});
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0]![0]).toBe('https://tokendance.space/gateway/v1/chat/completions');
+  const body=JSON.parse(String(fetcher.mock.calls[0]![1]?.body));expect(body).toMatchObject({model:'deepseek-v4.1-flash'});
  });
 });
