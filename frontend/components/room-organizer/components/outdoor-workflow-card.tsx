@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Map as MapIcon, TriangleAlert } from "@/components/solid-icons";
+import { Map as MapIcon, TriangleAlert, RotateCw } from "@/components/solid-icons";
 import {
   OUTDOOR_STAGE_LABELS,
   type useOutdoorAgentWorkflow,
@@ -200,19 +200,51 @@ export function OutdoorWorkflowCard({
       )}
       <StageThumb stage={flow.state.stage} />
       {flow.notice && flow.noticeKind === "error" ? (
-        <div className="ap-task-error" role="alert">
-          <TriangleAlert size={14} aria-hidden="true" />
-          <p>{flow.notice}</p>
-          {/* 2026-11-14 用户指令：错误卡直接给「重试」，按当前阶段动作原样再跑一遍。 */}
-          <button
-            type="button"
-            className="ap-task-retry"
-            disabled={flow.busy}
-            onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+        flow.noticeView ? (
+          <section
+            className={`ap-card ap-error-card${flow.noticeView.tone === "muted" ? " is-muted" : ""}`}
+            role="alert"
           >
-            重试
-          </button>
-        </div>
+            <span className="ap-error-stamp">
+              <TriangleAlert size={12} aria-hidden="true" />
+              {flow.noticeView.stamp}
+            </span>
+            <p className="ap-error-summary">{flow.noticeView.message}</p>
+            <div className="ap-error-actions">
+              {/* 按既定口径：重试是手动重发当前阶段动作，不自动换模型；两按钮都保留。 */}
+              <button
+                type="button"
+                className="chip"
+                disabled={flow.busy}
+                onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+              >
+                <RotateCw size={14} aria-hidden="true" />
+                重试云端理解
+              </button>
+              <button
+                type="button"
+                className="chip btn-outline"
+                onClick={() => document.getElementById("ap-input")?.focus()}
+              >
+                改一句再说
+              </button>
+            </div>
+          </section>
+        ) : (
+          <div className="ap-task-error" role="alert">
+            <TriangleAlert size={14} aria-hidden="true" />
+            <p>{flow.notice}</p>
+            {/* 2026-11-14 用户指令：错误卡直接给「重试」，按当前阶段动作原样再跑一遍。 */}
+            <button
+              type="button"
+              className="ap-task-retry"
+              disabled={flow.busy}
+              onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+            >
+              重试
+            </button>
+          </div>
+        )
       ) : (
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />

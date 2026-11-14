@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { BackendSession } from "@/lib/backend-session";
+import { agentErrorView, type AgentErrorView } from "@/lib/agent-error-view";
 import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import {
@@ -221,6 +222,7 @@ export function useOutdoorAgentWorkflow(input: {
   const [simulating, setSimulating] = useState(false);
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
+  const [noticeView, setNoticeView] = useState<AgentErrorView | null>(null);
   const refsRef = useRef<OutdoorTurn["references"]>([]);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
@@ -250,6 +252,7 @@ export function useOutdoorAgentWorkflow(input: {
   ) {
     const friendly = friendlyErrorNotice(action);
     setNotice(friendly);
+    setNoticeView(null);
     setNoticeKind(phase === "blocked" ? "error" : "info");
     callbacks.current.status({
       intent: OUTDOOR_STAGE_LABELS[stateRef.current.stage],
@@ -1358,6 +1361,10 @@ export function useOutdoorAgentWorkflow(input: {
         setProposal(proposalRef.current);
       }
     } catch (error) {
+      const errorStatus =
+        error && typeof error === "object" && "status" in error
+          ? String((error as { status?: unknown }).status)
+          : undefined;
       if (
         live(job) &&
         error &&
@@ -1400,13 +1407,16 @@ export function useOutdoorAgentWorkflow(input: {
             : "当前环境未开启 Agent 理解模型，规划未变。",
           "blocked",
         );
-      } else if (live(job))
+        if (errorStatus) setNoticeView(agentErrorView(errorStatus));
+      } else if (live(job)) {
         status(
           error instanceof Error
             ? error.message
             : "本次理解/提案无法核对，未执行。",
           "blocked",
         );
+        if (errorStatus) setNoticeView(agentErrorView(errorStatus));
+      }
     } finally {
       if (live(job)) setBusy(false);
     }
@@ -1568,6 +1578,7 @@ export function useOutdoorAgentWorkflow(input: {
     },
     notice,
     noticeKind,
+    noticeView,
     loginRequired: Boolean(state.pendingLogin),
     // 2026-11-14 用户指令：登录完成后这张卡要跟着变——已登录时切换为「继续这次搜索」。
     loginSatisfied:

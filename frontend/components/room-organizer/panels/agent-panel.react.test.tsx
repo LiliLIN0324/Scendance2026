@@ -4893,7 +4893,7 @@ describe('outdoor contextual workflow production Provider dispatch',()=>{
   const plan={...createStarterOutdoorPlan(),boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}]};let current!:NonNullable<ReturnType<typeof useAgent>>;const apply=vi.fn(()=>true);
   function Probe(){current=useAgent()!;useEffect(()=>{current.registerRouteBridge({getPlan:()=>plan,applyPlan:apply,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true});return()=>current.registerRouteBridge(null);},[]);return null;}
   studioMock.controller.assistantChat.mockResolvedValue({status:'disabled',answer:null});render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
-  send('45人草坪演出');await waitFor(()=>expect(current.outdoorWorkflow.notice).toContain('disabled'));expect(current.zoneProposal).toBeNull();expect(current.outdoorWorkflow.proposal).toBeNull();expect(apply).not.toHaveBeenCalled();expect(studioMock.generate).not.toHaveBeenCalled();
+  send('45人草坪演出');await waitFor(()=>expect(current.outdoorWorkflow.noticeView?.stamp).toBe('暂未启用'));expect(current.zoneProposal).toBeNull();expect(current.outdoorWorkflow.proposal).toBeNull();expect(apply).not.toHaveBeenCalled();expect(studioMock.generate).not.toHaveBeenCalled();
  });
 });
 
