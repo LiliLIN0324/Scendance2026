@@ -163,7 +163,7 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
   - 前端户外 + M2 + 契约组 84 绿（walk-boundary 13、three/outdoor 9、walk-engage 6、use-outdoor-walk 3、facility-migration 13、layout-migration 10、routes 12、footprint-lock 18）。
   - 根契约组 25 绿（site-plan 16、models 9）。
   - `agent-panel` 全量 39 failed / 403 passed / 1 skipped 为 #12 已知基线债，本轮不顺手清、不混入去耦合回归。
-- 根 `tests/` 全量快照（非去耦合定向范围）：18 failed / 1432 passed / 10 skipped（132 文件）。失败集中在后端配置预飞、资产库计数、守卫 RLS、简报供应商 mock（`config` 2、`hunyuan-config` 7、`merged-library` 3、`agent-guard-readiness` 2、`brief-conversation-api` 2、`brief-extract-api` 1、`database` 1、`asset-upload` suite 1），属缺 env / 本地资产未齐 / 在途智能体线的既有基线债；本轮源码改动仅 `5b9fae2e` 三处形参补 `| undefined`（纯注解、零运行分支），未触碰这些域。去耦合定向口径仍以前列 84 + 25 绿为准。
+- 根 `tests/` 全量快照（非去耦合定向范围）：最新一轮 21 failed / 1429 passed / 10 skipped（132 文件）。失败集中在后端配置预飞、资产库计数、守卫 RLS、简报供应商 mock（`config` 5、`hunyuan-config` 7、`merged-library` 3、`agent-guard-readiness` 3、`brief-conversation-api` 2、`brief-extract-api` 1、`database` 1），属缺 env / 本地资产未齐 / 在途智能体线的既有基线债；`site-plan` 16、`models` 9 契约仍绿。复核时 `tests/` 与 `supabase/functions` 无 tracked 修改，config/guard 较上一时点 +1~3 为缺 env/mock 的基线波动，非本侧前端改动引入；本轮源码改动仅 `5b9fae2e` 三处形参补 `| undefined`（纯注解、零运行分支），未触碰这些域。去耦合定向口径仍以前列 176 绿 + 根契约 25 绿为准。
 
 ### 10.2 零引用复核（#70）
 
