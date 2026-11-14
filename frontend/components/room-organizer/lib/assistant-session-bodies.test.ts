@@ -54,6 +54,20 @@ describe('assistant session bodies', () => {
     expect(bodies.byId).toEqual({});
   });
 
+  it('round trips the alert card stamp and tone, dropping an invalid tone', () => {
+    const bodies = writeSessionBubbles(emptyAssistantSessionBodies(), 'ses-alert', [
+      { id: 'a1', role: 'agent', text: '该模型额度已用完或欠费', alertStamp: '额度不足', alertTone: 'warn' },
+      { id: 'a2', role: 'agent', text: '活动问答暂未启用', alertStamp: '暂未启用', alertTone: 'muted' },
+      { id: 'a3', role: 'agent', text: '坏色调', alertStamp: 'x', alertTone: 'bogus' as 'warn' },
+    ]);
+    const rows = readSessionBubbles(bodies, 'ses-alert');
+    expect(rows[0]?.alertStamp).toBe('额度不足');
+    expect(rows[0]?.alertTone).toBe('warn');
+    expect(rows[1]?.alertStamp).toBe('暂未启用');
+    expect(rows[1]?.alertTone).toBe('muted');
+    expect(rows[2]?.alertTone).toBeUndefined();
+  });
+
   it('clips long threads and drops corrupt rows on parse', () => {
     const many = Array.from({ length: ASSISTANT_SESSION_BODY_BUBBLE_MAX + 5 }, (_, order) => ({
       id: `b-${order}`,

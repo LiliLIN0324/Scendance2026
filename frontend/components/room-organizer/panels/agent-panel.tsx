@@ -193,12 +193,17 @@ export type Bubble = {
   zoneApply?: { run(): void };
   /** S2 T2：审校台专属气泡（体检回执/钉评指路）。Bingo 脸只回放这类，活动脸回放全部。 */
   review?: boolean;
+  /**
+   * 失败/未启用卡片外壳：带 alert 的 agent 消息渲染成图1错误卡（标签 + 摘要 + 动作），
+   * 而不是旧的裸竖线气泡。retry 为运行时闭包，落盘时丢弃，回放不重现按钮。
+   */
+  alert?: { stamp: string; tone?: 'warn' | 'muted'; retry?: () => void };
 };
 
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
   // zoneApply 是闭包，落盘时丢掉；翻回话文字还在，按钮不重现。
-  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, materialQueries }) => {
+  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, materialQueries, alert }) => {
     return {
       id, role, text,
       ...(meta !== undefined ? { meta } : {}),
@@ -208,12 +213,19 @@ function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
       ...(image !== undefined ? { image } : {}),
       ...(role === 'agent' && modelConversation === true ? { modelConversation: true } : {}),
       ...(role === 'agent' && materialQueries?.length ? { materialQueries } : {}),
+      ...(role === 'agent' && alert?.stamp ? { alertStamp: alert.stamp, ...(alert.tone ? { alertTone: alert.tone } : {}) } : {}),
     } satisfies StoredAssistantBubble;
   });
 }
 
 function fromStoredBubbles(rows: readonly StoredAssistantBubble[]): Bubble[] {
-  return rows.map(row => ({ ...row }));
+  return rows.map(row => {
+    const { alertStamp, alertTone, ...rest } = row;
+    return {
+      ...rest,
+      ...(alertStamp ? { alert: { stamp: alertStamp, ...(alertTone ? { tone: alertTone } : {}) } } : {}),
+    };
+  });
 }
 /** 这一版要按哪组尺度摆：origin 记下米数是谁定的，只有人说过的才敢当事实念出来。 */
 type Scale = { length: number; width: number; origin: ScaleOrigin };
@@ -3026,12 +3038,20 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(!current())return;
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
       else {
-        if(result.status==='timeout'||result.status==='provider_error')uncertainInputs.current.add(text);
-        const message=result.status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':result.status==='disabled'||result.status==='unavailable'?'活动问答暂未启用，问题已保留。':result.status==='quota_exhausted'?'该模型额度已用完或欠费，请在上方切换其它模型，或联系管理员充值。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
-        say({role:'agent',amber:true,text:message});
+        const retryable = result.status==='timeout'||result.status==='provider_error';
+        if(retryable)uncertainInputs.current.add(text);
+        const status=result.status;
+        const message=status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':status==='disabled'||status==='unavailable'?'活动问答暂未启用，问题已保留。':status==='quota_exhausted'?'该模型额度已用完或欠费，请在上方切换其它模型，或联系管理员充值。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
+        // 按既定口径：所有错误卡都保留「重试云端理解 / 改一句再说」；重试是手动重发同一句，不会自动换到其它模型。
+        const retry = () => { if (!briefRequest.current) void send(text, true); };
+        const alert = status==='invalid' ? { stamp:'输入需调整', tone:'muted' as const, retry }
+          : status==='disabled'||status==='unavailable' ? { stamp:'暂未启用', tone:'muted' as const, retry }
+          : status==='quota_exhausted' ? { stamp:'额度不足', tone:'warn' as const, retry }
+          : { stamp:'智能理解', tone:'warn' as const, retry };
+        say({role:'agent',amber:true,text:message,alert});
       }
     } catch {
-      if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。'});}
+      if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
     } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}release();}
   }
 
@@ -4149,11 +4169,26 @@ function Bubbles({ agent, reviewOnly = false, onPickOption, onResendMessage }: {
         </div>
       </>)}
     </div>
-    : <div key={bubble.id} className="ap-bubble-wrap"><div className="ap-turn"><div className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>
+    : <div key={bubble.id} className="ap-bubble-wrap"><div className="ap-turn">{bubble.alert ? (
+      <section className={`ap-card ap-error-card${bubble.alert.tone === 'muted' ? ' is-muted' : ''}`} role="alert">
+        <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>{bubble.alert.stamp}</span>
+        <div className={`ap-error-body${bubble.long ? ' is-long' : ''}`}>
+          {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
+            ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
+            : <span key={index} className="ap-agent-line">{block.text}</span>)}
+        </div>
+        <div className="ap-error-actions">
+          {bubble.alert.retry && <button type="button" className="chip" onClick={bubble.alert.retry}><RotateCw size={14} aria-hidden="true"/>重试云端理解</button>}
+          <button type="button" className="chip btn-outline" onClick={() => document.getElementById('ap-input')?.focus()}>改一句再说</button>
+        </div>
+      </section>
+    ) : (
+      <div className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>
         {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
           ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
           : <span key={index} className="ap-agent-line">{block.text}</span>)}
       </div>
+    )}
       {followups.length > 0 && (
         <div className="ap-option-pick" role="group" aria-label="可选回复">
           {followups.map(option => {

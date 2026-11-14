@@ -277,6 +277,11 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-error-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); font-size: var(--fs-cap); font-weight: 500; }
 .ap-error-summary { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
 .ap-error-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 失败消息转成的错误卡：正文沿用摘要字号，保留换行与列表结构。 */
+.ap-error-body { display: flex; flex-direction: column; gap: 5px; margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); white-space: pre-line; overflow-wrap: anywhere; }
+.ap-error-body.is-long { white-space: pre-line; }
+.ap-error-card.is-muted { border-left-color: var(--wk-muted); }
+.ap-error-card.is-muted .ap-error-stamp { background: var(--plane-deep); color: var(--wk-ink-soft); }
 /* 阻塞/旧方案卡：状态标 + 说明 + 动作行，对照 petitmaker ResumeCard blocked 面。 */
 .ap-blocked-card { gap: 8px; }
 .ap-status-panel { gap: 8px; }
