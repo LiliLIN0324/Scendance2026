@@ -33,14 +33,15 @@ export function AuthCard({ controller, onAuthenticated, onEnter, ready = true, a
   const [code, setCode] = useState('');
   const [notice, setNotice] = useState('');
   const cooldown = useEmailCooldown();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [guestBusy, setGuestBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const demoEmail = (process.env.NEXT_PUBLIC_DEMO_EMAIL ?? '').trim();
   const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '';
   const demoAccount: DemoAccount | undefined = injectedDemo ?? (demoEmail && demoPassword ? { email: demoEmail, password: demoPassword } : undefined);
+  // 2026-11-14 用户指令：本地测试账号直接预填进表单（记住密码），打开弹层即按回车可登录。
+  const [email, setEmail] = useState(demoAccount?.email ?? '');
+  const [password, setPassword] = useState(demoAccount?.password ?? '');
+  const [busy, setBusy] = useState(false);
+  const [guestBusy, setGuestBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -135,14 +136,14 @@ export function AuthCard({ controller, onAuthenticated, onEnter, ready = true, a
           <form className="sc-auth-form" aria-label={verificationEmail ? '邮箱验证' : signUp ? '工作室注册' : '工作室登录'} onSubmit={(event) => { void submit(event); }} aria-busy={busy}>
             {verificationEmail ? <>
               <label htmlFor="sc-auth-code">六位验证码</label>
-              <input id="sc-auth-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={busy} required />
+              <input id="sc-auth-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={busy} required autoFocus />
             </> : <>
               {signUp && <>
                 <label htmlFor="sc-auth-name">如何称呼你</label>
                 <input id="sc-auth-name" autoComplete="nickname" maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="你的名字" disabled={busy} required />
               </>}
               <label htmlFor="sc-auth-email">邮箱</label>
-              <input id="sc-auth-email" name="email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required />
+              <input id="sc-auth-email" name="email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required autoFocus={!signUp && !verificationEmail} />
               <label htmlFor="sc-auth-password">密码</label>
               <input id="sc-auth-password" name="password" type="password" autoComplete={signUp ? 'new-password' : 'current-password'} minLength={signUp ? 12 : undefined} placeholder={signUp ? '至少 12 位' : '输入你的密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required />
             </>}

@@ -95,23 +95,39 @@ export function mergeOutdoorFacts(
   message: string,
 ): OutdoorFlowState {
   const facts = turn.facts;
+  // 2026-11-14 实测：多物件长句里模型引用原文时常差空格/全半角，严格 includes 频繁误杀。
+  // 归一化（去所有空白 + NFKC）后仍要求连续逐字引用——防编造性质不变，只是不再被排版差异卡死。
+  const normalizeEvidence = (s: string) => s.normalize("NFKC").replace(/\s+/g, "");
+  const normalizedMessage = normalizeEvidence(message);
   const proven = (value: { evidence: string }) =>
-    message.includes(value.evidence);
-  for (const value of [
-    facts.access,
-    facts.event,
-    facts.guests,
-    ...(facts.zones ?? []),
-    ...(facts.items ?? []),
-    ...(facts.people ?? []),
-  ])
-    if (value && !proven(value))
+    normalizedMessage.includes(normalizeEvidence(value.evidence));
+  // 2026-11-14 实测：模型会把上一轮记住的事实原样重发（evidence 还是更早句子的原文），
+  // 本句溯源对「顺带重发且与上一轮完全一致」的事实不适用——跳过；只有新增/变化的事实才要求本句依据。
+  const carriedOver = (value: unknown, before: unknown) =>
+    before !== undefined && JSON.stringify(before) === JSON.stringify(value);
+  for (const value of [...(facts.zones ?? []), ...(facts.items ?? []), ...(facts.people ?? [])]) {
+    if (!value) continue;
+    const before = [...state.brief.zones, ...state.brief.items, ...state.brief.people].find(
+      (b) => carriedOver(value, b),
+    );
+    if (before !== undefined) continue;
+    if (!proven(value))
       throw new Error("模型提取缺少本句原文依据，请重新说明；没有修改规划。");
-  if (
-    facts.guests &&
-    !evidencedCount(facts.guests.evidence, facts.guests.value)
-  )
-    throw new Error("人数与本句原文数量不一致，请明确人数；未采用模型猜测值。");
+  }
+  if (facts.guests) {
+    const carried = state.brief.guests === facts.guests.value;
+    if (!carried && !proven(facts.guests))
+      throw new Error("模型提取缺少本句原文依据，请重新说明；没有修改规划。");
+    if (!carried && !evidencedCount(facts.guests.evidence, facts.guests.value))
+      throw new Error("人数与本句原文数量不一致，请明确人数；未采用模型猜测值。");
+  }
+  if (facts.event) {
+    const carried = state.brief.event === facts.event.value;
+    if (!carried && !proven(facts.event))
+      throw new Error("模型提取缺少本句原文依据，请重新说明；没有修改规划。");
+  }
+  if (facts.access && !proven(facts.access))
+    throw new Error("模型提取缺少本句原文依据，请重新说明；没有修改规划。");
   for (const item of [...(facts.items ?? []), ...(facts.people ?? [])])
     if (!evidencedCount(item.evidence, item.count))
       throw new Error(
@@ -135,11 +151,15 @@ export function mergeOutdoorFacts(
       ...(facts.event ? { event: facts.event.value } : {}),
       ...(facts.guests ? { guests: facts.guests.value } : {}),
       zones: merge(state.brief.zones, facts.zones, (z) => z.name),
-      items: merge(
-        state.brief.items,
-        facts.items,
-        (i) => `${i.zone}:${i.query}`,
-      ),
+      // 2026-11-14：分区物件清单是「整区语义」——本轮提到哪个分区，该区清单整区替换
+      //（「舞台区放 1 个舞台」意味着该区就这 1 项，残留的旧物件如被撤掉的音响不清会一直报错）。
+      items: (() => {
+        const touchedZones = new Set((facts.items ?? []).map((i) => i.zone));
+        return [
+          ...state.brief.items.filter((i) => !touchedZones.has(i.zone)),
+          ...(facts.items ?? []),
+        ];
+      })(),
       people: merge(
         state.brief.people,
         facts.people,

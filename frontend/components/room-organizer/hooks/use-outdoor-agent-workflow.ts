@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { BackendSession } from "@/lib/backend-session";
-import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import {
   boundaryKey,
   emptyOutdoorFlow,
@@ -20,9 +20,16 @@ import {
   proposeInventoryObjects,
   proposeRoleWorkers,
   validateWorkflowPlan,
-  clipWorkflowRoutes,
+  prunePlanForBoundary,
+  OBJECTS_LAYOUT_STRATEGIES,
+  OBJECTS_LAYOUT_LABELS,
+  type ObjectsLayoutStrategy,
 } from "../lib/outdoor-agent-planning";
-import { readOutdoorPersonalLibrary } from "../lib/outdoor-personal-library";
+import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
+// 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
+import { lngLatToEnu } from "../lib/outdoor-plan-canvas";
+import { planPointInRing } from "../lib/site-plan-editing";
+import { planRingAreaM2 } from "../../../../supabase/functions/_shared/site-plan";
 import { proposeOutdoorStyle } from "../lib/outdoor-style-preview";
 import type { StyleBundle } from "../lib/style-bundles";
 import { fetchRoadNetwork } from "../lib/road-network";
@@ -434,12 +441,24 @@ export function useOutdoorAgentWorkflow(input: {
     });
     callbacks.current.bridge()?.previewBoundary?.(anchor, boundary);
     try {
+      // 2026-11-14 用户拍板「以第一个选区为准」：换边界时旧内容按新边界重新安置（越界随场淘汰，
+      // 整批可撤销），不再让「分区越出已确认活动边界」把换场卡死；锚点位移则旧场内容整体清空。
+      const pruned = prunePlanForBoundary(base, boundary, anchor);
+      const dropped = [
+        pruned.droppedZones.length ? `分区 ${pruned.droppedZones.join("、")}` : "",
+        pruned.droppedFacilities.length ? `物件 ${pruned.droppedFacilities.join("、")}` : "",
+        pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
+      ].filter(Boolean);
       offer(
-        { ...base, anchor, boundary },
+        { ...pruned.next, anchor, boundary },
         "scope",
         `核对“${name}”中的具体活动范围`,
         job,
-        ["地图轮廓只是候选，不代表整座商场均可使用；部分使用请重画。"],
+        [
+          "地图轮廓只是候选，不代表整座商场均可使用；部分使用请重画。",
+          ...(pruned.swept ? ["地理锚点已切换：旧场地内容已全部随场清空（确认后整批可撤销）。"] : []),
+          ...(!pruned.swept && dropped.length ? [`按新边界随场淘汰：${dropped.join("；")}（确认后整批可撤销）。`] : []),
+        ],
       );
     } catch (error) {
       status(
@@ -479,13 +498,63 @@ export function useOutdoorAgentWorkflow(input: {
       "请在同一地图圈出实际活动范围并闭合；完成后还需在对话核对，不把商场整体当活动场地。",
     );
   }
+  // 2026-11-14 用户指令「给我几个方案」：物件排布方案基座（objects 动作时的 plan/候选/当前策略）。
+  const objectsLayoutRef = useRef<{
+    base: SitePlanData;
+    library: OutdoorLibraryItem[];
+    strategy: ObjectsLayoutStrategy;
+  } | null>(null);
+  /** 提案卡「换一种排法」：同一基座换下一策略重排，重新出预览（不写盘，确认才应用）。 */
+  function cycleObjectsLayout() {
+    const stored = objectsLayoutRef.current;
+    const p = proposalRef.current;
+    if (!stored || !p || p.kind !== "objects") {
+      status("没有可切换的物件排布预览；先说一次物件清单。", "blocked");
+      return;
+    }
+    const job = start();
+    const order = OBJECTS_LAYOUT_STRATEGIES;
+    const next = order[(order.indexOf(stored.strategy) + 1) % order.length]!;
+    objectsLayoutRef.current = { ...stored, strategy: next };
+    const result = proposeInventoryObjects(
+      stored.base,
+      stateRef.current.brief,
+      stored.library,
+      undefined,
+      { strategy: next },
+    );
+    offer(
+      result.plan,
+      "objects",
+      `逐区复用库内真实设施（排法：${OBJECTS_LAYOUT_LABELS[next]}）`,
+      job,
+      [
+        `排布方案 ${OBJECTS_LAYOUT_LABELS[next]}——还有 ${
+          order
+            .filter((s) => s !== next)
+            .map((s) => OBJECTS_LAYOUT_LABELS[s])
+            .join("、")
+        } 可切换。`,
+      ],
+    );
+    setBusy(false);
+  }
+
   function manualApplied() {
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return;
     const job = start();
     persist({ ...stateRef.current, stage: "scope" });
-    offer(plan, "scope", "手画活动范围核对", job, [
+    // 2026-11-14 用户拍板「以第一个选区为准」：手画闭合同样按新边界重新安置旧内容。
+    const pruned = prunePlanForBoundary(plan, plan.boundary, plan.anchor ?? undefined);
+    const dropped = [
+      pruned.droppedZones.length ? `分区 ${pruned.droppedZones.join("、")}` : "",
+      pruned.droppedFacilities.length ? `物件 ${pruned.droppedFacilities.join("、")}` : "",
+      pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
+    ].filter(Boolean);
+    offer(pruned.next, "scope", "手画活动范围核对", job, [
       "手画范围来自用户，仍需核对本次活动可用范围。",
+      ...(dropped.length ? [`按新边界随场淘汰：${dropped.join("；")}（确认后整批可撤销）。`] : []),
     ]);
     setBusy(false);
   }
@@ -656,13 +725,17 @@ export function useOutdoorAgentWorkflow(input: {
           throw new Error("活动还没有真实锚点，请先定位并确认范围。");
         // 2026-11-14 测试修正：路网 bbox 按边界真实地理位置取（边界可离锚点很远）。
         const roadPlan = roadFetchPlanForBoundary(plan.boundary, plan.anchor);
-        const roads = bridge.roadNetwork
-          ? bridge.roadNetwork()
-          : await fetchRoadNetwork(
-              roadPlan.center,
-              roadPlan.spanM,
-              { signal: job.controller.signal },
-            );
+        // 2026-11-14 修复：快照里存了 road 特征才用快照；只锚了场地轮廓的快照回空会让
+        // bridge.roadNetwork() 直接短路实时抓取（连请求都不发）→「未取得可核对路网」死路。
+        // 快照无路就走实时路网（Overpass → 高德路径规划兜底）。
+        let roads = bridge.roadNetwork?.() ?? null;
+        if (!roads || !roads.roads.length) {
+          roads = await fetchRoadNetwork(
+            roadPlan.center,
+            roadPlan.spanM,
+            { signal: job.controller.signal },
+          );
+        }
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
         const proposal = buildRouteProposal({
           boundary: plan.boundary,
@@ -673,10 +746,12 @@ export function useOutdoorAgentWorkflow(input: {
           throw new Error(
             "未取得可核对路网。请在同一画布标出已知通道/入口或提供图纸，再核对；不会捏造建筑门与室内通道。",
           );
-        const clipped = clipWorkflowRoutes(proposal.routes, plan.boundary);
+        // 2026-11-14 用户拍板「流线可以从场地外延伸到场内——要考虑大家怎么来的」：
+        // 不再按边界裁掉界外段，整段道路保留；道路与边界的交点即出入口候选，界外部分是到场流线。
+        const clipped = proposal.routes;
         if (!clipped.length)
           throw new Error(
-            "可核对道路没有足够全宽的段落位于已确认活动范围内。请依实际通道手画/确认主线或调整授权范围，不把范围外路段写成本活动通路。",
+            "未取得可核对路网。请在同一画布标出已知通道/入口或提供图纸，再核对；不会捏造建筑门与室内通道。",
           );
         const nodes = proposal.nodes.map((n) => ({
           ...n,
@@ -694,6 +769,7 @@ export function useOutdoorAgentWorkflow(input: {
           job,
           [
             "道路等级只用于候选分类；真实门与室内连接未证实，需逐个核对，不保证可通行。",
+            "界外段是到场流线候选（怎么来的），与边界的交点即待核对入口；写入后可画布编辑。",
           ],
         );
         return;
@@ -750,12 +826,15 @@ export function useOutdoorAgentWorkflow(input: {
           );
         const found = bridge.readLibrary
           ? await bridge.readLibrary([turn.query], job.controller.signal)
-          : await readOutdoorPersonalLibrary(
-              callbacks.current.controller(),
-              bridge.projectId?.() ?? input.scope,
-              [turn.query],
-              job.controller.signal,
-            );
+          : (await Promise.allSettled([
+              readOutdoorPersonalLibrary(
+                callbacks.current.controller(),
+                bridge.projectId?.() ?? input.scope,
+                [turn.query],
+                job.controller.signal,
+              ),
+              readOutdoorBuiltinLibrary([turn.query], job.controller.signal),
+            ])).flatMap(r => (r.status === "fulfilled" ? r.value : []));
         if (!live(job)) return;
         setLibraryChoices(found.slice(0, 5));
         setSelectedLibraryId(undefined);
@@ -790,20 +869,54 @@ export function useOutdoorAgentWorkflow(input: {
         const queries = stateRef.current.brief.items.map((i) => i.query);
         const library = bridge.readLibrary
           ? await bridge.readLibrary(queries, job.controller.signal)
-          : await readOutdoorPersonalLibrary(
-              callbacks.current.controller(),
-              bridge.projectId?.() ?? input.scope,
-              queries,
-              job.controller.signal,
-            );
+          : (await Promise.allSettled([
+              readOutdoorPersonalLibrary(
+                callbacks.current.controller(),
+                bridge.projectId?.() ?? input.scope,
+                queries,
+                job.controller.signal,
+              ),
+              readOutdoorBuiltinLibrary(queries, job.controller.signal),
+            ])).flatMap(r => (r.status === "fulfilled" ? r.value : []));
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
+        // 2026-11-14 用户指令「建筑给室内分区，设计别做进室内」：拉边界内建筑足迹（室内禁区）。
+        // plan.buildings 已有就用；没有则随路网查询抓 OSM building（同一次 Overpass）。
+        // 过滤：面积 ≥45% 边界的（商场整体轮廓这种）丢弃；一个点都不在边界内的丢弃。
+        let buildingsEnu: PlanPoint[][] = plan.buildings?.map(b => b.points) ?? [];
+        if (!buildingsEnu.length && plan.anchor) {
+          const fetchPlan = roadFetchPlanForBoundary(plan.boundary, plan.anchor);
+          try {
+            const net = await fetchRoadNetwork(
+              fetchPlan.center,
+              fetchPlan.spanM,
+              { signal: job.controller.signal },
+            );
+            const boundaryArea = planRingAreaM2(plan.boundary);
+            buildingsEnu = (net.buildings ?? [])
+              .map(b => b.points.map(([lng, lat]) => lngLatToEnu(lng, lat, plan.anchor!.lng, plan.anchor!.lat)))
+              .filter(ring => ring.length >= 3)
+              .filter(ring => planRingAreaM2(ring) < boundaryArea * 0.45)
+              .filter(ring => ring.some(pt => planPointInRing(pt, plan.boundary)));
+          } catch { /* 建筑抓不到就不禁区内渲染，不阻断物件流程 */ }
+        }
+        const buildingsForPlan = buildingsEnu.length
+          ? buildingsEnu.map((points, i) => ({ id: `building:${i}`, points }))
+          : undefined;
+        const basePlan: SitePlanData = buildingsForPlan ? { ...plan, buildings: buildingsForPlan } : plan;
+        if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
+        // 2026-11-14 用户指令「给我几个方案」：物件排布带策略（行列/居中/沿边），提案卡可「换一种排法」循环预览。
+        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows" };
         const result = proposeInventoryObjects(
-          plan,
+          basePlan,
           stateRef.current.brief,
           library,
+          undefined,
+          { strategy: "rows", buildings: buildingsEnu.length ? buildingsEnu : undefined },
         );
         offer(result.plan, "objects", "逐区复用库内真实设施", job, [
           "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。",
+          `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
+          `已识别边界内建筑 ${buildingsForPlan?.length ?? 0} 栋${buildingsForPlan?.length ? "：标为室内禁区，排物件自动避开（灰色块 2D/3D 同步）。" : "（地图服务暂未提供建筑数据，稍后重试或用物件库「室内区域」手画）。"}`,
         ]);
         return;
       }
@@ -1316,6 +1429,7 @@ export function useOutdoorAgentWorkflow(input: {
     offerBoundary,
     manualBoundary,
     manualApplied,
+    cycleObjectsLayout,
     active: token.current !== null && callbacks.current.current(token.current),
   };
 }

@@ -246,6 +246,16 @@ export function OutdoorWorkflowCard({
           <button type="button" onClick={() => flow.cancel()}>
             撤回预览
           </button>
+          {/* 2026-11-14 用户指令「给我几个方案」：物件排布方案循环切换（行列/居中/沿边），确认哪版算哪版。 */}
+          {flow.proposal.kind === "objects" && (
+            <button
+              type="button"
+              disabled={flow.busy}
+              onClick={() => flow.cycleObjectsLayout()}
+            >
+              换一种排法
+            </button>
+          )}
           {flow.proposal.kind === "scope" && (
             <button
               type="button"

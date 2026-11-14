@@ -357,6 +357,8 @@ export function buildZone(
     name: input.name,
     polygon: input.polygon.map(p => ({ x: p.x, y: p.y })),
     color: input.color ?? defaultZoneColor(input.semantic),
+    // 2026-11-14 用户指令「建筑给室内分区」：室内区域语义即室内环境——排物件自动避开。
+    ...(input.semantic === 'indoor' ? { environment: 'indoor' as const } : {}),
     ...(input.opacity !== undefined ? { opacity: input.opacity } : {}),
     notes: input.notes ?? '',
   };

@@ -5,6 +5,7 @@ import type {
   SitePlanData,
   PlanFacility,
   PlanWorker,
+  PlanNode,
 } from "../../../../supabase/functions/_shared/site-plan";
 import { sitePlanDataSchema } from "../../../../supabase/functions/_shared/site-plan";
 import {
@@ -228,16 +229,74 @@ export function validateWorkflowDemand(
       `当前观众/市集/展览区域扣除已知物件和通道后，保守可用面积下界约${Math.floor(free)}㎡；本草案按预留2㎡/人粗筛，${brief.guests}人至少需${brief.guests * 2}㎡。请调整人数/分区/物件；这不是法规容量或疏散认证。`,
     );
 }
+/** 2026-11-14 用户指令「给我几个方案」：分区物件排布策略——行列铺排 / 居中紧凑 / 沿边环形。 */
+export type ObjectsLayoutStrategy = "rows" | "center" | "perimeter";
+export const OBJECTS_LAYOUT_STRATEGIES: ObjectsLayoutStrategy[] = ["rows", "center", "perimeter"];
+export const OBJECTS_LAYOUT_LABELS: Record<ObjectsLayoutStrategy, string> = {
+  rows: "行列铺排",
+  center: "居中紧凑",
+  perimeter: "沿边环形",
+};
+
+/** 分区内的候选落位（按策略排序）：grid=行列扫、center=离分区中心螺旋、perimeter=贴边一圈+网格兜底。 */
+function zonePlacementCandidates(
+  zone: PlanZone,
+  strategy: ObjectsLayoutStrategy,
+): PlanPoint[] {
+  const b = box(zone.polygon);
+  const grid: PlanPoint[] = [];
+  for (let iy = 0; iy < 30; iy++)
+    for (let ix = 0; ix < 30; ix++)
+      grid.push({
+        x: b.w + ((ix + 0.5) * (b.e - b.w)) / 30,
+        y: b.s + ((iy + 0.5) * (b.n - b.s)) / 30,
+      });
+  const cx = (b.w + b.e) / 2;
+  const cy = (b.s + b.n) / 2;
+  if (strategy === "center")
+    return [...grid].sort(
+      (p, q) =>
+        Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy),
+    );
+  if (strategy === "perimeter") {
+    const ring: PlanPoint[] = [];
+    for (let i = 0; i < zone.polygon.length; i++) {
+      const a = zone.polygon[i]!;
+      const b2 = zone.polygon[(i + 1) % zone.polygon.length]!;
+      const len = Math.hypot(b2.x - a.x, b2.y - a.y);
+      const steps = Math.max(1, Math.round(len / 2.5));
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        const px = a.x + (b2.x - a.x) * t;
+        const py = a.y + (b2.y - a.y) * t;
+        const d = Math.max(1, Math.hypot(cx - px, cy - py));
+        ring.push({
+          x: px + ((cx - px) / d) * 1.5,
+          y: py + ((cy - py) / d) * 1.5,
+        });
+      }
+    }
+    return [...ring, ...grid];
+  }
+  return grid;
+}
+
 export function proposeInventoryObjects(
   plan: SitePlanData,
   brief: OutdoorBrief,
   library: OutdoorLibraryItem[],
   id: () => string = () => crypto.randomUUID(),
+  options?: { strategy?: ObjectsLayoutStrategy; buildings?: PlanPoint[][] | undefined },
 ): { plan: SitePlanData; used: OutdoorLibraryItem[] } {
   if (!brief.items.length)
     throw new Error(
       "各区需要哪些物件、各多少？例如“展览区6个展板、表演区1个舞台2只音响”。将先检索你的真实物料库，不自动生成。",
     );
+  const strategy = options?.strategy ?? "rows";
+  // 2026-11-14 用户指令「建筑给室内分区，设计别做进室内」：落位候选在建筑足迹内、或占地与建筑相交的一律跳过。
+  const buildings = options?.buildings ?? [];
+  // 室内区域（用户手画的 indoor 语义分区）同样是禁区。
+  const indoorZones = plan.zones.filter(z => z.environment === "indoor");
   let next = { ...plan, facilities: [...plan.facilities] };
   const used: OutdoorLibraryItem[] = [];
   for (const need of brief.items) {
@@ -251,24 +310,37 @@ export function proposeInventoryObjects(
       throw new Error(
         `“${need.zone}”没有唯一对应分区，请选中并说明分区；未摆放物件。`,
       );
-    const matches = library.filter(
+    let matches = library.filter(
       (item) =>
-        item.source === "personal" &&
+        // 2026-11-14 用户指令「按主题排物件」：内置 OnePlan 物件库（source='built-in'）与个人库同权参与。
+        (item.source === "personal" || item.source === "built-in") &&
         item.available &&
         (item.name.toLowerCase().includes(need.query.toLowerCase()) ||
           item.id === need.query),
     );
+    // 2026-11-14 消歧：子串撞上一组相近物件（指示牌/指示牌架·双面/…）时，精确同名优先收窄。
+    const exact = matches.filter((m) => m.name === need.query);
+    if (exact.length) matches = exact;
     if (!matches.length)
       throw new Error(
         `你的真实物料库中尚未找到尺寸与模型可用的“${need.query}”。可改名称检索/选真实候选或上传；未自动创建收费生成。`,
       );
-    if (matches.length > 1)
-      throw new Error(
-        `你的库里有${matches.length}个“${need.query}”候选：${matches.map((m) => m.name).join("、")}。请给具体名称或ID，不替你随便选第一个。`,
-      );
+    if (matches.length > 1) {
+      // 同名多候选（如 manifest 里 icon/scale 两条「市集摊位」）按名称归组：组内同一物件不追问；
+      // 只有出现「不同名」真歧义时才要求用户给具体名称。
+      const nameGroups = new Map<string, typeof matches>();
+      for (const item of matches) {
+        const list = nameGroups.get(item.name) ?? [];
+        list.push(item);
+        nameGroups.set(item.name, list);
+      }
+      if (nameGroups.size > 1)
+        throw new Error(
+          `你的库里有${matches.length}个“${need.query}”候选：${[...nameGroups.keys()].join("、")}。请给具体名称或ID，不替你随便选第一个。`,
+        );
+    }
     const material = matches[0]!;
     used.push(material);
-    const b = box(zone.polygon);
     const allocationKey = `${zone.id}:${need.query}`;
     const allocated = next.facilities.filter(
       (f) => f.allocationKey === allocationKey,
@@ -279,8 +351,14 @@ export function proposeInventoryObjects(
       );
     if (allocated.length > need.count) {
       const removed = allocated.slice(need.count);
+      // 2026-11-14：Agent 摆的库物件（notes 有签名、非 generated 模型）随清单缩减自动回收；
+      // 用户深化过的（generated 模型）仍要求逐个确认，不批量丢件。
       if (
-        removed.some((f) => !f.modelOverride?.startsWith("generated:library-"))
+        removed.some(
+          (f) =>
+            !f.modelOverride?.startsWith("generated:library-") &&
+            !f.notes?.startsWith("复用我的物料库真实模型"),
+        )
       )
         throw new Error(
           "部分设施已有后续模型深化，请明确逐个删除；保留其任务归属，不批量丢件。",
@@ -294,29 +372,37 @@ export function proposeInventoryObjects(
     }
     for (let n = Math.min(allocated.length, need.count); n < need.count; n++) {
       let found: PlanFacility | null = null;
+      // 2026-11-14 用户指令「给我几个方案」：候选落位顺序随策略变化（行列/居中/沿边），换策略=换方案。
+      const candidates = zonePlacementCandidates(zone, strategy);
       for (const rotationDeg of [0, 90]) {
         if (found) break;
-        for (let iy = 0; iy < 30 && !found; iy++)
-          for (let ix = 0; ix < 30 && !found; ix++) {
-            const position = {
-              x: b.w + ((ix + 0.5) * (b.e - b.w)) / 30,
-              y: b.s + ((iy + 0.5) * (b.n - b.s)) / 30,
-            };
-            const facility: PlanFacility = {
-              id: id(),
-              templateId: `library:${material.id}`.slice(0, 64),
-              name: `${material.name} ${n + 1}`.slice(0, 60),
-              zoneId: zone.id,
-              position,
-              rotationDeg,
-              size: { width: material.width, depth: material.depth },
-              modelOverride: material.modelSlug,
-              sourceAssetId: material.id,
-              allocationKey,
-              notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
-            };
-            if (clearForObject(facility, next, zone)) found = facility;
+        for (const position of candidates) {
+          if (found) break;
+          const facility: PlanFacility = {
+            id: id(),
+            // 2026-11-14 修复：用规范的 oneplan: 前缀（原 library: 前缀贴纸/取色查找都认不出，
+            // Agent 摆的物件在画布上全是裸矩形）。
+            templateId: `oneplan:${material.id}`.slice(0, 64),
+            name: `${material.name} ${n + 1}`.slice(0, 60),
+            zoneId: zone.id,
+            position,
+            rotationDeg,
+            size: { width: material.width, depth: material.depth },
+            modelOverride: material.modelSlug,
+            sourceAssetId: material.id,
+            allocationKey,
+            notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
+          };
+          if (clearForObject(facility, next, zone)) {
+            // 建筑禁区 + 室内区域：落点在室内、或占地与建筑/室内分区相交 → 该候选作废（换下一个）。
+            if (buildings.some(ring => planPointInRing(position, ring))) continue;
+            const footprint = facilityFootprintRing(facility);
+            if (buildings.some(ring => outdoorRingsOverlap(footprint, ring))) continue;
+            if (indoorZones.some(z => planPointInRing(position, z.polygon))) continue;
+            if (indoorZones.some(z => outdoorRingsOverlap(footprint, z.polygon))) continue;
+            found = facility;
           }
+        }
       }
       if (!found)
         throw new Error(
@@ -517,6 +603,8 @@ export function validateWorkflowPlan(
       )
         throw new Error("当前同层分区重叠，请核对边界/层级；未应用。");
     }
+  // 2026-11-14 用户拍板「流线可以从场地外延伸到场内」：路线不再强制全宽落在活动边界内
+  //（到场段天然在界外，入口=道路与边界交点）；仅保留「不压现有设施」。
   for (const route of next.routes.filter(
     (r) =>
       JSON.stringify(base.boundary) !== JSON.stringify(next.boundary) ||
@@ -525,9 +613,6 @@ export function validateWorkflowPlan(
   )) {
     const strips = outdoorCorridorStrips(route.points, route.widthM ?? 3);
     if (
-      strips.some(
-        (strip) => facilityPlacementIssues(strip, next.boundary).length,
-      ) ||
       next.facilities.some((f) =>
         strips.some((strip) =>
           outdoorRingsOverlap(strip, facilityFootprintRing(f)),
@@ -535,7 +620,7 @@ export function validateWorkflowPlan(
       )
     )
       throw new Error(
-        "新路线全宽占地越出活动边界或穿越现有设施，请调整路线/物件；未应用。",
+        "新路线全宽占地穿越现有设施，请调整路线/物件；未应用。",
       );
   }
   for (const f of next.facilities.filter(
@@ -576,4 +661,101 @@ export function validateWorkflowPlan(
     if (worker.routeIds?.some((id) => !next.routes.some((r) => r.id === id)))
       throw new Error("岗位进出路线已失效，请重新安排；未应用。");
   }
+}
+/** 2026-11-14 用户拍板「以第一个选区为准」：换活动边界（候选轮廓/手画闭合）时，
+ * 旧边界下的内容按新边界重新安置——装不下的分区/物件/流线随场淘汰（提案整批可撤销），
+ * 人员/出入口的悬空 zoneId、岗位的悬空路线引用就地清空；不再用「分区越出」硬报错阻断换场。
+ * 若地理锚点本身位移（≥1cm，与 canReanchorOutdoorPlan 同口径），旧坐标系内容整体随场清空——
+ * 跨坐标系的逐件几何比较没有意义，换场=新场地。
+ * 产出保证能通过 validateWorkflowPlan（分区必须整体在新边界内、物件必须可归入保留分区、流线全宽不得越界或压物件）。 */
+export function prunePlanForBoundary(
+  base: SitePlanData,
+  boundary: SitePlanData["boundary"],
+  anchor?: NonNullable<SitePlanData["anchor"]>,
+): { next: SitePlanData; droppedZones: string[]; droppedFacilities: string[]; droppedRoutes: string[]; swept: boolean } {
+  const movedMeters = base.anchor && anchor
+    ? Math.hypot(
+        (anchor.lng - base.anchor.lng) * 111320 * Math.cos(anchor.lat * Math.PI / 180),
+        (anchor.lat - base.anchor.lat) * 110540,
+      )
+    : 0;
+  if (movedMeters >= 0.01) {
+    const name = (items: { name: string }[]) => items.map((item) => item.name);
+    return {
+      next: { ...base, zones: [], facilities: [], routes: [], workers: [], nodes: [], annotations: [], measurements: [] },
+      droppedZones: name(base.zones),
+      droppedFacilities: name(base.facilities),
+      droppedRoutes: name(base.routes),
+      swept: true,
+    };
+  }
+  const zones = base.zones.filter(
+    (zone) => !facilityPlacementIssues(zone.polygon, boundary).length,
+  );
+  const droppedZoneIds = new Set(
+    base.zones
+      .filter((zone) => facilityPlacementIssues(zone.polygon, boundary).length)
+      .map((zone) => zone.id),
+  );
+  const droppedZones = base.zones
+    .filter((zone) => droppedZoneIds.has(zone.id))
+    .map((zone) => zone.name);
+  const skeleton: SitePlanData = { ...base, boundary, zones };
+  // 物件：validateWorkflowPlan 在边界变化时会逐件重查（必须归进一个保留分区且落位干净），
+  // 归不进去的随场淘汰；能归入的换挂到保留分区。
+  const droppedFacilities: string[] = [];
+  const facilities: PlanFacility[] = [];
+  for (const facility of base.facilities) {
+    const ring = facilityFootprintRing(facility);
+    const host = zones.find(
+      (zone) => !facilityPlacementIssues(ring, zone.polygon).length,
+    );
+    if (!host || !clearForObject(facility, { ...skeleton, facilities }, host)) {
+      droppedFacilities.push(facility.name);
+      continue;
+    }
+    facilities.push({ ...facility, zoneId: host.id });
+  }
+  // 流线：全宽走廊越出新边界或压到保留物件的一律淘汰（与 validateWorkflowPlan 同口径）。
+  const droppedRoutes: string[] = [];
+  const routes = base.routes.filter((route) => {
+    const strips = outdoorCorridorStrips(route.points, route.widthM ?? 3);
+    const inside =
+      !strips.some((strip) => facilityPlacementIssues(strip, boundary).length) &&
+      !facilities.some((f) =>
+        strips.some((strip) =>
+          outdoorRingsOverlap(strip, facilityFootprintRing(f)),
+        ),
+      );
+    if (!inside) droppedRoutes.push(route.name);
+    return inside;
+  });
+  // 人员/出入口：归属分区没了就清引用（点保留）；岗位路线被淘汰就清引用。
+  const droppedRouteIds = new Set(
+    base.routes
+      .filter((route) => !routes.some((kept) => kept.id === route.id))
+      .map((route) => route.id),
+  );
+  const clearZoneRef = <T extends { zoneId?: string | undefined }>(items: T[]): T[] =>
+    items.map((item) =>
+      item.zoneId && droppedZoneIds.has(item.zoneId)
+        ? { ...item, zoneId: undefined }
+        : item,
+    );
+  return {
+    next: {
+      ...skeleton,
+      facilities,
+      routes,
+      workers: clearZoneRef<PlanWorker>(base.workers).map((worker) => ({
+        ...worker,
+        routeIds: worker.routeIds?.filter((id) => !droppedRouteIds.has(id)) ?? [],
+      })),
+      nodes: clearZoneRef<PlanNode>(base.nodes),
+    },
+    droppedZones,
+    droppedFacilities,
+    droppedRoutes,
+    swept: false,
+  };
 }

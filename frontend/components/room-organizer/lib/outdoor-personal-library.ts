@@ -8,6 +8,45 @@ import {
   listImportedGlbAssets,
 } from "../three/glb-assets";
 import type { OutdoorLibraryItem } from "./outdoor-agent-contract";
+import { libraryEntries, searchLibraryEntries, type LibraryEntry, type OneplanManifest } from "./oneplan-library";
+
+/** 2026-11-14 用户指令「按主题排物件」：OnePlan 内置物件库（600 件 manifest）接入户外检索——
+ *  个人库（上传/生成资产）之外的第二候选源，source='built-in'。会话内缓存一份清单。 */
+let builtinEntriesCache: LibraryEntry[] | null = null;
+async function loadBuiltinEntries(signal?: AbortSignal): Promise<LibraryEntry[]> {
+  if (builtinEntriesCache) return builtinEntriesCache;
+  const response = await fetch("/oneplan-icons/manifest.json", signal ? { signal } : {});
+  if (!response.ok) throw new Error(String(response.status));
+  const manifest = (await response.json()) as OneplanManifest;
+  builtinEntriesCache = libraryEntries(manifest.assets ?? []);
+  return builtinEntriesCache;
+}
+
+export async function readOutdoorBuiltinLibrary(
+  queries: string[],
+  signal?: AbortSignal,
+): Promise<OutdoorLibraryItem[]> {
+  const entries = await loadBuiltinEntries(signal);
+  const seen = new Set<string>();
+  const items: OutdoorLibraryItem[] = [];
+  for (const query of queries) {
+    for (const entry of searchLibraryEntries(entries, query)) {
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      items.push({
+        id: entry.id,
+        name: entry.nameZh,
+        source: "built-in",
+        width: entry.width,
+        depth: entry.depth,
+        height: 2.5,
+        modelSlug: entry.slug,
+        available: true,
+      });
+    }
+  }
+  return items;
+}
 
 /** Existing authenticated GET /assets used by My Materials; never a fabricated catalogue. */
 export async function readOutdoorPersonalLibrary(

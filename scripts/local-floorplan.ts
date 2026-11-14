@@ -22,8 +22,10 @@ const permitted = new Set(['DEEPSEEK_API_KEY', 'AI_MAX_REQUEST_CENTS', 'RECONSTR
   'HUNYUAN_API_KEY', 'HUNYUAN_API_MODE', 'GENERATION_MAX_TASK_CENTS', 'HUNYUAN_TERMS_URL', 'HUNYUAN_TERMS_REVIEWED_AT',
   // 2026-11-14：Agent 对话模型配置透传——本机配了 AGENT_CHAT_KEY + ASSISTANT_CHAT_ENABLED=1 时
   // 本地也能用「Agent 理解」（户外 understanding / brief 抽取）；不配则保持 disabled 并给出可行动文案。
+  // 2026-11-14 晚：补 OPENAI_NEXT_*——线上默认档（0d98ee06），缺了它本地理解链只会落 MiniMax 备份槽（慢、常超时）。
   'ASSISTANT_CHAT_ENABLED', 'BRIEF_CONVERSATION_ENABLED', 'AGENT_CHAT_KEY', 'AGENT_CHAT_BASE_URL',
-  'AGENT_CHAT_MODEL', 'AGENT_CHAT_PROFILE', 'AGENT_CHAT_REASONING_EFFORT', 'MINIMAX_AGENT_TOOLS_ENABLED']);
+  'AGENT_CHAT_MODEL', 'AGENT_CHAT_PROFILE', 'AGENT_CHAT_REASONING_EFFORT', 'MINIMAX_AGENT_TOOLS_ENABLED',
+  'OPENAI_NEXT_API_KEY', 'OPENAI_NEXT_BASE_URL', 'OPENAI_NEXT_MODEL']);
 const server = await startLocalServer(port, undefined, { dataDirectory, origins, privateHost: publicHost, env: key =>
   permitted.has(key) ? process.env[key] ?? (key === 'RECONSTRUCTION_MAX_REQUEST_CENTS' ? '200' : undefined) : undefined });
 
@@ -50,7 +52,9 @@ if (!(await server.db.query('select id from scene_private.projects limit 1')).ro
 // without a shell (EINVAL). The shell only wraps the one command below; every argument is plain.
 const windows = process.platform === 'win32';
 const frontend = spawn(windows ? 'npm.cmd' : 'npm', ['--prefix','frontend','run','dev','--','--hostname',publicHost === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0','--port',String(webPort)], {
-  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1',SCENDANCE_DEV_PUBLIC_ORIGIN:origins[0]},
+  // 2026-11-14 用户指令：本地 dev 把测试账号注入 AuthCard 演示位，登录卡直接预填（记住密码），
+  // 用户只按回车；trial / verify 环境不经过本启动器，不受影响。
+  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1',NEXT_PUBLIC_DEMO_EMAIL:testAccounts[0].email,NEXT_PUBLIC_DEMO_PASSWORD:testAccounts[0].password,SCENDANCE_DEV_PUBLIC_ORIGIN:origins[0]},
 });
 let stopping = false, working = false;
 const worker = setInterval(async () => {

@@ -161,17 +161,19 @@ it("原始模型过期revision与未发出的对象拒绝，不改成当前版�
       }),
     })),
   };
-  await expect(
-    understandOutdoorTurn({
-      message: "这个入口",
-      state: emptyOutdoorFlow("project-a"),
-      plan,
-      selected: [],
-      map,
-      controller,
-      signal: new AbortController().signal,
-    }),
-  ).rejects.toThrow("引用无效");
+  // 2026-11-14 用户拍板「引用无效要有追问」：不再 reject 死路——返回 action=ask 追问，
+  // 且坏引用被剥掉（不洗白成当前版本，不下发高亮，不执行）。
+  const turn = await understandOutdoorTurn({
+    message: "这个入口",
+    state: emptyOutdoorFlow("project-a"),
+    plan,
+    selected: [],
+    map,
+    controller,
+    signal: new AbortController().signal,
+  });
+  expect(turn.action).toBe("ask");
+  expect(turn.references.some(ref => ref.revision === "old-revision")).toBe(false);
   expect(
     adapter.highlights([{ layer: "map", id, revision: "old-revision" }]),
   ).toEqual([]);

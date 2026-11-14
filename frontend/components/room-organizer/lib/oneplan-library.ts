@@ -374,8 +374,15 @@ export function packFacilityTemplate(entry: LibraryEntry): PlanFacilityTemplate 
 export function parseLibraryTemplateId(
   templateId: string,
 ): { kind: OneplanStickerDescriptor['kind']; slug: string } | null {
-  if (!isLibraryTemplateId(templateId)) return null;
-  const rest = templateId.slice(LIBRARY_TEMPLATE_PREFIX.length);
+  // 2026-11-14 兼容存量：Agent 物件排布曾写入 `library:` 前缀（规范是 `oneplan:`），
+  // 已摆上图的物件不重摆也能出贴纸/取色。
+  const prefix = templateId.startsWith(LIBRARY_TEMPLATE_PREFIX)
+    ? LIBRARY_TEMPLATE_PREFIX
+    : templateId.startsWith('library:')
+      ? 'library:'
+      : null;
+  if (!prefix) return null;
+  const rest = templateId.slice(prefix.length);
   const sep = rest.indexOf(':');
   if (sep <= 0) return null;
   const kind = rest.slice(0, sep);

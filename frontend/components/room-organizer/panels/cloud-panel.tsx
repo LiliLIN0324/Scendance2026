@@ -178,7 +178,13 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
 
   // /auth 已改成「进工作台 + 自动弹登录浮窗」；标记只在 ?login=1 时置位。
   const loginRequested = useRef(false);
-  useEffect(()=>{const openLogin=()=>{loginRequested.current=true;setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();};window.addEventListener('scendance:request-account-login',openLogin);return()=>window.removeEventListener('scendance:request-account-login',openLogin);},[]);
+  // 2026-11-14 修复：原生 dialog.showModal() 会把焦点给第一个可聚焦元素（右上关闭钮），
+  // 用户按回车=直接关弹层，登录没提交。未登录弹层打开后显式聚焦 AuthCard 邮箱框。
+  const focusAuthEmail = () => {
+    if (controller.getSnapshot().user) return;
+    dialog.current?.querySelector<HTMLInputElement>('#sc-auth-email')?.focus();
+  };
+  useEffect(()=>{const openLogin=()=>{loginRequested.current=true;setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();focusAuthEmail();};window.addEventListener('scendance:request-account-login',openLogin);return()=>window.removeEventListener('scendance:request-account-login',openLogin);},[]);
 
   useEffect(() => {
     setProjects([]); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
@@ -203,7 +209,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
     openedOpenRequest.current = openRequest.serial;
     setSection(openRequest.section as AccountSection);
-    if (!dialog.current?.open) { setAccountOpen(true); dialog.current?.showModal(); }
+    if (!dialog.current?.open) { setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }
   }, [openRequest]);
   useEffect(() => {
     if (!localHandoff && fingerprint && fingerprint !== lastObserved.current) {
@@ -593,7 +599,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   </nav> : null;
 
   return <>
-    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户中心" title="账户中心 · 身份、团队与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); setAccountOpen(true); dialog.current?.showModal(); }}>
+    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户中心" title="账户中心 · 身份、团队与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><img src={avatar.src} alt=""/></span>
     </button>
     {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className={`sc-cloud-dialog sc-account-dialog${cloud.user ? '' : ' is-auth'}`} aria-labelledby="cloud-title" onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
@@ -826,7 +832,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       </div>
       </div> : <>
         <h2 id="cloud-title" className="sc-account-title-hidden">账户中心</h2>
-        <button className="sc-cloud-close sc-account-close-float" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={18}/></button>
+        {/* 2026-11-14 修复：未登录弹层的 autoFocus 原本落在关闭钮上，按回车=直接关弹层；焦点改由 AuthCard 的邮箱框接管。 */}
+        <button className="sc-cloud-close sc-account-close-float" type="button" aria-label="关闭账户面板" onClick={() => dialog.current?.close()}><X size={18}/></button>
         <AuthCard controller={controller} onAuthenticated={handleAuthenticated} />
       </>}
     </dialog>, document.body)}

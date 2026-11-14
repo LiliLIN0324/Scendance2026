@@ -73,6 +73,7 @@ import {
   drawAnnotationDraft,
   drawAnnotationLayer,
   drawBoundaryLayer,
+  drawBuildingLayer,
   drawConflictMarkers,
   drawDraftLayer,
   drawFacilityGhost,
@@ -629,6 +630,42 @@ function marqueePlanRect(marquee: { startPx: { x: number; y: number }; curPx: { 
   };
 }
 
+/** 2026-11-14 用户指令「框选要能选上线段」：折线落在矩形内的长度（逐段 Liang–Barsky 裁剪求和）。 */
+function routeLengthInRect(points: PlanPoint[], rect: PlanRect): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const ax = points[i - 1]!.x;
+    const ay = points[i - 1]!.y;
+    const dx = points[i]!.x - ax;
+    const dy = points[i]!.y - ay;
+    let t0 = 0;
+    let t1 = 1;
+    let clipped = true;
+    for (const [p, q] of [
+      [-dx, ax - rect.minX],
+      [dx, rect.maxX - ax],
+      [-dy, ay - rect.minY],
+      [dy, rect.maxY - ay],
+    ] as const) {
+      if (p === 0) {
+        if (q < 0) { clipped = false; break; }
+        continue;
+      }
+      const t = q / p;
+      if (p < 0) {
+        if (t > t1) { clipped = false; break; }
+        if (t > t0) t0 = t;
+      } else {
+        if (t < t0) { clipped = false; break; }
+        if (t < t1) t1 = t;
+      }
+    }
+    if (!clipped || t1 <= t0) continue;
+    total += Math.hypot(dx * (t1 - t0), dy * (t1 - t0));
+  }
+  return total;
+}
+
 /** 组角柄像素命中：返回角序号（0–3），未命中 null。 */
 function groupCornerHandleAtPx(px: { x: number; y: number }, bounds: PlanRect, viewport: PlanViewport): number | null {
   const corners = groupCornerPlanPoints(bounds);
@@ -1161,6 +1198,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const workerIssuesRef = useRef<PlanWorkerIssue[]>([]);
   const dragNodeRef = useRef<{ id: string; moved: boolean } | null>(null);
   const nodeDragPreviewRef = useRef<{ node: PlanNode; routes: PlanRoute[] } | null>(null);
+  // 2026-11-14 用户指令「生成的任何东西都要可以编辑」：人员点位补整体拖拽（与出入口节点同款）。
+  const dragWorkerRef = useRef<{ id: string; moved: boolean } | null>(null);
+  const workerDragPreviewRef = useRef<{ worker: PlanWorker } | null>(null);
   const historyRef = useRef<SitePlanData[]>([]);
   /** P2-g 重做栈：撤销时把当前快照推进来，任何新编辑清空（与 historyRef 对称，同样 30 步）。 */
   const redoRef = useRef<SitePlanData[]>([]);
@@ -1194,6 +1234,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
      marquee 框选与组拖拽/组缩放会话都走 ref（draw 读取）+ state（驱动重渲）。 */
   const [multiSelectedFacilityIds, setMultiSelectedFacilityIds] = useState<string[]>([]);
   const multiSelectedFacilityIdsRef = useRef<string[]>([]);
+  // 2026-11-14 用户指令「框住多少选多少」：框选多选扩展到流线与出入口候选（设施组沿用既有通道）。
+  const [multiSelectedRouteIds, setMultiSelectedRouteIds] = useState<string[]>([]);
+  const multiSelectedRouteIdsRef = useRef<string[]>([]);
+  const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState<string[]>([]);
+  const multiSelectedNodeIdsRef = useRef<string[]>([]);
   const marqueeRectRef = useRef<{ startPx: { x: number; y: number }; curPx: { x: number; y: number } } | null>(null);
   /** 组会话：move=整组平移；scale=角柄等比缩放（anchor=对角，米制）。preview 与单选拖拽同机制，松手一条 undo。 */
   const groupDragRef = useRef<{
@@ -1212,7 +1257,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** P2-j 分区选中与顶点改形：选中的分区 id + 正在拖的顶点 + 拖动预览多边形。 */
   const selectedZoneRef = useRef<string | null>(null);
   const dragZoneVertexRef = useRef<{ zoneId: string; index: number } | null>(null);
+  // 2026-11-14 用户反馈「没法编辑 Agent 生成的区域」：分区此前只能拖顶点改形，补整体拖动（与设施同款）。
+  const dragZoneMoveRef = useRef<{ zoneId: string; startPt: PlanPoint; base: PlanPoint[]; moved: boolean } | null>(null);
   const zoneDragPreviewRef = useRef<{ zoneId: string; polygon: PlanPoint[] } | null>(null);
+  // 2026-11-14 用户指令「生成的任何东西都要可以编辑」：流线此前只能整条删除，补顶点拖拽改形。
+  const dragRouteVertexRef = useRef<{ routeId: string; index: number; base: PlanPoint[] } | null>(null);
+  const routeDragPreviewRef = useRef<{ routeId: string; points: PlanPoint[] } | null>(null);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
@@ -1246,8 +1296,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [openLibrarySections, setOpenLibrarySections] = useState<string[]>(['areas']);
   const [openLibrarySubgroups, setOpenLibrarySubgroups] = useState<string[]>(['areas:区域']);
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
-  /** P2-l 右键层级菜单（用户 m05344）：上移一层 / 置于顶层 / 下移一层 / 置于底层。 */
-  const [facilityMenu, setFacilityMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  /**
+   * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
+   * - 画布设施（浏览/选择模式点中实体）= 复制 + 层级四项 + 删除；
+   * - 清单/面板行（已放置物件树行、测量行、标注行）= 按 kind 裁剪（分区/设施可复制）+ 删除。
+   * 删除固定红字沉底加分隔线（破坏性动作置底）；键盘加速器 Delete/Ctrl+D 不变。
+   */
+  type PlanContextMenu =
+    | { surface: 'stage-facility'; x: number; y: number; facilityId: string }
+    | { surface: 'row'; x: number; y: number; row: PlanInventoryRow };
+  const [contextMenu, setContextMenu] = useState<PlanContextMenu | null>(null);
+  const contextMenuElementRef = useRef<HTMLDivElement | null>(null);
+  // 菜单开着时：点菜单外任意处（画布/面板）或按 Esc 关闭；Esc 只关菜单不透传（避免顺手退出选择态）。
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onDocMouseDown = (event: MouseEvent) => {
+      const menu = contextMenuElementRef.current;
+      if (menu && event.target instanceof Node && menu.contains(event.target)) return;
+      setContextMenu(null);
+    };
+    const onDocKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu(null);
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    document.addEventListener('keydown', onDocKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown, true);
+      document.removeEventListener('keydown', onDocKeyDown, true);
+    };
+  }, [contextMenu]);
   const [facilityIssues, setFacilityIssues] = useState<PlanFacilityIssue[]>([]);
   const [routeKind, setRouteKind] = useState<PlanningRouteKind>('pedestrian');
   // M4（2026-11-13）：出入口类型在工具箱前置直选（ref + state 双写，对齐动线 kind）；
@@ -1447,6 +1527,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     annotateDragRef.current = null;
     setAnnotateDraftCount(0);
     updateNoteInput(null);
+    // 2026-11-14 统一右键菜单：切工具随手关（菜单只在浏览/选择态开，保守兜底）。
+    setContextMenu(null);
     dragNodeRef.current = null;
     nodeDragPreviewRef.current = null;
     // 2026-11-12 活动包预设随切模式重置（pickPackEntry 在 setMode 之后写入，不受影响）。
@@ -1503,7 +1585,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectNode(null);
     selectWorker(null);
     selectAnnotation(null);
-    setFacilityMenu(null);
+    setContextMenu(null);
     draftRef.current = [];
     setDraft([]);
     routeDraftRef.current = [];
@@ -1825,9 +1907,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const routes = nodeDragPreview
       ? current.routes.map(r => nodeDragPreview.routes.find(rr => rr.id === r.id) ?? r)
       : current.routes;
+    // 2026-11-14：流线顶点拖拽预览（未 commit 前仅绘制，与分区/设施同机制）。
+    const routeDragPreview = routeDragPreviewRef.current;
+    const drawnRoutes = routeDragPreview
+      ? routes.map(r => (r.id === routeDragPreview.routeId ? { ...r, points: routeDragPreview.points } : r))
+      : routes;
     const editingBoundary = modeRef.current === 'boundary-vertex';
     const boundary = previewRingRef.current ?? current.boundary;
     if (isLayerVisible(vis, 'boundary')) drawBoundaryLayer({ ctx: planCtx, viewport }, boundary, { vertexHandles: editingBoundary });
+    // 2026-11-14 用户指令「建筑给室内分区」：建筑足迹灰块（室内禁区），画在分区层之下。
+    if ((current.buildings ?? []).length) {
+      drawBuildingLayer({ ctx: planCtx, viewport }, current.buildings ?? []);
+    }
 
     // 分区警示：越界/重叠的分区画红虚线描边（数据本身不改动）。
     const warningZoneIds = new Set(
@@ -1920,7 +2011,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 2026-11-12 图标跟色：设施自带 color（Styling 色板/放置落色）优先；
         // 没有的老物件按模板 slug 走确定性调色板补色——地图上不再一片黑，也不动用户数据。
         const colorSlug = packEntry?.slug
-          ?? (facility.templateId.startsWith('oneplan:') ? facility.templateId.split(':')[2] ?? '' : '');
+          ?? (facility.templateId.startsWith('oneplan:') || facility.templateId.startsWith('library:')
+            ? facility.templateId.split(':')[2] ?? ''
+            : '');
         const itemColor = facility.color ?? (colorSlug ? libraryEntryColor({ slug: colorSlug }) : undefined);
         const pt = planPointToPixel(facility.position, viewport);
         const fw = Math.max(4, facility.size.width / metersPerPx);
@@ -1976,31 +2069,58 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (isLayerVisible(vis, 'route')) {
       drawRouteLayer(
         { ctx: planCtx, viewport },
-        routes.map(r => ({ ...r, selected: r.id === selectedRouteRef.current })),
+        drawnRoutes.map(r => ({
+          ...r,
+          // 2026-11-14：框选跨类型多选——流线多选同样高亮。
+          selected: r.id === selectedRouteRef.current || multiSelectedRouteIdsRef.current.includes(r.id),
+        })),
       );
       // H4-b：动线类型徽标（画在中点顶点下方；线型/箭头/选中白描边仍由 drawRouteLayer 负责）。
-      for (const route of routes) {
+      for (const route of drawnRoutes) {
         if (route.points.length < 2) continue;
         const sticker = routeSticker(route.kind);
         if (!sticker) continue;
         const mid = planPointToPixel(route.points[Math.floor(route.points.length / 2)]!, viewport);
         drawOneplanSticker(planCtx, sticker, mid.x, mid.y + 15, 13, { alpha: 0.95 });
       }
+      // 2026-11-14：选中流线画顶点手柄（polyline 控制点，选中即常驻，浏览/选择两模式都可拖）。
+      const selectedRouteForHandles = selectedRouteRef.current
+        ? drawnRoutes.find(r => r.id === selectedRouteRef.current) ?? null
+        : null;
+      if (selectedRouteForHandles && selectedRouteForHandles.points.length >= 2 && !layerLocked('route')) {
+        const px = selectedRouteForHandles.points.map(pt => planPointToPixel(pt, viewport));
+        planCtx.save();
+        for (const p of px) {
+          planCtx.fillStyle = 'rgba(18,20,26,0.9)';
+          planCtx.strokeStyle = '#ffffff';
+          planCtx.lineWidth = 2;
+          planCtx.beginPath();
+          planCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          planCtx.fill();
+          planCtx.stroke();
+        }
+        planCtx.restore();
+      }
     }
     if (isLayerVisible(vis, 'worker')) {
       const warningWorkerIds = new Set(
         workerIssuesRef.current.filter(i => i.issue.code === 'out-of-boundary').map(i => i.workerId),
       );
+      // 2026-11-14 用户指令「生成的任何东西都要可以编辑」：人员点位拖拽预览（未 commit 前仅绘制）。
+      const workerDragPreview = workerDragPreviewRef.current;
+      const drawnWorkers = workerDragPreview
+        ? current.workers.map(w => (w.id === workerDragPreview.worker.id ? workerDragPreview.worker : w))
+        : current.workers;
       drawWorkerLayer(
         { ctx: planCtx, viewport },
-        current.workers.map(w => ({
+        drawnWorkers.map(w => ({
           ...w,
           selected: w.id === selectedWorkerRef.current,
           warning: warningWorkerIds.has(w.id),
         })),
       );
       // H4-b：人员岗位贴纸（画在圆点上方，避开圆点与「岗位 ×人数」文本）。
-      for (const worker of current.workers) {
+      for (const worker of drawnWorkers) {
         const sticker = workerSticker(worker.role);
         if (!sticker) continue;
         const pt = planPointToPixel(worker.position, viewport);
@@ -2013,7 +2133,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         { ctx: planCtx, viewport },
         nodes.map(n => ({
           ...n,
-          selected: n.id === selectedNodeRef.current,
+          // 2026-11-14：框选跨类型多选——出入口候选多选同样高亮。
+          selected: n.id === selectedNodeRef.current || multiSelectedNodeIdsRef.current.includes(n.id),
           unconnected: unconnectedIds.has(n.id),
         })),
       );
@@ -2456,6 +2577,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       // 2026-11-12 B2：组选（≥2 件）优先于单选——批量复制/删除/微调各一条 undo。
+      // 2026-11-14：跨类型多选（流线/出入口）——Delete 批量删除；其余按键不占用。
+      const multiRouteIds = multiSelectedRouteIdsRef.current;
+      const multiNodeIds = multiSelectedNodeIdsRef.current;
+      if (multiRouteIds.length || multiNodeIds.length) {
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+          event.preventDefault();
+          deleteCrossMulti();
+        }
+        return;
+      }
       const multiIds = multiSelectedFacilityIdsRef.current;
       if (multiIds.length >= 2) {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
@@ -2659,7 +2790,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return true;
     },
     applyWorkflowPlan:(next,expected)=>{
-      const current=planRef.current;if(JSON.stringify(current)!==expected||!next.anchor||!canReanchorOutdoorPlan(current,next.anchor))return false;
+      const current=planRef.current;if(JSON.stringify(current)!==expected||!next.anchor)return false;
+      // 2026-11-14「以第一个选区为准」：提案已不携带任何旧坐标系内容（换场清空）时允许换锚点——
+      // 没有内容被静默搬动；内容存续时维持原有换锚保护。
+      const frameBound=[next.zones,next.routes,next.nodes,next.facilities,next.workers,next.annotations,next.measurements].some(items=>items?.length);
+      if(frameBound&&!canReanchorOutdoorPlan(current,next.anchor))return false;
       try{validateWorkflowPlan(current,next);}catch{return false;}
       commitPlan(next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
     },
@@ -3143,7 +3278,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function selectFacility(id: string | null) {
     selectedFacilityRef.current = id;
     setSelectedFacilityId(id);
-    if (id) selectZone(null);
+    // 2026-11-14：单选互斥——选中即清其它实体（流线/分区/节点/人员）与跨类型多选。
+    if (id) {
+      selectZone(null);
+      selectRoute(null);
+      selectNode(null);
+      selectWorker(null);
+      clearMultiSelection(false);
+    }
     draw();
   }
 
@@ -3167,7 +3309,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       next.splice(target, 0, moved);
     }
     if (next.every((item, i) => item.id === current.facilities[i]?.id)) {
-      setFacilityMenu(null);
+      setContextMenu(null);
       return;
     }
     commitPlan({ ...current, facilities: next });
@@ -3176,7 +3318,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`「${moved.name}」${label}（第 ${at} / ${next.length} 层）。`);
     setSelectedFacilityId(id);
     selectedFacilityRef.current = id;
-    setFacilityMenu(null);
+    setContextMenu(null);
     draw();
   }
 
@@ -3188,6 +3330,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (id) {
       selectedFacilityRef.current = null;
       setSelectedFacilityId(null);
+      selectRoute(null);
+      selectNode(null);
+      selectWorker(null);
+      clearMultiSelection(false);
     }
     draw();
   }
@@ -3199,6 +3345,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     let hitDist = VERTEX_HANDLE_HIT_PX;
     for (let index = 0; index < zone.polygon.length; index += 1) {
       const p = planPointToPixel(zone.polygon[index]!, viewport);
+      const distPx = Math.hypot(px.x - p.x, px.y - p.y);
+      if (distPx <= hitDist) {
+        hitIndex = index;
+        hitDist = distPx;
+      }
+    }
+    return hitIndex;
+  }
+
+  /** 2026-11-14：流线顶点手柄命中（与分区顶点同一套命中半径）。 */
+  function nearestRouteVertexIndex(route: { points: PlanPoint[] }, px: { x: number; y: number }): number | null {
+    const viewport = currentViewport();
+    let hitIndex: number | null = null;
+    let hitDist = VERTEX_HANDLE_HIT_PX;
+    for (let index = 0; index < route.points.length; index += 1) {
+      const p = planPointToPixel(route.points[index]!, viewport);
       const distPx = Math.hypot(px.x - p.x, px.y - p.y);
       if (distPx <= hitDist) {
         hitIndex = index;
@@ -3903,10 +4065,36 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 清空组选（ref+state 同步；drawAfter=false 供 setMode 等随后自会 draw 的调用方）。 */
   function clearMultiSelection(drawAfter = true) {
-    if (multiSelectedFacilityIdsRef.current.length === 0) return;
     multiSelectedFacilityIdsRef.current = [];
     setMultiSelectedFacilityIds([]);
+    // 2026-11-14：框选多选扩展到流线/出入口——一并清。
+    multiSelectedRouteIdsRef.current = [];
+    setMultiSelectedRouteIds([]);
+    multiSelectedNodeIdsRef.current = [];
+    setMultiSelectedNodeIds([]);
     if (drawAfter) draw();
+  }
+
+  /** 2026-11-14：跨类型多选批删（Delete 与属性面板共用）——流线整删、出入口删并解除路线引用。 */
+  function deleteCrossMulti() {
+    const multiRouteIds = multiSelectedRouteIdsRef.current;
+    const multiNodeIds = multiSelectedNodeIdsRef.current;
+    if (!multiRouteIds.length && !multiNodeIds.length) return;
+    const current = planRef.current;
+    commitPlan({
+      ...current,
+      routes: multiNodeIds.reduce(
+        (acc, nodeId) => detachNodeFromRoutes(nodeId, acc),
+        current.routes.filter(r => !multiRouteIds.includes(r.id)),
+      ),
+      nodes: current.nodes.filter(n => !multiNodeIds.includes(n.id)),
+    });
+    multiSelectedRouteIdsRef.current = [];
+    setMultiSelectedRouteIds([]);
+    multiSelectedNodeIdsRef.current = [];
+    setMultiSelectedNodeIds([]);
+    setEditMessage(`已删除 ${multiRouteIds.length} 条流线、${multiNodeIds.length} 个出入口候选；关联引用已解除。`);
+    draw();
   }
 
   /** 组选成立（≥2 件）：清单选/分区/标注选中，进入多选态。 */
@@ -3915,6 +4103,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setSelectedFacilityId(null);
     selectZone(null);
     selectAnnotation(null);
+    // 2026-11-14：跨类型多选互斥——设施组成立时清流线/出入口多选（注意先清再设）。
+    multiSelectedRouteIdsRef.current = [];
+    setMultiSelectedRouteIds([]);
+    multiSelectedNodeIdsRef.current = [];
+    setMultiSelectedNodeIds([]);
     multiSelectedFacilityIdsRef.current = ids;
     setMultiSelectedFacilityIds(ids);
     setInfoTab('inventory');
@@ -4067,7 +4260,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedRouteRef.current = id;
     setSelectedRouteId(id);
     if (id !== null) {
-      selectFacility(null); selectNode(null); selectWorker(null);
+      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null);
+      clearMultiSelection(false);
     }
     draw();
   }
@@ -4077,6 +4271,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setSelectedNodeId(id);
     if (id !== null) {
       selectFacility(null); selectRoute(null); selectWorker(null);
+      clearMultiSelection(false);
     }
     draw();
   }
@@ -4583,6 +4778,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`已删除分区「${zone.name}」。`);
   }
 
+  /** 2026-11-14 统一右键菜单：分区复制（整体平移 2 m，名称加「副本」，一条 undo，与设施复制同口径）。 */
+  function duplicateZone(id: string) {
+    const zone = planRef.current.zones.find(z => z.id === id);
+    if (!zone) return;
+    const copy: PlanZone = {
+      ...zone,
+      id: crypto.randomUUID(),
+      name: `${zone.name} 副本`,
+      polygon: zone.polygon.map(p => ({ x: p.x + 2, y: p.y + 2 })),
+      ...activeLevelStamp(),
+    };
+    commitPlan({ ...planRef.current, zones: [...planRef.current.zones, copy] });
+    selectZone(copy.id);
+    setEditMessage(`已复制分区「${zone.name}」，可直接拖动或用面板改色/透明度。`);
+  }
+
   /** 2026-11-11：树行右键删除的统一入口（按行 kind 分发到既有删除器）。 */
   function deleteRow(row: PlanInventoryRow) {
     if (row.kind === 'zone') deleteZone(row.id);
@@ -4673,6 +4884,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             setDragging(true);
             return;
           }
+          // 2026-11-14：按住分区体整体拖动（顶点优先，仍不命中才落这里）。
+          if (planPointInRing(hit.pt, zone.polygon)) {
+            pointerConsumedRef.current = true;
+            dragZoneMoveRef.current = { zoneId: zone.id, startPt: hit.pt, base: zone.polygon, moved: false };
+            zoneDragPreviewRef.current = { zoneId: zone.id, polygon: zone.polygon };
+            downPxRef.current = hit.px;
+            setDragging(true);
+            return;
+          }
+        }
+      }
+      // 2026-11-14：选中流线后按住顶点即改形（Agent 生成物可编辑；优先于节点拖动）。
+      if (hit && onPlanChange && !layerLocked('route')) {
+        const routeId = selectedRouteRef.current;
+        const route = routeId ? planRef.current.routes.find(r => r.id === routeId) ?? null : null;
+        if (route) {
+          const index = nearestRouteVertexIndex(route, hit.px);
+          if (index !== null) {
+            pointerConsumedRef.current = true;
+            dragRouteVertexRef.current = { routeId: route.id, index, base: route.points };
+            routeDragPreviewRef.current = { routeId: route.id, points: route.points };
+            downPxRef.current = hit.px;
+            setDragging(true);
+            return;
+          }
         }
       }
       // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移（锁定层不响应）。
@@ -4681,6 +4917,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (nodeId) {
           pointerConsumedRef.current = true;
           dragNodeRef.current = { id: nodeId, moved: false };
+          downPxRef.current = hit.px;
+          setDragging(true);
+          return;
+        }
+      }
+      // 2026-11-14 用户指令「生成的任何东西都要可以编辑」：浏览模式按住人员点位即拖动。
+      if (hit && !layerLocked('worker')) {
+        const workerId = nearestWorkerIdAt(hit.px);
+        if (workerId) {
+          pointerConsumedRef.current = true;
+          dragWorkerRef.current = { id: workerId, moved: false };
           downPxRef.current = hit.px;
           setDragging(true);
           return;
@@ -4704,6 +4951,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (activeMode === 'select') {
       // 2026-11-12 B2 框选模式：组角柄(缩放) > 已选单件手柄 > 组内件(整组移动) > 新命中(shift 加减选/单选拖动) > 空白(marquee)。
       if (!hit) return;
+      // 2026-11-14：选中流线的 polyline 控制点抓取（跨模式，与浏览模式同一套）。
+      if (onPlanChange && !layerLocked('route')) {
+        const routeId = selectedRouteRef.current;
+        const route = routeId ? planRef.current.routes.find(r => r.id === routeId) ?? null : null;
+        if (route) {
+          const index = nearestRouteVertexIndex(route, hit.px);
+          if (index !== null) {
+            pointerConsumedRef.current = true;
+            dragRouteVertexRef.current = { routeId: route.id, index, base: route.points };
+            routeDragPreviewRef.current = { routeId: route.id, points: route.points };
+            downPxRef.current = hit.px;
+            setDragging(true);
+            return;
+          }
+        }
+      }
       pointerConsumedRef.current = true;
       downPxRef.current = hit.px;
       setDragging(true);
@@ -4791,6 +5054,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function handleStageMouseMove(event: React.MouseEvent) {
+    // 2026-11-14：流线顶点拖拽预览跨模式（polyline 控制点，模式切换不打断编辑）。
+    if (dragRouteVertexRef.current) {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      const drag = dragRouteVertexRef.current;
+      const snapped = snapPointToGrid(hit.pt, currentViewport());
+      const points = drag.base.map((p, i) => (i === drag.index ? snapped : p));
+      const dup = points.some((p, i) => i > 0 && p.x === points[i - 1]!.x && p.y === points[i - 1]!.y);
+      if (!dup) {
+        routeDragPreviewRef.current = { routeId: drag.routeId, points };
+        setEditMessage(null);
+        draw();
+      }
+      return;
+    }
     const activeMode = modeRef.current;
     if (activeMode === 'select') {
       // 2026-11-12 B2：组会话预览 > 单件拖拽预览（与浏览同一套）> marquee 更新。select 模式不平移。
@@ -4872,6 +5150,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }
         return;
       }
+      // 2026-11-14：分区整体拖动预览（网格吸附，松手提交，越界由 zonePolygonIssue 拒绝）。
+      if (dragZoneMoveRef.current) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        const drag = dragZoneMoveRef.current;
+        const down = downPxRef.current;
+        if (down && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) > CLICK_MAX_MOVE_PX) {
+          drag.moved = true;
+        }
+        if (drag.moved) {
+          const snapped = snapPointToGrid(hit.pt, currentViewport());
+          const origin = snapPointToGrid(drag.startPt, currentViewport());
+          zoneDragPreviewRef.current = {
+            zoneId: drag.zoneId,
+            polygon: drag.base.map(p => ({ x: p.x + (snapped.x - origin.x), y: p.y + (snapped.y - origin.y) })),
+          };
+          setEditMessage(null);
+          draw();
+        }
+        return;
+      }
       if (dragNodeRef.current) {
         const hit = eventPlanPoint(event);
         if (!hit) return;
@@ -4888,6 +5187,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           draw();
         } else {
           setEditMessage(result.issue.message);
+        }
+        return;
+      }
+      // 2026-11-14：人员点位拖拽预览（网格吸附，松手提交）。
+      if (dragWorkerRef.current) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        const down = downPxRef.current;
+        if (down && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) > CLICK_MAX_MOVE_PX) {
+          dragWorkerRef.current.moved = true;
+        }
+        if (dragWorkerRef.current.moved) {
+          const worker = planRef.current.workers.find(w => w.id === dragWorkerRef.current?.id);
+          if (!worker) return;
+          workerDragPreviewRef.current = { worker: { ...worker, position: snapPointToGrid(hit.pt, currentViewport()) } };
+          setEditMessage(null);
+          draw();
         }
         return;
       }
@@ -5008,6 +5324,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function handleStageMouseUp(event: React.MouseEvent) {
+    // 2026-11-14：流线顶点拖拽松手跨模式——提交改形（一条 undo）；相邻重复点直接回退。
+    const routeDrag = dragRouteVertexRef.current;
+    if (routeDrag) {
+      dragRouteVertexRef.current = null;
+      const preview = routeDragPreviewRef.current;
+      routeDragPreviewRef.current = null;
+      if (preview && onPlanChange) {
+        const current = planRef.current;
+        const route = current.routes.find(r => r.id === preview.routeId);
+        if (route) {
+          const dup = preview.points.some((p, i) => i > 0 && p.x === preview.points[i - 1]!.x && p.y === preview.points[i - 1]!.y);
+          if (dup) {
+            setEditMessage('路线存在相邻重复顶点，本次改形已回退。');
+          } else {
+            commitPlan({
+              ...current,
+              routes: current.routes.map(r => (r.id === route.id ? { ...r, points: preview.points } : r)),
+            });
+            selectRoute(route.id);
+            setEditMessage(`「${route.name}」路线已更新。`);
+          }
+          draw();
+        }
+      }
+      return;
+    }
     const activeMode = modeRef.current;
     if (activeMode === 'select') {
       // 2026-11-12 B2 框选松手：组提交 > 单件提交 > marquee 命中入组 / 单击清空。
@@ -5050,22 +5392,47 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       marqueeRectRef.current = null;
       if (marquee && down && Math.hypot(marquee.curPx.x - marquee.startPx.x, marquee.curPx.y - marquee.startPx.y) > CLICK_MAX_MOVE_PX) {
         // 拖出了矩形 → 框选（中心或足迹顶点入矩形；单件回落单选，多件成组）。
-        if (!onPlanChange || layerLocked('facility')) return;
+        if (!onPlanChange) return;
         const rect = marqueePlanRect(marquee, currentViewport());
-        const hits = viewPlan().facilities.filter(f => facilityInRect(f, rect));
+        const hits = layerLocked('facility') ? [] : viewPlan().facilities.filter(f => facilityInRect(f, rect));
+        // 2026-11-14 用户指令「框住多少选多少」：流线（段与矩形相交）与出入口（点在矩形内）一并入多选。
+        const routeIds = layerLocked('route')
+          ? []
+          : viewPlan().routes.filter(r => routeLengthInRect(r.points, rect) > 0).map(r => r.id);
+        const nodeIds = layerLocked('node')
+          ? []
+          : viewPlan().nodes.filter(n => n.position.x >= rect.minX && n.position.x <= rect.maxX && n.position.y >= rect.minY && n.position.y <= rect.maxY).map(n => n.id);
         // shift+框选 = 与现有组选取并集（OnePlan 同语义）；无 shift = 替换。
         const base = event.shiftKey ? multiSelectedFacilityIdsRef.current : [];
         const merged = Array.from(new Set([...base, ...hits.map(f => f.id)]));
-        if (merged.length === 1) {
+        if (merged.length === 1 && !routeIds.length && !nodeIds.length) {
+          clearMultiSelection(false);
           selectFacility(merged[0]!);
           setInfoTab('inventory');
-        } else if (merged.length > 1) {
-          selectFacilityGroup(merged);
-          setEditMessage(`已框选 ${merged.length} 件设施。`);
+        } else if (merged.length > 1 || routeIds.length || nodeIds.length) {
+          clearMultiSelection(false);
+          if (merged.length) {
+            multiSelectedFacilityIdsRef.current = merged;
+            setMultiSelectedFacilityIds(merged);
+          } else {
+            selectedFacilityRef.current = null;
+            setSelectedFacilityId(null);
+          }
+          multiSelectedRouteIdsRef.current = routeIds;
+          setMultiSelectedRouteIds(routeIds);
+          multiSelectedNodeIdsRef.current = nodeIds;
+          setMultiSelectedNodeIds(nodeIds);
+          selectZone(null);
+          selectAnnotation(null);
+          setInfoTab('inventory');
+          setEditMessage(`已框选：设施 ${merged.length} · 流线 ${routeIds.length} · 出入口 ${nodeIds.length}。Delete 批量删除。`);
         } else {
           clearMultiSelection(false);
           selectFacility(null);
           selectZone(null);
+          selectRoute(null);
+          selectNode(null);
+          selectWorker(null);
           selectAnnotation(null);
         }
         draw();
@@ -5079,9 +5446,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             ? [...viewPlan().facilities].reverse().find(f => facilityContainsPoint(hit.pt, f))
             : null;
           if (!hitFacility) {
+            // 2026-11-14 用户反馈「分区/流线点不了」：选择模式此前只认设施，点分区/流线落到空白=清空。
+            // 选择模式同样可点选流线与分区（改形仍走浏览模式的顶点拖拽）。
+            const hitRoute = hit && !layerLocked('route') ? nearestRouteIdAt(hit.px) : null;
+            if (hitRoute) {
+              const route = viewPlan().routes.find(r => r.id === hitRoute);
+              clearMultiSelection(false);
+              selectFacility(null);
+              selectZone(null);
+              selectAnnotation(null);
+              selectRoute(hitRoute);
+              setInfoTab('inventory');
+              setEditMessage(`已选中流线「${route?.name ?? ''}」：Esc 回浏览模式可拖顶点改走向。`);
+              return;
+            }
+            const hitZone = hit && !layerLocked('zone')
+              ? [...viewPlan().zones].reverse().find(z => planPointInRing(hit.pt, z.polygon))
+              : null;
+            if (hitZone) {
+              clearMultiSelection(false);
+              selectFacility(null);
+              selectAnnotation(null);
+              selectZone(hitZone.id);
+              setInfoTab('inventory');
+              setEditMessage(`已选中分区「${hitZone.name}」：Esc 回浏览模式可拖顶点改形。`);
+              return;
+            }
             clearMultiSelection(false);
             selectFacility(null);
             selectZone(null);
+            selectRoute(null);
+            selectNode(null);
+            selectWorker(null);
             selectAnnotation(null);
             draw();
           }
@@ -5141,6 +5537,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }
         return;
       }
+      // 2026-11-14：分区整体拖动松手——moved 才提交（一条 undo），没拖动留给点选逻辑。
+      const zoneMove = dragZoneMoveRef.current;
+      if (zoneMove) {
+        dragZoneMoveRef.current = null;
+        const preview = zoneDragPreviewRef.current;
+        zoneDragPreviewRef.current = null;
+        if (zoneMove.moved && preview && onPlanChange) {
+          const current = planRef.current;
+          const zone = current.zones.find(z => z.id === preview.zoneId);
+          if (zone) {
+            const issue = zonePolygonIssue(zone, preview.polygon, current);
+            if (issue) {
+              setEditMessage(issue.message);
+            } else {
+              commitPlan({
+                ...current,
+                zones: current.zones.map(z => (z.id === zone.id ? { ...z, polygon: preview.polygon } : z)),
+              });
+              selectZone(zone.id);
+              setEditMessage(`「${zone.name}」已移动。`);
+            }
+            draw();
+          }
+        }
+        return;
+      }
       // H2-d：拖动节点松手：确实拖动过 → 提交随动结果；否则视为点选该节点。
       if (dragNodeRef.current) {
         const drag = dragNodeRef.current;
@@ -5159,6 +5581,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           return;
         }
         selectNode(drag.id);
+        return;
+      }
+      // 2026-11-14：人员点位拖动松手——moved 才提交（一条 undo），没拖动留给点选逻辑。
+      if (dragWorkerRef.current) {
+        const drag = dragWorkerRef.current;
+        const preview = workerDragPreviewRef.current;
+        dragWorkerRef.current = null;
+        workerDragPreviewRef.current = null;
+        if (drag.moved && preview && onPlanChange) {
+          const current = planRef.current;
+          commitPlan({
+            ...current,
+            workers: current.workers.map(w => (w.id === preview.worker.id ? preview.worker : w)),
+          });
+          selectWorker(preview.worker.id);
+          setEditMessage(`「${preview.worker.role}」岗位已移动。`);
+          return;
+        }
+        selectWorker(drag.id);
         return;
       }
       // H2-c/H2-d：浏览模式单击命中即选中（冲突标记 > 节点 > 人员 > 路线 > 设施），空白取消全部选中。
@@ -5207,6 +5648,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }
           selectFacility(null);
           selectZone(null);
+          selectRoute(null);
+          selectNode(null);
+          selectWorker(null);
           selectAnnotation(null);
         }
       }
@@ -5356,7 +5800,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityDragRef.current = null;
     // P2-j：分区顶点拖动中离开画布同样丢弃预览。
     dragZoneVertexRef.current = null;
+    // 2026-11-14：分区整体拖动同理。
+    dragZoneMoveRef.current = null;
     zoneDragPreviewRef.current = null;
+    // 2026-11-14：流线顶点拖拽同理。
+    dragRouteVertexRef.current = null;
+    routeDragPreviewRef.current = null;
+    // 2026-11-14：人员点位拖拽同理。
+    dragWorkerRef.current = null;
+    workerDragPreviewRef.current = null;
     draw();
   }
 
@@ -5376,7 +5828,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedNode = selectedNodeId ? plan.nodes.find(n => n.id === selectedNodeId) ?? null : null;
   const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
   // 2026-11-11 用户指令：右上角浮窗「属性」页签的角标 = 当前同时选中的物件数（点选后自动切过来）。
-  const selectionInspectorCount = (selectedZoneId ? 1 : 0) + (selectedFacility ? 1 : 0) + (selectedRoute ? 1 : 0) + (selectedNode ? 1 : 0) + (selectedWorker ? 1 : 0) + (multiSelectedFacilityIds.length >= 2 ? 1 : 0);
+  const selectionInspectorCount = (selectedZoneId ? 1 : 0) + (selectedFacility ? 1 : 0) + (selectedRoute ? 1 : 0) + (selectedNodeId ? 1 : 0) + (selectedWorkerId ? 1 : 0) + multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? 1 : 0);
   useEffect(() => {
     if (selectionInspectorCount === 0) return;
     // 选中物件 → 只把「属性」卡展开（测量/标注卡的开合不受影响）。
@@ -5733,8 +6185,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const row = inventoryRows.find(r => r.kind === 'measurement' && r.id === m.id);
           if (row) locateRow(row);
         },
-        onContextMenu: event => { event.preventDefault(); deleteMeasurement(m.id); },
-        title: '点击定位到地图；右键或 Delete 删除',
+        onContextMenu: event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const row = inventoryRows.find(r => r.kind === 'measurement' && r.id === m.id);
+          if (row) setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
+        },
+        title: '点击定位到地图；右键菜单删除',
         icon: <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: PLACED_KIND_COLORS.measurement }} />,
         trailing: (
           <button
@@ -5925,8 +6382,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const row = inventoryRows.find(r => r.kind === 'annotation' && r.id === a.id);
           if (row) locateRow(row);
         },
-        onContextMenu: event => { event.preventDefault(); deleteAnnotation(a.id); },
-        title: '点击定位到地图；右键或 Delete 删除',
+        onContextMenu: event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const row = inventoryRows.find(r => r.kind === 'annotation' && r.id === a.id);
+          if (row) setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
+        },
+        title: '点击定位到地图；右键菜单删除',
         icon: <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: a.color ?? PLACED_KIND_COLORS.annotation }} />,
         trailing: (
           <button
@@ -5989,6 +6451,76 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const BenchCloseIcon = planningIcon('x');
   const selectionInspectorZone = readOnly ? null : (
     <>
+                {/* 2026-11-14 用户指令「选中一个以上，属性里要有多个」：跨类型多选清单——逐条列出，可移除/单删/批删。 */}
+                {(multiSelectedRouteIds.length > 0 || multiSelectedNodeIds.length > 0) && (
+                  <div data-testid="cross-multi-panel" style={{ marginTop: PLANNING_SPACING.xs }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: PLANNING_SURFACE.panelText }}>
+                      已选 {multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? multiSelectedFacilityIds.length : 0)} 项
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.panel, opacity: 0.72 }}>
+                      Delete 批量删除 · 点画布空白释放全部
+                    </div>
+                    {multiSelectedRouteIds.map(id => {
+                      const route = levelView.routes.find(r => r.id === id);
+                      if (!route) return null;
+                      return (
+                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.row }}>
+                          <span style={{ opacity: 0.72, flex: '0 0 auto' }}>流线</span>
+                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{route.name}</span>
+                          <button type="button" aria-label={`移除流线「${route.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.panelText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
+                            const next = multiSelectedRouteIdsRef.current.filter(x => x !== id);
+                            multiSelectedRouteIdsRef.current = next;
+                            setMultiSelectedRouteIds(next);
+                            draw();
+                          }}>移除</button>
+                          <button type="button" aria-label={`删除流线「${route.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.dangerText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
+                            deleteRoute(id);
+                            const next = multiSelectedRouteIdsRef.current.filter(x => x !== id);
+                            multiSelectedRouteIdsRef.current = next;
+                            setMultiSelectedRouteIds(next);
+                            draw();
+                          }}>删除</button>
+                        </div>
+                      );
+                    })}
+                    {multiSelectedNodeIds.map(id => {
+                      const node = levelView.nodes.find(n => n.id === id);
+                      if (!node) return null;
+                      return (
+                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.row }}>
+                          <span style={{ opacity: 0.72, flex: '0 0 auto' }}>出入口</span>
+                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+                          <button type="button" aria-label={`移除出入口「${node.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.panelText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
+                            const next = multiSelectedNodeIdsRef.current.filter(x => x !== id);
+                            multiSelectedNodeIdsRef.current = next;
+                            setMultiSelectedNodeIds(next);
+                            draw();
+                          }}>移除</button>
+                          <button type="button" aria-label={`删除出入口「${node.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.dangerText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
+                            deleteNode(id);
+                            const next = multiSelectedNodeIdsRef.current.filter(x => x !== id);
+                            multiSelectedNodeIdsRef.current = next;
+                            setMultiSelectedNodeIds(next);
+                            draw();
+                          }}>删除</button>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.sm }}>
+                      <button
+                        type="button"
+                        data-testid="cross-multi-delete"
+                        style={{ ...modeButtonStyle(false), color: PLANNING_SURFACE.dangerText, borderColor: withAlphaHex(PLANNING_SURFACE.dangerText, 0.5) }}
+                        onClick={() => deleteCrossMulti()}
+                      >
+                        删除所选
+                      </button>
+                      <button type="button" style={modeButtonStyle(false)} onClick={() => clearMultiSelection()}>
+                        取消选择
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {/* 2026-11-12 B2 组选态（≥2 件设施）：计数 + 批量动作；单件回落下方 Bench 卡。 */}
                 {multiSelectedFacilityIds.length >= 2 && (
                   <div data-testid="facility-multi-panel" style={{ marginTop: PLANNING_SPACING.xs }}>
@@ -6763,7 +7295,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 目标不在舞台子树内直接忽略，避免在面板里右键误退画布草稿或弹出层级菜单。
         const stageGate = stageRef.current;
         if (!stageGate || !stageGate.contains(event.target as Node)) return;
-        // P2-l（用户 m05374）：画区域/边界时右键 = 移除上一个节点；其余模式右键点中设施 = 层级菜单。
+        // P2-l（用户 m05374）：画区域/边界/流线时右键 = 移除上一个节点；
+        // 浏览/选择模式右键点中设施 = 统一菜单（复制/层级/删除，2026-11-14）。
         if (modeRef.current === 'zone' || modeRef.current === 'boundary' || modeRef.current === 'route') {
           const draft = draftRef.current;
           if (draft.length === 0) return;
@@ -6777,20 +7310,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           );
           return;
         }
-        if (modeRef.current !== 'view') return;
+        if (modeRef.current !== 'view' && modeRef.current !== 'select') return;
         const hit = eventPlanPoint(event);
         if (!hit) {
-          setFacilityMenu(null);
+          setContextMenu(null);
           return;
         }
         const target = [...viewPlan().facilities].reverse().find(item => facilityContainsPoint(hit.pt, item));
         if (!target) {
-          setFacilityMenu(null);
+          setContextMenu(null);
           return;
         }
         event.preventDefault();
+        // 选择模式下组选让位给单件聚焦（菜单动作都按单件语义走）；浏览模式组选本就不成立。
+        clearMultiSelection(false);
         if (!layerLocked('facility')) selectFacility(target.id);
-        setFacilityMenu({ x: event.clientX, y: event.clientY, id: target.id });
+        setContextMenu({ surface: 'stage-facility', x: event.clientX, y: event.clientY, facilityId: target.id });
       }}
       onWheel={e => {
         // 视口边界（对标 Leaflet / Mapbox：滚轮缩放只挂地图视口本身）。
@@ -6891,59 +7426,93 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           </div>
         </div>
       )}
-      {/* P2-l 右键层级菜单（用户 m05344）：只动数组顺序，草稿/导出/3D 一起跟着变。 */}
-      {facilityMenu && (
-        <div
-          data-testid="facility-context-menu"
-          role="menu"
-          aria-label="设施层级"
-          style={{
-            position: 'fixed',
-            left: Math.min(facilityMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 172),
-            top: Math.min(facilityMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 900) - 152),
-            zIndex: 60,
-            minWidth: 156,
-            padding: 4,
-            borderRadius: 10,
-            background: PLANNING_SURFACE.panelBg,
-            border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-            boxShadow: '0 12px 32px rgba(20, 20, 22, 0.28)',
-          }}
-          onMouseDown={stopPanelMouse}
-          onWheel={stopPanelWheel}
-          onContextMenu={event => event.preventDefault()}
-        >
-          {(
-            [
-              ['up', '上移一层'],
-              ['top', '置于顶层'],
-              ['down', '下移一层'],
-              ['bottom', '置于底层'],
-            ] as const
-          ).map(([action, label]) => (
-            <button
-              key={action}
-              type="button"
-              role="menuitem"
-              data-testid={`facility-order-${action}`}
-              onClick={() => reorderFacility(facilityMenu.id, action)}
-              style={{
-                all: 'unset',
-                display: 'block',
-                boxSizing: 'border-box',
-                width: '100%',
-                padding: '6px 10px',
-                borderRadius: 6,
-                cursor: 'pointer',
-                color: PLANNING_SURFACE.panelText,
-                fontSize: PLANNING_TYPOGRAPHY.row,
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
+          画布设施 = 复制 + 层级四项 + 删除；清单/面板行 = 按 kind 裁剪（分区/设施可复制）+ 删除。
+          删除固定红字沉底加分隔线；菜单壳沿用 P2-l（viewport 防溢出 + 阻断画布按下/滚轮）。 */}
+      {contextMenu && (() => {
+        const close = () => setContextMenu(null);
+        const items: { key: string; label: string; hint?: string; danger?: boolean; run: () => void }[] = [];
+        if (contextMenu.surface === 'stage-facility') {
+          const facilityId = contextMenu.facilityId;
+          items.push({ key: 'duplicate', label: '复制', hint: 'Ctrl+D', run: () => { close(); duplicateFacility(facilityId); } });
+          for (const [action, label] of [['up', '上移一层'], ['top', '置于顶层'], ['down', '下移一层'], ['bottom', '置于底层']] as const) {
+            items.push({ key: `order-${action}`, label, run: () => { close(); reorderFacility(facilityId, action); } });
+          }
+        } else {
+          const row = contextMenu.row;
+          if (row.kind === 'zone') items.push({ key: 'duplicate', label: '复制', run: () => { close(); duplicateZone(row.id); } });
+          else if (row.kind === 'facility') items.push({ key: 'duplicate', label: '复制', hint: 'Ctrl+D', run: () => { close(); duplicateFacility(row.id); } });
+        }
+        items.push({
+          key: 'delete',
+          label: '删除',
+          hint: 'Del',
+          danger: true,
+          run: () => {
+            close();
+            if (contextMenu.surface === 'stage-facility') deleteFacility(contextMenu.facilityId);
+            else deleteRow(contextMenu.row);
+          },
+        });
+        return (
+          <div
+            ref={contextMenuElementRef}
+            data-testid="plan-context-menu"
+            role="menu"
+            aria-label="实体操作"
+            style={{
+              position: 'fixed',
+              left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 188),
+              top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 900) - 240),
+              zIndex: 60,
+              minWidth: 172,
+              padding: 4,
+              borderRadius: 10,
+              background: PLANNING_SURFACE.panelBg,
+              border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+              boxShadow: '0 12px 32px rgba(20, 20, 22, 0.28)',
+            }}
+            onMouseDown={stopPanelMouse}
+            onWheel={stopPanelWheel}
+            onContextMenu={event => event.preventDefault()}
+          >
+            {items.map(item => (
+              <Fragment key={item.key}>
+                {item.danger && items.some(other => !other.danger) && (
+                  <div
+                    role="separator"
+                    style={{ height: 1, margin: '4px 6px', background: PLANNING_SURFACE.panelBorder }}
+                  />
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid={`plan-context-${item.key}`}
+                  onClick={item.run}
+                  style={{
+                    all: 'unset',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    boxSizing: 'border-box',
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    color: item.danger ? PLANNING_SURFACE.dangerText : PLANNING_SURFACE.panelText,
+                    fontSize: PLANNING_TYPOGRAPHY.row,
+                  }}
+                >
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.hint && (
+                    <span style={{ color: PLANNING_TEXT.muted, fontSize: PLANNING_TYPOGRAPHY.hint }}>{item.hint}</span>
+                  )}
+                </button>
+              </Fragment>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* 2026-11-11 图层行（Level = 独立设计方案，非楼层高度）：点行切换/重命名/删除，+ 新建并切换；
           2026-11-12 用户指令：列表改为**卡内展开**（随文档流推下后续内容），不再是浮窗弹层；
@@ -7490,8 +8059,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         label: row.name,
                         active: inventoryRowSelected(row),
                         onClick: () => locateRow(row),
-                        onContextMenu: event => { event.preventDefault(); deleteRow(row); },
-                        title: '点击定位到地图；右键或 Delete 删除',
+                        // 2026-11-14 统一右键菜单：不再右键即删；stopPropagation 防冒泡进舞台处理器二次弹菜单。
+                        onContextMenu: event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
+                        },
+                        title: '点击定位到地图；右键复制/删除',
                         icon: renderLayerEntityIcon(row),
                         trailing: <TypeCapsule kind={row.kind} label={row.typeLabel} />,
                       }))}

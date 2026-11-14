@@ -21,6 +21,15 @@ export interface RoadSegment {
 
 export interface RoadNetwork {
   roads: RoadSegment[];
+  /** 2026-11-14 用户指令「建筑给室内分区」：范围内建筑足迹（GCJ-02 闭合环），仅 Overpass 源提供。 */
+  buildings?: BuildingFootprint[];
+}
+
+export interface BuildingFootprint {
+  id: string;
+  name: string;
+  /** GCJ-02 环（≥3 点）。 */
+  points: [number, number][];
 }
 
 /** 流线三类与 planRouteKinds 一致：人行 / 车辆 / 后勤。 */
@@ -61,9 +70,10 @@ export function routeClassLabel(routeClass: RouteClass): string {
   return routeClass === 'pedestrian' ? '人行' : routeClass === 'vehicle' ? '车行' : '后勤';
 }
 
-export function parseRoadNetwork(body: unknown): RoadSegment[] {
-  const raw = (body as { roads?: unknown } | null)?.roads;
-  if (!Array.isArray(raw)) return [];
+export function parseRoadNetwork(body: unknown): RoadNetwork {
+  const envelope = (body ?? {}) as { roads?: unknown; buildings?: unknown };
+  const raw = envelope.roads;
+  if (!Array.isArray(raw)) return { roads: [] };
   const roads: RoadSegment[] = [];
   for (const entry of raw) {
     const item = entry as Partial<RoadSegment> | null;
@@ -84,7 +94,29 @@ export function parseRoadNetwork(body: unknown): RoadSegment[] {
       points,
     });
   }
-  return roads;
+  // 2026-11-14：建筑足迹（室内禁区几何，可选字段——高德兜底源无建筑）。
+  const buildings: BuildingFootprint[] = [];
+  if (Array.isArray(envelope.buildings)) {
+    for (const entry of envelope.buildings) {
+      const item = entry as Partial<BuildingFootprint> | null;
+      if (!item || !Array.isArray(item.points) || item.points.length < 3) continue;
+      const points: [number, number][] = [];
+      for (const vertex of item.points) {
+        if (!Array.isArray(vertex) || vertex.length < 2) continue;
+        const lng = Number(vertex[0]);
+        const lat = Number(vertex[1]);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+        points.push([lng, lat]);
+      }
+      if (points.length < 3) continue;
+      buildings.push({
+        id: String(item.id ?? `${points[0]![0]},${points[0]![1]}`),
+        name: String(item.name ?? '').trim(),
+        points,
+      });
+    }
+  }
+  return { roads, ...(buildings.length ? { buildings } : {}) };
 }
 
 export async function fetchRoadNetwork(
@@ -102,8 +134,10 @@ export async function fetchRoadNetwork(
   const url = local
     ? `http://127.0.0.1:3199/api/road-network?${params.toString()}`
     : `/api/road-network?${params.toString()}`;
-  // Overpass 忙时要排队：给足 50s 预算，失败回空路网（调用方回「路网暂时拿不到」）。
-  const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(50000)]) : AbortSignal.timeout(50000) });
+  // Overpass 忙时要排队：给足 90s 预算（实测坏窗口镜像重试要 70s+），失败回空路网（调用方回「路网暂时拿不到」）。
+  const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(90000)]) : AbortSignal.timeout(90000) });
   if (!response.ok) return { roads: [] };
-  return { roads: parseRoadNetwork(await response.json()) };
+  // 2026-11-14 修复：原写法 { roads: parseRoadNetwork(...) } 把解析出的 buildings 丢了——
+  // 探针实证：代理交付 323 栋、fetchedBuildings 恒 0。
+  return parseRoadNetwork(await response.json());
 }

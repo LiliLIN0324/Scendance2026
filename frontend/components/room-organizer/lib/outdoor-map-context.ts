@@ -157,10 +157,13 @@ export function createOutdoorMapContext() {
           feature.kind !== "open-space" ||
           feature.geometry.type !== "polygon" ||
           need.environment !== "outdoor"
-        )
-          throw new Error(
-            "引用区域缺少可用的室外开放空间边界；建筑轮廓不是室内活动平面，请依图纸/实测画出区域后确认。",
-          );
+        ) {
+          // 2026-11-14 用户拍板「以第一个选区为准」后实测：理解模型爱把用途分区锚到商场建筑轮廓上，
+          // 建筑轮廓当分区形状确实不可用（原硬抛错「建筑轮廓不是室内活动平面」），但一票否决把
+          // 「边界内自动排布」这条合法路径也堵死了。改为丢弃无效引用 → 退回 proposeUseZones 的
+          // 活动边界内自动排布；产物仍是提案卡，用户确认前不写入。
+          return { ...need, referenceId: undefined };
+        }
         const matching = source.zones.filter((z) => z.name === need.name);
         if (matching.length > 1)
           throw new Error("区域名称有歧义，不能替换为地图形状。");
