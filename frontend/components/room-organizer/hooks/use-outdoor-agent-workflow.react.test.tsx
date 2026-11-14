@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
+import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import { createStarterOutdoorPlan } from "../lib/outdoor-project-store";
 import { useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
@@ -38,6 +39,9 @@ let root: Root,
   plan: SitePlanData,
   epoch: number,
   scope: string;
+let chatMeta: { provider: unknown; model: unknown };
+let providerOverride: (() => ChatProviderId | undefined) | undefined;
+let modelOverride: (() => string | null) | undefined;
 let understand: ReturnType<
     typeof vi.fn<(...args: unknown[]) => Promise<unknown>>
   >,
@@ -75,11 +79,17 @@ function Harness() {
           message: string,
           history: Array<{ role: "user" | "assistant"; text: string }>,
           signal: AbortSignal,
+          _purpose: unknown,
+          provider: unknown,
+          model: unknown,
         ) => {
+          chatMeta = { provider, model };
           assistantChatRequestSchema.parse({ message, history });
           return understand(message, history, signal);
         },
       }) as unknown as BackendSession,
+    provider: () => providerOverride?.(),
+    model: () => modelOverride?.() ?? null,
     begin: () => ++epoch,
     current: (e) => e === epoch,
     status: vi.fn(),
@@ -126,6 +136,9 @@ beforeEach(() => {
   plan = { ...createStarterOutdoorPlan(), boundary: ring };
   epoch = 0;
   scope = "project-a";
+  chatMeta = { provider: undefined, model: null };
+  providerOverride = undefined;
+  modelOverride = undefined;
   understand = vi.fn<(...args: unknown[]) => Promise<unknown>>();
   apply = vi.fn((next: SitePlanData, expected: string) => {
     if (JSON.stringify(plan) !== expected) return false;
@@ -150,6 +163,13 @@ afterEach(() => {
   act(() => root.unmount());
   host.remove();
   vi.restoreAllMocks();
+});
+it("户外问答跟随面板所选 provider 与 model 透传到对话请求", async () => {
+  providerOverride = () => "tokendance";
+  modelOverride = () => "tk-another";
+  await turn("布置一个户外市集", response("ask", {}));
+  expect(chatMeta.provider).toBe("tokendance");
+  expect(chatMeta.model).toBe("tk-another");
 });
 it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", async () => {
   const anchor = { ...plan.anchor!, lng: 120.1 };

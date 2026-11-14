@@ -298,7 +298,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   const input=agentRunRequestSchema.parse(start.input),deadline=Date.parse(start.deadline),claim=start.claim;
   // 请求级 provider 选择；所选槽位未配置时回退基础 env（默认链）。
   const requestedProvider=input.provider??'default';
-  const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider);
+  const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider,input.model);
   const now=backend.agentClock ?? Date.now;
   // Best effort, ordered and bounded: failed/missing observations never alter an operation.
   let eventChain:Promise<unknown>=Promise.resolve(),eventCount=0;

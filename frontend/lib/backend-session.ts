@@ -25,7 +25,7 @@ import {sameRecoveryFormValue} from './recovery-form-value';
 export { SceneApiError };
 export type { AgentRun };
 export type { ChatProviderId };
-export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode" | "provider">;
+export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode" | "provider" | "model">;
 export type ActivityTaskRunInput = Pick<ActivityTaskRunRequest, "requestId" | "instruction" | "activityContext">;
 export type { ActivityTaskRun };
 export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
@@ -261,10 +261,12 @@ const generationJobSchema = z.object({
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 const generationCapabilitiesSchema = z.object({ model: z.string(), textToModel: z.boolean(), imageToModel: z.boolean(), texture: z.boolean(), textureRequiresImage: z.literal(true), aholoTextToModel: z.boolean().default(false), aholoImageToModel: z.boolean().default(false) });
 export type GenerationCapabilities = z.infer<typeof generationCapabilitiesSchema>;
-const chatProviderCapabilitySchema = z.object({ id: chatProviderSchema, label: z.string(), configured: z.boolean(), agentTools: z.boolean(), model: z.string() });
+const chatModelOptionSchema = z.object({ model: z.string(), label: z.string(), default: z.boolean().optional() });
+const chatProviderCapabilitySchema = z.object({ id: chatProviderSchema, label: z.string(), configured: z.boolean(), agentTools: z.boolean(), model: z.string(), models: z.array(chatModelOptionSchema).default([]) });
 const chatCapabilitiesSchema = z.object({ active: z.object({ agent: chatProviderSchema.nullable(), brief: chatProviderSchema.nullable() }), providers: z.array(chatProviderCapabilitySchema) });
 export type ChatCapabilities = z.infer<typeof chatCapabilitiesSchema>;
 export type ChatProviderCapability = z.infer<typeof chatProviderCapabilitySchema>;
+export type ChatModelOption = z.infer<typeof chatModelOptionSchema>;
 interface PaidRequest<T> { fingerprint: string; promise?: Promise<T>; result?: T }
 interface RequestScope {
   projectId: string | null;
@@ -1516,15 +1518,15 @@ export class BackendSession {
     return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', check => this.client.startActivityTaskRun(projectId, body,check));
   }
   /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
-  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId): Promise<BriefExtractResponse> {
-    const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}) });
+  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId, model?: string | null): Promise<BriefExtractResponse> {
+    const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}), ...(model ? { model } : {}) });
     const dispatch=this.scopedDispatchGuard(false);
     const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch,true);
     dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
-  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId):Promise<BriefConversationResponse> {
-    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{})});
+  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null):Promise<BriefConversationResponse> {
+    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{}),...(model?{model}:{})});
     const client=this.conversationClient();
     if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1542,8 +1544,8 @@ export class BackendSession {
     return result;
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}) });
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);

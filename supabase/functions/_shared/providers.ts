@@ -148,8 +148,8 @@ export function chatModelName(env: Env, options?: { purpose?: 'brief' | 'agent' 
   const productBailian=options?.purpose==='brief' && env('BAILIAN_PRODUCT_ENABLED')==='1';
   const customModel = env(productBailian?'BAILIAN_PRODUCT_MODEL':'AGENT_CHAT_MODEL');
   if (customModel?.trim()) return customModel.trim();
-  if (env('TOKENDANCE_API_KEY')) return CHAT_MODEL;
-  if (env('DEEPSEEK_API_KEY')) return OFFICIAL_CHAT_MODEL;
+  if (env('TOKENDANCE_API_KEY')) return env('TOKENDANCE_MODEL')?.trim() || CHAT_MODEL;
+  if (env('DEEPSEEK_API_KEY')) return env('DEEPSEEK_MODEL')?.trim() || OFFICIAL_CHAT_MODEL;
   return '未配置';
 }
 
@@ -226,11 +226,11 @@ export function chatRequest(env: Env, body: Record<string, unknown>, options?: {
   const gatewayKey = env(CHAT_API_KEY_ENV);
   if (gatewayKey) return { url: CHAT_URL, init: {
     method: 'POST', headers: { Authorization: `Bearer ${gatewayKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
+    body: JSON.stringify({ model: env('TOKENDANCE_MODEL')?.trim() || CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
   } };
   return { url: OFFICIAL_CHAT_URL, init: {
     method: 'POST', headers: { Authorization: `Bearer ${required(env, 'DEEPSEEK_API_KEY')}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: OFFICIAL_CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
+    body: JSON.stringify({ model: env('DEEPSEEK_MODEL')?.trim() || OFFICIAL_CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
   } };
 }
 export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch, resources: readonly SceneResource[] = []) {

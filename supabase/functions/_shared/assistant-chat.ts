@@ -13,7 +13,7 @@ const sensitive=/(?:https?:\/\/|www\.|\b(?:data|blob|file):|(?:api[_ -]?key|acce
 function privateOrLink(value:string):boolean{return sensitive.test(value);}
 
 /** One read-only provider attempt. No tools, retries, search, scene or requirement writes. */
-export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId}):Promise<AssistantChatResult>{
+export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId;model?:string|null|undefined}):Promise<AssistantChatResult>{
  // Never log raw errors, bodies, prompts, endpoints, headers, model names or configuration.
  // One categorical event per slot attempt; response contract and fail-closed behavior stay unchanged.
  const diagnose=(slot:ChatProviderId,reason:'cancelled'|'provider_status'|'output_truncated'|'finish_reason'|'empty_answer'|'answer_too_long'|'unsupported_output'|'timeout'|'http_error'|'invalid_json'|'response_too_large'|'invalid_shape'|'transport_error'|'configuration_error'|'slot_skipped',fields:{httpStatus?:number;providerCode?:number;finishReason?:'length'|'content_filter'|'tool_calls'|'function_call'|'unknown'}={})=>{
@@ -122,7 +122,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  for(const slot of candidates){
   if(input.signal?.aborted)break;
   if(slot!=='default'&&!chatProviderConfigured(input.env,slot)){diagnose(slot,'slot_skipped');continue;}
-  const result=await attemptOnSlot(slot,chatProviderView(input.env,slot));
+  const result=await attemptOnSlot(slot,chatProviderView(input.env,slot,pinned?input.model:undefined));
   if(result.status==='ok')return result;
   last=result;
   if(result.status!=='provider_error'&&result.status!=='unavailable')return result;

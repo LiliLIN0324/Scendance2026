@@ -58,11 +58,80 @@ export function chatProviderAgentTools(env: Env, id: ChatProviderId): boolean {
   return true;
 }
 
+/** 一个可选模型项：`model` 是提交给后端的型号，`label` 是菜单展示名。 */
+export interface ChatModelOption {
+  model: string;
+  label: string;
+  default?: boolean;
+}
+
+/** 每厂商可选模型清单所在 env（逗号分隔，支持 `model=展示名`）；空串表示无清单 env。 */
+const MODEL_LIST_ENV: Record<ChatProviderId, string> = {
+  default: '',
+  'openai-next': 'OPENAI_NEXT_MODELS',
+  bailian: 'BAILIAN_PRODUCT_MODELS',
+  minimax: 'AGENT_CHAT_MODELS',
+  custom: 'AGENT_CHAT_MODELS',
+  tokendance: 'TOKENDANCE_MODELS',
+  deepseek: 'DEEPSEEK_MODELS',
+};
+
+/** 请求级模型覆盖写入的 MODEL env；空串表示代码常量、不被清单覆盖。 */
+const MODEL_ENV: Record<ChatProviderId, string> = {
+  default: '',
+  'openai-next': 'OPENAI_NEXT_MODEL',
+  bailian: 'BAILIAN_PRODUCT_MODEL',
+  minimax: 'AGENT_CHAT_MODEL',
+  custom: 'AGENT_CHAT_MODEL',
+  tokendance: 'TOKENDANCE_MODEL',
+  deepseek: 'DEEPSEEK_MODEL',
+};
+
+/** 解析逗号分隔清单：支持 `model=展示名`；去重保序；当前默认型号标 `default`。 */
+export function parseModelList(raw: string | undefined, fallbackModel: string): ChatModelOption[] {
+  const seen = new Set<string>();
+  const options: ChatModelOption[] = [];
+  for (const piece of (raw ?? '').split(',')) {
+    const trimmed = piece.trim();
+    if (!trimmed) continue;
+    const [rawModel, rawLabel] = trimmed.split('=');
+    const model = (rawModel ?? '').trim();
+    if (!model || seen.has(model)) continue;
+    seen.add(model);
+    options.push({ model, label: (rawLabel ?? '').trim() || model });
+  }
+  const current = fallbackModel.trim();
+  if (!options.length && current) {
+    return [{ model: current, label: current, default: true }];
+  }
+  if (current && !seen.has(current)) {
+    options.unshift({ model: current, label: current, default: true });
+  } else if (options.length) {
+    const match = options.find((option) => option.model === current);
+    if (match) match.default = true;
+    else options[0].default = true;
+  }
+  return options;
+}
+
+/** 该厂商可在前端菜单选择的模型清单；未配置或 `default` 返回空数组。 */
+export function chatModelOptions(env: Env, id: ChatProviderId, fallbackModel: string): ChatModelOption[] {
+  if (id === 'default') return [];
+  const listEnv = MODEL_LIST_ENV[id];
+  return parseModelList(listEnv ? env(listEnv) : undefined, fallbackModel);
+}
+
+/** 请求携带的 model 是否属于该厂商清单；空值一律不通过（调用方据此忽略覆盖）。 */
+export function chatModelAllowed(env: Env, id: ChatProviderId, model: string | null | undefined): boolean {
+  if (!model || id === 'default') return false;
+  return chatModelOptions(env, id, '').some((option) => option.model === model.trim());
+}
+
 /**
  * 构造强制选中槽位的 env 覆盖视图。空串用于腾开上级槽位（与 api.ts briefViews 同口径）。
- * `default` 原样返回基础 env，不做任何覆盖。
+ * `default` 原样返回基础 env，不做任何覆盖；合法型号写入对应 MODEL env，不合法则忽略。
  */
-export function chatProviderView(env: Env, id: ChatProviderId): Env {
+export function chatProviderView(env: Env, id: ChatProviderId, model?: string | null | undefined): Env {
   if (id === 'default') return env;
   const overrides: Record<string, string> = {};
   switch (id) {
@@ -117,6 +186,10 @@ export function chatProviderView(env: Env, id: ChatProviderId): Env {
       overrides.OPENAI_NEXT_MODEL = '';
       break;
   }
+  if (model && chatModelAllowed(env, id, model)) {
+    const modelEnv = MODEL_ENV[id];
+    if (modelEnv) overrides[modelEnv] = model.trim();
+  }
   return (key: string) => (Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : env(key));
 }
 
@@ -143,6 +216,8 @@ export interface ChatProviderCapability {
   agentTools: boolean;
   /** 已配置时的实际模型 id；未配置为「未配置」。 */
   model: string;
+  /** 该厂商可选择的模型清单；未配置或默认槽位为空数组。 */
+  models: ChatModelOption[];
 }
 
 export interface ChatCapabilities {
@@ -155,12 +230,14 @@ export function chatCapabilities(env: Env, modelName: (view: Env, purpose: 'brie
   const providers = CHAT_PROVIDER_IDS.map((id) => {
     const configured = chatProviderConfigured(env, id);
     const view = chatProviderView(env, id);
+    const model = configured ? modelName(view, 'agent') : '未配置';
     return {
       id,
       label: CHAT_PROVIDER_LABELS[id],
       configured,
       agentTools: chatProviderAgentTools(env, id),
-      model: configured ? modelName(view, 'agent') : '未配置',
+      model,
+      models: configured ? chatModelOptions(env, id, model) : [],
     };
   });
   return {

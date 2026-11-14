@@ -69,6 +69,8 @@ export const agentRunRequestSchema=z.strictObject({
   jevEnabled:z.boolean().default(false),executionMode:z.enum(['preview','direct']).default('preview'),
   /** 请求级 provider 选择；缺省 default 走服务端默认链。仅可选择已配置槽位。 */
   provider:chatProviderSchema.optional(),
+  /** 请求级 model 选择；必须属于所选厂商清单，否则回退厂商默认型号。 */
+  model:z.string().trim().min(1).max(80).optional(),
 });
 export type { ChatProviderId };
 export type AgentRunRequest=z.infer<typeof agentRunRequestSchema>;
