@@ -248,3 +248,11 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 **门禁维持不变**：#110 V1–V5 仍 blocked（模型理解 / 登录态 / Overpass 上游未通）；M3 未成套（#49 历史快照仍 RoomLayout、#50 导出 / 写守卫未 plan 化、#51 false 侧回写镜像未退役）；R1–R4 不动，关键路径仍 `M3 → R2 → R3 → R4`。
 
 **计数口径备注**：§3.6 表内为生产源码（非测试）引用面；本轮远端 `git grep -l` 全 `frontend/` 含测试，数字偏大，不可直接对照；合并到新基底后须按生产源码口径重核一遍再更新 §3.6。
+
+### 10.7 第二轮复核验收（2026-11-14，清 `*.tsbuildinfo` 后干净态）
+
+- 前端 `tsc --noEmit`：**exit 0**。
+- 去耦合定向组 15 文件 **161 绿**：迁移三件套（facility/layout/mapping）、共享坐标帧、routes、footprint-lock、facilities、item-bridge、display-units、splat-meters、glb-url、road-network、material-taxonomy、place-shape-quality、geo-coords。
+- 根契约组 2 文件 **25 绿**：`site-plan` 16、`models` 9。
+- 既有户外组 3 文件 **26 绿**：`outdoor-walk-boundary` 13、`walk-engage` 6、`outdoor-map-context` 7。
+- 合计 20 文件 212 绿，exit 全 0，无新增红。另一会话浮现的 untracked 测试对（`outdoor-walk-view` / `outdoor-route-follower` / `outdoor-route-proximity` / `outdoor-interaction-target`）未纳入本侧口径。
