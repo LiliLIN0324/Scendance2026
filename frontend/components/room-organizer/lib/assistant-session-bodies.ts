@@ -23,6 +23,9 @@ export type StoredAssistantBubble = {
   /** Only a model-authored reply, never a tool/system status. */
   readonly modelConversation?: boolean;
   readonly materialQueries?: readonly string[];
+  /** 失败/未启用卡片标签；仅 agent 警示气泡落盘，回放时恢复卡片外壳。 */
+  readonly alertStamp?: string;
+  readonly alertTone?: 'warn' | 'muted';
 };
 
 export type AssistantSessionBodies = {
@@ -136,6 +139,8 @@ function normalizeStoredBubble(row: unknown): StoredAssistantBubble | null {
     ...(typeof record.image === 'string' ? { image: record.image } : {}),
     ...(record.role === 'agent' && record.modelConversation === true ? { modelConversation: true } : {}),
     ...(record.role === 'agent' && Array.isArray(record.materialQueries) && record.materialQueries.length<=3 && record.materialQueries.every(value=>typeof value==='string'&&value.trim()===value&&value.length>0&&value.length<=40&&!/[\u0000-\u001f\u007f]/.test(value)) ? {materialQueries:record.materialQueries as string[]} : {}),
+    ...(typeof record.alertStamp === 'string' && record.alertStamp.trim() ? { alertStamp: record.alertStamp } : {}),
+    ...(record.alertTone === 'warn' || record.alertTone === 'muted' ? { alertTone: record.alertTone } : {}),
   } satisfies StoredAssistantBubble;
   return bubble;
 }
