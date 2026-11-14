@@ -21,6 +21,7 @@ import {
   type PlanWorker,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { laborRoleHasGender } from './labor-gender';
 import {
   planPointDistanceM,
   planPointInRing,
@@ -250,6 +251,8 @@ export interface BuildWorkerInput {
   /** 不传时按落点自动归属分区（inferWorkerZoneId）。 */
   zoneId?: string | undefined;
   color?: string;
+  /** 劳动力小人性别；自定义点不要传。 */
+  gender?: 'male' | 'female';
   notes?: string;
   id?: string;
 }
@@ -287,6 +290,7 @@ export function buildWorker(
     position: { x: input.position.x, y: input.position.y },
     ...(zoneId !== undefined ? { zoneId } : {}),
     ...(input.color !== undefined ? { color: input.color } : {}),
+    ...(laborRoleHasGender(role) && input.gender !== undefined ? { gender: input.gender } : {}),
     notes: input.notes ?? '',
   };
   return issues.length > 0 ? { ok: true, value: worker, issues } : { ok: true, value: worker };

@@ -277,6 +277,13 @@ import {
   packBuckets,
   type PackBucket,
 } from '../lib/oneplan-catalog';
+import { LaborGenderControl } from './labor-gender-control';
+import {
+  DEFAULT_LABOR_GENDER,
+  laborRoleHasGender,
+  normalizeLaborGender,
+  type LaborGender,
+} from '../lib/labor-gender';
 import {
   PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_ICONS,
@@ -1186,6 +1193,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const basemapLoadingRef = useRef(false);
   const workerRoleRef = useRef('安保');
   const workerCountRef = useRef(1);
+  const workerGenderRef = useRef<LaborGender>(DEFAULT_LABOR_GENDER);
   // 2026-11-12 活动包物件预设：动线（颜色/名称/线型）、分区（颜色/名称）、人员点位色。
   // setMode 统一清空；pickPackEntry 在切模式之后写入。
   const routePresetRef = useRef<{ kind: PlanningRouteKind; color?: string; name?: string } | null>(null);
@@ -1335,6 +1343,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('entry');
   const [, setRouteDraftCount] = useState(0);
   const [workerRole, setWorkerRole] = useState('安保');
+  const [workerGender, setWorkerGender] = useState<LaborGender>(DEFAULT_LABOR_GENDER);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
@@ -2839,6 +2848,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             role: worker.role, count: worker.count, position: worker.position, notes: worker.notes, id: worker.id,
             ...(worker.zoneId !== undefined ? { zoneId: worker.zoneId } : {}),
             ...(worker.color !== undefined ? { color: worker.color } : {}),
+            ...(worker.gender !== undefined ? { gender: worker.gender } : {}),
           },
           current.boundary,
           current.zones,
@@ -3037,6 +3047,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               count: 1,
               position: { x: workerGhostRef.current.x, y: workerGhostRef.current.y },
               notes: "",
+              ...(laborRoleHasGender(workerRoleRef.current) ? { gender: workerGenderRef.current } : {}),
             },
           ],
         };
@@ -3514,7 +3525,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     workerRoleRef.current = role;
     setWorkerRole(role);
     setMode('worker');
-    setEditMessage(`布「${role}」：单击地图落一个点位，可连续放；Esc 结束。`);
+    if (laborRoleHasGender(role)) {
+      setEditMessage(`布「${role}」：单击地图落一个点位，可连续放；性别在图标库里选，Esc 结束。`);
+    } else {
+      setEditMessage(`布「${role}」：单击地图落一个点位，可连续放；Esc 结束。`);
+    }
   }
 
   /**
@@ -4446,8 +4461,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function placeWorkerAt(pt: PlanPoint) {
     const current = planRef.current;
     const view = viewPlan();
+    const role = workerRoleRef.current;
     const result = buildWorker(
-      { role: workerRoleRef.current, count: workerCountRef.current, position: pt },
+      {
+        role,
+        count: workerCountRef.current,
+        position: pt,
+        ...(laborRoleHasGender(role) ? { gender: workerGenderRef.current } : {}),
+      },
       view.boundary,
       view.zones,
     );
@@ -4508,11 +4529,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage('出入口已删除；关联动线保留几何、引用已解除。');
   }
 
-  function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId'>>) {
+  function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId' | 'gender'>>) {
     const current = planRef.current;
     if (patch.role !== undefined && patch.role.trim().length === 0) return;
     if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1)) return;
-    commitPlan({ ...current, workers: current.workers.map(w => (w.id === id ? { ...w, ...patch } : w)) });
+    commitPlan({
+      ...current,
+      workers: current.workers.map(w => {
+        if (w.id !== id) return w;
+        const nextRole = (patch.role ?? w.role).trim();
+        const next: PlanWorker = { ...w, ...patch, role: nextRole };
+        if (!laborRoleHasGender(nextRole)) {
+          const { gender: _removed, ...rest } = next;
+          return rest;
+        }
+        next.gender = patch.gender ?? w.gender ?? DEFAULT_LABOR_GENDER;
+        return next;
+      }),
+    });
   }
 
   function deleteWorker(id: string) {
@@ -7242,6 +7276,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         style={{ width: 56, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
                       />
                     </div>
+                    {laborRoleHasGender(selectedWorker.role) && (
+                      <div style={zoneRowStyle}>
+                        <LaborGenderControl
+                          testIdPrefix="worker-gender"
+                          value={normalizeLaborGender(selectedWorker.gender)}
+                          onChange={gender => updateWorker(selectedWorker.id, { gender })}
+                        />
+                      </div>
+                    )}
                     <label style={zoneRowStyle}>
                       归属分区
                       <select
@@ -8405,6 +8448,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                               ),
                             });
                           })}
+                          {mode === 'worker' && laborRoleHasGender(workerRole) && (
+                            <div style={{ marginTop: PLANNING_SPACING.xs, padding: `0 2px` }}>
+                              <LaborGenderControl
+                                testIdPrefix="catalog-labor-gender"
+                                value={workerGender}
+                                onChange={gender => {
+                                  workerGenderRef.current = gender;
+                                  setWorkerGender(gender);
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
 

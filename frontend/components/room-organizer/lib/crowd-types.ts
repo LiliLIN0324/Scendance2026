@@ -22,6 +22,7 @@ export const CROWD_TYPES: readonly CrowdType[] = [
   { id: 'medical', name: '医护', note: '医疗点值守' },
   { id: 'fire', name: '消防', note: '消防值守' },
   { id: 'volunteer', name: '志愿者', note: '问询与协助' },
+  { id: 'executive', name: '经理', note: '现场经理' },
   { id: 'manager', name: '主管', note: '现场调度' },
   { id: 'admin', name: '管理员', note: '场地管理' },
   { id: 'performer', name: '演员', note: '表演与漫游角色' },
@@ -34,11 +35,16 @@ export type CrowdTypeId = (typeof CROWD_TYPES)[number]['id'];
 export type CrowdTypeModelStatus = 'walk' | 'lowpoly' | 'todo';
 
 /** 有漫游模型的类型。低模清单仍独立挂在 CROWD_TYPE_MODELS，两者可以同时存在。 */
-export const CROWD_TYPES_WITH_WALK_MODELS = new Set<string>(['performer', 'security', 'police', 'volunteer', 'manager', 'admin']);
+/**
+ * 目前只有古风漫游演员有已入库的 Aholo 双动画模型。
+ * 保安/警察/志愿者/主管/管理员在 walk-roles.ts 里虽有占位卡片，
+ * 制服批次尚未真正出模，不能算「有漫游模型」。
+ */
+export const CROWD_TYPES_WITH_WALK_MODELS = new Set<string>(['performer']);
 
 /**
  * 库内低模人物按类型挂上。每个 slug 只属于一类，避免同一模型在多处重复出现。
- * 保安 / 警察 / 志愿者 / 主管 / 管理员还没有对得上的制服低模。
+ * 保安 / 警察 / 志愿者 / 经理 / 主管 / 管理员还没有对得上的制服低模。
  */
 export const CROWD_TYPE_MODELS: Readonly<Record<string, readonly string[]>> = {
   staff: [

@@ -144,6 +144,7 @@ export function buildPlanGeoJson(plan: SitePlanData): GeoJsonExport {
       properties: {
         ...baseProperties({ kind: 'worker', name: worker.role, typeLabel: row?.typeLabel ?? '人员', zoneName, hasIssue: row?.hasIssue ?? false }),
         count: worker.count,
+        ...(worker.gender !== undefined ? { gender: worker.gender } : {}),
         notes: worker.notes,
       },
     });

@@ -124,6 +124,7 @@ export function applyPlanCandidate(
       id: worker.id, role: worker.role, count: worker.count, position: worker.position,
       ...(worker.zoneId !== undefined ? { zoneId: worker.zoneId } : {}),
       ...(worker.color !== undefined ? { color: worker.color } : {}),
+      ...(worker.gender !== undefined ? { gender: worker.gender } : {}),
       notes: worker.notes,
     }, current.boundary, current.zones);
     if (!built.ok) return { ok: false, issue: { code: 'assembly-failed', message: built.issue.message, ids: [worker.id] } };

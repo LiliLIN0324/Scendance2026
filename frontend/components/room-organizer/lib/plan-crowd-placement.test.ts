@@ -16,6 +16,7 @@ describe('plan-crowd-placement（2D 岗位 → 3D 人群实例）', () => {
     expect(crowdTypeForRole('保安')).toBe('security');
     expect(crowdTypeForRole('志愿者')).toBe('volunteer');
     expect(crowdTypeForRole('主管')).toBe('manager');
+    expect(crowdTypeForRole('经理')).toBe('executive');
     expect(crowdTypeForRole('管理员')).toBe('admin');
     expect(crowdTypeForRole('自定义点')).toBe('staff');
     expect(crowdTypeForRole('完全不认识的岗位')).toBe('staff');
@@ -83,5 +84,28 @@ describe('plan-crowd-placement（2D 岗位 → 3D 人群实例）', () => {
       { id: 'w4', role: '工作人员', count: 1, position: { x: 0, y: 0 }, color: '#ff8800' },
     ]);
     expect(placements[0]?.color).toBe('#ff8800');
+  });
+
+  it('人员点位带上性别；缺省为男，自定义点不挂人物模型', () => {
+    const police = planCrowdPlacements([
+      { id: 'w5', role: '警察', count: 2, position: { x: 0, y: 0 }, gender: 'female' },
+    ]);
+    expect(police).toHaveLength(2);
+    expect(police.every(item => item.gender === 'female')).toBe(true);
+    expect(police.every(item => item.glbUrl === null)).toBe(true);
+    expect(police[0]?.modelSource).toBe('fallback');
+
+    const legacyFire = planCrowdPlacements([
+      { id: 'w6', role: '消防', count: 1, position: { x: 0, y: 0 } },
+    ]);
+    expect(legacyFire[0]?.gender).toBe('male');
+    expect(legacyFire[0]?.modelSource).toBe('lowpoly');
+    expect(legacyFire[0]?.glbUrl).toContain('firefighter');
+
+    const pin = planCrowdPlacements([
+      { id: 'w7', role: '自定义点', count: 3, position: { x: 0, y: 0 }, gender: 'female' },
+    ]);
+    expect(pin).toHaveLength(3);
+    expect(pin.every(item => item.glbUrl === null && item.modelSource === 'none' && item.gender === null)).toBe(true);
   });
 });
