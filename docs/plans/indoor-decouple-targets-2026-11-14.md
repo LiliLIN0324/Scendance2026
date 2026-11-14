@@ -217,3 +217,34 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 - 任务链成套阻塞关系（夜间复核）：#29 M2 walls 接线 blocked by #30；#48 3a 可达部分已落地（遗留 floor/venue 影子），#49 3b 历史快照 blocked by #48，#50 3c 导出/写守卫、#51 3d 回写镜像随 #49 成套；#48–#51 互相成套，不能在 main 单独抽离。R 线 #23/#27/#32/#33 全部等 M3 接住后退役。
 - 夜间本侧本地提交（未 push，攒好一次性推）：`5b9fae2e` 类型止血、`ed9a4758` facility/layout 迁移边界、`636b2a8a` 映射边界、`d582af79` 迁移坐标帧边界、`5096d602` 单位/扫描/资产引用边界、`e2482c96` 路网/分类/选区几何边界、`48866ccb`/`cd98d24c`/`9447062f` 文档登记。验收：前端 tsc exit 0；收尾定向 17 文件 176 绿（含新第二批 6 文件 37 用例）；根契约 site-plan 16 + models 9 绿。
 - 真机探针受既存 3D 主线程 CDP op-lock 阻塞（navigate/js 排队超时），非本轮改动所致；运行时背书由 tsc + 定向测试承担，真机 undo/redo/图层走查留待页面空闲或用户醒后补。
+
+### 10.6 远端分叉对照与合并裁决口径（2026-11-14 第二轮）
+
+> 主线锁定**去耦合**；智能体线由丽丽在 `origin/main` 推进，本地并行分叉不回灌。本轮为只读三方对照，未 pull / rebase / merge / push，main 工作树未改。
+
+**基底状态**：`fetch` 后本地 `main` behind 7 / ahead 21，共同祖先 `492dcc8b`。直接 `push` 会被 non-fast-forward 拒绝，须先整合远端。
+
+**远端 7 提交**（丽丽智能体线演进，未触去耦合契约 / 壳体 / bridge 签名；`site-plan.ts` 仍无 walls 集合）：
+
+- `0d98ee06` 默认 OpenAI Next 均衡槽，MiniMax 保留为显式备份（#114）；
+- `0149465d` 理解链配额兜底：请求槽位 / 默认链失败按优先级切其余已配置槽位（timeout/invalid 不兜底，诊断带 slot）；
+- `d960f9d8` 活动卡封面实拍 / 归档右键删除 / 本地登录记忆 + 户外与助手面板批次；
+- `bcfab8ac` 并行会话批次类型收口；`bf38d71f` 清理误入探针临时文件；`4062d31a` / `5cd5b00c` 交接文档。
+
+**本地 21 提交分类**：
+
+- 去耦合本侧 12（测试 / 文档 / 类型注解，与远端零交集）：`c02971b0`、`5b9fae2e`、`ed9a4758`、`636b2a8a`、`48866ccb`、`cd98d24c`、`d582af79`、`9447062f`、`5096d602`、`e2482c96`、`40f49ca5`、`bbfd0354`。
+- 智能体线并行分叉 9（两级厂商型号选择 + brief hoist）：`b24540e4`、`7646a51f`、`12a340d3`、`6bdeef42`、`6cebad67`、`c56e8c0c`、`f6a8b662`、`f49835a0`、`56232d5c`。
+
+**13 个重叠文件三方合并结果**（base=`492dcc8b`，ours=origin/main，theirs=本地 main）：10 个文本层可自动合并；3 个文本冲突段——`agent-panel.tsx`、`api.ts`、`assistant-chat.ts`。
+
+**裁决口径**：
+
+1. **智能体文件合并时一律取远端主线**。远端为新整板 + 多槽兜底 + OpenAI Next 槽 + capabilities/agentTools/`resolveActiveProvider`；本地旧分叉回灌会回退丽丽已新增内容（`agent-panel` 远端多 346 行、`assistant-chat` 多 109 行、`providers` 多 50 行）。
+2. **本地两级型号清单层不回灌 main**，留 wip 参考：`ChatModelOption` / `MODEL_LIST_ENV` / `MODEL_ENV` 每厂商模型清单与 label、`TOKENDANCE_MODEL` / `DEEPSEEK_MODEL` 请求级 model env 覆写、`activeModel/setActiveModel` 状态与 run 透传、面板两级分组菜单。是否补做"厂商内可选型号"属智能体线产品口径，由丽丽主线决定，本去耦合线不叠。
+3. **brief-extract-contract hoist 两条 + BOM 清理**：远端已把 `materialQueries` 提到顶层 envelope（`briefConversationResponseSchema` / `conversationModelSchema` 顶层字段）；本地"嵌套在 extraction 里整轮作废"的兜底留 wip 参考，不擅自移植。
+4. **12 去耦合提交属可安全落新基底的集**：测试 / 文档 / 类型注解与远端零交集；唯 `5b9fae2e` 三形态参远端已是 `provider?: ChatProviderId` 可选口径，重落时核对是否已冗余。按用户偏好攒好 tsc + 测试 + 真机验收后一次性推，不为这批单独推 main。
+
+**门禁维持不变**：#110 V1–V5 仍 blocked（模型理解 / 登录态 / Overpass 上游未通）；M3 未成套（#49 历史快照仍 RoomLayout、#50 导出 / 写守卫未 plan 化、#51 false 侧回写镜像未退役）；R1–R4 不动，关键路径仍 `M3 → R2 → R3 → R4`。
+
+**计数口径备注**：§3.6 表内为生产源码（非测试）引用面；本轮远端 `git grep -l` 全 `frontend/` 含测试，数字偏大，不可直接对照；合并到新基底后须按生产源码口径重核一遍再更新 §3.6。
