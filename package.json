@@ -27,23 +27,23 @@
   },
   "dependencies": {
     "@gltf-transform/core": "4.5.1",
-    "@supabase/supabase-js": "2.117.2",
+    "@supabase/supabase-js": "2.119.0",
     "gltf-validator": "2.0.0-dev.3.10",
     "miniprogram-automator": "^0.13.0",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8",
+    "@electric-sql/pglite": "0.5.16",
     "@gltf-transform/extensions": "4.5.1",
-    "@types/node": "24.10.1",
+    "@types/node": "24.19.2",
     "deno": "2.9.6",
-    "supabase": "2.119.0",
+    "supabase": "2.122.1",
     "typescript": "5.9.3",
-    "vitest": "5.0.3"
+    "vitest": "5.1.0"
   },
   "overrides": {
     "miniprogram-automator": {
-      "debug": "4.3.1"
+      "debug": "4.4.3"
     },
     "jpeg-js": "0.4.4",
     "phin": "3.7.1",
