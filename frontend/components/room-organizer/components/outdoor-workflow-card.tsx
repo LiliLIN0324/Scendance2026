@@ -371,8 +371,9 @@ export function OutdoorWorkflowCard({
                   : "我的库"}
               </button>
             ))}
-            <label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.75, fontSize: 12 }}>
               缺物料？原位导入GLB（≤10MB，仅本会话，不上传不收费）
+              {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
               <input
                 type="file"
                 aria-label="当前活动导入GLB物料"
@@ -382,6 +383,15 @@ export function OutdoorWorkflowCard({
                   const file = event.target.files?.[0];
                   event.target.value = "";
                   if (file) void flow.importLibraryGlb(file);
+                }}
+                style={{
+                  position: "absolute",
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
+                  overflow: "hidden",
+                  clip: "rect(0 0 0 0)",
+                  whiteSpace: "nowrap",
                 }}
               />
             </label>
