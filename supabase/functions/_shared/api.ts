@@ -190,7 +190,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const override=record[key];return override===undefined?env(key):override;
         };
         const briefViews: Array<{viewEnv:Env, record:Record<string,string>}> = (pinnedProvider||defaultOpenAINext)
-          ? [{viewEnv:chatProviderView(env,pinnedProvider?requestedProvider:'openai-next'), record:{}}]
+          ? [{viewEnv:chatProviderView(env,pinnedProvider?requestedProvider:'openai-next',pinnedProvider?input.model:undefined), record:{}}]
           : chainViews.map(record=>({viewEnv:viewEnvFromRecord(record), record}));
         const briefReasons:string[]=[];
         let briefReply:Response|null=null;
@@ -346,7 +346,8 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
               throw new ApiError('AGENT_ANNOTATION_GUARD_UNAVAILABLE',503);
           }
           const requestedProvider:ChatProviderId=!activity&&'provider' in input?(input.provider??'default'):'default';
-          const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider);
+          const pinnedModel=!activity&&'model' in input?input.model:undefined;
+          const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider,pinnedModel);
           const miniMaxPreview=!activity&&chatProfile(runEnv)==='minimax'&&runEnv('MINIMAX_AGENT_TOOLS_ENABLED')==='1'&&runEnv('DEEPSEEK_AGENT_MODE')!=='legacy';
           // Check the configured provider itself before reserving a run. Custom
           // providers and the official fallback do not require a gateway key.

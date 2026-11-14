@@ -8,6 +8,7 @@ import {
   type OutdoorTurn,
 } from "./outdoor-agent-contract";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 
 import { OUTDOOR_AGENT_RULES as RULES } from "../../../../supabase/functions/_shared/outdoor-agent-response-contract";
 export async function understandOutdoorTurn(input: {
@@ -33,6 +34,8 @@ export async function understandOutdoorTurn(input: {
       })
     | null;
   signal: AbortSignal;
+  provider?: ChatProviderId | undefined;
+  model?: string | null | undefined;
 }): Promise<OutdoorTurn> {
   if (!input.controller)
     throw new Error(
@@ -126,6 +129,8 @@ export async function understandOutdoorTurn(input: {
     chunks.map((text) => ({ role: "user", text })),
     input.signal,
     "outdoor_v1",
+    input.provider && input.provider !== "default" ? input.provider : undefined,
+    input.model ?? null,
   );
   if (response.status !== "ok") {
     const error = new Error(

@@ -21,8 +21,8 @@ export function modelEnabled(): boolean {
 }
 
 export interface BriefExtractTransport {
-  briefExtract(message: string, signal?:AbortSignal, provider?:ChatProviderId): Promise<{ enabled: boolean; extraction: BriefSlots | null; reason?: string | undefined }>;
-  briefConversation?(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId):Promise<BriefConversationResponse>;
+  briefExtract(message: string, signal?:AbortSignal, provider?:ChatProviderId, model?:string|null): Promise<{ enabled: boolean; extraction: BriefSlots | null; reason?: string | undefined }>;
+  briefConversation?(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null):Promise<BriefConversationResponse>;
 }
 
 export type BriefResolution = 'model' | 'confirmation' | 'local_command' | 'disabled' | 'not_connected' | 'unavailable' | 'failed';
@@ -102,7 +102,7 @@ function reconcileHeadcountReply(text:string|undefined,memory:BriefMemory,pendin
   return hasPending||current===null?'本场人数还需核对；请以确认后的需求为准。':`本场已记录 ${current} 人；如人数有变化，请直接更正。`;
 }
 
-export async function resolveBriefTurn(raw: string, previous: BriefMemory, context: BriefTurnContext, controller?: BriefExtractTransport | null, signal?:AbortSignal, conversation?:{history:Array<{role:'user'|'assistant';text:string}>}, provider?:ChatProviderId): Promise<ResolvedBriefTurn> {
+export async function resolveBriefTurn(raw: string, previous: BriefMemory, context: BriefTurnContext, controller?: BriefExtractTransport | null, signal?:AbortSignal, conversation?:{history:Array<{role:'user'|'assistant';text:string}>}, provider?:ChatProviderId, model?:string|null): Promise<ResolvedBriefTurn> {
   if(signal?.aborted)throw new DOMException('已停止等待','AbortError');
   if (previous.pendingBasicFacts?.length) {
     const lead = splitConfirmationLead(raw);
@@ -174,7 +174,7 @@ export async function resolveBriefTurn(raw: string, previous: BriefMemory, conte
       // 与服务端预算一致；超时取消本地请求，但供应商可能仍会计费。
       const cancelled=new Promise<never>((_resolve,reject)=>{onCancel=()=>{abort.abort();reject(new DOMException('已停止等待','AbortError'));};signal?.addEventListener('abort',onCancel,{once:true});if(signal?.aborted)onCancel();});
       const response = await Promise.race([
-        conversation ? (controller.briefConversation ? controller.briefConversation(raw,conversation.history,abort.signal,provider) : Promise.resolve({enabled:false,extraction:null})) : controller.briefExtract(raw,abort.signal,provider),
+        conversation ? (controller.briefConversation ? controller.briefConversation(raw,conversation.history,abort.signal,provider,model) : Promise.resolve({enabled:false,extraction:null})) : controller.briefExtract(raw,abort.signal,provider,model),
         new Promise<never>((_, reject) => { timeout = setTimeout(() => {timedOut=true;abort.abort();reject(new Error('brief extract timeout'));}, BRIEF_CLIENT_TIMEOUT_MS); }),
         cancelled,
       ]);

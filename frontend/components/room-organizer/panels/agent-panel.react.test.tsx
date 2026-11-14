@@ -60,9 +60,11 @@ const studioMock = vi.hoisted(() => ({
   recoverable: false,
   applyRecovery: null as null | { projectId: string; revision: number; proposalId: string; outcome: 'pending' | 'committed' | 'cleanup_failed' },
   connection: '离线引导',
-  chatProviders: null as null | { active: { agent: string; brief: string }; providers: { id: string; label: string; configured: boolean; agentTools: boolean; model: string }[] },
+  chatProviders: null as null | { active: { agent: string; brief: string }; providers: { id: string; label: string; configured: boolean; agentTools: boolean; model: string; models: { model: string; label: string; default?: boolean }[] }[] },
   activeProvider: 'default' as string,
   setActiveProvider: vi.fn(),
+  activeModel: null as string | null,
+  setActiveModel: vi.fn(),
   controller: { briefExtract: vi.fn(), briefConversation: vi.fn(), assistantChat: vi.fn() },
   applyRecoveryReview: null as null | { status: 'base_matches' | 'candidate_matches' | 'unknown'; message: string },
   reviewingApplyRecovery: false,
@@ -520,35 +522,49 @@ describe('请求级模型槽位控件（活动脸小景）', () => {
   const providerFixture = () => ({
     active: { agent: 'default', brief: 'default' },
     providers: [
-      { id: 'default', label: '默认（按服务端配置）', configured: true, agentTools: true, model: 'deepseek-flash' },
-      { id: 'bailian', label: '百炼 Qwen', configured: false, agentTools: false, model: '未配置' },
-      { id: 'tokendance', label: 'Tokendance 网关', configured: true, agentTools: true, model: 'deepseek-v4.1-flash' },
-      { id: 'deepseek', label: 'DeepSeek 官方', configured: true, agentTools: true, model: 'deepseek-flash' },
+      { id: 'default', label: '默认（按服务端配置）', configured: true, agentTools: true, model: 'deepseek-flash', models: [] },
+      { id: 'bailian', label: '百炼 Qwen', configured: false, agentTools: false, model: '未配置', models: [] },
+      { id: 'tokendance', label: 'Tokendance 网关', configured: true, agentTools: true, model: 'deepseek-v4.1-flash', models: [{ model: 'deepseek-v4.1-flash', label: '网关 Flash', default: true }, { model: 'tk-another', label: '网关 Another' }] },
+      { id: 'deepseek', label: 'DeepSeek 官方', configured: true, agentTools: true, model: 'deepseek-flash', models: [] },
     ],
   });
   afterEach(() => {
     studioMock.chatProviders = null;
     studioMock.activeProvider = 'default';
+    studioMock.activeModel = null;
     studioMock.setActiveProvider.mockClear();
+    studioMock.setActiveModel.mockClear();
   });
 
-  it('活动脸在输入条旁渲染槽位菜单，已配置可点、未配置置灰，点选写入状态', () => {
+  it('活动脸在输入条旁渲染两级菜单，已配置可点、未配置置灰，点选模型写入状态', () => {
     studioMock.chatProviders = providerFixture();
     studioMock.activeProvider = 'default';
     render(ui(makeLayout()));
-    const menu = screen.getByRole('radiogroup', { name: '模型槽位' });
-    const tokendance = within(menu).getByRole('radio', { name: /Tokendance 网关/ }) as HTMLButtonElement;
-    expect(tokendance.disabled).toBe(false);
+    const menu = screen.getByRole('radiogroup', { name: '模型选择' });
+    const flash = within(menu).getByRole('radio', { name: /Flash/ }) as HTMLButtonElement;
+    expect(flash.disabled).toBe(false);
     const bailian = within(menu).getByRole('radio', { name: /百炼 Qwen/ }) as HTMLButtonElement;
     expect(bailian.disabled).toBe(true);
-    fireEvent.click(tokendance);
+    fireEvent.click(flash);
     expect(studioMock.setActiveProvider).toHaveBeenCalledWith('tokendance');
+    expect(studioMock.setActiveModel).toHaveBeenCalledWith(null);
+  });
+
+  it('点选非默认型号把对应 model 写入会话状态', () => {
+    studioMock.chatProviders = providerFixture();
+    studioMock.activeProvider = 'default';
+    render(ui(makeLayout()));
+    const menu = screen.getByRole('radiogroup', { name: '模型选择' });
+    const another = within(menu).getByRole('radio', { name: /Another/ }) as HTMLButtonElement;
+    fireEvent.click(another);
+    expect(studioMock.setActiveProvider).toHaveBeenCalledWith('tokendance');
+    expect(studioMock.setActiveModel).toHaveBeenCalledWith('tk-another');
   });
 
   it('Bingo 审校台不渲染模型槽位控件', () => {
     studioMock.chatProviders = providerFixture();
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo" /></LayoutAgentProvider>);
-    expect(screen.queryByRole('radiogroup', { name: '模型槽位' })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: '模型选择' })).toBeNull();
   });
 });
 
@@ -4952,7 +4968,7 @@ describe('bounded neighboring capability ownership regressions',()=>{
   const {resolveCommonCapability}=await import('../lib/agent-common-capabilities');expect(resolveCommonCapability(text)).toEqual({handled:false});
  });
  it('NEAR full mixed door constraint reaches model rather than being reduced to a style picker',async()=>{
-  const app=mountNear();send('按风格配一套。门保持打开');await act(async()=>{await Promise.resolve()});expect(app.current().stylePickerOpen).toBe(false);expect(studioMock.controller.assistantChat).toHaveBeenCalledWith('按风格配一套。门保持打开',expect.any(Array),expect.any(AbortSignal),'outdoor_v1');expect(app.apply).not.toHaveBeenCalled();
+  const app=mountNear();send('按风格配一套。门保持打开');await act(async()=>{await Promise.resolve()});expect(app.current().stylePickerOpen).toBe(false);expect(studioMock.controller.assistantChat).toHaveBeenCalledWith('按风格配一套。门保持打开',expect.any(Array),expect.any(AbortSignal),'outdoor_v1',undefined,null);expect(app.apply).not.toHaveBeenCalled();
  });
  it('NEAR named palette after a completed model turn remains actionable',async()=>{
   const app=mountNear();send('继续核对本场需求');await waitFor(()=>expect(studioMock.controller.assistantChat).toHaveBeenCalledOnce());await waitFor(()=>expect(app.current().outdoorWorkflow.busy).toBe(false));send('按松木户外配一套');await act(async()=>{await Promise.resolve()});await waitFor(()=>expect(app.current().outdoorWorkflow.proposal?.kind).toBe('style'));expect(app.apply).not.toHaveBeenCalled();

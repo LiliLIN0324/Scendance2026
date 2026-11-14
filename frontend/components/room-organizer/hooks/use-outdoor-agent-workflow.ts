@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BackendSession } from "@/lib/backend-session";
 import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import {
   boundaryKey,
   emptyOutdoorFlow,
@@ -129,6 +130,8 @@ export function useOutdoorAgentWorkflow(input: {
   status: (task: OutdoorTaskProgress) => void;
   say: (text: string) => void;
   search: (query: string) => void;
+  provider?: () => ChatProviderId | undefined;
+  model?: () => string | null;
   simulate?: (active: boolean) => boolean;
 }) {
   const [state, setState] = useState(() => readState(input.scope));
@@ -1116,6 +1119,8 @@ export function useOutdoorAgentWorkflow(input: {
         map,
         controller: callbacks.current.controller(),
         signal: job.controller.signal,
+        provider: callbacks.current.provider?.(),
+        model: callbacks.current.model?.() ?? null,
       });
       if (
         !live(job) ||

@@ -20,7 +20,8 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
 import { ArrowUp, Check, ChevronDown, Clock, Copy, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, Pencil, RotateCcw, RotateCw, Sparkles, Square, SquareDashed, TriangleAlert, X } from '@/components/solid-icons';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
@@ -1019,7 +1020,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }, [persistBubbles]);
 
   function searchOutdoorVenue(query:string){outdoorWorkflow.cancel();const epoch=beginOutdoorTask('venue');setVenuePick({epoch,query,candidates:[],loading:true,picking:null});setOutdoorTask({intent:`搜索“${query}”`,state:'working',action:'检索真实场地候选；未修改活动范围',steps:[]});}
-  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:text=>say({role:'agent',text}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
+  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:text=>say({role:'agent',text}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
 
   useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
     if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
@@ -3020,7 +3021,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       briefRequest.current=request;setUnderstanding(true);
       const cancelled=new Promise<never>((_,reject)=>request.controller.signal.addEventListener('abort',()=>reject(new DOMException('已停止等待','AbortError')),{once:true}));
       const provider=studioRef.current?.activeProvider;
-      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined),cancelled]);
+      const selectedModel=provider&&provider!=='default'?studioRef.current?.activeModel??null:null;
+      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel),cancelled]);
       if(!current())return;
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
       else {
@@ -3396,9 +3398,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     let turn: Awaited<ReturnType<typeof resolveBriefTurn>>;
     try {
       const provider=studioRef.current?.activeProvider;
+      const selectedModel=provider&&provider!=='default'?studioRef.current?.activeModel??null:null;
       turn = await resolveBriefTurn(trimmed, resolverMemory, {
         venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
-      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined);
+      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined, selectedModel);
       if(turn.modelNotice?.includes('可能仍会计费'))uncertainInputs.current.add(trimmed);
       if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
     } catch (error) { setProcessFailed('understanding'); releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
@@ -4237,23 +4240,6 @@ function PlusLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number;
   );
 }
 
-/** 模型位与菜单里的尖角/对勾：同一套线条，避免又混进实心 Material 图形。 */
-function ChevronDownLineIcon({ size = 13, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
-      <path d="M6 9.5 12 15.5 18 9.5" />
-    </svg>
-  );
-}
-
-function CheckLineIcon({ size = 14, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden={ariaHidden}>
-      <path d="M5 12.5 10 17.5 19 6.5" />
-    </svg>
-  );
-}
-
 /** 加号浮窗里的两项：图片 / 文件，仍是同一套线条。 */
 function ImageLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
   return (
@@ -4273,13 +4259,6 @@ function FileLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number;
     </svg>
   );
 }
-
-/**
- * 模型位按钮的固定文案。2026-11-14 用户指令：槽位选择并入「智能」菜单后，
- * 按钮本身仍叫「智能」，菜单里列服务端 chat/capabilities 下发的真实槽位，
- * 点选经 setActiveProvider 做请求级切换（对话/摘要/Agent 工具循环都跟随）。
- */
-const CURRENT_MODEL_LABEL = '智能';
 
 /** 附件白名单：图片 + 图纸/PDF。加号浮窗会按「图片 / 文件」临时收窄，取消选择后回到这份全量。 */
 const DEFAULT_FILE_ACCEPT = 'image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg';
@@ -4504,6 +4483,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 2026-11-14 用户指令：槽位列表并进 composer 的「智能」菜单；底部独立槽位栏拆除。
   const providerSlots = studio?.chatProviders?.providers ?? null;
   const activeProviderId = studio?.activeProvider ?? 'default';
+  const activeProviderSlot = providerSlots?.find(p => p.id === activeProviderId) ?? null;
+  const activeModelId = studio?.activeModel ?? null;
+  const activeModelOption = activeProviderSlot?.models?.find(option => option.model === activeModelId) ?? null;
+  const summaryLabel = activeModelOption ? `${activeProviderSlot?.label ?? ''} · ${activeModelOption.label}` : (activeProviderSlot?.label ?? '默认（按服务端配置）');
+  // 模型槽位浮层：堆栈矮卡里面板自身 overflow:hidden 会裁掉上弹菜单，因此挂到 body 层定位。
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
+  const providerAnchorRef = useRef<HTMLButtonElement>(null);
+  const providerMenuRef = useRef<HTMLDivElement>(null);
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
   // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
@@ -4525,6 +4512,42 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     document.addEventListener('keydown',onKey);
     return ()=>{ document.removeEventListener('pointerdown',onDown,true); document.removeEventListener('keydown',onKey); };
   },[openMenu]);
+  // 浮层定位：默认向上贴着锚点；上方空间不足或向下更宽裕时改为向下。关闭时不占用定位。
+  const providerMenuStyle = useMemo<CSSProperties>(() => {
+    if (!providerMenuOpen) return {};
+    const anchor = providerAnchorRef.current?.getBoundingClientRect();
+    if (!anchor || (anchor.width === 0 && anchor.height === 0)) return {};
+    const menuW = 266; const gap = 6; const estH = 232;
+    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - menuW - 8));
+    const above = anchor.top - gap >= estH || anchor.bottom + estH > window.innerHeight - 8;
+    return {
+      position: 'fixed',
+      left,
+      width: menuW,
+      ...(above ? { bottom: window.innerHeight - anchor.top + gap } : { top: anchor.bottom + gap }),
+    };
+  }, [providerMenuOpen]);
+  // 点击浮层外部 / Esc / 滚动或缩放时收起。
+  useEffect(() => {
+    if (!providerMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && (providerAnchorRef.current?.contains(target) || providerMenuRef.current?.contains(target))) return;
+      setProviderMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setProviderMenuOpen(false); };
+    const onDismiss = () => setProviderMenuOpen(false);
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onDismiss);
+    window.addEventListener('scroll', onDismiss, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onDismiss);
+      window.removeEventListener('scroll', onDismiss, true);
+    };
+  }, [providerMenuOpen]);
   const draft=draftState.key===draftKey ? draftState.value : volatileComposerDrafts.get(draftKey)??'';
   const setDraft=(value:string)=>{ if(value)volatileComposerDrafts.set(draftKey,value);else volatileComposerDrafts.delete(draftKey);setDraftState({key:draftKey,value}); };
   // 2026-11-14 用户指令：历史整层接管对话区时，输入框里直接回车 = 在当前项目开一个新会话，
@@ -4975,24 +4998,80 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             {/* 模型位「智能」：菜单列服务端下发的真实模型槽位（chat/capabilities），
                 点选即切换对话/摘要/Agent 工具循环的 provider（请求级切换）。
                 2026-11-14 用户指令：原底部独立槽位栏并进这里，不再单摆。 */}
-            <div className="ap-model-picker">
-              <button type="button" className="ap-model-trigger" aria-haspopup="menu" aria-expanded={openMenu === 'model'} aria-label={`模型：${CURRENT_MODEL_LABEL}`} data-tour="chat-model" onClick={() => setOpenMenu(open => open === 'model' ? null : 'model')}>
-                <span className="ap-model-trigger-name">{CURRENT_MODEL_LABEL}</span>
-                <ChevronDownLineIcon size={13} aria-hidden="true"/>
+            <div className={`ap-provider${providerMenuOpen ? ' is-open' : ''}`}>
+              <button
+                ref={providerAnchorRef}
+                type="button"
+                className="ap-provider-summary"
+                aria-expanded={providerMenuOpen}
+                aria-haspopup="menu"
+                aria-label="模型选择"
+                data-tour="chat-model"
+                onClick={() => setProviderMenuOpen(open => !open)}
+              >
+                <span className="ap-supervise-dot" aria-hidden="true"/>
+                <span className="ap-provider-summary-label">{summaryLabel}</span>
               </button>
-              {openMenu === 'model' && <div className="ap-model-menu" role="radiogroup" aria-label="模型槽位">
-                {providerSlots ? providerSlots.map(slot => {
-                  const active = activeProviderId === slot.id;
-                  return (
-                    <button key={slot.id} type="button" role="radio" aria-checked={active} className="ap-model-item" disabled={!slot.configured || !!studio?.busy} onClick={() => { studio?.setActiveProvider(slot.id); setOpenMenu(null); }}>
-                      <span className="ap-provider-label">{slot.label}{!slot.agentTools && <small>仅对话/摘要</small>}</span>
-                      {active ? <CheckLineIcon size={14} aria-hidden="true"/> : <span className="ap-provider-model">{slot.configured ? slot.model : '未配置'}</span>}
-                    </button>
-                  );
-                }) : (
-                  <p className="ap-model-empty">登录后这里按服务端配置显示可用模型；当前请求仍走默认链路。</p>
-                )}
-              </div>}
+              {providerSlots && createPortal(
+                <div
+                  ref={providerMenuRef}
+                  className={`ap-provider-menu${providerMenuOpen ? ' is-open' : ''}`}
+                  role="radiogroup"
+                  aria-label="模型选择"
+                  style={providerMenuStyle}
+                >
+                  {providerSlots.map(slot => {
+                    const activeProvider = activeProviderId === slot.id;
+                    const disabled = !slot.configured || !!studio?.busy;
+                    const models = slot.models ?? [];
+                    if (!models.length) {
+                      return (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={activeProvider}
+                          disabled={disabled}
+                          onClick={() => {
+                            studio?.setActiveProvider(slot.id);
+                            studio?.setActiveModel(null);
+                            setProviderMenuOpen(false);
+                          }}
+                        >
+                          <span className="ap-provider-label">{slot.label}{!slot.agentTools && <small>仅对话/摘要</small>}</span>
+                          <span className="ap-provider-model">{slot.configured ? slot.model : '未配置'}</span>
+                        </button>
+                      );
+                    }
+                    return (
+                      <div key={slot.id} className="ap-provider-group">
+                        <div className="ap-provider-group-label">{slot.label}{!slot.agentTools && <small>仅对话/摘要</small>}</div>
+                        {models.map(option => {
+                          const active = activeProvider && (activeModelId === option.model || (option.default && activeModelId === null));
+                          return (
+                            <button
+                              key={option.model}
+                              type="button"
+                              role="radio"
+                              aria-checked={active}
+                              disabled={disabled}
+                              onClick={() => {
+                                studio?.setActiveProvider(slot.id);
+                                studio?.setActiveModel(option.default ? null : option.model);
+                                setProviderMenuOpen(false);
+                              }}
+                            >
+                              <span className="ap-provider-label">{option.label}</span>
+                              <span className="ap-provider-model">{option.default ? '默认' : option.model}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>,
+                document.body,
+              )}
             </div>
             {/* 户外任务进行中：发送位变成中止钮，请求的取消入口从任务卡挪到这里。 */}
             {agent.outdoorWorkflow.busy || agent.outdoorWorkflow.simulating ? (

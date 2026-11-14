@@ -6,6 +6,9 @@ import {
   chatProviderView,
   resolveActiveProvider,
   chatCapabilities,
+  parseModelList,
+  chatModelOptions,
+  chatModelAllowed,
 } from '../supabase/functions/_shared/chat-provider.ts';
 import { chatModelName } from '../supabase/functions/_shared/providers.ts';
 import { briefExtractRequestSchema, briefConversationRequestSchema } from '../supabase/functions/_shared/brief-extract-contract.ts';
@@ -158,5 +161,64 @@ describe('request contract compatibility', () => {
     expect(briefExtractRequestSchema.safeParse({ message: '布置一下', provider: 'openai-next' }).success).toBe(true);
     const rejected = briefExtractRequestSchema.safeParse({ message: '布置一下', provider: 'openai' });
     expect(rejected.success).toBe(false);
+  });
+
+  it('accepts a model field and trims bounds', () => {
+    expect(briefExtractRequestSchema.safeParse({ message: '布置一下', provider: 'tokendance', model: '  deepseek-v4.1-flash  ' }).success).toBe(true);
+    expect(assistantChatRequestSchema.safeParse({ message: '你好', history: [], model: '' }).success).toBe(false);
+  });
+});
+
+describe('model list parsing', () => {
+  it('splits comma-separated ids and `id=label`, de-duplicating in order', () => {
+    const options = parseModelList('a=Alpha, b, a, c=Gamma', 'b');
+    expect(options.map((o) => [o.model, o.label])).toEqual([['a', 'Alpha'], ['b', 'b'], ['c', 'Gamma']]);
+    expect(options.find((o) => o.model === 'b')?.default).toBe(true);
+  });
+
+  it('falls back to a single default item when the list is empty', () => {
+    const options = parseModelList(undefined, 'fallback-model');
+    expect(options).toEqual([{ model: 'fallback-model', label: 'fallback-model', default: true }]);
+  });
+
+  it('prepends the current model when it is absent from the list', () => {
+    const options = parseModelList('alpha,beta', 'current-model');
+    expect(options[0]).toEqual({ model: 'current-model', label: 'current-model', default: true });
+    expect(options).toHaveLength(3);
+  });
+});
+
+describe('model whitelist and view override', () => {
+  it('allows only models listed for the provider slot', () => {
+    const env = makeEnv({ ...tokendance, TOKENDANCE_MODELS: 'deepseek-v4.1-flash, another' });
+    expect(chatModelAllowed(env, 'tokendance', 'another')).toBe(true);
+    expect(chatModelAllowed(env, 'tokendance', 'rogue-model')).toBe(false);
+    expect(chatModelAllowed(env, 'tokendance', null)).toBe(false);
+    expect(chatModelAllowed(env, 'default', 'anything')).toBe(false);
+  });
+
+  it('writes a whitelisted model into the matching MODEL env and ignores an illegal one', () => {
+    const env = makeEnv({ ...tokendance, TOKENDANCE_MODELS: 'deepseek-v4.1-flash, another' });
+    const legal = chatProviderView(env, 'tokendance', 'another');
+    expect(legal('TOKENDANCE_MODEL')).toBe('another');
+    const illegal = chatProviderView(env, 'tokendance', 'rogue-model');
+    expect(illegal('TOKENDANCE_MODEL')).toBeUndefined();
+  });
+
+  it('exposes models from the list and falls back to one item when the list is empty', () => {
+    const env = makeEnv({ ...minimax, AGENT_CHAT_MODELS: 'MiniMax-M3.1, MiniMax-M2.7' });
+    const options = chatModelOptions(env, 'minimax', 'MiniMax-M3.1');
+    expect(options.map((o) => o.model)).toEqual(['MiniMax-M3.1', 'MiniMax-M2.7']);
+    const fallback = chatModelOptions(makeEnv({}), 'deepseek', 'x');
+    expect(fallback).toEqual([{ model: 'x', label: 'x', default: true }]);
+  });
+
+  it('attaches a models array to each capability without leaking secrets', () => {
+    const caps = chatCapabilities(makeEnv({ ...minimax, ...tokendance, AGENT_CHAT_MODELS: 'MiniMax-M3.1' }), (view, purpose) => chatModelName(view, { purpose }));
+    const byId = Object.fromEntries(caps.providers.map((p) => [p.id, p]));
+    expect(byId.minimax.models.map((o) => o.model)).toEqual(['MiniMax-M3.1']);
+    expect(byId.tokendance.models).toHaveLength(1);
+    expect(byId.deepseek.models).toHaveLength(0);
+    expect(JSON.stringify(caps)).not.toContain('tk-secret');
   });
 });
