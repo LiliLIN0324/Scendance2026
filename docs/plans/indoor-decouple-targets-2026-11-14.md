@@ -190,6 +190,18 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 - facility 迁移：空 / 纯空白名回落「通用物件」、超长名截 60、非法 hex 色丢弃、NaN 旋转归零、空布局退空。
 - layout 迁移：空布局五类实体全空、人员空角色回落「人员」、分区非法色丢弃后工厂按语义回落默认灰。
 - 映射表：类型 `trim` 归一、空串 / 纯空白回落 misc、`glb-asset` 回落 misc。
+- 迁移共享坐标帧：`makeFrame`/`framePoint` 投影往返、`hexOrUndefined` 非法色丢弃边界。
+
+第二批（commit `5096d602` / `e2482c96`，均纯函数、无状态/网络/副作用，未碰 R 线与门禁邻近域）：
+
+- 单位换算 `display-units`（7）：米/英尺长宽面积换算、非有限回落 `—`、precision 覆盖、未知单位回落米制。
+- 扫描坏档 `splat-meters`（5）：各维有限校验、跨度 0.5–120m 可用、越界 null、结果 round 1 位、负向 max 按绝对值取跨度。
+- 资产引用 `glb-url`（6）：相对路径 / 同源 packaged 放行，带 hash/凭据/空格/反斜杠拒绝，http 仅 localhost/127.0.0.1/[::1]，超长/非字符串/解析失败拒绝。
+- 路网等级 `road-network`（6）：highway→人行/车行/后勤映射、未知 null、三类中文标签、坏段裁剪、缺 id 回首点坐标拼接。
+- 素材分类 `material-taxonomy`（3）：空家族→「其他」、已知折叠类目 / 未知原样、筛选直等与折叠后命中、类目标签判定。
+- 选区几何 `place-shape-quality`（10）：名称归一、线长 / 外接框面积、轮廓 hint、同名去城市前缀与短码后缀匹配、line 不可入库、坏多边形 / 越界点 / 公交往返标记拒绝、可信面与够长线可展示。
+
+甄别后明确排除（不越门禁、不写脆弱测试）：`lane-status`/`plan-basemap-source`（模块级状态 + 订阅器 + localStorage，跨用例污染高）；`outdoor-plan-handoff`（build 纯构造但属 3c 导出邻近域，download 走 DOM/URL 副作用）；`general-activity-question`（智能体读侧分类器，另一会话在途领域，避开回写冲突）；R 线 / 座位域 / 门禁邻近件（`structural-layout`、`initial-layout`、`blank-venue`、`furnishing-select`、`table-shape`、`online-model-placement`、`floor-reading`、`scene-presets`、`venue-history`、`workspace-write-guards`、`readonly-draft-bundle/registry`）均不动。
 
 ### 10.4 回写机制与处置口径（夜间实记）
 
@@ -203,5 +215,5 @@ R1 立壳入口退役、R2 卸保活容器 / three 链路、R3 删 layoutStore �
 - G3（R1–R4 壳体退役、`onApply(RoomLayout)` 签名改造）仍 blocked，等智能体提案全部经 routeBridge 落地、M3 成套接住。
 - 夜间未推进任何拆旧；关键路径仍是 `M3 → R2 → R3 → R4`。
 - 任务链成套阻塞关系（夜间复核）：#29 M2 walls 接线 blocked by #30；#48 3a 可达部分已落地（遗留 floor/venue 影子），#49 3b 历史快照 blocked by #48，#50 3c 导出/写守卫、#51 3d 回写镜像随 #49 成套；#48–#51 互相成套，不能在 main 单独抽离。R 线 #23/#27/#32/#33 全部等 M3 接住后退役。
-- 夜间本侧本地提交（未 push，攒好一次性推）：`5b9fae2e` 类型止血、`ed9a4758` facility/layout 迁移边界、`636b2a8a` 映射边界、`d582af79` 迁移坐标帧边界、`48866ccb`/`cd98d24c` 文档登记。验收：前端 tsc exit 0；定向 11 文件 139 绿（含新 frame 6、facilities 43）；根契约 site-plan 16 + models 9 绿。
+- 夜间本侧本地提交（未 push，攒好一次性推）：`5b9fae2e` 类型止血、`ed9a4758` facility/layout 迁移边界、`636b2a8a` 映射边界、`d582af79` 迁移坐标帧边界、`5096d602` 单位/扫描/资产引用边界、`e2482c96` 路网/分类/选区几何边界、`48866ccb`/`cd98d24c`/`9447062f` 文档登记。验收：前端 tsc exit 0；收尾定向 17 文件 176 绿（含新第二批 6 文件 37 用例）；根契约 site-plan 16 + models 9 绿。
 - 真机探针受既存 3D 主线程 CDP op-lock 阻塞（navigate/js 排队超时），非本轮改动所致；运行时背书由 tsc + 定向测试承担，真机 undo/redo/图层走查留待页面空闲或用户醒后补。
