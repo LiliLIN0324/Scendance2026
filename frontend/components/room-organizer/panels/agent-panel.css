@@ -220,6 +220,26 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* AC 式任务卡：上幅自绘地图缩略 + 图注一行；缩略是示意，不声称真实轮廓。 */
 .ap-task-map { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--wk-hair-soft); }
 .ap-task-caption { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+/* 低风险提示条的倒计时后缀：跟着 caption 走，纯提示不动任务状态。 */
+.ap-task-countdown { color: var(--wk-muted); white-space: nowrap; }
+
+/* 「下一句」建议芯片（对标谷地工坊）：阶段卡尾部一排可点例句，点即预填输入框。 */
+.ap-stage-prompts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-stage-prompt {
+  border: 1px solid var(--wk-hair);
+  border-radius: 999px;
+  background: var(--wk-paper);
+  color: var(--wk-ink-soft);
+  font-size: var(--fs-cap);
+  line-height: 1.4;
+  padding: 3px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.ap-stage-prompt:hover { border-color: var(--wk-green); color: var(--wk-green); }
+
+/* 理解中计时（对标谷地工坊状态计时）：跟在「正在理解活动需求…」chip 后面的 mm:ss。 */
+.ap-tool-clock { margin-left: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; opacity: 0.85; font-variant-numeric: tabular-nums; }
 /* 图标既有 svg 也有 MaterialSymbol span（13px 高、inline line-height:1）：
    文字行高 ≈18px，两者都补 3px 顶距才能与首行文字光学居中。 */
 .ap-task-caption svg,
@@ -1009,6 +1029,44 @@ button.ap-ghost {
 
 .ap-run-wrapup { display: flex; flex-direction: column; gap: 4px; }
 .ap-run-wrapup-line { margin: 0; font-size: var(--fs-p2); line-height: 1.55; color: var(--wk-ink-soft); }
+.ap-run-wrapup-line[data-tone="warn"] { color: var(--err); }
+.ap-run-wrapup-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 状态头小计时器：跟着「施工中」状态胶囊走的 mm:ss 读数。 */
+.ap-head-clock { margin-left: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+
+/* 运行中排队备注上屏（对标谷地工坊）：「下一步」标签 + 原句 + 撤回；
+   只显示未送达的，送达后由运行条「已送达 N 条」接手。 */
+.ap-steer-queue { display: flex; flex-direction: column; gap: 6px; }
+.ap-steer-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--wk-hair);
+  border-radius: 12px;
+  background: var(--wk-paper);
+  font-size: var(--fs-p2);
+}
+.ap-steer-note-tag {
+  flex: none;
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wk-green-pale);
+  color: var(--wk-green);
+  white-space: nowrap;
+}
+.ap-steer-note-text { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--wk-ink); }
+.ap-steer-note-undo {
+  flex: none;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  font-size: var(--fs-cap);
+  color: var(--wk-muted);
+  cursor: pointer;
+}
+.ap-steer-note-undo:hover { color: var(--err); }
 
 /* kbd 快捷键小标：只标注面板域内真实存在的按键绑定（确认行 Esc 取消；收尾 Ctrl+Z 逐步撤销），
    没有绑定的控件一律不加。等宽小字 + 浅底 + hair 边，沿用 --wk-* token。 */

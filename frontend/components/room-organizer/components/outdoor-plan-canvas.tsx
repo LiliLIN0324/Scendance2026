@@ -1,6 +1,7 @@
 'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
+import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan } from '../lib/outdoor-plan-protection';
 
 import type { BackendSession } from '@/lib/backend-session';
@@ -73,6 +74,7 @@ import {
   drawAnnotationDraft,
   drawAnnotationLayer,
   drawBoundaryLayer,
+  drawMapEditHighlight,
   drawBuildingLayer,
   drawConflictMarkers,
   drawDraftLayer,
@@ -418,6 +420,8 @@ export interface OutdoorPlanCanvasProps {
    * 「应用」走 handle.applyZoneProposal（commitPlan 可撤销）。
    */
   workflowPreview?:SitePlanData|null;
+  workflowScopePreview?: boolean;
+  mapEditHighlight?: OutdoorMapEditHighlight | null;
   evidenceHighlights?:OutdoorEvidenceHighlight[];
   zoneProposal?: { zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null;
   /**
@@ -1073,7 +1077,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   searchArea,
   routeProposal,
   zoneProposal,
-  workflowPreview, evidenceHighlights,
+  workflowPreview, workflowScopePreview, mapEditHighlight, evidenceHighlights,
   flowSimRoutes,
   sceneObjects,
   onOpenMaterialGenerate,
@@ -1152,6 +1156,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const routeProposalRef = useRef<{ routes: PlanRoute[]; nodes: PlanNode[] } | null>(routeProposal ?? null);
   // V-3c：区域提案预览（同一路数；应用走 handle.applyZoneProposal，预览本身不进 plan）。
   const workflowPreviewRef=useRef(workflowPreview);workflowPreviewRef.current=workflowPreview;
+  const workflowScopePreviewRef = useRef(workflowScopePreview);
+  workflowScopePreviewRef.current = workflowScopePreview;
+  const mapEditHighlightRef = useRef(mapEditHighlight);
+  mapEditHighlightRef.current = mapEditHighlight;
   const evidenceHighlightsRef=useRef(evidenceHighlights);evidenceHighlightsRef.current=evidenceHighlights;
   const zoneProposalRef = useRef<{ zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null>(zoneProposal ?? null);
   // V-4b：流动模拟（walkers 状态放 ref，ticker 步进后整帧重绘；模拟不写 plan）。
@@ -1914,7 +1922,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       : routes;
     const editingBoundary = modeRef.current === 'boundary-vertex';
     const boundary = previewRingRef.current ?? current.boundary;
-    if (isLayerVisible(vis, 'boundary')) drawBoundaryLayer({ ctx: planCtx, viewport }, boundary, { vertexHandles: editingBoundary });
+    const review = mapEditHighlightRef.current;
+    const layer = { ctx: planCtx, viewport };
+    if (isLayerVisible(vis, 'boundary')) {
+      drawBoundaryLayer(layer, boundary, { vertexHandles: editingBoundary });
+      if (review?.kind === 'scope' && !editingBoundary) drawMapEditHighlight(layer, boundary, 'area');
+    }
     // 2026-11-14 用户指令「建筑给室内分区」：建筑足迹灰块（室内禁区），画在分区层之下。
     if ((current.buildings ?? []).length) {
       drawBuildingLayer({ ctx: planCtx, viewport }, current.buildings ?? []);
@@ -1934,6 +1947,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         { ctx: planCtx, viewport },
         drawnZones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
       );
+      if (review?.kind === 'zones') {
+        for (const zone of drawnZones) {
+          if (review.zoneIds.includes(zone.id)) drawMapEditHighlight(layer, zone.polygon, 'area');
+        }
+      }
       // P2-j：选中的分区画顶点手柄（与边界顶点同一套视觉/命中半径）。
       const selectedZone = selectedZoneRef.current
         ? drawnZones.find(zone => zone.id === selectedZoneRef.current) ?? null
@@ -2075,6 +2093,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           selected: r.id === selectedRouteRef.current || multiSelectedRouteIdsRef.current.includes(r.id),
         })),
       );
+      if (review?.kind === 'main-routes') {
+        for (const route of drawnRoutes) {
+          if (review.routeIds.includes(route.id)) drawMapEditHighlight(layer, route.points, 'route');
+        }
+      }
       // H4-b：动线类型徽标（画在中点顶点下方；线型/箭头/选中白描边仍由 drawRouteLayer 负责）。
       for (const route of drawnRoutes) {
         if (route.points.length < 2) continue;
@@ -2151,6 +2174,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           planCtx.fillStyle = '#c0392b';
           planCtx.fill();
         }
+      }
+      if (review?.kind === 'main-routes') {
+        const positions = nodes.filter(node => review.nodeIds.includes(node.id)).map(node => node.position);
+        drawMapEditHighlight(layer, positions, 'entrance');
       }
     }
     // H3-a 固定测量标注（测量图层在最上层；隐藏测量层不影响数据与统计）。
@@ -2275,6 +2302,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 7c) V-3c：区域提案预览（虚线分区 + 物料幽灵）——同上，应用前不进 plan。
     const workflow=workflowPreviewRef.current;
     if(workflow){
+      if (workflowScopePreviewRef.current && workflow.anchor && isLayerVisible(vis, 'boundary')) {
+        drawSearchArea({ ctx: planCtx, viewport: { ...viewport, anchorLng: workflow.anchor.lng, anchorLat: workflow.anchor.lat } }, {
+          points: workflow.boundary,
+          label: '候选活动范围（待核对）',
+        });
+      }
       const changed=<T extends {id:string}>(next:T[],before:T[])=>next.filter(a=>JSON.stringify(a)!==JSON.stringify(before.find(b=>b.id===a.id)));
       drawZoneProposalLayer({ctx:planCtx,viewport},{zones:changed(workflow.zones,current.zones),facilities:changed(workflow.facilities,current.facilities)});
       drawRouteProposalLayer({ctx:planCtx,viewport},{routes:changed(workflow.routes,current.routes),nodes:changed(workflow.nodes,current.nodes)});
@@ -2354,7 +2387,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     zoneProposalRef.current = zoneProposal ?? null;
     drawRef.current();
   }, [zoneProposal]);
-  useEffect(()=>{draw();},[workflowPreview,evidenceHighlights]);
+  useEffect(()=>{draw();},[workflowPreview,workflowScopePreview,mapEditHighlight,evidenceHighlights]);
   // V-4b：流动模拟 ticker——流线集合变化（或停止）时重建 walkers；跑动期 66ms 步进重绘。
   useEffect(() => {
     if (!flowSimRoutes || flowSimRoutes.length === 0) {

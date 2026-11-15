@@ -314,6 +314,9 @@ export default function PlanPlaceSearch({
                 onClick={() => chooseOption(option)}
                 className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}`}
               >
+                {/* 2026-11-15 用户指令：下拉按从上往下的顺序编号，chat 卡只给前三个标题时
+                    说「第 N 个」能和这里的编号对上号。 */}
+                <span className="sc-plan-place-search-option-no" aria-hidden="true">{index + 1}</span>
                 {option.kind === 'area' ? (
                   <>
                     <span className="sc-plan-place-search-option-name">

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   handlePlaceShape,
   highwayLineStage,
@@ -41,6 +41,39 @@ function line(id: number, points: { lon: number; lat: number }[], name?: string)
 
 /** GCJ 点击点（画布坐标系）。合成面以 WGS84 给出、足够大，GCJ 偏移不改变包含关系。 */
 const NEAR = { lng: 120.163, lat: 30.249 };
+
+describe('shared place shape inventory', () => {
+  const env = { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture' };
+  const stocked = {
+    id: 'osm:W42', name: '浙江展览馆', kind: 'area', bounds: [120.16, 30.24, 120.17, 30.25],
+    polygon: [[120.16, 30.24], [120.17, 30.24], [120.17, 30.25], [120.16, 30.25]],
+  };
+  it('returns a matching stored footprint before calling the map providers', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json([stocked]));
+    const params = new URLSearchParams({ name: '浙江展览馆 | 杭州', near: '120.163,30.249' });
+    const response = await handlePlaceShape(new Request(`https://example.test/api/place-shape?${params}`), fetchImpl, env);
+    expect(await response.json()).toEqual({ shape: stocked });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchImpl.mock.calls[0]!;
+    expect(new URL(String(input)).searchParams.get('name_norm')).toBe('eq.浙江展览馆');
+    expect(init?.headers).toEqual({ apikey: env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY });
+  });
+
+  it.each([
+    ['unavailable inventory', () => new Response(null, { status: 503 })],
+    ['a mismatched alias', () => Response.json([stocked])],
+    ['an invalid footprint', () => Response.json([{ ...stocked, name: '库存测试地点', kind: 'line' }])],
+    ['a distant footprint', () => Response.json([{ ...stocked, name: '库存测试地点' }])],
+  ] as const)('falls back on %s', async (_label, stockReply) => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => String(input).includes('/rest/v1/place_shapes')
+      ? stockReply() : Response.json({ elements: [], features: [] }));
+    const params = new URLSearchParams({ name: '库存测试地点', near: '121.47,31.23' });
+    const response = await handlePlaceShape(new Request(`https://example.test/api/place-shape?${params}`), fetchImpl, env);
+    expect(await response.json()).toEqual({ shape: null });
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(fetchImpl.mock.calls.some(([input]) => String(input).includes('overpass'))).toBe(true);
+  });
+});
 
 describe('spatialAreaStage（空间命中：点哪儿框哪儿）', () => {
   // 注意 GCJ 偏移：GCJ 点击点 (120.163, 30.249) 对应的 WGS 位置约 (120.1583, 30.2514)，
