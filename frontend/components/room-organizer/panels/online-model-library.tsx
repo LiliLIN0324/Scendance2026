@@ -26,6 +26,7 @@ import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { buildStyleBundleItems, findStyleBundle, loadStyleRuns, saveStyleRun, type StyleBundle, type StyleRun } from '../lib/style-bundles';
 import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
+import { CharacterDesignPanel } from './character-design-panel';
 import { MaterialCreateCell } from './material-create-cell';
 import { MaterialThumb } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
@@ -613,6 +614,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       </nav>
       <div className="sc-lib-results" aria-live="polite">
         {pane === 'crowd' ? <div className="sc-lib-tree" aria-label="不同人群">
+          <CharacterDesignPanel/>
           {CROWD_TYPES.map(type => {
             const models = crowdTypeModelSlugs(type.id).flatMap(slug => {
               const model = peopleModels.find(entry => entry.slug === slug);

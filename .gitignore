@@ -42,6 +42,7 @@ output/model-library/
 
 # Scratch / heavy local assets (2026-10-28)
 .temp/
+frontend/.temp-pw/
 .cache/
 .temp-cloud.txt
 frontend/.preview/
@@ -114,6 +115,8 @@ console.log\(x\)\)\}
 frontend/.tmp-iso/
 frontend/.tmp-preview/
 vibe_images/
+# ts 运行器一次性 bundle 临时目录（run-ts 脚本产物，不入库）
+.run-ts-*/
 
 
 # local scratch 2026-11-11

@@ -87,7 +87,7 @@ function fatLine(
   color: string,
   opacity: number,
   elevation: number,
-  options: { closed?: boolean; lineWidth?: number },
+  options: { closed?: boolean; lineWidth?: number; dashed?: boolean; dashSize?: number; gapSize?: number },
   materials: InstanceType<typeof LineMaterial>[],
 ): Line2 | null {
   if (ring.length < 2) return null;
@@ -111,12 +111,59 @@ function fatLine(
     depthWrite: false,
     worldUnits: false,
     resolution: new THREE.Vector2(resolution.x, resolution.y),
+    ...(options.dashed
+      ? { dashed: true, dashSize: options.dashSize ?? 10, gapSize: options.gapSize ?? 6 }
+      : {}),
   });
   materials.push(material);
   const line = new Line2(geometry, material);
   line.computeLineDistances();
   line.renderOrder = 8;
   return line;
+}
+
+/** 单向动线箭头：贴地小三角，沿段方向指向下一顶点。纯世界坐标三点，避免 rotation 叠加歪掉。 */
+function buildRouteArrow(
+  THREE: typeof import('three'),
+  from: ShellPoint,
+  to: ShellPoint,
+  metrics: { width: number; depth: number },
+  color: string,
+  elevation: number,
+): import('three').Mesh | null {
+  const [ax, ay] = shapePoint(from, metrics);
+  const [bx, by] = shapePoint(to, metrics);
+  const dx = bx - ax;
+  const dz = -(by - ay);
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-4) return null;
+  const ux = dx / len;
+  const uz = dz / len;
+  const vx = -uz;
+  const vz = ux;
+  const L = 0.55;
+  const W = 0.28;
+  const tipX = bx;
+  const tipZ = -by;
+  const baseX = tipX - ux * L;
+  const baseZ = tipZ - uz * L;
+  const positions = new Float32Array([
+    tipX, elevation, tipZ,
+    baseX + vx * W, elevation, baseZ + vz * W,
+    baseX - vx * W, elevation, baseZ - vz * W,
+  ]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity: 0.95,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 9;
+  return mesh;
 }
 
 function borderLine(
@@ -228,12 +275,29 @@ export function buildPlanFootprint(
   }
 
   // 动线：折线直接压在设施之上，颜色区分人行/车辆/后勤。屏幕空间线宽对齐 2D。
+  // 线型与 2D drawRouteLayer 对齐：人行实线，车辆长划，后勤点划；oneWay 沿每段终点画方向箭头。
   for (const route of shapes.routes) {
     if (route.points.length < 2) continue;
-    const line = fatLine(THREE, route.points, metrics, route.color, 0.95, ELEVATION.route, { lineWidth: route.lineWidth }, lineMaterials);
+    // LineMaterial 虚线间距沿路径按**世界米**计（非像素）：车辆长划、后勤点划，与 2D 线型语义对齐。
+    const dash = route.kind === 'vehicle'
+      ? { dashSize: 0.8, gapSize: 0.3 }
+      : route.kind === 'service'
+        ? { dashSize: 0.45, gapSize: 0.35 }
+        : {};
+    const line = fatLine(THREE, route.points, metrics, route.color, 0.95, ELEVATION.route, { lineWidth: route.lineWidth, dashed: route.dashed, ...dash }, lineMaterials);
     if (!line) continue;
     line.userData.planRouteId = route.id;
     group.add(line);
+    if (route.oneWay) {
+      for (let i = 1; i < route.points.length; i++) {
+        const arrow = buildRouteArrow(THREE, route.points[i - 1]!, route.points[i]!, metrics, route.color, ELEVATION.route + 0.002);
+        if (arrow) {
+          arrow.userData.planRouteId = route.id;
+          arrow.userData.planRouteArrow = true;
+          group.add(arrow);
+        }
+      }
+    }
   }
 
   const addStroke = (stroke: PlanFootprintStrokeShape, elevation: number, userDataKey: string): void => {

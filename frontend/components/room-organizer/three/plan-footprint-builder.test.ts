@@ -65,6 +65,27 @@ describe('buildPlanFootprint', () => {
     expect(flatBox.max.y).toBeLessThan(0.2);
   });
 
+  it('单向动线在终点贴地生成朝向箭头，双向不生成箭头', () => {
+    const scene = new THREE.Scene();
+    const plan = makePlan();
+    (plan as unknown as { routes: unknown[] }).routes = [
+      { id: 'r1', kind: 'vehicle', name: '车行', points: [{ x: 2, y: 5 }, { x: 18, y: 5 }], oneWay: true, notes: '' },
+    ];
+    expect(buildPlanFootprint(THREE, scene, plan, metrics)).toBe(true);
+    const layer = findLayer(scene)!;
+    const arrows = layer.children.filter(
+      child => child.userData.planRouteArrow === true,
+    ) as THREE.Mesh[];
+    expect(arrows).toHaveLength(1);
+    // 箭头贴地不竖起；东行（x 2→18）尖点落在东侧（world x = x − width/2，尖 ≈ 8）。
+    const box = new THREE.Box3().setFromObject(arrows[0]!);
+    expect(box.max.y).toBeLessThan(0.2);
+    const pos = arrows[0]!.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const xs = [pos.getX(0), pos.getX(1), pos.getX(2)];
+    expect(Math.max(...xs)).toBeGreaterThan(Math.min(...xs));
+    expect(Math.max(...xs)).toBeCloseTo(18 - metrics.width / 2, 1);
+  });
+
   it('每个设施在 3D 里立起对应物件，且高度是「能认出来」的尺度而不是地贴', () => {
     const scene = new THREE.Scene();
     buildPlanFootprint(THREE, scene, makePlan(), metrics);

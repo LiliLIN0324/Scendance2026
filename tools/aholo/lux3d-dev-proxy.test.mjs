@@ -106,6 +106,60 @@ for (const [path, body, upstream, payload] of [
   });
 }
 
+const CHAR_GLB = 'https://cdn.example.test/char.glb?signature=abc';
+
+for (const [path, body, endpoint, payload] of [
+  ['/ref-image', { prompt: ' 古风女子 A 字站姿 ' }, '/lux3d/v1/generate/multimodal-to-image/task/create',
+    { prompt: '古风女子 A 字站姿' }],
+  ['/four-view', { img: PNG, prompt: ' 保持服装发型一致 ' }, '/lux3d/v1/generate/image-to-four-view/task/create',
+    { img: PNG, prompt: '保持服装发型一致' }],
+  ['/four-view', { img: PNG }, '/lux3d/v1/generate/image-to-four-view/task/create', { img: PNG }],
+  ['/rig', { modelUrl: CHAR_GLB }, '/lux3d/v1/animations/rig/task/create', { modelUrl: CHAR_GLB }],
+  ['/retarget', { rigModelUrl: CHAR_GLB, animationIds: ['Idle_Loop', 'Walk_Loop'] },
+    '/lux3d/v1/animations/retarget/task/create', { rigModelUrl: CHAR_GLB, animationIds: ['Idle_Loop', 'Walk_Loop'] }],
+]) {
+  test(`人物创建 ${path} 转发到 ${endpoint.split('/').pop()}`, async t => {
+    const f = await fixture(t, () => luxResponse('lux_task-123'));
+    const result = await f.request(path, { method: 'POST', body, headers: { Origin: 'http://localhost:5173' } });
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, { taskid: 'lux_task-123' });
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].url, `${LUX}${endpoint}`);
+    assert.equal(f.calls[0].init.method, 'POST');
+    assert.deepEqual(JSON.parse(f.calls[0].init.body), payload);
+    assertAuth(f.calls[0]);
+  });
+}
+
+test('人物创建任务号兼容数字号与 { taskId } 对象', async t => {
+  const numeric = await fixture(t, () => luxResponse(4475964));
+  const a = await numeric.request('/rig', { method: 'POST', body: { modelUrl: CHAR_GLB } });
+  assert.deepEqual(a.body, { taskid: '4475964' });
+  const object = await fixture(t, () => luxResponse({ taskId: 'lux_task-123' }));
+  const b = await object.request('/ref-image', { method: 'POST', body: { prompt: '女子' } });
+  assert.deepEqual(b.body, { taskid: 'lux_task-123' });
+});
+
+for (const [path, body, expected] of [
+  ['/ref-image', {}, 400], ['/ref-image', { prompt: 12 }, 400], ['/ref-image', { prompt: '   ' }, 400],
+  ['/four-view', {}, 400], ['/four-view', { img: 'https://127.0.0.1/x.png' }, 400],
+  ['/four-view', { img: 'data:image/gif;base64,R0lGODlh' }, 415],
+  ['/rig', {}, 400], ['/rig', { modelUrl: 'http://cdn.example.test/a.glb' }, 400],
+  ['/rig', { modelUrl: 'https://localhost/a.glb' }, 400],
+  ['/retarget', {}, 400], ['/retarget', { rigModelUrl: CHAR_GLB, animationIds: [] }, 400],
+  ['/retarget', { rigModelUrl: CHAR_GLB, animationIds: Array(11).fill('Idle_Loop') }, 400],
+  ['/retarget', { rigModelUrl: CHAR_GLB, animationIds: [123] }, 400],
+  ['/retarget', { animationIds: ['Idle_Loop'] }, 400],
+]) {
+  test(`人物创建非法入参 ${path}: ${JSON.stringify(body).slice(0, 60)}`, async t => {
+    const f = await fixture(t);
+    const result = await f.request(path, { method: 'POST', body });
+    assert.equal(result.status, expected);
+    assert.equal(typeof result.body.error, 'string');
+    assert.equal(f.calls.length, 0);
+  });
+}
+
 test('Lux creation returns Aholo 真实给出的数字任务号，转成字符串不丢任务', async t => {
   const f = await fixture(t, () => luxResponse(4425999));
   const result = await f.request('/text-to-3d', { method: 'POST', body: { prompt: '一张中式躺椅' } });

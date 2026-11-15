@@ -8,6 +8,8 @@
  * 与户外规划的劳动力岗位对齐（lib/oneplan-catalog.ts 的 LABOR_ROLES），另外多出
  * 工作人员 / 演员 / 观众三类——规划和 3D 都常用，但不算「岗位」。
  */
+import { WALK_ROLES, walkRoleCrowdType } from './walk-roles';
+
 export interface CrowdType {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ export const CROWD_TYPES: readonly CrowdType[] = [
   { id: 'fire', name: '消防', note: '消防值守' },
   { id: 'volunteer', name: '志愿者', note: '问询与协助' },
   { id: 'manager', name: '主管', note: '现场调度' },
+  { id: 'executive', name: '经理', note: '活动统筹与决策' },
   { id: 'admin', name: '管理员', note: '场地管理' },
   { id: 'performer', name: '演员', note: '表演与漫游角色' },
   { id: 'exhibitor', name: '展商', note: '摊位值守' },
@@ -33,45 +36,20 @@ export type CrowdTypeId = (typeof CROWD_TYPES)[number]['id'];
 
 export type CrowdTypeModelStatus = 'walk' | 'lowpoly' | 'todo';
 
-/** 有漫游模型的类型。低模清单仍独立挂在 CROWD_TYPE_MODELS，两者可以同时存在。 */
-export const CROWD_TYPES_WITH_WALK_MODELS = new Set<string>(['performer', 'security', 'police', 'volunteer', 'manager', 'admin']);
+/**
+ * 有漫游模型的类型：由漫游角色登记（lib/walk-roles.ts）反推，未标注的角色归演员。
+ * 这样「哪些类型有 walk 模型」只有 walk-roles 一处声明，避免与这里的硬编码清单漂移。
+ * 低模清单仍独立挂在 CROWD_TYPE_MODELS，两者可以同时存在。
+ */
+export const CROWD_TYPES_WITH_WALK_MODELS = new Set<string>(WALK_ROLES.map(walkRoleCrowdType));
 
 /**
  * 库内低模人物按类型挂上。每个 slug 只属于一类，避免同一模型在多处重复出现。
- * 保安 / 警察 / 志愿者 / 主管 / 管理员还没有对得上的制服低模。
+ *
+ * 2026-11-15 口径：本期不启用本地低模人物占位——无 walk 角色的类别直接出人位标记，
+ * 等对应可漫游角色补齐后再上模型。清单暂留空结构，GLB 文件仍在公共库，未删除。
  */
-export const CROWD_TYPE_MODELS: Readonly<Record<string, readonly string[]>> = {
-  staff: [
-    'low-poly-character-figures-builder-standing-41a26918',
-    'low-poly-character-figures-cleaner-with-mop-579c8a9e',
-    'low-poly-character-figures-waiter-with-tray-59369bb3',
-    'low-poly-character-figures-chef-standing-107eec87',
-  ],
-  medical: [
-    'low-poly-character-figures-medic-standing-c9e96efa',
-  ],
-  fire: [
-    'low-poly-character-figures-firefighter-standing-8ded7b6f',
-  ],
-  exhibitor: [
-    'low-poly-character-figures-shop-worker-standing-44c74d70',
-    'low-poly-character-figures-courier-with-parcel-9ba10dd9',
-  ],
-  audience: [
-    'low-poly-character-figures-civilian-standing-idle-514e9033',
-    'low-poly-character-figures-civilian-sitting-f51129df',
-    'low-poly-character-figures-civilian-walking-06de0354',
-    'low-poly-character-figures-civilian-waving-a7248cbd',
-    'low-poly-character-figures-civilian-arms-crossed-d539191f',
-    'low-poly-character-figures-civilian-coat-standing-d311fc0b',
-    'low-poly-character-figures-civilian-coat-walking-52e652ed',
-    'low-poly-character-figures-civilian-hands-in-pockets-65efe4c2',
-    'low-poly-character-figures-civilian-leaning-7dd8a161',
-    'low-poly-character-figures-civilian-on-phone-57698df1',
-    'low-poly-character-figures-civilian-pushing-trolley-02fba33e',
-    'low-poly-character-figures-civilian-running-de3617e6',
-  ],
-};
+export const CROWD_TYPE_MODELS: Readonly<Record<string, readonly string[]>> = {};
 
 export function crowdTypeModelSlugs(id: string): readonly string[] {
   return CROWD_TYPE_MODELS[id] ?? [];
@@ -103,4 +81,32 @@ export function crowdTypeStatusLabel(id: string): string {
 
 export function crowdTypeName(id: string): string {
   return CROWD_TYPES.find(type => type.id === id)?.name ?? id;
+}
+
+/** 一类人群在素材目录里的完整登记：漫游角色 + 低模 + 状态，一处分组，面板不再内联拼。 */
+export interface CrowdDirectoryEntry {
+  id: CrowdTypeId;
+  name: string;
+  note: string;
+  status: CrowdTypeModelStatus;
+  statusLabel: string;
+  /** 该类下的漫游角色 assetId（已绑骨上云）。 */
+  walkAssetIds: string[];
+  /** 该类下的本地低模 slug。 */
+  slugs: readonly string[];
+}
+
+/** 统一目录：按人群类型合并 walk 角色与低模清单，计数与状态都从登记层派生。 */
+export function crowdDirectory(): CrowdDirectoryEntry[] {
+  return CROWD_TYPES.map(type => ({
+    id: type.id,
+    name: type.name,
+    note: type.note,
+    status: crowdTypeModelStatus(type.id),
+    statusLabel: crowdTypeStatusLabel(type.id),
+    walkAssetIds: WALK_ROLES
+      .filter(role => walkRoleCrowdType(role) === type.id)
+      .map(role => role.assetId),
+    slugs: crowdTypeModelSlugs(type.id),
+  }));
 }
