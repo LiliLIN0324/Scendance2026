@@ -252,6 +252,47 @@ M5 智能体工具桥接扩充（独立，不依赖 R 线）
 3. 真机走通：选址确认 → 流线提案 applyRoutes → 区域提案 applyZoneProposal → 子出入口 → 设施巡检 inspectFacility → 生成/上传物料，全程可撤销、不崩。
 4. 全量 `tsc --noEmit` 0；无新增全量测试回归（基线债 #12 单列）。
 
+### 7.5.4 线上函数部署台账与真机槽位实测（用户实测，两轮）
+
+**第一轮 2026-11-14**：Management API 拉线上台账，两个聊天函数线上 bundle 下载后与本地 main 逐文件比对 `git diff` 为空（线上字节 = main 代码），无欠部署。早先 HANDOFF 记的 conversation-api 42 / scene-api 47 为旧锚点，已被实测覆盖。
+
+**第二轮 2026-11-15 线上走查**：后端已上线，前端未碰（未合 main、未触发 Pages 构建）。
+
+| 函数 | 第一轮 | 第二轮线上版本 | 状态 |
+|---|---|---|---|
+| scene-api | v52（11-14 21:56:13） | **v53** | ACTIVE |
+| conversation-api | v47（11-14 21:56:27） | **v48** | ACTIVE |
+| generation-worker | v25 | — | 本轮未改动，未重部 |
+| reconstruction-worker | v24 | — | 本轮未改动，未重部 |
+
+- **匿名 capabilities 200**：槽位清单正确。已配置 `default / openai-next / minimax / tokendance / deepseek`；未配置 `bailian / custom`。
+- **登录态真机两条槽（真实请求各 1 次）**：
+  - `deepseek`（deepseek-flash，DeepSeek 官方）：请求真打到上游，返回 `quota_exhausted`——该槽余额耗尽。关键区别：旧版报 `unavailable`（key 被抹空、判配置缺失）；现接通后由上游给额度信号，如实报额度不足、**不自动串到别的槽**。
+  - `tokendance`（deepseek-v4.1-flash，网关）：返回 `ok`，正常出理解回复（底部胶囊「Tokendance 网关」）。
+- **后端接通目标达成**：两个槽在 conversation-api 都能读到 key、显式选槽可直连上游、额度分类链路正确；`quota_exhausted` 独立分类、不自动串槽代码确在线上。
+
+**G2 门禁再收敛**：函数版本 / 部署、理解槽位接通两项外部前置已解除。剩余外部阻塞：
+1. **V1–V5 地图链路全流程真机走查**——本轮证据只覆盖「聊天理解槽位出回复」，未覆盖选址确认 → 流线提案 applyRoutes → 区域提案 applyZoneProposal → 子出入口 → 设施巡检 inspectFacility → 生成/上传物料、全程可撤销的画布/桥接全流程；
+2. **额度**：tokendance 槽活着可出回复；deepseek 耗尽（bailian 欠费、minimax 上限口径待核），兜底链保证一家活不瘫；
+3. **Overpass 恢复，或接受手画路径验 V2**。
+
+代码侧 G2 切片仍按隔离分支挂起，待上述全流程真机确认后成套推进。
+
+### 7.5.5 智能体链路成熟度口径（2026-11-15，用户判断）
+
+**预期修正**：智能体链路丽丽仍在设计迭代中，V1–V5 全流程不保证近期顺利通过；G2 解锁时点依赖她这轮 flow 稳定，不在去耦合侧可控范围。不干等、也不硬拆壳体与会话绑定。
+
+**已成功（HANDOFF 有实测证据）**：
+- V1 本地检索链：候选排序、chat → 地图「搜地点」框只读同步同序候选；地图框选点只飞瓦片 + 落钉，不动 plan/anchor（in77 链路实测 10 候选同序、落钉湖滨、0 新增报错）。
+- 渐进任务卡渲染、本地活动列表 / 新建活动、线上 production 200 存活。
+
+**待通（仍 blocked 或未走查）**：
+- V2 地图上下文：Overpass 上游 503/504/406，可接受手画路径兜底；
+- V3–V5 提案落位：流线提案 applyRoutes、区域提案 applyZoneProposal、子出入口、设施巡检 inspectFacility、生成/上传物料、全程可撤销；
+- 会话 / 快照与旧 layout 绑定的最终确认。
+
+**策略**：去耦合侧只推进 G1 安全区（不改 bridge 九方法签名、不改 SitePlanData 契约、不换会话 scope、不动壳体）；M3a/M3b、M2 墙体新契约、R1–R4 壳体退役继续挂起，等智能体 flow 稳定 + 全流程真机确认后成套推进。
+
 ## 8. 未决决策
 
 1. **墙体归属**：独立 `walls` 集合 vs `facilities` 物料类别——M2 动工前对照物料模板体系定；倾向先按独立折线实体建模，再评估是否归并 facility 模板。
@@ -265,3 +306,55 @@ M5 智能体工具桥接扩充（独立，不依赖 R 线）
 - 画布：`components/outdoor-plan-canvas.tsx`（工具 / 放置 / 吸附 / 选中 / 导出消费）；覆盖层 `components/outdoor-plan-overlay.tsx`（句柄 / 草稿载入 / 保存 / 生成面板桥）。
 - 壳体：`room-organizer.tsx`；store `hooks/use-layout-store.ts`；历史 `hooks/use-history.ts`；放置 `lib/drop-zone.ts`。
 - 存储：`lib/outdoor-project-store.ts`（projectId 解析 / 草稿读写 / 默认锚点 / 视图记忆）。
+
+## 10. 室内残留分层清单（2026-11-15，origin/main @ aceb87f3 只读扫描）
+
+扫描口径：在远端干净基底上按语义耦合信号统计，**不按目录名删**——`room-organizer/` 目录内已混数十个户外 `outdoor-*` 文件，目录重命名是最后一步。下列路径相对 `frontend/`。
+
+### 10.1 旧 schema 类型与状态核心（G3 / R 线最后卸）
+- 类型唯一定义：`components/room-organizer/lib/types.ts:425` `RoomLayout`（被 170+ 文件引用，含迁移器/桥接/户外侧借用，不能先删类型）。
+- 状态层：`hooks/use-layout-store.ts`、`hooks/use-layout-state.ts`、`hooks/layout-reducer.ts`、`hooks/use-layout-persistence.ts`（及对应 `.test`）。
+- 旧 schema/初始/常量：`lib/schema.ts`、`lib/initial-layout.ts`、`lib/structural-layout.ts`、`lib/constants.ts`（室内常量部分）。
+- 壳体主组件：`components/room-organizer/room-organizer.tsx`（4953 行；`isOutdoorProject` 16 处派生/分支；false 侧耦合实测 `layoutStore` 82、`applyLayout` 20、`assertLayoutWrite` 20、`scanIsolated` 23、`interiorWalls` 19、`walkthroughActive` 19、`drawWallMode` 17、`selectedWall` 6、`useNpcs` 2、`shellVenuePatchFromPlanBoundary` 2、`seededPlanFromLayout` 2）。
+- 上下文/出口：`contexts/room-editor-context.tsx`、`contexts/selection-context.tsx`、`index.ts`。
+
+### 10.2 室内 three 3D 壳体构件（G3 壳体退役整组卸；人物/漫游线须与 PR113 在途代码拆开）
+- 室内家具建造器 `three/builders/`：`builders-bathroom`、`builders-bedroom`、`builders-kitchen`、`builders-electronics`、`builders-storage`、`builders-decor`、`builders-seating`、`builders-tables`（保留：`builders-outdoor`、`builders-people`、`builders-plants`、`builders-lighting`、`builders-structure`、`human-figure`）。
+- 室内构件：`three/room-builder.ts`、`three/structure-builder.ts`、`three/interior-walls.ts`、`three/baseboard.ts`、`three/dormers.ts`、`three/stairs.ts`、`three/roof.ts`、`three/neighbours.ts`、`three/footprint-outline.ts`、`three/floor-patterns.ts`、`three/wall-openings.ts`、`three/wall-patterns.ts`、`three/wall-mount-heights.ts`、`three/entrance.ts`、`three/drag-handlers.ts`、`three/scan-placement.ts`、`three/item-labels.ts`。
+- 室内人物/漫游（拆分判定）：`three/people-model.ts`、`three/people-anim.ts`、`three/person-follow.ts`、`hooks/use-npcs.ts`、`hooks/use-walkthrough.ts`、`lib/walk-collision.ts`、`lib/walk-engage.ts`；户外漫游 `hooks/use-outdoor-walk.ts`、`lib/walk-roles.ts`、`lib/crowd-types.ts` 属另一在途线，不并入退役。
+
+### 10.3 室内业务纯函数 / lib（户外用不到，多被迁移器与桥接引用，随 R 线清）
+- 座位编排：`lib/table-seat-plan.ts`、`lib/seating-allocation.ts`、`lib/seat-requirement.ts`、`lib/ring-seating.ts`、`lib/local-seating-draft.ts`、`lib/local-seating-witness.ts`、`lib/local-seating-specs.ts`、`lib/local-shared-seating-draft.ts`、`lib/walk-seat.ts`、`lib/place-area.ts`。
+- 室内构件规则：`lib/stairs.ts`、`lib/dormers.ts`、`lib/room-shapes.ts`、`lib/sub-entrance.ts`、`lib/entrance-block-check.ts`、`lib/wall-snap.ts`、`hooks/use-floor-keep-out.ts`、`lib/floor-reading.ts`、`lib/bounded-edit-validation.ts`、`lib/opening-snap.ts`。
+- 家具/旧资产导入：`../../lib/furniture-catalog.ts`、`lib/furniture-sets.ts`、`lib/furnishing-select.ts`、`lib/catalog-*`、`lib/glb-import.ts`、`lib/glb-normalize.ts`、`lib/glb-limits.ts`、`lib/lux3d-import.ts`。
+- 旧室内方案：`lib/local-plan.ts`、`lib/legacy-brief.ts`、`lib/rest-area-plan.ts`、`lib/stage-platform-plan.ts`、`lib/structure-v2`、`lib/structural-marker-evidence`。
+
+### 10.4 M3 影子：会话 / 历史 / 快照绑 layout.id（G2 隔离，待真机验收后成套动）
+- 纪元/槽位：`lib/floor-session-epoch.ts`、`lib/venue-fact-epoch.ts`、`lib/activity-session-epoch.ts`、`hooks/use-assistant-sessions.ts`、`lib/assistant-sessions.ts`、`lib/project-session-scope.ts`、`lib/assistant-scope-registry.ts`。
+- 历史/持久化/回读：`hooks/use-history.ts`、`lib/version-history.ts`、`lib/restore-point.ts`、`lib/persistence.ts`、`lib/local-draft-delivery.ts`、`lib/local-draft-integrity.ts`、`lib/review-share.ts`、`lib/share-snapshot.ts`；回读页 `components/review-share-page/load-plan.ts`、`review-plan-sheet.tsx`。
+- 对应切片：M3a 会话 scope 改 projectId、M3b 历史快照换 SitePlanData、M3c 导出/写守卫 plan 化、M3d 退役 false 侧回写镜像。
+
+### 10.5 旧室内入口 / 立壳面板（#27 C 层，隔离会话后并入地图草稿）
+- 立壳：`lib/blank-venue.ts`、`three/scene-presets.ts`。
+- 面板：`panels/agent-panel.tsx`（`startBlankVenue` 函数体）、`panels/scene-presets-panel.tsx`、`panels/space-panel.tsx`。
+- 旧页面/组件：`app/cases/garden-flower-show/`（页面 + `garden-sample.ts`）、`app/review/page.tsx`、`components/business/assets-panel.tsx`、`components/business/layout-preview.tsx`。
+
+### 10.5b 场景模板预设资产（截图「空间 · 场景库 · 模板」页签，绑旧壳体 RoomLayout）
+
+立壳链路：`panels/scene-presets-panel.tsx` → `three/scene-presets.ts` `loadScenePreset(key)` 解析 GLB → 构造 `RoomLayout`（`floors/items/roof`）→ `onApply(layout)` 回写壳体。整条链绑旧 RoomLayout，属退役范围。
+
+- **前端清单**：`lib/scene-presets.ts`（`SCENE_PRESETS` + `SCENE_PRESET_KEYS` + `presetModelUrl`）。10 个预设分两类：
+  - 室内 8（随 G3 壳体整组卸）：`gym` 体育馆·黑客松、`popup` 青序·香氛快闪、`bar` 琥珀间·酒吧、`cafe` 慢调咖啡、`conference` 学术会议·共知、`museum` 留白之间·美术馆、`office` 办公室·留白、`studio` 摄影工作室。
+  - 户外 2（**单独决策**：当前承载仍是旧壳预设，退役时迁 SitePlan 草稿体系还是先留作户外样例）：`lawn` 室外草坪·旷野有约、`market` 风物市集·户外市集。
+- **GLB 源资产**：`scene/templates/<key>/`（`*.glb` + `previews/*.jpg` + `template.json`，10 组一一对应）；打包脚本 `scripts/package-scene-presets.mjs`（+ `.d.mts`）；产物 `public/scene-presets/<key>/` **不入库**，构建时生成。
+- **后端预设清单**：`supabase/functions/_shared/preset-manifest.json`（各预设物件名清单）；引用方 `frontend/.../lib/backend-adapter.ts`、`supabase/functions/_shared/domain.ts`、`supabase/functions/_shared/scene-resources.ts`、`tests/preset-scenes.test.ts`；迁移 `supabase/migrations/20261003210000_preset_scene_access.sql`。退役前端面板时后端 domain/scene-resources/backend-adapter 的预设分支须成套评估，不能只删前端。
+- **截图其余卡片**：「空白空间」「硬装空房·宴会厅」→ `lib/blank-venue.ts`（`createBlankVenue` / `createHardFinishHall`）；「Hall D5 尺寸参考」→ `frontend/lib/fixtures/hall-d5.ts` 基准夹具（4 个非测试引用，服务评分/尺寸口径，待 R 线评分层 plan 化后再处置，不等同卡片模板）；「分享会示例」→ 示例快照回读链路（见 10.4 review-share）。
+- **挂载现状（2026-11-15 核，origin/main @ aceb87f3）**：模板面板**不是死入口**，仍在生产主路径。`SpacePanel` 挂在壳体 `room-organizer.tsx` 的 `spaceSlot`，吃 `layout` / `onApply(scopedApply)` / `environment` / `floors` 等室内壳 props；`ScenePresetsPanel` 被 `space-panel.tsx:150` 与 `creative-studio.tsx:2527` 两处挂；`startBlankVenue` 经 `AgentChatBridge.onNewSpace` 接壳体。10 个 slug 无硬编码散落，只经 `SCENE_PRESETS` 清单键间接引用。**门禁归类**：拆面板入口 / 摘清单条目 / 删 GLB 属 #27 C 层 + G3，须成套退役，当前 G1 安全区不动；现在能做的仅是引用面登记与退役步骤准备。
+
+### 10.6 冻结面（G1 稳定面，拆 M3 前不得改签名）
+- routeBridge 九方法签名、`SitePlanData` 契约结构、`OutdoorTaskProgress`、物料生成链路入参；当前会话/记忆绑定在 M3 成套改造前保持现状。
+
+### 10.7 扫描附注
+- `indoor` 词命中分两类：旧二分布尔（已仅剩 10.1 壳体 `isOutdoorProject`）；户外契约里的 `environment: 'indoor'` 语义分区（建筑禁区，属新数据，**不是残留**，勿删）。
+- 测试夹具随源码退役：`lib/__testfixtures__/fixtures.ts`、各室内 `.test.ts` / `.react.test.tsx`；旧样例 `app/cases/.../garden-sample.ts`。
+- 本清单为远端基底只读盘点；本地工作树另有 PR113 人员/漫游在途未跟踪文件，不计入退役范围。

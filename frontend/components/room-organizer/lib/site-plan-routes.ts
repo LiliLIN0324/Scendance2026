@@ -677,6 +677,8 @@ export interface BuildWorkerInput {
   color?: string;
   notes?: string;
   id?: string;
+  /** 绑定的漫游人物代号（可选）：固定到具体角色。 */
+  assetId?: string | undefined;
 }
 
 /**
@@ -712,6 +714,7 @@ export function buildWorker(
     position: { x: input.position.x, y: input.position.y },
     ...(zoneId !== undefined ? { zoneId } : {}),
     ...(input.color !== undefined ? { color: input.color } : {}),
+    ...(input.assetId ? { assetId: input.assetId } : {}),
     notes: input.notes ?? '',
   };
   return issues.length > 0 ? { ok: true, value: worker, issues } : { ok: true, value: worker };

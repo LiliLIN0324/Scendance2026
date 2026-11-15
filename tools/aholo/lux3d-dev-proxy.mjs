@@ -201,6 +201,26 @@ function safeHttps(value) {
   }
 }
 
+/** 绑骨 / 重定向输入要求上游可回源的公网 HTTPS 模型地址（本机相对地址上游访问不到）。 */
+function httpsUrl(value, field) {
+  if (!safeHttps(value)) throw new HttpError(400, `${field} 必须是公网 HTTPS 地址`);
+  return value;
+}
+
+/** 动作重定向清单：1..10 条非空动作名（与上游预设动作枚举一致）。 */
+function animationList(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10) {
+    throw new HttpError(400, 'animationIds 需为 1..10 条动作');
+  }
+  return value.map((item, index) => text(item, `animationIds[${index}]`, 64));
+}
+
+/** 人物创建任务号：上游 d 可能是数字号、字符串号或 { taskId } 对象，统一归一后再校验。 */
+function luxTaskId(created) {
+  const candidate = isRecord(created) && created.taskId !== undefined ? created.taskId : created;
+  return Number.isSafeInteger(candidate) && candidate > 0 ? String(candidate) : candidate;
+}
+
 // 落盘目录只按 UUID 拼路径，ID 已先过 ASSET_ID_PATH 的正则，不存在目录穿越。
 function fileAssetStore(dir) {
   return {
@@ -868,6 +888,30 @@ export function createServer({
         }
         if (!validId(taskid)) throw new HttpError(502, 'Aholo 返回的任务号无效');
         result = { taskid };
+      } else if (req.method === 'POST' && ['/ref-image', '/four-view', '/rig', '/retarget'].includes(url.pathname)) {
+        // 人物设计链：参考图 → 四视图 → 静态人形出模（复用 /image-to-3d）→ 绑骨 → 动作重定向。
+        // 密钥仍留代理；绑骨/重定向输入是上游公网模型地址，本机相对地址送不到上游。
+        const body = await readJson(req);
+        let endpoint;
+        let payload;
+        if (url.pathname === '/ref-image') {
+          endpoint = '/lux3d/v1/generate/multimodal-to-image/task/create';
+          payload = { prompt: text(body.prompt, 'prompt', 4000) };
+        } else if (url.pathname === '/four-view') {
+          endpoint = '/lux3d/v1/generate/image-to-four-view/task/create';
+          payload = { img: image(body.img) };
+          if (typeof body.prompt === 'string' && body.prompt.trim()) payload.prompt = text(body.prompt, 'prompt', 4000);
+        } else if (url.pathname === '/rig') {
+          endpoint = '/lux3d/v1/animations/rig/task/create';
+          payload = { modelUrl: httpsUrl(body.modelUrl, 'modelUrl') };
+        } else {
+          endpoint = '/lux3d/v1/animations/retarget/task/create';
+          payload = { rigModelUrl: httpsUrl(body.rigModelUrl, 'rigModelUrl'), animationIds: animationList(body.animationIds) };
+        }
+        const created = await aholo(`${base}${endpoint}`, { method: 'POST', body: JSON.stringify(payload) });
+        const createdTaskId = luxTaskId(created);
+        if (!validId(createdTaskId)) throw new HttpError(502, 'Aholo 返回的任务号无效');
+        result = { taskid: createdTaskId };
       } else if (req.method === 'GET' && (url.pathname === '/task' || url.pathname === '/world')) {
         const world = url.pathname === '/world';
         const id = queryId(url, world ? 'worldId' : 'taskid');

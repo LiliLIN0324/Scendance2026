@@ -269,6 +269,11 @@ interface ViewToolsProps {
   publishHidden?: boolean;
   /** 进出漫游的唯一入口（room-organizer 的 startWalk）；不传时退回本组件的开关。 */
   onToggleWalkthrough?(on: boolean): void;
+  /** 回到框选场地边界（右下回选址靶心）；不传时钮禁用。 */
+  onFocusVenue?(): void;
+  /** 干净看图模式：隐藏浮动工具簇（右下眼睛钮自身保留可切回）。 */
+  chromeHidden?: boolean;
+  onToggleChrome?(): void;
   /**
    * P2-g 户外 2D 画布接管：非空时，撤销/重做/缩放/导出四组通用钮改由户外画布执行
    * （室内 3D 的布局历史与相机原样保活，关掉户外即恢复）。null/缺省＝纯室内行为。
@@ -287,6 +292,14 @@ interface ViewToolsProps {
     /** 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（「选择」钮按下态与切换；S/H 快捷键同源）。 */
     canvasMode?: 'view' | 'select';
     setCanvasMode?(mode: 'view' | 'select'): void;
+    /** 2026-11-15 测量直进：measure 绘制激活态、当前模式、进入/退出与切模式。 */
+    measureActive?: boolean;
+    measureKind?: 'distance' | 'area' | 'path';
+    setMeasureKind?(kind: 'distance' | 'area' | 'path'): void;
+    enterMeasure?(): void;
+    exitMeasure?(): void;
+    snapOn?: boolean;
+    setSnapOn?(on: boolean): void;
     /**
      * 2026-11-13 一期户外第一人称漫游：独立于室内 `walkthroughMode` 的启用信号。
      * `walkIn3D` 仅在户外 3D 接管视图为真（2D 平面仍禁用）；`toggleWalk` 在按钮手势内收口。
@@ -294,6 +307,14 @@ interface ViewToolsProps {
     walkActive?: boolean;
     walkIn3D?: boolean;
     toggleWalk?(on: boolean): void;
+    /** 户外当前视图：2d 平面 / 3d 接管；单枚圆钮按此报按下态。 */
+    view?: '2d' | '3d';
+    /** 户外 2D/3D 单枚圆钮：点按在两态间互换。 */
+    onToggleView?(): void;
+    /** 回到框选场地边界（回选址靶心）。 */
+    focusVenue?(): void;
+    /** 指北针：3D 相机回正正北；2D 复位视图到场地边界。 */
+    resetNorth?(): void;
   } | null;
   /**
    * GeoGround（2026-11-12）：主画布 3D 地面由户外计划的地理瓦片接管时置真。
@@ -340,6 +361,31 @@ function HandStopIcon({ size }: { size: number }): JSX.Element {
     </svg>
   );
 }
+// 朝向指北针：上蓝三角朝北、下深灰三角朝南（图1 双色箭头），不是罗盘菱形。
+function CompassArrowIcon({ size = 20 }: { size?: number }): JSX.Element {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 3 L17 12 L7 12 Z" fill="#2563EB" />
+      <path d="M12 21 L7 12 L17 12 Z" fill="#55585F" />
+    </svg>
+  );
+}
+// 第一人称漫游：复刻 Google Maps Pegman——黄圆头、橙领巾、直立小人；悬停时由 CSS 上浮微倾。
+function PegmanIcon({ size = 22 }: { size?: number }): JSX.Element {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <g fill="#FBBF0A">
+        <circle cx="12" cy="5" r="2.6" />
+        <rect x="9" y="8.4" width="6" height="5.4" rx="2.2" />
+        <rect x="6.6" y="9.4" width="1.8" height="4.8" rx="0.9" transform="rotate(12 7.5 9.4)" />
+        <rect x="15.6" y="9.4" width="1.8" height="4.8" rx="0.9" transform="rotate(-12 16.5 9.4)" />
+        <rect x="9.7" y="13.6" width="1.9" height="6.6" rx="0.95" />
+        <rect x="12.4" y="13.6" width="1.9" height="6.6" rx="0.95" />
+      </g>
+      <path d="M10.3 9.3 L13.7 9.3 L12 11.7 Z" fill="#E8732A" />
+    </svg>
+  );
+}
 function MoveSceneIcon(): JSX.Element {
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 3v18M3 12h18M12 3l-2 2m2-2 2 2m-2 16-2-2m2 2 2-2M3 12l2-2m-2 2 2 2m16-2-2-2m2 2-2 2"/>
@@ -372,7 +418,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -382,8 +428,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   // 一期户外漫游：只有户外 3D 接管视图可进；2D 平面保持旧禁用行为。按下态读独立信号，
   // 不翻室内 view.walkthroughMode。
   const outdoorWalkOn = outdoor?.walkActive ?? false;
-  const outdoorWalkAllowed = outdoor?.walkIn3D ?? false;
-  const walkDisabled = outdoorEditing && !outdoorWalkAllowed;
   const walkPressed = outdoorEditing ? outdoorWalkOn : view.walkthroughMode;
   // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
   // 这里只剩纯室内场景的平面/立体兜底切换。
@@ -413,6 +457,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const [mapMiss, setMapMiss] = useState(false);
   // 2026-11-11 用户指令：选择钮改 OnePlan 画布工具菜单（点钮开弹层：抓手 H / 选择 S）。
   const [selectMenuOpen, setSelectMenuOpen] = useState(false);
+  // 2026-11-15 测量直进：图标右下小标展开 距离/面积/路径。
+  const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
@@ -566,6 +612,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const [groundSourceOpen, setGroundSourceOpen] = useState(false);
   const groundSourceMenuRef = useRef<HTMLDivElement>(null);
   const selectMenuRef = useRef<HTMLDivElement>(null);
+  const measureMenuRef = useRef<HTMLDivElement>(null);
   // 2026-11-12 B2：户外态的抓手/选择走 2D 画布的 canvasMode（outdoor 转发），室内沿用 selectMode——
   // 同一个下拉管两套画布，✓ 与图标跟随当前画布的真实模式。
   const outdoorSelectOn = outdoor?.canvasMode === 'select';
@@ -668,7 +715,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
     }
   };
   useEffect(() => {
-    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen && !mapTypeOpen && !groundSourceOpen && !selectMenuOpen) return undefined;
+    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen && !mapTypeOpen && !groundSourceOpen && !selectMenuOpen && !measureMenuOpen) return undefined;
     const onPointer = (event: MouseEvent) => {
       const target = event.target as Node;
       const el = event.target as HTMLElement | null;
@@ -676,6 +723,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       if (mapTypeOpen && mapTypeMenuRef.current && !mapTypeMenuRef.current.contains(target)) setMapTypeOpen(false);
       if (groundSourceOpen && groundSourceMenuRef.current && !groundSourceMenuRef.current.contains(target)) setGroundSourceOpen(false);
       if (selectMenuOpen && selectMenuRef.current && !selectMenuRef.current.contains(target)) setSelectMenuOpen(false);
+      if (measureMenuOpen && measureMenuRef.current && !measureMenuRef.current.contains(target)) setMeasureMenuOpen(false);
       if (atmosphereMenuRef.current && !atmosphereMenuRef.current.contains(target)) {
         setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false);
       } else if (atmosphereMenuRef.current) {
@@ -686,12 +734,12 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); setMapTypeOpen(false); setSelectMenuOpen(false); }
+      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); setMapTypeOpen(false); setSelectMenuOpen(false); setMeasureMenuOpen(false); }
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
-  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown, mapTypeOpen, selectMenuOpen]);
+  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown, mapTypeOpen, selectMenuOpen, measureMenuOpen]);
 
   // 2026-11-11 画布工具快捷键（OnePlan 同款）：H 抓手 / S 选择；漫游 WASD 与输入框中不抢键。
   // 每次渲染重挂（无 deps），保证闭包拿到最新的 view/choose 函数，开销可忽略。
@@ -712,7 +760,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
 
   return (
     /* 圆钮贴在画布右上角。所有工具都是一级钮，没有省略号菜单；只有导出还带一层选项弹层。 */
-    <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
+    <nav id="tool-column" className={`sc-view-tools sc-canvas-rail sc-tool-column${outdoorEditing ? ' is-outdoor' : ''}${chromeHidden ? ' is-chrome-hidden' : ''}`} aria-label="工具" onWheel={event => event.stopPropagation()}>
       {/* 2026-11-13 M1：户外地图接管后楼层是室内结构概念，右轨楼层钮隐藏；户外方案层（levels）切换走画布自身的图层面板。 */}
       {!outdoorEditing && (
       <div className="sc-floor-switcher" role="group" aria-label={`楼层切换，当前第 ${activeFloorIndex + 1} 层`}>
@@ -728,8 +776,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         </div>
       </div>
       )}
-      {!(publishHidden || outdoorEditing) && (<>
-        <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/>
+      {!publishHidden && !outdoorEditing && (<>
+        <div className="oc-host" data-oc="tr"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/></div>
         <span className="sc-tool-sep" aria-hidden="true"/>
       </>)}
       {sceneMoveEnabled && <button type="button" id="tool-move-scene" data-tip={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '移动整体场景 · 坐标轴 · 再点切无轴' : '移动整体场景 · 无轴 · 再点完成'} aria-label={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '切换到无轴移动' : '完成移动整体场景'} aria-pressed={sceneMoveActive} className={sceneMoveActive ? 'is-active' : ''} onClick={() => onSceneMoveModeChange?.(sceneMoveMode === 'off' ? 'gizmo' : sceneMoveMode === 'gizmo' ? 'numeric' : 'off')}>
@@ -737,7 +785,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       </button>}
       {/* 2026-11-11 用户指令：OnePlan 画布工具菜单——按钮图标随当前工具（抓手/选择），
           点开弹层两行（图标 + 名称 + 快捷键徽标 + ✓ 当前项），H/S 快捷键直达。 */}
-      <div className="sc-tool-menu" ref={selectMenuRef}>
+      {!outdoorEditing && (<div className="sc-tool-menu" ref={selectMenuRef}>
         <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} aria-haspopup="menu" aria-expanded={selectMenuOpen} aria-controls="tool-select-panel" className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { setSelectMenuOpen(open => !open); setMapTypeOpen(false); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <HandStopIcon size={20} />}
         </button>
@@ -755,7 +803,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             {canvasSelectOn && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
           </button>
         </div>}
-      </div>
+      </div>)}
       <span className="sc-tool-sep" aria-hidden="true"/>
       {/* 2026-11-13 定稿：户外 2D/3D 切换统一走左下动作簇胶囊（见 room-organizer），右轨这颗钮只在
           纯室内场景兜底平面/立体；有户外计划时不出镜。aria-pressed 如实报当前是否 3D。 */}
@@ -764,40 +812,17 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <MaterialSymbol name={showing3D ? 'view_in_ar' : 'view_compact'} />
         </button>
       )}
-      {/* 2026-11-12 三张卡拆开（用户指令）：测量 / 标注 / 属性 各一张卡，圆钮按下态各自独立。 */}
-      {outdoor?.setInspector && <button type="button" id="tool-measure" data-tip="测量" aria-label="测量" aria-pressed={outdoor.inspectorTabs?.measure === true} className={outdoor.inspectorTabs?.measure === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('measure')}>
-        <MaterialSymbol name={OUTDOOR_TOOL_ICONS.measure} />
-      </button>}
-      {outdoor?.setInspector && <button type="button" id="tool-annotate" data-tip="标注" aria-label="标注" aria-pressed={outdoor.inspectorTabs?.annotate === true} className={outdoor.inspectorTabs?.annotate === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('annotate')}>
-        <MaterialSymbol name={OUTDOOR_TOOL_ICONS.annotate} />
-      </button>}
-      {outdoor?.setInspector && <button type="button" id="tool-selection" data-tip="属性" aria-label="属性" aria-pressed={outdoor.inspectorTabs?.selection === true} className={outdoor.inspectorTabs?.selection === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('selection')}>
-        <MaterialSymbol name={OUTDOOR_TOOL_ICONS.selection} />
-      </button>}
-      {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
-      {environmentViewEnabled && onEnvironmentViewChange && <button type="button" id="tool-environment-view" data-tip={environmentView === 'gaussian' ? '切换到识别轮廓' : '切换到高斯实景'} aria-label={environmentView === 'gaussian' ? '切换到识别轮廓' : '切换到高斯实景'} aria-pressed={environmentView === 'footprint'} className={environmentView === 'footprint' ? 'is-active' : ''} onClick={() => {
-        const next = environmentView === 'gaussian' ? 'footprint' : 'gaussian';
-        if (next === 'footprint') onSceneMoveModeChange?.('off');
-        onEnvironmentViewChange(next);
-      }}>
-        <MaterialSymbol name="layers" />
-      </button>}
-      {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
-      {/* 2026-11-13 一期：户外 3D 接管视图解除禁用，挂裸第一人称步行；户外 2D 平面与室内态行为不变。 */}
-      <button type="button" id="tool-walk" aria-label={walkDisabled ? '户外地图为环绕视角，暂不支持第一人称漫游' : walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} data-tip={walkDisabled ? '户外地图为环绕视角，暂不支持第一人称漫游' : undefined} disabled={walkDisabled} className={walkPressed ? 'is-active is-walk' : 'is-walk'} style={walkDisabled ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => {
-        if (outdoorEditing) {
-          if (outdoorWalkAllowed) outdoor?.toggleWalk?.(!outdoorWalkOn);
-          return;
-        }
-        toggleWalk(!view.walkthroughMode);
-      }}>
-        <MaterialSymbol name="footprint" />
+      {/* 2026-11-15 用户指令：右上「高斯实景 / 识别轮廓」切换钮先撤掉（#tool-environment-view），
+          两扇分隔线一并下线；environmentView / onEnvironmentViewChange 接口保留，后续要恢复再加回。 */}
+      {/* 室内第一人称漫游；户外漫游钮在右下工具簇（#tool-walk）。 */}
+      {!outdoorEditing && (<button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
+        <PegmanIcon size={20} />
         <span className="sc-walk-label" aria-hidden="true">{walkPressed ? '退出漫游' : '第一人称漫游'}</span>
-      </button>
+      </button>)}
       {/* 2026-11-13 M1：户外画布放置时由纯函数按网格自动吸附，没有独立吸附开关；户外态禁用该钮。 */}
-      <button type="button" id="tool-grid" data-tip={outdoorEditing ? '户外地图放置时自动按网格吸附' : '网格吸附'} aria-label={outdoorEditing ? '网格吸附（户外地图自动吸附）' : '网格吸附'} aria-pressed={!outdoorEditing && view.snapToGrid} disabled={outdoorEditing} className={view.snapToGrid ? 'is-active' : ''} style={outdoorEditing ? { opacity: 0.35, cursor: 'not-allowed' } : undefined} onClick={() => { if (!outdoorEditing) toggle('snapToGrid'); }}>
+      {!outdoorEditing && (<button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
         <GridSnapIcon active={view.snapToGrid} />
-      </button>
+      </button>)}
       {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。
           户外规划（含 3D 场地）时隐藏工作台「地图类型」：底图入口只在覆盖层右下角。
           GeoGround（计划瓦片接管主 3D 地面）：「卫星贴地」没有可管的东西继续隐藏；
@@ -869,20 +894,20 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       {satelliteVenue && !outdoorEditing && !geoGroundActive && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
         <MaterialSymbol name="satellite" />
       </button>}
-      <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-undo" data-tip={outdoorEditing ? '撤销（平面编辑）' : '撤销'} aria-label="撤销" disabled={outdoorEditing ? !outdoor!.canUndo : (layoutLocked || !history.canUndo)} onClick={outdoorEditing ? () => outdoor!.undo() : history.undo}>
+      {!outdoorEditing && <span className="sc-tool-sep" aria-hidden="true"/>}
+      {!outdoorEditing && (<button type="button" id="tool-undo" data-tip="撤销" aria-label="撤销" disabled={layoutLocked || !history.canUndo} onClick={history.undo}>
         <MaterialSymbol name="undo" />
-      </button>
-      <button type="button" id="tool-redo" data-tip={outdoorEditing ? '重做（平面编辑）' : '重做'} aria-label="重做" disabled={outdoorEditing ? !outdoor!.canRedo : (layoutLocked || !history.canRedo)} onClick={outdoorEditing ? () => outdoor!.redo() : history.redo}>
+      </button>)}
+      {!outdoorEditing && (<button type="button" id="tool-redo" data-tip="重做" aria-label="重做" disabled={layoutLocked || !history.canRedo} onClick={history.redo}>
         <MaterialSymbol name="redo" />
-      </button>
-      <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={outdoorEditing ? false : view.view2D} onClick={() => (outdoorEditing ? outdoor!.zoomBy(-1) : onZoom('-'))}>
+      </button>)}
+      {!outdoorEditing && <span className="sc-tool-sep" aria-hidden="true"/>}
+      {!outdoorEditing && (<button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={view.view2D} onClick={() => onZoom('-')}>
         <MaterialSymbol name="iconpark_zoom_out_solid" />
-      </button>
-      <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={outdoorEditing ? false : view.view2D} onClick={() => (outdoorEditing ? outdoor!.zoomBy(1) : onZoom('+'))}>
+      </button>)}
+      {!outdoorEditing && (<button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={view.view2D} onClick={() => onZoom('+')}>
         <MaterialSymbol name="iconpark_zoom_in_solid" />
-      </button>
+      </button>)}
       {onExportImage && !outdoorEditing && <div className="sc-tool-menu" ref={exportMenuRef}>
         <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); setMapTypeOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <MaterialSymbol name="photo_camera" />
@@ -938,6 +963,83 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           </div>}
         </div>}
       </div>}
+      {outdoorEditing && (<>
+        {/* 方案 A 定稿四角簇：右上＝分享单枚；右下＝罗盘·2D/3D·定位框选·缩放一体条·漫游·眼睛；底中＝工具‖开关‖历史；左下＝账号·地图切换。 */}
+        <div className="oc-cluster oc-tr" aria-label="右上工具簇">
+          <div className="oc-share"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/></div>
+        </div>
+        <div className="oc-cluster oc-br" aria-label="右下工具簇">
+          <button type="button" id="tool-compass" data-tip="指北针：回正朝北" aria-label="指北针：回正朝北" onClick={() => outdoor?.resetNorth?.()}>
+            <CompassArrowIcon size={22} />
+          </button>
+          <button type="button" id="tool-view-toggle" data-tip={outdoor?.view === '3d' ? '当前 3D · 切回 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={outdoor?.view === '3d' ? '当前 3D 场景，点击切回 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={outdoor?.view === '3d'} className={outdoor?.view === '3d' ? 'is-active' : ''} onClick={() => outdoor?.onToggleView?.()}>
+            <span className="oc-view-text">{outdoor?.view === '3d' ? '3D' : '2D'}</span>
+          </button>
+          <button type="button" id="tool-focus" data-tip="回到框选场地" aria-label="回到框选场地" disabled={!onFocusVenue} onClick={() => onFocusVenue?.()}>
+            <MaterialSymbol name="center_focus_strong" />
+          </button>
+          <div className="oc-zoom" role="group" aria-label="缩放">
+            <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" onClick={() => outdoor!.zoomBy(1)}>
+              <MaterialSymbol name="iconpark_zoom_in_solid" />
+            </button>
+            <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" onClick={() => outdoor!.zoomBy(-1)}>
+              <MaterialSymbol name="iconpark_zoom_out_solid" />
+            </button>
+          </div>
+          <button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => onToggleWalkthrough?.(!walkPressed)}>
+            <PegmanIcon size={22} />
+          </button>
+          <button type="button" id="tool-opacity" className={`is-ghost-eye${chromeHidden ? ' is-active' : ''}`} data-tip={chromeHidden ? '显示工具栏' : '隐藏工具栏'} aria-label={chromeHidden ? '显示工具栏' : '隐藏工具栏'} aria-pressed={chromeHidden} onClick={() => onToggleChrome?.()}>
+            <MaterialSymbol name="visibility" />
+          </button>
+        </div>
+        <div className="oc-cluster oc-bb" aria-label="底部工具条">
+          {/* 2026-11-15 直切：户外选择/抓手不再弹二级菜单，点钮在 抓手⇄选择 之间直切；图标随当前态，H/S 快捷键保留。 */}
+          <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { if (canvasSelectOn) chooseHandTool(); else chooseSelectTool(); }}>
+            {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <HandStopIcon size={20} />}
+          </button>
+          {outdoor?.enterMeasure && (
+            <div className="sc-tool-menu sc-measure-menu" ref={measureMenuRef}>
+            <div className={`sc-measure-combo${outdoor.measureActive ? ' is-active' : ''}`}>
+              <button type="button" id="tool-measure" className="sc-measure-main" data-tip={outdoor.measureActive ? '测量中 · 点按退出' : '测量：点按开始测距'} aria-label="测量" aria-pressed={!!outdoor.measureActive} onClick={() => { if (outdoor.measureActive) outdoor.exitMeasure?.(); else outdoor.enterMeasure?.(); }}>
+                <MaterialSymbol name={OUTDOOR_TOOL_ICONS.measure} />
+              </button>
+              <button type="button" className="sc-measure-caret" aria-label="测量模式：距离 / 面积 / 路径" aria-haspopup="menu" aria-expanded={measureMenuOpen} onClick={(event) => { event.stopPropagation(); setMeasureMenuOpen(open => !open); }}>
+                <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" /></svg>
+              </button>
+            </div>
+              {measureMenuOpen && (
+                <div id="tool-measure-panel" className="sc-tool-pop sc-measure-pop" role="menu" aria-label="测量模式">
+                  {([['distance', '距离', 'straighten'], ['area', '面积', 'crop_square'], ['path', '路径', 'progress_activity']] as const).map(([kind, label, icon]) => (
+                    <button key={kind} type="button" role="menuitemradio" aria-checked={outdoor.measureKind === kind} className={`sc-canvas-tool-row${outdoor.measureKind === kind ? ' is-active' : ''}`} onClick={() => { outdoor.setMeasureKind?.(kind); if (!outdoor.measureActive) outdoor.enterMeasure?.(); setMeasureMenuOpen(false); }}>
+                      <MaterialSymbol name={icon} size={16} />
+                      <span>{label}</span>
+                      {outdoor.measureKind === kind && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {outdoor?.setInspector && <button type="button" id="tool-annotate" data-tip="标注" aria-label="标注" aria-pressed={outdoor.inspectorTabs?.annotate === true} className={outdoor.inspectorTabs?.annotate === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('annotate')}>
+            <MaterialSymbol name={OUTDOOR_TOOL_ICONS.annotate} />
+          </button>}
+          <span className="oc-sep" aria-hidden="true" />
+          {outdoor?.setInspector && <button type="button" id="tool-selection" data-tip="属性" aria-label="属性" aria-pressed={outdoor.inspectorTabs?.selection === true} className={outdoor.inspectorTabs?.selection === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('selection')}>
+            <MaterialSymbol name={OUTDOOR_TOOL_ICONS.selection} />
+          </button>}
+          {outdoor?.setSnapOn && <button type="button" id="tool-snap" data-tip={outdoor.snapOn === false ? '网格吸附 · 已关闭，点按开启' : '网格吸附 · 开启，点按关闭'} aria-label="网格吸附" aria-pressed={outdoor.snapOn !== false} className={outdoor.snapOn !== false ? 'is-active' : ''} onClick={() => outdoor.setSnapOn?.(outdoor.snapOn === false)}>
+            <GridSnapIcon active={outdoor.snapOn !== false} />
+          </button>}
+          <span className="oc-sep" aria-hidden="true" />
+          <button type="button" id="tool-undo" data-tip="撤销（平面编辑）" aria-label="撤销" disabled={!outdoor!.canUndo} onClick={() => outdoor!.undo()}>
+            <MaterialSymbol name="undo" />
+          </button>
+          <button type="button" id="tool-redo" data-tip="重做（平面编辑）" aria-label="重做" disabled={!outdoor!.canRedo} onClick={() => outdoor!.redo()}>
+            <MaterialSymbol name="redo" />
+          </button>
+        </div>
+      </>)}
     </nav>
   );
 }

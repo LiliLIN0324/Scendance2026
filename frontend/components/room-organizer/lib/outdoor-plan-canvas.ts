@@ -15,7 +15,7 @@
  * - 派生量（面积/长度）仍从 site-plan 的米制几何现算，画布只做投影不产生真值。
  */
 
-import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
 import { planZoneFillAlpha, defaultZoneColor } from './site-plan-editing';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import type { PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
@@ -137,6 +137,8 @@ export function visiblePlanLayers(visibility: LayerVisibility): PlanningLayerKin
 export interface PlanCanvasContext {
   ctx: CanvasRenderingContext2D;
   viewport: PlanViewport;
+  /** 底图是否为深色（卫星/深色地图）：测量中性线在深底上转白。缺省按浅底。 */
+  dark?: boolean;
 }
 
 /** Draw a review outline or point ring above the editable map geometry. */
@@ -1536,18 +1538,17 @@ export function drawMeasureLayer(
   }[],
 ): void {
   const { ctx } = c;
-  const color = PLANNING_LAYER_COLORS.measure;
+  const color = measureStroke(c);
   for (const m of measurements) {
     if (m.points.length < 2) continue;
     if (m.kind === 'area' && m.points.length < 3) continue;
     if (m.kind === 'area') {
       traceRing(c, m.points);
-      ctx.fillStyle = hexWithAlpha(color, 0.12);
+      ctx.fillStyle = measureFill(c, 0.12);
       ctx.fill();
       ctx.save();
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-      ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.restore();
       const label = zoneLabelPixel(c, m.points);
@@ -1556,15 +1557,13 @@ export function drawMeasureLayer(
       ctx.save();
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.setLineDash([8, 5]);
       tracePolyline(c, m.points);
       ctx.stroke();
       ctx.restore();
-      // 端点小方块（起点/终点）。
+      // 端点白心圆环（Google 测距节点）。
       for (const p of [m.points[0]!, m.points[m.points.length - 1]!]) {
         const pt = planPointToPixel(p, c.viewport);
-        ctx.fillStyle = color;
-        ctx.fillRect(pt.x - 2.5, pt.y - 2.5, 5, 5);
+        drawMeasureNode(c, pt.x, pt.y);
       }
       const label = measureLabelPixel(c, m.points);
       if (label) drawMeasureLabel(c, formatLengthM(measureValue(m)), label.x, label.y);
@@ -1584,12 +1583,11 @@ export function drawMeasureDraft(
   cursorPoint?: PlanPoint,
 ): void {
   const { ctx } = c;
-  const color = PLANNING_LAYER_COLORS.measure;
+  const color = measureStroke(c);
   if (draft.length >= 2) {
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
-    ctx.setLineDash([8, 5]);
     if (kind === 'area' && draft.length >= 3) {
       traceRing(c, draft);
     } else {
@@ -1602,7 +1600,7 @@ export function drawMeasureDraft(
     const last = planPointToPixel(draft[draft.length - 1]!, c.viewport);
     const cursor = planPointToPixel(cursorPoint, c.viewport);
     ctx.save();
-    ctx.strokeStyle = hexWithAlpha(color, 0.55);
+    ctx.strokeStyle = measureFill(c, 0.55);
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -1613,8 +1611,7 @@ export function drawMeasureDraft(
   }
   for (const p of draft) {
     const pt = planPointToPixel(p, c.viewport);
-    ctx.fillStyle = color;
-    ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+    drawMeasureNode(c, pt.x, pt.y, 3.5);
   }
   if (kind === 'area' && draft.length >= 2 && (cursorPoint || draft.length >= 3)) {
     // 面积闭合提示：首点画圆圈（与边界/分区草稿同口径）。
@@ -2248,10 +2245,12 @@ function drawMeasureLabel(c: PlanCanvasContext, text: string, x: number, y: numb
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const w = text.length * 7 + 10;
-  ctx.fillStyle = 'rgba(15,22,32,0.78)';
-  ctx.fillRect(x - w / 2, y - 9, w, 18);
-  ctx.fillStyle = PLANNING_LAYER_COLORS.measure;
+  // 读数直接贴线：线色文字 + 反色描边光晕保证在瓦片上可读（Google 测距口径，无深色胶囊）。
+  const halo = c.dark ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = halo;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = measureStroke(c);
   ctx.fillText(text, x, y);
 }
 
@@ -2288,6 +2287,30 @@ function drawArrowHead(c: PlanCanvasContext, x: number, y: number, angle: number
   ctx.closePath();
   ctx.fillStyle = color;
   ctx.fill();
+  ctx.restore();
+}
+
+/** 测量中性线色：深底白、浅底近黑（Google 测距口径）。 */
+function measureStroke(c: PlanCanvasContext): string {
+  return c.dark ? PLANNING_MEASURE_COLORS.dark : PLANNING_MEASURE_COLORS.light;
+}
+
+/** 测量面积淡填：线色按透明度派生。 */
+function measureFill(c: PlanCanvasContext, alpha: number): string {
+  return hexWithAlpha(measureStroke(c), alpha);
+}
+
+/** 测量节点：白心圆环 + 线色描边（Google 测距端点）。 */
+function drawMeasureNode(c: PlanCanvasContext, x: number, y: number, r = 4): void {
+  const { ctx } = c;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.strokeStyle = measureStroke(c);
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
   ctx.restore();
 }
 

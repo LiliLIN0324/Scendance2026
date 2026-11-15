@@ -123,6 +123,9 @@ describe('planFootprintShapes', () => {
     // 2026-11-16：动线色改为跟载体走（与画布 / 图例同一套 token）。旧表里 vehicle 是金、service 是紫，
     // 正好和画布反着（“金线蓝标”）；现在统一到 PLANNING_ROUTE_KIND_COLORS。
     expect(shapes.routes[0]!.color).toBe('#8a6fa8');
+    expect(shapes.routes[0]!.kind).toBe('vehicle');
+    expect(shapes.routes[0]!.dashed).toBe(true);
+    expect(shapes.routes[0]!.lineWidth).toBe(3);
     expect(shapes.nodes[0]!.color).toBe('#c0392b');
     expect(shapes.workers[0]!.color).toBe('#5e7fa6');
     expect(shapes.workers[0]!.label).toBe('引导 · 6 人');

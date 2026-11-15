@@ -101,6 +101,45 @@ describe('3D 规划层：设计范围与场地边界同步', () => {
     expect(group.children.map(colorHex)).toContain(0x7fb3ff);
   });
 
+  it('单向动线在终点贴地生成朝向箭头，双向不生成箭头', () => {
+    const group = build(makePlan({
+      routes: [{ id: 'r1', kind: 'vehicle', name: '车行', points: [{ x: 2, y: 5 }, { x: 18, y: 5 }], oneWay: true, notes: '' }],
+    }));
+    const arrows = group.children.filter(
+      child => child.userData.planRouteArrow === true,
+    ) as THREE.Mesh[];
+    expect(arrows).toHaveLength(1);
+    // 箭头贴地不竖起；东行（x 2→18）尖点落在东侧（world x = x − width/2，尖 ≈ 8）。
+    const box = new THREE.Box3().setFromObject(arrows[0]!);
+    expect(box.max.y).toBeLessThan(0.2);
+    const pos = arrows[0]!.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const xs = [pos.getX(0), pos.getX(1), pos.getX(2)];
+    expect(Math.max(...xs)).toBeGreaterThan(Math.min(...xs));
+    // 箭头与动线/分区共用 shapePoint 换算：本帧 frame 以边界角点为原点，toShell 加回半宽、
+    // shapePoint 再减掉一次，两次相抵，所以本地 x 就是平面 x（终点 18）。
+    expect(Math.max(...xs)).toBeCloseTo(18, 1);
+  });
+
+  it('每个设施在 3D 里立起对应物件，且高度是「能认出来」的尺度而不是地贴', () => {
+    const group = build(makePlan({
+      facilities: [{ id: 'f1', templateId: 'tent', name: '帐篷', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 4, depth: 4 }, notes: '' }],
+    }));
+    group.updateMatrixWorld(true);
+    const props = group.children.filter(child => child.userData.planPropId);
+    expect(props).toHaveLength(1); // 只有一个设施
+    const prop = props[0]!;
+    expect(prop.name).toBe('plan-prop-tent');
+    // planPropId 记的是 2D 设施 id，两个视图靠它对齐同一件物料。
+    expect(prop.userData.planPropId).toBe('f1');
+    const box = new THREE.Box3().setFromObject(prop);
+    expect(box.min.y).toBeGreaterThanOrEqual(-0.01);
+    expect(box.max.y).toBeGreaterThan(2); // 帐篷是有高度的实体
+    expect(box.max.y).toBeLessThan(6);
+    // 占地不超出 2D 给的 4×4（含少量出檐）。
+    expect(box.max.x - box.min.x).toBeLessThan(4.6);
+    expect(box.max.z - box.min.z).toBeLessThan(4.6);
+  });
+
   it('范围比场地大：角标落在壳体之外而不是被钳回边界', () => {
     const group = build(makePlan({ designScope: SCOPE }));
     const brackets = group.children.filter(child => child.userData.planDesignScopeRing === true) as unknown as Array<{
