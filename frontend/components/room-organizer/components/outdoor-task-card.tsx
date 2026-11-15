@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 export interface OutdoorTaskProgress {
   intent: string;
-  state: 'ready' | 'working' | 'confirm' | 'done' | 'stopped' | 'blocked';
+  state: 'ready' | 'working' | 'ask' | 'confirm' | 'done' | 'stopped' | 'blocked';
   action: string;
   stopLabel?: '停止查找' | '停止模拟';
   steps: string[];
@@ -20,7 +20,7 @@ export function OutdoorTaskCard({ task, canStop = false, onStop, onPrefill, onIn
   onInspectFacility?(id: string): void;
   children?: ReactNode;
 }): JSX.Element {
-  const labels = { ready: '待操作', working: '正在处理', confirm: '待你确认', done: '已应用', stopped: '已停止', blocked: '需要补充' };
+  const labels = { ready: '待操作', working: '正在处理', ask: '待你回复', confirm: '待你确认', done: '已应用', stopped: '已停止', blocked: '需要补充' };
   return <section className="ap-card ap-venue-card" aria-label="户外规划任务" data-testid="outdoor-task-card" data-state={task.state}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
       <span className="ap-option-row-mark" role="status">{labels[task.state]}</span>

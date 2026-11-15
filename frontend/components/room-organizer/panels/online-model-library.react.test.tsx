@@ -9,6 +9,7 @@ import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { MATERIAL_LIBRARY_META_KEY } from '../lib/material-library-meta';
+import { getGenerationSheetState, resetGenerationSheetForTests } from '../lib/generation-sheet';
 import { STYLE_RUNS_KEY } from '../lib/style-bundles';
 import { listShippedAssets } from '../lib/shipped-assets';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -531,15 +532,17 @@ describe('OnlineModelLibrary', () => {
     expect(screen.queryByRole('button', { name: /^再显示/ })).toBeNull();
   });
 
-  it('opens a two-item generate menu from the leading plus, then stars and a custom tag', async () => {
+  it('opens the unified generation sheet from the leading plus, then stars and a custom tag', async () => {
     localStorage.removeItem(MATERIAL_LIBRARY_META_KEY);
     setup();
     await screen.findByRole('button', { name: '添加Lounge Chaise' });
     const rail = screen.getByRole('group', { name: '线上模型' });
     expect(rail.firstElementChild?.querySelector('[aria-label="生成物料"]')).toBeTruthy();
+    // 2026-11-15：物料栏这颗星改由统一生成面板接手，目标是模型库，不再弹本地两项菜单。
     fireEvent.click(screen.getByRole('button', { name: '生成物料' }));
-    const items = screen.getAllByRole('menuitem').map(item => item.textContent);
-    expect(items).toEqual(['通过描述生成物料', '拍照/图片生成物料']);
+    expect(getGenerationSheetState()).toMatchObject({ open: true, task: 'model', facility: null });
+    expect(screen.queryAllByRole('menuitem')).toHaveLength(0);
+    act(() => resetGenerationSheetForTests());
     fireEvent.click(screen.getByRole('button', { name: '收藏物料 Lounge Chaise' }));
     expect(screen.getByRole('button', { name: '取消收藏物料 Lounge Chaise' }).getAttribute('aria-pressed')).toBe('true');
     expect(JSON.parse(localStorage.getItem(MATERIAL_LIBRARY_META_KEY) ?? '{}').favorites).toContain('seating-chaise');
@@ -642,15 +645,15 @@ describe('最近用过', () => {
 });
 
 describe('物料库与 2D 目录对齐', () => {
-  it('browses public models as a two-level tree and shows a plan icon on each card', async () => {
+  it('browses the two-level tree without adding approximate plan icons to unlinked models', async () => {
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
     await screen.findByRole('button', { name: '物料库' });
     expect(screen.getByRole('button', { name: /^基础设施/ }).getAttribute('aria-expanded')).toBe('true');
     const chaise = screen.getByRole('button', { name: '添加Lounge Chaise' });
-    expect(chaise.querySelector('.sc-lib-plan-icon img')?.getAttribute('src')).toContain('chair');
+    expect(chaise.querySelector('.sc-lib-plan-icon img')).toBeNull();
     expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
     const tower = screen.getByRole('button', { name: '添加Lighting Tower' });
-    expect(tower.querySelector('.sc-lib-plan-icon img')?.getAttribute('src')).toContain('stage');
+    expect(tower.querySelector('.sc-lib-plan-icon img')).toBeNull();
   });
 });

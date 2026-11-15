@@ -39,6 +39,8 @@ import {
   type AgentRunState,
   type AgentStepLogEntry,
 } from './agent-chat-store';
+import { AgentSupervisionPicker } from './agent-supervision-picker';
+import { getAgentDecisions, subscribeAgentDecisions, type AgentDecision } from './agent-decision-log';
 
 
 /** 停滞侦测的采样间隔：与云端轮询（2s）同频。 */
@@ -99,8 +101,16 @@ function eventStatus(stage:'started'|'finished',outcome:'success'|'failed'|'unkn
 const PLACEMENT_TOOLS = new Set([
   'prepare_seating_candidate','prepare_shared_seating_candidate','create_parametric_model',
 ]);
-function isPlacementTool(tool: string): boolean {
+/**
+ * 影响量胶囊的适用面：所有会写画布的工具 + 放置类。
+ * 对标谷地工坊每一步的「78 个物品」——用户靠这个数自行判断这一步多重，
+ * 而不是等跑完了才知道改了多少。
+ */
+function showsImpactCount(tool: string): boolean {
   return isWriteTool(tool) || PLACEMENT_TOOLS.has(tool);
+}
+function isPlacementTool(tool: string): boolean {
+  return showsImpactCount(tool);
 }
 
 /** 流水行右侧结果标记：进行中转圈 / 成功绿勾 / 失败红叉 / 待核对中性点。 */
@@ -129,6 +139,13 @@ interface ArchivedRun {
   thoughtCount: number;
   stepLog: AgentStepLogEntry[];
   eventLog: AgentRunState['eventLog'];
+}
+
+/** 订阅决策留痕（你批准了 / 你拒绝了）——拒绝不是弹窗，是对话里的一行事实。 */
+export function useAgentDecisions(): AgentDecision[] {
+  const [decisions, setDecisions] = useState<AgentDecision[]>(getAgentDecisions);
+  useEffect(() => subscribeAgentDecisions(() => setDecisions(getAgentDecisions())), []);
+  return decisions;
 }
 
 /** 订阅运行时账本。 */
@@ -256,6 +273,7 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
   const run = useAgentRun();
   const now = useNowMs(run.isRunning);
   const stall = useStall(run);
+  const decisions = useAgentDecisions();
   const [expandedAll, setExpandedAll] = useState(false);
   const [showProcess, setShowProcess] = useState(true);
 
@@ -388,6 +406,10 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
             {run.isRunning && <span className="ap-run-timer">{formatDurationClock(elapsedMs)}</span>}
           </div>
 
+          {/* 监督档位：对标谷地工坊「需要我多久跟你确认一次？」。
+              常驻在运行卡顶部，就在用户盯着进度的时候看得见、改得了。 */}
+          <AgentSupervisionPicker />
+
           {/* 副行：这一段具体在做什么 + 预算读数。
               轮数在这里，不在主标题——它是真实的（6 轮硬上限），但它不回答「在干什么」。 */}
           <div className="ap-run-meta">
@@ -461,6 +483,19 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
             </div>
           )}
           </>}
+
+          {/* 决策留痕：你批准过什么、拒绝过什么，就写在过程下面。
+              拒绝不是错误弹窗，agent 会带着这个否决继续想办法，用户回头也看得见自己否过什么。 */}
+          {decisions.length > 0 && (
+            <ul aria-label="决策留痕" className="ap-run-decisions">
+              {decisions.map((decision) => (
+                <li key={decision.id} className="ap-run-decision" data-kind={decision.kind}>
+                  {decision.kind === 'rejected' ? '你拒绝了' : '你批准了'} · {decision.label}
+                  {decision.reason ? ` · ${decision.reason}` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* 停止/结束后的人话收尾：保留改动数（取不到不写数）、未完成部分如实披露、
               「还原到本轮开始」一键写回开跑前快照（还原动作本身可 Ctrl+Z 撤销）。 */}

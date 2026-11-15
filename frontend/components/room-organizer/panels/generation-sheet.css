@@ -1,0 +1,250 @@
+﻿/* 2026-11-15 统一生成面板：左栏卡片（用户明确「不要弹窗」）。
+   和拍摄场地/户外规划同一条左栏列，跟着 --sc-left-card-width（默认 ~320px）走，
+   没有遮罩、不压画布。窄卡里所有分段都上下排，不再并排挤两列。 */
+
+.sc-generation-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.sc-generation-card .gs-head {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid #efeff1;
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(14px);
+}
+.sc-generation-card .gs-head strong { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: #141416; }
+
+.sc-generation-card .gs-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.sc-generation-card .gs-question { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: #5b6067; }
+
+.sc-generation-card .gs-tasks { display: flex; flex-direction: column; gap: 6px; }
+
+.sc-generation-card .gs-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.sc-generation-card .gs-task:hover { background: #fafafa; border-color: #d4d4d8; }
+.sc-generation-card .gs-task-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f4f5f7;
+  color: #3f4249;
+}
+.sc-generation-card .gs-task-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-generation-card .gs-task-text strong { font-size: 12px; font-weight: 600; color: #141416; }
+.sc-generation-card .gs-task-text small { font-size: 10.5px; line-height: 14px; color: #71767e; }
+
+.sc-generation-card .gs-crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #141416;
+}
+.sc-generation-card .gs-link {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 10.5px;
+  color: #71767e;
+  cursor: pointer;
+}
+.sc-generation-card .gs-link:hover { color: #141416; text-decoration: underline; text-underline-offset: 2px; }
+
+.sc-generation-card .gs-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #f4f5f7;
+}
+.sc-generation-card .gs-seg button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px;
+  color: #3f4249;
+  cursor: pointer;
+}
+.sc-generation-card .gs-seg button[aria-pressed='true'] { background: #fff; color: #141416; box-shadow: 0 1px 2px rgb(20 24 32 / 10%); }
+
+.sc-generation-card .gs-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #5b6067; }
+.sc-generation-card .gs-field input:not([type='file']),
+.sc-generation-card .gs-field textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #f4f5f7;
+  font-size: 12px;
+  color: #141416;
+  outline: none;
+  resize: vertical;
+}
+.sc-generation-card .gs-field input:focus,
+.sc-generation-card .gs-field textarea:focus { border-color: #d4d4d8; }
+.sc-generation-card .gs-field input[type='file'] { font-size: 10.5px; color: #5b6067; }
+.sc-generation-card .gs-file { font-size: 10px; color: #71767e; overflow-wrap: anywhere; }
+
+.sc-generation-card .gs-target {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef3ef;
+  font-size: 11px;
+  font-weight: 600;
+  color: #3c6a4d;
+}
+
+.sc-generation-card .gs-import-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: #71767e;
+  cursor: pointer;
+}
+.sc-generation-card .gs-import-link:hover { color: #141416; text-decoration: underline; text-underline-offset: 2px; }
+
+.sc-generation-card .gs-hint { margin: 0; font-size: 10.5px; line-height: 15px; color: #71767e; }
+.sc-generation-card .gs-hint--warn { color: #a8641a; }
+
+.sc-generation-card .gs-credit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #3f4249;
+}
+.sc-generation-card .gs-credit input { accent-color: #4a7c59; }
+
+.sc-generation-card .gs-notice { margin: 0; font-size: 10.5px; line-height: 15px; color: #a8641a; }
+
+.sc-generation-card .gs-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 2px; }
+.sc-generation-card .gs-cancel,
+.sc-generation-card .gs-primary {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-generation-card .gs-cancel { border: 1px solid #e4e4e7; background: #fff; color: #141416; }
+.sc-generation-card .gs-cancel:hover { background: #fafafa; }
+.sc-generation-card .gs-primary { border: 1px solid #4a7c59; background: #4a7c59; color: #fff; }
+.sc-generation-card .gs-primary:hover { background: #416f4e; }
+
+.sc-generation-card .gs-foot { margin: 2px 0 0; font-size: 10px; line-height: 14px; color: #9aa0a7; }
+
+/* 描述框：卡内自带一条输入区，不用原生 textarea 的右下角拉伸手柄。 */
+.sc-generation-card .gs-composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.sc-generation-card .gs-composer:focus-within { border-color: #c8d3c8; box-shadow: 0 0 0 3px rgb(74 124 89 / 8%); }
+.sc-generation-card .gs-composer textarea {
+  width: 100%;
+  min-height: 56px;
+  padding: 9px 10px 4px;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 17px;
+  color: #141416;
+  outline: none;
+  resize: none;
+}
+.sc-generation-card .gs-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 7px 10px;
+  color: #9aa0a7;
+}
+.sc-generation-card .gs-composer-hint { flex: 1; font-size: 10px; }
+.sc-generation-card .gs-kbd {
+  padding: 1px 5px;
+  border: 1px solid #e4e4e7;
+  border-radius: 5px;
+  background: #f7f7f8;
+  font: inherit;
+  font-size: 9.5px;
+  color: #71767e;
+}
+
+.sc-generation-card .gs-file-input { display: none; }
+
+/* 参考图投放区：替掉浏览器原生的“选择文件 / 未选择任何文件”。 */
+.sc-generation-card .gs-drop {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px dashed #d4d4d8;
+  border-radius: 8px;
+  background: #fafafb;
+  color: #5b6067;
+  cursor: pointer;
+}
+.sc-generation-card .gs-drop:hover { border-color: #b9bac0; background: #f4f5f7; color: #141416; }
+.sc-generation-card .gs-drop.has-file { border-style: solid; border-color: #cfd8cf; background: #f2f6f2; color: #3c6a4d; }
+.sc-generation-card .gs-drop-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sc-generation-card .gs-drop-text strong { font-size: 11.5px; font-weight: 600; overflow-wrap: anywhere; }
+.sc-generation-card .gs-drop-text small { font-size: 10px; line-height: 14px; color: #8b9098; }
+.sc-generation-card .gs-primary[disabled] { opacity: .55; cursor: default; }

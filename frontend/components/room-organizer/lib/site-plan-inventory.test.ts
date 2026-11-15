@@ -55,9 +55,11 @@ function samplePlan(): SitePlanData {
         id: 'b2000000-0000-4000-8000-000000000003',
         templateId: 'unknown-thing',
         name: '临时闸机',
-        position: { x: 10, y: 60 },
+        // 2026-11-16：人车交叉只在设施占地上才报，所以把闸机放在两线交点 (55,52) 上，
+        // 让“设施上交叉”这条规则继续有夹具覆盖（人行 x=55 段 × 后勤斜线 y=10+1.2(x-20)）。
+        position: { x: 55, y: 52 },
         rotationDeg: 0,
-        size: { width: 4, depth: 1 },
+        size: { width: 4, depth: 2 },
         notes: '',
       },
     ],
@@ -74,6 +76,8 @@ function samplePlan(): SitePlanData {
       {
         id: 'c3000000-0000-4000-8000-000000000002',
         kind: 'service',
+        // 后勤电瓶车：2026-11-16 起载体缺省为步行，这条要显式标成机动车才保持「车行」语义。
+        carrier: 'vehicle',
         name: '后勤电瓶车动线',
         points: [{ x: 20, y: 10 }, { x: 70, y: 70 }],
         oneWay: false,
@@ -177,10 +181,10 @@ describe('buildPlanInventory (H3-c 清单构建)', () => {
 
   it('flags rows that hit any issue list or conflict rule', () => {
     const rows = buildPlanInventory(samplePlan());
-    // 后勤电瓶车动线缺宽度（missing）+ 人行动线与后勤交叉（conflict）。
+    // 后勤电瓶车动线缺宽度（missing）+ 人行动线与后勤在闸机上交叉（conflict）。
     expect(rowOf(rows, 'c3000000-0000-4000-8000-000000000002').hasIssue).toBe(true);
     expect(rowOf(rows, 'c3000000-0000-4000-8000-000000000001').hasIssue).toBe(true);
-    // 越界动线（conflict）。
+    // 越界动线在真实规则里不再报越界，但它没设宽度 → 缺宽度（missing）。
     expect(rowOf(rows, 'c3000000-0000-4000-8000-000000000003').hasIssue).toBe(true);
     // 未连接的北门（node issue）。
     expect(rowOf(rows, 'd4000000-0000-4000-8000-000000000002').hasIssue).toBe(true);

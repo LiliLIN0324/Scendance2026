@@ -20,6 +20,13 @@ describe('flow-sim（V-4b 流动模拟）', () => {
     expect(walkerCountFor(vehicle)).toBeLessThanOrEqual(6); // 车行 cap 6
   });
 
+  it('后勤缺省按「人车一起」计密度（2026-11-16 用户拍板）', () => {
+    const service = route('r6', 'service', [{ x: 0, y: 0 }, { x: 500, y: 0 }]);
+    expect(walkerCountFor(service)).toBe(10); // mixed 档
+    const vehicle = route('r7', 'vehicle', [{ x: 0, y: 0 }, { x: 500, y: 0 }]);
+    expect(walkerCountFor(vehicle)).toBe(6); // 车行仍按车流减半
+  });
+
   it('pointAtDistance 弧长插值准确', () => {
     expect(pointAtDistance(LINE.points, 40)).toEqual({ x: 40, y: 0 });
     const elbow = route('r5', 'pedestrian', [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }]);

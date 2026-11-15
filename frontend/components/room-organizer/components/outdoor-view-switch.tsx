@@ -15,6 +15,7 @@
  * testid 前缀：`${prefix}-toggle` / `${prefix}-2d` / `${prefix}-3d`。
  */
 
+import { useState } from 'react';
 import { PLANNING_SEGMENTED, PLANNING_SURFACE, PLANNING_TEXT } from '@/lib/outdoor-plan-tokens';
 
 export type OutdoorPlanView = '2d' | '3d';
@@ -33,6 +34,7 @@ export interface OutdoorViewSwitchProps {
 
 export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outdoor-view' }: OutdoorViewSwitchProps) {
   const activeIndex = view === '3d' ? 1 : 0;
+  const [hovered, setHovered] = useState<OutdoorPlanView | null>(null);
   const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -70,13 +72,21 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
       />
       {VIEW_MODES.map(([mode, label]) => {
         const active = view === mode;
+        // 3D 里把「2D」这一格压淡：它只是回 2D 的入口，不该和场景抢注意力；
+        // 鼠标/键盘聚焦时恢复，避免入口变得不可发现。
+        const dimmed = view === '3d' && mode === '2d' && hovered !== '2d';
         return (
           <button
             key={mode}
             type="button"
             data-testid={`${testIdPrefix}-${mode}`}
+            data-dimmed={dimmed ? 'true' : undefined}
             aria-pressed={active}
             onClick={() => onChange(mode)}
+            onPointerEnter={() => setHovered(mode)}
+            onPointerLeave={() => setHovered(null)}
+            onFocus={() => setHovered(mode)}
+            onBlur={() => setHovered(null)}
             style={{
               position: 'relative',
               zIndex: 1,
@@ -87,11 +97,13 @@ export default function OutdoorViewSwitch({ view, onChange, testIdPrefix = 'outd
               border: 'none',
               background: 'transparent',
               color: active ? '#ffffff' : PLANNING_TEXT.soft,
+              opacity: dimmed ? 0.42 : 1,
               fontSize: PLANNING_SEGMENTED.fontSize,
               fontWeight: active ? PLANNING_SEGMENTED.activeWeight : PLANNING_SEGMENTED.inactiveWeight,
               letterSpacing: '.02em',
               cursor: 'pointer',
               fontFamily: 'inherit',
+              transition: reducedMotion ? 'none' : 'opacity 160ms ease',
             }}
           >
             {label}

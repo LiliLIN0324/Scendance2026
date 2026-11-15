@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
 import { Check } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
+import { listMyItems, subscribeMyItems } from '../lib/my-items';
 import {
   SATELLITE_GROUND_LABEL,
   applySatelliteGroundPatch,
@@ -41,8 +42,6 @@ import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
 import { OUTDOOR_TOOL_ICONS } from '../components/outdoor-tool-icons';
 import { OnlineModelLibrary } from './online-model-library';
-import { MaterialCreateCell } from './material-create-cell';
-import { LibraryChat } from './library-chat';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
 import type { CatalogPlacementBatchGuard, CatalogPlacementGuard, CatalogPlacementResult } from '../lib/catalog-placement-guard';
 import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
@@ -59,7 +58,9 @@ interface LibraryProps {
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
   placeCatalogItemResult?(item: CatalogItem): CatalogPlacementResult;
   /** 2026-11-12 统一放置流程：点物料进「待放置」（点哪放哪，同户外），不再直接落正中。 */
-  onArmCatalogItem?(item: CatalogItem): void;
+  onArmCatalogItem?(item: CatalogItem, sourceSlug?: string, stickerSlug?: string): void;
+  /** 3D 接管态：卡片左下角规划图标压淡到 0.4，悬停/聚焦恢复。 */
+  dimPlanIcons?: boolean;
 }
 
 export function MaterialGlyph({ materialId, color = 'currentColor' }: { materialId?: string | undefined; color?: string }): JSX.Element {
@@ -151,7 +152,7 @@ export function ShelfGrip({ shelfRef, label = '调整物料库高度' }: { shelf
   ><span aria-hidden="true"/></div>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onArmCatalogItem, controller, onClose, capturePlacement, capturePlacementBatch, variant = 'shelf', walkRoles = [] }: LibraryProps & {
+export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onArmCatalogItem, controller, onClose, capturePlacement, capturePlacementBatch, variant = 'shelf', dimPlanIcons = false, walkRoles = [] }: LibraryProps & {
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
   /** 左侧只负责选角色；进出漫游统一走右侧 `tool-walk`。 */
@@ -184,6 +185,23 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
   // 本机 GLB：桌面上能拖到这一格，手机上点同一格选文件；导入后自动选中并落进画布。
   const importSlot = <LocalGlbImport variant={card ? 'card' : 'tile'} disabled={atLimit} onAdd={addMaterial}/>;
 
+  // 本会话导入的 GLB：先从「我的物品」里再放一件，刷新即失效。
+  const myItems = useSyncExternalStore(subscribeMyItems, listMyItems, listMyItems);
+  const mySlot = myItems.length ? <div className="sc-my-items" aria-label="我的物品">
+    <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#5b6067' }}>我的物品 · 本会话</p>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {myItems.map(item => (
+        <button
+          key={item.glbUrl}
+          type="button"
+          title="再放一件"
+          onClick={() => addMaterial(item)}
+          style={{ height: 26, padding: '0 9px', border: '1px solid #e4e4e7', borderRadius: 7, background: '#fff', fontSize: 11, color: '#141416', cursor: 'pointer', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >{item.name}</button>
+      ))}
+    </div>
+  </div> : null;
+
   return <aside ref={hostRef} className={`sc-library sc-compact-shelf${card ? ' is-card' : ''}`} aria-label="物料库">
     {!card && <div className="sc-shelf-top">
       <ShelfGrip shelfRef={hostRef}/>
@@ -193,14 +211,16 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
       {card
         ? <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} {...(onArmCatalogItem ? { onArmCatalogItem } : {})} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}
-              createSlot={<LibraryChat title="物料库"><MaterialCreateCell variant="chat" importSlot={importSlot} {...(controller ? { controller } : {})}/></LibraryChat>}
+            {mySlot}
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} {...(onArmCatalogItem ? { onArmCatalogItem } : {})} importSlot={importSlot} dimPlanIcons={dimPlanIcons} roomSize={{ width: layout.width, depth: layout.height }}
+
               walkRoles={walkRoles}/>
           </div>
         </div>
         : <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot}/>
+            {mySlot}
+            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot} dimPlanIcons={dimPlanIcons}/>
           </div>
         </div>}
     </div>

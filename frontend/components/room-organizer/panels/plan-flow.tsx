@@ -27,13 +27,6 @@ export const PLAN_VENUES = [
 
 export const PLAN_HEADCOUNTS = [30, 80, 120] as const;
 
-/** 首屏可点整句：点进输入框，不替人发送。 */
-export const PLAN_EXAMPLES = [
-  '80 人发布会，室内 12×9',
-  '30 人圆桌晚宴，室内 15×10',
-  '120 人市集，户外 20×14',
-] as const;
-
 /** 解析结果里的活动名 → 纠偏芯片；对不上的仍可当短语出方案。 */
 const EVENT_TO_ACTIVITY: Readonly<Record<string, (typeof PLAN_ACTIVITIES)[number]['id']>> = {
   快闪: 'popup',
@@ -177,11 +170,9 @@ export function planHeardStatus(heardParts: string[], missing: string[]): string
   return `${heardParts.join(' · ')} · 还差${missing.join('、')}`;
 }
 
-export function PlanHome({ draft = '', onGenerate, onPickExample }: {
+export function PlanHome({ draft = '', onGenerate }: {
   draft?: string;
   onGenerate(sentence: string): void;
-  /** 点例句只填进输入框，不替人发送。 */
-  onPickExample?(sentence: string): void;
 }): JSX.Element {
   const heard = useMemo(() => planSelectionFromText(draft), [draft]);
   const [activityId, setActivityId] = useState<string | null>(null);
@@ -252,8 +243,6 @@ export function PlanHome({ draft = '', onGenerate, onPickExample }: {
     setTouched(current => ({ ...current, [field]: true }));
   };
 
-  const showExamples = !draft.trim() && !adjusting;
-
   return <form className="sc-plan-home" aria-label="生成活动方案" onSubmit={event => {
     event.preventDefault();
     if (!activityPhrase || !venueReady || !venuePhrase || resolvedCount === null) { setAttempted(true); setAdjusting(true); return; }
@@ -263,17 +252,6 @@ export function PlanHome({ draft = '', onGenerate, onPickExample }: {
     }
     onGenerate(planGenerateSentence(activityPhrase, venuePhrase, resolvedCount));
   }}>
-    {showExamples && <div className="sc-plan-examples" role="group" aria-label="需求例句">
-      {PLAN_EXAMPLES.map(sentence => (
-        <button
-          key={sentence}
-          type="button"
-          className="sc-plan-example"
-          onClick={() => onPickExample?.(sentence)}
-        >{sentence}</button>
-      ))}
-    </div>}
-
     {statusText && <p className={`sc-plan-need${heardParts.length ? ' is-heard' : ''}`} role="status">{statusText}</p>}
 
     <button type="submit" className={`sc-plan-act${ready ? '' : ' is-disabled'}`} aria-disabled={!ready}>生成方案</button>

@@ -172,6 +172,51 @@ it("户外问答跟随面板所选 provider 与 model 透传到对话请求", as
   expect(chatMeta.provider).toBe("tokendance");
   expect(chatMeta.model).toBe("tk-another");
 });
+it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
+  await confirmScope();
+  apply.mockClear();
+  const { lng, lat } = plan.anchor!;
+  const roads = vi.fn(() => ({
+    roads: [{
+      id: "walkway",
+      name: "现场步道",
+      highway: "footway" as const,
+      points: [[lng + 0.0003, lat - 0.0002], [lng + 0.0003, lat + 0.0008]] as [number, number][],
+    }],
+  }));
+  bridge.roadNetwork = roads;
+  await turn("先划室外展览区和室外表演区，再设计主通道", response("main-routes", {
+    zones: [
+      { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "室外展览区" },
+      { name: "表演区", purpose: "performance", environment: "outdoor", evidence: "室外表演区" },
+    ],
+  }));
+  expect(flow.proposal).toMatchObject({ kind: "zones", afterConfirm: "main-routes" });
+  expect(host.querySelector(".ap-design-process")?.textContent).toContain("先按已知用途划分区域");
+  expect(host.textContent).toContain("确认分区并预览主通道");
+  expect(plan.zones).toHaveLength(0);
+  expect(roads).not.toHaveBeenCalled();
+  expect(apply).not.toHaveBeenCalled();
+
+  if (approved) {
+    await action("confirm");
+    expect(plan.zones.map(zone => zone.name)).toEqual(["展览区", "表演区"]);
+    expect(roads).toHaveBeenCalledOnce();
+    expect(flow.proposal?.kind, flow.notice).toBe("main-routes");
+    expect(host.querySelector(".ap-design-process")?.textContent).toContain("把真实道路与活动边界相交的位置作为入口候选");
+    expect(apply).toHaveBeenCalledOnce();
+    expect(plan.routes).toHaveLength(0);
+    await action("confirm");
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(plan.routes.length).toBeGreaterThan(0);
+  } else {
+    const stale = flow.proposal!;
+    act(() => flow.cancel());
+    await act(async () => { await flow.confirmProposal(stale); });
+    expect(roads).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  }
+});
 it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", async () => {
   const anchor = { ...plan.anchor!, lng: 120.1 };
   act(() => flow.offerBoundary(anchor, ring, "IN77"));

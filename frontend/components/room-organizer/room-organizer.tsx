@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 /*
  * COLLAB.md 独占区（Qoder 侧只提需求）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
  * 整景区视距下点云退化成锚点 POI，进到 100 m 内再挂/显示 splat。
@@ -8,8 +8,11 @@
 import { ArrowUpDown, Box, Globe, LayoutGrid, Loader2, Minimize2, PanelLeftClose, Scan, X } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib/pending-candidate-registry';
+import { openGenerationSheet } from './lib/generation-sheet';
+import { getGenerationSheetState, subscribeGenerationSheet, closeGenerationSheet } from './lib/generation-sheet';
+import { GenerationSheetHost } from './panels/generation-sheet';
 import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -119,7 +122,7 @@ import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadStoredAholoCatalogItem } from './lib/aholo-model-placement';
-import { loadOnlineModels } from './lib/online-models';
+import { loadShippedOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { editorItemLimit } from './lib/scene-presets';
@@ -183,6 +186,8 @@ import {
 } from './lib/amap-venue';
 import { capturePlanGround, type PlanGroundSource } from './lib/plan-ground-capture';
 import { readPlanGroundSource, subscribePlanGroundSource } from './lib/plan-basemap-source';
+import { planCatalogDragFor, planCatalogDragForScenePreset } from './lib/plan-catalog-drag';
+import type { ScenePresetKey } from './lib/scene-presets';
 import { publicSourceTileUrl, basemapSourceAttribution } from './lib/tdt-probe';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
@@ -195,7 +200,7 @@ import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { applyVenueHistorySnapshot } from './lib/venue-history';
 import { appendPlanZones } from '@/lib/plan-zone-persistence';
 import { prepareZonePlan, zonePlanCandidates } from '@/lib/zone-plan-application';
-import { AgentChatBridge } from './panels/agent-chat-bridge';
+import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
@@ -476,7 +481,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     return () => window.clearTimeout(timer);
   }, [agentCollapsed, agentClosing, sidePanel]);
   /** Bingo 栏在左侧。关掉后再从画布上的 Bingo 浮标打开，回到布置对话。 */
-  const spaceNewRef = useRef<((mode?: 'blank' | 'template') => void) | null>(null);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const conversationEntryRef = useRef<HTMLButtonElement>(null);
@@ -536,12 +540,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 私信压在栏里的时候，四格不算开着：栏中此刻不是它们的卡，按压态与高亮跟着让开。
   const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat;
   // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
-  const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');
-  const captureOpen = capturePanel === 'open';
+  const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');  const captureOpen = capturePanel === 'open';
   const capturePanelRef = useRef<HTMLElement>(null);
   const captureReturnFocusRef = useRef<HTMLElement | null>(null);
   const openCapturePanel = () => {
     captureReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // 2026-11-15：生成卡与拍摄卡同栏不同屏——去现场拍摄就把生成卡收掉，避免两张挤一条栏。
+    closeGenerationSheet();
     setCapturePanel('open');
   };
   const closeCapturePanel = () => {
@@ -552,6 +557,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     });
   };
   useEffect(() => { if (captureOpen) capturePanelRef.current?.focus(); }, [captureOpen]);
+  // 2026-11-15 用户：「不要弹窗」——生成面板作为左栏卡片存在，所以这里只订阅它开没开。
+  const generationOpen = useSyncExternalStore(subscribeGenerationSheet, () => getGenerationSheetState().open, () => false);
+  useEffect(() => {
+    if (!generationOpen) return;
+    // 生成卡独屏：占栏时把拍摄卡收掉。左栏的可视性由 columnExpanded（已含 generationOpen）控制，
+    // 这里不能再把 sidebarCollapsed 置 false——那会把「空间/物料」那张抽屉也同时叫出来，两张卡叠一栏。
+    // 2026-11-16 用户反馈「第一次点场地白屏一下」：'new' 表示拍摄卡从未打开过，不能借
+    // 'hidden' 这个「关过」哨兵去关它——那会把隐藏的拍摄向导也挂载起来，首次加载 chunk
+    // 挂起根 Suspense，整页被启动骨架屏顶掉。只收真正开着的卡。
+    setCapturePanel(current => current === 'open' ? 'hidden' : current);
+  }, [generationOpen]);
   // 户外规划覆盖层（P2-c）：同一页面内的户外面。默认是同一张地图的「3D 场地」视角，
   // 不是工作台预览；切「2D 地图」只换看法，规划功能不变。关掉才回到工作台 3D。
   // 数据同态：草稿按 layout.id 存本机（outdoor-project-store），底图定位继承活动点位。
@@ -572,6 +588,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 2026-11-13 用户指令：左栏「户外规划」卡片默认收起，只有点左轨「户外规划」钮才展开；
   // 右侧地图仍是常驻画面，不受这张卡的开合影响。
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>(null);
+  // 2026-11-16 用户拍板「属性卡只留一句点选提示 + 打开物件库」：
+  // 画布（右侧）不持有左栅状态，所以发事件，这里把户外卡切到「添加物件」页签。
+  useEffect(() => {
+    const openOutdoorLibrary = () => setOutdoorPanel('library');
+    window.addEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
+    return () => window.removeEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
+  }, []);
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
   useEffect(() => {
@@ -589,6 +612,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const outdoorOverlayRef = useRef<OutdoorPlanOverlayHandle | null>(null);
 /** 主画布接管态（户外项目非漫游 3D）挂的 OutdoorPlan3D 实例：右轨缩放/导出效果图改派用。 */
 const outdoorPlan3DRef = useRef<OutdoorPlan3DApi | null>(null);
+// 2026-11-16 用户：「3D 下的放大/缩小按钮没有交互」——右轨缩放原来只转发给 2D 画布，
+// 而 3D 接管时 2D 画布是隐藏保活的，改了也看不见。这个 ref 按当前视图分派。
+const outdoorZoomRef = useRef<(direction: 1 | -1) => void>(() => {});
 // 2026-11-12 用户拍板「3D 里中键转地图、左键改物件」：接管态把覆盖层里活着的 2D 画布
 // 编辑桥（pointerFromPlan 管线）交给全屏 OutdoorPlan3D——覆盖层在接管态保活（隐藏不卸载），
 // 这个 ref 每次 render 同步到它内部的画布句柄。
@@ -634,7 +660,7 @@ useEffect(() => {
     canRedo: outdoorHistory.canRedo,
     undo: () => outdoorOverlayRef.current?.undo(),
     redo: () => outdoorOverlayRef.current?.redo(),
-    zoomBy: (direction: 1 | -1) => outdoorOverlayRef.current?.zoomBy(direction),
+    zoomBy: (direction: 1 | -1) => outdoorZoomRef.current(direction),
     exportPng: () => outdoorOverlayRef.current?.exportPng() ?? false,
     // 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（右栏工具排「选择」钮的按下态与切换）。
     canvasMode: outdoorCanvasMode,
@@ -907,13 +933,14 @@ useEffect(() => {
   /** 左轨四格共用一个面板：切到哪一格，整栏就变成那个 agent 的卡。 */
   const showAgent = useCallback((id: AgentId) => {
     setCapturePanel(value => value === 'open' ? 'hidden' : value);
-    // 2026-11-13 收敛 14a：户外 3D 接管态下切到任一对话格，先退回户外 2D 地图——
-    // 否则接管层随左栏切换仍保持 visible，空屏 + 比例尺/指北针残留在右侧。只退视图，不整体关户外。
-    if ((outdoor3dTakeoverActive && !outdoor2DOpen) || (isOutdoorProject && !outdoor2DOpen && !outdoor3dTakeoverActive)) {
+    // 2026-11-16 用户指令：左栏一次只留一张卡。生成卡和拍摄卡一样，被切到别的格就收掉。
+    closeGenerationSheet();
+    // 2026-11-16 用户指令：左轨任何一格都不该把 3D 接管态踢回 2D。活动/Bingo 的对话卡
+    // 同样浮在 3D 场景上；只有用户自己点底部的 2D 段才换视角。
+    // 仅保留「地图已收起」这一异常兜底：此时没有 3D 可保，点左轨把地图带回来。
+    if (isOutdoorProject && !outdoor2DOpen && !outdoor3dTakeoverActive) {
       clearPendingPlacement();
-      setOutdoor3dTakeoverActive(false);
       setOutdoor2DOpen(true);
-      // 2026-11-13 用户指令：户外规划卡片只在点左轨「户外规划」时展开，这里只退回地图。
     }
     if (id === 'material') setWorkbenchMode('layout');
     // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
@@ -1026,9 +1053,10 @@ useEffect(() => {
   }, [activeAgent]);
   /** 点同一格收起，点别的格就地换成那个 agent 的卡。私信开着时点格子 = 换回那一格，不是收起整栏。 */
   const toggleAgent = useCallback((id: AgentId) => {
-    if (!captureOpen && agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
+    // 生成卡/拍摄卡占着栏时，点回当前格应当是「换回那一格」，而不是把隐藏的面板再收一次。
+    if (!generationOpen && !captureOpen && agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
     else showAgent(id);
-  }, [captureOpen, agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
+  }, [generationOpen, captureOpen, agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单仍浮在画布上。不把Bingo切成评审或执行。
     setLeftMode('business');
@@ -2133,10 +2161,25 @@ useEffect(() => {
    * 2026-11-12 统一放置流程（用户拍板）：物料卡点选 = 载入后进「待放置」（点哪放哪，同户外），
    * 不再直接落正中。已有待放置时换成新选的这件；拖拽到画布仍是拖哪落哪（onCatalogDrop）。
    */
-  const armCatalogFromLibrary = useCallback((item: CatalogItem) => {
+  const armCatalogFromLibrary = useCallback((item: CatalogItem, sourceSlug?: string, stickerSlug?: string) => {
+    // 2026-11-16 用户口径：户外规划打开时，物料卡点选也进「待放置」——
+    // 2D 落成卡片左下角那个图标，3D 落成同一个物件的模型，写的是同一条设施。
+    const canvas = outdoorCanvasBridgeRef.current;
+    if (canvas && sourceSlug && (outdoor2DOpen || outdoor3dTakeoverActive)
+      && canvas.armCatalogFacility(planCatalogDragFor({ slug: sourceSlug, name: item.name, width: item.width, depth: item.depth, ...(stickerSlug ? { stickerSlug } : {}) }))) {
+      return;
+    }
     clearPendingPlacement();
     armPendingPlacement(item);
-  }, [clearPendingPlacement, armPendingPlacement]);
+  }, [clearPendingPlacement, armPendingPlacement, outdoor2DOpen, outdoor3dTakeoverActive]);
+
+  // 2026-11-16 场景卡：同样走物料卡的「待放置」通道。场景预设不再载入整张布局，
+  // 而是在当前地图上落一个小场地（2D 占地 + 3D 整馆模型），可拖动、可缩放、可旋转。
+  const placeScenePreset = useCallback((key: ScenePresetKey): boolean => {
+    const canvas = outdoorCanvasBridgeRef.current;
+    if (!canvas || (!outdoor2DOpen && !outdoor3dTakeoverActive)) return false;
+    return canvas.armCatalogFacility(planCatalogDragForScenePreset(key));
+  }, [outdoor2DOpen, outdoor3dTakeoverActive]);
 
   const placeCatalogItemResult=useCallback((item:CatalogItem):CatalogPlacementResult=>{
     const id=placeFromCatalog(item);
@@ -2511,6 +2554,14 @@ useEffect(() => {
   // 2026-11-12 用户拍板（统一 2D/3D）：有户外计划时关掉覆盖层就是接管 3D（图六），
   // 不再看 view2D 落「主舞台平面平铺图」（图三已废）——漫游/实景隔离仍不接管。
   const outdoor3dTakeover = outdoor3dTakeoverActive && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive && !scanIsolated;
+  // 右轨放大/缩小按当前视图分派：3D 接管交给 OutdoorPlan3D 的相机；2D 等其余仍走覆盖层里的 2D 画布。
+  outdoorZoomRef.current = (direction) => {
+    if (outdoor3dTakeover) {
+      outdoorPlan3DRef.current?.zoomBy(direction);
+      return;
+    }
+    outdoorOverlayRef.current?.zoomBy(direction);
+  };
   // 离开户外 3D 接管（切 2D / 实景隔离 / 收起）时收口户外漫游态：控制器随
   // walkEnabled=false 清理指针锁与监听，这里只把独立信号复位。
   useEffect(() => {
@@ -2559,13 +2610,13 @@ useEffect(() => {
   // 全浮走时左栏只留一个白底空壳——此时把列宽/底/调节条收起，fixed 浮窗仍挂在列内不受影响。
   const dockedCards = leftStackCards.filter(id => !isLeftStackDetached(leftStack, id));
   const drawerDocked = !sidebarCollapsed && !captureOpen;
-  const dockColumnOccupied = dockedCards.length > 0 || drawerDocked;
+  const dockColumnOccupied = dockedCards.length > 0 || drawerDocked || generationOpen;
   // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
   // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
   // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
   // 左栏户外卡片里，接管态不挂卡片 = 3D 里没有任何编辑入口（误删回归，本行修复）。
   // columnExpanded 的全部消费点都在本行之后（769/4130/4135/4264），搬到这里才能引用 takeover。
-  const columnExpanded = navExpanded || personChat || captureOpen || ((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null);
+  const columnExpanded = navExpanded || personChat || captureOpen || generationOpen || ((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null);
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -4404,11 +4455,19 @@ useEffect(() => {
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
                 <button type="button"
-                  className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen ? ' is-active' : ''}`}
-                  aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"
-                  data-tip="拍摄场地 · 出 3D"
-                  aria-expanded={captureOpen}
-                  onClick={captureOpen ? closeCapturePanel : openCapturePanel}
+                  className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen || generationOpen ? ' is-active' : ''}`}
+                  /* 2026-11-15 用户拍板：这颗钮同时承接「重建真实场地」与「生成新场景」，
+                     所以叫「场地」，点开先并列问做哪件；现场拍摄/上传照片都从重建设支进去。 */
+                  aria-pressed={captureOpen || generationOpen}
+                  aria-expanded={captureOpen || generationOpen}
+                  aria-controls="generation-sheet workbench-capture-card"
+                  aria-label="场地：重建真实场地，或生成新场景"
+                  data-tip="场地"
+                  onClick={() => {
+                    // 再点一次收起，和拍摄卡/户外卡同一种手感。
+                    if (generationOpen) { closeGenerationSheet(); return; }
+                    openGenerationSheet({ scope: 'venue' });
+                  }}
                 >
                   <span className="sc-rail-capture-icon" aria-hidden="true">
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
@@ -4417,7 +4476,7 @@ useEffect(() => {
                     </svg>
                     <span className="sc-rail-3d-tag">3D</span>
                   </span>
-                  <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
+                  <span className="sc-rail-label" aria-hidden="true">场地</span>
                 </button>
                 <button
                   type="button"
@@ -4432,6 +4491,8 @@ useEffect(() => {
                     if (!panelOpen) {
                       // 展开左栏户外物料面板；先清待放置：地图点击只服务边界/分区/动线。
                       clearPendingPlacement();
+                      // 左栏一次只留一张卡：开户外就先收生成卡（同拍摄卡被切走时的手感）。
+                      closeGenerationSheet();
                       setOutdoorPanel('library');
                       // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
                       if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
@@ -4453,12 +4514,9 @@ useEffect(() => {
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => {
-              // 2026-11-13 收敛 14a：接管态开私信同样先退回户外 2D，避免接管层残留。
-              if ((outdoor3dTakeoverActive && !outdoor2DOpen) || (isOutdoorProject && !outdoor2DOpen && !outdoor3dTakeoverActive)) {
-                clearPendingPlacement();
-                setOutdoor3dTakeoverActive(false);
-                setOutdoor2DOpen(true);
-              }
+              // 左栏一次只留一张卡：开私信就收掉生成卡。
+              closeGenerationSheet();
+              // 2026-11-16 用户指令：私信卡也浮在 3D 上，不再为开私信退回 2D。
               setChatPeerId(current => current === member.userId ? null : member.userId);
             }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
@@ -4497,7 +4555,13 @@ useEffect(() => {
           </button>}
           <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}`}>
           {leftStackDragging && leftStackDockHover && !dockColumnOccupied && <div className="sc-dock-ghost" aria-hidden="true">放回左栏</div>}
-          {capturePanel !== 'new' && <aside ref={capturePanelRef} aria-hidden={!captureOpen}
+          {/* 2026-11-15 统一生成面板：左栏卡片（同拍摄场地/户外规划），不是弹窗。 */}
+          <GenerationSheetHost
+            onOpenCapture={openCapturePanel}
+            controller={controller}
+            onAddLocalGlb={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); }}
+          />
+          {capturePanel !== 'new' && <aside ref={capturePanelRef} id="workbench-capture-card" aria-hidden={!captureOpen}
             className={`sc-workbench-capture${isLeftStackDetached(leftStack, 'capture') ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
             style={{
               ...(isLeftStackDetached(leftStack, 'capture') ? leftStackFloatStyle('capture') : leftStackSplit && leftStackFirst === 'capture' ? { order: 0 } : leftStackSplit && leftStackSecond === 'capture' ? { order: 2 } : {}),
@@ -4515,8 +4579,10 @@ useEffect(() => {
               <strong>拍摄场地</strong><span>独立小窗</span><span className="spacer" />
               <button type="button" aria-label="收回拍摄场地面板" title="收回左栏" onClick={() => toggleLeftStackDetach('capture')}><Minimize2 size={12}/>收回</button>
             </div>}
-            <WorkbenchCaptureGuide key={layout.id ?? layout.name} venueName={hasMapVenue ? layout.name?.split(' · ')[0] : undefined} onClose={closeCapturePanel} onSendToRecon={handleCaptureSendToRecon}
-              {...(isLeftStackDetached(leftStack, 'capture') ? { onHeaderPointerDown: event => beginLeftStackDrag('move', 'capture', event) } : { onHeaderPointerDown: event => beginLeftStackPull('capture', event) })} />
+            <Suspense fallback={<div role="status" style={{ padding: '16px', fontSize: 12, color: 'var(--wk-muted, #6b6f76)' }}>正在加载拍摄向导…</div>}>
+              <WorkbenchCaptureGuide key={layout.id ?? layout.name} venueName={hasMapVenue ? layout.name?.split(' · ')[0] : undefined} onClose={closeCapturePanel} onSendToRecon={handleCaptureSendToRecon}
+                {...(isLeftStackDetached(leftStack, 'capture') ? { onHeaderPointerDown: event => beginLeftStackDrag('move', 'capture', event) } : { onHeaderPointerDown: event => beginLeftStackPull('capture', event) })} />
+            </Suspense>
             {isLeftStackDetached(leftStack, 'capture') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'capture', event)} />}
           </aside>}
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed || captureOpen ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
@@ -4526,7 +4592,7 @@ useEffect(() => {
             </nav><button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {!captureOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}
+          {!captureOpen && !generationOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}
             {...(isLeftStackDetached(leftStack, 'chat') ? {
               className: 'is-detached', style: leftStackFloatStyle('chat'),
               floatBar: <div className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`} onPointerDown={event => beginLeftStackDrag('move', 'chat', event)}>
@@ -4548,7 +4614,7 @@ useEffect(() => {
             <aside
               className={`sc-left-drawer sc-float-layer is-outdoor-card${isLeftStackDetached(leftStack, 'outdoor') ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
               data-testid="outdoor-left-card"
-              hidden={outdoorPanel === null}
+              hidden={outdoorPanel === null || generationOpen}
               style={{
                 position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
                 // 堆栈态高度交给 CSS（is-stack-first 吃 --sc-left-stack-percent，第二张吃剩余）；
@@ -4622,7 +4688,7 @@ useEffect(() => {
               </div>
             </div>
           )}
-          {!captureOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
+          {!captureOpen && !generationOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
                 floatBar: (
                   <div
                     className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
@@ -4633,7 +4699,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})} {...(outdoor2DOpen ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} {...(luxDirectVisible ? { onGenerate: () => { setSpaceWorkflow('aholo'); openAholoWorkflow('world'); }, onReconstruct: () => openAholoWorkflow('recon') } : {})} onAddSampleScene={startStoredScene} layout={layout} {...(layout.id ? { venueFactScope: activityScope(layout.id) } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} workflow={spaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChatBridge controller={controller} agent={activeAgent} hideLibraryActions onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow} onOpenActivity={() => showAgent("door")}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})} {...(outdoor2DOpen || outdoor3dTakeover ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} {...(layout.id ? { venueFactScope: activityScope(layout.id) } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -4773,7 +4839,7 @@ useEffect(() => {
           try {
             let item = findCatalogEntry(EVENT_CATALOG, key);
             if (key.startsWith('online:')) {
-              const model = (await loadOnlineModels()).models.find(entry => entry.slug === key.slice(7));
+              const model = (await loadShippedOnlineModels()).models.find(entry => entry.slug === key.slice(7));
               if (!model) return;
               item = await loadOnlineCatalogItem(model, controller);
             } else if (key.startsWith('generated:')) {

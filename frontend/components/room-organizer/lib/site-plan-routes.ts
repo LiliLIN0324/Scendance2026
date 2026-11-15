@@ -27,6 +27,7 @@ import {
   type PlanEditIssue,
   type PlanEditResult,
 } from './site-plan-editing';
+import { autoNodeName, isAutoNodeName } from './site-plan-node-names';
 
 /** 契约平面点范围（±5000 m），与 site-plan planPointSchema 同源。 */
 const PLAN_COORD_LIMIT_M = 5000;
@@ -44,6 +45,8 @@ export interface BuildRouteInput {
   name: string;
   points: readonly PlanPoint[];
   oneWay?: boolean;
+  /** 载体（可选）：缺省步行，写入时补齐 'walk'（2026-11-16）。 */
+  carrier?: PlanRoute['carrier'];
   widthM?: number;
   startNodeId?: string;
   endNodeId?: string;
@@ -105,6 +108,8 @@ export function buildRoute(input: BuildRouteInput, nodes: readonly PlanNode[] = 
     name: input.name,
     points: input.points.map(p => ({ x: p.x, y: p.y })),
     oneWay: input.oneWay ?? false,
+    // 新写入一律带上载体，不再让「没这个字段」在库里漂着；旧数据读出时由 routeCarrier 兜底。
+    carrier: input.carrier ?? 'walk',
     ...(input.widthM !== undefined ? { widthM: input.widthM } : {}),
     ...(input.startNodeId !== undefined ? { startNodeId: input.startNodeId } : {}),
     ...(input.endNodeId !== undefined ? { endNodeId: input.endNodeId } : {}),
@@ -123,11 +128,431 @@ export function reverseRoute(route: PlanRoute): PlanRoute {
   };
 }
 
+/* ---------------- 动线折点编辑（加点 / 减点 / 挪点 / 并点） ---------------- */
+
+/** 动线最少顶点数：与契约 planRouteSchema.points.min 一致（起点 + 终点）。 */
+export const PLAN_ROUTE_MIN_VERTICES = 2;
+
+/** 单条动线折点几何是否可提交：非法时返回第一条问题（空值表示合法）。 */
+export function routeVertexEditIssue(points: readonly PlanPoint[]): PlanEditIssue | null {
+  return routeGeometryIssues(points)[0] ?? null;
+}
+
+/**
+ * 2026-11-15 用户指令「路线和分区一样，在线上可以加点、减点、挪动合并点」：
+ * 三条纯函数把动线折点编辑的口径固定下来，画布交互只负责命中与提交。
+ *
+ * 共同约束（契约同源）：≥2 个点、无相邻重合、坐标不越 ±5000 m、不超过 128 点。
+ * 端点语义：动线起终点可能引用出入口节点（startNodeId / endNodeId），
+ * 删掉被引用的端点时必须**同步解除引用**——否则会留下「引用节点但几何已不在节点上」
+ * 的悬空引用（契约 superRefine 会拒，面板也会误报未连接）。
+ */
+
+/** 在第 edgeIndex 条边（v[edgeIndex] → v[edgeIndex+1]）上插入一个折点。 */
+export function insertRouteVertex(
+  route: PlanRoute,
+  edgeIndex: number,
+  point: PlanPoint,
+): PlanRouteEditResult<PlanRoute> {
+  if (!Number.isInteger(edgeIndex) || edgeIndex < 0 || edgeIndex >= route.points.length - 1) {
+    return { ok: false, issue: { code: 'bad-index', message: `动线边序号越界（${edgeIndex}）。` } };
+  }
+  if (route.points.length >= PLAN_ROUTE_MAX_VERTICES) {
+    return { ok: false, issue: { code: 'too-many-vertices', message: `动线顶点已达上限 ${PLAN_ROUTE_MAX_VERTICES} 个。` } };
+  }
+  const points = [
+    ...route.points.slice(0, edgeIndex + 1),
+    { x: point.x, y: point.y },
+    ...route.points.slice(edgeIndex + 1),
+  ];
+  const issue = routeVertexEditIssue(points);
+  if (issue) return { ok: false, issue };
+  // 插点在边中间，首末两点不动 → 起终点引用仍然有效，不需要解绑。
+  return { ok: true, value: { ...route, points } };
+}
+
+/** 删除第 index 个折点；删的是端点时同步解除对应的节点引用。 */
+export function removeRouteVertex(route: PlanRoute, index: number): PlanRouteEditResult<PlanRoute> {
+  if (!Number.isInteger(index) || index < 0 || index >= route.points.length) {
+    return { ok: false, issue: { code: 'bad-index', message: `动线折点序号越界（${index}）。` } };
+  }
+  if (route.points.length <= PLAN_ROUTE_MIN_VERTICES) {
+    return { ok: false, issue: { code: 'too-few-vertices', message: '动线至少保留 2 个点（起点和终点），不能再删。' } };
+  }
+  const points = route.points.filter((_, i) => i !== index);
+  const issue = routeVertexEditIssue(points);
+  if (issue) return { ok: false, issue };
+  const next: PlanRoute = { ...route, points };
+  if (index === 0) delete next.startNodeId;
+  if (index === route.points.length - 1) delete next.endNodeId;
+  return { ok: true, value: next };
+}
+
+/** 把第 index 个折点挪到 point（移动后仍需几何合法）。 */
+export function moveRouteVertex(
+  route: PlanRoute,
+  index: number,
+  point: PlanPoint,
+): PlanRouteEditResult<PlanRoute> {
+  if (!Number.isInteger(index) || index < 0 || index >= route.points.length) {
+    return { ok: false, issue: { code: 'bad-index', message: `动线折点序号越界（${index}）。` } };
+  }
+  const points = route.points.map((p, i) => (i === index ? { x: point.x, y: point.y } : p));
+  const issue = routeVertexEditIssue(points);
+  if (issue) return { ok: false, issue };
+  return { ok: true, value: { ...route, points } };
+}
+
+/* ---------------- 动线穿边 → 自动出入口 ---------------- */
+
+/** 交点/去重容差（m）：与顶点最小间距、共享节点豁免半径同值。 */
+export const PLAN_CROSSING_NODE_DEDUPE_M = 0.5;
+
+/** 两线段交点（含端点/共线端点触碰）；不相交返回 null。 */
+function segmentIntersection(a1: PlanPoint, a2: PlanPoint, b1: PlanPoint, b2: PlanPoint): PlanPoint | null {
+  const d1x = a2.x - a1.x;
+  const d1y = a2.y - a1.y;
+  const d2x = b2.x - b1.x;
+  const d2y = b2.y - b1.y;
+  const denom = d1x * d2y - d1y * d2x;
+  if (Math.abs(denom) < 1e-12) return null;
+  const t = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / denom;
+  const u = ((b1.x - a1.x) * d1y - (b1.y - a1.y) * d1x) / denom;
+  if (t < -1e-8 || t > 1 + 1e-8 || u < -1e-8 || u > 1 + 1e-8) return null;
+  return { x: a1.x + t * d1x, y: a1.y + t * d1y };
+}
+
+export interface RouteBoundaryCrossing {
+  point: PlanPoint;
+  /** 沿动线走向经过该交点：true = 从界外进场，false = 从界内离场。 */
+  entering: boolean;
+}
+
+/**
+ * 2026-11-15 用户：「如果是单向的流线，那么对应的进去的就是入口，出来的就是出口。
+ * 如果是双向的流线，对应的就是出入口」。
+ *
+ * 所以交点不能只给位置，还要知道“这一下是进还是出”：沿动线走向在交点前后各采一个点，
+ * 前在外、后在内 → 进场；前在内、后在外 → 离场。单向线据此判入口/出口，双向线一律出入口。
+ */
+export function routeBoundaryCrossingEntries(
+  points: readonly PlanPoint[],
+  boundary: readonly PlanPoint[],
+): RouteBoundaryCrossing[] {
+  if (points.length < 2 || boundary.length < 3) return [];
+  // 累计弧长：用来按“沿线的距离”采样，比按段索引采样稳（顶点附近也不会采样到线外）。
+  const arcs: number[] = [0];
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1]!;
+    const next = points[i]!;
+    arcs.push(arcs[i - 1]! + Math.hypot(next.x - prev.x, next.y - prev.y));
+  }
+  const total = arcs[points.length - 1]!;
+  const pointAtArc = (s: number): PlanPoint => {
+    const clamped = Math.max(0, Math.min(total, s));
+    let i = 1;
+    while (i < points.length - 1 && arcs[i]! < clamped) i += 1;
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const span = arcs[i]! - arcs[i - 1]!;
+    const t = span <= 0 ? 0 : (clamped - arcs[i - 1]!) / span;
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  };
+
+  const hits: { point: PlanPoint; arc: number }[] = [];
+  for (let i = 1; i < points.length; i += 1) {
+    const from = points[i - 1]!;
+    const to = points[i]!;
+    for (let j = 0; j < boundary.length; j += 1) {
+      const hit = segmentIntersection(from, to, boundary[j]!, boundary[(j + 1) % boundary.length]!);
+      if (!hit) continue;
+      if (hits.some(item => Math.hypot(item.point.x - hit.x, item.point.y - hit.y) < PLAN_CROSSING_NODE_DEDUPE_M)) continue;
+      // 沿动线的位置：段序号 + 段内插值（只用于排序，不需要是真实弧长）。
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((hit.x - from.x) * dx + (hit.y - from.y) * dy) / len2));
+      hits.push({ point: hit, arc: arcs[i - 1]! + t * (arcs[i]! - arcs[i - 1]!) });
+    }
+  }
+
+  return hits
+    .sort((a, b) => a.arc - b.arc)
+    .map(({ point, arc }) => {
+      // 采样步长 0.2 m，但不超过交点到两端的一半，避免越过线头把方向采反。
+      const probe = Math.min(0.2, Math.max(0.05, arc / 2), Math.max(0.05, (total - arc) / 2));
+      const insideBefore = planPointInRing(pointAtArc(arc - probe), boundary);
+      const insideAfter = planPointInRing(pointAtArc(arc + probe), boundary);
+      return { point, entering: !insideBefore && insideAfter };
+    });
+}
+
+/**
+ * 2026-11-15 用户：「从场地外的线到场地边界的时候，交界处会自动变成入口/出口/出入口」。
+ * 这里先算出折线与边界环的所有交点（沿动线顺序、按 0.5 m 去重）。
+ * 排序按动线走向算参数（段序号 + 段内位置），不依赖边界边的遍历顺序——
+ * 否则“先出后进”的场次会把左、右两个交点的先后弄反。
+ * 边界不足 3 点（没画完）时返回空——没有边界就没有「交界处」。
+ */
+export function routeBoundaryCrossings(
+  points: readonly PlanPoint[],
+  boundary: readonly PlanPoint[],
+): PlanPoint[] {
+  return routeBoundaryCrossingEntries(points, boundary).map(crossing => crossing.point);
+}
+
+/**
+ * 自动交界出入口的 notes 前缀：用来认出「这是自动建的」，用户手放的节点不会被误删。
+ *
+ * 2026-11-15 用户反馈「微调后原先的出入口没消失，又多了几个」：只“看到交点就新建” 是错的，
+ * 线一微调交点就漂，每次都剩下一只旧节点（还带红点）。改成“同一条动线自己那几只节点跟着交点走”。
+ */
+export const AUTO_CROSSING_NODE_NOTE = '动线与用地红线自动交点';
+
+/**
+ * 2026-11-16 改名前的旧前缀（“场地边界”）：只用来识别存量自动节点。
+ * 库里已有的自动出入口是用旧字符串写的，识别不到就会被当成“用户手放的”永不被回收——
+ * 所以新节点写新前缀，旧节点两个前缀都认。
+ */
+const LEGACY_AUTO_CROSSING_NODE_NOTE = '动线与场地边界自动交点';
+
+/** 自动节点的归属标记：notes 里带上建它的动线 id。 */
+function autoCrossingRouteTag(routeId: string): string {
+  return `route:${routeId}`;
+}
+
+/** 这节点是不是「动线穿边自动生成」的交界出入口。 */
+export function isAutoCrossingNode(node: PlanNode): boolean {
+  return node.notes.startsWith(AUTO_CROSSING_NODE_NOTE) || node.notes.startsWith(LEGACY_AUTO_CROSSING_NODE_NOTE);
+}
+
+/**
+ * 2026-11-15 用户：「如果是单向的流线，那么对应的进去的就是入口，出来的就是出口。
+ * 如果是双向的流线，对应的就是出入口」。
+ * 单向（oneWay=true）时 points 的先后就是行进方向：进场 → 入口，离场 → 出口；
+ * 双向 / 未声明单向 → 出入口。
+ */
+export function crossingNodeKind(oneWay: boolean | undefined, entering: boolean): PlanNode['kind'] {
+  if (!oneWay) return 'both';
+  return entering ? 'entry' : 'exit';
+}
+
+/** 自动判型结果写在 notes 里，用来认出“用户是不是自己改过类型”。 */
+function autoKindTag(kind: PlanNode['kind']): string {
+  return `（kind:${kind}）`;
+}
+
+function taggedAutoKind(notes: string): PlanNode['kind'] | null {
+  const match = /（kind:(entry|exit|both)）/.exec(notes);
+  return match ? (match[1] as PlanNode['kind']) : null;
+}
+
+/**
+ * 让自动节点跟上“这次该是入口/出口/出入口”：
+ * - 用户手动改过类型（notes 里的自动值与当前 kind 不一致）→ 一律不碰，尊重用户；
+ * - 名字仍是自动名 → 跟着重命名（出入口 1 → 入口 1，编号取目标类型最小空号）；
+ * - 只改 kind / name / notes，位置由调用方处理。
+ * 没有任何变化时返回 null（保持引用不变，方便幂等）。
+ */
+function retypeCrossingNode(
+  node: PlanNode,
+  desired: PlanNode['kind'],
+  others: readonly PlanNode[],
+): PlanNode | null {
+  const tagged = taggedAutoKind(node.notes);
+  if (tagged && node.kind !== tagged) return null;
+  const name = node.kind !== desired && isAutoNodeName(node.name)
+    ? autoNodeName(desired, others.filter(other => other.id !== node.id))
+    : node.name;
+  const notes = tagged
+    ? node.notes.replace(/（kind:(entry|exit|both)）/, autoKindTag(desired))
+    : `${node.notes}${autoKindTag(desired)}`;
+  if (node.kind === desired && node.name === name && node.notes === notes) return null;
+  return { ...node, kind: desired, name, notes };
+}
+
+/**
+ * 2026-11-15：删掉一条动线时，把它自己建的交界节点一起收走（否则剩一堆「未连接」红点）。
+ * 保留：别的动线引用的、用户改过名字的。
+ */
+export function removeAutoCrossingNodesOfRoute(
+  routeId: string,
+  plan: {
+    nodes: readonly PlanNode[];
+    routes: readonly Pick<PlanRoute, 'id' | 'startNodeId' | 'endNodeId'>[];
+  },
+): PlanNode[] {
+  const tag = autoCrossingRouteTag(routeId);
+  const referenced = new Set<string>();
+  for (const route of plan.routes) {
+    if (route.id === routeId) continue;
+    if (route.startNodeId) referenced.add(route.startNodeId);
+    if (route.endNodeId) referenced.add(route.endNodeId);
+  }
+  return plan.nodes.filter(node => {
+    if (!isAutoCrossingNode(node) || !node.notes.includes(tag)) return true;
+    if (referenced.has(node.id)) return true;
+    return !isAutoNodeName(node.name);
+  });
+}
+
+/** 自动节点跟交点走的最大距离（m）：再远就不认领（避免把别的动线的节点抢过来）。 */
+export const PLAN_CROSSING_NODE_REUSE_M = 5;
+
+/** 点到折线的最短距离（m）。 */
+function distancePointToPolylineM(pt: PlanPoint, points: readonly PlanPoint[]): number {
+  let best = Infinity;
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / len2));
+    const d = Math.hypot(pt.x - (a.x + dx * t), pt.y - (a.y + dy * t));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+export interface CrossingNodeReconcile {
+  /** 处理后的节点列表（可能含新增/位置更新/删除）。 */
+  nodes: PlanNode[];
+  added: PlanNode[];
+  /** 跟着交点挪了位置的自动节点（同一只，不是新建）。 */
+  moved: PlanNode[];
+  /** 类型跟着单向/双向重新判过的自动节点（入口 ↔ 出口 ↔ 出入口）。 */
+  retyped: PlanNode[];
+  removed: PlanNode[];
+}
+
+/**
+ * 把一条动线的交界出入口重新对齐到它当前的边界交点上（2026-11-15 用户反馈后的正解）：
+ * - 交点数量不变、只是位置微调 → **拖那只旧节点过去**，不新建（这才是“少一只不多一只”）；
+ * - 交点变多 → 补新建（按动线方向判入口/出口，双向为出入口）；
+ * - 单向/双向或走向变了 → 同一只节点重新判型（用户手动改过类型的除外）；
+ * - 交点变少/线缩进场内 → 本动线自己的自动节点删掉（前提：没被任何动线引用、名字仍是自动名），
+ *   用户在交点上手放的节点、改过名字的节点、被引用的节点一律不动；
+ * - 交点 0.5 m 内已有节点（含用户手放、其他动线的）→ 不再叠一只。
+ *
+ * 归属：优先看 notes 里的 `route:<id>`（新版）；旧版自动节点没有标记，就按“贴着这条动线 5 m 内”认领。
+ */
+export function reconcileCrossingNodes(
+  route: Pick<PlanRoute, 'points'> & { id?: string; oneWay?: boolean },
+  plan: {
+    boundary: readonly PlanPoint[];
+    nodes: readonly PlanNode[];
+    routes: readonly Pick<PlanRoute, 'id' | 'startNodeId' | 'endNodeId'>[];
+  },
+): CrossingNodeReconcile {
+  const crossings = routeBoundaryCrossingEntries(route.points, plan.boundary);
+  const referenced = new Set<string>();
+  for (const other of plan.routes) {
+    if (other.startNodeId) referenced.add(other.startNodeId);
+    if (other.endNodeId) referenced.add(other.endNodeId);
+  }
+  const tag = route.id ? autoCrossingRouteTag(route.id) : null;
+  const owned = (node: PlanNode): boolean => {
+    if (!isAutoCrossingNode(node)) return false;
+    if (tag && node.notes.includes(tag)) return true;
+    return distancePointToPolylineM(node.position, route.points) <= PLAN_CROSSING_NODE_REUSE_M;
+  };
+  const ownedIds = new Set(
+    plan.nodes.filter(node => owned(node) && !referenced.has(node.id)).map(node => node.id),
+  );
+
+  const working = [...plan.nodes];
+  const usedIds = new Set<string>();
+  const added: PlanNode[] = [];
+  const moved: PlanNode[] = [];
+  const retyped: PlanNode[] = [];
+
+  for (const crossing of crossings) {
+    // 2026-11-15 用户：「单向的流线，进去的就是入口，出来的就是出口；双向的就是出入口」。
+    const desiredKind = crossingNodeKind(route.oneWay, crossing.entering);
+    const target = { x: Math.round(crossing.point.x * 10) / 10, y: Math.round(crossing.point.y * 10) / 10 };
+    // 交点位置上已经有节点：如果正好是本动线自己的自动节点 → 认作已对齐（标记 used，别当多余删掉），
+    // 但要先把类型对齐（单向↔双向、进↔出改了就得跟着变）；是用户手放的 / 别的动线的 → 不动。
+    const atTarget = working.filter(
+      node => Math.hypot(node.position.x - target.x, node.position.y - target.y) < PLAN_CROSSING_NODE_DEDUPE_M,
+    );
+    const ownIndex = working.findIndex(node => atTarget.includes(node) && ownedIds.has(node.id));
+    if (ownIndex >= 0) {
+      const node = working[ownIndex]!;
+      usedIds.add(node.id);
+      const next = retypeCrossingNode(node, desiredKind, working) ?? node;
+      if (next !== node) {
+        working[ownIndex] = next;
+        retyped.push(next);
+      }
+      continue;
+    }
+    if (atTarget.length > 0) continue;
+
+    // 先找本动线自己的自动节点（最近的）拉过来。
+    let candidateIndex = -1;
+    let candidateDist = Infinity;
+    working.forEach((node, index) => {
+      if (!ownedIds.has(node.id) || usedIds.has(node.id)) return;
+      const d = Math.hypot(node.position.x - target.x, node.position.y - target.y);
+      if (d < candidateDist) {
+        candidateDist = d;
+        candidateIndex = index;
+      }
+    });
+    if (candidateIndex >= 0 && candidateDist <= PLAN_CROSSING_NODE_REUSE_M) {
+      const node = working[candidateIndex]!;
+      usedIds.add(node.id);
+      const positioned: PlanNode = candidateDist > 0.05 ? { ...node, position: target } : node;
+      const next = retypeCrossingNode(positioned, desiredKind, working) ?? positioned;
+      if (next !== node) {
+        working[candidateIndex] = next;
+        if (positioned !== node) moved.push(next);
+        if (next.kind !== node.kind) retyped.push(next);
+      }
+      continue;
+    }
+
+    // 没有可复用的 → 新建一只，类型按这次的方向判。
+    const node: PlanNode = {
+      id: crypto.randomUUID(),
+      kind: desiredKind,
+      name: autoNodeName(desiredKind, working),
+      position: target,
+      notes: `${AUTO_CROSSING_NODE_NOTE}：按动线方向自动判进/出（单向：进场入口、离场出口；双向：出入口），可手动改类型${tag ? `（${tag}）` : ''}${autoKindTag(desiredKind)}`,
+    };
+    working.push(node);
+    ownedIds.add(node.id);
+    usedIds.add(node.id);
+    added.push(node);
+  }
+
+  // 本动线剩下没对上任何交点的自动节点 → 删（用户改过名字的保留）。
+  const removed: PlanNode[] = [];
+  const nodes = working.filter(node => {
+    if (!ownedIds.has(node.id) || usedIds.has(node.id)) return true;
+    if (!isAutoNodeName(node.name)) return true;
+    removed.push(node);
+    return false;
+  });
+
+  return { nodes, added, moved, retyped, removed };
+}
+
 /* ---------------- 出入口节点 ---------------- */
 
-/** 按落点自动推断节点归属分区（第一个包含落点的分区；都不含返回 undefined）。口径与 inferWorkerZoneId 一致。 */
-export function inferNodeZoneId(pt: PlanPoint, zones: readonly { id: string; polygon: readonly PlanPoint[] }[]): string | undefined {
+/**
+ * 按落点推断归属分区（第一个包含落点的分区；都不含返回 undefined）。
+ * 2026-11-16 用户「物料这些物体要有归属意识」：设施/人员/出入口共用这一口径，
+ * 放置/拖动后都落到同一个函数上，免得三套各算各的。
+ */
+export function inferZoneIdAt(pt: PlanPoint, zones: readonly { id: string; polygon: readonly PlanPoint[] }[]): string | undefined {
   return zones.find(zone => zone.polygon.length >= 3 && planPointInRing(pt, zone.polygon))?.id;
+}
+
+/** 按落点自动推断节点归属分区。口径与 inferWorkerZoneId / 设施归属一致。 */
+export function inferNodeZoneId(pt: PlanPoint, zones: readonly { id: string; polygon: readonly PlanPoint[] }[]): string | undefined {
+  return inferZoneIdAt(pt, zones);
 }
 
 export interface BuildNodeInput {
@@ -159,7 +584,7 @@ export function buildNode(
   }
   const issues: PlanEditIssue[] = [];
   if (boundary.length >= 3 && !planPointInRing(input.position, boundary)) {
-    issues.push({ code: 'out-of-boundary', message: '出入口节点落在场地边界之外。', at: input.position });
+    issues.push({ code: 'out-of-boundary', message: '出入口节点落在用地红线之外。', at: input.position });
   }
   const fallbackName = input.kind === 'exit' ? '出口' : input.kind === 'both' ? '出入口' : '入口';
   const name = (input.name ?? fallbackName).trim();
@@ -240,7 +665,7 @@ export function nodeRouteRefs(nodeId: string, routes: readonly PlanRoute[]): { s
 
 /** 按落点自动推断人员归属分区（第一个包含落点的分区；都不含返回 undefined）。 */
 export function inferWorkerZoneId(pt: PlanPoint, zones: readonly { id: string; polygon: readonly PlanPoint[] }[]): string | undefined {
-  return zones.find(zone => zone.polygon.length >= 3 && planPointInRing(pt, zone.polygon))?.id;
+  return inferZoneIdAt(pt, zones);
 }
 
 export interface BuildWorkerInput {
@@ -278,7 +703,7 @@ export function buildWorker(
   }
   const issues: PlanEditIssue[] = [];
   if (boundary.length >= 3 && !planPointInRing(input.position, boundary)) {
-    issues.push({ code: 'out-of-boundary', message: '人员点位落在场地边界之外。', at: input.position });
+    issues.push({ code: 'out-of-boundary', message: '人员点位落在用地红线之外。', at: input.position });
   }
   const worker: PlanWorker = {
     id: input.id ?? crypto.randomUUID(),
@@ -347,13 +772,36 @@ export interface PlanNodeIssue {
 }
 
 /** 出入口节点问题：未被任何动线引用（未连接节点）。 */
+
+/**
+ * 2026-11-15 用户：「明明出入口已经在动线上了，还是显示未在动线上」。
+ *
+ * 交界处自动建的出入口本来就压在动线**中段**，它不是起终点引用（startNodeId / endNodeId），
+ * 但物理上确实连着这条线。只按引用判定就会把这种节点误报成「未连接」，画布上还挂红点。
+ *
+ * 所以「已连接」= 作为起终点被引用 **或** 节点落在某条动线折线上（≤ 0.5 m，与吸附/去重同一容差）。
+ */
+export const PLAN_NODE_ON_ROUTE_M = PLAN_CROSSING_NODE_DEDUPE_M;
+
+/** 哪些动线穿过（压着）这个点；端点引用不算在这里，只看几何。 */
+export function nodeOnRoutes(
+  position: PlanPoint,
+  routes: readonly PlanRoute[],
+  toleranceM: number = PLAN_NODE_ON_ROUTE_M,
+): PlanRoute[] {
+  return routes.filter(
+    route => route.points.length >= 2 && distancePointToPolylineM(position, route.points) <= toleranceM,
+  );
+}
+
 export function planNodeIssues(plan: Pick<SitePlanData, 'nodes' | 'routes'>): PlanNodeIssue[] {
   const issues: PlanNodeIssue[] = [];
   for (const node of plan.nodes) {
     const refs = nodeRouteRefs(node.id, plan.routes);
-    if (refs.startRoutes.length === 0 && refs.endRoutes.length === 0) {
-      issues.push({ nodeId: node.id, nodeName: node.name, issue: { code: 'unconnected-node', message: '未连接任何动线。', at: node.position } });
-    }
+    if (refs.startRoutes.length > 0 || refs.endRoutes.length > 0) continue;
+    // 压在动线中段也是连着（见 PLAN_NODE_ON_ROUTE_M 注释）。
+    if (nodeOnRoutes(node.position, plan.routes).length > 0) continue;
+    issues.push({ nodeId: node.id, nodeName: node.name, issue: { code: 'unconnected-node', message: '未连接任何动线。', at: node.position } });
   }
   return issues;
 }
@@ -370,7 +818,7 @@ export function planWorkerIssues(plan: Pick<SitePlanData, 'boundary' | 'workers'
   const issues: PlanWorkerIssue[] = [];
   for (const worker of plan.workers) {
     if (!planPointInRing(worker.position, plan.boundary)) {
-      issues.push({ workerId: worker.id, workerRole: worker.role, issue: { code: 'out-of-boundary', message: '点位在场地边界之外。', at: worker.position } });
+      issues.push({ workerId: worker.id, workerRole: worker.role, issue: { code: 'out-of-boundary', message: '点位在用地红线之外。', at: worker.position } });
     }
   }
   return issues;

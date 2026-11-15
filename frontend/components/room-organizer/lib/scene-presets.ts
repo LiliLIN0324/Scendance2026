@@ -35,5 +35,26 @@ export type { ScenePresetKey };
 /** Every packaged preset, in panel order. Validation accepts exactly these. */
 export const SCENE_PRESET_KEYS = Object.keys(SCENE_PRESETS) as ScenePresetKey[];
 
+/**
+ * 场景预设落成户外设施时的 templateId 前缀。
+ * 契约里的 templateId 是自由字符串，所以不需要新增后端字段；3D 模型层按这个前缀
+ * 直接解析 `public/scene-presets/<key>/<key>.glb`，2D 仍按设施占地矩形参与编辑。
+ */
+export const SCENE_PRESET_FACILITY_PREFIX = 'scene-preset:';
+
+export function scenePresetFacilityId(key: ScenePresetKey): string {
+  return `${SCENE_PRESET_FACILITY_PREFIX}${key}`;
+}
+
+export function scenePresetKeyFromFacilityId(id: string): ScenePresetKey | null {
+  if (!id.startsWith(SCENE_PRESET_FACILITY_PREFIX)) return null;
+  const key = id.slice(SCENE_PRESET_FACILITY_PREFIX.length) as ScenePresetKey;
+  return Object.hasOwn(SCENE_PRESETS, key) ? key : null;
+}
+
+export function isScenePresetFacilityId(id: string): boolean {
+  return scenePresetKeyFromFacilityId(id) !== null;
+}
+
 export function presetModelUrl(key: ScenePresetKey): string { return `/scene-presets/${key}/${key}.glb`; }
 export function editorItemLimit(layout: RoomLayout): number { return layout.scenePreset ? 500 : 200; }

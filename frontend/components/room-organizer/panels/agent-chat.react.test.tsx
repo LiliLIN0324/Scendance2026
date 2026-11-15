@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { AgentChat } from './agent-chat';
+import { clearAgentSteerNotes, getAgentRun, resetAgentRun, startAgentRun } from './agent-chat-store';
 
 function editor(): RoomEditorContextValue {
   return {
@@ -18,89 +19,41 @@ function editor(): RoomEditorContextValue {
   } as unknown as RoomEditorContextValue;
 }
 
-function renderChat(agent: 'space' | 'material', onNewSpace?: (mode?: 'blank' | 'template') => void, onForwardToActivity?: (text:string)=>boolean|Promise<boolean>): void {
-  const chat = <AgentChat agent={agent} onNewSpace={onNewSpace} onForwardToActivity={onForwardToActivity}/>;
-  render(<RoomEditorProvider value={editor()}>
-    {chat}
-  </RoomEditorProvider>);
+function renderChat(agent: 'space' | 'material'): void {
+  render(<RoomEditorProvider value={editor()}><AgentChat agent={agent} /></RoomEditorProvider>);
 }
 
-afterEach(cleanup);
+beforeEach(() => { act(() => resetAgentRun()); });
+afterEach(() => { cleanup(); act(() => resetAgentRun()); });
 
-describe('AgentChat composer entry points', () => {
-  it.each(['space','material'] as const)('forwards an unhandled %s request once and clears only on acceptance',async agent=>{
-    const forward=vi.fn(()=>true);renderChat(agent,undefined,forward);
-    const input=screen.getByRole('textbox',{name:agent==='space'?'空间输入框':'物料输入框'}) as HTMLTextAreaElement;
-    fireEvent.change(input,{target:{value:'帮我规划一场社区活动'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
-    expect(forward).toHaveBeenCalledExactlyOnceWith('帮我规划一场社区活动');await waitFor(()=>expect(input.value).toBe(''));
-  });
-  it('keeps the input when the activity conversation rejects the transfer',async()=>{
-    const forward=vi.fn(()=>false);renderChat('material',undefined,forward);
-    const input=screen.getByRole('textbox',{name:'物料输入框'}) as HTMLTextAreaElement;
-    fireEvent.change(input,{target:{value:'帮我选择椅子'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
-    expect(forward).toHaveBeenCalledExactlyOnceWith('帮我选择椅子');expect(input.value).toBe('帮我选择椅子');
-    await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('暂时无法转交'));
-  });
-  it('keeps text and prevents duplicate sends while waiting, including after rejection',async()=>{
-    let fail!:(error:Error)=>void;const forward=vi.fn(()=>new Promise<boolean>((_resolve,reject)=>{fail=reject;}));renderChat('material',undefined,forward);
-    const input=screen.getByRole('textbox',{name:'物料输入框'}) as HTMLTextAreaElement;
-    fireEvent.change(input,{target:{value:'帮我选择椅子'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
-    expect(screen.getByRole('status').textContent).toContain('正在转交');expect((screen.getByRole('button',{name:'发送'}) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.submit(input.closest('form')!);expect(forward).toHaveBeenCalledOnce();expect(input.value).toBe('帮我选择椅子');
-    await act(async()=>{fail(new Error('unavailable'));});expect(input.value).toBe('帮我选择椅子');expect(screen.getByRole('status').textContent).toContain('暂时无法转交');
-  });
-  it('keeps unaccepted input in its own page-memory scope across activity changes',()=>{
-    const renderScoped=(scope:string)=><RoomEditorProvider value={editor()}><AgentChat key={scope} agent="material" draftScope={scope}/></RoomEditorProvider>;
-    const {rerender}=render(renderScoped('input-test-a'));
-    fireEvent.change(screen.getByRole('textbox',{name:'物料输入框'}),{target:{value:'旧活动中的椅子'}});
-    rerender(renderScoped('input-test-b'));expect((screen.getByRole('textbox',{name:'物料输入框'}) as HTMLTextAreaElement).value).toBe('');
-    rerender(renderScoped('input-test-a'));expect((screen.getByRole('textbox',{name:'物料输入框'}) as HTMLTextAreaElement).value).toBe('旧活动中的椅子');
-  });
-  it('preserves a pending message in its original scope when the activity switches and transfer fails',async()=>{
-    let fail!:(error:Error)=>void;const forward=vi.fn(()=>new Promise<boolean>((_resolve,reject)=>{fail=reject;}));
-    const renderScoped=(scope:string)=><RoomEditorProvider value={editor()}><AgentChat key={scope} agent="material" draftScope={scope} onForwardToActivity={forward}/></RoomEditorProvider>;
-    const {rerender}=render(renderScoped('pending-test-a'));
-    fireEvent.change(screen.getByRole('textbox',{name:'物料输入框'}),{target:{value:'原活动物料需求'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
-    rerender(renderScoped('pending-test-b'));expect((screen.getByRole('textbox',{name:'物料输入框'}) as HTMLTextAreaElement).value).toBe('');
-    await act(async()=>{fail(new Error('session changed'));});rerender(renderScoped('pending-test-a'));
-    expect((screen.getByRole('textbox',{name:'物料输入框'}) as HTMLTextAreaElement).value).toBe('原活动物料需求');
-  });
-  it.each(['space', 'material'] as const)('keeps unhandled %s requests and tells the user where to continue', agent => {
+/**
+ * 2026-11-16 用户指令：空间/物料底部的「一句话描述场地/物件」输入框属于旧内联生成界面，
+ * 已并进统一生成面板。这里只剩正在跑的那一轮的备注框。
+ */
+describe('空间/物料栏不再有生成输入框', () => {
+  it.each(['space', 'material'] as const)('%s 栏空闲时没有任何输入框', agent => {
     renderChat(agent);
-    const input = screen.getByRole('textbox', { name: agent === 'space' ? '空间输入框' : '物料输入框' });
-    fireEvent.change(input, { target: { value: '帮我规划一场社区活动' } });
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    expect((input as HTMLTextAreaElement).value).toBe('帮我规划一场社区活动');
-    expect(screen.getByRole('status').textContent).toContain('打开活动对话继续');
-  });
-  it('puts 生成物料 in the bottom-left of the material chat', () => {
-    renderChat('material');
-    const generate = screen.getByRole('button', { name: '生成物料' });
-    expect(document.querySelector('.ap-composer-left')?.contains(generate)).toBe(true);
-    fireEvent.click(generate);
-    const menu = screen.getByRole('menu', { name: '生成物料' });
-    expect([...menu.querySelectorAll('button')].map(button => button.textContent)).toEqual(['通过描述生成物料', '拍照/图片生成物料']);
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByPlaceholderText('为下一步加备注…')).toBeNull();
+    // 旧的描述框占位、生成星、发送键都不该再出现。
+    expect(screen.queryByText(/一句话描述/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '生成物料' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '发送' })).toBeNull();
   });
 
-  it('annotates the real Enter-to-send binding with a kbd chip', () => {
-    renderChat('space');
-    expect(screen.getByText('Enter', { selector: '.ap-kbd' })).toBeTruthy();
+  it('agent 在跑时只留备注框，回车进下一轮上下文', () => {
+    act(() => startAgentRun('material'));
+    renderChat('material');
+    const input = screen.getByPlaceholderText('为下一步加备注…') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '椅子换成藤编' } });
+    fireEvent.submit(input.form!);
+    expect(getAgentRun().steerNotes).toEqual(['椅子换成藤编']);
+    expect(input.value).toBe('');
+    act(() => clearAgentSteerNotes());
   });
-  it('keeps the space chat on its own plus menu without a generate button', () => {
-    const onNewSpace = vi.fn();
-    renderChat('space', onNewSpace);
-    expect(screen.queryByRole('button', { name: '生成物料' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '新建空白空间' }));
-    expect(onNewSpace).toHaveBeenCalledWith('blank');
-  });
-  it('retains the explicit space-reconstruction shortcut but forwards a negation',async()=>{
-    const open=vi.fn(),forward=vi.fn(()=>true);
-    render(<RoomEditorProvider value={editor()}><AgentChat agent="space" onOpenAholo={open} onForwardToActivity={forward}/></RoomEditorProvider>);
-    const input=screen.getByRole('textbox',{name:'空间输入框'});
-    fireEvent.change(input,{target:{value:'请重建场地'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
-    expect(open).toHaveBeenCalledExactlyOnceWith('recon',undefined);expect(forward).not.toHaveBeenCalled();
-    fireEvent.change(input,{target:{value:'不要重建真实场地'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
-    await waitFor(()=>expect(forward).toHaveBeenCalledExactlyOnceWith('不要重建真实场地'));
-    expect(open).toHaveBeenCalledOnce();
+
+  it('活动/门这两栏不在这里渲染', () => {
+    const { container } = render(<RoomEditorProvider value={editor()}><AgentChat agent="door" /></RoomEditorProvider>);
+    expect(container.querySelector('.ap-chat')).toBeNull();
   });
 });

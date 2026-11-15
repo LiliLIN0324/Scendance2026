@@ -14,20 +14,22 @@
 
 import type { PlanningIconName } from '@/lib/outdoor-plan-tokens';
 import { PLANNING_ICONS } from '@/lib/outdoor-plan-tokens';
-import { PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
 import {
   planRingAreaM2,
-  planRouteKinds,
-  planRouteKindLabels,
+  planRouteCarriers,
+  planRouteCarrierLabels,
   planRouteLengthM,
   planZoneSemantics,
   planZoneSemanticLabels,
   planMeasurementKinds,
   planMeasurementKindLabels,
+  routeCarrier,
   type PlanPoint,
   type PlanRoute,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { CARRIER_COLOR_KIND } from './route-carrier-color';
 import { facilityTypeLabel } from './plan-facility-catalog';
 import {
   facilitySticker,
@@ -54,6 +56,12 @@ export interface PlanLegendEntry {
    * 只影响视觉，不参与数量/汇总口径；PNG/PDF 图例可忽略本字段。
    */
   sticker?: OneplanStickerDescriptor | null;
+  /**
+   * 贴纸芯片色（可选，仅出入口三型用）：缺省时图例芯片是深色片；
+   * 传了就让这一行与画布上的入口（绿）/出口（红）/双向（青）芯片同色。
+   * 只影响视觉，不参与数量/汇总口径。
+   */
+  chipColor?: string;
 }
 
 export interface PlanLegendGroup {
@@ -95,13 +103,14 @@ export function polylineHalfLengthPoint(points: readonly PlanPoint[]): PlanPoint
 export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
   const groups: PlanLegendGroup[] = [];
 
-  // 1) 场地边界（恒有一组：边界是全案基底）。图标与图层图标映射同源（H4-a：hexagon）。
+  // 1) 用地红线（恒有一组：红线是全案基底）。图标与图层图标映射同源（H4-a：hexagon）。
+  // 2026-11-16 用户：「把场地边界改成用地红线吧」——名字跟建筑配图语汇对齐，色块用红线色。
   groups.push({
-    title: '场地边界',
+    title: '用地红线',
     entries: [{
       icon: iconOf('hexagon'),
-      swatch: PLANNING_LAYER_COLORS.boundary,
-      label: '场地边界',
+      swatch: PLANNING_BOUNDARY_LINE_COLOR,
+      label: '用地红线',
       count: 1,
       detail: plan.boundary.length >= 3 ? `共 ${formatAreaM2(planRingAreaM2(plan.boundary))}` : '',
     }],
@@ -156,31 +165,36 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     });
   }
 
-  // 4) 动线：按三类聚合（契约枚举序），色用三类专属色，detail 总长。
+  // 4) 动线：按载体聚合（2026-11-16 用户：图例判 carrier 不判 kind）。
+  //    色与画布同源：直接取 `route-carrier-color` 的映射，不再自己维护一份。
   const routeEntries: PlanLegendEntry[] = [];
-  for (const kind of planRouteKinds) {
-    const routes = plan.routes.filter(r => r.kind === kind);
+  for (const carrier of planRouteCarriers) {
+    const routes = plan.routes.filter(r => routeCarrier(r) === carrier);
     if (routes.length === 0) continue;
     const lengthM = routes.reduce((sum, r) => sum + planRouteLengthM(r.points), 0);
+    const colorKind = CARRIER_COLOR_KIND[carrier];
     routeEntries.push({
       icon: iconOf('route'),
-      swatch: PLANNING_ROUTE_KIND_COLORS[kind],
-      label: `${planRouteKindLabels[kind]}动线`,
+      swatch: PLANNING_ROUTE_KIND_COLORS[colorKind],
+      label: `${planRouteCarrierLabels[carrier]}动线`,
       count: routes.length,
       detail: `共 ${formatLengthM(lengthM)}`,
-      sticker: routeSticker(kind),
+      sticker: routeSticker(colorKind),
     });
   }
   if (routeEntries.length > 0) groups.push({ title: '动线', entries: routeEntries });
 
-  // 5) 出入口：按类型聚合（入口/出口/两用）。
+  // 5) 出入口：按类型聚合（入口/出口/两用）。三条各用自己的 kind 色，
+  // 与画布芯片/工具箱一致——图例里三行不再共用同一个灰色块。
   const nodeEntries: PlanLegendEntry[] = [];
   for (const [kind, label] of [['entry', '入口'], ['exit', '出口'], ['both', '出入口']] as const) {
     const nodes = plan.nodes.filter(n => n.kind === kind);
     if (nodes.length === 0) continue;
     nodeEntries.push({
       icon: iconOf('door-open'),
-      swatch: PLANNING_LAYER_COLORS.node,
+      swatch: PLANNING_NODE_KIND_COLORS[kind],
+      // 图例芯片跟着 kind 走色，否则图例里三行还是三个一样的黑点。
+      chipColor: PLANNING_NODE_KIND_COLORS[kind],
       label,
       count: nodes.length,
       detail: '',

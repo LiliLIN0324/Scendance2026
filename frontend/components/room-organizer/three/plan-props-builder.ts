@@ -9,6 +9,7 @@ import {
   oneplanStickerSrc,
   oneplanStickerUsesChip,
   preloadOneplanStickers,
+  stickerNeedsQuarterTurn,
   subscribeOneplanStickerLoads,
   type OneplanStickerDescriptor,
 } from '../lib/oneplan-stickers';
@@ -351,12 +352,25 @@ function paintStickerCanvas(
     const bg = color ? getOneplanTintedStickerCanvas(srcs.bg, color) : getOneplanStickerImage(srcs.bg);
     const fg = getOneplanStickerImage(srcs.fg);
     if (!bg && !fg) return null;
-    if (bg) {
-      ctx.globalAlpha = 0.55;
-      ctx.drawImage(bg, 0, 0, canvasW, canvasH);
-      ctx.globalAlpha = 1;
-    }
-    if (fg) ctx.drawImage(fg, 0, 0, canvasW, canvasH);
+    // 2026-11-16：素材画布朝向与占地朝向不同时转 90°，否则竖着画的摩托车 / 房车会被拉横。
+    const art = bg ?? fg!;
+    const artW = 'naturalWidth' in art ? art.naturalWidth : art.width;
+    const artH = 'naturalHeight' in art ? art.naturalHeight : art.height;
+    const turn = stickerNeedsQuarterTurn(artW, artH, canvasW, canvasH);
+    const paint = (image: CanvasImageSource, alpha: number): void => {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (turn) {
+        ctx.translate(canvasW / 2, canvasH / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(image, -canvasH / 2, -canvasW / 2, canvasH, canvasW);
+      } else {
+        ctx.drawImage(image, 0, 0, canvasW, canvasH);
+      }
+      ctx.restore();
+    };
+    if (bg) paint(bg, 0.55);
+    if (fg) paint(fg, 1);
     return canvas;
   }
   const image = getOneplanStickerImage(oneplanStickerSrc(sticker));
@@ -446,6 +460,9 @@ function buildStickerPlaceholder(THREE: typeof import('three'), prop: PlanPropSh
 
 /** 一个设施的 3D 物件（不含定位；调用方负责摆位与朝向）。 */
 export function buildPlanPropObject(THREE: typeof import('three'), prop: PlanPropShape): ThreeNS.Group {
+  if (libraryStickerFor(prop.templateId) || packStickerForTemplateId(prop.templateId)) {
+    return buildStickerPlaceholder(THREE, prop);
+  }
   const width = Math.max(0.6, prop.width);
   const depth = Math.max(0.6, prop.depth);
   switch (prop.kind) {

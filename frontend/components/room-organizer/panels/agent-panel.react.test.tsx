@@ -1505,8 +1505,8 @@ beforeEach(() => {
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
 
-/** 「你可以做什么」默认收起：要用能力卡的用例先点开这行标题。 */
-const expandCapabilityCards = () => { fireEvent.click(screen.getByRole('button', { name: '你可以做什么' })); };
+/** 例句行末的 ⌄ 把输入框上方这一格换成能力卡；要用能力卡的用例先点它。 */
+const expandCapabilityCards = () => { fireEvent.click(screen.getByRole('button', { name: '展开你可以做什么' })); };
 
 describe('T-04 delivery narrative in the Agent panel', () => {
   it('T3 封门：评审模式右栏不再渲染钉议卡槽，面板内没有「打开客户评审」', () => {
@@ -1653,12 +1653,14 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('puts speak-first examples in the 活动 chat, with chips behind adjust', () => {
+  it('suggests a sentence above the composer, with chips behind adjust', () => {
     render(ui(INITIAL_LAYOUT));
     const home = screen.getByLabelText('生成活动方案');
     expect(home).toBeTruthy();
-    expect(within(home).getByRole('group', { name: '需求例句' })).toBeTruthy();
-    expect(within(home).getByRole('button', { name: '80 人发布会，室内 12×9' })).toBeTruthy();
+    // 例句行搬到输入框上方那一格，首页里不再自带一组例句卡。
+    expect(within(home).queryByRole('group', { name: '需求例句' })).toBeNull();
+    expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '试试这样描述你的活动：80 人发布会，室内 12×9' })).toBeTruthy();
     expect(within(home).getByRole('button', { name: '生成方案' })).toBeTruthy();
     expect(within(home).queryByRole('button', { name: '品牌快闪' })).toBeNull();
     fireEvent.click(within(home).getByRole('button', { name: '改类型或人数' }));
@@ -2168,21 +2170,35 @@ describe('T-UI visible interaction', () => {
   it('keeps the capability cards collapsed by default and remembers the choice', () => {
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
-    // 默认收起：能力卡不占对话区，只剩一行标题。
-    const toggle = screen.getByRole('button', { name: '你可以做什么' });
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // 默认收起：这一格只有一行例句，没有单独的能力卡折叠行。
+    expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: '你可以做什么' })).toBeNull();
-    fireEvent.click(toggle);
-    // 展开后卡片挂出；选择写进本机，下次保持。
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(localStorage.getItem('sc.ap-capabilities-open')).toBeNull();
+    expandCapabilityCards();
+    // 展开后卡片占同一格；选择写进本机，下次保持。
     expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: '需求例句' })).toBeNull();
     expect(localStorage.getItem('sc.ap-capabilities-open')).toBe('1');
     cleanup();
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
-    expect(screen.getByRole('button', { name: '你可以做什么' }).getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '你可以做什么' }));
+    expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '收起你可以做什么' }));
     expect(screen.queryByRole('group', { name: '你可以做什么' })).toBeNull();
+    expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
     expect(localStorage.getItem('sc.ap-capabilities-open')).toBe('0');
+  });
+
+  it('swaps the 例句 row for the capability cards in the same slot', () => {
+    state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    // 收起时这一格只有例句，没有额外的折叠行。
+    expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '展开你可以做什么' }));
+    // 同一格换成两张能力卡，例句行让位。
+    expect(screen.queryByRole('group', { name: '需求例句' })).toBeNull();
+    expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '收起你可以做什么' }));
+    expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
   });
 
   it('keeps the left rail on 布置 and sends review or delivery elsewhere', async () => {
@@ -4910,6 +4926,47 @@ describe('registered capabilities through the atomic outdoor Agent',()=>{
   render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
   return {current:()=>current,plan:()=>plan,switchProject:()=>{projectId='other-project';},change:()=>{plan={...plan,boundary:[{x:0,y:0},{x:81,y:0},{x:81,y:70},{x:0,y:70}]};},apply,download};
  }
+ it('户外提示卡只填入指令，输入或等待追问时让位', async () => {
+  mountCommon();
+  const input = screen.getByRole('textbox', { name: '告诉 Agent 要改的' }) as HTMLTextAreaElement;
+  const suggestion = screen.getByRole('group', { name: '下一句建议' });
+  fireEvent.click(within(suggestion).getByRole('button', { name: '先找场地，再核对可用范围。' }));
+  expect(input.value).toBe('先找杭州 IN77，核对可用的活动范围');
+  expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+  expect(screen.queryByRole('group', { name: '下一句建议' })).toBeNull();
+  fireEvent.change(input, { target: { value: '' } });
+  expect(screen.getByRole('group', { name: '下一句建议' })).toBeTruthy();
+  send('把它往那边挪一点');
+  expect(await screen.findByText('待你回复', { exact: true })).toBeTruthy();
+  expect(screen.queryByRole('group', { name: '下一句建议' })).toBeNull();
+ });
+ it('户外追问先于自动规划，并把上一轮问题带给下一句', async () => {
+  const app = mountCommon(true);
+  const roads = vi.spyOn(roadNetwork, 'fetchRoadNetwork');
+  const before = JSON.stringify(app.plan());
+  const request = '想把它往那边挪一点，先说说你打算怎么做。';
+  send(request);
+  const question = await screen.findByText(/想挪动哪个设施/);
+  expect(question.textContent).toMatch(/哪个位置/);
+  expect(screen.getByText('待你回复', { exact: true }).closest('.ap-head-status')).toBeTruthy();
+  expect(roads).not.toHaveBeenCalled();
+  expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+
+  send('现有展位，往东侧挪两米');
+  await waitFor(() => expect(studioMock.controller.assistantChat).toHaveBeenCalledTimes(1));
+  const history = studioMock.controller.assistantChat.mock.calls[0]?.[1] as unknown as Array<{ text: string }>;
+  expect(history.map(({ text }) => text).join('')).toContain(request);
+  expect(history.map(({ text }) => text).join('')).toContain('想挪动哪个设施');
+  await waitFor(() => expect(app.current().outdoorWorkflow.busy).toBe(false));
+
+  roads.mockClear();
+  send('排流线，同一条路必须全程是直线，但中途必须拐两个直角');
+  expect(await screen.findByText(/保留整条直线，还是允许分段转弯/)).toBeTruthy();
+  expect(roads).not.toHaveBeenCalled();
+  expect(studioMock.controller.assistantChat).toHaveBeenCalledTimes(1);
+  expect(app.apply).not.toHaveBeenCalled();
+  expect(JSON.stringify(app.plan())).toBe(before);
+ });
  it('registered export previews current SitePlanData and downloads only after confirmation, never the legacy scene',async()=>{
   const app=mountCommon();const before=JSON.stringify(app.plan());send('导出给搭建方');
   const button=await screen.findByRole('button',{name:'确认导出'});

@@ -52,7 +52,10 @@ import {
   ensureGlbAsset,
 } from '@/components/room-organizer/three/glb-assets';
 import {
+  facilityProp,
   planFootprintShapes,
+  planShellFrame,
+  type PlanPropShape,
 } from '@/components/room-organizer/lib/plan-footprint-geometry';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
 import {
@@ -72,6 +75,7 @@ import {
   FACILITY_ROTATE_GAP_PX,
   facilityFootprintRing,
   facilityHandles,
+  facilityContainsPoint,
 } from '@/components/room-organizer/lib/site-plan-facilities';
 import {
   findAholoAsset,
@@ -83,6 +87,9 @@ import {
 } from '@/components/room-organizer/lib/site-capture';
 import type { FurnitureItem } from '@/components/room-organizer/lib/types';
 import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-engage';
+import { clearPlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
+import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/plan-catalog-drag';
+import { CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/catalog-drag';
 import { useOutdoorWalk } from '@/components/room-organizer/hooks/use-outdoor-walk';
 import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -107,12 +114,12 @@ function addDraftOverlay(
 ): void {
   if (!draft) return;
   const y = 0.7;
-  const addLine = (points: PlanPoint[], color: string, closed: boolean): void => {
+  const addLine = (points: PlanPoint[], color: string, closed: boolean, lineY = y): void => {
     if (points.length < 2) return;
     const pts = closed && points.length >= 3 ? [...points, points[0]!] : points;
     const positions: number[] = [];
     for (const point of pts) {
-      positions.push(point.x - frame.cx, y, -(point.y - frame.cy));
+      positions.push(point.x - frame.cx, lineY, -(point.y - frame.cy));
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
@@ -159,6 +166,37 @@ function addDraftOverlay(
     }
     addLine(draft.ring, draft.ringColor, draft.fill);
     addDots(draft.ring, "#ffffff");
+  }
+  /**
+   * 2026-11-16 设施落位幽灵：与 2D 画布同一份 footprint ring（含旋转），
+   * 越界红、合法绿；贴地画填充 + 闭口轮廓，不再只在隐藏的 2D 画布上。
+   */
+  if (draft.facilityGhost && draft.facilityGhost.ring.length >= 3) {
+    const color = draft.facilityGhost.invalid ? "#c0392b" : "#2f9e44";
+    const ghostY = 0.12;
+    const shape = new THREE.Shape();
+    draft.facilityGhost.ring.forEach((point, index) => {
+      const x = point.x - frame.cx;
+      const yy = point.y - frame.cy;
+      if (index === 0) shape.moveTo(x, yy);
+      else shape.lineTo(x, yy);
+    });
+    shape.closePath();
+    const geometry = new THREE.ShapeGeometry(shape);
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.22,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = ghostY - 0.02;
+    group.add(mesh);
+    disposables.push(geometry, material);
+    // 贴地画：幽灵轮廓不跟随 zone/boundary 的 0.7m 抬高，否则像浮在空中。
+    addLine(draft.facilityGhost.ring, color, true, ghostY);
   }
   if (draft.route.length) {
     addLine(draft.route, draft.routeColor, false);
@@ -322,6 +360,12 @@ export default function OutdoorPlan3D({
     if (!stage) return undefined;
     let disposed = false;
     let frame = 0;
+    // 尺寸重试：挂载时容器可能还没量到，留着每帧重试（约 2 s 预算）。
+    let sizeFrame = 0;
+    let sizeRetryLeft = 120;
+    let appliedWidth = 0;
+    let appliedHeight = 0;
+    let pixelRatioSettled = false;
     let renderer: THREE.WebGLRenderer | null = null;
     let controls: OrbitControls | null = null;
     const disposables: { dispose: () => void }[] = [];
@@ -781,25 +825,83 @@ export default function OutdoorPlan3D({
       object.parent?.remove(object);
     };
 
+    // 2026-11-16 用户「你看这个点 超级夸张的大」：顶点球原来按固定世界半径 0.7m 画，
+    // 近景/远景观感完全失控（一颗球能盖住半个分区）。改成逐帧按镜头距离重算世界尺寸，
+    // 在屏幕上恒定为 2D 手柄那种“一点点大”的尺寸。
+    const zoneVertexHandles: { mesh: THREE.Mesh; outline: THREE.Mesh }[] = [];
+    /** 顶点球的几何半径（米）：世界尺寸 = 这个半径 × 逐帧缩放。 */
+    const ZONE_VERTEX_BASE_RADIUS = 0.7;
+    /** 顶点球在屏幕上的目标半径（CSS px）：2D 画布手柄是 4.5px 心 + 细描边，这里略放大一点好点。 */
+    const ZONE_VERTEX_PX = 6;
+
     const addSelectedZoneHandles = (group: THREE.Group, nextPlan: SitePlanData, frame: SiteFrame, zoneId: string | null): void => {
+      zoneVertexHandles.length = 0;
       if (!zoneId) return;
       const zone = nextPlan.zones.find((item) => item.id === zoneId);
       if (!zone) return;
-      const geometry = new THREE.SphereGeometry(0.7, 16, 12);
+      const geometry = new THREE.SphereGeometry(ZONE_VERTEX_BASE_RADIUS, 16, 12);
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      disposables.push(geometry, material);
+      // 2026-11-16 用户：「3D 下的点没有描边」—— 2D 的顶点手柄是白心 + 分区色描边，
+      // 3D 原来只有一颗纯白球，压在浅色底图/分区块上边界直接消失。
+      // 用一颗略大的「只画背面」的球当描边：透视下只在轮廓外露一圈，和 2D 的细描边同观感。
+      const outlineMaterial = new THREE.MeshBasicMaterial({ color: zone.color ?? '#6e5fd0', side: THREE.BackSide });
+      disposables.push(geometry, material, outlineMaterial);
       for (const point of zone.polygon) {
+        const outline = new THREE.Mesh(geometry, outlineMaterial);
+        outline.position.set(point.x - frame.cx, 0.82, -(point.y - frame.cy));
+        outline.scale.setScalar(0.16 * 1.28);
+        outline.userData.type = 'plan-vertex-handle';
+        group.add(outline);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(point.x - frame.cx, 0.82, -(point.y - frame.cy));
+        mesh.scale.setScalar(0.16);
         mesh.userData.type = 'plan-vertex-handle';
         group.add(mesh);
+        zoneVertexHandles.push({ mesh, outline });
       }
     };
 
     let lastEditKey = '';
+    /** 落位后短暂不要重建预览：否则同一次放置的指针位置会立刻再叠一个预览模型。 */
+    let previewMutedUntil = 0;
+    /** 2026-11-16 物料卡落位前预览：用卡片 slug 构造 3D 预览 prop；没有 catalog 载荷就不挂模型。 */
+    const previewPropFor = (
+      nextPlan: SitePlanData,
+      draft?: PlanEditVisuals['draft'],
+    ): PlanPropShape | null => {
+      const preview = draft?.facilityGhost?.preview;
+      if (!preview) return null;
+      const frame = ringFrame(nextPlan.boundary);
+      if (!frame) return null;
+      const shell = planShellFrame(nextPlan.boundary, { width: frame.width, depth: frame.depth }, { clampPoints: false });
+      if (!shell) return null;
+      return facilityProp({
+        id: '__plan-preview__',
+        templateId: preview.templateId,
+        name: preview.name,
+        position: preview.position,
+        rotationDeg: preview.rotationDeg,
+        size: { width: preview.width, depth: preview.depth },
+        modelOverride: preview.slug,
+      }, shell);
+    };
+    /** 预览压在已有设施上时，找到这一件：旧模型与旧占地都要先藏起来，落位后原地换。 */
+    const previewTargetId = (
+      nextPlan: SitePlanData,
+      draft?: PlanEditVisuals['draft'],
+    ): string | null => {
+      const preview = draft?.facilityGhost?.preview;
+      if (!preview) return null;
+      return [...nextPlan.facilities].reverse().find(f => facilityContainsPoint(preview.position, f))?.id ?? null;
+    };
     const syncEditVisuals = (): void => {
       const visuals = canvasEditApiRef.current?.current?.getEditVisuals?.();
       if (!visuals) return;
+      // 预览模型每帧跟手；真正落地仍走 plan 设施，避免预览和已落模型混淆。
+      planModelLayer.setPreview(
+        Date.now() < previewMutedUntil ? null : previewPropFor(visuals.plan, visuals.draft),
+        previewTargetId(visuals.plan, visuals.draft),
+      );
       // 2026-11-12 3D 手柄目标：可编辑且有选中设施才挂柄（每帧按最新目标重摆位置）。
       handleFacilityRef.current = visuals.facilityEditable && visuals.selectedFacilityId
         ? visuals.plan.facilities.find(f => f.id === visuals.selectedFacilityId) ?? null
@@ -824,7 +926,12 @@ export default function OutdoorPlan3D({
         (child) => child instanceof THREE.Group && child.userData.type === ROOM_OBJECT_TAGS.PlanFootprint,
       );
       if (previous) disposeObject(previous);
-      if (!buildPlanFootprint(THREE, scene, nextPlan, nextMetrics, { clampPoints: false })) {
+      const hiddenPreviewId = previewTargetId(nextPlan, draft);
+      // 预览压住的旧设施：3D 占地也不画（旧默认尺寸）；设施本体仍留在 plan 里，落位时原地换模型。
+      const footprintPlan = hiddenPreviewId
+        ? { ...nextPlan, facilities: nextPlan.facilities.filter(f => f.id !== hiddenPreviewId) }
+        : nextPlan;
+      if (!buildPlanFootprint(THREE, scene, footprintPlan, nextMetrics, { clampPoints: false })) {
         lineMaterialsRef.current = [];
         return;
       }
@@ -848,6 +955,11 @@ export default function OutdoorPlan3D({
         // 2026-11-12 新放置的设施当场落地真模型：原来要等图源/视口变化触发场景重挂，
         // 用户放个摩天轮只看得到占地轮廓。重建后的占位表同步接管（贴纸隐藏用）。
         planModelLayer.placeNew(nextShapes.props, nextMetrics, collectPlaceholdersByPropId(nextGroup));
+        // metrics 刚更新，预览模型按新场地框重新落位；压住的旧设施模型隐藏。
+        planModelLayer.setPreview(
+          Date.now() < previewMutedUntil ? null : previewPropFor(nextPlan, draft),
+          hiddenPreviewId,
+        );
       }
       const sceneLayerObj = scene.getObjectByName('plan-scene-objects');
         if (sceneLayerObj) sceneLayerObj.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -nextFrame.cy);
@@ -951,17 +1063,52 @@ export default function OutdoorPlan3D({
 
     function resize(): void {
       if (!renderer || !stage) return;
-      const width = stage.clientWidth;
-      const height = stage.clientHeight;
-      if (width < 2 || height < 2) return;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
+      const size = readStageSize();
+      if (!size) {
+        // 2026-11-15「3D 视觉没同步」的真因之一：3D 面板常在隐藏页签里挂载，
+        // 那一刻 clientWidth=0，旧代码直接 return，renderer 就一直是 three 的默认 300×150 缓冲，
+        // 而 canvas 的 CSS 被拉满——画面糊成一片，看着像没画东西。
+        if (sizeRetryLeft > 0) {
+          sizeRetryLeft -= 1;
+          sizeFrame = window.requestAnimationFrame(resize);
+        }
+        return;
+      }
+      if (size.width === appliedWidth && size.height === appliedHeight) return;
+      appliedWidth = size.width;
+      appliedHeight = size.height;
+      // 首次拿到实测尺寸时才锁定 dpr：挂载时窗口可能在另一块屏上。
+      if (!pixelRatioSettled) {
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+        pixelRatioSettled = true;
+      }
+      renderer.setSize(size.width, size.height, false);
+      camera.aspect = size.width / size.height;
       camera.updateProjectionMatrix();
-      lineMaterialsRef.current.forEach((material) => material.resolution.set(width, height));
+      lineMaterialsRef.current.forEach((material) => material.resolution.set(size.width, size.height));
     }
+
+    /** 先量 content-box，再量 border-box；两种都拿不到才算「还没就绪」。 */
+    function readStageSize(): { width: number; height: number } | null {
+      const element = stage;
+      if (!element) return null;
+      const width = Math.round(element.clientWidth);
+      const height = Math.round(element.clientHeight);
+      if (width >= 2 && height >= 2) return { width, height };
+      const rect = element.getBoundingClientRect();
+      const rectWidth = Math.round(rect.width);
+      const rectHeight = Math.round(rect.height);
+      if (rectWidth >= 2 && rectHeight >= 2) return { width: rectWidth, height: rectHeight };
+      return null;
+    }
+
     resize();
+    // 首帧再量一次：挂载当下样式可能还没应用完（切页签 / 面板动画）。
+    sizeFrame = window.requestAnimationFrame(resize);
     const observer = new ResizeObserver(resize);
     observer.observe(stage);
+    // 窗口级也兵：分屏、缩窗口时 ResizeObserver 有时只报父容器。
+    window.addEventListener('resize', resize);
 
     let lodBusy = false;
     let lastLodZoom = preferredZoom;
@@ -1058,6 +1205,11 @@ export default function OutdoorPlan3D({
     const pointerFlags = (event: PointerEvent | MouseEvent, hit: { viewport: PlanViewport } | null) => ({
       button: 'button' in event ? event.button : 0,
       shiftKey: event.shiftKey,
+      // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：修饰键必须一并送到 2D 桥，
+      // 否则 3D 里按了 Alt 跟没按一样。
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
       clientX: event.clientX,
       clientY: event.clientY,
       ...(hit ? { viewport: hit.viewport } : {}),
@@ -1113,13 +1265,38 @@ export default function OutdoorPlan3D({
       connectorLine.geometry.setFromPoints([toThree(planPoints.topMid, baseY), toThree(planPoints.rotate, PLAN_LAYER_BASE_Y + 1.0)]);
       frameLine.geometry.setFromPoints(facilityFootprintRing(facility).map(point => toThree(point, PLAN_LAYER_BASE_Y + 0.03)));
       frameLine.computeLineDistances();
-      // 恒定屏幕尺寸：透视下 world size ∝ 相机距离（等价于 2D 手柄的固定 CSS px）。
-      const dist = Math.max(camera.position.distanceTo(controls?.target ?? lookTarget), 2);
-      const size = Math.min(60, Math.max(0.25, dist * 0.016));
-      cornerHandles.forEach(holder => holder.scale.setScalar(size));
-      sideHandles.forEach(holder => holder.scale.setScalar(size * 0.72));
-      rotateHandle.scale.setScalar(size * 1.5);
+      // 2026-11-16 用户：「3D 里选中柄的缩放比例好奇怪」——旧式用「相机到 OrbitControls 目标」的
+      // 距离算世界尺寸：镜头贴近地面、目标却在远处时，柄会被放大成遮住半个场地的大球。
+      // 改成逐柄按「相机到该柄」的距离缩放（这才是恒定屏幕尺寸的正确数学），并给世界尺寸上下限兜底。
+      const sizeHandle = (holder: THREE.Group, factor: number): void => {
+        const distance = Math.max(camera.position.distanceTo(holder.position), 1);
+        const size = Math.min(1.5, Math.max(0.05, distance * 0.012));
+        holder.scale.setScalar(size * factor);
+      };
+      cornerHandles.forEach(holder => sizeHandle(holder, 1));
+      sideHandles.forEach(holder => sizeHandle(holder, 0.72));
+      sizeHandle(rotateHandle, 1.5);
       handleGroup.visible = true;
+    };
+
+    /**
+     * 2026-11-16 用户「这个点 超级夸张的大」：顶点球按「相机到该球」的距离换算世界尺寸，
+     * 让它在屏幕上恒定为 ZONE_VERTEX_PX 像素半径（透视投影：每像素对应 distance*2*tan(fov/2)/H 米）。
+     * 拾取不走这颗球（命中仍由 2D 画布的顶点热区判定），所以缩小不影响点选手感。
+     */
+    const updateZoneVertexHandles = (): void => {
+      if (!zoneVertexHandles.length) return;
+      const height = Math.max(1, stage.clientHeight);
+      const worldPerPixel = (2 * Math.tan((camera.fov * Math.PI) / 360)) / height;
+      const worldPosition = new THREE.Vector3();
+      for (const entry of zoneVertexHandles) {
+        entry.mesh.getWorldPosition(worldPosition);
+        const distance = Math.max(camera.position.distanceTo(worldPosition), 0.5);
+        const worldRadius = ZONE_VERTEX_PX * worldPerPixel * distance;
+        const scale = worldRadius / ZONE_VERTEX_BASE_RADIUS;
+        entry.mesh.scale.setScalar(scale);
+        entry.outline.scale.setScalar(scale * 1.28);
+      }
     };
 
     /**
@@ -1181,10 +1358,24 @@ export default function OutdoorPlan3D({
         }
         return;
       }
+      const mode = api.getMode();
       const hit = eventToPlanHit(event);
-      if (!hit) return;
+      if (!hit) {
+        // 放置/绘制模式下点到天空或场地外：左键也只吞掉，不转视角、不落位。
+        if (mode !== 'view') {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
       const consumed = api.pointerFromPlan('down', hit, pointerFlags(event, hit));
       syncEditVisuals();
+      // 2026-11-16 放置/绘制模式：左键只服务落位/拾取，空白处也不再交给 OrbitControls。
+      // 右键平移、滚轮缩放仍由 controls 自己处理（这里只吞左键这一次按下）。
+      if (mode !== 'view') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
       if (!consumed) return;
       pointerEditing = true;
       if (controls) controls.enabled = false;
@@ -1235,6 +1426,112 @@ export default function OutdoorPlan3D({
       api.pointerFromPlan('dblclick', hit, pointerFlags(event, hit));
       syncEditVisuals();
     };
+    // 2026-11-16 2D 画布发来的草稿变更：R 旋转 / Esc 取消 / 落位后用同一事件通知，
+    // 3D 不用等下一次指针移动就能重画待放置幽灵。
+    const onPlanVisuals = (): void => syncEditVisuals();
+    window.addEventListener('sc-outdoor-plan-visuals', onPlanVisuals);
+
+    // 2026-11-16 物件库拖进 3D：dragover 期间 dataTransfer 读不到模板，用拖起时记下的 id；
+    // 地面射线命中后走 canvas 的同一份绿/红幽灵，逐帧合并避免每个 dragover 重建整层。
+    let dragPreviewFrame = 0;
+    let lastDragOver: DragEvent | null = null;
+    let lastDropAt = 0;
+    const onDragOver = (event: DragEvent): void => {
+      if (walkEnabledRef.current) return;
+      const dragTypes = Array.from(event.dataTransfer?.types ?? []);
+      if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) {
+        if (!getPlanCatalogDrag()) return;
+      } else if (dragTypes.includes(CATALOG_DRAG_MIME)) {
+        return;
+      } else if (!getPlanFacilityDrag()) return;
+      const api = canvasEditApiRef.current?.current;
+      if (!api) return;
+      // 拖放期间也不让左键/中键转视角；右键平移、滚轮缩放保持。
+      if (controls) controls.enableRotate = false;
+      event.preventDefault();
+      // 2D 画布在 3D 接管时仍保活；别让同一次 dragover 再冒泡到下面那层画布。
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      lastDragOver = event;
+      if (dragPreviewFrame) return;
+      dragPreviewFrame = window.requestAnimationFrame(() => {
+        dragPreviewFrame = 0;
+        const queued = lastDragOver;
+        lastDragOver = null;
+        if (!queued) return;
+        const catalog = getPlanCatalogDrag();
+        const templateId = getPlanFacilityDrag();
+        if (!catalog && !templateId) return;
+        const hit = eventToPlanHit(queued);
+        if (!hit) return;
+        if (catalog) api.previewCatalogDrop(catalog, hit.pt);
+        else if (templateId) api.previewFacilityDrop(templateId, hit.pt);
+        syncEditVisuals();
+      });
+    };
+    const onDragLeave = (event: DragEvent): void => {
+      // 从 canvas 移到同一 stage 内的浮层不算离开。
+      const next = event.relatedTarget as Node | null;
+      if (next && stage.contains(next)) return;
+      if (Date.now() - lastDropAt < 250) return;
+      const api = canvasEditApiRef.current?.current;
+      if (!api) return;
+      api.clearFacilityDropPreview();
+      syncEditVisuals();
+    };
+    const onDrop = (event: DragEvent): void => {
+      if (walkEnabledRef.current) return;
+      const types = Array.from(event.dataTransfer?.types ?? []);
+      if (types.includes(PLAN_CATALOG_DRAG_MIME)) {
+        const catalogDrag = parsePlanCatalogDrag(event.dataTransfer?.getData(PLAN_CATALOG_DRAG_MIME) ?? '') ?? getPlanCatalogDrag();
+        clearPlanCatalogDrag();
+        if (!catalogDrag) return;
+        event.preventDefault();
+        event.stopPropagation();
+        lastDropAt = Date.now();
+        if (controls) controls.enableRotate = false;
+        if (dragPreviewFrame) {
+          window.cancelAnimationFrame(dragPreviewFrame);
+          dragPreviewFrame = 0;
+        }
+        lastDragOver = null;
+        const hit = eventToPlanHit(event);
+        if (!hit) return;
+        const api = canvasEditApiRef.current?.current;
+        if (!api) return;
+        previewMutedUntil = Date.now() + 350;
+        api.dropCatalogAt(catalogDrag, hit.pt);
+        syncEditVisuals();
+        // 落位完成后强制移除预览模型；2D 幽灵若还没清，也不能留第二个模型在真模型上。
+        planModelLayer.setPreview(null);
+        return;
+      }
+      // 物料卡没带户外载荷时不要落成上一次的设施模板。
+      if (types.includes(CATALOG_DRAG_MIME)) return;
+      const templateId = event.dataTransfer?.getData('text/plain') || getPlanFacilityDrag();
+      if (!templateId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      lastDropAt = Date.now();
+      if (controls) controls.enableRotate = false;
+      if (dragPreviewFrame) {
+        window.cancelAnimationFrame(dragPreviewFrame);
+        dragPreviewFrame = 0;
+      }
+      lastDragOver = null;
+      clearPlanFacilityDrag();
+      const hit = eventToPlanHit(event);
+      if (!hit) return;
+      const api = canvasEditApiRef.current?.current;
+      if (!api) return;
+      previewMutedUntil = Date.now() + 350;
+      api.dropFacilityAt(templateId, hit.pt);
+      syncEditVisuals();
+      planModelLayer.setPreview(null);
+    };
+    stage.addEventListener('dragover', onDragOver);
+    stage.addEventListener('dragleave', onDragLeave);
+    stage.addEventListener('drop', onDrop);
     renderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true });
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
@@ -1253,7 +1550,10 @@ export default function OutdoorPlan3D({
       controls?.update();
       if (controls) {
         const mode = canvasEditApiRef.current?.current?.getMode() ?? 'view';
-        controls.enableRotate = mode === 'view' && !pointerEditing;
+        // 2026-11-16 放置 / 拖放期间左键一律不转视角（中键环绕仍留给浏览态）。
+        // 拖放用模块级 store 判定：dragover 时还没轮到 pointer 事件，也要提前锁住。
+        const placing = mode !== 'view' || getPlanFacilityDrag() !== null;
+        controls.enableRotate = !placing && !pointerEditing;
       }
       const api = canvasEditApiRef.current?.current;
       if (api?.getBasemapVisible) basemapRoot.visible = api.getBasemapVisible();
@@ -1278,6 +1578,7 @@ export default function OutdoorPlan3D({
       if (!activeRef.current) return;
       // 2026-11-12 P2-i 3D 版：选中设施编辑手柄逐帧跟随镜头与拖拽预览（位置 + 恒定屏幕尺寸）。
       updateFacilityHandles();
+      updateZoneVertexHandles();
       if (process.env.NODE_ENV !== 'production') {
         // 本机验收桥：3D 手柄屏幕坐标（CSS px）+ 选中设施尺寸，Playwright 脚本直接点柄用。
         const facility = handleFacilityRef.current;
@@ -1327,7 +1628,14 @@ export default function OutdoorPlan3D({
       layerApiRef.current = null;
       modelRunRef.current += 1;
       window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(sizeFrame);
+      window.removeEventListener('resize', resize);
       observer.disconnect();
+      window.removeEventListener('sc-outdoor-plan-visuals', onPlanVisuals);
+      stage.removeEventListener('dragover', onDragOver);
+      stage.removeEventListener('dragleave', onDragLeave);
+      stage.removeEventListener('drop', onDrop);
+      if (dragPreviewFrame) window.cancelAnimationFrame(dragPreviewFrame);
       renderer?.domElement.removeEventListener('pointerdown', onPointerDown, true);
       renderer?.domElement.removeEventListener('pointermove', onPointerMove);
       renderer?.domElement.removeEventListener('pointerup', onPointerUp);
@@ -1443,7 +1751,7 @@ export default function OutdoorPlan3D({
             pointerEvents: 'none',
           }}
         >
-          还没有场地边界：切回 2D 画一圈，这里就会立起你的场地
+          还没有用地红线：切回 2D 画一圈，这里就会立起你的场地
         </div>
       )}
       {walkEnabled && (

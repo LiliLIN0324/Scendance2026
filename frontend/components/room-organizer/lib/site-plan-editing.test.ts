@@ -58,15 +58,23 @@ describe('site plan editing: boundary ring (H2-b)', () => {
     if (!check.ok) expect(check.issue.code).toBe('self-intersection');
   });
 
-  it('rejects boundary area below the 100 m² floor', () => {
-    const tiny = rect(0, 0, 5, 5); // 25 m²
+  it('小场地（约 38.7 m²）可以直接提交，不再被老下限挡住', () => {
+    // 2026-11-15 用户实测：约 38.7 m² 的场地一点就报「面积太小，下限 100 m²」，边界根本没发改。
+    const userSite = rect(0, 0, 6.2, 6.24); // ≈ 38.7 m²
+    const check = checkBoundaryRing(userSite);
+    expect(check.ok).toBe(true);
+    if (check.ok) expect(check.areaM2).toBeCloseTo(38.7, 1);
+  });
+
+  it('只挡真正的退化形状（2 m × 2 m 以下）', () => {
+    const tiny = rect(0, 0, 1, 1); // 1 m²
     const check = checkBoundaryRing(tiny);
     expect(check.ok).toBe(false);
     if (!check.ok) {
       expect(check.issue.code).toBe('area-below-min');
-      expect(check.issue.message).toContain('100');
+      expect(check.issue.message).toContain('下限 4 m²');
     }
-    expect(PLAN_MIN_BOUNDARY_AREA_M2).toBe(100);
+    expect(PLAN_MIN_BOUNDARY_AREA_M2).toBe(4);
   });
 
   it('rejects rings above the 64-vertex contract limit', () => {

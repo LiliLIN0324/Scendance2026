@@ -5,13 +5,19 @@
  * 硬塞进框，只能保证最长边入框、短轴留空；斜俯视下高箱体相对贴地框外扩，肉眼「不对齐」。
  * 成熟规划产品（Planner 5D / Live Home 3D / OnePlan 等）的范式是：2D 框即模型真实
  * 水平外廓，物件自带权威尺寸、缩放锁宽高比。本层只做无 three / React 依赖的纯计算：
- *  - `facilityFootprintSpec`：templateId → 权威外廓（优先真实 GLB，其次库/内置声明尺寸）；
- *  - `normalizeFacilitySize`：把历史自由比例尺寸吸附到权威宽高比（保留长边与朝向、中心不动）；
+ *  - `facilityFootprintSpec`：templateId（+ 可选的手选模型 slug）→ 权威外廓（优先真实 GLB，其次库/内置声明尺寸）；
+ *  - `normalizeFacilitySize`：把尺寸吸附到权威宽高比（保留长边与朝向、中心不动）；
+ *  - `facilitySizeFromModel`：模型自带尺寸 → 2D 占地（换模型时整体跟着变）；
  *  - `sizeWithMajor` / `sizeWithWidth` / `sizeWithDepth`：等比缩放时由一条边推另一条边。
+ *
+ * 2026-11-15 用户交互口径：2D 是唯一真源，模型只提供「默认多大」。
+ * 换模型 → 2D 改成新模型真实占地；用户在 2D 上缩放 → 3D 按同一系数等比跟随
+ *（所以 2D 缩放恒锁宽高比，不让两条边各自拉，否则模型会被拉变形）。
  */
 
 import { PLAN_PROP_SIZE, planPropKind } from './plan-footprint-geometry';
-import { resolveFacilityModels } from './plan-facility-models';
+import { builtinModelBySlug, resolveFacilityModels } from './plan-facility-models';
+import { onlineModelBySlug } from './online-models';
 import { resolveFacilityTemplate } from './plan-facility-catalog';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -37,11 +43,15 @@ function finitePositive(value: number | undefined): value is number {
 
 /**
  * 任意 templateId → 权威占地外廓。
- * 取值优先级：首选真实 GLB 的水平包围盒 → 物件库/内置模板声明尺寸 → 类型默认尺寸。
+ * 取值优先级：手选模型（`modelOverride`）→ 模板自动 GLB → 物件库/内置模板声明尺寸 → 类型默认尺寸。
+ * 手选模型必须显式算进来：否则 2D 框还停在旧模型的比例上，3D 只能缩着塞进去（周边留空）。
  */
-export function facilityFootprintSpec(templateId: string): FacilityFootprintSpec {
+export function facilityFootprintSpec(templateId: string, modelSlug?: string): FacilityFootprintSpec {
   const candidates = resolveFacilityModels(templateId);
-  const model = candidates[0];
+  const override = modelSlug
+    ? candidates.find(candidate => candidate.slug === modelSlug) ?? builtinModelBySlug(modelSlug) ?? onlineModelBySlug(modelSlug)
+    : undefined;
+  const model = override ?? candidates[0];
   if (model && finitePositive(model.width) && finitePositive(model.depth)) {
     // 保留候选原始轴序（width↔GLB/Three X、depth↔Z），与 3D 落位映射一一对应；
     // aspect 只存长边/短边比例，横竖朝向由 rotationDeg 与字段谁大谁小表达。
@@ -86,6 +96,20 @@ function clampScale(width: number, depth: number, k0: number, bounds: { minM: nu
 }
 
 /**
+ * 模型自带占地（米）→ 设施 2D 占地：整体等比缩放进 [minM,maxM]，保留模型轴序。
+ * 换模型时用它把 2D 框改成「这个模型真实多大」。
+ */
+export function facilitySizeFromModel(
+  model: { width: number; depth: number },
+  bounds: { minM: number; maxM: number } = FACILITY_FOOTPRINT_BOUNDS,
+): { width: number; depth: number } {
+  const width = finitePositive(model.width) ? model.width : bounds.minM;
+  const depth = finitePositive(model.depth) ? model.depth : bounds.minM;
+  const k = clampScale(width, depth, 1, bounds);
+  return { width: width * k, depth: depth * k };
+}
+
+/**
  * 把一个尺寸吸附到权威宽高比：以历史框长边长度为规模基准，字段归属跟随权威轴序
  * （width↔X、depth↔Z），不随自由框的横/竖交换宽深；矩形始终关于中心对称，无需改 position。
  * 极值下优先保证两轴都在界内且比例恒定。
@@ -94,8 +118,9 @@ export function normalizeFacilitySize(
   size: { width: number; depth: number },
   templateId: string,
   bounds: { minM: number; maxM: number },
+  modelSlug?: string,
 ): { width: number; depth: number } {
-  const spec = facilityFootprintSpec(templateId);
+  const spec = facilityFootprintSpec(templateId, modelSlug);
   let major = clampSize(Math.max(size.width, size.depth), bounds.minM, bounds.maxM);
   let minor = major / spec.aspect;
   if (minor < bounds.minM) {
@@ -166,7 +191,7 @@ export function normalizePlanFacilityFootprints(
     ...plan,
     facilities: plan.facilities.map(facility => ({
       ...facility,
-      size: normalizeFacilitySize(facility.size, facility.templateId, bounds),
+      size: normalizeFacilitySize(facility.size, facility.templateId, bounds, facility.modelOverride),
     })),
   };
 }

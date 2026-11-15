@@ -1013,6 +1013,53 @@ body {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 2; }
 }
+/* 2026-11-15 用户指令（中等尺寸「上下」难看，窄屏那套更好）：
+   769–1080 不再把左栏和画布切成上下两行——画布占满整列高度（竖排工具列才有地方站），
+   左栏改成浮在画布左上角的卡：宽度跟桌面一致（min(420px, 46%)），高度 62%（底部留给
+   比例尺 / 2D-3D 角标），内部照旧头部→滚动正文→输入区。
+   ≥1081 三列与 ≤768 手机外壳都不进这个断点。 */
+@media (min-width:769px) and (max-width:1080px) {
+  /* 浮层卡宽度只算一次：视口与 .sc-workspace 同宽（inset:0），用 vw 表达才能被画布里的
+     抬头/胶囊复用——百分比在那里会按画布列宽重算，两边对不上。 */
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail { --sc-medium-card-w: min(420px, 46vw); }
+  /* 画布吃满：一行网格，左栏与画布同格叠放。 */
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
+  /* 左栏 → 画布上的浮层卡。左缘让开 64px 图标轨，右缘留出地图。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
+    position: absolute; left: calc(var(--sc-nav-rail-width) + 12px); top: 12px;
+    right: auto; bottom: auto; grid-column: auto; grid-row: auto;
+    width: var(--sc-medium-card-w); height: min(62%, 640px); max-height: calc(100% - 24px);
+    border: 1px solid var(--wk-hair); border-radius: 16px;
+    background: var(--paper);
+    box-shadow: 0 12px 32px rgb(20 20 22 / 14%), 0 2px 6px rgb(20 20 22 / 6%);
+    z-index: 31;
+  }
+  /* 画布左上角的抬头/胶囊让到卡片右侧：卡片左缘离画布 12px，再留 24px 间距。
+     （.sc-canvas-heading 目前只有自家测试引用，属防御性规则；.sc-canvas-mode 在隔离扫描态
+     是活着的，两者同在左上角。） */
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column .sc-canvas-heading,
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column .sc-canvas-mode {
+    left: calc(var(--sc-medium-card-w) + 36px);
+    max-width: calc(100% - var(--sc-medium-card-w) - 96px);
+  }
+  /* 首次开图引导气泡（GuideBubble）避让卡片。
+     它在 .sc-canvas-stage 里，而该元素 container-type:size 形成栈上下文，气泡自身的
+     z-index 压不过左栏卡（实测把 z 提到 99 仍是卡片在上），所以只能平移：
+     canvas 锚点原本居中（left:50% + translateX(-50%)）、left 锚点原本 left:12，
+     两者在 1024 宽下都会落在卡片后面。统一让到卡片右侧，箭头朝向不变。
+     内联样式需要 !important。 */
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column [data-testid="guide-bubble"] {
+    left: calc(var(--sc-medium-card-w) + 36px) !important;
+    transform: none !important;
+  }
+  /* 断点里不再按拖边改宽：那条线只服务桌面的 --sc-left-card-width。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column .sc-left-card-resizer { display: none; }
+}
 @media (max-width:420px) {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
   .sc-workbench .is-docked-layout.has-conversation .sc-canvas-stage { display:none; }
@@ -2394,3 +2441,107 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   letter-spacing: 0.02em;
   color: var(--sc-muted, #71767e);
 }
+
+/* 2026-11-15 属性卡（多选行 / 对齐工具条 / 静默链接）。
+   面板实际只有 ~233 CSS px 宽，所以命中区按 26px 高定、字号 11px，靠间距和悬停态分区，不靠边框。 */
+.sc-multi-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.sc-multi-row__kind { flex: 0 0 auto; color: #8a8f98; }
+.sc-multi-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sc-text, #141416);
+}
+.sc-multi-row__act {
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--sc-muted, #71767e);
+}
+.sc-multi-row__act:hover { color: var(--sc-text, #141416); }
+.sc-multi-row__act--danger { color: #d0453c; }
+.sc-multi-row__act--danger:hover { color: #b23a32; }
+
+.sc-align-tool {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #f4f5f7;
+}
+.sc-align-tool__btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #3f4249;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.sc-align-tool__btn:hover:not(:disabled) { background: rgba(20, 20, 22, 0.07); color: #141416; }
+.sc-align-tool__btn:active:not(:disabled) { background: rgba(20, 20, 22, 0.12); }
+.sc-align-tool__btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.sc-align-tool__btn:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -1px; }
+.sc-align-tool__sep {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 14px;
+  margin: 0 3px;
+  background: #e4e4e7;
+}
+
+.sc-quiet-link {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--sc-muted, #71767e);
+}
+.sc-quiet-link:hover { color: var(--sc-text, #141416); text-decoration: underline; text-underline-offset: 2px; }
+
+/* 2026-11-15 模型区的「文字生成 / 图片生成 / 导入 GLB」：常驻三格，不再折在手风琴里。
+   面板只有 ~233 px 宽，三格各 ~73 px，所以图标在上、字在下，字号 10px。 */
+.sc-model-action {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 2px;
+  border: 1px solid var(--sc-line, #e4e4e7);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--sc-text, #141416);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.sc-model-action:hover { background: #fafafa; border-color: #d4d4d8; }
+.sc-model-action:active { background: #f4f5f7; }
+.sc-model-action:focus-visible { outline: 2px solid var(--sc-accent); outline-offset: -1px; }
+.sc-model-action span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

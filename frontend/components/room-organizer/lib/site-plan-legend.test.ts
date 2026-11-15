@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlanLegend, polylineHalfLengthPoint } from './site-plan-legend';
-import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_BOUNDARY_LINE_COLOR } from '@/lib/outdoor-plan-tokens';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 复用演示页「平湖秋月市集」同构的迷你样例（3 分区 / 2 摊位 + 1 帐篷 / 3 动线 / 2 节点 / 2 人员 / 2 测量）。 */
@@ -153,7 +153,7 @@ function samplePlan(): SitePlanData {
 describe('buildPlanLegend (H3-c 图例生成器)', () => {
   it('emits the stable group order: 边界 → 分区 → 设施 → 动线 → 出入口 → 人员 → 测量', () => {
     const groups = buildPlanLegend(samplePlan());
-    expect(groups.map(g => g.title)).toEqual(['场地边界', '功能分区', '设施', '动线', '出入口', '人员', '测量']);
+    expect(groups.map(g => g.title)).toEqual(['用地红线', '功能分区', '设施', '动线', '出入口', '人员', '测量']);
   });
 
   it('aggregates zones by semantic with default semantic colors and area totals', () => {
@@ -178,9 +178,10 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     expect(facilities.entries[0]!.detail).toBe('2×2 m');
   });
 
-  it('aggregates routes by kind with dedicated kind colors and length totals', () => {
+  it('aggregates routes by carrier with dedicated colors and length totals', () => {
     const routes = buildPlanLegend(samplePlan()).find(g => g.title === '动线')!;
-    expect(routes.entries.map(e => e.label)).toEqual(['人行动线', '车辆动线']);
+    // 2026-11-16 用户：图例判 carrier 不判 kind（人行 / 推车 / 车行 / 人车一起）。
+    expect(routes.entries.map(e => e.label)).toEqual(['人行动线', '车行动线']);
     expect(routes.entries[0]!.swatch).toBe(PLANNING_ROUTE_KIND_COLORS.pedestrian);
     expect(routes.entries[1]!.swatch).toBe(PLANNING_ROUTE_KIND_COLORS.vehicle);
     // 入场 55+30=85 m；装卸 40+35=75 m。
@@ -217,9 +218,9 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     };
     const groups = buildPlanLegend(boundaryOnly);
     expect(groups).toHaveLength(1);
-    expect(groups[0]!.title).toBe('场地边界');
+    expect(groups[0]!.title).toBe('用地红线');
     expect(groups[0]!.entries[0]!.detail).toBe('共 10000 m²');
-    expect(groups[0]!.entries[0]!.swatch).toBe(PLANNING_LAYER_COLORS.boundary);
+    expect(groups[0]!.entries[0]!.swatch).toBe(PLANNING_BOUNDARY_LINE_COLOR);
   });
 
   it('keeps zone explicit color as swatch when provided', () => {
@@ -234,7 +235,7 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     const groups = buildPlanLegend(samplePlan());
     const iconsOf = (title: string) => groups.find(g => g.title === title)!.entries.map(e => e.icon);
     // 每组图标与图层图标映射同源（H4-a：truck→tent，摊位/帐篷语义更贴设施组）。
-    expect(iconsOf('场地边界')).toEqual(['hexagon']);
+    expect(iconsOf('用地红线')).toEqual(['hexagon']);
     expect(iconsOf('功能分区')).toEqual(['shapes', 'shapes']);
     expect(iconsOf('设施')).toEqual(['tent', 'tent', 'tent']);
     expect(iconsOf('动线')).toEqual(['route', 'route']);

@@ -4,7 +4,8 @@
  * 无感挂云（设计规范 v2.5.2 §二.4「默认在云上」）：登录态下，本机画布第一次摆上物料且未连接项目时，
  * 静默在「个人工作室」建好云项目并接上现有保存链——建项目 → 取编辑权 → 绑定 layout.id → 同步 ?project=。
  * 只立壳（空白场地、门柱出入口等结构标记）不触发；访客（含匿名）不触发；建过就绝不重复建。
- * 失败不打扰：留在本机，等下一件物料进场再试。URL 同步前先打标记，CloudPanel 不会因此重开项目。
+ * 失败不打扰：留在本机，等下一件物料进场再试；成功也只在轻提示里报一次归属工作室，归属对用户可见。
+ * URL 同步前先打标记，CloudPanel 不会因此重开项目。
  */
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { BackendSession, Studio } from '@/lib/backend-session';
@@ -77,6 +78,7 @@ export function useSilentCloudAttach({ controller, layout, onBindProject, enable
       const stillAuthorized = () => { try { return canAttach() && permissionRef.current.isCurrent === capturedAuthority && !!capturedAuthority?.(); } catch { return false; } };
       const previousScope = startedLayout.id ?? 'local';
       let projectId: string;
+      let attachStudioName: string | undefined;
       let submittedLayout: RoomLayout | undefined;
       const changed = (): boolean => {
         if (stillAuthorized() && layoutRef.current === startedLayout) return false;
@@ -95,8 +97,10 @@ export function useSilentCloudAttach({ controller, layout, onBindProject, enable
           if (changed()) return;
           studios = [created];
         }
+        // 跟随面板最近选中的工作室（localStorage 记忆）：面板初始化与切换都会写入这份记忆，不再各猜各的。
         const studioId = preferredStudio(userId, studios);
         rememberStudio(userId, studioId);
+        attachStudioName = studios.find(item => item.id === studioId)?.name;
         const current = layoutRef.current;
         const scene = layoutToBackendScene(current);
         submittedLayout = current;
@@ -140,6 +144,7 @@ export function useSilentCloudAttach({ controller, layout, onBindProject, enable
       const url = new URL(window.location.href);
       url.searchParams.set('project', projectId);
       window.history.replaceState(null, '', url.pathname + url.search);
+      notify(attachStudioName ? `本机草稿已自动保存为云端方案，归属工作室「${attachStudioName}」。` : '本机草稿已自动保存为云端方案。', 'info');
     })();
   }, [controller, bits, count, layout, enabled, isCurrent]);
 }

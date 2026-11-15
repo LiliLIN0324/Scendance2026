@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan } from '../lib/outdoor-plan-protection';
+import { CAR_ROW_LABEL } from '../lib/vehicle-types';
 
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -66,6 +67,12 @@ import {
   AlignRight,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  ArrowLeftRight,
+  ArrowRight,
+  ArrowRightLeft,
+  ImageUp,
+  Sparkles,
+  Upload,
 } from 'lucide-react';
 import { BasemapTileCache, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
 import {
@@ -74,6 +81,10 @@ import {
   drawAnnotationDraft,
   drawAnnotationLayer,
   drawBoundaryLayer,
+  boundaryHaloToneFor,
+  drawBranchAnchor,
+  drawRouteKindChip,
+  findRouteBranchAnchor,
   drawMapEditHighlight,
   drawBuildingLayer,
   drawConflictMarkers,
@@ -86,6 +97,9 @@ import {
   drawRouteDraft,
   drawRouteLayer,
   drawRouteProposalLayer,
+  drawDesignScopeMask,
+  drawBoundaryEditHints,
+  drawScopeLockButton,
   drawFlowSimulationLayer,
   drawSearchArea,
   drawSearchPin,
@@ -93,19 +107,39 @@ import {
   drawWorkerLayer,
   drawZoneLayer,
   drawZoneProposalLayer,
+  type PlanBasemapTone,
   enuToLngLat,
+  facilityPlacementGhost,
+  hexWithAlpha,
   isLayerVisible,
   lngLatToEnu,
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
+  hitScopeLockButton,
+  scopeLockButtonRect,
   type LayerVisibility,
   type PlanViewport,
 } from '../lib/outdoor-plan-canvas';
+import {
+  DEFAULT_SCOPE_MARGIN_M,
+  expandRect,
+  rectBigEnough,
+  rectRing,
+  resizeScopeEdge,
+  nearestScopeEdgePx,
+  scopeAreaM2,
+  scopeContainsPoint,
+  scopeEdgeIsHorizontal,
+  scopeEdgeLabel,
+  type ScopeEdge,
+} from '../lib/outdoor-design-scope';
 import { createFlowWalkers, stepFlowWalkers, walkerPoints, routeDensity, type FlowWalker } from '../lib/flow-sim';
 import {
   PLAN_CONFLICT_CATEGORY_LABELS,
+  groupConflictIssues,
   planConflictIssues,
+  type PlanConflictCluster,
   type PlanConflictIssue,
 } from '../lib/site-plan-conflicts';
 import {
@@ -114,20 +148,19 @@ import {
   PLAN_RING_MAX_VERTICES,
   buildZone,
   checkBoundaryRing,
-  checkPlanRing,
   defaultZoneColor,
   insertRingVertex,
   moveRingVertex,
   planPointDistanceM,
   planPointInRing,
   planRingSelfIntersects,
-  planZonesOverlap,
   planZoneIssues,
   removeRingVertex,
-  zoneOutsideBoundaryIssue,
+  zoneEditBlockingIssue,
   type PlanEditIssue,
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
+import { findZoneBoundsOverflow, zoneOverflowReason, type ZoneBoundsOverflow } from '../lib/plan-zone-bounds';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
   FACILITY_HANDLE_PX,
@@ -155,6 +188,9 @@ import {
   type PlanRect,
 } from '../lib/site-plan-facilities';
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
+import { clearPlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from '../lib/plan-facility-drag';
+import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, type PlanCatalogDrag } from '../lib/plan-catalog-drag';
+import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import {
   FACILITY_GENERATE_POLL_MS,
   findGeneratedFacilityModel,
@@ -168,12 +204,13 @@ import {
   subscribeGeneratedFacilityModels,
 } from '../lib/facility-generated-models';
 import { newLocalGlbKey, validateLocalGlbPick } from '../lib/glb-import';
-import { MAX_FACILITY_MODEL_CANDIDATES, loadFacilityModelCandidates, type FacilityModelCandidate } from '../lib/plan-facility-models';
+import { openGenerationSheet } from '../lib/generation-sheet';
+import { loadFacilityModelCandidates, type FacilityModelCandidate } from '../lib/plan-facility-models';
 import {
   facilityFootprintSpec,
+  facilitySizeFromModel,
   normalizeFacilitySize,
-  sizeWithDepth,
-  sizeWithWidth,
+  sizeWithMajor,
 } from '../lib/facility-footprint-lock';
 import {
   PLAN_ROUTE_MAX_VERTICES,
@@ -181,15 +218,24 @@ import {
   buildRoute,
   buildWorker,
   detachNodeFromRoutes,
+  insertRouteVertex,
   movePlanNode,
+  inferZoneIdAt,
+  moveRouteVertex,
+  nodeOnRoutes,
   nodeRouteRefs,
   planNodeIssues,
   planWorkerIssues,
+  removeRouteVertex,
+  reconcileCrossingNodes,
+  removeAutoCrossingNodesOfRoute,
   reverseRoute,
+  routeVertexEditIssue,
   type PlanNodeIssue,
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
-import { nearestRingEdge, planGridStepM, snapPointToGrid } from '../lib/site-plan-snap';
+import { clampRingMoveToBoundary, nearestMergeTarget, nearestPolylineEdge, nearestRingEdge, nearestRouteSnapPoint, planGridStepM, snapPointToGrid, stickPointToBoundary } from '../lib/site-plan-snap';
+import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
 import { encodeStageCover } from '@/lib/stage-cover';
 import {
   PLAN_MEASURE_MAX_VERTICES,
@@ -243,14 +289,12 @@ import {
   drawOneplanScaleSticker,
   drawOneplanSticker,
   facilitySticker,
-  nodeSticker,
+  nodeStickerColor,
   oneplanStickerSrc,
   planStickerDescriptors,
   preloadOneplanStickers,
-  routeSticker,
   subscribeOneplanStickerLoads,
   workerSticker,
-  zoneSticker,
 } from '../lib/oneplan-stickers';
 import {
   isPackTemplateId,
@@ -277,9 +321,11 @@ import {
   groupCatalogResults,
   infraBuckets,
   packBuckets,
+  vehicleIconItems,
   type PackBucket,
 } from '../lib/oneplan-catalog';
 import {
+  PLANNING_BOUNDARY_LINE_COLOR,
   PLANNING_CONFLICT_COLORS,
   PLANNING_EDIT_MODE_ICONS,
   PLANNING_EDIT_MODE_LABELS,
@@ -308,7 +354,7 @@ import {
   planMeasurementKindLabels,
   planRouteKindLabels,
   planRouteKinds,
-  planRouteLengthM,
+  routeCarrier,
   planZoneSemanticLabels,
   planZoneSemantics,
   type PlanAnnotation,
@@ -435,14 +481,9 @@ export interface OutdoorPlanCanvasProps {
    */
   sceneObjects?: readonly PlanSceneObject[] | undefined;
   /**
-   * V-5b/c（2026-11-13）：属性卡「模型」区底部的生成/上传入口外发——
-   * kind 'text'=「生成一个」（文生 3D）、'image'=「上传图片生成」（图生 3D）。
-   * 主线接线（organizer → overlay → 本组件）：organizer 侧 recordFacilityGenerateLink
-   * 记「这炉生成给哪个设施」+ stageMaterialGenerate 预填左栏物料生成框（仍须确认额度）；
-   * 提交成功后 MaterialCreateCell 消费链接落 taskid↔facility，本组件轮询回填候选首位。
-   * 独立只读分享页（plan-share）不传：按钮保留、回调缺省 no-op（?. 调用）。
+   * 2026-11-15：模型区三格改为打开「统一生成面板」（结果目标带入当前设施），
+   * 不再自己开一张独立表单；`onOpenMaterialGenerate` 这条外发口随之退役。
    */
-  onOpenMaterialGenerate?: (facilityId: string, kind: 'text' | 'image') => void;
   generationController?: BackendSession | undefined;
 }
 
@@ -453,6 +494,110 @@ const TILE = 256;
  * 上限放到 19 是为了贴到单棵树/斑马线的粒度）。
  */
 const MAP_MIN_ZOOM = 12;
+
+/** 采样底图亮度用的 16×16 缩小画布（模块级单例：只为读平均色，不参与显示）。 */
+let toneProbeCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * 2026-11-16 用户：「这个文字是不是也要根据不同的地图给适配？深色的分区就要是白色的」。
+ * 把底图缩小到 16×16 读平均亮度：<108 视为深底（卫星影像 / 深色路网）→ 图上文字转白字。
+ * 透明像素（瓦片还没到）跳过；整张都空或跨域污染画布读不出时，按图源类型兜底。
+ */
+function detectCanvasTone(canvas: HTMLCanvasElement | null, fallback: PlanBasemapTone): PlanBasemapTone {
+  if (!canvas || typeof document === 'undefined') return fallback;
+  try {
+    if (!toneProbeCanvas) toneProbeCanvas = document.createElement('canvas');
+    toneProbeCanvas.width = 16;
+    toneProbeCanvas.height = 16;
+    const probeCtx = toneProbeCanvas.getContext('2d', { willReadFrequently: true });
+    if (!probeCtx) return fallback;
+    probeCtx.clearRect(0, 0, 16, 16);
+    probeCtx.drawImage(canvas, 0, 0, 16, 16);
+    const { data } = probeCtx.getImageData(0, 0, 16, 16);
+    let sum = 0;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if ((data[i + 3] ?? 0) < 8) continue;
+      sum += 0.2126 * (data[i] ?? 0) + 0.7152 * (data[i + 1] ?? 0) + 0.0722 * (data[i + 2] ?? 0);
+      count++;
+    }
+    if (count === 0) return fallback;
+    return sum / count < 108 ? 'dark' : 'light';
+  } catch {
+    // 跨域瓦片污染画布之类：读不了就按图源类型兜底，绝不把异常抛进 draw。
+    return fallback;
+  }
+}
+
+/**
+ * 2026-11-16 用户「不仅改名还要改图标视觉，现在没对上」：
+ * 物件库 / 图层行的小图标直接画成画布上看到的梯子——
+ * 用地红线 = 红描边 + 极淡红底（画布上就是红线 + 低透明场地底片）；
+ * 设计范围 = 白纸面 + 四角墨色角标（画布上就是框外毛玻璃 + 白 L 角标，没有填色）。
+ * 以前这里是一个绿方块 / 一个琥珀方块——玩家看到的是“哪条线是什么颜色”，
+ * 而不是“它在地图上长什么样”。
+ */
+function BoundarySwatch({ size = 22 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        flex: '0 0 auto',
+        borderRadius: 4,
+        background: hexWithAlpha(PLANNING_BOUNDARY_LINE_COLOR, 0.14),
+        boxShadow: `inset 0 0 0 2px ${PLANNING_BOUNDARY_LINE_COLOR}`,
+      }}
+    />
+  );
+}
+
+/** 设计范围缩略：白纸 + 四角角标；plus = 中间加一个「+」（“按场地外扩”那条用）。 */
+function ScopeSwatch({ size = 22, plus = false }: { size?: number; plus?: boolean }) {
+  const inset = Math.max(2, size * 0.16);
+  const arm = Math.max(3, size * 0.3);
+  const ink = 'rgba(17,19,23,0.82)';
+  const corners: [number, number, number, number][] = [
+    [inset, inset, 1, 1],
+    [size - inset, inset, -1, 1],
+    [size - inset, size - inset, -1, -1],
+    [inset, size - inset, 1, -1],
+  ];
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        flex: '0 0 auto',
+        borderRadius: 4,
+        background: 'rgba(255,255,255,0.94)',
+        boxShadow: 'inset 0 0 0 1px rgba(17,19,23,0.16)',
+      }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {corners.map(([x, y, sx, sy]) => (
+          <path
+            key={`${x}-${y}`}
+            d={`M ${x + sx * arm} ${y} L ${x} ${y} L ${x} ${y + sy * arm}`}
+            fill="none"
+            stroke={ink}
+            strokeWidth={1.8}
+            strokeLinecap="square"
+          />
+        ))}
+        {plus && (
+          <path
+            d={`M ${size / 2 - 3} ${size / 2} L ${size / 2 + 3} ${size / 2} M ${size / 2} ${size / 2 - 3} L ${size / 2} ${size / 2 + 3}`}
+            stroke={ink}
+            strokeWidth={1.6}
+          />
+        )}
+      </svg>
+    </span>
+  );
+}
 /**
  * 2026-11-11 用户反馈「放大倍数不够」：按图源分档放大上限——CARTO 瓦片原生支持到 z21、
  * 天地图影像/矢量 z18（z19+ 返回占位图）；纸面格网模式用 FLOOR 档。
@@ -593,6 +738,15 @@ const VERTEX_EDGE_HIT_PX = 14;
 const DRAFT_CLOSE_HIT_PX = 10;
 /** 区分「单击加顶点」与「拖拽平移」的位移阈值（CSS px）。 */
 const CLICK_MAX_MOVE_PX = 4;
+/** 「再点一下会删」琥珀框的保留时长（ms）：手离开后不挂太久。 */
+const BOUNDARY_DELETE_ARM_MS = 2400;
+/** 刚插入顶点的宽限期（ms）：双击边线加点时，紧接着的那一下不该被当成“双击顶点删点”。 */
+const BOUNDARY_INSERT_GRACE_MS = 500;
+/**
+ * 2026-11-16 用户「Alt 和双击删除的底层逻辑冲突了，很容易误删」：
+ * 刚用 Alt 分叉起线后的这段窗口内，浏览/选择态的双击一律不删点。
+ */
+const BRANCH_DOUBLECLICK_GUARD_MS = 400;
 /** 2026-11-11 拖拽式测量：路径自由手绘的采样间距（CSS px，约每 8px 收一个点）。 */
 const MEASURE_FREEHAND_SAMPLE_PX = 8;
 /** 出入口节点命中/吸附半径（CSS px）：点选与动线端点吸附共用。 */
@@ -902,13 +1056,24 @@ const ANNOTATE_SHAPE_META: Record<PlanShapeKind, string> = {
   line: '2 点',
 };
 
-/** M4：出入口三型前置直选（工具箱目录分列，对齐动线三类），标签与放置命名同源。 */
-const NODE_KIND_OPTIONS: { kind: PlanNode['kind']; label: string }[] = [
+/** M4：出入口三型前置直选（工具箱目录分列，对齐动线三类），标签与放置命名同源。 */const NODE_KIND_OPTIONS: { kind: PlanNode['kind']; label: string }[] = [
   { kind: 'entry', label: '入口' },
   { kind: 'exit', label: '出口' },
   { kind: 'both', label: '出入口' },
 ];
-const nodeKindLabel = (kind: PlanNode['kind']): string => NODE_KIND_OPTIONS.find(o => o.kind === kind)?.label ?? '入口';
+const nodeKindLabel = (kind: PlanNode['kind']): string => NODE_KIND_OPTIONS.find(o => o.kind === kind)?.label ?? '出入口';
+
+/**
+ * 2026-11-16 用户：「类型也就几个类型，再说一遍，我讨厌下拉选取」。
+ * 动线三类改成图标直选：人行=行人、车辆=货车、后勤=包裹。
+ * 2026-11-16 用户补充：「人行应该改成行人，而不是脚印」——脚印容易被读成“已走过的痕迹”，
+ * 而这里选的是“画什么类型的线”，所以用行人侧影（PersonStanding）。
+ */
+const ROUTE_KIND_ICONS: Record<PlanRoute['kind'], PlanningIconName> = {
+  pedestrian: 'person-standing',
+  vehicle: 'truck',
+  service: 'package',
+};
 
 /** H4-a 类型胶囊：清单行的「图标+类型」药丸，色从图层色派生（withAlphaHex），不另立色值。 */
 function TypeCapsule({ kind, label }: { kind: PlanInventoryKind; label: string }) {
@@ -1022,12 +1187,44 @@ export interface OutdoorPlanCanvasHandle {
   pointerFromPlan(
     kind: 'down' | 'move' | 'up' | 'leave' | 'dblclick' | 'contextmenu',
     hit: { px: { x: number; y: number }; pt: PlanPoint } | null,
-    flags?: { button?: number; shiftKey?: boolean; clientX?: number; clientY?: number; viewport?: PlanViewport },
+    flags?: {
+      button?: number;
+      shiftKey?: boolean;
+      /** 2026-11-16：Alt = 从已有点分叉画新动线，3D 必须跟 2D 一样透传。 */
+      altKey?: boolean;
+      ctrlKey?: boolean;
+      metaKey?: boolean;
+      clientX?: number;
+      clientY?: number;
+      viewport?: PlanViewport;
+    },
   ): boolean;
   /** 3D 编辑时用来同步预览、选中态和正在画/放的草稿。 */
   getEditVisuals(): PlanEditVisuals;
   /** 2026-11-12 B3 一期：当前户外选区 id（zone/facility/route/node/worker/annotation + 组选设施）；无选空数组。 */
   getSelectedIds(): string[];
+  /** 2026-11-16 3D 拖放：拖到地面时按模板预览幽灵（绿/红越界），返回是否已接管。 */
+  previewFacilityDrop(templateId: string, point: PlanPoint): boolean;
+  /** 2026-11-16 3D 拖放：松手落位（与 2D onDrop 同一入口）。 */
+  dropFacilityAt(templateId: string, point: PlanPoint): boolean;
+  /** 2026-11-16 3D 拖放离开：清掉幽灵（保留当前工具，方便接着点放）。 */
+  clearFacilityDropPreview(): void;
+  /** 2026-11-16 物料卡拖进 2D/3D：按模型真实宽深出幽灵。 */
+  previewCatalogDrop(payload: PlanCatalogDrag, point: PlanPoint): boolean;
+  /** 2026-11-16 物料卡松手：落成带 modelOverride 的设施。 */
+  dropCatalogAt(payload: PlanCatalogDrag, point: PlanPoint): boolean;
+  /** 2026-11-16 点物料卡：进入待放置，随后点画布/地面落位。 */
+  armCatalogFacility(payload: PlanCatalogDrag): boolean;
+}
+
+/**
+ * 2026-11-16 2D→3D 草稿同步：3D 接管态收到后立即重画 draft（R 旋转、Esc 取消、落位后清幽灵），
+ * 不再等下一次指针移动才刷新。
+ */
+const PLAN_DRAFT_EVENT = 'sc-outdoor-plan-visuals';
+function notifyPlanDraftChanged(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(PLAN_DRAFT_EVENT));
 }
 
 /** 3D 倾斜地图用来叠当前编辑预览（草稿折线、幽灵占位）。 */
@@ -1049,7 +1246,50 @@ export interface PlanEditVisuals {
     annotate: PlanPoint[];
     annotateColor: string;
     ghostMarker: { position: PlanPoint; color: string } | null;
+    /** 2026-11-16 设施落位前的占地幽灵：3D 接管态经 draft 通道渲染（旋转/越界与 2D 同源）。 */
+    facilityGhost: {
+      ring: PlanPoint[];
+      invalid: boolean;
+      /** 2026-11-16 物料卡预览：3D 在幽灵位置加载这张卡自己的模型（不回落模板默认模型）。 */
+      preview: {
+        slug: string;
+        templateId: string;
+        name: string;
+        position: PlanPoint;
+        rotationDeg: number;
+        width: number;
+        depth: number;
+      } | null;
+    } | null;
   };
+}
+
+/**
+ * 描边样式预览字形（2026-11-15 用户指令：实线/虚线/点线/无用图标代替）。
+ * 24×12 的一条线段，与画布上该描边的真实线型同构；「无」用带斜线的圆表示关闭。
+ */
+function StrokeGlyph({ style }: { style: 'solid' | 'dashed' | 'dotted' | 'none' }) {
+  return (
+    <svg width={24} height={12} viewBox="0 0 24 12" aria-hidden focusable="false" style={{ display: 'block' }}>
+      {style === 'none' ? (
+        <>
+          <circle cx="12" cy="6" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.4" opacity="0.6" />
+          <line x1="8.8" y1="9.2" x2="15.2" y2="2.8" stroke="currentColor" strokeWidth="1.4" opacity="0.6" />
+        </>
+      ) : (
+        <line
+          x1="2"
+          y1="6"
+          x2="22"
+          y2="6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={style === 'dashed' ? '5 4' : style === 'dotted' ? '1.6 3.4' : undefined}
+        />
+      )}
+    </svg>
+  );
 }
 
 export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, OutdoorPlanCanvasProps>(function OutdoorPlanCanvas({
@@ -1080,7 +1320,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   workflowPreview, workflowScopePreview, mapEditHighlight, evidenceHighlights,
   flowSimRoutes,
   sceneObjects,
-  onOpenMaterialGenerate,
   generationProjectId,
   generationController,
 }: OutdoorPlanCanvasProps, ref) {
@@ -1170,6 +1409,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const draftRef = useRef<PlanPoint[]>([]);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
+  // 2026-11-16：刚在边界线上插过点——松手时不要把“新插的顶”当成“点一下删掉”。
+  const boundaryJustInsertedRef = useRef(false);
   const downPxRef = useRef<{ x: number; y: number } | null>(null);
   const issuesRef = useRef<PlanZoneIssue[]>([]);
   // H2-c 设施放置：待放模板、幽灵位置、选中设施。
@@ -1177,14 +1418,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const facilityTemplateRef = useRef<string | null>(null);
   const facilityTemplateObjRef = useRef<PlanFacilityTemplate | null>(null);
   const ghostPointRef = useRef<PlanPoint | null>(null);
+  /** 2026-11-16 落位前旋转：R / Shift+R 每次 ±15°，2D 与 3D draft 共用同一个角度。 */
+  const facilityRotationRef = useRef(0);
+  /** 拖放刚落的 250ms 内不因 dragleave 清幽灵，否则连放第二件会丢预览。 */
+  const facilityDropAtRef = useRef(0);
+  /** 2026-11-16 物料卡拖放：记录「当前动态模板对应的物料 slug」，落位时写 modelOverride。 */
+  const facilityCatalogRef = useRef<PlanCatalogDrag | null>(null);
+  /** 点选物料卡后的待放载荷：即使落位前有别的 setMode/重选把 facilityCatalogRef 清掉，也仍能带上正确模型。 */
+  const armedCatalogRef = useRef<PlanCatalogDrag | null>(null);
   const selectedFacilityRef = useRef<string | null>(null);
   const facilityIssuesRef = useRef<PlanFacilityIssue[]>([]);
   // H2-d 动线/节点/人员：绘制草稿、语义选择、选中实体、问题清单、undo。
   const routeKindRef = useRef<PlanningRouteKind>('pedestrian');
+  /**
+   * 2026-11-16 用户「我明明是在改车行道，点了 Alt 又改回了人行道」：
+   * Alt 点在动线**端点**上时不是另起一条，而是接着这条线画；这里记住接的是谁、接哪头。
+   */
+  const routeExtendRef = useRef<{ routeId: string; at: 'start' | 'end' } | null>(null);
   const routeDraftRef = useRef<PlanPoint[]>([]);
   const routeCursorRef = useRef<PlanPoint | null>(null);
   const routeOneWayRef = useRef(false);
-  const nodeKindRef = useRef<PlanNode['kind']>('entry');
+  // 2026-11-15 用户：「一般情况都是出入口」——新放的点默认就是出入口（纯进/纯出由用户自己改），
+  // 动线穿边自动生成的交界点也走同一个默认值。
+  const nodeKindRef = useRef<PlanNode['kind']>('both');
   const nodeGhostRef = useRef<PlanPoint | null>(null);
   const workerGhostRef = useRef<PlanPoint | null>(null);
   const [basemapVisible, setBasemapVisible] = useState(true);
@@ -1196,7 +1452,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const workerCountRef = useRef(1);
   // 2026-11-12 活动包物件预设：动线（颜色/名称/线型）、分区（颜色/名称）、人员点位色。
   // setMode 统一清空；pickPackEntry 在切模式之后写入。
-  const routePresetRef = useRef<{ kind: PlanningRouteKind; color?: string; name?: string } | null>(null);
+  const routePresetRef = useRef<{ id?: string; kind: PlanningRouteKind; color?: string; name?: string; carrier?: 'walk' | 'trolley' | 'vehicle' | 'mixed' } | null>(null);
   const zonePresetRef = useRef<{ color?: string; name?: string } | null>(null);
   const workerPresetColorRef = useRef<string | null>(null);
   const selectedRouteRef = useRef<string | null>(null);
@@ -1260,30 +1516,148 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     moved: boolean;
     preview: PlanFacility[] | null;
   } | null>(null);
-  /** P2-i 图层锁定：锁定层不参与命中与编辑（显示、统计、图例口径不变）。 */
-  const lockedLayersRef = useRef<LockedLayerMap>({});
+  /** P2-i 图层锁定：锁定层不参与命中与编辑（显示、统计、图例口径不变）。
+   *  2026-11-16 用户：「给场地加一把锁，默认不编辑，解锁才编辑」——只有场地边界（绿色总区域）默认锁着，
+   *  想改几何得先在左侧「场地边界」行点锁图标；其他图层（含分区）默认不锁。
+   *  2026-11-16 用户更正：「我不要分区锁定啊，我说的是那个绿色的总区域」——分区回到默认可编辑。 */
+  const lockedLayersRef = useRef<LockedLayerMap>({ boundary: true });
   /** P2-j 分区选中与顶点改形：选中的分区 id + 正在拖的顶点 + 拖动预览多边形。 */
   const selectedZoneRef = useRef<string | null>(null);
-  const dragZoneVertexRef = useRef<{ zoneId: string; index: number } | null>(null);
+  const dragZoneVertexRef = useRef<{ zoneId: string; index: number; startPx: { x: number; y: number } } | null>(null);
+  /**
+   * 2026-11-15 用户指令「点线段中间就多一个点」：光标悬在选中分区边上时记下
+   * 投影点与边序号，用于画「加点」手柄；点下去就插顶点并直接进入拖动。
+   */
+  const zoneEdgeHintRef = useRef<{ zoneId: string; point: PlanPoint; index: number } | null>(null);
+  /** 2026-11-15：光标悬在选中分区的已有顶点上时高亮「可删」（点一下删掉，两侧自动相连）。 */
+  const zoneVertexHoverRef = useRef<{ zoneId: string; index: number } | null>(null);
+  /** 则是刚插完的点：紧接的松手别把它当成「点击删除」，否则插点会原地被抹掉。 */
+  const justInsertedZoneVertexRef = useRef(false);
+  /** 2026-11-15 用户指令「靠近就被吞掉」：当前拖动的顶点是否已吸到某个邻居上（画高亮用）。 */
+  const zoneVertexSnapRef = useRef<{ zoneId: string; index: number } | null>(null);
   // 2026-11-14 用户反馈「没法编辑 Agent 生成的区域」：分区此前只能拖顶点改形，补整体拖动（与设施同款）。
   const dragZoneMoveRef = useRef<{ zoneId: string; startPt: PlanPoint; base: PlanPoint[]; moved: boolean } | null>(null);
+  /** 2026-11-15：设计范围改成拖矩形，按下只记起点，不再攒顶点序列。 */
+  const scopeDragRef = useRef<{ startPt: PlanPoint } | null>(null);
+  /** 拖范围角点改尺寸：记对角（不动的那一个），保证结果永远是矩形。 */
+  const scopeResizeRef = useRef<{ fixed: PlanPoint } | null>(null);
+  /**
+   * 2026-11-15 用户指令「几个侧边，点的时候也可以按照对应的方向拖动」：
+   * 拖边只改一个方向（北/南动 y，东/西动 x）。ring 是按下时的框，对边位置钉在它里。
+   */
+  const scopeEdgeResizeRef = useRef<{ edge: ScopeEdge; ring: PlanPoint[] } | null>(null);
+  /** 悬停到哪条边（只用于光标提示：↕ / ↔，不画任何东西）。 */
+  const [scopeEdgeHover, setScopeEdgeHover] = useState<ScopeEdge | null>(null);
+  const scopeEdgeHoverRef = useRef<ScopeEdge | null>(null);
+  /**
+   * 2026-11-15 用户指令「框外加一个锁，默认不锁；锁了就不会误触边框」：
+   * 锁定只关掉拖角/拖边两条命中，不动 designScope 数据，也不影响重拖/清除按钮。
+   * 纯 UI 状态（不进 plan）：锁定是当下操作习惯，不该写进场地数据被同步给别人。
+   * 只存 ref：锁开关只影响画布绘制与命中，不需要 React 重渲染。
+   */
+  const scopeLockedRef = useRef(false);
+  /** 悬停在可拖的边界顶点上（编辑提示 + 光标）。 */
+  const [boundaryVertexHover, setBoundaryVertexHover] = useState<number | null>(null);
+  const boundaryVertexHoverRef = useRef<number | null>(null);
+  /** 悬停在边线上时的「+」加点把手：px 位置（画）+ 米制点与边序号（插点用）。 */
+  const [boundaryEdgeHint, setBoundaryEdgeHint] = useState<{ x: number; y: number } | null>(null);
+  const boundaryEdgeHintRef = useRef<{ x: number; y: number; index: number; pt: PlanPoint } | null>(null);
+  /** 「点了一下、再点就删」的顶点：白框描边转琥珀（删除预警，不是已删）。 */
+  const boundaryDeleteArmedRef = useRef<number | null>(null);
+  /** 最近一次插点的时间戳：插完的那一下不能又变红、也不能再触发删点。 */
+  const boundaryInsertedAtRef = useRef(0);
+  const boundaryDeleteArmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (boundaryDeleteArmTimerRef.current !== null) clearTimeout(boundaryDeleteArmTimerRef.current);
+  }, []);
+
+  /** 按住 Alt 时鼠标下的“可以从这里长出一条新动线”的锚点（画提示用）。 */
+  const [branchAnchorHint, setBranchAnchorHint] = useState<{ x: number; y: number; label: string } | null>(null);
+  const branchAnchorHintRef = useRef<{ x: number; y: number; label: string; point: PlanPoint; nodeId?: string } | null>(null);
+  /** 刚用 Alt 分叉起线的时刻：双击守护窗口的锚。 */
+  const branchStartedAtRef = useRef<number>(-Infinity);
+  const [altHeld, setAltHeld] = useState(false);
+  const altHeldRef = useRef(false);
+  // 2026-11-16 用户「按住 Alt 在原来的点上添加线」+「操作过程中需要有提示」：
+  // Alt 按下时把候选锚点亮成「+」，松开/失焦立即熄灭，不留下幽灵把手。
+  useEffect(() => {
+    const clear = () => {
+      if (!altHeldRef.current) return;
+      altHeldRef.current = false;
+      setAltHeld(false);
+      branchAnchorHintRef.current = null;
+      setBranchAnchorHint(null);
+      draw();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || altHeldRef.current) return;
+      altHeldRef.current = true;
+      setAltHeld(true);
+      // Alt = 分叉手势期间不许有“等待删除”的顶点留在手上（琥珀框会让人以为再点也不安全）。
+      clearBoundaryDeleteArm();
+      dragRouteVertexRef.current = null;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.altKey) return;
+      clear();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', clear);
+    };
+  }, []);
+  /** 锁定状态悬停在边界上：光标给 not-allowed，点一下给“去哪解锁”的提示。 */
+  const [boundaryLockedHover, setBoundaryLockedHover] = useState(false);
+  const boundaryLockedHoverRef = useRef(false);
+  /** 悬停在锁定钮上（光标变 pointer）。 */
+  const [scopeLockHover, setScopeLockHover] = useState(false);
+  const scopeLockHoverRef = useRef(false);
+  /** 悬停在「场地边界」那枚锁上（光标变 pointer）。 */
+  const [boundaryLockHover, setBoundaryLockHover] = useState(false);
+  const boundaryLockHoverRef = useRef(false);
   const zoneDragPreviewRef = useRef<{ zoneId: string; polygon: PlanPoint[] } | null>(null);
   // 2026-11-14 用户指令「生成的任何东西都要可以编辑」：流线此前只能整条删除，补顶点拖拽改形。
-  const dragRouteVertexRef = useRef<{ routeId: string; index: number; base: PlanPoint[] } | null>(null);
+  const dragRouteVertexRef = useRef<{ routeId: string; index: number; base: PlanPoint[]; merged: PlanRoute | null } | null>(null);
   const routeDragPreviewRef = useRef<{ routeId: string; points: PlanPoint[] } | null>(null);
+  /**
+   * 2026-11-15 用户指令「路线和分区一样，线上可以加点、减点、挪动合并点」：
+   * 与分区同机制的三只 ref——悬停边中段（画「加点」手柄）、悬停已有折点（画红色「可删」环）、
+   * 拖动时被吸住的邻居折点（琥珀大圈）。
+   */
+  const routeEdgeHintRef = useRef<{ routeId: string; point: PlanPoint; index: number } | null>(null);
+  const routeVertexHoverRef = useRef<{ routeId: string; index: number } | null>(null);
+  const routeVertexSnapRef = useRef<{ routeId: string; index: number } | null>(null);
+  /** 刚插完的点：紧接的松手别把它当成「点击删除」，否则插点会原地被抹掉。 */
+  const justInsertedRouteVertexRef = useRef(false);
 
   const [view, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
   const [layerState, setLayerState] = useState<LayerVisibility>(visibility ?? defaultLayerVisibility());
   /** P2-i 图层锁定（UI 状态；命中过滤读 lockedLayersRef，避免闭包过期）。 */
-  const [lockedLayers, setLockedLayers] = useState<LockedLayerMap>({});
+  const [lockedLayers, setLockedLayers] = useState<LockedLayerMap>({ boundary: true });
   const [panelOpen, setPanelOpen] = useState(true);
   /** 2026-11-11 OnePlan Placed Objects 文件夹树：类型文件夹展开状态（缺省全展开）。 */
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [mode, setModeState] = useState<PlanningEditMode>('view');
   const [zoneSemantic, setZoneSemantic] = useState<PlanningZoneSemantic>('audience');
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  /** 2026-11-15：边界/范围提交后的分区越界清单（提示条 + 一键收进）。 */
+  const [zoneOverflow, setZoneOverflow] = useState<ZoneBoundsOverflow[]>([]);
+  const [zoneUndoAvailable, setZoneUndoAvailable] = useState(false);
+  /** 一键收进前的整份 plan（原坐标），供提示条上的「撤销」恢复。 */
+  const zoneUndoRef = useRef<SitePlanData | null>(null);
   const [issues, setIssues] = useState<PlanZoneIssue[]>([]);
+  /**
+   * 2026-11-15 用户指令：分区重叠不阻编辑，只在画布上常驻报错，挪开就自动消失。
+   * 直接从问题清单派生（不另存状态）——清单每次 plan 变化都重算，重叠一消失提示自然就没了。
+   */
+  const overlapNotices = issues
+    .filter(item => item.issue.code === 'zones-overlap')
+    .map(item => ({ a: item.zoneName, b: item.otherZoneName ?? '另一个分区' }));
   const [facilityTemplateId, setFacilityTemplateId] = useState<string | null>(null);
   // P2-h 物件库：549 件 OnePlan 贴纸（左栏第三个页签）。清单 440 KB，只在挂载时拉一次。
   const [libraryAll, setLibraryAll] = useState<LibraryEntry[]>([]);
@@ -1340,7 +1714,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [routeKind, setRouteKind] = useState<PlanningRouteKind>('pedestrian');
   // M4（2026-11-13）：出入口类型在工具箱前置直选（ref + state 双写，对齐动线 kind）；
   // oneWay/人数的纯 UI 态仍在选中实体编辑器里调，画布逻辑读各自的 ref（draw 侧真值）。
-  const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('entry');
+  const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('both');
   const [, setRouteDraftCount] = useState(0);
   const [workerRole, setWorkerRole] = useState('安保');
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -1361,9 +1735,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 手风琴（+ 布场信息 / + 备注）：默认收起，同 OnePlan。
   const [facilitySetupOpen, setFacilitySetupOpen] = useState(false);
   const [facilityNotesOpen, setFacilityNotesOpen] = useState(false);
+  // 2026-11-15：位置改成可编辑后，经纬度采用「输入中存草稿、失焦/回车才提交」：
+  // 受控输入若每次按键就回写 5 位小数，用户连小数点都敲不进去。
+  const [facilityGeoDraft, setFacilityGeoDraft] = useState<{ lat: string; lng: string } | null>(null);
+  // 尺寸同理：宽/深也用草稿，否则敲「3.」时会被 1 位小数的回写吃掉小数点。
+  const [facilitySizeDraft, setFacilitySizeDraft] = useState<{ width: string; depth: string } | null>(null);
   // V-5a 模型候选切换：选中设施的 3D 模型候选（loadFacilityModelCandidates：内置映射同步
   // + 在线物料库异步兜底，上限 5）。属性卡「模型」网格渲染；点候选写 facility.modelOverride。
-  const [facilityModelCandidates, setFacilityModelCandidates] = useState<{ templateId: string; items: FacilityModelCandidate[] } | null>(null);
+  const [facilityModelCandidates, setFacilityModelCandidates] = useState<{
+    templateId: string;
+    items: FacilityModelCandidate[];
+    defaultSlug: string | null;
+  } | null>(null);
   // V-5b/c：生成/导入注册表的 revision——回填完成（或 GLB 导入）时候选网格实时重排。
   const generatedModelsRevision = useSyncExternalStore(
     subscribeGeneratedFacilityModels,
@@ -1384,21 +1767,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     // 同模板换选不重拉（函数式 set 同引用即跳过），plan 编辑重跑只是自愈。
     let alive = true;
-    setFacilityModelCandidates(current => (current?.templateId === templateId ? current : { templateId, items: [] }));
+    setFacilityModelCandidates(current => (current?.templateId === templateId ? current : { templateId, items: [], defaultSlug: null }));
     void loadFacilityModelCandidates([templateId])
       .then(map => {
         if (!alive) return;
         // V-5b/c：生成/导入回填的候选排最前（「生成完回填候选首位」），库内候选殿后；
         // 上限放行生成位，不让回填把库内候选挤没。
         const generated = listGeneratedFacilityModels(facility?.id, generationProjectId);
-        const items = [...generated, ...(map.get(templateId) ?? [])]
-          .slice(0, MAX_FACILITY_MODEL_CANDIDATES + generated.length);
-        setFacilityModelCandidates(current => (current?.templateId === templateId ? { templateId, items } : current));
+        const library = map.get(templateId) ?? [];
+        const items = [...generated, ...library];
+        const defaultSlug = library[0]?.slug ?? null;
+        setFacilityModelCandidates(current => (current?.templateId === templateId ? { templateId, items, defaultSlug } : current));
       })
       .catch(() => {
         if (!alive) return;
         // 在线库故障也不能吞掉本次生成/导入的候选。
-        setFacilityModelCandidates({ templateId, items: listGeneratedFacilityModels(facility?.id, generationProjectId) });
+        setFacilityModelCandidates({ templateId, items: listGeneratedFacilityModels(facility?.id, generationProjectId), defaultSlug: null });
       });
     return () => { alive = false; };
   }, [selectedFacilityId, plan, generatedModelsRevision, generationProjectId]);
@@ -1494,6 +1878,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setNoteInput(next);
   }
   const [conflictIssues, setConflictIssues] = useState<PlanConflictIssue[]>([]);
+  /**
+   * 2026-11-15 用户：「同一条线上的感叹号合并成一枚，点开再展开明细」。
+   * 画布上每个关联对象只画一枚徽章（多条问题画数字），点它才展开清单。
+   */
+  const [conflictClusters, setConflictClusters] = useState<PlanConflictCluster[]>([]);
+  const conflictClustersRef = useRef<PlanConflictCluster[]>([]);
+  /**
+   * 2026-11-16 用户「场地上又出现感叹号，不知道为什么」：那些橙色的「!」其实是
+   * 「缺宽度 / 容量待核实」这类**提示**（status=missing/unverified），不是真冲突。
+   * 它们每新画一条车行/后勤动线就冒一颗，一屏全是橙点，把真冲突淹了。
+   * 所以默认图上只画**冲突（红）**；提示类要手动打开才上图（问题清单里一直能看到）。
+   */
+  const [showAdvisoryBadges, setShowAdvisoryBadges] = useState(false);
+  const showAdvisoryBadgesRef = useRef(false);
+  /** 当前展开明细的那一枚徽章（key），null = 没展开。 */
+  const [conflictDetailKey, setConflictDetailKey] = useState<string | null>(null);
+  const conflictDetailKeyRef = useRef<string | null>(null);
+  function showConflictDetail(key: string | null) {
+    conflictDetailKeyRef.current = key;
+    setConflictDetailKey(key);
+  }
   // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
   const [infoOpen, setInfoOpen] = useState(true);
   // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起，可并存。
@@ -1518,14 +1923,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     modeRef.current = next;
     draftRef.current = [];
     previewRingRef.current = null;
+    scopeDragRef.current = null;
+    scopeResizeRef.current = null;
+    scopeEdgeResizeRef.current = null;
+    scopeEdgeHoverRef.current = null;
+    setScopeEdgeHover(null);
     dragVertexRef.current = null;
+    boundaryJustInsertedRef.current = false;
     facilityTemplateRef.current = null;
     ghostPointRef.current = null;
+    facilityCatalogRef.current = null;
+    armedCatalogRef.current = null;
+    facilityRotationRef.current = 0;
     setFacilityTemplateId(null);
     routeDraftRef.current = [];
+    routeExtendRef.current = null;
     routeCursorRef.current = null;
     nodeGhostRef.current = null;
-    workerGhostRef.current = null;
     measureDraftRef.current = [];
     measureCursorRef.current = null;
     measureDragRef.current = null;
@@ -1553,7 +1967,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setModeState(next);
     setEditMessage(null);
     onModeChange?.(next);
+    // 2026-11-16 用户「我现在好像画不了场地边界了啊？」：
+    // 锁只该挡「没选工具时的误触」。点了「画边界 / 编辑边界」就是明摆着要改几何，
+    // 进模式即自动解锁（否则单击收点会被锁直接拦下，工具看着就是坏的）。画完可在左栏再锁上。
+    if ((next === 'boundary' || next === 'boundary-vertex') && lockedLayersRef.current.boundary === true) {
+      const unlocked: LockedLayerMap = { ...lockedLayersRef.current, boundary: false };
+      lockedLayersRef.current = unlocked;
+      setLockedLayers(unlocked);
+      setEditMessage('已自动解除用地红线锁定（选了红线工具就是要改它）；画完可在左侧「用地红线」行再锁上。');
+    }
     draw();
+    notifyPlanDraftChanged();
+  }
+
+  /**
+   * 2026-11-16 落位前旋转（2D/3D 同一键）：R +15°，Shift+R −15°，Esc 取消。
+   * 只改“还没放下的那一个”的角度；已落位的设施仍走选中手柄。
+   */
+  function rotatePendingFacility(deltaDeg: number): boolean {
+    if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return false;
+    const next = ((facilityRotationRef.current + deltaDeg) % 360 + 360) % 360;
+    facilityRotationRef.current = next;
+    setEditMessage(`待放置已旋转 ${Math.round(next)}°；R / Shift+R 调整，Esc 取消。`);
+    draw();
+    notifyPlanDraftChanged();
+    return true;
   }
 
   function setDraft(next: PlanPoint[]) {
@@ -1704,6 +2142,77 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
   }
 
+  /**
+   * 边界/设计范围一变，就把全案分区重判一遍（2026-11-15 用户指令）。
+   *
+   * 为什么必须在这里做：分区是先画的、边界是后改的，提交边界时没人复验，
+   * 早期分区就静静留在外面。这里同时记一份「改动前」快照，供一键收进后撤销回原坐标。
+   */
+  function reviewZonesAfterBoundsChange(next: SitePlanData, previous: SitePlanData): ZoneBoundsOverflow[] {
+    const overflow = findZoneBoundsOverflow({
+      boundary: next.boundary,
+      designScope: next.designScope ?? [],
+      zones: next.zones,
+    });
+    setZoneOverflow(overflow);
+    if (overflow.length > 0) {
+      zoneUndoRef.current = previous;
+      setZoneUndoAvailable(true);
+    }
+    return overflow;
+  }
+
+  function overflowSuffix(overflow: ZoneBoundsOverflow[]): string {
+    return overflow.length > 0 ? ` 有 ${overflow.length} 个分区越界，可一键收进。` : '';
+  }
+
+  /** 一键收进：把能自动摆回的分区按建议坐标提交（平移优先，其次保形收缩）。 */
+  function pullOverflowZonesIntoBounds() {
+    const current = planRef.current;
+    const suggestions = new Map(
+      zoneOverflow.filter(item => item.pulled !== null).map(item => [item.zoneId, item.pulled!] as const),
+    );
+    if (suggestions.size === 0) {
+      setEditMessage('这些分区没法自动收进（红线与设计范围不相交，或缩到最小面积也放不下）；请先确认红线，或手动拖动分区。');
+      return;
+    }
+    const next: SitePlanData = {
+      ...current,
+      zones: current.zones.map(zone =>
+        suggestions.has(zone.id) ? { ...zone, polygon: suggestions.get(zone.id)!.map(p => ({ x: p.x, y: p.y })) } : zone,
+      ),
+    };
+    zoneUndoRef.current = current;
+    setZoneUndoAvailable(true);
+    commitPlan(next);
+    const still = findZoneBoundsOverflow({ boundary: next.boundary, designScope: next.designScope ?? [], zones: next.zones });
+    setZoneOverflow(still);
+    setEditMessage(
+      still.length > 0
+        ? `已收进 ${suggestions.size} 个分区；还有 ${still.length} 个放不下，请手动调整或先扩大红线。`
+        : `已把 ${suggestions.size} 个分区收进红线，原坐标已保留，可点「撤销」恢复。`,
+    );
+    draw();
+  }
+
+  /** 撤销一键收进：直接回填快照（与 undoPlan 同口径，把当前状态塞进 redo 栈）。 */
+  function undoZonePull() {
+    const snapshot = zoneUndoRef.current;
+    if (!snapshot) return;
+    redoRef.current.push(planRef.current);
+    if (redoRef.current.length > UNDO_LIMIT) redoRef.current.shift();
+    setRedoCount(redoRef.current.length);
+    planRef.current = snapshot;
+    onPlanChange?.(snapshot);
+    zoneUndoRef.current = null;
+    setZoneUndoAvailable(false);
+    setZoneOverflow(
+      findZoneBoundsOverflow({ boundary: snapshot.boundary, designScope: snapshot.designScope ?? [], zones: snapshot.zones }),
+    );
+    setEditMessage('已恢复收进前的坐标。');
+    draw();
+  }
+
   // P2-g：undo/redo 可用态上报（室内工具排撤销/重做钮的 disabled 与点击都走这里）。
   useEffect(() => {
   onHistoryChange?.({ canUndo: historyCount > 0, canRedo: redoCount > 0 });
@@ -1735,6 +2244,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setWorkerIssues(workerIssuesRef.current);
     conflictIssuesRef.current = planConflictIssues(view);
     setConflictIssues(conflictIssuesRef.current);
+    conflictClustersRef.current = groupConflictIssues(conflictIssuesRef.current);
+    setConflictClusters(conflictClustersRef.current);
+    // 2026-11-15：越界提示条跟真实 plan 同步（拖分区、撤销、外部提案都算），与问题清单同口径按当前层算。
+    setZoneOverflow(
+      findZoneBoundsOverflow({ boundary: view.boundary, designScope: view.designScope ?? [], zones: view.zones }),
+    );
     // 选中实体被外层删掉时静默取消选中，避免面板悬挂引用。
     if (selectedFacilityRef.current && !plan.facilities.some(f => f.id === selectedFacilityRef.current)) {
       selectedFacilityRef.current = null;
@@ -1905,6 +2420,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     publishBasemapLoading(basemapCacheRef.current.loadingCount > 0);
     }
 
+    // 2026-11-16 用户：「这个文字是不是也要根据不同的地图给适配？深色的话分区就要是白色的」。
+    // 采样底图平均亮度：偏暗（卫星影像/深色路网）→ 图上文字改白字 + 深描边。
+    // 室内纸面/关掉底图时不采（那两种底本身是浅色）。
+    const labelTone = detectCanvasTone(
+      basemapVisibleRef.current && baseModeRef.current !== 'floor' ? baseCanvas : null,
+      sourceRef.current === 'img' || sourceRef.current === 'amap-satellite' ? 'dark' : 'light',
+    );
+
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
     //    底图瓦片异步返回时不会覆盖业务层。
     // 节点拖动预览：被拖节点与受影响路线端点随动预览（未 commit 前仅绘制）。
@@ -1920,13 +2443,68 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const drawnRoutes = routeDragPreview
       ? routes.map(r => (r.id === routeDragPreview.routeId ? { ...r, points: routeDragPreview.points } : r))
       : routes;
-    const editingBoundary = modeRef.current === 'boundary-vertex';
+    // 2026-11-16 用户「解锁了之后还是无法编辑」：不再要求先进「编辑边界」模式——
+    // 只要边界没锁，浏览模式就挂大号实心方点（可直接拖）；选择模式仍是框选，不给可拖错觉。
+    const boundaryMode = modeRef.current;
+    const editingBoundary = lockedLayersRef.current.boundary !== true
+      && (boundaryMode === 'boundary-vertex' || boundaryMode === 'view');
     const boundary = previewRingRef.current ?? current.boundary;
     const review = mapEditHighlightRef.current;
     const layer = { ctx: planCtx, viewport };
+    // 2026-11-15 用户指令「先快速画一个大陆」：设计范围要先压暗框外，再画边界/分区。
+    // 压暗必须在最下层——否则暗色会盖在分区色块和设施贴纸上，框内反而看不清。
+    const designScope = current.designScope ?? [];
+    if (designScope.length >= 3) {
+      // 2026-11-15 用户「顶部的设计信息有点烦，锁住再显示」：
+      // 平时不挂面积标签（框本身已经说明范围）；锁上后才显示，连同解锁提示一起。
+      const scopeLocked = scopeLockedRef.current;
+      // 2026-11-15：框右上外侧的锁定钮（默认不锁；锁上后拖角/拖边不再响应）。
+      const lockRect = scopeLockButtonRect(
+        designScope.map(point => planPointToPixel(point, viewport)),
+        viewport,
+      );
+      drawDesignScopeMask(layer, designScope, {
+        // 未锁定时不传 label：`exactOptionalPropertyTypes` 下显式 undefined 不算「没传」。
+        ...(scopeLocked ? { label: `设计范围 · 约 ${Math.round(scopeAreaM2(designScope))} m² · 已锁定 · 点锁解锁` } : {}),
+        // 标签靠右延伸时要给锁定钮让位，不然文字会被钮压住。
+        ...(lockRect ? { labelMaxRightPx: lockRect.x - 8 } : {}),
+        // 2026-11-15 视觉定稿：框外改白色毛玻璃——取样源是刚铺好的底图 canvas，
+        // 只虚化底图，框外的流线/设施（业务层）仍清晰可读。
+        frostSource: { canvas: baseCanvas, cssWidth: cssW, cssHeight: cssH },
+      });
+      if (lockRect) drawScopeLockButton(layer, lockRect, scopeLocked);
+    }
     if (isLayerVisible(vis, 'boundary')) {
-      drawBoundaryLayer(layer, boundary, { vertexHandles: editingBoundary });
+      // 2026-11-16 用户「这个的区域设计…我不是说了也是上锁的逻辑吗」：
+      // 锁上时连顶点小点也不画——那几个点会被当成「可拖手柄」，锁了还画看着就像没锁。
+      drawBoundaryLayer(layer, boundary, {
+        // 「边界没锁 + 浏览/选择/编辑边界」= 可拖的编辑态，方点画大一号。
+        vertexHandles: editingBoundary,
+        vertexDots: lockedLayersRef.current.boundary !== true,
+        // 2026-11-16 用户：不同底图上的对比要不一样——矢量底灰线，影像/深色底亮线。
+        halo: boundaryHaloToneFor(activeSource),
+        // 2026-11-16 用户「锁定之后不要描边」：锁上就只留一层淡填色，没有任何边。
+        locked: lockedLayersRef.current.boundary === true,
+      });
+      // 2026-11-16 用户「你要补上一些交互提示」：悬停顶点给高亮框，悬停边线给「+」加点把手。
+      // 只在真能拖的浏览模式画，免得给出看不见的假手感。
+      if (editingBoundary && boundaryMode === 'view') {
+        drawBoundaryEditHints(layer, boundary, {
+          vertexHoverIndex: boundaryVertexHoverRef.current,
+          armedVertexIndex: boundaryDeleteArmedRef.current,
+          edgeHintPx: boundaryEdgeHintRef.current,
+        });
+      }
+      // 2026-11-16 用户：点击第一下，白底方框的绿色描边就转琥珀——预告“再点一下会删”，
+      // 而不是删完才闪。琥珀框会跟着钉子留在那个顶点上，直到交互改变或超时。
       if (review?.kind === 'scope' && !editingBoundary) drawMapEditHighlight(layer, boundary, 'area');
+      // 2026-11-16 用户「场地右上角也加一个小锁」：绿色总区域自带一枚锁，不用再跑左栅。
+      if (boundaryMode === 'view' || boundaryMode === 'select' || boundaryMode === 'boundary-vertex') {
+        const boundaryLockRect = boundaryLockRectAt(viewport);
+        if (boundaryLockRect) {
+          drawScopeLockButton(layer, boundaryLockRect, lockedLayersRef.current.boundary === true);
+        }
+      }
     }
     // 2026-11-14 用户指令「建筑给室内分区」：建筑足迹灰块（室内禁区），画在分区层之下。
     if ((current.buildings ?? []).length) {
@@ -1946,6 +2524,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       drawZoneLayer(
         { ctx: planCtx, viewport },
         drawnZones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
+        { tone: labelTone },
       );
       if (review?.kind === 'zones') {
         for (const zone of drawnZones) {
@@ -1958,36 +2537,58 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         : null;
       if (selectedZone && selectedZone.polygon.length >= 3 && modeRef.current === 'view' && !layerLocked('zone')) {
         const px = selectedZone.polygon.map(pt => planPointToPixel(pt, viewport));
+        // 2026-11-15 用户反馈「舞台区 1 一选中就变灰底灰描边」：选中不再另叠一层白虚线 + 深灰把手，
+        // 描边与手柄直接沿用这个分区自己的颜色——形状一眼还是“那一块”，只是多了可拖的把手。
+        const zoneColor = selectedZone.color ?? defaultZoneColor(selectedZone.semantic);
         planCtx.save();
-        planCtx.strokeStyle = 'rgba(255,255,255,0.85)';
-        planCtx.lineWidth = 1.5;
-        planCtx.setLineDash([5, 4]);
+        planCtx.strokeStyle = withAlphaHex(zoneColor, 0.95);
+        planCtx.lineWidth = 1.8;
+        planCtx.setLineDash([6, 4]);
         planCtx.beginPath();
         px.forEach((p, i) => (i === 0 ? planCtx.moveTo(p.x, p.y) : planCtx.lineTo(p.x, p.y)));
         planCtx.closePath();
         planCtx.stroke();
         planCtx.setLineDash([]);
-        for (const p of px) {
-          planCtx.fillStyle = 'rgba(18,20,26,0.9)';
-          planCtx.strokeStyle = '#ffffff';
-          planCtx.lineWidth = 2;
+        const hoverVertex = zoneVertexHoverRef.current;
+        const snapVertex = zoneVertexSnapRef.current;
+        px.forEach((p, i) => {
+          const hot = hoverVertex !== null && hoverVertex.zoneId === selectedZone.id && hoverVertex.index === i;
+          const magnet = snapVertex !== null && snapVertex.zoneId === selectedZone.id && snapVertex.index === i;
+          // 悬停顶点用红环白心（点了就删）；被吸住的目标用琥珀大圈（马上要并到这里）；
+          // 平时就是白心 + 分区色描边的细把手。
+          planCtx.fillStyle = hot ? '#ffffff' : magnet ? '#F2A33C' : '#ffffff';
+          planCtx.strokeStyle = hot ? '#E5484D' : magnet ? '#ffffff' : withAlphaHex(zoneColor, 0.95);
+          planCtx.lineWidth = magnet ? 2.5 : hot ? 2 : 1.8;
           planCtx.beginPath();
-          planCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          planCtx.arc(p.x, p.y, magnet ? 8 : hot ? 6 : 4.5, 0, Math.PI * 2);
           planCtx.fill();
+          planCtx.stroke();
+        });
+        // 2026-11-15：悬停边中段 → 画一枚「加点」手柄（白底墨环 + 十字），点下去就插点。
+        const edgeHint = zoneEdgeHintRef.current;
+        if (edgeHint && edgeHint.zoneId === selectedZone.id) {
+          const hp = planPointToPixel(edgeHint.point, viewport);
+          planCtx.beginPath();
+          planCtx.arc(hp.x, hp.y, 6, 0, Math.PI * 2);
+          planCtx.fillStyle = 'rgba(255,255,255,0.96)';
+          planCtx.fill();
+          planCtx.strokeStyle = 'rgba(18,20,26,0.9)';
+          planCtx.lineWidth = 2;
+          planCtx.stroke();
+          planCtx.beginPath();
+          planCtx.moveTo(hp.x - 3, hp.y);
+          planCtx.lineTo(hp.x + 3, hp.y);
+          planCtx.moveTo(hp.x, hp.y - 3);
+          planCtx.lineTo(hp.x, hp.y + 3);
           planCtx.stroke();
         }
         planCtx.restore();
       }
-      // H4-b：分区语义贴纸（OnePlan 地图符号/面域底形）画在名称上方，不压名称文本；
-      // 命中测试仍按多边形判定（drawZoneLayer 之外无改动）。
-      for (const zone of current.zones) {
-        if (zone.polygon.length < 2) continue;
-        const sticker = zoneSticker(zone.semantic);
-        if (!sticker) continue;
-        const a = planPointToPixel(zone.polygon[0]!, viewport);
-        const b = planPointToPixel(zone.polygon[1]!, viewport);
-        drawOneplanSticker(planCtx, sticker, (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, 16, { alpha: 0.95 });
-      }
+      // 2026-11-15 用户指令「分区里没有图标，不要任性加图标」：删掉画布上的分区语义贴纸。
+      // 分区数据（planZoneSchema）并没有 icon 字段，工具箱里也只有色块 + 语义名，
+      // 画布上再多画一枚图标就是凭空给定用户的数据加了不存在的东西。
+      // 名称仍由 drawZoneLayer 按面积质心居中绘制；若以后契约真加了 icon 字段，
+      // 再在分区内部按那个字段画，而不是按语义推断。
     }
     if (isLayerVisible(vis, 'facility')) {
       const warningFacilityIds = new Set(
@@ -2000,9 +2601,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const previewMap = new Map<string, PlanFacility>();
       if (dragPreview) previewMap.set(dragPreview.id, dragPreview);
       if (groupPreview) for (const item of groupPreview) previewMap.set(item.id, item);
-      const drawnFacilities = previewMap.size > 0
+      const previewGhost = pendingFacilityGhost();
+      const previewTarget = previewGhost?.preview
+        ? [...current.facilities].reverse().find(f => facilityContainsPoint(previewGhost.position, f)) ?? null
+        : null;
+      const baseFacilities = previewMap.size > 0
         ? current.facilities.map(f => previewMap.get(f.id) ?? f)
         : current.facilities;
+      // 物料卡预览压在已有设施上：旧设施的占地/图标先藏掉，只留卡片幽灵；松手原地换模型。
+      const drawnFacilities = previewTarget
+        ? baseFacilities.filter(f => f.id !== previewTarget.id)
+        : baseFacilities;
       drawFacilityLayer(
         { ctx: planCtx, viewport },
         drawnFacilities.map(f => ({ ...f, warning: warningFacilityIds.has(f.id) })),
@@ -2098,28 +2707,56 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           if (review.routeIds.includes(route.id)) drawMapEditHighlight(layer, route.points, 'route');
         }
       }
-      // H4-b：动线类型徽标（画在中点顶点下方；线型/箭头/选中白描边仍由 drawRouteLayer 负责）。
+      // H4-b：动线类型贴纸（线型/箭头/选中白描边仍由 drawRouteLayer 负责）。
+      // 2026-11-15 用户指令：「把 icon 放在每个节点上，文字不要显示，icon 和线条同色」。
+      // 所以每个折点都是一枚与线同色的类型芯片；原来「中间一枚芯片 + 其余黑点」的混排取消——
+      // 芯片本身就是节点手柄（可拖、点一下删、拖到相邻就被吸住），不再另画黑点。
+      // 2026-11-16 用户：「道路上的 icon 还是没改」——每个折点不再画 OnePlan 贴纸
+      // （那套图自带 PED / VEH / LZ 英文小字），改成与属性栏同源的自绘芯片：
+      // 底色 = 动线类型色，字形 = 行人 / 货车 / 包裹，白环 + 白描边，不写文字。
       for (const route of drawnRoutes) {
-        if (route.points.length < 2) continue;
-        const sticker = routeSticker(route.kind);
-        if (!sticker) continue;
-        const mid = planPointToPixel(route.points[Math.floor(route.points.length / 2)]!, viewport);
-        drawOneplanSticker(planCtx, sticker, mid.x, mid.y + 15, 13, { alpha: 0.95 });
+        const chipColor = route.color ?? PLANNING_ROUTE_KIND_COLORS[route.kind];
+        for (const pt of route.points) {
+          const p = planPointToPixel(pt, viewport);
+          drawRouteKindChip({ ctx: planCtx, viewport }, p, route.kind, { color: chipColor, diameter: 15, alpha: 0.97 });
+        }
       }
-      // 2026-11-14：选中流线画顶点手柄（polyline 控制点，选中即常驻，浏览/选择两模式都可拖）。
+      // 2026-11-15 用户指令「路线和分区一样」：悬停/被吸住的手柄提示还留着——
+      // 悬停在节点上：红环（点一下就删）；拖到相邻节点 12 px 内：琥珀环（松手并到这里）。
       const selectedRouteForHandles = selectedRouteRef.current
         ? drawnRoutes.find(r => r.id === selectedRouteRef.current) ?? null
         : null;
       if (selectedRouteForHandles && selectedRouteForHandles.points.length >= 2 && !layerLocked('route')) {
         const px = selectedRouteForHandles.points.map(pt => planPointToPixel(pt, viewport));
+        const hoverVertex = routeVertexHoverRef.current;
+        const snapVertex = routeVertexSnapRef.current;
         planCtx.save();
-        for (const p of px) {
-          planCtx.fillStyle = 'rgba(18,20,26,0.9)';
-          planCtx.strokeStyle = '#ffffff';
-          planCtx.lineWidth = 2;
+        px.forEach((p, i) => {
+          const hot = hoverVertex !== null && hoverVertex.routeId === selectedRouteForHandles.id && hoverVertex.index === i;
+          const magnet = snapVertex !== null && snapVertex.routeId === selectedRouteForHandles.id && snapVertex.index === i;
+          if (!hot && !magnet) return;
           planCtx.beginPath();
-          planCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          planCtx.arc(p.x, p.y, magnet ? 11 : 10, 0, Math.PI * 2);
+          planCtx.strokeStyle = hot ? '#E5484D' : '#F2A33C';
+          planCtx.lineWidth = magnet ? 2.5 : 2;
+          planCtx.stroke();
+        });
+        // 悬停在线中段 → 「加点」手柄（白底墨环 + 十字，与分区同一套视觉）。
+        const edgeHint = routeEdgeHintRef.current;
+        if (edgeHint && edgeHint.routeId === selectedRouteForHandles.id) {
+          const hp = planPointToPixel(edgeHint.point, viewport);
+          planCtx.beginPath();
+          planCtx.arc(hp.x, hp.y, 6, 0, Math.PI * 2);
+          planCtx.fillStyle = 'rgba(255,255,255,0.96)';
           planCtx.fill();
+          planCtx.strokeStyle = 'rgba(18,20,26,0.9)';
+          planCtx.lineWidth = 2;
+          planCtx.stroke();
+          planCtx.beginPath();
+          planCtx.moveTo(hp.x - 3, hp.y);
+          planCtx.lineTo(hp.x + 3, hp.y);
+          planCtx.moveTo(hp.x, hp.y - 3);
+          planCtx.lineTo(hp.x, hp.y + 3);
           planCtx.stroke();
         }
         planCtx.restore();
@@ -2141,6 +2778,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           selected: w.id === selectedWorkerRef.current,
           warning: warningWorkerIds.has(w.id),
         })),
+        { tone: labelTone },
       );
       // H4-b：人员岗位贴纸（画在圆点上方，避开圆点与「岗位 ×人数」文本）。
       for (const worker of drawnWorkers) {
@@ -2160,19 +2798,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           selected: n.id === selectedNodeRef.current || multiSelectedNodeIdsRef.current.includes(n.id),
           unconnected: unconnectedIds.has(n.id),
         })),
+        { tone: labelTone },
       );
-      // H4-b：出入口贴纸居中替换菱形符号；未连接警示点在贴纸之后补画（视觉提示不被盖住），
-      // 选中白圈半径 9.5 > 贴纸半宽 7，仍可见。
+      // H4-b：出入口贴纸画在「圆牌」上（直径 20 px）；
+      // 2026-11-16 用户：「3D 那个圈圈很形象，2D 的 icon 有点看不清」——
+      // 圆盘与白圈在 drawAccessLayer 里画，这里只负责把贴纸（同色圆片 + 白色字形）放上去；
+      // 未连接警示点在贴纸之后补画，不被圆片盖住。
+      // 2026-11-15：芯片色按 kind 走（绿进 / 红出 / 青双向），三型不再共用深色圆片。
+      // 2026-11-16 用户：「出入口现在不要是图标，我更喜欢环形的东西」——
+      // 圆牌已换成空心环（drawAccessLayer 自己画完），这里不再叠贴纸字形，
+      // 只保留「未连接」警示点（画在环外右上方，不被环压住）。
       for (const node of nodes) {
-        const sticker = nodeSticker(node.kind);
-        if (!sticker) continue;
         const pt = planPointToPixel(node.position, viewport);
-        drawOneplanSticker(planCtx, sticker, pt.x, pt.y, 14, { alpha: 0.95 });
         if (unconnectedIds.has(node.id)) {
           planCtx.beginPath();
-          planCtx.arc(pt.x + 6, pt.y - 6, 3, 0, Math.PI * 2);
+          planCtx.arc(pt.x + 9, pt.y - 9, 3.6, 0, Math.PI * 2);
           planCtx.fillStyle = '#c0392b';
           planCtx.fill();
+          planCtx.strokeStyle = '#ffffff';
+          planCtx.lineWidth = 1.4;
+          planCtx.stroke();
         }
       }
       if (review?.kind === 'main-routes') {
@@ -2193,18 +2838,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
 
     // H3-b 冲突/缺失可定位标记：规则检查输出，恒画在业务层之上（不随图层隐藏），
-    // 点击命中判定由组件按同半径处理（定位到关联动线）。
-    drawConflictMarkers({ ctx: planCtx, viewport }, conflictIssuesRef.current);
+    // 点击命中判定由组件按同半径处理（展开该徽章的明细）。
+    // 2026-11-15：一条线多枚叹号合并成一枚（数字 = 组内条数），默认只画冲突/缺宽度。
+    drawConflictMarkers(
+      { ctx: planCtx, viewport },
+      visibleConflictClusters().map(cluster => ({ key: cluster.key, status: cluster.status, at: cluster.at, count: cluster.count })),
+    );
 
-    // 3) 绘制草稿（画边界/画分区）：≥3 点后闭合预览；形状非法（自交）画红色。
+    // 3) 绘制草稿（画边界/画分区/圈设计范围）：≥3 点后闭合预览；形状非法（自交）画红色。
     const activeMode = modeRef.current;
-    if (activeMode === 'boundary' || activeMode === 'zone') {
+    // 2026-11-15：拖角改设计范围时不切模式，靠 scopeResizeRef 让草稿照样画出来（否则 view 模式下预览不画）。
+    const draftingScope = activeMode === 'scope' || scopeResizeRef.current !== null || scopeEdgeResizeRef.current !== null;
+    if (activeMode === 'boundary' || activeMode === 'zone' || draftingScope) {
       const draftPoints = draftRef.current;
       if (draftPoints.length > 0) {
         const draftColor = activeMode === 'zone'
           // 2026-11-12 活动包区预设：草稿直接用物件主题色。
           ? (zonePresetRef.current?.color ?? defaultZoneColor(zoneSemanticRef.current))
-          : PLANNING_LAYER_COLORS.boundary;
+          : activeMode === 'scope' || draftingScope
+            // 设计范围用琥珀色，与边界绿区分（一眼看出这是外框，不是场地边界）。
+            ? '#F2A33C'
+            : PLANNING_LAYER_COLORS.boundary;
         const draftInvalid = draftPoints.length >= 4 && planRingSelfIntersects(draftPoints);
         drawDraftLayer({ ctx: planCtx, viewport }, draftPoints, draftColor, { draftInvalid });
       }
@@ -2221,27 +2875,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (activeMode === 'shape') {
       drawAnnotationDraft({ ctx: planCtx, viewport }, annotateDraftRef.current, annotateShapeRef.current, annotateCursorRef.current ?? undefined, annotateColorRef.current, annotateStrokeWidthRef.current);
     }
+    // 2026-11-16 用户「操作过程中需要有提示」：Alt 分叉的「+」把手画在最上层，压过所有图层。
+    if (branchAnchorHintRef.current && altHeldRef.current) {
+      drawBranchAnchor({ ctx: planCtx, viewport }, branchAnchorHintRef.current);
+    }
     if (activeMode === 'node' && nodeGhostRef.current) {
       drawNodeGhost({ ctx: planCtx, viewport }, nodeKindRef.current, nodeKindLabel(nodeKindRef.current), nodeGhostRef.current);
     }
 
-    // 5) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；叠加在所有图层之上。
-    if (activeMode === 'facility' && ghostPointRef.current && facilityTemplateRef.current) {
-      const pendingId = facilityTemplateRef.current;
-      const override = facilityTemplateObjRef.current;
-      const template = override && override.templateId === pendingId
-        ? override
-        : findFacilityTemplate(pendingId) ?? resolveFacilityTemplate(pendingId);
-      if (template) {
-        const spec = facilityFootprintSpec(template.templateId);
-        const footprint = facilityFootprintRing({
-          position: ghostPointRef.current,
-          rotationDeg: 0,
-          size: { width: spec.width, depth: spec.depth },
-        });
-        const invalid = facilityPlacementIssues(footprint, current.boundary).length > 0;
-        drawFacilityGhost({ ctx: planCtx, viewport }, template, ghostPointRef.current, { invalid });
-      }
+    // 5) 设施放置幽灵（H2-c）：跟随指针的占地预览，越界变红；旋转/越界与 3D draft 同一份来源。
+    const facilityGhost = pendingFacilityGhost();
+    if (facilityGhost) {
+      drawFacilityGhost(
+        { ctx: planCtx, viewport },
+        facilityGhost.template,
+        facilityGhost.position,
+        { rotationDeg: facilityGhost.rotationDeg, invalid: facilityGhost.invalid },
+      );
     }
 
     // D) 阵列复制幽灵预览：repeat 面板打开时按当前列/行/间距画出全部副本落点；越界/碰撞格标红。
@@ -2472,6 +3122,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   );
   const libraryInfra = useMemo(() => infraBuckets(libraryAll), [libraryAll]);
   const libraryEntranceIcons = useMemo(() => entranceIconItems(libraryAll), [libraryAll]);
+  // 2026-11-16：车组＝库里点名的那几种车，一段平铺；服务类 / 服务以外靠条目配色区分（后勤金 / 车行紫）。
+  const libraryVehicleIcons = useMemo(() => vehicleIconItems(libraryAll), [libraryAll]);
   const libraryExtra = useMemo(() => extraBucket(libraryAll), [libraryAll]);
   const libraryTotal = libraryAll.length + packEntries.length;
   // 物件库模板 id → 模板对象（拖动进画布时 pickFacilityTemplate 只拿到 id，靠这张表还原尺寸）。
@@ -2511,7 +3163,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const stage = stageRef.current;
     if (!stage) return;
     const onWheel = (event: WheelEvent) => {
-      if (!stage.contains(event.target as Node)) return;
+      const target = event.target as Element | null;
+      // 2026-11-15 用户报「在属性面板里滚动，地图却跟着缩放」：面板 DOM 就在舞台内，
+      // 而原生 wheel 监听挂在舞台（比 React 根上的合成事件更早跑），面板上的
+      // onWheel={stopPanelWheel} 拦不住它——这里直接按 data-plan-panel 跳过，让面板自己滚。
+      if (target?.closest?.('[data-plan-panel]')) return;
+      if (!stage.contains(target as Node)) return;
       event.preventDefault();
       zoomAtPoint(event.deltaY < 0 ? 1 : -1, event.clientX, event.clientY);
     };
@@ -2583,6 +3240,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
         if (inField || !onPlanChange) return;
         event.preventDefault();
+        // 2026-11-16 用户：「正在画线时 Ctrl+Z 应该撤我刚放的点，而不是我之前画好的上一条线」。
+        // 半成品在手上时，历史栈里的东西其实是“上一次任务”，撤它等于把人带丢。
+        if (undoDraftStep()) return;
         undoPlan();
         return;
       }
@@ -2593,12 +3253,53 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         redoPlan();
         return;
       }
+      // 2026-11-16 设施落位前旋转：R +15°，Shift+R −15°（2D / 3D 接管态同一个 window 监听）。
+      if (
+        modeRef.current === 'facility'
+        && !inField
+        && !target?.isContentEditable
+        && !event.ctrlKey && !event.metaKey && !event.altKey
+        && (event.key === 'r' || event.key === 'R')
+      ) {
+        event.preventDefault();
+        rotatePendingFacility(event.shiftKey ? -15 : 15);
+        return;
+      }
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
+      // 2026-11-16 用户：「点 esc 就退出物体编辑模式」——选择模式的 Esc 一步到位：
+      // 清空选中（属性卡、3D 手柄随之收回）并回到浏览模式。
+      if (modeRef.current === 'select') {
+        clearEntitySelection();
+        setMode('view');
+        return;
+      }
       if (modeRef.current === 'view') {
-        // 2026-11-12 B2：浏览态 Esc = 取消组选（OnePlan 同语义；单选清空沿用既有行为不变）。
-        clearMultiSelection();
+        // 2026-11-15：先收起问题明细卡（开着卡时 Esc 只关它），没有卡再取消组选。
+        if (conflictDetailKeyRef.current) {
+          showConflictDetail(null);
+          return;
+        }
+        // 一层一层收：组选 → 单选 → 无选中。
+        if (
+          multiSelectedFacilityIdsRef.current.length > 0
+          || multiSelectedRouteIdsRef.current.length > 0
+          || multiSelectedNodeIdsRef.current.length > 0
+        ) {
+          clearMultiSelection();
+          return;
+        }
+        // 浏览态再按 Esc：退出单选编辑（旧版只清组选，单选会一直挂着）。
+        if (
+          selectedFacilityRef.current
+          || selectedZoneRef.current
+          || selectedRouteRef.current
+          || selectedNodeRef.current
+          || selectedWorkerRef.current
+        ) {
+          clearEntitySelection();
+        }
         return;
       }
       setMode('view');
@@ -2876,7 +3577,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       pendingVenueAnchorRef.current = anchor;
       focusLngLat(anchor.lng, anchor.lat, 17);
       setMode('boundary');
-      setEditMessage('没有真实轮廓：请在地图上逐点圈出场地，闭合后才会写入新锚点与边界；Esc 取消。');
+      setEditMessage('没有真实轮廓：请在地图上逐点圈出用地，闭合后才会写入新锚点与用地红线；Esc 取消。');
       return true;
     },
     applyWorkflowPlan:(next,expected)=>{
@@ -3098,7 +3799,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 templateId: template.templateId,
                 name: template.name,
                 position: { x: ghostPointRef.current.x, y: ghostPointRef.current.y },
-                rotationDeg: 0,
+                rotationDeg: facilityRotationRef.current,
                 size: { width: spec.width, depth: spec.depth },
                 notes: "",
               },
@@ -3138,6 +3839,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (measureCursorRef.current) measure.push(measureCursorRef.current);
       const annotate = annotateDraftRef.current.slice();
       if (annotateCursorRef.current) annotate.push(annotateCursorRef.current);
+      const ghost = pendingFacilityGhost();
       return {
         plan: next,
         selectedZoneId: selectedZoneRef.current,
@@ -3158,6 +3860,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           annotate: (mode === "shape" || mode === "note") ? annotate : [],
           annotateColor: PLANNING_LAYER_COLORS.annotate,
           ghostMarker: null,
+          // 2026-11-16 3D 接管态落位前的占地幽灵：与 2D 同一份 ring / 越界结果。
+          facilityGhost: ghost ? { ring: ghost.ring, invalid: ghost.invalid, preview: ghost.preview } : null,
         },
       };
     },
@@ -3165,6 +3869,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const picked = [selectedZoneRef.current, selectedFacilityRef.current, selectedRouteRef.current, selectedNodeRef.current, selectedWorkerRef.current, selectedAnnotationRef.current, ...multiSelectedFacilityIdsRef.current];
       return [...new Set(picked.filter((id): id is string => !!id))];
     },
+    previewFacilityDrop,
+    dropFacilityAt: dropFacilityAtPoint,
+    clearFacilityDropPreview,
+    previewCatalogDrop,
+    dropCatalogAt,
+    armCatalogFacility,
   }));
 
   /** 图层栈开关：切换某层可见并回传（受控/非受控均生效）。 */
@@ -3214,7 +3924,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const viewport = currentViewport();
     const edge = nearestRingEdge(current.boundary, px, viewport);
     if (!edge || edge.distPx > VERTEX_EDGE_HIT_PX) {
-      setEditMessage('双击边界线上才能加点（离边太远）。');
+      setEditMessage('双击红线上才能加点（离线太远）。');
       return;
     }
     const snapped = snapPointToGrid(edge.point, viewport);
@@ -3229,7 +3939,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     commitPlan({ ...current, boundary: result.value });
-    setEditMessage(`边界已插入顶点（约 ${Math.round(check.areaM2)} m²）。`);
+    boundaryInsertedAtRef.current = performance.now();
+    setEditMessage(`红线已插入顶点（约 ${Math.round(check.areaM2)} m²）。`);
   }
 
   /** P2-j：双击边界顶点 → 删掉它（最少 3 点、面积下限由 checkBoundaryRing 把关）。 */
@@ -3246,10 +3957,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     commitPlan({ ...current, boundary: result.value });
-    setEditMessage(`边界已删除顶点（约 ${Math.round(check.areaM2)} m²）。`);
+    clearBoundaryDeleteArm();
+    setEditMessage(`红线已删除顶点（约 ${Math.round(check.areaM2)} m²）。`);
+  }
+
+  /** 点亮/熄灭「再点一下就删」的琥珀框（只改显示，不改计划）。 */
+  function armBoundaryVertexDelete(index: number) {
+    boundaryDeleteArmedRef.current = index;
+    if (boundaryDeleteArmTimerRef.current !== null) clearTimeout(boundaryDeleteArmTimerRef.current);
+    boundaryDeleteArmTimerRef.current = setTimeout(() => {
+      boundaryDeleteArmTimerRef.current = null;
+      if (boundaryDeleteArmedRef.current === null) return;
+      boundaryDeleteArmedRef.current = null;
+      draw();
+    }, BOUNDARY_DELETE_ARM_MS);
+  }
+
+  function clearBoundaryDeleteArm() {
+    if (boundaryDeleteArmTimerRef.current !== null) {
+      clearTimeout(boundaryDeleteArmTimerRef.current);
+      boundaryDeleteArmTimerRef.current = null;
+    }
+    if (boundaryDeleteArmedRef.current === null) return;
+    boundaryDeleteArmedRef.current = null;
+    draw();
   }
 
   function handleDrawClick(px: { x: number; y: number }, pt: PlanPoint) {
+    // 2026-11-15 设计范围 = 拖矩形，不吃单击收点（否则又会变回多段线）。
+    if (modeRef.current === 'scope') return;
     // H2-c：放设施模式单击提交（可连续放置）。
     if (modeRef.current === 'facility') {
       placeFacilityAt(pt);
@@ -3289,6 +4025,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     const draftPoints = draftRef.current;
+    // 2026-11-16 用户：「场地加一把锁，默认不编辑」——已画好的边界不允许被「画边界」直接覆掉。
+    // 进了画边界模式就已在 setMode 里自动解锁，这里只作为兼底（防止外部直接改模式绕过）。
+    if (modeRef.current === 'boundary' && layerLocked('boundary') && planRef.current.boundary.length >= 3) {
+      setEditMessage('用地红线已锁定：先在左侧「用地红线」行解锁，再重画红线。');
+      return;
+    }
     // 近首点 → 尝试闭合提交。
     if (draftPoints.length >= 3) {
       const firstPx = planPointToPixel(draftPoints[0]!, currentViewport());
@@ -3326,11 +4068,34 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setEditMessage(check.issue.message);
         return;
       }
-      commitPlan({ ...current, ...(nextAnchor ? { anchor: nextAnchor } : {}), boundary: boundary.map(p => ({ x: p.x, y: p.y })) });
+      const nextBoundaryPlan: SitePlanData = {
+        ...current,
+        ...(nextAnchor ? { anchor: nextAnchor } : {}),
+        boundary: boundary.map(p => ({ x: p.x, y: p.y })),
+      };
+      commitPlan(nextBoundaryPlan);
       if (nextAnchor) onVenueBoundaryApplied?.(nextAnchor);
       pendingVenueAnchorRef.current = undefined;
       setMode('view');
-      setEditMessage(`边界已更新（约 ${Math.round(check.areaM2)} m²）。`);
+      const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²）。${overflowSuffix(boundaryOverflow)}`);
+      return;
+    }
+    // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
+    // 不与场地边界比较：设计范围天然比场地大，拿边界口径判它会永远「越界」。
+    if (modeRef.current === 'scope') {
+      const check = checkBoundaryRing(draftPoints);
+      if (!check.ok) {
+        setEditMessage(check.issue.message);
+        return;
+      }
+      const nextScopePlan: SitePlanData = { ...current, designScope: draftPoints.map(p => ({ x: p.x, y: p.y })) };
+      commitPlan(nextScopePlan);
+      setMode('view');
+      const scopeOverflow = reviewZonesAfterBoundsChange(nextScopePlan, current);
+      setEditMessage(
+        `设计范围已更新（约 ${Math.round(check.areaM2)} m²）：框外压暗，流线可以走在场地外这一圈里。${overflowSuffix(scopeOverflow)}`,
+      );
       return;
     }
     if (modeRef.current === 'zone') {
@@ -3377,6 +4142,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       clearMultiSelection(false);
     }
     draw();
+  }
+
+  /** 2026-11-16 用户：「点 esc 就退出物体编辑模式」——取消全部单选实体，属性卡与 3D 手柄一起收回。 */
+  function clearEntitySelection() {
+    selectFacility(null);
+    selectZone(null);
+    selectRoute(null);
+    selectNode(null);
+    selectWorker(null);
   }
 
   /* ---------------- P2-l 设施层级（右键菜单）---------------- */
@@ -3460,24 +4234,89 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return hitIndex;
   }
 
+  /**
+   * 2026-11-15 用户：「从场地外的线到场地边界的时候，交界处会自动变成出入口」。
+   * 动线新增/改形提交前调一次：把交界处重新对齐到当前交点上。
+   * 2026-11-15 用户补充：「单向的流线，进去的就是入口，出来的就是出口；双向的就是出入口」——
+   * 新建/复用的节点类型都按这条线当前的方向判（手动改过类型的不会被动）。
+   * 返回要提交的整案 + 新增/挪动/改型/删除的节点（用于提示文案）。
+   */
+  function planWithCrossingNodes(
+    plan: SitePlanData,
+    route: PlanRoute,
+  ): { plan: SitePlanData; added: PlanNode[]; moved: PlanNode[]; retyped: PlanNode[]; removed: PlanNode[] } {
+    const result = reconcileCrossingNodes(route, {
+      boundary: plan.boundary,
+      nodes: plan.nodes,
+      routes: plan.routes,
+    });
+    const changed = result.added.length > 0 || result.moved.length > 0 || result.retyped.length > 0 || result.removed.length > 0;
+    return {
+      plan: changed ? { ...plan, nodes: result.nodes } : plan,
+      added: result.added,
+      moved: result.moved,
+      retyped: result.retyped,
+      removed: result.removed,
+    };
+  }
+
+  /**
+   * 2026-11-15 用户指令「路线和分区一样的，需要在线段上可以加点、减点、挪动合并点」：
+   * 选中动线的按下接管——折点手柄 > 边中段插点 > 不接管（留给点选/平移）。
+   * 与分区同一顺序、同一命中半径（顶点 8 px / 边 9 px），两边手感一致。
+   */
+  function beginRouteVertexEdit(
+    route: PlanRoute,
+    hit: { px: { x: number; y: number }; pt: PlanPoint },
+  ): boolean {
+    const index = nearestRouteVertexIndex(route, hit.px);
+    if (index !== null) {
+      dragRouteVertexRef.current = { routeId: route.id, index, base: route.points, merged: null };
+      routeDragPreviewRef.current = { routeId: route.id, points: route.points };
+      downPxRef.current = hit.px;
+      pointerConsumedRef.current = true;
+      setDragging(true);
+      return true;
+    }
+    const edge = nearestPolylineEdge(route.points, hit.px, currentViewport());
+    if (!edge || edge.distPx > 9) return false;
+    const inserted = insertRouteVertex(route, edge.index, snapPointToGrid(edge.point, currentViewport()));
+    if (!inserted.ok) {
+      setEditMessage(inserted.issue.message);
+      return false;
+    }
+    const insertBase: SitePlanData = {
+      ...planRef.current,
+      routes: planRef.current.routes.map(item => (item.id === route.id ? inserted.value : item)),
+    };
+    // 2026-11-15：加点把线拉到边界外又拉回来时，交界处同样自动生成出入口。
+    const withCrossings = planWithCrossingNodes(insertBase, inserted.value);
+    commitPlan(withCrossings.plan);
+    routeEdgeHintRef.current = null;
+    justInsertedRouteVertexRef.current = true;
+    dragRouteVertexRef.current = { routeId: route.id, index: edge.index + 1, base: inserted.value.points, merged: null };
+    routeDragPreviewRef.current = { routeId: route.id, points: inserted.value.points };
+    downPxRef.current = hit.px;
+    pointerConsumedRef.current = true;
+    setDragging(true);
+    setEditMessage('已在线上插入折点，继续拖动调整；松手生效（点中线上的折点即可删掉它）。');
+    draw();
+    return true;
+  }
+
   /** 分区多边形改完要守住三条：形状合法、仍在场地边界内、不与别的分区重叠。 */
   function zonePolygonIssue(zone: PlanZone, polygon: PlanPoint[], current: SitePlanData): PlanEditIssue | null {
-    const ring = checkPlanRing(polygon, PLAN_MIN_ZONE_AREA_M2, `分区「${zone.name}」`);
-    if (!ring.ok) return ring.issue;
-    const outside = zoneOutsideBoundaryIssue(polygon, current.boundary);
-    if (outside) return outside;
-    for (const other of current.zones) {
-      if (other.id === zone.id) continue;
-      if (planZonesOverlap(polygon, other.polygon)) {
-        return { code: 'zones-overlap', message: `会和「${other.name}」重叠，换个位置。` } as PlanEditIssue;
-      }
-    }
-    return null;
+    // 2026-11-15 用户指令：重叠不再挡住提交（重叠只上常驻提示，挪开即消失）；
+    // 自交/退化/越界仍然硬拦，因为那些是「立刻就不成立」的形状。
+    return zoneEditBlockingIssue(polygon, current.boundary, `分区「${zone.name}」`);
   }
 
   /** 在面板点选模板（也可直接拖拽到画布）：记录待放模板，幽灵随鼠标。 */
   function pickFacilityTemplate(templateId: string) {
+    armedCatalogRef.current = null;
     facilityTemplateRef.current = templateId;
+    // 换模板就回到 0°；同一模板连续放时保留上一次的角度（方便成排摆）。
+    if (facilityRotationRef.current !== 0) facilityRotationRef.current = 0;
     const builtin = findFacilityTemplate(templateId);
     // P2-h：`oneplan:` 模板不在内置目录里，从物件库映射表取（拖动/键盘选择也走这里）。
     // 2026-11-11 目录合并：物件库没加载完（或来源是历史 `oneplan:` id）时，用统一目录兜底，
@@ -3488,6 +4327,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setFacilityTemplateId(templateId);
     setEditMessage(null);
     draw();
+    notifyPlanDraftChanged();
   }
 
   /**
@@ -3495,6 +4335,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * 不在 8 个内置模板里，所以把「模板对象」本身记下来，放置与幽灵预览都读它。
    */
   function pickLibraryEntry(entry: LibraryEntry) {
+    armedCatalogRef.current = null;
     const template = libraryFacilityTemplate(entry);
     // 2026-11-12 再点同一件已选设施 = 取消选择回浏览（允许「一件都不选」）。
     if (modeRef.current === 'facility' && facilityTemplateRef.current === template.templateId) {
@@ -3517,6 +4358,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * worker（纯色圆点位）走布人员，点位色用物件主题色。
    */
   function pickPackEntry(entry: LibraryEntry) {
+    armedCatalogRef.current = null;
     // 2026-11-12 再点当前已激活的同一件包物件 = 取消选择回浏览（与目录贴纸同一口径）。
     const packTemplateId = entry.packItemId ? `pack:${entry.packId}:${entry.packItemId}` : '';
     const alreadyActive = entry.placeKind === 'route'
@@ -3576,14 +4418,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * P2-k 第一段工具：区域（圈分区）/ 入口和通道图标（上面列出图标，点了按设施放）/
    * 路线（画动线）。都是已有编辑模式的入口，这里只是把按钮接到 setMode。
    */
-  function startAreaTool(tool: 'boundary' | 'zone' | 'node' | 'route') {
+  function startAreaTool(tool: 'boundary' | 'scope' | 'zone' | 'node' | 'route') {
     if (!onPlanChange) return;
+    // setMode 会把锁着的场地自动解锁；先记一下旧状态，好在提示里说清楚。
+    const boundaryWasLocked = lockedLayersRef.current.boundary === true;
     selectFacility(null);
     setSelectedZoneId(null);
     setMode(tool);
     if (tool === 'boundary') {
       // 2026-11-11：边界重画入口回归（OnePlan 化时曾随顶部工具条丢失）——画完闭合即替换起步矩形。
-      setEditMessage('重画场地边界：沿场地单击加顶点，双击或点回起点闭合替换旧边界；Esc 取消。');
+      setEditMessage(boundaryWasLocked
+        ? '重画用地红线：用地原为锁定，已自动解锁；沿用地单击加顶点，双击或点回起点闭合替换旧红线，Esc 取消。'
+        : '重画用地红线：沿用地单击加顶点，双击或点回起点闭合替换旧红线；Esc 取消。');
+    } else if (tool === 'scope') {
+      setEditMessage('拖出设计范围：按住鼠标拖一个矩形（可以比场地大一圈），松手即生效；Esc 取消。');
     } else if (tool === 'zone') {
       setEditMessage('画区域：在场地内单击加顶点，双击或靠近首点闭合；Esc 结束。');
     } else if (tool === 'node') {
@@ -3622,6 +4470,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     title?: string;
     draggable?: boolean;
     onDragStart?: ((event: React.DragEvent<HTMLDivElement>) => void) | undefined;
+    onDragEnd?: (() => void) | undefined;
     /** 2026-11-11 用户指令：右键删除已放置物件。 */
     onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
   }) {
@@ -3643,6 +4492,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }}
         draggable={input.draggable}
         onDragStart={input.onDragStart}
+        onDragEnd={input.onDragEnd}
         onContextMenu={input.onContextMenu}
         style={{
           all: 'unset',
@@ -3670,7 +4520,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** OnePlan 镜像：一级组头（chevron + 组图标 + 名称 + 计数）。多段可同时展开（用户 m00575）。 */
   function renderOneplanGroupHeader(input: {
-    id: 'areas' | 'infra' | 'labor' | 'extra';
+    id: 'areas' | 'vehicles' | 'infra' | 'labor' | 'extra';
     label: string;
     count: number;
     icon: PlanningIconName;
@@ -3810,10 +4660,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             onDragStart: isFacility
               ? (event: React.DragEvent<HTMLDivElement>) => {
                 // 与内置模板同一条拖放通道：画布 onDrop 读 text/plain 后落模板（含主题色）。
+                setPlanFacilityDrag(templateId);
                 event.dataTransfer.setData('text/plain', templateId);
                 event.dataTransfer.effectAllowed = 'copy';
               }
               : undefined,
+            onDragEnd: isFacility ? clearPlanFacilityDrag : undefined,
             icon: packChipNode(entry),
             trailing: placeLabel
               ? <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.6, flex: '0 0 auto' }}>{placeLabel}</span>
@@ -3903,10 +4755,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               draggable: entry.placeKind === 'facility',
               onDragStart: entry.placeKind === 'facility'
                 ? (event: React.DragEvent<HTMLDivElement>) => {
+                  setPlanFacilityDrag(packTemplateIdStr);
                   event.dataTransfer.setData('text/plain', packTemplateIdStr);
                   event.dataTransfer.effectAllowed = 'copy';
                 }
                 : undefined,
+              onDragEnd: entry.placeKind === 'facility' ? clearPlanFacilityDrag : undefined,
               icon: packChipNode(entry),
             });
           }
@@ -3922,9 +4776,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             draggable: true,
             onDragStart: event => {
               // 与内置模板同一条拖放通道：画布 onDrop 读 text/plain 后落模板。
+              setPlanFacilityDrag(template.templateId);
               event.dataTransfer.setData('text/plain', template.templateId);
               event.dataTransfer.effectAllowed = 'copy';
             },
+            onDragEnd: clearPlanFacilityDrag,
             icon: (
               <span
                 aria-hidden
@@ -3935,10 +4791,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   width: 22,
                   height: 22,
                   flex: '0 0 auto',
-                  borderRadius: entry.kind === 'icon' ? 999 : 6,
+                  borderRadius: entry.kind === 'icon' || entry.chipStyle === 'icon' ? 999 : 6,
                   // 2026-11-12 主题色：icon 类彩色圆底 + 白字形（OnePlan marketplace 同款）；
                   // scale/area 浅底 + 主题色线稿（mask 染色），无色回落原样。
-                  background: entry.kind === 'icon' ? libraryEntryColor(entry) : '#eef1f4',
+                  // 2026-11-16：`chipStyle: 'icon'`（车组）强制走彩底 + 白字形，icon / scale 混排也同一套视觉。
+                  background: entry.kind === 'icon' || entry.chipStyle === 'icon' ? libraryEntryColor(entry) : '#eef1f4',
                 }}
               >
                 {entry.kind !== 'icon' ? (
@@ -3948,7 +4805,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       display: 'block',
                       width: 16,
                       height: 16,
-                      backgroundColor: libraryEntryColor(entry),
+                      backgroundColor: entry.chipStyle === 'icon' ? '#ffffff' : libraryEntryColor(entry),
                       WebkitMaskImage: `url("${oneplanStickerSrc(entry.sticker)}")`,
                       maskImage: `url("${oneplanStickerSrc(entry.sticker)}")`,
                       WebkitMaskSize: 'contain',
@@ -3982,7 +4839,126 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return resolveFacilityTemplate(id);
   }
 
-  function placeFacilityAt(pt: PlanPoint) {
+  /**
+   * 2026-11-16 设施放置幽灵的唯一来源：2D 画布与 3D draft 共用同一份 ring / 角度 / 越界判定。
+   * 之前幽灵只画在 2D 画布上，3D 接管时画布被隐藏，等于盲放。
+   * 尺寸取模板真实宽深（与 buildFacility 一致），不再用 footprintSpec 的占位尺寸。
+   */
+  function pendingFacilityGhost(): {
+    template: PlanFacilityTemplate;
+    position: PlanPoint;
+    rotationDeg: number;
+    ring: PlanPoint[];
+    invalid: boolean;
+    preview: {
+      slug: string;
+      templateId: string;
+      name: string;
+      position: PlanPoint;
+      rotationDeg: number;
+      width: number;
+      depth: number;
+    } | null;
+  } | null {
+    if (modeRef.current !== 'facility') return null;
+    const position = ghostPointRef.current;
+    if (!position || !facilityTemplateRef.current) return null;
+    const template = resolvePendingTemplate();
+    if (!template) return null;
+    const rotationDeg = facilityRotationRef.current;
+    const { ring, invalid } = facilityPlacementGhost(template, position, rotationDeg, planRef.current.boundary);
+    // 2026-11-16 物料卡：3D 预览按这张卡的 slug 加载；普通设施没有 catalog 载荷，不额外挂模型。
+    const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
+    const preview = catalog && catalog.slug && catalog.templateId === template.templateId
+      ? {
+          slug: catalog.slug,
+          templateId: catalog.templateId,
+          name: catalog.name,
+          position,
+          rotationDeg,
+          width: template.width,
+          depth: template.depth,
+        }
+      : null;
+    return { template, position, rotationDeg, ring, invalid, preview };
+  }
+
+  /** 2026-11-16 拖放预览：2D onDragOver 与 3D 地面 dragover 共用，拖起即出幽灵。 */
+  function previewFacilityDrop(templateId: string, point: PlanPoint): boolean {
+    if (!templateId) return false;
+    if (modeRef.current !== 'facility') setMode('facility');
+    if (facilityTemplateRef.current !== templateId) pickFacilityTemplate(templateId);
+    ghostPointRef.current = point;
+    draw();
+    notifyPlanDraftChanged();
+    return true;
+  }
+
+  /** 2026-11-16 拖放落位：与单击放置共用 placeFacilityAt，角度/尺寸/校验不另走一套。 */
+  function dropFacilityAtPoint(templateId: string, point: PlanPoint): boolean {
+    if (!templateId) return false;
+    if (modeRef.current !== 'facility') setMode('facility');
+    if (facilityTemplateRef.current !== templateId) pickFacilityTemplate(templateId);
+    ghostPointRef.current = point;
+    facilityDropAtRef.current = Date.now();
+    placeFacilityAt(point);
+    return true;
+  }
+
+  /** 2026-11-16 拖出画布：只清幽灵，不清工具（用户可能接着点放）。 */
+  function clearFacilityDropPreview(): void {
+    if (modeRef.current !== 'facility') return;
+    if (Date.now() - facilityDropAtRef.current < 250) return;
+    if (!ghostPointRef.current) return;
+    ghostPointRef.current = null;
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  /** 2026-11-16 物料卡拖放：动态模板（真实宽深）+ 记录 slug，落位写 modelOverride。 */
+  function catalogFacilityTemplate(payload: PlanCatalogDrag): PlanFacilityTemplate {
+    return { templateId: payload.templateId, name: payload.name, width: payload.width, depth: payload.depth, note: '物料库模型' };
+  }
+
+  function armCatalogFacility(payload: PlanCatalogDrag): boolean {
+    if (!payload.slug || !(payload.width > 0) || !(payload.depth > 0)) return false;
+    // setMode 会清待放模板，必须先切模式再写模板。
+    setMode('facility');
+    facilityTemplateRef.current = payload.templateId;
+    facilityTemplateObjRef.current = catalogFacilityTemplate(payload);
+    facilityCatalogRef.current = payload;
+    armedCatalogRef.current = payload;
+    setFacilityTemplateId(payload.templateId);
+    setEditMessage(`已选「${payload.name}」（${payload.width}×${payload.depth} m），在地图/地面上单击放置；Esc 结束。`);
+    draw();
+    notifyPlanDraftChanged();
+    return true;
+  }
+
+  function previewCatalogDrop(payload: PlanCatalogDrag, point: PlanPoint): boolean {
+    if (!payload.slug || !(payload.width > 0) || !(payload.depth > 0)) return false;
+    if (modeRef.current !== 'facility' || facilityCatalogRef.current?.slug !== payload.slug) {
+      if (modeRef.current !== 'facility') setMode('facility');
+      facilityTemplateRef.current = payload.templateId;
+      facilityTemplateObjRef.current = catalogFacilityTemplate(payload);
+      facilityCatalogRef.current = payload;
+      setFacilityTemplateId(payload.templateId);
+    }
+    armedCatalogRef.current = payload;
+    ghostPointRef.current = point;
+    draw();
+    notifyPlanDraftChanged();
+    return true;
+  }
+
+  function dropCatalogAt(payload: PlanCatalogDrag, point: PlanPoint): boolean {
+    if (!previewCatalogDrop(payload, point)) return false;
+    facilityDropAtRef.current = Date.now();
+    placeFacilityAt(point, payload.slug);
+    return true;
+  }
+
+  function placeFacilityAt(pt: PlanPoint, explicitModelSlug?: string) {
     const templateId = facilityTemplateRef.current;
     if (!templateId) {
       setEditMessage('先在面板点选一个设施模板。');
@@ -3995,15 +4971,53 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     const current = planRef.current;
     const view = viewPlan();
-    const result = buildFacility({ templateId, template, position: pt }, current.boundary, view.facilities);
+    const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
+    const modelOverride = explicitModelSlug ?? (catalog && catalog.templateId === templateId ? catalog.slug : undefined);
+    // 物料卡落在已有设施上：把它当作「换这个物件的模型」，不叠第二件。
+    // 用户从库里拖卡到 3D 已有物件上时，期望看到的就是这一件跟着变；旧数据缺 modelOverride 也在这里补上。
+    if (modelOverride) {
+      const target = [...current.facilities].reverse().find(f => facilityContainsPoint(pt, f));
+      if (target) {
+        commitPlan({
+          ...current,
+          facilities: current.facilities.map(f => f.id === target.id
+            ? {
+              ...f,
+              templateId,
+              modelOverride,
+              size: { width: template.width, depth: template.depth },
+              ...activeLevelStamp(),
+            }
+            : f),
+        });
+        selectFacility(target.id);
+        setEditMessage(`已把「${target.name}」换成「${template.name}」，2D/3D 同一件跟着换模型。`);
+        ghostPointRef.current = null;
+        draw();
+        notifyPlanDraftChanged();
+        return;
+      }
+    }
+    // 2026-11-16 用户「物料要有归属意识」：落点落在哪个分区，这件物料就归那个区（与人员/出入口同口径）。
+    const zoneId = inferZoneIdAt(pt, current.zones);
+    const result = buildFacility(
+      { templateId, template, position: pt, rotationDeg: facilityRotationRef.current, ...(zoneId ? { zoneId } : {}) },
+      current.boundary,
+      view.facilities,
+    );
     if (!result.ok) {
       setEditMessage(result.issue.message);
       return;
     }
-    commitPlan({ ...current, facilities: [...current.facilities, { ...result.value, ...activeLevelStamp() }] });
+    commitPlan({ ...current, facilities: [...current.facilities, { ...result.value, ...(modelOverride ? { modelOverride } : {}), ...activeLevelStamp() }] });
     selectFacility(result.value.id);
     const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
-    setEditMessage(`已放置「${result.value.name}」，继续单击放置或 Esc 结束${hint}`);
+    const angle = facilityRotationRef.current;
+    setEditMessage(`已放置「${result.value.name}」${angle ? `（${Math.round(angle)}°）` : ''}，继续单击放置或 Esc 结束${hint}`);
+    // 2026-11-16 落位后清掉跟随幽灵：否则 3D 预览模型会和刚落地的真模型叠在同一位置。
+    ghostPointRef.current = null;
+    draw();
+    notifyPlanDraftChanged();
   }
 
   /**
@@ -4013,7 +5027,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function updateFacility(
     id: string,
     patch: Partial<Pick<PlanFacility,
-      'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride'
+      'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride' | 'zoneId'
       | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
     >> & { size?: { width: number; depth: number } },
   ) {
@@ -4024,8 +5038,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (f.id !== id) return f;
       // #51 方案甲收口：任何来源（手柄/面板/程序化写入）的尺寸都吸附到权威宽高比，
       // 已等比的输入幂等不变，自由比例按长边为锚纠偏，夹取在统一界内。
-      const size = patch.size
-        ? normalizeFacilitySize(patch.size, f.templateId, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M })
+      // 2026-11-15 用户口径：换模型时 2D 占地改成新模型的真实尺寸（模型只提供「默认多大」），
+      // 之后用户在 2D 缩放任等比跟随——换算统一在这里做，不让调用方各自记。
+      const modelOverride = Object.hasOwn(patch, 'modelOverride') ? patch.modelOverride : f.modelOverride;
+      const modelChanged = modelOverride !== f.modelOverride;
+      const requestedSize = patch.size
+        ?? (modelChanged ? facilitySizeFromModel(facilityFootprintSpec(f.templateId, modelOverride)) : undefined);
+      const size = requestedSize
+        ? normalizeFacilitySize(requestedSize, f.templateId, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }, modelOverride)
         : f.size;
       const rotationDeg = patch.rotationDeg !== undefined ? ((patch.rotationDeg % 360) + 360) % 360 : f.rotationDeg;
       return { ...f, ...patch, size, rotationDeg };
@@ -4040,15 +5060,67 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage('设施已删除。');
   }
 
+  /**
+   * 2026-11-15 用户：位置要能直接改。属性卡里展示的是经纬度（与坐标行同口径），
+   * 这里把经纬度逆映射回 ENU 米再落盘，仍走 commitPlan（可撤销）。
+   */
+  function moveFacilityTo(id: string, position: PlanPoint) {
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    const current = planRef.current;
+    if (!current.facilities.some(f => f.id === id)) return;
+    // 2026-11-16 用户「物料要有归属意识」：位置变了归属重算——搬进哪个分区就归哪个区，
+    // 搬出所有分区就是未归属（与人员/出入口的「按落点归属」同一口径）。
+    commitPlan({
+      ...current,
+      facilities: current.facilities.map(f =>
+        f.id === id
+          ? { ...f, position: { x: position.x, y: position.y }, zoneId: inferZoneIdAt(position, current.zones) }
+          : f,
+      ),
+    });
+  }
+
+  /** 提交纬度/经度草稿（失焦或回车）：无效值直接丢弃，不回退上一次合法位置。 */
+  function commitFacilityGeoDraft() {
+    const draft = facilityGeoDraft;
+    setFacilityGeoDraft(null);
+    if (!draft || !selectedFacility) return;
+    const lat = Number(draft.lat);
+    const lng = Number(draft.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return;
+    const anchorLng = plan.anchor?.lng ?? DEFAULT_ANCHOR_LNG;
+    const anchorLat = plan.anchor?.lat ?? DEFAULT_ANCHOR_LAT;
+    moveFacilityTo(selectedFacility.id, lngLatToEnu(lng, lat, anchorLng, anchorLat));
+  }
+
+  /** 提交宽/深草稿（失焦或回车）：仍走等比缩放，保证 2D 框不会变形。 */
+  function commitFacilitySizeDraft() {
+    const draft = facilitySizeDraft;
+    setFacilitySizeDraft(null);
+    if (!draft || !selectedFacility) return;
+    const width = Number(draft.width);
+    const depth = Number(draft.depth);
+    if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 0 || depth <= 0) return;
+    // 以长边为锚一次性回写两轴，避免「先改宽、再改深」两次提交、两次撤销。
+    const major = Math.max(width, depth);
+    updateFacility(selectedFacility.id, {
+      size: sizeWithMajor(selectedFacility.size, major, selectedFacility.templateId,
+        { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
+    });
+  }
+
   /** P2-i：方向键微调选中设施（1 m，Shift=10 m），共用一条 undo 记录。 */
   function nudgeFacility(id: string, dx: number, dy: number) {
     const current = planRef.current;
     if (!current.facilities.some(f => f.id === id)) return;
     commitPlan({
       ...current,
-      facilities: current.facilities.map(f =>
-        f.id === id ? { ...f, position: { x: f.position.x + dx, y: f.position.y + dy } } : f,
-      ),
+      facilities: current.facilities.map(f => {
+        if (f.id !== id) return f;
+        const position = { x: f.position.x + dx, y: f.position.y + dy };
+        // 微调也是位移：跨过分区边界就换归属。
+        return { ...f, position, zoneId: inferZoneIdAt(position, current.zones) };
+      }),
     });
   }
 
@@ -4123,11 +5195,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (i === 0 && j === 0) continue;
         const lu = i * (fac.size.width + gapX);
         const lv = j * (fac.size.depth + gapY);
+        const position = { x: fac.position.x + lu * cos - lv * sin, y: fac.position.y + lu * sin + lv * cos };
         copies.push({
           ...fac,
           id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-r${i}-${j}`,
           name: `${baseName} ${copies.length + 1}`,
-          position: { x: fac.position.x + lu * cos - lv * sin, y: fac.position.y + lu * sin + lv * cos },
+          position,
+          // 副本可能落到别的分区：逐件按落点重算归属，不无条件继承原件。
+          zoneId: inferZoneIdAt(position, planRef.current.zones),
         });
       }
     }
@@ -4140,11 +5215,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function duplicateFacility(id: string) {
     const facility = planRef.current.facilities.find(f => f.id === id);
     if (!facility) return;
+    const position = { x: facility.position.x + 2, y: facility.position.y + 2 };
     const copy: PlanFacility = {
       ...facility,
       id: crypto.randomUUID(),
       name: `${facility.name} 副本`,
-      position: { x: facility.position.x + 2, y: facility.position.y + 2 },
+      position,
+      zoneId: inferZoneIdAt(position, planRef.current.zones),
     };
     commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, copy] });
     selectFacility(copy.id);
@@ -4421,15 +5498,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return best?.id ?? null;
   }
 
-  /** H3-b 命中检测：最近的冲突/缺失标记（与绘制半径一致，标记恒在业务层之上）。 */
-  function nearestConflictAt(px: { x: number; y: number }): PlanConflictIssue | null {
-    let best: { issue: PlanConflictIssue; d: number } | null = null;
-    for (const issue of conflictIssuesRef.current) {
-      const pt = planPointToPixel(issue.at, currentViewport());
-      const d = Math.hypot(pt.x - px.x, pt.y - px.y);
-      if (d <= 10 && (best === null || d < best.d)) best = { issue, d };
+  /** 画布上该画的徽章：默认只画真冲突（红）；缺宽度/容量待核实属于提示，手动开才上图。 */
+  function visibleConflictClusters(): PlanConflictCluster[] {
+    const all = conflictClustersRef.current;
+    return all.filter(cluster => cluster.status === 'conflict' || showAdvisoryBadgesRef.current);
+  }
+
+  /** 切换「提示类徽标（缺宽度 / 容量待核实）」是否上图（ref 与 state 双写，draw() 里读的是 ref）。 */
+  function toggleShowAdvisoryBadges(next: boolean) {
+    showAdvisoryBadgesRef.current = next;
+    setShowAdvisoryBadges(next);
+    // 隐藏了提示类就不该还留着它的明细卡。
+    if (!next) {
+      const detail = conflictClustersRef.current.find(cluster => cluster.key === conflictDetailKeyRef.current);
+      if (detail && detail.status !== 'conflict') showConflictDetail(null);
     }
-    return best?.issue ?? null;
+    draw();
+  }
+
+  /** H3-b 命中检测：最近的合并徽章（与绘制半径一致，标记恒在业务层之上）。 */
+  function nearestConflictClusterAt(px: { x: number; y: number }): PlanConflictCluster | null {
+    let best: { cluster: PlanConflictCluster; d: number } | null = null;
+    for (const cluster of visibleConflictClusters()) {
+      const pt = planPointToPixel(cluster.at, currentViewport());
+      const d = Math.hypot(pt.x - px.x, pt.y - px.y);
+      // 带数字的徽章画得稍大，命中半径跟着放宽一点。
+      const radius = cluster.count > 1 ? 12 : 10;
+      if (d <= radius && (best === null || d < best.d)) best = { cluster, d };
+    }
+    return best?.cluster ?? null;
   }
 
   /** 动线端点吸附：SNAP 距离内的最近节点（只吸当前层节点），返回 {nodeId, position} 或 null。 */
@@ -4446,8 +5543,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 画动线模式单击加点（近已有点忽略；上限 128）。 */
-  function addRoutePoint(pt: PlanPoint) {
-    const draftPoints = routeDraftRef.current;
+  function addRoutePoint(pt: PlanPoint) {    const draftPoints = routeDraftRef.current;
     if (draftPoints.length >= PLAN_ROUTE_MAX_VERTICES) {
       setEditMessage(`动线顶点已达上限 ${PLAN_ROUTE_MAX_VERTICES} 个，先完成或按 Esc 取消。`);
       return;
@@ -4460,13 +5556,71 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     routeDraftRef.current = [...draftPoints, { x: pt.x, y: pt.y }];
     setRouteDraftCount(routeDraftRef.current.length);
-    setEditMessage(null);
+    setEditMessage(outsideScopeHint(planRef.current.designScope ?? [], pt));
     draw();
+  }
+
+  /**
+   * 动线点落在设计范围外（蒙版区）时只提示、不拒绝（2026-11-15 用户定）：
+   * 现场常有借用市政道路、地铁口前空地的情况，硬拦会把真实方案挡在门外；
+   * 但范围是为了让视线集中在「这次要设计的地」，所以必须当场说一句。
+   */
+  function outsideScopeHint(designScope: readonly PlanPoint[], pt: PlanPoint): string | null {
+    if (designScope.length < 3) return null;
+    if (scopeContainsPoint(designScope, pt)) return null;
+    return '这个点在设计范围外（蒙版区）：仍然保留，但先确认要不要把设计范围扩大一点。';
   }
 
   /** 完成/提交动线：端点吸附节点（唯一端点来源），buildRoute 校验后提交；可连续画下一条。 */
   function finishRoute() {
     const draftPoints = routeDraftRef.current;
+    // 2026-11-16 用户「点了 Alt 又改回了人行道」：从端点续接时，结束不是新建一条线，
+    // 而是把新点并回原动线（id/名称/类型/颜色/宽度/单行全保留，一条 undo 可撤）。
+    const extend = routeExtendRef.current;
+    routeExtendRef.current = null;
+    if (extend) {
+      const current = planRef.current;
+      const view = viewPlan();
+      const source = view.routes.find(route => route.id === extend.routeId);
+      if (source) {
+        const tail = draftPoints.slice(1);
+        if (tail.length === 0) {
+          setEditMessage('续接至少还要再点 1 个点：单击加点，双击结束。');
+          return;
+        }
+        const mergedRaw = extend.at === 'end'
+          ? [...source.points, ...tail]
+          : [...[...tail].reverse(), ...source.points];
+        const startSnap = snapNodeAt(mergedRaw[0]!);
+        const endSnap = snapNodeAt(mergedRaw[mergedRaw.length - 1]!);
+        const points = mergedRaw.map((p, i) => {
+          if (i === 0 && startSnap) return startSnap.position;
+          if (i === mergedRaw.length - 1 && endSnap && endSnap.nodeId !== startSnap?.nodeId) return endSnap.position;
+          return p;
+        });
+        const issue = routeVertexEditIssue(points);
+        if (issue) {
+          setEditMessage(issue.message);
+          return;
+        }
+        const next: PlanRoute = { ...source, points: points.map(p => ({ x: p.x, y: p.y })) };
+        const startNodeId = extend.at === 'start' ? startSnap?.nodeId : source.startNodeId;
+        const endNodeId = extend.at === 'end' ? endSnap?.nodeId : source.endNodeId;
+        if (startNodeId) next.startNodeId = startNodeId; else delete next.startNodeId;
+        if (endNodeId) next.endNodeId = endNodeId; else delete next.endNodeId;
+        // 续接不再重算边界交点：已存在的交点节点保持不变，避免重复插节点。
+        commitPlan({
+          ...current,
+          routes: current.routes.map(route => (route.id === source.id ? next : route)),
+        });
+        routeDraftRef.current = [];
+        routeCursorRef.current = null;
+        setRouteDraftCount(0);
+        selectRoute(source.id);
+        setEditMessage(`已续接「${source.name}」（${planRouteKindLabels[next.kind]}）：现在 ${next.points.length} 个折点；可继续画或 Esc 结束。`);
+        return;
+      }
+    }
     if (draftPoints.length < 2) {
       setEditMessage('动线至少要 2 个点：单击加路径点，完成后点「完成动线」。');
       return;
@@ -4484,6 +5638,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {
         // 2026-11-12 活动包预设：动线名/主题色/线型随包物件（finishRoute 后保留，可连画同款）。
         kind: routePresetRef.current?.kind ?? routeKindRef.current,
+        // 载体：车的预设自带 vehicle；手画车辆动线也是机动车；人行/后勤吃默认步行（2026-11-16）。
+        carrier: routePresetRef.current?.carrier ?? (routeKindRef.current === 'vehicle' ? 'vehicle' : 'walk'),
         name: routePresetRef.current?.name ?? `${planRouteKindLabels[routeKindRef.current]}动线 ${view.routes.length + 1}`,
         points,
         oneWay: routeOneWayRef.current,
@@ -4497,13 +5653,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(result.issue.message);
       return;
     }
-    commitPlan({ ...current, routes: [...current.routes, { ...result.value, ...activeLevelStamp() }] });
+    // 2026-11-15 用户：「从场地外的线到场地边界的时候，交界处会自动变成入口/出口/出入口」。
+    // 交点处还没有节点时补一个：类型按这条线的方向判（单向进场→入口、离场→出口，双向→出入口）。
+    const routeBase: SitePlanData = {
+      ...current,
+      routes: [...current.routes, { ...result.value, ...activeLevelStamp() }],
+    };
+    const withCrossings = planWithCrossingNodes(routeBase, result.value);
+    commitPlan(withCrossings.plan);
     routeDraftRef.current = [];
     routeCursorRef.current = null;
     setRouteDraftCount(0);
     selectRoute(result.value.id);
     const snapHint = startSnap || endSnap ? '，端点已连接到出入口节点' : '';
-    setEditMessage(`动线「${result.value.name}」已添加${snapHint}；继续画下一条或 Esc 结束。`);
+    const crossingHint = withCrossings.added.length > 0
+      ? `；交界处已自动加${withCrossings.added.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}`
+      : '';
+    setEditMessage(`动线「${result.value.name}」已添加${snapHint}${crossingHint}；继续画下一条或 Esc 结束。`);
   }
 
   /** 放节点模式单击：类型取当前工具箱选择，落点自动归属分区，自动编号命名，连续放置。 */
@@ -4514,7 +5680,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const result = buildNode(
       {
         kind: nodeKindRef.current,
-        name: `${nodeKindLabel(nodeKindRef.current)} ${view.nodes.length + 1}`,
+        // 2026-11-15 用户：自动名按「类型 + 递增数字」，且各类型各自编号（此前用全局点位总数，
+        // 放第三个出口会叫「出口 3」但中间夹着入口，编号看着像乱跳）。
+        name: autoNodeName(nodeKindRef.current, view.nodes),
         position: pt,
         ...(stamp.levelId !== undefined ? { levelId: stamp.levelId } : {}),
       },
@@ -4559,31 +5727,76 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`已布「${result.value.role} ×${result.value.count}」${hint}；继续单击放置或 Esc 结束。`);
   }
 
-  function updateRoute(id: string, patch: Partial<Pick<PlanRoute, 'name' | 'kind' | 'oneWay'>>) {
+  function updateRoute(id: string, patch: Partial<Pick<PlanRoute, 'name' | 'kind' | 'oneWay' | 'carrier'>>) {
     const current = planRef.current;
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
-    commitPlan({ ...current, routes: current.routes.map(r => (r.id === id ? { ...r, ...patch } : r)) });
+    const route = current.routes.find(r => r.id === id);
+    if (!route) return;
+    const nextRoute: PlanRoute = { ...route, ...patch };
+    const base: SitePlanData = {
+      ...current,
+      routes: current.routes.map(r => (r.id === id ? nextRoute : r)),
+    };
+    // 2026-11-15 用户：「单向的进去就是入口，出来的就是出口；双向的就是出入口」——
+    // 切单向/双向就是把交界处重新判一次型（同一只节点改型改名，不新建）。
+    if (patch.oneWay === undefined) {
+      commitPlan(base);
+      return;
+    }
+    const updated = planWithCrossingNodes(base, nextRoute);
+    commitPlan(updated.plan);
+    if (updated.retyped.length > 0) {
+      setEditMessage(`已按${nextRoute.oneWay ? '单向' : '双向'}流向调整交界处：${updated.retyped.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}。`);
+    }
   }
 
   function reverseSelectedRoute(id: string) {
     const current = planRef.current;
     const route = current.routes.find(r => r.id === id);
     if (!route) return;
-    commitPlan({ ...current, routes: current.routes.map(r => (r.id === id ? reverseRoute(r) : r)) });
-    setEditMessage('动线方向已反转（起终点引用已互换）。');
+    const nextRoute = reverseRoute(route);
+    const base: SitePlanData = {
+      ...current,
+      routes: current.routes.map(r => (r.id === id ? nextRoute : r)),
+    };
+    // 方向一反，进/出也反了：交界处的入口/出口跟着对调（双向线不受影响）。
+    const updated = planWithCrossingNodes(base, nextRoute);
+    commitPlan(updated.plan);
+    setEditMessage(
+      updated.retyped.length > 0
+        ? `动线方向已反转；交界处随之调整：${updated.retyped.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}。`
+        : '动线方向已反转（起终点引用已互换）。',
+    );
   }
 
   function deleteRoute(id: string) {
     const current = planRef.current;
-    commitPlan({ ...current, routes: current.routes.filter(r => r.id !== id) });
+    // 2026-11-15：删动线时把它自己建的交界出入口一并收走（被别人引用 / 用户改过名字的保留）。
+    const nodes = removeAutoCrossingNodesOfRoute(id, current);
+    commitPlan({
+      ...current,
+      routes: current.routes.filter(r => r.id !== id),
+      ...(nodes.length !== current.nodes.length ? { nodes } : {}),
+    });
     selectRoute(null);
-    setEditMessage('动线已删除。');
+    setEditMessage(nodes.length !== current.nodes.length ? '动线已删除（交界处自动生成的出入口一并移除）。' : '动线已删除。');
   }
 
   function updateNode(id: string, patch: Partial<Pick<PlanNode, 'name' | 'kind' | 'zoneId'>>) {
     const current = planRef.current;
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
-    commitPlan({ ...current, nodes: current.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)) });
+    const target = current.nodes.find(n => n.id === id);
+    // 2026-11-15 用户：「入口改成出口之后自动改名」——换类型时把自动名里的类型词换掉，
+    // 编号尽量保持不变；用户手改过的名字（不带「入口 N」形态）不碰。
+    const autoRenamed = target && patch.kind !== undefined && patch.kind !== target.kind && patch.name === undefined
+      ? renamedNodeName(target.name, patch.kind, current.nodes, id)
+      : undefined;
+    commitPlan({
+      ...current,
+      nodes: current.nodes.map(n => (n.id === id
+        ? { ...n, ...patch, ...(autoRenamed !== undefined && autoRenamed !== n.name ? { name: autoRenamed } : {}) }
+        : n)),
+    });
   }
 
   function deleteNode(id: string) {
@@ -4806,6 +6019,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /**
+   * 2026-11-15 设计范围定位：把视野框到范围的外接矩形。
+   * 为什么不用 centerViewOn：设计范围常常比视口大好几倍（外扩 20 m 就是 60 m 见方），
+   * 只居中不缩放的话压暗区会铺满整块画布，用户看到的就是「整张图变暗、看不到那个框」，
+   * 误以为蒙版坏了。这里复用 focusBounds 的墨卡托反解，一次把框塞进视口。
+   */
+  function focusDesignScope(scope: readonly PlanPoint[]) {
+    if (scope.length < 3) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of scope) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    if (![minX, minY, maxX, maxY].every(Number.isFinite)) return;
+    const anchor = planRef.current.anchor;
+    const lng0 = anchor?.lng ?? DEFAULT_ANCHOR_LNG;
+    const lat0 = anchor?.lat ?? DEFAULT_ANCHOR_LAT;
+    const sw = enuToLngLat(minX, minY, lng0, lat0);
+    const ne = enuToLngLat(maxX, maxY, lng0, lat0);
+    focusBounds([
+      Math.min(sw.lng, ne.lng),
+      Math.min(sw.lat, ne.lat),
+      Math.max(sw.lng, ne.lng),
+      Math.max(sw.lat, ne.lat),
+    ]);
+  }
+
+  /**
    * P2-k 搜地点：把视图飞到某个经纬度（可指定 zoom，缺省保持当前级别）。
    * 只动视图，不改 plan / anchor —— 搜地点是「看一眼这块地」，不是重新标定。
    */
@@ -4939,7 +6184,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function viewHitSelectable(hit: { px: { x: number; y: number }; pt: PlanPoint }): boolean {
     if (!onPlanChange) return false;
-    if (nearestConflictAt(hit.px)) return true;
+    if (nearestConflictClusterAt(hit.px)) return true;
     if (!layerLocked('node') && nearestNodeIdAt(hit.px)) return true;
     if (!layerLocked('worker') && nearestWorkerIdAt(hit.px)) return true;
     if (!layerLocked('route') && nearestRouteIdAt(hit.px)) return true;
@@ -4949,9 +6194,251 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return false;
   }
 
+  /**
+   * 2026-11-15：设计范围四角的命中（12 px）。画面上只有白色 L 角标、不再画圆点手柄
+   * （用户「这个圆形的点完全没必要存在」），所以热区要比视觉角标宽一圈，否则得精准点角心。
+   * 只认 4 点矩形；旧的多段线数据不给角柄，避免拖出奇怪形状。
+   */
+  function scopeCornerIndexAt(px: { x: number; y: number }): number | null {
+    const ring = planRef.current.designScope ?? [];
+    if (ring.length !== 4) return null;
+    const viewport = currentViewport();
+    for (let index = 0; index < ring.length; index += 1) {
+      const corner = planPointToPixel(ring[index]!, viewport);
+      if (Math.hypot(corner.x - px.x, corner.y - px.y) <= 12) return index;
+    }
+    return null;
+  }
+
+  /**
+   * 2026-11-15 用户指令「几个侧边，点的时候也可以按照对应的方向拖动」：
+   * 边上按住的命中——8 px 带到四边，角点（12 px）优先，两套不抢：
+   * 离角近就按角的双向缩放，离边近就只动那一条边。
+   * ENU 口径：north = 屏幕上方（y 最小），south = 下方，west = 左，east = 右。
+   */
+  function scopeEdgeAt(px: { x: number; y: number }): ScopeEdge | null {
+    const ring = planRef.current.designScope ?? [];
+    if (ring.length !== 4) return null;
+    const viewport = currentViewport();
+    return nearestScopeEdgePx(ring.map(point => planPointToPixel(point, viewport)), px);
+  }
+
+  /** 锁定钮的当前矩形（框右上外侧）；没框就是 null。 */
+  function scopeLockRectAt(viewport = currentViewport()) {
+    const ring = planRef.current.designScope ?? [];
+    if (ring.length < 3) return null;
+    return scopeLockButtonRect(ring.map(point => planPointToPixel(point, viewport)), viewport);
+  }
+
+  /**
+   * 场地边界（绿色总区域）的锁定钮：放在**设计白框右上角的内侧**（角的左下方向）。
+   *
+   * 2026-11-16 用户：「边界的锁在设计白框右上角位置的框内左下角」——两枚锁一外一内：
+   * 白框自己的锁在框外右上角，边界锁在同一个角的框内，不会认错。
+   * 没画设计范围时退回边界自己的包围盒，避免钮消失。
+   */
+  function boundaryLockRectAt(viewport = currentViewport()) {
+    const scopeRing = planRef.current.designScope ?? [];
+    const ring = scopeRing.length >= 3 ? scopeRing : (previewRingRef.current ?? planRef.current.boundary);
+    if (ring.length < 3) return null;
+    const rect = scopeLockButtonRect(
+      ring.map(point => planPointToPixel(point, viewport)),
+      viewport,
+      { placement: 'inside' },
+    );
+    return rect;
+  }
+
+  /**
+   * Ctrl+Z 的第一优先级：撤「正在画的草稿」的最后一个点。
+   *
+   * 2026-11-16 用户：「正在画线时 Ctrl+Z 应该撤我刚放的点，而不是上一条画好的线」——
+   * 草稿还在手上时，历史栈里存的是上一次任务，先撤它是错的。
+   * 返回 true = 这次 Ctrl+Z 已被草稿消费；false = 交给历史栈。
+   */
+  function undoDraftStep(): boolean {
+    const mode = modeRef.current;
+    if (mode === 'route' && routeDraftRef.current.length > 0) {
+      const next = routeDraftRef.current.slice(0, -1);
+      routeDraftRef.current = next;
+      setRouteDraftCount(next.length);
+      setEditMessage(next.length === 0
+        ? '已撤回起点（仍在画动线：单击重新开始，Esc 退出）。'
+        : `已撤回刚放的点，还剩 ${next.length} 个；双击结束动线。`);
+      draw();
+      notifyPlanDraftChanged();
+      return true;
+    }
+    if ((mode === 'zone' || mode === 'boundary') && draftRef.current.length > 0) {
+      const next = draftRef.current.slice(0, -1);
+      draftRef.current = next;
+      setEditMessage(next.length === 0
+        ? '草稿已清空（仍在收点模式：单击重新开始，Esc 退出）。'
+        : `已撤回上一个点，还剩 ${next.length} 个。`);
+      draw();
+      notifyPlanDraftChanged();
+      return true;
+    }
+    if (mode === 'measure' && measureDraftRef.current.length > 0) {
+      const next = measureDraftRef.current.slice(0, -1);
+      measureDraftRef.current = next;
+      setMeasureDraftCount(next.length);
+      setEditMessage(next.length === 0
+        ? '已撤回测量起点。'
+        : `已撤回上一个测量点，还剩 ${next.length} 个。`);
+      draw();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 2026-11-16 用户「我明明是在改车行道，点了 Alt 又改回了人行道进行补充」：
+   * Alt 的落点决定“画什么”：类型/颜色跟**来源动线**走（没来源就跟着已选中的线，再退到工具箱），
+   * 不再沿用工具箱里上一次选的类型——那才是“改回人行道”的根源。
+   * 另外：点在端点上 = 续接同一条线（不是另起一条）。
+   */
+  function branchIntentFor(anchor: { routeId?: string; isEndpoint?: boolean; vertexIndex?: number }) {
+    const plan = planRef.current;
+    const source = anchor.routeId ? plan.routes.find(route => route.id === anchor.routeId) : undefined;
+    const selected = plan.routes.find(route => route.id === selectedRouteRef.current);
+    const kind = source?.kind ?? selected?.kind ?? routeKindRef.current;
+    const extendAt: 'start' | 'end' | null = source && anchor.isEndpoint
+      ? (anchor.vertexIndex === 0 ? 'start' : 'end')
+      : null;
+    return { source, kind, extendAt, color: source?.color };
+  }
+
+  /** 开关场地边界锁：写的是图层锁，与左栅那一行同步。 */
+  function toggleBoundaryLock() {
+    const next = !layerLocked('boundary');
+    setLayerLocked('boundary', next);
+    if (next) clearBoundaryDeleteArm();
+    setEditMessage(next
+      ? '用地红线已锁定：拖顶点、加点都不再响应；再点右上角这枚锁即可解锁。'
+      : '用地红线已解锁：可以拖顶点、双击加点 / 点顶点删点。');
+  }
+
+  /** 开关锁定：只关命中，不动数据；锁上时顺手清掉边悬停光标。 */
+  function toggleScopeLock() {    const next = !scopeLockedRef.current;
+    scopeLockedRef.current = next;
+    scopeEdgeHoverRef.current = null;
+    setScopeEdgeHover(null);
+    setEditMessage(
+      next
+        ? '设计范围边框已锁定：拖角、拖四条边都不再响应（防止手滑改到范围）；再点一次锁即可解锁。'
+        : '设计范围边框已解锁：可以拖角、拖四条边调整范围。',
+    );
+    draw();
+  }
+
   function handleStageMouseDown(event: React.MouseEvent) {
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
+    // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：Alt + 点已有点 = 从它分叉一条新动线。
+    // 2026-11-16 用户反馈「和双击删除冲突，很容易误删」：Alt 现在是一个**严格手势**——
+    // 只要按着 Alt，任何删除/加点/选中都不允许跑；没命中已有点就只给提示，不做事。
+    if (event.altKey) {
+      const anchor = hit && onPlanChange && (activeMode === 'view' || activeMode === 'select' || activeMode === 'route')
+        ? findRouteBranchAnchor(planRef.current, hit.px, currentViewport(), { nodeRadiusPx: NODE_HIT_PX + 4 })
+        : null;
+      pointerConsumedRef.current = true;
+      downPxRef.current = null;
+      if (!anchor) {
+        setEditMessage(activeMode === 'route'
+          ? '正在画动线：松开 Alt 单击即可加点（Alt 只用来从已有点分叉）。'
+          : 'Alt 只能从已有的点（出入口 / 动线折点）分叉画线；空白处请松开 Alt 再点。');
+        return;
+      }
+      if (activeMode === 'route' && routeDraftRef.current.length > 0) {
+        setEditMessage('正在画动线：先双击结束或 Esc 取消，再按住 Alt 从别的点分叉。');
+        return;
+      }
+      branchAnchorHintRef.current = null;
+      setBranchAnchorHint(null);
+      clearBoundaryDeleteArm();
+      const intent = branchIntentFor(anchor);
+      setMode('route');
+      // setMode 会清草稿与预设——类型/颜色/续接目标必须在它之后写回去。
+      routeKindRef.current = intent.kind;
+      setRouteKind(intent.kind);
+      routePresetRef.current = intent.color ? { kind: intent.kind, color: intent.color } : null;
+      routeExtendRef.current = intent.source && intent.extendAt
+        ? { routeId: intent.source.id, at: intent.extendAt }
+        : null;
+      // setMode 会清草稿——首点必须在它之后写进去。
+      routeDraftRef.current = [{ ...anchor.point }];
+      setRouteDraftCount(1);
+      branchStartedAtRef.current = performance.now();
+      const kindLabel = planRouteKindLabels[intent.kind];
+      setEditMessage(intent.extendAt
+        ? `已接着「${anchor.label}」的${intent.extendAt === 'start' ? '起点' : '终点'}画（同一条${kindLabel}线，双击结束后并入、不新建）：单击加点，Ctrl+Z 撤刚放的点。`
+        : `已从「${anchor.label}」分叉一条${kindLabel}新动线（沿用原线的类型/颜色）：单击加点、双击结束；Ctrl+Z 撤刚放的点。`);
+      draw();
+      return;
+    }
+    if (activeMode === 'scope') {
+      // 2026-11-15 用户拍板：设计范围只画矩形——按住拖框，松手成框。
+      if (!hit) return;
+      scopeDragRef.current = { startPt: hit.pt };
+      downPxRef.current = hit.px;
+      pointerConsumedRef.current = true;
+      setEditMessage('拖出一个矩形作为设计范围，松手生效；Shift = 正方形，Esc 取消。');
+      return;
+    }
+    // 2026-11-16 用户「场地右上角也加一个小锁」：这枚锁先吃掉自己那一小块，
+    // 浏览 / 选择 / 编辑边界三种模式都认——锁着时也能从画布上直接解开。
+    if (hit) {
+      const boundaryLockRect = boundaryLockRectAt();
+      if (
+        boundaryLockRect
+        && hitScopeLockButton(boundaryLockRect, hit.px)
+        && (activeMode === 'view' || activeMode === 'select' || activeMode === 'boundary-vertex')
+      ) {
+        pointerConsumedRef.current = true;
+        downPxRef.current = hit.px;
+        toggleBoundaryLock();
+        return;
+      }
+    }
+    // 2026-11-15 用户反馈「范围点不了」：画了四个角手柄就得更它们能拖。
+    // 只认角点、只在浏览/选择模式，优先级排在内容命中之后、平移之前。
+    if (hit && (activeMode === 'view' || activeMode === 'select')) {
+      // 2026-11-15：框右上外侧的锁优先吃掉自己那一小块（否则会落到平移里）。
+      const lockRect = scopeLockRectAt();
+      if (lockRect && hitScopeLockButton(lockRect, hit.px)) {
+        pointerConsumedRef.current = true;
+        downPxRef.current = hit.px;
+        toggleScopeLock();
+        return;
+      }
+      if (!scopeLockedRef.current) {
+        const cornerIndex = scopeCornerIndexAt(hit.px);
+        if (cornerIndex !== null) {
+          const ring = planRef.current.designScope ?? [];
+          const fixed = ring[(cornerIndex + 2) % 4]!;
+          scopeResizeRef.current = { fixed: { x: fixed.x, y: fixed.y } };
+          downPxRef.current = hit.px;
+          pointerConsumedRef.current = true;
+          setEditMessage('拖角点调整设计范围（仍是轴对齐矩形）；Esc 取消。');
+          return;
+        }
+        // 2026-11-15：角之外还有四条边——按住一条边只改这个方向，对边钉住不动。
+        const edge = scopeEdgeAt(hit.px);
+        if (edge !== null) {
+          const ring = planRef.current.designScope ?? [];
+          scopeEdgeResizeRef.current = { edge, ring: ring.map(point => ({ x: point.x, y: point.y })) };
+          scopeEdgeHoverRef.current = edge;
+          setScopeEdgeHover(edge);
+          downPxRef.current = hit.px;
+          pointerConsumedRef.current = true;
+          setEditMessage(
+            `拖动「设计范围${scopeEdgeLabel(edge)}边」调整范围（只改这个方向，对边不动）；Esc 取消。`,
+          );
+          return;
+        }
+      }
+    }
     if (activeMode === 'view') {
       // P2-i：设施手柄/本体优先接管（旋转、改尺寸、整体拖动），其次才落到节点与平移。
       if (hit && onPlanChange && startFacilityDrag(hit.px, hit.pt)) {
@@ -4968,10 +6455,39 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const index = nearestZoneVertexIndex(zone, hit.px);
           if (index !== null) {
             pointerConsumedRef.current = true;
-            dragZoneVertexRef.current = { zoneId: zone.id, index };
+            dragZoneVertexRef.current = { zoneId: zone.id, index, startPx: { x: hit.px.x, y: hit.px.y } };
             zoneDragPreviewRef.current = { zoneId: zone.id, polygon: zone.polygon };
             downPxRef.current = hit.px;
             setDragging(true);
+            return;
+          }
+          // 2026-11-15 用户指令：点选中分区的边中段 → 就地插一个顶点，并直接进入拖动（松手才定形）。
+          // 顺序：顶点手柄 > 边中段插点 > 分区体平移，三者命中半径从紧到松。
+          const edgeHit = nearestRingEdge(zone.polygon, hit.px, currentViewport());
+          if (edgeHit && edgeHit.distPx <= 9) {
+            const inserted = insertRingVertex(
+              zone.polygon,
+              edgeHit.index,
+              snapPointToGrid(edgeHit.point, currentViewport()),
+              { minAreaM2: PLAN_MIN_ZONE_AREA_M2, label: `分区「${zone.name}」` },
+            );
+            if (!inserted.ok) {
+              setEditMessage(inserted.issue.message);
+              return;
+            }
+            const nextZones = planRef.current.zones.map(item =>
+              item.id === zone.id ? { ...item, polygon: inserted.value } : item,
+            );
+            commitPlan({ ...planRef.current, zones: nextZones });
+            zoneEdgeHintRef.current = null;
+            justInsertedZoneVertexRef.current = true;
+            dragZoneVertexRef.current = { zoneId: zone.id, index: edgeHit.index + 1, startPx: { x: hit.px.x, y: hit.px.y } };
+            zoneDragPreviewRef.current = { zoneId: zone.id, polygon: inserted.value };
+            downPxRef.current = hit.px;
+            pointerConsumedRef.current = true;
+            setDragging(true);
+            setEditMessage('已在边上插入顶点，继续拖动调整；松手生效。');
+            draw();
             return;
           }
           // 2026-11-14：按住分区体整体拖动（顶点优先，仍不命中才落这里）。
@@ -4985,21 +6501,61 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }
         }
       }
+      // 2026-11-16 用户「类似分区，把添加/删除/临近合并补上」：没锁时浏览模式按住边界顶点就能拖，
+      // 拖到另一个顶点上松手即合并；双击顶点删、双击边加点（handleStageDoubleClick 里同一套）。
+      if (hit && onPlanChange && !layerLocked('boundary')) {
+        // 按到别处（或别的顶点）就把琥珀框熄灭：“待删”只对刚点的那一个成立。
+        if (boundaryDeleteArmedRef.current !== null
+          && nearestBoundaryVertexIndex(hit.px) !== boundaryDeleteArmedRef.current) {
+          clearBoundaryDeleteArm();
+        }
+        // 先认边线上的「+」把手（比综的边线更好点中），点一下就插点并直接进入拖动。
+        const edgeHint = boundaryEdgeHintRef.current;
+        if (edgeHint && Math.hypot(hit.px.x - edgeHint.x, hit.px.y - edgeHint.y) <= 12) {
+          const inserted = insertRingVertex(planRef.current.boundary, edgeHint.index, edgeHint.pt);
+          if (!inserted.ok) {
+            setEditMessage(inserted.issue.message);
+            return;
+          }
+          const insertedCheck = checkBoundaryRing(inserted.value);
+          if (!insertedCheck.ok) {
+            setEditMessage(insertedCheck.issue.message);
+            return;
+          }
+          setPreviewRing(inserted.value);
+          dragVertexRef.current = edgeHint.index + 1;
+          boundaryJustInsertedRef.current = true;
+          boundaryInsertedAtRef.current = performance.now();
+          pointerConsumedRef.current = true;
+          downPxRef.current = hit.px;
+          setEditMessage('已在边上插入顶点，继续拖动调整；双击顶点即可删除。');
+          draw();
+          return;
+        }
+        const boundaryVertex = nearestBoundaryVertexIndex(hit.px);
+        if (boundaryVertex !== null) {
+          dragVertexRef.current = boundaryVertex;
+          downPxRef.current = hit.px;
+          pointerConsumedRef.current = true;
+          setPreviewRing(planRef.current.boundary);
+          setEditMessage('拖动红线顶点改形；拖到另一个顶点上松手即合并，双击顶点可删除。');
+          draw();
+          return;
+        }
+      }
+      // 2026-11-16：锁着时点边界不能“默不作声”——告知解锁入口。
+      if (hit && layerLocked('boundary')) {
+        const lockedEdge = nearestRingEdge(planRef.current.boundary, hit.px, currentViewport());
+        if (lockedEdge && lockedEdge.distPx <= VERTEX_EDGE_HIT_PX) {
+          setEditMessage('用地红线已锁定：点右上角那枚锁解锁后，就能拖顶点、双击边线加点。');
+        }
+      }
       // 2026-11-14：选中流线后按住顶点即改形（Agent 生成物可编辑；优先于节点拖动）。
+      // 2026-11-15 用户指令：同一条交互里补上「点线上加点」——命中顺序与分区一致。
       if (hit && onPlanChange && !layerLocked('route')) {
         const routeId = selectedRouteRef.current;
         const route = routeId ? planRef.current.routes.find(r => r.id === routeId) ?? null : null;
-        if (route) {
-          const index = nearestRouteVertexIndex(route, hit.px);
-          if (index !== null) {
-            pointerConsumedRef.current = true;
-            dragRouteVertexRef.current = { routeId: route.id, index, base: route.points };
-            routeDragPreviewRef.current = { routeId: route.id, points: route.points };
-            downPxRef.current = hit.px;
-            setDragging(true);
-            return;
-          }
-        }
+        if (route && beginRouteVertexEdit(route, hit)) return;
       }
       // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移（锁定层不响应）。
       if (hit && !layerLocked('node')) {
@@ -5042,20 +6598,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 2026-11-12 B2 框选模式：组角柄(缩放) > 已选单件手柄 > 组内件(整组移动) > 新命中(shift 加减选/单选拖动) > 空白(marquee)。
       if (!hit) return;
       // 2026-11-14：选中流线的 polyline 控制点抓取（跨模式，与浏览模式同一套）。
+      // 2026-11-15：同样补上点线加点（与浏览模式完全同一套命中顺序）。
       if (onPlanChange && !layerLocked('route')) {
         const routeId = selectedRouteRef.current;
         const route = routeId ? planRef.current.routes.find(r => r.id === routeId) ?? null : null;
-        if (route) {
-          const index = nearestRouteVertexIndex(route, hit.px);
-          if (index !== null) {
-            pointerConsumedRef.current = true;
-            dragRouteVertexRef.current = { routeId: route.id, index, base: route.points };
-            routeDragPreviewRef.current = { routeId: route.id, points: route.points };
-            downPxRef.current = hit.px;
-            setDragging(true);
-            return;
-          }
-        }
+        if (route && beginRouteVertexEdit(route, hit)) return;
       }
       pointerConsumedRef.current = true;
       downPxRef.current = hit.px;
@@ -5138,28 +6685,239 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         : null;
     }
     if (activeMode === 'boundary-vertex') {
-      // P2-i：边界层锁定时顶点不可拖动。
-      dragVertexRef.current = layerLocked('boundary') ? null : nearestBoundaryVertexIndex(hit.px);
+      // 2026-11-16 用户：「场地和区域是一样的，也有加节点、减节点、挪节点」+「给场地加把锁」。
+      // 先看锁：默认锁着，解锁后才有手柄、能加点/减点。
+      if (layerLocked('boundary')) {
+        setEditMessage('用地红线已锁定：在左侧「用地红线」行点锁图标解锁后就能加/减/挪顶点。');
+        return;
+      }
+      const vertex = nearestBoundaryVertexIndex(hit.px);
+      if (vertex !== null) {
+        dragVertexRef.current = vertex;
+        return;
+      }
+      // 点在边界线上 → 直接加点（与分区同一手感），并立即进入拖动。
+      const viewport = currentViewport();
+      const edge = nearestRingEdge(planRef.current.boundary, hit.px, viewport);
+      if (!edge || edge.distPx > VERTEX_EDGE_HIT_PX) {
+        dragVertexRef.current = null;
+        return;
+      }
+      const inserted = insertRingVertex(planRef.current.boundary, edge.index, snapPointToGrid(edge.point, viewport));
+      if (!inserted.ok) {
+        setEditMessage(inserted.issue.message);
+        return;
+      }
+      const check = checkBoundaryRing(inserted.value);
+      if (!check.ok) {
+        setEditMessage(check.issue.message);
+        return;
+      }
+      setPreviewRing(inserted.value);
+      dragVertexRef.current = edge.index + 1;
+      boundaryJustInsertedRef.current = true;
+      boundaryInsertedAtRef.current = performance.now();
+      setEditMessage('已在红线上插入顶点，继续拖动调整；松手生效（点一下顶点即可删掉它）。');
+      draw();
     }
   }
 
   function handleStageMouseMove(event: React.MouseEvent) {
+    // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：Alt 按着时，鼠标下的已有点亮一枚「+」，
+    // 告诉你“从这里能长一条新线”；没锚点就什么都不画。
+    if (altHeldRef.current) {
+      const mode = modeRef.current;
+      const editable = onPlanChange && (mode === 'view' || mode === 'select');
+      const probe = editable ? eventPlanPoint(event) : null;
+      const anchor = probe
+        ? findRouteBranchAnchor(planRef.current, probe.px, currentViewport(), { nodeRadiusPx: NODE_HIT_PX + 4 })
+        : null;
+      const anchorPx = anchor ? planPointToPixel(anchor.point, currentViewport()) : null;
+      const intent = anchor ? branchIntentFor(anchor) : null;
+      const nextHint = anchor && anchorPx
+        ? { x: anchorPx.x, y: anchorPx.y, label: anchor.label, point: anchor.point, ...(anchor.nodeId ? { nodeId: anchor.nodeId } : {}) }
+        : null;
+      const prevHint = branchAnchorHintRef.current;
+      const changed = (nextHint?.label ?? null) !== (prevHint?.label ?? null)
+        || Math.abs((nextHint?.x ?? 0) - (prevHint?.x ?? 0)) > 0.5
+        || Math.abs((nextHint?.y ?? 0) - (prevHint?.y ?? 0)) > 0.5;
+      if (changed) {
+        branchAnchorHintRef.current = nextHint;
+        setBranchAnchorHint(nextHint ? { x: nextHint.x, y: nextHint.y, label: nextHint.label } : null);
+        if (nextHint && intent) {
+          // 提示里先说清楚“会是什么类型、是续接还是新线”——避免画出来才发现变回人行道。
+          const kindLabel = planRouteKindLabels[intent.kind];
+          setEditMessage(intent.extendAt
+            ? `松开 Alt 点这里就接着「${nextHint.label}」${intent.extendAt === 'start' ? '起点' : '终点'}继续画${kindLabel}线（同一条，不新建）。`
+            : `松开 Alt 点这里就从「${nextHint.label}」分叉一条${kindLabel}新动线（类型/颜色跟原线一致）。`);
+        }
+        draw();
+      }
+    }
     // 2026-11-14：流线顶点拖拽预览跨模式（polyline 控制点，模式切换不打断编辑）。
+    // 2026-11-15 用户指令「挪动合并点」：拖到相邻折点 12 px 内就吸过去（预览少一个点），拉远自动恢复。
     if (dragRouteVertexRef.current) {
       const hit = eventPlanPoint(event);
       if (!hit) return;
       const drag = dragRouteVertexRef.current;
-      const snapped = snapPointToGrid(hit.pt, currentViewport());
-      const points = drag.base.map((p, i) => (i === drag.index ? snapped : p));
-      const dup = points.some((p, i) => i > 0 && p.x === points[i - 1]!.x && p.y === points[i - 1]!.y);
-      if (!dup) {
-        routeDragPreviewRef.current = { routeId: drag.routeId, points };
+      const viewport = currentViewport();
+      const route = planRef.current.routes.find(r => r.id === drag.routeId) ?? null;
+      if (!route) return;
+      // 已经吸住时预览里已经没有这个点了，基准回到已提交的点列，才能再拉出来。
+      const base = (routeVertexSnapRef.current !== null ? null : routeDragPreviewRef.current?.points) ?? route.points;
+      const mergeTarget = base.length > 2 ? nearestMergeTarget(base, drag.index, hit.px, viewport, 12) : null;
+      if (mergeTarget !== null) {
+        const merged = removeRouteVertex({ ...route, points: base }, drag.index);
+        if (merged.ok) {
+          // 并点后的整条动线存进会话（端点被删时 removeRouteVertex 已解绑节点引用，提交要用它）。
+          drag.merged = merged.value;
+          routeDragPreviewRef.current = { routeId: drag.routeId, points: merged.value.points };
+          routeVertexSnapRef.current = {
+            routeId: drag.routeId,
+            index: mergeTarget > drag.index ? mergeTarget - 1 : mergeTarget,
+          };
+          setEditMessage('够近了：松手就把这个折点并到相邻折点上。');
+          draw();
+          return;
+        }
+      }
+      if (routeVertexSnapRef.current !== null) {
+        routeVertexSnapRef.current = null;
+        drag.merged = null;
+        draw();
+      }
+      const moved = moveRouteVertex({ ...route, points: base }, drag.index, snapPointToGrid(hit.pt, viewport));
+      if (moved.ok) {
+        routeDragPreviewRef.current = { routeId: drag.routeId, points: moved.value.points };
         setEditMessage(null);
         draw();
+      } else {
+        setEditMessage(moved.issue.message);
       }
       return;
     }
     const activeMode = modeRef.current;
+    // 2026-11-15 设计范围拖框：必须在顶层拦（放在 view 分支里的话 scope 模式根本走不到，
+    // 表现就是「拖了没反应、松手又提示范围太小」）。
+    if (activeMode === 'scope' && scopeDragRef.current) {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      const start = scopeDragRef.current.startPt;
+      const current = snapPointToGrid(hit.pt, currentViewport());
+      setDraft(event.shiftKey ? measureRectPoints(start, current, true) : rectRing(start, current));
+      setEditMessage(null);
+      return;
+    }
+    if (scopeResizeRef.current) {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      setDraft(rectRing(scopeResizeRef.current.fixed, snapPointToGrid(hit.pt, currentViewport())));
+      setEditMessage(null);
+      return;
+    }
+    // 2026-11-15：拖边——只改一个方向（北/南动 y，东/西动 x），对边与另两个坐标不动。
+    if (scopeEdgeResizeRef.current) {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      const drag = scopeEdgeResizeRef.current;
+      const snapped = snapPointToGrid(hit.pt, currentViewport());
+      const coordinate = scopeEdgeIsHorizontal(drag.edge) ? snapped.y : snapped.x;
+      const next = resizeScopeEdge(drag.ring, drag.edge, coordinate);
+      if (next) setDraft(next);
+      setEditMessage(null);
+      return;
+    }
+    // 2026-11-15 用户指令：范围的边也能拖——悬停到边就给方向光标（画面上不加线，靠光标提示）。
+    // 锁定钮单独给 pointer；锁上后整条边不再给 ↕/↔（光标就是「现在改不了」的提示）。
+    if (!dragging) {
+      const hoverHit = eventPlanPoint(event);
+      const hoverLockRect = hoverHit ? scopeLockRectAt() : null;
+      const hoverLock = Boolean(hoverHit && hoverLockRect && hitScopeLockButton(hoverLockRect, hoverHit.px));
+      if (hoverLock !== scopeLockHoverRef.current) {
+        scopeLockHoverRef.current = hoverLock;
+        setScopeLockHover(hoverLock);
+      }
+      // 2026-11-16：场地边界那枚锁同样给 pointer（两种锁互不叠，各自只认自己那一小块）。
+      const hoverBoundaryLockRect = hoverHit ? boundaryLockRectAt() : null;
+      const hoverBoundaryLock = Boolean(
+        hoverHit && hoverBoundaryLockRect && hitScopeLockButton(hoverBoundaryLockRect, hoverHit.px),
+      );
+      if (hoverBoundaryLock !== boundaryLockHoverRef.current) {
+        boundaryLockHoverRef.current = hoverBoundaryLock;
+        setBoundaryLockHover(hoverBoundaryLock);
+      }
+      const canResize = (activeMode === 'view' || activeMode === 'select') && onPlanChange && !scopeLockedRef.current;
+      const hoverEdge = canResize && hoverHit && !hoverLock ? scopeEdgeAt(hoverHit.px) : null;
+      if (hoverEdge !== scopeEdgeHoverRef.current) {
+        scopeEdgeHoverRef.current = hoverEdge;
+        setScopeEdgeHover(hoverEdge);
+      }
+    }
+    // 2026-11-15：悬停在选中分区的边中段 → 维护「加点」手柄；
+    // 悬停在已有顶点 → 那一点高亮成「可删」样式（点一下就删）。变了才重绘，不多刷帧。
+    if ((activeMode === 'view' || activeMode === 'select') && !dragging && onPlanChange && !layerLocked('zone')) {
+      const hoverHit = eventPlanPoint(event);
+      const hoverZoneId = selectedZoneRef.current;
+      const hoverZone = hoverZoneId ? planRef.current.zones.find(z => z.id === hoverZoneId) ?? null : null;
+      const vertexIndex = hoverHit && hoverZone ? nearestZoneVertexIndex(hoverZone, hoverHit.px) : null;
+      // 顶点优先：已经在顶点上就不再提示加点，不然两个手柄叠在一起。
+      const edge =
+        hoverHit && hoverZone && vertexIndex === null
+          ? nearestRingEdge(hoverZone.polygon, hoverHit.px, currentViewport())
+          : null;
+      const hint =
+        hoverZone && edge && edge.distPx <= 9
+          ? { zoneId: hoverZone.id, point: edge.point, index: edge.index }
+          : null;
+      const nextVertex = hoverZone && vertexIndex !== null ? { zoneId: hoverZone.id, index: vertexIndex } : null;
+      const prev = zoneEdgeHintRef.current;
+      const prevVertex = zoneVertexHoverRef.current;
+      const hintChanged =
+        (prev === null) !== (hint === null) ||
+        (prev !== null &&
+          hint !== null &&
+          (prev.index !== hint.index ||
+            Math.hypot(prev.point.x - hint.point.x, prev.point.y - hint.point.y) > 0.05));
+      const vertexChanged =
+        (prevVertex === null) !== (nextVertex === null) ||
+        (prevVertex !== null && nextVertex !== null && (prevVertex.index !== nextVertex.index || prevVertex.zoneId !== nextVertex.zoneId));
+      if (hintChanged) zoneEdgeHintRef.current = hint;
+      if (vertexChanged) zoneVertexHoverRef.current = nextVertex;
+      if (hintChanged || vertexChanged) draw();
+    }
+    // 2026-11-15 用户指令「路线和分区一样」：流线用同一套悬停提示（可加点 / 可删点）。
+    if ((activeMode === 'view' || activeMode === 'select') && !dragging && onPlanChange && !layerLocked('route')) {
+      const hoverHit = eventPlanPoint(event);
+      const hoverRouteId = selectedRouteRef.current;
+      const hoverRoute = hoverRouteId ? planRef.current.routes.find(r => r.id === hoverRouteId) ?? null : null;
+      const routeVertexIndex = hoverHit && hoverRoute ? nearestRouteVertexIndex(hoverRoute, hoverHit.px) : null;
+      const routeEdge =
+        hoverHit && hoverRoute && routeVertexIndex === null
+          ? nearestPolylineEdge(hoverRoute.points, hoverHit.px, currentViewport())
+          : null;
+      const routeHint =
+        hoverRoute && routeEdge && routeEdge.distPx <= 9
+          ? { routeId: hoverRoute.id, point: routeEdge.point, index: routeEdge.index }
+          : null;
+      const nextRouteVertex = hoverRoute && routeVertexIndex !== null
+        ? { routeId: hoverRoute.id, index: routeVertexIndex }
+        : null;
+      const prevHint = routeEdgeHintRef.current;
+      const prevVertex = routeVertexHoverRef.current;
+      const routeHintChanged =
+        (prevHint === null) !== (routeHint === null) ||
+        (prevHint !== null &&
+          routeHint !== null &&
+          (prevHint.index !== routeHint.index ||
+            Math.hypot(prevHint.point.x - routeHint.point.x, prevHint.point.y - routeHint.point.y) > 0.05));
+      const routeVertexChanged =
+        (prevVertex === null) !== (nextRouteVertex === null) ||
+        (prevVertex !== null && nextRouteVertex !== null &&
+          (prevVertex.index !== nextRouteVertex.index || prevVertex.routeId !== nextRouteVertex.routeId));
+      if (routeHintChanged) routeEdgeHintRef.current = routeHint;
+      if (routeVertexChanged) routeVertexHoverRef.current = nextRouteVertex;
+      if (routeHintChanged || routeVertexChanged) draw();
+    }
     if (activeMode === 'select') {
       // 2026-11-12 B2：组会话预览 > 单件拖拽预览（与浏览同一套）> marquee 更新。select 模式不平移。
       const hit = eventPlanPoint(event);
@@ -5208,6 +6966,74 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     if (activeMode === 'view') {
+      // 2026-11-16 用户「解锁了之后还是无法编辑」：浏览模式下拖边界顶点（大号实心方点）。
+      if (dragVertexRef.current !== null) {        const vertexHit = eventPlanPoint(event);
+        if (!vertexHit) return;
+        const ring = previewRingRef.current ?? planRef.current.boundary;
+        const next = snapPointToGrid(vertexHit.pt, currentViewport());
+        const anchor = ring[dragVertexRef.current];
+        if (!anchor || planPointDistanceM(anchor, next) < 0.01) return;
+        const result = moveRingVertex(ring, dragVertexRef.current, next);
+        if (result.ok) {
+          setPreviewRing(result.value);
+          setEditMessage(null);
+        } else {
+          setEditMessage(result.issue.message);
+        }
+        return;
+      }
+      // 2026-11-16 用户「你要补上一些交互提示」：没在拖东西时，把“哪里能拖、哪里能加点”悬停出来。
+      // 未锁：顶点→白框高亮 + grab；边线→「+」把手（点即插点）。已锁：光标 not-allowed，点一下告诉你去哪解。
+      {
+        const hoverHit = eventPlanPoint(event);
+        if (onPlanChange && hoverHit) {
+          const hoverViewport = currentViewport();
+          if (layerLocked('boundary')) {
+            if (boundaryVertexHoverRef.current !== null || boundaryEdgeHintRef.current) {
+              boundaryVertexHoverRef.current = null;
+              boundaryEdgeHintRef.current = null;
+              setBoundaryVertexHover(null);
+              setBoundaryEdgeHint(null);
+              draw();
+            }
+            const ringEdge = nearestRingEdge(planRef.current.boundary, hoverHit.px, hoverViewport);
+            const lockedHover = ringEdge !== null && ringEdge.distPx <= VERTEX_EDGE_HIT_PX;
+            if (lockedHover !== boundaryLockedHoverRef.current) {
+              boundaryLockedHoverRef.current = lockedHover;
+              setBoundaryLockedHover(lockedHover);
+            }
+          } else {
+            if (boundaryLockedHoverRef.current) {
+              boundaryLockedHoverRef.current = false;
+              setBoundaryLockedHover(false);
+            }
+            const vertexIndex = nearestBoundaryVertexIndex(hoverHit.px);
+            if (vertexIndex !== boundaryVertexHoverRef.current) {
+              boundaryVertexHoverRef.current = vertexIndex;
+              setBoundaryVertexHover(vertexIndex);
+              draw();
+            }
+            const ringEdge = vertexIndex === null
+              ? nearestRingEdge(planRef.current.boundary, hoverHit.px, hoverViewport)
+              : null;
+            const nextHint = ringEdge && ringEdge.distPx <= VERTEX_EDGE_HIT_PX
+              ? (() => {
+                const px = planPointToPixel(ringEdge.point, hoverViewport);
+                return { x: px.x, y: px.y, index: ringEdge.index, pt: ringEdge.point };
+              })()
+              : null;
+            const prevHint = boundaryEdgeHintRef.current;
+            const hintChanged = (nextHint?.index ?? -1) !== (prevHint?.index ?? -1)
+              || Math.abs((nextHint?.x ?? 0) - (prevHint?.x ?? 0)) > 0.5
+              || Math.abs((nextHint?.y ?? 0) - (prevHint?.y ?? 0)) > 0.5;
+            if (hintChanged) {
+              boundaryEdgeHintRef.current = nextHint;
+              setBoundaryEdgeHint(nextHint ? { x: nextHint.x, y: nextHint.y } : null);
+              draw();
+            }
+          }
+        }
+      }
       // P2-i：设施拖拽预览（移动/旋转/改尺寸）；松手才 commitPlan，拖拽过程不进 undo 栈。
       const facilityDrag = facilityDragRef.current;
       if (facilityDrag) {
@@ -5228,12 +7054,47 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const hit = eventPlanPoint(event);
         if (!hit) return;
         const drag = dragZoneVertexRef.current;
-        const base = zoneDragPreviewRef.current?.polygon ?? planRef.current.zones.find(z => z.id === drag.zoneId)?.polygon;
+        const viewport = currentViewport();
+        const committed = planRef.current.zones.find(z => z.id === drag.zoneId) ?? null;
+        // 已经吸住时预览里已经没这个点了，基准回到已提交的形状，才能再拉出来。
+        const base = (zoneVertexSnapRef.current !== null ? null : zoneDragPreviewRef.current?.polygon) ?? committed?.polygon;
         if (!base) return;
-        const result = moveRingVertex(base, drag.index, snapPointToGrid(hit.pt, currentViewport()));
+        // 2026-11-15 用户指令「靠近最近点就被吞」：拖到另一顶点够近时，预览直接换成
+        // 「去掉这个点」的形状——看上去就是被吸进去了；松手按这个形状提交（少一个顶点）。
+        // 拉开距离会自动恢复，不会误删。
+        const mergeTarget = nearestMergeTarget(base, drag.index, hit.px, viewport, 12);
+        if (mergeTarget !== null && committed) {
+          const merged = removeRingVertex(committed.polygon, drag.index, {
+            minAreaM2: PLAN_MIN_ZONE_AREA_M2,
+            label: `分区「${committed.name}」`,
+          });
+          if (merged.ok) {
+            zoneDragPreviewRef.current = { zoneId: drag.zoneId, polygon: merged.value };
+            zoneVertexSnapRef.current = {
+              zoneId: drag.zoneId,
+              index: mergeTarget > drag.index ? mergeTarget - 1 : mergeTarget,
+            };
+            setEditMessage('够近了：松手就把这个顶点并到相邻顶点上。');
+            draw();
+            return;
+          }
+        }
+        if (zoneVertexSnapRef.current !== null) {
+          zoneVertexSnapRef.current = null;
+          draw();
+        }
+        const stuck = stickPointToBoundary(snapPointToGrid(hit.pt, viewport), planRef.current.boundary, viewport);
+        const stickHint = stuck.stuck ? '已贴到用地红线上；沿着红线拖可以调位置。' : null;
+        const result = moveRingVertex(
+          base,
+          drag.index,
+          // 2026-11-16 用户：「挪到接近场地边缘老是识别超出场地，能不能直接贴边设计」。
+          // 边界当墙：顶点落到场外或贴近边界时直接吸到边界上，不再产生「越界」。
+          stuck.point,
+        );
         if (result.ok) {
           zoneDragPreviewRef.current = { zoneId: drag.zoneId, polygon: result.value };
-          setEditMessage(null);
+          setEditMessage(stickHint);
           draw();
         } else {
           setEditMessage(result.issue.message);
@@ -5252,11 +7113,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (drag.moved) {
           const snapped = snapPointToGrid(hit.pt, currentViewport());
           const origin = snapPointToGrid(drag.startPt, currentViewport());
-          zoneDragPreviewRef.current = {
-            zoneId: drag.zoneId,
-            polygon: drag.base.map(p => ({ x: p.x + (snapped.x - origin.x), y: p.y + (snapped.y - origin.y) })),
-          };
-          setEditMessage(null);
+          const translated = drag.base.map(p => ({ x: p.x + (snapped.x - origin.x), y: p.y + (snapped.y - origin.y) }));
+          // 2026-11-16：整体拖动也是「撞墙就停」，不让整个分区被推出场地。
+          const clamped = clampRingMoveToBoundary(drag.base, translated, planRef.current.boundary);
+          const hitWall = clamped.some((p, i) => Math.hypot(p.x - translated[i]!.x, p.y - translated[i]!.y) > 1e-6);
+          zoneDragPreviewRef.current = { zoneId: drag.zoneId, polygon: clamped };
+          setEditMessage(hitWall ? '已到用地红线，继续拖不会跑到红线外。' : null);
           draw();
         }
         return;
@@ -5270,7 +7132,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }
         const node = planRef.current.nodes.find(n => n.id === dragNodeRef.current?.id);
         if (!node) return;
-        const result = movePlanNode(node, hit.pt, planRef.current.routes);
+        // 2026-11-15 用户：「手放的出入口移到流线上时自动吸附在线上，挪开也没问题」。
+        // 软吸附：指针离动线 ≤12 px 就吸到线的投影点，拉开自动脱开（不留硬约束）。
+        const routeSnap = nearestRouteSnapPoint(hit.px, planRef.current.routes, currentViewport());
+        const target = routeSnap ?? hit.pt;
+        const result = movePlanNode(node, target, planRef.current.routes);
+        if (routeSnap && result.ok) {
+          setEditMessage('已吸附到动线上；继续拖动离开即可脱开。');
+        }
         if (result.ok) {
           nodeDragPreviewRef.current = result.value;
           setEditMessage(null);
@@ -5305,11 +7174,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (activeMode === 'boundary-vertex' && dragVertexRef.current !== null) {
       const hit = eventPlanPoint(event);
       if (!hit) return;
-      const result = moveRingVertex(
-        previewRingRef.current ?? planRef.current.boundary,
-        dragVertexRef.current,
-        snapPointToGrid(hit.pt, currentViewport()),
-      );
+      const ring = previewRingRef.current ?? planRef.current.boundary;
+      const next = snapPointToGrid(hit.pt, currentViewport());
+      const anchor = ring[dragVertexRef.current];
+      // 2026-11-15 用户反馈「点一下边界就报面积太小」：原地一点不该走形状复验。
+      // 没真的挪动（<1 cm，含吸附回原位）就直接返回，不能因为场地小就往外跳报错。
+      if (!anchor || planPointDistanceM(anchor, next) < 0.01) return;
+      const result = moveRingVertex(ring, dragVertexRef.current, next);
       if (result.ok) {
         setPreviewRing(result.value);
         setEditMessage(null);
@@ -5414,26 +7285,77 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function handleStageMouseUp(event: React.MouseEvent) {
+    // 2026-11-16 Alt 分叉期间，松手不能落进“单击选中 / 点折点删点”那几条路径。
+    if (event.altKey) {
+      downPxRef.current = null;
+      return;
+    }
     // 2026-11-14：流线顶点拖拽松手跨模式——提交改形（一条 undo）；相邻重复点直接回退。
+    // 2026-11-15 用户指令「减点」：点一下折点（没拖）= 删掉它，两侧自动相连；并点松手即少一个点。
     const routeDrag = dragRouteVertexRef.current;
     if (routeDrag) {
       dragRouteVertexRef.current = null;
       const preview = routeDragPreviewRef.current;
       routeDragPreviewRef.current = null;
+      const upHit = eventPlanPoint(event);
+      const down = downPxRef.current;
+      const clickOnly =
+        upHit !== null && down !== null
+          ? Math.hypot(upHit.px.x - down.x, upHit.px.y - down.y) < 4
+          : false;
+      if (clickOnly && !justInsertedRouteVertexRef.current && onPlanChange) {
+        const current = planRef.current;
+        const route = current.routes.find(r => r.id === routeDrag.routeId);
+        if (route) {
+          const removed = removeRouteVertex(route, routeDrag.index);
+          if (!removed.ok) {
+            setEditMessage(removed.issue.message);
+          } else {
+            const removeBase: SitePlanData = {
+              ...current,
+              routes: current.routes.map(r => (r.id === route.id ? removed.value : r)),
+            };
+            // 删点可能把“进界”那一段拉长，交界处的出入口跟着补上。
+            commitPlan(planWithCrossingNodes(removeBase, removed.value).plan);
+            selectRoute(route.id);
+            setEditMessage(`已删除这个折点，两侧折点已相连（剩 ${removed.value.points.length} 个）；撤销可找回。`);
+          }
+          routeVertexHoverRef.current = null;
+          draw();
+          return;
+        }
+      }
+      justInsertedRouteVertexRef.current = false;
       if (preview && onPlanChange) {
         const current = planRef.current;
         const route = current.routes.find(r => r.id === preview.routeId);
         if (route) {
-          const dup = preview.points.some((p, i) => i > 0 && p.x === preview.points[i - 1]!.x && p.y === preview.points[i - 1]!.y);
-          if (dup) {
-            setEditMessage('路线存在相邻重复顶点，本次改形已回退。');
+          const mergedNow = routeVertexSnapRef.current !== null;
+          routeVertexSnapRef.current = null;
+          const issue = routeVertexEditIssue(preview.points);
+          if (issue) {
+            setEditMessage(issue.message);
           } else {
-            commitPlan({
+            // 并点提交并点结果（含端点引用解绑）；普通拖点只改坐标。
+            const nextRoute: PlanRoute = routeDrag.merged && routeDrag.merged.points.length === preview.points.length
+              ? { ...routeDrag.merged, id: route.id }
+              : { ...route, points: preview.points };
+            const dragBase: SitePlanData = {
               ...current,
-              routes: current.routes.map(r => (r.id === route.id ? { ...r, points: preview.points } : r)),
-            });
+              routes: current.routes.map(r => (r.id === route.id ? nextRoute : r)),
+            };
+            // 2026-11-15：拖点把线拖进场/拖出场后，交界处自动补出入口（已有节点 0.5 m 内不重复建）。
+            const dragged = planWithCrossingNodes(dragBase, nextRoute);
+            commitPlan(dragged.plan);
             selectRoute(route.id);
-            setEditMessage(`「${route.name}」路线已更新。`);
+            const crossingHint = dragged.added.length > 0
+              ? `；交界处已自动加${dragged.added.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}`
+              : '';
+            setEditMessage(
+              mergedNow
+                ? `已把这个折点并到相邻折点上（剩 ${preview.points.length} 个）${crossingHint}；撤销可找回。`
+                : `「${route.name}」路线已更新（${preview.points.length} 个折点）${crossingHint}。`,
+            );
           }
           draw();
         }
@@ -5441,6 +7363,58 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     const activeMode = modeRef.current;
+    if (activeMode === 'scope') {
+      if (!scopeDragRef.current) return;
+      scopeDragRef.current = null;
+      downPxRef.current = null;
+      const ring = draftRef.current;
+      setDraft([]);
+      if (!onPlanChange) return;
+      if (!rectBigEnough(ring)) {
+        setEditMessage('范围太小了：按住鼠标拖出一个矩形（最短边 2 m）。');
+        draw();
+        return;
+      }
+      const area = scopeAreaM2(ring);
+      const previousScopePlan = planRef.current;
+      const nextScopePlan: SitePlanData = { ...previousScopePlan, designScope: ring.map(point => ({ x: point.x, y: point.y })) };
+      commitPlan(nextScopePlan);
+      setMode('view');
+      const dragOverflow = reviewZonesAfterBoundsChange(nextScopePlan, previousScopePlan);
+      setEditMessage(`设计范围已设为矩形（约 ${Math.round(area)} m²），框外压暗。${overflowSuffix(dragOverflow)}`);
+      draw();
+      return;
+    }
+    if (scopeResizeRef.current || scopeEdgeResizeRef.current) {
+      const resizedEdge = scopeEdgeResizeRef.current?.edge ?? null;
+      scopeResizeRef.current = null;
+      scopeEdgeResizeRef.current = null;
+      downPxRef.current = null;
+      const ring = draftRef.current;
+      setDraft([]);
+      if (!onPlanChange) return;
+      // 按下就松（没拖）：什么也不改，也不用报「太小」——那只是点了一下角/边。
+      if (ring.length !== 4) {
+        draw();
+        return;
+      }
+      if (!rectBigEnough(ring)) {
+        setEditMessage('范围太小了（最短边 2 m），本次调整已取消。');
+        draw();
+        return;
+      }
+      const previousResizePlan = planRef.current;
+      const nextResizePlan: SitePlanData = { ...previousResizePlan, designScope: ring.map(point => ({ x: point.x, y: point.y })) };
+      commitPlan(nextResizePlan);
+      const resizeOverflow = reviewZonesAfterBoundsChange(nextResizePlan, previousResizePlan);
+      setEditMessage(
+        resizedEdge
+          ? `设计范围${scopeEdgeLabel(resizedEdge)}边已移到新位置（约 ${Math.round(scopeAreaM2(ring))} m²），对边与另外两个方向没动。${overflowSuffix(resizeOverflow)}`
+          : `设计范围已调整为矩形（约 ${Math.round(scopeAreaM2(ring))} m²）。${overflowSuffix(resizeOverflow)}`,
+      );
+      draw();
+      return;
+    }
     if (activeMode === 'select') {
       // 2026-11-12 B2 框选松手：组提交 > 单件提交 > marquee 命中入组 / 单击清空。
       const down = downPxRef.current;
@@ -5453,7 +7427,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const previewIds = new Set(groupDrag.preview.map(p => p.id));
           commitPlan({
             ...planRef.current,
-            facilities: planRef.current.facilities.map(f => (previewIds.has(f.id) ? groupDrag.preview!.find(p => p.id === f.id) ?? f : f)),
+            facilities: planRef.current.facilities.map(f => {
+              if (!previewIds.has(f.id)) return f;
+              const moved = groupDrag.preview!.find(p => p.id === f.id) ?? f;
+              // 整组移动也逐件重算归属：可能一部分搬出了原分区。
+              return { ...moved, zoneId: inferZoneIdAt(moved.position, planRef.current.zones) };
+            }),
           });
           setEditMessage(groupDrag.kind === 'move' ? `已整组移动 ${groupDrag.items.length} 件设施。` : `已整组缩放 ${groupDrag.items.length} 件设施。`);
         }
@@ -5580,6 +7559,51 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       downPxRef.current = null;
       panRef.current = undefined;
       setDragging(false);
+      // 2026-11-16：浏览模式拖边界顶点松手——提交新形；落在别的顶点 12 px 内 = 合并。
+      // 单击（没拖）不删点（双击才删），避免手一抖把场地少了只角。
+      if (dragVertexRef.current !== null) {
+        const vertexIndex = dragVertexRef.current;
+        dragVertexRef.current = null;
+        const preview = previewRingRef.current;
+        setPreviewRing(null);
+        if (preview && onPlanChange && vertexIndex < preview.length) {
+          const viewport = currentViewport();
+          const originPx = planPointToPixel(preview[vertexIndex]!, viewport);
+          // 2026-11-16 用户：「没点到那个点，双击线也出现红框」——那是刚用「+」插进来的新顶点，
+          // 不算“点了一下它”，不该变红。
+          const justInserted = performance.now() - boundaryInsertedAtRef.current < BOUNDARY_INSERT_GRACE_MS;
+          // 只点不拖 = 白框描边转琥珀（预告再点一下会删），这一下不提交任何改动。
+          if (!justInserted && down && Math.hypot(down.x - originPx.x, down.y - originPx.y) <= CLICK_MAX_MOVE_PX) {
+            armBoundaryVertexDelete(vertexIndex);
+            setEditMessage('再点一下这个顶点就会删掉它（琥珀框 = 待删除）；拖动则改形。');
+            return;
+          }
+          const movedPx = planPointToPixel(preview[vertexIndex]!, viewport);
+          const mergeIndex = preview.findIndex((p, i) => i !== vertexIndex
+            && Math.hypot(planPointToPixel(p, viewport).x - movedPx.x, planPointToPixel(p, viewport).y - movedPx.y) <= 12);
+          const nextRing = mergeIndex === -1 ? preview : preview.filter((_, i) => i !== vertexIndex);
+          if (nextRing.length >= 3) {
+            const check = checkBoundaryRing(nextRing);
+            if (!check.ok) {
+              setEditMessage(check.issue.message);
+              return;
+            }
+            // 刚插完点又松开（没拖）：形状早已提交过，这里不再压一条空 undo。
+            const unchanged = nextRing.length === planRef.current.boundary.length
+              && nextRing.every((p, i) => planPointDistanceM(p, planRef.current.boundary[i]!) < 0.01);
+            if (unchanged) {
+              setEditMessage('红线顶点未移动（拖动可改形）。');
+              return;
+            }
+            commitPlan({ ...planRef.current, boundary: nextRing });
+            clearBoundaryDeleteArm();
+            setEditMessage(mergeIndex === -1
+              ? '红线顶点已更新。'
+              : '两个顶点已合并（撤销可找回）。');
+          }
+        }
+        return;
+      }
       // P2-i：设施拖拽松手——确实拖动过 → 提交预览（移动/旋转/改尺寸一条 undo）；
       // 没拖动则当单击，继续走下面的既有选中顺序。
       const facilityDrag = facilityDragRef.current;
@@ -5588,7 +7612,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (facilityDrag.moved && onPlanChange) {
           const preview = facilityDrag.preview;
           const current = planRef.current;
-          commitPlan({ ...current, facilities: current.facilities.map(f => (f.id === preview.id ? preview : f)) });
+          // 归属跟着落点走：拖进别的分区就换归属，拖出所有分区变未归属。
+          const placed = { ...preview, zoneId: inferZoneIdAt(preview.position, current.zones) };
+          commitPlan({ ...current, facilities: current.facilities.map(f => (f.id === preview.id ? placed : f)) });
           selectFacility(preview.id);
           setInfoTab('inventory');
           setEditMessage(
@@ -5607,10 +7633,42 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         dragZoneVertexRef.current = null;
         const preview = zoneDragPreviewRef.current;
         zoneDragPreviewRef.current = null;
+        // 2026-11-15 用户指令：点一下已有顶点（没拖动）= 删掉它，两侧顶点自动连上。
+        // 判定用位移阈值：刚才拖过就不算点击，正常提交形状；刚插完点的松手也跳过。
+        const upHit = eventPlanPoint(event);
+        const moved = upHit !== null
+          ? Math.hypot(upHit.px.x - zoneDrag.startPx.x, upHit.px.y - zoneDrag.startPx.y) >= 4
+          : true;
+        if (!moved && !justInsertedZoneVertexRef.current && onPlanChange) {
+          const current = planRef.current;
+          const zone = current.zones.find(z => z.id === zoneDrag.zoneId);
+          if (zone) {
+            const removed = removeRingVertex(zone.polygon, zoneDrag.index, {
+              minAreaM2: PLAN_MIN_ZONE_AREA_M2,
+              label: `分区「${zone.name}」`,
+            });
+            if (!removed.ok) {
+              setEditMessage(removed.issue.message);
+            } else {
+              commitPlan({
+                ...current,
+                zones: current.zones.map(z => (z.id === zone.id ? { ...z, polygon: removed.value } : z)),
+              });
+              selectZone(zone.id);
+              setEditMessage(`已删除顶点，两侧顶点已相连（剩 ${removed.value.length} 个）；撤销可找回。`);
+            }
+            zoneVertexHoverRef.current = null;
+            draw();
+            return;
+          }
+        }
+        justInsertedZoneVertexRef.current = false;
         if (preview && onPlanChange) {
           const current = planRef.current;
           const zone = current.zones.find(z => z.id === preview.zoneId);
           if (zone) {
+            const mergedNow = zoneVertexSnapRef.current !== null;
+            zoneVertexSnapRef.current = null;
             const issue = zonePolygonIssue(zone, preview.polygon, current);
             if (issue) {
               setEditMessage(issue.message);
@@ -5620,7 +7678,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 zones: current.zones.map(z => (z.id === zone.id ? { ...z, polygon: preview.polygon } : z)),
               });
               selectZone(zone.id);
-              setEditMessage(`「${zone.name}」形状已更新。`);
+              setEditMessage(
+                mergedNow
+                  ? `已把这个顶点并到相邻顶点上（剩 ${preview.polygon.length} 个）；撤销可找回。`
+                  : `「${zone.name}」形状已更新。`,
+              );
             }
             draw();
           }
@@ -5696,19 +7758,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (down && onPlanChange) {
         const hit = eventPlanPoint(event);
         if (hit && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) <= CLICK_MAX_MOVE_PX) {
-          // H3-b：冲突/缺失标记恒在业务层之上，先于实体命中；点击定位到关联动线。
-          const conflict = nearestConflictAt(hit.px);
-          if (conflict) {
-            const related = conflict.routeIds[0];
-            if (related) {
-              selectRoute(related);
-              setEditMessage(`已定位「${PLAN_CONFLICT_CATEGORY_LABELS[conflict.category]}」：${conflict.message}`);
-            } else {
-              setEditMessage(`${PLAN_CONFLICT_CATEGORY_LABELS[conflict.category]}：${conflict.message}`);
-            }
-            setInfoTab('inventory');
+          // H3-b：冲突/缺失标记恒在业务层之上，先于实体命中；点开看这一枚徽章的明细。
+          const cluster = nearestConflictClusterAt(hit.px);
+          if (cluster) {
+            const related = cluster.routeIds[0];
+            if (related) selectRoute(related);
+            showConflictDetail(cluster.key);
+            setEditMessage(
+              cluster.count > 1
+                ? `该动线有 ${cluster.count} 条问题，已展开明细。`
+                : `${PLAN_CONFLICT_CATEGORY_LABELS[cluster.issues[0]!.category]}：${cluster.issues[0]!.message}`,
+            );
+            setInfoTab('issues');
             return;
           }
+          // 点到别处就把明细收起来（下面各分支都是新选择）。
+          showConflictDetail(null);
           const hitNode = layerLocked('node') ? null : nearestNodeIdAt(hit.px);
           if (hitNode) { selectNode(hitNode); setInfoTab('inventory'); return; }
           const hitWorker = layerLocked('worker') ? null : nearestWorkerIdAt(hit.px);
@@ -5747,11 +7812,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     if (activeMode === 'boundary-vertex') {
-      if (dragVertexRef.current !== null && previewRingRef.current && onPlanChange) {
-        commitPlan({ ...planRef.current, boundary: previewRingRef.current });
-        setEditMessage('边界顶点已更新。');
-      }
+      // 2026-11-16：与分区一致——点一下顶点（没拖动）= 删掉它；拖过就提交新形状。
+      const upHit = eventPlanPoint(event);
+      const moved = upHit !== null && downPxRef.current !== null
+        ? Math.hypot(upHit.px.x - downPxRef.current.x, upHit.px.y - downPxRef.current.y) >= 4
+        : true;
+      const insertedNow = boundaryJustInsertedRef.current;
+      boundaryJustInsertedRef.current = false;
+      const hitIndex = dragVertexRef.current;
       dragVertexRef.current = null;
+      if (!moved && !insertedNow && hitIndex !== null) {
+        setPreviewRing(null);
+        removeBoundaryVertexAt(hitIndex);
+        return;
+      }
+      if (hitIndex !== null && previewRingRef.current && onPlanChange) {
+        commitPlan({ ...planRef.current, boundary: previewRingRef.current });
+        setEditMessage('红线顶点已更新。');
+      }
       setPreviewRing(null);
       return;
     }
@@ -5829,9 +7907,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     handleDrawClick(hit.px, hit.pt);
   }
 
-  function handleStageDoubleClick(event: { preventDefault(): void; clientX: number; clientY: number }) {
+  function handleStageDoubleClick(event: { preventDefault(): void; clientX: number; clientY: number; altKey?: boolean }) {
+    // 2026-11-16 用户「Alt 和双击删除的底层逻辑冲突了，很容易误删」：
+    // 双击在这一层是“删点 / 边上加一点 / 闭合收点”，与 Alt 分叉抢同一次点击。规则改成：
+    //   1) 按着 Alt 的双击永远不删点、不加点、不闭合（只提示）；
+    //   2) 刚用 Alt 分叉起的 400 ms 内，浏览/选择态的双击也忽略（两次 Alt 点击不该把起点删掉）。
+    if (event.altKey === true) {
+      event.preventDefault();
+      pointerConsumedRef.current = true;
+      setEditMessage('Alt 状态下双击不会删点（避免误删）；要删点请先松开 Alt。');
+      return;
+    }
+    if ((modeRef.current === 'view' || modeRef.current === 'select')
+      && performance.now() - branchStartedAtRef.current < BRANCH_DOUBLECLICK_GUARD_MS) {
+      event.preventDefault();
+      pointerConsumedRef.current = true;
+      return;
+    }
         // P2-l（用户 m05374）：画区域/边界时双击左键 = 完成绘制（少于 3 点不闭合）。
-        if (modeRef.current === 'zone' || modeRef.current === 'boundary') {
+        // 2026-11-15：圈设计范围沿用同一手感——双击闭合，不再要求“点回起点”。
+        if (modeRef.current === 'zone' || modeRef.current === 'boundary' || modeRef.current === 'scope') {
           pointerConsumedRef.current = true;
           event.preventDefault();
           if (draftRef.current.length >= 3) closeDraft();
@@ -5852,7 +7947,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const hit = eventPlanPoint(event);
           if (!hit || !onPlanChange || !facilityDirectEditable()) return;
           if (layerLocked('boundary')) {
-            setEditMessage('边界图层已锁定，先解锁再改。');
+            setEditMessage('用地红线图层已锁定，先解锁再改。');
+            return;
+          }
+          // 2026-11-16 用户：「双击线也出现红框」——双击线加点时第一下已经插好顶点了，
+          // 第二下别再把它当“双击顶点”删掉（否则加了又没，还红一下）。
+          if (performance.now() - boundaryInsertedAtRef.current < BOUNDARY_INSERT_GRACE_MS) {
+            boundaryInsertedAtRef.current = 0;
+            pointerConsumedRef.current = true;
+            event.preventDefault();
             return;
           }
           pointerConsumedRef.current = true;
@@ -5867,13 +7970,58 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     panRef.current = undefined;
     setDragging(false);
     downPxRef.current = null;
+    if (scopeEdgeHoverRef.current !== null) {
+      scopeEdgeHoverRef.current = null;
+      setScopeEdgeHover(null);
+    }
+    if (scopeLockHoverRef.current) {
+      scopeLockHoverRef.current = false;
+      setScopeLockHover(false);
+    }
+    if (boundaryLockHoverRef.current) {
+      boundaryLockHoverRef.current = false;
+      setBoundaryLockHover(false);
+    }
     dragVertexRef.current = null;
+    boundaryJustInsertedRef.current = false;
     setPreviewRing(null);
     ghostPointRef.current = null;
     routeCursorRef.current = null;
     nodeGhostRef.current = null;
     workerGhostRef.current = null;
     measureCursorRef.current = null;
+    if (zoneEdgeHintRef.current) {
+      zoneEdgeHintRef.current = null;
+      draw();
+    }
+    // 2026-11-16：边界的悬停提示同理——离开画布不该留一枚幽灵「+」或高亮框。
+    if (boundaryVertexHoverRef.current !== null || boundaryEdgeHintRef.current) {
+      boundaryVertexHoverRef.current = null;
+      boundaryEdgeHintRef.current = null;
+      setBoundaryVertexHover(null);
+      setBoundaryEdgeHint(null);
+      draw();
+    }
+    if (boundaryLockedHoverRef.current) {
+      boundaryLockedHoverRef.current = false;
+      setBoundaryLockedHover(false);
+    }
+    // 2026-11-16：Alt 分叉提示也不要跟着鼠标跑出画布。
+    if (branchAnchorHintRef.current) {
+      branchAnchorHintRef.current = null;
+      setBranchAnchorHint(null);
+      draw();
+    }
+    clearBoundaryDeleteArm();
+    zoneVertexSnapRef.current = null;
+    zoneVertexHoverRef.current = null;
+    // 2026-11-15：流线加点的悬停手柄同理——离开画布不该留一枚“幽灵加号”。
+    if (routeEdgeHintRef.current) {
+      routeEdgeHintRef.current = null;
+      draw();
+    }
+    routeVertexSnapRef.current = null;
+    routeVertexHoverRef.current = null;
     // 拖拽测量中离开画布：丢弃拖拽会话（已收的单击草稿点保留，与既有半成品口径一致）。
     measureDragRef.current = null;
     // 2026-11-11 用户指令：形状拖拽离开画布同样丢弃会话（拖拽预览草稿一并清；单击已收的点保留）。
@@ -5958,18 +8106,37 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     annotation: layerState.annotate ? (levelView.annotations ?? []).length : 0,
   };
   const inventoryRows = buildPlanInventory(levelView);
-  const filteredInventoryRows = filterPlanInventory(inventoryRows, { kind: invKind, zone: invZone, issuesOnly: invIssuesOnly });
+  // 2026-11-16 用户「清单要能按分区筛」：分区被删后自动退回「全部分区」，
+  // 不让筛选值：指向不存在的区（否则下拉空白、清单一空到底，看着像数据丢了）。
+  const invZoneActive = invZone === undefined || invZone === 'unassigned' || levelView.zones.some(zone => zone.id === invZone)
+    ? invZone
+    : undefined;
+  const filteredInventoryRows = filterPlanInventory(inventoryRows, { kind: invKind, zone: invZoneActive, issuesOnly: invIssuesOnly });
+  // 件数口径与筛选一致：受当前类型 / 只看问题约束，只算能归属的类型（设施 / 人员）。
+  const invZoneCounts = (() => {
+    const counts = new Map<string, number>();
+    let unassigned = 0;
+    for (const row of filterPlanInventory(inventoryRows, { kind: invKind, issuesOnly: invIssuesOnly })) {
+      if (row.kind !== 'facility' && row.kind !== 'worker') continue;
+      if (row.zoneId) counts.set(row.zoneId, (counts.get(row.zoneId) ?? 0) + 1);
+      else unassigned += 1;
+    }
+    return { counts, unassigned };
+  })();
   const legendGroups = buildPlanLegend(levelView);
   const anchorById = new Map(inventoryRows.map(row => [row.id, row.anchor] as const));
   const infoIssues: PlanLocatableIssue[] = [
-    ...conflictIssues.map(item => ({
-      key: `c-${item.key}`,
-      text: `${item.status === 'conflict' ? '⚠' : item.status === 'missing' ? '缺' : '核'} ${PLAN_CONFLICT_CATEGORY_LABELS[item.category]}：${item.message}`,
-      color: conflictTextColors[item.status],
-      anchor: item.at,
-      routeId: item.routeIds[0],
-      facilityId: item.facilityId,
-    })),
+    // 2026-11-15：与画布同口径——默认只列冲突/缺宽度，「容量待核实」手动打开才出现。
+    ...conflictIssues
+      .filter(item => showAdvisoryBadges || item.status !== 'unverified')
+      .map(item => ({
+        key: `c-${item.key}`,
+        text: `${item.status === 'conflict' ? '⚠' : item.status === 'missing' ? '缺' : '核'} ${PLAN_CONFLICT_CATEGORY_LABELS[item.category]}：${item.message}`,
+        color: conflictTextColors[item.status],
+        anchor: item.at,
+        routeId: item.routeIds[0],
+        facilityId: item.facilityId,
+      })),
     ...issues.map((item, i) => ({
       key: `z-${item.zoneId}-${item.issue.code}-${i}`,
       text: `${item.zoneName}：${item.issue.message}`,
@@ -6125,7 +8292,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const UndoIcon = planningIcon('undo-2');
   const ViewModeIcon = planningIcon(PLANNING_EDIT_MODE_ICONS.view);
   const SelectModeIcon = planningIcon(PLANNING_EDIT_MODE_ICONS.select);
-  const NodeToolIcon = planningIcon('door-open');
+  /**
+   * 2026-11-16 用户：「出入口现在不要是图标，我更喜欢右边这种环形的东西」。
+   * 工具箱行图标跟着画布一起改：kind 色空心环（环厚 ≈ 外径一半，与画布环同比例）。
+   */
+  const nodeKindToolIcon = (kind: PlanNode['kind']) => (
+    <span
+      aria-hidden
+      style={{
+        display: 'block',
+        width: 18,
+        height: 18,
+        flex: '0 0 auto',
+        borderRadius: 999,
+        border: `4.5px solid ${nodeStickerColor(kind)}`,
+        boxSizing: 'border-box',
+        background: 'transparent',
+      }}
+    />
+  );
   const LibraryFooterIcon = planningIcon('layers');
   const LevelRowIcon = planningIcon('layers');
   /** 编辑器模式（有面板宿主）下，测量/标注 / 选中编辑合并进画布右上角浮窗。 */
@@ -6501,146 +8686,192 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedFacilityGeo = selectedFacility
     ? enuToLngLat(selectedFacility.position.x, selectedFacility.position.y, plan.anchor?.lng ?? DEFAULT_ANCHOR_LNG, plan.anchor?.lat ?? DEFAULT_ANCHOR_LAT)
     : null;
-  const selectedFacilityGeoLabel = selectedFacilityGeo ? `${selectedFacilityGeo.lat.toFixed(5)}, ${selectedFacilityGeo.lng.toFixed(5)}` : '';
   /* 2026-11-12 OnePlan Bench 卡同款控件样式：白底发丝线盒式输入、单位内嵌、28px 图标钮。 */
   const benchIconButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, flex: '0 0 auto', padding: 0, background: 'none', border: 'none', borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', color: PLANNING_SURFACE.panelText };
-  const benchSectionTitleStyle: React.CSSProperties = { fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_SURFACE.panelText, marginBottom: PLANNING_SPACING.xs };
-  const benchUnitBoxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, height: 28, padding: '0 8px', background: PLANNING_SURFACE.panelBg, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, minWidth: 0 };
-  const benchUnitLabelStyle: React.CSSProperties = { flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row, opacity: 0.6 };
-  const benchUnitSuffixStyle: React.CSSProperties = { flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row, opacity: 0.6 };
-  const benchUnitInputStyle: React.CSSProperties = { flex: 1, minWidth: 0, border: 'none', background: 'transparent', padding: 0, fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_SURFACE.panelText, textAlign: 'right', outline: 'none' };
-  const benchAccordionStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '8px 0', marginTop: PLANNING_SPACING.sm, background: 'none', border: 'none', borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}`, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_SURFACE.panelText, textAlign: 'left' };
+  /* 2026-11-15 视觉统一（以用户提供的 Figma 属性面板为参照）：
+     ① 分区标题 = 12px/600 + 上方发丝线（Figma 的 Position / Layout / Fill… 靠这条线分节）；
+     ② 输入框 = 浅灰填充块，无描边（Figma #F5F5F5），不再是白底细边；
+     ③ 值左对齐，轴标/单位当框内浅灰前缀（X / Y / W / H 那套）；
+     ④ 图标钮保留 28px 命中区，但默不作声，只在标题行里作次行动作。 */
+  const benchSectionTitleStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_SURFACE.panelText, marginTop: 12, paddingTop: 10, marginBottom: 6, borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}` };
+  const benchUnitBoxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 8px', background: PLANNING_SURFACE.fieldBg, border: '1px solid transparent', borderRadius: PLANNING_RADIUS.sm, minWidth: 0 };
+  const benchUnitLabelStyle: React.CSSProperties = { flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.faint };
+  const benchUnitSuffixStyle: React.CSSProperties = { flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.faint };
+  const benchUnitInputStyle: React.CSSProperties = { flex: 1, minWidth: 0, border: 'none', background: 'transparent', padding: 0, fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_SURFACE.panelText, textAlign: 'left', outline: 'none', fontVariantNumeric: 'tabular-nums' };
+  const benchAccordionStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '10px 0', marginTop: 12, background: 'none', border: 'none', borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}`, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.panel, fontWeight: 600, color: PLANNING_SURFACE.panelText, textAlign: 'left' };
+  /* 2026-11-15 属性卡行尾小按钮（多选头部 复制 / 删除）：24px 高、发丝描边、灰底白面，
+     与 Figma 面板里的次级按钮同权重——不再用 modeButtonStyle（那是模式切换胶囊，比正文还重）。 */
+  const benchPanelButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: PLANNING_RADIUS.sm, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, background: PLANNING_SURFACE.panelBg, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, lineHeight: 1, cursor: 'pointer', whiteSpace: 'nowrap' };
+  // 2026-11-15 模型来源三格（文字生成 / 图片生成 / 导入 GLB）已改成常驻按钮，
+  // 说明进 title，所以原来的 modelAction* 三行文本样式不再需要。
   const benchSetupRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_SURFACE.panelText };
-  const benchSetupFieldStyle: React.CSSProperties = { flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px', outline: 'none' };
+  const benchSetupFieldStyle: React.CSSProperties = { flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: '1px solid transparent', borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '5px 8px', outline: 'none' };
   /* 2026-11-12 室内多选胶囊移植（panels/viewport.tsx SelectionChip 同款观感）：
      组选浮层锚在组包围盒顶边中点上方（view state 驱动跟随平移缩放），拖组会话中隐藏。
      成组/存为组合不搬——SitePlan 契约没有 groups/组合概念。 */
-  const chipPillStyle: React.CSSProperties = { padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.row, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' };
-  const chipAlignRowStyle: React.CSSProperties = { padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 2, borderRadius: 999, color: 'var(--pc-paper, #141416)' };
   const chipButtonStyle: React.CSSProperties = { border: '1px solid', borderRadius: 999, background: 'transparent', color: 'inherit', fontWeight: 700, fontSize: PLANNING_TYPOGRAPHY.hint, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap' };
-  // 删除动作 danger 变体：深底胶囊用 demolish 红（--pc-demolish），描边同色降透明。
-  const chipDangerButtonStyle: React.CSSProperties = { ...chipButtonStyle, color: 'var(--pc-demolish, #E45248)', borderColor: 'rgba(228, 82, 72, 0.55)' };
-  // 计数徽章：深底胶囊上的半透明白底小丸，件数居中。
-  const chipCountBadgeStyle: React.CSSProperties = { minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.16)', color: '#fff', fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 700, lineHeight: '18px' };
-  const chipIconButtonStyle: React.CSSProperties = { width: 22, height: 22, display: 'grid', placeItems: 'center', borderRadius: 7, background: 'transparent', color: 'inherit', border: '1.5px solid transparent', cursor: 'pointer', opacity: 0.9, padding: 0 };
-  /** 组选胶囊锚点：组包围盒顶边中点 → 屏幕像素（每次渲染按当前视口现算，跟随平移/缩放/对齐后的新包围盒）。 */
-  const multiGroupChipPx = (() => {
-    if (multiSelectedFacilityIds.length < 2) return null;
-    const items = multiSelectedFacilityIds
-      .map(id => plan.facilities.find(f => f.id === id))
-      .filter((f): f is PlanFacility => Boolean(f));
-    const bounds = facilityGroupBounds(items);
-    if (!bounds) return null;
-    const topCenter = planPointToPixel({ x: (bounds.minX + bounds.maxX) / 2, y: bounds.maxY }, currentViewport());
-    const cssWidth = typeof window === 'undefined' ? 1200 : window.innerWidth;
-    return { x: Math.max(110, Math.min(topCenter.x, cssWidth - 110)), y: Math.max(8, topCenter.y - 62) };
-  })();
+  /** 组选工具条已并入右侧属性卡（facility-group-panel），画布不再算锚点。 */
   const BenchRepeatIcon = planningIcon('layout-grid');
-  const BenchCopyIcon = planningIcon('copy');
   const BenchPlusIcon = planningIcon('plus');
   const BenchCloseIcon = planningIcon('x');
   const selectionInspectorZone = readOnly ? null : (
     <>
-                {/* 2026-11-14 用户指令「选中一个以上，属性里要有多个」：跨类型多选清单——逐条列出，可移除/单删/批删。 */}
-                {(multiSelectedRouteIds.length > 0 || multiSelectedNodeIds.length > 0) && (
-                  <div data-testid="cross-multi-panel" style={{ marginTop: PLANNING_SPACING.xs }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: PLANNING_SURFACE.panelText }}>
-                      已选 {multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? multiSelectedFacilityIds.length : 0)} 项
-                    </div>
-                    <div style={{ marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.panel, opacity: 0.72 }}>
-                      Delete 批量删除 · 点画布空白释放全部
-                    </div>
-                    {multiSelectedRouteIds.map(id => {
-                      const route = levelView.routes.find(r => r.id === id);
-                      if (!route) return null;
-                      return (
-                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.row }}>
-                          <span style={{ opacity: 0.72, flex: '0 0 auto' }}>流线</span>
-                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{route.name}</span>
-                          <button type="button" aria-label={`移除流线「${route.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.panelText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
-                            const next = multiSelectedRouteIdsRef.current.filter(x => x !== id);
-                            multiSelectedRouteIdsRef.current = next;
-                            setMultiSelectedRouteIds(next);
-                            draw();
-                          }}>移除</button>
-                          <button type="button" aria-label={`删除流线「${route.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.dangerText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
-                            deleteRoute(id);
-                            const next = multiSelectedRouteIdsRef.current.filter(x => x !== id);
-                            multiSelectedRouteIdsRef.current = next;
-                            setMultiSelectedRouteIds(next);
-                            draw();
-                          }}>删除</button>
+                {/* 2026-11-15 用户：多选在属性卡里只说一次——一个头部（件数 + 分类明细）、
+                    一份复制/删除、一条「对齐」工具条。原先「已选 N 件设施」「已选 N 项」两块
+                    各说一遍、复制/删除各出一遍，读起来像两个不相干的面板。 */}
+                {(multiSelectedFacilityIds.length >= 2 || multiSelectedRouteIds.length > 0 || multiSelectedNodeIds.length > 0) && (() => {
+                  const grouped = multiSelectedFacilityIds.length >= 2;
+                  const facilityCount = grouped ? multiSelectedFacilityIds.length : 0;
+                  const total = facilityCount + multiSelectedRouteIds.length + multiSelectedNodeIds.length;
+                  const breakdown = [
+                    facilityCount ? `设施 ${facilityCount}` : '',
+                    multiSelectedRouteIds.length ? `流线 ${multiSelectedRouteIds.length}` : '',
+                    multiSelectedNodeIds.length ? `出入口 ${multiSelectedNodeIds.length}` : '',
+                  ].filter(Boolean).join(' · ');
+                  const deleteAll = () => (
+                    grouped && multiSelectedRouteIds.length + multiSelectedNodeIds.length === 0
+                      ? deleteFacilitiesMulti(multiSelectedFacilityIds)
+                      : deleteCrossMulti()
+                  );
+                  return (
+                    <div data-testid="cross-multi-panel" style={{ marginTop: PLANNING_SPACING.xs }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: PLANNING_SURFACE.panelText, minWidth: 0 }}>已选 {total} 项</span>
+                        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                          {grouped && (
+                            <button
+                              type="button"
+                              data-testid="facility-multi-copy"
+                              title="复制所选（Ctrl+D 同效）"
+                              style={benchPanelButtonStyle}
+                              onClick={() => duplicateFacilitiesMulti(multiSelectedFacilityIds)}
+                            >
+                              复制
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            data-testid="cross-multi-delete"
+                            title="删除所选（Delete 同效）"
+                            style={{ ...benchPanelButtonStyle, color: PLANNING_SURFACE.dangerText }}
+                            onClick={deleteAll}
+                          >
+                            删除
+                          </button>
+                        </span>
+                      </div>
+                      <div style={{ marginTop: 3, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.muted }}>{breakdown}</div>
+                      {grouped && (
+                        <div style={{ marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.muted }}>
+                          拖动即整体移动 · 拖角等比缩放 · Delete 删除
                         </div>
-                      );
-                    })}
-                    {multiSelectedNodeIds.map(id => {
-                      const node = levelView.nodes.find(n => n.id === id);
-                      if (!node) return null;
-                      return (
-                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.row }}>
-                          <span style={{ opacity: 0.72, flex: '0 0 auto' }}>出入口</span>
-                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
-                          <button type="button" aria-label={`移除出入口「${node.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.panelText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
-                            const next = multiSelectedNodeIdsRef.current.filter(x => x !== id);
-                            multiSelectedNodeIdsRef.current = next;
-                            setMultiSelectedNodeIds(next);
-                            draw();
-                          }}>移除</button>
-                          <button type="button" aria-label={`删除出入口「${node.name}」`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: PLANNING_SURFACE.dangerText, padding: 0, fontSize: PLANNING_TYPOGRAPHY.row }} onClick={() => {
-                            deleteNode(id);
-                            const next = multiSelectedNodeIdsRef.current.filter(x => x !== id);
-                            multiSelectedNodeIdsRef.current = next;
-                            setMultiSelectedNodeIds(next);
-                            draw();
-                          }}>删除</button>
-                        </div>
-                      );
-                    })}
-                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.sm }}>
-                      <button
-                        type="button"
-                        data-testid="cross-multi-delete"
-                        style={{ ...modeButtonStyle(false), color: PLANNING_SURFACE.dangerText, borderColor: withAlphaHex(PLANNING_SURFACE.dangerText, 0.5) }}
-                        onClick={() => deleteCrossMulti()}
-                      >
-                        删除所选
-                      </button>
-                      <button type="button" style={modeButtonStyle(false)} onClick={() => clearMultiSelection()}>
-                        取消选择
-                      </button>
+                      )}
+                      {multiSelectedRouteIds.map(id => {
+                        const route = levelView.routes.find(r => r.id === id);
+                        if (!route) return null;
+                        return (
+                          <div key={id} className="sc-multi-row">
+                            <span className="sc-multi-row__kind">流线</span>
+                            <span className="sc-multi-row__name">{route.name}</span>
+                            <button type="button" className="sc-multi-row__act" aria-label={`移除流线「${route.name}」`} onClick={() => {
+                              const next = multiSelectedRouteIdsRef.current.filter(x => x !== id);
+                              multiSelectedRouteIdsRef.current = next;
+                              setMultiSelectedRouteIds(next);
+                              draw();
+                            }}>移除</button>
+                            <button type="button" className="sc-multi-row__act sc-multi-row__act--danger" aria-label={`删除流线「${route.name}」`} onClick={() => {
+                              deleteRoute(id);
+                              const next = multiSelectedRouteIdsRef.current.filter(x => x !== id);
+                              multiSelectedRouteIdsRef.current = next;
+                              setMultiSelectedRouteIds(next);
+                              draw();
+                            }}>删除</button>
+                          </div>
+                        );
+                      })}
+                      {multiSelectedNodeIds.map(id => {
+                        const node = levelView.nodes.find(n => n.id === id);
+                        if (!node) return null;
+                        return (
+                          <div key={id} className="sc-multi-row">
+                            <span className="sc-multi-row__kind">出入口</span>
+                            <span className="sc-multi-row__name">{node.name}</span>
+                            <button type="button" className="sc-multi-row__act" aria-label={`移除出入口「${node.name}」`} onClick={() => {
+                              const next = multiSelectedNodeIdsRef.current.filter(x => x !== id);
+                              multiSelectedNodeIdsRef.current = next;
+                              setMultiSelectedNodeIds(next);
+                              draw();
+                            }}>移除</button>
+                            <button type="button" className="sc-multi-row__act sc-multi-row__act--danger" aria-label={`删除出入口「${node.name}」`} onClick={() => {
+                              deleteNode(id);
+                              const next = multiSelectedNodeIdsRef.current.filter(x => x !== id);
+                              multiSelectedNodeIdsRef.current = next;
+                              setMultiSelectedNodeIds(next);
+                              draw();
+                            }}>删除</button>
+                          </div>
+                        );
+                      })}
+                      {grouped && (
+                        <>
+                          <div style={benchSectionTitleStyle}>对齐</div>
+                          {/* 2026-11-15 视觉：等宽 8 键 + 悬停浅灰，分组之间一条发丝线；
+                              等距需 ≥3 件，禁用只降不透明度（仍占位，不跳动）。 */}
+                          <div data-testid="facility-group-panel" className="sc-align-tool">
+                            {([
+                              ['左对齐', 'min-x', AlignLeft, false],
+                              ['水平居中', 'center-x', AlignCenterHorizontal, false],
+                              ['右对齐', 'max-x', AlignRight, false],
+                              ['水平等距', 'distribute-x', AlignHorizontalDistributeCenter, true],
+                            ] as const).map(([label, key, Icon, needsThree]) => {
+                              const disabled = needsThree && multiSelectedFacilityIds.length < 3;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  aria-label={disabled ? `${label}（至少三件）` : label}
+                                  title={disabled ? `${label}（至少三件）` : label}
+                                  disabled={disabled}
+                                  data-testid={`facility-multi-${key}`}
+                                  className="sc-align-tool__btn"
+                                  onClick={() => (key === 'distribute-x' ? distributeFacilitiesMulti(multiSelectedFacilityIds, 'x') : alignFacilitiesMulti(multiSelectedFacilityIds, key))}
+                                >
+                                  <Icon size={13} strokeWidth={1.75} aria-hidden />
+                                </button>
+                              );
+                            })}
+                            <span aria-hidden className="sc-align-tool__sep" />
+                            {([
+                              ['上对齐', 'max-y', AlignStartVertical, false],
+                              ['垂直居中', 'center-y', AlignCenterVertical, false],
+                              ['下对齐', 'min-y', AlignEndVertical, false],
+                              ['垂直等距', 'distribute-y', AlignVerticalDistributeCenter, true],
+                            ] as const).map(([label, key, Icon, needsThree]) => {
+                              const disabled = needsThree && multiSelectedFacilityIds.length < 3;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  aria-label={disabled ? `${label}（至少三件）` : label}
+                                  title={disabled ? `${label}（至少三件）` : label}
+                                  disabled={disabled}
+                                  data-testid={`facility-multi-${key}`}
+                                  className="sc-align-tool__btn"
+                                  onClick={() => (key === 'distribute-y' ? distributeFacilitiesMulti(multiSelectedFacilityIds, 'y') : alignFacilitiesMulti(multiSelectedFacilityIds, key))}
+                                >
+                                  <Icon size={13} strokeWidth={1.75} aria-hidden />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                      <div style={{ marginTop: 8 }}>
+                        <button type="button" className="sc-quiet-link" onClick={() => clearMultiSelection()}>取消选择</button>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {/* 2026-11-12 B2 组选态（≥2 件设施）：计数 + 批量动作；单件回落下方 Bench 卡。 */}
-                {multiSelectedFacilityIds.length >= 2 && (
-                  <div data-testid="facility-multi-panel" style={{ marginTop: PLANNING_SPACING.xs }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: PLANNING_SURFACE.panelText }}>已选 {multiSelectedFacilityIds.length} 件设施</div>
-                    <div style={{ marginTop: 2, fontSize: PLANNING_TYPOGRAPHY.panel, opacity: 0.72 }}>
-                      拖组内任意一件整组移动 · 角柄整组缩放 · 方向键微调 · Ctrl+D 复制 · Delete 删除
-                    </div>
-                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.sm }}>
-                      <button
-                        type="button"
-                        data-testid="facility-multi-duplicate"
-                        style={modeButtonStyle(false)}
-                        onClick={() => duplicateFacilitiesMulti(multiSelectedFacilityIds)}
-                      >
-                        复制
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="facility-multi-delete"
-                        style={{ ...modeButtonStyle(false), color: PLANNING_SURFACE.dangerText, borderColor: withAlphaHex(PLANNING_SURFACE.dangerText, 0.5) }}
-                        onClick={() => deleteFacilitiesMulti(multiSelectedFacilityIds)}
-                      >
-                        删除
-                      </button>
-                      <button type="button" style={modeButtonStyle(false)} onClick={() => clearMultiSelection()}>
-                        取消选择
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
                 {selectedZoneId && levelView.zones.filter(zone => zone.id === selectedZoneId).map(zone => (
                   <div
                     key={zone.id}
@@ -6650,36 +8881,49 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       marginTop: PLANNING_SPACING.xs,
                       borderTop: `1px solid ${PLANNING_SURFACE.fieldBg}`,
                       paddingTop: PLANNING_SPACING.xs,
-                      outline: `1px solid ${PLANNING_SURFACE.warnText}`, outlineOffset: 2, borderRadius: PLANNING_RADIUS.sm,
+                      // 2026-11-15 用户指令：去掉属性块的橘色描边（顶部已有分隔线 + 「取消选中」按钮，
+                      // 再套一圈琥珀色高亮反而碍眼）。只保留圆角，不再画 outline。
+                      borderRadius: PLANNING_RADIUS.sm,
                     }}
                   >
                     <div style={zoneRowStyle}>
-                      <button
-                        type="button"
-                        aria-pressed="true"
-                        data-testid={`zone-select-${zone.id}`}
-                        onClick={() => selectZone(null)}
-                        style={{ ...zoneRowStyle, gap: 4, flex: '0 0 auto', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                        title="取消选中"
-                      >
-                        取消选中
-                      </button>
                       <input
                         aria-label={`分区「${zone.name}」颜色`}
                         type="color"
                         value={zone.color ?? PLANNING_ZONE_COLORS[zone.semantic]}
                         onChange={event => updateZone(zone.id, { color: event.target.value })}
-                        style={{ width: 22, height: 18, padding: 0, border: 'none', background: 'none' }}
+                        title="改分区颜色"
+                        style={{ width: 18, height: 18, padding: 0, border: 'none', background: 'none', borderRadius: 4, flex: '0 0 auto' }}
                       />
                       <input
                         aria-label={`分区「${zone.name}」名称`}
+                        title="点一下改名字"
                         value={zone.name}
                         maxLength={60}
                         onChange={event => updateZone(zone.id, { name: event.target.value })}
-                        style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
+                        // 2026-11-15 用户反馈：名字框一片灰底 + 灰描边很抢眼。改成“标题”长相：
+                        // 透明底、无常规描边，只在聚焦时透出细边，一眼看出是分区名而不是待填输入框。
+                        style={{ flex: 1, minWidth: 0, background: 'transparent', color: PLANNING_SURFACE.panelText, border: '1px solid transparent', borderRadius: PLANNING_RADIUS.sm, fontSize: 14, fontWeight: 600, padding: '2px 4px' }}
+                        onFocus={event => { event.currentTarget.style.borderColor = PLANNING_SURFACE.panelBorder; }}
+                        onBlur={event => { event.currentTarget.style.borderColor = 'transparent'; }}
                       />
+                      {/* 2026-11-15 用户指令：「取消选中」摆在名字前面很怪——当成属性卡的关闭钮，放行尾。 */}
+                      <button
+                        type="button"
+                        data-testid={`zone-select-${zone.id}`}
+                        aria-label="取消选中"
+                        title="取消选中（Esc）"
+                        onClick={() => selectZone(null)}
+                        style={{
+                          flex: '0 0 auto', width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          padding: 0, background: 'none', border: 'none', cursor: 'pointer',
+                          color: PLANNING_SURFACE.panelText, opacity: 0.55, fontSize: 15, lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
-                    <label style={zoneRowStyle}>
+                    <label style={zoneRowStyle} title="这条分区服务于哪场活动：填了就代替分区名显示在图上，也会作为 AI 排布时的参考">
                       事件
                       <ZoneEventInput key={`${generationProjectId ?? 'local'}:${zone.id}`} name={zone.name}
                         value={zone.event}
@@ -6838,36 +9082,137 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <BenchRepeatIcon size={16} aria-hidden />
                         </button>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span
-                          data-testid="facility-geo-label"
-                          style={{ flex: 1, minWidth: 0, fontSize: PLANNING_TYPOGRAPHY.panel, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        >
-                          {selectedFacilityGeoLabel}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label="复制物件坐标"
-                          title="复制坐标"
-                          style={benchIconButtonStyle}
-                          onClick={() => {
-                            void navigator.clipboard?.writeText(selectedFacilityGeoLabel).then(() => setEditMessage(`坐标已复制：${selectedFacilityGeoLabel}`)).catch(() => setEditMessage('复制没成功，请手动记下。'));
-                          }}
-                        >
-                          <BenchCopyIcon size={14} aria-hidden />
-                        </button>
+                      {/* 2026-11-15 用户：位置与尺寸压成一块——标题留在上面（位置 / 尺寸两栏），
+                          下面一行就是具体数字；四项都直接可改：纬/经 逆映射回米，W/L 等比缩放。
+                          2026-11-15 视觉修正：属性卡实际只有 ~233 CSS px 宽（截图 DPR2），
+                          两栏并排时每个格子只剩 ~34 px 文字宽，30.25214 / W 2.05 全被裁。
+                          改成两组上下堆：标题在上、数字占满整行，四项仍在一屏内全部可改。 */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}` }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: PLANNING_TEXT.soft, marginBottom: 4 }}>位置</div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="纬度（可改，失焦或回车生效）">
+                          <input
+                            aria-label="选中设施纬度"
+                            type="text"
+                            inputMode="decimal"
+                            value={facilityGeoDraft?.lat ?? (selectedFacilityGeo ? selectedFacilityGeo.lat.toFixed(5) : '')}
+                            onFocus={() => setFacilityGeoDraft({
+                              lat: selectedFacilityGeo ? selectedFacilityGeo.lat.toFixed(5) : '',
+                              lng: selectedFacilityGeo ? selectedFacilityGeo.lng.toFixed(5) : '',
+                            })}
+                            onChange={event => setFacilityGeoDraft(prev => ({
+                              lat: event.target.value,
+                              lng: prev?.lng ?? (selectedFacilityGeo ? selectedFacilityGeo.lng.toFixed(5) : ''),
+                            }))}
+                            onBlur={commitFacilityGeoDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitFacilityGeoDraft(); }}
+                            style={benchUnitInputStyle}
+                          />
+                        </label>
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="经度（可改，失焦或回车生效）">
+                          <input
+                            aria-label="选中设施经度"
+                            type="text"
+                            inputMode="decimal"
+                            value={facilityGeoDraft?.lng ?? (selectedFacilityGeo ? selectedFacilityGeo.lng.toFixed(5) : '')}
+                            onFocus={() => setFacilityGeoDraft({
+                              lat: selectedFacilityGeo ? selectedFacilityGeo.lat.toFixed(5) : '',
+                              lng: selectedFacilityGeo ? selectedFacilityGeo.lng.toFixed(5) : '',
+                            })}
+                            onChange={event => setFacilityGeoDraft(prev => ({
+                              lat: prev?.lat ?? (selectedFacilityGeo ? selectedFacilityGeo.lat.toFixed(5) : ''),
+                              lng: event.target.value,
+                            }))}
+                            onBlur={commitFacilityGeoDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitFacilityGeoDraft(); }}
+                            style={benchUnitInputStyle}
+                          />
+                        </label>
+                        </div>
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: PLANNING_TEXT.soft, marginBottom: 4 }}>尺寸</div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="宽度（米，失焦或回车生效）">
+                          <span style={benchUnitLabelStyle}>W</span>
+                          <input
+                            aria-label="选中设施宽度（米）"
+                            type="text"
+                            inputMode="decimal"
+                            value={facilitySizeDraft?.width ?? selectedFacility.size.width.toFixed(1)}
+                            onFocus={() => setFacilitySizeDraft({
+                              width: selectedFacility.size.width.toFixed(1),
+                              depth: selectedFacility.size.depth.toFixed(1),
+                            })}
+                            onChange={event => setFacilitySizeDraft(prev => ({
+                              width: event.target.value,
+                              depth: prev?.depth ?? selectedFacility.size.depth.toFixed(1),
+                            }))}
+                            onBlur={commitFacilitySizeDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitFacilitySizeDraft(); }}
+                            style={benchUnitInputStyle}
+                          />
+                          <span style={benchUnitSuffixStyle}>m</span>
+                        </label>
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="深度/长度（米，失焦或回车生效）">
+                          <span style={benchUnitLabelStyle}>L</span>
+                          <input
+                            aria-label="选中设施深度（米）"
+                            type="text"
+                            inputMode="decimal"
+                            value={facilitySizeDraft?.depth ?? selectedFacility.size.depth.toFixed(1)}
+                            onFocus={() => setFacilitySizeDraft({
+                              width: selectedFacility.size.width.toFixed(1),
+                              depth: selectedFacility.size.depth.toFixed(1),
+                            })}
+                            onChange={event => setFacilitySizeDraft(prev => ({
+                              width: prev?.width ?? selectedFacility.size.width.toFixed(1),
+                              depth: event.target.value,
+                            }))}
+                            onBlur={commitFacilitySizeDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitFacilitySizeDraft(); }}
+                            style={benchUnitInputStyle}
+                          />
+                          <span style={benchUnitSuffixStyle}>m</span>
+                        </label>
+                          </div>
+                        </div>
+                        {/* 2026-11-15 用户：「复制坐标没用」——删掉这颗钮（经纬度本来就能就地改，要抄走直接框选文本）。 */}
                       </div>
-                      {/* Styling：色板圆点 + 盒式透明度数字输入（OnePlan 同款，无滑杆）。 */}
-                      <div style={{ ...benchSectionTitleStyle, marginTop: PLANNING_SPACING.sm }}>样式</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm }}>
-                        <input
-                          aria-label="选中设施颜色"
-                          type="color"
-                          value={selectedFacility.color ?? PLANNING_LAYER_COLORS.facility}
-                          onChange={event => updateFacility(selectedFacility.id, { color: event.target.value })}
-                          style={{ width: 28, height: 28, flex: '0 0 auto', padding: 0, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: 999, background: 'none', cursor: 'pointer' }}
-                        />
-                        <label style={{ ...benchUnitBoxStyle, width: 76, justifyContent: 'space-between' }}>
+                      {/* 2026-11-16 用户「物料要有归属意识」：归属直接写在属性卡里——清单/CSV 的「所属分区」列、
+                          分区筛选都吃这个字段；换区会自动重算，也可以在这里手动钉到某一个区。 */}
+                      <div style={benchSectionTitleStyle}>归属</div>
+                      <label style={{ ...benchUnitBoxStyle, flex: '1 1 0' }} title="这件物料属于哪个分区">
+                        <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.soft, flex: '0 0 auto' }}>分区</span>
+                        <select
+                          aria-label="选中设施归属分区"
+                          value={selectedFacility.zoneId ?? ''}
+                          onChange={event => updateFacility(selectedFacility.id, { zoneId: event.target.value || undefined })}
+                          style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                        >
+                          <option value="">未归属</option>
+                          {plan.zones.map(zone => (
+                            <option key={zone.id} value={zone.id}>{zone.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {/* 样式：色块 + 十六进制 + 透明度（对齐 Figma 的 Fill 行：色块在最左，数值成对排）。 */}
+                      <div style={benchSectionTitleStyle}>样式</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <label style={{ ...benchUnitBoxStyle, flex: '0 0 auto', width: 108 }} title="改颜色">
+                          <input
+                            aria-label="选中设施颜色"
+                            type="color"
+                            value={selectedFacility.color ?? PLANNING_LAYER_COLORS.facility}
+                            onChange={event => updateFacility(selectedFacility.id, { color: event.target.value })}
+                            style={{ width: 16, height: 16, flex: '0 0 auto', padding: 0, border: 'none', borderRadius: 4, background: 'none', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.soft, textTransform: 'uppercase', fontVariantNumeric: 'tabular-nums' }}>
+                            {(selectedFacility.color ?? PLANNING_LAYER_COLORS.facility).replace('#', '')}
+                          </span>
+                        </label>
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0' }} title="透明度">
                           <input
                             aria-label="选中设施透明度"
                             type="number"
@@ -6916,162 +9261,157 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   type="button"
                                   aria-pressed={active}
                                   aria-label={`描边${label}`}
+                                  title={label}
                                   data-testid={`facility-stroke-${value}`}
                                   className="sc-seg__btn"
                                   style={{ color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText }}
                                   onClick={() => updateFacility(selectedFacility.id, { strokeStyle: value })}
                                 >
-                                  {label}
+                                  <StrokeGlyph style={value} />
                                 </button>
                               );
                             })}
                           </div>
                         );
                       })()}
-                      {/* Details：W/L 盒式输入，单位内嵌（OnePlan 同款）。 */}
-                      <div style={{ ...benchSectionTitleStyle, marginTop: PLANNING_SPACING.sm }}>尺寸</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: PLANNING_SPACING.sm }}>
-                        <label style={benchUnitBoxStyle}>
-                          <span style={benchUnitLabelStyle}>W</span>
-                          <input
-                            aria-label="选中设施宽度（米）"
-                            type="number"
-                            min={FACILITY_MIN_SIZE_M}
-                            max={FACILITY_MAX_SIZE_M}
-                            step={0.5}
-                            value={Number(selectedFacility.size.width.toFixed(1))}
-                            onChange={event => {
-                              const width = Number(event.target.value);
-                              if (Number.isFinite(width)) {
-                                updateFacility(selectedFacility.id, {
-                                  size: sizeWithWidth(width, selectedFacility.size, selectedFacility.templateId,
-                                    { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
-                                });
-                              }
-                            }}
-                            style={benchUnitInputStyle}
-                          />
-                          <span style={benchUnitSuffixStyle}>m</span>
-                        </label>
-                        <label style={benchUnitBoxStyle}>
-                          <span style={benchUnitLabelStyle}>L</span>
-                          <input
-                            aria-label="选中设施深度（米）"
-                            type="number"
-                            min={FACILITY_MIN_SIZE_M}
-                            max={FACILITY_MAX_SIZE_M}
-                            step={0.5}
-                            value={Number(selectedFacility.size.depth.toFixed(1))}
-                            onChange={event => {
-                              const depth = Number(event.target.value);
-                              if (Number.isFinite(depth)) {
-                                updateFacility(selectedFacility.id, {
-                                  size: sizeWithDepth(depth, selectedFacility.size, selectedFacility.templateId,
-                                    { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
-                                });
-                              }
-                            }}
-                            style={benchUnitInputStyle}
-                          />
-                          <span style={benchUnitSuffixStyle}>m</span>
-                        </label>
-                      </div>
-                      {/* V-5a 模型候选（OnePlan 卡小标签+浅描边盒同款）：点缩略图写 facility.modelOverride，
-                          3D plan-model-layer 即时换模型；「自动」清除 override 回自动挑选。一条 updateFacility=一条 undo。 */}
-                      <div style={{ ...benchSectionTitleStyle, marginTop: PLANNING_SPACING.sm }}>模型</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: PLANNING_SPACING.xs }} role="group" aria-label="3D 模型候选">
-                        <button
-                          type="button"
-                          aria-pressed={!selectedFacility.modelOverride}
-                          data-testid="facility-model-auto"
-                          title="按占地自动挑选模型（清除手动 override）"
-                          style={{ position: 'relative', height: 48, padding: '0 4px', background: PLANNING_SURFACE.panelBg, border: `1px solid ${selectedFacility.modelOverride ? PLANNING_SURFACE.panelBorder : GROUP_SELECT_BLUE}`, borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          onClick={() => {
-                            updateFacility(selectedFacility.id, { modelOverride: undefined });
-                            setEditMessage(`「${selectedFacility.name}」已恢复自动挑选 3D 模型。`);
-                          }}
-                        >
-                          <span style={{ fontSize: PLANNING_TYPOGRAPHY.panel, color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>自动</span>
-                        </button>
-                        {(facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId
-                          ? facilityModelCandidates.items
-                          : []
-                        ).map((candidate) => (
+                      {/* 当前模型排首位，素材库的默认模型保留标记，点它清除 override。 */}
+                      <div style={benchSectionTitleStyle}>模型</div>
+                      <div
+                        role="group"
+                        aria-label="3D 模型候选"
+                        data-testid="facility-model-strip"
+                        style={{ display: 'flex', gap: PLANNING_SPACING.xs, overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2, scrollbarWidth: 'thin' }}
+                      >
+                        {(() => {
+                          const raw = facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId ? facilityModelCandidates.items : [];
+                          const override = selectedFacility.modelOverride;
+                          const picked = override ? raw.findIndex(item => item.slug === override) : -1;
+                          return picked > 0 ? [raw[picked]!, ...raw.slice(0, picked), ...raw.slice(picked + 1)] : raw;
+                        })().map(candidate => {
+                          const isDefault = candidate.slug === facilityModelCandidates?.defaultSlug;
+                          const active = candidate.slug === (selectedFacility.modelOverride ?? facilityModelCandidates?.defaultSlug);
+                          return (
                           <button
                             key={candidate.slug}
                             type="button"
-                            aria-pressed={selectedFacility.modelOverride === candidate.slug}
+                            aria-pressed={active}
                             data-testid={`facility-model-${candidate.slug}`}
-                            title={`${candidate.name}（${candidate.width}×${candidate.depth}×${candidate.height} m）`}
-                            style={{ position: 'relative', height: 48, padding: 0, background: PLANNING_SURFACE.panelBg, border: `1px solid ${selectedFacility.modelOverride === candidate.slug ? GROUP_SELECT_BLUE : PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', overflow: 'hidden' }}
+                            data-default={isDefault ? 'true' : undefined}
+                            title={`${candidate.name}（${candidate.width}×${candidate.depth}×${candidate.height} m）${isDefault ? ' · 素材库默认模型' : ''}`}
+                            style={{ flex: '0 0 auto', width: 64, height: 60, padding: 0, background: PLANNING_SURFACE.panelBg, border: `1px solid ${active ? GROUP_SELECT_BLUE : PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
                             onClick={() => {
-                              updateFacility(selectedFacility.id, { modelOverride: candidate.slug });
-                              setEditMessage(`「${selectedFacility.name}」的 3D 模型已切换为「${candidate.name}」，切 3D 即时生效。`);
+                              if (active) return;
+                              updateFacility(selectedFacility.id, { modelOverride: isDefault ? undefined : candidate.slug });
+                              setEditMessage(`「${selectedFacility.name}」已换用「${candidate.name}」，2D 占地已重置为模型真实尺寸（约 ${candidate.width.toFixed(1)}×${candidate.depth.toFixed(1)} m）；之后拖角缩放，3D 等比跟随。`);
                             }}
                           >
-                            {/* 缩略图盖在名称占位块上：加载失败 onError 隐藏图片 → 露出占位块，不空崩。 */}
-                            {candidate.thumb ? (
-                              <img
-                                key={`${selectedFacility.id}:${candidate.slug}`}
-                                src={candidate.thumb}
-                                alt=""
-                                loading="lazy"
-                                onError={event => { event.currentTarget.style.display = 'none'; }}
-                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                              />
-                            ) : null}
-                            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 4px 2px', fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: '12px', color: PLANNING_SURFACE.panelText, textShadow: candidate.thumb ? '0 1px 2px rgba(0,0,0,0.6)' : 'none', pointerEvents: 'none' }}>
-                              <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.name}</span>
+                            {/* 2026-11-15 上图下名：缩略图 40px + 名称条 18px。名称原先压在图上（白字 + textShadow），
+                                碰浅色模型直接糊成一片；独立名称条后任何缩略图都读得清。 */}
+                            <span aria-hidden style={{ position: 'relative', display: 'block', height: 40, width: '100%', overflow: 'hidden', background: PLANNING_SURFACE.fieldBg }}>
+                              {candidate.thumb ? (
+                                <img
+                                  key={`${selectedFacility.id}:${candidate.slug}`}
+                                  src={candidate.thumb}
+                                  alt=""
+                                  loading="lazy"
+                                  onError={event => { event.currentTarget.style.display = 'none'; }}
+                                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : null}
+                              {isDefault ? (
+                                <span style={{ position: 'absolute', left: 3, top: 3, padding: '0 3px', height: 13, lineHeight: '13px', borderRadius: 3, background: 'rgba(20, 20, 22, 0.62)', color: '#fff', fontSize: 9, fontWeight: 600, letterSpacing: '0.02em' }}>默认</span>
+                              ) : null}
+                            </span>
+                            <span style={{ height: 18, width: '100%', padding: '0 4px', lineHeight: '18px', textAlign: 'center', fontSize: 10, color: PLANNING_TEXT.muted, borderTop: `1px solid ${PLANNING_SURFACE.panelBorder}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {candidate.name}
                             </span>
                           </button>
-                        ))}
+                          );
+                        })}
+                        {/* 2026-11-15：候选为空时把原因写出来，别让「模型」这一行看着像没加载完。 */}
+                        {!(facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId && facilityModelCandidates.items.length > 0) && (
+                          <span style={{ alignSelf: 'center', fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.6, lineHeight: '14px' }}>
+                            素材库里没有和这个图标对应的 3D 模型，可在下方「生成或导入模型」补一个。
+                          </span>
+                        )}
                       </div>
+                      {(() => {
+                        const raw = facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId ? facilityModelCandidates.items : [];
+                        const builtinFirst = raw.find(candidate => candidate.slug === facilityModelCandidates?.defaultSlug);
+                        const override = selectedFacility.modelOverride;
+                        if (!builtinFirst || !override || override === builtinFirst.slug) return null;
+                        return (
+                          <button
+                            type="button"
+                            data-testid="facility-model-reset-default"
+                            className="sc-quiet-link"
+                            style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            title="把首张模型还原成素材库内置的默认模型"
+                            onClick={() => {
+                              updateFacility(selectedFacility.id, { modelOverride: undefined });
+                              setEditMessage(`「${selectedFacility.name}」已恢复默认模型「${builtinFirst.name}」，2D 占地按它的真实尺寸（约 ${builtinFirst.width.toFixed(1)}×${builtinFirst.depth.toFixed(1)} m）。`);
+                            }}
+                          >
+                            设为默认：「{builtinFirst.name}」
+                          </button>
+                        );
+                      })()}
                       {/* V-5b/c 生成中状态行：轮询到待取回任务时给一句可读进度，完成后自动消失。 */}
                       {facilityGenerateStatus && facilityGenerateStatus.facilityId === selectedFacility.id ? (
                         <div role="status" style={{ marginTop: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: '16px', color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>
                           「{facilityGenerateStatus.name}」{facilityGenerateStatus.message}，完成后自动回填候选首位。
                         </div>
                       ) : null}
-                      {/* V-5b/c 生成/上传/导入入口：生成与图片经 onOpenMaterialGenerate 打开户外原位生成框
-                          （仍须确认额度）；GLB 直传走本机导入兜底（会话内有效），完成即回填候选首位。 */}
-                      <div style={{ display: 'flex', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.xs }}>
-                        <input
-                          ref={glbImportInputRef}
-                          type="file"
-                          accept=".glb,model/gltf-binary"
-                          style={{ display: 'none' }}
-                          onChange={event => {
-                            const file = event.target.files?.[0];
-                            event.target.value = '';
-                            void handleImportFacilityGlb(file);
-                          }}
-                        />
+                      {/* 2026-11-15 生成/上传/导入三个入口统一打开「生成」面板（预选输入方式 + 设施目标），
+                          不再在画布上叠一张原位表单。下面这个隐藏 input 留给本机 GLB 的校验/入库逻辑复用，
+                          但入口已搬到面板里，点画布按钮不会再触发它。
+                          同一天用户反馈「模型下面四个应该是好用的按钮或展开区域」：
+                          改为与布场信息/备注同一只手风琴，展开后是三行带图标与说明的整行按钮。 */}
+                      <input
+                        ref={glbImportInputRef}
+                        type="file"
+                        accept=".glb,model/gltf-binary"
+                        style={{ display: 'none' }}
+                        onChange={event => {
+                          const file = event.target.files?.[0];
+                          event.target.value = '';
+                          void handleImportFacilityGlb(file);
+                        }}
+                      />
+                      {/* 2026-11-15 用户：「生成和导入模型不应该收在下方，因为这个很重要」。
+                          原来它是一条折叠手风琴且默认关闭——最需要入口的动作反而最不显眼。
+                          改成模型条正下方三格常驻：文字生成 / 图片生成 / 导入 GLB，
+                          图标在上、名称在下，与模型卡同一视觉重量；说明挤进 title，不再占两行。 */}
+                      <div role="group" aria-label="生成或导入模型" style={{ display: 'flex', gap: 4, marginTop: 6 }}>
                         <button
                           type="button"
                           data-testid="facility-model-generate"
-                          title="按设施名预填左栏物料生成框，确认额度后提交；生成完自动回填候选首位"
-                          style={{ ...modeButtonStyle(false), flex: 1, justifyContent: 'center' }}
-                          onClick={() => onOpenMaterialGenerate?.(selectedFacility.id, 'text')}
+                          title="按设施名预填生成面板，确认额度后提交；生成完回填到模型条首位"
+                          className="sc-model-action"
+                          onClick={() => openGenerationSheet({ task: 'model', scope: 'facility', source: 'text', facility: { id: selectedFacility.id, name: selectedFacility.name } })}
                         >
-                          生成一个
+                          <Sparkles size={14} aria-hidden />
+                          <span>文字生成</span>
                         </button>
                         <button
                           type="button"
                           data-testid="facility-model-upload"
-                          title="上传一张图片，预填到物料生成框生成 3D 模型"
-                          style={{ ...modeButtonStyle(false), flex: 1, justifyContent: 'center' }}
-                          onClick={() => onOpenMaterialGenerate?.(selectedFacility.id, 'image')}
+                          title="上传一张现场照片，生成对应的 3D 模型"
+                          className="sc-model-action"
+                          onClick={() => openGenerationSheet({ task: 'model', scope: 'facility', source: 'image', facility: { id: selectedFacility.id, name: selectedFacility.name } })}
                         >
-                          上传图片生成
+                          <ImageUp size={14} aria-hidden />
+                          <span>图片生成</span>
                         </button>
                         <button
                           type="button"
                           data-testid="facility-model-import-glb"
-                          title="导入本机 .glb（≤10MB），仅本次编辑有效"
-                          style={{ ...modeButtonStyle(false), flex: 1, justifyContent: 'center' }}
-                          onClick={() => glbImportInputRef.current?.click()}
+                          title="导入本机 .glb（≤10 MB，仅本次编辑有效）"
+                          className="sc-model-action"
+                          onClick={() => openGenerationSheet({ task: 'model', scope: 'facility', source: 'import', facility: { id: selectedFacility.id, name: selectedFacility.name } })}
                         >
-                          导入 GLB
+                          <Upload size={14} aria-hidden />
+                          <span>导入 GLB</span>
                         </button>
                       </div>
                       {/* + 布场信息（OnePlan Object setup 镜像：供应商/进撤场/用电）。 */}
@@ -7193,90 +9533,258 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
                 {selectedRoute && (
                   <>
-                    <div style={sectionTitle}>已选中动线</div>
-                    <div style={zoneRowStyle}>
+                    {/* 2026-11-15 用户第二轮指令：去掉「已选中动线」标题行和「删除动线」文字按钮，
+                        单向/反转合成同一行图标控件。删除仍可用 Delete/Backspace 或清单页签行删除。 */}
+                    <div style={{ ...zoneRowStyle, marginTop: 0 }}>
                       <input
                         aria-label="选中动线名称"
+                        title="点一下改名字"
                         value={selectedRoute.name}
                         maxLength={60}
                         onChange={event => updateRoute(selectedRoute.id, { name: event.target.value })}
-                        style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
+                        style={{ flex: 1, minWidth: 0, background: 'transparent', color: PLANNING_SURFACE.panelText, border: '1px solid transparent', borderRadius: PLANNING_RADIUS.sm, fontSize: 14, fontWeight: 600, padding: '2px 4px' }}
+                        onFocus={event => { event.currentTarget.style.borderColor = PLANNING_SURFACE.panelBorder; }}
+                        onBlur={event => { event.currentTarget.style.borderColor = 'transparent'; }}
                       />
+                      <button
+                        type="button"
+                        data-testid="route-deselect"
+                        aria-label="取消选择"
+                        title="取消选择（Esc）"
+                        onClick={() => selectRoute(null)}
+                        style={{
+                          flex: '0 0 auto', width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          padding: 0, background: 'none', border: 'none', cursor: 'pointer',
+                          color: PLANNING_SURFACE.panelText, opacity: 0.55, fontSize: 15, lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
-                    <label style={zoneRowStyle}>
-                      类型
-                      <select
+                    {/* 2026-11-16 用户：「类型也就几个类型，再说一遍，我讨厌下拉选取」——
+                        下拉换成三颗图标直选，颜色用动线类型色（与画布芯片同源）。 */}
+                    <div style={{ ...zoneRowStyle, gap: PLANNING_SPACING.xs }}>
+                      <span style={{ flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row }}>类型</span>
+                      <div
+                        className="sc-seg"
+                        role="group"
                         aria-label="选中动线类型"
-                        value={selectedRoute.kind}
-                        onChange={event => updateRoute(selectedRoute.id, { kind: event.target.value as PlanRoute['kind'] })}
-                        style={selectStyle}
+                        style={{ width: 96, flex: '0 0 auto', background: PLANNING_SURFACE.fieldBg }}
                       >
-                        {planRouteKinds.map(k => <option key={k} value={k}>{planRouteKindLabels[k]}</option>)}
-                      </select>
-                    </label>
-                    <label style={zoneRowStyle}>
-                      <input
-                        type="checkbox"
-                        aria-label="选中动线单向"
-                        checked={selectedRoute.oneWay}
-                        onChange={event => updateRoute(selectedRoute.id, { oneWay: event.target.checked })}
-                      />
-                      单向（沿线方向箭头）
-                    </label>
-                    <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
-                      {selectedRoute.points.length} 点 · 全长 {formatLengthM(planRouteLengthM(selectedRoute.points))} · {selectedRoute.startNodeId ? '起点已连节点' : '起点自由'} · {selectedRoute.endNodeId ? '终点已连节点' : '终点自由'}
+                        {planRouteKinds.map(kind => {
+                          const Icon = planningIcon(ROUTE_KIND_ICONS[kind]);
+                          const active = selectedRoute.kind === kind;
+                          const tint = PLANNING_ROUTE_KIND_COLORS[kind];
+                          return (
+                            <button
+                              key={kind}
+                              type="button"
+                              aria-pressed={active}
+                              aria-label={`类型：${planRouteKindLabels[kind]}`}
+                              title={planRouteKindLabels[kind]}
+                              data-testid={`route-kind-${kind}`}
+                              className="sc-seg__btn"
+                              style={{
+                                // 2026-11-16 用户：「切换应该底部的圆圈底色就是对应的颜色；
+                                // 选中左右边距很奇怪」——不再用滑动药丸，每颗自己上色
+                                // （人行蓝 / 车辆紫 / 后勤金），选中就是色块本身，
+                                // 左右边距由容器 padding + gap 均分，不再有位移误差。
+                                background: active ? tint : 'transparent',
+                                color: active ? '#ffffff' : PLANNING_SURFACE.panelText,
+                                boxShadow: active ? '0 1px 2px rgba(20, 24, 32, 0.18)' : 'none',
+                                transition: 'background 120ms ease, color 120ms ease',
+                              }}
+                              onClick={() => updateRoute(selectedRoute.id, { kind })}
+                            >
+                              <Icon size={14} aria-hidden />
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        data-testid="route-reverse"
-                        style={modeButtonStyle(false)}
-                        onClick={() => reverseSelectedRoute(selectedRoute.id)}
-                      >
-                        反转方向
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="route-delete"
-                        style={modeButtonStyle(false)}
-                        onClick={() => deleteRoute(selectedRoute.id)}
-                      >
-                        删除动线
-                      </button>
-                      <button type="button" style={modeButtonStyle(false)} onClick={() => selectRoute(null)}>
-                        取消选择
-                      </button>
+                    {/* 2026-11-16 用户：「如果是双向的，也用不到反向。那我其实就三个状态啊？」
+                        于是并成一组三颗的分段控件：双向 / 单向 / 反向。
+                        数据里方向只有“双向/单向”两个持久态（单向时 points 顺序就是行进方向），
+                        所以第三颗是“翻一下”的动作：双向时置灰，单项时才可点。 */}
+                    {(() => {
+                      const oneWay = selectedRoute.oneWay;
+                      const options = [
+                        { key: 'both', label: '双向', Icon: ArrowLeftRight, testId: 'route-direction-both', active: !oneWay, disabled: false },
+                        { key: 'oneway', label: '单向', Icon: ArrowRight, testId: 'route-direction-oneway', active: oneWay, disabled: false },
+                        { key: 'reverse', label: '反向', Icon: ArrowRightLeft, testId: 'route-reverse', active: false, disabled: !oneWay },
+                      ] as const;
+                      return (
+                        <div style={{ ...zoneRowStyle, gap: PLANNING_SPACING.xs }}>
+                          <span style={{ flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row }}>方向</span>
+                          <div
+                            className="sc-seg"
+                            role="group"
+                            aria-label="动线方向"
+                            style={{ width: 96, flex: '0 0 auto', background: PLANNING_SURFACE.fieldBg }}
+                          >
+                            {options.map(({ key, label, Icon, testId, active, disabled }) => (
+                              <button
+                                key={key}
+                                type="button"
+                                aria-pressed={active}
+                                aria-disabled={disabled}
+                                aria-label={label}
+                                title={disabled ? `${label}（单向时才能用）` : `${label}（${key === 'reverse' ? '把流向翻一下' : key === 'both' ? '不画方向箭头' : '沿线画方向箭头'}）`}
+                                data-testid={testId}
+                                className="sc-seg__btn"
+                                style={{
+                                  // 同一处修改：选中底色直接长在按钮上，不再靠绝对定位的药丸，
+                                  // 这样左右边距永远对称（以前第 2/3 颗会偏 3~5 px）。
+                                  background: active ? PLANNING_SURFACE.activeBg : 'transparent',
+                                  boxShadow: active ? '0 1px 2px rgba(20, 24, 32, 0.10)' : 'none',
+                                  transition: 'background 120ms ease, color 120ms ease',
+                                  color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText,
+                                  opacity: disabled ? 0.35 : 1,
+                                  cursor: disabled ? 'not-allowed' : 'pointer',
+                                }}
+                                onClick={() => {
+                                  if (disabled) return;
+                                  if (key === 'reverse') reverseSelectedRoute(selectedRoute.id);
+                                  else updateRoute(selectedRoute.id, { oneWay: key === 'oneway' });
+                                }}
+                              >
+                                <Icon size={14} aria-hidden />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* 2026-11-16 用户：动线属性里加「通行方式」——人行 / 车行 / 人车一起 */}
+                    <div style={{ ...zoneRowStyle, gap: PLANNING_SPACING.xs }}>
+                      <span style={{ flex: '0 0 auto', fontSize: PLANNING_TYPOGRAPHY.row }}>通行</span>
+                      <div role="group" aria-label="动线通行方式" style={{ flex: 1, display: 'flex', gap: 2, padding: 2, borderRadius: 6, background: PLANNING_SURFACE.fieldBg }}>
+                        {([
+                          { id: 'walk', label: '人行' },
+                          { id: 'vehicle', label: '车行' },
+                          { id: 'mixed', label: '人车一起' },
+                        ] as const).map(option => {
+                          const active = routeCarrier(selectedRoute) === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              aria-pressed={active}
+                              data-testid={`route-carrier-${option.id}`}
+                              title={option.label === '人车一起' ? '这条线人和车共用：冲突判定会同时和纯人行、纯车行配对' : `${option.label}：布点密度和冲突判定都按它算`}
+                              onClick={() => updateRoute(selectedRoute.id, { carrier: option.id })}
+                              style={{
+                                flex: 1,
+                                padding: '4px 0',
+                                border: 'none',
+                                borderRadius: 4,
+                                cursor: 'pointer',
+                                fontSize: PLANNING_TYPOGRAPHY.row,
+                                background: active ? PLANNING_SURFACE.activeBg : 'transparent',
+                                color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText,
+                                fontWeight: active ? 600 : 400,
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </>
                 )}
 
                 {selectedNode && (() => {
                   const refs = nodeRouteRefs(selectedNode.id, plan.routes);
+                  // 2026-11-15 用户：「明明出入口已经在动线上了，还是显示未在动线上」。
+                  // 交界处自动建的出入口压在动线中段，不是起终点引用，但它确实连着——要一起算。
+                  const onRoutes = nodeOnRoutes(selectedNode.position, plan.routes);
+                  const routeIds = new Set([...refs.startRoutes, ...refs.endRoutes, ...onRoutes].map(route => route.id));
+                  const routeCount = routeIds.size;
+                  const anchored = refs.startRoutes.length + refs.endRoutes.length;
                   return (
                     <>
-                      <div style={sectionTitle}>已选中出入口</div>
+                      {/* 2026-11-15 用户指令「出入口也重新设计一下」：跟分区那块同一套语法——
+                          标题行 + 行尾 ×，名字当标题写，状态用一只小圆点，动作只剩一个轻量的删除。 */}
+                      <div style={{ ...sectionTitle, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ flex: 1 }}>已选中出入口</span>
+                        <button
+                          type="button"
+                          data-testid="node-deselect"
+                          aria-label="取消选择"
+                          title="取消选择（Esc）"
+                          onClick={() => selectNode(null)}
+                          style={{
+                            flex: '0 0 auto', width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            padding: 0, background: 'none', border: 'none', cursor: 'pointer',
+                            color: PLANNING_SURFACE.panelText, opacity: 0.55, fontSize: 15, lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
                       <div style={zoneRowStyle}>
                         <input
                           aria-label="选中出入口名称"
+                          title="点一下改名字"
                           value={selectedNode.name}
                           maxLength={60}
                           onChange={event => updateNode(selectedNode.id, { name: event.target.value })}
-                          style={{ flex: 1, minWidth: 0, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
+                          style={{ flex: 1, minWidth: 0, background: 'transparent', color: PLANNING_SURFACE.panelText, border: '1px solid transparent', borderRadius: PLANNING_RADIUS.sm, fontSize: 14, fontWeight: 600, padding: '2px 4px' }}
+                          onFocus={event => { event.currentTarget.style.borderColor = PLANNING_SURFACE.panelBorder; }}
+                          onBlur={event => { event.currentTarget.style.borderColor = 'transparent'; }}
                         />
                       </div>
-                      <label style={zoneRowStyle}>
-                        类型
-                        <select
-                          aria-label="选中出入口类型"
-                          value={selectedNode.kind}
-                          onChange={event => updateNode(selectedNode.id, { kind: event.target.value as PlanNode['kind'] })}
-                          style={selectStyle}
-                        >
-                          <option value="entry">入口</option>
-                          <option value="exit">出口</option>
-                          <option value="both">出入口（两用）</option>
-                        </select>
-                      </label>
+                      {/* 2026-11-15 用户：「类型」不当下拉菜单做——三个图标直接点，省一次展开。
+                          2026-11-16 用户：「出入口不要图标，喜欢环形」——这里也改成同款空心环。 */}
+                      <div style={zoneRowStyle}>
+                        <span>类型</span>
+                        <span role="group" aria-label="选中出入口类型" style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                          {NODE_KIND_OPTIONS.map(option => {
+                            const active = selectedNode.kind === option.kind;
+                            const ringColor = nodeStickerColor(option.kind);
+                            return (
+                              <button
+                                key={option.kind}
+                                type="button"
+                                data-testid={`node-kind-${option.kind}`}
+                                aria-label={`改为${option.label}`}
+                                aria-pressed={active}
+                                title={`改为${option.label}${active ? '（当前）' : ''}`}
+                                onClick={() => { if (!active) updateNode(selectedNode.id, { kind: option.kind }); }}
+                                style={{
+                                  all: 'unset' as const,
+                                  cursor: active ? 'default' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: 999,
+                                  // 未选中只留描边，选中补一圈「已选」环（品牌绿点睛，不自造色）。
+                                  boxShadow: active ? `0 0 0 1px #fff, 0 0 0 2.5px ${PLANNING_SURFACE.selectedBorder}` : 'none',
+                                }}
+                              >
+                                <span
+                                  aria-hidden
+                                  style={{
+                                    display: 'block',
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: 999,
+                                    border: `4.5px solid ${ringColor}`,
+                                    boxSizing: 'border-box',
+                                    background: 'transparent',
+                                    // 未选中去色：三型仍然看得见（不靠颜色滴），但一眼能看出哪个是当前值。
+                                    filter: active ? 'none' : 'grayscale(1)',
+                                    opacity: active ? 1 : 0.55,
+                                  }}
+                                />
+                              </button>
+                            );
+                          })}
+                        </span>
+                      </div>
                       <label style={zoneRowStyle}>
                         归属分区
                         <select
@@ -7289,24 +9797,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {levelView.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
                         </select>
                       </label>
-                      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
-                        {refs.startRoutes.length === 0 && refs.endRoutes.length === 0
-                          ? '未连接任何动线（红点警示）。'
-                          : `关联动线 ${refs.startRoutes.length + refs.endRoutes.length} 条（起点 ${refs.startRoutes.length} / 终点 ${refs.endRoutes.length}）`}
+                      <div style={{ marginTop: PLANNING_SPACING.xs, display: 'flex', alignItems: 'center', gap: 6, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_SURFACE.panelText, opacity: 0.8 }}>
+                        <span
+                          aria-hidden
+                          style={{ width: 6, height: 6, borderRadius: 999, flex: '0 0 auto', background: routeCount === 0 ? PLANNING_SURFACE.dangerText : '#3E9E63' }}
+                        />
+                        <span>
+                          {routeCount === 0
+                            ? '未连接任何动线'
+                            : anchored > 0
+                              ? `已连接 ${routeCount} 条动线（起点 ${refs.startRoutes.length} / 终点 ${refs.endRoutes.length}）`
+                              : `位于 ${routeCount} 条动线中段`}
+                        </span>
                       </div>
-                      <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          data-testid="node-delete"
-                          style={modeButtonStyle(false)}
-                          onClick={() => deleteNode(selectedNode.id)}
-                        >
-                          删除出入口
-                        </button>
-                        <button type="button" style={modeButtonStyle(false)} onClick={() => selectNode(null)}>
-                          取消选择
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        data-testid="node-delete"
+                        title="删除这个出入口"
+                        style={{
+                          marginTop: PLANNING_SPACING.sm, padding: 0, background: 'none', border: 'none', cursor: 'pointer',
+                          color: PLANNING_SURFACE.dangerText, fontSize: PLANNING_TYPOGRAPHY.row,
+                        }}
+                        onClick={() => deleteNode(selectedNode.id)}
+                      >
+                        删除出入口
+                      </button>
                     </>
                   );
                 })()}
@@ -7373,7 +9888,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       ref={stageRef}
       style={{
         position: 'relative', width: '100%', height: '100%', overflow: 'hidden',
-        cursor: mode === 'view' ? (dragging ? 'grabbing' : 'grab') : 'crosshair',
+        cursor: scopeLockHover || boundaryLockHover
+          ? 'pointer'
+          : altHeld && branchAnchorHint
+            ? 'copy'
+            : boundaryLockedHover
+            ? 'not-allowed'
+            : boundaryVertexHover !== null
+              ? 'grab'
+              : boundaryEdgeHint
+                ? 'copy'
+                : scopeEdgeHover
+                  ? (scopeEdgeIsHorizontal(scopeEdgeHover) ? 'ns-resize' : 'ew-resize')
+                  : mode === 'view' ? (dragging ? 'grabbing' : 'grab') : 'crosshair',
       }}
       onMouseDown={handleStageMouseDown}
       onMouseMove={handleStageMouseMove}
@@ -7418,35 +9945,51 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setContextMenu({ surface: 'stage-facility', x: event.clientX, y: event.clientY, facilityId: target.id });
       }}
       onDragOver={event => {
-        // H2-c：拖模板到画布 → 幽灵占地跟随（占地预览）。
-        if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return;
+        // 2026-11-16 物料卡直接拖进 2D：按卡片左下角图标对应的设施落位，
+        // dragover 读不到 dataTransfer，用拖起时记下的模型宽深先出幽灵。
+        const catalogDrag = getPlanCatalogDrag();
+        const dragTypes = Array.from(event.dataTransfer.types);
+        if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) {
+          if (!catalogDrag) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          const hit = eventPlanPoint(event);
+          if (hit) previewCatalogDrop(catalogDrag, hit.pt);
+          return;
+        }
+        // 物料卡没带户外载荷（旧代码/禁用态）时不要退化成上一次的设施模板，否则会落成别的物件。
+        if (dragTypes.includes(CATALOG_DRAG_MIME)) return;
+        // 2026-11-16 直接从物件库拖进来：dragover 读不到 dataTransfer，
+        // 用拖起时记下的模板 id 提前出幽灵（与 3D 地面同一来源）。
+        const draggedTemplate = getPlanFacilityDrag();
+        if (!draggedTemplate) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
         const hit = eventPlanPoint(event);
         if (!hit) return;
-        ghostPointRef.current = hit.pt;
-        draw();
+        previewFacilityDrop(draggedTemplate, hit.pt);
       }}
       onDragLeave={() => {
-        if (modeRef.current === 'facility') {
-          ghostPointRef.current = null;
-          draw();
-        }
+        clearFacilityDropPreview();
       }}
       onDrop={event => {
-        // H2-c：拖放提交（与单击提交同一入口 placeFacilityAt）。
+        // H2-c：拖放提交（与单击提交同一入口）。
         event.preventDefault();
-        // P2-h：从物件库直接拖进来的模板，画布上还没有「待放模板」，先按拖动的 id 落模板。
-        const dragged = event.dataTransfer.getData('text/plain');
-        if (dragged) {
-          // setMode 会清空待放模板，所以先切模式、再按拖动的 id 落模板。
-          if (modeRef.current !== 'facility') setMode('facility');
-          pickFacilityTemplate(dragged);
+        const types = Array.from(event.dataTransfer.types);
+        if (types.includes(PLAN_CATALOG_DRAG_MIME)) {
+          const catalogDrag = parsePlanCatalogDrag(event.dataTransfer.getData(PLAN_CATALOG_DRAG_MIME)) ?? getPlanCatalogDrag();
+          clearPlanCatalogDrag();
+          if (!catalogDrag) return;
+          const hit = eventPlanPoint(event);
+          if (hit) dropCatalogAt(catalogDrag, hit.pt);
+          return;
         }
-        if (!facilityTemplateRef.current) return;
+        if (types.includes(CATALOG_DRAG_MIME)) return;
+        const dragged = event.dataTransfer.getData('text/plain') || getPlanFacilityDrag();
+        clearPlanFacilityDrag();
         const hit = eventPlanPoint(event);
-        if (!hit) return;
-        placeFacilityAt(hit.pt);
+        if (!dragged || !hit) return;
+        dropFacilityAtPoint(dragged, hit.pt);
       }}
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
@@ -7462,51 +10005,90 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           </div>
         </div>
       )}
-      {/* 2026-11-12 室内多选胶囊移植：组选浮层（计数+复制/删除 / 对齐八向+等距），锚在组包围盒上方，
-          拖组会话中隐藏（不跟随拖拽帧，松手回位）；对齐/等距各一条 undo。 */}
-      {multiSelectedFacilityIds.length >= 2 && !groupDragRef.current && multiGroupChipPx && (
-        <div className="pc-top-chip absolute" style={{ left: multiGroupChipPx.x, top: multiGroupChipPx.y, transform: 'translateX(-50%)', zIndex: 26 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-            <div className="pc-glass pc-glass--dark" style={chipPillStyle}>
-              <span aria-hidden style={chipCountBadgeStyle}>{multiSelectedFacilityIds.length}</span>
-              <span style={{ opacity: 0.9 }}>件已选中 · 拖动即整体移动</span>
-              <button type="button" data-testid="facility-multi-copy" title="复制所选（Ctrl+D 同效）" style={chipButtonStyle} onClick={() => duplicateFacilitiesMulti(multiSelectedFacilityIds)}>
-                复制
+      {/* 2026-11-15 用户指令：边界/范围改小后，把越界分区摆到明面上，并给「一键收进 + 撤销」。
+          挂舞台层而不是面板里：用户此刻在画布上，提示就在画布上；mousedown 拦截避免误触平移。 */}
+      {zoneOverflow.length > 0 || zoneUndoAvailable ? (
+        <div
+          className="pc-top-chip absolute left-1/2"
+          data-testid="zone-out-of-bounds-chip"
+          style={{ top: basemapLoading ? 54 : 14, transform: 'translateX(-50%)', zIndex: 27 }}
+          onMouseDown={event => event.stopPropagation()}
+          onDoubleClick={event => event.stopPropagation()}
+        >
+          <div
+            className="pc-glass pc-glass--dark"
+            role="status"
+            aria-live="polite"
+            style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_SURFACE.warnText, maxWidth: 620 }}
+          >
+            <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: 'currentColor', flex: '0 0 auto' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {zoneOverflow.length > 0 ? (
+                <>
+                  {zoneOverflow.length} 个分区越界：{zoneOverflow.slice(0, 2).map(item => `${item.zoneName}（${zoneOverflowReason(item)}）`).join('、')}
+                  {zoneOverflow.length > 2 ? ' 等' : ''}
+                </>
+              ) : (
+                '分区已收进红线，原坐标已保留'
+              )}
+            </span>
+            {zoneOverflow.length > 0 && (
+              <button
+                type="button"
+                data-testid="zone-pull-into-bounds"
+                title="把能自动摆回的分区收进红线（先平移，放不下再保形收缩）"
+                style={chipButtonStyle}
+                onClick={pullOverflowZonesIntoBounds}
+              >
+                一键收进红线
               </button>
-              <button type="button" data-testid="facility-multi-remove" title="删除所选（Delete 同效）" style={chipDangerButtonStyle} onClick={() => deleteFacilitiesMulti(multiSelectedFacilityIds)}>
-                删除
+            )}
+            {zoneUndoAvailable && (
+              <button
+                type="button"
+                data-testid="zone-pull-undo"
+                title="恢复收进前的原坐标"
+                style={chipButtonStyle}
+                onClick={undoZonePull}
+              >
+                撤销
               </button>
-            </div>
-            <div className="pc-glass pc-glass--dark" style={chipAlignRowStyle}>
-              <button type="button" aria-label="左对齐" title="左对齐" style={chipIconButtonStyle} onClick={() => alignFacilitiesMulti(multiSelectedFacilityIds, 'min-x')}>
-                <AlignLeft size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <button type="button" aria-label="水平居中" title="水平居中" style={chipIconButtonStyle} onClick={() => alignFacilitiesMulti(multiSelectedFacilityIds, 'center-x')}>
-                <AlignCenterHorizontal size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <button type="button" aria-label="右对齐" title="右对齐" style={chipIconButtonStyle} onClick={() => alignFacilitiesMulti(multiSelectedFacilityIds, 'max-x')}>
-                <AlignRight size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <button type="button" aria-label={multiSelectedFacilityIds.length < 3 ? '水平等距（至少三件）' : '水平等距分布'} title={multiSelectedFacilityIds.length < 3 ? '水平等距（至少三件）' : '水平等距分布'} disabled={multiSelectedFacilityIds.length < 3} style={{ ...chipIconButtonStyle, cursor: multiSelectedFacilityIds.length < 3 ? 'not-allowed' : 'pointer', opacity: multiSelectedFacilityIds.length < 3 ? 0.35 : 0.9 }} onClick={() => distributeFacilitiesMulti(multiSelectedFacilityIds, 'x')}>
-                <AlignHorizontalDistributeCenter size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <span aria-hidden style={{ width: 1, height: 14, background: 'currentColor', opacity: 0.25 }} />
-              <button type="button" aria-label="上对齐" title="上对齐" style={chipIconButtonStyle} onClick={() => alignFacilitiesMulti(multiSelectedFacilityIds, 'max-y')}>
-                <AlignStartVertical size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <button type="button" aria-label="垂直居中" title="垂直居中" style={chipIconButtonStyle} onClick={() => alignFacilitiesMulti(multiSelectedFacilityIds, 'center-y')}>
-                <AlignCenterVertical size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <button type="button" aria-label="下对齐" title="下对齐" style={chipIconButtonStyle} onClick={() => alignFacilitiesMulti(multiSelectedFacilityIds, 'min-y')}>
-                <AlignEndVertical size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-              <button type="button" aria-label={multiSelectedFacilityIds.length < 3 ? '垂直等距（至少三件）' : '垂直等距分布'} title={multiSelectedFacilityIds.length < 3 ? '垂直等距（至少三件）' : '垂直等距分布'} disabled={multiSelectedFacilityIds.length < 3} style={{ ...chipIconButtonStyle, cursor: multiSelectedFacilityIds.length < 3 ? 'not-allowed' : 'pointer', opacity: multiSelectedFacilityIds.length < 3 ? 0.35 : 0.9 }} onClick={() => distributeFacilitiesMulti(multiSelectedFacilityIds, 'y')}>
-                <AlignVerticalDistributeCenter size={13} strokeWidth={1.75} aria-hidden />
-              </button>
-            </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+      {/* 2026-11-15 用户指令：分区重叠不影响继续编辑，只在画布上挂一条常驻报错；
+          挪开就自动消失（不弹模态、不拦鼠标、不挡拖拽）。 */}
+      {overlapNotices.length > 0 && (
+        <div
+          className="pc-top-chip absolute left-1/2"
+          data-testid="zone-overlap-chip"
+          style={{
+            top: (basemapLoading ? 54 : 14) + (zoneOverflow.length > 0 || zoneUndoAvailable ? 44 : 0),
+            transform: 'translateX(-50%)',
+            zIndex: 28,
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            className="pc-glass pc-glass--dark"
+            role="alert"
+            aria-live="assertive"
+            style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_SURFACE.warnText, maxWidth: 640 }}
+          >
+            <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: '#E5484D', flex: '0 0 auto' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {overlapNotices.length} 处分区重叠：
+              {overlapNotices.slice(0, 2).map(item => `${item.a} × ${item.b}`).join('、')}
+              {overlapNotices.length > 2 ? ' 等' : ''}
+              （可以继续编辑，挪开就消失）
+            </span>
           </div>
         </div>
       )}
+      {/* 2026-11-15 用户：「浮胶囊的功能并进右侧属性卡」——件数/复制删除与八向对齐已移到
+          属性卡的 facility-group-panel，画布上不再压工具条，免得挡住宅区与动线。 */}
+
       {/* 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
           画布设施 = 复制 + 层级四项 + 删除；清单/面板行 = 按 kind 裁剪（分区/设施可复制）+ 删除。
           删除固定红字沉底加分隔线；菜单壳沿用 P2-l（viewport 防溢出 + 阻断画布按下/滚轮）。 */}
@@ -7764,12 +10346,73 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 </div>
               ))}
               <div style={{ padding: '6px 8px 2px', opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.row }}>
-                图层是同一套场地的不同设计方案；边界与定位跨图层共享。
+                图层是同一套场地的不同设计方案；用地红线与定位跨图层共享。
               </div>
             </div>
           )}
         </div>
       </PanelPortal>
+
+      {/* 2026-11-15 用户：合并徽章的明细卡——点徽章才展开，不再把一排叹号撒在线上。 */}
+      {conflictDetailKey && (() => {
+        const cluster = conflictClusters.find(item => item.key === conflictDetailKey);
+        if (!cluster) return null;
+        const viewport = currentViewport();
+        const pt = planPointToPixel(cluster.at, viewport);
+        const cardW = 260;
+        const half = cardW / 2 + 8;
+        const left = Math.min(Math.max(pt.x, half), Math.max(half, viewport.canvasW - half));
+        const anchorName = cluster.routeIds[0]
+          ? planRef.current.routes.find(route => route.id === cluster.routeIds[0])?.name
+          : cluster.zoneId
+            ? planRef.current.zones.find(zone => zone.id === cluster.zoneId)?.name
+            : undefined;
+        return (
+          <div
+            data-testid="conflict-detail"
+            style={{
+              position: 'absolute', left, top: pt.y + 14, transform: 'translateX(-50%)', zIndex: 7, width: cardW,
+              background: PLANNING_SURFACE.panelBg, border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+              borderRadius: PLANNING_RADIUS.md, boxShadow: '0 8px 22px rgba(20, 20, 22, 0.18)',
+              padding: '6px 8px 7px', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row,
+              fontFamily: 'system-ui, sans-serif', textAlign: 'left',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {anchorName ? `「${anchorName}」` : '问题'} · {cluster.count} 条
+              </span>
+              <button
+                type="button"
+                aria-label="收起问题明细"
+                title="收起"
+                onClick={() => showConflictDetail(null)}
+                style={{ all: 'unset' as const, cursor: 'pointer', padding: '0 2px', color: PLANNING_SURFACE.panelText, opacity: 0.55, fontSize: 13, lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {cluster.issues.map(issue => (
+                <li key={issue.key} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                  <span
+                    aria-hidden
+                    style={{ width: 6, height: 6, flex: '0 0 auto', marginTop: 5, borderRadius: 999, background: PLANNING_CONFLICT_COLORS[issue.status] }}
+                  />
+                  <span style={{ flex: 1, minWidth: 0, lineHeight: 1.45 }}>
+                    <b style={{ fontWeight: 600 }}>{PLAN_CONFLICT_CATEGORY_LABELS[issue.category]}</b>
+                    {' · '}
+                    {issue.message}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div style={{ marginTop: 5, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_TEXT.muted }}>
+              同一对象只占一枚徽章；红色＝冲突，橙色＝缺宽度。
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 2026-11-11 用户指令：文本标注就地输入框（Enter 提交 / Esc 取消；Shift+Enter 换行）。 */}
       {noteInput && (() => {
@@ -7900,13 +10543,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   </select>
                   <select
                     aria-label="清单分区筛选"
-                    value={invZone ?? 'all'}
+                    value={invZoneActive ?? 'all'}
                     onChange={event => setInvZone(event.target.value === 'all' ? undefined : event.target.value)}
                     style={selectStyle}
                   >
                     <option value="all">全部分区</option>
-                    <option value="unassigned">未归属</option>
-                    {levelView.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                    <option value="unassigned">未归属（{invZoneCounts.unassigned}）</option>
+                    {levelView.zones.map(zone => (
+                      <option key={zone.id} value={zone.id}>{zone.name}（{invZoneCounts.counts.get(zone.id) ?? 0}）</option>
+                    ))}
                   </select>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                     <input type="checkbox" checked={invIssuesOnly} onChange={event => setInvIssuesOnly(event.target.checked)} />
@@ -7916,6 +10561,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 <div data-testid="inventory-count" style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75 }}>
                   共 {filteredInventoryRows.length} 行 / 本层 {inventoryRows.length} 行
                 </div>
+                {filteredInventoryRows.length === 0 && (
+                  <div data-testid="inventory-empty" style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.7 }}>
+                    {invZoneActive !== undefined && invZoneActive !== 'unassigned'
+                      ? '这个分区里还没有物料或人员；把物料拖进分区就会自动归属到它。'
+                      : invZoneActive === 'unassigned'
+                        ? '所有物料和人员都已经归到分区里了。'
+                        : '当前筛选下没有行。'}
+                  </div>
+                )}
                 <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                   {filteredInventoryRows.slice(0, PLAN_INFO_LIST_LIMIT).map(row => {
                     const selected = inventoryRowSelected(row);
@@ -7941,6 +10595,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
             {infoTab === 'issues' && (
               <div data-testid="info-issues">
+                {/* 2026-11-16：图上默认只画真冲突（红）；缺宽度/容量待核实属于提示，这里给一个口子放出来。 */}
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: PLANNING_SPACING.xs, opacity: 0.8, cursor: 'pointer' }}
+                  title="缺宽度 = 通行带没评估；容量是按面积估算的规划假设，不是法规口径；两者都是提示，不是冲突"
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="info-show-unverified"
+                    checked={showAdvisoryBadges}
+                    onChange={event => toggleShowAdvisoryBadges(event.target.checked)}
+                  />
+                  图上显示提示类（缺宽度 / 容量待核实，默认不上图）
+                </label>
                 {infoIssues.length === 0 ? (
                   <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.8 }}>暂无待处理问题。</div>
                 ) : (
@@ -7971,11 +10638,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     {group.entries.map(entry => {
                       return (
                         <div key={entry.label} data-testid="legend-entry" style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: 2 }}>
-                          {/* H4-b：能对上 OnePlan 贴纸的条目用真实 SVG，其余/缺图回落 Lucide（entry.icon）。 */}
+                          {/* H4-b：能对上 OnePlan 贴纸的条目用真实 SVG，其余/缺图回落 Lucide（entry.icon）。
+                              2026-11-15：芯片再衬条目自己的 swatch 色，图例三型出入口与画布芯片同色。 */}
                           <OneplanSticker
                             sticker={entry.sticker ?? null}
                             fallbackIcon={entry.icon}
                             color={entry.swatch}
+                            chipColor={entry.chipColor}
                             title={entry.label}
                           />
                           <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: entry.swatch, display: 'inline-block' }} />
@@ -8156,7 +10825,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               );
             })}
 
-            {/* 场地边界文件夹（边界不在 inventory 里，单独一行）。 */}
+            {/* 用地红线文件夹（红线不在 inventory 里，单独一行）。 */}
             <div style={{ marginTop: PLANNING_SPACING.xs }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs }}>
                 <button
@@ -8167,13 +10836,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, flex: 1, minWidth: 0, padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 400 }}
                 >
                   <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{openFolders['boundary'] !== false ? '▾' : '▸'}</span>
-                  <span aria-hidden style={{ width: 16, height: 16, flex: '0 0 auto', borderRadius: 4, background: PLANNING_LAYER_COLORS.boundary, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />
-                  <span style={{ flex: 1 }}>场地边界</span>
+                  <BoundarySwatch size={16} />
+                  <span style={{ flex: 1 }}>用地红线</span>
                   <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{plan.boundary.length}</span>
                 </button>
                 <input
                   type="checkbox"
-                  aria-label="显示场地边界图层"
+                  aria-label="显示用地红线图层"
                   checked={layerState.boundary}
                   onChange={event => setLayerVisible('boundary', event.target.checked)}
                 />
@@ -8184,7 +10853,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     <button
                       type="button"
                       data-testid="layer-lock-boundary"
-                      aria-label={`${locked ? '解锁' : '锁定'}场地边界图层`}
+                      aria-label={`${locked ? '解锁' : '锁定'}用地红线图层`}
                       aria-pressed={locked}
                       onClick={() => setLayerLocked('boundary', !locked)}
                       style={{ all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', padding: 2, borderRadius: PLANNING_RADIUS.sm, color: locked ? PLANNING_SURFACE.warnText : PLANNING_SURFACE.panelText, opacity: locked ? 1 : 0.4 }}
@@ -8198,21 +10867,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {plan.boundary.length === 0 ? (
                     <div style={{ paddingLeft: 30, opacity: 0.7, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-                      还没画边界——物件库 → 区域 → 场地边界
+                      还没画红线——物件库 → 区域 → 用地红线
                     </div>
                   ) : (
                     renderOneplanItemRow({
                       key: 'layer-entity-boundary',
                       testId: 'layer-entity-boundary',
-                      label: `场地边界（${plan.boundary.length} 点）`,
+                      label: `用地红线（${plan.boundary.length} 点）`,
                       active: false,
                       onClick: () => {
                         const cx = plan.boundary.reduce((s, p) => s + p.x, 0) / plan.boundary.length;
                         const cy = plan.boundary.reduce((s, p) => s + p.y, 0) / plan.boundary.length;
                         centerViewOn({ x: cx, y: cy });
                       },
-                      title: '点击定位到边界',
-                      icon: <span aria-hidden style={{ width: 16, height: 16, flex: '0 0 auto', borderRadius: 4, background: PLANNING_LAYER_COLORS.boundary, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
+                      title: '点击定位到红线',
+                      icon: <BoundarySwatch size={16} />,
                     })
                   )}
                 </div>
@@ -8347,11 +11016,64 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                               {renderOneplanItemRow({
                                 key: 'catalog-boundary',
                                 testId: 'catalog-boundary',
-                                label: plan.boundary.length > 0 ? '场地边界（重画）' : '场地边界',
+                                label: plan.boundary.length > 0 ? '用地红线（重画）' : '用地红线',
                                 active: mode === 'boundary',
                                 onClick: () => armOrDisarm(mode === 'boundary', () => startAreaTool('boundary')),
-                                title: '沿场地单击加顶点，闭合后替换旧边界',
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_LAYER_COLORS.boundary, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
+                                title: '沿用地单击加顶点，闭合后替换旧红线',
+                                icon: <BoundarySwatch size={22} />,
+                              })}
+                              {/* 2026-11-15 用户指令：先圈一块比场地大的「大陆」，框外压暗。 */}
+                              {renderOneplanItemRow({
+                                key: 'catalog-scope',
+                                testId: 'catalog-scope',
+                                label: (plan.designScope ?? []).length >= 3 ? '重拖设计范围' : '拖出设计范围',
+                                active: mode === 'scope',
+                                onClick: () => armOrDisarm(mode === 'scope', () => startAreaTool('scope')),
+                                title: '按住拖一个矩形当设计范围：框外压暗，流线可以走在场地外、范围里',
+                                icon: <ScopeSwatch size={22} />,
+                              })}
+                              {plan.boundary.length >= 3 && renderOneplanItemRow({
+                                key: 'catalog-scope-expand',
+                                testId: 'catalog-scope-expand',
+                                label: `按场地外扩 ${DEFAULT_SCOPE_MARGIN_M} m`,
+                                active: false,
+                                onClick: () => {
+                                  if (readOnly) return;
+                                  // 手画十几点太贵：先给一个精确可用的外框，再拖顶点微调。
+                                  // 矩形口径：取场地外接矩形四周各外扩，永远 4 个角。
+                                  const next = expandRect(plan.boundary, DEFAULT_SCOPE_MARGIN_M);
+                                  commitPlan({ ...planRef.current, designScope: next });
+                                  setMode('view');
+                                  // 生成即框住：刚生成的范围如果大半在视口外，压暗区会盖满屏幕，看着像没画。
+                                  focusDesignScope(next);
+                                  setEditMessage(`已按场地外接矩形外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要改就点「重拖设计范围」。`);
+                                },
+                                title: '各边外扩 20 m 直接生成设计范围，不用手画顶点',
+                                icon: <ScopeSwatch size={22} plus />,
+                              })}
+                              {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
+                                key: 'catalog-scope-focus',
+                                testId: 'catalog-scope-focus',
+                                label: '定位到设计范围',
+                                active: false,
+                                // 只动视图不动 plan：手滑缩小了也能一键看回整个框。
+                                onClick: () => focusDesignScope(plan.designScope ?? []),
+                                title: '把视野框到设计范围（只移动视图，不改范围本身）',
+                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(242,163,60,0.16)', boxShadow: 'inset 0 0 0 1px rgba(242,163,60,0.7)' }} />,
+                              })}
+                              {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
+                                key: 'catalog-scope-clear',
+                                testId: 'catalog-scope-clear',
+                                label: '清除设计范围',
+                                active: false,
+                                onClick: () => {
+                                  if (readOnly) return;
+                                  commitPlan({ ...planRef.current, designScope: [] });
+                                  setMode('view');
+                                  setEditMessage('设计范围已清除：框外不再压暗。');
+                                },
+                                title: '去掉外框与蒙版（用地红线、分区、流线都不受影响）',
+                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)' }} />,
                               })}
                               {planZoneSemantics.map(s => {
                                 const zoneActive = mode === 'zone' && zoneSemantic === s;
@@ -8378,7 +11100,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                     label: option.label,
                                     active: nodeActive,
                                     onClick: () => armOrDisarm(nodeActive, () => { nodeKindRef.current = option.kind; setNodeKind(option.kind); draw(); startAreaTool('node'); }),
-                                    icon: <NodeToolIcon size={PLANNING_ICON_SIZES.tool} aria-hidden color={PLANNING_LAYER_COLORS.access} />,
+                                    icon: nodeKindToolIcon(option.kind),
                                   });
                                 })}
                               </div>
@@ -8389,7 +11111,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {openLibrarySubgroups.includes('areas:路线') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {planRouteKinds.map(k => {
-                                const routeActive = mode === 'route' && routeKind === k;
+                                const routeActive = mode === 'route' && routeKind === k && !routePresetRef.current;
                                 return renderOneplanItemRow({
                                 key: `route-${k}`,
                                 testId: `catalog-route-${k}`,
@@ -8403,6 +11125,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           )}
                         </>
                       )}
+
+                      {/* 2026-11-16 用户：车与「基础设施」同级、单独一行；行内是图标素材 */}
+                      {renderOneplanGroupHeader({ id: 'vehicles', label: CAR_ROW_LABEL, count: libraryVehicleIcons.length, icon: 'truck' })}
+                      {openLibrarySections.includes('vehicles') && libraryVehicleIcons.length > 0 && renderOneplanStickerRows(libraryVehicleIcons)}
 
                       {/* 2. 基础设施 → 17 个子组（OnePlan Infrastructure 镜像） */}
                       {renderOneplanGroupHeader({
@@ -8597,27 +11323,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               ? selectionInspectorZone
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 4px', textAlign: 'left', color: PLANNING_TEXT.muted }}>
-                  <span style={{ fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: 1.6 }}>还没选中物件。点下面类型快速开始，或直接在图上点选查看属性。</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs }}>
-                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('zone')}>分区</button>
+                  {/* 2026-11-16 用户拍板「按第 1 条改」：删掉 5 个类型 chip，只留一句点选提示 + 打开物件库。
+                      属性卡只负责“看/改选中物件的属性”；画/放这类创建入口归左栏物件库，不再在这里再开一份。 */}
+                  <span style={{ fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: 1.6 }}>在图上点选物件，就能查看和修改它的属性。</span>
+                  {!readOnly && (
                     <button
                       type="button"
+                      data-testid="outdoor-inspector-open-library"
                       className="sc-empty-chip"
-                      disabled={readOnly}
-                      onClick={() => {
-                        selectFacility(null);
-                        setSelectedZoneId(null);
-                        setMode('facility');
-                        setEditMessage('从左侧物件库选一件设施，在地图上单击放置；Esc 结束。');
-                        draw();
-                      }}
+                      // 物件库是左栅「添加物件」页签，宿主不在画布内：发事件请左栅切过去，
+                      // 与既有 `scendance:focus-object` 同一套跨组件做法（画布不持有左栅状态）。
+                      onClick={() => window.dispatchEvent(new CustomEvent('scendance:open-outdoor-library'))}
                     >
-                      设施
+                      打开物件库
                     </button>
-                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('route')}>动线</button>
-                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startAreaTool('node')}>出入口</button>
-                    <button type="button" className="sc-empty-chip" disabled={readOnly} onClick={() => startLaborRole('安保')}>人员</button>
-                  </div>
+                  )}
                 </div>
               ),
           },
@@ -8633,6 +11353,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <PanelPortal host={inspectorPanelHost}>
           <div
             data-testid="outdoor-inspector-stack"
+            data-plan-panel=""
             onWheel={stopPanelWheel}
             style={{
               position: 'absolute', right: 96, top: 12, zIndex: 6,

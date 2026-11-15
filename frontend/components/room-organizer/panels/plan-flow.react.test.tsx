@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import {
-  PLAN_EXAMPLES,
   PlanHome,
   isPlanHome,
   planGenerateFromDraft,
@@ -16,17 +15,13 @@ import {
 afterEach(() => { cleanup(); });
 
 describe('plan flow v2', () => {
-  it('leads with clickable examples instead of chip rows', () => {
-    const onPickExample = vi.fn();
-    render(<PlanHome onGenerate={vi.fn()} onPickExample={onPickExample} />);
-    const examples = screen.getByRole('group', { name: '需求例句' });
-    expect(within(examples).getAllByRole('button').map(button => button.textContent)).toEqual([...PLAN_EXAMPLES]);
+  it('keeps the example row out of the home — it lives above the composer', () => {
+    render(<PlanHome onGenerate={vi.fn()} />);
+    // 例句只在输入框上方那一格出现，首页里不再自带一组例句卡。
+    expect(screen.queryByRole('group', { name: '需求例句' })).toBeNull();
     expect(screen.queryByRole('button', { name: '发布会' })).toBeNull();
     expect(screen.getByRole('button', { name: '生成方案' }).getAttribute('aria-disabled')).toBe('true');
     expect(screen.queryByRole('status')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: PLAN_EXAMPLES[0] }));
-    expect(onPickExample).toHaveBeenCalledWith(PLAN_EXAMPLES[0]);
   });
 
   it('echoes a partial draft and asks for what is missing', () => {

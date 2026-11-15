@@ -5,8 +5,9 @@ import type {
   PlanPoint,
   SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { PLANNING_LAYER_COLORS, PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY } from '@/lib/outdoor-plan-tokens';
 import { annotationRectRing } from './site-plan-annotate';
+import { routeDisplayColor } from './route-carrier-color';
 
 /**
  * 2D 规划实体 → 3D 场地坐标（P2-g「2D 设施与 3D 物料对位」的几何层）。
@@ -95,11 +96,8 @@ const ROUTE_COLORS: Record<string, string> = {
   service: '#8a6fa8',
 };
 
-const NODE_COLORS: Record<string, string> = {
-  entry: '#2f8f6a',
-  exit: '#c0392b',
-  both: '#3d8fa8',
-};
+/** 出入口三型色与 2D 画布同源（tokens 单一出口），3D 点位与平面点位颜色一致。 */
+const NODE_COLORS: Record<string, string> = { ...PLANNING_NODE_KIND_COLORS };
 
 const FACILITY_FALLBACK_COLOR = '#8b9aa6';
 const WORKER_FALLBACK_COLOR = '#5e7fa6';
@@ -236,6 +234,12 @@ export function planPropKind(templateId: string): PlanPropKind {
 
 export interface PlanFootprintShapes {
   boundary: ShellPoint[];
+  /**
+   * 2026-11-15 设计范围（2D 里那个比场地大的「大陆框」）。
+   * 为什么不并进 boundary：两者语义不同——boundary 是物料能落地的场地，designScope 只是看图时的取景框；
+   * 3D 里也要独立画，否则 2D 圈好的范围切到 3D 就「消失」，用户会以为两个视图不是同一份数据。
+   */
+  scope: ShellPoint[];
   zones: PlanFootprintZonesShape[];
   facilities: PlanFootprintFacilityShape[];
   /** 需要真正立起来的 3D 物件（与 facilities 一一对应，尺寸/朝向已换算到壳体）。 */
@@ -367,15 +371,20 @@ function annotationShape(annotation: PlanAnnotation, frame: PlanShellFrame): Pla
 }
 
 export function planFootprintShapes(
-  plan: Pick<SitePlanData, 'boundary' | 'zones' | 'facilities' | 'routes' | 'nodes' | 'workers' | 'measurements' | 'annotations'>,
+  plan: Pick<SitePlanData, 'boundary' | 'designScope' | 'zones' | 'facilities' | 'routes' | 'nodes' | 'workers' | 'measurements' | 'annotations'>,
   target: { width: number; depth: number },
   options?: { clampPoints?: boolean },
 ): PlanFootprintShapes | null {
   const frame = planShellFrame(plan.boundary, target, options);
   if (!frame) return null;
+  // 范围另算一帧、关掉 clamp：它天生落在场地外，「钳进壳体」等于把框缩回边界上。
+  const scopeFrame = planShellFrame(plan.boundary, target, { clampPoints: false });
+  const designScope = plan.designScope ?? [];
   const defaultOpacity = PLANNING_ZONE_OPACITY.default;
   return {
     boundary: plan.boundary.map(point => frame.toShell(point)),
+    // 设计范围故意不 clamp：它天生比场地大，钳进壳体就等于把框缩回到边界上。
+    scope: scopeFrame && designScope.length >= 3 ? designScope.map(point => scopeFrame.toShell(point)) : [],
     zones: plan.zones.map(zone => ({
       id: zone.id,
       semantic: zone.semantic,
@@ -394,7 +403,8 @@ export function planFootprintShapes(
       id: route.id,
       points: route.points.map(point => frame.toShell(point)),
       // 2026-11-12 活动包赛道预设：动线主题色优先（契约 planRouteSchema.color）。
-      color: route.color ?? ROUTE_COLORS[route.kind] ?? ROUTE_COLORS.pedestrian!,
+      // 2026-11-16 线色跟载体走（与图例同一口径），自带主题色优先。
+      color: routeDisplayColor(route),
       oneWay: route.oneWay,
       lineWidth: route.kind === 'vehicle' ? 3 : 2,
     })),

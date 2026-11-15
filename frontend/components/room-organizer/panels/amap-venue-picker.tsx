@@ -303,7 +303,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
     flowRef.current = [];
     setSaved(false);
     paintDraftPolygon([], window.AMap as any, mapRef.current, true, draftOverlayRef);
-    setStatus('在卫星图上点击勾出场地边界，点「完成圈画」闭合。');
+    setStatus('在卫星图上点击勾出用地红线，点「完成圈画」闭合。');
   }
 
   /** 结束圈画：顶点够且轮廓合格才闭合，不合格要说清原因。 */
@@ -372,7 +372,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
 
   function startFlow() {
     if (drawRef.current.length < 3) {
-      setStatus('先圈出场地边界，再画主客流线。');
+      setStatus('先圈出用地红线，再画主客流线。');
       return;
     }
     drawingRef.current = 'flow';

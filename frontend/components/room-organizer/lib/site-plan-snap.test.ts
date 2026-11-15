@@ -7,7 +7,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { planMetersPerPixel, planPointToPixel, type PlanViewport } from './outdoor-plan-canvas';
-import { nearestRingEdge, planGridStepM, SNAP_GRID_TOL_PX, snapPointToGrid } from './site-plan-snap';
+import { planPointInRing } from './site-plan-editing';
+import { clampRingMoveToBoundary, nearestRingEdge, nearestRouteSnapPoint, planGridStepM, SNAP_GRID_TOL_PX, snapPointToGrid, stickPointToBoundary } from './site-plan-snap';
 
 const VIEW: PlanViewport = { lng: 120.146, lat: 30.252, zoom: 19, canvasW: 1000, canvasH: 700 };
 
@@ -93,5 +94,110 @@ describe('nearestRingEdge', () => {
 
   it('少于 2 个点 → 没有边可命中', () => {
     expect(nearestRingEdge([{ x: 0, y: 0 }], { x: 0, y: 0 }, VIEW)).toBeNull();
+  });
+});
+
+describe('贴边：接近场地边缘就不许越界（2026-11-16 用户）', () => {
+  // 「这个挪到接近场地边缘的时候，老是识别超出场地，能不能直接设计成贴边去设计」。
+  const BOUNDARY = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 },
+  ];
+
+  it('场外的点被拉回最近的边界上（不再产生越界）', () => {
+    const stuck = stickPointToBoundary({ x: 130, y: 50 }, BOUNDARY, VIEW);
+    expect(stuck.stuck).toBe(true);
+    expect(stuck.point.x).toBeCloseTo(100, 6);
+    expect(stuck.point.y).toBeCloseTo(50, 6);
+    // 顶点真的落在边界上：既不算界外，也不会被判越界。
+    expect(planPointInRing(stuck.point, BOUNDARY)).toBe(true);
+  });
+
+  it('界内但离边 ≤14 px 的点吸到边界上（描着墙画）', () => {
+    const mpp = planMetersPerPixel(VIEW);
+    const near = stickPointToBoundary({ x: 100 - 6 * mpp, y: 50 }, BOUNDARY, VIEW);
+    expect(near.stuck).toBe(true);
+    expect(near.point.x).toBeCloseTo(100, 6);
+  });
+
+  it('离边界远的点一个不动（不影响细微调整）', () => {
+    const mpp = planMetersPerPixel(VIEW);
+    const far = stickPointToBoundary({ x: 100 - 40 * mpp, y: 50 }, BOUNDARY, VIEW);
+    expect(far.stuck).toBe(false);
+    expect(far.point.x).toBeCloseTo(100 - 40 * mpp, 6);
+  });
+
+  it('边界没画完（<3 点）→ 不做任何贴边', () => {
+    const pt = { x: 130, y: 50 };
+    expect(stickPointToBoundary(pt, [], VIEW)).toEqual({ point: pt, stuck: false });
+  });
+
+  it('整体拖动撞墙就停：整个分区不会被推出场地', () => {
+    const base = [
+      { x: 10, y: 10 },
+      { x: 40, y: 10 },
+      { x: 40, y: 40 },
+      { x: 10, y: 40 },
+    ];
+    const moved = base.map(p => ({ x: p.x + 200, y: p.y }));
+    const clamped = clampRingMoveToBoundary(base, moved, BOUNDARY);
+    // 停在边界上：最右顶点不越过 x=100，而且确实动了（不是被钉在原位）。
+    expect(Math.max(...clamped.map(p => p.x))).toBeLessThanOrEqual(100 + 1e-6);
+    expect(Math.max(...clamped.map(p => p.x))).toBeGreaterThan(99);
+    expect(clamped.every(p => planPointInRing(p, BOUNDARY))).toBe(true);
+  });
+
+  it('没碰到边界时整体拖动原样通过', () => {
+    const base = [
+      { x: 10, y: 10 },
+      { x: 40, y: 10 },
+      { x: 40, y: 40 },
+      { x: 10, y: 40 },
+    ];
+    const moved = base.map(p => ({ x: p.x + 5, y: p.y + 5 }));
+    expect(clampRingMoveToBoundary(base, moved, BOUNDARY)).toEqual(moved);
+  });
+
+  it('本来就在界外的顶点不会把整块分区锁死（历史数据可继续编辑）', () => {
+    const base = [
+      { x: 10, y: 10 },
+      { x: 120, y: 10 },
+      { x: 120, y: 40 },
+      { x: 10, y: 40 },
+    ];
+    const moved = base.map(p => ({ x: p.x + 5, y: p.y }));
+    expect(clampRingMoveToBoundary(base, moved, BOUNDARY)).toEqual(moved);
+  });
+});
+
+describe('nearestRouteSnapPoint（手放的出入口吸到动线上）', () => {
+  // 2026-11-15 用户：「出入口移到流线上时自动吸附在线上，挪开也没问题」——软吸附，不粘住。
+  const route = { points: [{ x: 0, y: 0 }, { x: 40, y: 0 }] };
+
+  it('指针离动线 3 px → 吸到线上投影点', () => {
+    const mpp = planMetersPerPixel(VIEW);
+    const snapped = nearestRouteSnapPoint(planPointToPixel({ x: 20, y: 3 * mpp }, VIEW), [route], VIEW);
+    expect(snapped).not.toBeNull();
+    expect(snapped!.x).toBeCloseTo(20, 4);
+    expect(snapped!.y).toBeCloseTo(0, 6);
+  });
+
+  it('离得远（>12 px）→ 不吸，返回 null（挪开就脱开）', () => {
+    const mpp = planMetersPerPixel(VIEW);
+    expect(nearestRouteSnapPoint(planPointToPixel({ x: 20, y: 20 * mpp }, VIEW), [route], VIEW)).toBeNull();
+  });
+
+  it('多条动线都够近 → 吸到最近的那条', () => {
+    const mpp = planMetersPerPixel(VIEW);
+    const far = { points: [{ x: 0, y: 8 * mpp }, { x: 40, y: 8 * mpp }] };
+    const snapped = nearestRouteSnapPoint(planPointToPixel({ x: 20, y: 3 * mpp }, VIEW), [far, route], VIEW);
+    expect(snapped).not.toBeNull();
+    expect(snapped!.y).toBeCloseTo(0, 6);
+  });
+
+  it('没有动线 → null（不影响普通拖放）', () => {
+    expect(nearestRouteSnapPoint({ x: 0, y: 0 }, [], VIEW)).toBeNull();
   });
 });

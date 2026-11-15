@@ -294,6 +294,7 @@ function failure(error: unknown): BackendFailure {
     LEASE_LOST: "编辑权已到期或交接，草稿已保留。",
     LEASE_BUSY: "另一编辑会话正在使用此项目。",
     PROJECT_BUSY: "项目仍有人持有编辑权，请先释放或等待到期后再删除。",
+    PROJECT_NOT_FOUND: "项目已不存在或已被删除，当前画布仍是本机草稿，可继续编辑。",
     RECONSTRUCTION_BUSY: "项目正在生成方案，请等待任务完成后再删除。",
     NETWORK_ERROR: "连接失败，草稿已保留，云端写入已暂停。",
     CLOUD_WRITE_BLOCKED: "请先获取有效编辑权再保存。",
@@ -324,6 +325,11 @@ function failure(error: unknown): BackendFailure {
     IDEMPOTENCY_CONFLICT: "同一请求编号不能用于不同需求，请创建新的请求。",
   };
   return { code, status: error instanceof SceneApiError ? error.status : 0, message: messages[code] ?? (localCode && error instanceof Error ? error.message : `云端操作失败（${code}），草稿已保留。`) };
+}
+
+/** 面板/浮窗直接 catch 到的 SceneApiError 只有原始 code；用同一张文案表转成用户可读文本。 */
+export function backendFailureText(error: unknown): string {
+  return failure(error).message;
 }
 
 export class BackendSession {
@@ -470,6 +476,11 @@ export class BackendSession {
     try{await this.client.request(`/projects/${encodeURIComponent(projectId)}/lease/release`,'POST',{sessionId:lease.sessionId,generation:lease.generation},false,undefined,check);}
     catch(error){if(!(error instanceof SceneApiError&&error.code==='LEASE_LOST'))throw error;}
     check();this.update({lease:null});
+  }
+  /** 深链指向的项目已不存在等一次性失败：清掉残留的会话级错误与阻塞态，画布保持本机草稿。 */
+  dismissTransientFailure(): void {
+    if (this.snapshot.project || this.snapshot.lease || this.snapshot.geometryBinding || !this.snapshot.error || this.snapshot.status !== "blocked") return;
+    this.update({ error: null, status: this.snapshot.user ? "ready" : this.snapshot.status });
   }
   private assertCanvasProjectMatch():void {
     if(this.canvasProjectMismatch)throw new SceneApiError('CANVAS_PROJECT_MISMATCH',409,null);

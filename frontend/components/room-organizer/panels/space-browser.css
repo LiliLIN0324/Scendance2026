@@ -89,6 +89,9 @@
 .sc-scan-plain { margin-top: 18px; }
 .sc-scan-plain-label { margin: 0 0 2px; padding-inline: 2px; color: var(--space-muted); font-size: 11px; line-height: 16px; }
 .sc-scan-plain ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--space-line); }
+/* 示例场景并入实景扫描后的一小段：示例是两列卡片，不继承索引行那条上边线。 */
+.sc-space-samples-inline ul { border-top: 0; }
+.sc-space-samples-inline .sc-space-samples { margin-top: 6px; }
 .sc-scan-row {
   display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 8px 2px; border: 0; border-bottom: 1px solid var(--space-line);

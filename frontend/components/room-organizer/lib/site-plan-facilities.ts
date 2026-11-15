@@ -178,7 +178,7 @@ export function facilityPlacementIssues(
   if (boundary.length < 3) return issues;
   for (const pt of footprint) {
     if (!planPointInRing(pt, boundary)) {
-      issues.push({ code: 'out-of-boundary', message: '设施越界：占地有角点落在场地边界之外。', at: pt });
+      issues.push({ code: 'out-of-boundary', message: '设施越界：占地有角点落在用地红线之外。', at: pt });
       return issues;
     }
   }
@@ -190,7 +190,7 @@ export function facilityPlacementIssues(
       const b1 = boundary[j]!;
       const b2 = boundary[(j + 1) % boundary.length]!;
       if (planSegmentsCrossStrict(f1, f2, b1, b2)) {
-        issues.push({ code: 'out-of-boundary', message: '设施越界：场地边界穿过了设施占地。', at: f2 });
+        issues.push({ code: 'out-of-boundary', message: '设施越界：用地红线穿过了设施占地。', at: f2 });
         return issues;
       }
     }

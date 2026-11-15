@@ -10,10 +10,14 @@ import { parseStoredLayout } from './schema';
 describe('merged catalogue cloud compatibility',()=>{
   it('keeps every model and its identity through save, reload and local serialization, including thin models',()=>{
     const models=normalizeOnlineModels(catalogue);
-    expect(models).toHaveLength(528);
-    expect(buildOnlineModelIndex(models).buckets).toHaveLength(12);
-    expect(new Set(models.map(m=>m.assetId)).size).toBe(528);
-    for(const model of models){
+    expect(models).toHaveLength(catalogue.placeableCount);
+    // 素材家族 20 类折进基础设施 9 组（material-taxonomy 的 MATERIAL_GROUP_BY_BUCKET）。
+    expect(buildOnlineModelIndex(models).buckets).toHaveLength(9);
+    // 只有走过云注册的 528 件能进云端场景（补库批次与 rides 仍是本地可用、未注册）。
+    const registered=models.filter(model=>model.assetId);
+    expect(registered).toHaveLength(528);
+    expect(new Set(registered.map(m=>m.assetId)).size).toBe(528);
+    for(const model of registered){
       expect(model.assetId).toBe((assetIds as Record<string,string>)[model.glb]);
       const doc=sceneSchema.parse({schemaVersion:1,venue:{shape:'rectangle',width:100,depth:100,height:6,entrances:[]},camera:'overview',lighting:'warm',
         objects:[{id:'10000000-0000-4000-8000-000000000001',materialId:'asset',assetId:model.assetId,

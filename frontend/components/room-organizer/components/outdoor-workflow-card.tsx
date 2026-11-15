@@ -18,19 +18,6 @@ const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
   "refine-3d": "选中设施换模型、原位上传或生成（费用单独确认）",
 };
 
-/** 2026-11-15 对标谷地工坊的建议体系：每阶段给可点的「下一句」，点即填进输入框，
- *  不用自己想措辞。只做预填不做提交——发送仍是用户按键确认的动作。 */
-const STAGE_PROMPTS: Record<OutdoorStage, readonly string[]> = {
-  place: ["在杭州西湖边办一场周末市集", "先找杭州 IN77，核对可用的活动范围"],
-  scope: ["就用这个范围", "范围往北扩一点"],
-  zones: ["按活动用途分区", "签到区和观众区放北侧"],
-  "main-routes": ["排一下流线和出入口", "入口放在正门，别走地下车库"],
-  objects: ["签到区摆 2 张桌子", "舞台区配音响和背景板"],
-  "sub-routes": ["补一下子出入口", "散场支线也排一下"],
-  people: ["展览区 2 名保安、表演区 3 名工作人员"],
-  "refine-3d": ["给舞台换个模型", "开流动模拟看散场"],
-};
-
 /** 底图共享层：地表/水系/道路/街区，各阶段变体只追加自己的覆盖层。 */
 function ThumbBase(): JSX.Element {
   return (
@@ -178,12 +165,10 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
 
 export function OutdoorWorkflowCard({
   flow,
-  onPrefill,
   onCancelPreview,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
   /** 「下一句」建议芯片的预填回调：点芯片只填输入框，发送仍是用户按键确认。 */
-  onPrefill?: ((text: string) => void) | undefined;
   /** 2026-11-15 用户拍板：撤回预览要在对话流留「已放弃」徽章——按钮经此回调，
    *  由面板调 cancel() 并补一条决策留痕气泡；不传则保持原直调 cancel() 的行为。 */
   onCancelPreview?: (() => void) | undefined;
@@ -268,6 +253,14 @@ export function OutdoorWorkflowCard({
           {flow.state.brief.guests ? ` · 同时${flow.state.brief.guests}人` : ""}
         </p>
       )}
+      {flow.designSteps.length > 0 && (
+        <details className="ap-design-process" open>
+          <summary>设计过程 <span>{flow.designSteps.length} 步</span></summary>
+          <ol>
+            {flow.designSteps.map((step, index) => <li key={`${index}:${step}`}>{step}</li>)}
+          </ol>
+        </details>
+      )}
       {flow.proposal ? (
         <div>
           <strong>{flow.proposal.label}</strong>
@@ -295,7 +288,11 @@ export function OutdoorWorkflowCard({
               flow.proposal && void flow.confirmProposal(flow.proposal)
             }
           >
-            确认并应用这一版
+            {flow.proposal.afterConfirm === "main-routes"
+              ? "确认分区并预览主通道"
+              : flow.proposal.afterConfirm === "objects"
+                ? "确认分区并预览物料排布"
+                : "确认并应用这一版"}
           </button>
           <button
             type="button"
@@ -519,16 +516,6 @@ export function OutdoorWorkflowCard({
             取消本次预览
           </button>
         </footer>
-      )}
-      {/* 「下一句」建议芯片（谷地工坊式）：空闲且无待确认提案时给，忙碌/确认中不出。 */}
-      {onPrefill && !flow.busy && !flow.proposal && (STAGE_PROMPTS[flow.state.stage]?.length ?? 0) > 0 && (
-        <div className="ap-stage-prompts" role="group" aria-label="下一句建议">
-          {STAGE_PROMPTS[flow.state.stage]!.map((text) => (
-            <button key={text} type="button" className="ap-stage-prompt" onClick={() => onPrefill(text)}>
-              {text}
-            </button>
-          ))}
-        </div>
       )}
     </section>
     {flow.loginRequired && (

@@ -191,6 +191,17 @@ describe('无感挂云', () => {
     expect(consumeSelfAttachedProject('me', 'p-new')).toBe(true);
   });
 
+  it('挂云成功后轻提示归属工作室，归属对用户可见', async () => {
+    const notices: string[] = [];
+    const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
+    try {
+      const onBind = vi.fn();
+      render(<Probe layout={cloudLayout()} onBind={onBind} />);
+      await waitFor(() => expect(onBind).toHaveBeenCalledWith('p-new'));
+      expect(notices.some(text => text.includes('归属工作室「个人工作室」'))).toBe(true);
+    } finally { unsubscribe(); }
+  });
+
   it('画布已有名字时沿用画布名', async () => {
     const onBind = vi.fn();
     render(<Probe layout={cloudLayout([{}], { name: '春夏市集' })} onBind={onBind} />);

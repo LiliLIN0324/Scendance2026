@@ -30,11 +30,16 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(materialBlock).toContain('<Box size={26}');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 空间、物料、拍摄场地、户外规划共用圆钮；标签沿用「拍完当场判断能不能重建，并出 3D」。
+    // 空间、物料、场地、户外规划共用圆钮。场地钮既承接「重建真实场地」也承接「生成新场景」，
+    // 所以标签不再写「拍摄场地」——否则用户会以为点开只有拍摄。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
-    expect(primary).toContain('aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"');
+    expect(primary).toContain('aria-label="场地：重建真实场地，或生成新场景"');
     expect(primary).toContain('sc-rail-3d-tag');
-    expect(primary).toContain('onClick={captureOpen ? closeCapturePanel : openCapturePanel}');
+    // 点开的是统一生成面板首层（只列场地两项），再点一次收起。
+    expect(primary).toContain("onClick={() => {");
+    expect(primary).toContain("openGenerationSheet({ scope: 'venue' })");
+    expect(primary).toContain('closeGenerationSheet()');
+    expect(primary).toContain('data-tip="场地"');
     expect(primary).toContain('data-tip="空间"');
     expect(primary).toContain('data-tip="物料"');
     expect(primary).not.toContain('sc-space-chevron');
@@ -46,11 +51,14 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(source).not.toContain('id="workbench-space-shelf"');
     expect(source).not.toContain('id="workbench-material-shelf"');
     expect(primary).not.toContain('aria-label="场地"');
-    // 旧「场地」轨钮已删；「拍摄场地」（拍摄引导锚点）允许含「场地」二字，故只封具体名称。
+    // 旧「场地」轨钮（VenueRailButton）已删；现在的场地钮是新写的一颗，带冒号后缀，
+    // 所以仍然封着无后缀的「aria-label="场地"」，防止又回到无歧义的旧命名上。
     expect(primary).not.toContain('<VenueRailButton');
     expect(primary).not.toContain('Store');
     expect(source).not.toContain('<VenueRailButton');
     expect(source).not.toContain('aria-label="场地"');
+    // 轨钮已改口，旧文案不应再出现在源码里（手机端另有简短入口，不在本次范围）。
+    expect(source).not.toContain('aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"');
     expect(source).not.toContain('title="设置"');
     expect(source).not.toContain('RailAgentBrandSlot');
     expect(source).not.toContain('QingguangAvatarFlight');

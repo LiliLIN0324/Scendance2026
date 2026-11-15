@@ -1,152 +1,122 @@
-import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
+import { describe, expect, it } from 'vitest';
 import { buildPlanFootprint } from './plan-footprint-builder';
-import { ROOM_OBJECT_TAGS } from './room-builder';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /**
- * 3D 地面图层的构建冒烟测试：不渲染、不看图，只确认「该有的都有、位置在场地框里、
- * 标记挂对」——重建靠 removeTagged 清这一层，标记漏了就会在场景里越堆越多。
+ * 3D 规划层必须和 2D 同一份数据：场地边界（蓝）与设计范围（琥珀）都要出现。
+ *
+ * 为什么在 node 里直接建 THREE 场景来测：这两个环在 3D 里是 Line2/Mesh，
+ * 只有真跑一遍 builder 才能确认「画进去了、抬升层级对、颜色对」，
+ * 而不是靠人眼在浏览器里截图比对。
  */
 
-const metrics = { width: 20, depth: 10 };
+const BOUNDARY = [
+  { x: -10, y: -7 },
+  { x: 10, y: -7 },
+  { x: 10, y: 7 },
+  { x: -10, y: 7 },
+];
 
-function makePlan(): SitePlanData {
+/** 外扩 20 m/边后的 60×54 m 设计范围（与「按场地外扩 20 m」同一套几何）。 */
+const SCOPE = [
+  { x: -30, y: -27 },
+  { x: 30, y: -27 },
+  { x: 30, y: 27 },
+  { x: -30, y: 27 },
+];
+
+function makePlan(overrides: Partial<SitePlanData> = {}): SitePlanData {
   return {
     schemaVersion: 1,
-    boundary: [
-      { x: 0, y: 0 },
-      { x: 20, y: 0 },
-      { x: 20, y: 10 },
-      { x: 0, y: 10 },
-    ],
-    zones: [{ id: 'z1', semantic: 'audience', name: '观众区', polygon: [
-      { x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 },
-    ], notes: '' }],
-    facilities: [{ id: 'f1', templateId: 'tent', name: '帐篷', position: { x: 15, y: 5 }, rotationDeg: 0, size: { width: 4, depth: 4 }, notes: '' }],
-    routes: [{ id: 'r1', kind: 'pedestrian', name: '人行', points: [{ x: 1, y: 1 }, { x: 19, y: 9 }], oneWay: false, notes: '' }],
-    nodes: [{ id: 'n1', kind: 'entry', name: '入口', position: { x: 0, y: 5 }, notes: '' }],
-    workers: [{ id: 'w1', role: '引导', count: 4, position: { x: 10, y: 5 }, notes: '' }],
+    anchor: { lng: 120.15, lat: 30.28 },
+    boundary: BOUNDARY,
+    zones: [],
+    facilities: [],
+    routes: [],
+    nodes: [],
+    workers: [],
+    measurements: [],
+    annotations: [],
+    ...overrides,
   } as unknown as SitePlanData;
 }
 
-function findLayer(scene: THREE.Scene): THREE.Object3D | undefined {
-  return scene.children.find(child => child.userData.type === ROOM_OBJECT_TAGS.PlanFootprint);
+function build(plan: SitePlanData): THREE.Group {
+  const scene = new THREE.Scene();
+  const ok = buildPlanFootprint(
+    THREE as unknown as typeof import('three'),
+    scene as unknown as import('three').Scene,
+    plan,
+    { width: 20, depth: 14 },
+    { clampPoints: false },
+  );
+  expect(ok).toBe(true);
+  const group = (scene.getObjectByName('plan-footprint') as THREE.Group | undefined) ?? null;
+  expect(group).not.toBeNull();
+  return group!;
 }
 
-describe('buildPlanFootprint', () => {
-  it('把规划挂成带了标记的单一图层，重建时可以整层摘掉', () => {
-    const scene = new THREE.Scene();
-    expect(buildPlanFootprint(THREE, scene, makePlan(), metrics)).toBe(true);
-    const layer = findLayer(scene);
-    expect(layer).toBeDefined();
-    expect(layer!.children.length).toBeGreaterThanOrEqual(7); // 分区色块+描边、设施色块+描边、动线、点位×2、场地轮廓
+function colorHex(object: THREE.Object3D): number | null {
+  const material = (object as unknown as { material?: { color?: { getHex(): number } } }).material;
+  return material?.color ? material.color.getHex() : null;
+}
+
+describe('3D 规划层：设计范围与场地边界同步', () => {
+  it('有设计范围时：白纱蒙版 + 四角白色 L 角标（各带一圈淡墨底线），与 2D 同一个形', () => {
+    const group = build(makePlan({ designScope: SCOPE }));
+    const marked = group.children.filter(child => child.userData.planDesignScope === true);
+    // 1 块白纱面 + 4 个角 ×（1 条白 L + 1 条淡墨底线）= 9（字在单测环境里没有 canvas，会自己跳过）
+    expect(marked.length).toBe(9);
+
+    const mask = marked.find(child => child.userData.planDesignScopeMask === true) as THREE.Mesh | undefined;
+    expect(mask).toBeTruthy();
+    // 2026-11-15 视觉定稿：框外不再压黑，改白纱（与 2D 的 rgba(255,255,255,0.52) 同档）。
+    expect(colorHex(mask!)).toBe(0xffffff);
+    expect(mask!.position.y).toBeCloseTo(0.049, 6);
+    // 有洞才有内外面：外框 4 角 + 范围 4 点，三角化后顶点数一定多于一个四边形
+    const position = (mask!.geometry as THREE.BufferGeometry).getAttribute('position');
+    expect(position.count).toBeGreaterThan(6);
+
+    // 2D 只留四个角的 L，不画整圈框线；带 4 个角才能和 2D 「一模一样」。
+    const brackets = marked.filter(child => child.userData.planDesignScopeRing === true);
+    expect(brackets.length).toBe(4);
+    for (const bracket of brackets) expect(colorHex(bracket)).toBe(0xffffff);
+    const halos = marked.filter(child => child.userData.planDesignScopeHalo === true);
+    expect(halos.length).toBe(4);
+    for (const halo of halos) expect(colorHex(halo)).toBe(0x0a0e14);
   });
 
-  it('所有几何都落在场地框内（x ±width/2、z ±depth/2），不会飘到壳体外', () => {
-    const scene = new THREE.Scene();
-    buildPlanFootprint(THREE, scene, makePlan(), metrics);
-    const layer = findLayer(scene)!;
-    layer.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(layer);
-    // 出入口/人员点位以自身中心落在边界上，圆环半径 0.9 m 会跨过边界线，所以留 1 m 容差。
-    const markerSlack = 1.0;
-    expect(box.min.x).toBeGreaterThanOrEqual(-metrics.width / 2 - markerSlack);
-    expect(box.max.x).toBeLessThanOrEqual(metrics.width / 2 + markerSlack);
-    expect(box.min.z).toBeGreaterThanOrEqual(-metrics.depth / 2 - markerSlack);
-    expect(box.max.z).toBeLessThanOrEqual(metrics.depth / 2 + markerSlack);
-    // 地面图形本身是贴地抬升，不是立起来的墙。不含 planPropId（帐篷等低模/贴纸占位）。
-    // 2026-11-12「物体没放在平面上」：分层压到瓦片金字塔顶（0.048）之上——
-    // 边界 0.05 / 分区 0.062 / 设施 0.074 / 动线 0.086，最高点位圆环 0.134。
-    const flat = layer.children.filter(child => !child.userData.planPropId);
-    const flatBox = new THREE.Box3();
-    for (const child of flat) flatBox.expandByObject(child);
-    expect(flatBox.min.y).toBeGreaterThanOrEqual(-0.01);
-    expect(flatBox.max.y).toBeLessThan(0.2);
+  it('场地边界仍在，且用原有的蓝色（范围框不能顶掉它；范围框不再是琥珀）', () => {
+    const group = build(makePlan({ designScope: SCOPE }));
+    const colors = group.children.map(colorHex).filter((hex): hex is number => hex !== null);
+    expect(colors).toContain(0x7fb3ff);
+    expect(colors).toContain(0xffffff);
+    expect(colors).not.toContain(0xf2a33c);
   });
 
-  it('每个设施在 3D 里立起对应物件，且高度是「能认出来」的尺度而不是地贴', () => {
-    const scene = new THREE.Scene();
-    buildPlanFootprint(THREE, scene, makePlan(), metrics);
-    const layer = findLayer(scene)!;
-    layer.updateMatrixWorld(true);
-    const props = layer.children.filter(child => child.userData.planPropId);
-    expect(props).toHaveLength(1); // 只有一个设施
-    const prop = props[0]!;
-    expect(prop.name).toBe('plan-prop-tent');
-    // planPropId 记的是 2D 设施 id，两个视图靠它对齐同一件物料。
-    expect(prop.userData.planPropId).toBe('f1');
-    const box = new THREE.Box3().setFromObject(prop);
-    expect(box.min.y).toBeGreaterThanOrEqual(-0.01);
-    expect(box.max.y).toBeGreaterThan(2); // 帐篷是有高度的实体
-    expect(box.max.y).toBeLessThan(6);
-    // 占地不超出 2D 给的 4×4（含少量出檐）。
-    expect(box.max.x - box.min.x).toBeLessThan(4.6);
-    expect(box.max.z - box.min.z).toBeLessThan(4.6);
+  it('没圈设计范围时，3D 层不出现任何范围图元', () => {
+    const group = build(makePlan());
+    expect(group.children.some(child => child.userData.planDesignScope === true)).toBe(false);
+    expect(group.children.map(colorHex)).toContain(0x7fb3ff);
   });
 
-  it('没有贴纸的未知模板不再立灰块，只保留地面占地', () => {
-    const scene = new THREE.Scene();
-    const plan = makePlan();
-    (plan as unknown as { facilities: unknown[] }).facilities = [
-      { id: 'f9', templateId: 'mystery-box', name: '神秘物件', position: { x: 5, y: 5 }, rotationDeg: 30, size: { width: 2, depth: 1.4 }, notes: '' },
-    ];
-    expect(buildPlanFootprint(THREE, scene, plan, metrics)).toBe(true);
-    const layer = findLayer(scene)!;
-    const prop = layer.children.find(child => child.userData.planPropId === 'f9');
-    expect(prop).toBeUndefined();
-    // 地面设施色块还在，只是不再竖一块 1.1 m 的灰盒。
-    expect(layer.children.length).toBeGreaterThan(0);
-    const tallBox = new THREE.Box3();
-    layer.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (mesh.geometry instanceof THREE.BoxGeometry) tallBox.expandByObject(mesh);
-    });
-    if (tallBox.isEmpty()) return;
-    expect(tallBox.max.y).toBeLessThan(0.8);
-  });
-
-  it('没有 3D 模型的库物件在场地上铺原来的 2D 贴纸，不再立低模方块', () => {
-    const scene = new THREE.Scene();
-    const plan = makePlan();
-    (plan as unknown as { facilities: unknown[] }).facilities = [
-      { id: 'f10', templateId: 'oneplan:icon:first-aid-point', name: '急救点', position: { x: 5, y: 5 }, rotationDeg: 0, size: { width: 2, depth: 2 }, notes: '' },
-      { id: 'f11', templateId: 'oneplan:scale:car', name: '轿车', position: { x: 12, y: 5 }, rotationDeg: 45, size: { width: 4.5, depth: 2.1 }, notes: '' },
-    ];
-    expect(buildPlanFootprint(THREE, scene, plan, metrics)).toBe(true);
-    const layer = findLayer(scene)!;
-    const icon = layer.children.find(child => child.userData.planPropId === 'f10');
-    const scale = layer.children.find(child => child.userData.planPropId === 'f11');
-    expect(icon).toBeDefined();
-    expect(scale).toBeDefined();
-    expect(icon!.name).toBe('plan-prop-misc');
-    expect(scale!.name).toBe('plan-prop-misc');
-    const hasBox = (object: THREE.Object3D): boolean => {
-      let found = false;
-      object.traverse((child) => {
-        if ((child as THREE.Mesh).geometry instanceof THREE.BoxGeometry) found = true;
-      });
-      return found;
-    };
-    expect(hasBox(icon!)).toBe(false);
-    expect(hasBox(scale!)).toBe(false);
-    layer.updateMatrixWorld(true);
-    const iconBox = new THREE.Box3().setFromObject(icon!);
-    const scaleBox = new THREE.Box3().setFromObject(scale!);
-    // 2026-11-12「物体没放在平面上」：贴纸层压到瓦片顶之上贴地带（0.08），不再悬空 0.42。
-    expect(iconBox.max.y).toBeLessThan(0.2);
-    expect(scaleBox.max.y).toBeLessThan(0.2);
-    expect(iconBox.max.y).toBeGreaterThan(0.05);
-    // 比例尺贴纸按占地铺满（轿车约 4.5×2.1）。
-    expect(scaleBox.max.x - scaleBox.min.x).toBeGreaterThan(2);
-    expect(scaleBox.max.z - scaleBox.min.z).toBeGreaterThan(1);
-  });
-
-  it('平面为空/边界退化时返回 false 且不挂空图层', () => {
-    const scene = new THREE.Scene();
-    expect(buildPlanFootprint(THREE, scene, null, metrics)).toBe(false);
-    const degenerate = { ...makePlan(), boundary: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }] } as SitePlanData;
-    expect(buildPlanFootprint(THREE, scene, degenerate, metrics)).toBe(false);
-    expect(findLayer(scene)).toBeUndefined();
+  it('范围比场地大：角标落在壳体之外而不是被钳回边界', () => {
+    const group = build(makePlan({ designScope: SCOPE }));
+    const brackets = group.children.filter(child => child.userData.planDesignScopeRing === true) as unknown as Array<{
+      geometry: { attributes: { instanceStart?: { data: { array: number[] } } } };
+    }>;
+    const xs: number[] = [];
+    for (const bracket of brackets) {
+      // Line2 的真实坐标在 instanceStart 的交错缓冲里（每段 6 个分量：起点 xyz + 终点 xyz）。
+      const raw = bracket.geometry.attributes.instanceStart?.data.array ?? [];
+      for (let index = 0; index < raw.length; index += 3) {
+        if (index % 6 === 0) xs.push(raw[index]!);
+      }
+    }
+    expect(xs.length).toBeGreaterThan(3);
+    // 场地 20 m 铺满壳体，范围 60 m → 壳体里应出现负坐标与超过 20 的坐标
+    expect(Math.min(...xs)).toBeLessThan(0);
+    expect(Math.max(...xs)).toBeGreaterThan(20);
   });
 });

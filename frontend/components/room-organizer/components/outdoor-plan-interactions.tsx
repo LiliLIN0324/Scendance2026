@@ -49,6 +49,9 @@ export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss
       style={{
         position: 'absolute',
         ...(anchoredLeft ? { left: 12, top: 24 } : { left: '50%', top: 24, transform: 'translateX(-50%)' }),
+        /* 2026-11-15：导引气泡在 .sc-canvas-stage 里（container-type:size → 栈上下文），
+           自身的 z-index 永远压不过 769–1080 档的左栏卡（实测 z 提到 99 仍输），
+           所以避让改在 CSS 里做平移，这里保持原值。 */
         zIndex: 30,
         width: 340,
         maxWidth: 'calc(100% - 32px)',

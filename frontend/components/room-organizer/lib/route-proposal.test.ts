@@ -52,6 +52,11 @@ describe('matchRouteCommand（V-2 意图）', () => {
     expect(matchRouteCommand('在潮乐之城去做设计')).toBeNull();
     expect(matchRouteCommand('')).toBeNull();
   });
+
+  it('复合规划不走单独的自动流线指令', () => {
+    expect(matchRouteCommand('请帮我画出流线和入口。', true)).toBe('auto');
+    expect(matchRouteCommand('排流线，先划室外展览区和室外表演区', true)).toBeNull();
+  });
 });
 
 describe('buildRouteProposal（V-2c 生成规则）', () => {

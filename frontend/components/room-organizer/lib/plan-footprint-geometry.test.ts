@@ -120,7 +120,9 @@ describe('planFootprintShapes', () => {
     expect(shapes.zones[0]!.color).toBe('#c98a2c');
     expect(shapes.zones[1]!.color).toBe('#123456');
     expect(shapes.zones[0]!.opacity).toBeCloseTo(0.22, 5);
-    expect(shapes.routes[0]!.color).toBe('#c98a2c');
+    // 2026-11-16：动线色改为跟载体走（与画布 / 图例同一套 token）。旧表里 vehicle 是金、service 是紫，
+    // 正好和画布反着（“金线蓝标”）；现在统一到 PLANNING_ROUTE_KIND_COLORS。
+    expect(shapes.routes[0]!.color).toBe('#8a6fa8');
     expect(shapes.nodes[0]!.color).toBe('#c0392b');
     expect(shapes.workers[0]!.color).toBe('#5e7fa6');
     expect(shapes.workers[0]!.label).toBe('引导 · 6 人');
@@ -144,6 +146,24 @@ describe('planFootprintShapes', () => {
     const xs = shapes.boundary.map(point => point.x);
     expect(Math.min(...xs)).toBeCloseTo(0, 5);
     expect(Math.max(...xs)).toBeCloseTo(20, 5);
+  });
+
+  it('设计范围按同一帧换算，且不被钳回场地内', () => {
+    const shapes = planFootprintShapes(makePlan({
+      designScope: [{ x: -10, y: -5 }, { x: 30, y: -5 }, { x: 30, y: 15 }, { x: -10, y: 15 }],
+    } as unknown as SitePlanData), { width: 20, depth: 10 })!;
+    // 场地 20×10 m 铺满壳体（scale 1:1），外扩 10 m/边 → 壳体坐标正好 -10..30 / -5..15。
+    const xs = shapes.scope.map(point => point.x);
+    const zs = shapes.scope.map(point => point.z);
+    expect(Math.min(...xs)).toBeCloseTo(-10, 5);
+    expect(Math.max(...xs)).toBeCloseTo(30, 5);
+    expect(Math.min(...zs)).toBeCloseTo(-5, 5);
+    expect(Math.max(...zs)).toBeCloseTo(15, 5);
+  });
+
+  it('没圈设计范围时 scope 是空数组，3D 层不多画蒙版', () => {
+    const shapes = planFootprintShapes(makePlan({}), { width: 20, depth: 10 })!;
+    expect(shapes.scope).toEqual([]);
   });
 
   it('边界退化时整份图形返回 null', () => {

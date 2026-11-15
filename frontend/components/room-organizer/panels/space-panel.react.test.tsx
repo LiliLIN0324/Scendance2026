@@ -7,7 +7,6 @@ import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { SpacePanel } from './space-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
-import type { RoomLayout } from '../lib/types';
 
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 // 空间卡现在常驻结构入口；这里只要给它一份最小壳体，不验证结构交互。
@@ -29,18 +28,13 @@ function environment(preview: SplatPreviewState = { status: 'idle', assetId: '',
 describe('SpacePanel', () => {
   it('puts real venues first and folds secondary actions', () => {
     const onApply = vi.fn();
-    let runNew: (() => void) | undefined;
-    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onRegisterNew={run => { runNew = run; }}/>);
+    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
     // 面板打开即自动登记云端扫描库（索引 8 套实景），空库提示只在真没数据时出现
     expect(screen.getByText(/\d+ 套已扫描/)).toBeTruthy();
     expect(screen.queryByText('用手机拍一段场地')).toBeNull();
     expect(screen.getByText('场景模板').closest('details')?.open).toBe(false);
-    // 新建空间已收进输入框的 ＋ 菜单，由 chat 栏调用注册进来的动作。
-    runNew?.();
-    const next = onApply.mock.calls[0]![0] as RoomLayout;
-    expect(next.width).toBe(12);
-    expect(next.height).toBe(8);
+    expect(onApply).not.toHaveBeenCalled();
   });
 
   it('lists scanned venues with size and time, and applies one on click', () => {

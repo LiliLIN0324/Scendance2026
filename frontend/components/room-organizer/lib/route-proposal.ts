@@ -22,12 +22,17 @@ const BBOX_MARGIN_M = 150;
 const NODE_DEDUPE_M = 10;
 
 /** 「排流线」「自动排入口」→ 生成指令；其余（删流线等）不劫持。 */
-export function matchRouteCommand(text: string): 'auto' | null {
+export function matchRouteCommand(text: string, standalone = false): 'auto' | null {
   const trimmed = text.trim();
   if (trimmed.length < 3 || trimmed.length > 60) return null;
   if (/(?:删除|去掉|清空|移除)(?:全部)?流线/u.test(trimmed)) return null;
-  if (/排(?:一下)?流线|画(?:出)?流线|生成流线|自动排流线|流线怎么排|排(?:一下)?线|自动排(?:一下)?(?:入口|出入口)/u.test(trimmed)) return 'auto';
-  return null;
+  const command = trimmed.match(/排(?:一下)?流线|画(?:出)?流线|生成流线|自动排流线|流线怎么排|排(?:一下)?线|自动排(?:一下)?(?:入口|出入口)/u);
+  if (!command) return null;
+  if (!standalone) return 'auto';
+  const unwrapped = trimmed.replace(/^(?:请\s*)?(?:帮我\s*)?/u, '').replace(/[。！!？?\s]+$/u, '');
+  const routeAndAccess = command[0].includes('流线')
+    && command[0] === unwrapped.replace(/(?:和|与|及|以及)(?:出)?入口$/u, '');
+  return command[0] === unwrapped || routeAndAccess ? 'auto' : null;
 }
 
 /** Liang–Barsky 线段裁剪：两端都在框外但穿过场地的稀疏 OSM 道路也要保留。 */
@@ -206,6 +211,9 @@ export function buildRouteProposal(
       routes.push({
         id: idFactory(),
         kind: routeClass,
+        // 路网来自真实道路：车行/后勤都是车能走的路面，显式写 vehicle，
+        // 不让 OSM 车行道吃「默认步行」的布点密度。
+        carrier: routeClass === 'pedestrian' ? 'walk' : 'vehicle',
         name,
         points,
         oneWay: false,
@@ -223,7 +231,7 @@ export function buildRouteProposal(
           kind: 'both',
           name: nodeName.slice(0, 60),
           position: { x: Math.round(crossing.x * 10) / 10, y: Math.round(crossing.y * 10) / 10 },
-          notes: 'AI 提案出入口：道路与场地边界交点',
+          notes: 'AI 提案出入口：道路与用地红线交点',
         });
         crossingsTotal += 1;
       }
@@ -253,7 +261,7 @@ export function buildRouteProposal(
           { x: Math.round(bestRoad.vertex.x * 10) / 10, y: Math.round(bestRoad.vertex.y * 10) / 10 },
         ],
         oneWay: false,
-        widthM: routeWidth(bestRoad.routeClass),
+        carrier: bestRoad.routeClass === 'pedestrian' ? 'walk' : 'vehicle',
         notes: 'AI 提案接驳线：路网不进界时连接最近道路与场地',
       });
       nodes.push({

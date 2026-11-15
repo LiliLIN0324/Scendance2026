@@ -14,8 +14,13 @@
 import { planRingAreaM2, planZoneSemanticLabels, type PlanPoint, type PlanZone } from '../../../../supabase/functions/_shared/site-plan';
 import { PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY, type PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
 
-/** 场地边界最小面积（m²）：户外市集起步尺度，低于它视为误点（可调常量，验收锚 200×120=24,000 m²）。 */
-export const PLAN_MIN_BOUNDARY_AREA_M2 = 100;
+/**
+ * 场地边界最小面积（m²）：只用来挡「退化形状」（三点几乎共线、误点一下），不限制场地能画多小。
+ *
+ * 2026-11-15 用户反馈：38.7 m² 的小场地一点就报「面积太小，下限 100 m²」，改不动。
+ * 快闪摊位/小型市集就是几米见方的场地，所以下限收到 2 m × 2 m，与设计范围最小边长同口径。
+ */
+export const PLAN_MIN_BOUNDARY_AREA_M2 = 4;
 /** 单个功能分区最小面积（m²）：允许小而有效的签到/医疗点区域。 */
 export const PLAN_MIN_ZONE_AREA_M2 = 1;
 /** 顶点最小间距（m）：更近视为重复点击，忽略。与室内圈画 MIN_VERTEX_GAP_M 同值。 */
@@ -134,6 +139,18 @@ function isOnRingEdge(pt: PlanPoint, ring: readonly PlanPoint[]): boolean {
 export function planRingsOverlap(a: readonly PlanPoint[], b: readonly PlanPoint[]): boolean {
   for (const pt of a) if (planPointInRingInterior(pt, b)) return true;
   for (const pt of b) if (planPointInRingInterior(pt, a)) return true;
+  // 2026-11-15：只比顶点 + 严格穿越会漏掉「边叠在一起」的情形（两个方块错开半格时，
+  // 顶点全落在对方边上、交叉点又都在端点）。再拿每条边的中点探一次内部，就能拦住它。
+  for (let i = 0; i < a.length; i++) {
+    const a1 = a[i]!;
+    const a2 = a[(i + 1) % a.length]!;
+    if (planPointInRingInterior({ x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 }, b)) return true;
+  }
+  for (let i = 0; i < b.length; i++) {
+    const b1 = b[i]!;
+    const b2 = b[(i + 1) % b.length]!;
+    if (planPointInRingInterior({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 }, a)) return true;
+  }
   for (let i = 0; i < a.length; i++) {
     const a1 = a[i]!;
     const a2 = a[(i + 1) % a.length]!;
@@ -181,7 +198,7 @@ export function checkPlanRing(
 
 /** 场地边界校验（面积下限 = PLAN_MIN_BOUNDARY_AREA_M2）。 */
 export function checkBoundaryRing(ring: readonly PlanPoint[]): { ok: true; areaM2: number } | { ok: false; issue: PlanEditIssue } {
-  return checkPlanRing(ring, PLAN_MIN_BOUNDARY_AREA_M2, '场地边界');
+  return checkPlanRing(ring, PLAN_MIN_BOUNDARY_AREA_M2, '用地红线');
 }
 
 function revalidateRing(ring: readonly PlanPoint[], minAreaM2: number, label: string): PlanEditResult<PlanPoint[]> {
@@ -196,7 +213,7 @@ export function moveRingVertex(
   next: PlanPoint,
   opts: { minAreaM2?: number; label?: string } = {},
 ): PlanEditResult<PlanPoint[]> {
-  const label = opts.label ?? '场地边界';
+  const label = opts.label ?? '用地红线';
   const minAreaM2 = opts.minAreaM2 ?? PLAN_MIN_BOUNDARY_AREA_M2;
   if (!Number.isInteger(index) || index < 0 || index >= ring.length) {
     return { ok: false, issue: { code: 'bad-index', message: `${label}顶点序号越界（${index}）。` } };
@@ -215,7 +232,7 @@ export function insertRingVertex(
   point: PlanPoint,
   opts: { minAreaM2?: number; label?: string } = {},
 ): PlanEditResult<PlanPoint[]> {
-  const label = opts.label ?? '场地边界';
+  const label = opts.label ?? '用地红线';
   const minAreaM2 = opts.minAreaM2 ?? PLAN_MIN_BOUNDARY_AREA_M2;
   if (!Number.isInteger(edgeIndex) || edgeIndex < 0 || edgeIndex >= ring.length) {
     return { ok: false, issue: { code: 'bad-index', message: `${label}边序号越界（${edgeIndex}）。` } };
@@ -233,7 +250,7 @@ export function removeRingVertex(
   index: number,
   opts: { minAreaM2?: number; label?: string } = {},
 ): PlanEditResult<PlanPoint[]> {
-  const label = opts.label ?? '场地边界';
+  const label = opts.label ?? '用地红线';
   const minAreaM2 = opts.minAreaM2 ?? PLAN_MIN_BOUNDARY_AREA_M2;
   if (!Number.isInteger(index) || index < 0 || index >= ring.length) {
     return { ok: false, issue: { code: 'bad-index', message: `${label}顶点序号越界（${index}）。` } };
@@ -267,7 +284,7 @@ export function zoneOutsideBoundaryIssue(
   if (boundary.length < 3) return null;
   for (const pt of polygon) {
     if (!planPointInRing(pt, boundary)) {
-      return { code: 'out-of-boundary', message: '分区越界：有顶点落在场地边界之外。', at: pt };
+      return { code: 'out-of-boundary', message: '分区越界：有顶点落在用地红线之外。', at: pt };
     }
   }
   for (let i = 0; i < polygon.length; i++) {
@@ -277,7 +294,7 @@ export function zoneOutsideBoundaryIssue(
       const b1 = boundary[j]!;
       const b2 = boundary[(j + 1) % boundary.length]!;
       if (planSegmentsCrossStrict(p1, p2, b1, b2)) {
-        return { code: 'out-of-boundary', message: '分区越界：边穿出了场地边界。', at: p2 };
+        return { code: 'out-of-boundary', message: '分区越界：边穿出了用地红线。', at: p2 };
       }
     }
   }
@@ -363,6 +380,22 @@ export function buildZone(
     notes: input.notes ?? '',
   };
   return { ok: true, value: zone, issues };
+}
+
+/**
+ * 画布上「提交前必须挡住」的硬校验：自交/退化（<3 点、重合顶点、面积 <1 m²）/越界。
+ *
+ * 2026-11-15 用户指令：分区重叠**不挡编辑**——两个分区叠在一起时还得能继续拖，只在画布上
+ * 常驻一条报错，挪开就自动消失（重叠提示由 planZoneIssues 产出，不在这里拒绝提交）。
+ */
+export function zoneEditBlockingIssue(
+  polygon: readonly PlanPoint[],
+  boundary: readonly PlanPoint[],
+  label: string,
+): PlanEditIssue | null {
+  const ring = checkPlanRing(polygon, PLAN_MIN_ZONE_AREA_M2, label);
+  if (!ring.ok) return ring.issue;
+  return zoneOutsideBoundaryIssue(polygon, boundary);
 }
 
 /** 分区语义与文案一致性守卫：tokens 的语义集必须与契约九类完全对齐（防两处漂移）。 */
