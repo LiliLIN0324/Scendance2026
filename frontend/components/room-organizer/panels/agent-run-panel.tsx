@@ -231,6 +231,9 @@ function RunProcessList({ entry, scope }: { entry: Pick<AgentRunState,'stepLog'|
                 {isPlacementTool(step.toolName) && typeof step.itemCount === 'number' && (
                   <span className="ap-run-count-pill">{step.itemCount} 个物品</span>
                 )}
+                {typeof step.durationMs === 'number' && step.durationMs > 0 && (
+                  <span className="ap-run-status">· {formatDurationClock(step.durationMs)}</span>
+                )}
               </div>
               <span className="ap-run-tick" data-result={result} aria-hidden="true">{RESULT_MARK[result]}</span>
             </li>
@@ -249,7 +252,7 @@ function RunProcessList({ entry, scope }: { entry: Pick<AgentRunState,'stepLog'|
  * 三控件里的「跑完这步停」「为下一步加备注」要后端支持「运行中插话」才
  * 能真生效，没有那条通道就别挂上去冒充能用。
  */
-export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId }: { scope?: AgentRunScope; controls?: boolean; steerInputId?: string } = {}): JSX.Element | null {
+export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId, onRestoreStart }: { scope?: AgentRunScope; controls?: boolean; steerInputId?: string; /** 收尾卡「还原到本轮开始」：调用方持有开跑前快照，返回是否真的还原了。 */ onRestoreStart?: (() => boolean) | undefined } = {}): JSX.Element | null {
   const run = useAgentRun();
   const now = useNowMs(run.isRunning);
   const stall = useStall(run);
@@ -459,14 +462,23 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId 
           )}
           </>}
 
-          {/* 停止/结束后的人话收尾：保留改动数（取不到不写数）、未完成部分不再继续、两档撤销语义。 */}
+          {/* 停止/结束后的人话收尾：保留改动数（取不到不写数）、未完成部分如实披露、
+              「还原到本轮开始」一键写回开跑前快照（还原动作本身可 Ctrl+Z 撤销）。 */}
           {!run.isRunning && (run.stepLog.length > 0 || run.eventLog.length > 0) && (
             <div className="ap-run-wrapup">
               <p className="ap-run-wrapup-line">
                 {retainedCount > 0 ? `地图上保留了 ${retainedCount} 处改动。` : '本轮没有在画布上留下改动。'}
               </p>
+              {unresolvedCount > 0 && (
+                <p className="ap-run-wrapup-line" data-tone="warn">有 {unresolvedCount} 步未能完成，列表里用 × 标出；已完成的部分不受影响。</p>
+              )}
               <p className="ap-run-wrapup-line">停止时未完成的部分不会继续执行，可以接着补充说明。</p>
-              <p className="ap-run-wrapup-line">整体撤回会还原到这趟作业开始前；<kbd className="ap-kbd">Ctrl+Z</kbd> 是逐步撤销。</p>
+              <p className="ap-run-wrapup-line"><kbd className="ap-kbd">Ctrl+Z</kbd> 是逐步撤销{onRestoreStart && retainedCount > 0 ? '，也能撤掉这次还原' : ''}。</p>
+              {onRestoreStart && retainedCount > 0 && (
+                <div className="ap-run-wrapup-actions">
+                  <button type="button" className="ap-run-pill" onClick={onRestoreStart}>还原到本轮开始</button>
+                </div>
+              )}
             </div>
           )}
         </div>

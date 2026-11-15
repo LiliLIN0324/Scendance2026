@@ -12,6 +12,10 @@ export const outdoorStages = [
   "refine-3d",
 ] as const;
 export type OutdoorStage = (typeof outdoorStages)[number];
+export type OutdoorMapEditHighlight =
+  | { kind: "scope" }
+  | { kind: "zones"; zoneIds: readonly string[] }
+  | { kind: "main-routes"; routeIds: readonly string[]; nodeIds: readonly string[] };
 import { outdoorTurnSchema } from "../../../../supabase/functions/_shared/outdoor-agent-response-contract";
 export { outdoorTurnSchema };
 export type OutdoorTurn = z.infer<typeof outdoorTurnSchema>;
