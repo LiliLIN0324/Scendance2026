@@ -1409,10 +1409,15 @@ export default function OutdoorPlan3D({
         idleTick = (idleTick + 1) % 6;
         if (idleTick !== 0) return;
       }
-      controls?.update();
+      const walking = walkEnabledRef.current;
+      const aerialView = walking && viewModeRef.current === 'orbit';
+      // 步行 / 第三人称档相机由 useOutdoorWalk 每帧接管位置与朝向。OrbitControls 即便
+      // enabled=false，其 update() 仍会按内部过期球坐标把相机拽回环绕 target 并 lookAt，
+      // 与步行落点 / 指针锁朝向打架（表现为按 WASD 时视角剧烈甩动）。仅非漫游态与鸟瞰
+      // 环绕档调用 update()。
+      if (!walking || aerialView) controls?.update();
       if (controls) {
         const mode = canvasEditApiRef.current?.current?.getMode() ?? 'view';
-        const aerialView = walkEnabledRef.current && viewModeRef.current === 'orbit';
         controls.enableRotate = aerialView || (mode === 'view' && !pointerEditing);
       }
       const api = canvasEditApiRef.current?.current;
