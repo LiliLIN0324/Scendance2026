@@ -27,12 +27,13 @@ export interface BriefExtractTransport {
 
 export type BriefResolution = 'model' | 'confirmation' | 'local_command' | 'disabled' | 'not_connected' | 'unavailable' | 'failed';
 /** Stable category for logs and tests. Production chat copy stays in modelNotice. */
-export interface ModelCallDiagnostic { category: 'unauthenticated' | 'route' | 'config' | 'timeout' | 'session' | 'network' | 'non_json' | 'contract' | 'http' | 'provider' | 'unknown'; status?: number; code?: string }
+export interface ModelCallDiagnostic { category: 'unauthenticated' | 'route' | 'config' | 'billing' | 'timeout' | 'session' | 'network' | 'non_json' | 'contract' | 'http' | 'provider' | 'unknown'; status?: number; code?: string }
 export type ResolvedBriefTurn = BriefTurn & { resolution: BriefResolution; modelNotice?: string; modelDiagnostic?: ModelCallDiagnostic; modelRetryable?: boolean; modelReply?:string; unhandled?:BriefConversationResponse['unhandled']; materialQueries?:string[]; readOnlyReply?:boolean; usesModelText?:boolean; resumeInstruction?:string };
 
 /** Transient upstream blips worth one click-retry; config/auth/billing stay local. */
 function isRetryableDiagnostic(d: ModelCallDiagnostic | undefined): boolean {
   if(!d)return false;
+  if(d.category==='billing')return false; // out of quota/balance cannot be fixed by retrying
   if(d.category==='network'||d.category==='timeout')return true;
   if(d.category==='provider'||d.category==='http'){
     if(d.code==='PROVIDER_HTTP_ERROR:429')return true;
@@ -57,6 +58,7 @@ function safeDiagnosticCode(value: string | undefined): string | undefined {
 }
 function providerDiagnostic(reason: string | undefined, enabled: boolean): ModelCallDiagnostic {
   const code=safeDiagnosticCode(reason);
+  if(reason==='PROVIDER_QUOTA_EXHAUSTED')return {category:'billing',...(code?{code}:{})};
   return {category:enabled?'provider':'config',...(code?{code}:{})};
 }
 function thrownModelFailure(error: unknown, timedOut: boolean): { notice: string; diagnostic: ModelCallDiagnostic } {
@@ -79,6 +81,7 @@ function thrownModelFailure(error: unknown, timedOut: boolean): { notice: string
 }
 function modelFailureNotice(reason: string | undefined): string {
   if (reason === 'MODEL_PROVIDER_INCOMPLETE' || reason === 'MODEL_PROVIDER_URL_INVALID' || reason === 'MODEL_PROVIDER_PROFILE_INVALID' || reason === 'MODEL_PROVIDER_UNSUPPORTED_WORKFLOW' || reason === 'SERVICE_NOT_CONFIGURED') return '智能理解服务配置不完整或地址无效，请联系管理员检查。';
+  if (reason === 'PROVIDER_QUOTA_EXHAUSTED') return '该模型额度已用完或欠费，请切换其它模型或联系管理员充值。';
   if (reason === 'PROVIDER_HTTP_ERROR:401' || reason === 'PROVIDER_HTTP_ERROR:403') return '智能理解服务认证或权限未通过，请联系管理员检查。';
   if (reason === 'PROVIDER_HTTP_ERROR:402') return '智能理解服务余额或计费状态异常，请联系管理员检查。';
   if (reason === 'PROVIDER_HTTP_ERROR:429') return '智能理解服务请求过多；请先核对服务状态和用量。';
