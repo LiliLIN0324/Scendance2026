@@ -327,6 +327,42 @@ it("当前规划改变后的确认拒绝旧提案，不覆盖手工草稿", asyn
   expect(JSON.stringify(plan)).toBe(snapshot);
   expect(flow.notice).toContain("失效");
 });
+it("提案后用户新加的实体不让提案失效，确认时并回且不丢用户内容", async () => {
+  await confirmScope();
+  await turn(
+    "室外展览区",
+    response("zones", {
+      zones: [
+        {
+          name: "展览区",
+          purpose: "exhibition",
+          environment: "outdoor",
+          evidence: "室外展览区",
+        },
+      ],
+    }),
+  );
+  // 用户在预览之后自己加了点位（画布新增，基座没被删改）。
+  plan = {
+    ...plan,
+    nodes: [
+      ...plan.nodes,
+      {
+        id: crypto.randomUUID(),
+        name: "我核对的分期入口",
+        kind: "entry" as const,
+        verification: "user-confirmed" as const,
+        position: { x: 5, y: 35 },
+        notes: "",
+      },
+    ],
+  };
+  await action("confirm");
+  expect(flow.notice).not.toContain("失效");
+  expect(apply).toHaveBeenCalled();
+  expect(plan.zones.map((z) => z.name)).toContain("展览区");
+  expect(plan.nodes.map((n) => n.name)).toContain("我核对的分期入口");
+});
 it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单，不启动收费请求", async () => {
   await confirmScope();
   await turn(
@@ -522,7 +558,8 @@ it("模型不可用/格式错误明确阻断，不用关键词假装理解或落
   await act(async () => {
     await flow.handle("这个区放展位");
   });
-  expect(flow.notice).toContain("disabled");
+  // 用户可见文案是「当前环境未开启 Agent 理解模型…」；不再回显模型层的 status 原码。
+  expect(flow.notice).toContain("未开启");
   expect(apply).not.toHaveBeenCalled();
   await turn("舞台不要挡入口", { status: "ok", answer: "我已完成！" });
   expect(flow.notice).toContain("没有返回");
