@@ -192,6 +192,8 @@ export const planWorkerSchema = z.strictObject({
   /** 所属图层（可选）：缺省归第一层。 */
   levelId: z.uuid().optional(),
   notes: z.string().max(500).default(''),
+  /** 绑定的漫游人物代号（可选）：固定到具体角色；不绑则按岗位归类取该类默认角色。旧快照不带照常解析。 */
+  assetId: z.string().uuid().optional(),
 });
 export type PlanWorker = z.infer<typeof planWorkerSchema>;
 

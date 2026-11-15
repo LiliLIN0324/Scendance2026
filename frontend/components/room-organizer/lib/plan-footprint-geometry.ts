@@ -3,9 +3,15 @@ import type {
   PlanFacility,
   PlanMeasurement,
   PlanPoint,
+  PlanRoute,
   SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { PLANNING_LAYER_COLORS, PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY } from '@/lib/outdoor-plan-tokens';
+import {
+  PLANNING_LAYER_COLORS,
+  PLANNING_ROUTE_KIND_COLORS,
+  PLANNING_ZONE_COLORS,
+  PLANNING_ZONE_OPACITY,
+} from '@/lib/outdoor-plan-tokens';
 import { annotationRectRing } from './site-plan-annotate';
 
 /**
@@ -89,12 +95,6 @@ export function planShellFrame(
 }
 
 /** 分区 / 动线的颜色与透明度口径（与 2D 画布同一套 token，3D 里不需要另配一套色）。 */
-const ROUTE_COLORS: Record<string, string> = {
-  pedestrian: '#2f8f6a',
-  vehicle: '#c98a2c',
-  service: '#8a6fa8',
-};
-
 const NODE_COLORS: Record<string, string> = {
   entry: '#2f8f6a',
   exit: '#c0392b',
@@ -107,7 +107,7 @@ const WORKER_FALLBACK_COLOR = '#5e7fa6';
 function zoneColor(facilityOrZone: { semantic?: string | undefined; color?: string | undefined }): string {
   if (facilityOrZone.color) return facilityOrZone.color;
   const semantic = facilityOrZone.semantic ?? '';
-  return (PLANNING_ZONE_COLORS as Record<string, string>)[semantic] ?? ROUTE_COLORS.pedestrian!;
+  return (PLANNING_ZONE_COLORS as Record<string, string>)[semantic] ?? FACILITY_FALLBACK_COLOR;
 }
 
 export interface PlanFootprintZonesShape {
@@ -130,6 +130,9 @@ export interface PlanFootprintRouteShape {
   points: ShellPoint[];
   color: string;
   oneWay: boolean;
+  kind: PlanRoute['kind'];
+  /** 车辆 / 后勤用虚线，人行实线；口径与 2D drawRouteLayer 线型一致。 */
+  dashed: boolean;
   /** 屏幕空间线宽（像素），跟人行/车行动线 2D 描边对齐。 */
   lineWidth: number;
 }
@@ -393,9 +396,11 @@ export function planFootprintShapes(
     routes: plan.routes.map(route => ({
       id: route.id,
       points: route.points.map(point => frame.toShell(point)),
-      // 2026-11-12 活动包赛道预设：动线主题色优先（契约 planRouteSchema.color）。
-      color: route.color ?? ROUTE_COLORS[route.kind] ?? ROUTE_COLORS.pedestrian!,
+      // 2026-11-12 活动包赛道预设：动线主题色优先（契约 planRouteSchema.color）；缺省按 kind 取 2D 同一套 tokens 色。
+      color: route.color ?? PLANNING_ROUTE_KIND_COLORS[route.kind],
       oneWay: route.oneWay,
+      kind: route.kind,
+      dashed: route.kind !== 'pedestrian',
       lineWidth: route.kind === 'vehicle' ? 3 : 2,
     })),
     nodes: plan.nodes.map(node => ({

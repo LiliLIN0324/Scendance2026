@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { LibraryEntry } from './oneplan-library';
 import {
   CATEGORY_PLAN_STICKERS,
-  CROWD_TYPE_PLAN_STICKERS,
   GENERIC_PLAN_STICKER,
   planStickerForModel,
 } from './plan-icon-for-model';
@@ -41,9 +40,9 @@ describe('planStickerForModel', () => {
     expect(sticker).toEqual(CATEGORY_PLAN_STICKERS['家具']);
   });
 
-  it('uses the crowd-type sticker for a wired people model', () => {
-    const sticker = planStickerForModel({ name: 'Firefighter', slug: 'low-poly-character-figures-firefighter-standing-8ded7b6f', bucket: 'people' }, []);
-    expect(sticker).toEqual(CROWD_TYPE_PLAN_STICKERS.fire);
+  it('returns the category sticker when a people model is no longer wired to a crowd type', () => {
+    const sticker = planStickerForModel({ name: 'Standing Figure', slug: 'low-poly-character-figures-firefighter-standing-8ded7b6f', bucket: 'people' }, []);
+    expect(sticker).toEqual(CATEGORY_PLAN_STICKERS['不同人群']);
   });
 
   it('falls back to a generic sticker when the bucket is unknown', () => {

@@ -120,7 +120,10 @@ describe('planFootprintShapes', () => {
     expect(shapes.zones[0]!.color).toBe('#c98a2c');
     expect(shapes.zones[1]!.color).toBe('#123456');
     expect(shapes.zones[0]!.opacity).toBeCloseTo(0.22, 5);
-    expect(shapes.routes[0]!.color).toBe('#c98a2c');
+    expect(shapes.routes[0]!.color).toBe('#8a6fa8');
+    expect(shapes.routes[0]!.kind).toBe('vehicle');
+    expect(shapes.routes[0]!.dashed).toBe(true);
+    expect(shapes.routes[0]!.lineWidth).toBe(3);
     expect(shapes.nodes[0]!.color).toBe('#c0392b');
     expect(shapes.workers[0]!.color).toBe('#5e7fa6');
     expect(shapes.workers[0]!.label).toBe('引导 · 6 人');
