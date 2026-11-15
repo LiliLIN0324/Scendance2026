@@ -83,8 +83,11 @@ describe('tdt probe helpers (H0-b)', () => {
 
   it('builds public-source tile urls with required attributions', () => {
     expect(publicSourceTileUrl('osm', 15, 27315, 13489)).toBe('https://tile.openstreetmap.org/15/27315/13489.png');
-    expect(publicSourceTileUrl('carto-light', 15, 27315, 13489)).toContain('basemaps.cartocdn.com/light_all/15/27315/13489.png');
-    expect(publicSourceTileUrl('carto-dark', 15, 27315, 13489)).toContain('dark_all/15/27315/13489.png');
+    // Carto 走同源代理：key 只在服务端，浏览器地址里不能出现 key。
+    expect(publicSourceTileUrl('carto-light', 15, 27315, 13489)).toBe('/api/carto-tiles?style=light&z=15&x=27315&y=13489');
+    expect(publicSourceTileUrl('carto-dark', 15, 27315, 13489)).toBe('/api/carto-tiles?style=dark&z=15&x=27315&y=13489');
+    expect(publicSourceTileUrl('carto-dark', 15, 27315, 13489)).not.toContain('key=');
+    expect(publicSourceTileUrl('carto-light', 15, 27315, 13489)).not.toContain('cartocdn');
     // OSM 政策要求署名必显。
     expect(PUBLIC_SOURCE_SPECS.osm.attribution).toContain('OpenStreetMap contributors');
     expect(PUBLIC_SOURCE_SPECS['carto-light'].attribution).toContain('CARTO');

@@ -159,17 +159,20 @@ export const PROBE_PUBLIC_SOURCES: readonly ProbePublicSource[] = [
 ];
 
 /**
- * Carto Basemaps key（公开配置，非密钥）：2026-09-23 起 Carto 要求 tile URL 带 ?key=，
- * 无 key 商用仅保障至 2026-11-30。key 从 NEXT_PUBLIC_CARTO_KEY 读取，可空——
- * 空时沿用无 key 公开端点（带水印），探针零配置仍可跑。
+ * Carto 2026-09-23 起强制 key；2026-11-16 起无 key 的请求虽然还是 HTTP 200，内容却是
+ * 「API KEY REQUIRED」灰底水印图——底图看上去就是「断了」。
+ *
+ * key 只在服务端：Pages 运行时环境变量 `CARTO_KEY`，浏览器打同源 `/api/carto-tiles`
+ * （本机 dev 由 3199 代理补同一个口子，见 tools/aholo/lux3d-dev-proxy.mjs）。
+ * 旧做法是把 NEXT_PUBLIC_CARTO_KEY 在编译期内联，而静态导出（output:'export'）会把值
+ * 烤进 JS、Cloudflare Pages 构建又不注入项目环境变量 ⇒ 每次 CI 重建都静默丢 key。
+ * 换成运行时代理后，换 key / 续期只改 Pages 环境变量，不用重新构建前端包。
  */
-const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_KEY?.trim() || '';
-const CARTO_QUERY = CARTO_KEY ? `?key=${CARTO_KEY}` : '';
 
 export interface PublicSourceSpec {
   id: ProbePublicSource;
   label: string;
-  /** 瓦片 URL 模板：{z}/{x}/{y}。OSM 无子域；Carto 用固定 a.basemaps 单域，避免轮询滥用。 */
+  /** 瓦片 URL 模板：{z}/{x}/{y}。OSM 直连无子域；Carto 走同源代理（key 在服务端，浏览器拿不到）。 */
   urlTemplate: string;
   attribution: string;
 }
@@ -184,13 +187,13 @@ export const PUBLIC_SOURCE_SPECS: Record<ProbePublicSource, PublicSourceSpec> = 
   'carto-light': {
     id: 'carto-light',
     label: 'Carto 浅色',
-    urlTemplate: `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${CARTO_QUERY}`,
+    urlTemplate: '/api/carto-tiles?style=light&z={z}&x={x}&y={y}',
     attribution: '© OpenStreetMap contributors · © CARTO',
   },
   'carto-dark': {
     id: 'carto-dark',
     label: 'Carto 深色',
-    urlTemplate: `https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${CARTO_QUERY}`,
+    urlTemplate: '/api/carto-tiles?style=dark&z={z}&x={x}&y={y}',
     attribution: '© OpenStreetMap contributors · © CARTO',
   },
   // 2026-11-11 用户 m00xxx：「地图类型-高德那三个能用，补到我的平面下面」。

@@ -198,7 +198,7 @@ export default function TdtProbePage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <h1>地图满铺探针（H0-b+公开源）</h1>
-        <small>EPSG:3857 · 天地图走服务端代理 · OSM/Carto 公开源直连</small>
+        <small>EPSG:3857 · 天地图 / Carto 走服务端代理 · OSM 直连</small>
         <div className={styles.controls}>
           <select
             aria-label="底图图源"
