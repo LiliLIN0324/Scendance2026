@@ -310,6 +310,7 @@ function failure(error: unknown): BackendFailure {
     BILLING_NOT_CONFIGURED: "AI 费用限制尚未配置，请联系工作室管理员。",
     AI_INVALID_PROPOSAL: "AI 未能生成可用方案，请调整要求后重试。",
     AI_INPUT_TOO_LARGE: "场景内容过长，请缩短物件备注或需求后重试。",
+    PROVIDER_QUOTA_EXHAUSTED: "该模型额度已用完或欠费，请切换其它模型或联系管理员充值。",
     PROVIDER_HTTP_ERROR: "AI 服务暂时不可用，请稍后手动重试。",
     PROVIDER_INVALID_JSON: "AI 服务返回异常，请稍后手动重试。",
     PROVIDER_TIMEOUT: "AI 响应超时，请稍后手动重试。",
@@ -627,7 +628,7 @@ export class BackendSession {
         // late response from a handed-off editor must not stop the new lease.
         const permissionLost = error instanceof SceneApiError && (error.status === 401 || ["LEASE_LOST", "REVISION_CONFLICT"].includes(error.code));
         const materialPreviewFailure = path.endsWith('/material-variants') && error instanceof SceneApiError && ['VALIDATION_ERROR','MATERIAL_VARIANT_SELECTION_INVALID','OBJECT_LOCKED','MATERIAL_VARIANT_MISMATCH','ASSET_NOT_GLB','DIMENSION_CONFLICT','STRUCTURAL_COLLISION','IDEMPOTENCY_CONFLICT'].includes(error.code);
-        const serviceFailure = materialPreviewFailure || error instanceof SceneApiError && ["SERVICE_NOT_CONFIGURED", "BILLING_NOT_CONFIGURED", "BUDGET_EXCEEDED", "DAILY_BUDGET_EXCEEDED", "AI_BUSY", "AI_IN_PROGRESS", "AI_PREVIOUS_REQUEST_FAILED", "AI_INVALID_PROPOSAL", "AI_INPUT_TOO_LARGE", "PROVIDER_HTTP_ERROR", "PROVIDER_INVALID_JSON", "PROVIDER_TIMEOUT", "GENERATION_BUSY"].includes(error.code);
+        const serviceFailure = materialPreviewFailure || error instanceof SceneApiError && ["SERVICE_NOT_CONFIGURED", "BILLING_NOT_CONFIGURED", "BUDGET_EXCEEDED", "DAILY_BUDGET_EXCEEDED", "AI_BUSY", "AI_IN_PROGRESS", "AI_PREVIOUS_REQUEST_FAILED", "AI_INVALID_PROPOSAL", "AI_INPUT_TOO_LARGE", "PROVIDER_QUOTA_EXHAUSTED", "PROVIDER_HTTP_ERROR", "PROVIDER_INVALID_JSON", "PROVIDER_TIMEOUT", "GENERATION_BUSY"].includes(error.code);
         if (!suppressProjectFailure || error instanceof SceneApiError && (error.status === 401 || error.code === 'UNAUTHENTICATED')) {
           if (permissionLost || blocksWrites === true || (blocksWrites === false && !serviceFailure)) this.block(error);
           else this.update({ error: failure(error) });

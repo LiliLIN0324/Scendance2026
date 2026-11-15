@@ -251,7 +251,9 @@ export function OutdoorWorkflowCard({
             <button
               type="button"
               disabled={flow.busy}
-              onClick={() => flow.cycleObjectsLayout()}
+              onClick={() => {
+                void flow.cycleObjectsLayout();
+              }}
             >
               换一种排法
             </button>

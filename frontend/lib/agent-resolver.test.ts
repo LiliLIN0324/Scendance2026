@@ -638,6 +638,7 @@ describe('model requirements', () => {
     ['MODEL_PROVIDER_URL_INVALID', '地址无效'],
     ['PROVIDER_HTTP_ERROR:401', '认证或权限'],
     ['PROVIDER_HTTP_ERROR:402', '余额或计费'],
+    ['PROVIDER_QUOTA_EXHAUSTED', '额度已用完'],
     ['PROVIDER_HTTP_ERROR:429', '请求过多'],
     ['MODEL_TIMEOUT', '响应超时'],
     ['MODEL_EVIDENCE_MISMATCH', '未通过校验'],
@@ -652,6 +653,15 @@ describe('model requirements', () => {
     expect(turn.modelNotice).toContain(expected);
     expect(turn.modelNotice).not.toContain(reason);
     expect(turn.memory.headcount).toBe(80);
+  });
+
+  it('classifies quota exhaustion as billing and does not offer a retry', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    const turn = await resolveBriefTurn('80人', initialBriefMemory(), context, {
+      briefExtract: vi.fn().mockResolvedValue({ enabled: true, extraction: null, reason: 'PROVIDER_QUOTA_EXHAUSTED' }),
+    });
+    expect(turn.modelDiagnostic).toMatchObject({ category: 'billing', code: 'PROVIDER_QUOTA_EXHAUSTED' });
+    expect(turn.modelRetryable).toBeUndefined();
   });
 
   it('asks for confirmation before model-interpreted activity needs affect the plan', async () => {

@@ -28,7 +28,8 @@ import {
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
 // 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
-import { lngLatToEnu } from "../lib/outdoor-plan-canvas";
+import { enuToLngLat, lngLatToEnu } from "../lib/outdoor-plan-canvas";
+import { fetchOpenFreeMapBuildings, lngLatRingsToEnu } from "../lib/openfreemap-buildings";
 import { planPointInRing } from "../lib/site-plan-editing";
 import { planRingAreaM2 } from "../../../../supabase/functions/_shared/site-plan";
 import { proposeOutdoorStyle } from "../lib/outdoor-style-preview";
@@ -119,6 +120,69 @@ const ERROR_CODE_NOTICES: Record<string, string> = {
 function friendlyErrorNotice(text: string): string {
   if (!/^[A-Z][A-Z0-9_]*$/u.test(text)) return text;
   return ERROR_CODE_NOTICES[text] ?? "请求没有完成，本次未执行；请稍后重试。";
+}
+
+/** 提案基座与当前画布做「纯新增」比对时要逐条对齐的实体表。 */
+const PLAN_ENTITY_KEYS = [
+  "zones",
+  "facilities",
+  "routes",
+  "nodes",
+  "workers",
+  "annotations",
+  "measurements",
+] as const;
+
+/**
+ * 基座快照是否仍原样在画布上：基座里每个实体都没被删/改，且边界、锚点等非实体字段一字未动。
+ * 任何一处变动都算「规划已变化」，绝不拿基座快照覆盖用户内容。
+ */
+function baseStillIntact(base: SitePlanData, current: SitePlanData): boolean {
+  const baseObj = base as unknown as Record<string, unknown>;
+  const nowObj = current as unknown as Record<string, unknown>;
+  for (const key of PLAN_ENTITY_KEYS) {
+    const before = (baseObj[key] ?? []) as readonly { id: string }[];
+    const now = (nowObj[key] ?? []) as readonly { id: string }[];
+    const kept = before.every(item =>
+      now.some(x => x.id === item.id && JSON.stringify(x) === JSON.stringify(item)),
+    );
+    if (!kept) return false;
+  }
+  const keys = new Set([...Object.keys(baseObj), ...Object.keys(nowObj)]);
+  for (const key of PLAN_ENTITY_KEYS) keys.delete(key);
+  return [...keys].every(
+    key => JSON.stringify(baseObj[key]) === JSON.stringify(nowObj[key]),
+  );
+}
+
+/** 把基座之后用户新画的实体并进提案；对没加东西的画布是恒等运算。 */
+function carryNewEntities(
+  base: SitePlanData,
+  next: SitePlanData,
+  current: SitePlanData,
+): SitePlanData {
+  const carryList = <T extends { id: string }>(
+    baseItems: readonly T[],
+    nextItems: readonly T[],
+    currentItems: readonly T[],
+  ): T[] => {
+    const baseIds = new Set(baseItems.map(item => item.id));
+    const nextIds = new Set(nextItems.map(item => item.id));
+    return [
+      ...nextItems,
+      ...currentItems.filter(item => !baseIds.has(item.id) && !nextIds.has(item.id)),
+    ];
+  };
+  return {
+    ...next,
+    zones: carryList(base.zones, next.zones, current.zones),
+    facilities: carryList(base.facilities, next.facilities, current.facilities),
+    routes: carryList(base.routes, next.routes, current.routes),
+    nodes: carryList(base.nodes, next.nodes, current.nodes),
+    workers: carryList(base.workers, next.workers, current.workers),
+    annotations: carryList(base.annotations ?? [], next.annotations ?? [], current.annotations ?? []),
+    measurements: carryList(base.measurements ?? [], next.measurements ?? [], current.measurements ?? []),
+  };
 }
 
 export function useOutdoorAgentWorkflow(input: {
@@ -321,20 +385,47 @@ export function useOutdoorAgentWorkflow(input: {
       status("这张确认卡已过期，未应用其他任务的提案。", "blocked");
       return;
     }
-    const p = proposalRef.current,
+    let p = proposalRef.current,
       bridge = callbacks.current.bridge(),
       plan = bridge?.getPlan();
     if (
       !p ||
       !plan ||
-      !callbacks.current.current(p.epoch) ||
-      p.base !== JSON.stringify(plan)
+      !callbacks.current.current(p.epoch)
     ) {
       proposalRef.current = null;
       setProposal(null);
       status("当前规划已变化，旧提案已失效；请基于最新场地重算。", "blocked");
       return;
     }
+    // 2026-11-14 用户实测：提案基座拍快照之后用户新画的实体（如室内分区）不该让提案整张失效，
+    // 也不该在应用时被基座快照冲掉——「纯新增」放行并把新增实体并回提案（一条 undo）；
+    // 基座实体被删改、或边界/锚点等非实体字段变了仍然失效（防静默丢失用户内容）。
+    const baseObj = JSON.parse(p.base) as SitePlanData;
+    const expire = () => {
+      proposalRef.current = null;
+      setProposal(null);
+      status("当前规划已变化，旧提案已失效；请基于最新场地重算。", "blocked");
+    };
+    if (!baseStillIntact(baseObj, plan)) {
+      expire();
+      return;
+    }
+    /** 按「最新画布」把新增实体并回提案；await 期间画布若再变，重新判定再合并。 */
+    const mergeLatest = (current: SitePlanData): boolean => {
+      if (!baseStillIntact(baseObj, current)) {
+        expire();
+        return false;
+      }
+      const carried = carryNewEntities(baseObj, p!.next, current);
+      if (JSON.stringify(carried) !== JSON.stringify(p!.next)) {
+        p = { ...p!, next: carried };
+        proposalRef.current = p;
+        setProposal(p);
+      }
+      return true;
+    };
+    if (!mergeLatest(plan)) return;
     const check = abort.current;
     const confirmationScope = scopeRef.current;
     const owns = () =>
@@ -342,10 +433,10 @@ export function useOutdoorAgentWorkflow(input: {
         check &&
           !check.signal.aborted &&
           abort.current === check &&
-          token.current === p.epoch &&
+          token.current === p!.epoch &&
           proposalRef.current === p &&
           scopeRef.current === confirmationScope &&
-          callbacks.current.current(p.epoch),
+          callbacks.current.current(p!.epoch),
       );
     if (!owns()) return;
     // Re-read map version before accepting any proposal that relied on map context.
@@ -366,7 +457,7 @@ export function useOutdoorAgentWorkflow(input: {
       if (!owns()) return;
       if (
         p.mapVersion !== map.version ||
-        p.base !== JSON.stringify(bridge.getPlan())
+        !baseStillIntact(baseObj, bridge.getPlan() ?? plan)
       ) {
         setProposal(null);
         proposalRef.current = null;
@@ -398,8 +489,11 @@ export function useOutdoorAgentWorkflow(input: {
       );
       return;
     }
-    if (!owns() || p.base !== JSON.stringify(bridge?.getPlan())) return;
-    if (!bridge?.applyPlan?.(p.next, p.base)) {
+    if (!owns()) return;
+    const applyBase = bridge?.getPlan();
+    // 应用前按最新画布再并一次：新增实体已带进 p.next，所以应用基准就是当前画布（仍是同一条 undo）。
+    if (!applyBase || !mergeLatest(applyBase)) return;
+    if (!bridge?.applyPlan?.(p.next, JSON.stringify(applyBase))) {
       status("画布当前不可写或保存身份变化，未应用；原规划保留。", "blocked");
       return;
     }
@@ -508,7 +602,7 @@ export function useOutdoorAgentWorkflow(input: {
     strategy: ObjectsLayoutStrategy;
   } | null>(null);
   /** 提案卡「换一种排法」：同一基座换下一策略重排，重新出预览（不写盘，确认才应用）。 */
-  function cycleObjectsLayout() {
+  async function cycleObjectsLayout() {
     const stored = objectsLayoutRef.current;
     const p = proposalRef.current;
     if (!stored || !p || p.kind !== "objects") {
@@ -518,29 +612,44 @@ export function useOutdoorAgentWorkflow(input: {
     const job = start();
     const order = OBJECTS_LAYOUT_STRATEGIES;
     const next = order[(order.indexOf(stored.strategy) + 1) % order.length]!;
-    objectsLayoutRef.current = { ...stored, strategy: next };
-    const result = proposeInventoryObjects(
-      stored.base,
-      stateRef.current.brief,
-      stored.library,
-      undefined,
-      { strategy: next },
-    );
-    offer(
-      result.plan,
-      "objects",
-      `逐区复用库内真实设施（排法：${OBJECTS_LAYOUT_LABELS[next]}）`,
-      job,
-      [
-        `排布方案 ${OBJECTS_LAYOUT_LABELS[next]}——还有 ${
-          order
-            .filter((s) => s !== next)
-            .map((s) => OBJECTS_LAYOUT_LABELS[s])
-            .join("、")
-        } 可切换。`,
-      ],
-    );
-    setBusy(false);
+    try {
+      const result = await proposeInventoryObjects(
+        stored.base,
+        stateRef.current.brief,
+        stored.library,
+        undefined,
+        {
+          strategy: next,
+          // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏。
+          onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
+          signal: job.controller.signal,
+        },
+      );
+      // 排成功才推进策略指针，失败时下一击仍从同一种排法重试。
+      objectsLayoutRef.current = { ...stored, strategy: next };
+      offer(
+        result.plan,
+        "objects",
+        `逐区复用库内真实设施（排法：${OBJECTS_LAYOUT_LABELS[next]}）`,
+        job,
+        [
+          `排布方案 ${OBJECTS_LAYOUT_LABELS[next]}——还有 ${
+            order
+              .filter((s) => s !== next)
+              .map((s) => OBJECTS_LAYOUT_LABELS[s])
+              .join("、")
+          } 可切换。`,
+        ],
+      );
+    } catch (error) {
+      if (live(job))
+        status(
+          error instanceof Error ? error.message : "换排法未能重排，预览保持原样。",
+          "blocked",
+        );
+    } finally {
+      if (live(job)) setBusy(false);
+    }
   }
 
   function manualApplied() {
@@ -887,20 +996,39 @@ export function useOutdoorAgentWorkflow(input: {
         // 过滤：面积 ≥45% 边界的（商场整体轮廓这种）丢弃；一个点都不在边界内的丢弃。
         let buildingsEnu: PlanPoint[][] = plan.buildings?.map(b => b.points) ?? [];
         if (!buildingsEnu.length && plan.anchor) {
-          const fetchPlan = roadFetchPlanForBoundary(plan.boundary, plan.anchor);
+          // 2026-11-14 用户指令「进度条要显示在干嘛」：建筑抓取是 10-60s 的大头，单独上屏。
+          status("正在抓取地图建筑足迹（OpenFreeMap 矢量瓦片）…", "working", { stopLabel: "停止查找" });
+          const boundaryArea = planRingAreaM2(plan.boundary);
+          // ① 首选 OpenFreeMap 矢量瓦片（CDN 稳定，无 Overpass 坏窗口）。
           try {
-            const net = await fetchRoadNetwork(
-              fetchPlan.center,
-              fetchPlan.spanM,
-              { signal: job.controller.signal },
+            const boundaryLngLat = plan.boundary.map(pt => enuToLngLat(pt.x, pt.y, plan.anchor!.lng, plan.anchor!.lat));
+            const lngs = boundaryLngLat.map(p => p.lng);
+            const lats = boundaryLngLat.map(p => p.lat);
+            const rings = await fetchOpenFreeMapBuildings(
+              { west: Math.min(...lngs), south: Math.min(...lats), east: Math.max(...lngs), north: Math.max(...lats) },
+              job.controller.signal,
             );
-            const boundaryArea = planRingAreaM2(plan.boundary);
-            buildingsEnu = (net.buildings ?? [])
-              .map(b => b.points.map(([lng, lat]) => lngLatToEnu(lng, lat, plan.anchor!.lng, plan.anchor!.lat)))
+            buildingsEnu = lngLatRingsToEnu(rings, plan.anchor!.lng, plan.anchor!.lat)
               .filter(ring => ring.length >= 3)
               .filter(ring => planRingAreaM2(ring) < boundaryArea * 0.45)
               .filter(ring => ring.some(pt => planPointInRing(pt, plan.boundary)));
-          } catch { /* 建筑抓不到就不禁区内渲染，不阻断物件流程 */ }
+          } catch { /* OpenFreeMap 失败走后备源 */ }
+          // ② 后备：路网查询（Overpass building + 高德兜底，坏窗口依赖种子/缓存）。
+          if (!buildingsEnu.length) {
+            const fetchPlan = roadFetchPlanForBoundary(plan.boundary, plan.anchor);
+            try {
+              const net = await fetchRoadNetwork(
+                fetchPlan.center,
+                fetchPlan.spanM,
+                { signal: job.controller.signal },
+              );
+              buildingsEnu = (net.buildings ?? [])
+                .map(b => b.points.map(([lng, lat]) => lngLatToEnu(lng, lat, plan.anchor!.lng, plan.anchor!.lat)))
+                .filter(ring => ring.length >= 3)
+                .filter(ring => planRingAreaM2(ring) < boundaryArea * 0.45)
+                .filter(ring => ring.some(pt => planPointInRing(pt, plan.boundary)));
+            } catch { /* 建筑抓不到就不禁区内渲染，不阻断物件流程 */ }
+          }
         }
         const buildingsForPlan = buildingsEnu.length
           ? buildingsEnu.map((points, i) => ({ id: `building:${i}`, points }))
@@ -909,12 +1037,18 @@ export function useOutdoorAgentWorkflow(input: {
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
         // 2026-11-14 用户指令「给我几个方案」：物件排布带策略（行列/居中/沿边），提案卡可「换一种排法」循环预览。
         objectsLayoutRef.current = { base: basePlan, library, strategy: "rows" };
-        const result = proposeInventoryObjects(
+        const result = await proposeInventoryObjects(
           basePlan,
           stateRef.current.brief,
           library,
           undefined,
-          { strategy: "rows", buildings: buildingsEnu.length ? buildingsEnu : undefined },
+          {
+            strategy: "rows",
+            buildings: buildingsEnu.length ? buildingsEnu : undefined,
+            // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
+            onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
+            signal: job.controller.signal,
+          },
         );
         offer(result.plan, "objects", "逐区复用库内真实设施", job, [
           "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。",
@@ -1067,6 +1201,53 @@ export function useOutdoorAgentWorkflow(input: {
       if (live(job)) setBusy(false);
     }
   }
+  /**
+   * 2026-11-14 用户指令「物件排布路由摇摆，给我几个方案」：多分区物件清单句式
+   * （「摊位区 18 个市集摊位、舞台表演区 1 个舞台」）确定性解析为 objects 回合，
+   * 不再依赖理解模型路由（实测 deepseek 对该句式在 zones/objects/library-search 间摇摆）。
+   * ≥2 段才接管（单区清单仍走模型，保留其追问能力）；解析失败回 null 由模型兜底。
+   */
+  function synthesizeObjectsTurn(
+    message: string,
+    plan: SitePlanData,
+  ): OutdoorTurn | null {
+    const segments = message
+      .split(/[，,；;]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (segments.length < 2) return null;
+    const items: Array<{
+      zone: string;
+      query: string;
+      count: number;
+      evidence: string;
+    }> = [];
+    for (const segment of segments) {
+      const zone = plan.zones.find((z) => segment.startsWith(z.name));
+      if (!zone) continue;
+      const rest = segment.slice(zone.name.length);
+      const match = rest.match(/^\s*(\d{1,4})\s*[个把只组台张]?\s*(\S.*)$/);
+      if (!match) continue;
+      const count = Number(match[1]);
+      if (!Number.isInteger(count) || count < 1 || count > 500) continue;
+      const query = match[2]!.trim();
+      if (!query) continue;
+      items.push({
+        zone: zone.name,
+        query,
+        count,
+        evidence: segment,
+      });
+    }
+    if (items.length < 2) return null;
+    return {
+      action: "objects",
+      reply: "",
+      references: [],
+      facts: { items },
+    } as OutdoorTurn;
+  }
+
   async function handle(message: string): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
     if (explicitProposalApproval(message) && proposalRef.current) {
@@ -1081,6 +1262,19 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return false;
+    // 2026-11-14：确定性 objects 预路由（先于理解模型）——「分区名+数量+物件名」清单句直接合成。
+    const planForSynth = plan;
+    const synthesizedTurn = synthesizeObjectsTurn(message, planForSynth);
+    if (synthesizedTurn) {
+      stateRef.current = mergeOutdoorFacts(
+        stateRef.current,
+        synthesizedTurn,
+        message,
+      );
+      persist(stateRef.current);
+      await act(synthesizedTurn, message);
+      return true;
+    }
     const previousProposal = proposalRef.current;
     const job = start();
     status(
