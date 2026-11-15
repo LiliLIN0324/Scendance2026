@@ -123,3 +123,12 @@ frontend/build-run.log
 frontend/local-panel-preview.png
 docs/research/evidence-*/
 /artifacts/
+
+# Push-prep 2026-11-16：一次性探针 / 验收截图 / 调试输出（已清理，规则常驻，下次跑脚本不再脏工作树）
+/frontend/verify-*.png
+/tmp-*
+/frontend/*.txt
+*.err
+scope-shots/
+scope-out/
+/p0-*
