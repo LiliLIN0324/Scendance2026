@@ -138,6 +138,43 @@ export interface PlanCanvasContext {
   viewport: PlanViewport;
 }
 
+/** Draw a review outline or point ring above the editable map geometry. */
+export function drawMapEditHighlight(
+  c: PlanCanvasContext,
+  points: readonly PlanPoint[],
+  kind: 'area' | 'route' | 'entrance',
+): void {
+  if (!points.length) return;
+  const { ctx, viewport } = c;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const stroke = () => {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.strokeStyle = '#4A6AF0';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  };
+  if (kind !== 'entrance') {
+    if (kind === 'area') traceRing(c, points);
+    else tracePolyline(c, points);
+    stroke();
+  }
+  if (kind !== 'area') {
+    ctx.beginPath();
+    const radius = kind === 'entrance' ? 12 : 6;
+    for (const point of points) {
+      const { x, y } = planPointToPixel(point, viewport);
+      ctx.moveTo(x + radius, y);
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+    }
+    stroke();
+  }
+  ctx.restore();
+}
+
 /** 场地边界：品牌绿描边 + 低透明填充，顶点小方点；编辑模式下顶点画成可拖手柄。 */
 export function drawBoundaryLayer(
   c: PlanCanvasContext,

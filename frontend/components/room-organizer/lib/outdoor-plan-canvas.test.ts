@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   PLAN_LAYER_STACK,
   defaultLayerVisibility,
@@ -6,6 +6,7 @@ import {
   drawConflictMarkers,
   drawFacilityGhost,
   drawFacilityLayer,
+  drawMapEditHighlight,
   drawMeasureDraft,
   drawMeasureLayer,
   drawNodeGhost,
@@ -185,6 +186,26 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
   Object.defineProperty(ctx, 'textBaseline', { set: () => {}, get: () => 'top' });
   return { ctx, cap };
 }
+
+it('outlines a review area, marks each route vertex, and rings the entrance separately', () => {
+  const { ctx } = makeCtx();
+  const closePath = vi.spyOn(ctx, 'closePath');
+  const arc = vi.spyOn(ctx, 'arc');
+  const canvas = { ctx, viewport: view };
+  const points = [{ x: 0, y: 0 }, { x: 10, y: 5 }, { x: 20, y: 0 }];
+  drawMapEditHighlight(canvas, points, 'area');
+  expect(closePath).toHaveBeenCalledTimes(1);
+  expect(arc).not.toHaveBeenCalled();
+
+  drawMapEditHighlight(canvas, points, 'route');
+  expect(closePath).toHaveBeenCalledTimes(1);
+  expect(arc).toHaveBeenCalledTimes(3);
+  const vertex = planPointToPixel(points[1]!, view);
+  expect(arc).toHaveBeenNthCalledWith(2, vertex.x, vertex.y, 6, 0, Math.PI * 2);
+
+  drawMapEditHighlight(canvas, [points[0]!], 'entrance');
+  expect(arc).toHaveBeenLastCalledWith(view.canvasW / 2, view.canvasH / 2, 12, 0, Math.PI * 2);
+});
 
 describe('facility ghost & selection drawing (H2-c)', () => {
   it('draws the ghost as a dashed footprint with a template/size label', () => {
