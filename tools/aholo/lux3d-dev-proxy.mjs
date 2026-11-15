@@ -801,6 +801,26 @@ export function createServer({
         });
         res.end(tile.bytes);
         return;
+      } else if (req.method === 'GET' && url.pathname === '/api/carto-tiles') {
+        // Carto 瓦片代理（dev-only）：直接复用 Pages Function 本体（Node 24 原生跑 TS），
+        // dev 与线上只有一套逻辑：运行时读 key、水印图识别、占位兜底都同源。
+        const cartoKey = await resolveCartoKey();
+        if (!cartoKey) throw new HttpError(503, '本机缺少 CARTO_KEY（仓库根 .env.local 或前端 .env.local）');
+        const { handleCartoTiles } = await import('../../functions/api/carto-tiles.ts');
+        const response = await handleCartoTiles(new Request(url), { CARTO_KEY: cartoKey });
+        const bytes = Buffer.from(await response.arrayBuffer());
+        const fallback = response.headers.get('x-carto-fallback');
+        res.writeHead(response.status, {
+          'Content-Type': response.headers.get('content-type') ?? 'image/png',
+          'Content-Length': String(bytes.length),
+          'Cache-Control': response.headers.get('cache-control') ?? 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          ...(fallback ? { 'X-Carto-Fallback': fallback } : {}),
+          Vary: 'Origin',
+          ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
+        });
+        res.end(bytes);
+        return;
       } else if (req.method === 'GET' && url.pathname === '/api/tdt-search') {
         // 天地图地名搜索（dev-only，对齐 functions/api/tdt-search.ts）。
         // 本机 next dev 没有 Pages Functions，创建活动时的「活动地点」检索走这条口子。
@@ -1005,6 +1025,23 @@ async function fetchTdtTile(searchParams) {
     }
   }
   return { bytes: Buffer.from(TDT_PLACEHOLDER_SVG), type: 'image/svg+xml', fallback: true };
+}
+
+/* ---------------- Carto 瓦片代理（dev-only，直接复用 functions/api/carto-tiles.ts） ---------------- */
+
+/** 本机 key：仓库根 .env.local 先，其次前端 .env.local；只在运行时读，不写进任何构建。 */
+async function resolveCartoKey() {
+  const candidates = [
+    ['CARTO_KEY', new URL('../../.env.local', import.meta.url)],
+    ['NEXT_PUBLIC_CARTO_KEY', new URL('../../.env.local', import.meta.url)],
+    ['CARTO_KEY', new URL('../../frontend/.env.local', import.meta.url)],
+    ['NEXT_PUBLIC_CARTO_KEY', new URL('../../frontend/.env.local', import.meta.url)],
+  ];
+  for (const [name, fileUrl] of candidates) {
+    const value = await readEnvFile(name, fileUrl);
+    if (value) return value;
+  }
+  return '';
 }
 
 /* 天地图地名搜索（dev-only，对齐 functions/api/tdt-search.ts） */

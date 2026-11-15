@@ -56,6 +56,15 @@ NEXT_PUBLIC_GENERATION_ENABLED=false
 
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 是兼容 `main` 旧代码的变量名，值与 publishable key 相同。两个 key 都是浏览器公开配置，但仍保存在 Cloudflare 的项目环境中，不写入仓库。
 
+## Carto 底图 key（运行时，不进 Build command）
+
+`/api/carto-tiles` 是 Pages Function，Carto key 只从**运行时**环境变量 `CARTO_KEY` 读取（`functions/api/carto-tiles.ts` → `carto-env.ts`）。它不属于 `NEXT_PUBLIC_*`：
+
+- 写进 Build command 只会进构建镜像、进不了 Functions 运行时；
+- 写成 `NEXT_PUBLIC_CARTO_KEY` 会被静态导出烤进 JS，而且 Pages 构建不注入项目环境变量 —— 每次 CI 重建都会静默丢 key（2026-11-16 底图断成「API KEY REQUIRED」水印就是这个原因）。
+
+设置位置：Pages 项目 → Settings → Environment variables，Production 与 Preview 各设一份 `CARTO_KEY=<key>`。改完立即生效，**不需要重新部署前端包**。浏览器永远拿不到 key，只打同源 `/api/carto-tiles?style=light|dark&z=&x=&y=`；上游失败或 key 失效时该函数回 200 灰底占位块并带 `X-Carto-Fallback`（`nokey` / `invalid-key` / `upstream-xxx`），不会再让水印图冒充底图。
+
 ## 自定义域名 `scendance.lilicoding.space`
 
 `lilicoding.space` 的 zone 与本 Pages 项目在同一个 Cloudflare 账号，因此域名直接挂在项目上，由 Cloudflare 自动签发证书（CA 为 Google）：

@@ -43,6 +43,7 @@ npm --prefix frontend run dev
 | Lux3D | `LUX3D_API_KEY`、`LUX3D_BASE_URL`、`LUX3D_TERMS_URL`、`LUX3D_TERMS_REVIEWED_AT`、`NEXT_PUBLIC_LUX3D_DIRECT_URL`（可选直连中转） |
 | AMap | `NEXT_PUBLIC_AMAP_KEY`、`NEXT_PUBLIC_AMAP_SECURITY_CODE`、`NEXT_PUBLIC_AMAP_STATIC_KEY` |
 | 对话模型 | `SILICONFLOW_API_KEY`、`AGENT_CHAT_BASE_URL`、`AGENT_CHAT_KEY`、`AGENT_CHAT_MODEL`、`TOKENDANCE_API_KEY` |
+| 底图 Carto | `CARTO_KEY`（Pages 运行时环境变量；本地写根 `.env.local`。浏览器不读，统一走同源 `/api/carto-tiles`；不要写进 Build command，也没有 `NEXT_PUBLIC_CARTO_KEY`） |
 
 检查与构建：
 
