@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearGlbAssetCache, cloneOwnedGlb, createCachedGlbModel, createGlbCatalogItem, disposeOwnedModel,
-  ensureGlbAsset, getGlbAssetState, normalizeGlbInstance, validateGlbBuffer } from './glb-assets';
+  ensureGlbAsset, getGlbAssetState, normalizeGlbInstance, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
 import { advancePeopleAnimations, personOdometer } from './people-anim';
 
 function realGlb(): ArrayBuffer {
@@ -123,5 +123,68 @@ describe('owned GLB model instances', () => {
     view.setUint32(12, json.length, true); view.setUint32(16, 0x4e4f534a, true);
     new Uint8Array(buffer, 20).set(json);
     expect(() => validateGlbBuffer(buffer)).toThrow('外部文件');
+  });
+
+  it('accepts a JSON chunk padded with NUL instead of spaces', () => {
+    const json = new TextEncoder().encode(JSON.stringify({ asset: { version: '2.0' } }));
+    const jsonLen = Math.ceil(json.length / 4) * 4;
+    const buffer = new ArrayBuffer(20 + jsonLen); const view = new DataView(buffer);
+    view.setUint32(0, 0x46546c67, true); view.setUint32(4, 2, true); view.setUint32(8, buffer.byteLength, true);
+    view.setUint32(12, jsonLen, true); view.setUint32(16, 0x4e4f534a, true);
+    new Uint8Array(buffer, 20).set(json); // ArrayBuffer 零初始化，尾部即 NUL 填充
+    expect(() => validateGlbBuffer(buffer)).not.toThrow();
+  });
+
+  it('rewrites NUL JSON-chunk padding to spaces before handing the buffer to the loader', () => {
+    const json = new TextEncoder().encode(JSON.stringify({ asset: { version: '2.0' } }));
+    const jsonLen = Math.ceil(json.length / 4) * 4;
+    const bytes = new Uint8Array(20 + jsonLen);
+    const view = new DataView(bytes.buffer, bytes.byteOffset);
+    view.setUint32(0, 0x46546c67, true); view.setUint32(4, 2, true); view.setUint32(8, bytes.length, true);
+    view.setUint32(12, jsonLen, true); view.setUint32(16, 0x4e4f534a, true);
+    bytes.set(json, 20); // 尾部保持 0x00
+    sanitizeGlbJsonPadding(bytes);
+    for (let i = 20 + json.length; i < 20 + jsonLen; i += 1) expect(bytes[i]).toBe(0x20);
+  });
+
+  function buildGlb(doc: unknown, bin: Uint8Array): Uint8Array {
+    const json = new TextEncoder().encode(JSON.stringify(doc));
+    const jsonLen = Math.ceil(json.length / 4) * 4;
+    const total = 12 + 8 + jsonLen + 8 + bin.length;
+    const out = new Uint8Array(total);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, 0x46546c67, true); view.setUint32(4, 2, true); view.setUint32(8, total, true);
+    view.setUint32(12, jsonLen, true); view.setUint32(16, 0x4e4f534a, true);
+    out.set(json, 20);
+    view.setUint32(20 + jsonLen, bin.length, true);
+    view.setUint32(20 + jsonLen + 4, 0x4e4942, true);
+    out.set(bin, 20 + jsonLen + 8);
+    return out;
+  }
+
+  function parseGlbJson(buffer: ArrayBuffer): { doc: { bufferViews?: Array<{ buffer?: number }> }; binStart: number; binLen: number } {
+    const view = new DataView(buffer);
+    const jsonLen = view.getUint32(12, true);
+    const doc = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLen)).trim()) as { bufferViews?: Array<{ buffer?: number }> };
+    const binOff = 20 + jsonLen;
+    return { doc, binStart: binOff + 8, binLen: view.getUint32(binOff, true) };
+  }
+
+  it('patches missing bufferView.buffer to 0 and keeps the BIN chunk intact', () => {
+    const bin = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const doc = { asset: { version: '2.0' }, buffers: [{ byteLength: 8 }], bufferViews: [{ byteLength: 4 }, { byteOffset: 4, byteLength: 4 }] };
+    const repaired = repairGlbBufferViews(buildGlb(doc, bin));
+    const { doc: outDoc, binStart, binLen } = parseGlbJson(repaired);
+    expect(outDoc.bufferViews!.every(bv => bv.buffer === 0)).toBe(true);
+    expect(binLen).toBe(bin.length);
+    expect([...new Uint8Array(repaired, binStart, binLen)]).toEqual([...bin]);
+    expect(new DataView(repaired).getUint32(8, true)).toBe(repaired.byteLength);
+  });
+
+  it('returns the original buffer when every bufferView already has a buffer index', () => {
+    const bin = new Uint8Array([9, 9]);
+    const doc = { asset: { version: '2.0' }, buffers: [{ byteLength: 2 }], bufferViews: [{ buffer: 0, byteLength: 2 }] };
+    const input = buildGlb(doc, bin);
+    expect(repairGlbBufferViews(input)).toBe(input.buffer);
   });
 });

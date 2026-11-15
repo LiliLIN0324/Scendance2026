@@ -1,4 +1,6 @@
 import { cloudPeopleUrl } from './cloud-assets';
+import { LABOR_GENDER_SLOTS } from './labor-gender';
+import type { CrowdTypeId } from './crowd-types';
 
 /**
  * 漫游角色清单：左侧「漫游角色」只负责选人，右侧 `tool-walk` 负责进出漫游。
@@ -17,8 +19,22 @@ export type WalkRole = {
   /** 不能走时说明原因，显示在卡片下面。 */
   note?: string;
   /** 挂到「不同人群」的哪一类；缺省为演员。 */
-  crowdType?: 'performer' | 'security' | 'police' | 'volunteer' | 'manager' | 'admin';
+  crowdType?: CrowdTypeId;
 };
+
+/**
+ * PEOPLE-06 劳动力男女批次：ready 槽位已上云双动画 GLB，并入漫游角色表。
+ * 头像取自交接包正面参考图（public/assets/avatars/labor-<slot>.jpg）。
+ */
+const LABOR_WALK_ROLES: readonly WalkRole[] = LABOR_GENDER_SLOTS
+  .filter(slot => slot.ready)
+  .map(slot => ({
+    assetId: slot.assetId,
+    name: `${slot.roleLabel}${slot.gender === 'female' ? '女' : '男'}`,
+    image: `/assets/avatars/labor-${slot.id}.jpg`,
+    walkable: true,
+    crowdType: slot.crowdType,
+  }));
 
 export const WALK_ROLES: readonly WalkRole[] = [
   { assetId: '7a9f1e21-8c34-4d51-a001-b00000000001', name: '唐女', image: '/assets/avatars/walk-tang-f.jpg', walkable: true },
@@ -32,12 +48,18 @@ export const WALK_ROLES: readonly WalkRole[] = [
   { assetId: '7a9f1e21-8c34-4d51-a009-b00000000009', name: '志愿者', image: '/assets/avatars/walk-volunteer.jpg', walkable: true, crowdType: 'volunteer' },
   { assetId: '7a9f1e21-8c34-4d51-a00a-b0000000000a', name: '主管', image: '/assets/avatars/walk-manager.jpg', walkable: true, crowdType: 'manager' },
   { assetId: '7a9f1e21-8c34-4d51-a00b-b0000000000b', name: '管理员', image: '/assets/avatars/walk-admin.jpg', walkable: true, crowdType: 'admin' },
+  ...LABOR_WALK_ROLES,
 ];
 
 export const DEFAULT_WALK_ROLE_ID = WALK_ROLES[0]!.assetId;
 
 export function findWalkRole(assetId: string): WalkRole {
   return WALK_ROLES.find(role => assetId === role.assetId) ?? WALK_ROLES[0]!;
+}
+
+/** 角色归属的人群类型；未标注的古装角色默认归演员（performer）。 */
+export function walkRoleCrowdType(role: WalkRole): string {
+  return role.crowdType ?? 'performer';
 }
 
 /**

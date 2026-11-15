@@ -10,6 +10,21 @@ import {
   worldToEnu,
   type WalkBoundaryPoint,
 } from '../lib/outdoor-walk-boundary';
+import {
+  rigOffsetForYaw,
+  type WalkViewMode,
+} from '../lib/walk-view-modes';
+
+/** 每帧透出的玩家锚点姿态，供户外组件摆占位 avatar 与跟随相机。 */
+export interface OutdoorWalkFrame {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  moving: boolean;
+  thirdPerson: boolean;
+  delta: number;
+}
 
 /**
  * 户外规划 3D 的裸第一人称步行（一期）。
@@ -41,6 +56,10 @@ export interface UseOutdoorWalkOptions {
   eyeHeight?: number;
   /** 步行速度（米/秒），默认 1.8；Shift 翻倍。 */
   walkSpeed?: number;
+  /** 视角档位；默认第一人称。third/shoulder 把相机摆到锚点后上方并透出帧给 avatar。 */
+  viewMode?: WalkViewMode;
+  /** 每帧玩家锚点姿态回调（摆占位 avatar 用）。 */
+  onWalkFrame?: (frame: OutdoorWalkFrame) => void;
   /** 第二次 Esc / 退出钮：整条漫游态交回外层收口。 */
   onExit?: (() => void) | undefined;
 }
@@ -74,6 +93,8 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
     boundary,
     eyeHeight = 1.6,
     walkSpeed = 1.8,
+    viewMode = 'first',
+    onWalkFrame,
     onExit,
   } = options;
 
@@ -88,6 +109,10 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
   eyeHeightRef.current = eyeHeight;
   const walkSpeedRef = useRef(walkSpeed);
   walkSpeedRef.current = walkSpeed;
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  const onWalkFrameRef = useRef(onWalkFrame);
+  onWalkFrameRef.current = onWalkFrame;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
 
@@ -197,6 +222,10 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         camera.position.y = eyeHeightRef.current;
       }
       const player = camera.position.clone();
+      const lookDir = new THREE.Vector3();
+      camera.getWorldDirection(lookDir);
+      let yaw = Math.atan2(lookDir.x, lookDir.z);
+      let moving = false;
 
       const markRefused = () => {
         if (!cancelled) setPhase(lockedOnceRef.current ? 'unlocked' : 'drag');
@@ -302,6 +331,8 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         if (pressed.has('KeyA') || pressed.has('ArrowLeft')) dx -= 1;
         if (pressed.has('KeyD') || pressed.has('ArrowRight')) dx += 1;
 
+        const prevX = player.x;
+        const prevZ = player.z;
         if (dx !== 0 || dz !== 0) {
           camera.getWorldDirection(cameraForward);
           forward.set(cameraForward.x, 0, cameraForward.z).normalize();
@@ -315,7 +346,25 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           player.z = clamped.z;
         }
         player.y = eyeHeightRef.current;
-        camera.position.copy(player);
+        const movedX = player.x - prevX;
+        const movedZ = player.z - prevZ;
+        moving = Math.hypot(movedX, movedZ) > 0.0001;
+        if (moving) yaw = Math.atan2(movedX, movedZ);
+        const rig = rigOffsetForYaw(viewModeRef.current, yaw);
+        camera.position.set(
+          player.x + rig.x,
+          player.y + rig.heightDelta,
+          player.z + rig.z,
+        );
+        onWalkFrameRef.current?.({
+          x: player.x,
+          y: player.y,
+          z: player.z,
+          yaw,
+          moving,
+          thirdPerson: rig.thirdPerson,
+          delta,
+        });
       };
       rafId = requestAnimationFrame(step);
       cleanup.push(() => cancelAnimationFrame(rafId));
