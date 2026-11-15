@@ -13,21 +13,45 @@
   a { color: inherit; text-underline-offset: .25em }
   :focus-visible { outline: 2px solid #387b58; outline-offset: 4px }
   [hidden] { display: none !important }
-  .wrap { width: min(1180px, calc(100% - clamp(36px, 9vw, 112px))); margin-inline: auto }
-  .navigation { border-bottom: 1px solid var(--line) }
-  .navigation nav, .navigation .links { display: flex; align-items: center; gap: clamp(14px, 3vw, 34px) }
-  .navigation nav { min-height: 69px; justify-content: space-between }
-  .navigation a { text-decoration: none }
-  .navigation a:hover { text-decoration: underline }
-  .brand { display: inline-flex; padding: 5px 10px; color: #fff; background: var(--green); border-radius: 8px }
-  .brand svg { width: 46px; height: 25px }
+  .wrap { width: 100%; max-width: 1500px; margin-inline: auto; padding: 0 max(4.5%, 18px) }
+  /* 顶部栏：对齐官网导航的字形与排布（右对齐竖排、字距 .08em），白底深绿字，不用深色底板 */
+  .site-head { position: relative; z-index: 20; background: #fff; border-bottom: 1px solid var(--line) }
+  .site-head-inner { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-block: 16px }
+  .site-head .head-brand { display: inline-flex; padding-top: 2px; font-size: 24px; font-weight: 700; letter-spacing: .08em; line-height: 1.125; color: var(--green); text-decoration: none }
+  .site-head .head-nav { display: grid; justify-items: end; gap: 0 }
+  .site-head .head-nav a { display: grid; align-items: center; justify-items: end; min-height: 34px; color: #24422f; font-size: clamp(14px, 1.2vw, 17px); font-weight: 600; line-height: 1.15; letter-spacing: .06em; text-decoration: none }
+  .site-head .head-nav span { position: relative }
+  .site-head .head-nav span::after { content: ""; position: absolute; inset: auto .1em -.28em 0; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: right; transition: transform .22s ease }
+  .site-head .head-nav a:is(:hover, :focus-visible) span::after { transform: scaleX(1) }
+  @media (prefers-reduced-motion: reduce) { .site-head .head-nav span::after { transition: none } }
+  @media (max-width: 760px) {
+    .site-head .head-brand { font-size: 20px }
+    .site-head .head-nav a { min-height: 30px; font-size: 13px }
+  }
   .hero { display: grid; position: relative; isolation: isolate; overflow: hidden; align-items: center; min-height: 310px; background: #fff }
   .hero.has-photo { min-height: clamp(370px, 49vw, 600px); background: #172d23; color: #fff }
   .hero-photo, .hero.has-photo::before { position: absolute; inset: 0; width: 100%; height: 100% }
   .hero-photo { object-fit: cover; object-position: center 56%; z-index: -2 }
   .hero.has-photo::before { content: ""; z-index: -1; background: linear-gradient(90deg, #14261dea 0%, #14261dbd 37%, #14261d48 77%), linear-gradient(0deg, #14261d72, transparent 32%) }
   .hero-inner { padding-block: clamp(45px, 7vw, 100px) }
-  .hero .back { display: inline-block; margin-bottom: 24px; font-size: 14px }
+  .hero .back { margin-bottom: 24px }
+  /* 返回胶囊：全站子页统一的「上一步」导航（箭头 hover 左移、玻璃底、暖绿描边） */
+  .back-pill {
+    display: inline-flex; align-items: center; gap: 9px;
+    min-height: 40px; padding: 9px 20px 9px 15px;
+    border: 1px solid rgba(56, 74, 48, .24); border-radius: 999px;
+    background: #ffffffb8; color: #31473a;
+    font-size: 13px; font-weight: 600; line-height: 1; text-decoration: none;
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    transition: border-color .22s cubic-bezier(.16, 1, .3, 1), background .22s, box-shadow .22s;
+  }
+  .back-pill svg { width: 15px; height: 15px; flex: none; transition: transform .28s cubic-bezier(.16, 1, .3, 1) }
+  .back-pill:hover { border-color: #6f8f52; background: #fff; box-shadow: 0 8px 24px #2f3a261f }
+  .back-pill:hover svg { transform: translateX(-4px) }
+  .back-pill:focus-visible { outline: 2px solid #465c33; outline-offset: 3px }
+  /* 深色照片 hero 上的变体：hero.has-photo 由照片加载后自动挂上 */
+  .hero.has-photo .back-pill { border-color: #ffffff45; background: #14261d59; color: #fff }
+  .hero.has-photo .back-pill:hover { border-color: #ffffff8c; background: #14261d80; box-shadow: none }
   h1, h2, h3, p, figure { margin: 0 }
   h1 { margin-bottom: 16px; font-size: clamp(44px, 7.5vw, 100px); line-height: 1.08; letter-spacing: -.035em }
   h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.2; letter-spacing: -.025em }
@@ -70,27 +94,27 @@
     .hero.has-photo::before { background: linear-gradient(90deg, #14261de8, #14261d70) }
   }
   @media (max-width: 480px) {
-    .navigation .links { font-size: 14px }
     .hero-credit { max-width: calc(100% - 36px) }
     .gallery { grid-template-columns: 1fr }
   }
 </style>
 </head>
 <body>
-<header class="navigation">
-  <nav class="wrap" aria-label="站点导航">
-    <a class="brand" href="/introduction" aria-label="幕景首页"><svg aria-hidden="true" viewBox="0 0 61 32"><use href="./site-lettering.svg#scendance"></use></svg></a>
-    <div class="links">
-      <a href="/introduction#site-cases">活动类型</a>
-      <a href="/introduction?view=inspiration#inspiration">灵感中心</a>
-    </div>
-  </nav>
+<header class="site-head">
+  <div class="wrap site-head-inner">
+    <a class="head-brand" href="/introduction" aria-label="幕景首页">幕景</a>
+    <nav class="head-nav" aria-label="站点导航">
+      <a href="/introduction?view=inspiration#inspiration"><span>灵感中心</span></a>
+      <a href="/introduction#process"><span>产品能力</span></a>
+      <a href="/guide"><span>新手指引</span></a>
+    </nav>
+  </div>
 </header>
 <main>
   <section class="hero">
     <img class="hero-photo" id="photo" alt="" fetchpriority="high" hidden>
     <div class="wrap hero-inner">
-      <a class="back" href="/introduction#site-cases">← 返回活动类型</a>
+      <a class="back back-pill" href="/introduction#site-cases"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5 5 8l4.5 4.5M5 8h7.5"/></svg>返回官网 · 活动案例</a>
       <h1>活动布置指南</h1>
       <p class="lead" id="lead">在首页选择一种活动，查看场地布置要点。</p>
       <a class="button" href="#workflow" id="workflow-jump" hidden>查看布置步骤 ↓</a>
@@ -120,7 +144,7 @@
   </article>
   <section class="wrap case-analysis" id="case-analysis" aria-label="案例分析"></section>
 </main>
-<footer><div class="wrap"><a href="/introduction#site-cases">← 返回活动类型</a></div></footer>
+  <footer><div class="wrap"><a class="back-pill" href="/introduction#site-cases"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5 5 8l4.5 4.5M5 8h7.5"/></svg>返回官网 · 活动案例</a></div></footer>
 <script type="module">
   import { activityTypes } from './site-activity-types.mjs';
   import { inspirationCases } from './site-inspiration.mjs';

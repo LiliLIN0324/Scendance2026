@@ -1,7 +1,14 @@
+import { existsSync, readFileSync } from 'node:fs';
+import links from '../../../../assets/library/icon-model-links.json';
+import catalogue from '../../../../assets/library/merged.json';
+
 import { describe, expect, it } from 'vitest';
 
-import { registerPackEntries, type LibraryEntry } from './oneplan-library';
-import { loadOnlineModels } from './online-models';
+import {
+  libraryEntries, libraryTemplateId, packsToEntries, packTemplateId, registerPackEntries,
+  type LibraryEntry, type OneplanManifest, type OneplanPacksFile,
+} from './oneplan-library';
+import { loadOnlineModels, loadShippedOnlineModels } from './online-models';
 import { clearGeneratedFacilityModelsForTests, registerGeneratedFacilityModel } from './facility-generated-models';
 import {
   facilityTemplateSlug,
@@ -36,6 +43,32 @@ function assertWellFormed(candidates: readonly FacilityModelCandidate[]): void {
     expect(candidate.height).toBeGreaterThan(0);
   }
 }
+
+describe('scene preset facility models', () => {
+  it('loads the packaged full-venue GLB with real preset dimensions', async () => {
+    const candidates = resolveFacilityModels('scene-preset:popup');
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      slug: 'scene-preset:popup',
+      name: '青序 · 香氛快闪',
+      glbUrl: '/scene-presets/popup/popup.glb',
+      width: 12,
+      depth: 8,
+      height: 3.5,
+      trueScale: true,
+      thumb: '/scene-presets/popup/preview.jpg',
+    });
+    expect(fitFacilityModel(12, 8, candidates[0]!).scale).toBe(1);
+    expect(await loadFacilityModelOverride('scene-preset:popup')).toEqual(candidates[0]);
+    const map = await loadFacilityModelCandidates(['scene-preset:popup']);
+    expect(map.get('scene-preset:popup')).toEqual(candidates);
+  });
+
+  it('does not turn an unknown scene-preset suffix into a model', () => {
+    expect(resolveFacilityModels('scene-preset:not-a-real-venue')).toEqual([]);
+    expect(resolveFacilityModels('scene-preset:')).toEqual([]);
+  });
+});
 
 describe('facilityTemplateSlug', () => {
   it('解析 oneplan 物件库模板的 slug', () => {
@@ -163,32 +196,13 @@ describe('resolveFacilityModels', () => {
       };
     }
 
-    it('包 slug 命中物件库映射时自动继承（同命名空间回落）', () => {
+    it('shares the reviewed model with an aliased pack entry before and after registration', () => {
+      registerPackEntries([]);
+      const screen = resolveFacilityModels('oneplan:icon:large-screen');
+      expect(screen).toHaveLength(2);
+      expect(resolveFacilityModels('pack:biathlon:led-screen')).toEqual(screen);
       registerPackEntries([packEntry('biathlon', 'led-screen', 'large-screen')]);
-      const candidates = resolveFacilityModels('pack:biathlon:led-screen');
-      expect(candidates.length).toBeGreaterThanOrEqual(1);
-      assertWellFormed(candidates);
-      expect(candidates[0]?.slug).toBe('cinema-multiplex-and-foyer-cinema-screen-and-masking-92b7d56f');
-    });
-
-    it('包专属映射覆盖（打蜡车/戏台/补给站），未映射物件保持低模占位', () => {
-      registerPackEntries([
-        packEntry('biathlon', 'team-wax-truck', 'team-wax-truck'),
-        packEntry('festival-cn', 'cn-opera-stage', 'cn-opera-stage'),
-        packEntry('race', 'aid-station-200m', 'aid-station-200m'),
-        packEntry('fairs', 'ferris-wheel', 'ferris-wheel'),
-      ]);
-      expect(resolveFacilityModels('pack:biathlon:team-wax-truck')[0]?.slug).toBe(
-        'car-park-and-road-vehicle-fleet-box-truck-4574c765',
-      );
-      expect(resolveFacilityModels('pack:festival-cn:cn-opera-stage')[0]?.slug).toBe(
-        'live-music-venue-and-festival-stage-stage-deck-module-b23478f5',
-      );
-      expect(resolveFacilityModels('pack:race:aid-station-200m')[0]?.slug).toBe(
-        'medieval-monastery-and-scriptorium-trestle-table-2a0801e0',
-      );
-      // 没有同类实物模型的包物件（打蜡车之外的杂项）不乱配，保持占位。
-      expect(resolveFacilityModels('pack:biathlon:unknown-prop')).toEqual([]);
+      expect(resolveFacilityModels('pack:biathlon:led-screen')).toEqual(screen);
     });
 
     it('游乐设施包物件经同命名空间回落命中真模型（2026-11-12 起摩天轮/飞椅/木马已入库）', () => {
@@ -220,17 +234,11 @@ describe('resolveFacilityModels', () => {
       expect(resolveFacilityModels('pack:cricket:unknown-prop')).toEqual([]);
     });
 
-    it('包清单未登记时用 templateId 自带 itemId 回落命中内置映射（#51 真机外廓修复）', () => {
-      // 模拟载入历史草稿时 packs.json 尚未异步登记：不能因此把餐车误判成 misc 1:1。
+    it('matches the actual team dugout before the pack has loaded', () => {
       registerPackEntries([]);
-      const truck = resolveFacilityModels('pack:fairs:chuck-wagon');
-      expect(truck.length).toBeGreaterThanOrEqual(1);
-      expect(truck[0]?.slug).toBe('car-park-and-road-vehicle-fleet-box-truck-4574c765');
-      assertWellFormed(truck);
-      // pack 专属表条目同样可仅凭 itemId 命中。
-      expect(resolveFacilityModels('pack:cricket:dugout')[0]?.slug).toBe(
-        'trading-post-and-barter-market-canopy-market-booth-46c6c10f',
-      );
+      const dugout = resolveFacilityModels('pack:cricket:dugout');
+      expect(dugout).toHaveLength(1);
+      expect(dugout[0]?.slug).toContain('dugout');
     });
   });
 });
@@ -309,6 +317,82 @@ describe('loadFacilityModelCandidates', () => {
       if (thumbBySlug.has(candidate.slug)) expect(candidate.thumb).toBe(thumbBySlug.get(candidate.slug));
     }
   });
+
+  it('does not append keyword matches to a reviewed facility', async () => {
+    const ids = ['oneplan:scale:forklift', 'oneplan:scale:laze-sofa', 'oneplan:icon:market-stall'];
+    const map = await loadFacilityModelCandidates(ids, 100);
+    expect(map.get(ids[0])).toEqual(resolveFacilityModels(ids[0]));
+    expect(map.get(ids[0])?.[0]?.slug).toBe('car-factory-production-line-forklift-4daac5a1');
+    expect(map.get(ids[1])).toEqual([]);
+    expect(map.get(ids[2])).toHaveLength(5);
+    expect((await loadFacilityModelCandidates([ids[2]], 2)).get(ids[2])).toEqual(map.get(ids[2])?.slice(0, 2));
+  });
+
+  it('offers three beanbag styles in primary-first order', () => {
+    expect(resolveFacilityModels('oneplan:scale:beanbag').map(model => model.slug)).toEqual([
+      'retro-arcade-and-mall-1989-beanbag-602afbad',
+      'cozy-home-interiors-bean-bag-c28c5060',
+      'pixel-modern-office-bean-bag-d3c1aa76',
+    ]);
+  });
+});
+
+describe('reviewed 2D to 3D links', () => {
+  it('resolves each recorded link to one usable asset with catalogue dimensions and a local preview', () => {
+    const shipped = new Map(catalogue.models.map(model => [model.slug, model]));
+    const variants: Readonly<Record<string, readonly string[]>> = links.variants;
+    for (const [icon, primary] of Object.entries(links.icons)) {
+      const candidates = resolveFacilityModels(`oneplan:icon:${icon}`);
+      expect(candidates.map(model => model.slug), icon).toEqual([primary, ...(variants[icon] ?? [])]);
+      expect(candidates.length, icon).toBeLessThanOrEqual(5);
+      expect(new Set(candidates.map(model => model.slug)).size, icon).toBe(candidates.length);
+      const root = new URL('../../../../', import.meta.url);
+      for (const candidate of candidates) {
+        const model = shipped.get(candidate.slug);
+        expect(model, icon).toBeDefined();
+        expect(model?.blockedReason, icon).toBeUndefined();
+        expect(candidate).toMatchObject({ width: model?.width, depth: model?.depth, height: model?.height });
+        expect(existsSync(new URL(candidate.glbUrl.replace('/showcase/', ''), root)), icon).toBe(true);
+        expect(existsSync(new URL(candidate.thumb!.replace('/showcase/', ''), root)), icon).toBe(true);
+      }
+    }
+  });
+
+  it('uses dedicated ground models for shapes and keeps true areas in the area renderer', () => {
+    expect(resolveFacilityModels('oneplan:icon:stop')[0]?.slug).toBe('scendance-plan-stop');
+    expect(resolveFacilityModels('oneplan:icon:route-dash')[0]?.slug).toBe('scendance-plan-route-dash');
+    expect(resolveFacilityModels('oneplan:scale:triangle')[0]?.slug).toBe('scendance-plan-triangle');
+    expect(resolveFacilityModels('oneplan:area:parking')).toEqual([]);
+  });
+
+  it('covers every placeable object in the base library and activity packs', () => {
+    const root = new URL('../../../public/oneplan-icons/', import.meta.url);
+    const manifest = JSON.parse(readFileSync(new URL('manifest.json', root), 'utf8')) as OneplanManifest;
+    const packFile = JSON.parse(readFileSync(new URL('packs.json', root), 'utf8')) as OneplanPacksFile;
+    const entries = libraryEntries(manifest.assets);
+    const packs = packsToEntries(packFile);
+    for (const entry of entries) {
+      const id = libraryTemplateId(entry);
+      expect(resolveFacilityModels(id).length, id).toBeGreaterThanOrEqual(entry.kind === 'area' ? 0 : 1);
+      if (entry.kind === 'area') expect(resolveFacilityModels(id), id).toEqual([]);
+    }
+    registerPackEntries([]);
+    for (const entry of packs.filter(entry => entry.placeKind === 'facility')) {
+      const id = packTemplateId(entry.packId!, entry.packItemId!);
+      expect(resolveFacilityModels(id).length, id).toBeGreaterThan(0);
+    }
+    registerPackEntries(packs);
+    try {
+      for (const entry of packs) {
+        const id = packTemplateId(entry.packId!, entry.packItemId!);
+        const candidates = resolveFacilityModels(id);
+        if (entry.placeKind === 'facility') expect(candidates.length, id).toBeGreaterThan(0);
+        else expect(candidates, id).toEqual([]);
+      }
+    } finally {
+      registerPackEntries([]);
+    }
+  });
 });
 
 describe('selectFacilityModelOverride / loadFacilityModelOverride (V-5a)', () => {
@@ -355,7 +439,7 @@ describe('selectFacilityModelOverride / loadFacilityModelOverride (V-5a)', () =>
   });
 
   it('loadFacilityModelOverride：在线库里的 slug 全库直查；不存在的 slug 返回 null', async () => {
-    const { models } = await loadOnlineModels();
+    const { models } = await loadShippedOnlineModels();
     const builtinSlugs = new Set(
       [...LEGACY_TEMPLATES, 'oneplan:scale:tent', 'oneplan:icon:market-stall'].flatMap(
         (templateId) => resolveFacilityModels(templateId).map((candidate) => candidate.slug),

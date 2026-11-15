@@ -2170,5 +2170,857 @@
   "theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab": {
     "name": "旋转飞椅",
     "bucket": "rides"
+  },
+  "street-food-market-and-food-trucks-picnic-bench-0f446ae7": {
+    "name": "野餐长椅",
+    "bucket": "seating"
+  },
+  "retail-store-fixtures-and-mall-back-to-back-bench-8640042d": {
+    "name": "背靠背长椅",
+    "bucket": "seating"
+  },
+  "office-lobby-and-facilities-visitor-sofa-three-seat-0919a142": {
+    "name": "访客沙发（三人）",
+    "bucket": "seating"
+  },
+  "cozy-home-interiors-sofa-three-seat-8d2d33f9": {
+    "name": "布艺沙发（三人）",
+    "bucket": "seating"
+  },
+  "care-home-and-day-room-high-back-armchair-green-a759c0d7": {
+    "name": "高背扶手椅",
+    "bucket": "seating"
+  },
+  "office-lobby-and-facilities-lobby-armchair-b7009456": {
+    "name": "大堂扶手椅",
+    "bucket": "seating"
+  },
+  "izakaya-alley-and-ramen-shop-folding-chair-dbe1ca77": {
+    "name": "折叠椅",
+    "bucket": "seating"
+  },
+  "caravan-park-and-campsite-camping-chair-390fe145": {
+    "name": "野营折叠椅",
+    "bucket": "seating"
+  },
+  "bakery-and-cafe-bar-stool-counter-ec2e9883": {
+    "name": "吧台高脚凳",
+    "bucket": "seating"
+  },
+  "bakery-and-cafe-cafe-table-4-person-bf74a9a9": {
+    "name": "四人咖啡桌",
+    "bucket": "tables"
+  },
+  "city-park-and-playground-picnic-table-97b71a11": {
+    "name": "木质野餐桌",
+    "bucket": "tables"
+  },
+  "village-hall-and-community-events-trestle-table-6cb6b682": {
+    "name": "折叠长桌",
+    "bucket": "tables"
+  },
+  "hotel-and-resort-operations-poolside-table-and-parasol-2a52833a": {
+    "name": "池畔桌配遮阳伞",
+    "bucket": "tables"
+  },
+  "street-food-market-and-food-trucks-stall-counter-modul-2f352fdb": {
+    "name": "摊位台面模块",
+    "bucket": "exhibition"
+  },
+  "street-food-market-and-food-trucks-bar-stall-with-taps-34a0fc7b": {
+    "name": "带龙头吧台摊位",
+    "bucket": "exhibition"
+  },
+  "airport-terminal-and-ground-operations-self-service-ki-70dc7b17": {
+    "name": "自助服务亭",
+    "bucket": "exhibition"
+  },
+  "fast-food-and-drive-thru-self-order-kiosk-floor-272961e1": {
+    "name": "自助点单机",
+    "bucket": "digital"
+  },
+  "armoured-column-and-field-camp-command-tent-5c85fae1": {
+    "name": "指挥帐篷",
+    "bucket": "structure"
+  },
+  "beach-surf-and-paddle-kit-pop-up-changing-tent-5762c0fa": {
+    "name": "快开更衣帐篷",
+    "bucket": "structure"
+  },
+  "theatre-stage-and-backstage-stage-deck-module-5173fe61": {
+    "name": "舞台台面模块",
+    "bucket": "stage"
+  },
+  "indian-bazaar-street-and-temple-potted-plant-group-f4a7cda5": {
+    "name": "盆栽组合",
+    "bucket": "plants"
+  },
+  "izakaya-alley-and-ramen-shop-potted-plant-in-can-ca363621": {
+    "name": "罐栽植物",
+    "bucket": "plants"
+  },
+  "botanical-glasshouse-and-palm-house-botanical-glasshou-c857c466": {
+    "name": "方形木质棕榈花箱",
+    "bucket": "plants"
+  },
+  "greek-island-village-and-harbour-stone-planter-5303d8e8": {
+    "name": "石花箱",
+    "bucket": "plants"
+  },
+  "car-park-and-road-vehicle-fleet-entry-barrier-7cb4f555": {
+    "name": "道闸（抬杆）",
+    "bucket": "logistics"
+  },
+  "beach-surf-and-paddle-kit-dune-fence-run-cf3f7f77": {
+    "name": "沙丘栅栏",
+    "bucket": "structure"
+  },
+  "airport-terminal-and-ground-operations-perimeter-fence-f8a14e9f": {
+    "name": "周界围栏",
+    "bucket": "structure"
+  },
+  "hero-shooter-harbour-payload-quay-bollard-f41b9701": {
+    "name": "铸铁隔离柱",
+    "bucket": "structure"
+  },
+  "motorway-services-and-truck-park-traffic-cone-338a0889": {
+    "name": "交通锥",
+    "bucket": "logistics"
+  },
+  "lawn-mowing-simulator-kit-barbecue-with-lid-2af11b0a": {
+    "name": "带盖烧烤炉",
+    "bucket": "food"
+  },
+  "beach-surf-and-paddle-kit-cooler-box-3c6c2b15": {
+    "name": "保温箱",
+    "bucket": "food"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-024387cb": {
+    "name": "冰淇淋亭",
+    "bucket": "food"
+  },
+  "street-food-market-and-food-trucks-ice-cream-van-6da2c4e2": {
+    "name": "冰淇淋车",
+    "bucket": "vehicles"
+  },
+  "bakery-and-cafe-espresso-machine-2-group-60882cf3": {
+    "name": "双头咖啡机",
+    "bucket": "food"
+  },
+  "nightclub-and-dj-booth-beer-tap-font-7c18dba3": {
+    "name": "四头啤酒龙头",
+    "bucket": "food"
+  },
+  "computers-and-desk-gadgets-speaker-bookshelf-90b50703": {
+    "name": "书架音箱",
+    "bucket": "audio"
+  },
+  "cinema-multiplex-and-foyer-wall-speaker-on-mount-ac24c00d": {
+    "name": "壁挂环绕音箱",
+    "bucket": "audio"
+  },
+  "hot-air-balloon-festival-event-floodlight-mast-fcfa3f16": {
+    "name": "活动投光灯塔",
+    "bucket": "lighting"
+  },
+  "football-soccer-club-grounds-floodlight-mast-282b2db3": {
+    "name": "四灯投光灯塔",
+    "bucket": "lighting"
+  },
+  "wedding-and-chapel-kit-lantern-post-c06e501d": {
+    "name": "花园灯柱",
+    "bucket": "lighting"
+  },
+  "restaurant-kitchen-and-dining-hand-wash-basin-8a6818d3": {
+    "name": "洗手盆（按压龙头）",
+    "bucket": "logistics"
+  },
+  "japanese-school-and-city-street-water-fountain-41607d12": {
+    "name": "直饮水机",
+    "bucket": "logistics"
+  },
+  "halloween-slasher-street-metal-trash-can-7b4be17a": {
+    "name": "金属垃圾桶",
+    "bucket": "logistics"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-486efc8a": {
+    "name": "分类回收桶",
+    "bucket": "logistics"
+  },
+  "caravan-park-and-campsite-bin-and-recycling-store-beed8b68": {
+    "name": "垃圾与回收房",
+    "bucket": "logistics"
+  },
+  "motorcycle-racing-and-street-bikes-trackside-bike-rack-dd2988a6": {
+    "name": "四位置自行车架",
+    "bucket": "sports"
+  },
+  "gym-and-fitness-studio-locker-bank-open-door-bd2cea7d": {
+    "name": "六门储物柜",
+    "bucket": "storage"
+  },
+  "office-lobby-and-facilities-staff-locker-bank-aaf13317": {
+    "name": "员工储物柜",
+    "bucket": "storage"
+  },
+  "hardware-store-and-diy-warehouse-tool-box-00f4820f": {
+    "name": "工具箱",
+    "bucket": "tools"
+  },
+  "car-factory-production-line-pallet-with-parts-crates-631a2a1a": {
+    "name": "托盘带周转箱",
+    "bucket": "logistics"
+  },
+  "hot-air-balloon-festival-balloon-basket-trolley-a25aabce": {
+    "name": "手推车",
+    "bucket": "logistics"
+  },
+  "vertical-farm-and-hydroponics-tower-vertical-farm-and--6e684ade": {
+    "name": "平板推车",
+    "bucket": "logistics"
+  },
+  "aircraft-fleet-and-airfield-light-turbine-helicopter-d4734be7": {
+    "name": "直升机",
+    "bucket": "vehicles"
+  },
+  "almanac-gardens-striped-deckchair-1fa5a8cf": {
+    "name": "沙滩躺椅",
+    "bucket": "seating"
+  },
+  "american-football-stadium-kit-switchback-ramp-943f4dd2": {
+    "name": "折返坡道",
+    "bucket": "structure"
+  },
+  "amusement-arcade-and-seaside-pier-cctv-dome-fcb4da0d": {
+    "name": "360° 安防摄像头",
+    "bucket": "digital"
+  },
+  "bakery-and-cafe-outdoor-heater-f41c88ea": {
+    "name": "取暖器",
+    "bucket": "logistics"
+  },
+  "bar-pub-and-brewery-taproom-refectory-table-and-benche-172bcbde": {
+    "name": "吧桌与长凳",
+    "bucket": "tables"
+  },
+  "battle-royale-town-and-airfield-dumpster-dfad923c": {
+    "name": "大型垃圾箱",
+    "bucket": "logistics"
+  },
+  "beach-surf-and-paddle-kit-recreational-jet-ski-a61d9936": {
+    "name": "救生摩托艇",
+    "bucket": "vehicles"
+  },
+  "beach-surf-and-paddle-kit-rescue-paddleboard-183e649e": {
+    "name": "救生冲浪板",
+    "bucket": "sports"
+  },
+  "beach-surf-and-paddle-kit-sit-on-top-kayak-07093469": {
+    "name": "皮划艇",
+    "bucket": "vehicles"
+  },
+  "beach-surf-and-paddle-kit-swim-zone-buoy-orange-36e2fd5e": {
+    "name": "浮标",
+    "bucket": "logistics"
+  },
+  "bicycle-shop-and-repair-cafe-floor-pump-347171db": {
+    "name": "打气筒投放点",
+    "bucket": "tools"
+  },
+  "bus-station-and-city-transit-ticket-office-kiosk-61214dac": {
+    "name": "售票处",
+    "bucket": "exhibition"
+  },
+  "car-factory-production-line-forklift-4daac5a1": {
+    "name": "叉车",
+    "bucket": "vehicles"
+  },
+  "car-park-and-road-vehicle-fleet-disabled-bay-tile-22090d5f": {
+    "name": "无障碍停车",
+    "bucket": "logistics"
+  },
+  "car-park-and-road-vehicle-fleet-police-car-39c206c9": {
+    "name": "警车",
+    "bucket": "vehicles"
+  },
+  "car-park-and-road-vehicle-fleet-taxi-ae3c8ca0": {
+    "name": "出租车",
+    "bucket": "vehicles"
+  },
+  "caravan-park-and-campsite-bell-tent-d7f74bfd": {
+    "name": "钟形帐篷",
+    "bucket": "structure"
+  },
+  "caravan-park-and-campsite-fire-pit-ring-a42e931d": {
+    "name": "篝火坑",
+    "bucket": "decor"
+  },
+  "casino-floor-and-back-rooms-atm-kiosk-ff57e849": {
+    "name": "ATM 取款机",
+    "bucket": "digital"
+  },
+  "christmas-storybook-iced-cookie-plate-e5daee0b": {
+    "name": "曲奇/饼干",
+    "bucket": "food"
+  },
+  "christmas-storybook-mantel-garland-78cc0731": {
+    "name": "圣诞花环",
+    "bucket": "decor"
+  },
+  "city-park-and-playground-playground-slide-ffdeee73": {
+    "name": "滑梯",
+    "bucket": "rides"
+  },
+  "clinic-and-veterinary-practice-defibrillator-wall-unit-077ecfb7": {
+    "name": "AED 除颤器",
+    "bucket": "logistics"
+  },
+  "cold-war-missile-silo-and-command-bunker-helipad-marki-89cd69b2": {
+    "name": "直升机停机坪",
+    "bucket": "logistics"
+  },
+  "cold-war-missile-silo-and-command-bunker-perimeter-gat-b683838a": {
+    "name": "入口闸门",
+    "bucket": "structure"
+  },
+  "container-inspection-and-customs-yard-container-inspec-86499dea": {
+    "name": "出口闸门",
+    "bucket": "structure"
+  },
+  "cricket-ground-and-pavilion-sight-screen-8094a4f3": {
+    "name": "视线挡板",
+    "bucket": "sports"
+  },
+  "demolition-and-site-clearance-demolition-and-site-clea-e98ff264": {
+    "name": "伸缩臂叉装车",
+    "bucket": "vehicles"
+  },
+  "diving-and-underwater-salvage-twin-scuba-tank-rig-99accfd4": {
+    "name": "潜水装备",
+    "bucket": "sports"
+  },
+  "downtown-office-interiors-printer-multifunction-0b3b5d41": {
+    "name": "打印机",
+    "bucket": "digital"
+  },
+  "endurance-and-gt-paddock-wide-podium-08d709f4": {
+    "name": "领奖台",
+    "bucket": "stage"
+  },
+  "factory-conveyor-network-factory-conveyor-network-logi-10087a40": {
+    "name": "楼梯",
+    "bucket": "structure"
+  },
+  "football-soccer-club-grounds-accessible-platform-c28164f3": {
+    "name": "无障碍观景台",
+    "bucket": "structure"
+  },
+  "football-soccer-club-grounds-camera-platform-81d16afb": {
+    "name": "摄像平台",
+    "bucket": "structure"
+  },
+  "football-soccer-club-grounds-dugout-shelter-ea708920": {
+    "name": "球员休息棚",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-tripod-turnstile-b2daf4d7": {
+    "name": "闸机",
+    "bucket": "structure"
+  },
+  "hollowwick-halloween-footed-candy-bowl-b35f038a": {
+    "name": "糖果",
+    "bucket": "food"
+  },
+  "hot-air-balloon-festival-bunting-run-5879a446": {
+    "name": "彩旗",
+    "bucket": "decor"
+  },
+  "hotel-and-resort-operations-banquet-round-table-10-958b76ee": {
+    "name": "圆桌",
+    "bucket": "tables"
+  },
+  "ice-hockey-arena-and-locker-room-penalty-box-057f8942": {
+    "name": "罚时盒",
+    "bucket": "sports"
+  },
+  "imperial-china-palace-and-garden-hanging-silk-lantern-24c01831": {
+    "name": "宫灯",
+    "bucket": "decor"
+  },
+  "liminal-spaces-kit-elevator-car-22251ff7": {
+    "name": "电梯",
+    "bucket": "structure"
+  },
+  "low-poly-character-figures-police-officer-standing-cedbbfb3": {
+    "name": "警察",
+    "bucket": "people"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-df24f11e": {
+    "name": "托盘/卡板",
+    "bucket": "logistics"
+  },
+  "marina-and-yacht-club-marina-and-yacht-club-dinghy-on--2f3b28ee": {
+    "name": "橡皮艇/小艇",
+    "bucket": "vehicles"
+  },
+  "marina-and-yacht-club-marina-and-yacht-club-pontoon-mo-a1492ae9": {
+    "name": "浮桥/趸船",
+    "bucket": "structure"
+  },
+  "medieval-mmo-starter-realm-hay-bale-12135bfd": {
+    "name": "草捆",
+    "bucket": "decor"
+  },
+  "modern-rail-and-metro-network-low-floor-tram-orange-li-264c0a52": {
+    "name": "有轨电车",
+    "bucket": "vehicles"
+  },
+  "north-pole-village-decorated-christmas-tree-cdf11f72": {
+    "name": "圣诞树",
+    "bucket": "decor"
+  },
+  "office-lobby-and-facilities-baby-change-unit-9b900116": {
+    "name": "母婴更衣台",
+    "bucket": "logistics"
+  },
+  "paranormal-investigation-house-handheld-camcorder-0c59e26d": {
+    "name": "手持机位",
+    "bucket": "digital"
+  },
+  "pickups-and-collectibles-medallion-60e6d081": {
+    "name": "奖牌点",
+    "bucket": "decor"
+  },
+  "pixel-modern-supermarket-freezer-chest-a5eb2cbd": {
+    "name": "冷冻柜",
+    "bucket": "food"
+  },
+  "radio-telescope-array-and-field-station-water-tank-on--65a921bb": {
+    "name": "便携固定水箱",
+    "bucket": "logistics"
+  },
+  "restaurant-kitchen-and-dining-drinks-station-f9484874": {
+    "name": "饮水补给站",
+    "bucket": "food"
+  },
+  "restaurant-kitchen-and-dining-prep-sink-58aded03": {
+    "name": "水槽",
+    "bucket": "logistics"
+  },
+  "retail-store-fixtures-and-mall-mid-floor-gondola-630432ab": {
+    "name": "周边商品",
+    "bucket": "exhibition"
+  },
+  "retro-arcade-and-mall-1989-beanbag-602afbad": {
+    "name": "懒人沙发",
+    "bucket": "seating"
+  },
+  "safari-camp-and-bush-lodge-viewing-platform-4d5346b6": {
+    "name": "观景平台",
+    "bucket": "structure"
+  },
+  "self-storage-facility-and-loading-bay-self-storage-fac-18bad828": {
+    "name": "停车",
+    "bucket": "logistics"
+  },
+  "ski-resort-and-snow-park-finish-arch-4c222829": {
+    "name": "终点",
+    "bucket": "structure"
+  },
+  "street-food-market-and-food-trucks-grill-stall-with-ho-4c48bea1": {
+    "name": "食品摊贩",
+    "bucket": "food"
+  },
+  "street-food-market-and-food-trucks-hand-wash-station-db419292": {
+    "name": "洗手站",
+    "bucket": "logistics"
+  },
+  "street-food-market-and-food-trucks-pizza-trailer-with--25e61d41": {
+    "name": "餐饮拖车",
+    "bucket": "vehicles"
+  },
+  "street-food-market-and-food-trucks-portable-generator-a151aacc": {
+    "name": "发电机",
+    "bucket": "logistics"
+  },
+  "submarine-interior-and-control-room-life-ring-on-brack-449f02bf": {
+    "name": "救生圈",
+    "bucket": "logistics"
+  },
+  "survivor-vehicle-maintenance-water-pump-6cdf94b8": {
+    "name": "水泵",
+    "bucket": "tools"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-e7ab6e10": {
+    "name": "套圈",
+    "bucket": "exhibition"
+  },
+  "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-bb7dd131": {
+    "name": "脚手架塔",
+    "bucket": "structure"
+  },
+  "vertical-farm-and-hydroponics-tower-vertical-farm-and--0f0612fa": {
+    "name": "剪叉升降车",
+    "bucket": "vehicles"
+  },
+  "voxel-city-districts-fire-engine-43262943": {
+    "name": "消防车",
+    "bucket": "vehicles"
+  },
+  "waterpark-and-pool-operations-waterpark-and-pool-opera-46779842": {
+    "name": "水池",
+    "bucket": "structure"
+  },
+  "wind-and-solar-energy-farm-battery-storage-container-8b8f8557": {
+    "name": "电池储能系统",
+    "bucket": "logistics"
+  },
+  "aircraft-fleet-and-airfield-twin-piston-be652abb": {
+    "name": "活塞式飞机",
+    "bucket": "vehicles"
+  },
+  "allotments-and-community-garden-standpipe-and-tap-41356c7e": {
+    "name": "供水接口",
+    "bucket": "logistics"
+  },
+  "almanac-gardens-footbridge-4de89dc1": {
+    "name": "人行天桥",
+    "bucket": "structure"
+  },
+  "american-football-stadium-kit-ticket-scan-pedestal-dbcf96cf": {
+    "name": "验票点",
+    "bucket": "logistics"
+  },
+  "arable-fields-and-farm-machinery-fuel-bowser-e7e4d22e": {
+    "name": "油箱/燃料箱",
+    "bucket": "logistics"
+  },
+  "car-factory-production-line-wheel-fitting-station-3726bd74": {
+    "name": "换轮站",
+    "bucket": "tools"
+  },
+  "car-park-and-road-vehicle-fleet-medium-panel-van-9ef397a4": {
+    "name": "厢式货车",
+    "bucket": "vehicles"
+  },
+  "caravan-park-and-campsite-touring-caravan-f889a9ff": {
+    "name": "房车",
+    "bucket": "vehicles"
+  },
+  "cricket-ground-and-pavilion-pitch-cover-arch-ac1eec67": {
+    "name": "三柱门罩布",
+    "bucket": "sports"
+  },
+  "demolition-and-site-clearance-demolition-and-site-clea-016dd84b": {
+    "name": "金属铺道板",
+    "bucket": "logistics"
+  },
+  "equestrian-yard-and-stables-draft-horse-standing-black-ccf84bdb": {
+    "name": "挽马",
+    "bucket": "decor"
+  },
+  "ferry-terminal-and-harbour-crossing-ferry-terminal-and-31435dc5": {
+    "name": "封闭拖车",
+    "bucket": "vehicles"
+  },
+  "fps-survival-forest-outpost-radio-mast-cba3b9db": {
+    "name": "无线电塔",
+    "bucket": "structure"
+  },
+  "go-kart-track-and-pit-lane-start-finish-gantry-cd27d755": {
+    "name": "龙门架",
+    "bucket": "structure"
+  },
+  "gym-and-fitness-studio-standing-fan-4a03c434": {
+    "name": "风扇",
+    "bucket": "logistics"
+  },
+  "lawn-mowing-simulator-kit-lawn-stripe-roller-867a3ad6": {
+    "name": "轻型压路机",
+    "bucket": "sports"
+  },
+  "lawn-mowing-simulator-kit-wheelie-bin-b3a9ac25": {
+    "name": "垃圾桶",
+    "bucket": "logistics"
+  },
+  "mega-weapon-pack-floor-rifle-rack-3a14f603": {
+    "name": "射击枪架",
+    "bucket": "sports"
+  },
+  "modular-survival-base-builder-access-ramp-a09354b2": {
+    "name": "坡道",
+    "bucket": "structure"
+  },
+  "motorway-services-and-truck-park-ev-charging-post-8ff36140": {
+    "name": "电动车充电桩",
+    "bucket": "digital"
+  },
+  "office-lobby-and-facilities-wc-cubicle-accessible-ec78cf34": {
+    "name": "无障碍卫生间",
+    "bucket": "logistics"
+  },
+  "powerboat-racing-and-launch-ramp-rescue-boat-ed671043": {
+    "name": "医疗船",
+    "bucket": "vehicles"
+  },
+  "retail-store-fixtures-and-mall-concourse-info-desk-6e0a0be9": {
+    "name": "交通服务台",
+    "bucket": "tables"
+  },
+  "ski-resort-and-snow-park-toboggan-sled-47bc0f3c": {
+    "name": "滑雪橇",
+    "bucket": "sports"
+  },
+  "stock-car-oval-speedway-restroom-block-52c62453": {
+    "name": "卫生间（永久）",
+    "bucket": "structure"
+  },
+  "storybook-christmas-market-stitched-teddy-bear-2f2f23bb": {
+    "name": "毛绒玩具",
+    "bucket": "decor"
+  },
+  "survival-food-and-preservation-smoked-sausage-10f9c18c": {
+    "name": "德式香肠",
+    "bucket": "food"
+  },
+  "wedding-and-chapel-kit-gift-box-stack-562b6e24": {
+    "name": "礼品",
+    "bucket": "decor"
+  },
+  "zombie-quarantine-streets-concrete-jersey-barrier-fe81cf2f": {
+    "name": "混凝土墩",
+    "bucket": "structure"
+  },
+  "allotments-and-community-garden-timber-greenhouse-20a90a3b": {
+    "name": "园艺",
+    "bucket": "plants"
+  },
+  "bicycle-shop-and-repair-cafe-repair-workstand-986907af": {
+    "name": "维修点",
+    "bucket": "sports"
+  },
+  "camera-repair-and-darkroom-laboratory-spiral-film-reel-e756c7b5": {
+    "name": "影视/放映",
+    "bucket": "digital"
+  },
+  "demolition-and-site-clearance-demolition-and-site-clea-4365708d": {
+    "name": "活动管理办公室",
+    "bucket": "structure"
+  },
+  "grand-prix-circuit-and-open-wheel-broadcast-camera-cra-82c8e32d": {
+    "name": "Jimmy 摄像车",
+    "bucket": "digital"
+  },
+  "hot-air-balloon-festival-registration-gazebo-1f36ec9a": {
+    "name": "快搭帐篷",
+    "bucket": "structure"
+  },
+  "izakaya-alley-and-ramen-shop-gyoza-plate-d9ba6784": {
+    "name": "饺子",
+    "bucket": "food"
+  },
+  "storybook-christmas-market-chestnut-brazier-5d37224e": {
+    "name": "烤栗子",
+    "bucket": "food"
+  },
+  "storybook-christmas-market-moravian-star-lantern-29ab27e3": {
+    "name": "星星",
+    "bucket": "decor"
+  },
+  "velodrome-and-track-cycling-vip-box-front-df7dd797": {
+    "name": "贵宾包厢",
+    "bucket": "structure"
+  },
+  "aircraft-fleet-and-airfield-light-piston-helicopter-829e9bcf": {
+    "name": "轻型活塞直升机",
+    "bucket": "vehicles"
+  },
+  "aircraft-fleet-and-airfield-medium-twin-helicopter-2fc3750d": {
+    "name": "双发通用直升机",
+    "bucket": "vehicles"
+  },
+  "allotments-and-community-garden-deckchair-green-8908dab5": {
+    "name": "绿色帆布躺椅",
+    "bucket": "seating"
+  },
+  "alpine-snow-village-slatted-alpine-deckchair-f1c6bffe": {
+    "name": "木条躺椅",
+    "bucket": "seating"
+  },
+  "american-football-stadium-kit-camera-crane-470b66eb": {
+    "name": "场边广播摇臂",
+    "bucket": "digital"
+  },
+  "animated-mechanisms-kit-scissor-lift-3793b643": {
+    "name": "自行式剪叉升降车",
+    "bucket": "vehicles"
+  },
+  "arable-fields-and-farm-machinery-telehandler-7248dc4b": {
+    "name": "农用伸缩臂叉装车",
+    "bucket": "vehicles"
+  },
+  "armoured-column-and-field-camp-helipad-marker-31007943": {
+    "name": "直升机停机坪标记台",
+    "bucket": "logistics"
+  },
+  "bank-vault-heist-kit-alley-dumpster-200bf5b7": {
+    "name": "巷道翻盖垃圾箱",
+    "bucket": "logistics"
+  },
+  "bar-pub-and-brewery-taproom-pub-table-round-pedestal-3936d6f5": {
+    "name": "单柱圆桌",
+    "bucket": "tables"
+  },
+  "beach-surf-and-paddle-kit-swim-zone-buoy-ec54d875": {
+    "name": "游泳区浮标（柱形）",
+    "bucket": "logistics"
+  },
+  "bunker-shelter-construction-handwash-station-3e410107": {
+    "name": "独立洗手站（户外款）",
+    "bucket": "logistics"
+  },
+  "canal-boats-and-lock-operations-canal-boats-and-lock-o-0ff5b182": {
+    "name": "运河人行桥",
+    "bucket": "structure"
+  },
+  "car-park-and-road-vehicle-fleet-high-roof-van-933a819a": {
+    "name": "高顶厢式货车",
+    "bucket": "vehicles"
+  },
+  "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2": {
+    "name": "绳式礼宾隔离柱",
+    "bucket": "structure"
+  },
+  "christmas-village-light-garland-cb81cb23": {
+    "name": "带灯独立圣诞花环",
+    "bucket": "decor"
+  },
+  "christmas-village-star-topped-tree-f0bd90f3": {
+    "name": "星顶圣诞树",
+    "bucket": "decor"
+  },
+  "cruise-ship-deck-and-lounge-cruise-ship-deck-and-loung-e5791c54": {
+    "name": "带立杆的救生圈",
+    "bucket": "logistics"
+  },
+  "dog-agility-and-training-field-shade-gazebo-b25e7ce2": {
+    "name": "俱乐部快搭帐篷",
+    "bucket": "structure"
+  },
+  "downtown-office-interiors-meeting-table-round-4-f0e7c30f": {
+    "name": "四人圆形会议桌",
+    "bucket": "tables"
+  },
+  "downtown-office-interiors-printer-desktop-a228d16a": {
+    "name": "桌面打印机",
+    "bucket": "digital"
+  },
+  "endurance-and-gt-paddock-campsite-gazebo-52bc263d": {
+    "name": "赛场快搭遮阳帐篷",
+    "bucket": "structure"
+  },
+  "endurance-and-gt-paddock-start-finish-gantry-bccfbd22": {
+    "name": "带灯光起终点龙门架",
+    "bucket": "structure"
+  },
+  "home-appliances-and-utility-chest-freezer-stainless-755fe206": {
+    "name": "不锈钢卧式冷冻柜",
+    "bucket": "food"
+  },
+  "home-appliances-and-utility-pedestal-fan-786af6d8": {
+    "name": "网罩落地风扇",
+    "bucket": "logistics"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-78651fdd": {
+    "name": "配重叉车（工厂款）",
+    "bucket": "vehicles"
+  },
+  "medieval-siege-and-castle-defence-bell-tent-open-88cc714a": {
+    "name": "钟形帐篷（开口款）",
+    "bucket": "structure"
+  },
+  "nuclear-power-station-and-control-room-diesel-backup-g-2bfffe1f": {
+    "name": "柴油备用发电机",
+    "bucket": "logistics"
+  },
+  "paranormal-investigation-house-tripod-video-camera-9aec57b5": {
+    "name": "三脚架摄像机（直播款）",
+    "bucket": "digital"
+  },
+  "party-obstacle-course-party-obstacle-course-celebratio-e1340d69": {
+    "name": "三位领奖台（庆典款）",
+    "bucket": "stage"
+  },
+  "petrol-station-and-forecourt-shop-cctv-dome-57449d14": {
+    "name": "球形半球监控",
+    "bucket": "digital"
+  },
+  "public-swimming-baths-and-poolside-entrance-turnstile-d81fae1c": {
+    "name": "立式入口闸机",
+    "bucket": "structure"
+  },
+  "restaurant-kitchen-and-dining-upright-freezer-333c5973": {
+    "name": "单门立式冷冻柜",
+    "bucket": "food"
+  },
+  "retro-arcade-and-mall-1989-glass-elevator-1bf8a428": {
+    "name": "玻璃观光电梯",
+    "bucket": "structure"
+  },
+  "road-car-showroom-lineup-saloon-taxi-0bf6e890": {
+    "name": "顶灯轿车出租车",
+    "bucket": "vehicles"
+  },
+  "rural-scavenging-settlements-bus-stop-timber-shelter-51267faf": {
+    "name": "木质公交候车亭",
+    "bucket": "structure"
+  },
+  "safari-camp-and-bush-lodge-fire-pit-and-stone-ring-bc4f9a35": {
+    "name": "石圈营地火坑",
+    "bucket": "decor"
+  },
+  "ski-resort-and-snow-park-fire-pit-1c08ca20": {
+    "name": "金属火盆",
+    "bucket": "decor"
+  },
+  "steam-era-railway-and-rolling-stock-footbridge-59be8b67": {
+    "name": "车站人行天桥",
+    "bucket": "structure"
+  },
+  "storybook-christmas-market-grand-christmas-tree-7f114b50": {
+    "name": "大型装饰圣诞树",
+    "bucket": "decor"
+  },
+  "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-933c55a3": {
+    "name": "户外场地叉车",
+    "bucket": "vehicles"
+  },
+  "travelling-circus-and-big-top-hay-bale-round-afda6e9d": {
+    "name": "圆柱草捆",
+    "bucket": "decor"
+  },
+  "tv-studio-and-broadcast-gallery-shoulder-camera-on-tri-31dde6ba": {
+    "name": "三脚架摄像机（肩扛机身）",
+    "bucket": "digital"
+  },
+  "ufo-crash-site-and-recovery-facility-forklift-7a7056c4": {
+    "name": "港区配重叉车",
+    "bucket": "vehicles"
+  },
+  "waterpark-and-pool-operations-waterpark-and-pool-opera-cfdc507a": {
+    "name": "浅水戏水池",
+    "bucket": "structure"
+  },
+  "zoo-and-safari-park-builder-viewing-platform-d4e7e669": {
+    "name": "户外观景平台",
+    "bucket": "structure"
+  },
+  "cozy-home-interiors-bean-bag-c28c5060": {
+    "name": "圆形豆袋懒人沙发",
+    "bucket": "seating"
+  },
+  "pixel-modern-office-bean-bag-d3c1aa76": {
+    "name": "方形布艺懒人沙发",
+    "bucket": "seating"
   }
 }

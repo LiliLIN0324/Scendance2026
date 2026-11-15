@@ -21,7 +21,7 @@ if(values.write){
   if(!['127.0.0.1','localhost','[::1]'].includes(new URL(url).hostname) && !values.remote)throw new Error('REMOTE_WRITE_REQUIRES_REMOTE_FLAG');
   client=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
 }
-let checked=0,registered=0;
+let checked=0,registered=0,projectAuthored=0;
 const failures:{model:string;error:string}[]=[];
 // UUIDv5 names pin retries to identical bytes. Publish IDs only after the RPC confirms registration.
 function plannedId(slug:string,hash:string):string {
@@ -32,10 +32,13 @@ function plannedId(slug:string,hash:string):string {
 for(let start=0;start<models.length;start+=6){
   await Promise.all(models.slice(start,start+6).map(async(model:typeof models[number])=>{
   try{
-    if(!/^[a-z0-9-]{1,200}$/.test(model.slug) || model.glb!==`/showcase/assets/library/model/${model.slug}.glb` || model.page!==`https://3dassets.dev/assets/${model.slug}`)throw new Error('INVALID_CATALOG_ENTRY');
+    const isProjectAuthored=model.license==='project-authored';
+    if(!/^[a-z0-9-]{1,200}$/.test(model.slug) || model.glb!==`/showcase/assets/library/model/${model.slug}.glb` ||
+      (!isProjectAuthored && model.page!==`https://3dassets.dev/assets/${model.slug}`))throw new Error('INVALID_CATALOG_ENTRY');
     const bytes=new Uint8Array(await readFile(new URL(`assets/library/model/${model.slug}.glb`,root)));
     if(bytes.length!==model.bytes || await sha256(bytes)!==model.sha256)throw new Error('CATALOG_BYTES_CHANGED');
     const metadata=await validateLibraryModel(bytes);checked++;
+    if(isProjectAuthored){projectAuthored++;return;}
     if(client && !model.assetId && !receipts[model.slug]){
       const id=model.assetId??plannedId(model.slug,model.sha256);
       const record=await assetRecord(values.owner!,bytes,{name:model.name,source:'upload',sourceId:model.slug,sourceUrl:model.page,
@@ -54,5 +57,5 @@ for(let start=0;start<models.length;start+=6){
   if(client)await writeFile(receiptPath,JSON.stringify(receipts,null,2)+'\n');
   if(checked%30===0)console.log(JSON.stringify({checked,registered,total:models.length}));
 }
-console.log(JSON.stringify({checked,registered,total:models.length,excluded:catalog.count-models.length,failures},null,2));
+console.log(JSON.stringify({checked,registered,projectAuthored,total:models.length,excluded:catalog.count-models.length,failures},null,2));
 if(failures.length)process.exitCode=1;

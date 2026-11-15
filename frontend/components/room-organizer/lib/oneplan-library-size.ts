@@ -77,6 +77,10 @@ const SIZE_RULES: readonly SizeRule[] = [
   { re: /(^|-)van(-rotated)?$/, major: 5.4, shortRatio: 2 / 5.4 },
   { re: /caravan/, major: 6, shortRatio: 2.2 / 6 },
   { re: /(^|-)((police-)?car)(-rotated)?$/, major: 4.5, shortRatio: 1.8 / 4.5 },
+  // 出租车只有正面小图标（icon kind），以前落成 1.5×1.5 的正方形，看着像辆车大小但不成立。
+  { re: /^taxi$/, major: 4.5, shortRatio: 1.8 / 4.5 },
+  { re: /^sweeper|^street-sweeper/, major: 4, shortRatio: 2 / 4 },
+  { re: /^bicycle$|^bike$/, major: 1.8, shortRatio: 0.6 / 1.8 },
   { re: /golf-cart/, major: 2.7, shortRatio: 1.2 / 2.7 },
   { re: /motorcycle|motorbike/, major: 2.2, shortRatio: 0.8 / 2.2 },
   { re: /forklift|scissor-lift/, major: 3.2, shortRatio: 1.4 / 3.2 },
@@ -221,6 +225,11 @@ export function libraryFootprint(input: LibraryFootprintInput): { width: number;
       (fromKind ? Math.max(fromKind.width, fromKind.depth) : null) ??
       categoryMajor(input.categoryZh ?? '', kind) ??
       defaultMajor(kind);
+    // 2026-11-16：写死了长边的规则优先于 viewBox。
+    // OnePlan 的比例图留着大量画布边距（巴士的 viewBox 是 24×9，真车是 12×2.5），
+    // 拿 viewBox 当占地会把 12 m 的巴士画成 4.5 m 宽；2D 占地和 3D 模型因此对不上。
+    // 没写短边比例的规则（帐篷、椅子这类）本来就要靠 viewBox 定形，保持原行为。
+    if (rule && rule.shortRatio !== undefined) return unrotatedFromRule(rule, slug);
     if (aspect) return fitMajor(major, aspect.w, aspect.h);
     if (rule) return unrotatedFromRule(rule, slug);
     if (fromKind) return { width: fromKind.width, depth: fromKind.depth };

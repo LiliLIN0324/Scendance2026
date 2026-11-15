@@ -33,7 +33,7 @@ describe('oneplan-library', () => {
       asset({ kind: 'area', slug: 'crowd', name_zh: '人群面域' }),
       asset({ kind: 'scale-bg', slug: 'van' }),
       asset({ kind: 'categories', slug: 'infrastructure' }),
-    ]);
+    ], { curated: false });
     expect(entries.map(e => e.id)).toEqual(['icon:tent', 'scale:van', 'area:crowd']);
   });
 
@@ -87,7 +87,7 @@ describe('oneplan-library', () => {
       asset({}),
       asset({ slug: 'toilets-temporary', name_zh: '临时卫生间', name_en: 'Toilets (Temporary)' }),
       asset({ kind: 'scale-fg', slug: 'police-car', name_zh: '警车', name_en: 'Police car' }),
-    ]);
+    ], { curated: false });
     expect(searchLibraryEntries(entries, '临时').map(e => e.slug)).toEqual(['toilets-temporary']);
     expect(searchLibraryEntries(entries, 'POLICE').map(e => e.slug)).toEqual(['police-car']);
     expect(searchLibraryEntries(entries, ' tent ').map(e => e.slug)).toEqual(['tent']);
@@ -101,7 +101,7 @@ describe('oneplan-library', () => {
       asset({ slug: 'a', name_zh: '甲', category_zh: '设施物料' }),
       asset({ kind: 'area', slug: 'crowd', name_zh: '人群', category_zh: '面域' }),
       asset({ slug: 'c', name_zh: '丙', category_zh: '车辆' }),
-    ]);
+    ], { curated: false });
     const groups = groupLibraryEntries(entries);
     expect(groups.map(g => g.category)).toEqual(['面域', '设施物料', '车辆']);
     // 组内顺序按中文名排（这里只断言「已排序」，不把具体排序结果写死——Node 的 ICU 数据会变）。
@@ -113,7 +113,7 @@ describe('oneplan-library', () => {
     const entries = libraryEntries([
       asset({ kind: 'icon', slug: 'stage' }),
       asset({ kind: 'scale-fg', slug: 'stage' }),
-    ]);
+    ], { curated: false });
     expect(entries).toHaveLength(2);
     expect(new Set(entries.map(e => e.id)).size).toBe(2);
     expect(new Set(entries.map(e => libraryTemplateId(e))).size).toBe(2);
@@ -128,7 +128,8 @@ describe('oneplan-library', () => {
       viewBox: '0 0 24 11',
     }))!;
     expect(car.width).toBe(4.5);
-    expect(car.depth).toBe(2.1);
+    // 2026-11-16：写了短边比例的规则优先于 viewBox（24×11 只当线稿比例，不当米）→ 真车 4.5×1.8。
+    expect(car.depth).toBe(1.8);
 
     const rotated = libraryEntryFromAsset(asset({
       kind: 'scale-fg',
@@ -137,7 +138,7 @@ describe('oneplan-library', () => {
       category_zh: '车辆',
       viewBox: '0 0 5.2 24',
     }))!;
-    expect(rotated.width).toBe(2.6);
+    expect(rotated.width).toBe(2.5);
     expect(rotated.depth).toBe(12);
 
     const chair = libraryEntryFromAsset(asset({
@@ -147,8 +148,8 @@ describe('oneplan-library', () => {
       category_zh: '家具',
       viewBox: '0 0 20 24',
     }))!;
-    expect(chair.width).toBe(0.5);
-    expect(chair.depth).toBe(0.6);
+    expect(chair.width).toBe(0.6);
+    expect(chair.depth).toBe(0.5);
 
     const cone = libraryEntryFromAsset(asset({
       slug: 'cone',
@@ -168,6 +169,6 @@ describe('oneplan-library', () => {
       viewBox: '0 0 24 10',
     });
     expect(size.width).toBe(6.1);
-    expect(size.depth).toBe(2.5);
+    expect(size.depth).toBe(2.4);
   });
 });

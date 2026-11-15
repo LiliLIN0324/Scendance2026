@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryEntry } from './oneplan-library';
-import {
-  CATEGORY_PLAN_STICKERS,
-  CROWD_TYPE_PLAN_STICKERS,
-  GENERIC_PLAN_STICKER,
-  planStickerForModel,
-} from './plan-icon-for-model';
+import { planStickerForModel } from './plan-icon-for-model';
 
 function entry(partial: Pick<LibraryEntry, 'slug' | 'kind' | 'nameZh' | 'nameEn' | 'categoryZh'>): LibraryEntry {
   return {
@@ -23,31 +18,23 @@ function entry(partial: Pick<LibraryEntry, 'slug' | 'kind' | 'nameZh' | 'nameEn'
 }
 
 describe('planStickerForModel', () => {
-  it('prefers a same-name library sticker over the category default', () => {
-    const entries = [entry({
-      slug: 'folding-chair',
-      kind: 'scale',
-      nameZh: '折叠椅',
-      nameEn: 'Folding Chair',
-      categoryZh: '设施物料 / 家具',
-    })];
-    const sticker = planStickerForModel({ name: '折叠椅', slug: 'folding-chair-01', bucket: 'seating' }, entries);
-    expect(sticker.slug).toBe('folding-chair');
-    expect(sticker.kind).toBe('scale');
+  const entries = [
+    entry({ slug: 'chair', kind: 'scale', nameZh: '椅子', nameEn: 'Chair', categoryZh: '设施物料 / 家具' }),
+    entry({ slug: 'folding-chair', kind: 'scale', nameZh: '折叠椅', nameEn: 'Folding Chair', categoryZh: '设施物料 / 家具' }),
+  ];
+
+  it('shows a badge on the explicitly linked folding chair', () => {
+    const sticker = planStickerForModel({ slug: 'izakaya-alley-and-ramen-shop-folding-chair-dbe1ca77' }, entries);
+    expect(sticker).toEqual(entries[1].sticker);
   });
 
-  it('falls back to the category sticker when nothing in the library matches', () => {
-    const sticker = planStickerForModel({ name: '未知物件', slug: 'zzz-unknown', bucket: 'seating' }, []);
-    expect(sticker).toEqual(CATEGORY_PLAN_STICKERS['家具']);
+  it('shows the same badge on a reviewed variant', () => {
+    const sticker = planStickerForModel({ slug: 'caravan-park-and-campsite-camping-chair-390fe145' }, entries);
+    expect(sticker).toEqual(entries[1].sticker);
   });
 
-  it('uses the crowd-type sticker for a wired people model', () => {
-    const sticker = planStickerForModel({ name: 'Firefighter', slug: 'low-poly-character-figures-firefighter-standing-8ded7b6f', bucket: 'people' }, []);
-    expect(sticker).toEqual(CROWD_TYPE_PLAN_STICKERS.fire);
-  });
-
-  it('falls back to a generic sticker when the bucket is unknown', () => {
-    const sticker = planStickerForModel({ name: 'Mystery', slug: 'mystery', bucket: '' }, []);
-    expect(sticker).toEqual(GENERIC_PLAN_STICKER);
+  it('leaves unlinked chairs and unlinked models without a badge', () => {
+    expect(planStickerForModel({ slug: 'folding-chair-01' }, entries)).toBeNull();
+    expect(planStickerForModel({ slug: 'mystery' }, entries)).toBeNull();
   });
 });

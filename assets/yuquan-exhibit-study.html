@@ -16,11 +16,34 @@ h1,h2,h3,p,figure{margin:0}
 h1{font-size:clamp(3rem,7vw,6.2rem);letter-spacing:-.055em;line-height:1.04}
 h2{font-size:clamp(1.8rem,4vw,3.1rem);letter-spacing:-.035em;line-height:1.2}
 h3{font-size:1.15rem;line-height:1.4}
-.wrap{width:min(1140px,calc(100% - 52px));margin-inline:auto}
+.wrap{width:100%;max-width:1500px;margin-inline:auto;padding:0 max(4.5%,18px)}
 nav{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line)}
 .nav{display:flex;gap:clamp(12px,3vw,30px);align-items:center;min-height:62px;white-space:nowrap;overflow:auto}
 .nav a{font-size:.875rem;text-decoration:none;color:var(--ink)}
-.nav a:first-child{font-size:1.12rem;font-weight:800}
+.nav a:first-child{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:8px 17px 8px 12px;
+  border:1px solid #c9d6cb;border-radius:999px;background:#fff;
+  font-size:.8125rem;font-weight:700;line-height:1;
+  transition:border-color .22s cubic-bezier(.16,1,.3,1),box-shadow .22s;
+}
+.nav a:first-child svg{width:14px;height:14px;flex:none;transition:transform .28s cubic-bezier(.16,1,.3,1)}
+.nav a:first-child:hover{border-color:var(--green);box-shadow:0 8px 24px #2f3a261f}
+.nav a:first-child:hover svg{transform:translateX(-4px)}
+/* 顶部栏：对齐官网导航的字形与排布（右对齐竖排、字距 .08em），白底深绿字，不用深色底板 */
+.site-head{position:relative;z-index:20;background:#fff;border-bottom:1px solid var(--line)}
+.site-head-inner{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-block:16px}
+.site-head .head-brand{display:inline-flex;padding-top:2px;font-size:1.5rem;font-weight:700;letter-spacing:.08em;line-height:1.125;color:var(--green);text-decoration:none}
+.site-head .head-nav{display:grid;justify-items:end;gap:0}
+.site-head .head-nav a{display:grid;align-items:center;justify-items:end;min-height:34px;color:#24422f;font-size:clamp(14px,1.2vw,17px);font-weight:600;line-height:1.15;letter-spacing:.06em;text-decoration:none}
+.site-head .head-nav span{position:relative}
+.site-head .head-nav span::after{content:"";position:absolute;inset:auto .1em -.28em 0;height:1px;background:currentColor;transform:scaleX(0);transform-origin:right;transition:transform .22s ease}
+.site-head .head-nav a:is(:hover,:focus-visible) span::after{transform:scaleX(1)}
+@media(prefers-reduced-motion:reduce){.site-head .head-nav span::after{transition:none}}
+@media(max-width:760px){
+  .site-head .head-brand{font-size:1.25rem}
+  .site-head .head-nav a{min-height:30px;font-size:.8125rem}
+}
 .hero{display:grid;grid-template-columns:minmax(0,.93fr) minmax(0,1.07fr);gap:46px;align-items:center;padding-block:56px 62px}
 .hero figure img{aspect-ratio:1.24;object-fit:cover;border-radius:8px}
 .eyebrow{color:var(--green);font-size:.82rem;font-weight:750;margin-bottom:14px}
@@ -137,13 +160,23 @@ output{display:block;font-size:.86rem;background:#edf5ed;border-radius:6px;paddi
 .story{max-width:77ch}
 .story p+p{margin-top:12px}
 .source-list{padding-left:20px}
-@media(max-width:760px){.wrap{width:calc(100% - 34px)}.hero,.evidence,.photo-notes,.site-detail,.trial,.maps,.decision-grid,.steps{grid-template-columns:1fr}.hero{gap:24px;padding-block:32px}.band,.chapter{padding-block:32px}.trial{padding:16px}.hero figure img{aspect-ratio:1.65}.decision-grid{gap:15px}.route-row{gap:4px}}
+@media(max-width:760px){.wrap{padding-inline:max(4.5%,18px)}.hero,.evidence,.photo-notes,.site-detail,.trial,.maps,.decision-grid,.steps{grid-template-columns:1fr}.hero{gap:24px;padding-block:32px}.band,.chapter{padding-block:32px}.trial{padding:16px}.hero figure img{aspect-ratio:1.65}.decision-grid{gap:15px}.route-row{gap:4px}}
 @media print{nav,.actions,#westlake-3d,.hero .button{display:none}.band,.chapter,.hero{padding-block:24px}.trial,.evidence{break-inside:avoid}}
 @media(max-width:760px){.activity-points,.park-layout,.market-workspace{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<nav aria-label="案例导航"><div class="wrap nav"><a href="./yuquan-market-proposal.html#research">返回菊展案例</a><a href="./yuquan-research-dossier.html">研究档案</a><a href="#park">园内布局</a><a href="#activities">真实活动</a><a href="#market">幕景市集方案</a><a href="#workbench">玉泉长廊</a><a href="#handover">交接</a></div></nav>
+<header class="site-head">
+<div class="wrap site-head-inner">
+<a class="head-brand" href="/introduction" aria-label="幕景首页">幕景</a>
+<nav class="head-nav" aria-label="站点导航">
+<a href="/introduction?view=inspiration#inspiration"><span>灵感中心</span></a>
+<a href="/introduction#process"><span>产品能力</span></a>
+<a href="/guide"><span>新手指引</span></a>
+</nav>
+</div>
+</header>
+<nav aria-label="案例导航"><div class="wrap nav"><a href="./yuquan-market-proposal.html#research"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5 5 8l4.5 4.5M5 8h7.5"/></svg>返回菊展案例</a><a href="./yuquan-research-dossier.html">研究档案</a><a href="#park">园内布局</a><a href="#activities">真实活动</a><a href="#market">幕景市集方案</a><a href="#workbench">玉泉长廊</a><a href="#handover">交接</a></div></nav>
 <main id="top">
 <header class="hero wrap">
   <div>

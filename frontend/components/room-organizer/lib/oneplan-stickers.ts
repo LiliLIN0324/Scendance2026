@@ -20,6 +20,7 @@
  */
 
 import type { PlanningIconName, PlanningRouteKind, PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_NODE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 import type { PlanNode } from '../../../../supabase/functions/_shared/site-plan';
 
 /** OnePlan 素材种类（对应 public/oneplan-icons 下的三个子目录）。 */
@@ -58,6 +59,23 @@ export function oneplanStickerUsesChip(sticker: OneplanStickerDescriptor | null 
 
 /** 芯片填充色（与页面的深色卡片同族，底图上仍可读）。 */
 export const ONEOPLAN_CHIP_FILL = 'rgba(24, 26, 32, 0.88)';
+
+/**
+ * 画布朝向与占地朝向不一致时，贴图要整体转 90°（2026-11-16）。
+ *
+ * 库里的车一半画成横的（巴士 24×9、货车 24×6），一半画成竖的（摩托车 8×24、房车 8×24、
+ * 皮卡 8.2×24、叉车 11.5×24），而占地总是「宽 ≥ 深、长边沿 X」。
+ * 直接把竖图拉进横框，摩托车这类就会躺平——看着就是「莫名其妙转了 90°」。
+ */
+export function stickerNeedsQuarterTurn(
+  artWidth: number,
+  artHeight: number,
+  boxWidth: number,
+  boxHeight: number,
+): boolean {
+  if (!(artWidth > 0) || !(artHeight > 0) || !(boxWidth > 0) || !(boxHeight > 0)) return false;
+  return artHeight > artWidth !== boxHeight > boxWidth;
+}
 
 /** 贴纸的 `<img src>`：scale 用前景线稿（画布会另叠加底形）。 */
 export function oneplanStickerSrc(sticker: OneplanStickerDescriptor): string {
@@ -111,6 +129,13 @@ export const NODE_STICKERS: Record<PlanNode['kind'], OneplanStickerDescriptor> =
   exit: { kind: 'icon', slug: 'exit-gate', icon: 'door-open' },
   both: { kind: 'icon', slug: 'turnstile', icon: 'door-open' },
 };
+
+/**
+ * 出入口节点类型 → 芯片色（2026-11-15 用户：三型要给不同的视觉图标）。
+ * 贴纸字形本身只差箭头方向，14px 下几乎分不出；芯片配色才是第一眼的分辨依据，
+ * 绿进 / 红出 / 青双向，与图例、工具箱、放置幽灵、3D 点位同源。
+ */
+export const NODE_STICKER_COLORS: Record<PlanNode['kind'], string> = { ...PLANNING_NODE_KIND_COLORS };
 
 /** 动线三类 → 贴纸（线本身仍按现实线条绘制，贴纸只做类型徽标）。 */
 export const ROUTE_STICKERS: Record<PlanningRouteKind, OneplanStickerDescriptor> = {
@@ -192,6 +217,11 @@ export function facilitySticker(templateId: string): OneplanStickerDescriptor | 
 /** 出入口节点类型 → 贴纸。 */
 export function nodeSticker(kind: PlanNode['kind']): OneplanStickerDescriptor | null {
   return NODE_STICKERS[kind] ?? null;
+}
+
+/** 出入口节点类型 → 芯片色（贴纸未加载/无 DOM 时，画布仍用这个色画底形）。 */
+export function nodeStickerColor(kind: PlanNode['kind']): string {
+  return NODE_STICKER_COLORS[kind] ?? PLANNING_NODE_KIND_COLORS.both;
 }
 
 /** 人员岗位 → 贴纸；先精确命中再关键词回落，未知岗位返回 null（回落 Lucide users）。 */
@@ -404,6 +434,13 @@ export function drawOneplanSticker(
   return drawCachedImage(ctx, src, x, y, size, size, alpha);
 }
 
+/** 图片 / canvas 的像素尺寸（两种来源都可能是贴纸本体）。 */
+function artSize(source: HTMLImageElement | HTMLCanvasElement): { w: number; h: number } {
+  return 'naturalWidth' in source
+    ? { w: source.naturalWidth, h: source.naturalHeight }
+    : { w: source.width, h: source.height };
+}
+
 /**
  * 按真实尺度画设施贴纸：底形（scale-bg）+ 前景线稿（scale-fg）成对拉伸到占地矩形，
  * 旋转矩阵与 drawFacilityLayer 一致（rotationDeg 以东为零、逆时针为正）。
@@ -424,19 +461,26 @@ export function drawOneplanScaleSticker(
   const fg = loadImage(srcs.fg);
   if (!bg && !fg) return false;
   const alpha = opts.alpha ?? 1;
+  // 2026-11-16：素材竖着画（摩托车 8×24、房车 8×24）而占地是横的，直接拉伸就是「转了 90°」。
+  const art = bg ?? fg!;
+  const { w: artW, h: artH } = artSize(art);
+  const turn = stickerNeedsQuarterTurn(artW, artH, width, height);
+  const drawW = turn ? height : width;
+  const drawH = turn ? width : height;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-rotationDeg * Math.PI / 180);
+  if (turn) ctx.rotate(Math.PI / 2);
   if (bg) {
     ctx.save();
     ctx.globalAlpha = alpha * 0.55;
-    ctx.drawImage(bg, -width / 2, -height / 2, width, height);
+    ctx.drawImage(bg, -drawW / 2, -drawH / 2, drawW, drawH);
     ctx.restore();
   }
   if (fg) {
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.drawImage(fg, -width / 2, -height / 2, width, height);
+    ctx.drawImage(fg, -drawW / 2, -drawH / 2, drawW, drawH);
     ctx.restore();
   }
   ctx.restore();

@@ -9,6 +9,16 @@ const [online, local, legacy, incoming, labels, registered, receipts] = await Pr
   read('assets/catalogue.json'), read('assets/library/model200.json'),
   read('assets/library/labels.zh.json'), read('assets/library/asset-ids.json'), read('assets/library/registered.json'),
 ]);
+// 2026-11-15：开源自建补库批次（scripts/fetch-open-models.mjs 产出，CC0 人工审过）。
+// 与 model200 同构，所以沿用同一套校验收录逻辑；文件不存在时视为空批次。
+let extra = { models: [], repairs: [] };
+try {
+  extra = JSON.parse(await readFile(new URL('assets/library/incoming-extra.json', root), 'utf8'));
+} catch {
+  /* 没有补库批次。 */
+}
+const iconProps = await read('assets/library/incoming-icon-original.json');
+for (const model of iconProps.models) labels[model.slug] = model.label;
 const categories = {
   seating: '座椅沙发', tables: '桌台柜台', exhibition: '摊位展陈', stage: '舞台设施',
   audio: '音响乐器', lighting: '灯光照明', signage: '标识导视', people: '人物角色',
@@ -29,12 +39,17 @@ for (const model of original) {
   rows.set(model.slug, { ...model, ...previous, sources: [...(previous?.sources ?? []), model.source] });
 }
 const replacements = [];
-for (const model of incoming.models) {
+// 两个批次同构，但来源要如实记（model200 = 旧模200 目录，open-extra = 2026-11-15 开源的补库批次）。
+for (const [model, sourceName] of [
+  ...incoming.models.map(model => [model, 'model200']),
+  ...extra.models.map(model => [model, 'open-extra']),
+  ...iconProps.models.map(model => [model, 'scendance-icon-props']),
+]) {
   const previous = rows.get(model.slug);
   if (previous) replacements.push({ slug: model.slug, identicalAfterRepair: model.sha256 === previous.sha256 });
   // New files win, but a cloud identity belongs only to its exact registered bytes.
   const assetId = previous?.sha256 === model.sha256 ? previous.assetId : undefined;
-  rows.set(model.slug, { ...model, ...(assetId ? { assetId } : {}), sources: [...(previous?.sources ?? []), 'model200'] });
+  rows.set(model.slug, { ...model, ...(assetId ? { assetId } : {}), sources: [...(previous?.sources ?? []), sourceName] });
 }
 const models = [];
 const byHash = new Map();
@@ -71,7 +86,8 @@ for (const row of rows.values()) {
     slug: row.slug, name: label.name, originalName: row.name, bucket: label.bucket,
     subcategory: categories[label.bucket], width: row.width, depth: row.depth, height: row.height,
     bytes: bytes.length, triangles: row.triangles, glb, thumb: `/showcase/${thumb}`,
-    page: row.page, cdnUrl: row.cdnUrl, sha256, license: 'CC0-1.0',
+    page: row.page, cdnUrl: row.cdnUrl, sha256,
+    license: row.license?.slug === 'project-authored' ? 'project-authored' : 'CC0-1.0',
     sources: row.sources, aliases: [], ...(assetId ? { assetId } : {}),
     ...(row.blockedReason ? { blockedReason: row.blockedReason } : {}),
   };
@@ -81,7 +97,7 @@ for (const row of rows.values()) {
 }
 const buckets = Object.entries(categories).map(([key, label]) => ({ key, label, count: models.filter(m => m.bucket === key).length })).filter(b => b.count);
 const result = {
-  version: 1, provider: '3dassets.dev', license: 'CC0-1.0', count: models.length,
+  version: 1, provider: '3dassets.dev', license: 'per-model', count: models.length,
   placeableCount: models.filter(m => !m.blockedReason).length,
   registeredCount: models.filter(m => m.assetId).length,
   totalBytes: models.reduce((n, m) => n + m.bytes, 0), buckets, models,
@@ -90,9 +106,9 @@ await writeFile(new URL('assets/library/merged.json', root), JSON.stringify(resu
 await writeFile(new URL('assets/library/asset-labels.zh.json', root), JSON.stringify(Object.fromEntries(models.filter(m => m.assetId).map(m => [m.assetId, m.name])), null, 2) + '\n');
 await writeFile(new URL('assets/library/asset-ids.json', root), JSON.stringify(aliases, null, 2) + '\n');
 await writeFile(new URL('assets/library/merge-report.json', root), JSON.stringify({
-  sourceCounts: { websiteOnline: online.models.length, websiteLocal: local.models.length, websiteLegacy: legacy.assets.length, model200: incoming.models.length },
+  sourceCounts: { websiteOnline: online.models.length, websiteLocal: local.models.length, websiteLegacy: legacy.assets.length, model200: incoming.models.length, openExtra: extra.models.length, iconProps: iconProps.models.length },
   count: result.count, placeableCount: result.placeableCount, registeredCount: result.registeredCount,
-  replacements, duplicates, repairs: incoming.repairs,
+  replacements, duplicates, repairs: [...(incoming.repairs ?? []), ...(extra.repairs ?? [])],
   blocked: models.filter(m => m.blockedReason).map(m => ({ slug: m.slug, name: m.name, reason: m.blockedReason })),
 }, null, 2) + '\n');
 console.log(JSON.stringify({ count: result.count, placeableCount: result.placeableCount, registeredCount: result.registeredCount, totalBytes: result.totalBytes, buckets }));

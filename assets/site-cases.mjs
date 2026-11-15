@@ -529,16 +529,12 @@ function showHero(project) {
     if (turn !== heroRequest) return;
     const loaded = results.every(result => result.status === 'fulfilled');
     layer.replaceChildren(...(loaded ? [large] : []));
-    hero.querySelector('[data-site-city]').textContent = project === projects.yuquan ? '长三角 · 杭州' : '长三角 · 上海';
-    hero.querySelector('[data-site-place]').textContent = project.place;
     document.querySelector('[data-site-name]').textContent = project.title;
     document.querySelector('[data-site-kicker]').textContent = project.kicker;
     document.querySelector('[data-site-intro]').textContent = project.caption;
-    document.querySelector('[data-yuquan-proposal]').hidden = heroKey !== 'yuquan';
     if (animate) document.querySelector('.hero-site-caption').animate(
       [{opacity:0, transform:'translateY(9px)'},{opacity:1, transform:'translateY(0)'}],
       {duration:430, easing:'ease-out'});
-    hero.querySelector('[data-site-date]').textContent = loaded ? `Esri · ${project.date}` : '影像暂不可用';
     document.querySelector('#hero').toggleAttribute('data-real-site', loaded);
   });
 }
@@ -1311,16 +1307,8 @@ if ('IntersectionObserver' in window) {
   const visibility = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }, {threshold: .25});
   visibility.observe(heroHeader);
 }
-const pause = hero.querySelector('[data-site-pause]');
-let paused = false;
-pause.hidden = reducedMotion.matches;
-reducedMotion.addEventListener('change', event => { pause.hidden = event.matches; });
-pause.addEventListener('click', () => {
-  paused = !paused;
-  pause.textContent = paused ? '继续轮播' : '暂停轮播';
-});
 setInterval(() => {
-  if (paused || gallery.hidden || !agent.hidden || !visible || document.hidden || reducedMotion.matches || hero.matches(':hover, :focus-within')) return;
+  if (gallery.hidden || !agent.hidden || !visible || document.hidden || reducedMotion.matches || hero.matches(':hover, :focus-within')) return;
   heroAt = (heroAt + 1) % heroKeys.length;
   const next = heroKeys[heroAt];
   tabs.filter(button => hero.contains(button)).forEach(button => button.setAttribute('aria-pressed',String(button.dataset.siteProject === next)));

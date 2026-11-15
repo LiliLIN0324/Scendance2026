@@ -1,30 +1,17 @@
-/**
- * 2D 规划设施 → 真实 GLB 模型的解析层（纯函数，无 React / three 依赖）。
- *
- * 背景：户外 3D 视图里的设施原本只有抽象低模方块。本模块负责回答两个问题：
- *  1. 这个模板（内置 8 模板或 `oneplan:` 物件库条目）能不能对应到在线物料库里的真实模型？
- *  2. 对应哪几个模型、模型的真实米制尺寸是多少（3D 里按占地缩放要用）？
- *
- * 命名空间核实结论（2026-11-11）：
- *  - OnePlan 物件库 slug 是短语义词（`tent` / `stage` / `market-stall` / `food-trailer` …），
- *    物料库 `assets/library/merged.json` 的 slug 是长描述词（`…-base-camp-dome-tent-…`），
- *    **两套 slug 不在同一命名空间，无法直接对上**，只能按语义关键词匹配。
- *  - 物料库 529 个模型里**没有任何厕所类模型**，所以 `toilet` 类设施只能继续用低模。
- *
- * 两条取值路径：
- *  - `resolveFacilityModels()`：同步，返回内置的小映射（人工核实过的稳定命中），先让 3D 有模型可摆。
- *  - `loadFacilityModelCandidates()`：异步，在线物料库兜底（关键词打分 + top N）。
- */
-
 import { findGeneratedFacilityModel } from './facility-generated-models';
 import {
   isPackTemplateId,
   packEntryByTemplateId,
   parseLibraryTemplateId,
-  parsePackTemplateId,
 } from './oneplan-library';
-import { loadOnlineModels, type OnlineModel } from './online-models';
+import { iconModelSlugs, packagedIconModel, packModelSlugs } from './icon-model-links';
+import { loadOnlineModels, loadShippedOnlineModels, type OnlineModel } from './online-models';
 import { planPropKind, type PlanPropKind } from './plan-footprint-geometry';
+import {
+  SCENE_PRESETS,
+  presetModelUrl,
+  scenePresetKeyFromFacilityId,
+} from './scene-presets';
 
 /** 一个可用于 3D 落位的真实模型候选。 */
 export interface FacilityModelCandidate {
@@ -53,6 +40,28 @@ export interface FacilityModelCandidate {
 /** 一个设施最多给出几个候选模型（V-5a：候选缩略图网格提到 5 格）。 */
 export const MAX_FACILITY_MODEL_CANDIDATES = 5;
 const MAX_CANDIDATES = MAX_FACILITY_MODEL_CANDIDATES;
+
+/**
+ * 场景预设落成设施时的模型候选：直接读打包好的整馆 GLB，不走在线物料库。
+ *
+ * 这里刻意不用 `catalogFacilityTemplateId(slug)` 的哈希短 id——`scene-preset:<key>`
+ * 要同时承担「2D 识别场景预设」和「3D 找到 GLB」两件事，必须在两边都能反解。
+ */
+export function scenePresetFacilityCandidate(slug: string): FacilityModelCandidate | null {
+  const key = scenePresetKeyFromFacilityId(slug);
+  if (!key) return null;
+  const preset = SCENE_PRESETS[key];
+  return {
+    slug,
+    name: preset.name,
+    glbUrl: presetModelUrl(key),
+    width: preset.width,
+    depth: preset.depth,
+    height: preset.height,
+    trueScale: true,
+    thumb: `/scene-presets/${key}/preview.jpg`,
+  };
+}
 
 /** 物料库模型的本地同源地址。 */
 function localGlbUrl(slug: string): string {
@@ -207,306 +216,6 @@ const BUILTIN_BY_KIND: Readonly<Record<PlanPropKind, readonly string[]>> = {
   misc: [],
 };
 
-/**
- * OnePlan 物件库 slug → 模型 slug。
- * 显式列出（而不是只靠类型兜底），是为了让「蒙古包」「集装箱」这种语义明确的条目
- * 落到合适的模型上；空数组表示「库里确实没有这类模型」。
- */
-const BUILTIN_BY_ONEPLAN_SLUG: Readonly<Record<string, readonly string[]>> = {
-  // 帐篷
-  tent: BUILTIN_BY_KIND.tent,
-  'bell-tent': BUILTIN_BY_KIND.tent,
-  'pop-up-tent': BUILTIN_BY_KIND.tent,
-  'stretch-tent': BUILTIN_BY_KIND.tent,
-  camping: BUILTIN_BY_KIND.tent,
-  yurt: BUILTIN_BY_KIND.tent,
-  // 舞台
-  stage: BUILTIN_BY_KIND.stage,
-  'dj-location': BUILTIN_BY_KIND.stage,
-  podium: BUILTIN_BY_KIND.stage,
-  // 摊位 / 售卖
-  'market-stall': BUILTIN_BY_KIND.kiosk,
-  'food-trader': BUILTIN_BY_KIND.kiosk,
-  'fast-food': BUILTIN_BY_KIND.kiosk,
-  'hot-drinks': BUILTIN_BY_KIND.kiosk,
-  'ice-cream': BUILTIN_BY_KIND.kiosk,
-  'roasted-chestnuts': BUILTIN_BY_KIND.kiosk,
-  'food-trailer': BUILTIN_BY_KIND.foodTruck,
-  'food-trailer-rotated': BUILTIN_BY_KIND.foodTruck,
-  'chuck-wagon': BUILTIN_BY_KIND.foodTruck,
-  'duck-pond-booth': BUILTIN_BY_KIND.kiosk,
-  bar: BUILTIN_BY_KIND.kiosk,
-  'cocktail-bar': BUILTIN_BY_KIND.kiosk,
-  'prosecco-bar': BUILTIN_BY_KIND.kiosk,
-  'wine-bar': BUILTIN_BY_KIND.kiosk,
-  merchandise: BUILTIN_BY_KIND.kiosk,
-  // 车辆
-  van: BUILTIN_BY_KIND.foodTruck,
-  'van-rotated': BUILTIN_BY_KIND.foodTruck,
-  caravan: BUILTIN_BY_KIND.foodTruck,
-  'ob-truck': BUILTIN_BY_KIND.foodTruck,
-  'hb-van': BUILTIN_BY_KIND.foodTruck,
-  'large-screen-truck': BUILTIN_BY_KIND.foodTruck,
-  'large-screen-truck-rotated': BUILTIN_BY_KIND.foodTruck,
-  'outside-broadcast-truck': BUILTIN_BY_KIND.foodTruck,
-  'satellite-van': BUILTIN_BY_KIND.foodTruck,
-  'enclosed-trailer': BUILTIN_BY_KIND.foodTruck,
-  'golf-cart': ['golf-course-and-clubhouse-motorised-golf-cart-b754304d'],
-  'golf-cart-rotated': ['golf-course-and-clubhouse-motorised-golf-cart-b754304d'],
-  forklift: BUILTIN_BY_KIND.foodTruck,
-  // 值守 / 岗亭
-  'security-checkpoint': BUILTIN_BY_KIND.post,
-  'ticket-office': BUILTIN_BY_KIND.post,
-  'ticket-check': BUILTIN_BY_KIND.post,
-  'information-point': BUILTIN_BY_KIND.post,
-  accreditation: BUILTIN_BY_KIND.post,
-  'first-aid-point': [
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-  ],
-  'transport-desk': [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  // 垃圾
-  'waste-container': BUILTIN_BY_KIND.bin,
-  'large-waste-container': BUILTIN_BY_KIND.bin,
-  'waste-and-recycling-point': BUILTIN_BY_KIND.bin,
-  // 厕所
-  'portable-toilet': BUILTIN_BY_KIND.toilet,
-  'accessible-portable-toilet': BUILTIN_BY_KIND.toilet,
-  'toilets-temporary': BUILTIN_BY_KIND.toilet,
-  'gender-neutral-toilet': BUILTIN_BY_KIND.toilet,
-  'mens-urinal-pod': BUILTIN_BY_KIND.toilet,
-  'toilet-trailer': [
-    'live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a',
-    'hot-air-balloon-festival-portable-toilet-block-82a4faf8',
-  ],
-  'accessible-toilet': [
-    'live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a',
-    'hot-air-balloon-festival-portable-toilet-block-82a4faf8',
-  ],
-  'toilets-permanent': [
-    'live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a',
-    'hot-air-balloon-festival-portable-toilet-block-82a4faf8',
-  ],
-  'changing-places-toilet': [
-    'live-music-venue-and-festival-stage-portable-toilet-bl-309ed26a',
-    'hot-air-balloon-festival-portable-toilet-block-82a4faf8',
-  ],
-  // 轿车 / 巴士 / 皮卡 / 摩托 / 集装箱
-  car: [
-    'car-park-and-road-vehicle-fleet-saloon-ad831b1f',
-    'car-park-and-road-vehicle-fleet-city-car-033e3215',
-    'car-park-and-road-vehicle-fleet-sports-car-900de487',
-  ],
-  'car-rotated': [
-    'car-park-and-road-vehicle-fleet-saloon-ad831b1f',
-    'car-park-and-road-vehicle-fleet-city-car-033e3215',
-    'car-park-and-road-vehicle-fleet-sports-car-900de487',
-  ],
-  'police-car': [
-    'car-park-and-road-vehicle-fleet-saloon-ad831b1f',
-    'car-park-and-road-vehicle-fleet-city-car-033e3215',
-  ],
-  'police-car-rotated': [
-    'car-park-and-road-vehicle-fleet-saloon-ad831b1f',
-    'car-park-and-road-vehicle-fleet-city-car-033e3215',
-  ],
-  bus: ['bus-station-and-city-transit-city-bus-single-decker-ddf9a355'],
-  'bus-rotated': ['bus-station-and-city-transit-city-bus-single-decker-ddf9a355'],
-  coach: ['bus-station-and-city-transit-city-bus-single-decker-ddf9a355'],
-  'bus-stop': ['bus-station-and-city-transit-bus-stop-pole-with-flag-3071e762'],
-  'bus-coach-station': ['bus-station-and-city-transit-bus-stop-pole-with-flag-3071e762'],
-  'pickup-truck': ['car-park-and-road-vehicle-fleet-double-cab-pickup-cano-aa92dedb'],
-  motorcycle: ['motorcycle-racing-and-street-bikes-road-sportbike-e1418015'],
-  motorbike: ['motorcycle-racing-and-street-bikes-road-sportbike-e1418015'],
-  'paramedic-motorbike': ['motorcycle-racing-and-street-bikes-road-sportbike-e1418015'],
-  'shipping-container': ['long-haul-trucking-and-truck-stop-container-20ft-bc3beca3'],
-  // 家具
-  chair: [
-    'bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7',
-    'office-lobby-and-facilities-canteen-stacking-chair-3440c7d8',
-    'hot-air-balloon-festival-folding-camp-chair-ba5bb3d0',
-  ],
-  'folding-chair': [
-    'hot-air-balloon-festival-folding-camp-chair-ba5bb3d0',
-    'beach-surf-and-paddle-kit-folding-beach-chair-68794f97',
-    'office-lobby-and-facilities-canteen-stacking-chair-3440c7d8',
-  ],
-  'deck-chair': [
-    'beach-surf-and-paddle-kit-folding-beach-chair-68794f97',
-    'hot-air-balloon-festival-folding-camp-chair-ba5bb3d0',
-  ],
-  sofa: [
-    'bedroom-and-living-room-furniture-sofa-three-seat-6be9b44b',
-    'bedroom-and-living-room-furniture-sofa-two-seat-904fa140',
-    'hotel-and-resort-operations-lobby-sofa-79174bf1',
-  ],
-  bench: [
-    'public-aquarium-and-marine-centre-visitor-bench-teal-d3402427',
-    'football-soccer-club-grounds-changing-bench-912e20bc',
-  ],
-  table: [
-    'medieval-monastery-and-scriptorium-trestle-table-2a0801e0',
-    'hotel-and-resort-operations-conference-table-module-a6abb373',
-  ],
-  'picnic-table': [
-    'medieval-monastery-and-scriptorium-trestle-table-2a0801e0',
-    'art-gallery-and-exhibition-rooms-cafe-table-and-chairs-a767551a',
-  ],
-  'table-and-chairs': [
-    'art-gallery-and-exhibition-rooms-cafe-table-and-chairs-a767551a',
-    'medieval-monastery-and-scriptorium-trestle-table-2a0801e0',
-  ],
-  'round-table': [
-    'casino-floor-and-back-rooms-cocktail-table-329ca6f8',
-    'art-gallery-and-exhibition-rooms-cafe-table-and-chairs-a767551a',
-  ],
-  'round-table-and-chairs': [
-    'art-gallery-and-exhibition-rooms-cafe-table-and-chairs-a767551a',
-    'casino-floor-and-back-rooms-cocktail-table-329ca6f8',
-  ],
-  'bar-table-and-bench': [
-    'casino-floor-and-back-rooms-cocktail-table-329ca6f8',
-    'art-gallery-and-exhibition-rooms-cafe-table-and-chairs-a767551a',
-  ],
-  // 锥桶 / 防撞柱 / 大屏 / 音箱
-  cone: ['hot-air-balloon-festival-traffic-cone-799bc862'],
-  bollard: [
-    'car-park-and-road-vehicle-fleet-bollard-e7119d33',
-    'bus-station-and-city-transit-street-bollard-7db606aa',
-  ],
-  'large-screen': [
-    'cinema-multiplex-and-foyer-cinema-screen-and-masking-92b7d56f',
-    'abandoned-cinema-and-projection-booth-abandoned-cinema-765a1a5b',
-    'university-lecture-hall-and-campus-projection-screen-f41396d5',
-  ],
-  'replay-screen': [
-    'cinema-multiplex-and-foyer-cinema-screen-and-masking-92b7d56f',
-    'university-lecture-hall-and-campus-projection-screen-f41396d5',
-  ],
-  'pa-speakers': [
-    'hot-air-balloon-festival-pa-speaker-on-stand-43f5125f',
-    'village-hall-and-community-events-pa-speaker-on-stand-7ffa787e',
-    'live-music-venue-and-festival-stage-line-array-speaker-7500d812',
-  ],
-  // 通用：明确是箱柜/配电的才用杂物模型；其余未映射的不再落到箱子
-  generator: [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  'generator-point': [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  'distribution-board': [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  'temporary-power': [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  'permanent-power': [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  'wooden-chalet': ['christmas-storybook-market-chalet-f8bf72ba'],
-  'portable-cabin': ['tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-fac914d0'],
-  pallet: [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  'fuel-cube': [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-  esky: [
-    'abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33',
-    'live-music-venue-and-festival-stage-power-distro-box-28b03233',
-    'football-soccer-club-grounds-first-aid-cabinet-feff73ae',
-  ],
-
-  tractor: ['arable-fields-and-farm-machinery-tracked-tractor-f59c2454'],
-  ambulance: ['fire-and-emergency-services-ambulance-f22ce1a5'],
-  'ambulance-rotated': ['fire-and-emergency-services-ambulance-f22ce1a5'],
-  'bike-rack': ['city-park-and-playground-bike-rack-c73abcbf'],
-  'street-lamp': ['bus-station-and-city-transit-street-lamp-2c6420cf'],
-  'traffic-lights': ['bus-station-and-city-transit-traffic-light-4b8313ca'],
-  'temporary-lighting-tower': [
-    'tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941',
-    'fps-survival-forest-outpost-floodlight-mast-98fcda0b',
-  ],
-  'permanent-lighting-tower': [
-    'fps-survival-forest-outpost-floodlight-mast-98fcda0b',
-    'tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-b7d1c941',
-  ],
-  'fire-hydrant': ['fire-and-emergency-services-fire-hydrant-09cb0c64'],
-  'fire-extinguisher': [
-    'street-food-market-and-food-trucks-fire-extinguisher-p-1bc646d7',
-    'machine-shop-and-factory-hall-machine-shop-and-factory-d83014ca',
-  ],
-  plant: ['care-home-and-day-room-potted-plant-tall-e50d9742'],
-  'feather-flag': [
-    'live-music-venue-and-festival-stage-festival-flag-pole-6d4f8842',
-    'hot-air-balloon-festival-event-flag-pole-f98bce99',
-  ],
-  'lamp-post-banner': [
-    'hot-air-balloon-festival-event-flag-pole-f98bce99',
-    'live-music-venue-and-festival-stage-festival-flag-pole-6d4f8842',
-  ],
-  'camera-tripod': ['police-station-and-detective-office-camera-on-tripod-60d9e444'],
-  'camera-drone': ['robots-and-drones-kit-quadcopter-camera-16e693ab'],
-  'cctv-camera': ['animated-mechanisms-kit-security-camera-yoke-12d335bf'],
-  'camera-fixed': ['animated-mechanisms-kit-security-camera-yoke-12d335bf'],
-  '360-security-camera': ['animated-mechanisms-kit-security-camera-yoke-12d335bf'],
-  fridge: ['restaurant-kitchen-and-dining-upright-fridge-double-06328b60'],
-  freezer: ['restaurant-kitchen-and-dining-upright-fridge-double-06328b60'],
-  shower: ['football-soccer-club-grounds-shower-column-2aeb12a4'],
-  stanchion: [
-    'nightclub-and-dj-booth-rope-barrier-post-with-rope-327c14d3',
-    'laundrette-and-cleaning-caution-barrier-post-75cbf09d',
-  ],
-  'cable-matting': ['live-music-venue-and-festival-stage-cable-ramp-6576a82f'],
-  'ada-low-profile-cable-matting': ['live-music-venue-and-festival-stage-cable-ramp-6576a82f'],
-  boat: ['powerboat-racing-and-launch-ramp-cabin-cruiser-canopy-11c4fda1'],
-  'motor-boat': ['powerboat-racing-and-launch-ramp-cabin-cruiser-canopy-11c4fda1'],
-  // 游乐设施：物件库 slug 与 fairs/christmas 包物件同名，包物件经同命名空间回落命中。
-  'ferris-wheel': ['theme-park-rides-and-coasters-theme-park-rides-and-coa-d18acb96'],
-  carousel: ['theme-park-rides-and-coasters-theme-park-rides-and-coa-b3ccf619'],
-  'chair-o-planes': ['theme-park-rides-and-coasters-theme-park-rides-and-coa-8af0e6ab'],
-};
-
-/**
- * 活动包物件（`pack:`）专属映射（按包物件的 asset_slug）。
- *
- * 包 slug 与 OnePlan 物件库 slug 同为短语义词：先查这张表（包语义与库条目不同或库里
- * 没有同 slug 条目时在这里补），再回落 `BUILTIN_BY_ONEPLAN_SLUG`；两表都没有就保持
- * 低模占位——包物件不做关键词/在线乱配（planPropKind 对 pack: 钉死 misc 的纪律）。
- * 显式映射的口径=「模型与物件是同类实物」，不相似就不映射。
- */
-const BUILTIN_BY_PACK_SLUG: Readonly<Record<string, readonly string[]>> = {
-  // 转播 / 工作车辆：与库里的厢式工作车同类
-  'team-wax-truck': BUILTIN_BY_KIND.foodTruck,
-  // 补给 / 维修站长桌：路跑补给站本就是长桌 + 水桶
-  'aid-station-200m': ['medieval-monastery-and-scriptorium-trestle-table-2a0801e0'],
-  'special-needs': ['medieval-monastery-and-scriptorium-trestle-table-2a0801e0'],
-  // 戏台：中式演舞台面，与舞台模块同类
-  'cn-opera-stage': BUILTIN_BY_KIND.stage,
-  // 球员休息棚：敞开遮棚，遮棚展位是同类替身
-  dugout: ['trading-post-and-barter-market-canopy-market-booth-46c6c10f'],
-};
-
 /** 在线兜底用的关键词表（按 3D 物件类型）。 */
 interface KindTokens {
   include: readonly string[];
@@ -627,8 +336,7 @@ const MAX_MODEL_HEIGHT = 4;
 const MAX_HEIGHT_RATIO = 1.2;
 /** 放大上限：模型不放大到超过原尺寸的 2.5 倍，避免小模型被撑成庞然大物。 */
 const MAX_SCALE = 2.5;
-/** 候选排序权重：语义越靠前越优先（面积相近时不让低优先模型抢位）。V-5a 候选上限 5，第 5 位与原兜底同权。 */
-const RANK_WEIGHTS = [1, 0.75, 0.55, 0.4, 0.3];
+/** 候选排序权重：已废弃（2026-11-15 自动挑选改为取首位候选，与 2D 占地同源）。 */
 
 /** 一个模型按占地缩放后的结果。 */
 export interface FacilityModelFit {
@@ -667,7 +375,11 @@ export function fitFacilityModel(
 }
 
 /**
- * 在候选里挑一个最合适的：先按语义顺序加权，再按缩放后占地面积比大小。
+ * 自动挑一个模型落位。
+ *
+ * 2026-11-15 口径变更：2D 占地现在由首位候选的真实尺寸推导（`facilityFootprintSpec` /
+ * `facilitySizeFromModel`），所以自动挑选必须与 2D 同源——直接取首位（语义最优）候选，
+ * 只把当前 2D 尺寸换算成缩放。先前「谁塞得满就选谁」会让 2D 框和 3D 模型形状对不上。
  * 返回 null 表示一个候选都没有（3D 侧继续画低模）。
  */
 export function selectFacilityModel(
@@ -675,24 +387,26 @@ export function selectFacilityModel(
   propWidth: number,
   propDepth: number,
 ): (FacilityModelCandidate & FacilityModelFit) | null {
-  let best: (FacilityModelCandidate & FacilityModelFit) | null = null;
-  let bestScore = 0;
-  candidates.forEach((candidate, index) => {
-    const fit = fitFacilityModel(propWidth, propDepth, candidate);
-    const width = (fit.swap ? candidate.depth : candidate.width) * fit.scale;
-    const depth = (fit.swap ? candidate.width : candidate.depth) * fit.scale;
-    const weight = RANK_WEIGHTS[index] ?? 0.3;
-    const score = width * depth * weight;
-    if (score > bestScore) {
-      bestScore = score;
-      best = { ...candidate, ...fit };
-    }
-  });
-  return best;
+  const first = candidates[0];
+  if (!first) return null;
+  return { ...first, ...fitFacilityModel(propWidth, propDepth, first) };
+}
+
+/**
+ * 2026-11-15：按 slug 同步拿内置模型（不碰在线索引）。
+ * 2D 外廓要在同步渲染路径里算「用户手选的这个模型」到底多大，不能 await 在线库，
+ * 因此只认随代码发布的内置尺寸表；查不到返回 null，由调用方回落模板默认。
+ */
+export function builtinModelBySlug(slug: string): FacilityModelCandidate | null {
+  return scenePresetFacilityCandidate(slug) ?? candidateFromBuiltin(slug);
 }
 
 function candidateFromBuiltin(slug: string): FacilityModelCandidate | null {
-  const entry = BUILTIN_MODELS[slug];
+  const scene = scenePresetFacilityCandidate(slug);
+  if (scene) return scene;
+  const packaged = packagedIconModel(slug);
+  if (packaged) return packaged;
+  const entry = Object.hasOwn(BUILTIN_MODELS, slug) ? BUILTIN_MODELS[slug] : undefined;
   if (!entry) return null;
   return {
     slug,
@@ -725,33 +439,20 @@ export function facilityTemplateSlug(templateId: string): string | null {
   return parsed ? parsed.slug : null;
 }
 
-/**
- * 同步解析一个模板能用的模型候选（内置映射）。
- *
- * 活动包物件（`pack:`）先查包专属映射，再按包 slug 回落物件库映射（两套 slug 同为
- * OnePlan 短语义词、同一张 curated 表，命中即用）；都没有时保持低模占位——
- * 包物件不做关键词/在线乱配（`planPropKind` 对 pack: 钉死 misc 的既有纪律）。
- *
- * slug 取值：优先运行时 packs.json 登记条目的权威 slug；包清单尚未异步登记（载入历史草稿
- * 同步规整时常见）则从 templateId 自带的 itemId 解析，使 `pack:fairs:chuck-wagon` 这类 id
- * 即便在包索引为空时也能命中内置同名映射，不至于误回落成 misc 的 1:1 占位外廓。
- */
+/** Resolve the reviewed model for a library object. Legacy tools retain their preset candidates. */
 export function resolveFacilityModels(templateId: string): FacilityModelCandidate[] {
+  const scene = scenePresetFacilityCandidate(templateId);
+  if (scene) return [scene];
+  let slugs: readonly string[];
   if (isPackTemplateId(templateId)) {
     const entry = packEntryByTemplateId(templateId);
-    const parsed = parsePackTemplateId(templateId);
-    const slug = entry?.slug ?? parsed?.itemId ?? '';
-    if (!slug) return [];
-    const packExplicit = BUILTIN_BY_PACK_SLUG[slug] ?? BUILTIN_BY_ONEPLAN_SLUG[slug] ?? [];
-    return packExplicit.map(candidateFromBuiltin).filter((item): item is FacilityModelCandidate => item !== null);
+    if (entry?.placeKind && entry.placeKind !== 'facility') return [];
+    slugs = entry ? iconModelSlugs(entry.slug, entry.kind) : packModelSlugs(templateId);
+  } else {
+    const icon = parseLibraryTemplateId(templateId);
+    slugs = icon ? iconModelSlugs(icon.slug, icon.kind) : BUILTIN_BY_KIND[planPropKind(templateId)];
   }
-  const slug = facilityTemplateSlug(templateId);
-  if (slug && Object.prototype.hasOwnProperty.call(BUILTIN_BY_ONEPLAN_SLUG, slug)) {
-    const explicit = BUILTIN_BY_ONEPLAN_SLUG[slug];
-    return explicit.map(candidateFromBuiltin).filter((item): item is FacilityModelCandidate => item !== null);
-  }
-  const kind = planPropKind(templateId);
-  return (BUILTIN_BY_KIND[kind] ?? [])
+  return slugs.slice(0, MAX_CANDIDATES)
     .map(candidateFromBuiltin)
     .filter((item): item is FacilityModelCandidate => item !== null);
 }
@@ -764,15 +465,18 @@ export function resolveFacilityModels(templateId: string): FacilityModelCandidat
  */
 export async function loadFacilityModelCandidates(
   templateIds: readonly string[],
+  limit: number = MAX_CANDIDATES,
 ): Promise<Map<string, FacilityModelCandidate[]>> {
+  const boundedLimit = Math.max(0, Math.min(limit, MAX_CANDIDATES));
   const unique = [...new Set(templateIds)];
   const result = new Map<string, FacilityModelCandidate[]>();
   let models: readonly OnlineModel[] = [];
-  try {
-    const index = await loadOnlineModels();
-    models = index.models;
-  } catch {
-    models = [];
+  if (unique.some(id => !parseLibraryTemplateId(id) && !isPackTemplateId(id) && !scenePresetFacilityCandidate(id))) {
+    try {
+      models = (await loadOnlineModels()).models;
+    } catch {
+      // Legacy defaults are available without the catalogue.
+    }
   }
   // V-5a：内置映射是同步手挑的，候选上没带缩略图；在线索引在手时按 slug 补齐，
   // 属性卡候选网格就能给绝大多数候选配图（拿不到的显示名称占位块）。
@@ -787,17 +491,15 @@ export async function loadFacilityModelCandidates(
     });
     const kind = planPropKind(templateId);
     const merged = [...builtin];
-    // 未映射的杂项不要再用 crate/table 关键词去网上乱配。
-    const skipKindOnline = kind === 'misc' && builtin.length === 0;
-    if (!skipKindOnline) {
+    if (!parseLibraryTemplateId(templateId) && !isPackTemplateId(templateId) && kind !== 'misc') {
       for (const entry of scoreModels(kind, models)) {
-        if (merged.length >= MAX_CANDIDATES) break;
+        if (merged.length >= boundedLimit) break;
         const candidate = candidateFromOnline(entry.model);
-        if (merged.some((item) => item.slug === candidate.slug)) continue;
+        if (merged.some(item => item.slug === candidate.slug)) continue;
         merged.push(candidate);
       }
     }
-    result.set(templateId, merged.slice(0, MAX_CANDIDATES));
+    result.set(templateId, merged.slice(0, boundedLimit));
   }
   return result;
 }
@@ -829,10 +531,10 @@ export async function loadFacilityModelOverride(slug: string): Promise<FacilityM
   // V-5b/c：生成/导入回填的候选第一优先——它们不在物料库里，库查永远 null。
   const generated = findGeneratedFacilityModel(slug);
   if (generated) return generated;
-  // hasOwnProperty 守卫与 resolveFacilityModels 同款：slug 是自由字符串，不能撞上原型链键。
-  if (Object.prototype.hasOwnProperty.call(BUILTIN_MODELS, slug)) return candidateFromBuiltin(slug);
+  const builtin = candidateFromBuiltin(slug);
+  if (builtin) return builtin;
   try {
-    const index = await loadOnlineModels();
+    const index = await loadShippedOnlineModels();
     const model = index.models.find(entry => entry.slug === slug);
     return model ? candidateFromOnline(model) : null;
   } catch {

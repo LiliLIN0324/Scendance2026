@@ -4,7 +4,9 @@ import {
   drawOneplanSticker,
   facilitySticker,
   nodeSticker,
+  nodeStickerColor,
   oneplanScaleSrcs,
+  stickerNeedsQuarterTurn,
   oneplanStickerSrc,
   planStickerDescriptors,
   preloadOneplanStickers,
@@ -20,6 +22,7 @@ import {
   type OneplanStickerDescriptor,
 } from './oneplan-stickers';
 import { buildPlanLegend } from './site-plan-legend';
+import { PLANNING_NODE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 import { PLANNING_ICONS } from '@/lib/outdoor-plan-tokens';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -150,6 +153,14 @@ describe('OnePlan 贴纸映射', () => {
     expect(routeSticker('service')).toMatchObject({ slug: 'load-zone' });
   });
 
+  it('出入口三型的芯片色两两不同（绿进 / 红出 / 青双向），字形也不同', () => {
+    expect(nodeStickerColor('entry')).toBe(PLANNING_NODE_KIND_COLORS.entry);
+    expect(nodeStickerColor('exit')).toBe(PLANNING_NODE_KIND_COLORS.exit);
+    expect(nodeStickerColor('both')).toBe(PLANNING_NODE_KIND_COLORS.both);
+    expect(new Set([nodeStickerColor('entry'), nodeStickerColor('exit'), nodeStickerColor('both')]).size).toBe(3);
+    expect(new Set([nodeSticker('entry')!.slug, nodeSticker('exit')!.slug, nodeSticker('both')!.slug]).size).toBe(3);
+  });
+
   it('样例人员岗位命中：安保→警察、引导员→问询处；未知岗位返回 null', () => {
     expect(workerSticker('安保')).toMatchObject({ kind: 'icon', slug: 'police' });
     expect(workerSticker('引导员')).toMatchObject({ kind: 'icon', slug: 'information-point' });
@@ -179,6 +190,14 @@ describe('OnePlan 贴纸映射', () => {
     expect(oneplanStickerSrc({ kind: 'scale', slug: 'tent', icon: 'tent' })).toBe('/oneplan-icons/scale-fg/tent.svg');
     expect(oneplanStickerSrc({ kind: 'icon', slug: 'stage', icon: 'shapes' })).toBe('/oneplan-icons/icon/stage.svg');
   });
+
+  it('画布朝向与占地朝向不一致时转 90°（摩托车 8×24 落进 2.2×0.8）', () => {
+    expect(stickerNeedsQuarterTurn(8, 24, 2.2, 0.8)).toBe(true);
+    expect(stickerNeedsQuarterTurn(24, 6, 12, 2.5)).toBe(false);
+    expect(stickerNeedsQuarterTurn(24, 11, 4.5, 1.8)).toBe(false);
+    expect(stickerNeedsQuarterTurn(24, 24, 4.5, 1.8)).toBe(false);
+    expect(stickerNeedsQuarterTurn(0, 0, 4.5, 1.8)).toBe(false);
+  });
 });
 
 describe('图例接入 OnePlan 贴纸', () => {
@@ -190,7 +209,7 @@ describe('图例接入 OnePlan 贴纸', () => {
     expect(group('动线').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'pedestrian-access' } });
     expect(group('出入口').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'entry-gate' } });
     expect(group('人员').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'police' } });
-    expect(group('场地边界').entries[0]!.sticker).toBeUndefined();
+    expect(group('用地红线').entries[0]!.sticker).toBeUndefined();
     expect(group('测量') ?? null).toBeNull(); // 样例无测量
     // 既有 icon 字段保持不变（PNG/PDF 图例与既有测试契约继续成立）。
     expect(group('设施').entries[0]!.icon).toBe('tent');
