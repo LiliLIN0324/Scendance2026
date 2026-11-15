@@ -1146,6 +1146,11 @@ export interface OutdoorPlanCanvasHandle {
   focusLngLat(lng: number, lat: number, zoom?: number): void;
   /** 2026-11-12 选区：把视野框到 `[west, south, east, north]`（只动视图，不改 plan/anchor）。 */
   focusBounds(bounds: [number, number, number, number]): void;
+  /**
+   * 2026-11-16 用户指令：左栏那行「定位到设计范围」去掉，功能挪到右轨焦点钮（#tool-focus）。
+   * 只动视图不动 plan；没有设计范围或顶点不足 3 个时静默不动（调用方据此回落到场地取景）。
+   */
+  focusDesignScope(): void;
   /** V-2d：应用流线提案（合并 routes/nodes 进 plan，commitPlan 可撤销）；空提案回 false。 */
   applyWorkflowPlan(next:SitePlanData,expected:string):boolean;
   openFacilityUpload(id:string):boolean;
@@ -3604,6 +3609,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     canRedo: () => redoRef.current.length > 0,
     focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
     focusBounds: (bounds: [number, number, number, number]) => focusBounds(bounds),
+    focusDesignScope: () => focusDesignScope(planRef.current.designScope ?? []),
     inspectFacility: id => {
       const facility = planRef.current.facilities.find(item => item.id === id);
       if (!facility) return false;
@@ -11044,16 +11050,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 title: '各边外扩 20 m 直接生成设计范围，不用手画顶点',
                                 icon: <ScopeSwatch size={22} plus />,
                               })}
-                              {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
-                                key: 'catalog-scope-focus',
-                                testId: 'catalog-scope-focus',
-                                label: '定位到设计范围',
-                                active: false,
-                                // 只动视图不动 plan：手滑缩小了也能一键看回整个框。
-                                onClick: () => focusDesignScope(plan.designScope ?? []),
-                                title: '把视野框到设计范围（只移动视图，不改范围本身）',
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(242,163,60,0.16)', boxShadow: 'inset 0 0 0 1px rgba(242,163,60,0.7)' }} />,
-                              })}
+                              {/* 2026-11-16 用户指令：这一行「定位到设计范围」去掉——同样的功能挪到右轨那颗
+                                  焦点钮（#tool-focus）：圈了设计范围就框到范围，没圈还是回到场地取景。
+                                  左栏不再重复摆一行只能动视图、不能改范围的条目。 */}
                               {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
                                 key: 'catalog-scope-clear',
                                 testId: 'catalog-scope-clear',

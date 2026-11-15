@@ -271,6 +271,11 @@ interface ViewToolsProps {
   onToggleWalkthrough?(on: boolean): void;
   /** 回到框选场地边界（右下回选址靶心）；不传时钮禁用。 */
   onFocusVenue?(): void;
+  /**
+   * 2026-11-16 用户指令：这颗钮的说法跟着目标变——圈了设计范围就叫「定位到设计范围」，
+   * 没圈范围仍是「回到框选场地」。不传时两者均按后者。
+   */
+  focusVenueTip?: string | undefined;
   /** 干净看图模式：隐藏浮动工具簇（右下眼睛钮自身保留可切回）。 */
   chromeHidden?: boolean;
   onToggleChrome?(): void;
@@ -418,7 +423,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -975,7 +980,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <button type="button" id="tool-view-toggle" data-tip={outdoor?.view === '3d' ? '当前 3D · 切回 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={outdoor?.view === '3d' ? '当前 3D 场景，点击切回 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={outdoor?.view === '3d'} className={outdoor?.view === '3d' ? 'is-active' : ''} onClick={() => outdoor?.onToggleView?.()}>
             <span className="oc-view-text">{outdoor?.view === '3d' ? '3D' : '2D'}</span>
           </button>
-          <button type="button" id="tool-focus" data-tip="回到框选场地" aria-label="回到框选场地" disabled={!onFocusVenue} onClick={() => onFocusVenue?.()}>
+          <button type="button" id="tool-focus" data-tip={focusVenueTip ?? '回到框选场地'} aria-label={focusVenueTip ?? '回到框选场地'} disabled={!onFocusVenue} onClick={() => onFocusVenue?.()}>
             <MaterialSymbol name="center_focus_strong" />
           </button>
           <div className="oc-zoom" role="group" aria-label="缩放">
