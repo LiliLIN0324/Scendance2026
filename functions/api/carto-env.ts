@@ -11,12 +11,25 @@
 export interface CartoServerEnv {
   /** 推荐名：Pages 项目 → Settings → Environment variables（运行时），不是 Build command。 */
   CARTO_KEY?: string;
+  /** 兼容别名：部分项目把底图 key 叫 API key；与 CARTO_KEY 同义。 */
+  CARTO_API_KEY?: string;
   /** 兼容旧名：只在没人配 CARTO_KEY 时兜底；不要写进构建命令指望它进浏览器。 */
   NEXT_PUBLIC_CARTO_KEY?: string;
 }
 
 export function cartoKeyFromEnv(env: CartoServerEnv): string {
-  return (env.CARTO_KEY ?? '').trim() || (env.NEXT_PUBLIC_CARTO_KEY ?? '').trim();
+  return (env.CARTO_KEY ?? '').trim()
+    || (env.CARTO_API_KEY ?? '').trim()
+    || (env.NEXT_PUBLIC_CARTO_KEY ?? '').trim();
+}
+
+/** 只报「哪个名字有值」，绝不回值：用来区分「变量没生效」与「变量名不对/加错环境」。 */
+export function cartoKeyNamesPresent(env: CartoServerEnv): Record<'CARTO_KEY' | 'CARTO_API_KEY' | 'NEXT_PUBLIC_CARTO_KEY', boolean> {
+  return {
+    CARTO_KEY: Boolean((env.CARTO_KEY ?? '').trim()),
+    CARTO_API_KEY: Boolean((env.CARTO_API_KEY ?? '').trim()),
+    NEXT_PUBLIC_CARTO_KEY: Boolean((env.NEXT_PUBLIC_CARTO_KEY ?? '').trim()),
+  };
 }
 
 /** Carto 只有浅色 / 深色两档底图，style 直接拼进上游路径 `{style}_all`。 */

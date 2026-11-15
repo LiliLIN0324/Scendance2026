@@ -1,6 +1,7 @@
 import {
   CARTO_WATERMARK_SHA256,
   cartoKeyFromEnv,
+  cartoKeyNamesPresent,
   cartoTileUrl,
   isCartoTileStyle,
   isCartoWatermark,
@@ -29,6 +30,14 @@ export async function handleCartoTiles(
   watermarkHashes: CartoWatermarkHashes = CARTO_WATERMARK_SHA256,
 ): Promise<Response> {
   const params = new URL(request.url).searchParams;
+  // 诊断口：只看「哪个环境变量有值、这个部署能不能读到」，绝不回值。
+  if (params.get('probe') === '1') {
+    const names = cartoKeyNamesPresent(env);
+    return new Response(JSON.stringify({ configured: Boolean(cartoKeyFromEnv(env)), names }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
   const style = params.get('style');
   if (!isCartoTileStyle(style)) return new Response('style invalid', { status: 400 });
   const coord = parseCartoTileCoord(params.get('z'), params.get('x'), params.get('y'));
@@ -36,10 +45,14 @@ export async function handleCartoTiles(
 
   const key = cartoKeyFromEnv(env);
   if (!key) {
-    return new Response('CARTO_KEY missing', {
-      status: 503,
-      headers: { 'X-Carto-Fallback': 'nokey', 'Cache-Control': 'no-store' },
-    });
+    return new Response(
+      'CARTO_KEY missing: set it in Pages → Settings → Environment variables (Production), then redeploy. ' +
+      'Probe: /api/carto-tiles?probe=1',
+      {
+        status: 503,
+        headers: { 'X-Carto-Fallback': 'nokey', 'Cache-Control': 'no-store' },
+      },
+    );
   }
 
   let upstream: Response;

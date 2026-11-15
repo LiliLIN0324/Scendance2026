@@ -4,6 +4,7 @@ import {
   CARTO_TILE_MAX_ZOOM,
   CARTO_WATERMARK_SHA256,
   cartoKeyFromEnv,
+  cartoKeyNamesPresent,
   cartoTileUrl,
   isCartoTileStyle,
   parseCartoTileCoord,
@@ -72,6 +73,22 @@ describe('pages carto tiles functions', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('reports which env names this deployment can see, never their values', async () => {
+    const response = await handleCartoTiles(
+      new Request(`${URL_BASE}?probe=1`),
+      { NEXT_PUBLIC_CARTO_KEY: 'leak-me-not' },
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const text = await response.text();
+    expect(text).not.toContain('leak-me-not');
+    expect(JSON.parse(text)).toEqual({
+      configured: true,
+      names: { CARTO_KEY: false, CARTO_API_KEY: false, NEXT_PUBLIC_CARTO_KEY: true },
+    });
+  });
+
   it('falls back to a placeholder tile when upstream fails', async () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL) => new Response('nope', { status: 403 }));
     const response = await handleCartoTiles(
@@ -124,7 +141,13 @@ describe('pages carto tiles functions', () => {
     expect(parseCartoTileCoord('abc', '1', '1')).toBeNull();
     expect(cartoTileUrl('dark', 3, 1, 2, 'k')).toBe('https://a.basemaps.cartocdn.com/dark_all/3/1/2.png?key=k');
     expect(cartoKeyFromEnv({ CARTO_KEY: ' a ' })).toBe('a');
+    expect(cartoKeyFromEnv({ CARTO_API_KEY: 'alias' })).toBe('alias');
     expect(cartoKeyFromEnv({ NEXT_PUBLIC_CARTO_KEY: 'b' })).toBe('b');
     expect(cartoKeyFromEnv({})).toBe('');
+    expect(cartoKeyNamesPresent({ CARTO_KEY: 'k' })).toEqual({
+      CARTO_KEY: true,
+      CARTO_API_KEY: false,
+      NEXT_PUBLIC_CARTO_KEY: false,
+    });
   });
 });
