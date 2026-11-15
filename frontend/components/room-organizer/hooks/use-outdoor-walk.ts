@@ -225,6 +225,13 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       const lookDir = new THREE.Vector3();
       camera.getWorldDirection(lookDir);
       let yaw = Math.atan2(lookDir.x, lookDir.z);
+      // 步行 / 跟随档进场水平化俯仰：环绕机位是 58° polar 俯视，直接沿用会贴地看地；
+      // 保留 yaw 朝向、把 pitch 拉到水平。鸟瞰档相机交回 OrbitControls 摆高空俯视，不动。
+      if (viewModeRef.current !== 'orbit') {
+        const entryEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+        entryEuler.x = 0;
+        camera.quaternion.setFromEuler(entryEuler);
+      }
       let moving = false;
 
       const markRefused = () => {
