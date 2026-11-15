@@ -85,5 +85,7 @@
 .sc-activity-group.is-island.is-open .sc-activity-island-body{grid-template-rows:1fr;opacity:1;visibility:visible;transition:grid-template-rows .22s ease,opacity .18s ease}
 .sc-activity-island-clip{overflow:hidden;min-height:0}
 .sc-activity-group.is-island.is-open .sc-activity-island-clip{border-top:1px solid var(--wk-hair)}
+/* 展开后卡片墙的当前卡已经带整幅封面，胶囊左侧不再重复挂同一张缩略图；收起态仍保留小圆标识。 */
+.sc-activity-group.is-island.is-open .sc-activity-island-mark{display:none}
 @media (prefers-reduced-motion:reduce){.sc-activity-island-body,.sc-activity-group.is-island.is-open .sc-activity-island-body{transition:none}}
 @media(max-width:480px){.sc-activity-head,.sc-activity-form,.sc-activity-status{padding-left:10px;padding-right:10px}.sc-local-activities-list{padding:8px;gap:8px}}

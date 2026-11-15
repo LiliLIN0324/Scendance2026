@@ -7,6 +7,7 @@ export interface SolidIconProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'c
   absoluteStrokeWidth?: boolean;
   color?: string;
   fill?: string;
+  active?: boolean;
 }
 export type SolidIconComponent = (props: SolidIconProps) => JSX.Element;
 
@@ -112,3 +113,84 @@ export const Users = makeSolidIcon('group');
 export const UsersRound = makeSolidIcon('groups');
 export const Video = makeSolidIcon('videocam');
 export const X = makeSolidIcon('close');
+
+/** 自绘左轨工具图标：不走 Material 字形，24 网格、currentColor、paper 镂空。 */
+function makeCustomIcon(render: (size: number, active: boolean) => JSX.Element): SolidIconComponent {
+  return function CustomIcon({ size = 20, active = false, color, style, ...props }: SolidIconProps): JSX.Element {
+    return (
+      <span style={{ display: 'inline-flex', flex: 'none', ...(color ? { color } : {}), ...(active ? { color: '#141416' } : {}), ...style }} {...props}>
+        {render(size, active)}
+      </span>
+    );
+  };
+}
+
+/** 空间（S01）：四块独立圆角矩形 2×2，块间留缝，表达分区/房间。常态描边，激活实心。 */
+export const RailSpace = makeCustomIcon((size, active) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+    fill={active ? 'currentColor' : 'none'}
+    stroke={active ? 'none' : 'currentColor'}
+    strokeWidth="1.8" strokeLinejoin="round">
+    <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5"/>
+    <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5"/>
+    <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5"/>
+    <rect x="13" y="13" width="7.5" height="7.5" rx="1.5"/>
+  </svg>
+));
+
+/** 物料（M11d）：箱体 + 顶部拱形提手。常态描边，激活实心、提手以白负形弧留在最上层。 */
+export const RailCrate = makeCustomIcon((size, active) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+    fill={active ? 'currentColor' : 'none'}
+    stroke={active ? 'none' : 'currentColor'}
+    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+    {active
+      ? <>
+          <rect x="3.4" y="7.0" width="17.2" height="12.6" rx="2.4"/>
+          <path d="M8.8 7.5 a3.2 3.2 0 0 1 6.4 0" stroke="#FFFFFF" strokeWidth="1.7" fill="none"/>
+        </>
+      : <>
+          <path d="M8.8 7.5 a3.2 3.2 0 0 1 6.4 0"/>
+          <rect x="3.5" y="7.5" width="17" height="12.5" rx="2.2"/>
+        </>}
+  </svg>
+));
+
+/** 拍摄场地（C10）：经典相机轮廓——中央取景器凸起、左右斜切肩、中央镜头圈；描边闭合无缺口。常态描边，激活实心、镜头镂空。 */
+export const RailShoot = makeCustomIcon((size, active) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+    fill={active ? 'currentColor' : 'none'}
+    stroke={active ? 'none' : 'currentColor'}
+    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+    {active
+      ? <>
+          <path d="M14.4 4.4h-4.8L7.4 7.4H4.8a1.9 1.9 0 0 0-1.9 1.9v8.4a1.9 1.9 0 0 0 1.9 1.9h14.4a1.9 1.9 0 0 0 1.9-1.9V9.3a1.9 1.9 0 0 0-1.9-1.9h-2.6z"/>
+          <circle cx="12" cy="12.8" r="3.1" fill="#FFFFFF"/>
+          <circle cx="12" cy="12.8" r="1.6" fill="currentColor"/>
+        </>
+      : <>
+          <path d="M14.4 4.4h-4.8L7.4 7.4H4.8a1.9 1.9 0 0 0-1.9 1.9v8.4a1.9 1.9 0 0 0 1.9 1.9h14.4a1.9 1.9 0 0 0 1.9-1.9V9.3a1.9 1.9 0 0 0-1.9-1.9h-2.6z"/>
+          <circle cx="12" cy="12.8" r="3.0"/>
+        </>}
+  </svg>
+));
+
+/** 户外规划（O01）：星球圆 + 两块对角正圆大陆。常态描边，激活实心、大陆镂空。 */
+export const RailMap = makeCustomIcon((size, active) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+    fill={active ? 'currentColor' : 'none'}
+    stroke={active ? 'none' : 'currentColor'}
+    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
+    {active
+      ? <>
+          <circle cx="12" cy="12" r="9.2"/>
+          <circle cx="9.1" cy="9.1" r="2.7" fill="#FFFFFF"/>
+          <circle cx="14.9" cy="14.9" r="2.7" fill="#FFFFFF"/>
+        </>
+      : <>
+          <circle cx="12" cy="12" r="9.2"/>
+          <circle cx="9.1" cy="9.1" r="2.7"/>
+          <circle cx="14.9" cy="14.9" r="2.7"/>
+        </>}
+  </svg>
+));
