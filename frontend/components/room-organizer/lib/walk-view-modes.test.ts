@@ -28,6 +28,15 @@ describe('view rig offsets', () => {
     expect(VIEW_RIG_OFFSETS.orbit.thirdPerson).toBe(false);
   });
 
+  it('marks orbit as the orbit-camera aerial mode and others as walk-rigged', () => {
+    expect(VIEW_RIG_OFFSETS.orbit.orbitCamera).toBe(true);
+    for (const mode of ['first', 'third', 'shoulder'] as const) {
+      expect(VIEW_RIG_OFFSETS[mode].orbitCamera ?? false).toBe(false);
+      expect(rigOffsetForYaw(mode, 0).orbitCamera).toBe(false);
+    }
+    expect(rigOffsetForYaw('orbit', 0).orbitCamera).toBe(true);
+  });
+
   it('exposes the same offset via viewRigOffset', () => {
     expect(viewRigOffset('shoulder').back).toBe(1.5);
   });

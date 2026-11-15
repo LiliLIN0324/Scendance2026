@@ -271,6 +271,9 @@ export default function OutdoorPlan3D({
   // 漫游态镜像给挂载在 three 场景上的指针事件闭包读，避免重跑挂载 effect 掉指针锁。
   const walkEnabledRef = useRef(walkEnabled);
   walkEnabledRef.current = walkEnabled;
+  // 视角档位镜像给主 loop / 事件闭包读（同 walkEnabledRef 口径，避免重跑挂载 effect）。
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
   const walkCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -360,6 +363,39 @@ export default function OutdoorPlan3D({
     onWalkFrame: (frame) => { walkFrameRef.current = frame; },
     onExit: onWalkExit,
   });
+
+  // #82 漫游鸟瞰档：退出指针锁、重新启用 OrbitControls 摆高空俯视机位，左键环绕 / 滚轮缩放；
+  // 步行档把 OrbitControls 交回 hook（停用），非漫游态不动既有编辑环绕手势。
+  useEffect(() => {
+    const controls = controlsRef.current;
+    const camera = cameraRef.current;
+    if (!controls || !camera) return;
+    const aerial = walkEnabled && viewMode === 'orbit';
+    if (!aerial) {
+      if (walkEnabled) controls.enabled = false;
+      controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
+      return;
+    }
+    const doc = walkCanvasRef.current?.ownerDocument ?? document;
+    if (doc.pointerLockElement) {
+      try { doc.exitPointerLock(); } catch { /* already unlocked */ }
+    }
+    controls.enabled = true;
+    controls.enableRotate = true;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
+    // 高空 target 取玩家锚点；空方案 / 未出帧回退边界质心。
+    const frame = ringFrame(plan.boundary);
+    const player = walkFrameRef.current;
+    const target = player
+      ? new THREE.Vector3(player.x, 0, player.z)
+      : new THREE.Vector3(frame.cx, 0, -frame.cy);
+    controls.target.copy(target);
+    const span = Math.max(12, frame.span);
+    const aerialEye = cameraPose(target, span, Math.min(MAP_TILT_POLAR + 0.28, Math.PI * 0.42), 52);
+    camera.position.copy(aerialEye);
+    camera.lookAt(target);
+    controls.update();
+  }, [walkEnabled, viewMode, plan.boundary]);
 
   // 岗位点位 / 设施 → 可交互条目：plan 变化时清空重登；动作回调交外层 onInteract（#61 对话接这里）。
   useEffect(() => {
@@ -504,8 +540,10 @@ export default function OutdoorPlan3D({
         if (shared) tileCache.imageCache = shared;
         let shown = false;
         let settleTimer = 0;
-        const showGround = (count: number): void => {
-          if (disposed || shown || count <= 0) return;
+        const showGround = (): void => {
+          // 按真实挂上纹理的瓦片数（readyKeys）判定，不能用调度键集合 tileKeys——
+          // pending / 超时失败的键也在集合里，会把「一张都没出图」误判成已有底图。
+          if (disposed || shown || tileCache.readyKeys.size <= 0) return;
           shown = true;
           if (settleTimer) window.clearTimeout(settleTimer);
           grid.visible = false;
@@ -517,10 +555,10 @@ export default function OutdoorPlan3D({
         // 就按可用底图结算（剩下的继续后台补），一张都没到才退回纸面网格。
         settleTimer = window.setTimeout(() => {
           if (disposed || shown) return;
-          if (tileKeys.size > 0) showGround(tileKeys.size);
+          if (tileCache.readyKeys.size > 0) showGround();
           else setGroundState('paper');
         }, 1600);
-        const nearCount = await paintTilePyramid({
+        await paintTilePyramid({
           scene,
           disposables,
           closeBounds: frameToBounds(nearFrame, anchor),
@@ -536,9 +574,9 @@ export default function OutdoorPlan3D({
           closeMaxTiles: 64,
           parent: basemapRoot,
         });
-        showGround(nearCount);
+        showGround();
         if (disposed) return;
-        const expandCount = await paintTilePyramid({
+        await paintTilePyramid({
           scene,
           disposables,
           closeBounds: frameToBounds(closeFrame, anchor),
@@ -554,9 +592,9 @@ export default function OutdoorPlan3D({
           closeMaxTiles: 160,
           parent: basemapRoot,
         });
-        showGround(expandCount);
+        showGround();
         if (disposed) return;
-        const backdropCount = await paintTiledGround({
+        await paintTiledGround({
           scene,
           disposables,
           bounds: frameToBounds(groundFrame, anchor),
@@ -572,7 +610,7 @@ export default function OutdoorPlan3D({
           focus: focusEnu,
           parent: basemapRoot,
         });
-        showGround(backdropCount);
+        showGround();
         if (disposed) return;
         if (!shown) setGroundState('paper');
       })();
@@ -778,18 +816,33 @@ export default function OutdoorPlan3D({
         glbUrl: placement.glbUrl,
         uniformScale: true,
       };
+      // #93：人物 GLB 异步下载 / 解析期间先落人位柱，避免空窗期被误看成没人；
+      // 模型就位后替换掉占位柱，拉不到则保留占位柱。
+      const placeholder = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.26, 0.3, 1.7, 12),
+        new THREE.MeshBasicMaterial({ color: placement.color, transparent: true, opacity: 0.8 }),
+      );
+      placeAt(placeholder, shell, 0);
+      placeholder.position.y = 0.85;
+      placeholder.name = `plan-crowd-marker-${placement.id}`;
+      crowdLayer.add(placeholder);
+      const releasePlaceholder = (): void => {
+        crowdLayer.remove(placeholder);
+      };
       void ensureGlbAsset(placement.assetId ?? placement.glbUrl, placement.glbUrl)
         .then(() => {
-          if (disposed || modelRunRef.current !== run) return;
+          if (disposed || modelRunRef.current !== run) { releasePlaceholder(); return; }
           // 带 Idle/Walk 片段的云端人物：挂独立 mixer 并进人物注册表播待机动作；
           // 缺片段的回退本地低模走静态摆位（createWalkAvatar 返回 null）。
           const avatar = createWalkAvatar(item);
           const model = avatar?.group ?? createCachedGlbModel(item, false);
-          if (!model) return;
+          if (!model) { releasePlaceholder(); return; }
           if (disposed || modelRunRef.current !== run) {
             disposeOwnedModel(model);
+            releasePlaceholder();
             return;
           }
+          releasePlaceholder();
           placeAt(model, shell, 0);
           model.name = `plan-crowd-${placement.crowdType}`;
           crowdLayer.add(model);
@@ -1359,7 +1412,8 @@ export default function OutdoorPlan3D({
       controls?.update();
       if (controls) {
         const mode = canvasEditApiRef.current?.current?.getMode() ?? 'view';
-        controls.enableRotate = mode === 'view' && !pointerEditing;
+        const aerialView = walkEnabledRef.current && viewModeRef.current === 'orbit';
+        controls.enableRotate = aerialView || (mode === 'view' && !pointerEditing);
       }
       const api = canvasEditApiRef.current?.current;
       if (api?.getBasemapVisible) basemapRoot.visible = api.getBasemapVisible();
@@ -1401,16 +1455,26 @@ export default function OutdoorPlan3D({
       // E 键交互：每帧用漫游锚点（非漫游回退相机位置）预筛最近条目，仅 id 变化回写 state。
       const interactRegistry = interactRegistryRef.current;
       if (interactRegistry) {
-        const frameNow = walkFrameRef.current;
-        // 近邻按地面平面距离判定：玩家锚点 y 是眼高，这里压到地面基准，垂直差不参与可达半径。
-        const playerPos = frameNow
-          ? { x: frameNow.x, y: PLAN_LAYER_BASE_Y, z: frameNow.z }
-          : { x: camera.position.x, y: PLAN_LAYER_BASE_Y, z: camera.position.z };
-        const near = nearestNearbyEntry(interactRegistry.list(), playerPos);
-        const nearId = near?.id ?? null;
-        if (nearId !== nearEntryIdRef.current) {
-          nearEntryIdRef.current = nearId;
-          setNearEntry(near);
+        // 鸟瞰档相机在高空、或退出漫游回到编辑环绕态：跳过预筛、清空既有近邻条目，避免 E 提示残留。
+        const walking = walkEnabledRef.current;
+        const aerialView = walking && viewModeRef.current === 'orbit';
+        if (!walking || aerialView) {
+          if (nearEntryIdRef.current !== null) {
+            nearEntryIdRef.current = null;
+            setNearEntry(null);
+          }
+        } else {
+          const frameNow = walkFrameRef.current;
+          // 近邻按地面平面距离判定：玩家锚点 y 是眼高，这里压到地面基准，垂直差不参与可达半径。
+          const playerPos = frameNow
+            ? { x: frameNow.x, y: PLAN_LAYER_BASE_Y, z: frameNow.z }
+            : { x: camera.position.x, y: PLAN_LAYER_BASE_Y, z: camera.position.z };
+          const near = nearestNearbyEntry(interactRegistry.list(), playerPos);
+          const nearId = near?.id ?? null;
+          if (nearId !== nearEntryIdRef.current) {
+            nearEntryIdRef.current = nearId;
+            setNearEntry(near);
+          }
         }
       }
       if (process.env.NODE_ENV !== 'production') {
@@ -1637,7 +1701,7 @@ export default function OutdoorPlan3D({
             whiteSpace: 'nowrap',
           }}
         >
-          <span>WASD / 方向键行走 · Shift 加速 · Esc 退出漫游</span>
+          <span>{viewMode === 'orbit' ? '左键环绕 · 滚轮缩放 · Esc 退出漫游' : 'WASD / 方向键行走 · Shift 加速 · Esc 退出漫游'}</span>
           {onCycleView && (
             <button
               type="button"

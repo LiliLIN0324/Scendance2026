@@ -29,10 +29,16 @@ export interface ViewRigOffset {
   heightDelta: number;
   /** 是否为第三人称 / 过肩（需要 avatar 与跟随）。 */
   thirdPerson: boolean;
+  /**
+   * 本档是否由 OrbitControls 接管的高空环绕相机（#82 真鸟瞰）。
+   * 为 true 时：hook 跳过步行移动与 walk-step 相机摆位、不抢指针锁；场景层重新启用
+   * OrbitControls 摆高空俯视机位，左键环绕 / 滚轮缩放，不参与近邻 E 提示。
+   */
+  orbitCamera?: boolean;
 }
 
 export const VIEW_RIG_OFFSETS: Record<WalkViewMode, ViewRigOffset> = {
-  orbit: { back: 0, right: 0, heightDelta: 0, thirdPerson: false },
+  orbit: { back: 0, right: 0, heightDelta: 0, thirdPerson: false, orbitCamera: true },
   first: { back: 0, right: 0, heightDelta: 0, thirdPerson: false },
   third: { back: 4, right: 0.65, heightDelta: 0, thirdPerson: true },
   shoulder: { back: 1.5, right: 0.42, heightDelta: -0.18, thirdPerson: true },
@@ -56,6 +62,7 @@ export interface RigPlanOffset {
   z: number;
   heightDelta: number;
   thirdPerson: boolean;
+  orbitCamera: boolean;
 }
 
 /**
@@ -69,5 +76,5 @@ export function rigOffsetForYaw(mode: WalkViewMode, yaw: number): RigPlanOffset 
   // forward=(sin, cos)；右向量顺时针 90° = (cos, -sin)。
   const x = -offset.back * sin + offset.right * cos;
   const z = -offset.back * cos - offset.right * sin;
-  return { x, z, heightDelta: offset.heightDelta, thirdPerson: offset.thirdPerson };
+  return { x, z, heightDelta: offset.heightDelta, thirdPerson: offset.thirdPerson, orbitCamera: offset.orbitCamera ?? false };
 }
