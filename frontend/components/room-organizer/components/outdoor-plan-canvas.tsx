@@ -796,9 +796,8 @@ function niceScaleMeters(metersPerPx: number, targetPx: number): { meters: numbe
 }
 
 /**
- * P2-i：画布左下角常驻比例尺 + 图源署名（2026-11-14 用户指令定稿：
- * 左下同一行 = [2D|3D] 胶囊（DOM，left 12 bottom 14）+ 比例尺 + 完整署名文字（画布 left 152 让位胶囊；
- * 不用短图源名）；指北针在右下「指北针|地图」双段卡（DOM，outdoor-plan-overlay），画布右下不再画角标。
+ * P2-i：画布右下角常驻比例尺 + 图源署名（2026-11-16 用户指令：比例尺与署名归到地图右下角，
+ * 避让右侧竖控件簇；不再挤在左下折叠卡 / 底中工具条一带）。
  * 样式对齐 Google 式：细线两端竖须、柔和白色光晕（shadowBlur，不再粗白描边）、深字。
  * 与导出 PNG（site-plan-png 的 scaleBarMeters）同口径：比例尺按当前缩放级真实换算。
  */
@@ -806,36 +805,54 @@ function drawScaleAttribution(ctx: CanvasRenderingContext2D, viewport: PlanViewp
   const mPerPx = planMetersPerPixel(viewport);
   if (!Number.isFinite(mPerPx) || mPerPx <= 0) return;
   const { meters } = niceScaleMeters(mPerPx, 96);
-  const barPx = Math.max(24, Math.min(meters / mPerPx, Math.max(24, cssW - 380)));
   const label = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
-  const left = 152; // 让位左下 [2D|3D] 胶囊（left 12 + 胶囊宽 ~128 + 间距 12）
-  const barY = cssH - 24; // 与胶囊垂直中线对齐
+  const text = source ? basemapSourceAttribution(source) : null;
+  const labelFont = '500 11px "Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
+  const attrFont = '10px "Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
+
+  // 先量文字宽，整组右对齐到右下角（右缘避让右侧竖控件簇一列）。
+  ctx.font = labelFont;
+  const labelW = ctx.measureText(label).width;
+  let attrW = 0;
+  if (text) {
+    ctx.font = attrFont;
+    attrW = ctx.measureText(text).width;
+  }
+  const barPx = Math.max(24, Math.min(meters / mPerPx, Math.max(24, cssW - 320)));
+  const scaleW = Math.max(labelW, barPx);
+  const gap = 20;
+  const groupW = scaleW + (text ? gap + attrW : 0);
+  // 竖控件簇宽约 38 + 右缘 16 + 间距 16，比例尺组右缘让到竖簇左侧。
+  const rightMargin = 72;
+  const groupRight = cssW - rightMargin;
+  const scaleLeft = groupRight - groupW;
+  const attrLeft = scaleLeft + scaleW + gap;
+  const barY = cssH - 24; // 与右下控件底部对齐
   ctx.save();
   ctx.lineCap = 'butt';
-  ctx.font = '500 11px "Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
   ctx.textBaseline = 'alphabetic';
   // 柔和白色光晕（blur，不再粗白描边）——亮暗底图都可读且不发糊。
   ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
   ctx.shadowBlur = 3;
   ctx.fillStyle = 'rgba(28, 32, 40, 0.88)';
-  ctx.fillText(label, left, barY - 7);
+  ctx.font = labelFont;
+  ctx.fillText(label, scaleLeft, barY - 7);
   // 细线两端竖须：深色 2px 主线（自带白色光晕）。
   ctx.lineWidth = 2;
   ctx.strokeStyle = 'rgba(28, 32, 40, 0.88)';
   ctx.beginPath();
-  ctx.moveTo(left, barY);
-  ctx.lineTo(left + barPx, barY);
-  ctx.moveTo(left, barY - 5);
-  ctx.lineTo(left, barY + 5);
-  ctx.moveTo(left + barPx, barY - 5);
-  ctx.lineTo(left + barPx, barY + 5);
+  ctx.moveTo(scaleLeft, barY);
+  ctx.lineTo(scaleLeft + barPx, barY);
+  ctx.moveTo(scaleLeft, barY - 5);
+  ctx.lineTo(scaleLeft, barY + 5);
+  ctx.moveTo(scaleLeft + barPx, barY - 5);
+  ctx.lineTo(scaleLeft + barPx, barY + 5);
   ctx.stroke();
   // 署名文字：跟在比例尺后同行（瓦片源才署名；纸面无图源不署名）。
-  if (source) {
-    const text = basemapSourceAttribution(source);
-    ctx.font = '10px "Inter", system-ui, -apple-system, "Segoe UI", sans-serif';
+  if (text) {
+    ctx.font = attrFont;
     ctx.fillStyle = 'rgba(28, 32, 40, 0.62)';
-    ctx.fillText(text, left + barPx + 20, barY - 7);
+    ctx.fillText(text, attrLeft, barY - 7);
   }
   ctx.restore();
 }
@@ -872,19 +889,6 @@ const INVENTORY_KIND_COLORS: Record<PlanInventoryKind, string> = {
   worker: PLANNING_LAYER_COLORS.worker,
   measurement: PLANNING_LAYER_COLORS.measure,
   annotation: PLANNING_LAYER_COLORS.annotate,
-};
-
-/** 测量三模式图标：距离=尺、面积=框选矩形、路径=折线；与 Lucide 注册表编译期闭环。 */
-const MEASURE_KIND_ICONS: Record<PlanMeasureKind, PlanningIconName> = {
-  distance: 'ruler',
-  area: 'box-select',
-  path: 'route',
-};
-/** 菜单右侧点数约束短标：与点数门槛同口径（距离 2、面积 ≥3、路径 ≥2）。 */
-const MEASURE_KIND_META: Record<PlanMeasureKind, string> = {
-  distance: '2 点',
-  area: '≥3 点',
-  path: '≥2 点',
 };
 
 /** 标注形状四类型图标：矩形/圆形/三角形/线段；与 Lucide 注册表编译期闭环。 */
@@ -1009,6 +1013,12 @@ export interface OutdoorPlanCanvasHandle {
   getMode(): string;
   /** 2026-11-12 B1 选择工具：切绘制/浏览模式（右栏工具排「选择」钮转发）。 */
   setMode(mode: string): void;
+  /** 2026-11-15 测量直进：切距离/面积/路径（工具条小标转发），不清当前绘制模式。 */
+  setMeasureKind(kind: PlanMeasureKind): void;
+  /** 读取当前测量模式（工具条小标回显图标用）。 */
+  getMeasureKind(): PlanMeasureKind;
+  /** 2026-11-15 户外网格吸附开关：开=对齐网格，关=自由摆放。 */
+  setSnapOn(on: boolean): void;
   /** 2026-11-12 测量/标注收进右轨圆钮：开/关「工具与属性」浮窗并切页签。 */
   setInspector(open: boolean, tab?: 'measure' | 'annotate' | 'selection'): void;
   /** 2D 底图瓦片缓存（含往上 4 级祖先兜底）；3D 共用这份，切换时不用重新下图。 */
@@ -1475,7 +1485,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** P2-g 重做栈深度（state 供工具排 disabled，ref 供命令句柄即时查询）。 */
   const [redoCount, setRedoCount] = useState(0);
   const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
-  const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
   // 2026-11-11 用户指令：自由标注 UI 态（形状类型/草稿计数/选中/文本就地输入框）。
   const [annotateShape, setAnnotateShape] = useState<PlanShapeKind>('rect');
@@ -1498,6 +1507,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [infoOpen, setInfoOpen] = useState(true);
   // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起，可并存。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
+  // 2026-11-15 属性浮卡总开关：默认开；关闭后点选物件不再弹出属性卡（底条属性钮切换）。
+  const [selectionPanelOn, setSelectionPanelOn] = useState(true);
+  const selectionPanelOnRef = useRef(true);
+  const setSelectionPanelEnabled = useCallback((on: boolean) => {
+    selectionPanelOnRef.current = on;
+    setSelectionPanelOn(on);
+    setInspectorPanels(current => ({ ...current, selection: on }));
+  }, []);
+  // 2026-11-15 户外网格吸附开关：默认开；关闭后放置/拖动/拖顶点不再对齐网格（底条吸附钮切换）。
+  const snapOnRef = useRef(true);
+  const setSnapOn = useCallback((on: boolean) => {
+    snapOnRef.current = on;
+  }, []);
+  const snapPoint = useCallback((pt: PlanPoint, viewport: PlanViewport): PlanPoint => (
+    snapOnRef.current ? snapPointToGrid(pt, viewport) : pt
+  ), []);
   const setInspectorPanel = useCallback((tab: 'measure' | 'annotate' | 'selection', open: boolean) => {
     setInspectorPanels(current => (current[tab] === open ? current : { ...current, [tab]: open }));
   }, []);
@@ -1553,6 +1578,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setModeState(next);
     setEditMessage(null);
     onModeChange?.(next);
+    draw();
+  }
+
+  // 2026-11-15 测量直进：只切换距离/面积/路径，清空当前草稿，不强切绘制模式；是否进入收点由调用方 setMode('measure') 决定。
+  function applyMeasureKind(kind: PlanMeasureKind) {
+    measureKindRef.current = kind;
+    setMeasureKind(kind);
+    measureDraftRef.current = [];
+    measureCursorRef.current = null;
+    setMeasureDraftCount(0);
+    setEditMessage(null);
     draw();
   }
 
@@ -1819,6 +1855,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
     const v = viewRef.current;
     const activeSource = sourceRef.current;
+    // 测量中性线在卫星/深色底图上转白；室内纸面模式按浅底处理。
+    const darkBasemap = baseModeRef.current !== 'floor' && (activeSource === 'carto-dark' || activeSource === 'amap-satellite' || activeSource === 'img');
     // 2026-11-11 图层：画布只画当前活动层的实体（边界/锚点跨层共享，过滤视图原样保留）。
     const current = viewPlan();
     const vis = layerStateRef.current;
@@ -2182,7 +2220,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     // H3-a 固定测量标注（测量图层在最上层；隐藏测量层不影响数据与统计）。
     if (isLayerVisible(vis, 'measure')) {
-      drawMeasureLayer({ ctx: planCtx, viewport }, current.measurements ?? []);
+      drawMeasureLayer({ ctx: planCtx, viewport, dark: darkBasemap }, current.measurements ?? []);
     }
     // 2026-11-11 用户指令：自由标注图层（文本/形状；随「标注」图层开关隐藏，不影响数据与统计）。
     if (isLayerVisible(vis, 'annotate')) {
@@ -2215,7 +2253,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       drawRouteDraft({ ctx: planCtx, viewport }, routeDraftRef.current, routeKindRef.current, routeCursorRef.current ?? undefined);
     }
     if (activeMode === 'measure') {
-      drawMeasureDraft({ ctx: planCtx, viewport }, measureDraftRef.current, measureKindRef.current, measureCursorRef.current ?? undefined);
+      drawMeasureDraft({ ctx: planCtx, viewport, dark: darkBasemap }, measureDraftRef.current, measureKindRef.current, measureCursorRef.current ?? undefined);
     }
     // 2026-11-11 用户指令：形状草稿（拖拽实时预览 / 三角形逐点橡皮筋）。
     if (activeMode === 'shape') {
@@ -2261,8 +2299,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
     }
 
-    // 6) P2-i：常驻比例尺 + 署名（左下，跟 2D/3D 胶囊同一行；2026-11-14 用户指令定稿）。
-    //    右下 = 「指北针|地图」双段卡（DOM，outdoor-plan-overlay），画布右下不再画角标。
+    // 6) P2-i：常驻比例尺 + 署名（右下角，避让右侧竖控件簇；2026-11-16 用户指令归位）。
+    //    指北针/取景/缩放/漫游等控件在右侧竖列（DOM，outdoor-plan-overlay），画布角标只画比例尺与署名。
     //    纸面模式无图源不画署名。
     drawScaleAttribution(planCtx, viewport, cssW, cssH, baseModeRef.current !== 'floor' ? sourceRef.current : null);
 
@@ -2867,7 +2905,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const facility = planRef.current.facilities.find(item => item.id === id);
       if (!facility) return false;
       if (facility.levelId) setActiveLevelId(facility.levelId);
-      setMode('select'); selectFacility(id); setInspectorPanel('selection', true);
+      setMode('select'); selectFacility(id); if (selectionPanelOnRef.current) setInspectorPanel('selection', true);
       setInspectorCollapsed(current => ({ ...current, selection: false }));
       return true;
     },
@@ -2888,7 +2926,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       try{validateWorkflowPlan(current,next);}catch{return false;}
       commitPlan(next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
     },
-    openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
+    openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
       if (!checkBoundaryRing(boundary).ok || !canReanchorOutdoorPlan(planRef.current, anchor)) return false;
       commitPlan({ ...planRef.current, anchor, boundary });
@@ -3004,12 +3042,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     getView: () => currentViewport(),
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
+    setMeasureKind: (kind: PlanMeasureKind) => applyMeasureKind(kind),
+    getMeasureKind: () => measureKindRef.current,
+    setSnapOn: (on: boolean) => setSnapOn(on),
     setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => {
       // 2026-11-12 三张卡拆开：每张卡独立展开/收起，互不影响。
       if (!tab) {
         setInspectorPanels(open ? { measure: true, annotate: true, selection: true } : { measure: false, annotate: false, selection: false });
+        setSelectionPanelEnabled(open);
         return;
       }
+      // 属性卡是总开关：关闭后点选物件不再弹属性卡。
+      if (tab === 'selection') { setSelectionPanelEnabled(open); return; }
       setInspectorPanel(tab, open);
       // 从右轨重新打开时顺手展开卡身，避免「点了按钮但看不到内容」。
       if (open) setInspectorCollapsed(current => (current[tab] ? { ...current, [tab]: false } : current));
@@ -3217,7 +3261,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage('双击边界线上才能加点（离边太远）。');
       return;
     }
-    const snapped = snapPointToGrid(edge.point, viewport);
+    const snapped = snapPoint(edge.point, viewport);
     const result = insertRingVertex(current.boundary, edge.index, snapped);
     if (!result.ok) {
       setEditMessage(result.issue.message);
@@ -5149,7 +5193,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const hit = eventPlanPoint(event);
       if (!hit) return;
       const drag = dragRouteVertexRef.current;
-      const snapped = snapPointToGrid(hit.pt, currentViewport());
+      const snapped = snapPoint(hit.pt, currentViewport());
       const points = drag.base.map((p, i) => (i === drag.index ? snapped : p));
       const dup = points.some((p, i) => i > 0 && p.x === points[i - 1]!.x && p.y === points[i - 1]!.y);
       if (!dup) {
@@ -5230,7 +5274,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const drag = dragZoneVertexRef.current;
         const base = zoneDragPreviewRef.current?.polygon ?? planRef.current.zones.find(z => z.id === drag.zoneId)?.polygon;
         if (!base) return;
-        const result = moveRingVertex(base, drag.index, snapPointToGrid(hit.pt, currentViewport()));
+        const result = moveRingVertex(base, drag.index, snapPoint(hit.pt, currentViewport()));
         if (result.ok) {
           zoneDragPreviewRef.current = { zoneId: drag.zoneId, polygon: result.value };
           setEditMessage(null);
@@ -5250,8 +5294,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           drag.moved = true;
         }
         if (drag.moved) {
-          const snapped = snapPointToGrid(hit.pt, currentViewport());
-          const origin = snapPointToGrid(drag.startPt, currentViewport());
+          const snapped = snapPoint(hit.pt, currentViewport());
+          const origin = snapPoint(drag.startPt, currentViewport());
           zoneDragPreviewRef.current = {
             zoneId: drag.zoneId,
             polygon: drag.base.map(p => ({ x: p.x + (snapped.x - origin.x), y: p.y + (snapped.y - origin.y) })),
@@ -5291,7 +5335,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (dragWorkerRef.current.moved) {
           const worker = planRef.current.workers.find(w => w.id === dragWorkerRef.current?.id);
           if (!worker) return;
-          workerDragPreviewRef.current = { worker: { ...worker, position: snapPointToGrid(hit.pt, currentViewport()) } };
+          workerDragPreviewRef.current = { worker: { ...worker, position: snapPoint(hit.pt, currentViewport()) } };
           setEditMessage(null);
           draw();
         }
@@ -5308,7 +5352,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const result = moveRingVertex(
         previewRingRef.current ?? planRef.current.boundary,
         dragVertexRef.current,
-        snapPointToGrid(hit.pt, currentViewport()),
+        snapPoint(hit.pt, currentViewport()),
       );
       if (result.ok) {
         setPreviewRing(result.value);
@@ -5920,7 +5964,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 2026-11-11 用户指令：右上角浮窗「属性」页签的角标 = 当前同时选中的物件数（点选后自动切过来）。
   const selectionInspectorCount = (selectedZoneId ? 1 : 0) + (selectedFacility ? 1 : 0) + (selectedRoute ? 1 : 0) + (selectedNodeId ? 1 : 0) + (selectedWorkerId ? 1 : 0) + multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? 1 : 0);
   useEffect(() => {
-    if (selectionInspectorCount === 0) return;
+    if (selectionInspectorCount === 0 || !selectionPanelOnRef.current) return;
     // 选中物件 → 只把「属性」卡展开（测量/标注卡的开合不受影响）。
     setInspectorPanel('selection', true);
   }, [selectionInspectorCount]);
@@ -6157,97 +6201,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{levelView.measurements?.length ?? 0}</span>
         </div>
       )}
-      {/* 2026-11-12 变体2：紧凑工具条——图标入口钮 + 右侧读数小标签；点开竖向下拉切模式，入口记住上次默认。 */}
+      {/* 2026-11-15 模式切换已收进底条合体钮小标；卡片内不再放模式入口，只保留当前读数。 */}
       <div style={{ marginTop: PLANNING_SPACING.xs }}>
         {(() => {
-          const TriggerIcon = planningIcon(MEASURE_KIND_ICONS[measureKind]);
           const readout = measureDraftReadout(measureKind, measureDraftRef.current, measureCursorRef.current ?? undefined);
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                type="button"
-                data-testid="measure-trigger"
-                aria-haspopup="listbox"
-                aria-expanded={measureMenuOpen}
-                aria-label={`测量模式：${planMeasurementKindLabels[measureKind]}`}
-                onClick={() => setMeasureMenuOpen(open => !open)}
-                style={{
-                  all: 'unset', display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '5px 8px', borderRadius: PLANNING_RADIUS.sm,
-                  border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                  background: PLANNING_SURFACE.panelBg, color: PLANNING_SURFACE.panelText,
-                  cursor: 'pointer',
-                }}
-              >
-                <TriggerIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                <span aria-hidden style={{ opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.hint, display: 'inline-flex' }}>{measureMenuOpen ? '▾' : '▸'}</span>
-              </button>
-              <span
-                aria-hidden
-                style={{ marginLeft: 'auto', fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: readout ? PLANNING_SURFACE.panelText : PLANNING_TEXT.muted }}
-              >
-                {readout ?? '—'}
-              </span>
-            </div>
+            <span
+              aria-hidden
+              style={{ display: 'block', textAlign: 'right', fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: readout ? PLANNING_SURFACE.panelText : PLANNING_TEXT.muted }}
+            >
+              {readout ?? '—'}
+            </span>
           );
         })()}
-        {measureMenuOpen && (
-          <div
-            role="listbox"
-            aria-label="测量类型"
-            data-testid="measure-menu"
-            onWheel={stopPanelWheel}
-            style={{
-              marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
-              background: PLANNING_SURFACE.panelBg,
-              border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-              boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
-              display: 'grid', gap: 2,
-            }}
-          >
-            {(['distance', 'area', 'path'] as const).map(k => {
-              const KindIcon = planningIcon(MEASURE_KIND_ICONS[k]);
-              const active = mode === 'measure' && measureKind === k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  data-testid={`measure-type-${k}`}
-                  onClick={() => {
-                    measureKindRef.current = k;
-                    setMeasureKind(k);
-                    measureDraftRef.current = [];
-                    measureCursorRef.current = null;
-                    setMeasureDraftCount(0);
-                    setEditMessage(null);
-                    draw();
-                    setMode('measure');
-                    setMeasureMenuOpen(false);
-                  }}
-                  style={{
-                    all: 'unset', display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '7px 8px', borderRadius: PLANNING_RADIUS.sm,
-                    background: active ? PLANNING_SURFACE.activeBg : 'transparent',
-                    color: PLANNING_SURFACE.panelText,
-                    fontWeight: active ? 600 : 400,
-                    fontSize: PLANNING_TYPOGRAPHY.row, cursor: 'pointer',
-                  }}
-                >
-                  <span aria-hidden style={{ width: 14, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center', color: PLANNING_LAYER_COLORS.measure }}>
-                    {active ? (
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                    ) : null}
-                  </span>
-                  <KindIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                  <span>{planMeasurementKindLabels[k]}</span>
-                  <span aria-hidden style={{ marginLeft: 'auto', color: PLANNING_TEXT.muted, fontSize: PLANNING_TYPOGRAPHY.hint }}>{MEASURE_KIND_META[k]}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
       {/* 2026-11-12 精简：不再常驻三模式长说明，只给当前模式一句短引导；拖拽快速、单击逐点两种手势都保留。 */}
       <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
@@ -8622,7 +8588,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               ),
           },
         ];
-        const visible = cards.filter(card => inspectorPanels[card.key]);
+        const visible = cards.filter(card => inspectorPanels[card.key] && (card.key !== 'selection' || selectionPanelOn));
         if (visible.length === 0) {
           // 收起态不再画画布内浮条（入口在右轨圆钮，属性随选中实体自动浮出）。
           return null;
@@ -8635,11 +8601,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             data-testid="outdoor-inspector-stack"
             onWheel={stopPanelWheel}
             style={{
-              position: 'absolute', right: 96, top: 12, zIndex: 6,
+              position: 'absolute', bottom: 72, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
               pointerEvents: 'auto',
-              display: 'flex', flexDirection: 'column', gap: 8,
-              width: 'min(300px, calc(100% - 96px))',
-              maxHeight: 'calc(100% - 24px)',
+              display: 'flex', flexDirection: 'row', gap: 8,
+              width: 'max-content', maxWidth: 'calc(100% - 32px)',
+              maxHeight: 'calc(100% - 120px)',
             }}
           >
             {visible.map(card => {
@@ -8668,6 +8634,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   onMouseUp={stopPanelMouse}
                   onDoubleClick={stopPanelMouse}
                 >
+                  {card.key !== 'annotate' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px' }}>
                     <button
                       type="button"
@@ -8718,8 +8685,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       <MaterialSymbol name="close" size={18} />
                     </button>
                   </div>
-                  {!collapsed && (
-                    <div style={{ minHeight: 0, overflowY: 'auto', maxHeight: '46vh', padding: '0 12px 12px' }}>{card.body}</div>
+                  )}
+                  {(!collapsed || card.key === 'annotate') && (
+                    <div style={{ minHeight: 0, overflowY: 'auto', maxHeight: '46vh', padding: card.key === 'annotate' ? '8px 10px' : '0 12px 12px' }}>{card.body}</div>
                   )}
                 </section>
               );

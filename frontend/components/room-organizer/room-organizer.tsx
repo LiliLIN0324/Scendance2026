@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { ArrowUpDown, Box, Globe, LayoutGrid, Loader2, Minimize2, PanelLeftClose, Scan, X } from '@/components/solid-icons';
+import { ArrowUpDown, Loader2, Minimize2, PanelLeftClose, RailCrate, RailMap, RailShoot, RailSpace, Scan, X } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -201,7 +201,6 @@ import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
-import OutdoorViewSwitch from './components/outdoor-view-switch';
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
@@ -569,6 +568,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 一期户外第一人称漫游启用态：独立于室内 walkthroughMode 的信号，避免翻旧链路
   // 把 OutdoorPlan3D 卸载；控制器与边界钳制自管在户外 3D 组件内。
   const [outdoorWalkActive, setOutdoorWalkActive] = useState(false);
+  // 2026-11-15 干净看图模式：隐藏右上/底中浮动工具簇与左下图层卡，右下眼睛钮保留可切回。
+  const [chromeHidden, setChromeHidden] = useState(false);
   // 2026-11-13 用户指令：左栏「户外规划」卡片默认收起，只有点左轨「户外规划」钮才展开；
   // 右侧地图仍是常驻画面，不受这张卡的开合影响。
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>(null);
@@ -606,8 +607,15 @@ useEffect(() => {
   }, []);
   // 2026-11-12 B1 选择工具：2D 画布当前模式（右栏「选择」钮按下态）。
   const [outdoorCanvasMode, setOutdoorCanvasMode] = useState<'view' | 'select'>('view');
-  const handleOutdoorCanvasMode = useCallback((mode: 'view' | 'select') => {
-    setOutdoorCanvasMode(mode);
+  // 2026-11-15 测量直进：measure 绘制模式激活态 + 当前距离/面积/路径（工具条小标回显）。
+  const [outdoorMeasureActive, setOutdoorMeasureActive] = useState(false);
+  const [outdoorMeasureKind, setOutdoorMeasureKind] = useState<'distance' | 'area' | 'path'>('distance');
+  // 2026-11-15 户外网格吸附开关：默认开；关闭后放置/拖动/拖顶点自由摆放。
+  const [outdoorSnapOn, setOutdoorSnapOn] = useState(true);
+  const handleOutdoorCanvasMode = useCallback((mode: string) => {
+    if (mode === 'measure') { setOutdoorMeasureActive(true); setOutdoorCanvasMode('view'); return; }
+    setOutdoorMeasureActive(false);
+    setOutdoorCanvasMode(mode === 'select' ? 'select' : 'view');
   }, []);
   // 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自展开态（右轨三枚圆钮的按下态）。
   const [outdoorInspector, setOutdoorInspector] = useState<{
@@ -639,6 +647,15 @@ useEffect(() => {
     // 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（右栏工具排「选择」钮的按下态与切换）。
     canvasMode: outdoorCanvasMode,
     setCanvasMode: (mode: 'view' | 'select') => outdoorOverlayRef.current?.setCanvasMode(mode),
+    // 2026-11-15 测量直进：激活态 / 当前模式 + 进入退出 / 切距离·面积·路径（工具条小标转发）。
+    measureActive: outdoorMeasureActive,
+    measureKind: outdoorMeasureKind,
+    setMeasureKind: (kind: 'distance' | 'area' | 'path') => { setOutdoorMeasureKind(kind); outdoorOverlayRef.current?.setMeasureKind(kind); },
+    // 2026-11-15 网格吸附开关：底条吸附钮切换，转发到 2D 画布。
+    snapOn: outdoorSnapOn,
+    setSnapOn: (on: boolean) => { setOutdoorSnapOn(on); outdoorOverlayRef.current?.setSnapOn(on); },
+    enterMeasure: () => outdoorOverlayRef.current?.setToolMode('measure'),
+    exitMeasure: () => outdoorOverlayRef.current?.setToolMode('view'),
     // 2026-11-12 三张卡拆开：右轨每枚圆钮只管自己那张卡的展开态。
     inspectorTabs: outdoorInspector.openTabs,
     setInspector: (tab: 'measure' | 'annotate' | 'selection') => {
@@ -651,7 +668,15 @@ useEffect(() => {
     // 实景隔离 / 无 plan 时 takeover 本身不成立，按钮态由下游接管条件兜底。
     walkIn3D: outdoor3dTakeoverActive && !outdoor2DOpen && !walkthroughActive,
     toggleWalk: (on: boolean) => toggleOutdoorWalk(on),
-  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorInspector, outdoorWalkActive, outdoor3dTakeoverActive, walkthroughActive, toggleOutdoorWalk]);
+    // 2026-11-15 方案 A：2D/3D 收进右列一枚可切换圆钮；回选址靶心聚焦场地边界。
+    view: outdoor3dTakeoverActive && !outdoor2DOpen ? '3d' as const : '2d' as const,
+    onToggleView: () => handleOutdoorViewSwitch(outdoor3dTakeoverActive && !outdoor2DOpen ? '2d' : '3d'),
+    // 指北针：3D 接管回正相机朝向正北；2D 平面复位视图到场地边界。
+    resetNorth: () => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
+      else outdoorOverlayRef.current?.focusVenue();
+    },
+  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorMeasureActive, outdoorMeasureKind, outdoorSnapOn, outdoorInspector, outdoorWalkActive, outdoor3dTakeoverActive, walkthroughActive, toggleOutdoorWalk]);
   // 2026-11-11 用户要求：Bingo 与户外规划同开时——中间分隔要清楚、可上下换序、可拖动改高度、
   // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
   const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
@@ -4250,6 +4275,26 @@ useEffect(() => {
     onGenerateShareLink: handleShareLink,
     onOpenMaterials: openMaterialsFromShare,
     onOpenChecklist: () => setChecklistOpen(true),
+    // 2026-11-15 出图收编进分享面板：按当前视图抓帧下载 PNG，独立导出钮不再出镜。
+    onExportImage: async () => {
+      if (outdoor3dTakeover) return handleOutdoor3dExport();
+      if (outdoor2DOpen) {
+        const data = outdoorOverlayRef.current?.captureImage();
+        if (!data) { notify('效果图导出失败，请稍后重试。', 'error'); return false; }
+        const link = document.createElement('a');
+        link.href = data;
+        link.download = `outdoor-2d-${Date.now()}.png`;
+        link.click();
+        notify('效果图已开始下载。', 'success');
+        return true;
+      }
+      return handleExportImage({ view: 'current', scale: 1 });
+    },
+    // 户外方案专属导出：CSV 物料清单 / GeoJSON 几何 / PDF 演示稿，经覆盖层句柄下发；
+    // 室内分支 ref 为空、回调不挂载，主分享卡也就不显示这三枚入口。
+    onExportCsv: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportCsv() : undefined,
+    onExportGeoJson: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportGeoJson() : undefined,
+    onPrintDeck: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportPdf() : undefined,
   };
 
   return (
@@ -4383,7 +4428,7 @@ useEffect(() => {
                   data-tip="空间"
                   onClick={() => toggleAgent('space')}
                 >
-                  <LayoutGrid size={26} aria-hidden="true" />
+                  <RailSpace size={28} active={isLaneOpen('space')} aria-hidden="true" />
                   <RailLaneDot lane="space" open={isLaneOpen('space')}/>
                   <span className="sc-rail-label" aria-hidden="true">空间</span>
                 </button>
@@ -4399,7 +4444,7 @@ useEffect(() => {
                   data-tip="物料"
                   onClick={() => toggleAgent('material')}
                 >
-                  <Box size={26} aria-hidden="true" />
+                  <RailCrate size={28} active={isLaneOpen('material')} aria-hidden="true" />
                   <RailLaneDot lane="material" open={isLaneOpen('material')}/>
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
@@ -4410,13 +4455,7 @@ useEffect(() => {
                   aria-expanded={captureOpen}
                   onClick={captureOpen ? closeCapturePanel : openCapturePanel}
                 >
-                  <span className="sc-rail-capture-icon" aria-hidden="true">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
-                      <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
-                    </svg>
-                    <span className="sc-rail-3d-tag">3D</span>
-                  </span>
+                  <RailShoot size={28} active={captureOpen} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
                 </button>
                 <button
@@ -4447,7 +4486,7 @@ useEffect(() => {
                     setOutdoorPanel(null);
                   }}
                 >
-                  <Globe size={26} aria-hidden="true" />
+                  <RailMap size={28} active={outdoorPanel !== null} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
               </nav>
@@ -4637,7 +4676,7 @@ useEffect(() => {
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
-          <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
+          <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}${chromeHidden ? ' is-chrome-hidden' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
             // 2026-11-12 户外态短路：户外地图/接管 3D 也是 canvas，待放置物料不能被误落到室内场景。
             if (workbenchMode !== 'layout' || outdoor2DOpen || outdoor3dTakeover || !pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
@@ -4691,20 +4730,8 @@ useEffect(() => {
               data-testid="outdoor-inspector-host"
               style={{ position: 'absolute', inset: 0, zIndex: 31, pointerEvents: 'none', visibility: outdoor3dTakeover ? 'visible' : 'hidden' }}
             />
-            {/* 2026-11-14 用户指令（图一范式重排）：2D/3D 胶囊沉到左下角底（bottom 14），
-                同一行右侧由画布画比例尺 + 图源名（outdoor-plan-canvas drawScaleAndName，left 152 让位胶囊）。
-                z 33：接管层 29 / 覆盖层 30 / 工具卡宿主 31 之上，右轨 35 之下。 */}
-            {!!outdoorPlan && (outdoor2DOpen || outdoor3dTakeover) && (
-              <div
-                data-testid="outdoor-view-switch-host"
-                style={{ position: 'absolute', left: 12, bottom: 14, zIndex: 33, pointerEvents: 'auto' }}
-              >
-                <OutdoorViewSwitch
-                  view={outdoor3dTakeover ? '3d' : '2d'}
-                  onChange={handleOutdoorViewSwitch}
-                />
-              </div>
-            )}
+            {/* 2026-11-15 方案 A：2D/3D 分段胶囊退役，切换入口收进右下工具簇一枚可切换圆钮（#tool-view-toggle）。
+                原左下胶囊挂载不再渲染；OutdoorViewSwitch 组件文件保留待后续整体清理。 */}
       {/* 2026-11-13 用户拍板：右侧唯一画面 = 户外地图 2D/3D；室内房间 three 画布整体退役出镜，
           容器常驻隐藏但保留保活管线（renderer/canvas ref 仍被环境、漫游、就绪态逻辑复用），
           彻底卸载 Viewport 与室内 layout 回写链路作为后续清理。 */}
@@ -4876,6 +4903,7 @@ useEffect(() => {
                 compassRef={geoCompassRef}
                 attribution={basemapSourceAttribution(geoGroundSource)}
                 testIdPrefix="geo-ground"
+                showCompass={false}
               />
             )}
             {scanIsolated && environment && <div className={`sc-canvas-mode${isolatedScanFailed ? ' is-error' : ''}`}
@@ -5054,7 +5082,7 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusMapVenue} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

@@ -817,6 +817,8 @@ body {
 .sc-geo-scale-bar { height: 2px; width: 80px; background: #22262e; box-shadow: 0 0 0 1px rgba(255, 255, 255, .85), 0 1px 3px rgba(15, 23, 42, .18); }
 .sc-geo-attribution-text { color: rgba(34, 38, 46, .74); font-size: 11px; line-height: 16px; text-shadow: 0 0 3px #fff, 0 1px 2px rgba(255, 255, 255, .8); padding-bottom: 1px; }
 .sc-geo-compass-card { position: absolute; right: 16px; bottom: 14px; z-index: 2; width: 46px; height: 46px; border-radius: 12px; background: rgba(255, 255, 255, .96); border: 1px solid rgba(20, 22, 28, .10); box-shadow: 0 4px 14px rgba(20, 20, 22, 0.12); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.sc-geo-compass-card--interactive { pointer-events: auto; cursor: grab; }
+.sc-geo-compass-card--interactive:active { cursor: grabbing; }
 .sc-geo-compass-needle { width: 20px; height: 28px; transform-origin: 50% 50%; display: flex; align-items: center; justify-content: center; }
 .sc-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sc-canvas-dot { color: var(--faint); }
@@ -1269,24 +1271,23 @@ body {
   display: grid; place-items: center; text-align: center;
   border: 2px solid var(--wk-paper, #F7F5F0); font-variant-numeric: tabular-nums;
 }
-/* 拍摄场地图标 + 右下「3D」小副标。图标槽 span 必须用与 Bingo 角标同链的选择器复活，
-   否则被窄轨 `button > span{display:none}`（只该藏文字标签）连带藏掉，相机不显示。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon {
-  position: relative; display: grid; place-items: center; width: 26px; height: 26px; flex: none;
-}
-.sc-rail-3d-tag {
-  position: absolute; right: -9px; bottom: -7px; padding: 0 3px; border-radius: 5px;
-  background: var(--wk-plane); border: 1px solid var(--wk-hair); color: var(--wk-ink-soft);
-  font-size: 8px; font-weight: 600; line-height: 1.5; letter-spacing: .02em; white-space: nowrap;
-}
-/* 状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、描边/数字退回中性色。 */
+/* Bingo 实心方案（B）：待评 / 回执两态整圆填状态色，圆内数字 / 勾形用 paper 白负形；空态仍描边空圆。状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、底色 / 字色退回中性。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="awaiting"] {
-  border-color: var(--warn); color: var(--warn);
-  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
+  border-color: var(--warn); background: var(--warn); color: var(--wk-paper);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="returned"] {
-  border-color: var(--err); color: var(--err);
-  box-shadow: 0 0 0 3px rgba(180, 68, 60, 0.22);
+  border-color: var(--err); background: var(--err); color: var(--wk-paper);
+}
+/* 空态：28 占位盒内收一枚 21px 中性深灰描边空心圆，外径对齐家族工具图形（实测 20.1–21.5px）；描边 3px 对齐线条基准；paper 底、不填色、不另加符号，静息态不用品牌绿。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"] {
+  background: transparent;
+  border-color: transparent;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"]::before {
+  content: "";
+  width: 21px; height: 21px; border-radius: 50%;
+  border: 3px solid var(--wk-ink-soft);
+  background: var(--wk-paper);
 }
 /* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }
@@ -1694,7 +1695,7 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column > button,
 .sc-workbench .sc-tool-column .sc-tool-menu > button {
   position: relative;
-  width: 30px; height: 30px; min-width: 30px; min-height: 30px; padding: 0;
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px; padding: 0;
   border-radius: 50%; background: var(--wk-paper); border: 1px solid transparent;
   box-shadow: 0 1px 3px rgb(20 20 22 / 12%); color: var(--wk-ink-soft, #71717a);
   display: inline-flex; align-items: center; justify-content: center;
@@ -1706,7 +1707,7 @@ body.sc-panel-dragging * {
   box-shadow: 0 2px 6px rgb(20 20 22 / 16%);
 }
 .sc-workbench .sc-tool-column > button:disabled {
-  color: var(--wk-ink-faint); background: var(--wk-paper); box-shadow: none; opacity: .45;
+  color: var(--wk-ink-soft); background: var(--wk-paper); box-shadow: none; opacity: .7;
 }
 .sc-workbench .sc-tool-column > button.is-active,
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
@@ -1761,6 +1762,108 @@ body.sc-panel-dragging * {
   .sc-workbench .sc-tool-column .sc-tool-menu > button { width: 26px; height: 26px; min-width: 26px; min-height: 26px; }
   .sc-workbench .sc-tool-column .sc-tool-sep { margin: 0; }
 }
+
+/* ===== 方案 A 户外四角簇：右上/右下竖列，底中横条，左下横列；室内仍走右轨单列 ===== */
+.sc-workbench .sc-tool-column.is-outdoor {
+  position: absolute !important; inset: 0 !important;
+  left: 0 !important; right: 0 !important; top: 0 !important; bottom: 0 !important;
+  width: 100% !important; max-width: none; max-height: none; display: block !important;
+  padding: 0; gap: 0; background: transparent; pointer-events: none; z-index: 35;
+}
+.oc-cluster {
+  position: absolute; display: flex; align-items: center; gap: 8px; padding: 6px;
+  background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: var(--r-md, 14px);
+  box-shadow: var(--e1, 0 6px 18px rgba(20, 20, 22, .10)); pointer-events: auto; z-index: 35;
+}
+.oc-cluster.oc-tr { top: 20px; right: 20px; flex-direction: column; }
+.oc-cluster.oc-br { bottom: 20px; right: 20px; flex-direction: column; }
+.oc-cluster.oc-bb { bottom: 20px; left: 50%; transform: translateX(-50%); flex-direction: row; max-width: calc(100vw - 150px); flex-wrap: wrap; justify-content: center; row-gap: 6px; }
+.oc-cluster.oc-bl { bottom: 4px; left: 51px; flex-direction: row; }
+/* 窄屏：底中条收窄钮距与钮径，允许换行避让左下图层条与右下簇，不溢出视口。 */
+@media (max-width: 760px) {
+  .oc-cluster.oc-bb { gap: 6px; padding: 4px; max-width: calc(100vw - 96px); }
+  .oc-cluster.oc-bb button { width: 30px; height: 30px; min-width: 30px; min-height: 30px; }
+  .oc-cluster.oc-bb .oc-sep { height: 16px; }
+}
+/* 干净看图模式：藏右上簇、底中条、左下图层卡与面板；右下簇只留眼睛复位钮。 */
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-tr,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-bb,
+.sc-canvas-stage.is-chrome-hidden #tool-outdoor-source,
+.sc-canvas-stage.is-chrome-hidden [data-testid="outdoor-map-picker-panel"] { display: none !important; }
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br button:not(#tool-opacity) { display: none; }
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-zoom { display: none; }
+.oc-cluster .oc-sep { width: 1px; height: 20px; background: var(--wk-hair); flex: none; }
+.oc-cluster .oc-share { display: inline-flex; align-items: center; }
+/* 簇内圆钮沿用右轨形制（34 白底气泡）。 */
+.sc-workbench .sc-tool-column .oc-cluster button {
+  position: relative; width: 34px; height: 34px; min-width: 34px; min-height: 34px; padding: 0;
+  border-radius: 50%; background: var(--wk-paper); border: 1px solid transparent;
+  box-shadow: 0 1px 3px rgb(20 20 22 / 12%); color: var(--wk-ink-soft, #71717a);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster button:hover { background: var(--wk-paper); box-shadow: 0 2px 6px rgb(20 20 22 / 16%); }
+.sc-workbench .sc-tool-column .oc-cluster button:disabled { color: var(--wk-ink-soft); background: var(--wk-paper); box-shadow: none; opacity: .7; }
+.sc-workbench .sc-tool-column .oc-cluster button.is-active { background: var(--wk-paper); border-color: var(--wk-green, #4A7C59); color: var(--wk-green-deep, #35624A); }
+/* 2D/3D 切换：直接用文字，不套额外图标。 */
+.sc-workbench .sc-tool-column .oc-cluster .oc-view-text {
+  font-size: 11px; font-weight: 600; letter-spacing: .02em; line-height: 1;
+}
+/* 透明度眼睛：半透明浅青圆底 + 灰眼（petitmaker 参考）。 */
+.sc-workbench .sc-tool-column .oc-cluster .is-ghost-eye { background: rgba(214, 235, 235, .72); border-color: transparent; color: var(--wk-muted, #71767E); }
+/* 缩放一体条：+ / − 上下合并进同一条背板，替代两枚独立圆钮（参照 Google Maps 右下缩放条）。 */
+.sc-workbench .sc-tool-column .oc-cluster .oc-zoom {
+  display: flex; flex-direction: column; border-radius: 12px; overflow: hidden;
+  background: var(--wk-paper); border: 1px solid var(--wk-hair);
+  box-shadow: 0 1px 3px rgb(20 20 22 / 12%);
+}
+.sc-workbench .sc-tool-column .oc-cluster .oc-zoom button {
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  border-radius: 0; background: transparent; border-color: transparent; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster .oc-zoom button:first-child { border-bottom: 1px solid var(--wk-hair); }
+.sc-workbench .sc-tool-column .oc-cluster .oc-zoom button:hover { background: var(--plane, #F7F5F0); box-shadow: none; }
+/* 2026-11-15 用户指令：右上簇钮与图标整体放大一档（34→38，图标 20→22）。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr button,
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button {
+  width: 38px; height: 38px; min-width: 38px; min-height: 38px;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr button > svg,
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr button > span,
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button > span { width: 22px; height: 22px; }
+/* 右下簇与右上同口径：圆钮 34→38，贴近 Google Maps 圆钮直径；缩放连体条内钮同步。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-br button,
+.sc-workbench .sc-tool-column .oc-cluster.oc-br .oc-zoom button {
+  width: 38px; height: 38px; min-width: 38px; min-height: 38px;
+}
+/* 漫游 Pegman：常态直立；悬停像被拎起一样上浮并微倾，离开平滑复位。 */
+.sc-workbench .sc-tool-column button.is-walk > svg { transition: transform .18s ease; }
+.sc-workbench .sc-tool-column button.is-walk:hover > svg { transform: translateY(-2px) rotate(-9deg); }
+.sc-workbench .sc-tool-column .oc-cluster .sc-tool-menu { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
+/* 2026-11-15 测量变体小标：对齐 Figma 工具栏——一颗合体钮，图标 + 右侧小 V 箭头水平同排，不另起圆钮。 */
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-menu { flex-direction: row; }
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-combo {
+  display: inline-flex; align-items: center; height: 34px; border-radius: 17px;
+  background: var(--wk-paper); border: 1px solid transparent; box-shadow: 0 1px 3px rgb(20 20 22 / 12%);
+  color: var(--wk-ink-soft, #71717a); overflow: hidden;
+}
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-combo.is-active {
+  border-color: var(--wk-green, #4A7C59); color: var(--wk-green-deep, #35624A);
+}
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-main,
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-caret {
+  height: 34px; min-height: 34px; padding: 0; border: 0; background: transparent; box-shadow: none; border-radius: 0;
+  display: inline-flex; align-items: center; justify-content: center; color: inherit;
+}
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-main { width: 26px; min-width: 26px; }
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-caret { width: 14px; min-width: 14px; }
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-combo:hover { background: var(--wk-paper); box-shadow: 0 2px 6px rgb(20 20 22 / 16%); }
+/* 底中条贴底边：模式菜单向上弹出到钮正上方，水平居中，不向左侧飘。 */
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop {
+  right: auto; left: 50%; transform: translateX(-50%);
+  top: auto; bottom: calc(100% + 8px); min-width: 104px;
+}
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-canvas-tool-row { width: 100%; }
 .sc-workbench .sc-tool-pop {
   position: absolute; right: calc(100% + 8px); top: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;
@@ -1990,6 +2093,14 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   background: var(--wk-plane);
 }
 .sc-workbench .sc-publish-qr-side { flex: 1 1 auto; min-width: 0; }
+/* 链路就绪状态行：方案网页 / 3D 漫游 / 评审，圆点灰=未就绪、绿=已就绪。 */
+.sc-workbench .sc-publish-card .sc-publish-status { display: flex; flex-direction: column; gap: 6px; }
+.sc-workbench .sc-publish-status-item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+.sc-workbench .sc-publish-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wk-faint, #A6AAB2); flex: none; }
+.sc-workbench .sc-publish-status-item.is-live .sc-publish-status-dot { background: var(--wk-green, #4A7C59); }
+.sc-workbench .sc-publish-status-name { color: var(--wk-ink); flex: 0 0 auto; }
+.sc-workbench .sc-publish-status-state { margin-left: auto; color: var(--wk-muted); }
+.sc-workbench .sc-publish-status-item.is-live .sc-publish-status-state { color: var(--wk-green-deep, #35624A); }
 .sc-workbench .sc-publish-card .sc-publish-row { display: flex; gap: 5px; }
 .sc-workbench .sc-publish-card .sc-publish-row > button,
 .sc-workbench .sc-publish-card .sc-publish-row > a {

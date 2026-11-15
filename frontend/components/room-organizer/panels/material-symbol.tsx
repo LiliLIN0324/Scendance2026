@@ -24,7 +24,10 @@ const MATERIAL_SYMBOL_FILLED_SVG_ASSETS = new Set([
   'corporate_fare', 'groups', 'select_all', 'ios_share',
   'undo', 'redo', 'arrow_upward', 'attach_file', 'more_horiz',
   'progress_activity', 'refresh', 'replay', 'autorenew', 'fullscreen',
-  'fullscreen_exit', 'tune',
+  'fullscreen_exit', 'tune', 'image',
+  // 2026-11-15 户外四簇：统一走官方 rounded fill SVG，避开可变字体缺字形。
+  'explore', 'center_focus_strong', 'footprint', 'view_compact', 'view_in_ar',
+  'visibility', 'near_me', 'straighten', 'edit_note', 'person', 'map', 'upload',
 ]);
 
 /** Bundled Google Material Symbols Rounded variable glyphs with one shared visual grade. */

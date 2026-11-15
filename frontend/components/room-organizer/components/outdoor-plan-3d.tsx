@@ -190,6 +190,8 @@ function cameraPose(target: THREE.Vector3, span: number, polar: number, fovDeg: 
 export interface OutdoorPlan3DApi {
   zoomBy(direction: 1 | -1): void;
   focusLngLat(lng: number, lat: number): void;
+  /** 相机回正正北（保留距离与俯仰角）；右上指北针钮调用。 */
+  resetNorth(): void;
   /** 同步渲染一帧后读 canvas：接管态（主画布复用本组件）导出效果图用。 */
   captureImage(): string | null;
 }
@@ -286,6 +288,36 @@ export default function OutdoorPlan3D({
     controls.update();
   }, [plan.anchor]);
 
+  /** 罗盘回正朝北：保留目标点、距离与俯仰角，只把水平方位角归 0（北 = -z）。 */
+  const resetNorth = useCallback((): void => {
+    if (walkEnabledRef.current) return;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const radius = offset.length();
+    if (radius < 1e-6) return;
+    const phi = Math.acos(THREE.MathUtils.clamp(offset.y / radius, -1, 1));
+    // theta = 0：x = 0、z = +radius·sinφ，相机位于目标正南、看向正北，与初始机位一致。
+    offset.set(0, radius * Math.cos(phi), radius * Math.sin(phi));
+    camera.position.copy(controls.target).add(offset);
+    controls.update();
+  }, []);
+
+  /** 罗盘拖动转盘：按增量弧度绕目标水平旋转，保留距离与俯仰角。 */
+  const orbitByDelta = useCallback((deltaTheta: number): void => {
+    if (walkEnabledRef.current) return;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls || !deltaTheta) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    spherical.theta += deltaTheta;
+    offset.setFromSpherical(spherical);
+    camera.position.copy(controls.target).add(offset);
+    controls.update();
+  }, []);
+
   const captureImage = useCallback((): string | null => {
     const renderer = rendererRef.current;
     const scene = sceneRef.current;
@@ -302,9 +334,9 @@ export default function OutdoorPlan3D({
 
   useEffect(() => {
     if (!apiRef) return undefined;
-    apiRef.current = { zoomBy: zoomByStep, focusLngLat, captureImage };
+    apiRef.current = { zoomBy: zoomByStep, focusLngLat, resetNorth, captureImage };
     return () => { apiRef.current = null; };
-  }, [apiRef, zoomByStep, focusLngLat, captureImage]);
+  }, [apiRef, zoomByStep, focusLngLat, resetNorth, captureImage]);
 
   // 一期裸第一人称步行：指针锁 / WASD / 边界钳制自管在本组件内，旧室内
   // walkthroughMode 链路不动；退出由 onWalkExit 交外层收口。
@@ -866,9 +898,10 @@ export default function OutdoorPlan3D({
     controls.minDistance = Math.max(1.2, Math.min(siteFrame.span * 0.02, 8));
     controls.maxDistance = Math.max(span * 8, groundFrame.span * 0.5);
     controls.zoomSpeed = 0.85;
-    // 2026-11-12 用户拍板：3D 里**中键**才转地图（环绕），左键整个让给物件编辑手势
-    // （pointerFromPlan 桥：按下拾取/拖动走和 2D 画布同一套管线）；滚轮缩放、右键平移保持。
-    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
+    // 2026-11-14 成熟编辑器口径：左键命中物件走拾取/拖动（pointerFromPlan 桥独占），
+    // 左键命中空白则环绕；中键同样环绕，右键平移，滚轮缩放。是否真正响应左键旋转
+    // 由每帧 enableRotate（仅 view 且非编辑态）与按下命中结果共同决定。
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
     controls.target.copy(lookTarget);
     controls.update();
     cameraRef.current = camera;
@@ -1018,6 +1051,8 @@ export default function OutdoorPlan3D({
     const pointerNdc = new THREE.Vector2();
     const groundHit = new THREE.Vector3();
     let pointerEditing = false;
+    /** 本次左键按下未被物件/框选消费、已放行给轨道控制器环绕（仅 view 空白）。 */
+    let blankReleased = false;
 
     /** 当前镜头推导的 2D 规划视口（eventToPlanHit 与 3D 手柄同步共用同一套口径）。 */
     const derivedViewportNow = (): PlanViewport | null => {
@@ -1185,16 +1220,21 @@ export default function OutdoorPlan3D({
       if (!hit) return;
       const consumed = api.pointerFromPlan('down', hit, pointerFlags(event, hit));
       syncEditVisuals();
-      if (!consumed) return;
-      pointerEditing = true;
-      if (controls) controls.enabled = false;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      try {
-        renderer?.domElement.setPointerCapture(event.pointerId);
-      } catch {
-        /* 有的指针已经 captured，忽略。 */
+      if (consumed) {
+        pointerEditing = true;
+        if (controls) controls.enabled = false;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        try {
+          renderer?.domElement.setPointerCapture(event.pointerId);
+        } catch {
+          /* 有的指针已经 captured，忽略。 */
+        }
+        return;
       }
+      // 未命中物件/手柄：view 模式放行给左键环绕；不拦截事件、不关控制器。
+      // select 空白起框选时 2D 桥会回 consumed=true，不会走到这里。
+      blankReleased = true;
     };
     const onPointerMove = (event: PointerEvent): void => {
       if (walkEnabledRef.current) return;
@@ -1217,7 +1257,14 @@ export default function OutdoorPlan3D({
         const hit = eventToPlanHit(event);
         api.pointerFromPlan('up', hit, pointerFlags(event, hit));
         syncEditVisuals();
+      } else if (blankReleased) {
+        // view 空白放行环绕：短按回喂 up，2D 按位移阈值判定单击清空；
+        // 环绕拖拽位移超阈值，2D 不会误选中或清空。
+        const hit = eventToPlanHit(event);
+        if (hit) api.pointerFromPlan('up', hit, pointerFlags(event, hit));
+        syncEditVisuals();
       }
+      blankReleased = false;
       if (!pointerEditing) return;
       pointerEditing = false;
       if (controls) controls.enabled = true;
@@ -1492,6 +1539,9 @@ export default function OutdoorPlan3D({
         compassRef={compassRef}
         attribution={groundState === 'satellite' ? basemapSourceAttribution(source) : null}
         testIdPrefix="outdoor-3d"
+        onResetNorth={resetNorth}
+        onOrbitDelta={orbitByDelta}
+        showCompass={false}
       />
     </div>
   );

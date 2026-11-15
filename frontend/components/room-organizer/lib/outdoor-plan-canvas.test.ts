@@ -23,7 +23,7 @@ import {
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
-import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
@@ -177,6 +177,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
     strokeRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`stroke:${x},${y},${w},${h}`),
     fillRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`fill:${x},${y},${w},${h}`),
     fillText: (t: string) => cap.texts.push(t),
+    strokeText: () => {},
   } as unknown as CanvasRenderingContext2D;
   Object.defineProperty(ctx, 'strokeStyle', { set: (v: string) => cap.strokes.push(v), get: () => '' });
   Object.defineProperty(ctx, 'fillStyle', { set: (v: string) => cap.fills.push(v), get: () => '' });
@@ -338,16 +339,19 @@ describe('route / node / worker drawing (H2-d)', () => {
 /* ---------------- H3-a 测量标注绘制 ---------------- */
 
 describe('measurement drawing (H3-a)', () => {
-  it('draws a fixed distance measurement as a dashed segment with a 5 m label', () => {
+  it('draws a fixed distance measurement as a solid segment with white-ring endpoints and a 5 m label', () => {
     const { ctx, cap } = makeCtx();
     drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
       { id: 'm1', kind: 'distance', points: [{ x: 0, y: 0 }, { x: 3, y: 4 }] },
     ]);
-    expect(cap.dash).toContainEqual([8, 5]);
+    // Google 测距口径：浅底近黑实线，无虚线。
+    expect(cap.strokes).toContain(PLANNING_MEASURE_COLORS.light);
+    expect(cap.dash).not.toContainEqual([8, 5]);
+    // 端点白心圆环。
+    expect(cap.fills).toContain('#ffffff');
+    // 读数不再画深色胶囊底衬。
+    expect(cap.fills.some(f => f.startsWith('rgba(15,22,32'))).toBe(false);
     expect(cap.texts).toContain('5 m');
-    expect(cap.strokes).toContain(PLANNING_LAYER_COLORS.measure);
-    // 深色底衬（标签可读性）也在 fill 记录里。
-    expect(cap.fills.some(f => f.startsWith('rgba(15,22,32'))).toBe(true);
   });
 
   it('draws a fixed 10×10 area measurement as a filled ring with a 100 m² label', () => {
@@ -355,8 +359,8 @@ describe('measurement drawing (H3-a)', () => {
     drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
       { id: 'm2', kind: 'area', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] },
     ]);
-    expect(cap.dash).toContainEqual([6, 4]);
-    expect(cap.fills).toContain(hexWithAlpha(PLANNING_LAYER_COLORS.measure, 0.12));
+    expect(cap.dash).not.toContainEqual([6, 4]);
+    expect(cap.fills).toContain(hexWithAlpha(PLANNING_MEASURE_COLORS.light, 0.12));
     expect(cap.texts).toContain('100 m²');
   });
 
@@ -372,8 +376,9 @@ describe('measurement drawing (H3-a)', () => {
     const { ctx, cap } = makeCtx();
     drawMeasureDraft({ ctx, viewport: view } as PlanCanvasContext, [{ x: 0, y: 0 }], 'distance', { x: 3, y: 4 });
     expect(cap.dash).toContainEqual([4, 4]); // 橡皮筋
-    // 一个顶点方块 + 读数底衬 = 2 个 fill 矩形。
-    expect(cap.rects.filter(r => r.startsWith('fill:'))).toHaveLength(2);
+    // 顶点为白心圆环，不再画实心方块；读数也无矩形底衬。
+    expect(cap.rects.filter(r => r.startsWith('fill:'))).toHaveLength(0);
+    expect(cap.fills).toContain('#ffffff');
     expect(cap.texts).toContain('5 m'); // 实时读数
 
     // 面积草稿：3 点 + 指针闭合 10×10 → 100 m²。
