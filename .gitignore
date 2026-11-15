@@ -42,6 +42,7 @@ output/model-library/
 
 # Scratch / heavy local assets (2026-10-28)
 .temp/
+frontend/.temp-pw/
 .cache/
 .temp-cloud.txt
 frontend/.preview/
