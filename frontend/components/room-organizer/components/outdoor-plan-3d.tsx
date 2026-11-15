@@ -73,6 +73,7 @@ import {
   planSceneObjectPlacements,
   type SceneObjectPlacement,
 } from '@/components/room-organizer/lib/plan-scene-placement';
+import { assignCrowdWalkRoutes } from '@/components/room-organizer/lib/plan-crowd-routes';
 import {
   splatPlacementOffset,
   splatVenueSpan,
@@ -713,16 +714,25 @@ export default function OutdoorPlan3D({
         workers: nextPlan.workers ?? [],
         boundary: nextPlan.boundary,
         metrics: nextMetrics,
+        routes: (nextPlan.routes ?? []).map((route) => ({ kind: route.kind, points: route.points })),
       });
       if (signature === crowdSignature) return;
       crowdSignature = signature;
       releaseCrowdChildren();
       const gen = ++crowdGen;
-      planCrowdShellPlacements(
+      const crowdPlacements = planCrowdShellPlacements(
         Array.isArray(nextPlan.workers) ? nextPlan.workers : [],
         nextPlan.boundary,
         nextMetrics,
-      ).forEach((placement) => {
+      );
+      // #102：可走云端人物挂人流动线 follower；车流/后勤流本批不接动态对象。
+      const walkRouteMap = assignCrowdWalkRoutes(
+        crowdPlacements,
+        Array.isArray(nextPlan.routes) ? nextPlan.routes : [],
+        nextPlan.boundary,
+        nextMetrics,
+      );
+      crowdPlacements.forEach((placement) => {
         const { shell } = placement;
         // 落位按本次重建的新 frame 折坐标（闭包 placeAt 用的是初始 metrics，边界变了会错位）。
         const placeAtNext = (object: THREE.Object3D, nextShell: { x: number; z: number }, rotationDeg = 0): void => {
@@ -792,7 +802,7 @@ export default function OutdoorPlan3D({
                 clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip() },
                 action: 'idle',
                 paused: false,
-                route: null,
+                route: walkRouteMap.get(placement.id) ?? null,
               });
             }
           })
