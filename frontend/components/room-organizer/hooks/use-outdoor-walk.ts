@@ -319,6 +319,26 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         lastTime = now;
 
         if (controls) adoptWalkPointerLock(controls, canvas);
+
+        const rig = rigOffsetForYaw(viewModeRef.current, yaw);
+
+        // #82 鸟瞰档：相机交回 OrbitControls 做高空环绕，hook 不步行、不摆位、不持指针锁；
+        // 帧照常透出（avatar 按 thirdPerson=false 隐藏；近邻 E 提示由场景层在鸟瞰档跳过）。
+        if (rig.orbitCamera) {
+          if (controls?.isLocked) controls.unlock();
+          moving = false;
+          onWalkFrameRef.current?.({
+            x: player.x,
+            y: player.y,
+            z: player.z,
+            yaw,
+            moving: false,
+            thirdPerson: false,
+            delta,
+          });
+          return;
+        }
+
         if (!controls?.isLocked && phaseRef.current !== 'drag' && phaseRef.current !== 'unlocked') return;
 
         const sprint = pressed.has('ShiftLeft') || pressed.has('ShiftRight');
@@ -350,7 +370,6 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         const movedZ = player.z - prevZ;
         moving = Math.hypot(movedX, movedZ) > 0.0001;
         if (moving) yaw = Math.atan2(movedX, movedZ);
-        const rig = rigOffsetForYaw(viewModeRef.current, yaw);
         camera.position.set(
           player.x + rig.x,
           player.y + rig.heightDelta,

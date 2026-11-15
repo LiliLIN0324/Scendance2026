@@ -124,12 +124,15 @@ describe('planCrowdShellPlacements', () => {
     expect(placements[0].glbUrl).toContain('/people/');
   });
 
-  it('有模型的岗位给出可加载的模型地址', () => {
+  it('没有 walk 角色的岗位在壳体层也回退人位标记（不挂本地低模）', () => {
     const placements = planCrowdShellPlacements(
       [{ id: 'w1', role: '观众', count: 1, position: { x: 10, y: 10 } }],
       BOUNDARY,
       METRICS,
     );
-    expect(placements[0].glbUrl).toMatch(/^\/showcase\/assets\/library\/model\/.+\.glb$/);
+    expect(placements).toHaveLength(1);
+    expect(placements[0].assetId).toBeNull();
+    expect(placements[0].slug).toBeNull();
+    expect(placements[0].glbUrl).toBeNull();
   });
 });
