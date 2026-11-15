@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
-import type { OutdoorAgentBridge } from "../lib/outdoor-agent-contract";
+import type { OutdoorAgentBridge, OutdoorMapEditHighlight } from "../lib/outdoor-agent-contract";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import Overlay from "./outdoor-plan-overlay";
 import { createStarterOutdoorPlan } from "../lib/outdoor-project-store";
@@ -30,7 +30,11 @@ const agent = vi.hoisted(() => ({
   registerRouteBridge: vi.fn((bridge: OutdoorAgentBridge | null) => {
     state.bridge = bridge;
   }),
-  outdoorWorkflow: { proposal: null, state: { confirmedBoundary: null } },
+  outdoorWorkflow: {
+    proposal: null as { kind: "scope"; next: SitePlanData } | null,
+    appliedHighlight: null as OutdoorMapEditHighlight | null,
+    state: { confirmedBoundary: null },
+  },
 }));
 vi.mock("../panels/agent-panel", () => ({ useAgentOptional: () => agent }));
 vi.mock("./outdoor-plan-canvas", async () => {
@@ -63,6 +67,8 @@ vi.mock("./outdoor-delivery-panel", () => ({
 vi.mock("../lib/site-plan-csv", () => ({ downloadPlanCsv: state.csv }));
 beforeEach(() => {
   localStorage.clear();
+  agent.outdoorWorkflow.proposal = null;
+  agent.outdoorWorkflow.appliedHighlight = null;
   state.bridge = null;
   state.canvas = null;
   state.three = null;
@@ -78,6 +84,53 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+it("keeps the guide buttons usable and hides the guide when the user works outside it", () => {
+  render(<Overlay projectId="guide-outside-action" seedPlan={createStarterOutdoorPlan()} />);
+  const begin = screen.getByRole("button", { name: "开始浏览" });
+  fireEvent.pointerDown(begin);
+  fireEvent.click(begin);
+  expect(screen.getByRole("dialog", { name: /这边是物件库/ })).toBeTruthy();
+
+  const outsideTool = document.createElement("button");
+  document.body.append(outsideTool);
+  const useTool = vi.fn();
+  outsideTool.addEventListener("click", useTool);
+  try {
+    fireEvent.pointerDown(outsideTool);
+    fireEvent.click(outsideTool);
+    expect(useTool).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId("guide-bubble")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("outdoor-plan-guide-v1")!)).toEqual({ done: ["welcome"], dismissed: false });
+  } finally {
+    outsideTool.remove();
+  }
+
+  fireEvent.click(screen.getByRole("button", { name: /^底图：/ }));
+  fireEvent.click(screen.getByRole("button", { name: "重看首次开图引导" }));
+  expect(screen.getByRole("dialog", { name: /这是你的场地画布/ })).toBeTruthy();
+  fireEvent.wheel(screen.getByTestId("merge-canvas"));
+  expect(screen.queryByTestId("guide-bubble")).toBeNull();
+});
+it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
+  const plan = createStarterOutdoorPlan();
+  const candidate = { ...plan, boundary: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }] };
+  agent.outdoorWorkflow.proposal = { kind: "scope", next: candidate };
+  const props = { projectId: "review-highlights", seedPlan: plan };
+  const { rerender } = render(<Overlay {...props} />);
+  expect(state.canvas?.workflowScopePreview).toBe(true);
+  expect(state.canvas?.workflowPreview).toEqual(candidate);
+  expect(state.canvas?.mapEditHighlight).toBeNull();
+
+  agent.outdoorWorkflow.proposal = null;
+  rerender(<Overlay {...props} />);
+  expect(state.canvas?.workflowScopePreview).toBe(false);
+  expect(state.canvas?.workflowPreview).toBeNull();
+
+  const highlight = { kind: "main-routes", routeIds: ["route-id"], nodeIds: ["entrance-id"] } as const;
+  agent.outdoorWorkflow.appliedHighlight = highlight;
+  rerender(<Overlay {...props} />);
+  expect(state.canvas?.mapEditHighlight).toEqual(highlight);
 });
 it("主线缺省高德与已有图源偏好保留，同时单位导出和Agent受控2D/3D接线共存", () => {
   expect(readPlanGroundSource()).toBe("amap-streets");

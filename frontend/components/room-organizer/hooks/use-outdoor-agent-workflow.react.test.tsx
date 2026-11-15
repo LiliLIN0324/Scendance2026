@@ -14,7 +14,8 @@ import type {
   OutdoorTurn,
 } from "../lib/outdoor-agent-contract";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
-vi.mock("../lib/road-network", () => ({
+vi.mock(import("../lib/road-network"), async (importOriginal) => ({
+  ...(await importOriginal()),
   fetchRoadNetwork: vi.fn(async () => ({ roads: [] })),
 }));
 vi.mock("../three/glb-assets", () => ({
@@ -175,6 +176,7 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   const anchor = { ...plan.anchor!, lng: 120.1 };
   act(() => flow.offerBoundary(anchor, ring, "IN77"));
   expect(apply).not.toHaveBeenCalled();
+  expect(flow.appliedHighlight).toBeNull();
   expect(host.textContent).toContain("部分使用请重画");
   const confirm = [...host.querySelectorAll("button")].find(
     (b) => b.textContent === "确认并应用这一版",
@@ -185,6 +187,20 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(apply).toHaveBeenCalledTimes(1);
   expect(plan.anchor?.lng).toBe(120.1);
   expect(flow.state.stage).toBe("zones");
+  expect(flow.appliedHighlight).toEqual({ kind: "scope" });
+  expect(host.textContent).toContain("拖动顶点调整后，请重新核对活动范围");
+});
+it("可从候选范围直接重画地图边界，重画前不写入提案", () => {
+  const anchor = { ...plan.anchor!, lng: 120.1 };
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  const redraw = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === "在地图上重画实际活动范围",
+  )!;
+  act(() => redraw.click());
+  expect(bridge.beginVenueBoundary).toHaveBeenCalledWith(anchor);
+  expect(apply).not.toHaveBeenCalled();
+  expect(flow.proposal).toBeNull();
+  expect(host.textContent).toContain("圈出实际活动范围并闭合");
 });
 it("刷新后重新预览未确认候选，仍需显式确认才写入", async () => {
   plan = { ...plan, boundary: [] };
@@ -248,12 +264,43 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
   );
   expect(plan.zones).toHaveLength(0);
   expect(flow.state.brief).toMatchObject({ event: "户外市集", guests: 45 });
-  await turn(
-    "这个安排没问题，就按它落下去吧",
-    response("confirm", {}, { confirmationEvidence: "就按它落下去吧" }),
-  );
+  await act(async () => {
+    await flow.handle("这个安排没问题，就按它落下去吧");
+  });
   expect(plan.zones).toHaveLength(1);
   expect(flow.state.stage).toBe("main-routes");
+  expect(flow.appliedHighlight).toEqual({ kind: "zones", zoneIds: [plan.zones[0]!.id] });
+  expect(host.textContent).toContain("可以拖动分区，或拖动顶点调整轮廓");
+
+  const editedZone = {
+    ...plan.zones[0]!,
+    polygon: plan.zones[0]!.polygon.map(({ x, y }) => ({ x: x + 1, y })),
+  };
+  plan = { ...plan, zones: [editedZone] };
+  const { lng, lat } = plan.anchor!;
+  bridge.roadNetwork = () => ({
+    roads: [{
+      id: "walkway",
+      name: "现场步道",
+      highway: "footway",
+      points: [[lng + 0.0003, lat - 0.0002], [lng + 0.0003, lat + 0.0008]],
+    }],
+  });
+  await turn("生成主通道", response("main-routes"));
+  expect(flow.proposal?.next.zones, flow.notice).toEqual([editedZone]);
+  expect(flow.appliedHighlight).toBeNull();
+  expect(host.textContent).not.toContain("拖动路线转折点");
+  await action("confirm");
+  expect(plan.routes.length).toBeGreaterThan(0);
+  expect(plan.zones).toEqual([editedZone]);
+  expect(flow.appliedHighlight).toEqual({
+    kind: "main-routes",
+    routeIds: plan.routes.map(route => route.id),
+    nodeIds: plan.nodes.map(node => node.id),
+  });
+  expect(host.textContent).toContain("拖动路线转折点绕开障碍");
+  act(() => flow.cancel());
+  expect(flow.appliedHighlight).toBeNull();
 });
 it("改口新任务后迟到旧模型结果不复活；取消与项目切换均隔离", async () => {
   await confirmScope();
