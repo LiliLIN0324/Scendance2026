@@ -47,10 +47,23 @@ import {
 } from '@/components/room-organizer/three/plan-basemap-tiles';
 import { ROOM_OBJECT_TAGS } from '@/components/room-organizer/three/room-builder';
 import {
+  advanceGlbAnimations,
   createCachedGlbModel,
+  createWalkAvatar,
   disposeOwnedModel,
   ensureGlbAsset,
 } from '@/components/room-organizer/three/glb-assets';
+import {
+  advancePeopleAnimations,
+  registerPersonAnim,
+} from '@/components/room-organizer/three/people-anim';
+import type { WalkViewMode } from '@/components/room-organizer/lib/walk-view-modes';
+import {
+  InteractRegistry,
+  nearestNearbyEntry,
+  type InteractableEntry,
+} from '@/components/room-organizer/lib/interact-registry';
+import { facilityInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
 import {
   planFootprintShapes,
 } from '@/components/room-organizer/lib/plan-footprint-geometry';
@@ -96,6 +109,14 @@ const SKY_GROUND = '#c9d4dc';
  *  2026-11-12 用户反馈「物体没放在平面上」：模型底面原来在 y=0，被 4 cm 高的瓦片盖住脚。
  *  syncFootprint 重摆时也必须带回这个底面，否则一编辑就又沉回 0。 */
 const PLAN_LAYER_BASE_Y = 0.052;
+
+/** 漫游视角档位按钮文案（与 walk-view-modes 四档对齐）。 */
+const WALK_VIEW_LABEL: Record<WalkViewMode, string> = {
+  orbit: '鸟瞰',
+  first: '第一人称',
+  third: '第三人称',
+  shoulder: '过肩',
+};
 
 
 
@@ -220,6 +241,12 @@ export interface OutdoorPlan3DProps {
   walkEnabled?: boolean;
   /** 漫游退出收口（第二次 Esc 或再点漫游钮），交外层把启用态置回 false。 */
   onWalkExit?: () => void;
+  /** 漫游视角档位（orbit/first/third/shoulder）；first 为相机即锚点，third/shoulder 显示占位 avatar 并后拉相机。 */
+  viewMode?: WalkViewMode;
+  /** 点视角切换钮时交外层循环到下一档（快捷键也走外层状态）。 */
+  onCycleView?: () => void;
+  /** E 键触发可交互物时回调条目（一期占位，#61 对话接这里）。 */
+  onInteract?: (entry: InteractableEntry) => void;
 }
 
 export default function OutdoorPlan3D({
@@ -233,6 +260,9 @@ export default function OutdoorPlan3D({
   active = true,
   walkEnabled = false,
   onWalkExit,
+  viewMode = 'first',
+  onCycleView,
+  onInteract,
 }: OutdoorPlan3DProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement | null>(null);
   // 保活态：隐藏时仍旧跑 LOD，但不渲染（不可见的 GPU 耗时没意义）。
@@ -256,6 +286,18 @@ export default function OutdoorPlan3D({
   const scaleBarRef = useRef<HTMLDivElement | null>(null);
   const scaleLabelRef = useRef<HTMLSpanElement | null>(null);
   const lineMaterialsRef = useRef<{ resolution: THREE.Vector2 }[]>([]);
+  // 漫游占位 avatar：第三人称 / 过肩档显示；帧姿态由 useOutdoorWalk 每帧写 ref，主 loop 摆位。
+  const avatarGroupRef = useRef<THREE.Group | null>(null);
+  const walkFrameRef = useRef<{ x: number; y: number; z: number; yaw: number; moving: boolean; thirdPerson: boolean } | null>(null);
+  // E 键交互：注册表实例 + 当前近邻条目（HUD 提示 / E 键触发用）。
+  const interactRegistryRef = useRef<InteractRegistry | null>(null);
+  if (!interactRegistryRef.current) interactRegistryRef.current = new InteractRegistry();
+  const [nearEntry, setNearEntry] = useState<InteractableEntry | null>(null);
+  const nearEntryIdRef = useRef<string | null>(null);
+  const nearEntryRef = useRef<InteractableEntry | null>(null);
+  nearEntryRef.current = nearEntry;
+  const onInteractRef = useRef(onInteract);
+  onInteractRef.current = onInteract;
   const [groundState, setGroundState] = useState<'loading' | 'satellite' | 'paper'>('loading');
 
   const zoomBy = useCallback((factor: number) => {
@@ -314,8 +356,38 @@ export default function OutdoorPlan3D({
     cameraRef,
     orbitRef: controlsRef,
     boundary: plan.boundary,
+    viewMode,
+    onWalkFrame: (frame) => { walkFrameRef.current = frame; },
     onExit: onWalkExit,
   });
+
+  // 岗位点位 / 设施 → 可交互条目：plan 变化时清空重登；动作回调交外层 onInteract（#61 对话接这里）。
+  useEffect(() => {
+    const registry = interactRegistryRef.current;
+    if (!registry) return;
+    registry.clear();
+    const bind = (entry: InteractableEntry) =>
+      registry.register(entry, ({ entry: e }) => onInteractRef.current?.(e));
+    const workers = Array.isArray(plan.workers) ? plan.workers : [];
+    for (const entry of workerInteractables(workers)) bind(entry);
+    const facilities = Array.isArray(plan.facilities) ? plan.facilities : [];
+    for (const entry of facilityInteractables(facilities)) bind(entry);
+  }, [plan.workers, plan.facilities]);
+
+  // E 键触发：仅漫游激活态绑定；跳过重复触发与输入框聚焦；近邻条目才生效。
+  useEffect(() => {
+    if (!walkEnabled) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || (event.target instanceof HTMLElement && event.target.matches('input, textarea, [contenteditable=true]'))) return;
+      if (event.code !== 'KeyE') return;
+      const registry = interactRegistryRef.current;
+      const entry = nearEntryRef.current;
+      if (!registry || !entry) return;
+      registry.actionFor(entry.id)?.({ entry });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [walkEnabled]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -560,6 +632,20 @@ export default function OutdoorPlan3D({
     crowdLayer.position.set(siteFrame.cx, PLAN_LAYER_BASE_Y, -siteFrame.cy);
     scene.add(crowdLayer);
 
+    // —— 漫游占位 avatar（第三人称 / 过肩档显示；世界坐标，不挂场地偏移层）——
+    const avatarGroup = new THREE.Group();
+    avatarGroup.name = 'plan-walk-avatar';
+    const avatarMat = new THREE.MeshStandardMaterial({ color: 0x3a6ea5, roughness: 0.8 });
+    const avatarSkinMat = new THREE.MeshStandardMaterial({ color: 0xd9b08c, roughness: 0.7 });
+    const avatarBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.9, 4, 10), avatarMat);
+    avatarBody.position.y = 0.95;
+    const avatarHead = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), avatarSkinMat);
+    avatarHead.position.y = 1.62;
+    avatarGroup.add(avatarBody, avatarHead);
+    avatarGroup.visible = false;
+    scene.add(avatarGroup);
+    avatarGroupRef.current = avatarGroup;
+
     /** 壳体坐标 → three 局部坐标（组再补 (w/2, 0, -d/2) 后与占位体重合）。 */
     const placeAt = (object: THREE.Object3D, shell: { x: number; z: number }, rotationDeg = 0): void => {
       object.position.set(shell.x - metrics.width / 2, 0, shell.z - metrics.depth / 2);
@@ -688,13 +774,17 @@ export default function OutdoorPlan3D({
         height: 1.75,
         color: '#ffffff',
         icon: '☺',
+        ...(placement.assetId ? { assetId: placement.assetId } : {}),
         glbUrl: placement.glbUrl,
         uniformScale: true,
       };
-      void ensureGlbAsset(placement.glbUrl, placement.glbUrl)
+      void ensureGlbAsset(placement.assetId ?? placement.glbUrl, placement.glbUrl)
         .then(() => {
           if (disposed || modelRunRef.current !== run) return;
-          const model = createCachedGlbModel(item, false);
+          // 带 Idle/Walk 片段的云端人物：挂独立 mixer 并进人物注册表播待机动作；
+          // 缺片段的回退本地低模走静态摆位（createWalkAvatar 返回 null）。
+          const avatar = createWalkAvatar(item);
+          const model = avatar?.group ?? createCachedGlbModel(item, false);
           if (!model) return;
           if (disposed || modelRunRef.current !== run) {
             disposeOwnedModel(model);
@@ -704,6 +794,17 @@ export default function OutdoorPlan3D({
           model.name = `plan-crowd-${placement.crowdType}`;
           crowdLayer.add(model);
           modelRoots.push(model);
+          if (avatar) {
+            registerPersonAnim(model, {
+              id: item.id,
+              mixer: avatar.mixer,
+              rig: null,
+              clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip() },
+              action: 'idle',
+              paused: false,
+              route: null,
+            });
+          }
         })
         .catch(() => {
           /* 人物模型拉不到：保留人位柱。 */
@@ -1242,8 +1343,13 @@ export default function OutdoorPlan3D({
     renderer.domElement.addEventListener('dblclick', onDblClick);
 
     let idleTick = 0;
+    let lastFrameAt = performance.now();
     function loop(): void {
       frame = window.requestAnimationFrame(loop);
+      const frameNow = performance.now();
+      // 切标签页回来时别把整段暂停一次补上；0.1 s 上限足够跟手（与室内循环同口径）。
+      const deltaSeconds = Math.min((frameNow - lastFrameAt) / 1000, 0.1);
+      lastFrameAt = frameNow;
       // 保活隐藏（2D 地图态）：每 6 帧只推进一次瓦片 LOD，切回 3D 时地面已经铺好，
       // 不需要再从低清瓦片重新抓一遍。
       if (!activeRef.current) {
@@ -1278,6 +1384,35 @@ export default function OutdoorPlan3D({
       if (!activeRef.current) return;
       // 2026-11-12 P2-i 3D 版：选中设施编辑手柄逐帧跟随镜头与拖拽预览（位置 + 恒定屏幕尺寸）。
       updateFacilityHandles();
+      // 户外人物动画：注册表推进待机/步态 + 自动播放的非人物 GLB 实例。
+      advancePeopleAnimations(deltaSeconds);
+      advanceGlbAnimations(deltaSeconds);
+      // 漫游占位 avatar：第三人称 / 过肩档按帧姿态摆位；第一人称、鸟瞰或退出漫游时隐藏。
+      const walkAvatar = avatarGroupRef.current;
+      const walkFrame = walkFrameRef.current;
+      if (walkAvatar) {
+        const showAvatar = walkEnabledRef.current && Boolean(walkFrame?.thirdPerson);
+        walkAvatar.visible = showAvatar;
+        if (showAvatar && walkFrame) {
+          walkAvatar.position.set(walkFrame.x, PLAN_LAYER_BASE_Y, walkFrame.z);
+          walkAvatar.rotation.y = walkFrame.yaw;
+        }
+      }
+      // E 键交互：每帧用漫游锚点（非漫游回退相机位置）预筛最近条目，仅 id 变化回写 state。
+      const interactRegistry = interactRegistryRef.current;
+      if (interactRegistry) {
+        const frameNow = walkFrameRef.current;
+        // 近邻按地面平面距离判定：玩家锚点 y 是眼高，这里压到地面基准，垂直差不参与可达半径。
+        const playerPos = frameNow
+          ? { x: frameNow.x, y: PLAN_LAYER_BASE_Y, z: frameNow.z }
+          : { x: camera.position.x, y: PLAN_LAYER_BASE_Y, z: camera.position.z };
+        const near = nearestNearbyEntry(interactRegistry.list(), playerPos);
+        const nearId = near?.id ?? null;
+        if (nearId !== nearEntryIdRef.current) {
+          nearEntryIdRef.current = nearId;
+          setNearEntry(near);
+        }
+      }
       if (process.env.NODE_ENV !== 'production') {
         // 本机验收桥：3D 手柄屏幕坐标（CSS px）+ 选中设施尺寸，Playwright 脚本直接点柄用。
         const facility = handleFacilityRef.current;
@@ -1310,6 +1445,35 @@ export default function OutdoorPlan3D({
                 rotate: project(rotateHandle),
               }
             : null,
+          crowd: crowdLayer.children.map((c) => {
+            let meshCount = 0;
+            c.traverse((n) => { if ((n as THREE.Mesh).isMesh) meshCount += 1; });
+            return {
+              name: c.name,
+              pos: c.position.toArray().map((n) => +n.toFixed(2)),
+              status: (c.userData as { glbStatus?: string }).glbStatus ?? null,
+              staticMixer: Boolean((c.userData as { glbMixer?: unknown }).glbMixer),
+              meshCount,
+              visible: c.visible,
+            };
+          }),
+          interact: interactRegistryRef.current
+            ? {
+                size: interactRegistryRef.current.size,
+                entries: interactRegistryRef.current.list().map((e) => ({ id: e.id, kind: e.kind, label: e.label, position: e.position })),
+                near: nearEntryRef.current?.id ?? null,
+              }
+            : null,
+          /** 本机验收桥：把轨道镜头拉近到第 index 个 crowd 实体（近景目检用，生产不调用）。 */
+          focusCrowd: (index = 0, distance = 3) => {
+            const target = crowdLayer.children[index];
+            if (!target || !camera || !controls) return false;
+            const p = target.getWorldPosition(new THREE.Vector3());
+            controls.target.copy(p);
+            camera.position.set(p.x + distance * 0.5, p.y + 1.7, p.z + distance);
+            controls.update();
+            return { target: p.toArray(), camPos: camera.position.toArray() };
+          },
           ...(viewport ? { viewport: { metersPerPixel: planMetersPerPixel(viewport) } } : {}),
         };
       }
@@ -1369,6 +1533,11 @@ export default function OutdoorPlan3D({
         }
         root.parent?.remove(root);
       });
+      avatarGroup.parent?.remove(avatarGroup);
+      avatarGroupRef.current = null;
+      walkFrameRef.current = null;
+      interactRegistryRef.current?.clear();
+      nearEntryIdRef.current = null;
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
           const material = object.material as THREE.Material | THREE.Material[] | undefined;
@@ -1424,8 +1593,9 @@ export default function OutdoorPlan3D({
         </div>
       )}
       {/* 2026-11-11 用户 m00274「只做了一个切片…就是场地的3d就行了」：
-          还没画边界时 3D 里只有一块底图面，容易被当成“多余的切片”——这里说清楚下一步。 */}
-      {plan.boundary.length < 3 && (
+          还没画边界时 3D 里只有一块底图面，容易被当成“多余的切片”——这里说清楚下一步。
+          漫游沉浸态隐藏这条编辑引导，避免与漫游 HUD 在顶部居中位置重合。 */}
+      {plan.boundary.length < 3 && !walkEnabled && (
         <div
           data-testid="outdoor-3d-empty-hint"
           style={{
@@ -1452,20 +1622,79 @@ export default function OutdoorPlan3D({
           style={{
             position: 'absolute',
             left: '50%',
-            bottom: 20,
+            top: 16,
             transform: 'translateX(-50%)',
-            zIndex: 3,
+            zIndex: 35,
             padding: '6px 12px',
             borderRadius: 10,
             background: 'rgba(18, 20, 26, 0.72)',
             color: '#fff',
             fontSize: 12,
             lineHeight: '18px',
-            pointerEvents: 'none',
+            display: 'flex',
+            gap: 10,
+            alignItems: 'center',
             whiteSpace: 'nowrap',
           }}
         >
-          WASD / 方向键行走 · Shift 加速 · Esc 退出漫游
+          <span>WASD / 方向键行走 · Shift 加速 · Esc 退出漫游</span>
+          {onCycleView && (
+            <button
+              type="button"
+              data-testid="outdoor-walk-view"
+              onClick={onCycleView}
+              style={{
+                pointerEvents: 'auto',
+                border: '1px solid rgba(255,255,255,0.35)',
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.12)',
+                color: '#fff',
+                fontSize: 12,
+                lineHeight: '18px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              {WALK_VIEW_LABEL[viewMode]} · F5
+            </button>
+          )}
+        </div>
+      )}
+      {nearEntry && (
+        <div
+          data-testid="outdoor-interact-hint"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 56,
+            transform: 'translateX(-50%)',
+            zIndex: 35,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            padding: '6px 12px',
+            borderRadius: 10,
+            background: 'rgba(18, 20, 26, 0.72)',
+            color: '#fff',
+            fontSize: 12,
+            lineHeight: '18px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span
+            style={{
+              border: '1px solid rgba(255,255,255,0.4)',
+              borderRadius: 5,
+              padding: '0 6px',
+              fontWeight: 600,
+            }}
+          >
+            E
+          </span>
+          <span>
+            {nearEntry.label}
+            {nearEntry.subtitle ? ` · ${nearEntry.subtitle}` : ''}
+          </span>
         </div>
       )}
       {groundState === 'paper' && (

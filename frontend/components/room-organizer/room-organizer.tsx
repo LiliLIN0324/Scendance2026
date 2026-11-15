@@ -86,6 +86,7 @@ import { useSplatLod } from './hooks/use-splat-lod';
 import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough, type WalkViewMode } from './hooks/use-walkthrough';
+import { nextWalkViewMode, type WalkViewMode as OutdoorWalkViewMode } from './lib/walk-view-modes';
 import { useWalkAvatar } from './hooks/use-walk-avatar';
 import { requestOutdoorWalkPointerLock, requestWalkPointerLock } from './lib/walk-engage';
 import { useWeather } from './hooks/use-weather';
@@ -569,6 +570,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 一期户外第一人称漫游启用态：独立于室内 walkthroughMode 的信号，避免翻旧链路
   // 把 OutdoorPlan3D 卸载；控制器与边界钳制自管在户外 3D 组件内。
   const [outdoorWalkActive, setOutdoorWalkActive] = useState(false);
+  // 户外漫游视角档位（四档：鸟瞰/第一/第三/过肩），独立于室内 walkViewMode。
+  const [outdoorWalkView, setOutdoorWalkView] = useState<OutdoorWalkViewMode>('first');
+  const cycleOutdoorWalkView = useCallback(() => {
+    setOutdoorWalkView((mode) => nextWalkViewMode(mode));
+  }, []);
   // 2026-11-13 用户指令：左栏「户外规划」卡片默认收起，只有点左轨「户外规划」钮才展开；
   // 右侧地图仍是常驻画面，不受这张卡的开合影响。
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>(null);
@@ -625,7 +631,10 @@ useEffect(() => {
    * 点击手势内同步发起（晚一个 render 手势就没了），控制器在 OutdoorPlan3D 内自管。
    */
   const toggleOutdoorWalk = useCallback((on: boolean) => {
-    if (on) requestOutdoorWalkPointerLock();
+    if (on) {
+      requestOutdoorWalkPointerLock();
+      setOutdoorWalkView('first');
+    }
     setOutdoorWalkActive(on);
   }, []);
   // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
@@ -2971,6 +2980,20 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', onKey);
   }, [walkAvatarOn, cycleWalkView]);
 
+  // 户外漫游 F5：循环四档视角（与室内 F5 链路互斥，仅户外激活态绑定）。
+  useEffect(() => {
+    if (!outdoorWalkActive) return;
+    const onOutdoorKey = (event: KeyboardEvent) => {
+      if (event.repeat || (event.target instanceof HTMLElement && event.target.matches('input, textarea, [contenteditable=true]'))) return;
+      if (event.code === 'F5') {
+        event.preventDefault();
+        cycleOutdoorWalkView();
+      }
+    };
+    window.addEventListener('keydown', onOutdoorKey);
+    return () => window.removeEventListener('keydown', onOutdoorKey);
+  }, [outdoorWalkActive, cycleOutdoorWalkView]);
+
   const { phase: walkthroughPhase, nearSeat: walkNearSeat, seated: walkSeated } = useWalkthrough({
     enabled: isReady && walkthroughActive,
     ...(walkAvatarOn ? { viewMode: walkViewMode, onWalkFrame: walkAvatar.frame, walkSpeed: 1.2 } : {}),
@@ -4344,7 +4367,7 @@ useEffect(() => {
         onOpenLux3d: openAholoWorkflow,
         luxToolsVisible: luxDirectVisible,
       }}>
-      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
+      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive || outdoorWalkActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
           <span
@@ -4819,6 +4842,8 @@ useEffect(() => {
                   active={outdoor3dTakeover}
                   walkEnabled={outdoorWalkActive}
                   onWalkExit={() => setOutdoorWalkActive(false)}
+                  viewMode={outdoorWalkView}
+                  onCycleView={cycleOutdoorWalkView}
                 />
               </div>
             )}

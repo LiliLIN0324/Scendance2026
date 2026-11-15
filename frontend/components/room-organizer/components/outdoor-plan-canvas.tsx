@@ -187,6 +187,8 @@ import {
   type PlanNodeIssue,
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
+import { WALK_ROLES, walkRoleCrowdType } from '../lib/walk-roles';
+import { crowdTypeForRole } from '../lib/plan-crowd-placement';
 import { nearestRingEdge, planGridStepM, snapPointToGrid } from '../lib/site-plan-snap';
 import { encodeStageCover } from '@/lib/stage-cover';
 import {
@@ -2839,6 +2841,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             role: worker.role, count: worker.count, position: worker.position, notes: worker.notes, id: worker.id,
             ...(worker.zoneId !== undefined ? { zoneId: worker.zoneId } : {}),
             ...(worker.color !== undefined ? { color: worker.color } : {}),
+            ...(worker.assetId !== undefined ? { assetId: worker.assetId } : {}),
           },
           current.boundary,
           current.zones,
@@ -4508,10 +4511,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage('出入口已删除；关联动线保留几何、引用已解除。');
   }
 
-  function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId'>>) {
+  function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId' | 'assetId'>>) {
     const current = planRef.current;
     if (patch.role !== undefined && patch.role.trim().length === 0) return;
     if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1)) return;
+    // 固定角色必须是登记表里可走的漫游角色；未登记/不可走视为未绑定，不写入。
+    if (patch.assetId !== undefined && patch.assetId && !WALK_ROLES.some(role => role.assetId === patch.assetId && role.walkable)) return;
     commitPlan({ ...current, workers: current.workers.map(w => (w.id === id ? { ...w, ...patch } : w)) });
   }
 
@@ -5827,6 +5832,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedRoute = selectedRouteId ? plan.routes.find(r => r.id === selectedRouteId) ?? null : null;
   const selectedNode = selectedNodeId ? plan.nodes.find(n => n.id === selectedNodeId) ?? null : null;
   const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
+  // 固定角色选项：可走漫游角色；与当前岗位同类的排前，其余在后。
+  const selectedWorkerCrowdType = selectedWorker ? crowdTypeForRole(selectedWorker.role) : null;
+  const workerRoleOptions = (() => {
+    const walkable = WALK_ROLES.filter(role => role.walkable);
+    if (!selectedWorkerCrowdType) return walkable;
+    return [
+      ...walkable.filter(role => walkRoleCrowdType(role) === selectedWorkerCrowdType),
+      ...walkable.filter(role => walkRoleCrowdType(role) !== selectedWorkerCrowdType),
+    ];
+  })();
   // 2026-11-11 用户指令：右上角浮窗「属性」页签的角标 = 当前同时选中的物件数（点选后自动切过来）。
   const selectionInspectorCount = (selectedZoneId ? 1 : 0) + (selectedFacility ? 1 : 0) + (selectedRoute ? 1 : 0) + (selectedNodeId ? 1 : 0) + (selectedWorkerId ? 1 : 0) + multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? 1 : 0);
   useEffect(() => {
@@ -7252,6 +7267,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       >
                         <option value="">（自动 / 无）</option>
                         {levelView.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                      </select>
+                    </label>
+                    <label style={zoneRowStyle}>
+                      固定角色
+                      <select
+                        aria-label="选中人员固定角色"
+                        value={selectedWorker.assetId ?? ''}
+                        onChange={event => updateWorker(selectedWorker.id, { assetId: event.target.value || undefined })}
+                        style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                      >
+                        <option value="">按岗位自动分配</option>
+                        {workerRoleOptions.map(role => <option key={role.assetId} value={role.assetId}>{role.name}</option>)}
                       </select>
                     </label>
                     <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>

@@ -1,17 +1,20 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { cloudPeopleUrl } from '../lib/cloud-assets';
+import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { normalizeGlbRoot } from '../lib/glb-normalize';
 import { isGlbUrl } from '../lib/glb-url';
 import { personIsAnimated, registerPersonAnim } from './people-anim';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
-const TIMEOUT_MS = 30_000;
+// 蒙皮人物 GLB 31–48MB，公网并发下载 + 解码易压过 30s（真机复现 AbortError）；
+// 超时窗口放宽到 90s，给大对象下载与 GLTFLoader 解析留足余量，物件小模型不受影响。
+const TIMEOUT_MS = 90_000;
 export type GlbAssetState = Readonly<{
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
+  stack?: string | undefined;
   dimensions?: Readonly<{ width: number; depth: number; height: number }>;
 }>;
 type CachedAsset = {
@@ -64,9 +67,101 @@ export function subscribeGlbAssets(listener: () => void): () => void {
 }
 export function getGlbAssetRevision(): number { return revision; }
 export function getGlbAssetState(key: string): GlbAssetState { return cache.get(key)?.state ?? IDLE; }
+
+export interface GlbCacheProbe {
+  key: string;
+  url: string;
+  status: GlbAssetState['status'];
+  error?: string | undefined;
+  stack?: string | undefined;
+  anims: string[];
+  hasSource: boolean;
+}
+
+/** 走查/E2E 探针：读缓存里每个条目的状态、错误与动画片段名（生产 UI 不消费）。 */
+export function glbCacheProbe(): GlbCacheProbe[] {
+  return [...cache.entries()].map(([key, entry]) => ({
+    key,
+    url: entry.url,
+    status: entry.state.status,
+    error: entry.state.error,
+    stack: entry.state.stack,
+    anims: (entry.animations ?? []).map(clip => clip.name),
+    hasSource: !!entry.source,
+  }));
+}
+
+// 浏览器走查探针（仅 dev 构建挂 window；生产构建不暴露任何全局）。
+if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+  (window as unknown as { __glbAssetCache?: typeof glbCacheProbe }).__glbAssetCache = glbCacheProbe;
+}
 /** Read-only source owned by the cache; callers must clone before mutation. */
 export function getGlbAssetSource(key: string): THREE.Object3D | undefined { return cache.get(key)?.source; }
 export function glbAssetKey(item: Pick<FurnitureItem, 'assetId' | 'glbUrl'>): string | undefined { return item.assetId ?? item.glbUrl; }
+
+/**
+ * 部分批次产物用 NUL(0x00) 而非规范空格对齐 JSON chunk；预检与 GLTFLoader 都会
+ * 对整段 JSON 做 parse，NUL 会被判成非空白字符。合法 JSON 文本内部不含裸 NUL，
+ * 这里把 JSON chunk 段里的 NUL 刷成空格，原地修补后再喂给校验与加载器。
+ */
+export function sanitizeGlbJsonPadding(bytes: Uint8Array): void {
+  if (bytes.length < 20) return;
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  if (view.getUint32(16, true) !== 0x4e4f534a) return;
+  const jsonLen = view.getUint32(12, true);
+  const end = Math.min(20 + jsonLen, bytes.length);
+  for (let i = 20; i < end; i += 1) if (bytes[i] === 0) bytes[i] = 0x20;
+}
+
+/**
+ * 部分合并产物漏写了 bufferView 的 `buffer` 字段（glTF 规范缺省为 0）。three 的
+ * GLTFLoader 没有对缺省值兜底，`buffers[undefined]` 取 `.type` 直接崩溃。这里在加载前
+ * 解析 GLB 的 JSON chunk，给缺省的 bufferView 补 `buffer: 0`，再重建合规的 GLB 容器；
+ * BIN chunk 数据原样保留。结构不符的输入原样返回，交由后续校验报错。
+ */
+export function repairGlbBufferViews(bytes: Uint8Array): ArrayBuffer {
+  const original = bytes.buffer as ArrayBuffer;
+  if (bytes.length < 20) return original;
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  if (view.getUint32(0, true) !== 0x46546c67 || view.getUint32(4, true) !== 2) return original;
+  const jsonLen = view.getUint32(12, true);
+  if (view.getUint32(16, true) !== 0x4e4f534a || 20 + jsonLen > bytes.length) return original;
+  const jsonText = new TextDecoder().decode(bytes.subarray(20, 20 + jsonLen)).replace(/[\0\s]+$/, '');
+  let document: { bufferViews?: Array<{ buffer?: number | undefined }> };
+  try {
+    document = JSON.parse(jsonText) as typeof document;
+  } catch {
+    return original;
+  }
+  let patched = false;
+  for (const bv of document.bufferViews ?? []) {
+    if (bv.buffer === undefined) { bv.buffer = 0; patched = true; }
+  }
+  if (!patched) return original;
+
+  const binOff = 20 + jsonLen;
+  const binLen = view.getUint32(binOff, true);
+  if (view.getUint32(binOff + 4, true) !== 0x4e4942 || binOff + 8 + binLen > bytes.length) return original;
+  const binData = bytes.subarray(binOff + 8, binOff + 8 + binLen);
+
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(document));
+  const jsonPad = (4 - (jsonBytes.length % 4)) % 4;
+  const newJsonLen = jsonBytes.length + jsonPad;
+  const total = 12 + 8 + newJsonLen + 8 + binLen;
+  const out = new Uint8Array(total);
+  const outView = new DataView(out.buffer);
+  outView.setUint32(0, 0x46546c67, true);
+  outView.setUint32(4, 2, true);
+  outView.setUint32(8, total, true);
+  outView.setUint32(12, newJsonLen, true);
+  outView.setUint32(16, 0x4e4f534a, true);
+  out.set(jsonBytes, 20);
+  out.fill(0x20, 20 + jsonBytes.length, 20 + newJsonLen);
+  outView.setUint32(20 + newJsonLen, binLen, true);
+  outView.setUint32(20 + newJsonLen + 4, 0x4e4942, true);
+  out.set(binData, 20 + newJsonLen + 8);
+  return out.buffer;
+}
 
 /** Reject external URI dependencies: an archived standalone GLB must reopen by itself. */
 export function validateGlbBuffer(buffer: ArrayBuffer, maxBytes = GLB_MAX_FILE_BYTES): void {
@@ -78,7 +173,9 @@ export function validateGlbBuffer(buffer: ArrayBuffer, maxBytes = GLB_MAX_FILE_B
   }
   const jsonLength = view.getUint32(12, true);
   if (view.getUint32(16, true) !== 0x4e4f534a || jsonLength > buffer.byteLength - 20) throw new Error('GLB 缺少有效模型数据。');
-  const document = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLength))) as { buffers?: { uri?: string }[]; images?: { uri?: string }[] };
+  // glTF 规范要求 JSON chunk 用空格对齐，部分批次产物用 NUL(0x00) 做填充；parse 前剥掉尾部 NUL/空白。
+  const jsonText = new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLength)).replace(/[\0\s]+$/, '');
+  const document = JSON.parse(jsonText) as { buffers?: { uri?: string }[]; images?: { uri?: string }[] };
   for (const dependency of [...(document.buffers ?? []), ...(document.images ?? [])]) {
     if (dependency.uri && !dependency.uri.startsWith('data:')) throw new Error('GLB 引用了外部文件，请先归档为独立模型。');
   }
@@ -91,29 +188,43 @@ async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffe
   const cloudTrial = LOCAL_WALK_ASSET_IDS.some(assetId => url === cloudPeopleUrl(assetId));
   const maxBytes = localTrial || cloudTrial ? LOCAL_WALK_MAX_FILE_BYTES : GLB_MAX_FILE_BYTES;
   const tooLarge = () => new Error(`GLB 超过 ${maxBytes / (1024 * 1024)} MB，未载入。`);
-  const response = await fetch(url, { signal, credentials: 'omit' });
-  if (!response.ok) throw new Error(`模型下载失败（HTTP ${response.status}）。`);
-  if (Number(response.headers.get('content-length')) > maxBytes) throw tooLarge();
-  if (!response.body) {
-    const buffer = await response.arrayBuffer(); validateGlbBuffer(buffer, maxBytes); return buffer;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let count = 0;
+
+  const readOnce = async (): Promise<Uint8Array> => {
+    const response = await fetch(url, { signal, credentials: 'omit' });
+    if (!response.ok) throw new Error(`模型下载失败（HTTP ${response.status}）。`);
+    if (Number(response.headers.get('content-length')) > maxBytes) throw tooLarge();
+    if (!response.body) return new Uint8Array(await response.arrayBuffer());
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let count = 0;
+    try {
+      while (true) {
+        const result = await reader.read();
+        if (result.done) break;
+        count += result.value.byteLength;
+        if (count > maxBytes) { await reader.cancel(); throw tooLarge(); }
+        chunks.push(result.value);
+      }
+    } finally { reader.releaseLock(); }
+    const bytes = new Uint8Array(count);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return bytes;
+  };
+
+  // 大对象偶发流式截断（network error / CONTENT_LENGTH_MISMATCH）只在网络层重试一次；
+  // HTTP 错误、超尺寸与主动取消不重试。
+  let bytes: Uint8Array;
   try {
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
-      count += result.value.byteLength;
-      if (count > maxBytes) { await reader.cancel(); throw tooLarge(); }
-      chunks.push(result.value);
-    }
-  } finally { reader.releaseLock(); }
-  const bytes = new Uint8Array(count);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  validateGlbBuffer(bytes.buffer, maxBytes);
-  return bytes.buffer;
+    bytes = await readOnce();
+  } catch (error) {
+    if (signal.aborted || !(error instanceof TypeError)) throw error;
+    bytes = await readOnce();
+  }
+  sanitizeGlbJsonPadding(bytes);
+  const repaired = repairGlbBufferViews(bytes);
+  validateGlbBuffer(repaired, maxBytes);
+  return repaired;
 }
 
 /** A GLB with only empty nodes renders as nothing; reject before measuring. */
@@ -156,7 +267,9 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
     } catch (error) {
       if (source) disposeOwnedModel(source);
       const message = controller.signal.aborted ? '模型加载超时或请求已取消，请重试。' : error instanceof Error ? error.message : '模型加载失败，请重试。';
-      if (cache.get(key) === entry) { entry.state = { status: 'error', error: message }; changed(); }
+      const stack = error instanceof Error ? error.stack : undefined;
+      if (cache.get(key) === entry) { entry.state = { status: 'error', error: message, ...(stack ? { stack } : {}) }; changed(); }
+      if (process.env.NODE_ENV !== 'production') console.error('[glb-load]', error);
       throw new Error(message);
     } finally { clearTimeout(timer); }
   })();
