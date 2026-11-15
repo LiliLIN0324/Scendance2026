@@ -41,6 +41,87 @@ export interface OneplanManifest {
   counts?: Record<string, number>;
 }
 
+/**
+ * 抓取包里没有、但现场真会用到的车型（2026-11-16 用户：清扫车、自行车得能直接摆上去）。
+ * 图是本地手绘的鸟瞰比例图，放在 public/oneplan-icons/scale-(fg|bg)/ 下，与清单同形接入，
+ * 所以既能当图标拖上平面，也能拿到真实占地（见 oneplan-library-size 的规则）。
+ * 不去改 manifest.json：那是抓取器的产物，重跑就被覆盖。
+ *
+ * 2026-11-16 目检（用户：「还有没有其他的图标也这样，货不对板」）：
+ * - 清扫车 / 自行车 原来画的是侧视图，和库里其余车的鸟瞰图不是一个画法 → 已重画为鸟瞰；
+ * - 出租车库里只有 24×24 的 icon 小字形，放大到 4.5×1.8 m 发糊 → 这里补一份平面比例图（scale 优先于 icon）；
+ * - 厕所拖车库里那张是男女厕所符号占满整块占地 → 素材文件已就地重画为拖车轮廓 + 角落 WC 标记
+ *   （就地改而不是再登记一份，避免同 slug 两张 scale 图争同一行）。
+ */
+export const CURATED_MANIFEST_ASSETS: readonly OneplanManifestAsset[] = [
+  {
+    path: '/oneplan-icons/scale-fg/sweeper.svg',
+    kind: 'scale-fg',
+    slug: 'sweeper',
+    name_zh: '清扫车',
+    name_en: 'Street Sweeper',
+    category_zh: '设施物料 / 车辆',
+    category_en: 'Infrastructure / Vehicles',
+    pack: 'Vehicles',
+    viewBox: '0 0 24 12',
+  },
+  {
+    path: '/oneplan-icons/scale-bg/sweeper.svg',
+    kind: 'scale-bg',
+    slug: 'sweeper',
+    name_zh: '清扫车',
+    name_en: 'Street Sweeper',
+    category_zh: '设施物料 / 车辆',
+    category_en: 'Infrastructure / Vehicles',
+    pack: 'Vehicles',
+    viewBox: '0 0 24 12',
+  },
+  {
+    path: '/oneplan-icons/scale-fg/bicycle.svg',
+    kind: 'scale-fg',
+    slug: 'bicycle',
+    name_zh: '自行车',
+    name_en: 'Bicycle',
+    category_zh: '设施物料 / 车辆',
+    category_en: 'Infrastructure / Vehicles',
+    pack: 'Vehicles',
+    viewBox: '0 0 24 8',
+  },
+  {
+    path: '/oneplan-icons/scale-bg/bicycle.svg',
+    kind: 'scale-bg',
+    slug: 'bicycle',
+    name_zh: '自行车',
+    name_en: 'Bicycle',
+    category_zh: '设施物料 / 车辆',
+    category_en: 'Infrastructure / Vehicles',
+    pack: 'Vehicles',
+    viewBox: '0 0 24 8',
+  },
+  {
+    path: '/oneplan-icons/scale-fg/taxi.svg',
+    kind: 'scale-fg',
+    slug: 'taxi',
+    name_zh: '出租车',
+    name_en: 'Taxi',
+    category_zh: '设施物料 / 车辆',
+    category_en: 'Infrastructure / Vehicles',
+    pack: 'Vehicles',
+    viewBox: '0 0 24 10',
+  },
+  {
+    path: '/oneplan-icons/scale-bg/taxi.svg',
+    kind: 'scale-bg',
+    slug: 'taxi',
+    name_zh: '出租车',
+    name_en: 'Taxi',
+    category_zh: '设施物料 / 车辆',
+    category_en: 'Infrastructure / Vehicles',
+    pack: 'Vehicles',
+    viewBox: '0 0 24 10',
+  },
+];
+
 /** 物件库里一件可选物件。 */
 export interface LibraryEntry {
   /** 稳定 id：`kind:slug`（同一 slug 在 icon / scale-fg 下是两件不同的物件）。 */
@@ -57,6 +138,8 @@ export interface LibraryEntry {
   depth: number;
   /** 3D 低模种类：帐篷 / 舞台 / 摊位 / 餐车 / 厕所 / 岗亭 / 垃圾桶 / 杂项。 */
   propKind: PlanPropKind;
+  /** 2026-11-16 「车」组：强制按 icon 款渲染（彩色圆底 + 白字形），库里 icon / scale 混在一起也长一样。 */
+  chipStyle?: 'icon';
   /** 2026-11-12 活动包物件：所属包 id（packs.json），非包条目缺省。 */
   packId?: string;
   /** 包内物件 id（`pack:` 模板 id 的第三段）。 */
@@ -289,9 +372,14 @@ export function libraryEntryFromAsset(asset: OneplanManifestAsset): LibraryEntry
 }
 
 /** 整份清单 → 物件库（顺序与清单一致，便于稳定渲染）。 */
-export function libraryEntries(assets: readonly OneplanManifestAsset[]): LibraryEntry[] {
+export function libraryEntries(
+  assets: readonly OneplanManifestAsset[],
+  /** `curated: false` 只用于测试：手绘素材与清单无关，会干扰「清单 → 条目」的断言。 */
+  options: { curated?: boolean } = {},
+): LibraryEntry[] {
   const out: LibraryEntry[] = [];
-  for (const asset of assets) {
+  const all = options.curated === false ? assets : [...assets, ...CURATED_MANIFEST_ASSETS];
+  for (const asset of all) {
     const entry = libraryEntryFromAsset(asset);
     if (entry) out.push(entry);
   }

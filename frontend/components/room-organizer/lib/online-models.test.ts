@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import catalogue from '../../../../assets/library/merged.json';
 import { ONLINE_BUCKET_LABELS, buildOnlineModelIndex, clearOnlineModelCache, filterOnlineModels,
-  formatModelBytes, loadOnlineModels, normalizeOnlineModels, onlineBucketLabel,
+  formatModelBytes, loadOnlineModels, loadShippedOnlineModels, normalizeOnlineModels, onlineBucketLabel,
   onlineModelThumb } from './online-models';
 
 /** A catalogue row shaped the way `assets/library/online.json` writes it. */
@@ -239,16 +240,25 @@ describe('loadOnlineModels', () => {
 describe('merged Chinese library', () => {
   it('merges all sources once and keeps Chinese and English searches usable', async () => {
     clearOnlineModelCache();
-    const index = await loadOnlineModels();
-    // 库快照（2026-11-12）：merged 543 件、1 件 blocked 场景被过滤 → 542 placeable；
-    // 其中已注册云身份 528（合并补入的 11 件与 rides 游乐设施 3 件均未走云注册）。
-    expect(index.models).toHaveLength(542);
-    expect(new Set(index.models.map(model => model.slug)).size).toBe(542);
+    const index = await loadShippedOnlineModels();
+    expect(index.models).toHaveLength(catalogue.placeableCount);
+    expect(new Set(index.models.map(model => model.slug)).size).toBe(index.models.length);
     expect(index.models.filter(model => model.assetId)).toHaveLength(528);
-    expect(index.buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(542);
+    expect(index.buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(index.models.length);
     expect(filterOnlineModels(index.models, '抱臂', 'people')[0]?.name).toBe('抱臂站立人物');
     expect(filterOnlineModels(index.models, 'arms crossed', 'people')[0]?.name).toBe('抱臂站立人物');
     expect(filterOnlineModels(index.models, '音箱', 'audio').length).toBeGreaterThan(5);
     expect(filterOnlineModels(index.models, '音箱', 'storage')).toHaveLength(0);
   });
+});
+
+it('keeps only explicitly linked models and all people in the public catalogue', async () => {
+  const { models: shipped } = await loadShippedOnlineModels();
+  const { models: visible } = await loadOnlineModels();
+  const { default: links } = await import('../../../../assets/library/icon-model-links.json');
+  const linked = new Set([...Object.values(links.icons), ...Object.values(links.variants).flat()]);
+  expect(visible.map(model => model.slug)).toEqual(shipped
+    .filter(model => model.bucket === 'people' || linked.has(model.slug))
+    .map(model => model.slug));
+  expect(shipped.length).toBeGreaterThan(visible.length);
 });

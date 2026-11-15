@@ -1,0 +1,5519 @@
+{
+  "models": [
+    {
+      "slug": "scendance-plan-emergency-access-point",
+      "name": "Emergency Access Point Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 17700,
+      "triangles": 86,
+      "sha256": "e4dbb4f678768a6e04e397452e3ed508548c729bdb442a312bf917f32a34c230",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-emergency-access-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-emergency-access-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "emergency-access-point",
+      "label": {
+        "name": "应急通道入口",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-evacuation-meeting-point",
+      "name": "Evacuation Meeting Point Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 16912,
+      "triangles": 86,
+      "sha256": "289921b00ec4bdcb93c225de8f2f83453ab1b172a0ce397074d032b010285b47",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-evacuation-meeting-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-evacuation-meeting-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "evacuation-meeting-point",
+      "label": {
+        "name": "疏散集合点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-pedestrian-access",
+      "name": "Pedestrian Access Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 17844,
+      "triangles": 86,
+      "sha256": "8be379150132507c1bd2233aa6ec14796453dd521581966910342fab0d83ad11",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-pedestrian-access.glb",
+      "thumb": "assets/library/thumb/scendance-plan-pedestrian-access.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "pedestrian-access",
+      "label": {
+        "name": "步行通道",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-vehicle-access",
+      "name": "Vehicle Access Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 18104,
+      "triangles": 86,
+      "sha256": "c7e8c688a9fc415188f1c4c34b2d71f14a285ebd1bc5f3c3ba603e9ac60d601a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-vehicle-access.glb",
+      "thumb": "assets/library/thumb/scendance-plan-vehicle-access.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "vehicle-access",
+      "label": {
+        "name": "车辆通道",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-information-point",
+      "name": "Information Point Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 11700,
+      "triangles": 86,
+      "sha256": "cb9400c06f6897d9967b7377f7ef662ae6b03b178f46da50c570f382a3aaf0ca",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-information-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-information-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "information-point",
+      "label": {
+        "name": "问询处",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-lost-property",
+      "name": "Lost Property Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 20644,
+      "triangles": 86,
+      "sha256": "1fad98b2469883c0ea36a20764acc87abafc96cede0f3a82e45fa810a1274c34",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-lost-property.glb",
+      "thumb": "assets/library/thumb/scendance-plan-lost-property.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "lost-property",
+      "label": {
+        "name": "失物招领",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-missing-persons-point",
+      "name": "Missing Persons Point Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 20960,
+      "triangles": 86,
+      "sha256": "175dfd3221ae7b2b35c8d5bd7fc3658be2e96a8bdab03dabbf6ff10241422f59",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-missing-persons-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-missing-persons-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "missing-persons-point",
+      "label": {
+        "name": "走失人员点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-wristband-collection",
+      "name": "Wristband Collection Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 19512,
+      "triangles": 86,
+      "sha256": "7ea1468e43fb80acbd2571abd1508786d38fa154e1bfed2e7954086595778479",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-wristband-collection.glb",
+      "thumb": "assets/library/thumb/scendance-plan-wristband-collection.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "wristband-collection",
+      "label": {
+        "name": "手环领取点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-welfare-point",
+      "name": "Welfare Point Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 15628,
+      "triangles": 86,
+      "sha256": "a1fc08db0b214c2477ebc406a3169654f72f50d1d48a71b8ad9f5bcab4d1e1b6",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-welfare-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-welfare-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "welfare-point",
+      "label": {
+        "name": "福利/关怀点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-load-zone",
+      "name": "Load Zone Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 19072,
+      "triangles": 86,
+      "sha256": "ec5f8a0fdf97eaef30df703bcae2232cc7fdb90ef03955bcb203d8ce5277118a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-load-zone.glb",
+      "thumb": "assets/library/thumb/scendance-plan-load-zone.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "load-zone",
+      "label": {
+        "name": "装卸区",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-park-and-ride",
+      "name": "Park and Ride Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 9872,
+      "triangles": 86,
+      "sha256": "78d5e89b8901910e975f784085b5ea75366f15eceef8a6a360af513709f68042",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-park-and-ride.glb",
+      "thumb": "assets/library/thumb/scendance-plan-park-and-ride.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "park-and-ride",
+      "label": {
+        "name": "停车换乘",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-cycle-parking",
+      "name": "Cycle Parking Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 18668,
+      "triangles": 86,
+      "sha256": "d9037809c22674786626f9e6ad12977a798f55d61719ea4c7d0714025c734ca4",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cycle-parking.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cycle-parking.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cycle-parking",
+      "label": {
+        "name": "自行车停车",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-km-marker",
+      "name": "KM Marker Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 10000,
+      "triangles": 86,
+      "sha256": "3f2ffd6a8ef41befb73770c96244c7348f4ccb5dacc886ad48a8d0a2c5c425ca",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-km-marker.glb",
+      "thumb": "assets/library/thumb/scendance-plan-km-marker.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "km-marker",
+      "label": {
+        "name": "公里标志",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-5km",
+      "name": "5km Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12596,
+      "triangles": 86,
+      "sha256": "d655ff47ba9903d5b18a413fa7b992750ebf571cc333164be9ccdce9e4f9939f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-5km.glb",
+      "thumb": "assets/library/thumb/scendance-plan-5km.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "5km",
+      "label": {
+        "name": "5 公里",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-parking",
+      "name": "Parking Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 7576,
+      "triangles": 86,
+      "sha256": "4b95d17c999b2ecd550795f7365cfc588e8db80633db2021639fa9d0adafd566",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-parking.glb",
+      "thumb": "assets/library/thumb/scendance-plan-parking.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "parking",
+      "label": {
+        "name": "停车",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-car-park-closed",
+      "name": "Car Park Closed Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 20316,
+      "triangles": 86,
+      "sha256": "e56097981c88d2a7dc694fffd5dc5421c4ca14000635e46ecd164685b1b7a517",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-car-park-closed.glb",
+      "thumb": "assets/library/thumb/scendance-plan-car-park-closed.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "car-park-closed",
+      "label": {
+        "name": "停车场关闭",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-national-speed-limit",
+      "name": "National Speed Limit Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 9580,
+      "triangles": 198,
+      "sha256": "8bef5502d7f9d15027771215766fd6f9c70d02f6d942753db03b1dfddbbafa49",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-national-speed-limit.glb",
+      "thumb": "assets/library/thumb/scendance-plan-national-speed-limit.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "national-speed-limit",
+      "label": {
+        "name": "国家限速",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-stop",
+      "name": "Stop Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 16568,
+      "triangles": 102,
+      "sha256": "6259f244600f133acecba2a9751ba8a29c8d33f10c1f2db60fa340c6a175bbfd",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-stop.glb",
+      "thumb": "assets/library/thumb/scendance-plan-stop.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "stop",
+      "label": {
+        "name": "停止",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-go",
+      "name": "Go Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 16460,
+      "triangles": 198,
+      "sha256": "66c1ca3f5e238af587eae49f1043cda48a10c212d1750529875be3047c47f041",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-go.glb",
+      "thumb": "assets/library/thumb/scendance-plan-go.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "go",
+      "label": {
+        "name": "通行/Go",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-entry",
+      "name": "No entry Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 9336,
+      "triangles": 198,
+      "sha256": "73a60afcdf620bb8e518de599d4cc013614e3032c96c456e7ea3956d9b6c3db3",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-entry.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-entry.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-entry",
+      "label": {
+        "name": "禁止驶入",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-parking",
+      "name": "No Parking Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 19200,
+      "triangles": 198,
+      "sha256": "7511caa12a00bd5bb9b5e10227573054425bcbf62cefdea012eb95a4e7320e81",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-parking.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-parking.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-parking",
+      "label": {
+        "name": "禁止停车",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-u-turn",
+      "name": "No U-Turn Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 16236,
+      "triangles": 198,
+      "sha256": "edbdecd47d117cdf62f2ada2cae63137aa1b29fe67cdf9f39c65f9ac2627a90e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-u-turn.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-u-turn.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-u-turn",
+      "label": {
+        "name": "禁止掉头",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-danger",
+      "name": "Danger Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 7904,
+      "triangles": 82,
+      "sha256": "155234c6872c9fde1d7bce7fb3687e224b7012c0a33fc5e86f5fbabcfe20d28a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-danger.glb",
+      "thumb": "assets/library/thumb/scendance-plan-danger.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "danger",
+      "label": {
+        "name": "危险",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-hazard",
+      "name": "Hazard Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12244,
+      "triangles": 82,
+      "sha256": "0e44e40e38b63c7bea010a3c2fb78f580119080a0995bae16ff5c7575bfb5684",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-hazard.glb",
+      "thumb": "assets/library/thumb/scendance-plan-hazard.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "hazard",
+      "label": {
+        "name": "危险路段",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-bumps",
+      "name": "Bumps Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14580,
+      "triangles": 82,
+      "sha256": "8897feaeddf0cdbde39b64e6f60370f0b948a556c5ced4faa6835c6dafccea75",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bumps.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bumps.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bumps",
+      "label": {
+        "name": "减速带",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-flood",
+      "name": "Flood Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 11704,
+      "triangles": 82,
+      "sha256": "2e618837c769387d00e6683c2502bd2d085c9e7d244a1ca0cdb14e5303bd3927",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-flood.glb",
+      "thumb": "assets/library/thumb/scendance-plan-flood.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "flood",
+      "label": {
+        "name": "积水/洪水",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-lollypop-crossing",
+      "name": "Lollypop crossing Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 1.05,
+      "bytes": 17616,
+      "triangles": 198,
+      "sha256": "b31984731b678af106be674971cd18eeee925949922fd723885378ae98d0e90e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-lollypop-crossing.glb",
+      "thumb": "assets/library/thumb/scendance-plan-lollypop-crossing.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "lollypop-crossing",
+      "label": {
+        "name": "手持停牌过街",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-merge",
+      "name": "Merge Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12736,
+      "triangles": 82,
+      "sha256": "e0c40a795eb0db9699966ef8f159196a3f55f37546a1b34396f4018b660a2592",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-merge.glb",
+      "thumb": "assets/library/thumb/scendance-plan-merge.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "merge",
+      "label": {
+        "name": "合流",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-queues",
+      "name": "Queues Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12984,
+      "triangles": 82,
+      "sha256": "4173bc3a01ef018d576ee5d9b1c07e6ba052ae9541783de5d24d7f075bb5febf",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-queues.glb",
+      "thumb": "assets/library/thumb/scendance-plan-queues.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "queues",
+      "label": {
+        "name": "排队",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-road-narrows",
+      "name": "Road Narrows Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 20540,
+      "triangles": 82,
+      "sha256": "f7702f7a9a07a5c55c459f0938fe5a6f6f1c3ae4366182c7566113f094c3818d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-road-narrows.glb",
+      "thumb": "assets/library/thumb/scendance-plan-road-narrows.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "road-narrows",
+      "label": {
+        "name": "道路变窄",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-roadworks",
+      "name": "Roadworks Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 23624,
+      "triangles": 82,
+      "sha256": "d42d095760d0b0d104eac5f105bb1a5dfeb5adbcbfda17ca16c7804349510358",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-roadworks.glb",
+      "thumb": "assets/library/thumb/scendance-plan-roadworks.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "roadworks",
+      "label": {
+        "name": "道路施工",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-school-children",
+      "name": "School Children Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14312,
+      "triangles": 82,
+      "sha256": "b80acf54f9a48eca2990e41b8b46e9f74c3b89b878da9d54cd2a90c814b261dd",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-school-children.glb",
+      "thumb": "assets/library/thumb/scendance-plan-school-children.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "school-children",
+      "label": {
+        "name": "注意学生",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-slippery",
+      "name": "Slippery Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12064,
+      "triangles": 82,
+      "sha256": "d58e792ba16ad0883292d835a4aa47e0cebce8b2242d1ccbb555c5076636e058",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-slippery.glb",
+      "thumb": "assets/library/thumb/scendance-plan-slippery.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "slippery",
+      "label": {
+        "name": "路面湿滑",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-towaway",
+      "name": "Towaway Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 17372,
+      "triangles": 86,
+      "sha256": "a04af776794daee6a1349dfb442bfe024074f4ef35ececb67d5296970073bf71",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-towaway.glb",
+      "thumb": "assets/library/thumb/scendance-plan-towaway.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "towaway",
+      "label": {
+        "name": "违停拖移",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-detour",
+      "name": "Detour Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 1.05,
+      "bytes": 12516,
+      "triangles": 86,
+      "sha256": "5e62af0b25a7985eda91c552de5434a1ef686d929f73da4d22aef85b94453aee",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-detour.glb",
+      "thumb": "assets/library/thumb/scendance-plan-detour.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "detour",
+      "label": {
+        "name": "绕行",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-diversion",
+      "name": "Diversion Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 1.05,
+      "bytes": 14112,
+      "triangles": 86,
+      "sha256": "99546ad083966e9cb96242031bf552f7644fbdd10fd4b54a760c93b4596f84b3",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-diversion.glb",
+      "thumb": "assets/library/thumb/scendance-plan-diversion.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "diversion",
+      "label": {
+        "name": "分流/改道",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-reduce-speed-now",
+      "name": "Reduce Speed Now Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 17848,
+      "triangles": 86,
+      "sha256": "e85bb401b7f1641152f14eec2d378ce4a1e94dbfb85669a94a3fb4a7be37f4c1",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-reduce-speed-now.glb",
+      "thumb": "assets/library/thumb/scendance-plan-reduce-speed-now.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "reduce-speed-now",
+      "label": {
+        "name": "请减速",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-road-ahead-closed",
+      "name": "Road Ahead Closed Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 1.05,
+      "bytes": 17244,
+      "triangles": 86,
+      "sha256": "9d99deda341910fbecddbaf3d62a8049528f5e2b5d85a40a074eddc9bf2cbf5f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-road-ahead-closed.glb",
+      "thumb": "assets/library/thumb/scendance-plan-road-ahead-closed.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "road-ahead-closed",
+      "label": {
+        "name": "前方道路封闭",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-road-closed",
+      "name": "Road Closed Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 1.05,
+      "bytes": 22272,
+      "triangles": 86,
+      "sha256": "434db3b8b066d2a61bff8c2329acf497eb7b9cb6f51596b200375d53a50bcd88",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-road-closed.glb",
+      "thumb": "assets/library/thumb/scendance-plan-road-closed.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "road-closed",
+      "label": {
+        "name": "道路封闭",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-straight",
+      "name": "Straight Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 9788,
+      "triangles": 198,
+      "sha256": "3face05af6544f3790e96f4d8e064c7af50d3f69b26099c9485c514850e27938",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-straight.glb",
+      "thumb": "assets/library/thumb/scendance-plan-straight.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "straight",
+      "label": {
+        "name": "直行",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-turn-left",
+      "name": "Turn Left Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 9720,
+      "triangles": 198,
+      "sha256": "58aaf70e7953eba308a31b97986e03390c388be61b171f791e2783e8531a00a0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-turn-left.glb",
+      "thumb": "assets/library/thumb/scendance-plan-turn-left.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "turn-left",
+      "label": {
+        "name": "左转",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-turn-right",
+      "name": "Turn Right Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 9728,
+      "triangles": 198,
+      "sha256": "5f3b594dedf8075814b075d5088655b2203281c06c1760fb494b634ddc2f176d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-turn-right.glb",
+      "thumb": "assets/library/thumb/scendance-plan-turn-right.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "turn-right",
+      "label": {
+        "name": "右转",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-traffic-lights-ahead",
+      "name": "Traffic Lights Ahead Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 16740,
+      "triangles": 82,
+      "sha256": "825a82c984ee712e7449fe661c38b352d4591c7e0b1d2fe8614cd2be9d6f6827",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-traffic-lights-ahead.glb",
+      "thumb": "assets/library/thumb/scendance-plan-traffic-lights-ahead.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "traffic-lights-ahead",
+      "label": {
+        "name": "前方红绿灯",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-aid-station-200m",
+      "name": "Aid Station 200m Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14596,
+      "triangles": 86,
+      "sha256": "77924dce5cb3f161b52171848f3ccc0f254ed22e329395f7803084d27d4aa31b",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-aid-station-200m.glb",
+      "thumb": "assets/library/thumb/scendance-plan-aid-station-200m.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "aid-station-200m",
+      "label": {
+        "name": "补给站（200m）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-penalty-box-200m",
+      "name": "Penalty Box 200m Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 15540,
+      "triangles": 86,
+      "sha256": "2eabf2cce0c0b43e7e9f34f49f9f42762d4d79c24a076519342f527c30392ab0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-penalty-box-200m.glb",
+      "thumb": "assets/library/thumb/scendance-plan-penalty-box-200m.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "penalty-box-200m",
+      "label": {
+        "name": "罚时区（200m）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-repair-200m",
+      "name": "Repair 200m Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 15944,
+      "triangles": 86,
+      "sha256": "53e7f4958db058fe5a710d18e8080a66b09bbf0cc9fcd8aab991cb299f6d550f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-repair-200m.glb",
+      "thumb": "assets/library/thumb/scendance-plan-repair-200m.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "repair-200m",
+      "label": {
+        "name": "维修点（200m）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-littering-start",
+      "name": "Littering Start Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14272,
+      "triangles": 86,
+      "sha256": "d7c47b19458088cf803aadadd00d3a693e1bd36255d20f57345ddbf9353cb2d8",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-littering-start.glb",
+      "thumb": "assets/library/thumb/scendance-plan-littering-start.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "littering-start",
+      "label": {
+        "name": "可扔垃圾区起点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-littering-end",
+      "name": "Littering End Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 11912,
+      "triangles": 86,
+      "sha256": "ac5221547d50723777c5c993f05302140fb0aa6ccb5351f71137d5b8052b7552",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-littering-end.glb",
+      "thumb": "assets/library/thumb/scendance-plan-littering-end.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "littering-end",
+      "label": {
+        "name": "可扔垃圾区终点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-aero-start",
+      "name": "No Aero Start Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 17264,
+      "triangles": 86,
+      "sha256": "83d74f3057338c637c1da61525ef66a2faa8d5d8fa9260342a895b6cf8e623bb",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-aero-start.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-aero-start.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-aero-start",
+      "label": {
+        "name": "禁止气动姿势起点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-aero-end",
+      "name": "No Aero End Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14152,
+      "triangles": 86,
+      "sha256": "f35693a2a04e59af8fab4d3cf8fc98f00a3f1ad405f32f7866dc5b3bbe7723ba",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-aero-end.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-aero-end.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-aero-end",
+      "label": {
+        "name": "禁止气动姿势终点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-draft-start",
+      "name": "No Draft Start Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 17228,
+      "triangles": 86,
+      "sha256": "89ac37291d358b7c89c76a2ab719c99da5912d4c5d7059f82bb602e9eaa1f15e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-draft-start.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-draft-start.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-draft-start",
+      "label": {
+        "name": "禁止跟骑起点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-no-draft-end",
+      "name": "No Draft End Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14516,
+      "triangles": 86,
+      "sha256": "b9c7a0d82288401506e5c27b58b844e7af0b78c83cce00524bbd49f56190fb8e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-no-draft-end.glb",
+      "thumb": "assets/library/thumb/scendance-plan-no-draft-end.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "no-draft-end",
+      "label": {
+        "name": "禁止跟骑终点",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-bike-in",
+      "name": "Bike In Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 11292,
+      "triangles": 86,
+      "sha256": "027654df3422c01ab1cf251ea3d99ea84dc5fe2a659ea4345d0a4ac6ee4eb842",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bike-in.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bike-in.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bike-in",
+      "label": {
+        "name": "骑行入口",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-bike-out",
+      "name": "Bike Out Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12528,
+      "triangles": 86,
+      "sha256": "a618ce0aec7f4e6ff7af941b957aa581783f0a9c06619bcd9b62522cd1f0d400",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bike-out.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bike-out.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bike-out",
+      "label": {
+        "name": "骑行出口",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-run-out",
+      "name": "Run Out Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 12360,
+      "triangles": 86,
+      "sha256": "fc5b8413481468b58e791be4db34e817369814a888a7e9fb7a254c136d184709",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-run-out.glb",
+      "thumb": "assets/library/thumb/scendance-plan-run-out.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "run-out",
+      "label": {
+        "name": "跑步出口",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-swim-in",
+      "name": "Swim in Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14184,
+      "triangles": 86,
+      "sha256": "84962a644133b94978d2711edd2856464fdec3e1764de25d9ecb55f9a826bb70",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-swim-in.glb",
+      "thumb": "assets/library/thumb/scendance-plan-swim-in.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "swim-in",
+      "label": {
+        "name": "游泳入口",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-swim-out",
+      "name": "Swim out Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 14688,
+      "triangles": 86,
+      "sha256": "1f83dd157575e091cd2ed86ee65ac7cb384cc8928a9acdbedb7f5ca57007ced0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-swim-out.glb",
+      "thumb": "assets/library/thumb/scendance-plan-swim-out.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "swim-out",
+      "label": {
+        "name": "游泳出口",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-p1",
+      "name": "P1 Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 8224,
+      "triangles": 86,
+      "sha256": "3293990045c36303526cff9df05bca26b654fbb073552d3bff356440244958f8",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-p1.glb",
+      "thumb": "assets/library/thumb/scendance-plan-p1.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "p1",
+      "label": {
+        "name": "导视牌（P1）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-p2",
+      "name": "P2 Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 10096,
+      "triangles": 86,
+      "sha256": "5cf27038debb5d6016f1b64278c11f38f95a89b71681e0028750776234d76d7d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-p2.glb",
+      "thumb": "assets/library/thumb/scendance-plan-p2.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "p2",
+      "label": {
+        "name": "导视牌（P2）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-p3",
+      "name": "P3 Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 10976,
+      "triangles": 86,
+      "sha256": "b443547b0bc8d0e6f8f618e0310805e5773ce130b6b85165e1eaeb18a392b4de",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-p3.glb",
+      "thumb": "assets/library/thumb/scendance-plan-p3.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "p3",
+      "label": {
+        "name": "导视牌（P3）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-p4",
+      "name": "P4 Sign",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.84,
+      "depth": 0.4,
+      "height": 2.0,
+      "bytes": 8728,
+      "triangles": 86,
+      "sha256": "7763cae5472db64639943692e9c608a478715288115c23d510ee9f33e32ba403",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-p4.glb",
+      "thumb": "assets/library/thumb/scendance-plan-p4.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "p4",
+      "label": {
+        "name": "导视牌（P4）",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-aluminum-trackway",
+      "name": "Aluminum Trackway",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.4,
+      "depth": 1.15,
+      "height": 0.064,
+      "bytes": 3144,
+      "triangles": 120,
+      "sha256": "6fb5484a6d0325b7f1cd72e24cced0203ee9f1d8197665058dba7754fe6fcc3f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-aluminum-trackway.glb",
+      "thumb": "assets/library/thumb/scendance-plan-aluminum-trackway.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "aluminum-trackway",
+      "label": {
+        "name": "铝制铺道板",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-ground-protection-mats",
+      "name": "Ground Protection Mats",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.4,
+      "depth": 1.2,
+      "height": 0.0645,
+      "bytes": 18268,
+      "triangles": 1200,
+      "sha256": "0653d647e67f28d443a6bf19b858496cbee692a2abe4092c51fbb1e96b058fcf",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ground-protection-mats.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ground-protection-mats.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ground-protection-mats",
+      "label": {
+        "name": "地面保护垫",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-plastic-trackway",
+      "name": "Plastic Trackway",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.0,
+      "depth": 1.0,
+      "height": 0.064,
+      "bytes": 3088,
+      "triangles": 120,
+      "sha256": "a8a2c35de4b39a3f87b7b8f0fcc481e3bd3422d0889a7d27cc967cae4f0ea218",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-plastic-trackway.glb",
+      "thumb": "assets/library/thumb/scendance-plan-plastic-trackway.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "plastic-trackway",
+      "label": {
+        "name": "塑料铺道板",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-training-wickets",
+      "name": "Training Wickets",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.33,
+      "depth": 0.17,
+      "height": 0.792,
+      "bytes": 5984,
+      "triangles": 312,
+      "sha256": "9d90a3894706128554c276f255c870d6bb8338f6abdf768df1aeb6ba679cb4eb",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-training-wickets.glb",
+      "thumb": "assets/library/thumb/scendance-plan-training-wickets.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "training-wickets",
+      "label": {
+        "name": "训练三柱门",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-alternate-wickets",
+      "name": "Alternate Wickets",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.236,
+      "depth": 0.036,
+      "height": 0.732,
+      "bytes": 5204,
+      "triangles": 300,
+      "sha256": "6d1213d9e5e47724e7c6bf426df6a72c5f99e69aab106487ed51afe270d486be",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-alternate-wickets.glb",
+      "thumb": "assets/library/thumb/scendance-plan-alternate-wickets.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "alternate-wickets",
+      "label": {
+        "name": "备用三柱门",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-lantern",
+      "name": "Red Lantern",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.611512,
+      "depth": 0.611512,
+      "height": 0.820555,
+      "bytes": 48240,
+      "triangles": 3728,
+      "sha256": "490ca0c7aefb6541bf196a1ee165eae72767e78525635cca638fb3bc1982f3fa",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-lantern.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-lantern.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-lantern",
+      "label": {
+        "name": "灯笼",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-lantern-riddle",
+      "name": "Lantern Riddle",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.611512,
+      "depth": 0.612756,
+      "height": 0.820555,
+      "bytes": 53648,
+      "triangles": 3742,
+      "sha256": "7fdbaa3b166327b6d7571ed5b471e54d650a78531c1365b2882bc7db619029b6",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-lantern-riddle.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-lantern-riddle.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-lantern-riddle",
+      "label": {
+        "name": "灯谜",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-round-fan",
+      "name": "Round Fan",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.38,
+      "depth": 0.03,
+      "height": 0.51,
+      "bytes": 16672,
+      "triangles": 1148,
+      "sha256": "775db66682a2e0d97762ce6a942660d4b43ef37672179281fcd969f15d319403",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-round-fan.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-round-fan.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-round-fan",
+      "label": {
+        "name": "团扇",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-firecracker",
+      "name": "Firecrackers",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.217,
+      "depth": 0.162,
+      "height": 0.241058,
+      "bytes": 37828,
+      "triangles": 2880,
+      "sha256": "7244e83260b6cfe1b12c99a1183e13dbf01893bae41ca1752a0ccc61cb069fde",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-firecracker.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-firecracker.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-firecracker",
+      "label": {
+        "name": "鞭炮",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-candied-hawthorn",
+      "name": "Candied Hawthorn",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.048,
+      "depth": 0.048,
+      "height": 0.32,
+      "bytes": 19908,
+      "triangles": 1468,
+      "sha256": "bd88fc48ad024a87c367a74357e38a66a34639c6616c5ee5894bdca59921f635",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-candied-hawthorn.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-candied-hawthorn.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-candied-hawthorn",
+      "label": {
+        "name": "糖葫芦",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-mooncake",
+      "name": "Mooncake",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.11,
+      "depth": 0.11,
+      "height": 0.042,
+      "bytes": 14836,
+      "triangles": 1032,
+      "sha256": "4312503a9c1bf9288e1e016710be99adc5e7b6869ea769d2456b5200a3a21052",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-mooncake.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-mooncake.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-mooncake",
+      "label": {
+        "name": "月饼",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-zongzi",
+      "name": "Zongzi",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.127,
+      "depth": 0.102,
+      "height": 0.09,
+      "bytes": 4524,
+      "triangles": 244,
+      "sha256": "6153094f65866afa8718a6efaee1b8308f49b5f7d32205d950650842cfc91385",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-zongzi.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-zongzi.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-zongzi",
+      "label": {
+        "name": "粽子",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-red-envelope",
+      "name": "Red Envelope",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.09,
+      "depth": 0.01,
+      "height": 0.174,
+      "bytes": 3044,
+      "triangles": 73,
+      "sha256": "b19d425916c1cb3ed65701fc45534ff396d39e4b5b69837995064485d3d4ed15",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-red-envelope.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-red-envelope.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-red-envelope",
+      "label": {
+        "name": "红包",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-balloon-arch",
+      "name": "Balloon arch",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.330473,
+      "depth": 0.710473,
+      "height": 3.14,
+      "bytes": 107820,
+      "triangles": 8640,
+      "sha256": "922b594e4fec15f9dbccd56c07cf58c502995ec6f530c8d41b1a98359d480e73",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-balloon-arch.glb",
+      "thumb": "assets/library/thumb/scendance-plan-balloon-arch.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "balloon-arch",
+      "label": {
+        "name": "气球拱门",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-balloons",
+      "name": "Balloons",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.56,
+      "depth": 0.41,
+      "height": 0.971158,
+      "bytes": 15400,
+      "triangles": 1044,
+      "sha256": "82e2a3752675bf6d88fc38dac2099531e85422c0307cfab4ce3db7054df63b8f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-balloons.glb",
+      "thumb": "assets/library/thumb/scendance-plan-balloons.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "balloons",
+      "label": {
+        "name": "气球",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-inflatable-arch",
+      "name": "Inflatable Arch",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.406,
+      "depth": 0.606,
+      "height": 3.2,
+      "bytes": 46012,
+      "triangles": 3620,
+      "sha256": "a37cab6f255c03d6d27aa58ca57ca8c5814f7963a2c5e8d8d12befaaf5e87981",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-inflatable-arch.glb",
+      "thumb": "assets/library/thumb/scendance-plan-inflatable-arch.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "inflatable-arch",
+      "label": {
+        "name": "充气拱门",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-truss-arch",
+      "name": "Truss Arch",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.3,
+      "depth": 0.64,
+      "height": 3.269,
+      "bytes": 42000,
+      "triangles": 3264,
+      "sha256": "33a5684afec1db88284c928eee42352459b85b5f193b1b929ee49aba91d1fb5d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-truss-arch.glb",
+      "thumb": "assets/library/thumb/scendance-plan-truss-arch.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "truss-arch",
+      "label": {
+        "name": "桁架拱门",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-bouncy-castle",
+      "name": "Bouncy castle",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.99,
+      "depth": 4.365,
+      "height": 3.26,
+      "bytes": 40600,
+      "triangles": 2844,
+      "sha256": "049db42c8d99f87b3ee409915e89a15e9c68ad943a02830980dd34f6d8120951",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bouncy-castle.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bouncy-castle.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bouncy-castle",
+      "label": {
+        "name": "充气城堡",
+        "bucket": "rides"
+      }
+    },
+    {
+      "slug": "scendance-plan-yurt",
+      "name": "Yurt",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.4,
+      "depth": 5.445,
+      "height": 3.24,
+      "bytes": 5248,
+      "triangles": 168,
+      "sha256": "034c13c5ce8e635a6b64fce8ce16f695ecbc376e61194a26329398da39f80406",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-yurt.glb",
+      "thumb": "assets/library/thumb/scendance-plan-yurt.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "yurt",
+      "label": {
+        "name": "蒙古包",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-warming-dome",
+      "name": "Warming Dome",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.530544,
+      "depth": 5.53527,
+      "height": 3.14674,
+      "bytes": 83996,
+      "triangles": 5964,
+      "sha256": "2ed2350cf8cfd9017a36ded9d070a25cf8809b53abdcf32cd7419580303aa628",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-warming-dome.glb",
+      "thumb": "assets/library/thumb/scendance-plan-warming-dome.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "warming-dome",
+      "label": {
+        "name": "取暖穹顶",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-stretch-tent",
+      "name": "Stretch tent",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 9.463403,
+      "depth": 6.315641,
+      "height": 3.504699,
+      "bytes": 8820,
+      "triangles": 488,
+      "sha256": "79a91c949ee9901f044de0d770293c1eda2a386e4529514c69b1d6970b4843aa",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-stretch-tent.glb",
+      "thumb": "assets/library/thumb/scendance-plan-stretch-tent.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "stretch-tent",
+      "label": {
+        "name": "拉伸棚",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-feather-flag",
+      "name": "Feather Flag",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.097553,
+      "depth": 0.59,
+      "height": 2.934597,
+      "bytes": 5652,
+      "triangles": 284,
+      "sha256": "3f2d732436d8206963efc171fa14b790b0eea3ad773913763e30b046021fb0b6",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-feather-flag.glb",
+      "thumb": "assets/library/thumb/scendance-plan-feather-flag.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "feather-flag",
+      "label": {
+        "name": "刀旗/羽毛旗",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-pull-up-banner",
+      "name": "Pull up banner",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.94,
+      "depth": 0.29,
+      "height": 2.1175,
+      "bytes": 4116,
+      "triangles": 108,
+      "sha256": "cc8a1fc054660254ae0df976efd212e35db849f7a7e7ace193225790796aff67",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-pull-up-banner.glb",
+      "thumb": "assets/library/thumb/scendance-plan-pull-up-banner.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "pull-up-banner",
+      "label": {
+        "name": "易拉宝",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-lamp-post-banner",
+      "name": "Lamp Post Banner",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.03,
+      "depth": 0.4,
+      "height": 4.094,
+      "bytes": 6332,
+      "triangles": 288,
+      "sha256": "6ffb3f4c15746d1b7ed221ca2ebac8bc49436cc943a92119058c2532bf8a6b0d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-lamp-post-banner.glb",
+      "thumb": "assets/library/thumb/scendance-plan-lamp-post-banner.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "lamp-post-banner",
+      "label": {
+        "name": "灯杆旗",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-signage-frame-2",
+      "name": "Signage frame — 2 sides",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.39,
+      "depth": 1.06,
+      "height": 1.94,
+      "bytes": 9052,
+      "triangles": 552,
+      "sha256": "fd7cb8ace9cf490a2a2f13ffe4a32bee92e383696bdd8b876de6ce0beecca144",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-signage-frame-2.glb",
+      "thumb": "assets/library/thumb/scendance-plan-signage-frame-2.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "signage-frame-2",
+      "label": {
+        "name": "指示牌架·双面",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-signage-frame-4",
+      "name": "Signage frame — 4 sides",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.39,
+      "depth": 1.06,
+      "height": 1.94,
+      "bytes": 12368,
+      "triangles": 816,
+      "sha256": "0b072074f36476858225d018801c1bff428ce574766e993da8f8db9b5c50d990",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-signage-frame-4.glb",
+      "thumb": "assets/library/thumb/scendance-plan-signage-frame-4.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "signage-frame-4",
+      "label": {
+        "name": "指示牌架·四面",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-crossing-point",
+      "name": "Crossing Point",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.2,
+      "depth": 3.45,
+      "height": 0.0765,
+      "bytes": 3144,
+      "triangles": 120,
+      "sha256": "52ac5f1bbacf04438d30957f239f803cb577d97d2da3bb8aed55907c4cde5e8d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-crossing-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-crossing-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "crossing-point",
+      "label": {
+        "name": "人行过街点",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-vms-fixed",
+      "name": "VMS Fixed",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.03,
+      "depth": 0.66,
+      "height": 2.41,
+      "bytes": 14544,
+      "triangles": 146,
+      "sha256": "35da9dc67875d824c49579bbd87c9ffab68f6d3fa4f2aa71bc1a67c4233408c0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-vms-fixed.glb",
+      "thumb": "assets/library/thumb/scendance-plan-vms-fixed.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "vms-fixed",
+      "label": {
+        "name": "固定式可变情报板",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-vms-mobile",
+      "name": "VMS Mobile",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.17,
+      "depth": 1.899085,
+      "height": 2.41,
+      "bytes": 19016,
+      "triangles": 506,
+      "sha256": "9a8f79a6013c94393723c3c7ec11ebd64c4a5ce98a40cc5ff4e4c3a5edbe2318",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-vms-mobile.glb",
+      "thumb": "assets/library/thumb/scendance-plan-vms-mobile.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "vms-mobile",
+      "label": {
+        "name": "移动式可变情报板",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-water-refill-station",
+      "name": "Water Refill Station",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.51,
+      "depth": 0.517,
+      "height": 1.14,
+      "bytes": 3504,
+      "triangles": 108,
+      "sha256": "f8da9c2a468b16b2bf51d569764d42e08adf72855576d0598c53af5a3587aef9",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-water-refill-station.glb",
+      "thumb": "assets/library/thumb/scendance-plan-water-refill-station.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "water-refill-station",
+      "label": {
+        "name": "补水站",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-feed-station",
+      "name": "Feed Station",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.86,
+      "depth": 0.72,
+      "height": 0.994,
+      "bytes": 18952,
+      "triangles": 1260,
+      "sha256": "5fdd577194f5415df613ba216ae27af257c38e7d810856317fc493141fa0cdab",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-feed-station.glb",
+      "thumb": "assets/library/thumb/scendance-plan-feed-station.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "feed-station",
+      "label": {
+        "name": "补给站",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-couplet",
+      "name": "Spring Couplets",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.39,
+      "depth": 0.0165,
+      "height": 0.6725,
+      "bytes": 3832,
+      "triangles": 168,
+      "sha256": "f412922cf966bf04e394d9968950e16a10e334bc0167e1acfcf5dd779b764a17",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-couplet.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-couplet.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-couplet",
+      "label": {
+        "name": "对联",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-wish-tablet",
+      "name": "Wish Tablet",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.1,
+      "depth": 0.015,
+      "height": 0.231208,
+      "bytes": 4264,
+      "triangles": 168,
+      "sha256": "27efa6fe9da4d3388655513a9f9cf3c7aaddcec67cb315d6bd73e63eef4149d2",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-wish-tablet.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-wish-tablet.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-wish-tablet",
+      "label": {
+        "name": "祈福牌",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-tangyuan",
+      "name": "Tangyuan",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.292,
+      "depth": 0.292,
+      "height": 0.105,
+      "bytes": 20872,
+      "triangles": 1596,
+      "sha256": "2b75297a5d5c598cfe22318c4820d35fd2cb1e69ba487a2e2f0940b30af8fde1",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-tangyuan.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-tangyuan.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-tangyuan",
+      "label": {
+        "name": "汤圆",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-mugwort",
+      "name": "Mugwort",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.162314,
+      "depth": 0.105744,
+      "height": 0.381089,
+      "bytes": 89988,
+      "triangles": 7140,
+      "sha256": "d38c56e84e454da800f23ab9d082b7e57c5bfbb2eb8b8a0e5e62573507394f8a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-mugwort.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-mugwort.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-mugwort",
+      "label": {
+        "name": "艾草",
+        "bucket": "plants"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-firework",
+      "name": "Firework",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.142,
+      "depth": 0.142,
+      "height": 0.387058,
+      "bytes": 5080,
+      "triangles": 240,
+      "sha256": "13d260540a00ffb450199541542f60dd5c0c49a558f5290ca320cc06ea8558ea",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-firework.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-firework.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-firework",
+      "label": {
+        "name": "烟花",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-dragon-boat",
+      "name": "Dragon Boat",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.549937,
+      "depth": 7.676817,
+      "height": 0.995668,
+      "bytes": 30124,
+      "triangles": 2064,
+      "sha256": "2b120bdceb4a36bd659d40dc20dd6d035f9211fbe1835934b93746126a6adac7",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-dragon-boat.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-dragon-boat.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-dragon-boat",
+      "label": {
+        "name": "龙舟",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-opera-stage",
+      "name": "Opera Stage",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 6.432399,
+      "depth": 5.299394,
+      "height": 4.211,
+      "bytes": 40052,
+      "triangles": 2812,
+      "sha256": "32eb186a114bb77440763c0228327773eea88f8381835cbdd90ede84765d5996",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-opera-stage.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-opera-stage.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-opera-stage",
+      "label": {
+        "name": "戏台",
+        "bucket": "stage"
+      }
+    },
+    {
+      "slug": "scendance-plan-targets-control",
+      "name": "Targets Control",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.15,
+      "depth": 0.45,
+      "height": 0.745,
+      "bytes": 10652,
+      "triangles": 636,
+      "sha256": "5e611e7e4d6540364c307e0bba0223a3125b58bcdf5ca97486dfef5a881aa31e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-targets-control.glb",
+      "thumb": "assets/library/thumb/scendance-plan-targets-control.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "targets-control",
+      "label": {
+        "name": "靶标控制",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-lan-socket",
+      "name": "Lan Socket",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.44,
+      "depth": 0.2315,
+      "height": 0.38,
+      "bytes": 4604,
+      "triangles": 180,
+      "sha256": "fce18157bca396f861634fcf08c0b433211771c77baae5eaffc640ad7c87cde0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-lan-socket.glb",
+      "thumb": "assets/library/thumb/scendance-plan-lan-socket.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "lan-socket",
+      "label": {
+        "name": "局域网插座",
+        "bucket": "digital"
+      }
+    },
+    {
+      "slug": "scendance-plan-wifi",
+      "name": "WiFi",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.44,
+      "depth": 0.227,
+      "height": 0.65,
+      "bytes": 3908,
+      "triangles": 144,
+      "sha256": "55109fe853a2c84198f43b72beb518ddbd12c665bdb8e5ec727dd25e0e201525",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-wifi.glb",
+      "thumb": "assets/library/thumb/scendance-plan-wifi.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "wifi",
+      "label": {
+        "name": "无线接入点",
+        "bucket": "digital"
+      }
+    },
+    {
+      "slug": "scendance-plan-charity",
+      "name": "Charity",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.34,
+      "depth": 0.221,
+      "height": 0.403,
+      "bytes": 13052,
+      "triangles": 62,
+      "sha256": "306a17d754c2ee28cec64ad99b6ea1cc78e58ed2d09b007b2646babb7c030c03",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-charity.glb",
+      "thumb": "assets/library/thumb/scendance-plan-charity.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "charity",
+      "label": {
+        "name": "慈善",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-chuck-wagon",
+      "name": "Chuck Wagon",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.064,
+      "depth": 4.521248,
+      "height": 2.199566,
+      "bytes": 64688,
+      "triangles": 4692,
+      "sha256": "3d43a31962f4667ab482eca0f1ee886334b021bd2c19b8745f69b76cd9f1ea02",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-chuck-wagon.glb",
+      "thumb": "assets/library/thumb/scendance-plan-chuck-wagon.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "chuck-wagon",
+      "label": {
+        "name": "牛仔餐车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-round-table-and-chairs",
+      "name": "Round Table and Chairs",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.347351,
+      "depth": 2.468,
+      "height": 0.864,
+      "bytes": 24968,
+      "triangles": 1828,
+      "sha256": "b2c51aefecd197c093035bf95b6101f8699e1253a63456a6ee5ce3b22d7c9dee",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-round-table-and-chairs.glb",
+      "thumb": "assets/library/thumb/scendance-plan-round-table-and-chairs.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "round-table-and-chairs",
+      "label": {
+        "name": "圆桌与椅",
+        "bucket": "tables"
+      }
+    },
+    {
+      "slug": "scendance-plan-accessible-portable-toilet",
+      "name": "Accessible portable toilet",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.735,
+      "depth": 1.6975,
+      "height": 2.257,
+      "bytes": 18792,
+      "triangles": 254,
+      "sha256": "291e457c7cd68c261c6d6d97115b05541281262a97edc496bb31d7736ab8cf10",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-accessible-portable-toilet.glb",
+      "thumb": "assets/library/thumb/scendance-plan-accessible-portable-toilet.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "accessible-portable-toilet",
+      "label": {
+        "name": "无障碍便携厕所",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-gender-neutral-toilet",
+      "name": "Gender neutral toilet",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.305,
+      "depth": 1.3575,
+      "height": 2.257,
+      "bytes": 18280,
+      "triangles": 254,
+      "sha256": "509dd8ff8e13625412dd4685a89fdee819e5d08feecc448171e5d74a5cd9b7e4",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-gender-neutral-toilet.glb",
+      "thumb": "assets/library/thumb/scendance-plan-gender-neutral-toilet.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "gender-neutral-toilet",
+      "label": {
+        "name": "中性卫生间",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-accessible-ramp",
+      "name": "Accessible Ramp",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.35,
+      "depth": 6.432,
+      "height": 1.532866,
+      "bytes": 11484,
+      "triangles": 804,
+      "sha256": "0ce494368e6522d2b4d1c7437d559bb6c0b9f3c7c3e294ad94b3dec17d8340ab",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-accessible-ramp.glb",
+      "thumb": "assets/library/thumb/scendance-plan-accessible-ramp.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "accessible-ramp",
+      "label": {
+        "name": "无障碍坡道",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-ramp-turning",
+      "name": "Ramp Turning",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.497,
+      "depth": 1.286,
+      "height": 1.532794,
+      "bytes": 11484,
+      "triangles": 804,
+      "sha256": "6e3e0a8ef07dfda5518027ef88831dae5ed243b1d3a165b58116d2613ba3c74e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ramp-turning.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ramp-turning.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ramp-turning",
+      "label": {
+        "name": "转弯坡道",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-evacuation-chair",
+      "name": "Evacuation chair",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.642,
+      "depth": 0.777,
+      "height": 1.250264,
+      "bytes": 16792,
+      "triangles": 1184,
+      "sha256": "55c3a7c7a023f1f914cb06e728bab6bc2904f20928bb1b61ddba164a436ae930",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-evacuation-chair.glb",
+      "thumb": "assets/library/thumb/scendance-plan-evacuation-chair.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "evacuation-chair",
+      "label": {
+        "name": "疏散椅",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-jade-rabbit",
+      "name": "Jade Rabbit",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.164,
+      "depth": 0.168,
+      "height": 0.252,
+      "bytes": 29384,
+      "triangles": 2252,
+      "sha256": "4d140212abdbbb0e306db369af14410921d85e822fce998712cbb374c5d267ac",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-jade-rabbit.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-jade-rabbit.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-jade-rabbit",
+      "label": {
+        "name": "玉兔",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-cn-chinese-knot",
+      "name": "Chinese Knot",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.258789,
+      "depth": 0.0232,
+      "height": 0.349798,
+      "bytes": 33852,
+      "triangles": 2472,
+      "sha256": "a0a5743fe646e429ed300f715c5c6c058424d42ae4f5ee9c474d9a34f579ca1a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-chinese-knot.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-chinese-knot.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-chinese-knot",
+      "label": {
+        "name": "中国结",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-fondue",
+      "name": "Fondue",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.32,
+      "depth": 0.32,
+      "height": 0.360863,
+      "bytes": 15140,
+      "triangles": 904,
+      "sha256": "63a979af616eb1179e0ac4843baec6cdb3e374493571c95a616004245dace096",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-fondue.glb",
+      "thumb": "assets/library/thumb/scendance-plan-fondue.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "fondue",
+      "label": {
+        "name": "火锅/芝士火锅",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-mulled-wine",
+      "name": "Mulled Wine",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.29983,
+      "depth": 0.257,
+      "height": 0.146998,
+      "bytes": 35596,
+      "triangles": 2700,
+      "sha256": "dfe5471da3c853c699b31e92f03ccea2026251b9109881213b1a0df997883c12",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-mulled-wine.glb",
+      "thumb": "assets/library/thumb/scendance-plan-mulled-wine.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "mulled-wine",
+      "label": {
+        "name": "热红酒",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-event-control",
+      "name": "Event Control",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.66,
+      "depth": 4.278,
+      "height": 2.505,
+      "bytes": 23148,
+      "triangles": 566,
+      "sha256": "170f0521a68f4bc5e1e4de9f9bc40051add8c0fe9cc2e4e7b76c64cafeb4fd64",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-event-control.glb",
+      "thumb": "assets/library/thumb/scendance-plan-event-control.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "event-control",
+      "label": {
+        "name": "活动指挥中心",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-changing-room",
+      "name": "Changing Room",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.66,
+      "depth": 4.278,
+      "height": 2.505,
+      "bytes": 23988,
+      "triangles": 542,
+      "sha256": "2c3f5f80213a1aee5a71ab3945e9db68b2c5e3e8a80c32acea67257bcd41fc2d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-changing-room.glb",
+      "thumb": "assets/library/thumb/scendance-plan-changing-room.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "changing-room",
+      "label": {
+        "name": "更衣室",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-security-checkpoint",
+      "name": "Security Checkpoint",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.92,
+      "depth": 1.75,
+      "height": 2.5,
+      "bytes": 18688,
+      "triangles": 434,
+      "sha256": "25cbd52dc9e5d2f36bff867146720a2c0a1d3c1d25887f089e0f475c21c624b0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-security-checkpoint.glb",
+      "thumb": "assets/library/thumb/scendance-plan-security-checkpoint.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "security-checkpoint",
+      "label": {
+        "name": "安检点",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-toilet-trailer",
+      "name": "Toilet trailer",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.286,
+      "depth": 6.093186,
+      "height": 2.978,
+      "bytes": 17684,
+      "triangles": 1184,
+      "sha256": "7911b36164263816802171871575d99ded6c1162d1324318a977bd06bb651e7e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-toilet-trailer.glb",
+      "thumb": "assets/library/thumb/scendance-plan-toilet-trailer.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "toilet-trailer",
+      "label": {
+        "name": "厕所拖车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-large-screen-truck",
+      "name": "Large Screen Truck",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.632,
+      "depth": 7.165,
+      "height": 4.22,
+      "bytes": 16336,
+      "triangles": 872,
+      "sha256": "f8471b55ca24e85c971fe53b707e22218d3ff4e3ad840325d56aa868bb61d1bf",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-large-screen-truck.glb",
+      "thumb": "assets/library/thumb/scendance-plan-large-screen-truck.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "large-screen-truck",
+      "label": {
+        "name": "大屏车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-satellite-van",
+      "name": "Satellite Van",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.262,
+      "depth": 5.815,
+      "height": 3.62,
+      "bytes": 16244,
+      "triangles": 920,
+      "sha256": "158f5bd7132be2153c9d64af4ed334c56b1b275b92da7233587a67deba93f0fe",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-satellite-van.glb",
+      "thumb": "assets/library/thumb/scendance-plan-satellite-van.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "satellite-van",
+      "label": {
+        "name": "卫星转播车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-hb-van",
+      "name": "HB Van",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.262,
+      "depth": 5.815,
+      "height": 3.62,
+      "bytes": 17944,
+      "triangles": 1004,
+      "sha256": "3d98509ba52cb6815ef7d2d08617d81c65fed3eeb3ed3f7dbf95425661b61aa6",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-hb-van.glb",
+      "thumb": "assets/library/thumb/scendance-plan-hb-van.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "hb-van",
+      "label": {
+        "name": "HB 转播车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-team-wax-truck",
+      "name": "Team Wax Truck",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.5455,
+      "depth": 7.165,
+      "height": 2.91,
+      "bytes": 16824,
+      "triangles": 920,
+      "sha256": "c690109a63bc2b1924f3453fdc65cc78f6990fd1d7842422a88db0eb8cbb5ced",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-team-wax-truck.glb",
+      "thumb": "assets/library/thumb/scendance-plan-team-wax-truck.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "team-wax-truck",
+      "label": {
+        "name": "队伍打蜡车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-swat-police-vehicle",
+      "name": "SWAT Police Vehicle",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.632,
+      "depth": 7.28,
+      "height": 3.095,
+      "bytes": 15868,
+      "triangles": 884,
+      "sha256": "644f607296a99b1651e6f6f813860c8f20522c4f3b0d363c952f2d88917f0608",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-swat-police-vehicle.glb",
+      "thumb": "assets/library/thumb/scendance-plan-swat-police-vehicle.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "swat-police-vehicle",
+      "label": {
+        "name": "特警车辆",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-heavy-roller",
+      "name": "Heavy Roller",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.47,
+      "depth": 2.36,
+      "height": 1.969,
+      "bytes": 11700,
+      "triangles": 772,
+      "sha256": "ecdb279a5b364bb8f242c3dc373ae1b4f388040849ac0516f9b8fc73432061aa",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-heavy-roller.glb",
+      "thumb": "assets/library/thumb/scendance-plan-heavy-roller.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "heavy-roller",
+      "label": {
+        "name": "重型压路机",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-mens-urinal-pod",
+      "name": "Men's urinal pod",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.92,
+      "depth": 1.92,
+      "height": 1.89,
+      "bytes": 19212,
+      "triangles": 1288,
+      "sha256": "78f23fcb1f484e5e33da6b81cb6ac34446e55783bd9831627b89809e35e706a3",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-mens-urinal-pod.glb",
+      "thumb": "assets/library/thumb/scendance-plan-mens-urinal-pod.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "mens-urinal-pod",
+      "label": {
+        "name": "男用小便舱",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-time-trial-ramp",
+      "name": "Time Trial Ramp",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.61,
+      "depth": 3.86,
+      "height": 1.667,
+      "bytes": 8652,
+      "triangles": 468,
+      "sha256": "f3156608f34c1f789d831cdb04c3389a3184cea550908d10530c3acc23c04cfe",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-time-trial-ramp.glb",
+      "thumb": "assets/library/thumb/scendance-plan-time-trial-ramp.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "time-trial-ramp",
+      "label": {
+        "name": "计时赛坡道",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-duck-pond-booth",
+      "name": "Duck Pond Booth",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.592,
+      "depth": 1.866,
+      "height": 2.53,
+      "bytes": 42340,
+      "triangles": 1778,
+      "sha256": "d523eb549424c534edf6a18b45c348599eaeb902948198225e8a8c005e59786d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-duck-pond-booth.glb",
+      "thumb": "assets/library/thumb/scendance-plan-duck-pond-booth.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "duck-pond-booth",
+      "label": {
+        "name": "捞鸭游戏摊",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-milk-bottle-toss",
+      "name": "Milk Bottle Toss",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.592,
+      "depth": 1.866,
+      "height": 2.53,
+      "bytes": 32900,
+      "triangles": 1466,
+      "sha256": "61ec9119ffda79f44aa24e901186acc6a458b86b8e500fce1403c1120ae48343",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-milk-bottle-toss.glb",
+      "thumb": "assets/library/thumb/scendance-plan-milk-bottle-toss.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "milk-bottle-toss",
+      "label": {
+        "name": "牛奶瓶投掷游戏",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-bungee-trampoline",
+      "name": "Bungee Trampoline",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.631312,
+      "depth": 3.431462,
+      "height": 5.117901,
+      "bytes": 23596,
+      "triangles": 1712,
+      "sha256": "04f4f877ceb5f345f21ae72a65e2a37f5bcd05b895290ec4f7b0689872b6fb88",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bungee-trampoline.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bungee-trampoline.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bungee-trampoline",
+      "label": {
+        "name": "蹦极蹦床",
+        "bucket": "rides"
+      }
+    },
+    {
+      "slug": "scendance-plan-outside-broadcast-truck",
+      "name": "Outside broadcast truck",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.632,
+      "depth": 7.165,
+      "height": 4.02,
+      "bytes": 17968,
+      "triangles": 1004,
+      "sha256": "51788872019bcf5cbbae4aec2ca130696aebd5fbd1421953ea5e23f3a28602ed",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-outside-broadcast-truck.glb",
+      "thumb": "assets/library/thumb/scendance-plan-outside-broadcast-truck.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "outside-broadcast-truck",
+      "label": {
+        "name": "转播车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-first-aid-point",
+      "name": "First Aid Point",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.08,
+      "depth": 3.105,
+      "height": 2.998383,
+      "bytes": 20564,
+      "triangles": 564,
+      "sha256": "1e92adae706ea69e7a9c393cdd9678a5a6f3c9dfe94927342b493092c6a281cd",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-first-aid-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-first-aid-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "first-aid-point",
+      "label": {
+        "name": "急救点",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-aid-station-electrolyte",
+      "name": "Aid Station - Electrolyte",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.86,
+      "depth": 0.72,
+      "height": 1.105,
+      "bytes": 10236,
+      "triangles": 600,
+      "sha256": "51e0b3deaf0878e6abb676a0d215b031c4fe9d47956653a615e3bbc23c9e0a84",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-aid-station-electrolyte.glb",
+      "thumb": "assets/library/thumb/scendance-plan-aid-station-electrolyte.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "aid-station-electrolyte",
+      "label": {
+        "name": "补给站-电解质",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-ada-low-profile-cable-matting",
+      "name": "ADA Low profile Cable Matting",
+      "sourceFile": "scripts/build-icon-props.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.76,
+      "depth": 0.54,
+      "height": 0.041,
+      "bytes": 3912,
+      "triangles": 132,
+      "sha256": "701fc7702e11970a08fb86778a6900bfc662d96e5e5fdabd6a43d9144d9e0fcb",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ada-low-profile-cable-matting.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ada-low-profile-cable-matting.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ada-low-profile-cable-matting",
+      "label": {
+        "name": "无障碍低矮过线垫",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-course-crossroad-a",
+      "name": "Course Crossroad A",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 6.0,
+      "depth": 6.0,
+      "height": 1.675,
+      "bytes": 26036,
+      "triangles": 710,
+      "sha256": "cbf9f965ac26c48392c5f4c783ae8fc4eefb5c7c35591147b8f495758085691d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-course-crossroad-a.glb",
+      "thumb": "assets/library/thumb/scendance-plan-course-crossroad-a.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "course-crossroad-a",
+      "label": {
+        "name": "赛道交叉口 A",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-course-crossroad-b",
+      "name": "Course Crossroad B",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 6.0,
+      "depth": 6.0,
+      "height": 1.675,
+      "bytes": 25264,
+      "triangles": 710,
+      "sha256": "26b232f90b0fdb12635f979984a8f52889c5d1ae2f0a52a3f9d83f38725b5813",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-course-crossroad-b.glb",
+      "thumb": "assets/library/thumb/scendance-plan-course-crossroad-b.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "course-crossroad-b",
+      "label": {
+        "name": "赛道交叉口 B",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-ski-paramedic",
+      "name": "Ski Paramedic",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.856,
+      "depth": 2.035873,
+      "height": 1.903147,
+      "bytes": 42936,
+      "triangles": 3252,
+      "sha256": "beb6c4db61e7f9874190ef51809dcaf3a960d614e2dfa0250020f5361518c406",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ski-paramedic.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ski-paramedic.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ski-paramedic",
+      "label": {
+        "name": "滑雪急救员",
+        "bucket": "people"
+      }
+    },
+    {
+      "slug": "scendance-plan-tunnel-entry-exit",
+      "name": "Tunnel Entry/Exit",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.58,
+      "depth": 5.65,
+      "height": 3.2,
+      "bytes": 30204,
+      "triangles": 1682,
+      "sha256": "edc6d588fdc6f2547fbcd23f79da2aaaa7cd2a9539cb8e32b4dc4933202488ca",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-tunnel-entry-exit.glb",
+      "thumb": "assets/library/thumb/scendance-plan-tunnel-entry-exit.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "tunnel-entry-exit",
+      "label": {
+        "name": "隧道出入口",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-candied-fruits",
+      "name": "Candied Fruits",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.428,
+      "depth": 0.428,
+      "height": 0.214,
+      "bytes": 68028,
+      "triangles": 5296,
+      "sha256": "0e9b96ba6e4bf3860ae007a6a9896b0888c6acfe710d0bf979dcdbf0ccc76a95",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-candied-fruits.glb",
+      "thumb": "assets/library/thumb/scendance-plan-candied-fruits.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "candied-fruits",
+      "label": {
+        "name": "糖渍水果",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-crokicurl",
+      "name": "Crokicurl",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 8.93771,
+      "depth": 8.93771,
+      "height": 0.247,
+      "bytes": 56716,
+      "triangles": 4092,
+      "sha256": "2548eac4e867d4220bd3f036dac2918a3336b50c9ee4b5dc229e82b5c999232e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-crokicurl.glb",
+      "thumb": "assets/library/thumb/scendance-plan-crokicurl.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "crokicurl",
+      "label": {
+        "name": "冰壶棋场（Crokicurl）",
+        "bucket": "sports"
+      },
+      "designReference": "https://www.publiccityarchitecture.com/crokicurl"
+    },
+    {
+      "slug": "scendance-plan-elf",
+      "name": "Elf",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.856,
+      "depth": 0.491371,
+      "height": 2.104,
+      "bytes": 47580,
+      "triangles": 3648,
+      "sha256": "0b5f30f3c7929b7d719fcef4dc3fe2c18ae25871b27944f665a8200553a56236",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-elf.glb",
+      "thumb": "assets/library/thumb/scendance-plan-elf.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "elf",
+      "label": {
+        "name": "精灵",
+        "bucket": "people"
+      }
+    },
+    {
+      "slug": "scendance-plan-ice-skating",
+      "name": "Ice Skating",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 12.0,
+      "depth": 18.0,
+      "height": 0.88,
+      "bytes": 18200,
+      "triangles": 1048,
+      "sha256": "9296382a8805895af1a79c3743c83a4f8c8bc0ec2c4c8aa573d7025ba9147914",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ice-skating.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ice-skating.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ice-skating",
+      "label": {
+        "name": "滑冰",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-inflatable-santa",
+      "name": "Inflatable Santa",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.919,
+      "depth": 1.44,
+      "height": 2.87094,
+      "bytes": 50300,
+      "triangles": 3876,
+      "sha256": "b9503f4e428613a0f2df4d0705375053cc729ae4a2d8d2b424e26f58b6040e9a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-inflatable-santa.glb",
+      "thumb": "assets/library/thumb/scendance-plan-inflatable-santa.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "inflatable-santa",
+      "label": {
+        "name": "充气圣诞老人",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-nativity-scene",
+      "name": "Nativity Scene",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.46,
+      "depth": 3.23,
+      "height": 3.03,
+      "bytes": 90300,
+      "triangles": 7000,
+      "sha256": "54ad0ae22fc205a314bc106d061fe93d7941b0df1c2121a4ceeb13e70437a945",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-nativity-scene.glb",
+      "thumb": "assets/library/thumb/scendance-plan-nativity-scene.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "nativity-scene",
+      "label": {
+        "name": "耶稣诞生场景",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-wooden-rudolf",
+      "name": "Wooden Rudolf",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.764053,
+      "depth": 1.8546,
+      "height": 1.987109,
+      "bytes": 18016,
+      "triangles": 1280,
+      "sha256": "bdd75297ab4d209b628fbf6901298233ae7fa5564464d63a789ffe1812e5af29",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-wooden-rudolf.glb",
+      "thumb": "assets/library/thumb/scendance-plan-wooden-rudolf.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "wooden-rudolf",
+      "label": {
+        "name": "木制驯鹿 Rudolf",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-boundary-calculator-men",
+      "name": "Boundary Calculator Men",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.05,
+      "depth": 4.42,
+      "height": 1.675,
+      "bytes": 29732,
+      "triangles": 978,
+      "sha256": "948833993811da02a906160f3a60fc84681a3e88934508f232d6ab88e992bc88",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-boundary-calculator-men.glb",
+      "thumb": "assets/library/thumb/scendance-plan-boundary-calculator-men.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "boundary-calculator-men",
+      "label": {
+        "name": "边界计算器（男）",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-boundary-calculator-women",
+      "name": "Boundary Calculator Women",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.05,
+      "depth": 4.42,
+      "height": 1.675,
+      "bytes": 32652,
+      "triangles": 978,
+      "sha256": "1d88369229b339722fa5cc67ced0894833c22e625fe49930da2b29e0c29883c6",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-boundary-calculator-women.glb",
+      "thumb": "assets/library/thumb/scendance-plan-boundary-calculator-women.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "boundary-calculator-women",
+      "label": {
+        "name": "边界计算器（女）",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-slips",
+      "name": "Slips",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.51,
+      "depth": 2.6,
+      "height": 2.94,
+      "bytes": 37612,
+      "triangles": 1634,
+      "sha256": "d37f19fda1b065097715dbb24435460979f4f21b3895c035385b374eb0abaa11",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-slips.glb",
+      "thumb": "assets/library/thumb/scendance-plan-slips.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "slips",
+      "label": {
+        "name": "滑垒机位",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-stroller-storage",
+      "name": "Stroller Storage",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.9,
+      "depth": 2.4,
+      "height": 2.385,
+      "bytes": 55288,
+      "triangles": 3482,
+      "sha256": "9f4b10d1e6099223c17fb1dfa947bd395596e4aced4a49510ede68bb4a04811f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-stroller-storage.glb",
+      "thumb": "assets/library/thumb/scendance-plan-stroller-storage.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "stroller-storage",
+      "label": {
+        "name": "婴儿车存放",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-mixed-relay-zone",
+      "name": "Mixed Relay Zone",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.0,
+      "depth": 7.3,
+      "height": 1.675,
+      "bytes": 31920,
+      "triangles": 1130,
+      "sha256": "613fad4a7ef51bbe495a574c204a32cc6091d60a6e6312c6f121d1f103c93669",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-mixed-relay-zone.glb",
+      "thumb": "assets/library/thumb/scendance-plan-mixed-relay-zone.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "mixed-relay-zone",
+      "label": {
+        "name": "混合接力区",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-paramedic-motorbike",
+      "name": "Paramedic Motorbike",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.9,
+      "depth": 2.246,
+      "height": 1.348,
+      "bytes": 14616,
+      "triangles": 904,
+      "sha256": "14ac8b70fb558c76cf076c3aaefb6b981a22efc4839bac9d4ce4833043dd259a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-paramedic-motorbike.glb",
+      "thumb": "assets/library/thumb/scendance-plan-paramedic-motorbike.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "paramedic-motorbike",
+      "label": {
+        "name": "急救摩托车",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-relay-handover",
+      "name": "Relay Handover",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.0,
+      "depth": 7.3,
+      "height": 1.675,
+      "bytes": 32176,
+      "triangles": 1142,
+      "sha256": "00252981689312435ccd5724cb55684ed3ca7f2d17c478055e023704f3b9400a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-relay-handover.glb",
+      "thumb": "assets/library/thumb/scendance-plan-relay-handover.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "relay-handover",
+      "label": {
+        "name": "接力交接",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-special-needs",
+      "name": "Special Needs",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.0,
+      "depth": 7.3,
+      "height": 1.675,
+      "bytes": 44708,
+      "triangles": 1946,
+      "sha256": "2f403596aa3539b05b0ba9fcefebf892f7ed795258a9eb19a620ff6e59c800aa",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-special-needs.glb",
+      "thumb": "assets/library/thumb/scendance-plan-special-needs.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "special-needs",
+      "label": {
+        "name": "特殊需求区",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-swim-evacuation-point",
+      "name": "Swim Evacuation Point",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.6,
+      "depth": 5.6,
+      "height": 1.78,
+      "bytes": 35760,
+      "triangles": 1210,
+      "sha256": "60970ebb3b722db0ca08897e5baac9731e4c7f2f816612f9e499495c0a2ee663",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-swim-evacuation-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-swim-evacuation-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "swim-evacuation-point",
+      "label": {
+        "name": "游泳疏散点",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-transition-zone",
+      "name": "Transition Zone",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.0,
+      "depth": 7.3,
+      "height": 1.675,
+      "bytes": 57784,
+      "triangles": 3362,
+      "sha256": "0471418435b5916e21f9998775a6a0349e354b1b001148f52dd7b53811c255dd",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-transition-zone.glb",
+      "thumb": "assets/library/thumb/scendance-plan-transition-zone.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "transition-zone",
+      "label": {
+        "name": "转换区",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-tv-boat",
+      "name": "TV Boat",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.421973,
+      "depth": 6.999096,
+      "height": 2.352585,
+      "bytes": 33432,
+      "triangles": 1838,
+      "sha256": "732eb56355106561d3156e534b2d07afdc591d2c731494f1c2387dbbd099f7f3",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-tv-boat.glb",
+      "thumb": "assets/library/thumb/scendance-plan-tv-boat.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "tv-boat",
+      "label": {
+        "name": "电视转播船",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-water-crossing",
+      "name": "Water Crossing",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.6,
+      "depth": 5.6,
+      "height": 1.675,
+      "bytes": 29644,
+      "triangles": 1094,
+      "sha256": "c2169c88b70a475842da4a8283d99eb4606ecf71fb982f353a29a0b9fb4e4265",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-water-crossing.glb",
+      "thumb": "assets/library/thumb/scendance-plan-water-crossing.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "water-crossing",
+      "label": {
+        "name": "涉水穿越",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-agricultural-competition",
+      "name": "Agricultural Competition",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 9.5,
+      "depth": 7.15,
+      "height": 1.237,
+      "bytes": 78316,
+      "triangles": 3114,
+      "sha256": "7b9997d51a235f06c4312af8548ee71f6eb0720e6ed71a759d9be90a12134484",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-agricultural-competition.glb",
+      "thumb": "assets/library/thumb/scendance-plan-agricultural-competition.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "agricultural-competition",
+      "label": {
+        "name": "农业竞赛",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-barrel-racing",
+      "name": "Barrel Racing",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 9.5,
+      "depth": 7.15,
+      "height": 2.56,
+      "bytes": 75908,
+      "triangles": 5808,
+      "sha256": "d9680637b9393b19e40ebca5566bbdbf28fc6155a88e8f30f4d9c571aad2c45e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-barrel-racing.glb",
+      "thumb": "assets/library/thumb/scendance-plan-barrel-racing.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "barrel-racing",
+      "label": {
+        "name": "绕桶赛马",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-bull-riding",
+      "name": "Bull Riding",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 9.5,
+      "depth": 7.15,
+      "height": 2.4644,
+      "bytes": 81916,
+      "triangles": 6228,
+      "sha256": "b1781d8aeec72baea55b5e9c04d4e35d51683e40b5f312193d3b9dfd615c5faa",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bull-riding.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bull-riding.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bull-riding",
+      "label": {
+        "name": "骑牛",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-clay-pigeon-shooting",
+      "name": "Clay Pigeon Shooting",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 10.3,
+      "depth": 13.2,
+      "height": 1.675,
+      "bytes": 32436,
+      "triangles": 1154,
+      "sha256": "a3fd172a0bc3e25ae53a06d0d0df18926e119161344f160b01afe4d0bb44fd53",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-clay-pigeon-shooting.glb",
+      "thumb": "assets/library/thumb/scendance-plan-clay-pigeon-shooting.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "clay-pigeon-shooting",
+      "label": {
+        "name": "飞碟射击",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-floriculture",
+      "name": "Floriculture",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.9,
+      "depth": 3.05,
+      "height": 2.66,
+      "bytes": 128340,
+      "triangles": 8698,
+      "sha256": "3d2fe64265e495287e46c6e7bc367e8b9729bd11ed466856fb266fd7ffb17661",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-floriculture.glb",
+      "thumb": "assets/library/thumb/scendance-plan-floriculture.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "floriculture",
+      "label": {
+        "name": "花卉园艺",
+        "bucket": "plants"
+      }
+    },
+    {
+      "slug": "scendance-plan-hedgelaying",
+      "name": "Hedgelaying",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.8,
+      "depth": 3.1,
+      "height": 1.675,
+      "bytes": 88032,
+      "triangles": 5774,
+      "sha256": "fac9a00e90fac90f36ae52106bcec0895f0706c4a51f12e29f76ce73fef5ca9e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-hedgelaying.glb",
+      "thumb": "assets/library/thumb/scendance-plan-hedgelaying.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "hedgelaying",
+      "label": {
+        "name": "树篱修剪技艺",
+        "bucket": "plants"
+      }
+    },
+    {
+      "slug": "scendance-plan-horse-racing",
+      "name": "Horse Racing",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 9.5,
+      "depth": 7.15,
+      "height": 2.56,
+      "bytes": 126588,
+      "triangles": 8990,
+      "sha256": "a98f5cf94814b94cb1c914a3fdc2e53fb8833dd2395b548062bb874ee009e357",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-horse-racing.glb",
+      "thumb": "assets/library/thumb/scendance-plan-horse-racing.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "horse-racing",
+      "label": {
+        "name": "赛马",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-mirror-maze",
+      "name": "Mirror Maze",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 7.2,
+      "depth": 6.2,
+      "height": 2.48,
+      "bytes": 38104,
+      "triangles": 1846,
+      "sha256": "7ef55c4f52c7df3cb0c21b3195acaa72503debb756f4018d48bd920a894e0c07",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-mirror-maze.glb",
+      "thumb": "assets/library/thumb/scendance-plan-mirror-maze.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "mirror-maze",
+      "label": {
+        "name": "镜子迷宫",
+        "bucket": "rides"
+      }
+    },
+    {
+      "slug": "scendance-plan-paratrooper",
+      "name": "Paratrooper",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 8.84,
+      "depth": 8.84,
+      "height": 6.999428,
+      "bytes": 56876,
+      "triangles": 3690,
+      "sha256": "8a82fe9e6ec7e0eca888e2820243c55d1dd4e868ffd0ce13c1ac938b4a12f60b",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-paratrooper.glb",
+      "thumb": "assets/library/thumb/scendance-plan-paratrooper.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "paratrooper",
+      "label": {
+        "name": "伞兵游乐设施",
+        "bucket": "rides"
+      },
+      "designReference": "https://www.fairground-heritage.org.uk/learning/riding-to-infinity-beyond/"
+    },
+    {
+      "slug": "scendance-plan-ploughing",
+      "name": "Ploughing",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 6.5,
+      "depth": 8.2,
+      "height": 1.72,
+      "bytes": 15976,
+      "triangles": 956,
+      "sha256": "9a06e7374de595f4f9962c20cecf862b83a4318182e346804d6b244d38db81eb",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ploughing.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ploughing.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ploughing",
+      "label": {
+        "name": "犁地表演",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-rodeo-clown",
+      "name": "Rodeo Clown",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.856,
+      "depth": 0.48,
+      "height": 1.793,
+      "bytes": 48956,
+      "triangles": 3816,
+      "sha256": "4bf2cb08383102ce71f158abf5b2645300e0cb315892abbe73699ef30d1bd5ee",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-rodeo-clown.glb",
+      "thumb": "assets/library/thumb/scendance-plan-rodeo-clown.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "rodeo-clown",
+      "label": {
+        "name": "牛仔竞技小丑",
+        "bucket": "people"
+      }
+    },
+    {
+      "slug": "scendance-plan-stickmakers-guild",
+      "name": "Stickmakers Guild",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.9,
+      "depth": 3.05,
+      "height": 2.66,
+      "bytes": 34428,
+      "triangles": 1638,
+      "sha256": "1d9650ceabdb7f7e703c7413d8d6ab6d319d852b6e795235d3c4ddf7aa918ab1",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-stickmakers-guild.glb",
+      "thumb": "assets/library/thumb/scendance-plan-stickmakers-guild.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "stickmakers-guild",
+      "label": {
+        "name": "手杖工匠行会",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-young-farmers-club",
+      "name": "Young Farmers Club",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.9,
+      "depth": 3.05,
+      "height": 2.66,
+      "bytes": 59028,
+      "triangles": 3150,
+      "sha256": "169a6da9e55c5959820d82c79a143fbfb587057483d1a3118f0643a6de6930a9",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-young-farmers-club.glb",
+      "thumb": "assets/library/thumb/scendance-plan-young-farmers-club.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "young-farmers-club",
+      "label": {
+        "name": "青年农夫俱乐部",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-shooting-range",
+      "name": "Shooting range",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 10.3,
+      "depth": 13.2,
+      "height": 2.55,
+      "bytes": 18252,
+      "triangles": 1092,
+      "sha256": "541ca79eef3a161df4d49e59a67b2b5066b32049a1f4193d871fedd23072d122",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-shooting-range.glb",
+      "thumb": "assets/library/thumb/scendance-plan-shooting-range.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "shooting-range",
+      "label": {
+        "name": "射击场",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-airport",
+      "name": "Airport",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 22.0,
+      "depth": 15.0,
+      "height": 6.81,
+      "bytes": 30472,
+      "triangles": 770,
+      "sha256": "84b5c5cba3fab09091ee12446c830b1105f9e8074155256c529a831606a13b2f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-airport.glb",
+      "thumb": "assets/library/thumb/scendance-plan-airport.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "airport",
+      "label": {
+        "name": "机场",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-bus-coach-station",
+      "name": "Bus/Coach Station",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 13.8,
+      "depth": 7.8,
+      "height": 2.92,
+      "bytes": 39436,
+      "triangles": 1550,
+      "sha256": "c07ed17e649e8444898f94cfb434d87c085b2c751eeed05dfdb90a5e260db422",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bus-coach-station.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bus-coach-station.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bus-coach-station",
+      "label": {
+        "name": "公交/大巴站",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-train-station",
+      "name": "Train Station",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 15.0,
+      "depth": 9.2,
+      "height": 3.92,
+      "bytes": 29992,
+      "triangles": 726,
+      "sha256": "5ad48fb3e54c917491778acc55d711718a9df03576d2b318768eeec4d8ca927d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-train-station.glb",
+      "thumb": "assets/library/thumb/scendance-plan-train-station.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "train-station",
+      "label": {
+        "name": "火车站",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-lifeguard-kayak",
+      "name": "Lifeguard Kayak",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.26,
+      "depth": 3.923722,
+      "height": 0.688346,
+      "bytes": 22004,
+      "triangles": 458,
+      "sha256": "8a6516cfefdcdd9b7651c2b04944c9c14fe8919308ce6fc809d1d6fdb7d16165",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-lifeguard-kayak.glb",
+      "thumb": "assets/library/thumb/scendance-plan-lifeguard-kayak.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "lifeguard-kayak",
+      "label": {
+        "name": "救生皮划艇",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-arts-and-crafts",
+      "name": "Arts and crafts",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.9,
+      "depth": 3.05,
+      "height": 2.66,
+      "bytes": 45272,
+      "triangles": 1650,
+      "sha256": "b23c36c7f73394f8a3a92d282047a8dba08c25625d690343a07bb8e228ad42f7",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-arts-and-crafts.glb",
+      "thumb": "assets/library/thumb/scendance-plan-arts-and-crafts.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "arts-and-crafts",
+      "label": {
+        "name": "手工艺",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-carnival",
+      "name": "Carnival",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 12.0,
+      "depth": 9.5,
+      "height": 3.35,
+      "bytes": 28756,
+      "triangles": 1082,
+      "sha256": "45613c5875b68ea44e87ea5581b94fcc43e743dfd92a5d881a6a666a6bbfac5f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-carnival.glb",
+      "thumb": "assets/library/thumb/scendance-plan-carnival.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "carnival",
+      "label": {
+        "name": "嘉年华",
+        "bucket": "rides"
+      }
+    },
+    {
+      "slug": "scendance-plan-fireworks",
+      "name": "Fireworks",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.52,
+      "depth": 2.18,
+      "height": 1.675,
+      "bytes": 33064,
+      "triangles": 1214,
+      "sha256": "5215b6861d6f49278d418ac97e9fd0be5b4fe561d153d1b0ff6b7630fda2a09f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-fireworks.glb",
+      "thumb": "assets/library/thumb/scendance-plan-fireworks.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "fireworks",
+      "label": {
+        "name": "烟花",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-hospital",
+      "name": "Hospital",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 12.0,
+      "depth": 9.0,
+      "height": 5.035,
+      "bytes": 23664,
+      "triangles": 578,
+      "sha256": "74d2b95a41eadec984b71606bbdf4b5d27fd95bca0ae7b96e56b204a04fa1121",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-hospital.glb",
+      "thumb": "assets/library/thumb/scendance-plan-hospital.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "hospital",
+      "label": {
+        "name": "医院",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-multi-faith-room",
+      "name": "Multi faith room",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.3502,
+      "depth": 3.902,
+      "height": 2.745,
+      "bytes": 23668,
+      "triangles": 410,
+      "sha256": "7b3a55b5fc44270df6bb89cec0e9114c73ec0988981a83fbe6d8d8400a510555",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-multi-faith-room.glb",
+      "thumb": "assets/library/thumb/scendance-plan-multi-faith-room.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "multi-faith-room",
+      "label": {
+        "name": "多信仰静室",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-relax-zone",
+      "name": "Relax Zone",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 6.3,
+      "depth": 4.65,
+      "height": 2.705,
+      "bytes": 20312,
+      "triangles": 1440,
+      "sha256": "037b96ef326f2233ae3add3d792cfe390f55c09acd2dfd0ab5b45855eb56481b",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-relax-zone.glb",
+      "thumb": "assets/library/thumb/scendance-plan-relax-zone.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "relax-zone",
+      "label": {
+        "name": "休息区",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-themepark",
+      "name": "Themepark",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 12.0,
+      "depth": 9.5,
+      "height": 4.662299,
+      "bytes": 33564,
+      "triangles": 1766,
+      "sha256": "f0f862c50c3495411213c716140fb0acec7dbdabb950c0aaa7bfcb91d5cca875",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-themepark.glb",
+      "thumb": "assets/library/thumb/scendance-plan-themepark.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "themepark",
+      "label": {
+        "name": "主题乐园",
+        "bucket": "rides"
+      }
+    },
+    {
+      "slug": "scendance-plan-timing-point",
+      "name": "Timing Point",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.4,
+      "depth": 3.1,
+      "height": 2.71,
+      "bytes": 15648,
+      "triangles": 326,
+      "sha256": "f79da5f2fed57907b26aa65ad73dcbd94b48927333ac82b08ea128ee84d249df",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-timing-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-timing-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "timing-point",
+      "label": {
+        "name": "计时点",
+        "bucket": "sports"
+      }
+    },
+    {
+      "slug": "scendance-plan-vintage-display",
+      "name": "Vintage display",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.5,
+      "depth": 3.28,
+      "height": 2.185,
+      "bytes": 29204,
+      "triangles": 614,
+      "sha256": "0031161f5c2d269ccfcbbd5f65a5f1813fb25ce217ad531d8a5446a03969d8cf",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-vintage-display.glb",
+      "thumb": "assets/library/thumb/scendance-plan-vintage-display.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "vintage-display",
+      "label": {
+        "name": "复古展示",
+        "bucket": "exhibition"
+      }
+    },
+    {
+      "slug": "scendance-plan-zoo",
+      "name": "Zoo",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 8.4,
+      "depth": 6.1,
+      "height": 3.45,
+      "bytes": 38448,
+      "triangles": 2186,
+      "sha256": "d7f4e24e78f59e71970533251e2df1f67db71d2351f5bf16977a3fa46e149493",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-zoo.glb",
+      "thumb": "assets/library/thumb/scendance-plan-zoo.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "zoo",
+      "label": {
+        "name": "动物园",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-changing-places-toilet",
+      "name": "Changing Places Toilet",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.5726,
+      "depth": 3.659,
+      "height": 2.755,
+      "bytes": 30596,
+      "triangles": 1034,
+      "sha256": "029c1218c93f705939eb337df7ec13b30cd153d60d092257e3abd6e674cbdf6a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-changing-places-toilet.glb",
+      "thumb": "assets/library/thumb/scendance-plan-changing-places-toilet.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "changing-places-toilet",
+      "label": {
+        "name": "无障碍更衣卫生间",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-fire-towers",
+      "name": "Fire towers",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.031276,
+      "depth": 3.290535,
+      "height": 6.765479,
+      "bytes": 25208,
+      "triangles": 1800,
+      "sha256": "9bf5b12f2269a65574e67c3ef92ab1090869c944b854397b14e2a1c96b66aa07",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-fire-towers.glb",
+      "thumb": "assets/library/thumb/scendance-plan-fire-towers.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "fire-towers",
+      "label": {
+        "name": "消防瞭望塔",
+        "bucket": "structure"
+      }
+    },
+    {
+      "slug": "scendance-plan-risk-assessment-pin",
+      "name": "Risk assessment pin",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.64,
+      "depth": 0.52,
+      "height": 1.45,
+      "bytes": 4788,
+      "triangles": 216,
+      "sha256": "591e610a847dfd1cf1eb15df5afc7601a665709de98d77e52ce9cb8a750c144c",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-risk-assessment-pin.glb",
+      "thumb": "assets/library/thumb/scendance-plan-risk-assessment-pin.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "risk-assessment-pin",
+      "label": {
+        "name": "风险评估标记",
+        "bucket": "signage"
+      }
+    },
+    {
+      "slug": "scendance-plan-firewall",
+      "name": "Firewall",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.51,
+      "depth": 0.63,
+      "height": 1.61,
+      "bytes": 33016,
+      "triangles": 1046,
+      "sha256": "0b58e28ee8bbed02fa59ee70cbf7ff423e86a7fe2b1c4f1bb9fd6e297066e80a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-firewall.glb",
+      "thumb": "assets/library/thumb/scendance-plan-firewall.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "firewall",
+      "label": {
+        "name": "防火墙",
+        "bucket": "digital"
+      }
+    },
+    {
+      "slug": "scendance-plan-generator-point",
+      "name": "Generator Point",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.55,
+      "depth": 2.47,
+      "height": 1.67,
+      "bytes": 11948,
+      "triangles": 780,
+      "sha256": "ce2231be4026cd0811d3ed53509badd9299c1862e3a2bb3ce2abf95260f92b5d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-generator-point.glb",
+      "thumb": "assets/library/thumb/scendance-plan-generator-point.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "generator-point",
+      "label": {
+        "name": "发电机位",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-permanent-power",
+      "name": "Permanent Power",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.5,
+      "depth": 1.15,
+      "height": 1.535,
+      "bytes": 20960,
+      "triangles": 530,
+      "sha256": "610ce422ff3f30113085ca4ef24dd0d726173a245f2f8994b01bd153624c30d0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-permanent-power.glb",
+      "thumb": "assets/library/thumb/scendance-plan-permanent-power.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "permanent-power",
+      "label": {
+        "name": "永久供电",
+        "bucket": "logistics"
+      }
+    },
+    {
+      "slug": "scendance-plan-coach",
+      "name": "Coach",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.688,
+      "depth": 12.2025,
+      "height": 3.23,
+      "bytes": 32792,
+      "triangles": 1250,
+      "sha256": "0ced14c38ce222f2ace21971ecfc06a7194ed0c77f53cb3e504121d4767c5c6b",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-coach.glb",
+      "thumb": "assets/library/thumb/scendance-plan-coach.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "coach",
+      "label": {
+        "name": "大巴",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-spitfire-aircraft",
+      "name": "Spitfire Aircraft",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 11.23,
+      "depth": 9.48,
+      "height": 2.557034,
+      "bytes": 40128,
+      "triangles": 2392,
+      "sha256": "0807f2bc7ffb06b9eebbfc2a1827b4cf37f145f8d5d82c0f1cbe52386918e2b5",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-spitfire-aircraft.glb",
+      "thumb": "assets/library/thumb/scendance-plan-spitfire-aircraft.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "spitfire-aircraft",
+      "label": {
+        "name": "Spitfire 战机",
+        "bucket": "vehicles"
+      },
+      "designReference": "https://www.sciencemuseum.org.uk/sites/default/files/2025-11/Flight-Large%20Print%20Book%202%20of%203-DIGITAL.pdf"
+    },
+    {
+      "slug": "scendance-plan-camera-boat",
+      "name": "Camera Boat",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.82197,
+      "depth": 4.983403,
+      "height": 2.0,
+      "bytes": 22196,
+      "triangles": 1380,
+      "sha256": "1b3852ffdee25f6d0300c6e91b265369aaaa17243cef13ee6b268dd7eeb25d83",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-camera-boat.glb",
+      "thumb": "assets/library/thumb/scendance-plan-camera-boat.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "camera-boat",
+      "label": {
+        "name": "摄像船",
+        "bucket": "vehicles"
+      }
+    },
+    {
+      "slug": "scendance-plan-skycam",
+      "name": "Skycam",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 8.14,
+      "depth": 6.33,
+      "height": 4.2,
+      "bytes": 13516,
+      "triangles": 912,
+      "sha256": "cd6bf76b78dbeb1b3d11085f89aa7e59142e153e892e2ecc5bcbdd7a41f78e3c",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-skycam.glb",
+      "thumb": "assets/library/thumb/scendance-plan-skycam.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "skycam",
+      "label": {
+        "name": "索道摄像机（Skycam）",
+        "bucket": "digital"
+      }
+    },
+    {
+      "slug": "scendance-plan-prosecco-bar",
+      "name": "Prosecco Bar",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.78,
+      "depth": 2.75,
+      "height": 2.07,
+      "bytes": 45452,
+      "triangles": 2394,
+      "sha256": "5116b10eb3717784cce993c9bd8f76a2914b98be296e53882db2b067b96d1859",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-prosecco-bar.glb",
+      "thumb": "assets/library/thumb/scendance-plan-prosecco-bar.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "prosecco-bar",
+      "label": {
+        "name": "起泡酒吧",
+        "bucket": "food"
+      }
+    },
+    {
+      "slug": "scendance-plan-chequered-circ",
+      "name": "Chequered circle",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.997591,
+      "depth": 1.997591,
+      "height": 0.024,
+      "bytes": 14424,
+      "triangles": 960,
+      "sha256": "79ae78d78ffa005a3169a431354fdc1125341a41c01de096665d4ee6d9f33c01",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-chequered-circ.glb",
+      "thumb": "assets/library/thumb/scendance-plan-chequered-circ.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "chequered-circ",
+      "label": {
+        "name": "方格圆底",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-chequered-rect",
+      "name": "Chequered rectangle",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.0,
+      "depth": 2.0,
+      "height": 0.03,
+      "bytes": 6716,
+      "triangles": 384,
+      "sha256": "f6204d9fccabd7f421478a0c1d2dab9752123ea1a809190e4c4cc46e420a7422",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-chequered-rect.glb",
+      "thumb": "assets/library/thumb/scendance-plan-chequered-rect.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "chequered-rect",
+      "label": {
+        "name": "方格矩形底",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-circle",
+      "name": "Circle sticker base",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.0,
+      "depth": 2.0,
+      "height": 0.033,
+      "bytes": 2500,
+      "triangles": 140,
+      "sha256": "f4cd7c19fbb0c4e6822e47b168f06bea8895e2f9e881bf314852b3c6aaf5e91d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-circle.glb",
+      "thumb": "assets/library/thumb/scendance-plan-circle.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "circle",
+      "label": {
+        "name": "圆点底衬",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-ellipse",
+      "name": "Ellipse footprint",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.1,
+      "depth": 1.3,
+      "height": 0.033,
+      "bytes": 2560,
+      "triangles": 140,
+      "sha256": "29923497df4c67234ebfbe08bab1c90ce1bfc468b0a7fb0d6ecea7c687478f4d",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ellipse.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ellipse.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ellipse",
+      "label": {
+        "name": "椭圆底面",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-overlayimage",
+      "name": "Overlay image",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.45,
+      "depth": 1.56,
+      "height": 0.051,
+      "bytes": 4800,
+      "triangles": 116,
+      "sha256": "3bb8f70da21bb00760b0aa61edcf156bfd749c20c9c34595076ebcf9a09aa074",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-overlayimage.glb",
+      "thumb": "assets/library/thumb/scendance-plan-overlayimage.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "overlayimage",
+      "label": {
+        "name": "叠加图层",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-rectangle",
+      "name": "Rectangle footprint",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.2,
+      "depth": 1.4,
+      "height": 0.033,
+      "bytes": 1016,
+      "triangles": 12,
+      "sha256": "a7343953b4c13636fffe7020568324b97d6fb62f106652b77ef638f3cd886a82",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-rectangle.glb",
+      "thumb": "assets/library/thumb/scendance-plan-rectangle.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "rectangle",
+      "label": {
+        "name": "矩形底面",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-route-dash",
+      "name": "Route — dashed line",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.36,
+      "depth": 3.62,
+      "height": 0.026,
+      "bytes": 1696,
+      "triangles": 60,
+      "sha256": "a1ccde302a2bab754137e944c13670126bbc1a8001dbb51f86b061bc601e65b0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-route-dash.glb",
+      "thumb": "assets/library/thumb/scendance-plan-route-dash.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "route-dash",
+      "label": {
+        "name": "动线·虚线",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-route-dot",
+      "name": "Route — dotted line",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.332865,
+      "depth": 3.658,
+      "height": 0.026,
+      "bytes": 8424,
+      "triangles": 612,
+      "sha256": "88b8b55c42ce15d56f7ce6a4d181495156494408920663ea9a9d3df7327dc125",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-route-dot.glb",
+      "thumb": "assets/library/thumb/scendance-plan-route-dot.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "route-dot",
+      "label": {
+        "name": "动线·点线",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-route-solid",
+      "name": "Route — solid line",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.36,
+      "depth": 3.8,
+      "height": 0.026,
+      "bytes": 1020,
+      "triangles": 12,
+      "sha256": "2379deed8def9631a72c351fc478e192b0a93d83fc1dfbb53ce61f80e9effa2a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-route-solid.glb",
+      "thumb": "assets/library/thumb/scendance-plan-route-solid.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "route-solid",
+      "label": {
+        "name": "动线·实线",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-textbox",
+      "name": "Text box",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.11,
+      "depth": 1.18,
+      "height": 0.05,
+      "bytes": 10192,
+      "triangles": 14,
+      "sha256": "a17d4a586d5f10c362edb18089cf46fb5e2822c8d87ab00f63e94d042814030f",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-textbox.glb",
+      "thumb": "assets/library/thumb/scendance-plan-textbox.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "textbox",
+      "label": {
+        "name": "文本框",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-transparent",
+      "name": "Transparent sticker base",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.07,
+      "depth": 1.47,
+      "height": 0.028,
+      "bytes": 2200,
+      "triangles": 96,
+      "sha256": "c0a31f31e008294c4cf69f504c2128809defd2c3d14ae257051f3b62f6670c30",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-transparent.glb",
+      "thumb": "assets/library/thumb/scendance-plan-transparent.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "transparent",
+      "label": {
+        "name": "透明底衬",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-triangle",
+      "name": "Triangle footprint",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.0,
+      "depth": 2.0,
+      "height": 0.03,
+      "bytes": 912,
+      "triangles": 8,
+      "sha256": "a7af2684a60d18ec5a2bcdf2a1a74cc37e11d6c08754c5c0abf23a57b5ad1384",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-triangle.glb",
+      "thumb": "assets/library/thumb/scendance-plan-triangle.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "triangle",
+      "label": {
+        "name": "三角形底面",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-triangle-equilateral",
+      "name": "Equilateral triangle footprint",
+      "sourceFile": "scripts/icon_props_completion.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.0,
+      "depth": 1.732051,
+      "height": 0.03,
+      "bytes": 940,
+      "triangles": 8,
+      "sha256": "72333b85178c8fdf72304ecd815818f26582bea97daaaa6775af171a121c8a54",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-triangle-equilateral.glb",
+      "thumb": "assets/library/thumb/scendance-plan-triangle-equilateral.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "triangle-equilateral",
+      "label": {
+        "name": "等边三角形底面",
+        "bucket": "decor"
+      }
+    },
+    {
+      "slug": "scendance-plan-first-aid-point-compact",
+      "name": "Compact first aid station",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.75,
+      "depth": 2.25,
+      "height": 2.65,
+      "bytes": 24372,
+      "triangles": 882,
+      "sha256": "dfb640fe48fedd02a96758d3d69531bf8b50114ff44439d9610d385db9ef2c7c",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-first-aid-point-compact.glb",
+      "thumb": "assets/library/thumb/scendance-plan-first-aid-point-compact.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "first-aid-point-compact",
+      "label": {
+        "name": "便携急救站（紧凑型）",
+        "bucket": "logistics"
+      },
+      "variantOf": "first-aid-point"
+    },
+    {
+      "slug": "scendance-plan-food-trailer-coffee",
+      "name": "Coffee concession trailer",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.564,
+      "depth": 4.489002,
+      "height": 2.439,
+      "bytes": 22420,
+      "triangles": 830,
+      "sha256": "a5ea7faddd7b7878cb5d320d7ccbebfcb23d87a7a5ba4cd53a7621f8597d951a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-food-trailer-coffee.glb",
+      "thumb": "assets/library/thumb/scendance-plan-food-trailer-coffee.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "food-trailer-coffee",
+      "label": {
+        "name": "咖啡餐饮拖车",
+        "bucket": "vehicles"
+      },
+      "variantOf": "food-trailer"
+    },
+    {
+      "slug": "scendance-plan-camera-boat-catamaran",
+      "name": "Camera catamaran",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.3,
+      "depth": 4.54,
+      "height": 2.51,
+      "bytes": 23484,
+      "triangles": 1632,
+      "sha256": "7d02357906aea479c2d8806c2357287c8275804c85a23c76fd077778d7c6dc53",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-camera-boat-catamaran.glb",
+      "thumb": "assets/library/thumb/scendance-plan-camera-boat-catamaran.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "camera-boat-catamaran",
+      "label": {
+        "name": "双体摄像船",
+        "bucket": "vehicles"
+      },
+      "variantOf": "camera-boat"
+    },
+    {
+      "slug": "scendance-plan-security-checkpoint-dual",
+      "name": "Dual-lane security checkpoint",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 5.2,
+      "depth": 3.1,
+      "height": 2.615,
+      "bytes": 29792,
+      "triangles": 1250,
+      "sha256": "6681f7acb141d1b4489f05da53dff3c651f261fb454e435647bf9006d565fc29",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-security-checkpoint-dual.glb",
+      "thumb": "assets/library/thumb/scendance-plan-security-checkpoint-dual.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "security-checkpoint-dual",
+      "label": {
+        "name": "双通道安检点",
+        "bucket": "structure"
+      },
+      "variantOf": "security-checkpoint"
+    },
+    {
+      "slug": "scendance-plan-water-refill-station-dual",
+      "name": "Dual-height bottle refill station",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.03,
+      "depth": 0.55,
+      "height": 1.37,
+      "bytes": 10972,
+      "triangles": 230,
+      "sha256": "72f249b037431d2f0116cf7171db36e19570ef445e7d9ab299db6f654272e604",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-water-refill-station-dual.glb",
+      "thumb": "assets/library/thumb/scendance-plan-water-refill-station-dual.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "water-refill-station-dual",
+      "label": {
+        "name": "双龙头补水站",
+        "bucket": "logistics"
+      },
+      "variantOf": "water-refill-station"
+    },
+    {
+      "slug": "scendance-plan-ev-charge-point-dual",
+      "name": "Twin EV charging point",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.77,
+      "depth": 0.83,
+      "height": 1.5,
+      "bytes": 12856,
+      "triangles": 708,
+      "sha256": "da861ba5b628bfac6b189faae207065a5bbcd7330f73f185f729a0241e084379",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-ev-charge-point-dual.glb",
+      "thumb": "assets/library/thumb/scendance-plan-ev-charge-point-dual.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "ev-charge-point-dual",
+      "label": {
+        "name": "双机充电桩",
+        "bucket": "digital"
+      },
+      "variantOf": "ev-charge-point"
+    },
+    {
+      "slug": "scendance-plan-round-table-and-chairs-parasol",
+      "name": "Round table and chairs with parasol",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 2.66,
+      "depth": 2.66,
+      "height": 2.65,
+      "bytes": 23532,
+      "triangles": 1640,
+      "sha256": "7e877378ca3501a4228decf62717ad1d78d5d6cc8773bcc7e8a19320d759d78a",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-round-table-and-chairs-parasol.glb",
+      "thumb": "assets/library/thumb/scendance-plan-round-table-and-chairs-parasol.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "round-table-and-chairs-parasol",
+      "label": {
+        "name": "户外圆桌椅（带伞）",
+        "bucket": "tables"
+      },
+      "variantOf": "round-table-and-chairs"
+    },
+    {
+      "slug": "scendance-plan-information-point-booth",
+      "name": "Information booth",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 1.83,
+      "depth": 1.45,
+      "height": 2.555,
+      "bytes": 14460,
+      "triangles": 218,
+      "sha256": "96798923b5d530b65e25b5e0140f2d372539ca8bbfc23afb1d00cb02b83ef093",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-information-point-booth.glb",
+      "thumb": "assets/library/thumb/scendance-plan-information-point-booth.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "information-point-booth",
+      "label": {
+        "name": "问询服务亭",
+        "bucket": "exhibition"
+      },
+      "variantOf": "information-point"
+    },
+    {
+      "slug": "scendance-plan-relax-zone-lounge",
+      "name": "Covered two-sofa lounge",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.8,
+      "depth": 4.2,
+      "height": 2.526,
+      "bytes": 17908,
+      "triangles": 1160,
+      "sha256": "4fd96c368bc08fad8da2b0423172e714fc9661d91777104546f10f7032036371",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-relax-zone-lounge.glb",
+      "thumb": "assets/library/thumb/scendance-plan-relax-zone-lounge.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "relax-zone-lounge",
+      "label": {
+        "name": "双沙发遮阳休息区",
+        "bucket": "structure"
+      },
+      "variantOf": "relax-zone"
+    },
+    {
+      "slug": "scendance-plan-accessible-ramp-dual",
+      "name": "Twin-lane access ramp",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 3.216,
+      "depth": 4.575,
+      "height": 1.586,
+      "bytes": 24464,
+      "triangles": 1848,
+      "sha256": "29c7fd7f180d6045caacaa622cf3181e0945a0ea187fffc3de389f5d84ae479e",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-accessible-ramp-dual.glb",
+      "thumb": "assets/library/thumb/scendance-plan-accessible-ramp-dual.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "accessible-ramp-dual",
+      "label": {
+        "name": "双通道无障碍坡道",
+        "bucket": "structure"
+      },
+      "variantOf": "accessible-ramp"
+    },
+    {
+      "slug": "scendance-plan-bouncy-castle-roofed",
+      "name": "Roofed bouncy castle",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 4.3,
+      "depth": 5.22,
+      "height": 3.03,
+      "bytes": 35244,
+      "triangles": 2582,
+      "sha256": "acef6f670d81d351970c778fe4d091ba78e29ef778ac686d9bffddad44b919fa",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-bouncy-castle-roofed.glb",
+      "thumb": "assets/library/thumb/scendance-plan-bouncy-castle-roofed.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "bouncy-castle-roofed",
+      "label": {
+        "name": "带顶充气城堡",
+        "bucket": "rides"
+      },
+      "variantOf": "bouncy-castle"
+    },
+    {
+      "slug": "scendance-plan-cn-lantern-round",
+      "name": "Round red festive lantern",
+      "sourceFile": "scripts/icon_props_variants.py",
+      "sourceCategory": "scendance-icon-props",
+      "width": 0.76,
+      "depth": 0.76,
+      "height": 0.940726,
+      "bytes": 23252,
+      "triangles": 1772,
+      "sha256": "a2b64c817e4797a13435a3d53f0389b04022f356e0c2917b8ffdb1cffe9c70e0",
+      "license": {
+        "slug": "project-authored",
+        "name": "Scendance original asset"
+      },
+      "glb": "assets/library/model/scendance-plan-cn-lantern-round.glb",
+      "thumb": "assets/library/thumb/scendance-plan-cn-lantern-round.webp",
+      "keyword": "icon-exact",
+      "creator": "Scendance",
+      "iconSlug": "cn-lantern-round",
+      "label": {
+        "name": "圆鼓红灯笼",
+        "bucket": "decor"
+      },
+      "variantOf": "cn-lantern"
+    }
+  ]
+}

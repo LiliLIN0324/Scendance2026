@@ -1,4 +1,5 @@
 import { cp, readdir, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packageScenePresets, stripGlbExtras } from './package-scene-presets.mjs';
 
@@ -12,12 +13,19 @@ const root = new URL('../', import.meta.url);
 await packageScenePresets(root);
 const publicDir = new URL('frontend/public/', root);
 const showcase = new URL('showcase/', publicDir);
+const library = JSON.parse(await readFile(new URL('assets/library/merged.json', root), 'utf8'));
+// Blocked models stay in the source library for provenance and catalogue rebuilds.
+const blockedFiles = new Set(library.models.filter(model => model.blockedReason).flatMap(model =>
+  [model.glb, model.thumb].map(path => fileURLToPath(new URL(path.slice('/showcase/'.length), root)))));
 // cp 是递归覆盖、不会删除源目录里已不存在的文件。不先清空的话，
 // 之前迭代留下的图片（例如改名前的 show.png / house.jpg）会一直被打进产物。
 await rm(showcase, { recursive: true, force: true });
 await mkdir(showcase, { recursive: true });
 for (const path of ['assets', 'vendor', 'renderer-webgl.js']) {
-  await cp(new URL(path, root), new URL(path, showcase), { recursive: true });
+  await cp(new URL(path, root), new URL(path, showcase), {
+    recursive: true,
+    filter: source => !blockedFiles.has(resolve(source)),
+  });
 }
 // The showcase scene library only loads `<key>/<key>.glb`. Archive manifests,
 // previews and asset notes stay in the repository for provenance, not in the

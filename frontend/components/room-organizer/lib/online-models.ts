@@ -1,4 +1,5 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
+import { isLinkedIconModel } from './icon-model-links';
 import { MATERIAL_GROUP_LABELS, matchesMaterialGroup, materialGroupLabel } from './material-taxonomy';
 import { isGlbUrl } from './glb-url';
 
@@ -202,10 +203,20 @@ export function onlineModelThumb(glbUrl: string | undefined, assetId?: string): 
 }
 
 let pending: Promise<OnlineModelIndex> | null = null;
+let pendingShipped: Promise<OnlineModelIndex> | null = null;
+/** 已加载目录的同步索引：2D 外廓/幽灵要在同步渲染里按 slug 取真实宽深。 */
+let cachedIndex: OnlineModelIndex | null = null;
+
+/** 同步按 slug 查已加载的物料（未加载/不存在返回 null）。 */
+export function onlineModelBySlug(slug: string): OnlineModel | null {
+  return cachedIndex?.models.find(model => model.slug === slug) ?? null;
+}
 
 /** Test seam: mirrors `clearGlbAssetCache` so a spec can exercise a fresh load. */
 export function clearOnlineModelCache(): void {
+  cachedIndex = null;
   pending = null;
+  pendingShipped = null;
 }
 
 /**
@@ -213,11 +224,29 @@ export function clearOnlineModelCache(): void {
  * cache so the panel's retry button performs a real retry rather than replaying the
  * same rejection.
  */
-export function loadOnlineModels(): Promise<OnlineModelIndex> {
-  pending ??= import('../../../../assets/library/merged.json')
+export function loadShippedOnlineModels(): Promise<OnlineModelIndex> {
+  pendingShipped ??= import('../../../../assets/library/merged.json')
     .then(module => {
       const namespace = module as { default?: unknown };
-      return buildOnlineModelIndex(normalizeOnlineModels(namespace.default ?? namespace));
+      const index = buildOnlineModelIndex(normalizeOnlineModels(namespace.default ?? namespace));
+      cachedIndex = index;
+      return index;
+    })
+    .catch((error: unknown) => {
+      pendingShipped = null;
+      throw error;
+    });
+  return pendingShipped;
+}
+
+/** Public material search only lists icon-linked models and people. */
+export function loadOnlineModels(): Promise<OnlineModelIndex> {
+  pending ??= loadShippedOnlineModels()
+    .then(index => {
+      const visible = buildOnlineModelIndex(index.models.filter(model =>
+        model.bucket === 'people' || isLinkedIconModel(model.slug)));
+      cachedIndex = visible;
+      return visible;
     })
     .catch((error: unknown) => {
       pending = null;
