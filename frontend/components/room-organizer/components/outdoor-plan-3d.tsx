@@ -691,6 +691,117 @@ export default function OutdoorPlan3D({
       object.rotation.y = -(rotationDeg * Math.PI) / 180;
     };
 
+    // —— 人群层随 plan.workers / boundary 刷新（#84）：重建前清掉旧实例并释放 GPU / 内置 mixer，
+    // 代际号拦过期异步回调；人物动画注册表按 group.parent 在下一帧摘除脱离实例，无需手动反注册。
+    let crowdGen = 0;
+    let crowdSignature = '';
+    const releaseCrowdChildren = (): void => {
+      while (crowdLayer.children.length > 0) {
+        const child = crowdLayer.children[0];
+        crowdLayer.remove(child);
+        const rootIndex = modelRoots.indexOf(child);
+        if (rootIndex >= 0) modelRoots.splice(rootIndex, 1);
+        try { disposeOwnedModel(child); } catch { /* 单个释放失败不阻断重建 */ }
+      }
+    };
+    const rebuildCrowd = (nextPlan: SitePlanData): void => {
+      if (disposed) return;
+      const nextFrame = ringFrame(nextPlan.boundary);
+      if (!nextFrame) return;
+      const nextMetrics = { width: nextFrame.width, depth: nextFrame.depth };
+      const signature = JSON.stringify({
+        workers: nextPlan.workers ?? [],
+        boundary: nextPlan.boundary,
+        metrics: nextMetrics,
+      });
+      if (signature === crowdSignature) return;
+      crowdSignature = signature;
+      releaseCrowdChildren();
+      const gen = ++crowdGen;
+      planCrowdShellPlacements(
+        Array.isArray(nextPlan.workers) ? nextPlan.workers : [],
+        nextPlan.boundary,
+        nextMetrics,
+      ).forEach((placement) => {
+        const { shell } = placement;
+        // 落位按本次重建的新 frame 折坐标（闭包 placeAt 用的是初始 metrics，边界变了会错位）。
+        const placeAtNext = (object: THREE.Object3D, nextShell: { x: number; z: number }, rotationDeg = 0): void => {
+          object.position.set(nextShell.x - nextMetrics.width / 2, 0, nextShell.z - nextMetrics.depth / 2);
+          object.rotation.y = -(rotationDeg * Math.PI) / 180;
+        };
+        if (!placement.glbUrl) {
+          const marker = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.26, 0.3, 1.7, 12),
+            new THREE.MeshBasicMaterial({ color: placement.color, transparent: true, opacity: 0.8 }),
+          );
+          placeAtNext(marker, shell, 0);
+          marker.position.y = 0.85;
+          marker.name = `plan-crowd-marker-${placement.id}`;
+          crowdLayer.add(marker);
+          return;
+        }
+        const item: FurnitureItem = {
+          id: `plan-crowd-${placement.id}`,
+          type: 'glb-asset',
+          name: placement.role,
+          width: 0.6,
+          depth: 0.6,
+          height: 1.75,
+          color: '#ffffff',
+          icon: '☺',
+          ...(placement.assetId ? { assetId: placement.assetId } : {}),
+          glbUrl: placement.glbUrl,
+          uniformScale: true,
+        };
+        // #93：人物 GLB 异步下载 / 解析期间先落人位柱，避免空窗期被误看成没人；
+        // 模型就位后替换掉占位柱，拉不到则保留占位柱。
+        const placeholder = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.26, 0.3, 1.7, 12),
+          new THREE.MeshBasicMaterial({ color: placement.color, transparent: true, opacity: 0.8 }),
+        );
+        placeAtNext(placeholder, shell, 0);
+        placeholder.position.y = 0.85;
+        placeholder.name = `plan-crowd-marker-${placement.id}`;
+        crowdLayer.add(placeholder);
+        const releasePlaceholder = (): void => {
+          if (gen === crowdGen) crowdLayer.remove(placeholder);
+        };
+        void ensureGlbAsset(placement.assetId ?? placement.glbUrl, placement.glbUrl)
+          .then(() => {
+            if (disposed || modelRunRef.current !== run || gen !== crowdGen) return;
+            // 带 Idle/Walk 片段的云端人物：挂独立 mixer 并进人物注册表播待机动作；
+            // 缺片段的回退本地低模走静态摆位（createWalkAvatar 返回 null）。
+            const avatar = createWalkAvatar(item);
+            const model = avatar?.group ?? createCachedGlbModel(item, false);
+            if (!model) { releasePlaceholder(); return; }
+            if (disposed || modelRunRef.current !== run || gen !== crowdGen) {
+              disposeOwnedModel(model);
+              releasePlaceholder();
+              return;
+            }
+            releasePlaceholder();
+            placeAtNext(model, shell, 0);
+            model.name = `plan-crowd-${placement.crowdType}`;
+            crowdLayer.add(model);
+            modelRoots.push(model);
+            if (avatar) {
+              registerPersonAnim(model, {
+                id: item.id,
+                mixer: avatar.mixer,
+                rig: null,
+                clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip() },
+                action: 'idle',
+                paused: false,
+                route: null,
+              });
+            }
+          })
+          .catch(() => {
+            /* 人物模型拉不到：保留人位柱。 */
+          });
+      });
+    };
+
     // 实景扫描（高斯点云）：先把地面轮廓标记画出来，点云本体等 controls 建好再起
     //（预览器要 renderer + camera + 环绕控制器）。
     const splatRequests: {
@@ -786,83 +897,7 @@ export default function OutdoorPlan3D({
     });
 
     // 不同人群：2D 岗位点位按 count 展开成 N 个人（没模型的岗位先画人位柱）。
-    planCrowdShellPlacements(
-      Array.isArray(plan.workers) ? plan.workers : [],
-      plan.boundary,
-      metrics,
-    ).forEach((placement) => {
-      const { shell } = placement;
-      if (!placement.glbUrl) {
-        const marker = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.26, 0.3, 1.7, 12),
-          new THREE.MeshBasicMaterial({ color: placement.color, transparent: true, opacity: 0.8 }),
-        );
-        placeAt(marker, shell, 0);
-        marker.position.y = 0.85;
-        marker.name = `plan-crowd-marker-${placement.id}`;
-        crowdLayer.add(marker);
-        return;
-      }
-      const item: FurnitureItem = {
-        id: `plan-crowd-${placement.id}`,
-        type: 'glb-asset',
-        name: placement.role,
-        width: 0.6,
-        depth: 0.6,
-        height: 1.75,
-        color: '#ffffff',
-        icon: '☺',
-        ...(placement.assetId ? { assetId: placement.assetId } : {}),
-        glbUrl: placement.glbUrl,
-        uniformScale: true,
-      };
-      // #93：人物 GLB 异步下载 / 解析期间先落人位柱，避免空窗期被误看成没人；
-      // 模型就位后替换掉占位柱，拉不到则保留占位柱。
-      const placeholder = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.26, 0.3, 1.7, 12),
-        new THREE.MeshBasicMaterial({ color: placement.color, transparent: true, opacity: 0.8 }),
-      );
-      placeAt(placeholder, shell, 0);
-      placeholder.position.y = 0.85;
-      placeholder.name = `plan-crowd-marker-${placement.id}`;
-      crowdLayer.add(placeholder);
-      const releasePlaceholder = (): void => {
-        crowdLayer.remove(placeholder);
-      };
-      void ensureGlbAsset(placement.assetId ?? placement.glbUrl, placement.glbUrl)
-        .then(() => {
-          if (disposed || modelRunRef.current !== run) { releasePlaceholder(); return; }
-          // 带 Idle/Walk 片段的云端人物：挂独立 mixer 并进人物注册表播待机动作；
-          // 缺片段的回退本地低模走静态摆位（createWalkAvatar 返回 null）。
-          const avatar = createWalkAvatar(item);
-          const model = avatar?.group ?? createCachedGlbModel(item, false);
-          if (!model) { releasePlaceholder(); return; }
-          if (disposed || modelRunRef.current !== run) {
-            disposeOwnedModel(model);
-            releasePlaceholder();
-            return;
-          }
-          releasePlaceholder();
-          placeAt(model, shell, 0);
-          model.name = `plan-crowd-${placement.crowdType}`;
-          crowdLayer.add(model);
-          modelRoots.push(model);
-          if (avatar) {
-            registerPersonAnim(model, {
-              id: item.id,
-              mixer: avatar.mixer,
-              rig: null,
-              clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip() },
-              action: 'idle',
-              paused: false,
-              route: null,
-            });
-          }
-        })
-        .catch(() => {
-          /* 人物模型拉不到：保留人位柱。 */
-        });
-    });
+    rebuildCrowd(plan);
 
     // —— 2026-11-12 P2-i 3D 版：选中设施的编辑手柄（虚线占地框 + 四角方柄 + 四边圆柄 + 顶部旋转柄）——
     // 视觉与 2D 画布同款（深底白边）；位置每帧按 2D 同一套 facilityHandles 数学折回 plan 坐标，
@@ -1007,6 +1042,8 @@ export default function OutdoorPlan3D({
         if (sceneLayerObj) sceneLayerObj.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -nextFrame.cy);
       const crowdLayerObj = scene.getObjectByName('plan-crowd');
         if (crowdLayerObj) crowdLayerObj.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -nextFrame.cy);
+      // #84：岗位 / 边界变化时重建人群层（设施模型层走 planModelLayer.syncPositions/placeNew）。
+      rebuildCrowd(nextPlan);
     };
     layerApiRef.current = { syncFootprint, syncEditVisuals };
 
