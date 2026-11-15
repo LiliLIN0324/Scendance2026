@@ -601,13 +601,15 @@ function ScopeSwatch({ size = 22, plus = false }: { size?: number; plus?: boolea
   );
 }
 /**
- * 2026-11-11 用户反馈「放大倍数不够」：按图源分档放大上限——CARTO 瓦片原生支持到 z21、
- * 天地图影像/矢量 z18（z19+ 返回占位图）；纸面格网模式用 FLOOR 档。
+ * 2026-11-11 用户反馈「放大倍数不够」：按图源分档放大上限——天地图影像/矢量 z18（z19+ 返回占位图）；
+ * 2026-11-16 实测 Carto 也不到 z21：同一把 key 下 z18 仍是真图（6–15 KB），z19/z20 一律 403
+ * （代理返回 `X-Carto-Fallback: upstream-403`）——上限改按 18，19~22 级由 overzoom 拉伸 z18，
+ * 与高德卫星 z18 之后的处理同口径，不会放大到一定级别就整屏空白。
  * OSM 官方瓦片 z20 直接 400（实测 tile.openstreetmap.org/20/... → 400 Bad Request，
  * 且 400 响应无 CORS 头，浏览器报「blocked by CORS policy」），所以 OSM 上限是 z19。
  */
 function mapMaxZoomFor(source: CanvasBasemapSource): number {
-  if (source === 'carto-light' || source === 'carto-dark') return 21;
+  if (source === 'carto-light' || source === 'carto-dark') return 18;
   if (source === 'osm') return 19;
   // 2026-11-12 实测（杭州大剧院同坐标瓦片）：天地图影像 z18 是真影像（7487b），
   // z19/z20 返回的是同一张占位图（同 4769b、同 MD5）——真实数据到 z18 为止。
