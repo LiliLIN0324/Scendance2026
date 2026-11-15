@@ -206,6 +206,8 @@ export interface OutdoorPlanOverlayHandle {
   setInspector(open: boolean, tab?: 'measure' | 'annotate' | 'selection'): void;
   /** 指北针 2D 态：复位视图到场地边界外框，缺边界则回锚点居中。 */
   focusVenue(): void;
+  /** 2026-11-16：把视野框到设计范围（右下焦点钮在圈了范围时改派这里）。 */
+  focusDesignScope(): void;
 }
 
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
@@ -482,6 +484,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     } else {
       canvasApiRef.current?.focusLngLat(lng, lat);
     }
+  },
+  focusDesignScope: () => {
+    // 2026-11-16 用户指令：左栏「定位到设计范围」那行已经删了，同样的事改由右轨焦点钮发起。
+    // 只框视图、不改 plan；没范围时画布内部静默不动，调用方自己回落。
+    canvasApiRef.current?.focusDesignScope();
   },
   }));
 
