@@ -223,11 +223,11 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.id).toBe('tool-column');
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
-    // 室内常驻：发布 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。尺寸标注收进账户中心设置分区；卫星只在户外。
+    // 室内常驻：分享 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。尺寸标注收进账户中心设置分区；卫星只在户外。
     expect(within(rail).getAllByRole('button')).toHaveLength(13);
-    expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
+    expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
     // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
-    for (const name of ['发布', '选择工具', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
+    for (const name of ['分享', '选择工具', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。

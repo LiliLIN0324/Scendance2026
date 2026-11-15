@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 画布工具轨右上角的「发布」。
+ * 画布工具轨右上角的「分享」。
  * 一张卡片：方案预览、扫码看的只读链接、项目大纲，下面是带走资料的次要入口。
  * 二维码算法用 qrcode（MIT），图标与卡片样式是自写的。
  */
@@ -35,6 +35,14 @@ export interface ShareMenuActions {
   onOpenMaterials(): void;
   /** 到场清单抽屉。调用方不得因此把 workbenchMode 设成 delivery。 */
   onOpenChecklist(): void;
+  /** 导出当前效果图 PNG（收编到分享面板；原独立导出钮退役）。 */
+  onExportImage?(): Promise<boolean> | void;
+  /** 导出物料清单 CSV（户外方案；室内无对应链路则不传）。 */
+  onExportCsv?: (() => void) | undefined;
+  /** 导出场地几何 GeoJSON（户外方案）。 */
+  onExportGeoJson?: (() => void) | undefined;
+  /** 导出 PDF 演示稿排版（户外方案）。 */
+  onPrintDeck?: (() => void) | undefined;
 }
 
 export interface PlanOutline {
@@ -147,7 +155,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
 
   const publish = async () => {
     if (!actions || busy) {
-      setNotice(actions ? '' : '发布还没接到工作台。');
+      setNotice(actions ? '' : '分享还没接到工作台。');
       return;
     }
     setBusy(true);
@@ -156,9 +164,9 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       const result = await actions.onPublish();
       setPublished(result);
       writePublishedLink(projectId, result);
-      setNotice(`版本 ${result.revision} 已发布。手机扫码看到的就是这一版。`);
+      setNotice(`版本 ${result.revision} 链接已生成。手机扫码看到的就是这一版。`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '发布没有完成。');
+      setNotice(error instanceof Error ? error.message : '链接没有生成。');
     } finally {
       setBusy(false);
     }
@@ -231,6 +239,11 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     setNotice(copied ? '链接已复制。' : '复制没成功，请从框里手动复制。');
   };
 
+  // 链路就绪汇总：方案网页 / 只读 3D / 评审三条各自是否已生成，供状态行总览。
+  const webLive = !!published;
+  const viewerLive = !!viewerLink;
+  const reviewLive = !!(reviewUrl && reviewCurrent());
+
   return <div className="sc-tool-menu" ref={rootRef}>
     {variant === 'canvas' ? (
       <button
@@ -238,8 +251,8 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
         id="tool-outdoor-publish"
         data-testid="outdoor-publish"
         data-tour="publish"
-        data-tip="发布这版方案"
-        aria-label="发布这版方案"
+        data-tip="分享这版方案"
+        aria-label="分享这版方案"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls="tool-share-menu"
@@ -260,20 +273,20 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
           fontFamily: 'inherit',
         }}
       >
-        发布
+        分享
       </button>
     ) : (
-      <button type="button" id="tool-share" data-tour="publish" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
-        <MaterialSymbol name="ios_share" />
+      <button type="button" id="tool-share" data-tour="publish" data-tip="分享" aria-label="分享" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
+        <MaterialSymbol name="upload" />
       </button>
     )}
-    {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="发布">
+    {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="分享">
       <header className="sc-publish-head">
         <span className="sc-publish-name">{titleOf(layout)}</span>
-        <span className={`sc-publish-chip${published ? ' is-live' : ''}`}>{published ? `已发布 v${published.revision}` : '未发布'}</span>
+        <span className={`sc-publish-chip${published ? ' is-live' : ''}`}>{published ? `已分享 v${published.revision}` : '未分享'}</span>
         <details className="sc-publish-tip">
           <summary aria-label="分享说明"><Info size={13} aria-hidden="true"/></summary>
-          <p>发布不会通知对方，链接由你自己发。后续编辑不改已发布的版本；评审评论写在打开页面的浏览器里。</p>
+          <p>分享不会通知对方，链接由你自己发。后续编辑不改已生成的版本；评审评论写在打开页面的浏览器里。</p>
         </details>
       </header>
 
@@ -285,7 +298,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
 
       <div className="sc-publish-actions">
         <button type="button" className="sc-publish-primary" disabled={busy} onClick={() => { void publish(); }}>
-          <Upload size={15} aria-hidden="true"/><span>{busy ? '正在发布…' : published ? `重新发布版本 ${published.revision + 1}` : '发布当前版本'}</span>
+          <Upload size={15} aria-hidden="true"/><span>{busy ? '正在生成…' : published ? `重新生成版本 ${published.revision + 1} 链接` : '生成分享链接'}</span>
         </button>
         {published && <>
           <button type="button" aria-label="复制链接" data-tip="复制链接" onClick={() => { void copyPublished(); }}><Copy size={15} aria-hidden="true"/></button>
@@ -313,9 +326,27 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
               : <div className="sc-publish-qr-frame is-pending" aria-hidden="true"><QrCode size={26}/></div>)
             : <div className="sc-publish-qr-frame is-empty" aria-hidden="true"><QrCode size={26}/></div>}
           <div className="sc-publish-qr-side">
-            <p>{published ? `版本 ${published.revision} · 只读，扫码即看` : '发布后这里出二维码，手机扫码看到的就是同一版。'}</p>
+            <p>{published ? `版本 ${published.revision} · 只读，扫码即看` : '生成链接后这里出二维码，手机扫码看到的就是同一版。'}</p>
           </div>
         </div>
+      </section>
+
+      <section className="sc-publish-status" aria-label="分享链路状态">
+        <span className={`sc-publish-status-item${webLive ? ' is-live' : ''}`}>
+          <i className="sc-publish-status-dot" aria-hidden="true"/>
+          <span className="sc-publish-status-name">方案网页</span>
+          <span className="sc-publish-status-state">{webLive ? `已分享 v${published!.revision}` : '未发布'}</span>
+        </span>
+        <span className={`sc-publish-status-item${viewerLive ? ' is-live' : ''}`}>
+          <i className="sc-publish-status-dot" aria-hidden="true"/>
+          <span className="sc-publish-status-name">3D 漫游</span>
+          <span className="sc-publish-status-state">{viewerLive ? '已生成' : '未生成'}</span>
+        </span>
+        <span className={`sc-publish-status-item${reviewLive ? ' is-live' : ''}`}>
+          <i className="sc-publish-status-dot" aria-hidden="true"/>
+          <span className="sc-publish-status-name">评审</span>
+          <span className="sc-publish-status-state">{reviewLive ? '已发评审' : '未送审'}</span>
+        </span>
       </section>
 
       {reviewUrl && reviewCurrent() && <section className="sc-publish-review">
@@ -340,6 +371,10 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
 
       <div className="sc-publish-more">
         <button type="button" onClick={() => { void issue(); }}><Link2 size={15} aria-hidden="true"/><span>发评审链接</span></button>
+        {actions?.onExportImage && <button type="button" onClick={() => { void actions.onExportImage?.(); setOpen(false); }}><MaterialSymbol name="image" size={15} /><span>导出效果图</span></button>}
+        {actions?.onExportCsv && <button type="button" onClick={() => { actions?.onExportCsv?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出物料清单 CSV</span></button>}
+        {actions?.onExportGeoJson && <button type="button" onClick={() => { actions?.onExportGeoJson?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出场地几何 GeoJSON</span></button>}
+        {actions?.onPrintDeck && <button type="button" onClick={() => { actions?.onPrintDeck?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出演示稿 PDF</span></button>}
         <button type="button" onClick={() => { actions?.onExportHandoff(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出交接</span></button>
         <button type="button" onClick={() => { actions?.onOpenMaterials(); setOpen(false); }}><PackageOpen size={15} aria-hidden="true"/><span>打开资料</span></button>
         <button type="button" onClick={() => { actions?.onOpenChecklist(); setOpen(false); }}><ClipboardCheck size={15} aria-hidden="true"/><span>到场清单</span></button>

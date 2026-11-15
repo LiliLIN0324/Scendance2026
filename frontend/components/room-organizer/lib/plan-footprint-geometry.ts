@@ -3,9 +3,15 @@ import type {
   PlanFacility,
   PlanMeasurement,
   PlanPoint,
+  PlanRoute,
   SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY } from '@/lib/outdoor-plan-tokens';
+import {
+  PLANNING_LAYER_COLORS,
+  PLANNING_NODE_KIND_COLORS,
+  PLANNING_ZONE_COLORS,
+  PLANNING_ZONE_OPACITY,
+} from '@/lib/outdoor-plan-tokens';
 import { annotationRectRing } from './site-plan-annotate';
 import { routeDisplayColor } from './route-carrier-color';
 
@@ -89,13 +95,6 @@ export function planShellFrame(
   };
 }
 
-/** 分区 / 动线的颜色与透明度口径（与 2D 画布同一套 token，3D 里不需要另配一套色）。 */
-const ROUTE_COLORS: Record<string, string> = {
-  pedestrian: '#2f8f6a',
-  vehicle: '#c98a2c',
-  service: '#8a6fa8',
-};
-
 /** 出入口三型色与 2D 画布同源（tokens 单一出口），3D 点位与平面点位颜色一致。 */
 const NODE_COLORS: Record<string, string> = { ...PLANNING_NODE_KIND_COLORS };
 
@@ -105,7 +104,7 @@ const WORKER_FALLBACK_COLOR = '#5e7fa6';
 function zoneColor(facilityOrZone: { semantic?: string | undefined; color?: string | undefined }): string {
   if (facilityOrZone.color) return facilityOrZone.color;
   const semantic = facilityOrZone.semantic ?? '';
-  return (PLANNING_ZONE_COLORS as Record<string, string>)[semantic] ?? ROUTE_COLORS.pedestrian!;
+  return (PLANNING_ZONE_COLORS as Record<string, string>)[semantic] ?? FACILITY_FALLBACK_COLOR;
 }
 
 export interface PlanFootprintZonesShape {
@@ -128,6 +127,9 @@ export interface PlanFootprintRouteShape {
   points: ShellPoint[];
   color: string;
   oneWay: boolean;
+  kind: PlanRoute['kind'];
+  /** 车辆 / 后勤用虚线，人行实线；口径与 2D drawRouteLayer 线型一致。 */
+  dashed: boolean;
   /** 屏幕空间线宽（像素），跟人行/车行动线 2D 描边对齐。 */
   lineWidth: number;
 }
@@ -406,6 +408,8 @@ export function planFootprintShapes(
       // 2026-11-16 线色跟载体走（与图例同一口径），自带主题色优先。
       color: routeDisplayColor(route),
       oneWay: route.oneWay,
+      kind: route.kind,
+      dashed: route.kind !== 'pedestrian',
       lineWidth: route.kind === 'vehicle' ? 3 : 2,
     })),
     nodes: plan.nodes.map(node => ({

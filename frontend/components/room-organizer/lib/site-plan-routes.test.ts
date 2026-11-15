@@ -181,6 +181,22 @@ describe('site-plan workers (H2-d)', () => {
     expect(emptyRole.ok).toBe(false);
   });
 
+  it('keeps the bound walk character assetId on the worker', () => {
+    const bound = buildWorker(
+      { role: '安保', count: 1, position: { x: 30, y: 30 }, assetId: '7a9f1e21-8c34-4d52-a109-b00000000009' },
+      BOUNDARY,
+      ZONES,
+    );
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    expect(bound.value.assetId).toBe('7a9f1e21-8c34-4d52-a109-b00000000009');
+
+    const loose = buildWorker({ role: '安保', count: 1, position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(loose.ok).toBe(true);
+    if (!loose.ok) return;
+    expect(loose.value.assetId).toBeUndefined();
+  });
+
   it('infers the containing zone by point-in-ring', () => {
     expect(inferWorkerZoneId({ x: 30, y: 30 }, ZONES)).toBe(ZONES[0].id);
     expect(inferWorkerZoneId({ x: 20, y: 90 }, ZONES)).toBe(ZONES[1].id);

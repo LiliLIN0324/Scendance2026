@@ -33,7 +33,7 @@ export const PLANNING_LAYER_COLORS = {
   access: '#3D6FA8',
   worker: '#B3628C',
   node: '#6B6B6B',
-  measure: '#2fa8b5', // 测量标注（H3-a）：青色，与其他图层色互异
+  measure: '#1f1f1f', // 测量：中性近黑（Google 测距口径），深底图自动转白，见 PLANNING_MEASURE_COLORS
   annotate: '#8e44ad', // 2026-11-11 用户指令：自由标注（文本/形状）：紫色，与其他图层色互异
 } as const;
 
@@ -60,6 +60,15 @@ export const PLANNING_NODE_KIND_COLORS = {
 
 export type PlanningNodeKind = keyof typeof PLANNING_NODE_KIND_COLORS;
 
+/**
+ * 测量要素（距离/面积/路径）中性配色，对齐 Google Maps 测距：浅底近黑实线、
+ * 卫星/深色底转白实线；端点为白心圆环，读数文字直接贴线、配反色描边光晕。
+ * 全为 #rrggbb 小写。
+ */
+export const PLANNING_MEASURE_COLORS = {
+  light: '#1f1f1f',
+  dark: '#ffffff',
+} as const;
 export type PlanningLayerKind = keyof typeof PLANNING_LAYER_COLORS;
 
 /**

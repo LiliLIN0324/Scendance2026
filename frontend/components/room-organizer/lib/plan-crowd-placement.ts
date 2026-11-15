@@ -12,6 +12,7 @@
  */
 
 import { CROWD_TYPE_MODELS, type CrowdTypeId } from './crowd-types';
+import { WALK_ROLES, walkRoleCrowdType, walkRoleGlbUrl } from './walk-roles';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 单个岗位最多渲染几个人（worker.count 上限 9999，全放会卡死）。 */
@@ -62,6 +63,19 @@ export function crowdGlbUrl(slug: string): string {
   return `/showcase/assets/library/model/${slug}.glb`;
 }
 
+/** 绑定代号是否登记在可走漫游角色表里（未登记或不可走视为未绑定，回退到岗位默认）。 */
+function registeredWalkAsset(assetId: string | undefined): string | null {
+  if (!assetId) return null;
+  const role = WALK_ROLES.find(candidate => candidate.assetId === assetId && candidate.walkable);
+  return role?.assetId ?? null;
+}
+
+/** 该类人群的默认漫游角色：取登记表第一个可走角色，稳定兜底，不在男女之间轮换。 */
+export function defaultWalkAssetIdForType(crowdType: CrowdTypeId): string | null {
+  const role = WALK_ROLES.find(candidate => walkRoleCrowdType(candidate) === crowdType && candidate.walkable);
+  return role?.assetId ?? null;
+}
+
 /** 2D 岗位点位（只取本模块需要的字段）。 */
 export interface PlanCrowdWorker {
   id: string;
@@ -69,6 +83,8 @@ export interface PlanCrowdWorker {
   count: number;
   position: PlanPoint;
   color?: string | undefined;
+  /** 绑定的漫游人物代号（可选）：固定到具体角色；不绑按岗位归类取默认角色。 */
+  assetId?: string | undefined;
 }
 
 /** 一个可渲染的人群实例。 */
@@ -77,6 +93,8 @@ export interface CrowdPlacement {
   workerId: string;
   role: string;
   crowdType: CrowdTypeId;
+  /** 解析出的云端漫游人物代号；null 表示该实例不用云端 walk 模型。 */
+  assetId: string | null;
   /** 素材库 slug；null 表示该人群暂时没有模型（仍画人位标记）。 */
   slug: string | null;
   /** 模型 URL；slug 为 null 时也是 null。 */
@@ -116,16 +134,21 @@ export function planCrowdPlacements(
   for (const worker of workers) {
     const crowdType = crowdTypeForRole(worker.role);
     const total = Math.max(0, Math.min(Math.floor(worker.count), max));
+    const boundAssetId = registeredWalkAsset(worker.assetId);
+    const defaultAssetId = defaultWalkAssetIdForType(crowdType);
     for (let index = 0; index < total; index += 1) {
-      const slug = crowdModelSlugForType(crowdType, index);
+      // 固定到人：点位绑定的角色优先；未绑定取该类默认角色；都没有就出人位标记（本期不挂本地低模）。
+      const assetId = boundAssetId ?? defaultAssetId;
+      const slug = assetId ? null : crowdModelSlugForType(crowdType, index);
       const offset = crowdSpreadOffset(index);
       placements.push({
         id: `${worker.id}#${index}`,
         workerId: worker.id,
         role: worker.role,
         crowdType,
+        assetId,
         slug,
-        glbUrl: slug ? crowdGlbUrl(slug) : null,
+        glbUrl: assetId ? walkRoleGlbUrl(assetId) : slug ? crowdGlbUrl(slug) : null,
         at: { x: worker.position.x + offset.x, y: worker.position.y + offset.y },
         offset,
         color: worker.color ?? DEFAULT_WORKER_COLOR,

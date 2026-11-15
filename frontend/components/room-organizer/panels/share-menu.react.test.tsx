@@ -16,23 +16,23 @@ function actions(): ShareMenuActions {
   };
 }
 
-describe('发布卡片', () => {
-  it('opens from the single 发布 control, shows preview, scan, and outline, and closes on Escape', () => {
+describe('分享卡片', () => {
+  it('opens from the single 分享 control, shows preview, scan, and outline, and closes on Escape', () => {
     localStorage.clear();
     render(<ShareMenu actions={actions()} layout={sampleLayout()}/>);
-    const trigger = screen.getByRole('button', { name: '发布' });
+    const trigger = screen.getByRole('button', { name: '分享' });
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.getAllByRole('button', { name: '发布' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: '分享' })).toHaveLength(1);
     fireEvent.click(trigger);
-    const dialog = screen.getByRole('dialog', { name: '发布' });
-    for (const name of ['方案预览', '手机看方案', '项目大纲', '发布当前版本', '发评审链接', '导出交接', '打开资料', '到场清单']) {
+    const dialog = screen.getByRole('dialog', { name: '分享' });
+    for (const name of ['方案预览', '手机看方案', '项目大纲', '生成分享链接', '发评审链接', '导出交接', '打开资料', '到场清单']) {
       expect(dialog.textContent).toContain(name);
     }
     expect(dialog.textContent).toContain('12 × 8 m');
     expect(dialog.textContent).toContain('1 件');
     expect(dialog.textContent).toContain('签到');
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: '发布' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '分享' })).toBeNull();
   });
 
   it('publishes the saved version, draws the QR, and copies the link', async () => {
@@ -41,11 +41,11 @@ describe('发布卡片', () => {
     const clipboard = vi.fn(async () => undefined);
     Object.assign(navigator, { clipboard: { writeText: clipboard } });
     render(<ShareMenu actions={share} layout={sampleLayout()}/>);
-    fireEvent.click(screen.getByRole('button', { name: '发布' }));
-    expect(screen.getByText(/发布后这里出二维码/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '发布当前版本' }));
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    expect(screen.getByText(/生成链接后这里出二维码/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '生成分享链接' }));
     expect(await screen.findByRole('img', { name: '只读方案二维码' })).toBeTruthy();
-    expect((screen.getByRole('status')).textContent).toContain('版本 3 已发布');
+    expect((screen.getByRole('status')).textContent).toContain('版本 3 链接已生成');
     expect(screen.getByRole('link', { name: '打开只读页' })).toHaveProperty('href', 'https://studio.example/view/#token');
     fireEvent.click(screen.getByRole('button', { name: '复制链接' }));
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/view/#token');
@@ -56,11 +56,11 @@ describe('发布卡片', () => {
   it('shows the reason when publishing is refused', async () => {
     localStorage.clear();
     const share = actions();
-    vi.mocked(share.onPublish).mockRejectedValueOnce(new Error('还有改动没保存，保存后再发布。'));
+    vi.mocked(share.onPublish).mockRejectedValueOnce(new Error('还有改动没保存，保存后再生成链接。'));
     render(<ShareMenu actions={share} layout={sampleLayout()}/>);
-    fireEvent.click(screen.getByRole('button', { name: '发布' }));
-    fireEvent.click(screen.getByRole('button', { name: '发布当前版本' }));
-    expect((await screen.findByRole('status')).textContent).toContain('保存后再发布');
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成分享链接' }));
+    expect((await screen.findByRole('status')).textContent).toContain('保存后再生成');
     expect(screen.queryByRole('img', { name: '只读方案二维码' })).toBeNull();
   });
 
@@ -70,7 +70,7 @@ describe('发布卡片', () => {
     const clipboard = vi.fn(async () => undefined);
     Object.assign(navigator, { clipboard: { writeText: clipboard } });
     render(<ShareMenu actions={share} layout={sampleLayout()}/>);
-    fireEvent.click(screen.getByRole('button', { name: '发布' }));
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
     fireEvent.click(screen.getByRole('button', { name: '发评审链接' }));
     expect((await screen.findByRole('status')).textContent).toContain('请确认当前活动和方案后复制');
     expect(screen.getByRole('textbox', { name: '评审链接' })).toHaveProperty('value', 'https://studio.example/review/issued');
@@ -78,11 +78,11 @@ describe('发布卡片', () => {
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/review/issued');
     fireEvent.click(screen.getByRole('button', { name: '导出交接' }));
     expect(share.onExportHandoff).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('dialog', { name: '发布' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '发布' }));
+    expect(screen.queryByRole('dialog', { name: '分享' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
     fireEvent.click(screen.getByRole('button', { name: '打开资料' }));
     expect(share.onOpenMaterials).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: '发布' }));
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
     fireEvent.click(screen.getByRole('button', { name: '到场清单' }));
     expect(share.onOpenChecklist).toHaveBeenCalledOnce();
   });
@@ -90,7 +90,7 @@ describe('发布卡片', () => {
     const share=actions(),clipboard=vi.fn(async()=>undefined);Object.assign(navigator,{clipboard:{writeText:clipboard}});
     let finish!:(value:{url:string;isCurrent:()=>boolean})=>void,epoch=0;const token=epoch;
     vi.mocked(share.onIssueReviewLink).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    render(<ShareMenu actions={share} layout={sampleLayout()}/>);fireEvent.click(screen.getByRole('button',{name:'发布'}));fireEvent.click(screen.getByRole('button',{name:'发评审链接'}));
+    render(<ShareMenu actions={share} layout={sampleLayout()}/>);fireEvent.click(screen.getByRole('button',{name:'分享'}));fireEvent.click(screen.getByRole('button',{name:'发评审链接'}));
     act(()=>{epoch++;epoch++;});await act(async()=>finish({url:'https://studio.example/review/old',isCurrent:()=>epoch===token}));
     expect(screen.getByRole('status').textContent).toContain('旧链接未复制');expect(clipboard).not.toHaveBeenCalled();expect(screen.queryByRole('textbox',{name:'评审链接'})).toBeNull();
   });

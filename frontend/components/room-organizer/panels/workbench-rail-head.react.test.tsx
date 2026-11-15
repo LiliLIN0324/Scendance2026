@@ -26,8 +26,8 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(primary).not.toContain('aria-label="空间与物料"');
     const spaceBlock = source.slice(space, material);
     const materialBlock = source.slice(material, primaryEnd);
-    expect(spaceBlock).toContain('<LayoutGrid size={26}');
-    expect(materialBlock).toContain('<Box size={26}');
+    expect(spaceBlock).toContain('<RailSpace size={28}');
+    expect(materialBlock).toContain('<RailCrate size={28}');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
     // 空间、物料、场地、户外规划共用圆钮。场地钮既承接「重建真实场地」也承接「生成新场景」，

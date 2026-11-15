@@ -67,6 +67,8 @@ vi.mock("./outdoor-delivery-panel", () => ({
 vi.mock("../lib/site-plan-csv", () => ({ downloadPlanCsv: state.csv }));
 beforeEach(() => {
   localStorage.clear();
+  // 模块级图源缓存不随 localStorage 清，复位回缺省街道，避免上一条用例写入跨用例残留。
+  writePlanGroundSource("amap-streets");
   agent.outdoorWorkflow.proposal = null;
   agent.outdoorWorkflow.appliedHighlight = null;
   state.bridge = null;
@@ -106,7 +108,11 @@ it("keeps the guide buttons usable and hides the guide when the user works outsi
     outsideTool.remove();
   }
 
-  fireEvent.click(screen.getByRole("button", { name: /^底图：/ }));
+  // 折叠卡本身直切街道/卫星；完整底图面板从悬停竖列的「展开」格进入。
+  const cycleBtn = screen.getByRole("button", { name: /^底图：/ });
+  fireEvent.mouseEnter(cycleBtn.parentElement!);
+  fireEvent.click(screen.getByRole("button", { name: "展开更多图层" }));
+  fireEvent.mouseLeave(cycleBtn.parentElement!);
   fireEvent.click(screen.getByRole("button", { name: "重看首次开图引导" }));
   expect(screen.getByRole("dialog", { name: /这是你的场地画布/ })).toBeTruthy();
   fireEvent.wheel(screen.getByTestId("merge-canvas"));
@@ -176,7 +182,11 @@ it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3
       onPlanChange={onPlan}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: /^底图：/ }));
+  // 折叠卡直切街道/卫星；其余图源从悬停竖列「展开」格进面板再选。
+  const cycleBtn = screen.getByRole("button", { name: /^底图：/ });
+  fireEvent.mouseEnter(cycleBtn.parentElement!);
+  fireEvent.click(screen.getByRole("button", { name: "展开更多图层" }));
+  fireEvent.mouseLeave(cycleBtn.parentElement!);
   fireEvent.click(screen.getByText("Carto 深色"));
   expect(state.canvas?.source).toBe("carto-dark");
   expect(readPlanGroundSource()).toBe("carto-dark");
