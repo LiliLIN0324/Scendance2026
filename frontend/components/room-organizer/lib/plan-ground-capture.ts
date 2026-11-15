@@ -59,10 +59,11 @@ export const PLAN_GROUND_BACKDROP: Record<PlanGroundSource, string> = {
 /**
  * 各底图的瓦片上限（贴地拼图用）。
  * 高德矢量档 z19 返回 100 多字节的空瓦片，只有 z18 及以下是真图；卫星档 z19 仍有影像。
- * OSM z19（z20 是 400）；Carto 能到 21，但 1024px 拼图在 z19 已覆盖约 20 m，够用。
+ * OSM z19（z20 是 400）；Carto 2026-11-16 实测 z18 是真图、z19/z20 回 403，上限同样按 18。
  */
 export function planGroundMaxZoom(source: PlanGroundSource): number {
   if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
+  if (source === 'carto-light' || source === 'carto-dark') return 18;
   return 19;
 }
 

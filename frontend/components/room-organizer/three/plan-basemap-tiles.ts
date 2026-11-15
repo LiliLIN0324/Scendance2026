@@ -154,8 +154,10 @@ export function zoomFromSpan(spanM: number): number {
 
 export function maxZoomForSource(source: CanvasBasemapSource): number {
   // 3D 默认用图源真正有高清瓦片的最高级；高德街道 z18 仍为真图（z19 才回空瓦片）。
+  // Carto 2026-11-16 实测同一把 key：z18 真图、z19/z20 回 403，所以也不超过 18。
   if (source === 'amap-satellite') return 18;
   if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
+  if (source === 'carto-light' || source === 'carto-dark') return 18;
   if (source === 'vec' || source === 'img') return 18;
   return 19;
 }

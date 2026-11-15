@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BasemapTileCache } from '../lib/plan-tile-cache';
 import { RESEARCH_BASEMAP_TAG } from './research-basemap';
-import { paintTiledGround, paintTilePyramid, type TilePaintCache } from './plan-basemap-tiles';
+import { paintTiledGround, paintTilePyramid, maxZoomForSource, type TilePaintCache } from './plan-basemap-tiles';
 
 /** 微任务直接就绪的假图：只当「图片已能解码」用，不碰网络。 */
 class FakeImage {
@@ -17,6 +17,15 @@ class FakeImage {
 
 const ANCHOR = { lng: 120.15, lat: 30.25 };
 const BOUNDS = { west: 120.148, south: 30.248, east: 120.152, north: 30.252 };
+
+describe('3D 地面瓦片级别上限', () => {
+  it('Carto 封顶 z18（同一把 key 下 z19/z20 回 403）', () => {
+    expect(maxZoomForSource('carto-light')).toBe(18);
+    expect(maxZoomForSource('carto-dark')).toBe(18);
+    expect(maxZoomForSource('amap-satellite')).toBe(18);
+    expect(maxZoomForSource('osm')).toBe(19);
+  });
+});
 
 function makeCache(): TilePaintCache {
   return {
