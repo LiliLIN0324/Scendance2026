@@ -199,6 +199,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             const details=error.details;
             const status=details&&typeof details==='object'&&'status' in details?details.status:undefined;
             if(error.code==='PROVIDER_HTTP_ERROR'&&typeof status==='number'&&Number.isInteger(status)&&status>=100&&status<=599)return `PROVIDER_HTTP_ERROR:${status}`;
+            if(error.code==='PROVIDER_QUOTA_EXHAUSTED')return 'PROVIDER_QUOTA_EXHAUSTED';
             if(['MODEL_PROVIDER_INCOMPLETE','MODEL_PROVIDER_URL_INVALID','MODEL_PROVIDER_PROFILE_INVALID','MODEL_PROVIDER_UNSUPPORTED_WORKFLOW','MODEL_INCOMPLETE_OUTPUT','MODEL_INVALID_RESPONSE','SERVICE_NOT_CONFIGURED','PROVIDER_INVALID_JSON','FILE_TOO_LARGE','EMPTY_BODY'].includes(error.code))return error.code;
             return 'MODEL_REQUEST_FAILED';
           }
@@ -247,6 +248,8 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             briefReasons.push(briefFailure(error));
             // 客户端主动取消：换供应商没有意义，立即返回。
             if(request.signal&&request.signal.aborted)break;
+            // 额度/欠费是账户级问题，换其它槽位也救不回来，如实返回该分类，不自动串槽。
+            if(error instanceof ApiError&&error.code==='PROVIDER_QUOTA_EXHAUSTED')break;
             continue;
           }
         }
