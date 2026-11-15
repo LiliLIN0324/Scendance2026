@@ -8,6 +8,7 @@ import type { ActivitySuggestion } from '../../../lib/suggestions';
 import { buildPlanChecklist } from '../../../lib/plan-checklist';
 import type { PlanSizeFacts } from '../../../lib/plan-size-facts';
 import type { FunctionalNeeds } from '../lib/functional-requirements';
+import { formatZoneRange, numberPlanZones, stageZoneNumbers } from '../lib/plan-zone-numbering';
 
 type SkippedZone = { zoneId: string; reason: string };
 
@@ -15,8 +16,14 @@ type SkippedZone = { zoneId: string; reason: string };
  * 第 7.5 批「规划草案」计划卡。
  *
  * 受控组件：不订阅 agent-chat 内部状态，全部回调由父组件注入。
- * 对应 Z4/Z5——阶段带空间关系理由，三按钮「批准 / 换一版 / 取消」，
- * 输入框允许口头改方案，页脚常驻「执行前我会先征求你的意见」。
+ * 对应 Z4/Z5——阶段带空间关系理由，三按钮「批准 / 换一份计划 / 取消任务」，
+ * 输入框允许口头改方案，页脚常驻免责。
+ *
+ * 2026-11-15 按谷地工坊的施工方案卡改骨架：
+ * - 抬头是「计划 + N 个阶段」，先给规模再给细节；
+ * - 每个阶段标题后挂它覆盖的分区号区间（#1-#4），与画布上的分区编号同号；
+ * - 每个分区行带编号徽标，计划与画布靠同一个号对照，而不是靠用户自己认色块；
+ * - 三键文案对齐「批准 / 换一份计划 / 取消任务」——第三档是停整个任务，不是拒绝这版。
  *
  * 第 12 批：父组件额外传入三版打分结果 + AI 建议，卡片在阶段列表下方、
  * 按钮行上方插入「三版分数小条」与「AI 建议」两块，让用户在批准前
@@ -88,6 +95,21 @@ const metaStyle: CSSProperties = {
   color: '#9ca3af',
   fontSize: 11,
   marginTop: 2,
+};
+
+/** 分区编号徽标：与画布色块上的号同一套，灰色小底，不抢阶段标题。 */
+const zoneBadgeStyle: CSSProperties = {
+  display: 'inline-block',
+  minWidth: 16,
+  textAlign: 'center',
+  marginRight: 4,
+  padding: '0 4px',
+  borderRadius: 999,
+  background: '#eef2ee',
+  color: '#4A7C59',
+  fontWeight: 600,
+  fontSize: 10,
+  lineHeight: '14px',
 };
 
 const buttonRowStyle: CSSProperties = {
@@ -378,6 +400,10 @@ export function PlanCard({
     [draft],
   );
 
+  // 编号与画布同源：同一份草案算出来的号必须和画布色块上的号一致。
+  const zoneNumbers = useMemo(() => numberPlanZones(draft), [draft]);
+  const zoneNumbersByStage = useMemo(() => stageZoneNumbers(draft), [draft]);
+
   // 批准前先把「每个区会落什么」算出来摆给用户看，别让人盲批。
   const preview = useMemo(() => {
     if (!draft) return { byId: new Map<string, string>(), skipped: [] as SkippedZone[] };
@@ -423,7 +449,13 @@ export function PlanCard({
 
   return (
     <section style={cardStyle} aria-label="规划草案">
-      <header style={titleStyle}>规划草案</header>
+      <header style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={titleStyle}>计划</span>
+        {stages.length > 0 && (
+          <span style={metaStyle} data-testid="plan-card-stage-count">{stages.length} 个阶段</span>
+        )}
+      </header>
+      <p style={{ ...rationaleStyle, marginTop: 0 }}>这份计划是按你的要求拟定的，执行前我会先征求你的意见。</p>
       {blockedReason && <p role="alert" style={violationHardStyle}>{blockedReason}</p>}
       {zoneWarnings?.map(warning => <p key={warning} style={rationaleStyle}>{warning}</p>)}
 
@@ -435,18 +467,22 @@ export function PlanCard({
         const zoneAnnotations = (draft?.annotations ?? []).filter(
           (a) => a.kind === 'zone' && stage.annotationIds.includes(a.id),
         );
+        const stageRange = formatZoneRange(zoneNumbersByStage.get(stage.stageNo) ?? []);
         return (
           <div key={stage.stageNo} style={stageStyle}>
             <div style={stageTitleStyle}>
               <span aria-hidden="true">{stage.stageNo}.</span> {stage.title}
+              {stageRange && <span style={metaStyle} data-testid={`plan-card-stage-range-${stage.stageNo}`}> {stageRange}</span>}
             </div>
             <div style={rationaleStyle}>{stage.rationale}</div>
             {zoneAnnotations.map((a) => {
               const planned = preview.byId.get(a.id);
               const missed = preview.skipped.find((s) => s.zoneId === a.id);
+              const numbered = zoneNumbers.get(a.id);
               return (
                 <div key={a.id} style={metaStyle}>
-                  · {a.label}
+                  {numbered ? <span style={zoneBadgeStyle} data-testid={`plan-card-zone-no-${a.id}`}>{numbered.number}</span> : null}
+                  {a.label}
                   {planned ? ` → ${planned}` : ''}
                   {missed ? `（${missed.reason}）` : ''}
                 </div>
@@ -585,13 +621,13 @@ export function PlanCard({
 
       <div style={buttonRowStyle}>
         <button type="button" style={primaryButtonStyle} onClick={onApprove} disabled={!!blockedReason || !selectedPlan || !isScoredPlanApplicable(selectedPlan)}>
-          应用布置
+          批准
         </button>
         <button type="button" style={secondaryButtonStyle} onClick={onReplace}>
-          换一版
+          换一份计划
         </button>
         <button type="button" style={cancelButtonStyle} onClick={onCancel}>
-          取消
+          取消任务
         </button>
       </div>
 
@@ -605,7 +641,7 @@ export function PlanCard({
         }}
       />
 
-      <footer style={footerStyle}>执行前我会先征求你的意见</footer>
+      <footer style={footerStyle}>我会出错，也可能破坏你的设计。</footer>
     </section>
   );
 }

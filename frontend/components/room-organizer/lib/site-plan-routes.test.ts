@@ -8,6 +8,7 @@ import {
   inferNodeZoneId,
   inferWorkerZoneId,
   movePlanNode,
+  nodeOnRoutes,
   nodeRouteRefs,
   planNodeIssues,
   planWorkerIssues,
@@ -130,6 +131,24 @@ describe('site-plan routes / nodes (H2-d)', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].nodeId).toBe(NODE_LONELY.id);
     expect(issues[0].issue.code).toBe('unconnected-node');
+  });
+
+  it('treats a node sitting on a route mid-line as connected (2026-11-15 用户反馈)', () => {
+    // 交界处自动建的出入口压在动线中段，不引引用也被算作已连接。
+    const route = makeRoute();
+    const midNode = {
+      id: 'd4000000-0000-4000-8000-0000000000aa',
+      kind: 'both' as const,
+      name: '出入口 1',
+      position: { x: 20, y: 60 },
+      notes: '动线与场地边界自动交点：默认出入口',
+    };
+    const onLine = nodeOnRoutes(midNode.position, [route]);
+    expect(onLine).toHaveLength(1);
+    expect(planNodeIssues({ nodes: [midNode], routes: [route] })).toHaveLength(0);
+    // 离开动线 0.9 m 就不算连着（容差 0.5 m）。
+    expect(nodeOnRoutes({ x: 20, y: 60.9 }, [route])).toHaveLength(0);
+    expect(planNodeIssues({ nodes: [{ ...midNode, position: { x: 20, y: 60.9 } }], routes: [route] })).toHaveLength(1);
   });
 });
 

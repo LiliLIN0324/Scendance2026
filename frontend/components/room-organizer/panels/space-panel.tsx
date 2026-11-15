@@ -1,9 +1,7 @@
 'use client';
 
-import { Camera, Info, Loader2, MoreHorizontal, Scan } from '@/components/solid-icons';
+import { Camera, Loader2, MoreHorizontal, Scan } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
-import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
-import { isUntouched } from '../lib/restore-point';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
 import { registerCloudScans, registerLocalScans } from '../lib/local-scans';
@@ -12,6 +10,7 @@ import { LibraryChat } from './library-chat';
 import { SceneChat } from './scene-chat';
 import { ShelfGrip } from './scendance-workspace';
 import { ScenePresetsPanel } from './scene-presets-panel';
+import type { ScenePresetKey } from '../lib/scene-presets';
 import { StructuralPropertiesPanel } from './structural-properties-panel';
 import { VenueFactsPanel } from './venue-facts-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
@@ -26,24 +25,24 @@ import './space-browser.css';
 export function SpacePanel({
   layout,
   onApply,
+  onPlaceScene,
   environment,
   currentScanId,
   onPickScan,
   onShowScanContext,
   onOpenCapture,
-  onGenerate,
-  onReconstruct,
   onAddSampleScene,
   onTryHanfuWalk,
   hanfuWalkDisabledReason,
   workflow,
   variant = 'shelf',
-  onRegisterNew,
   venueFactScope,
   isVenueFactScopeCurrent,
 }: {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
+  /** 户外地图打开时，场景卡改为在当前地图上摆一个小场地（不替换整图）。 */
+  onPlaceScene?(key: ScenePresetKey): boolean;
   environment?: {
     preview: SplatPreviewState;
     current: StoredEnvironment | null;
@@ -62,8 +61,6 @@ export function SpacePanel({
   onPickScan?(venue: ScannedVenue): void;
   onShowScanContext?(): void;
   onOpenCapture?(): void;
-  onGenerate?(): void;
-  onReconstruct?(): void;
   onAddSampleScene?(assetId: string): void;
   onTryHanfuWalk?(): void;
   /** 实景还没就绪时说明为什么不能进汉服漫游。 */
@@ -72,16 +69,16 @@ export function SpacePanel({
   workflow?: 'aholo' | 'traditional';
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
-  /** 新建空间收进输入框的 ＋ 菜单：blank 直接立空白壳，template 展开模板卡。 */
-  onRegisterNew?(run: (mode?: 'blank' | 'template') => void): void;
   venueFactScope?: string;
   isVenueFactScopeCurrent?: () => boolean;
 }): JSX.Element {
   const hostRef = useRef<HTMLElement>(null);
-  const [confirm, setConfirm] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [source, setSource] = useState<'samples' | 'templates' | 'scans' | 'project'>(
-    environment?.environments.length ? 'project' : onAddSampleScene ? 'samples' : 'templates',
+  // 2026-11-16 用户：「我现在分成了四类，场地上的、那种高斯场景啊⋯我感觉没有必要」——
+  // 场景库不再当分栏用（本活动 / 示例 / 模板 / 实景扫描 四个互斥标签，点一个就把别的藏起来），
+  // 改成和物料库一样的连续列表：本活动 → 实景扫描（示例并入其中）→ 场景模板。
+  // `source` 只决定初次展开哪一段，不再是「当前分类」。
+  const [source, setSource] = useState<'templates' | 'scans' | 'project'>(
+    environment?.environments.length ? 'project' : onAddSampleScene ? 'scans' : 'templates',
   );
   const moreRef = useRef<HTMLDetailsElement>(null);
   const templatesRef = useRef<HTMLDetailsElement>(null);
@@ -91,32 +88,6 @@ export function SpacePanel({
     if (variant !== 'card' && moreRef.current) moreRef.current.open = true;
     if (templatesRef.current) templatesRef.current.open = true;
   }, [variant, workflow]);
-  const blank = BLANK_VENUE;
-  const startBlank = () => {
-    setConfirm(false);
-    setNotice('');
-    try {
-      onApply(createBlankVenue(layout));
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : '空白空间没立起来，请重试。');
-    }
-  };
-  const pressNew = (mode: 'blank' | 'template' = 'blank') => {
-    if (mode === 'template') {
-      setConfirm(false);
-      if (variant === 'card') {
-        setSource('templates');
-        return;
-      }
-      if (moreRef.current) moreRef.current.open = true;
-      const templates = templatesRef.current;
-      if (templates) templates.open = true;
-      templates?.scrollIntoView({ block: 'nearest' });
-      return;
-    }
-    if (isUntouched(layout)) startBlank();
-    else setConfirm(true);
-  };
   const card = variant === 'card';
   // 扫描登记在浏览器的来源隔离存储里（127.0.0.1 与 localhost 各存各的），换来源就丢；
   // 文件才是事实，所以每次开面板先登记本机文件、再用云端副本补缺，两边都不漏。
@@ -143,21 +114,19 @@ export function SpacePanel({
     if (onPickScan) onPickScan(venue);
     else environment?.onSelect(venue.assetId, venue.name);
   };
-  useEffect(() => { onRegisterNew?.(pressNew); });
-  const templates = <details ref={templatesRef} className="sc-space-block sc-space-templates sc-space-library-details" data-space-source={card ? 'templates' : undefined} open={card ? source === 'templates' : undefined} hidden={card && source !== 'templates'}>
+  const templates = <details ref={templatesRef} className="sc-space-block sc-space-templates sc-space-library-details" data-space-source={card ? 'templates' : undefined} open={card ? source === 'templates' : undefined}>
     <summary>{card ? '场景模板库' : '场景模板'}</summary>
     <div className="sc-library-presets">
-      <ScenePresetsPanel layout={layout} onApply={onApply} active={layout.scenePreset}/>
+      <ScenePresetsPanel layout={layout} onApply={onApply} active={layout.scenePreset} {...(onPlaceScene ? { onPlace: onPlaceScene } : {})}/>
     </div>
   </details>;
-  const projectScenes = environment && <details className="sc-space-block sc-space-env sc-space-library-details" data-space-source={card ? 'project' : undefined} open={card ? source === 'project' : undefined} hidden={card && source !== 'project'}>
+  const projectScenes = environment && <details className="sc-space-block sc-space-env sc-space-library-details" data-space-source={card ? 'project' : undefined} open={card ? source === 'project' : undefined}>
     <summary>项目中的场景{environment.environments.length > 0 && ` · ${environment.environments.length}`}</summary>
     <EnvironmentPreview {...environment} gallery={card}/>
   </details>;
   const moreOptions = <details className={card ? "sc-space-library-menu" : "sc-space-library-details"} ref={moreRef}>
             <summary aria-label={card ? "更多场地选项" : undefined}>{card ? <MoreHorizontal size={18} aria-hidden="true"/> : "更多场地选项"}</summary>
             <div className="sc-space-library-menu-content">
-            <button className="sc-button" type="button" onClick={() => pressNew()}>空白空间</button>
           {!card && templates}
           {!card && projectScenes}
             <StructuralPropertiesPanel/>
@@ -168,7 +137,6 @@ export function SpacePanel({
       {!card && <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>}
       <div className="sc-space-body">
         {venueFactScope?.startsWith('activity:') && isVenueFactScopeCurrent && <VenueFactsPanel key={venueFactScope} activityId={venueFactScope.slice('activity:'.length)} isCurrent={isVenueFactScopeCurrent}/>}
-        {notice && <p className="sc-note" role="status">{notice}</p>}
         <div className="sc-space-card is-aholo">
           {!card && <section className="sc-space-block" aria-label="真实场地">
             <div className="sc-space-section-head">
@@ -187,21 +155,11 @@ export function SpacePanel({
           </section>}
           {card && <div className="sc-space-browser-head">
             <LibraryChat title="场景库" headerAction={moreOptions}>
-            <SceneChat scans={scans} onPickScan={pickScan} onOpenCapture={onOpenCapture} onGenerate={onGenerate} onReconstruct={onReconstruct}/>
+            <SceneChat scans={scans} onPickScan={pickScan} onOpenCapture={onOpenCapture}/>
             </LibraryChat>
-            <nav className="sc-library-tabs-equal" aria-label="场景来源">
-              <button type="button" aria-pressed={source === 'project'} onClick={() => setSource('project')}>本活动</button>
-              <button type="button" aria-pressed={source === 'samples'} onClick={() => setSource('samples')}>示例</button>
-              <button type="button" aria-pressed={source === 'templates'} onClick={() => setSource('templates')}>模板</button>
-              <button type="button" aria-pressed={source === 'scans'} onClick={() => setSource('scans')}>实景扫描</button>
-            </nav>
-            {source === 'project' && <p className="sc-space-source-note">{hasBoundary || layout.researchArea ? '场景可单独预览，地图位置未校准' : '这个活动已加入的场景'}</p>}
-            {source === 'scans' && <p className="sc-space-source-note">这台电脑上的扫描，可加入不同活动</p>}
-            {source === 'project' && !environment && <p className="sc-note">本活动还没有场景。</p>}
-            {source === 'samples' && samples.length === 0 && <p className="sc-note">暂无可用的示例场景。</p>}
           </div>}
             {(card || scans.length > 0) && <ScanList className={card ? 'sc-space-library-details' : 'sc-scan-options'}
-              {...(card ? { 'data-space-source': 'scans', open: source === 'scans', hidden: source !== 'scans' } : {})}>
+              {...(card ? { 'data-space-source': 'scans', open: source === 'scans' } : {})}>
                 {card && <summary>我的实景扫描 · {scans.length}</summary>}
                 {scans.length === 0 && <p className="sc-note">还没有实景扫描。拍摄后可在这里查看。</p>}
                 {/* 画面优先：截过止帧的排成大图，还没打开过的收成一行行索引，不拿同一句话填满每张卡。 */}
@@ -249,6 +207,20 @@ export function SpacePanel({
                     })}
                   </ul>
                 </div>}
+                {/* 2026-11-16：示例场景不再单开一栏，收进实景扫描这一段末尾——
+                    自己还没扫的时候拿它顶上先看效果，它不是本场场地。 */}
+                {card && samples.length > 0 && <div className="sc-scan-plain sc-space-samples-inline">
+                  <p className="sc-scan-plain-label">示例场景 · {samples.length}</p>
+                  <ul className="sc-space-samples">
+                    {samples.map(asset => <li key={asset.assetId}>
+                      <button type="button" className="sc-space-sample" onClick={() => onAddSampleScene?.(asset.assetId)}
+                        aria-label={`加入示例场景 ${asset.name}`}>
+                        {asset.image && <img src={shippedImageUrl(asset)} alt="" loading="lazy" />}
+                        <strong>{asset.name}</strong>
+                      </button>
+                    </li>)}
+                  </ul>
+                </div>}
               </ScanList>}
           {card && projectScenes}
             {onTryHanfuWalk && <button className="sc-button" type="button" disabled={!!hanfuWalkDisabledReason}
@@ -256,32 +228,8 @@ export function SpacePanel({
             {onTryHanfuWalk && hanfuWalkDisabledReason && <p className="sc-note">{hanfuWalkDisabledReason}</p>}
             {onShowScanContext && <button className="sc-button" type="button" onClick={onShowScanContext}>{hasBoundary || layout.researchArea ? '返回地图' : '显示其他场景'}</button>}
           {card && templates}
-          {card && samples.length > 0 && <details className="sc-space-library-details" data-space-source="samples" open={source === 'samples'} hidden={source !== 'samples'}>
-            <summary>示例场景 · {samples.length}</summary>
-            <ul className="sc-space-samples">
-              {samples.map(asset => <li key={asset.assetId}>
-                <button type="button" className="sc-space-sample" onClick={() => onAddSampleScene?.(asset.assetId)}
-                  aria-label={`加入示例场景 ${asset.name}`}>
-                  {asset.image && <img src={shippedImageUrl(asset)} alt="" loading="lazy" />}
-                  <strong>{asset.name}</strong>
-                </button>
-              </li>)}
-            </ul>
-          </details>}
           {!card && moreOptions}
         </div>
-        {confirm && <div className="sc-space-confirm" role="group" aria-label="确认新建空间">
-          <span className="sc-space-confirm-plan" aria-hidden="true"/>
-          <span className="sc-space-confirm-text"><strong>空白空间</strong><small>{blank.width} × {blank.depth} 米，可改尺寸</small></span>
-          <span className="sc-space-confirm-actions">
-            <button type="button" className="sc-button" onClick={startBlank}>新建</button>
-            <button type="button" className="sc-button" onClick={() => setConfirm(false)}>取消</button>
-            <details className="sc-space-info is-right is-up">
-              <summary aria-label="新建会清掉什么"><Info size={12} aria-hidden="true"/></summary>
-              <p>会换成一块可改尺寸的空白空间，当前布置会被清掉。</p>
-            </details>
-          </span>
-        </div>}
       </div>
     </aside>
   );

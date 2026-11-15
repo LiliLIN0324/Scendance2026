@@ -26,6 +26,8 @@ export interface OneplanStickerProps {
   fallbackIcon?: PlanningIconName;
   size?: number;
   color?: string;
+  /** 芯片填充色；缺省深色片。出入口图例等需要「与画布芯片同色」的地方传实体色。 */
+  chipColor?: string | undefined;
   title?: string;
   style?: CSSProperties;
 }
@@ -39,6 +41,7 @@ export function OneplanSticker({
   fallbackIcon,
   size = PLANNING_ICON_SIZES.legend,
   color,
+  chipColor,
   title,
   style,
 }: OneplanStickerProps) {
@@ -61,7 +64,7 @@ export function OneplanSticker({
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: '50%',
-        background: chip ? ONEOPLAN_CHIP_FILL : 'transparent',
+        background: chip ? (chipColor ?? ONEOPLAN_CHIP_FILL) : 'transparent',
         flex: '0 0 auto',
         verticalAlign: 'middle',
       }}

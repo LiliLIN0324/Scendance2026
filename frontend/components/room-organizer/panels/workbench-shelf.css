@@ -405,20 +405,6 @@
   font-size:var(--fs-cap); color:var(--wk-ink,#141416);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-/* 载入模板的确认块：直接盖在这张卡上，不弹窗。 */
-.sc-compact-shelf .sc-preset-confirm {
-  position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; gap:4px;
-  padding:5px 6px; border:1px solid var(--wk-green); border-radius:var(--r-sm); background:var(--wk-paper);
-}
-.sc-compact-shelf .sc-preset-confirm p { margin:0; font-size:var(--fs-cap); line-height:var(--lh-cap); color:var(--wk-ink-soft); }
-.sc-compact-shelf .sc-preset-confirm > div { display:flex; gap:5px; }
-.sc-compact-shelf .sc-preset-confirm button {
-  flex:1; min-height:20px; padding:0 5px; border:1px solid var(--wk-hair);
-  border-radius:8px; background:var(--wk-paper); color:var(--wk-ink-soft); font-size:var(--fs-cap);
-}
-.sc-compact-shelf .sc-preset-confirm button.is-go {
-  border-color:var(--wk-green,#4a7c59); background:var(--wk-green,#4a7c59); color:#fff; font-weight:600;
-}
 .sc-compact-shelf .sc-preset-notice { margin:0; flex:0 0 auto; font-size:var(--fs-cap); line-height:var(--lh-cap); }
 /* 空间三块同级：场景模板 / 环境 / 结构，都是同一张卡，不再有浮层。 */
 .sc-space-section {
@@ -641,18 +627,6 @@
 .sc-space-panel .sc-material-rail { flex: none; height: 148px; }
 .sc-space-templates, .sc-space-env { min-height: 0; }
 .sc-space-env > :not(.sc-space-section-head) { margin-block: auto; }
-/* 新建空间确认：贴着面板底部的窄条，不占中部，破坏性说明收进 ⓘ。 */
-.sc-space-confirm {
-  position:relative; inset:auto; display:flex; align-items:center; gap:8px;
-  padding:6px 8px; border:1px solid var(--wk-hair); border-radius:var(--r-sm); background:var(--wk-paper);
-}
-.sc-space-confirm-plan { flex:none; width:28px; height:22px; border:1px dashed var(--wk-hair); border-radius:4px; background:var(--wk-plane); }
-.sc-space-confirm-text { display:flex; flex-direction:column; gap:1px; min-width:0; }
-.sc-space-confirm-text strong { font-size:var(--fs-p2); line-height:16px; }
-.sc-space-confirm-text small { font-size:var(--fs-cap); line-height:14px; color:var(--wk-muted); }
-.sc-space-confirm-actions { display:flex; align-items:center; gap:4px; margin-left:auto; }
-.sc-space-confirm-actions .sc-button { height:24px; padding:0 8px; font-size:var(--fs-cap); }
-
 /* 工作台物料面板直接浏览，整栏滚动。 */
 .sc-lib-wrap { display:flex; flex-direction:column; gap:10px; min-width:0; }
 /* 三块同一版式：图标左、标题中、数量最右；单行不换行，hover 只提亮，选中只留绿内描边。 */
@@ -700,7 +674,12 @@
 .sc-lib-tile-thumb { display:block; aspect-ratio:1 / 1; width:100%; overflow:hidden; padding:0; border-radius:8px; background:transparent; }
 .sc-lib-tile-thumb img { width:100%; height:100%; object-fit:contain; border-radius:8px; background:transparent; }
 .sc-lib-tile-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; line-height:15px; color:var(--wk-ink-soft); }
-.sc-lib-tile-btn:hover .sc-lib-tile-thumb { box-shadow:inset 0 0 0 1px var(--wk-ink-faint); }
+.is-browse .sc-lib-tile.is-object .sc-lib-tile-btn { position:relative; gap:0; }
+ .is-browse .sc-lib-tile.is-object .sc-lib-tile-name { position:absolute; left:34px; right:7px; bottom:7px; z-index:2; padding:3px 6px; border-radius:5px; background:rgba(20,20,22,.82); color:#fff; font-size:11px; line-height:15px; opacity:0; pointer-events:none; transition:opacity .12s ease; }
+ .is-browse .sc-lib-tile.is-object .sc-lib-tile-btn:hover .sc-lib-tile-name,
+ .is-browse .sc-lib-tile.is-object .sc-lib-tile-btn:focus-visible .sc-lib-tile-name { opacity:1; }
+ .is-browse .sc-lib-tile.is-object .sc-lib-tile-btn:focus-visible { outline:none; }
+ .is-browse .sc-lib-tile.is-object .sc-lib-tile-btn:focus-visible .sc-lib-tile-thumb { box-shadow:inset 0 0 0 2px var(--wk-green); }
 /* 收藏角标：缩进 8px 安全距离，独立悬浮层压在图上方；已收藏常驻可见。 */
 .sc-lib-star {
   position:absolute; right:8px; top:8px; z-index:var(--z-card-pop, 6);
@@ -734,7 +713,6 @@
 .is-browse .sc-lib-tile .sc-lib-tile-btn { display:flex; flex-direction:column; align-items:stretch; gap:5px; padding:7px; border:1px solid var(--wk-hair); border-radius:var(--r-sm); }
 .is-browse .sc-lib-tile .sc-lib-tile-thumb { width:100%; height:auto; aspect-ratio:16 / 10; background:var(--wk-plane); }
 .is-browse .sc-lib-tile .sc-lib-tile-name { font-size:12px; line-height:17px; }
-.is-browse .sc-lib-tile-add { font-size:11px; color:var(--wk-green-deep); font-weight:600; }
 .is-browse .sc-lib-tile .sc-lib-star { position:absolute; top:10px; right:10px; width:24px; height:24px; opacity:1; }
 .is-browse .sc-lib-list .sc-lib-group { gap:6px; }
 
@@ -1168,6 +1146,18 @@
   display: block;
   width: 14px;
   height: 14px;
+}
+/* 3D 接管态：卡片左下角的规划小图标只作轻声提示，别压住模型预览；
+   鼠标移到卡片或键盘聚焦时恢复，口径同底部 2D 段。 */
+.sc-lib-plan-icon.is-dimmed {
+  opacity: 0.4;
+  transition: opacity 120ms var(--ease-spec, ease);
+}
+.sc-lib-tile:hover .sc-lib-plan-icon.is-dimmed,
+.sc-lib-tile:focus-within .sc-lib-plan-icon.is-dimmed,
+.sc-material-tile:hover .sc-lib-plan-icon.is-dimmed,
+.sc-material-tile:focus-within .sc-lib-plan-icon.is-dimmed {
+  opacity: 1;
 }
 .sc-lib-tree {
   display: flex;

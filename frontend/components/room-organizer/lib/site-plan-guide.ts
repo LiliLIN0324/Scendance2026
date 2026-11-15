@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 首次开图渐进引导（H4-b）——纯函数状态机。
  *
  * 设计（评审稿 §7 交互复刻）：第一次打开规划画布的用户不需要一次性面对九个编辑
@@ -23,7 +23,7 @@ export type GuideAnchor = 'canvas' | 'left';
 export const GUIDE_STEP_CONTENT: Record<GuideStep, { title: string; body: string; cta: string; anchor: GuideAnchor }> = {
   welcome: {
     title: '这是你的场地画布',
-    body: '底图是真地图瓦片，绿色虚线是场地边界，彩色块是功能分区。拖动平移、滚轮缩放先熟悉场地；左上角搜索框可以直接定位地点。',
+    body: '底图是真地图瓦片，红色实线是用地红线，彩色块是功能分区。拖动平移、滚轮缩放先熟悉场地；左上角搜索框可以直接定位地点。',
     cta: '开始浏览',
     anchor: 'canvas',
   },

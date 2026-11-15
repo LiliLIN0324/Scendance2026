@@ -11,12 +11,41 @@ import type { SitePlanData } from "../../../../supabase/functions/_shared/site-p
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 
 import { OUTDOOR_AGENT_RULES as RULES } from "../../../../supabase/functions/_shared/outdoor-agent-response-contract";
+
+export function outdoorClarificationQuestion(
+  message: string,
+  plan: SitePlanData,
+  selected: readonly string[],
+): string | null {
+  const straight = /(?:全程|整条路)(?:都|必须|要|保持|是|为|走|的|\s)*直线/u;
+  const turn = /(?:拐|转)[^，。；]{0,8}(?:直角|90\s*[°度])/u;
+  const positiveClauses = message.split(/[，。；,;]|但是?/u)
+    .filter(clause => !/不用|不需要|不必|不要求|无需|不能|禁止|不要/u.test(clause));
+  if (/(?:同一条|但|又要|同时|还要)/u.test(message) &&
+      positiveClauses.some(clause => straight.test(clause)) &&
+      positiveClauses.some(clause => turn.test(clause))) {
+    return "同一条路线无法既全程走直线，又在中途拐直角。你想保留整条直线，还是允许分段转弯？";
+  }
+
+  const vagueMove = /(?:它|这个|那个)(?:(?:往|向|朝)(?:这边|那边)(?:挪|移|搬)|(?:挪|移|搬)到(?:这边|那边))/u;
+  if (!vagueMove.test(message)) return null;
+  const targets = plan.facilities.filter(facility => message.includes(facility.name));
+  const selectedFacilities = plan.facilities.filter(facility => selected.includes(facility.id));
+  const target = targets.length === 1 ? targets[0] : targets.length === 0 && selectedFacilities.length === 1 ? selectedFacilities[0] : undefined;
+  return target
+    ? `你想把「${target.name}」挪到哪个位置？可以说方向和距离，或者指明它要靠近哪个设施。`
+    : "你想挪动哪个设施、挪到哪个位置？可以说设施名、方向和距离，例如「把签到台往东挪两米」。";
+}
+
+export type OutdoorClarification = { request: string; question: string };
+
 export async function understandOutdoorTurn(input: {
   message: string;
   state: OutdoorFlowState;
   plan: SitePlanData;
   selected: string[];
   map: OutdoorMapContext;
+  clarification?: OutdoorClarification | undefined;
   libraryChoices?: Array<{
     id: string;
     name: string;
@@ -77,6 +106,9 @@ export async function understandOutdoorTurn(input: {
     .slice(0, 25);
   const fixedContext = {
     stage: input.state.stage,
+    staging: input.plan.zones.length === 0
+      ? "同时要求分区和设计主通道或排布物料时，action 保留 main-routes 或 objects，本句明确的分区写入 facts.zones。补答分区问题时延续原请求的设计目标；先预览分区，确认后再做详细预览。"
+      : undefined,
     pendingProposal: input.proposal,
     libraryChoices: input.libraryChoices,
     selectedLibraryId: input.selectedLibraryId,
@@ -92,12 +124,18 @@ export async function understandOutdoorTurn(input: {
   };
   // Budget the entire unescaped request first, including rules, complete brief and all candidates.
   // A fresh issued context is built at the remaining budget; never trim/relabel an issued object.
-  const mapBudget =
+  const baseMapBudget =
     6000 -
     RULES.length -
     input.message.length -
     JSON.stringify({ ...fixedContext, mapContext: null }).length -
     32;
+  const clarification = input.clarification ? { clarification: input.clarification } : {};
+  const clarificationCost = JSON.stringify(clarification).length;
+  // A follow-up must not crowd out the map evidence needed to validate the next turn.
+  const requiredMapBudget = input.map.issue ? 1200 : JSON.stringify(input.map.issued ?? input.map.text).length;
+  const includeClarification = input.clarification !== undefined && baseMapBudget - clarificationCost >= requiredMapBudget;
+  const mapBudget = baseMapBudget - (includeClarification ? clarificationCost : 0);
   let issuedForTurn = input.map.issued;
   if (input.map.issue) {
     if (mapBudget < 1200)
@@ -108,6 +146,7 @@ export async function understandOutdoorTurn(input: {
   }
   const context = JSON.stringify({
     ...fixedContext,
+    ...(includeClarification ? clarification : {}),
     mapContext: issuedForTurn ?? input.map.text,
   });
   // Existing authenticated, opt-in, read-only model method. No new provider or undocumented API.

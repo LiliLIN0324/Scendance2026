@@ -99,6 +99,28 @@ describe('plan model layer pure math', () => {
     expect(shrinkFactorFor(prop('p1'), FITTED, { width: 0, depth: 0, height: 0 })).toBe(1);
   });
 
+  it('fits a whole-venue GLB by its 2D footprint instead of its declared height', () => {
+    const scene = {
+      slug: 'scene-preset:gym',
+      name: '体育馆',
+      glbUrl: '/scene-presets/gym/gym.glb',
+      width: 70,
+      depth: 76,
+      height: 6,
+      scale: 1,
+      swap: false,
+    };
+    const actual = { width: 65.1, depth: 64.3, height: 10.725 };
+    const gymProp = { ...prop('scene'), width: 70, depth: 76 };
+    const item = candidateItemFor(gymProp, scene, actual);
+    const fit = Math.min(70 / actual.width, 76 / actual.depth);
+    expect(item.height).toBeCloseTo(actual.height * fit, 5);
+    expect(item.width).toBe(70);
+    expect(item.depth).toBe(76);
+    expect(item.uniformScale).toBe(false);
+    expect(shrinkFactorFor(gymProp, scene, actual)).toBe(1);
+  });
+
   it('builds the uniform-scaled glb item the cache factory expects', () => {
     const item = candidateItemFor(prop('p1'), FITTED);
     expect(item.id).toBe('plan-model-p1');
@@ -388,6 +410,29 @@ describe('plan model layer modelOverride (V-5a)', () => {
     layer.dispose();
   });
 
+  it('预览压住已有设施时先隐藏旧模型，清预览恢复显示', async () => {
+    vi.mocked(loadFacilityModelOverride).mockResolvedValue(OVERRIDE);
+    const layer = createPlanModelLayer({
+      parent: new THREE.Scene(),
+      props: [prop('p1', {}, CANDIDATE.slug)],
+      metrics,
+      isDisposed: () => false,
+    });
+    await flush();
+    const placed = layer.group.children[0];
+    expect(placed?.visible).toBe(true);
+    layer.setPreview({
+      ...prop('__plan-preview__', { x: 10, z: 20, width: 1.05, depth: 0.45 }),
+      templateId: 'oneplan:icon:pa-speakers',
+      modelOverride: OVERRIDE.slug,
+    }, 'p1');
+    expect(placed?.visible).toBe(false);
+    await flush();
+    layer.setPreview(null);
+    expect(placed?.visible).toBe(true);
+    layer.dispose();
+  });
+
   it('syncPositions：override 从 A 切到 B 当场换模型（dispose 旧模型 + 重落），清除回自动也换', async () => {
     const parent = new THREE.Scene();
     const layer = createPlanModelLayer({
@@ -446,6 +491,60 @@ describe('V5 异步载入版本守卫', () => {
     await flush();
     expect(layer.group.children).toHaveLength(1);
     expect(vi.mocked(createCachedGlbModel).mock.calls.at(-1)?.[0]?.glbUrl).toBe('https://assets.example.test/renewed.glb');
+    layer.dispose();
+  });
+  it('setPreview 只加载卡片 override 模型并按幽灵位置跟手，清空后移除', async () => {
+    vi.mocked(createCachedGlbModel).mockClear();
+    vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
+    vi.mocked(loadFacilityModelOverride).mockResolvedValue({
+      slug: 'line-array',
+      name: '线阵列音箱',
+      glbUrl: '/line-array.glb',
+      width: 1.05,
+      depth: 0.45,
+      height: 0.43,
+    });
+    const layer = createPlanModelLayer({ parent: new THREE.Scene(), props: [prop('p1')], metrics: { width: 100, depth: 60 }, isDisposed: () => false });
+    const previewProp: PlanPropShape = {
+      ...prop('__plan-preview__', { x: 10, z: 20, width: 1.05, depth: 0.45 }),
+      templateId: 'oneplan:icon:pa-speakers',
+      modelOverride: 'line-array',
+    };
+    layer.setPreview(previewProp);
+    await flush();
+
+    expect(loadFacilityModelOverride).toHaveBeenCalledWith('line-array');
+    expect(vi.mocked(createCachedGlbModel).mock.calls.at(-1)?.[0]?.glbUrl).toBe('/line-array.glb');
+    const previewGroup = layer.group.parent?.getObjectByName('plan-model-preview');
+    expect(previewGroup?.children).toHaveLength(1);
+    const model = previewGroup!.children[0] as THREE.Group;
+    expect(model.position.x).toBeCloseTo(10 - 50, 9);
+    expect(model.position.z).toBeCloseTo(20 - 30, 9);
+
+    // 同一个 slug 拖动只更新落位，不重新加载模型。
+    const calls = vi.mocked(createCachedGlbModel).mock.calls.length;
+    layer.setPreview({ ...previewProp, center: { x: 20, z: 25 } });
+    expect(model.position.x).toBeCloseTo(20 - 50, 9);
+    expect(model.position.z).toBeCloseTo(25 - 30, 9);
+    expect(vi.mocked(createCachedGlbModel)).toHaveBeenCalledTimes(calls);
+
+    layer.setPreview(null);
+    expect(previewGroup?.children).toHaveLength(0);
+    layer.dispose();
+  });
+  it('setPreview 的 override 解析失败时只留占地幽灵，不回落模板默认模型', async () => {
+    vi.mocked(createCachedGlbModel).mockClear();
+    vi.mocked(loadFacilityModelOverride).mockResolvedValue(null);
+    const layer = createPlanModelLayer({ parent: new THREE.Scene(), props: [], metrics: { width: 100, depth: 60 }, isDisposed: () => false });
+    layer.setPreview({
+      ...prop('__plan-preview__', { x: 10, z: 20, width: 1.05, depth: 0.45 }),
+      templateId: 'oneplan:icon:pa-speakers',
+      modelOverride: 'missing-model',
+    });
+    await flush();
+    expect(loadFacilityModelOverride).toHaveBeenCalledWith('missing-model');
+    expect(vi.mocked(createCachedGlbModel)).not.toHaveBeenCalled();
+    expect(layer.group.parent?.getObjectByName('plan-model-preview')?.children).toHaveLength(0);
     layer.dispose();
   });
 });

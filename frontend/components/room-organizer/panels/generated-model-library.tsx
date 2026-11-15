@@ -6,6 +6,7 @@ import { assetError } from '@/lib/assets-api';
 import { useBackendSession, type BackendSession, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
 import { AholoGuideCard } from './aholo-guide-card';
 import { createGlbCatalogItem, ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
+import { engineLabel, engineSupports, modeSupports, plainFailure, submitModelJob, uploadModelReference, type GenerationEngine, type GenerationMode } from '../lib/model-generation';
 import type { CatalogItem } from '../lib/types';
 
 const labels: Record<GenerationJob['state'], string> = {
@@ -22,9 +23,6 @@ const ambiguousGraceMs = 11 * 60_000;
 const awaitingRelease = (job: GenerationJob) => job.state === 'submit_unknown'
   && Date.now() - Date.parse(job.updated_at) < ambiguousGraceMs;
 const message = assetError;
-type GenerationMode = 'text' | 'image';
-type GenerationEngine = 'hy3d' | 'aholo';
-const engineLabel = (engine: GenerationEngine) => engine === 'aholo' ? 'Aholo Lux3D' : 'HY-3D';
 /** 历史任务行的模型版本：provider_mode 定主线，provider_model 是云端给的具体版本号。 */
 const jobEngineLabel = (job: GenerationJob): string => {
   const lane = job.provider_mode === 'aholo' ? 'Aholo Lux3D' : 'HY-3D';
@@ -37,19 +35,6 @@ const jobTime = (iso: string): string => {
   } catch { return ''; }
 };
 /** 网络失败不把“Failed to fetch”原样甩给用户。 */
-function plainFailure(failure: unknown): string {
-  const raw = failure instanceof Error ? failure.message : '';
-  if (/failed to fetch|networkerror|load failed|network request failed/i.test(raw)) return '连不上云端，请检查网络后再试。';
-  return message(failure);
-}
-const engineSupports = (capabilities: GenerationCapabilities | null, engine: GenerationEngine, mode: GenerationMode): boolean => {
-  if (!capabilities) return false;
-  return engine === 'aholo'
-    ? (mode === 'image' ? capabilities.aholoImageToModel : capabilities.aholoTextToModel)
-    : (mode === 'image' ? capabilities.imageToModel : capabilities.textToModel);
-};
-const modeSupports = (capabilities: GenerationCapabilities | null, mode: GenerationMode): boolean =>
-  engineSupports(capabilities, 'hy3d', mode) || engineSupports(capabilities, 'aholo', mode);
 export interface TextureVariantReady { sourceAssetId:string;variantAssetId:string;objectIds?:string[] }
 export interface GenerationTarget { sourceAssetId?:string;sourceObjectIds?:string[];onVariantReady?(variant:TextureVariantReady):void }
 export function GeneratedModelLibrary({ controller, disabled = false, onAdd, ...target }: {
@@ -186,11 +171,12 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     if (!engineSupports(capabilities, engine, mode)) return;
     lock.current = true; setGenPending(true); setError('');
     try {
-      // HY-3D is the server's default lane, so its choice is sent as no provider; Aholo is declared.
-      const provider = engine === 'aholo' ? { provider: 'aholo' as const } : {};
-      const job = await controller.createGenerationJob(prompt, crypto.randomUUID(), mode === 'image' && genReference
-        ? { kind: 'image', referenceImageAssetId: genReference.id, ...provider }
-        : { kind: 'text', ...provider });
+      const job = await submitModelJob(controller, {
+        mode,
+        prompt,
+        engine,
+        ...(mode === 'image' && genReference ? { referenceImageAssetId: genReference.id } : {}),
+      });
       if (job.kind !== 'texture') autoAdd.current = job.id;
       setGenPrompt(''); setGenReference(null); setRefresh(value => value + 1);
     } catch (failure) { if (mounted.current) setError(plainFailure(failure)); }
@@ -208,8 +194,8 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     if (!file) return;
     setError('');
     try {
-      const uploaded = await controller.uploadGenerationReference(file);
-      setGenReference({ id: uploaded.id, name: file.name });
+      const uploaded = await uploadModelReference(controller, file);
+      setGenReference({ id: uploaded.id, name: uploaded.name });
     } catch (failure) { if (mounted.current) setError(plainFailure(failure instanceof Error && /5 MB/.test(failure.message) ? failure.message : failure)); }
   }
 

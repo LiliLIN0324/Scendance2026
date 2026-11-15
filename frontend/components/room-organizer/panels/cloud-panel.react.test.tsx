@@ -343,6 +343,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('CloudPanel stale deep link', () => {
+  it('深链指向已删除项目：清掉 URL 与会话错误，回到本机草稿', async () => {
+    const fresh = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+    try {
+      queue({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'user-b', email: 'b@example.com' } });
+      await fresh.signIn('b@example.com', 'password');
+      window.history.replaceState(null, '', `/editor/?project=${otherId}`);
+      mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes(`/projects/${otherId}`)) return new Response(JSON.stringify({ error: { code: 'PROJECT_NOT_FOUND', details: {} } }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+        return json([]);
+      });
+      render(<CloudPanel controller={fresh} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+      expect(await screen.findByText('链接中的项目已不存在或已被删除；当前画布仍是本机草稿，可继续编辑。')).toBeTruthy();
+      await waitFor(() => expect(new URLSearchParams(window.location.search).get('project')).toBeNull());
+      expect(fresh.getSnapshot().error).toBeNull();
+      expect(fresh.getSnapshot().status).toBe('ready');
+      expect(fresh.getSnapshot().project).toBeNull();
+    } finally {
+      fresh.dispose();
+    }
+  });
+});
+
 describe('CloudPanel delayed project replacement', () => {
   it.each(['url','button','acquire'] as const)('stops $0 before a replacement request when the original brief cannot flush', async entry => {
     const initial=backendSceneToLayout(scene,{projectId});

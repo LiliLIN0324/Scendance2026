@@ -16,7 +16,7 @@ import {
   type OutdoorStage,
   type OutdoorTurn,
 } from "../lib/outdoor-agent-contract";
-import { understandOutdoorTurn } from "../lib/outdoor-agent-understanding";
+import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -39,6 +39,7 @@ import { fetchRoadNetwork } from "../lib/road-network";
 import { checkBoundaryRing } from "../lib/site-plan-editing";
 import { buildRouteProposal, roadFetchPlanForBoundary } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
+import { renamedNodeName } from "../lib/site-plan-node-names";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
 
 export interface OutdoorWorkflowProposal {
@@ -50,6 +51,7 @@ export interface OutdoorWorkflowProposal {
   next: SitePlanData;
   warnings: string[];
   references: OutdoorTurn["references"];
+  afterConfirm?: "main-routes" | "objects";
 }
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   place: "搜索目标地点",
@@ -65,12 +67,17 @@ export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
   scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
   zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
-  "main-routes": "请核对地图上蓝色标记的主通道和候选入口。选中路线后可拖动路线转折点绕开障碍，也可把候选入口移到实际门口。",
+  "main-routes": "请核对地图上蓝色标记的主通道和候选入口。选中路线后可拖动路线转折点绕开障碍（在线段上点一下就加点，点中已有折点即删掉，拖到相邻折点上就合并），也可把候选入口移到实际门口。",
 };
 
 function changedIds<T extends { id: string }>(before: readonly T[], after: readonly T[]): string[] {
   const previous = new Map(before.map(item => [item.id, item]));
   return after.filter(item => JSON.stringify(item) !== JSON.stringify(previous.get(item.id))).map(item => item.id);
+}
+
+function hasVerifiedMainAccess(plan: SitePlanData): boolean {
+  return plan.routes.length > 0
+    && plan.nodes.some(node => node.kind !== "exit" && node.verification === "user-confirmed");
 }
 
 function mapEditHighlight(kind: OutdoorWorkflowProposal["kind"], before: SitePlanData, after: SitePlanData): OutdoorMapEditHighlight | null {
@@ -217,7 +224,7 @@ export function useOutdoorAgentWorkflow(input: {
   begin: () => number;
   current: (epoch: number) => boolean;
   status: (task: OutdoorTaskProgress) => void;
-  say: (text: string) => void;
+  say: (text: string, clarification?: boolean) => void;
   search: (query: string) => void;
   provider?: () => ChatProviderId | undefined;
   model?: () => string | null;
@@ -246,6 +253,7 @@ export function useOutdoorAgentWorkflow(input: {
   const [busy, setBusy] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [notice, setNotice] = useState("");
+  const [designSteps, setDesignSteps] = useState<string[]>([]);
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   const refsRef = useRef<OutdoorTurn["references"]>([]);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
@@ -285,7 +293,11 @@ export function useOutdoorAgentWorkflow(input: {
       ...extra,
     });
   }
-  function start() {
+  function designStep(text: string) {
+    setDesignSteps(steps => steps.at(-1) === text ? steps : [...steps.slice(-9), text]);
+  }
+  function start(continueDesign = false) {
+    if (!continueDesign) setDesignSteps([]);
     setAppliedHighlight(null);
     setSimulating(false);
     refsRef.current = [];
@@ -313,6 +325,7 @@ export function useOutdoorAgentWorkflow(input: {
     );
   }
   function cancel(options?: { preservePendingLogin?: boolean }) {
+    setDesignSteps([]);
     setAppliedHighlight(null);
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
@@ -330,6 +343,7 @@ export function useOutdoorAgentWorkflow(input: {
     status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
   }
   useEffect(() => {
+    setDesignSteps([]);
     setAppliedHighlight(null);
     abort.current?.abort();
     token.current = null;
@@ -387,6 +401,7 @@ export function useOutdoorAgentWorkflow(input: {
     label: string,
     job: { epoch: number; controller: AbortController; scope: string },
     warnings: string[] = [],
+    afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
   ) {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base || !live(job)) return;
@@ -404,11 +419,15 @@ export function useOutdoorAgentWorkflow(input: {
       next,
       warnings,
       references: [...refsRef.current],
+      ...(afterConfirm ? { afterConfirm } : {}),
     };
     proposalRef.current = p;
     setProposal(p);
     if (kind === "scope" && next.anchor) {
       callbacks.current.bridge()?.previewBoundary?.(next.anchor, next.boundary);
+    }
+    if (kind === "zones" || kind === "main-routes" || kind === "objects") {
+      designStep(`已生成「${label}」预览，等待核对。`);
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
   }
@@ -557,6 +576,12 @@ export function useOutdoorAgentWorkflow(input: {
         : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。`,
       "done",
     );
+    if (p.kind === "zones" || p.kind === "main-routes" || p.kind === "objects") {
+      designStep(`已确认并应用「${p.label}」。`);
+    }
+    if (p.afterConfirm) {
+      await act({ action: p.afterConfirm, reply: "", references: [], facts: {} }, "", true);
+    }
   }
   function offerBoundary(
     anchor: NonNullable<SitePlanData["anchor"]>,
@@ -706,7 +731,7 @@ export function useOutdoorAgentWorkflow(input: {
     ]);
     setBusy(false);
   }
-  async function act(turn: OutdoorTurn, message: string) {
+  async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
     if (turn.action === "cancel") {
       cancel();
       return;
@@ -771,11 +796,10 @@ export function useOutdoorAgentWorkflow(input: {
     if (turn.action === "ask") {
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
-      callbacks.current.say(turn.reply || "请补充当前活动需求；没有修改规划。");
-      status("需要你补充一句，见对话；规划未变。", "ready");
+      askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
       return;
     }
-    const job = start();
+    const job = start(continueDesign);
     refsRef.current = turn.references.filter(
       (r) => r.id.startsWith("plan:") || r.id.startsWith("osm:"),
     );
@@ -799,6 +823,13 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       requireScope(plan);
+      const designingRoutes = turn.action === "main-routes";
+      const designingObjects = turn.action === "objects";
+      if (designingRoutes || designingObjects || turn.action === "zones" || turn.action === "revise") {
+        designStep(plan.zones.length
+          ? `已核对活动边界和画布上已有的 ${plan.zones.length} 个分区。`
+          : "已核对活动边界，当前场地还没有功能分区。");
+      }
       if (
         turn.action === "draw-zone" ||
         turn.action === "draw-route" ||
@@ -822,8 +853,18 @@ export function useOutdoorAgentWorkflow(input: {
         );
         return;
       }
+      const needsZones = !plan.zones.length && (designingRoutes || designingObjects);
+      const zoneNeeds = stateRef.current.brief.zones;
+      if (needsZones && (!zoneNeeds.length || zoneNeeds.some(zone => zone.environment === "unknown"))) {
+        askForDetails("这次活动要分成哪些区域？请告诉我各区的用途和室内外属性，例如室外展览区和室外表演区。");
+        return;
+      }
       await mapContext(job.controller.signal);
       if (!live(job)) return;
+      if (JSON.stringify(bridge.getPlan()) !== original) {
+        status("读取期间画布已变化，请基于当前规划重新预览。", "blocked");
+        return;
+      }
       if (turn.action === "adjust" || turn.action === "connect") {
         if (!turn.operation || !message.includes(turn.operation.evidence))
           throw new Error("空间变更没有本句依据，未执行。");
@@ -846,18 +887,30 @@ export function useOutdoorAgentWorkflow(input: {
         );
         return;
       }
-      if (turn.action === "zones" || turn.action === "revise") {
+      if (turn.action === "zones" || turn.action === "revise" || needsZones) {
         persist({ ...stateRef.current, stage: "zones" });
+        const afterConfirm = needsZones
+          ? designingRoutes || !hasVerifiedMainAccess(plan) ? "main-routes" : "objects"
+          : undefined;
+        designStep(needsZones
+          ? `先按已知用途划分区域，让${designingRoutes ? "主通道" : "物料"}有明确的服务范围。`
+          : "根据已知用途和室内外条件，在活动边界内安排分区。");
+        const next = bridge.proposeZones
+          ? bridge.proposeZones(plan, stateRef.current.brief)
+          : proposeUseZones(plan, stateRef.current.brief);
+        if (needsZones) {
+          const names = next.zones.slice(0, 4).map(zone => zone.name).join("、");
+          designStep(`分区预览包含 ${next.zones.length} 个区域：${names}${next.zones.length > 4 ? "等" : ""}。`);
+        }
         offer(
-          bridge.proposeZones
-            ? bridge.proposeZones(plan, stateRef.current.brief)
-            : proposeUseZones(plan, stateRef.current.brief),
+          next,
           "zones",
           "分区用途与室内外属性",
           job,
           [
             "室内边界必须由用户图纸或已有手画分区确认；地图不提供室内通道事实。",
           ],
+          afterConfirm,
         );
         return;
       }
@@ -867,11 +920,10 @@ export function useOutdoorAgentWorkflow(input: {
         );
       if (turn.action === "main-routes") {
         persist({ ...stateRef.current, stage: "main-routes" });
+        designStep("把真实道路与活动边界相交的位置作为入口候选，再预览主通道。");
         status("读取真实路网证据，出入口交点只作待核对候选。", "working", {
           stopLabel: "停止查找",
         });
-        await mapContext(job.controller.signal);
-        if (!live(job)) return;
         if (!plan.anchor)
           throw new Error("活动还没有真实锚点，请先定位并确认范围。");
         // 2026-11-14 测试修正：路网 bbox 按边界真实地理位置取（边界可离锚点很远）。
@@ -952,17 +1004,17 @@ export function useOutdoorAgentWorkflow(input: {
         offer(
           {
             ...plan,
-            nodes: plan.nodes.map((n) =>
-              n.id === target
-                ? {
-                    ...n,
-                    ...(turn.facts.access?.kind
-                      ? { kind: turn.facts.access.kind }
-                      : {}),
-                    verification: "user-confirmed" as const,
-                  }
-                : n,
-            ),
+            nodes: plan.nodes.map((n) => {
+              if (n.id !== target) return n;
+              const nextKind = turn.facts.access?.kind ?? n.kind;
+              return {
+                ...n,
+                kind: nextKind,
+                // 2026-11-15：核对成「仅出口/双向」也走同一套自动改名（入口 1 → 出口 1）。
+                name: renamedNodeName(n.name, nextKind, plan.nodes, n.id),
+                verification: "user-confirmed" as const,
+              };
+            }),
           },
           "verify-access",
           "用户核对入口可用",
@@ -999,12 +1051,7 @@ export function useOutdoorAgentWorkflow(input: {
       }
       if (turn.action === "objects") {
         persist({ ...stateRef.current, stage: "objects" });
-        if (
-          !plan.routes.length ||
-          !plan.nodes.some(
-            (n) => n.kind !== "exit" && n.verification === "user-confirmed",
-          )
-        )
+        if (!hasVerifiedMainAccess(plan))
           throw new Error(
             "请先核对主入口和主要通道；道路交点不当作已经核实的门。",
           );
@@ -1017,6 +1064,7 @@ export function useOutdoorAgentWorkflow(input: {
           "working",
           { stopLabel: "停止查找" },
         );
+        designStep("按分区用途、物料的真实尺寸和已核对的通道试排。");
         const queries = stateRef.current.brief.items.map((i) => i.query);
         const library = bridge.readLibrary
           ? await bridge.readLibrary(queries, job.controller.signal)
@@ -1287,7 +1335,28 @@ export function useOutdoorAgentWorkflow(input: {
     } as OutdoorTurn;
   }
 
-  async function handle(message: string): Promise<boolean> {
+  function askForDetails(question: string) {
+    callbacks.current.say(question, true);
+    status("补充对话里的信息后可以继续。", "ask");
+  }
+
+  function clarify(message: string): boolean {
+    const bridge = callbacks.current.bridge();
+    const plan = bridge?.getPlan();
+    if (!bridge || !plan) return false;
+    const question = outdoorClarificationQuestion(message, plan, bridge.selectedIds?.() ?? []);
+    if (!question) return false;
+    start();
+    setBusy(false);
+    if (stateRef.current.pendingLogin) {
+      const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
+      persist(kept);
+    }
+    askForDetails(question);
+    return true;
+  }
+
+  async function handle(message: string, clarification?: OutdoorClarification): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
     if (explicitProposalApproval(message) && proposalRef.current) {
       await confirm();
@@ -1316,6 +1385,7 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const previousProposal = proposalRef.current;
     const job = start();
+    designStep("读取当前活动边界、已有分区与设施。");
     status(
       "结合当前需求、选中对象与结构化地图依据理解本句；未读取地图像素、未执行修改。",
       "working",
@@ -1324,8 +1394,11 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       const map = await mapContext(job.controller.signal);
       if (!live(job)) return true;
+      if (map.status === "ready") designStep("已取得结构化地图依据，用来核对请求涉及的位置。");
+      if (map.status === "partial") designStep("地图依据只有一部分，缺失的位置需要核对。");
       const turn = await understandOutdoorTurn({
         message,
+        clarification,
         libraryChoices: libraryChoices.map(
           ({ id, name, width, depth, height }) => ({
             id,
@@ -1386,7 +1459,7 @@ export function useOutdoorAgentWorkflow(input: {
         return true;
       }
       const constraintBefore = JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed});
-      await act(turn, message);
+      await act(turn, message, true);
       // A neutral clarification is not cancellation or authorization. Only the unchanged
       // scope checkpoint may remain pending; never retain a geometric/model proposal
       // across unstructured new requirements. Cancel/new facts/new actions still invalidate.
@@ -1591,6 +1664,11 @@ export function useOutdoorAgentWorkflow(input: {
   }
   return {
     state,
+    designSteps,
+    scopeConfirmed: () => {
+      const plan = callbacks.current.bridge()?.getPlan();
+      return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
+    },
     proposal,
     appliedHighlight: state.scope === input.scope ? appliedHighlight : null,
     models,
@@ -1665,6 +1743,7 @@ export function useOutdoorAgentWorkflow(input: {
         n.verification !== "user-confirmed" ||
         (stateRef.current.stage === "people" && n.kind === "entry"),
     ),
+    clarify,
     handle,
     action,
     cancel,

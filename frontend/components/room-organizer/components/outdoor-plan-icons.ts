@@ -17,6 +17,7 @@ import {
   Copy,
   DoorOpen,
   Download,
+  Footprints,
   Hand,
   Hexagon,
   Info,
@@ -29,7 +30,9 @@ import {
   MapPin,
   Minus,
   Move,
+  Package,
   PenTool,
+  PersonStanding,
   Plus,
   Redo2,
   RotateCw,
@@ -90,6 +93,10 @@ export const PLANNING_ICON_COMPONENTS: Record<PlanningIconName, LucideIcon> = {
   circle: Circle,
   'triangle-shape': TriangleShape,
   minus: Minus,
+  footprints: Footprints,
+  // 2026-11-16 用户：「人行应该用行人图标，而不是脚印」。
+  'person-standing': PersonStanding,
+  package: Package,
 };
 
 /** 取图标组件：类型上不会越界，回落 shapes 仅作运行时防御。 */

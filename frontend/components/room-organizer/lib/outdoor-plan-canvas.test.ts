@@ -3,6 +3,7 @@ import {
   PLAN_LAYER_STACK,
   defaultLayerVisibility,
   drawAccessLayer,
+  accessRingRadiusPx,
   drawConflictMarkers,
   drawFacilityGhost,
   drawFacilityLayer,
@@ -13,17 +14,20 @@ import {
   drawRouteDraft,
   drawRouteLayer,
   drawWorkerLayer,
+  drawZoneLayer,
   enuToLngLat,
+  facilityPlacementGhost,
   hexWithAlpha,
   isLayerVisible,
   planMetersPerPixel,
+  planLabelInk,
   planPixelToPoint,
   planPointToPixel,
   visiblePlanLayers,
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
-import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
@@ -155,12 +159,14 @@ interface CtxCapture {
   rects: string[];
   dash: number[][];
   texts: string[];
+  /** 文字描边（白底气）：用来锁「名字有描边才读得出来」。 */
+  haloTexts: string[];
   strokes: string[];
   fills: string[];
 }
 
 function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
-  const cap: CtxCapture = { rects: [], dash: [], texts: [], strokes: [], fills: [] };
+  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [] };
   const ctx = {
     save: () => {},
     restore: () => {},
@@ -177,6 +183,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
     strokeRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`stroke:${x},${y},${w},${h}`),
     fillRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`fill:${x},${y},${w},${h}`),
     fillText: (t: string) => cap.texts.push(t),
+    strokeText: (t: string) => cap.haloTexts.push(t),
   } as unknown as CanvasRenderingContext2D;
   Object.defineProperty(ctx, 'strokeStyle', { set: (v: string) => cap.strokes.push(v), get: () => '' });
   Object.defineProperty(ctx, 'fillStyle', { set: (v: string) => cap.fills.push(v), get: () => '' });
@@ -225,6 +232,25 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     expect(cap.strokes).not.toContain(PLANNING_LAYER_COLORS.facility);
   });
 
+  it('feeds the 2D and 3D ghost from one rotated footprint and one bounds check', () => {
+    const boundary = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }];
+    const inside = facilityPlacementGhost({ width: 4, depth: 2 }, { x: 10, y: 10 }, 0, boundary);
+    expect(inside.invalid).toBe(false);
+    expect(inside.ring).toHaveLength(4);
+    const span = (points: { x: number; y: number }[]) => ({
+      x: Math.max(...points.map(p => p.x)) - Math.min(...points.map(p => p.x)),
+      y: Math.max(...points.map(p => p.y)) - Math.min(...points.map(p => p.y)),
+    });
+    // 0°：宽 4 沿 x、深 2 沿 y；转 90° 后长宽互换，证明旋转真的进了幽灵几何。
+    expect(span(inside.ring).x).toBeCloseTo(4, 6);
+    expect(span(inside.ring).y).toBeCloseTo(2, 6);
+    const rotated = facilityPlacementGhost({ width: 4, depth: 2 }, { x: 10, y: 10 }, 90, boundary);
+    expect(span(rotated.ring).x).toBeCloseTo(2, 6);
+    expect(span(rotated.ring).y).toBeCloseTo(4, 6);
+    // 越界与提交共用 facilityPlacementIssues：贴角放置必须报红。
+    expect(facilityPlacementGhost({ width: 4, depth: 2 }, { x: 0.5, y: 0.5 }, 0, boundary).invalid).toBe(true);
+  });
+
   it('highlights the selected facility with a white halo and name label', () => {
     const facility = { id: 'f1', name: '市集摊位 A', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 2, depth: 2 } };
     const selected = makeCtx();
@@ -271,14 +297,30 @@ describe('route / node / worker drawing (H2-d)', () => {
     expect(noArrow.cap.fills.filter(s => s === PLANNING_ROUTE_KIND_COLORS.pedestrian)).toHaveLength(0);
   });
 
-  it('highlights the selected route with a white overlay and a name label', () => {
+  it('adds a mid-segment arrow once the segment is long enough to read direction', () => {
+    // 2026-11-15：长段中间补方向箭头（端点箭头会被节点徽标盖住）；短段不加，避免箭头连成串。
+    const long = makeCtx();
+    drawRouteLayer({ ctx: long.ctx, viewport: view } as PlanCanvasContext, [
+      { kind: 'pedestrian', points: [{ x: 0, y: 0 }, { x: 300, y: 0 }], oneWay: true },
+    ]);
+    // 300 m ≈ 145 px：端点一只 + 中点一只。
+    expect(long.cap.fills.filter(s => s === PLANNING_ROUTE_KIND_COLORS.pedestrian)).toHaveLength(2);
+    const short = makeCtx();
+    drawRouteLayer({ ctx: short.ctx, viewport: view } as PlanCanvasContext, [
+      { kind: 'pedestrian', points: [{ x: 0, y: 0 }, { x: 20, y: 0 }], oneWay: true },
+    ]);
+    expect(short.cap.fills.filter(s => s === PLANNING_ROUTE_KIND_COLORS.pedestrian)).toHaveLength(1);
+  });
+
+  it('highlights the selected route with a white overlay and no name text', () => {
+    // 2026-11-15 用户指令「文字就不要显示了」：选中只留白描边，不再画名字标签。
     const { ctx, cap } = makeCtx();
     drawRouteLayer(
       { ctx, viewport: view } as PlanCanvasContext,
       [{ kind: 'vehicle', points: [{ x: 0, y: 0 }, { x: 20, y: 0 }], oneWay: false, name: '装卸动线', selected: true }],
     );
     expect(cap.strokes).toContain('#ffffff');
-    expect(cap.texts).toContain('装卸动线');
+    expect(cap.texts).not.toContain('装卸动线');
   });
 
   it('draws the route draft with rubber band and cursor cross when a cursor point is given', () => {
@@ -310,6 +352,65 @@ describe('route / node / worker drawing (H2-d)', () => {
     expect(lonely.cap.fills).toContain('#c0392b');
   });
 
+  it('draws access nodes as a filled round badge with a white collar and a haloed name', () => {
+    // 2026-11-16 用户：「3D 的圈圈很形象，2D 的 icon 有点看不清」——
+    // 所以 2D 也画实心圆盘（类型色）+ 白圈，名字带白描写底。
+    const { ctx, cap } = makeCtx();
+    // 名字分级：放大到看得见街区细节（z21）才出名字，这里用近视角。
+    const near = { ...view, zoom: 21 };
+    drawAccessLayer({ ctx, viewport: near } as PlanCanvasContext, [
+      { kind: 'entry', position: { x: 0, y: 0 }, name: '入口 1' },
+      { kind: 'exit', position: { x: 8, y: 0 }, name: '出口 1' },
+    ]);
+    // 三型各自的圆盘色都真的填了。
+    expect(cap.fills.filter(color => color.startsWith('rgba(')).length).toBeGreaterThanOrEqual(2);
+    // 白圈（圆牌外沿）与名字描边都在。
+    expect(cap.strokes).toContain('#ffffff');
+    expect(cap.haloTexts).toEqual(['入口 1', '出口 1']);
+    expect(cap.texts).toEqual(['入口 1', '出口 1']);
+  });
+
+  it('hides access names when zoomed out and keeps them for the selected node', () => {
+    // 2026-11-16 用户：「缩小时只留圆牌不画名字，放大或选中时才出名字」。
+    const node = { kind: 'entry' as const, position: { x: 0, y: 0 }, name: '西门' };
+    const far = makeCtx();
+    drawAccessLayer({ ctx: far.ctx, viewport: view } as PlanCanvasContext, [node]);
+    expect(far.cap.texts).toEqual([]); // 缩小时不出名字
+    expect(far.cap.strokes.some(color => color.startsWith('rgba('))).toBe(true); // 圆牌（现在是环）还在
+
+    const farSelected = makeCtx();
+    drawAccessLayer({ ctx: farSelected.ctx, viewport: view } as PlanCanvasContext, [{ ...node, selected: true }]);
+    expect(farSelected.cap.texts).toEqual(['西门']); // 选中时无论如何都出名字
+  });
+
+  it('switches zone/worker label ink with the basemap tone (深色图上白字)', () => {
+    // 2026-11-16 用户：「这个文字是不是也要根据不同的地图给适配？深色的话分区就要是白色的」。
+    const zone = { name: '装卸区', polygon: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 10 }, { x: 0, y: 10 }] };
+    const dark = makeCtx();
+    drawZoneLayer({ ctx: dark.ctx, viewport: view } as PlanCanvasContext, [zone], { tone: 'dark' });
+    expect(dark.cap.texts).toContain('装卸区');
+    expect(dark.cap.haloTexts).toContain('装卸区');
+    // 深底：白字 + 深描边（描边恒为字的反色）。
+    expect(dark.cap.fills).toContain(planLabelInk('dark').fill);
+    expect(dark.cap.strokes).toContain(planLabelInk('dark').halo);
+
+    // 缺省浅底：保持原来的深字 + 白描边（浅色路网图仍照旧）。
+    const light = makeCtx();
+    drawZoneLayer({ ctx: light.ctx, viewport: view } as PlanCanvasContext, [zone]);
+    expect(light.cap.fills).toContain(planLabelInk('light').fill);
+    expect(light.cap.strokes).toContain(planLabelInk('light').halo);
+    expect(planLabelInk('dark').fill).not.toBe(planLabelInk('light').fill);
+
+    // 人名同样跟着底图走。
+    const darkWorker = makeCtx();
+    drawWorkerLayer(
+      { ctx: darkWorker.ctx, viewport: view } as PlanCanvasContext,
+      [{ role: '安保', count: 1, position: { x: 3, y: 57 } }],
+      { tone: 'dark' },
+    );
+    expect(darkWorker.cap.fills).toContain(planLabelInk('dark').fill);
+  });
+
   it('labels workers with role and count and halos the selected one', () => {
     const worker = { id: 'w1', role: '安保', count: 2, position: { x: 3, y: 57 } };
     const plain = makeCtx();
@@ -325,13 +426,55 @@ describe('route / node / worker drawing (H2-d)', () => {
     expect(warned.cap.strokes).toContain('#c0392b');
   });
 
+  it('draws entry / exit / both with their own colors (green in, red out, teal two-way)', () => {
+    const kinds = ['entry', 'exit', 'both'] as const;
+    const drawn = kinds.map(kind => {
+      const { ctx, cap } = makeCtx();
+      drawAccessLayer({ ctx, viewport: view } as PlanCanvasContext, [{ id: kind, kind, position: { x: 0, y: 0 }, name: kind }]);
+      return cap.strokes;
+    });
+    kinds.forEach((kind, i) => {
+      expect(drawn[i]).toContain(hexWithAlpha(PLANNING_NODE_KIND_COLORS[kind], 0.95));
+      // 每型不接受其它两型的颜色：三型确实互斥，不是“都画蓝/灰”。
+      for (const other of kinds.filter(k => k !== kind)) {
+        expect(drawn[i]).not.toContain(hexWithAlpha(PLANNING_NODE_KIND_COLORS[other], 0.95));
+      }
+    });
+    expect(new Set(Object.values(PLANNING_NODE_KIND_COLORS)).size).toBe(3);
+  });
+
+  it('draws the access node as a hollow ring whose size follows the zoom', () => {
+    const node = { kind: 'entry' as const, position: { x: 0, y: 0 }, name: '西门' };
+    const ringArc = (zoom: number) => {
+      const { ctx, cap } = makeCtx();
+      const arc = vi.spyOn(ctx, 'arc');
+      drawAccessLayer({ ctx, viewport: { ...view, zoom } } as PlanCanvasContext, [node]);
+      // 第一条弧是白色底环；中空意味着这一层不需要填色。
+      return { radius: arc.mock.calls[0]![2] as number, fills: cap.fills, strokes: cap.strokes };
+    };
+
+    const at19 = ringArc(19);
+    expect(at19.fills).toEqual([]); // 不再画实心盘
+    expect(at19.strokes.some(color => color.startsWith('rgba('))).toBe(true);
+
+    // 2026-11-16 用户：「这个环的缩放比例特别奇怪。和道路一样行不行?」
+    // 环随缩放收敛：低倍缩小（不糊满场地），高倍放大（撑得住街区尺度），上下都有夹值。
+    // （第一条弧画在环中线上，所以是 mid = R - 环厚/2，而不是外径 R。）
+    expect(ringArc(15).radius).toBeLessThan(at19.radius);
+    expect(ringArc(21).radius).toBeGreaterThan(at19.radius);
+    expect(accessRingRadiusPx({ ...view, zoom: 15 })).toBeGreaterThanOrEqual(6);
+    expect(accessRingRadiusPx({ ...view, zoom: 15 })).toBeLessThan(accessRingRadiusPx({ ...view, zoom: 19 }));
+    expect(accessRingRadiusPx({ ...view, zoom: 21 })).toBeGreaterThan(accessRingRadiusPx({ ...view, zoom: 19 }));
+    expect(accessRingRadiusPx({ ...view, zoom: 23 })).toBeLessThanOrEqual(13);
+  });
+
   it('previews node placement with a translucent diamond and name label', () => {
     const { ctx, cap } = makeCtx();
     drawNodeGhost({ ctx, viewport: view } as PlanCanvasContext, 'entry', '西门 2', { x: 0, y: 60 });
     expect(cap.rects.some(r => r.startsWith('stroke:'))).toBe(true);
     expect(cap.texts).toContain('西门 2');
-    // 幽灵菱形是 0.9 透明度的入口蓝 fill。
-    expect(cap.fills).toContain(hexWithAlpha(PLANNING_LAYER_COLORS.access, 0.9));
+    // 幽灵菱形是 0.9 透明度的入口色 fill（三型各自一色，不再共用 access 蓝）。
+    expect(cap.fills).toContain(hexWithAlpha(PLANNING_NODE_KIND_COLORS.entry, 0.9));
   });
 });
 
@@ -428,5 +571,24 @@ describe('conflict marker drawing (H3-b)', () => {
     drawConflictMarkers({ ctx, viewport: view } as PlanCanvasContext, []);
     expect(cap.texts).toHaveLength(0);
     expect(cap.fills).toHaveLength(0);
+  });
+
+  it('writes the merged count instead of a row of exclamation marks (count > 1)', () => {
+    const { ctx, cap } = makeCtx();
+    drawConflictMarkers(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ key: 'route:r-svc', status: 'conflict' as const, at: { x: 0, y: 0 }, count: 3 }],
+    );
+    // 一枚徽章 + 数字，不再是三枚「!」。
+    expect(cap.texts).toEqual(['3']);
+    expect(cap.strokes.filter(s => s === '#ffffff')).toHaveLength(1);
+    expect(cap.fills).toContain(PLANNING_CONFLICT_COLORS.conflict);
+    // 单条问题仍画「!」（与旧视觉兼容）。
+    const single = makeCtx();
+    drawConflictMarkers(
+      { ctx: single.ctx, viewport: view } as PlanCanvasContext,
+      [{ key: 'route:r-svc', status: 'conflict' as const, at: { x: 0, y: 0 }, count: 1 }],
+    );
+    expect(single.cap.texts).toEqual(['!']);
   });
 });

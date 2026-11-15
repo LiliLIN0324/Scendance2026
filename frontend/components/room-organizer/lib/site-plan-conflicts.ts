@@ -9,17 +9,19 @@
  * - 「容量与安全状态保留待核实」（评审稿 §5 问题列：显示规则、位置、对象、依据与处理状态）。
  *
  * 规则清单（全部派生现算，不落盘、不改契约）：
- * 1. route-crossing   人车中心线交叉：人行 × 车辆/后勤动线严格穿越相交（潜在问题），
+ * 1. route-crossing   设施上人车交叉：人行 × 车辆/后勤动线严格穿越且**交点落在设施占地上**才算冲突（2026-11-16 用户：人车交叉本身不算问题）；
  *    at = 交点；两条动线都引用的共享出入口节点位置的触碰豁免（声明允许的共享节点）。
  * 2. route-collinear  共线重叠：同对动线沿同一直线重叠 ≥ 最小长度（单独分类，与交叉互斥）。
  * 3. route-facility-collision  通行带与设施占地相交：宽度已知（widthM）的动线走廊
  *    （半宽 = widthM/2）触到设施占地角点/中心；at = 通行带上距设施最近的点。
- * 4. route-out-of-boundary     动线越界：顶点落在边界外，或（凸界内点不出界的兜底）
- *    非凸边界下边穿出（严格穿越）；贴边界（顶点在边界上）不算越界。
- * 5. route-missing-width       缺宽度：车辆/后勤动线未设置 widthM →「通行带未评估」
+ * 4. route-missing-width       缺宽度：车辆/后勤动线未设置 widthM →「通行带未评估」
  *    缺失项（不虚构宽度）；人行动线不强制宽度（自由通行），但宽度已知时同样参与规则 3。
- * 6. capacity-unverified       容量待核实：观众区按面积 ÷ 人均占地估算容量，
+ * 5. capacity-unverified       容量待核实：观众区按面积 ÷ 人均占地估算容量，
  *    规划假设常量（非法规口径），结果一律标「待核实」。
+ *
+ * 2026-11-15 用户：「很多人就是从场地外面挪进来的」——动线本来就是把人从场外带进场内的，
+ * 顶点落在边界外是**正常写法**（观众从马路边/集合点走过来），所以取消了动线越界这条规则。
+ * 分区/设施/人员的越界仍由 site-plan-editing / 各自问题层单独管，不受这里影响。
  *
  * 每条问题带 status（conflict / missing / unverified）、可定位点 at、关联对象
  * （routeIds / facilityId / zoneId）——画布标记与面板清单共用本层输出。
@@ -27,6 +29,7 @@
 
 import {
   planRingAreaM2,
+  routeCarrier,
   type PlanFacility,
   type PlanPoint,
   type PlanRoute,
@@ -52,7 +55,6 @@ export type PlanConflictCategory =
   | 'route-crossing'
   | 'route-collinear'
   | 'route-facility-collision'
-  | 'route-out-of-boundary'
   | 'route-missing-width'
   | 'capacity-unverified';
 
@@ -74,13 +76,80 @@ export interface PlanConflictIssue {
 
 /** 类别中文名（面板清单与定位提示共用）。 */
 export const PLAN_CONFLICT_CATEGORY_LABELS: Record<PlanConflictCategory, string> = {
-  'route-crossing': '人车交叉',
+  'route-crossing': '设施上人车交叉',
   'route-collinear': '动线共线',
   'route-facility-collision': '通行带压设施',
-  'route-out-of-boundary': '动线越界',
   'route-missing-width': '缺宽度',
   'capacity-unverified': '容量待核实',
 };
+
+/**
+ * 状态严重度（合并徽章取组内最高，颜色与明细顺序都按它）。
+ */
+export const PLAN_CONFLICT_STATUS_PRIORITY: Record<PlanConflictStatus, number> = {
+  conflict: 2,
+  missing: 1,
+  unverified: 0,
+};
+
+/** 画布默认只画这两类（2026-11-15 用户：默认只显示冲突红 / 缺宽度橙，「容量待核实」先收起）。 * 默认上图的状态：2026-11-16 用户「场地上又出现感叹号，不知道为什么」之后收窄为**只有真冲突**。
+ * 「缺宽度」「容量待核实」属于提示项，仍进问题清单，但要手动开关才上图（否则每加一条车行/后勤线就冒一颗橙点）。
+ */
+export const PLAN_CONFLICT_DEFAULT_STATUSES: readonly PlanConflictStatus[] = ['conflict'];
+
+/**
+ * 合并后的画布标记：同一条动线（或同一个分区）的多条问题合成一枚徽章。
+ *
+ * 为什么合并：一条线上同时命中「缺宽度 + 越界 + 两次交叉」就会在线上撒四枚叹号，
+ * 看上去像四处故障，实际是同一件事的四个侧面（用户 2026-11-15 反馈）。
+ */
+export interface PlanConflictCluster {
+  /** 稳定 key：`route:<id>` / `zone:<id>` / `issue:<key>`。 */
+  key: string;
+  /** 组内最严重状态（决定徽章颜色）。 */
+  status: PlanConflictStatus;
+  /** 徽章落点 = 组内最严重那条问题的定位点。 */
+  at: PlanPoint;
+  routeIds: string[];
+  zoneId?: string;
+  /** 组内问题，按严重度降序（点开明细的顺序）。 */
+  issues: PlanConflictIssue[];
+  /** 组内条数：>1 时徽章画数字，1 条时画「!」。 */
+  count: number;
+}
+
+/**
+ * 按关联对象合并问题：动线按 `routeIds[0]`，只关联分区的按 `zoneId`，
+ * 其余（理论上没有）单独一组。人车交叉只挂在前一条动线上，不在另一条上重复出现。
+ */
+export function groupConflictIssues(issues: readonly PlanConflictIssue[]): PlanConflictCluster[] {
+  const buckets = new Map<string, PlanConflictIssue[]>();
+  for (const issue of issues) {
+    const key = issue.routeIds[0]
+      ? `route:${issue.routeIds[0]}`
+      : issue.zoneId
+        ? `zone:${issue.zoneId}`
+        : `issue:${issue.key}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(issue);
+    else buckets.set(key, [issue]);
+  }
+  const clusters: PlanConflictCluster[] = [];
+  for (const [key, bucket] of buckets) {
+    const sorted = [...bucket].sort((a, b) => PLAN_CONFLICT_STATUS_PRIORITY[b.status] - PLAN_CONFLICT_STATUS_PRIORITY[a.status]);
+    const worst = sorted[0]!;
+    clusters.push({
+      key,
+      status: worst.status,
+      at: worst.at,
+      routeIds: worst.routeIds,
+      ...(worst.zoneId !== undefined ? { zoneId: worst.zoneId } : {}),
+      issues: sorted,
+      count: sorted.length,
+    });
+  }
+  return clusters;
+}
 
 /* ---------------- 内部几何工具 ---------------- */
 
@@ -164,10 +233,15 @@ function closestPointOnPolyline(p: PlanPoint, points: readonly PlanPoint[]): Pla
   return best;
 }
 
-/** 「人车对」判定：一条人行 + 一条车辆类（车辆/后勤）动线。 */
+/**
+ * 「人车对」判定（2026-11-16 改按载体）：载体不同才可能互相干扰——步行×推车、
+ * 步行×机动车、推车×机动车都算一对，同载体（步行×步行）不算。
+ *
+ * 这样后勤里的人和车各按各的算：推车要人工标 carrier='trolley' 才会跟人流报交叉，
+ * 不再是「凡是后勤一律当车」。存量数据全吃默认步行，彼此不构成人车对。
+ */
 function isPedestrianVehiclePair(a: PlanRoute, b: PlanRoute): boolean {
-  const veh = (r: PlanRoute) => r.kind === 'vehicle' || r.kind === 'service';
-  return (a.kind === 'pedestrian' && veh(b)) || (veh(a) && b.kind === 'pedestrian');
+  return routeCarrier(a) !== routeCarrier(b);
 }
 
 /** 两条动线共同引用的出入口节点位置（声明允许的共享节点，交叉豁免）。 */
@@ -180,6 +254,18 @@ function declaredSharedNodePositions(a: PlanRoute, b: PlanRoute, nodes: readonly
     if (aRefs.has(node.id) && bRefs.has(node.id)) shared.push(node.position);
   }
   return shared;
+}
+
+/** 交叉点落在哪个设施占地上（含边界）；都不覆盖则 null。 */
+function facilityCoveringPoint(
+  pt: PlanPoint,
+  facilities: readonly PlanFacility[],
+): PlanFacility | null {
+  for (const facility of facilities) {
+    const ring = facilityFootprintRing(facility as Pick<PlanFacility, 'position' | 'rotationDeg' | 'size'>);
+    if (ring.length >= 3 && planPointInRing(pt, ring)) return facility;
+  }
+  return null;
 }
 
 function nearAny(pt: PlanPoint, targets: readonly PlanPoint[], tolerance: number): boolean {
@@ -197,15 +283,13 @@ export type PlanConflictInput = Pick<SitePlanData, 'boundary' | 'zones' | 'facil
 
 /**
  * 全案冲突/缺失检查（评审稿「随编辑实时跑」）：输入一份数据，输出可定位问题清单。
- * 顺序稳定：人车交叉 → 共线 → 通行带压设施 → 越界 → 缺宽度 → 容量待核实。
+ * 顺序稳定：人车交叉 → 共线 → 通行带压设施 → 缺宽度 → 容量待核实。
  */
 export function planConflictIssues(plan: PlanConflictInput): PlanConflictIssue[] {
   const issues: PlanConflictIssue[] = [];
   const routes = plan.routes;
-  const boundary = plan.boundary;
-  const boundaryUsable = boundary.length >= 3;
 
-  // 1) 人车中心线交叉（i<j 全对，仅人行 × 车辆类；严格穿越，端点触碰不算）。
+  // 1) 人车中心线交叉（i<j 全对，仅人行 × 车辆类；严格穿越，端点触碰不算；且交点要落在设施占地上）。
   for (let i = 0; i < routes.length; i++) {
     for (let j = i + 1; j < routes.length; j++) {
       const a = routes[i]!;
@@ -221,13 +305,19 @@ export function planConflictIssues(plan: PlanConflictInput): PlanConflictIssue[]
           if (!planSegmentsCrossStrict(a1, a2, b1, b2)) continue;
           const at = strictCrossingPoint(a1, a2, b1, b2);
           if (nearAny(at, sharedNodes, PLAN_SHARED_NODE_TOLERANCE_M)) continue;
+          // 2026-11-16 用户：「人车交叉没问题。除非是踩在设施上了」——
+          // 平面上人车交叉是设计常态（出入口、货口、红毯口），不再单独报；
+          // 只有交叉点落在设施占地里（设施上人车混行）才算真冲突。
+          const covering = facilityCoveringPoint(at, plan.facilities);
+          if (!covering) continue;
           issues.push({
             key: `crossing:${a.id}:${b.id}:${si - 1}:${sj - 1}`,
             category: 'route-crossing',
             status: 'conflict',
-            message: `「${a.name}」与「${b.name}」中心线交叉（潜在问题，请确认分流）。`,
+            message: `「${a.name}」与「${b.name}」在设施「${covering.name}」占地上交叉（设施上人车混行，请确认分流）。`,
             at,
             routeIds: [a.id, b.id],
+            facilityId: covering.id,
           });
         }
       }
@@ -275,44 +365,15 @@ export function planConflictIssues(plan: PlanConflictInput): PlanConflictIssue[]
     }
   }
 
-  // 4) 动线越界：顶点出界优先报顶点；顶点都在界内时兜底查边穿出（非凸边界）。
-  for (const route of routes) {
-    if (!boundaryUsable) continue;
-    const outsideVertex = route.points.find(pt => !planPointInRing(pt, boundary));
-    if (outsideVertex) {
-      issues.push({
-        key: `route-out:${route.id}:vertex`,
-        category: 'route-out-of-boundary',
-        status: 'conflict',
-        message: `「${route.name}」有顶点落在场地边界之外。`,
-        at: outsideVertex,
-        routeIds: [route.id],
-      });
-      continue;
-    }
-    let flagged = false;
-    for (let i = 1; i < route.points.length && !flagged; i++) {
-      for (let j = 0; j < boundary.length; j++) {
-        const b1 = boundary[j]!;
-        const b2 = boundary[(j + 1) % boundary.length]!;
-        if (!planSegmentsCrossStrict(route.points[i - 1]!, route.points[i]!, b1, b2)) continue;
-        issues.push({
-          key: `route-out:${route.id}:edge:${i - 1}:${j}`,
-          category: 'route-out-of-boundary',
-          status: 'conflict',
-          message: `「${route.name}」有边穿出场地边界。`,
-          at: strictCrossingPoint(route.points[i - 1]!, route.points[i]!, b1, b2),
-          routeIds: [route.id],
-        });
-        flagged = true;
-        break;
-      }
-    }
-  }
+  // 4) 动线越界：2026-11-15 用户拍掉这条规则——「很多人就是从场地外面挪进来的」。
+  // 动线的正常用途就是把场外的人流带进场内（马路边仓库、集合点、接驳车落客点），
+  // 顶点落在边界外是设计意图而不是错误；继续报红只会盖住真正要看的冲突。
+  // 越界判定仍保留给分区/设施/人员（各自问题层），动线不再产生这类问题。
 
   // 5) 缺宽度：车辆/后勤动线未设置 widthM →「未评估」缺失项（不虚构宽度）。
   for (const route of routes) {
-    if (route.kind === 'pedestrian' || route.widthM !== undefined) continue;
+    // 宽度要求跟着载体走：只有步行不需要报「缺宽度」（推车/机动车都要）。
+    if (routeCarrier(route) === 'walk' || route.widthM !== undefined) continue;
     issues.push({
       key: `no-width:${route.id}`,
       category: 'route-missing-width',

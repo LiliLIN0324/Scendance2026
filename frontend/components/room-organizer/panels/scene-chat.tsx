@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowUp, Camera, Globe, Scan } from '@/components/solid-icons';
+import { ArrowUp, Camera } from '@/components/solid-icons';
 import { useAgentOptional } from './agent-panel';
 import { matchSceneIntent } from '../lib/scene-chat-intent';
 import type { ScannedVenue } from '../lib/venue-scans';
@@ -14,12 +14,10 @@ type Message = { id: string; role: 'user' | 'agent'; text: string; amber?: boole
  * 认得出的现场动作（拍摄、生成、重建、加扫描）当场做掉并回报；
  * 其余句子原样交给主 Agent（brief 抽取 + 真模型），不在这里另造一套理解。
  */
-export function SceneChat({ scans, onPickScan, onOpenCapture, onGenerate, onReconstruct }: {
+export function SceneChat({ scans, onPickScan, onOpenCapture }: {
   scans: readonly ScannedVenue[];
   onPickScan?: ((venue: ScannedVenue) => void) | undefined;
   onOpenCapture?: (() => void) | undefined;
-  onGenerate?: (() => void) | undefined;
-  onReconstruct?: (() => void) | undefined;
 }): JSX.Element {
   const agent = useAgentOptional();
   const [draft, setDraft] = useState('');
@@ -52,17 +50,12 @@ export function SceneChat({ scans, onPickScan, onOpenCapture, onGenerate, onReco
     push({ role: 'user', text });
     if (intent.kind === 'capture') {
       onOpenCapture?.();
-      push({ role: 'agent', text: '采集页开了：拍完把素材带回来，这里能直接生成场地。' });
+      push({ role: 'agent', text: '采集页开了：拍完把素材带回来，生成走左轨「场地」。' });
       return;
     }
-    if (intent.kind === 'generate') {
-      onGenerate?.();
-      push({ role: 'agent', text: '生成场地已经打开：写一句提示，或直接生成。' });
-      return;
-    }
-    if (intent.kind === 'reconstruct') {
-      onReconstruct?.();
-      push({ role: 'agent', text: '照片重建已经打开：把这一场的照片传上去就能重建。' });
+    if (intent.kind === 'generate' || intent.kind === 'reconstruct') {
+      // 2026-11-15：生成收成一张面板，入口在左轨「场地」，场景库对话不再自己开局。
+      push({ role: 'agent', amber: true, text: '生成不在场景库里了：点左轨「场地」，里面选重建真实场地或生成新场景。' });
       return;
     }
     if (!onPickScan) {
@@ -112,8 +105,6 @@ export function SceneChat({ scans, onPickScan, onOpenCapture, onGenerate, onReco
     <div className="sc-scene-chat-quick" role="group" aria-label="常用动作">
       {onOpenCapture ? <button type="button" onClick={() => run('拍摄场地')}><Camera size={13} aria-hidden="true"/>拍摄场地</button>
         : <a href="/guide/capture"><Camera size={13} aria-hidden="true"/>拍摄场地</a>}
-      {onGenerate && <button type="button" onClick={() => run('生成场地')}><Globe size={13} aria-hidden="true"/>生成场地</button>}
-      {onReconstruct && <button type="button" onClick={() => run('照片重建')}><Scan size={13} aria-hidden="true"/>照片重建</button>}
     </div>
   </div>;
 }

@@ -3,12 +3,14 @@ import {
   PLAN_AUDIENCE_AREA_PER_PERSON_M2,
   PLAN_COLLINEAR_MIN_LENGTH_M,
   PLAN_CONFLICT_CATEGORY_LABELS,
+  PLAN_CONFLICT_DEFAULT_STATUSES,
+  groupConflictIssues,
   planConflictCount,
   planConflictIssues,
   type PlanConflictIssue,
 } from './site-plan-conflicts';
 import { planOverviewStats } from './site-plan-measure';
-import type { PlanNode, PlanPoint, PlanRoute, PlanZone, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanFacility, PlanNode, PlanPoint, PlanRoute, PlanZone, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /* ---------------- 夹具 ---------------- */
 
@@ -38,12 +40,12 @@ function route(partial: Partial<PlanRoute> & { id: string; kind: PlanRoute['kind
 
 function issuesFor(
   routes: PlanRoute[],
-  opts: { boundary?: PlanPoint[]; zones?: PlanZone[]; nodes?: PlanNode[] } = {},
+  opts: { boundary?: PlanPoint[]; zones?: PlanZone[]; nodes?: PlanNode[]; facilities?: PlanFacility[] } = {},
 ): PlanConflictIssue[] {
   return planConflictIssues({
     boundary: opts.boundary ?? BOUNDARY,
     zones: opts.zones ?? NO_ZONES,
-    facilities: [],
+    facilities: opts.facilities ?? [],
     routes,
     nodes: opts.nodes ?? NO_NODES,
   });
@@ -53,21 +55,54 @@ function byCategory(issues: PlanConflictIssue[], category: PlanConflictIssue['ca
   return issues.filter(i => i.category === category);
 }
 
-/* ---------------- 1) 人车中心线交叉 ---------------- */
+/* ---------------- 1) 人车交叉（仅设施占地上才报） ---------------- */
+
+/** 占地 6×6 的设施（默认盖住两线交叉点 55,20）。 */
+function hallAt(position: PlanPoint) {
+  return {
+    id: 'f-hall',
+    templateId: 'hall-6x6',
+    name: '候场棚',
+    position,
+    rotationDeg: 0,
+    size: { width: 6, depth: 6 },
+    notes: '',
+  } as unknown as PlanFacility;
+}
 
 describe('pedestrian-vehicle centerline crossing (H3-b)', () => {
-  it('flags a strict crossing with the intersection point as the locatable marker', () => {
-    const issues = issuesFor([
+  it('stays quiet on a plain crossing, and only flags it when it lands on a facility footprint', () => {
+    // 2026-11-16 用户：「人车交叉没问题。除非是踩在设施上了」。
+    const plain = issuesFor([
       route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
       route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
     ]);
-    const crossings = byCategory(issues, 'route-crossing');
+    expect(byCategory(plain, 'route-crossing')).toHaveLength(0);
+
+    const onFacility = issuesFor(
+      [
+        route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
+        route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
+      ],
+      { facilities: [hallAt({ x: 55, y: 20 })] },
+    );
+    const crossings = byCategory(onFacility, 'route-crossing');
     expect(crossings).toHaveLength(1);
     expect(crossings[0]!.status).toBe('conflict');
     expect(crossings[0]!.at).toEqual({ x: 55, y: 20 });
     expect(crossings[0]!.routeIds).toEqual(['r-ped', 'r-veh']);
-    expect(crossings[0]!.message).toContain('r-ped');
-    expect(crossings[0]!.message).toContain('r-veh');
+    expect(crossings[0]!.facilityId).toBe('f-hall');
+    expect(crossings[0]!.message).toContain('候场棚');
+
+    // 设施离交叉点较远 → 不报。
+    const farFacility = issuesFor(
+      [
+        route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
+        route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
+      ],
+      { facilities: [hallAt({ x: 55, y: 45 })] },
+    );
+    expect(byCategory(farFacility, 'route-crossing')).toHaveLength(0);
   });
 
   it('does not flag endpoint touches or same-kind crossings (strict crossing only)', () => {
@@ -83,20 +118,29 @@ describe('pedestrian-vehicle centerline crossing (H3-b)', () => {
       route({ id: 'r-p2', kind: 'pedestrian', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
     ]);
     expect(byCategory(pedPed, 'route-crossing')).toHaveLength(0);
-    // 车辆 × 后勤同类交叉同样不报（两条都是车辆类）。
+    // 车辆 × 后勤同类交叉同样不报（两条都标了 vehicle，同载体）。
     const vehSvc = issuesFor([
       route({ id: 'r-v1', kind: 'vehicle', points: [{ x: 10, y: 40 }, { x: 100, y: 40 }] }),
-      route({ id: 'r-s1', kind: 'service', points: [{ x: 55, y: 10 }, { x: 55, y: 90 }] }),
+      route({ id: 'r-s1', kind: 'service', carrier: 'vehicle', points: [{ x: 55, y: 10 }, { x: 55, y: 90 }] }),
     ]);
     expect(byCategory(vehSvc, 'route-crossing')).toHaveLength(0);
   });
 
-  it('treats service routes as vehicle-like for the crossing rule', () => {
-    const issues = issuesFor([
-      route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
-      route({ id: 'r-svc', kind: 'service', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
-    ]);
-    expect(byCategory(issues, 'route-crossing')).toHaveLength(1);
+  it('judges service routes by carrier：缺省人车一起，标 walk 才算纯人行（2026-11-16）', () => {
+    const crossing = (carrier?: 'walk' | 'trolley' | 'vehicle' | 'mixed') => issuesFor(
+      [
+        route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
+        route({ id: 'r-svc', kind: 'service', ...(carrier ? { carrier } : {}), points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
+      ],
+      { facilities: [hallAt({ x: 55, y: 20 })] },
+    );
+    // 缺省：后勤当「人车一起」，与人行不同载体，要报。
+    expect(byCategory(crossing(), 'route-crossing')).toHaveLength(1);
+    // 显式标成纯人行：与人行同载体，不报。
+    expect(byCategory(crossing('walk'), 'route-crossing')).toHaveLength(0);
+    // 标成机动车或推车：不同载体，同样要报。
+    expect(byCategory(crossing('vehicle'), 'route-crossing')).toHaveLength(1);
+    expect(byCategory(crossing('trolley'), 'route-crossing')).toHaveLength(1);
   });
 
   it('exempts crossings at a node declared by both routes (声明允许的共享节点)', () => {
@@ -112,7 +156,7 @@ describe('pedestrian-vehicle centerline crossing (H3-b)', () => {
         route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }], startNodeId: 'n-shared' }),
         route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }], startNodeId: 'n-shared' }),
       ],
-      { nodes: [sharedNode] },
+      { nodes: [sharedNode], facilities: [hallAt({ x: 55, y: 20 })] },
     );
     expect(byCategory(bothDeclared, 'route-crossing')).toHaveLength(0);
     // 只有一条声明 → 不豁免（共用入口必须双方声明）。
@@ -121,7 +165,7 @@ describe('pedestrian-vehicle centerline crossing (H3-b)', () => {
         route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }], startNodeId: 'n-shared' }),
         route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
       ],
-      { nodes: [sharedNode] },
+      { nodes: [sharedNode], facilities: [hallAt({ x: 55, y: 20 })] },
     );
     expect(byCategory(oneDeclared, 'route-crossing')).toHaveLength(1);
   });
@@ -199,55 +243,43 @@ describe('known-width corridor vs facility footprint (H3-b)', () => {
   });
 });
 
-/* ---------------- 4) 动线越界 ---------------- */
+/* ---------------- 4) 动线越界：不再报（2026-11-15 用户拍掉） ---------------- */
 
-describe('route out-of-boundary (H3-b)', () => {
-  it('flags an outside vertex first', () => {
+describe('route out-of-boundary is not a conflict any more (2026-11-15)', () => {
+  it('keeps a route that starts outside the boundary quiet（场外走进来是常态）', () => {
+    // 从界外 10 m 处走到界内：原来会报「有顶点落在场地边界之外」，现在不该再出现。
     const issues = issuesFor([
       route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 10, y: 20 }, { x: 210, y: 20 }] }),
     ]);
-    const out = byCategory(issues, 'route-out-of-boundary');
-    expect(out).toHaveLength(1);
-    expect(out[0]!.at).toEqual({ x: 210, y: 20 });
+    expect(issues.some(issue => issue.category === 'route-out-of-boundary' as never)).toBe(false);
+    // 也不该以其它的名义重复报一遍越界。
+    expect(issues.some(issue => issue.message.includes('边界之外'))).toBe(false);
   });
 
-  it('flags an edge poking out of a concave boundary even with inside vertices', () => {
-    // 两端都在 L 形界内，但连线穿过右上门洞（界外）。
+  it('keeps a route that cuts across a concave boundary quiet', () => {
     const issues = issuesFor(
       [route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 80, y: 90 }, { x: 190, y: 30 }] })],
       { boundary: L_BOUNDARY },
     );
-    const out = byCategory(issues, 'route-out-of-boundary');
-    expect(out).toHaveLength(1);
-    expect(out[0]!.message).toContain('边穿出');
-    // 首个命中的边界边是 (200,60)→(100,60)，交点 (135,60)。
-    expect(out[0]!.at.x).toBeCloseTo(135, 6);
-    expect(out[0]!.at.y).toBeCloseTo(60, 6);
+    expect(issues.some(issue => issue.message.includes('穿出'))).toBe(false);
   });
 
-  it('treats boundary-touching routes as inside (贴边界合法)', () => {
+  it('still flags the real problems on such a route（缺宽度照旧）', () => {
     const issues = issuesFor([
-      route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 0, y: 10 }, { x: 55, y: 0 }, { x: 200, y: 60 }] }),
+      route({ id: 'r-veh', kind: 'vehicle', points: [{ x: -40, y: 20 }, { x: 110, y: 20 }] }),
     ]);
-    expect(byCategory(issues, 'route-out-of-boundary')).toHaveLength(0);
-  });
-
-  it('skips the boundary check when the boundary is not a usable ring', () => {
-    const issues = issuesFor(
-      [route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 10, y: 20 }, { x: 5000, y: 20 }] })],
-      { boundary: [{ x: 0, y: 0 }, { x: 200, y: 0 }] },
-    );
-    expect(byCategory(issues, 'route-out-of-boundary')).toHaveLength(0);
+    expect(byCategory(issues, 'route-missing-width')).toHaveLength(1);
+    expect(issues.every(issue => issue.status !== 'conflict')).toBe(true);
   });
 });
 
 /* ---------------- 5) 缺宽度（缺失项） ---------------- */
 
 describe('missing width (H3-b)', () => {
-  it('flags vehicle and service routes without widthM as missing, at the mid vertex', () => {
+  it('只对非步行载体报缺宽度（vehicle / trolley / 缺省后勤），纯步行不报', () => {
     const issues = issuesFor([
       route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 10, y: 20 }, { x: 110, y: 20 }, { x: 110, y: 80 }] }),
-      route({ id: 'r-svc', kind: 'service', points: [{ x: 20, y: 10 }, { x: 70, y: 70 }] }),
+      route({ id: 'r-svc', kind: 'service', carrier: 'vehicle', points: [{ x: 20, y: 10 }, { x: 70, y: 70 }] }),
     ]);
     const missing = byCategory(issues, 'route-missing-width');
     expect(missing).toHaveLength(2);
@@ -315,7 +347,8 @@ describe('conflict issue stability & stats wiring (H3-b)', () => {
     schemaVersion: 1,
     boundary: BOUNDARY,
     zones: [audienceZone],
-    facilities: [],
+    // 人车交叉只在设施占地上才报，所以给交叉点 (55,20) 放一个棚。
+    facilities: [hallAt({ x: 55, y: 20 })],
     routes: [
       route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
       route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
@@ -342,5 +375,64 @@ describe('conflict issue stability & stats wiring (H3-b)', () => {
 
   it('planConflictCount matches the issue list length', () => {
     expect(planConflictCount(mixedPlan())).toBe(planConflictIssues(mixedPlan()).length);
+  });
+});
+
+describe('groupConflictIssues（同一条线的问题合并成一枚徽章）', () => {
+  it('一条动线上的多条问题合成一组：枚数、最严重状态与徽章落点取最严重那条', () => {
+    const issues = planConflictIssues({
+      boundary: BOUNDARY,
+      zones: NO_ZONES,
+      // 后勤线缺宽度（missing）× 与人在设施上交叉（conflict）。
+      // 交叉问题按 routeIds[0] 归属（交叉只挂前一条线，不在两条上各报一次），
+      // 所以把后勤线放在前面，才能让它同时拿到「交叉 + 缺宽度」两条。
+      // （原先还有「越界」凑第三条，2026-11-15 这条规则已按用户意见移除；
+      //   2026-11-16 也收窄了交叉——只有踩在设施占地上才算冲突。）
+      facilities: [hallAt({ x: 60, y: 60 })],
+      routes: [
+        route({ id: 'r-svc', kind: 'service', carrier: 'vehicle', points: [{ x: 60, y: 10 }, { x: 60, y: 130 }] }),
+        route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 60 }, { x: 190, y: 60 }] }),
+      ],
+      nodes: NO_NODES,
+    });
+    const clusters = groupConflictIssues(issues);
+    const svc = clusters.find(cluster => cluster.key === 'route:r-svc')!;
+    expect(svc.count).toBe(svc.issues.length);
+    expect(svc.count).toBeGreaterThan(1);
+    // 组内按严重度降序：冲突在前，缺宽度在后。
+    expect(svc.issues[0]!.status).toBe('conflict');
+    expect(svc.status).toBe('conflict');
+    expect(svc.at).toEqual(svc.issues[0]!.at);
+    expect(svc.issues.at(-1)!.status).toBe('missing');
+  });
+
+  it('不同对象各占一枚，量数等于关联对象数而不是问题条数', () => {
+    const issues = planConflictIssues({
+      boundary: BOUNDARY,
+      zones: [{
+        id: 'z-aud',
+        semantic: 'audience',
+        name: '观众区',
+        polygon: [{ x: 10, y: 10 }, { x: 90, y: 10 }, { x: 90, y: 55 }, { x: 10, y: 55 }],
+        notes: '',
+      }],
+      facilities: [hallAt({ x: 55, y: 20 })],
+      routes: [
+        route({ id: 'r-ped', kind: 'pedestrian', points: [{ x: 10, y: 20 }, { x: 100, y: 20 }] }),
+        route({ id: 'r-veh', kind: 'vehicle', points: [{ x: 55, y: 0 }, { x: 55, y: 80 }] }),
+      ],
+      nodes: NO_NODES,
+    });
+    const clusters = groupConflictIssues(issues);
+    // 交叉挂在人行线上、缺宽度挂在车行线上、容量挂在分区上：三枚。
+    expect(clusters).toHaveLength(3);
+    expect(clusters.map(cluster => cluster.key)).toEqual(['route:r-ped', 'route:r-veh', 'zone:z-aud']);
+    // 默认上图只算真冲突：缺宽度（橙）和容量待核实（灰）都是提示，默认不上图但不影响总数。
+    expect(clusters.filter(cluster => !PLAN_CONFLICT_DEFAULT_STATUSES.includes(cluster.status)).map(cluster => cluster.key)).toEqual(['route:r-veh', 'zone:z-aud']);
+    expect(clusters.reduce((sum, cluster) => sum + cluster.count, 0)).toBe(issues.length);
+  });
+
+  it('空的输入得到空的分组（不造占位徽章）', () => {
+    expect(groupConflictIssues([])).toEqual([]);
   });
 });

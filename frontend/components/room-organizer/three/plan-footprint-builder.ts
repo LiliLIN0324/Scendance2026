@@ -25,7 +25,14 @@ import type * as ThreeNS from 'three';
  *  depthWrite:false + renderOrder 定序（plan-basemap-tiles），规划层只需要贴着
  *  瓦片金字塔最高点（z19 = 0.048 m）之上以 8–12 mm 级差排开即可。 */
 const ELEVATION = {
+  // 设计范围的压暗面：压在瓦片顶（z19 = 0.048 m）之上、场地线（0.05）之下。
+  // 顺序不能反：洞里的场地线得能看见，而蒙版只该盖框外。
+  scopeMask: 0.049,
   boundary: 0.05,
+  // 白线底下的淡墨圈：比白线低 1.5 mm，先描一层宽一点的软底色，白线才在亮底图上立得住。
+  scopeHalo: 0.0505,
+  // 范围框压在场地线之上：它是「取景框」，读图优先级最高。
+  scope: 0.052,
   zone: 0.062,
   facility: 0.074,
   route: 0.086,
@@ -53,6 +60,49 @@ function ringShape(
     else shape.lineTo(x, y);
   });
   shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+/**
+ * 设计范围的「框外压暗」：一整块大面减去范围多边形（Shape + hole），
+ * 和 2D 画布 `drawDesignScopeMask` 的 evenodd 挖洞同一个意思。
+ *
+ * 为什么不用多个四边形拼：拼出来的接缝在地面斜看时会露出亮缝，
+ * 而 ShapeGeometry 一次三角化，边界与范围框严格共线。
+ */
+function scopeMaskGeometry(
+  THREE: typeof import('three'),
+  scope: readonly ShellPoint[],
+  metrics: { width: number; depth: number },
+): import('three').ShapeGeometry {
+  // 2026-11-15：白纱比原来的深色幕明显得多，范围太小就会在远处看出一条直角边。
+  // 3D 能拉到 span × 8 的距离，这里按壳体 60 倍铺（20 m 场地 ≈ 1.2 km），
+  // 镜头拉到最远时白纱依旧盖满可见地面，不会出现「一块白色地毯」的边界。
+  const reach = Math.max(metrics.width, metrics.depth) * 60;
+  const shape = new THREE.Shape();
+  shape.moveTo(-reach, -reach);
+  shape.lineTo(reach, -reach);
+  shape.lineTo(reach, reach);
+  shape.lineTo(-reach, reach);
+  shape.closePath();
+
+  const points = scope.map(point => shapePoint(point, metrics));
+  // 洞的绕向要与外框相反，否则三角化会把它当外轮廓、把整块地挖空。
+  let area = 0;
+  for (let index = 0; index < points.length; index++) {
+    const current = points[index]!;
+    const next = points[(index + 1) % points.length]!;
+    area += current[0] * next[1] - next[0] * current[1];
+  }
+  const ring = area > 0 ? [...points].reverse() : points;
+
+  const hole = new THREE.Path();
+  ring.forEach(([x, y], index) => {
+    if (index === 0) hole.moveTo(x, y);
+    else hole.lineTo(x, y);
+  });
+  hole.closePath();
+  shape.holes.push(hole);
   return new THREE.ShapeGeometry(shape);
 }
 
@@ -306,7 +356,9 @@ export function buildPlanFootprint(
     group.add(mesh);
   }
 
-  // 地面文字：分区名写在区块中心，设施名写在占位南侧（OnePlan 那种「区块带名字」的读图感）。
+  // 地面文字：只在区块中心写分区名（舞台 / 排队区这类区域语义）。
+  // 2026-11-16 用户：「3D 上面的物品写字不要，名字根本不重要，点开属性看就够了」——
+  // 设施/物件的名字不再画到 3D 地面（原逻辑写在占位南侧），名字只在点选后的属性卡里出现。
   // 浏览器里才有 canvas；SSR/单测环境跳过，不影响图形本身。
   for (const zone of shapes.zones) {
     if (zone.points.length < 3) continue;
@@ -324,23 +376,78 @@ export function buildPlanFootprint(
       group.add(label);
     }
   }
-  for (const prop of shapes.props) {
-    const label = buildGroundLabel(
-      THREE,
-      prop.label,
-      { x: prop.center.x, z: prop.center.z + prop.depth * 0.5 + 0.75 },
-      metrics,
-      { widthM: Math.min(5, Math.max(1.8, prop.width * 0.85)), y: ELEVATION.label, color: '#eef3f8' },
+
+  // 2026-11-15 设计范围（2D 里的「大陆框」）：先白纱蒙版框外，再描白色框线。
+  // 之前 3D 根本没有这个层，所以 2D 圈好的范围切到 3D 就看不见——这才是「视觉没同步」的根因。
+  // 2026-11-15 视觉定稿（用户「把 3D 的设计范围也统一成白色」）：
+  // 框外从深色压暗改成白纱（与 2D 的 rgba(255,255,255,0.52) 同一档），
+  // 框线从琥珀改成白线 + 一层淡墨底线——3D 没法做模糊，白色靠这圈投影立起来，
+  // 这样斜看时线在亮底图上不会糊掉，观感与 2D 的白角标一致。
+  if (shapes.scope.length >= 3) {
+    const mask = new THREE.Mesh(
+      scopeMaskGeometry(THREE, shapes.scope, metrics),
+      flatMaterial(THREE, '#ffffff', 0.45),
     );
-    if (label) {
-      label.userData.planPropLabel = prop.id;
-      group.add(label);
+    mask.rotation.x = -Math.PI / 2;
+    mask.position.y = ELEVATION.scopeMask;
+    mask.renderOrder = 6;
+    mask.userData.planDesignScope = true;
+    mask.userData.planDesignScopeMask = true;
+    group.add(mask);
+
+    // 与 2D 画布同一个「四个 L 角标」：整圈框线太吵，2D 定稿就只留四角（用户「3D 和 2D 一模一样」）。
+    // 臂长按短边 18% 取（与 2D 的 arm = min(34, minSide×0.18) 同一比例），米制下夹在 1.5～12 m。
+    const scopeBounds = boundsOf(shapes.scope);
+    const shortSide = Math.min(scopeBounds.maxX - scopeBounds.minX, scopeBounds.maxZ - scopeBounds.minZ);
+    const arm = Math.max(1.5, Math.min(12, shortSide * 0.18));
+    const corners: Array<{ cx: number; cz: number; sx: number; sz: number }> = [
+      { cx: scopeBounds.minX, cz: scopeBounds.minZ, sx: 1, sz: 1 },
+      { cx: scopeBounds.maxX, cz: scopeBounds.minZ, sx: -1, sz: 1 },
+      { cx: scopeBounds.maxX, cz: scopeBounds.maxZ, sx: -1, sz: -1 },
+      { cx: scopeBounds.minX, cz: scopeBounds.maxZ, sx: 1, sz: -1 },
+    ];
+    for (const corner of corners) {
+      // 只画角、不连线：两段臂从角点伸出，和 2D 的 L 同一个形状。
+      const elbow = [
+        { x: corner.cx + corner.sx * arm, z: corner.cz },
+        { x: corner.cx, z: corner.cz },
+        { x: corner.cx, z: corner.cz + corner.sz * arm },
+      ];
+      // 白线下面垫一圈淡墨：3D 没有阴影，靠这圈让白线在白纱/浅色路面上也看得见。
+      const halo = fatLine(THREE, elbow, metrics, '#0a0e14', 0.4, ELEVATION.scopeHalo, { lineWidth: 4.4 }, lineMaterials);
+      if (halo) {
+        halo.userData.planDesignScope = true;
+        halo.userData.planDesignScopeHalo = true;
+        group.add(halo);
+      }
+      // 与 2D 画布同一个白色、同一个线宽量级，两个视图才是「同一个框」。
+      const bracket = fatLine(THREE, elbow, metrics, '#ffffff', 1, ELEVATION.scope, { lineWidth: 3.2 }, lineMaterials);
+      if (bracket) {
+        bracket.userData.planDesignScope = true;
+        bracket.userData.planDesignScopeRing = true;
+        group.add(bracket);
+      }
+    }
+
+    // 字贴上边中点上方：与 2D 的「设计范围 · 约 N m²」同一个位置逻辑。
+    const scopeLabel = buildGroundLabel(
+      THREE,
+      '设计范围',
+      { x: (scopeBounds.minX + scopeBounds.maxX) / 2, z: scopeBounds.minZ - 1.6 },
+      metrics,
+      { widthM: 5, y: ELEVATION.label, color: '#ffffff' },
+    );
+    if (scopeLabel) {
+      scopeLabel.userData.planDesignScopeLabel = true;
+      group.add(scopeLabel);
     }
   }
 
   // 场地轮廓最后画，压在最高层，方便一眼看出 2D 画的边界在哪。
-  const boundary = borderLine(THREE, shapes.boundary, metrics, '#7fb3ff', 0.85, ELEVATION.boundary, lineMaterials, 2.5);
-  if (boundary) group.add(boundary);
+  if (shapes.boundary.length >= 3) {
+    const boundary = borderLine(THREE, shapes.boundary, metrics, '#7fb3ff', 0.85, ELEVATION.boundary, lineMaterials, 2.5);
+    if (boundary) group.add(boundary);
+  }
 
   scene.add(group);
   return true;

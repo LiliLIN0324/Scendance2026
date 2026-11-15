@@ -6,7 +6,7 @@
  * 画布据此给流线着色深浅。3D 真行走（person-route 户外化）是后置增强，接口面留这。
  */
 
-import type { PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
+import { routeCarrier, type PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
 
 export interface FlowWalker {
   /** 第几条流线（对齐传入 routes 数组下标）。 */
@@ -19,11 +19,16 @@ export interface FlowWalker {
   speed: number;
 }
 
-/** 每条流线布点数：按长度每 8m 一个，夹在 2–12；车行/后勤减半。 */
+/**
+ * 每条流线布点数：按长度每 8m 一个，夹在 2–12；上限按载体分档（2026-11-16 用户：
+ * 布点按 carrier 判，不再按 kind 判）。步行 12 / 推车 8 / 机动车 6——推车占地更大、
+ * 行进更慢，密度介于人和车之间。仍只是预览性质的示意。
+ */
 export function walkerCountFor(route: PlanRoute): number {
   const length = polylineLength(route.points);
   const base = Math.round(length / 8);
-  const cap = route.kind === 'pedestrian' ? 12 : 6;
+  const carrier = routeCarrier(route);
+  const cap = carrier === 'vehicle' ? 6 : carrier === 'trolley' ? 8 : carrier === 'mixed' ? 10 : 12;
   return Math.max(2, Math.min(cap, base || 2));
 }
 

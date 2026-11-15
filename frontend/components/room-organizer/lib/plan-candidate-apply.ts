@@ -135,6 +135,8 @@ export function applyPlanCandidate(
     if (existingIds.has(route.id)) continue;
     const built = buildRoute({
       id: route.id, kind: route.kind, name: route.name, points: route.points, oneWay: route.oneWay,
+      // 载体随提案搬运，否则 AI 应用后推车/机动车会被默认值冲成步行。
+      ...(route.carrier !== undefined ? { carrier: route.carrier } : {}),
       ...(route.widthM !== undefined ? { widthM: route.widthM } : {}),
       ...(route.startNodeId !== undefined ? { startNodeId: route.startNodeId } : {}),
       ...(route.endNodeId !== undefined ? { endNodeId: route.endNodeId } : {}),

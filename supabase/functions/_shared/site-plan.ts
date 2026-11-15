@@ -141,10 +141,28 @@ export const planRouteKindLabels: Record<(typeof planRouteKinds)[number], string
   vehicle: '车辆',
   service: '后勤',
 };
+
+/**
+ * 动线载体（2026-11-16 用户）：kind 表达「目的」（人行 / 车辆 / 后勤），carrier 表达
+ * 「靠什么在走」（步行 / 推车 / 机动车）。第四类「推车」就落在这里，不新增 kind。
+ *
+ * 存量数据不带该字段 → 步行（见 `routeCarrier`）；新写入一律补 `walk`。
+ */
+export const planRouteCarriers = ['walk', 'trolley', 'vehicle', 'mixed'] as const;
+export type PlanRouteCarrier = (typeof planRouteCarriers)[number];
+export const planRouteCarrierLabels: Record<PlanRouteCarrier, string> = {
+  walk: '人行',
+  trolley: '推车',
+  vehicle: '车行',
+  /** 2026-11-16 用户：「人车一起」——一条线上人与车共用。 */
+  mixed: '人车一起',
+};
 export const planRouteSchema = z.strictObject({
   audiences: z.array(z.enum(['visitors','staff','security','performers','service'])).min(1).max(5).optional(),
   id: z.uuid(),
   kind: z.enum(planRouteKinds),
+  /** 载体（可选）：缺省 = 步行。旧数据不带该字段照常解析（存量默认走 routeCarrier）。 */
+  carrier: z.enum(planRouteCarriers).optional(),
   name: z.string().min(1).max(60),
   points: z.array(planPointSchema).min(2).max(128),
   oneWay: z.boolean().default(false),
@@ -160,6 +178,23 @@ export const planRouteSchema = z.strictObject({
   notes: z.string().max(500).default(''),
 });
 export type PlanRoute = z.infer<typeof planRouteSchema>;
+
+/**
+ * 取动线载体：缺省按 kind 推——车辆 → 车行，后勤 → **人车一起**，人行 → 人行。
+ *
+ * 2026-11-16 用户拍板：「后勤应该是人车一起」。理由：后勤通道现场就是人与车/推车
+ * 共用（货运、清运、送餐、布草），当纯人行会把交叉风险报漏，当纯车行又会把
+ * 保洁维修当成占道。
+ *
+ * 布点、冲突判定、图例三处一律经此函数判断，不再按 kind 判断。
+ * 想统一改口径，只改这一处即可——单一决策点。
+ */
+export function routeCarrier(route: Pick<PlanRoute, 'carrier' | 'kind'>): PlanRouteCarrier {
+  if (route.carrier) return route.carrier;
+  if (route.kind === 'vehicle') return 'vehicle';
+  if (route.kind === 'service') return 'mixed';
+  return 'walk';
+}
 
 /** 出入口节点：动线的唯一端点来源（入口/出口/两用）。 */
 export const planNodeSchema = z.strictObject({
@@ -258,6 +293,19 @@ export const sitePlanDataSchema = z.strictObject({
   schemaVersion: z.literal(1),
   anchor: planAnchorSchema.optional(),
   boundary: planBoundarySchema,
+  /**
+   * 设计范围「大陆」（2026-11-15 用户指令）。
+   *
+   * 为什么需要它：IN77 这类场地，场地壳只是其中一块，人流从地铁口、路口一路进来；
+   * 那段流线在场地**外面**，却仍属于这次设计。所以设计范围必须独立于 boundary：
+   * - 物料仍只落 boundary 内（越界判定不变）；
+   * - 流线允许落在 boundary 外、designScope 内；
+   * - designScope 外压暗当背景（蒙版由前端画，不入库）。
+   *
+   * 口径与 boundary 一致：0 或 3–64 点，空数组 = 用户明确「不设范围」，
+   * 读取层不得自行补一个默认外框（不能把「没设」渲染成「设了」）。旧数据不带照常解析。
+   */
+  designScope: planBoundarySchema.optional(),
   /** 图层清单（可选）：旧数据缺省——读取层合成单个默认层，不落盘；至多 20 层。 */
   levels: z.array(planLevelSchema).max(20).optional(),
   zones: z.array(planZoneSchema).max(200),

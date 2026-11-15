@@ -8,7 +8,7 @@ import { AuthCard } from '@/components/intro/auth-card';
 import { DoorOpen, FolderOpen, Images, MoreHorizontal, RefreshCw, Settings, UserRound, UsersRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
-import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
+import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
@@ -199,7 +199,10 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setLoadingProjects(true);
     void Promise.all([controller.listProjects(), controller.listStudios()]).then(([nextProjects, nextStudios]) => {
       if (cancelled) return;
-      setProjects(nextProjects); setStudios(nextStudios); setStudioId(preferredStudio(userId, nextStudios, controller.getSnapshot().project?.studio_id)); setProjectsLoaded(true);
+      const initialStudio = preferredStudio(userId, nextStudios, controller.getSnapshot().project?.studio_id);
+      setProjects(nextProjects); setStudios(nextStudios); setStudioId(initialStudio); setProjectsLoaded(true);
+      // 面板初始展示的工作室也写入「最近使用」：无感挂云与「新方案」建项目时落在同一个工作室，不再各猜各的。
+      rememberStudio(userId, initialStudio);
     }).catch(() => { if (!cancelled) setNotice('项目加载失败，请点击刷新重试。'); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
@@ -224,7 +227,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     try { await action(); }
     catch (error) {
       const code=error instanceof Error&&'code' in error?error.code:undefined;
-      setNotice(code==='ORIGINAL_SCENE_REVIEW_REQUIRED'?'此项目含未核验原始记录，目前仅可只读核对；本机草稿未替换。':error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。');
+      setNotice(code==='ORIGINAL_SCENE_REVIEW_REQUIRED'?'此项目含未核验原始记录，目前仅可只读核对；本机草稿未替换。':code?backendFailureText(error):error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。');
     } finally { actionPending.current = false; setBusy(false); }
   }
   // 一次性：/auth 跳过来时把浮窗打开，后续交给账户中心自己管开关。
@@ -388,7 +391,19 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       if(controller.getSnapshot().project?.id===id&&layoutRef.current.id!==id){
         suspendFailedReplacement(id);
       }
-      softProjectNotice(error instanceof Error ? error.message : '打开项目失败，请重试。', 'error');throw error;
+      const code=error instanceof Error&&'code' in error?error.code:undefined;
+      if(code==='PROJECT_NOT_FOUND'){
+        // 深链指向的项目已不存在（被删除或无权限）：清掉 URL 残留与会话错误，回到本机草稿，刷新不再反复报错。
+        const url=new URL(window.location.href);
+        if(url.searchParams.get('project')===id){
+          url.searchParams.delete('project');
+          window.history.replaceState(null,'',url.pathname+(url.searchParams.toString()?`?${url.searchParams}`:'')+url.hash);
+        }
+        controller.dismissTransientFailure();
+        softProjectNotice('链接中的项目已不存在或已被删除；当前画布仍是本机草稿，可继续编辑。','info');
+        return;
+      }
+      softProjectNotice(code?backendFailureText(error):error instanceof Error ? error.message : '打开项目失败，请重试。', 'error');throw error;
     }
   });
   function confirmReplace(): boolean {

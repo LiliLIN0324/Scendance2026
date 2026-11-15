@@ -1703,8 +1703,6 @@ describe('creative brief and assistant interaction', () => {
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('保留这条未发送的需求');
     selectBusiness('场景模板');
     fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
-    expect(loadScenePreset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'确认载入'}));
     await waitFor(()=>expect(onApply).toHaveBeenCalledWith({...preset,id:layout.id,name:layout.name}));
     expect(loadScenePreset).toHaveBeenCalledWith('office');
     expect(prepareProposal).not.toHaveBeenCalled();
@@ -1719,8 +1717,6 @@ describe('creative brief and assistant interaction', () => {
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'仍在建模的未发送输入'}});
     selectBusiness('场景模板');
     fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
-    expect(loadScenePreset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'确认载入'}));
     expect(loadScenePreset).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button',{name:'返回当前工作区'}));
     await act(async()=>{finish({...layout,name:'迟到的办公室模板',scenePreset:'office'});});

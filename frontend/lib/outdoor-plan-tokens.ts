@@ -37,6 +37,29 @@ export const PLANNING_LAYER_COLORS = {
   annotate: '#8e44ad', // 2026-11-11 用户指令：自由标注（文本/形状）：紫色，与其他图层色互异
 } as const;
 
+/**
+ * 用地红线色（2026-11-16 用户：「做建筑设计会画一条用地红线」）。
+ *
+ * 为何不放进 `PLANNING_LAYER_COLORS`：那组 key 被图层可见性/图层图标/图例按
+ * `Record<keyof typeof …>` 派生，多一个“不是图层”的 key 会连带要求补三张表。
+ * 红色只属于地界线本身，单独一个常量刚好。
+ * 越界警示仍用红色**虚线**：实线红 = 地界，虚线红 = 出错。
+ */
+export const PLANNING_BOUNDARY_LINE_COLOR = '#c8362c';
+
+/**
+ * 出入口三型专属色（2026-11-15 用户：「入口 / 出口 / 出入口」要有各自的样子）：
+ * 绿进、红出、青双向。贴纸芯片、放置幽灵、图例色块、工具箱选项四处共用这一份，
+ * 同时就是 `plan-footprint-geometry` 里三维点位的配色来源——2D 与 3D 不会各说各话。
+ */
+export const PLANNING_NODE_KIND_COLORS = {
+  entry: '#2f8f6a',
+  exit: '#c0392b',
+  both: '#3d8fa8',
+} as const;
+
+export type PlanningNodeKind = keyof typeof PLANNING_NODE_KIND_COLORS;
+
 export type PlanningLayerKind = keyof typeof PLANNING_LAYER_COLORS;
 
 /**
@@ -225,13 +248,16 @@ export const PLANNING_ICONS = [
   'circle', // 标注形状 · 圆形
   'triangle-shape', // 标注形状 · 三角形（区别于 triangle-alert 警示）
   'minus', // 标注形状 · 线段
+  'footprints', // 动线类型 · 人行（2026-11-16 用户：类型不要下拉）
+  'person-standing', // 动线类型 · 人行（2026-11-16 用户：要“行人”，不要脚印）
+  'package', // 动线类型 · 后勤
 ] as const;
 
 export type PlanningIconName = (typeof PLANNING_ICONS)[number];
 
 /** 类型胶囊的语义文案（H2-b 分区 + H2-c 设施 + H2-d 人员 + H3-a 测量）。 */
 export const PLANNING_LABELS = {
-  boundary: '场地边界',
+  boundary: '用地红线',
   zone: '功能分区',
   facility: '设施',
   route: '动线',
@@ -246,8 +272,11 @@ export const PLANNING_EDIT_MODE_LABELS = {
   view: '浏览',
   // 2026-11-12 OnePlan Selection tool：框选多选设施（S 快捷键，浏览旁并列钮）。
   select: '选择',
-  boundary: '画边界',
-  'boundary-vertex': '编辑边界',
+  boundary: '画红线',
+  'boundary-vertex': '编辑红线',
+  // 2026-11-15 用户指令「先快速画一个大陆，外面加蒙版」：设计范围是场地壳外面的一圈，
+  // 单独一个模式——它不参与越界判定，只决定「哪块地算这次设计」。
+  scope: '圈设计范围',
   zone: '画分区',
   facility: '放设施',
   route: '画动线',
@@ -287,6 +316,8 @@ export const PLANNING_EDIT_MODE_ICONS: Record<PlanningEditMode, PlanningIconName
   select: 'box-select',
   boundary: 'pen-tool',
   'boundary-vertex': 'move',
+  // 设计范围用外框图标；hexagon 已登记，与边界的笔尖、分区的套索都不撞。
+  scope: 'hexagon',
   zone: 'lasso',
   facility: 'tent',
   route: 'route',

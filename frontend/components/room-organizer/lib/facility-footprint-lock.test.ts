@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   facilityFootprintSpec,
+  facilitySizeFromModel,
   normalizeFacilitySize,
   normalizePlanFacilityFootprints,
   sizeWithDepth,
@@ -24,17 +25,20 @@ describe('facilityFootprintSpec（权威占地外廓）', () => {
     expect(spec.aspect).toBeGreaterThanOrEqual(1);
   });
 
-  it('餐车 oneplan:scale:chuck-wagon 取首选箱货外廓，宽高比约 2.84', () => {
-    const spec = facilityFootprintSpec('oneplan:scale:chuck-wagon');
+  it('炊事篷车按专用模型的外廓确定占地', () => {
+    const id = 'oneplan:scale:chuck-wagon';
+    const spec = facilityFootprintSpec(id);
+    const model = resolveFacilityModels(id)[0]!;
     expect(spec.hasModel).toBe(true);
-    expect(spec.aspect).toBeCloseTo(7.542 / 2.652, 2);
+    expect(model.slug).toBe('scendance-plan-chuck-wagon');
+    expect(spec.aspect).toBeCloseTo(model.depth / model.width, 6);
   });
 
-  it('真机 id pack:fairs:chuck-wagon 在包清单未登记时仍命中箱货外廓（不误判 1:1）', () => {
+  it('活动包未登记时仍能读取炊事篷车的外廓', () => {
     // 不调用 registerPackEntries，复现载入历史草稿时包索引为空的真机时序。
     const spec = facilityFootprintSpec('pack:fairs:chuck-wagon');
     expect(spec.hasModel).toBe(true);
-    expect(spec.aspect).toBeCloseTo(7.542 / 2.652, 2);
+    expect(spec).toEqual(facilityFootprintSpec('oneplan:scale:chuck-wagon'));
   });
 
   it('完全未知 id 回落 misc 默认正方形，不抛错', () => {
@@ -42,6 +46,68 @@ describe('facilityFootprintSpec（权威占地外廓）', () => {
     expect(spec.hasModel).toBe(false);
     expect(spec.aspect).toBeCloseTo(1, 6);
     expect(spec.width).toBe(spec.depth);
+  });
+});
+
+describe('2D 占地 ↔ 3D 模型尺寸联动（2026-11-15 用户口径）', () => {
+  // 用户口径：模型只提供「默认多大」；换模型 → 2D 跟着变，用户在 2D 缩放 → 3D 等比跟随。
+  const tentId = 'tent-3x3';
+  const auto = resolveFacilityModels(tentId)[0]!;
+  // 选一个和默认帐篷比例差得足够远的真模型（箱货 7.5×2.65）。
+  const overrideSlug = 'car-park-and-road-vehicle-fleet-box-truck-4574c765';
+
+  it('facilitySizeFromModel：2D 直接取模型真实占地，保留模型轴序', () => {
+    const size = facilitySizeFromModel({ width: auto.width, depth: auto.depth });
+    expect(size.width).toBeCloseTo(auto.width, 6);
+    expect(size.depth).toBeCloseTo(auto.depth, 6);
+  });
+
+  it('facilitySizeFromModel：超出界的大模型整体缩到上界，比例不变', () => {
+    const size = facilitySizeFromModel({ width: 400, depth: 200 }, BOUNDS);
+    expect(size.width).toBeCloseTo(100, 6);
+    expect(size.depth).toBeCloseTo(50, 6);
+  });
+
+  it('facilityFootprintSpec 接受手选模型 slug：外廓改成那个模型的尺寸', () => {
+    const spec = facilityFootprintSpec(tentId, overrideSlug);
+    expect(spec.hasModel).toBe(true);
+    // 箱货的长边在 depth（模型原始轴序：width↔X 车宽、depth↔Z 车长）。
+    expect(spec.width).toBeCloseTo(2.652, 3);
+    expect(spec.depth).toBeCloseTo(7.542, 3);
+    expect(spec.aspect).toBeCloseTo(7.542 / 2.652, 2);
+    // 不带 override 时仍是模板默认帐篷（证明 override 真的生效，不是未变）。
+    expect(facilityFootprintSpec(tentId).aspect).not.toBeCloseTo(spec.aspect, 2);
+  });
+
+  it('normalizeFacilitySize 带 slug：吸附到该模型的长宽比（换模型时 2D 框不变形）', () => {
+    const next = normalizeFacilitySize({ width: 3, depth: 3 }, tentId, BOUNDS, overrideSlug);
+    // 字段归属跟权威轴序：车宽落 width、车长落 depth，长边/短边比例即模型比例。
+    expect(next.depth).toBeGreaterThan(next.width);
+    expect(next.depth / next.width).toBeCloseTo(7.542 / 2.652, 3);
+  });
+
+  it('用户缩放 2D：等比推另一个轴（3D 拿到的始终是未变形的框）', () => {
+    const base = facilitySizeFromModel({ width: 3, depth: 2 }, BOUNDS);
+    const wider = sizeWithWidth(6, base, tentId, BOUNDS);
+    expect(wider.width).toBeCloseTo(6, 6);
+    expect(wider.depth).toBeCloseTo(4, 6);
+  });
+
+  it('载入历史计划时按各自的 modelOverride 吸附，而非全部回到模板默认', () => {
+    const plan = {
+      facilities: [
+        { id: 'f1', templateId: tentId, size: { width: 3, depth: 3 }, modelOverride: overrideSlug },
+        { id: 'f2', templateId: tentId, size: { width: 3, depth: 3 } },
+      ],
+    } as unknown as SitePlanData;
+    const normalized = normalizePlanFacilityFootprints(plan, BOUNDS);
+    const [withOverride, without] = normalized.facilities;
+    expect((withOverride!.size.depth / withOverride!.size.width)).toBeCloseTo(7.542 / 2.652, 3);
+    expect(without!.size.width / without!.size.depth).toBeCloseTo(
+      // 字段归属跟模板默认模型的轴序，所以取长边/短边比对。
+      Math.min(without!.size.width, without!.size.depth) / Math.max(without!.size.width, without!.size.depth),
+      3,
+    );
   });
 });
 
@@ -74,27 +140,27 @@ describe('sizeWithWidth / sizeWithDepth / sizeWithMajor（面板等比联动）'
   const id = 'oneplan:scale:chuck-wagon';
 
   it('改宽度，另一轴按比例联动，长边/短边比例恒定（车长在 depth）', () => {
-    const base = { width: 2.652, depth: 7.542 }; // 权威原始轴序
+    const base = facilityFootprintSpec(id);
     const next = sizeWithWidth(10, base, id, BOUNDS);
     expect(next.width).toBe(10);
     expect(Math.max(next.width, next.depth) / Math.min(next.width, next.depth)).toBeCloseTo(facilityFootprintSpec(id).aspect, 6);
   });
 
   it('改深度，另一轴按比例联动，比例恒定', () => {
-    const base = { width: 2.652, depth: 7.542 };
+    const base = facilityFootprintSpec(id);
     const next = sizeWithDepth(3, base, id, BOUNDS);
     expect(next.depth).toBe(3);
     expect(Math.max(next.width, next.depth) / Math.min(next.width, next.depth)).toBeCloseTo(facilityFootprintSpec(id).aspect, 6);
   });
 
   it('sizeWithMajor 以长边为锚等比缩放，保持权威轴序朝向', () => {
-    const next = sizeWithMajor({ width: 2.652, depth: 7.542 }, 12, id, BOUNDS);
+    const next = sizeWithMajor(facilityFootprintSpec(id), 12, id, BOUNDS);
     expect(next.depth).toBe(12);
     expect(Math.max(next.width, next.depth) / Math.min(next.width, next.depth)).toBeCloseTo(facilityFootprintSpec(id).aspect, 6);
   });
 
   it('宽度低于下限时通过统一系数夹取，短边触 min 且不破比例', () => {
-    const base = { width: 2.652, depth: 7.542 }; // 已规整，base 比例即权威 aspect
+    const base = facilityFootprintSpec(id);
     const next = sizeWithWidth(0.1, base, id, BOUNDS);
     expect(next.width).toBe(0.5);
     expect(Math.max(next.width, next.depth) / Math.min(next.width, next.depth)).toBeCloseTo(facilityFootprintSpec(id).aspect, 6);
@@ -187,7 +253,7 @@ describe('对抗性不变量：任何畸形输入都收敛为「界内 + 严格�
   });
 
   it('面板等比联动对 NaN/Infinity/负数目标值不炸、退回界内等比尺寸', () => {
-    const base = { width: 2.652, depth: 7.542 };
+    const base = facilityFootprintSpec(truck);
     for (const target of [Number.NaN, Number.POSITIVE_INFINITY, -100, 0]) {
       const out = sizeWithWidth(target, base, truck, BOUNDS);
       expect(Number.isFinite(out.width) && Number.isFinite(out.depth)).toBe(true);

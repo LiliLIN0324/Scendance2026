@@ -1,0 +1,106 @@
+/* 输入框上方那一格建议（收起态）：图标 + 一句例句，3.2s 换一句；点整行预填指令，不发送。
+   行尾的 ⌄ 把这一格换成两张能力卡（见 agent-panel.css 的 .ap-suggestion-slot）。 */
+
+.sc-task-examples {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--wk-ink, #1c201c);
+}
+
+.sc-task-examples .sc-task-example {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 9px;
+  background: var(--wk-plane, #f4f5f4);
+  color: inherit;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+button.sc-task-example {
+  cursor: pointer;
+}
+
+.sc-task-examples button:focus-visible {
+  outline: 2px solid var(--wk-ink-soft, #626962);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sc-task-examples button.sc-task-example:hover,
+  .sc-task-examples .sc-task-examples-toggle:hover {
+    background: var(--wk-green-pale, #eef3ef);
+  }
+}
+
+.sc-task-example-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--wk-paper, #fff);
+  color: var(--wk-ink-soft, #626962);
+}
+
+.sc-task-example-sentence {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  animation: sc-task-example-in 240ms ease-out both;
+}
+
+.sc-task-example-sentence strong {
+  font-weight: 600;
+}
+
+.sc-task-example-sentence small,
+.sc-task-example-dot {
+  font-size: inherit;
+  color: var(--wk-ink-soft, #626962);
+}
+
+.sc-task-example-dot {
+  margin: 0 3px;
+}
+
+@keyframes sc-task-example-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-task-example-sentence { animation: none; }
+}
+
+.sc-task-examples .sc-task-examples-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wk-ink-soft, #626962);
+  box-shadow: none;
+  cursor: pointer;
+}

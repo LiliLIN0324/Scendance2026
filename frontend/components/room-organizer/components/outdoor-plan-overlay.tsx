@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
 
 /**
@@ -37,7 +37,7 @@ import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
 import { boundaryKey } from '../lib/outdoor-agent-contract';
 import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
-import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
+import { openGenerationSheet } from '../lib/generation-sheet';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
 import { PLANNING_SURFACE, PLANNING_TYPOGRAPHY } from '@/lib/outdoor-plan-tokens';
 import {
@@ -211,7 +211,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 搜地点（用户 m04938 / m05472）：左上角「和地图 App 一样」的搜索框，组件本体在
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
-  const [generateTarget, setGenerateTarget] = useState<{ facilityId: string; facilityName: string; kind: 'text' | 'image' } | null>(null);
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
@@ -239,7 +238,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const anchorRef = useRef(anchor);
   anchorRef.current = anchor;
   useEffect(() => {
-    setGenerateTarget(null);
     cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
     const record = readOutdoorProjectRecord(slotId);
     // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
@@ -286,7 +284,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       },
       setView:next=>{viewChangeRef.current?.(next);},
       models:async id=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return[];const result=await loadFacilityModelCandidates([f.templateId]);const own=listGeneratedFacilityModels(id,slotId);const current=f.modelOverride?findGeneratedFacilityModel(f.modelOverride):null;if(current&&current.projectId===slotId&&!own.some(m=>m.slug===current.slug))own.unshift(current);return[...own.map(m=>({slug:m.slug,name:m.name,source:'此设施已有/上传模型',width:m.width,depth:m.depth,height:m.height})),...(result.get(f.templateId)??[]).map(m=>({slug:m.slug,name:m.name,source:'现有公共物料库',width:m.width,depth:m.depth,height:m.height}))].slice(0,5);},
-      openGenerate:(id,kind)=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return false;setGenerateTarget({facilityId:id,facilityName:f.name,kind});return true;},
+      openGenerate:(id,kind)=>{const f=(canvasApiRef.current?.getEditVisuals().plan??planRef.current)?.facilities.find(f=>f.id===id);if(!f)return false;openGenerationSheet({task:'model',scope:'facility',source:kind,facility:{id,name:f.name}});return true;},
       openUpload:id=>canvasApiRef.current?.openFacilityUpload(id)??false,
       mapContext:async signal=>{const p=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!p)throw new Error('当前活动尚未载入');return mapContextRef.current.load(slotId,p,canvasApiRef.current?.getSelectedIds()??[],flowRef.current?.state.confirmedBoundary===boundaryKey(p),signal);},
       proposeZones:(p,brief)=>mapContextRef.current.zones(p,brief),
@@ -438,9 +436,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       data-testid="outdoor-overlay"
       style={{ position: 'absolute', inset: 0, zIndex: 30, background: dormant ? 'transparent' : 'var(--sc-surface, #ffffff)', color: 'var(--sc-ink, #141416)', ...(dormant ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}) }}
     >
-      {generateTarget && <OutdoorFacilityGenerate
-        key={`${slotId}:${generateTarget.facilityId}:${generateTarget.kind}`}
-        target={generateTarget} projectId={slotId} controller={controller} onClose={() => setGenerateTarget(null)} />}
+      {/* 2026-11-15：属性卡不再自己开一张原位生成表单，统一进「生成」面板（见 GenerationSheetHost）。 */}
       {showGuide && guide.activeStep && (
         <GuideBubble
           step={guide.activeStep}
@@ -485,10 +481,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
             generationController={controller}
-            onOpenMaterialGenerate={(facilityId, kind) => {
-              const facility = plan.facilities.find(item => item.id === facilityId);
-              if (facility) setGenerateTarget({ facilityId, facilityName: facility.name, kind });
-            }}
             {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>

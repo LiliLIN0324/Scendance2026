@@ -19,9 +19,10 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { AgentTaskExamples } from '@/components/agent-task-examples';
+import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
@@ -31,6 +32,8 @@ import { chatUserHistory } from '../lib/chat-user-history';
 import { Bubbles, GenProgress, ToolCallTrace, type Bubble } from './agent-bubbles';
 import { ProposalCard, type ProposalDecision } from './agent-proposal-card';
 import { RouteConfirmCard, VenueConfirmCard, ZoneConfirmCard } from './agent-confirm-cards';
+// 决策留痕：确认卡上点「批准 / 放弃」都记一行，运行卡里读得到（对标谷地工坊的「你拒绝了」）。
+import { recordAgentDecision } from './agent-decision-log';
 import { CandidateInventoryPanel } from './candidate-inventory-panel';
 import { checkCandidateInventory, type CandidateInventory } from '../lib/candidate-inventory';
 import {captureOriginalPreservation,isStandalonePreservationInstruction,preservationIntent,reviewOriginalPreservation} from '../lib/original-preservation';
@@ -136,7 +139,8 @@ import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
 import { CapabilitySuggestionCards } from './capability-suggestion-cards';
-import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, OUTDOOR_PLACE_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { OutdoorStageSuggestion } from './outdoor-stage-suggestion';
 import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, STYLE_RUNS_KEY, type StyleBundle } from '../lib/style-bundles';
 import { editorItemLimit } from '../lib/scene-presets';
 import {
@@ -1006,7 +1010,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }, [persistBubbles]);
 
   function searchOutdoorVenue(query:string){outdoorWorkflow.cancel();const epoch=beginOutdoorTask('venue');setVenuePick({epoch,query,candidates:[],loading:true,picking:null});setOutdoorTask({intent:`搜索“${query}”`,state:'working',action:'检索真实场地候选；未修改活动范围',steps:[]});}
-  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:text=>say({role:'agent',text}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
+  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:(text,clarification)=>say({role:'agent',text,...(clarification?{modelConversation:true}:{})}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
 
   useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
     if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
@@ -1734,7 +1738,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     outdoorRequestRef.current?.abort(); outdoorRequestRef.current = controller;
     const base = JSON.stringify(plan);
     setZoneProposal(null); setRouteProposal(null);
-    setOutdoorTask({ intent: '根据真实道路安排流线和出入口', state: 'working', action: '读取场地周边路网', steps: ['读取当前场地边界'] });
+    setOutdoorTask({ intent: '根据真实道路安排流线和出入口', state: 'working', action: '读取场地周边路网', steps: ['读取当前用地红线'] });
     setRouteBusy(true);
     try {
       // 2026-11-14 测试修正：路网 bbox 按边界真实地理位置取（边界可离锚点很远），不再锚点居中。
@@ -1752,7 +1756,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         roads,
       });
       if (!proposal) {
-        setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '没有可用路网，未编造道路；稍后重试或手画', steps: ['读取当前场地边界'] });
+        setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '没有可用路网，未编造道路；稍后重试或手画', steps: ['读取当前用地红线'] });
         say({ role: 'agent', amber: true, text: '这一带的路网暂时拿不到（OSM 忙或没收录道路）——稍后再说一次「排流线」，或先用画布手画。' });
         return;
       }
@@ -3057,11 +3061,20 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // The single visible outdoor workbench dispatches through the contextual domain workflow.
     // Legacy layout/keyword planners remain only for legacy integrations without the atomic plan bridge.
     if(!queued&&callbacks.workbenchMode==='layout'&&routeBridgeRef.current?.applyPlan){
+      const [previousRequest, previousReply] = chatUserHistory(bubblesRef.current.slice(-2), trimmed);
+      const clarification = previousRequest?.role === 'user' && previousReply?.role === 'assistant'
+        ? { request: previousRequest.text, question: previousReply.text }
+        : undefined;
       if(attachment){setPendingFile(attachment);say({role:'agent',amber:true,text:'附件尚未结构化进入地图理解，未上传或声称已读图；文件保留在输入框。室内信息请先依图核对并画出真实区域/门口，设施GLB请用当前设施的原位上传。'});if(!trimmed)return;}
       say({role:'user',text:trimmed});
+      if(outdoorWorkflow.clarify(trimmed))return;
       // 2026-11-14 用户指令：排流线/排入口是确定性规则命令（读真实路网 → 提案），不依赖理解模型——
       // 本地无模型、模型暂时不可用都要能跑；放在工作流模型理解之前拦截（此前这分支在桥接模式下是死代码）。
-      if(matchRouteCommand(trimmed)){await proposeRoutePlan();return;}
+      if (matchRouteCommand(trimmed, true)) {
+        if (outdoorWorkflow.scopeConfirmed()) await outdoorWorkflow.action('main-routes');
+        else await proposeRoutePlan();
+        return;
+      }
       if(venuePick&&!venuePick.loading&&!venuePick.picking){
         const ordinal=trimmed.match(/(?:第|选|用|就)([一二三四五12345])(?:个|项)?/u)?.[1];
         const index=ordinal?('一二三四五'.includes(ordinal)?'一二三四五'.indexOf(ordinal):Number(ordinal)-1):-1;
@@ -3070,7 +3083,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         if(chosen){await handleVenuePick(chosen);return;}
         if(isAffirmativeIntent(trimmed)){if(venuePick.candidates.length===1)await handleVenuePick(venuePick.candidates[0]!);else say({role:'agent',text:'有多个地点候选，请告诉我名称或第几个；不把其中一个猜成本次场地。'});return;}
       }
-      await outdoorWorkflow.handle(trimmed);return;
+      await outdoorWorkflow.handle(trimmed,clarification);return;
     }
     if (!attachment && isExplicitProposalConfirmation(trimmed)) {
       if(!queued)say({role:'user',text:trimmed});
@@ -3861,33 +3874,30 @@ export function MapRailButton(): JSX.Element {
 
 const CAPABILITY_PANEL_OPEN_KEY = 'sc.ap-capabilities-open';
 
-/** 活动脸的快捷能力：活动级选址 + 风格套。S1 后这里是唯一的布置生成对话入口。 */
 /**
- * 「你可以做什么」能力卡：默认收起，只留一行标题，不把对话区占着；展开后卡片挂出。
- * 展开的选择记在本机，之后保持常驻。首帧与 SSR 一致，读本机选择放在渲染后。
+ * 输入框上方只有一格建议：收起是例句行，展开在同一格换成两张能力卡（不另留折叠行）。
+ * 展开的选择记在本机，之后保持常驻；首帧与 SSR 一致，读本机选择放在渲染后。
  */
-function AgentCapabilityPrompts({ onPrefill }: { onPrefill(text: string): void }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  // 渲染后再读本机选择：首帧与 SSR 一致，避免水合不一致。
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(CAPABILITY_PANEL_OPEN_KEY) === '1') setOpen(true);
-    } catch { /* 读不到就保持收起 */ }
-  }, []);
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    try { window.localStorage.setItem(CAPABILITY_PANEL_OPEN_KEY, next ? '1' : '0'); } catch { /* 存不住就只在本会话生效 */ }
-  };
+function AgentSuggestionSlot({ open, onToggle, showExample, onPickExample, onPrefill }: {
+  open: boolean;
+  onToggle(): void;
+  /** 收起态只有例句行，且只在空会话/空闲时出现。 */
+  showExample: boolean;
+  onPickExample(sentence: string): void;
+  onPrefill(text: string): void;
+}): JSX.Element | null {
+  if (!open && !showExample) return null;
   return (
-    <div id="ap-capabilities" className={`ap-capabilities${open ? '' : ' is-collapsed'}`}>
-      <button type="button" className="ap-capability-toggle" aria-expanded={open} aria-controls="ap-capability-cards" onClick={toggle}>
-        <span className="ap-capability-label">你可以做什么</span>
-        <ChevronDown size={14} aria-hidden="true" className="ap-capability-chevron"/>
-      </button>
-      <div id="ap-capability-cards" hidden={!open}>
-        <CapabilitySuggestionCards onPrefill={onPrefill}/>
-      </div>
+    <div id="ap-capabilities" className={`ap-suggestion-slot${open ? ' is-open' : ''}`}>
+      {open ? <>
+        <div id="ap-capability-cards" className="ap-suggestion-cards">
+          <CapabilitySuggestionCards onPrefill={onPrefill}/>
+        </div>
+        <button type="button" className="ap-suggestion-toggle" aria-expanded="true" aria-controls="ap-capability-cards"
+          aria-label="收起你可以做什么" title="收起能力卡" onClick={onToggle}>
+          <ChevronDown size={14} aria-hidden="true" className="ap-suggestion-chevron is-open"/>
+        </button>
+      </> : <AgentTaskExamples onPick={onPickExample} onExpand={onToggle}/>}
     </div>
   );
 }
@@ -4106,6 +4116,19 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const providerMenuRef = useRef<HTMLDivElement>(null);
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
+  // 「你可以做什么」的展开状态提到面板这一层：展开时顶掉上方的例句行，两处建议不并排。
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  // 渲染后再读本机选择：首帧与 SSR 一致，避免水合不一致。
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CAPABILITY_PANEL_OPEN_KEY) === '1') setCapabilitiesOpen(true);
+    } catch { /* 读不到就保持收起 */ }
+  }, []);
+  const toggleCapabilities = () => {
+    const next = !capabilitiesOpen;
+    setCapabilitiesOpen(next);
+    try { window.localStorage.setItem(CAPABILITY_PANEL_OPEN_KEY, next ? '1' : '0'); } catch { /* 存不住就只在本会话生效 */ }
+  };
   // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
   const [proposalDecision, setProposalDecision] = useState<ProposalDecision | null>(null);
   const { layout, activeFloor, actions: layoutActions } = useRoomEditor();
@@ -4291,16 +4314,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     stageLine: agent.toolPending ? null : localStageLine,
   });
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
-  // 户外开局（还没选地点）：引导句换成场地搜索那一套，Tab 一次填整句。
-  const outdoorPlaceStage = activeAgent === 'door' && agent.outdoorBridgeReady && !agent.venuePick && agent.outdoorWorkflow.state.stage === 'place';
-  const suggestion = useSuggestion(activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : outdoorPlaceStage ? OUTDOOR_PLACE_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
+  const suggestion = useSuggestion(activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
   // 待确认 / 暂停 / 圈选态让位给状态专属 placeholder，不再打例句。
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
-  // ghost 两处开：无户外桥（老室内流）照旧；户外开局（还没选地点）也开——引导句指向场地搜索。
-  const ghostVisible = (outdoorPlaceStage || !agent.outdoorBridgeReady) && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
+  const ghostVisible = !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
   const composerPlaceholder = agent.outdoorBridgeReady ? (agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
@@ -4324,12 +4344,30 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const bingo = activeAgent === 'bingo';
   // 内部 id 仍是 'door'：这里用语义别名，S4 再做标识符级重命名。
   const activity = activeAgent === 'door';
+  const showOutdoorSuggestion = activity && mode === 'layout' && agent.outdoorBridgeReady && !showHistory
+    && !draft.trim() && !agent.pendingFile && !agent.venuePick && !agent.mapPickerOpen
+    && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal && !agent.outdoorWorkflow.loginRequired
+    && !['working', 'confirm', 'ask', 'blocked'].includes(agent.outdoorTask?.state ?? '');
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
+  const showPlanHome = activity && mode === 'layout' && !agent.outdoorBridgeReady
+    && isPlanHome(agent.state, layout, agent.proposal !== null);
+  // 例句行占的就是输入框上方那一格；能力卡展开时同一格换成卡片，不再另占一行。
+  const showTaskExamples = activity && mode === 'layout' && !showHistory && preStates
+    && !agent.bubbles.some(bubble => !bubble.review)
+    && !agent.briefBusy && !agent.understanding && !agent.generationQueued
+    && !cloudRunRunning && !agent.cloudBusy && !agent.recovering && !studio?.applyRecovery
+    && !agent.outdoorTask && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal
+    && !agent.proposal && !agent.pendingFile && !agent.issue && !agent.venuePick && !agent.mapPickerOpen;
+  const pickTaskExample = (sentence: string): void => {
+    setDraft(sentence);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
 
   // 状态头三件套：色调 + 图标 + 短文案；拿不到明确阶段就回退现有头部样式，不硬造状态。
   const headStatus: { tone: 'ask' | 'think' | 'run' | 'paused' | 'stopped'; label: string; icon: ReactNode } | null = (() => {
     if (mode !== 'layout' || !activity) return null;
+    if (agent.outdoorTask?.state === 'ask' && !agent.outdoorWorkflow.busy) return { tone: 'ask', label: '待你回复', icon: <HelpCircle size={15} aria-hidden="true" /> };
     const s = agent.state;
     if (s === 'planProposed') return { tone: 'ask', label: '等你确认', icon: <HelpCircle size={15} aria-hidden="true" /> };
     if (agent.understanding || agent.briefBusy) return { tone: 'think', label: '正在思考', icon: <Sparkles size={15} aria-hidden="true" /> };
@@ -4416,10 +4454,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <p className="ap-lead-title">这边只管审校</p>
         <p className="ap-lead-body">点「立即体检」查看几何问题，或准备客户评审。对方的意见保存在对方浏览器，不会自动回到这里。</p>
       </div>}
-      {activity && mode === 'layout' && !agent.outdoorBridgeReady && isPlanHome(agent.state, layout, agent.proposal !== null) && (
+      {showPlanHome && (
         <PlanHome
           draft={draft}
-          onPickExample={sentence => { setDraft(sentence); requestAnimationFrame(() => inputRef.current?.focus()); }}
           onGenerate={sentence => { if (!agent.isSessionCurrent()) return; setDraft(''); void agent.send(sentence); }}
         />
       )}
@@ -4440,14 +4477,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           ))}
         </div>
       )}
-      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
+      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}
         routes={agent.routeProposal.routes.length}
         busy={agent.routeBusy}
-        onConfirm={() => agent.confirmRouteProposal()}
-        onDismiss={() => agent.dismissRouteProposal()}
+        onConfirm={() => { recordAgentDecision({ kind: 'approved', label: '流线提案' }); agent.confirmRouteProposal(); }}
+        onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '流线提案' }); agent.dismissRouteProposal(); }}
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
       {agent.outdoorTask && (!agent.outdoorBridgeReady||agent.venuePick) && <OutdoorTaskCard task={agent.outdoorTask}
@@ -4456,23 +4493,23 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {agent.venuePick && <VenueConfirmCard
         state={agent.venuePick}
         onPick={place => agent.handleVenuePick(place)}
-        onDismiss={() => agent.dismissVenuePick()}
+        onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '场地候选' }); agent.dismissVenuePick(); }}
       />}
       {/* V-2d 流线提案确认卡：虚线预览在画布，应用才写入（可撤销）。 */}
       {!agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}
         routes={agent.routeProposal.routes.length}
         busy={agent.routeBusy}
-        onConfirm={() => agent.confirmRouteProposal()}
-        onDismiss={() => agent.dismissRouteProposal()}
+        onConfirm={() => { recordAgentDecision({ kind: 'approved', label: '流线提案' }); agent.confirmRouteProposal(); }}
+        onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '流线提案' }); agent.dismissRouteProposal(); }}
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
       {/* V-3 区域提案确认卡：虚线分区+物料幽灵在画布，应用才写入（可撤销）。 */}
       {!agent.venuePick && !agent.routeProposal && agent.zoneProposal && <ZoneConfirmCard
         proposal={agent.zoneProposal}
         busy={agent.zoneBusy}
-        onConfirm={() => agent.confirmZoneProposal()}
-        onDismiss={() => agent.dismissZoneProposal()}
+        onConfirm={() => { recordAgentDecision({ kind: 'approved', label: '分区提案' }); agent.confirmZoneProposal(); }}
+        onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '分区提案' }); agent.dismissZoneProposal(); }}
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
       </OutdoorTaskCard>}
@@ -4628,14 +4665,15 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             onPick={bundle => agent.placeStyleBundle(bundle)}
           />
         )}
-        {mode === 'layout' && activity && <AgentCapabilityPrompts onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        {mode === 'layout' && activity && <AgentSuggestionSlot open={capabilitiesOpen} onToggle={toggleCapabilities} showExample={showTaskExamples && !draft.trim()} onPickExample={pickTaskExample} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <form id="composer" className="ap-composer ap-composer-panel" onSubmit={event => { event.preventDefault(); submitComposer(); }}>
+        {showOutdoorSuggestion && <OutdoorStageSuggestion key={agent.outdoorWorkflow.state.stage} stage={agent.outdoorWorkflow.state.stage} onPick={pickTaskExample} />}
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <div className="ap-composer-field ap-panel-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
-          if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
+          if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
         }}/>
         {agent.pendingFile && <div className="sc-chat-file ap-file-chip">

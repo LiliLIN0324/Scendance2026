@@ -13,7 +13,7 @@ import type { BackendSession } from '@/lib/backend-session';
  * 直连代理在就优先走它（本机加速）；不在就走云端任务队列，GLB 由服务端归档后自动进画布。
  * variant='composer' 是底部对话左下角的那一颗；'tile' 给旧的横条物料轨。
  */
-export function MaterialCreateCell({ disabled = false, variant = 'composer', controller, openBelow = false, importSlot, listenForAsk = false }: {
+export function MaterialCreateCell({ disabled = false, variant = 'composer', controller, openBelow = false, importSlot, listenForAsk = false, onGenerate }: {
   disabled?: boolean;
   openBelow?: boolean;
   variant?: 'tile' | 'composer' | 'action' | 'chat';
@@ -22,6 +22,11 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
   controller?: BackendSession;
   /** 活动对话点名生成时，打开这个框并填上原话。仍须确认额度。 */
   listenForAsk?: boolean;
+  /**
+   * 2026-11-15：物料栏那颗「生成」星改由统一生成面板接手——传了它就只负责开面板，
+   * 不再弹本地小菜单（“描述生成/图片生成”）。其它入口（对话里的＋）不传，行为不变。
+   */
+  onGenerate?: () => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'menu' | 'text' | 'image' | 'import'>('menu');
@@ -147,11 +152,11 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
     ref={buttonRef}
     className={variant === 'tile' ? 'sc-material-card sc-material-plus' : variant === 'action' ? 'ap-gen-chip' : 'ap-plus-btn ap-generate-btn'}
     aria-label="生成物料"
-    aria-haspopup="menu"
+    aria-haspopup={onGenerate ? 'dialog' : 'menu'}
     aria-expanded={open}
     aria-controls={open ? menuId : undefined}
     disabled={disabled}
-    onClick={() => { setOpen(value => !value); setMode('menu'); }}
+    onClick={() => { if (onGenerate) { onGenerate(); return; } setOpen(value => !value); setMode('menu'); }}
   >
     {variant !== 'tile'
       ? <><Sparkles size={15} aria-hidden="true"/>{variant === 'action' && '生成物料'}</>
@@ -206,7 +211,7 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer', con
   if (inline) return panel;
   return <div className={variant !== 'tile' ? 'ap-generate' : 'sc-material-tile sc-material-create'}>
     {trigger}
-    {open && typeof document !== 'undefined' && createPortal(panel, document.body)}
+    {!onGenerate && open && typeof document !== 'undefined' && createPortal(panel, document.body)}
   </div>;
 }
 

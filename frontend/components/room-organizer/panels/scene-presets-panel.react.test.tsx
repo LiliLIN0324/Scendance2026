@@ -18,14 +18,12 @@ beforeEach(() => { vi.mocked(loadScenePreset).mockReset(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const load = () => fireEvent.click(screen.getByRole('button', { name: /青序 · 香氛快闪/ }));
 
-it('提供独立预览，不修改当前 57 件场景', () => {
+it('does not put review-only examples in the scene library', () => {
   const source=structuredClone(INITIAL_LAYOUT);
-  const item=source.floors[0]!.items[0]!;
-  for(let i=0;i<52;i++)source.floors[0]!.items.push({...item,id:`existing-${i}`});
   const original=structuredClone(source),apply=vi.fn();
   render(<ScenePresetsPanel layout={source} onApply={apply}/>);
-  expect(screen.getByRole('link',{name:'打开分享会示例预览（新窗口）'}).getAttribute('href')).toBe('/review/?example=sharing');
-  expect(screen.getByRole('link',{name:'打开 Hall D5 尺寸参考预览（新窗口）'}).getAttribute('href')).toBe('/review/?example=hall-d5');
+  expect(screen.queryByRole('link',{name:/分享会示例/})).toBeNull();
+  expect(screen.queryByRole('link',{name:/Hall D5/})).toBeNull();
   expect(apply).not.toHaveBeenCalled();
   expect(source).toEqual(original);
 });
@@ -59,34 +57,28 @@ it('puts the blank venue first and loads a 12 × 8 m editable shell without a pr
   expect(screen.queryByRole('status')).toBeNull();
 });
 
-it('stands up an 18 × 12 m hard-finish hall with a 2.4 m double entrance and no furniture', () => {
-  const apply = vi.fn();
-  render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={apply}/>);
-  fireEvent.click(screen.getByRole('button', { name: '载入硬装空房 宴会厅 18 × 12 米' }));
-  expect(loadScenePreset).not.toHaveBeenCalled();
-  const next = apply.mock.calls[0]![0] as RoomLayout;
-  expect(next.width).toBe(18);
-  expect(next.height).toBe(12);
-  expect(next.backendSceneV2?.venue.height).toBe(5);
-  expect(next.backendSceneV2?.structure.walls).toHaveLength(4);
-  expect(next.backendSceneV2?.structure.openings[0]!).toMatchObject({ kind: 'door', width: 2.4 });
-  expect(next.floors[0]?.items.filter(item => !item.structuralOpeningId && !item.structuralColumnId && !item.venueEntranceId)).toHaveLength(0);
-});
-
-it('asks on the blank card before clearing a worked-on layout', () => {
+it('replaces a worked-on layout with a blank shell without an extra confirm', () => {
   const apply = vi.fn();
   const populated = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0], items: [{ id: 'existing' }] }] } as RoomLayout;
   render(<ScenePresetsPanel layout={populated} onApply={apply}/>);
   fireEvent.click(screen.getByRole('button', { name: '载入空白空间 12 × 8 米' }));
-  expect(screen.getByRole('group', { name: '确认换成空白空间' })).toBeTruthy();
-  expect(apply).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: '取消' }));
   expect(screen.queryByRole('group', { name: '确认换成空白空间' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '载入空白空间 12 × 8 米' }));
-  fireEvent.click(screen.getByRole('button', { name: '确认换成' }));
   const next = apply.mock.calls[0]![0] as RoomLayout;
   expect(next.floors[0]?.items.some(item => item.id === 'existing')).toBe(false);
   expect(next.width).toBe(12);
+});
+
+it('arms a scene venue on the current outdoor map instead of replacing the layout', () => {
+  const apply = vi.fn();
+  const onPlace = vi.fn(() => true);
+  render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={apply} onPlace={onPlace}/>);
+  expect(screen.queryByRole('button', { name: /空白空间/ })).toBeNull();
+  const card = screen.getByRole('button', { name: '摆放模板 青序 · 香氛快闪' });
+  expect(card.getAttribute('title')).toContain('摆放到当前地图');
+  fireEvent.click(card);
+  expect(onPlace).toHaveBeenCalledWith('popup');
+  expect(loadScenePreset).not.toHaveBeenCalled();
+  expect(apply).not.toHaveBeenCalled();
 });
 
 it('opens the selected preset once and permits loading it again', async () => {
@@ -100,20 +92,18 @@ it('opens the selected preset once and permits loading it again', async () => {
   expect(apply).toHaveBeenCalledTimes(2);
 });
 
-it('asks on the card before replacing a worked-on layout, and keeps the draft when declined', async () => {
+it('loads a preset directly on a worked-on layout and reports a failed load', async () => {
   const apply = vi.fn();
   const populated = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0], items: [{ id: 'existing' }] }] } as RoomLayout;
   render(<ScenePresetsPanel layout={populated} onApply={apply}/>);
-  load();
-  expect(screen.getByRole('group', { name: '确认载入青序 · 香氛快闪' })).toBeTruthy();
-  expect(loadScenePreset).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: '取消' }));
-  expect(screen.queryByRole('group', { name: '确认载入青序 · 香氛快闪' })).toBeNull();
-  load();
   vi.mocked(loadScenePreset).mockRejectedValue(new Error('模型下载失败'));
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认载入' })); });
+  await act(async () => { load(); });
+  expect(screen.queryByRole('group', { name: /确认载入/ })).toBeNull();
   expect(screen.getByRole('status').textContent).toContain('模型下载失败');
   expect(apply).not.toHaveBeenCalled();
+  vi.mocked(loadScenePreset).mockResolvedValue(next);
+  await act(async () => { load(); });
+  expect(apply).toHaveBeenCalledWith(next);
 });
 
 it('does not replace edits made while loading', async () => {
@@ -152,9 +142,7 @@ it('keeps the activity identity and all task records when a template replaces it
   vi.mocked(loadScenePreset).mockResolvedValue(replacement);
   const apply = vi.fn();
   render(<ScenePresetsPanel layout={previous} onApply={apply}/>);
-  load();
-  expect(screen.getByRole('group', { name: '确认载入青序 · 香氛快闪' }).textContent).toContain('活动需求和任务会保留');
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认载入' })); });
+  await act(async () => { load(); });
   const restored = apply.mock.calls[0]![0] as RoomLayout;
   expect(restored.id).toBe(previous.id); expect(restored.name).toBe(previous.name);
   expect(restored.eventOperations).toBe(operations);

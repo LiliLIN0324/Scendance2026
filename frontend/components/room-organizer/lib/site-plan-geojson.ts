@@ -66,7 +66,7 @@ export function buildPlanGeoJson(plan: SitePlanData): GeoJsonExport {
     features.push({
       type: 'Feature',
       geometry: { type: 'Polygon', coordinates: [closed] },
-      properties: { kind: 'boundary', name: '场地边界', type: '边界', zone: null, issue: null, area_m2: Number(planRingAreaM2(plan.boundary).toFixed(2)) },
+      properties: { kind: 'boundary', name: '用地红线', type: '边界', zone: null, issue: null, area_m2: Number(planRingAreaM2(plan.boundary).toFixed(2)) },
     });
   }
 
