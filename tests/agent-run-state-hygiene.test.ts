@@ -120,6 +120,28 @@ describe('agent run 状态卫生',()=>{
     expect(list.events.map((event:{seq:number})=>event.seq)).toEqual([1,2]);
   });
 
+  it('slim 只裁运行中的候选，终态照旧回全量',async()=>{
+    const {projectId,id,claim}=await setup();
+    const candidate={label:'A',title:'方案 A',scene:scene(),explanation:'同场景',warnings:[]};
+    const saved=await agent('checkpoint',{projectId,id,claim,steerTotal:0,candidates:[candidate]});
+    expect(saved.state).toBe('running');
+    expect(saved.candidates).toHaveLength(1);
+
+    // 轮询要摘要：运行中不回整包场景，但字段齐全（客户端 schema 仍能解析）。
+    const slim=await agent('get',{projectId,id,slim:true});
+    expect(slim.state).toBe('running');
+    expect(slim.candidates).toEqual([]);
+    expect(slim.planCandidates).toEqual([]);
+    expect(slim.progress).toBe(saved.progress);
+    // 不带 slim 的调用方（恢复、旧客户端）语义不变。
+    expect((await agent('get',{projectId,id})).candidates).toHaveLength(1);
+
+    const finished=await agent('finish',{projectId,id,claim,steerTotal:0});
+    expect(finished.state).toBe('complete');
+    // 终态即使带了 slim 也必须回全量，否则确认卡会误报「没有候选」。
+    expect((await agent('get',{projectId,id,slim:true})).candidates).toHaveLength(1);
+  });
+
   it('内部活动体不经匿名入口暴露',async()=>{
     const {rows}=await f.db.query<{anon:boolean;authenticated:boolean;service:boolean}>(
       "select has_function_privilege('anon','public.agent_rpc_activity_unguarded(uuid,text,jsonb)','EXECUTE') as anon,"+

@@ -401,7 +401,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const agentRun=tail.match(/^\/agent-runs\/(by-request\/)?([^/]+)(\/cancel)?$/);
         if(agentRun&&backend.agent) {
           if(agentRun[1]&&method==='GET'&&!agentRun[3])return respond(withAgentTextNotice(await backend.agent(actor,'by_request',{projectId,requestId:uuid.parse(agentRun[2])})));
-          if(!agentRun[1]&&((method==='GET'&&!agentRun[3])||(method==='POST'&&agentRun[3])))return respond(withAgentTextNotice(await backend.agent(actor,agentRun[3]?'cancel':'get',{projectId,id:uuid.parse(agentRun[2])})));
+          if(!agentRun[1]&&((method==='GET'&&!agentRun[3])||(method==='POST'&&agentRun[3]))){
+            // 轮询期显式要摘要：运行中不回传整包候选场景，终态仍回全量（前端确认卡要用）。
+            const slim=url.searchParams.get('slim');
+            if(slim!==null&&slim!=='1')throw new ApiError('INVALID_AGENT_VIEW',422);
+            return respond(withAgentTextNotice(await backend.agent(actor,agentRun[3]?'cancel':'get',{projectId,id:uuid.parse(agentRun[2]),...(slim==='1'?{slim:true}:{})})));
+          }
         }
         if(tail==='/material-variants' && method==='POST') {
           const {reused,...proposal}=await prepareMaterialVariant(backend,actor,projectId,await json());
