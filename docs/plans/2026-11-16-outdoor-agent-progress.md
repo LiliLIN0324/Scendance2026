@@ -90,7 +90,7 @@ scripts/probe-basemap-zoom.mjs
 ```text
 日期时间（中国标准时间）及运行 ID：2026-11-16 02:40，自动轮次 28
 批次 / 切片 / 状态：M4 前置切片（登录卡文案错位）/ **已交付**；M4 主体 **阻塞**
-开工 HEAD：9b92e0d9；收工 HEAD 见推送结果
+开工 HEAD：9b92e0d9；收工 HEAD：**f618880b**（已推，远端同；中途远端进到 ede46aba / e813b31e，两次快进+一次合并都在本轮内完成）
 先解决合并（用户本轮要求）：
   · 远端 ede46aba（用户把 thoughts/流式那批在途改动提了），本地落后 1 笔
   · 工作树里 20 个脏文件与 origin/main 内容**逐字节相同**（hash-object 逐个比对 same_as_origin=20 / differs=0）
@@ -106,6 +106,8 @@ M4 取证（真实浏览器，1440×900，未登录，:3210）：
   · `outdoor-workflow-card.tsx` 与 `panels/agent-panel.tsx` 接入：范围已确认 → “登录后继续这次设计”
   · 验证：`npm test -- outdoor-login-copy.test.ts` 4/4；真实浏览器 `AFTER_MSG={"placeholder":"登录后继续这次设计","disabled":true,"card":"登录后继续这次设计","mentionsDesign":true,"mentionsPlace":false}` → VERDICT=PASS（截图 .temp/m4-login-copy.png）
   · 回退：本轮一度改过 `zone-event-proposal.matchZoneCommand`（想让“人数+活动”走到本地分区），但实测分流根本到不了那里，属未验证改动，已 `git checkout --` 收回
+  · 合并后又拿到一笔上游（e813b31e “show model summaries in outdoor planning”），与脏文件零重叠，`git merge --no-edit` 干净合入后推成功
+  · 隔离 worktree typedcheck（.temp/wt-r28 @ f618880b + node_modules junction）→ `tsc --noEmit` **0 行**；工作树仍有用户在途的 `outdoor-plan-canvas.test.ts` 报错（`MEASURE_RULER_MIN_TICK_PX`/`formatLengthM` 未导入），属在途文件，不算本轮回归
 遗留（必须写在下次开工前看）：
   · M4 主体未验收，也不是我能单独解开的：要么拿到可用登录态，要么把分区/组合预览改成不依赖模型的确定性路径（需要产品决策）
   · 两条已知基线失败未动：IN77 token 1024 vs 4096；sub-routes 2 米支线
