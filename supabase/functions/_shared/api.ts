@@ -179,7 +179,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(!input.success)return streamResponse(async emit=>{emit('done',{status:'invalid',answer:null});});
         return streamResponse(async emit=>{
           const result=await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default',
-            onDelta:(text)=>{emit('delta',{text});}});
+            onDelta:(text)=>{emit(input.data.includeThought?'thought':'delta',{text});}});
           emit('done',{status:result.status,answer:result.answer});
         });
       }

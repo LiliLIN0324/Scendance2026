@@ -16,6 +16,14 @@ function outdoorAnswer(turn:OutdoorTurn,includeThought:boolean):string {
  const visible=includeThought?thought?.replace(/\s+/gu,' ').trim():undefined;
  return JSON.stringify(visible&&!privateOrLink(visible)?{...decision,thought:visible}:decision);
 }
+// Read only the first JSON string's complete characters, even before its closing quote.
+// If the provider chooses a different key order, the completed turn still carries the summary.
+function outdoorThoughtPrefix(content:string):string {
+ const escaped=content.match(/^\s*\{\s*"thought"\s*:\s*"((?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*)/)?.[1];
+ if(!escaped)return '';
+ const decoded:string=JSON.parse('"'+escaped+'"');
+ return decoded.replace(/[\uD800-\uDBFF]$/u,'').slice(0,400);
+}
 /** Backstop for a provider that streams far more than a 3000-character answer. */
 const STREAM_MAX_CHARS=20_000;
 /**
@@ -23,7 +31,7 @@ const STREAM_MAX_CHARS=20_000;
  * content deltas. `reasoning_content`/`reasoning_details` in the same frames are
  * deliberately dropped: they are provider-private and never an application result.
  */
-async function readProviderStream(url:string,init:RequestInit,fetcher:Fetcher,timeoutMs:number,onDelta:(text:string)=>void):Promise<{content:string;finishReason:string|null}>{
+async function readProviderStream(url:string,init:RequestInit,fetcher:Fetcher,timeoutMs:number,onDelta:(text:string,content:string)=>void):Promise<{content:string;finishReason:string|null}>{
  const response=await fetcher(url,{...init,redirect:'error',signal:init.signal??AbortSignal.timeout(timeoutMs)});
  if(!response.ok){
   let upstream='';try{upstream=new TextDecoder().decode(await readBounded(response,2_048));}catch{/* body optional */}
@@ -55,7 +63,7 @@ async function readProviderStream(url:string,init:RequestInit,fetcher:Fetcher,ti
     const delta=choice.delta?.content;
     if(typeof delta==='string'&&delta){
      content+=delta;if(content.length>STREAM_MAX_CHARS)throw new ApiError('FILE_TOO_LARGE',413);
-     onDelta(delta);
+     onDelta(delta,content);
     }
    }
   }
@@ -121,7 +129,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
    // outdoor_v1 is a JSON contract. OpenAI-compatible slots honor response_format;
    // the MiniMax adapter strips this field and keeps its own token/reasoning shape.
    const structured=parsed.data.responseMode==='outdoor_v1'?{response_format:{type:'json_object' as const}}:{};
-   const includeThought=parsed.data.includeThought===true&&!input.onDelta;
+   const includeThought=parsed.data.includeThought===true;
    const systemPrompt=parsed.data.responseMode==='outdoor_v1'
     ? OUTDOOR_AGENT_SYSTEM_PROMPT+(includeThought?OUTDOOR_THOUGHT_PROMPT:'')
     : ASSISTANT_CHAT_PROMPT;
@@ -131,7 +139,17 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
      // Streaming first: the caller receives visible content deltas as they arrive.
      // Provider reasoning deltas are ignored here; only `delta.content` is forwarded.
      if(input.onDelta){
-      const streamed=await readProviderStream(url,{...init,signal:controller.signal},input.fetcher,timeoutMs,input.onDelta);
+      const emit=input.onDelta;
+      let sent='',suppressThought=false;
+      const streamed=await readProviderStream(url,{...init,signal:controller.signal},input.fetcher,timeoutMs,(delta,content)=>{
+       if(parsed.data.responseMode!=='outdoor_v1'){emit(delta);return;}
+       if(!includeThought||suppressThought)return;
+       const thought=outdoorThoughtPrefix(content);
+       if(privateOrLink(thought)||/[<\u0000-\u001f\u007f]/u.test(thought)){suppressThought=true;return;}
+       if(thought.length>sent.length&&thought.startsWith(sent)){
+        emit(thought.slice(sent.length));sent=thought;
+       }
+      });
       const answer=streamed.content.trim();
       if(streamed.finishReason!=='stop'){
        const reason=streamed.finishReason;
@@ -144,7 +162,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
       if(parsed.data.responseMode==='outdoor_v1'){
        let value:unknown;try{value=JSON.parse(answer);}catch{diagnose(slot,'invalid_shape');return fail('provider_error');}
        const checked=outdoorTurnSchema.safeParse(value);if(!checked.success){diagnose(slot,'invalid_shape');return fail('provider_error');}
-       return {status:'ok',answer:outdoorAnswer(checked.data,false)};
+       return {status:'ok',answer:outdoorAnswer(checked.data,includeThought)};
       }
       return {status:'ok',answer};
      }

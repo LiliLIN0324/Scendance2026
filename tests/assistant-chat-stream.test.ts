@@ -46,6 +46,31 @@ describe('流式只读活动聊天',()=>{
   expect(text).toContain('"status":"ok"');
   expect(text).not.toContain('PRIVATE');
  });
+ it('streams only the outdoor thought string before the structured turn is ready',async()=>{
+  const encoder=new TextEncoder();
+  let upstream!:ReadableStreamDefaultController<Uint8Array>;
+  const provider=new ReadableStream<Uint8Array>({start(controller){upstream=controller;}});
+  const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response(provider));
+  const response=await createApi(backend,env,fetcher)(request('/assistant/chat/stream',{...input,responseMode:'outdoor_v1',includeThought:true}));
+  const reader=response.body!.getReader();
+  const decode=new TextDecoder();
+  upstream.enqueue(encoder.encode(chunk({choices:[{delta:{reasoning_content:'PRIVATE REASONING',content:'{"thought":"先核对\\u573'}}]})));
+  expect(decode.decode((await reader.read()).value)).toContain('"text":"先核对"');
+  upstream.enqueue(encoder.encode(chunk({choices:[{delta:{content:'a地，再确认入口。","action":"ask","reply":"请确认入口。"}'},finish_reason:'stop'}]})));
+  upstream.close();
+  let rest='';
+  for(;;){
+   const {value,done}=await reader.read();
+   if(done)break;
+   rest+=decode.decode(value);
+  }
+  expect(rest).toContain('event: thought');
+  expect(rest).toContain('"text":"场地，再确认入口。"');
+  expect(rest).toContain('event: done');
+  expect(rest).toContain('"status":"ok"');
+  expect(rest).not.toContain('event: delta');
+  expect(rest).not.toContain('PRIVATE');
+ });
  it('keeps the authentication, disabled and guard behavior of the JSON route',async()=>{
   const fetcher=vi.fn<typeof fetch>();
   const api=createApi(backend,env,fetcher);

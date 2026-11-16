@@ -263,6 +263,7 @@ export function useOutdoorAgentWorkflow(input: {
   const [designSteps, setDesignSteps] = useState<string[]>([]);
   const [thought, setThought] = useState<string | null>(null);
   const [awaitingThought, setAwaitingThought] = useState(false);
+  const [thoughtDraft, setThoughtDraft] = useState("");
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   /**
    * 2026-11-16 用户拍板：要你动手的提示（反问补充/待确认/需要补充）不许倒计时自己消失——
@@ -319,6 +320,7 @@ export function useOutdoorAgentWorkflow(input: {
   function start(continueDesign = false) {
     if (!continueDesign) setDesignSteps([]);
     setAwaitingThought(false);
+    setThoughtDraft("");
     setAppliedHighlight(null);
     setSimulating(false);
     refsRef.current = [];
@@ -348,6 +350,7 @@ export function useOutdoorAgentWorkflow(input: {
   function cancel(options?: { preservePendingLogin?: boolean }) {
     setDesignSteps([]);
     setAwaitingThought(false);
+    setThoughtDraft("");
     setAppliedHighlight(null);
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
@@ -368,6 +371,7 @@ export function useOutdoorAgentWorkflow(input: {
     setDesignSteps([]);
     setThought(null);
     setAwaitingThought(false);
+    setThoughtDraft("");
     setAppliedHighlight(null);
     abort.current?.abort();
     token.current = null;
@@ -1477,6 +1481,9 @@ export function useOutdoorAgentWorkflow(input: {
         map,
         controller: callbacks.current.controller(),
         signal: job.controller.signal,
+        onThought: text => {
+          if (live(job)) setThoughtDraft(draft => draft + text);
+        },
         provider: callbacks.current.provider?.(),
         model: callbacks.current.model?.() ?? null,
       });
@@ -1487,6 +1494,7 @@ export function useOutdoorAgentWorkflow(input: {
       )
         return true;
       setAwaitingThought(false);
+      setThoughtDraft("");
       if (stateRef.current.pendingLogin) {
         const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
         persist(kept);
@@ -1580,6 +1588,7 @@ export function useOutdoorAgentWorkflow(input: {
     } finally {
       if (live(job)) {
         setAwaitingThought(false);
+        setThoughtDraft("");
         setBusy(false);
       }
     }
@@ -1728,6 +1737,7 @@ export function useOutdoorAgentWorkflow(input: {
     designSteps,
     thought: state.scope === input.scope ? thought : null,
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
+    thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
     mapGap,
     scopeConfirmed: () => {
