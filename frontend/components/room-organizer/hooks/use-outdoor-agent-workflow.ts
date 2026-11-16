@@ -277,6 +277,7 @@ export function useOutdoorAgentWorkflow(input: {
   const [awaitingThought, setAwaitingThought] = useState(false);
   const [thoughtDraft, setThoughtDraft] = useState("");
   const [thoughtMs, setThoughtMs] = useState<number | null>(null);
+  const [thoughtRequest, setThoughtRequest] = useState<string | null>(null);
   type PendingPlan = {
     steps: readonly string[];
     turn: OutdoorTurn;
@@ -400,6 +401,7 @@ export function useOutdoorAgentWorkflow(input: {
     setDesignSteps([]);
     setThought(null);
     setThoughtMs(null);
+    setThoughtRequest(null);
     updatePendingPlan(null);
     setAwaitingThought(false);
     setThoughtDraft("");
@@ -1478,6 +1480,7 @@ export function useOutdoorAgentWorkflow(input: {
     const base = JSON.stringify(plan);
     const selected = callbacks.current.bridge()?.selectedIds?.() ?? [];
     let modelStarted: number | undefined;
+    setThoughtRequest(message);
     designStep(`核对活动范围和地图依据。当前画布有 ${plan.zones.length} 个分区、${plan.facilities.length} 项设施。`);
     setAwaitingThought(true);
     status(
@@ -1577,12 +1580,12 @@ export function useOutdoorAgentWorkflow(input: {
       if (steps) {
         const zoneNames = turn.facts.zones?.filter(zone => message.includes(zone.evidence)).map(zone => zone.name) ?? [];
         const needsZones = !plan.zones.length && (turn.action === "main-routes" || turn.action === "objects");
+        const showZoneNames = zoneNames.length > 0 && (turn.action === "zones" || turn.action === "revise");
         const proposedSteps = [
           ...(needsZones ? ["根据已知用途先拟分区，核对后再推进下一步"] : []),
-          ...steps,
-          ...(zoneNames.length && (turn.action === "zones" || turn.action === "revise")
-            ? [`本轮涉及的分区：${zoneNames.join("、")}`]
-            : []),
+          ...steps.map((step, index) => showZoneNames && index === steps.length - 1
+            ? `${step}（${zoneNames.join("、")}）`
+            : step),
         ];
         updatePendingPlan({ steps: proposedSteps, turn, message, base, selected: JSON.stringify(selected), job });
         status("计划已拟好，等你批准。", "confirm");
@@ -1816,6 +1819,7 @@ export function useOutdoorAgentWorkflow(input: {
     designSteps,
     thought: state.scope === input.scope ? thought : null,
     thoughtMs: state.scope === input.scope ? thoughtMs : null,
+    thoughtRequest: state.scope === input.scope ? thoughtRequest : null,
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
@@ -1858,6 +1862,7 @@ export function useOutdoorAgentWorkflow(input: {
       })(),
     authChanged: (nextActor: string | null) => {
       setThought(null);
+      setThoughtRequest(null);
       const pending = stateRef.current.pendingLogin;
       cancel({
         preservePendingLogin: Boolean(

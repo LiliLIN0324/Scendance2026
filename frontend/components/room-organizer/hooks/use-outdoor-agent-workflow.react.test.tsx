@@ -227,10 +227,13 @@ it("模型提出分区计划后，批准计划才生成预览，再确认才写�
   }));
   await act(async () => { await flow.handle("安排室外展览区"); });
   const planCard = host.querySelector('[aria-label="待批准计划"]');
+  const thoughtCard = host.querySelector('[aria-label="思考卡片"]');
+  expect(thoughtCard?.textContent).toContain("安排室外展览区");
+  expect(thoughtCard?.nextElementSibling).toBe(planCard);
   expect(planCard?.textContent).toContain("按活动用途和室内外依据生成分区预览");
   expect(flow.proposal).toBeNull();
   expect(apply).not.toHaveBeenCalled();
-  const approve = [...planCard!.querySelectorAll("button")].find(button => button.textContent === "批准计划");
+  const approve = [...planCard!.querySelectorAll("button")].find(button => button.textContent === "批准并执行");
   await act(async () => { approve!.click(); });
   expect(flow.pendingPlan).toBeNull();
   expect(flow.proposal?.kind, flow.notice).toBe("zones");

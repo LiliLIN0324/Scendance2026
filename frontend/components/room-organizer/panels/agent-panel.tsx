@@ -4428,8 +4428,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
   const waitingOutdoorReply = !bingo && agent.outdoorTask?.state === 'ask' && agent.bubbles.at(-1)?.outdoorQuestion === true;
-  const outdoorWorkflowCard = agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply) && (
-    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} onSearchPlace={focusPlaceSearch} onCancelPreview={() => {
+  const outdoorWorkflowCard = agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply || agent.outdoorWorkflow.pendingPlan) && (
+    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
       agent.outdoorWorkflow.cancel();
       agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。');
     }}/>
@@ -4451,10 +4451,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 状态头三件套：色调 + 图标 + 短文案；拿不到明确阶段就回退现有头部样式，不硬造状态。
   const headStatus: { tone: 'ask' | 'think' | 'run' | 'paused' | 'stopped'; label: string; icon: ReactNode } | null = (() => {
     if (mode !== 'layout' || !activity) return null;
+    if (agent.outdoorWorkflow.pendingPlan) return { tone: 'ask', label: '等你批准', icon: <HelpCircle size={15} aria-hidden="true" /> };
     if (agent.outdoorTask?.state === 'ask' && !agent.outdoorWorkflow.busy) return { tone: 'ask', label: '待你回复', icon: <HelpCircle size={15} aria-hidden="true" /> };
     const s = agent.state;
     if (s === 'planProposed') return { tone: 'ask', label: '等你确认', icon: <HelpCircle size={15} aria-hidden="true" /> };
-    if (agent.understanding || agent.briefBusy) return { tone: 'think', label: '正在思考', icon: <Sparkles size={15} aria-hidden="true" /> };
+    if (agent.understanding || agent.briefBusy || agent.outdoorWorkflow.awaitingThought) return { tone: 'think', label: '正在思考', icon: <Sparkles size={15} aria-hidden="true" /> };
     if (s === 'generating') return { tone: 'run', label: '施工中', icon: <Loader2 size={15} className="cr-spin" aria-hidden="true" /> };
     if (s === 'generatePaused') return { tone: 'paused', label: '已暂停', icon: <span className="ap-pause-glyph" aria-hidden="true"><i /><i /></span> };
     if (FAILED_STATES.includes(s)) return { tone: 'stopped', label: '已停止', icon: <Square size={14} aria-hidden="true" /> };
@@ -4562,7 +4563,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       )}
       {!waitingOutdoorReply && outdoorWorkflowCard}
-      {!waitingOutdoorReply && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
+      {!outdoorWorkflowCard && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}
