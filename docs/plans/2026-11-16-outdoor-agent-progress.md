@@ -4,12 +4,12 @@
 
 ## 当前续跑点
 
-- 总状态：**M0 已收口**；**M1a 1–3 已交付**；**M2/M3 已验收**；**M6 375/768 已验**；**M4 阻塞（分区分流仍要登录/模型，证据见轮次 28）**；**M5 进行中**（幂等票号 + 刷新恢复已交）；**M7 进行中**（轮次 31 门禁、32 回退手册、33 证据对照表、34 指标计算层、35 轨迹→指标适配层 18/18；11 条用例仍 0 条全绿）。
+- 总状态：**M0 已收口**；**M1a 1–3 已交付**；**M2/M3 已验收**；**M6 375/768 已验**；**M4 阻塞（分区分流仍要登录/模型，证据见轮次 28）**；**M5 进行中**（幂等票号 + 刷新恢复已交）；**M7 进行中**（31 门禁、32 回退手册、33 证据对照表、34/35 指标层、36 指标接线＋日志 27/27；11 条用例仍 0 条全绿）。
 - 验收口径：以计划 §0「用户口径」为准（不卡第一步 / 地图听懂人话 / 每步有下一步 / 会做设计 / 分层指令 / 一口气做完 / 可回看取证），优先级高于功能清单；任一不满足不得标已验收。
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：指标层已有「计算 + 轨迹适配」两半，但还没接到界面。下一步接线：在 `use-outdoor-agent-workflow` 的 `finishTurn` 之后调 `metricsFromTurnTrace`（首气泡时刻取气泡首次渲染、确认时刻在确认回调里记），先只写到 `console.info` 或 `turn-trace-log`（不改 UI），并用一条固定轨迹验换算。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-trace-metrics.test.ts`。
+- 下一条操作：指标已接进 `offer()` 与 `confirm()` 并只写日志，但日志只在浏览器/测试控制台看得到。下一步把最近几轮指标接到已有的 `turn-trace-log` 编号簿旁，做一个可导出的纯数据快照（仍不发请求），并用一条固定轨迹验导出内容与日志一致。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-turn-live.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -29,7 +29,7 @@
 | M4 组合预览 | 阻塞（需登录/模型） | 以首条代表需求和直接编辑为中心。**轮次 28 实测：范围已确认后发「200 人市集，签到靠近入口，留出通道」→ 零请求、zones 仍 0、无任何气泡；发「帮我分区」→ 输入框被禁并写“登录后继续这次选址”；点卡片上的「预览分区用途与室内外依据」→ 请求 `/api/site-context` 后停在“正在处理”。结论：在线下/未登录环境拿不到组合预览，问题不在匹配器而在登录门。** 已交付其前置切片（v4.15.1：范围已确认后不再说“这次选址”）。 |
 | M5 应用与恢复 | 进行中 | 补版本、应用幂等、撤销及中断验收。**轮次 29**：`ApplyOnce` 票号接在分区确认前（同一 epoch + 基准版本只写一次），6/6。**轮次 30**：刷新恢复改为逐项取舍（旧草稿不再整份丢掉、过期登录等待作废、未确认边界仍以“待确认”回来），9/9；`use-outdoor-agent-workflow.react.test.tsx` 40/40 全过。剩余：双击确认/切换活动/撤销的真实浏览器验收（需登录态）。 |
 | M6 工作台体验 | 已验收（375/768） | 375/768 退回流程端到端已过。**375 卡片收口已修**：根因是 `mobile-shell.css:244` 的手机规则把左栏所有 `.sc-left-heading` 藏了，连同户外卡片标题栏里那枚唯一的关闭钮；改为只给 `.sc-left-drawer.is-outdoor-card` 放回标题栏。真实浏览器复验：关闭钮 32×32、点后 `cardOpen=false`、`railOpen=false`、入口可命中；768 同样通过且无横向溢出。**遗留：卡片打开时入口仍被盖住，只能靠顶部关闭钮退出（不再算缺陷）。480 全流程未跑。** |
-| M7 验收和发布准备 | 进行中（已拦发布） | **轮次 31 门禁**；**32 回退手册**；**33 对照表**（14 文件 148 条，11 条用例 0 条三类全绿，已拦发布）；**34 指标计算层**（9/9）；**35 轨迹适配层**：`lib/outdoor-trace-metrics.ts`（9/9）把 `TurnTrace` 阶段打点 + 尝试次数 + 界面时刻换算成指标；同时修正预览耗时口径（预览在确认之前从开轮算，不用负值）。两层合计 18/18。剩：接线到界面、浏览器主流程（需 9222）、服务端查询说明（B）。 |
+| M7 验收和发布准备 | 进行中（已拦发布） | 31 门禁 / 32 回退手册 / 33 对照表（11 条用例 0 条三类全绿，已拦）/ 34–35 指标层 18/18；**36 接线**：`lib/outdoor-turn-live.ts`（9/9）把 `begin/markPreview/settle/…` 做成一行调用，接进 `start() / offer() / confirm()`，只打 `[outdoor-metrics]` 日志不动 UI；hook 套件 43/43。剩：指标快照导出、浏览器主流程（需 9222）、服务端查询说明（B）。 |
 
 ## 未提交改动清单（2026-11-16 08:12 基线 f1c5a525 实读；08:30 后 HEAD 已前进）
 
@@ -101,6 +101,27 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-17 02:10 · 自动轮次 36 · M7 指标接线（只写日志）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 02:10，自动轮次 36
+批次 / 切片 / 状态：M7 / metricsFromTurnTrace 接进 hook / 已交付
+开工 HEAD：12e1afb5；远端同（div 0/0，无需合并）
+问题：hook 里根本没有 turn-trace/finishTurn，轨迹层只有测试在用 —— 所以“接到 finishTurn 之后”= 先把一轮的生命周期建起来
+交付：
+  · lib/outdoor-turn-live.ts：createLiveTurn() 提供 begin/markMap/attempt/markPreview/markConfirm/markApplied/settle/log/peek，每次调用一行，日志形如 [outdoor-metrics] model=1 map=1 confirm=0 applied=0 firstFeedback=2000 preview=2000 apply=null terminal=preview_ready turn=t-…
+  · hook 接线 9 行：start() 开轮；offer() 标预览并收口；confirm() 记确认；应用成功后标落盘再补一行日志
+  · 修了适配层一个真 bug：窗口末端只算 finishedAt+UI 时刻，会把“确认 2.4s、落盘 2.9s”裁掉；改为也纳入阶段打点（扫带测试先报出）
+验证：
+  · 固定轨迹：outdoor-turn-live 9/9；指标两层 18/18
+  · 回归：use-outdoor-agent-workflow.react.test.tsx 43/43 全过
+  · 提交：hook 属用户 WIP（且本轮期间又被用户改过，含 card-history-sync），用 HEAD blob + 只打自己的 9 行 → cacheinfo 提交；staged 实测只有 9 行新增
+未完成：日志只在控制台，无导出；浏览器实证仍需 9222
+```
+
+- **先确认目标存在再动手**：“接到 finishTurn 之后”听起来是加一行，实际那个函数根本不存在；先查调用点，不假装接上。
+- **用户在改的文件只提自己那几行**：用 HEAD 版重叠打补丁 + `--cacheinfo`，比直接 `git add` 安全；staged 后逐行看一遍才提。
 
 ### 2026-11-17 01:05 · 自动轮次 35 · 合并（OpenFreeMap 证据线）+ M7 轨迹适配层
 

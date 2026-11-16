@@ -17,6 +17,7 @@ import {
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
+import { createLiveTurn } from "../lib/outdoor-turn-live";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -306,6 +307,8 @@ export function useOutdoorAgentWorkflow(input: {
   const refsRef = useRef<OutdoorTurn["references"]>([]);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
+  // M7.1：一轮对话的轨迹与指标（只打日志，不影响界面与请求）。
+  const liveTurn = useRef(createLiveTurn());
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
   scopeRef.current = input.scope;
@@ -360,6 +363,7 @@ export function useOutdoorAgentWorkflow(input: {
     refsRef.current = [];
     abort.current?.abort();
     const epoch = callbacks.current.begin();
+    liveTurn.current.begin("scene");
     token.current = epoch;
     const controller = new AbortController();
     abort.current = controller;
@@ -496,8 +500,11 @@ export function useOutdoorAgentWorkflow(input: {
       designStep(`已生成「${label}」预览，等待核对。`);
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
+    liveTurn.current.markPreview();
+    liveTurn.current.settle("preview_ready");
   }
   async function confirm(expected?: OutdoorWorkflowProposal) {
+    liveTurn.current.markConfirm();
     if (expected && proposalRef.current !== expected) {
       status("这张确认卡已过期，未应用其他任务的提案。", "blocked");
       return;
@@ -623,6 +630,8 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
+    liveTurn.current.markApplied();
+    liveTurn.current.log();
     proposalRef.current = null;
     setProposal(null);
     if (p.kind === "scope") {
