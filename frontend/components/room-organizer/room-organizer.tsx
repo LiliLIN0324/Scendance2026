@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 /*
  * COLLAB.md 独占区（Qoder 侧只提需求）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
  * 整景区视距下点云退化成锚点 POI，进到 100 m 内再挂/显示 splat。
@@ -2738,6 +2738,9 @@ useEffect(() => {
       if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
       else outdoorOverlayRef.current?.focusVenue();
     },
+    // 大罗盘：3D 接管时读相机方位并支持拖动转视角；2D 这两项不生效。
+    bearingRad: () => outdoorPlan3DRef.current?.getBearing() ?? 0,
+    orbitByDelta: (deltaTheta: number) => { outdoorPlan3DRef.current?.orbitByDelta(deltaTheta); },
   } : null;
   const splatLodEnabled = showGaussianInCanvas && !!layout.researchArea && !!environment && !scanIsolated;
   const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
@@ -4501,7 +4504,7 @@ useEffect(() => {
             {capacityText}
           </span>
         </div>
-        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging ? ' is-panel-dragging' : ''}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
+        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging ? ' is-panel-dragging' : ''}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${chromeHidden ? ' is-chrome-hidden' : ''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px`, ['--sc-left-stack-percent' as string]: `${(leftStack.ratio * 100).toFixed(2)}%` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>

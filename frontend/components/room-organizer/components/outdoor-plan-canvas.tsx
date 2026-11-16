@@ -56,7 +56,7 @@ import type { BackendSession } from '@/lib/backend-session';
  * 分区颜色/透明度/命名可在面板内直接编辑（契约可选字段 opacity，0.05–0.6 区间）。
  */
 
-import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlignCenterHorizontal,
@@ -1968,6 +1968,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [infoOpen, setInfoOpen] = useState(true);
   // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起，可并存。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
+  // 2026-11-16 用户指令：标注卡不要再和属性卡一起挤在右上角；作为「标注」钮的
+  // 上浮面板锚定到底条按钮上方，像地图工具栏的 popover 一样有明确的来处。
+  const [annotateAnchor, setAnnotateAnchor] = useState<{ left: number; bottom: number } | null>(null);
   // 2026-11-15 属性浮卡总开关：默认开；关闭后点选物件不再弹出属性卡（底条属性钮切换）。
   const [selectionPanelOn, setSelectionPanelOn] = useState(true);
   const selectionPanelOnRef = useRef(true);
@@ -2369,6 +2372,43 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   useEffect(() => {
     onInspectorChange?.({ openTabs: inspectorPanels });
   }, [inspectorPanels, onInspectorChange]);
+
+  // 标注面板锚点跟随底条工具钮；窗口变化时重算，保证弹出层始终在按钮正上方。
+  // 用 layout effect 在绘制前落位，避免先闪一下右上角再跳到底条上方。
+  useLayoutEffect(() => {
+    if (!inspectorPanels.annotate) {
+      setAnnotateAnchor(null);
+      return;
+    }
+    let raf = 0;
+    const place = (): void => {
+      const button = document.querySelector<HTMLElement>('#tool-annotate');
+      if (!button) {
+        setAnnotateAnchor(null);
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        setAnnotateAnchor(null);
+        return;
+      }
+      const halfPanel = 78;
+      const margin = 12;
+      const left = Math.min(
+        Math.max(rect.left + rect.width / 2, margin + halfPanel),
+        window.innerWidth - margin - halfPanel,
+      );
+      setAnnotateAnchor({ left, bottom: window.innerHeight - rect.top + 10 });
+    };
+    raf = window.requestAnimationFrame(place);
+    window.addEventListener('resize', place);
+    document.addEventListener('scroll', place, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', place);
+      document.removeEventListener('scroll', place, true);
+    };
+  }, [inspectorPanels.annotate]);
 
   useEffect(() => {
     planRef.current = plan;
@@ -11504,7 +11544,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   data-collapsed={collapsed ? 'true' : 'false'}
                   role="complementary"
                   aria-label={`${card.label}卡片`}
-                  className="sc-outdoor-toolcard"
+                  className={`sc-outdoor-toolcard${card.key === 'annotate' ? ' sc-outdoor-toolcard--annotate' : ''}`}
+                  data-anchored={card.key === 'annotate' && annotateAnchor ? 'above-tool' : undefined}
                   onWheel={stopPanelWheel}
                   style={{
                     flex: '0 0 auto',
@@ -11513,9 +11554,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
                     borderRadius: 12,
                     boxShadow: '0 10px 26px rgba(20, 24, 32, 0.10)',
-                    overflow: 'hidden',
+                    overflow: card.key === 'annotate' ? 'visible' : 'hidden',
                     color: PLANNING_SURFACE.panelText,
                     fontSize: PLANNING_TYPOGRAPHY.panel,
+                    ...(card.key === 'annotate' && annotateAnchor
+                      ? {
+                        position: 'fixed' as const,
+                        left: annotateAnchor.left,
+                        bottom: annotateAnchor.bottom,
+                        top: 'auto',
+                        right: 'auto',
+                        transform: 'translateX(-50%)',
+                        zIndex: 80,
+                        maxWidth: 'calc(100vw - 24px)',
+                      }
+                      : {}),
                   }}
                   onMouseDown={stopPanelMouse}
                   onMouseUp={stopPanelMouse}

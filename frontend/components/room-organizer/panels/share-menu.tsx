@@ -277,7 +277,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       </button>
     ) : (
       <button type="button" id="tool-share" data-tour="publish" data-tip="分享" aria-label="分享" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
-        <MaterialSymbol name="upload" />
+        <MaterialSymbol name="upload" size={15} />
       </button>
     )}
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="分享">
