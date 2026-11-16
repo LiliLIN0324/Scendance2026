@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.15.0'
+          node-version: '24.22.3'
 
       - name: 阈值与网页端一致
         run: node miniprogram/scripts/gen-thresholds.mjs --check
