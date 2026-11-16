@@ -19,7 +19,7 @@ function outdoorAnswer(turn:OutdoorTurn,includeThought:boolean):string {
 // Read only the first JSON string's complete characters, even before its closing quote.
 // If the provider chooses a different key order, the completed turn still carries the summary.
 function outdoorThoughtPrefix(content:string):string {
- const escaped=content.match(/^\s*\{\s*"thought"\s*:\s*"((?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*)/)?.[1];
+ const escaped=content.match(/^\s*(?:\x60{3}(?:json)?\s*)?\{\s*"thought"\s*:\s*"((?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*)/)?.[1];
  if(!escaped)return '';
  const decoded:string=JSON.parse('"'+escaped+'"');
  return decoded.replace(/[\uD800-\uDBFF]$/u,'').slice(0,400);
@@ -128,8 +128,11 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
    const tokenLimit=chatProfile(viewEnv,'brief')==='minimax'?{max_completion_tokens:completionBudget}:{max_tokens:completionBudget};
    // outdoor_v1 is a JSON contract. OpenAI-compatible slots honor response_format;
    // the MiniMax adapter strips this field and keeps its own token/reasoning shape.
-   const structured=parsed.data.responseMode==='outdoor_v1'?{response_format:{type:'json_object' as const}}:{};
    const includeThought=parsed.data.includeThought===true;
+   // Some gateways buffer JSON response mode. Stream plain text here and
+   // validate the full object locally before using any structured decision.
+   const liveThought=includeThought&&!!input.onDelta;
+   const structured=parsed.data.responseMode==='outdoor_v1'&&!liveThought?{response_format:{type:'json_object' as const}}:{};
    const systemPrompt=parsed.data.responseMode==='outdoor_v1'
     ? OUTDOOR_AGENT_SYSTEM_PROMPT+(includeThought?OUTDOOR_THOUGHT_PROMPT:'')
     : ASSISTANT_CHAT_PROMPT;
@@ -160,7 +163,8 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
       if(answer.length>3000){diagnose(slot,'answer_too_long');return fail('provider_error');}
       if(/<\/?think>/i.test(answer)||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(answer)){diagnose(slot,'unsupported_output');return fail('provider_error');}
       if(parsed.data.responseMode==='outdoor_v1'){
-       let value:unknown;try{value=JSON.parse(answer);}catch{diagnose(slot,'invalid_shape');return fail('provider_error');}
+       const json=answer.replace(/^\x60{3}(?:json)?\s*|\s*\x60{3}$/g,'');
+       let value:unknown;try{value=JSON.parse(json);}catch{diagnose(slot,'invalid_shape');return fail('provider_error');}
        const checked=outdoorTurnSchema.safeParse(value);if(!checked.success){diagnose(slot,'invalid_shape');return fail('provider_error');}
        return {status:'ok',answer:outdoorAnswer(checked.data,includeThought)};
       }
