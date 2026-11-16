@@ -19,6 +19,7 @@ import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarif
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
+import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -1842,6 +1843,8 @@ export function useOutdoorAgentWorkflow(input: {
     mapGap,
     /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
     metricsSummary: () => summarizeMetrics(metricsBook.current),
+    /** 把汇总打到控制台并尽量写进剪贴板；返回值说明剪贴板是否发起成功。 */
+    exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
