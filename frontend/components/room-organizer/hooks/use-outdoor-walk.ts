@@ -15,6 +15,9 @@ import {
   type WalkViewMode,
 } from '../lib/walk-view-modes';
 
+/** 鸟瞰档 WASD 平移速度（米/秒）；比步行快，等同拖地图。 */
+const ORBIT_PAN_SPEED_MPS = 9;
+
 /** 每帧透出的玩家锚点姿态，供户外组件摆占位 avatar 与跟随相机。 */
 export interface OutdoorWalkFrame {
   x: number;
@@ -26,6 +29,8 @@ export interface OutdoorWalkFrame {
   delta: number;
   /** 落座态：占位 avatar 据此切坐姿并改用坐姿眼高对齐。 */
   seated?: boolean;
+  /** 落座椅面高度（米），人物碱关节按它对齐，避免屁股浮在椅面上。 */
+  seatHeight?: number;
 }
 
 /**
@@ -41,6 +46,8 @@ export interface SeatWalkState {
   z: number;
   /** 坐姿眼高（含楼层基准，米）。 */
   eyeY: number;
+  /** 椅面高度（米，地面为 0）；落座时把人物碱关节对齐到这个高度。 */
+  seatHeight?: number;
   /** 落座朝向（弧度，可选；缺省保持当前 yaw）。 */
   yaw?: number;
 }
@@ -366,6 +373,33 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         if (rig.orbitCamera) {
           if (controls?.isLocked) controls.unlock();
           moving = false;
+          // 鸟瞰档：WASD / 方向键平移机位（等同拖地图），俯仰与距离仍交给 OrbitControls。
+          let panX = 0;
+          let panZ = 0;
+          if (pressed.has('KeyW') || pressed.has('ArrowUp')) panZ -= 1;
+          if (pressed.has('KeyS') || pressed.has('ArrowDown')) panZ += 1;
+          if (pressed.has('KeyA') || pressed.has('ArrowLeft')) panX -= 1;
+          if (pressed.has('KeyD') || pressed.has('ArrowRight')) panX += 1;
+          if ((panX !== 0 || panZ !== 0) && controls) {
+            const sprintPan = pressed.has('ShiftLeft') || pressed.has('ShiftRight');
+            const step = ORBIT_PAN_SPEED_MPS * (sprintPan ? 2.4 : 1) * delta;
+            camera.getWorldDirection(cameraForward);
+            forward.set(cameraForward.x, 0, cameraForward.z);
+            if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
+            forward.normalize();
+            right.crossVectors(forward, camera.up).normalize();
+            const moveX = -forward.x * panZ * step + right.x * panX * step;
+            const moveZ = -forward.z * panZ * step + right.z * panX * step;
+            camera.position.x += moveX;
+            camera.position.z += moveZ;
+            // 环绕中心一起平移，否则左键环绕仍绕原地点转。
+            const orbit = orbitRef.current;
+            if (orbit) {
+              orbit.target.x += moveX;
+              orbit.target.z += moveZ;
+              orbit.update();
+            }
+          }
           onWalkFrameRef.current?.({
             x: player.x,
             y: player.y,
@@ -402,6 +436,7 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
             thirdPerson: rig.thirdPerson,
             delta,
             seated: true,
+            ...(typeof seatState.seatHeight === 'number' ? { seatHeight: seatState.seatHeight } : {}),
           });
           return;
         }

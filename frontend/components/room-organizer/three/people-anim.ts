@@ -55,8 +55,13 @@ interface PersonAnimEntry extends PersonAnimSpec {
   /** 程序化兜底的步态相位。 */
   phase: number;
   manualMoving: boolean | null;
-  /** 漫游落座态：坐在座位上时播坐姿循环，起身清除。 */
+  /** 落座态：坐在座位上时播坐姿循环，起身清除。 */
   seated: boolean;
+  /** 落座椅面高度（米）与把这个模型摆上去所需的抬升；每个模型量一次。 */
+  seatHeight: number | null;
+  sitLift: number | null;
+  /** 站立时的原始 y，起身还原。 */
+  baseY: number;
 }
 
 const entries = new Map<string, PersonAnimEntry>();
@@ -75,6 +80,26 @@ export function setPersonWalkContext(ctx: RouteStepContext | null): void {
  */
 export function setPeopleShadowRefresher(fn: (() => void) | null): void {
   shadowRefresher = fn;
+}
+
+/**
+ * 坐姿摆位：读出当前坐姿下髋关节相对 group 的高度，把人抬到椅面上。
+ * 只靠「坐姿眼高」对齐会让屁股浮在椅面上；这里直接用椅面高度反算。
+ */
+function alignSeatedGroup(entry: PersonAnimEntry): void {
+  if (entry.seatHeight === null) return;
+  entry.group.updateMatrixWorld(true);
+  if (entry.sitLift === null) {
+    let hips: ThreeNS.Object3D | null = null;
+    entry.group.traverse((node: ThreeNS.Object3D) => {
+      if (!hips && /hips/i.test(node.name)) hips = node;
+    });
+    if (!hips) return;
+    const hipsWorldY = (hips as ThreeNS.Object3D).matrixWorld.elements[13] ?? 0;
+    const groupWorldY = entry.group.matrixWorld.elements[13] ?? 0;
+    entry.sitLift = entry.seatHeight - (hipsWorldY - groupWorldY);
+  }
+  entry.group.position.y = entry.baseY + entry.sitLift;
 }
 
 /** 只有显式开了动画的人物才进注册表：有路线、改过默认动作或被暂停。普通静态人物保持原状。 */
@@ -145,6 +170,9 @@ export function registerPersonAnim(group: ThreeNS.Group, spec: PersonAnimSpec): 
     phase: existing?.phase ?? 0,
     manualMoving: existing?.group === group ? existing.manualMoving : null,
     seated: existing?.group === group ? existing.seated : false,
+    seatHeight: existing?.group === group ? existing.seatHeight : null,
+    sitLift: existing?.group === group ? existing.sitLift : null,
+    baseY: existing?.group === group ? existing.baseY : group.position.y,
   };
   entries.set(spec.id, entry);
   if (entry.follower && entry.manualMoving === null) {
@@ -177,16 +205,25 @@ export function takePersonControl(id: string, group: ThreeNS.Group) {
       const live = current();
       if (live) live.manualMoving = moving;
     },
-    /** 落座 / 起身：坐姿循环与站立待机互换，位置仍由漫游层每帧钉在座位上。 */
-    setSeated(seated: boolean) {
+    /** 落座 / 起身：坐姿循环与站立待机互换，并按椅面高度把人物摆正。 */
+    setSeated(seated: boolean, seatHeight?: number) {
       const live = current();
-      if (live) live.seated = seated;
+      if (!live) return;
+      live.seated = seated;
+      if (typeof seatHeight === 'number') live.seatHeight = seatHeight;
+      if (!seated) {
+        live.sitLift = null;
+        live.group.position.y = live.baseY;
+      }
     },
     release() {
       const live = current();
       if (!live) return;
       live.manualMoving = null;
       live.seated = false;
+      live.seatHeight = null;
+      live.sitLift = null;
+      live.group.position.y = live.baseY;
       group.position.copy(position);
       group.rotation.y = rotation;
       group.visible = true;
@@ -300,6 +337,7 @@ export function advancePeopleAnimations(deltaSeconds: number, scene?: ThreeNS.Sc
         poseWalk(entry.rig, entry.phase, !entry.seated && entry.manualMoving ? 1 : 0);
       }
       if (entry.mixer) entry.mixer.update(deltaSeconds);
+      if (entry.seated) alignSeatedGroup(entry);
       continue;
     }
     if (entry.paused) continue; // 暂停 = 全停：路线冻结在原地，mixer 停在当前帧。
