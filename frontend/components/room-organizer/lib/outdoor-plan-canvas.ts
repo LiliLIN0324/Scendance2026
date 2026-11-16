@@ -922,6 +922,56 @@ function paintPlanLabel(
 }
 
 /**
+ * 2026-11-16 用户指令「室内分区要为他有一个门的图标，让人知道怎么进入就行了」：
+ * 室内分区在 2D 上只补一扇门——洞口 + 门扇 + 开门弧，不画真墙体也不做门禁判断。
+ * 位置取最长那段边的中点：最长边通常是面向场内/通道的那面墙，比按经纬方向猜更稳。
+ * 返回的 inward 是指向分区内部的单位向量（米制），画弧时用它决定开向。
+ */
+export interface IndoorZoneDoor {
+  /** 洞口一端（门轴，米制）。 */
+  hinge: PlanPoint;
+  /** 洞口另一端（米制）。 */
+  latch: PlanPoint;
+  /** 朝分区内部的单位向量（米制）。 */
+  inward: PlanPoint;
+}
+
+export function indoorZoneDoor(polygon: readonly PlanPoint[]): IndoorZoneDoor | null {
+  if (polygon.length < 3) return null;
+  const n = polygon.length;
+  const center = polygon.reduce(
+    (acc, p) => ({ x: acc.x + p.x / n, y: acc.y + p.y / n }),
+    { x: 0, y: 0 },
+  );
+  let best: { a: PlanPoint; b: PlanPoint; len: number } | null = null;
+  for (let i = 0; i < n; i += 1) {
+    const a = polygon[i] as PlanPoint;
+    const b = polygon[(i + 1) % n] as PlanPoint;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!(len > 1e-6)) continue;
+    if (!best || len > best.len) best = { a, b, len };
+  }
+  if (!best) return null;
+  const mx = (best.a.x + best.b.x) / 2;
+  const my = (best.a.y + best.b.y) / 2;
+  const ux = (best.b.x - best.a.x) / best.len;
+  const uy = (best.b.y - best.a.y) / best.len;
+  let nx = -uy;
+  let ny = ux;
+  if (nx * (center.x - mx) + ny * (center.y - my) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  // 门洞只占这段边的一小段：太长的边不会把门开成一整面墙。
+  const half = Math.min(best.len * 0.18, 2.5);
+  return {
+    hinge: { x: mx - ux * half, y: my - uy * half },
+    latch: { x: mx + ux * half, y: my + uy * half },
+    inward: { x: nx, y: ny },
+  };
+}
+
+/**
  * 分区：填充色 + 名称标注；分区自带色/透明度优先（H2-b）。
  * warning 为 true 时改红虚线描边（越界/重叠警示，分区数据本身保留原色）。
  */
@@ -936,6 +986,8 @@ export function drawZoneLayer(
     semantic?: PlanningZoneSemantic | undefined;
     opacity?: number | undefined;
     warning?: boolean | undefined;
+    /** 2026-11-16：室内分区要标一扇门，让看图纸的人知道从哪进。 */
+    environment?: 'indoor' | 'outdoor' | 'unknown' | undefined;
   }[],
   /** 2026-11-16：分区名跟着底图明暗走（深色卫星图用白字），滑入即适配。 */
   opts: { tone?: PlanBasemapTone } = {},
@@ -963,7 +1015,64 @@ export function drawZoneLayer(
     if (label) {
       paintPlanLabel(c, zone.name, label.x, label.y, opts.tone ?? 'light', '11px system-ui, sans-serif');
     }
+    // 2026-11-16 用户指令：室内分区加一扇门，让人知道怎么进入；室外分区不画。
+    if (zone.environment === 'indoor') drawIndoorZoneDoor(c, zone.polygon, opts.tone ?? 'light', label);
   }
+}
+
+/** 室内分区的那扇门：洞口（白底断口）+ 门扇 + 90° 开门弧，必要时带「入口」小字。 */
+function drawIndoorZoneDoor(
+  c: PlanCanvasContext,
+  polygon: readonly PlanPoint[],
+  tone: PlanBasemapTone,
+  label: { x: number; y: number } | null,
+): void {
+  const door = indoorZoneDoor(polygon);
+  if (!door) return;
+  const { ctx, viewport } = c;
+  const hinge = planPointToPixel(door.hinge, viewport);
+  const latch = planPointToPixel(door.latch, viewport);
+  const swing = planPointToPixel(
+    { x: door.hinge.x + door.inward.x * Math.hypot(door.latch.x - door.hinge.x, door.latch.y - door.hinge.y), y: door.hinge.y + door.inward.y * Math.hypot(door.latch.x - door.hinge.x, door.latch.y - door.hinge.y) },
+    viewport,
+  );
+  const ink = planLabelInk(tone);
+  ctx.save();
+  ctx.lineCap = 'round';
+  // 洞口：先把这段边擦成底色断口，再描出洞口两侧的短脚，像平面图的门口。
+  ctx.strokeStyle = ink.halo;
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.moveTo(hinge.x, hinge.y);
+  ctx.lineTo(latch.x, latch.y);
+  ctx.stroke();
+  // 门扇 + 开门弧（半径 = 门洞宽）。
+  ctx.strokeStyle = ink.fill;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(hinge.x, hinge.y);
+  ctx.lineTo(swing.x, swing.y);
+  ctx.stroke();
+  const radius = Math.hypot(latch.x - hinge.x, latch.y - hinge.y);
+  const a0 = Math.atan2(latch.y - hinge.y, latch.x - hinge.x);
+  const a1 = Math.atan2(swing.y - hinge.y, swing.x - hinge.x);
+  ctx.beginPath();
+  ctx.arc(hinge.x, hinge.y, Math.max(4, radius), a0, a1, a0 > a1);
+  ctx.stroke();
+  // 「入口」小字贴在门内侧；分区很小或算不出质心时不写，免得盖住分区名。
+  if (label && radius >= 7) {
+    const mid = { x: (hinge.x + latch.x) / 2, y: (hinge.y + latch.y) / 2 };
+    const toCenterX = label.x - mid.x;
+    const toCenterY = label.y - mid.y;
+    const dist = Math.hypot(toCenterX, toCenterY) || 1;
+    paintPlanLabel(
+      c, '入口',
+      mid.x + (toCenterX / dist) * (radius + 10),
+      mid.y + (toCenterY / dist) * (radius + 10),
+      tone, '9px system-ui, sans-serif',
+    );
+  }
+  ctx.restore();
 }
 
 /**
@@ -1255,44 +1364,65 @@ export function drawRouteLayer(
 /**
  * 人员：圆形点位 + 角色名与数量标注，人员色；选中画白圈（H2-d）。
  * warning 为 true 时改红描边（点位越界警示，数据本身保留）。
+ *
+ * 2026-11-16 用户：「地图上应该就直接是图标，而不是一个点、上面再一个图标，感觉是重复信息」——
+ * `chip: true` 表示调用方会在同一点位画 16 px 岗位图标芯片（画布 outdoor-plan-canvas.tsx
+ * 负责把贴纸画上去），本层于是不再画那颗圆点，只留选中/越界圈与「岗位 ×人数」文字。
+ * 缺省仍是圆点（无岗位贴纸的岗位、单测与外部调用不受影响）。
  */
 export function drawWorkerLayer(
   c: PlanCanvasContext,
-  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined }[],
+  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 调用方已画岗位图标芯片：不再画圆点。 */ chip?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined }[],
   opts: { tone?: PlanBasemapTone } = {},
 ): void {
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.worker;
+  /** 芯片半径（px）：与画布那边的 16 px 芯片同口径，圈与文字都按它让位。 */
+  const chipRadius = 8;
   for (const w of workers) {
     const pt = planPointToPixel(w.position, viewport);
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = hexWithAlpha(w.color ?? color, 0.85);
-    ctx.fill();
-    ctx.strokeStyle = w.warning ? '#c0392b' : '#fff';
-    ctx.lineWidth = w.warning ? 1.6 : 1;
-    ctx.stroke();
+    if (!w.chip) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = hexWithAlpha(w.color ?? color, 0.85);
+      ctx.fill();
+      ctx.strokeStyle = w.warning ? '#c0392b' : '#fff';
+      ctx.lineWidth = w.warning ? 1.6 : 1;
+      ctx.stroke();
+    } else if (w.warning) {
+      // 圆点被芯片取代后，越界仍需一眼看出：红圈套在芯片外沿（芯片由画布后画，圈要让到外面）。
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, chipRadius + 1, 0, Math.PI * 2);
+      ctx.strokeStyle = '#c0392b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     if (w.selected) {
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 8.5, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, w.chip ? chipRadius + 3.5 : 8.5, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.8;
       ctx.stroke();
     }
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    // 2026-11-16：人名也跟着底图明暗走（深色卫星图上的深字根本看不见）。
-    paintPlanLabel(
-      c,
-      w.count > 1 ? `${w.role} ×${w.count}` : w.role,
-      pt.x + 6,
-      pt.y - 2,
-      opts.tone ?? 'light',
-      '10px system-ui, sans-serif',
-      'left',
-      'top',
-    );
+    // 2026-11-16 用户：「图标细分之后就不需要在地图上显示名字了」——岗位名交给图标本身，
+    // 只有多人位才补一枚「×N」（数量是图标表达不了的）；单人位不写任何字。
+    // 颜色跟底图明暗走（深色卫星图上的深字根本看不见）。
+    if (w.count > 1) {
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      // 文字起点按芯片/圆点让位：芯片版贴右沿 3 px、竖直居中（10 px 字 → 上方 5 px）。
+      paintPlanLabel(
+        c,
+        `×${w.count}`,
+        pt.x + (w.chip ? chipRadius + 3 : 6),
+        pt.y - (w.chip ? chipRadius - 3 : 2),
+        opts.tone ?? 'light',
+        '10px system-ui, sans-serif',
+        'left',
+        'top',
+      );
+    }
   }
 }
 
@@ -1535,6 +1665,8 @@ export function drawMeasureLayer(
     kind: 'distance' | 'area' | 'path';
     points: readonly PlanPoint[];
     selected?: boolean;
+    /** 2026-11-16 读数据 DOM 贴片渲染时置 false（不再在画布上重复画一遍文字）。 */
+    showLabel?: boolean;
   }[],
 ): void {
   const { ctx } = c;
@@ -1544,28 +1676,44 @@ export function drawMeasureLayer(
     if (m.kind === 'area' && m.points.length < 3) continue;
     if (m.kind === 'area') {
       traceRing(c, m.points);
-      ctx.fillStyle = measureFill(c, 0.12);
+      ctx.fillStyle = measureFill(c, m.selected ? 0.2 : 0.12);
       ctx.fill();
+      // 选中态：先铺一圈白色宽光晕，再压回测量色——图上能一眼看出“这条被选中了”。
+      if (m.selected) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = m.selected ? 2.5 : 1.5;
       ctx.stroke();
       ctx.restore();
-      const label = zoneLabelPixel(c, m.points);
+      const label = m.showLabel === false ? null : zoneLabelPixel(c, m.points);
       if (label) drawMeasureLabel(c, formatAreaM2(measureValue(m)), label.x, label.y);
     } else {
       ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = m.selected ? 'rgba(255,255,255,0.9)' : color;
+      ctx.lineWidth = m.selected ? 5 : 2;
       tracePolyline(c, m.points);
       ctx.stroke();
       ctx.restore();
+      if (m.selected) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        tracePolyline(c, m.points);
+        ctx.stroke();
+        ctx.restore();
+      }
       // 端点白心圆环（Google 测距节点）。
       for (const p of [m.points[0]!, m.points[m.points.length - 1]!]) {
         const pt = planPointToPixel(p, c.viewport);
         drawMeasureNode(c, pt.x, pt.y);
       }
-      const label = measureLabelPixel(c, m.points);
+      const label = m.showLabel === false ? null : measureLabelPixel(c, m.points);
       if (label) drawMeasureLabel(c, formatLengthM(measureValue(m)), label.x, label.y);
     }
   }
@@ -2237,6 +2385,31 @@ function measureLabelPixel(
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
   return polylineLabelPixel(c, points);
+}
+
+/**
+ * 2026-11-16 用户：「点击下面的×就消失了」——读数据做成图上可关的贴片，需要一个跟画布
+ * 读数完全同位置的屏幕锚点（否则贴片会和画布文字错位）。距离/路径取段中点，面积取
+ * 画布面积读数用的同一落点（首边中点）。
+ */
+export function measureReadoutAnchor(
+  viewport: PlanViewport,
+  measurement: { kind: 'distance' | 'area' | 'path'; points: readonly PlanPoint[] },
+): { x: number; y: number } | null {
+  const points = measurement.points;
+  if (points.length < 2) return null;
+  if (measurement.kind === 'area') {
+    if (points.length < 3) return null;
+    const a = planPointToPixel(points[0]!, viewport);
+    const b = planPointToPixel(points[1]!, viewport);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  if (points.length === 2) {
+    const a = planPointToPixel(points[0]!, viewport);
+    const b = planPointToPixel(points[1]!, viewport);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  return planPointToPixel(points[Math.floor(points.length / 2)]!, viewport);
 }
 
 /** 测量读数标签：深色半透明底衬 + 青色文字（宽按文本长度估算，不依赖 measureText）。 */

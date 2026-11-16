@@ -81,6 +81,9 @@ const SIZE_RULES: readonly SizeRule[] = [
   { re: /^taxi$/, major: 4.5, shortRatio: 1.8 / 4.5 },
   { re: /^sweeper|^street-sweeper/, major: 4, shortRatio: 2 / 4 },
   { re: /^bicycle$|^bike$/, major: 1.8, shortRatio: 0.6 / 1.8 },
+  // 2026-11-16 用户指令「门要能自己从图标库放」：门是一道 1.2 m 宽的门扇，不是 10 m 的通行区。
+  // 它的分类带「流线」，如果不先拦截，categoryMajor 会给到 10 m——一扇门占满半个场地。
+  { re: /(^|-)door(-|$)|(^|-)gate(-|$)/, major: 1.2, shortRatio: 0.1 / 1.2 },
   { re: /golf-cart/, major: 2.7, shortRatio: 1.2 / 2.7 },
   { re: /motorcycle|motorbike/, major: 2.2, shortRatio: 0.8 / 2.2 },
   { re: /forklift|scissor-lift/, major: 3.2, shortRatio: 1.4 / 3.2 },
