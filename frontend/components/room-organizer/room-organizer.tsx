@@ -96,6 +96,7 @@ import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { sceneAnchorFromOutdoorPlan } from './lib/outdoor-venue-sync';
+import { DEFAULT_OUTDOOR_PROJECT_ID } from './lib/outdoor-project-store';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { suggestDropPoint } from './lib/drop-zone';
@@ -192,7 +193,7 @@ import type { ScenePresetKey } from './lib/scene-presets';
 import { publicSourceTileUrl, basemapSourceAttribution } from './lib/tdt-probe';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
-import { useActivitySessionTracker, activityScope, type ActivityScopeSource, type ActivitySessionToken } from './lib/activity-session-epoch';
+import { useActivitySessionTracker, type ActivityScopeSource, type ActivitySessionToken } from './lib/activity-session-epoch';
 import { projectSessionScope } from './lib/project-session-scope';
 import { adoptScopeHistory, rememberScopeName } from './lib/assistant-scope-registry';
 import { useFloorSessionTracker, type FloorSessionToken } from './lib/floor-session-epoch';
@@ -230,6 +231,7 @@ import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
 import { type ShareMenuActions } from './panels/share-menu';
+import { type ServerShare } from './lib/share-records';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
@@ -310,6 +312,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 2026-11-13 收敛 14b：户外项目直进 B（外壳 A 下线）。非空 outdoorProjectId = 纯户外语境：
   // 草稿按该 id 存本机 outdoor-project-store，室内布置 Viewport 让位，不回写室内壳体。
   const isOutdoorProject = outdoorProjectIdProp != null && outdoorProjectIdProp !== '';
+  // 升级前整台设备只有 default-outdoor 这一份规划；允许当前活动一次性接管，之后的空活动不再继承。
+  const legacyOutdoorPlanProjectId = outdoorProjectIdProp === DEFAULT_OUTDOOR_PROJECT_ID
+    ? DEFAULT_OUTDOOR_PROJECT_ID : null;
   const placementIdentity = useRef({ controller, apiUrl: controller.config.apiUrl, isActive, epoch: 0 });
   if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller.config.apiUrl || placementIdentity.current.isActive !== isActive) {
     placementIdentity.current = { controller, apiUrl: controller.config.apiUrl, isActive, epoch: placementIdentity.current.epoch + 1 };
@@ -331,6 +336,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const frameViewportRef = useRef(() => {});
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  // 2026-11-17 用户反馈「新建活动会把当前项目复制过来」：户外规划必须跟活动走。
+  // 之前传的是外壳项目 id（本机固定 default-outdoor），所有本机活动共用同一份规划；
+  // 新建活动只换了布局，规划还是上一份（边界/分区/设施/流线都在），看起来就是复制。
+  // overlay 的草稿归属本来就是 layout.id，只有外壳还没注水时才退回项目 id。
+  // 2026-11-17 补：显式项目（云项目、经典案例 replica-*）仍按外壳 id 取规划——那份规划就存
+  // 在项目名下，跟本机活动 id 不是一回事；只有本机默认壳体才落到当前活动。
+  const explicitOutdoorProject = isOutdoorProject && outdoorProjectIdProp !== DEFAULT_OUTDOOR_PROJECT_ID;
+  const outdoorPlanSlotId = explicitOutdoorProject
+    ? outdoorProjectIdProp
+    : (layout.id ?? outdoorProjectIdProp ?? null);
   // 2026-11-13 用户指令：聊天历史要「服从于不同的项目」——会话槽跟当前活动走
   // （活动身份 = 当前布局 id，切换/新建活动即变），外壳 projectId 只在外壳还没注水时兜底。
   // 旧版本用 projectSessionScope(outdoorProjectIdProp)，一个 id 全活动共享，历史才会全摊在一起。
@@ -640,9 +655,9 @@ useEffect(() => {
   }, []);
   // 2026-11-12 B1 选择工具：2D 画布当前模式（右栏「选择」钮按下态）。
   const [outdoorCanvasMode, setOutdoorCanvasMode] = useState<'view' | 'select'>('view');
-  // 2026-11-15 测量直进：measure 绘制模式激活态 + 当前距离/面积/路径（工具条小标回显）。
+  // 2026-11-15 测量直进：measure 绘制模式激活态 + 当前距离/面积（工具条小标回显；2026-11-17 路径入口下线）。
   const [outdoorMeasureActive, setOutdoorMeasureActive] = useState(false);
-  const [outdoorMeasureKind, setOutdoorMeasureKind] = useState<'distance' | 'area' | 'path'>('distance');
+  const [outdoorMeasureKind, setOutdoorMeasureKind] = useState<'distance' | 'area'>('distance');
   // 2026-11-15 户外网格吸附开关：默认开；关闭后放置/拖动/拖顶点自由摆放。
   const [outdoorSnapOn, setOutdoorSnapOn] = useState(true);
   const handleOutdoorCanvasMode = useCallback((mode: string) => {
@@ -1009,6 +1024,17 @@ useEffect(() => {
     } catch (error) {
       throw new Error(shareErrorMessage(error));
     }
+  }, [controller]);
+  // 分享记录：版本 / 时间 / 撤回状态以服务端为准；链接 token 只在生成时返回一次，URL 由卡片记在本机日志里。
+  const listProjectShares = useCallback(async (): Promise<ServerShare[]> => {
+    const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
+    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    return controller.businessRequest<ServerShare[]>(`/projects/${encodeURIComponent(projectId)}/shares`, 'GET');
+  }, [controller]);
+  const revokeProjectShare = useCallback(async (shareId: string) => {
+    const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
+    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    await controller.businessRequest(`/projects/${encodeURIComponent(projectId)}/shares/${encodeURIComponent(shareId)}`, 'DELETE');
   }, [controller]);
   const exportHandoff = useCallback(() => {
     setSidePanel(null);
@@ -1765,7 +1791,7 @@ useEffect(() => {
     // 先镜像给 3D 地面图层：即使边界没变（只挪了设施/改分区），3D 里也要跟着动。
     // 收在户外视图里也保留这份快照——切回 3D 才看得见平面在哪儿。
     outdoorFullPlanRef.current = plan;
-    const boundId = isOutdoorProject ? outdoorProjectIdProp : (layoutStore.getState().layout.id ?? null);
+    const boundId = isOutdoorProject ? outdoorPlanSlotId : (layoutStore.getState().layout.id ?? null);
     setOutdoorPlanState({ projectId: boundId, plan: filterPlanByLevel(plan, outdoorLevelIdRef.current) });
     // 纯户外项目没有室内壳体：不回写室内 layout，只把边界/分区镜像给 3D 地面图层。
     if (isOutdoorProject) {
@@ -1793,22 +1819,22 @@ useEffect(() => {
     // 边界变了就重拼 3D 地面底图（用 2D 当前那张地图：OSM/Carto/天地图）。
     applyOutdoorGroundBasemap(plan);
     if (patch.scaled) notify('平面边界超过 200 m，已按比例缩到壳体可承载的尺寸。', 'info');
-  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, applyOutdoorGroundBasemap, isOutdoorProject, outdoorProjectIdProp]);
+  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, applyOutdoorGroundBasemap, isOutdoorProject, outdoorPlanSlotId]);
   const handleOutdoorActiveLevelChange = useCallback((levelId: string) => {
     outdoorLevelIdRef.current = levelId;
     const full = outdoorFullPlanRef.current;
     if (!full) return;
-    const boundId = isOutdoorProject ? outdoorProjectIdProp : (layoutStore.getState().layout.id ?? null);
+    const boundId = isOutdoorProject ? outdoorPlanSlotId : (layoutStore.getState().layout.id ?? null);
     setOutdoorPlanState({ projectId: boundId, plan: filterPlanByLevel(full, levelId) });
-  }, [isOutdoorProject, outdoorProjectIdProp]);
+  }, [isOutdoorProject, outdoorPlanSlotId]);
   /** 切回 3D 也保留平面图层（这才是「2D 策划的东西 3D 里也在」）；只丢掉别的活动的残留。 */
   const outdoorPlan = useMemo(
     () => {
       if (!outdoorPlanState) return null;
-      const matchId = isOutdoorProject ? outdoorProjectIdProp : (layout.id ?? null);
+      const matchId = isOutdoorProject ? outdoorPlanSlotId : (layout.id ?? null);
       return outdoorPlanState.projectId === matchId ? outdoorPlanState.plan : null;
     },
-    [layout.id, outdoorPlanState, isOutdoorProject, outdoorProjectIdProp],
+    [layout.id, outdoorPlanState, isOutdoorProject, outdoorPlanSlotId],
   );
   // V-5 生成/上传由 OutdoorPlanOverlay 原位承接，不跳转旧物料 Agent 或另一工作台。
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
@@ -2717,10 +2743,10 @@ useEffect(() => {
     // 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（右栏工具排「选择」钮的按下态与切换）。
     canvasMode: outdoorCanvasMode,
     setCanvasMode: (mode: 'view' | 'select') => outdoorOverlayRef.current?.setCanvasMode(mode),
-    // 2026-11-15 测量直进：激活态 / 当前模式 + 进入退出 / 切距离·面积·路径（工具条小标转发）。
+    // 2026-11-15 测量直进：激活态 / 当前模式 + 进入退出 / 切距离·面积（工具条小标转发）。
     measureActive: outdoorMeasureActive,
     measureKind: outdoorMeasureKind,
-    setMeasureKind: (kind: 'distance' | 'area' | 'path') => { setOutdoorMeasureKind(kind); outdoorOverlayRef.current?.setMeasureKind(kind); },
+    setMeasureKind: (kind: 'distance' | 'area') => { setOutdoorMeasureKind(kind); outdoorOverlayRef.current?.setMeasureKind(kind); },
     // 2026-11-15 网格吸附开关：底条吸附钮切换，转发到 2D 画布。
     snapOn: outdoorSnapOn,
     setSnapOn: (on: boolean) => { setOutdoorSnapOn(on); outdoorOverlayRef.current?.setSnapOn(on); },
@@ -4375,6 +4401,13 @@ useEffect(() => {
       return null;
     },
   }),[planAnnot.getSnapshot,activitySession.isCurrent,sessionToken,sessionScope,flushPendingBeforeSwitch]);
+  // 分享卡预览：打开时抓当前画布真实一帧（户外 3D 接管 / 户外 2D / 室内各走各的抓帧句柄）；抓不到由卡片退回示意图。
+  // 必须放在会话提前 return 之前，hooks 不能条件调用。
+  const captureSharePreview = useCallback(async () => {
+    if (outdoor3dTakeover) return outdoorPlan3DRef.current?.captureImage() ?? null;
+    if (outdoor2DOpen) return outdoorOverlayRef.current?.captureImage() ?? null;
+    return captureRenderImage({ view: 'current', scale: 1 });
+  }, [outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
   if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
 
   // P4-c：发布卡片只实现一次；3D 工具轨与 2D 画布右上交付簇各自挂一份触发钮，
@@ -4382,6 +4415,9 @@ useEffect(() => {
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
     onPublish: publishVersion,
+    onListShares: listProjectShares,
+    onRevokeShare: revokeProjectShare,
+    onCapturePreview: captureSharePreview,
     onExportHandoff: exportHandoff,
     onGenerateShareLink: handleShareLink,
     onOpenMaterials: openMaterialsFromShare,
@@ -4799,7 +4835,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})} {...(outdoor2DOpen || outdoor3dTakeover ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} {...(layout.id ? { venueFactScope: activityScope(layout.id) } : {})} isVenueFactScopeCurrent={isScopedSessionCurrent} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})} {...(outdoor2DOpen || outdoor3dTakeover ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -4826,7 +4862,8 @@ useEffect(() => {
             >
             <OutdoorPlanOverlay
               ref={outdoorOverlayRef}
-              projectId={isOutdoorProject ? outdoorProjectIdProp : (layout.id ?? null)}
+              projectId={outdoorPlanSlotId}
+              legacyPlanProjectId={legacyOutdoorPlanProjectId}
               anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? layout.mapLngLat ?? null)}
               activityName={isOutdoorProject ? null : layout.name}
               onSaveStateChange={handleOutdoorSaveState}

@@ -74,6 +74,7 @@ import {
   type PlanPropShape,
 } from '@/components/room-organizer/lib/plan-footprint-geometry';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
+import { acquireWebGLSurface } from '@/components/room-organizer/lib/webgl-context';
 import {
   planCrowdShellPlacements,
   planSceneObjectPlacements,
@@ -451,7 +452,9 @@ export default function OutdoorPlan3D({
   nearEntryRef.current = nearEntry;
   const onInteractRef = useRef(onInteract);
   onInteractRef.current = onInteract;
-  const [groundState, setGroundState] = useState<'loading' | 'satellite' | 'paper'>('loading');
+  // 2026-11-17：多一个 unavailable——设备根本给不出 WebGL 时，3D 画不出来是事实，
+  // 别再假称“正在取底图”或“先用纸面网格”，那两句话会把人引到错的地方。
+  const [groundState, setGroundState] = useState<'loading' | 'satellite' | 'paper' | 'unavailable'>('loading');
 
   const zoomBy = useCallback((factor: number) => {
     const camera = cameraRef.current;
@@ -697,10 +700,22 @@ export default function OutdoorPlan3D({
       coverFrameFromFrustum(lookTarget, orbitEye, 52, aspect),
     ]);
 
+    // 2026-11-17：先自己拿上下文。three 建失败会先 console.error 再抛，Next 开发面板
+    // 会把那条 error 记成 issue；这里拿到就复用，拿不到就直接停在“打不开 3D”的说明上。
+    const surface = acquireWebGLSurface({ antialias: true, alpha: false });
+    if (!surface) {
+      setGroundState('unavailable');
+      return undefined;
+    }
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer = new THREE.WebGLRenderer({
+        canvas: surface.canvas,
+        context: surface.context,
+        antialias: true,
+        alpha: false,
+      });
     } catch {
-      setGroundState('paper');
+      setGroundState('unavailable');
       return undefined;
     }
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -2369,6 +2384,31 @@ export default function OutdoorPlan3D({
             {interactHintLabel(nearEntry, seatActiveId === nearEntry.id)}
             {nearEntry.subtitle ? ` · ${nearEntry.subtitle}` : ''}
           </span>
+        </div>
+      )}
+      {groundState === 'unavailable' && (
+        <div
+          data-testid="outdoor-3d-unavailable"
+          role="status"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 2,
+            maxWidth: 360,
+            padding: '14px 18px',
+            borderRadius: 12,
+            background: 'rgba(18, 20, 26, 0.86)',
+            color: '#fff',
+            fontSize: 13,
+            lineHeight: '20px',
+            textAlign: 'center',
+          }}
+        >
+          这台设备暂时打不开 3D 画面（浏览器没给 WebGL）。
+          <br />
+          布置和保存都不受影响，切回 2D 继续就行。
         </div>
       )}
       {groundState === 'paper' && (

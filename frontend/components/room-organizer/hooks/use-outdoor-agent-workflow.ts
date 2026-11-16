@@ -101,6 +101,13 @@ import { fetchRoadNetwork } from "../lib/road-network";
 import { checkBoundaryRing } from "../lib/site-plan-editing";
 import { buildRouteProposal, roadFetchPlanForBoundary } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
+import {
+  parseShorelineDemand,
+  proposeShorelineLayout,
+  shorelineIntent,
+} from "../lib/outdoor-shoreline-layout";
+import { isShorelineEvent } from "../lib/outdoor-event-logic";
+import { facilityFootprintRing } from "../lib/site-plan-facilities";
 import { renamedNodeName } from "../lib/site-plan-node-names";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
 
@@ -166,7 +173,6 @@ function mapEditHighlight(kind: OutdoorWorkflowProposal["kind"], before: SitePla
   }
 }
 const stages = Object.keys(OUTDOOR_STAGE_LABELS) as OutdoorStage[];
-export const OUTDOOR_MODEL_INPUT_STEP = "将本轮输入和场地资料交给模型判断。";
 const outdoorPlanSteps: Partial<Record<OutdoorTurn["action"], readonly string[]>> = {
   zones: ["核对活动范围和已有分区", "按活动用途和室内外依据生成分区预览"],
   revise: ["核对要调整的分区和需要保留的内容", "生成调整后的分区预览"],
@@ -403,6 +409,8 @@ export function useOutdoorAgentWorkflow(input: {
   const [simulating, setSimulating] = useState(false);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
+  /** 2026-11-17：画布规模并进思考卡摘要（一行），不再作为一条步骤占一行。 */
+  const [canvasNote, setCanvasNote] = useState<string | null>(null);
   const [thought, setThought] = useState<string | null>(null);
   const [awaitingThought, setAwaitingThought] = useState(false);
   const [thoughtDraft, setThoughtDraft] = useState("");
@@ -494,6 +502,7 @@ export function useOutdoorAgentWorkflow(input: {
   function start(continueDesign = false) {
     if (!continueDesign) {
       setDesignSteps([]);
+      setCanvasNote(null);
       setThought(null);
       setThoughtMs(null);
       setThoughtRequest(null);
@@ -531,6 +540,7 @@ export function useOutdoorAgentWorkflow(input: {
   function cancel(options?: { preservePendingLogin?: boolean }) {
     const withdrawnCard = proposalRef.current;
     setDesignSteps([]);
+    setCanvasNote(null);
     updatePendingPlan(null);
     setAwaitingThought(false);
     setThoughtDraft("");
@@ -1078,6 +1088,10 @@ export function useOutdoorAgentWorkflow(input: {
         );
         return;
       }
+      // 2026-11-17 用户实测「就沿着水岸线」→ 被反問「北/东/南/西」，而画布上河就在那儿。
+      // 水体/水道已进快照（openfreemap-water），沿岸意图的追问不再问方位：
+      // 沿真实岸线直接出预览；真没有水系/界外才给可执行的下一步。ask 与非 ask 共用 shorelineTurn。
+      if (shorelineIntent(message) && (await shorelineTurn(message, continueDesign, null))) return;
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
       askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
@@ -1689,6 +1703,70 @@ export function useOutdoorAgentWorkflow(input: {
     } as OutdoorTurn;
   }
 
+  /**
+   * 2026-11-17：沿岸排布的确定性接管——ask 与 zones/objects/revise 共用一条路径。
+   * 返回 true = 本轮已按沿岸处理（出预览/给下一步/亮失败），调用方直接 return；
+   * 返回 false = 没接管（画布未就绪），调用方落回原路径。
+   */
+  async function shorelineTurn(
+    message: string,
+    continueDesign: boolean,
+    existingJob?: { epoch: number; controller: AbortController; scope: string } | null,
+  ): Promise<boolean> {
+    const job = existingJob ?? start(continueDesign);
+    const before = JSON.stringify(callbacks.current.bridge()?.getPlan());
+    try {
+      await mapContext(job.controller.signal);
+      const shorePlan = callbacks.current.bridge()?.getPlan();
+      if (!live(job)) return true;
+      if (!shorePlan) return false;
+      if (JSON.stringify(shorePlan) !== before) {
+        status("读取期间画布已变化，请基于当前规划重新预览。", "blocked");
+        return true;
+      }
+      const shoreline = proposeShorelineLayout(
+        {
+          shorelines: mapRef.current.water?.() ?? [],
+          boundary: shorePlan.boundary,
+          demand: parseShorelineDemand(message),
+          obstacles: shorePlan.facilities.map(facilityFootprintRing),
+          exclusions: shorePlan.zones.map(zone => zone.polygon),
+        },
+        () => crypto.randomUUID(),
+      );
+      if (shoreline.ok) {
+        const { layout } = shoreline;
+        designStep(
+          `沿真实岸线 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个钓位；本版只出预览，未写入画布。`,
+        );
+        offer(
+          {
+            ...shorePlan,
+            zones: [...shorePlan.zones, ...layout.zones],
+            facilities: [...shorePlan.facilities, ...layout.facilities],
+            routes: [...shorePlan.routes, ...layout.routes],
+          },
+          "objects",
+          `沿岸排布·${layout.summary.waterName}（${layout.summary.stations} 个钓位）`,
+          job,
+          layout.summary.warnings,
+        );
+        return true;
+      }
+      askForDetails(shoreline.message);
+      return true;
+    } catch (error) {
+      // 取消就静默结束；真失败（如校验拦截）如实亮出原因，不回退到「问方位」。
+      if (error instanceof DOMException && error.name === "AbortError") return true;
+      status(
+        error instanceof Error
+          ? error.message
+          : "沿岸排布未完成；请在地图上确认水岸位置后重试。",
+        "blocked",
+      );
+      return true;
+    }
+  }
   function askForDetails(question: string) {
     callbacks.current.say(question, true);
     status("补充对话里的信息后可以继续。", "ask");
@@ -1779,7 +1857,7 @@ export function useOutdoorAgentWorkflow(input: {
     const selected = callbacks.current.bridge()?.selectedIds?.() ?? [];
     let modelStarted: number | undefined;
     setThoughtRequest(message);
-    designStep(`核对活动范围和地图依据。当前画布有 ${plan.zones.length} 个分区、${plan.facilities.length} 项设施。`);
+    setCanvasNote(`已读画布 ${plan.zones.length} 个分区 · ${plan.facilities.length} 项设施`);
     setAwaitingThought(true);
     status(
       "结合当前需求、选中对象与结构化地图依据理解本句；未读取地图像素、未执行修改。",
@@ -1831,7 +1909,6 @@ export function useOutdoorAgentWorkflow(input: {
         onRequest: () => {
           if (live(job)) {
             modelStarted = performance.now();
-            designStep(OUTDOOR_MODEL_INPUT_STEP);
           }
         },
         onThought: text => {
@@ -1876,6 +1953,17 @@ export function useOutdoorAgentWorkflow(input: {
         setProposal(proposalRef.current);
         await confirm();
         return true;
+      }
+      // 2026-11-17 用户拍板：沿岸活动（钓鱼比赛等）模型不回 ask、直接给设计动作时，
+      // 跳过通用计划批准闸门直接沿岸出预览（预览本身就是确认环节）；范围未确认则落回通用流程先确认范围。
+      if (
+        (turn.action === "zones" || turn.action === "objects" || turn.action === "revise") &&
+        stateRef.current.confirmedBoundary === boundaryKey(plan) &&
+        (shorelineIntent(message) ||
+          isShorelineEvent(message) ||
+          isShorelineEvent(stateRef.current.brief.event))
+      ) {
+        if (await shorelineTurn(message, true, job)) return true;
       }
       const steps = outdoorPlanSteps[turn.action];
       if (steps) {
@@ -2175,6 +2263,7 @@ export function useOutdoorAgentWorkflow(input: {
   return {
     state,
     designSteps,
+    canvasNote: state.scope === input.scope ? canvasNote : null,
     thought: state.scope === input.scope ? thought : null,
     thoughtMs: state.scope === input.scope ? thoughtMs : null,
     thoughtRequest: state.scope === input.scope ? thoughtRequest : null,

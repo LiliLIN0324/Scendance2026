@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, RotateCw, Search, TriangleAlert } from "@/components/solid-icons";
 import {
-  OUTDOOR_MODEL_INPUT_STEP,
   OUTDOOR_STAGE_LABELS,
   type OutdoorCardRecord,
   type useOutdoorAgentWorkflow,
@@ -167,7 +166,7 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
   );
 }
 
-export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft = "", steps = [], elapsedMs = null, compact = false }: {
+export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft = "", steps = [], elapsedMs = null, compact = false, canvasNote = null, attention = false }: {
   thought: string | null;
   request?: string | null;
   awaiting?: boolean;
@@ -175,10 +174,16 @@ export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft
   steps?: readonly string[];
   elapsedMs?: number | null;
   compact?: boolean;
+  canvasNote?: string | null;
+  /** 本轮有真异常（地图依据没取全）才自动展开；常规轮默认收起。*/
+  attention?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // 2026-11-17：不再「只要在跑就展开」。这几步在请求发出前就全部就位，自动展开等于每次输入都弹一大块。
+  const autoOpen = awaiting && attention;
+  const [open, setOpen] = useState(autoOpen);
+  useEffect(() => { setOpen(autoOpen); }, [autoOpen]);
   if (!thought && !awaiting) return null;
-  const modelIndex = steps.indexOf(OUTDOOR_MODEL_INPUT_STEP) + 1;
   const modelNote = (thought || draft) && (
     <details className="ap-outdoor-model-note" open>
       <summary>{awaiting ? "目前的思考" : elapsedMs === null ? "模型摘要" : `思考了 ${formatDurationClock(elapsedMs)}`}</summary>
@@ -186,25 +191,27 @@ export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft
     </details>
   );
   const stepRow = (step: string, index: number) => <li key={index} className="ap-run-thought-text">{step}</li>;
+  // 2026-11-17：折叠窗口只截步骤，模型片段始终保留——否则窗口滑动会把最后真正有用的一步挤掉。
+  const visibleSteps = showAll ? steps : steps.slice(-3);
   const rows = [
-    ...steps.slice(0, modelIndex).map(stepRow),
+    ...visibleSteps.map((step, index) => stepRow(step, showAll ? index : steps.length - visibleSteps.length + index)),
     ...(modelNote ? [<li key="model">{modelNote}</li>] : []),
-    ...steps.slice(modelIndex).map((step, index) => stepRow(step, modelIndex + index)),
   ];
   return (
     <article className="ap-card ap-outdoor-thought-card" aria-label="思考卡片">
     {request && <header className="ap-outdoor-thought-heading">{request}</header>}
     {awaiting && <div className="ap-task-progress" aria-hidden="true" />}
-    <details className="ap-run-thoughts" open={awaiting || !compact} aria-busy={awaiting || undefined}>
+    <details className="ap-run-thoughts" open={open} aria-busy={awaiting || undefined} onToggle={event => setOpen(event.currentTarget.open)}>
       <summary className="ap-run-thoughts-summary">
         {awaiting ? "思考中" : "思考记录 · 1 条"}
+        {canvasNote && <span className="ap-outdoor-thought-canvas">{canvasNote}</span>}
         {compact && !awaiting && elapsedMs !== null && <span className="ap-run-thoughts-hint">思考了 {formatDurationClock(elapsedMs)}</span>}
       </summary>
-      {rows.length > 3 && <button className="ap-outdoor-thought-more" type="button" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>
-        {showAll ? "收起较早步骤" : `共 ${rows.length} 步，查看较早步骤`}
+      {steps.length > 3 && <button className="ap-outdoor-thought-more" type="button" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>
+        {showAll ? "收起较早步骤" : `共 ${steps.length} 步，查看较早步骤`}
       </button>}
-      <ol className="ap-outdoor-thought-steps" start={showAll ? 1 : Math.max(1, rows.length - 2)}>
-        {showAll ? rows : rows.slice(-3)}
+      <ol className="ap-outdoor-thought-steps" start={showAll ? 1 : Math.max(1, steps.length - 3 + 1)}>
+        {rows}
       </ol>
     </details>
     </article>
@@ -296,7 +303,7 @@ export function OutdoorWorkflowCard({
     people: "people",
     "refine-3d": "refine-3d",
   };
-  const thoughtRecord = <OutdoorThoughtRecord key={flow.thoughtRequest} thought={flow.thought} request={flow.thoughtRequest} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} />;
+  const thoughtRecord = <OutdoorThoughtRecord key={flow.thoughtRequest} thought={flow.thought} request={flow.thoughtRequest} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} canvasNote={flow.canvasNote} attention={flow.mapGap} />;
   const pendingPlan = flow.pendingPlan;
   if (pendingPlan) return (
     <>

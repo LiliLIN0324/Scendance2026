@@ -21,6 +21,7 @@ import { applyRendererLook, DEFAULT_EVENT_LIGHTING, makeBackdropTexture, placeAc
 import type { RoomLayout } from '../room-organizer/lib/types';
 import { SHARE_VIEW_LABELS, SHARE_VIEW_PRESETS, shareShotFilename, type ShareViewPreset } from '../../lib/share-snapshot';
 import { MaterialSymbol } from '../room-organizer/panels/material-symbol';
+import { acquireWebGLSurface } from '../room-organizer/lib/webgl-context';
 
 /** Mirrors the canvas presets in `use-camera-presets.ts` so the stills match the editor angles. */
 const VIEWS: Record<ShareViewPreset, (size: number) => { position: [number, number, number]; target: [number, number, number] }> = {
@@ -54,6 +55,9 @@ export function LayoutPreview({ layout, assetUrls, name, initialView = 'iso' }: 
   const [assetProblems, setAssetProblems] = useState<string[]>([]);
   const [notice, setNotice] = useState('');
   const [busyExport, setBusyExport] = useState(false);
+  // 2026-11-17：没 WebGL 时以前会直接抛错（连 try 都没有，整块预览变白屏），
+  // 现在先探一次，拿不到就只出一句话，导出钮置灰。
+  const [webglMissing, setWebglMissing] = useState(false);
 
   const modelUrls = useMemo(() => {
     const map = new Map<string, string>();
@@ -81,6 +85,7 @@ export function LayoutPreview({ layout, assetUrls, name, initialView = 'iso' }: 
     host.dataset.ready = 'false';
     host.dataset.assetsPending = String(modelUrls.size);
     setAssetProblems([]);
+    setWebglMissing(false);
 
     // 与编辑器同一份光照档案（three/render-look.ts）：同一套色调映射、
     // 曝光、渐变背景、环境强度与阴影，所以查看器与导出图不再比编辑器发灰。
@@ -91,7 +96,20 @@ export function LayoutPreview({ layout, assetUrls, name, initialView = 'iso' }: 
     const world = new THREE.Scene();
     const backdrop = makeBackdropTexture(THREE, look.skyZenith, look.background);
     world.background = backdrop;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    let renderer: THREE.WebGLRenderer;
+    const surface = acquireWebGLSurface({ antialias: true, preserveDrawingBuffer: true });
+    if (!surface) { setWebglMissing(true); return undefined; }
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: surface.canvas,
+        context: surface.context,
+        antialias: true,
+        preserveDrawingBuffer: true,
+      });
+    } catch {
+      setWebglMissing(true);
+      return undefined;
+    }
     applyRendererLook(THREE, renderer);
     renderer.toneMappingExposure = look.exposure;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -343,11 +361,14 @@ export function LayoutPreview({ layout, assetUrls, name, initialView = 'iso' }: 
         <MaterialSymbol name={preset === 'front' ? 'view_agenda' : preset === 'top' ? 'grid_view' : '3d_rotation'}/>
       </button>)}
       <span className="sc-preview-tools-sep" aria-hidden="true"/>
-      <button type="button" aria-label="导出三张效果图" title="导出三张效果图" disabled={busyExport} onClick={() => { void exportShots(); }}>
+      <button type="button" aria-label="导出三张效果图" title={webglMissing ? '这台设备无法渲染三维效果图' : '导出三张效果图'} disabled={busyExport || webglMissing} onClick={() => { void exportShots(); }}>
         <MaterialSymbol name="download"/>
       </button>
     </div>
     {notice && <p className="sc-preview-note" role="status">{notice}</p>}
+    {webglMissing && <p className="sc-preview-note is-warning" role="status">
+      这台设备暂时无法渲染三维方案（浏览器没给 WebGL），物料与平面信息不受影响。
+    </p>}
     {assetProblems.length > 0 && <p className="sc-preview-note is-warning" role="status">
       有 {assetProblems.length} 个模型未能载入，已用占位显示：{assetProblems.slice(0, 4).join('、')}{assetProblems.length > 4 ? '…' : ''}
     </p>}
