@@ -19,7 +19,7 @@ import {
 /** planet 数据的 building 图层只到 z14（TileJSON maxzoom），更高的瓦片是空的。 */
 const OFM_BUILDING_ZOOM = OFM_MAX_USEFUL_ZOOM;
 
-interface LngLatRing {
+export interface LngLatRing {
   id: string;
   name: string;
   lngLat: [number, number][];
