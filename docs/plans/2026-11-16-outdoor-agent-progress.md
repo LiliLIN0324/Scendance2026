@@ -115,7 +115,9 @@ scripts/probe-basemap-zoom.mjs
   · 阶段打点 → map_request / preview_ready / applied；attemptIds → 模型次数（只报次数，不造时刻）
   · 窗口末端取 max(finishedAt, UI 时刻)，因为气泡常在终态之后才渲染
   · 修正上轮预览口径：预览在确认之前时从开轮算（原实现会返回负值转 null）
-验证：两个文件各 9/9（合计 18）；自己先跑挂两条（预览负值、终态后补阶段无效），改测试构造与口径后全绿
+验证：两个文件各 9/9（合计 18）；在隔离 worktree（干净 HEAD + 本轮提交）`tsc --noEmit` 0 行
+自我挖出的错（已修）：
+  · 首次提交把用户 WIP 的 `outdoor-map-context.ts` 与 `frontend/package.json` 一并带进去了（stash pop 与手工 `git add` 留下的暂存）——`reset --soft HEAD^` 后只重提自己的 4 个文件，用户的 scripts 与 map-context 改动仍在工作树（逐项比过）
 未完成：还没接到界面（下一步）；浏览器主流程仍需 9222
 ```
 
