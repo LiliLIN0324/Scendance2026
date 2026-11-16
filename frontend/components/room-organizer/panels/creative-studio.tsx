@@ -43,7 +43,7 @@ import {registerReadonlyDraftReader} from '../lib/readonly-draft-registry';
 import type {createSourceEditorCoordinator} from '@/lib/source-editor-coordinator';
 import type { ActivitySessionToken } from '../lib/activity-session-epoch';
 import { buildReviewReference } from '../lib/review-copy';
-import { appendAgentRunEvents, appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
+import { appendAgentRunEvents, appendAgentThoughts, appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { setBriefHeadcount } from './brief-headcount-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
@@ -1517,12 +1517,34 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
             new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('event timeout')),2000);}),
           ]);
           if(!eventActive())return;
-          appendAgentRunEvents(response.events);eventCursor=response.nextCursor;
+          appendAgentRunEvents(response.events);appendAgentThoughts(response.thoughts);eventCursor=Math.max(eventCursor,response.nextCursor);
           if(response.events.length<50)return;
         }catch{eventUnavailable=true;return;}
         finally{if(timer)clearTimeout(timer);}
       }
     };
+    /**
+     * SSE 优先：同一个游标，服务器把新帧（工具回执 + 可见自述）推上来，
+     * 轮询仍是兜底——旧部署没有该路由、或流断了，轮询照样能把账本补齐。
+     * 两边写入都按 seq/轮次去重，游标只增不减。
+     */
+    const streamAbort=new AbortController();
+    let streamDisabled=false;
+    const streamEvents=async():Promise<void>=>{
+      while(eventActive()&&!streamDisabled&&!streamAbort.signal.aborted&&['queued','running'].includes(result.state)){
+        let ending:'done'|'ended';
+        try{
+          ending=await controller.streamAgentRunEvents(eventRunId,eventCursor,(page)=>{
+            if(!eventActive())return;
+            appendAgentRunEvents(page.events);appendAgentThoughts(page.thoughts);
+            eventCursor=Math.max(eventCursor,page.nextCursor);
+          },streamAbort.signal);
+        }catch{streamDisabled=true;return;}
+        if(ending==='done')return;
+        await new Promise(resolve=>setTimeout(resolve,1000));
+      }
+    };
+    void streamEvents();
     /**
      * 运行条里塞进来的备注，交给正在跑的这一趟。工作线程在下一轮模型调用之前取走，
      * 所以送达时机是「下一次它要思考的时候」，不是立刻——界面上说的也是这个。
@@ -1573,6 +1595,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       result=await controller.getAgentRun(result.id);
     }
     if(lastProgress)closeAgentStep(Date.now()-stepStartedAt);
+    streamAbort.abort();
     // 本轮既没给候选也没改动画布 → 出空结果回执卡，不许沉默结束。
     endAgentRun({emptyOutcome:!result.candidates.length});
     if(active())return await consumeRun(result,base,submittedBrief,submittedScope,epoch,turnToken,turnFloor,venueBinding,seatingCapture,annotationEvidence);

@@ -27,7 +27,7 @@ describe('bounded agent execution observations',()=>{
   await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:finished});
   const api=createApi(f.backend,()=>undefined);
   const res=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events?after=0`,{headers:{authorization:`Bearer ${owner}`}}));
-  expect(res.status).toBe(200);expect(await res.json()).toEqual({events:[{seq:1,...started,argsSummary:null,durationMs:null},{seq:2,...finished,argsSummary:null,durationMs:null}],nextCursor:2,mayBeIncomplete:true});
+  expect(res.status).toBe(200);expect(await res.json()).toEqual({events:[{seq:1,kind:'tool',...started,argsSummary:null,durationMs:null,round:null,thought:null},{seq:2,kind:'tool',...finished,argsSummary:null,durationMs:null,round:null,thought:null}],nextCursor:2,mayBeIncomplete:true});
   const empty=await f.backend.agentEvents!(owner,'list',{projectId,id,after:2});expect(empty).toEqual({events:[],nextCursor:2,mayBeIncomplete:true});
   const denied=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events?after=0`,{headers:{authorization:`Bearer ${editor}`}}));expect(denied.status).toBe(404);
   const malformed=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events?after=1&after=2`,{headers:{authorization:`Bearer ${owner}`}}));expect(malformed.status).toBe(422);
@@ -50,8 +50,8 @@ describe('bounded agent execution observations',()=>{
   await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{...base,PRIVATE:'x'}})).rejects.toBeTruthy();
   const listed=await f.backend.agentEvents!(owner,'list',{projectId,id,after:0});
   expect(listed.events).toEqual([
-   {seq:1,...base,argsSummary:within,durationMs:0},
-   {seq:2,...base,argsSummary:null,durationMs:300000},
+   {seq:1,kind:'tool',...base,argsSummary:within,durationMs:0,round:null,thought:null},
+   {seq:2,kind:'tool',...base,argsSummary:null,durationMs:300000,round:null,thought:null},
   ]);
   await f.backend.agent!(owner,'cancel',{projectId,id});
  });
@@ -83,6 +83,25 @@ describe('bounded agent execution observations',()=>{
   expect(first.mayBeIncomplete).toBe(true);
   await f.backend.agent!(owner,'cancel',{projectId,id});
   await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event})).rejects.toBeTruthy();
+ });
+ it('stores a bounded per-round visible self-report beside tool receipts',async()=>{
+  const {project,run,claim}=await setup(),projectId=project.id,id=run.id;
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{round:1,thought:'先盘点场地已有物件，再决定挪哪些。'}});
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{tool:'get_scene',stage:'started',outcome:null,errorCode:null}});
+  const page=await f.backend.agentEvents!(owner,'list',{projectId,id,after:0});
+  expect(page.events[0]).toMatchObject({seq:1,kind:'thought',round:1,thought:'先盘点场地已有物件，再决定挪哪些。',tool:null,stage:null,outcome:null,errorCode:null,argsSummary:null,durationMs:null});
+  expect(page.events[1]).toMatchObject({seq:2,kind:'tool',tool:'get_scene',round:null,thought:null});
+  expect(page.nextCursor).toBe(2);
+  // Round bounds, the text bound, and cross-frame fields are all refused.
+  for(const event of [
+   {round:0,thought:'x'}, {round:7,thought:'x'}, {round:1,thought:''}, {round:1,thought:'x'.repeat(401)},
+   {round:1,thought:'x',tool:'get_scene'}, {round:1,thought:'x',PRIVATE:'y'},
+  ]) await expect(f.backend.agentEvents!(owner,'append',{projectId,id,claim,event})).rejects.toBeTruthy();
+  // The documented maximum is accepted as-is.
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{round:2,thought:'x'.repeat(400)}});
+  const listed=await f.backend.agentEvents!(owner,'list',{projectId,id,after:2});
+  expect(listed.events).toHaveLength(1);expect(listed.events[0]).toMatchObject({round:2,thought:'x'.repeat(400)});
+  await f.backend.agent!(owner,'cancel',{projectId,id});
  });
  it('rejects the old worker after release, transfer, expiry and A→B→A even if its claim is known',async()=>{
   const {project,run,claim,generation}=await setup(),projectId=project.id,id=run.id;
@@ -146,5 +165,28 @@ describe('bounded agent execution observations',()=>{
   const api=createApi({...f.backend,agentEvents:async()=>{throw Error('storage unavailable');}},env,fetcher);
   const res=await api(new Request(`https://local.test/projects/${project.id}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(input)}));
   expect(res.status).toBe(202);expect((await res.json()).state).toBe('complete');
+ });
+ it('streams stored frames and stops once the run is terminal',async()=>{
+  const {project,run,claim}=await setup(),projectId=project.id,id=run.id;
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{round:1,thought:'先盘点场地已有物件。'}});
+  await f.backend.agentEvents!(owner,'append',{projectId,id,claim,event:{tool:'get_scene',stage:'finished',outcome:'success',errorCode:null}});
+  await f.backend.agent!(owner,'cancel',{projectId,id});
+  const api=createApi(f.backend,()=>undefined);
+  const anonymous=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events/stream?after=0`));
+  expect(anonymous.status).toBe(401);
+  const res=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events/stream?after=0`,{headers:{authorization:`Bearer ${owner}`}}));
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toContain('text/event-stream');
+  const text=await res.text();
+  expect(text).toContain('event: page');
+  expect(text).toContain('"round":1');
+  expect(text).toContain('event: done');
+  expect(text).toContain('"state":"cancelled"');
+ });
+ it('rejects a malformed stream cursor before opening a connection',async()=>{
+  const {project,run}=await setup(),projectId=project.id,id=run.id;
+  const api=createApi(f.backend,()=>undefined);
+  const res=await api(new Request(`https://local.test/projects/${projectId}/agent-runs/${id}/events/stream?after=129`,{headers:{authorization:`Bearer ${owner}`}}));
+  expect(res.status).toBe(422);
  });
 });

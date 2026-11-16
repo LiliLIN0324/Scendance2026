@@ -113,6 +113,31 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
     const permitted=!!origin&&originPermitted(origin,allowed);
     if(permitted&&origin) headers.set('Access-Control-Allow-Origin',origin);
     const respond=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
+    /**
+     * Server-sent events for the two live channels (assistant answer, run frames).
+     * Errors after the response starts cannot become a JSON status any more, so
+     * they end the stream with a categorical `error` frame instead of a body dump.
+     */
+    const streamResponse=(run:(emit:(event:string,data:unknown)=>boolean)=>Promise<void>):Response=>{
+      const encoder=new TextEncoder();
+      const body=new ReadableStream<Uint8Array>({
+        async start(controller){
+          let closed=false;
+          const emit=(event:string,data:unknown):boolean=>{
+            if(closed)return false;
+            try{controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));return true;}
+            catch{closed=true;return false;}
+          };
+          try{await run(emit);}
+          catch(error){emit('error',{code:error instanceof ApiError?error.code:'STREAM_FAILED'});}
+          finally{if(!closed){closed=true;try{controller.close();}catch{/* already closed */}}}
+        },
+      });
+      const streamHeaders=new Headers(headers);
+      streamHeaders.set('Content-Type','text/event-stream; charset=utf-8');
+      streamHeaders.set('X-Accel-Buffering','no');
+      return new Response(body,{status:200,headers:streamHeaders});
+    };
     try {
       if(origin && !permitted) throw new ApiError('ORIGIN_FORBIDDEN',403);
       if(request.method==='OPTIONS') {
@@ -144,6 +169,20 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       const token=request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1];
       if(!token) throw new ApiError('UNAUTHENTICATED',401);
       const actor=await backend.user(token);
+      // 流式问答：同样的守卫与契约，只是把可见内容边生成边发。
+      // 只转发 delta.content；服务商推理 delta 在服务端丢弃，不进入事件流。
+      if(path==='/assistant/chat/stream' && method==='POST') {
+        const guardMode=env('BRIEF_REQUEST_GUARD');
+        if(guardMode!==undefined && guardMode!=='' && guardMode!=='off')throw new ApiError('BRIEF_GUARD_NOT_READY',503);
+        if(env('ASSISTANT_CHAT_ENABLED')!=='1')return streamResponse(async emit=>{emit('done',{status:'disabled',answer:null});});
+        const input=assistantChatRequestSchema.safeParse(await json());
+        if(!input.success)return streamResponse(async emit=>{emit('done',{status:'invalid',answer:null});});
+        return streamResponse(async emit=>{
+          const result=await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default',
+            onDelta:(text)=>{emit('delta',{text});}});
+          emit('done',{status:result.status,answer:result.answer});
+        });
+      }
       if(path==='/assistant/chat' && method==='POST') {
         // The existing guard is a draft: preserve its fail-closed configuration
         // rather than creating another unguarded route while it is enforced.
@@ -381,6 +420,32 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const all=url.searchParams.getAll('after');
           if(all.length>1||! /^(?:0|[1-9]\d{0,2})$/.test(all[0]??'0')||Number(all[0]??'0')>128)throw new ApiError('INVALID_AGENT_EVENT',422);
           return respond(await backend.agentEvents(actor,'list',{projectId,id:uuid.parse(agentEvents[1]),after:Number(all[0]??'0')}));
+        }
+        // 运行帧流：同一个游标、同一种校验，只是把轮询改成服务器推。
+        // 每帧是一页（工具回执 + 可见自述）加新游标；运行结束或连接到期即收尾。
+        const agentEventsStream=tail.match(/^\/agent-runs\/([^/]+)\/events\/stream$/);
+        if(agentEventsStream&&method==='GET') {
+          if(!backend.agentEvents||!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
+          // Capture the narrowed RPCs: the streaming closure must not re-read a possibly
+          // undefined field after the guard.
+          const eventsRpc=backend.agentEvents,agentRpc=backend.agent;
+          const all=url.searchParams.getAll('after');
+          if(all.length>1||! /^(?:0|[1-9]\d{0,2})$/.test(all[0]??'0')||Number(all[0]??'0')>128)throw new ApiError('INVALID_AGENT_EVENT',422);
+          const runId=uuid.parse(agentEventsStream[1]);
+          return streamResponse(async emit=>{
+            let cursor=Number(all[0]??'0');
+            const deadline=Date.now()+25_000;
+            while(Date.now()<deadline&&!request.signal.aborted){
+              const page=await eventsRpc(actor,'list',{projectId,id:runId,after:cursor});
+              const state=(page&&typeof page==='object'&&'events' in page)?page as {events:unknown[];nextCursor:number}:null;
+              if(state&&state.events.length){emit('page',{events:state.events,nextCursor:state.nextCursor,mayBeIncomplete:true});cursor=state.nextCursor;}
+              const run=await agentRpc(actor,'get',{projectId,id:runId});
+              const runState=run&&typeof run==='object'&&'state' in run?String((run as {state:unknown}).state):'';
+              if(!['queued','running'].includes(runState)){emit('done',{state:runState});return;}
+              await new Promise(resolve=>setTimeout(resolve,800));
+            }
+            emit('done',{state:'stream-ended'});
+          });
         }
         // 运行中改道：用户在这趟跑着的时候追加一句要求，工作线程在下一轮模型调用前取走。
         // 任务已结束时这里回 AGENT_RUN_STOPPED（409）——备注没有执行机会，不能假装收到。

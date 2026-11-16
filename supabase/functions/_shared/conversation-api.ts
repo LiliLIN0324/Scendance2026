@@ -22,7 +22,7 @@ export function createConversationApi(backend:Backend,env:Env,fetcher:Fetcher=fe
   if(path===prefix||path.startsWith(prefix+'/'))path=path.slice(prefix.length);
   else if(path==='/conversation-api'||path.startsWith('/conversation-api/'))path=path.slice('/conversation-api'.length);
   if(path.endsWith('/'))path=path.slice(0,-1);
-  if(path!=='/brief/extract'&&path!=='/assistant/chat')return new Response(null,{status:404,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+  if(path!=='/brief/extract'&&path!=='/assistant/chat'&&path!=='/assistant/chat/stream')return new Response(null,{status:404,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
   if(request.method!=='POST'&&request.method!=='OPTIONS')return new Response(null,{status:405,headers:{'Allow':'POST, OPTIONS','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
   url.pathname=path;
   // For disabled requests use the already authenticated, no-provider chat

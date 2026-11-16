@@ -1,8 +1,49 @@
-/** Observations describe tool execution only, never model reasoning or safety approval. */
+/**
+ * Observations describe tool execution or a bounded per-round self-report.
+ *
+ * A tool frame is a receipt: which whitelisted tool started/finished and with
+ * what categorical outcome. It never carries model text or safety approval.
+ *
+ * A thought frame is the model's own visible sentence for one round, normalized
+ * and truncated. It is contextual help for the user, not evidence, not a tool
+ * result and never provider reasoning: `reasoning_content`/`reasoning_details`
+ * stay in worker memory for the next provider request only.
+ */
 export const agentEventTools=['get_scene','search_resources','search_places','inspect_zone','find_free_areas','prepare_seating_candidate','prepare_shared_seating_candidate','create_parametric_model','inspect_materials','customize_material','validate_candidate','submit_candidates','get_bom','start_lux3d_model','get_outdoor_plan','prepare_plan_zones','prepare_plan_facilities','prepare_plan_routes','prepare_plan_workers','validate_plan_candidate','submit_plan_candidates'] as const;
 export const agentEventErrors=['INVALID_TOOL_INPUT','UNKNOWN_TOOL','AGENT_TOOL_FAILED','CANDIDATE_GEOMETRY_CONFLICT','CANDIDATES_NOT_DISTINCT','DIMENSION_CONFLICT','INVALID_SELECTION','INVALID_MATERIAL_TARGET','OBJECT_LOCKED','OBJECT_NOT_FOUND','OUT_OF_BOUNDS','STRUCTURAL_COLLISION','RESOURCE_NOT_FOUND','PREPARED_CANDIDATE_NOT_FOUND','VALIDATED_CANDIDATE_NOT_FOUND','SEATING_ALLOCATION_CONFLICT','SEATING_ALLOCATION_UNCONFIRMED','SEATING_SPEC_CONFLICT','SEATING_SPEC_UNCONFIRMED','PLACE_SEARCH_FAILED','PLACE_SEARCH_UNAVAILABLE','PLAN_UNKNOWN_TEMPLATE','PLAN_UNKNOWN_ZONE','PLAN_UNKNOWN_NODE','PLAN_CANDIDATE_NOT_FOUND'] as const;
 export type AgentEventTool=typeof agentEventTools[number];
 export type AgentEvent={tool:AgentEventTool;stage:'started'|'finished';outcome:'success'|'failed'|'unknown'|null;errorCode:string|null;argsSummary?:string|null;durationMs?:number|null};
+/** Bounds shared by the store, the runner and the client parser. */
+export const agentThoughtMaxChars=400;
+export const agentThoughtMaxRound=6;
+export type AgentThought={round:number;thought:string};
+/**
+ * Normalize one round's visible self-report. Null when the model said nothing
+ * usable, so the caller emits no frame instead of an empty one.
+ *
+ * Control characters and `<think>` wrappers are dropped, whitespace collapses to
+ * single spaces, and the result is truncated by code point to the fixed bound.
+ */
+export function agentThoughtText(value:string|null|undefined):string|null{
+ if(typeof value!=='string')return null;
+ const text=value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,' ').replace(/<\/?think>/gi,' ').replace(/\s+/g,' ').trim();
+ if(!text)return null;
+ const points=Array.from(text);
+ return points.length<=agentThoughtMaxChars?text:`${points.slice(0,agentThoughtMaxChars-1).join('')}…`;
+}
+/**
+ * Build the frame for one model round. Visible model text wins; a round that only
+ * produced tool calls is summarized by those whitelisted tool names, which is a
+ * fact about the request, not an interpretation of the model's reasoning.
+ */
+export function agentRoundThought(round:number,content:string|null|undefined,toolNames:readonly string[]):AgentThought|null{
+ if(!Number.isInteger(round)||round<1||round>agentThoughtMaxRound)return null;
+ const visible=agentThoughtText(content);
+ if(visible)return {round,thought:visible};
+ if(!toolNames.length)return null;
+ const fallback=agentThoughtText(`本轮准备调用工具：${toolNames.join('、')}。`);
+ return fallback?{round,thought:fallback}:null;
+}
 export function agentEventTool(value:string):value is AgentEventTool{return (agentEventTools as readonly string[]).includes(value);}
 /** A returned response may encode a failed operation despite the call completing normally. */
 export function agentEventOutcome(tool:AgentEventTool,value:unknown,expectedCandidates?:number):Pick<AgentEvent,'outcome'|'errorCode'> {
