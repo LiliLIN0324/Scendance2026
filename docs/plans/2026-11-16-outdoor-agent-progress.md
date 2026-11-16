@@ -4,23 +4,23 @@
 
 ## 当前续跑点
 
-- 总状态：计划编写阶段已完成；**M0 进行中**（浏览器入口复现未做），M2 已开工（切片 2a、2b 已交付）。M1、M3–M7 待开始。
+- 总状态：计划编写阶段已完成；**M0 已收口**（浏览器复现 + 首断点 + 修复），**M2 进行中**，**M3 已开工**（复合句分流）。M1、M4–M7 待开始。
 - 验收口径：以计划 §0「用户口径」为准（不卡第一步 / 地图听懂人话 / 每步有下一步 / 会做设计 / 分层指令 / 一口气做完 / 可回看取证），优先级高于功能清单；任一不满足不得标已验收。
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：改复合句分流（M3 第一步）——有地名 + 有设计对象的句子不再被 `matchVenueCommand` 整句吃掉：先保留整句，定位到该场地、让用户确认范围，再把设计部分当待办接回；断言用真实浏览器重跑同一句。
-- 执行位置、分支、当前 HEAD：`C:\Users\13266\.dsh\bot\workspace\Scendance2026`；`main`；HEAD `fd0e4d40`。2026-11-16 09:50 实读。M0 首断点已定位（见轮次 4 记录）。
+- 下一条操作：浏览器验“范围确认 → 自动接回”。上一轮已知：复合句发出去后待恢复槽已写入 `scendance:outdoor-pending-brief:<scope>`（含原句与 stage=place）。本轮要验：地图上圈出并确认范围后，是否自动重发一次并清槽；不做重跑整份复现。
+- 执行位置、分支、当前 HEAD：`C:\Users\13266\.dsh\bot\workspace\Scendance2026`；`main`；HEAD `f65f339b`。2026-11-16 10:45 实读。
 - 未提交在途（本轮新增，因文件带用户 WIP，未单独提交）：`panels/agent-panel.tsx`——退回分支 `writePendingBrief(...)` 两行 + 范围确认后的接回 effect（`shouldResumeBrief` 门控、先清槽再发）。
 - 已核实的第一失败点、实际后端部署及日志编号：待 M0。
 - 协作依赖：当前工作区有未提交改动，服务端段由 B 主责。M1a 可独立推进，M1b/c 的最终服务端验收需对应环境和权限。
 
 | 批次 | 状态 | 当前切片或验收证据 |
 | --- | --- | --- |
-| M0 固定复现 | 进行中 | 切片 1b 已交付：真实浏览器复现「玉泉市集句 → 进选址 + 登录卡、零 /assistant/chat、零待恢复槽」；首断点定位到 `placeStillPending` 阶段未初始化 + `matchVenueCommand` 吃掉设计意图。剩：把这两条修到能出设计。 |
+| M0 固定复现 | 已收口 | 首断点两条已定位并修复：`placeStillPending` 增加 `rangeConfirmed`；复合句不再被 `matchVenueCommand` 整句吃掉。浏览器重验：零 `/assistant/chat`，待恢复槽已写入原句。 |
 | M1 诊断 | 待开始 | 先 M1a，再补服务端关联和双路径验收。 |
 | M2 恢复需求 | 进行中 | 切片 2a：`pending-brief.ts` 按活动存原句（过期/隔离/坏数据，9 条测试）。切片 2b：`shouldResumeBrief` 按边界去重接回，面板侧已接线（未提交）。下一切片：浏览器验接回 + 跨活动不串。 |
-| M3 分流与上下文 | 待开始 | 先固定真实入口行为，再调整地图数据访问。 |
+| M3 分流与上下文 | 进行中 | 切片 3a：复合句（地名 + 设计）保留整句、设计入槽，8 条测试通过。下一切片：验范围确认后自动接回。 |
 | M4 组合预览 | 待开始 | 以首条代表需求和直接编辑为中心。 |
 | M5 应用与恢复 | 待开始 | 补版本、应用幂等、撤销及中断验收。 |
 | M6 工作台体验 | 待开始 | 桌面和窄屏按同一任务状态复测。 |
@@ -80,6 +80,30 @@ scripts/probe-basemap-zoom.mjs
 其中与地图优先直接相关、本轮必须保留在基线的四个文件：`lib/place-first.ts`（入口守卫，07:30）、`lib/outdoor-place-handover.ts`（地图→对话交接，07:11）、`lib/focus-place-search.ts`（焦点送到地名搜索，07:57）、`panels/agent-panel.tsx` 中的守卫接线（08:04）。
 
 ## 执行记录
+
+### 2026-11-16 10:00–10:50 · 自动轮次 5 · M3 切片 3a（复合句分流）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 10:00–10:50，自动轮次 5，无外部运行 ID
+批次 / 切片 / 状态：M3 / 切片 3a 地名+设计复合句 / 已验收（单测 + 真实浏览器）
+工作目录 / 分支 / 开始与结束 HEAD：仓库根 / main / 56e36fdf → f65f339b（已提交，待推）
+修改、提交或未提交路径：lib/place-first.ts、lib/place-first.test.ts（commit f65f339b，首次将这两个用户侧未跟踪文件入库）；panels/agent-panel.tsx 接线未提交（文件带用户 WIP）
+复现及第一失败步骤：① 首次改测试时把 `it(...)` 开头删芙了，vitest 报 Transform failed（无语法错行号），对照文件后补回；② dev server 首次以默认堆启动，编译 /editor 时 OOM（FATAL ERROR: Committing semi space failed），换 4 GB 堆后正常
+验证命令、结果及环境：
+  · frontend: npm test -- lib/place-first.test.ts → 8 passed
+  · frontend: npm run typecheck → 0 错
+  · 真实浏览器（headless Chrome，3210，NODE_OPTIONS=--max-old-space-size=4096）：发玉泉句后
+      - `/assistant/chat` = 0
+      - 待恢复槽写入成功：`scendance:outdoor-pending-brief:project:house-59woktch`，值含原句与 `stage:'place'`
+      - 界面仍进入选址卡（符合预期：地名交给选址流程）
+证据位置及安全诊断编号：截图 .temp/m0b-bounce.png；探针 .temp/m0b-probe2.mjs（本机临时，不入库）
+剩余项、解除阻塞条件：范围确认后自动接回未验（需地图圈选交互）；登录卡仍在，未处理（属另一项需求）
+下次准确从哪条命令或哪个文件继续：起 3210 后在 `/editor` 圈范围 → 确认边界，看 agent-panel 接回 effect 是否触发、槽是否清空、是否发出一次 `/assistant/chat`
+```
+
+- **改了什么**：新增 `isCompositeDesignBrief`——有地名且同时是设计句时，不退回、不丢句；设计部分进待恢复槽，地名继续走选址。守卫条件从 `!matchVenueCommand` 改为在分支内分流。
+- **实测确认**：复合句确实不再被吞，槽里有完整原句；这一步之前是“发了等于没说”。
+- **环境注意**：本机默认堆下 `next dev` 编译 `/editor` 会 OOM，起 dev server 要带 `NODE_OPTIONS=--max-old-space-size=4096`，已写入续跑点。
 
 ### 2026-11-16 09:20–09:50 · 自动轮次 4 · M0 切片 1b（浏览器复现 + 首断点）
 
