@@ -22,11 +22,14 @@ import {
   type TurnTrace,
 } from './turn-trace';
 import { metricsFromTurnTrace, type TurnTraceUiHints } from './outdoor-trace-metrics';
+import type { MetricsBook } from './outdoor-metrics-book';
 import type { OutdoorTurnMetrics } from './outdoor-turn-metrics';
 
 export interface LiveTurnOptions {
   sink?: (line: string) => void;
   now?: () => number;
+  /** 传了簿子就顺手记一笔（同 turnId 是更新，不会一轮留两条）。 */
+  book?: MetricsBook;
 }
 
 export interface LiveTurn {
@@ -75,8 +78,28 @@ export function createLiveTurn(options: LiveTurnOptions = {}): LiveTurn {
   const hints = (): TurnTraceUiHints => ({ firstBubbleAt, confirmAts: [...confirmAts] });
   const metricsOf = (current: TurnTrace) => metricsFromTurnTrace(current, hints());
 
+  const settleTurn = (terminal: TurnTerminal, now?: number): OutdoorTurnMetrics | null => {
+    if (!trace) return null;
+    const already = trace.terminal !== null;
+    trace = finishTurn(trace, terminal, { now: now ?? clock() });
+    const metrics = metricsOf(trace);
+    options.book?.record(trace.turnId, metrics, trace.terminal);
+    sink(formatMetricsLine(metrics, { turnId: trace.turnId, terminal: trace.terminal }));
+    // 已收口过的一轮：只补日志，别让人以为又结算了一次。
+    if (already) {
+      sink(`${PREFIX} already-settled turn=${trace.turnId} asked=${terminal}`);
+    }
+    return metrics;
+  };
+
   return {
     begin(route: TurnRoute = 'scene', now?: number) {
+      // 上一轮如果还没收口（比如只出了预览就没人再动它），换轮前先结掉，
+      // 否则簿子里会永远留一条“进行中”的假记录。
+      if (trace) {
+        const hadPreview = trace.stages.some((mark) => mark.stage === 'preview');
+        settleTurn(hadPreview ? 'preview_ready' : 'local_done', now);
+      }
       trace = startTurn({ route, now: now ?? clock() });
       confirmAts.length = 0;
       firstBubbleAt = null;
@@ -102,16 +125,7 @@ export function createLiveTurn(options: LiveTurnOptions = {}): LiveTurn {
       if (trace) trace = enterStage(trace, 'apply', now ?? clock());
     },
     settle(terminal: TurnTerminal, now?: number) {
-      if (!trace) return null;
-      const already = trace.terminal !== null;
-      trace = finishTurn(trace, terminal, { now: now ?? clock() });
-      const metrics = metricsOf(trace);
-      sink(formatMetricsLine(metrics, { turnId: trace.turnId, terminal: trace.terminal }));
-      // 已收口过的一轮：只补日志，别让人以为又结算了一次。
-      if (already) {
-        sink(`${PREFIX} already-settled turn=${trace.turnId} asked=${terminal}`);
-      }
-      return metrics;
+      return settleTurn(terminal, now);
     },
     peek() {
       return { trace, metrics: trace ? metricsOf(trace) : null };
@@ -119,6 +133,7 @@ export function createLiveTurn(options: LiveTurnOptions = {}): LiveTurn {
     log() {
       if (!trace) return null;
       const metrics = metricsOf(trace);
+      options.book?.record(trace.turnId, metrics, trace.terminal);
       sink(formatMetricsLine(metrics, { turnId: trace.turnId, terminal: trace.terminal }));
       return metrics;
     },

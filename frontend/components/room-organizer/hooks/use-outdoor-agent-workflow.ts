@@ -501,7 +501,7 @@ export function useOutdoorAgentWorkflow(input: {
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
     liveTurn.current.markPreview();
-    liveTurn.current.settle("preview_ready");
+    liveTurn.current.log();
   }
   async function confirm(expected?: OutdoorWorkflowProposal) {
     liveTurn.current.markConfirm();
