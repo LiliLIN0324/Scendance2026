@@ -57,7 +57,7 @@ export function proposeUseZones(
 ): SitePlanData {
   if (!brief.zones.length)
     throw new Error(
-      "这块活动场地要分哪些用途？例如展览区、表演区；同时告诉我各区室内/室外，尚不放物件。",
+      "这块活动场地要分哪些用途？例如展览区、表演区、签到区；尚不放物件。",
     );
   if (brief.zones.some((z) => z.environment === "unknown"))
     throw new Error(
@@ -71,10 +71,10 @@ export function proposeUseZones(
       throw new Error("分区名称有歧义，请用当前具体对象引用确认。");
     return matches[0];
   });
-  if (brief.zones.some((z, i) => z.environment === "indoor" && !existing[i]))
-    throw new Error(
-      "室内分区尚无可核对边界。请提供图纸或在同一画布画出并命名该分区，再确认；商场轮廓不能代表室内活动空间。",
-    );
+  // 2026-11-16 用户指令「无室内，后续是造墙」：原来这里直接 throw「室内分区尚无可核对边界」，
+  // 生产上一条「室内 12×9」的输入就能把整条户外主链卡死在分区步。现在室内不再单独占一条流程：
+  // 分区先按用地轮廓划出占位几何，真正的室内边界等造墙阶段确认——不在这里拦人。
+  // `unknown` 的拦截保留：那是「别猜」的保护，和室内口径无关。
   if (plan.zones.length && existing.some((z) => !z))
     throw new Error(
       "已有分区与新用途不完全对应。请先选中要修改的分区并明确名称，不会新增重叠区域或清旧分区。",
@@ -129,7 +129,9 @@ export function proposeUseZones(
       polygon,
       notes:
         old?.notes ??
-        "用途分区几何草案：保留外围与区间通道余量，非物件布局或容量/疏散认证。",
+        (need.environment === "indoor"
+          ? "室内分区占位几何：先按用地轮廓划出，墙体与洞口在造墙阶段确认；非物件布局或容量/疏散认证。"
+          : "用途分区几何草案：保留外围与区间通道余量，非物件布局或容量/疏散认证。"),
     };
   });
   for (let i = 0; i < zones.length; i++)

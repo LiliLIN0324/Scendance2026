@@ -1660,7 +1660,7 @@ describe('T-UI visible interaction', () => {
     // 例句行搬到输入框上方那一格，首页里不再自带一组例句卡。
     expect(within(home).queryByRole('group', { name: '需求例句' })).toBeNull();
     expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '试试这样描述你的活动：80 人发布会，室内 12×9' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '试试这样描述你的活动：80 人发布会，户外广场 30×20' })).toBeTruthy();
     expect(within(home).getByRole('button', { name: '生成方案' })).toBeTruthy();
     expect(within(home).queryByRole('button', { name: '品牌快闪' })).toBeNull();
     fireEvent.click(within(home).getByRole('button', { name: '改类型或人数' }));

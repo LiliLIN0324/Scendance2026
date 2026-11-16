@@ -18,8 +18,8 @@ function prefersStill(): boolean {
 export const BANQUET_INPUT_SUGGESTIONS = ['加座，再排一版', '圆桌再小一号', '换一版'] as const;
 
 export const AGENT_INPUT_SUGGESTIONS: Record<ChatAgent, readonly string[]> = {
-  door: ['80 人发布会，室内 12×9，安排签到和主舞台', '按奶油会客配一套', '这场活动的目标和限制是……'],
-  bingo: ['80 人发布会，室内 12×9，安排签到和主舞台', '按墨金发布配一套', '按奶油会客配一套'],
+  door: ['80 人发布会，户外广场 30×20，安排签到和主舞台', '按奶油会客配一套', '这场活动的目标和限制是……'],
+  bingo: ['80 人发布会，户外广场 30×20，安排签到和主舞台', '按墨金发布配一套', '按奶油会客配一套'],
   space: ['用 Aholo 世界模型生成一个户外婚礼花园', '用现场照片或视频重建这座真实场地', '切换到传统空间模板'],
   material: ['生成 20 把适合户外的折叠椅', '把主桌模型换成圆桌', '再加一张茶几'],
 };
