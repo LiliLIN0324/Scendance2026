@@ -4,12 +4,12 @@
 
 ## 当前续跑点
 
-- 总状态：**M0 已收口**；**M1a 切片 1–2 已交付**（轮次 8–9：`turn-trace.ts` 14 条、`turn-trace-log.ts` 7 条）；M2/M3 已验到「地名分支写槽」，接回验受登录阻塞。M4–M7 待开始。
+- 总状态：**M0 已收口**；**M1a 切片 1–2 已交付**（轮次 8–9）；**M2 待办模型已交付但未推**（轮次 10，本地 `8f6a66ff`，推送被 GitHub 网络/TLS 中断拦住）；M2/M3 的接回验仍受登录阻塞。M4–M7 待开始。
 - 验收口径：以计划 §0「用户口径」为准（不卡第一步 / 地图听懂人话 / 每步有下一步 / 会做设计 / 分层指令 / 一口气做完 / 可回看取证），优先级高于功能清单；任一不满足不得标已验收。
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：M1a 切片 3——接线（分流打点 + 失败卡显示可复制编号 + 导出按钮），必须动 `panels/agent-panel.tsx`；该文件仍带你的在途改动，**改前先看你是否已提交**（未提交就继续挑无依赖切片，如 M1c 查找说明或 M4 预览契约）。
+- 下一条操作：先把卡住的推送完成——`git fetch origin` 重试（本轮连续失败：`schannel: failed to receive handshake`、`TLS connect error`，push 报 non-fast-forward），恢复后 `git rebase origin/main` 再 push；本地已有一笔未推提交 `8f6a66ff`。推送通了再做 M1a 切片 3 接线（`panels/agent-panel.tsx` 仍带用户 WIP）。
 - 上一步已验（不依赖登录）：turnId/attemptId 不重复且无身份字段；每轮恰一个终态（第二次只留 `conflictingTerminal`）；重试复用 turnId、换 attemptId；错误码按“像不像错误码”判定，自然语言整体丢成 null。
 - 阻塞（轮次 7 实浏）：待恢复槽写入后可验，但「地图上圈范围 → 确认边界」这一步要先进选址，而选址卡在未登录时只给“登录后继续这次选址”，成品页没有无登录的圈选入口。解除条件：有一个可用的登录态（或内测账号）在 3210 上跑一次圈选。
 - 分支状态（轮次 7）：本地与远端同为 `e8a95e02`（快进 18 笔，含用户合并后的分支）。做法：`git stash` 46 项在途 → `git merge --ff-only origin/main` → `git stash pop`，零冲突、无重复提交。
@@ -82,6 +82,28 @@ scripts/probe-basemap-zoom.mjs
 其中与地图优先直接相关、本轮必须保留在基线的四个文件：`lib/place-first.ts`（入口守卫，07:30）、`lib/outdoor-place-handover.ts`（地图→对话交接，07:11）、`lib/focus-place-search.ts`（焦点送到地名搜索，07:57）、`panels/agent-panel.tsx` 中的守卫接线（08:04）。
 
 ## 执行记录
+
+### 2026-11-16 12:55–13:15 · 自动轮次 10 · M2 待办模型（结论：代码已验，推送阻塞）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 12:55–13:15，自动轮次 10，无外部运行 ID
+批次 / 切片 / 状态：M2 / 待办模型切片 / **代码已验收，未推送到 main**
+工作目录 / 分支 / 开始与结束 HEAD：仓库根 / main / 5172f4de（开工与远端一致）→ 8f6a66ff（本地新提交，未推）
+修改、提交或未提交路径：新增 lib/outdoor-pending-task.ts、lib/outdoor-pending-task.test.ts（commit 8f6a66ff，本地）；46 项用户在途修改未动
+复现及第一失败步骤：无代码级复现——本轮选的是无依赖切片；先卡的是外部依赖：`git push` 报 non-fast-forward（远端在我拉取后又前进），而 `git fetch` 连续三次失败（schannel TLS handshake / `fatal: expected flush after ref listing`），无法 rebase
+验证命令、结果及环境：
+  · frontend: npm test -- components/room-organizer/lib/outdoor-pending-task.test.ts → 12 passed
+  · frontend: npm run typecheck → 0 错
+  · 未做的验证：未接线、未上浏览器（本轮无 UI 变更）
+证据位置及安全诊断编号：无诊断编号（不涉及请求路径）
+剩余项、解除阻塞条件：需一次能通的 `git fetch`（网络恢复）；随后 rebase 并 push。面板接线仍等 `agent-panel.tsx` 干净
+下次准确从哪条命令或哪个文件继续：`git fetch origin` → 成功则 `git rebase origin/main` → `git push origin main`；失败则只读本文件退出，不要重复提交同一批改动
+```
+
+- **交付的是什么**：一件待办的纯模型——目标与约束原样保存，`waitingOn` 为 place/range/login/ready 时各自只映射一个 `next`（选地点/确认范围/登录/接着做设计）；登录完成回到“圈范围”而不是重选地点；改写需求合并约束但保留同一件事；迟到回包靠 `taskId + revision` 判新旧，需求改过即丢弃。
+- **为什么选它**：面板接线要改带用户 WIP 的 `agent-panel.tsx`，不动它就只能挑纯逻辑层；这一层直接对应 §0「每步有下一步」与「一句话不被地点条件吞掉」。
+- **没做到的事说清楚**：代码只在本地，远端 main 仍是 `5172f4de`；网络恢复前不要重复实现同一批。
+
 
 ### 2026-11-16 12:25–12:35 · 自动轮次 9 · M1a 切片 2（编号簿 + 白名单导出）
 
