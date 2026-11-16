@@ -1,6 +1,7 @@
 import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from './types';
 import { metersPerDegreeLng } from './tdt-probe-scale';
+import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
 
 /**
  * 户外 2D 规划 ↔ 3D 场地壳体联动（P2-g 数据打通）。
@@ -248,6 +249,9 @@ export function seededPlanFromVenue(
   const plan: SitePlanData = {
     schemaVersion: 1,
     boundary,
+    // 2026-11-17 同一标准：播种出来的方案也有红线，就跟着生成白框（外扩 20 m）；
+    // 场景模板 / 3D 壳体转 2D 是这条路径，缺了它一样是「有红线、没白框」。
+    designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M),
     zones: [],
     facilities: [],
     routes: [],
@@ -290,6 +294,8 @@ export function seededPlanFromLayout(layout: {
       const plan: SitePlanData = {
         schemaVersion: 1,
         boundary,
+        // 真实足迹也是一条红线：同口径补白框（见 seededPlanFromVenue 注释）。
+        designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M),
         zones: [],
         facilities: [],
         routes: [],

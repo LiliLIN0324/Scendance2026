@@ -255,3 +255,13 @@ describe('outdoor-project-store', () => {
     });
   });
 });
+
+// 2026-11-17：「有红线就带白框」不等于「无红线也造框」。起步规划是零边界起步，
+// 没画红线时凭空长出一只白框，就违反 schema 里「读取层不得把没设渲染成设了」。
+describe('起步规划不造白框', () => {
+  it('createStarterOutdoorPlan：边界为空，也不带 designScope', () => {
+    const plan = createStarterOutdoorPlan();
+    expect(plan.boundary).toEqual([]);
+    expect(plan.designScope).toBeUndefined();
+  });
+});

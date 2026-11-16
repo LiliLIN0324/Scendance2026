@@ -6,6 +6,7 @@ import {
 } from './outdoor-demo-plan';
 import { findFacilityTemplate } from './site-plan-facilities';
 import { sitePlanDataSchema } from '../../../../supabase/functions/_shared/site-plan';
+import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
 
 describe('outdoor-demo-plan（内置示范场景）', () => {
   it('过站点规划 schema，实体计数与目录常量一致', () => {
@@ -47,5 +48,20 @@ describe('outdoor-demo-plan（内置示范场景）', () => {
     const second = createDemoOutdoorPlan();
     expect(second.facilities[0]!.name).not.toBe('被改掉');
     expect(second.facilities).toHaveLength(DEMO_OUTDOOR_FACILITY_COUNT);
+  });
+});
+
+// 2026-11-17 同一标准：示范方案也是「带红线的成品」，不能只画红线不给白框。
+describe('demo plan 的设计范围', () => {
+  it('自带外扩 20 m 的白框，四个角正好各边外扩一个 margin', () => {
+    const plan = createDemoOutdoorPlan();
+    expect(plan.designScope).toEqual(expandRect(plan.boundary, DEFAULT_SCOPE_MARGIN_M));
+    expect(plan.designScope).toHaveLength(4);
+  });
+
+  it('仍旧是独立对象：改一份的白框不会污染下一份', () => {
+    const first = createDemoOutdoorPlan();
+    first.designScope![0]!.x = 999;
+    expect(createDemoOutdoorPlan().designScope![0]!.x).not.toBe(999);
   });
 });

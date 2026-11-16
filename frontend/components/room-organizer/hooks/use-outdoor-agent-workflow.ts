@@ -21,6 +21,7 @@ import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarif
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
+import { DEFAULT_SCOPE_MARGIN_M, expandRect } from "../lib/outdoor-design-scope";
 import {
   loadRemoteCardHistory,
   mergeCardHistory,
@@ -864,7 +865,9 @@ export function useOutdoorAgentWorkflow(input: {
         pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
       ].filter(Boolean);
       offer(
-        { ...pruned.next, anchor, boundary },
+        // 2026-11-17 「同一标准」：范围确认卡是一个自带红线的方案，落地后必须配白框——
+        // 预览与确认走同一份数据，不靠画布那边事后补（那条路留给手画红线和换场地）。
+        { ...pruned.next, anchor, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) },
         "scope",
         `确认“${name}”的活动范围`,
         job,

@@ -171,6 +171,40 @@ export function nearestScopeEdgePx(
   return candidates[0]?.edge ?? null;
 }
 
+/**
+ * 应用别人送来的方案（Agent 提案 / 工作流整份替换）时，白框该怎么跟上。
+ *
+ * 2026-11-17 用户：「同一标准检查其他会生成方案的入口」。提案是另一条产出路径：
+ * 范围卡里的 `next` 自成一个 plan，若它换了红线却不带 designScope，落地后就是
+ * 「有红线、没白框」——和案例库那个毛病同一个。
+ *
+ * 判据（返回 null = 不要动白框）：
+ * - 来件自己带了白框（>=3 点）→ 听它的，它明确说过要什么；
+ * - 红线没变（`boundaryKey` 口径只需要几何一致）→ 保留现场那只框（可能是用户自己拖的）；
+ * - 红线变了且来件没框 → 按新红线外扩 margin 生一只。
+ */
+export function scopeForAppliedPlan(args: {
+  currentBoundary: readonly ScopePoint[];
+  nextBoundary: readonly ScopePoint[];
+  nextScope?: readonly ScopePoint[] | undefined;
+  marginM?: number;
+}): ScopePoint[] | null {
+  const { currentBoundary, nextBoundary, nextScope, marginM = DEFAULT_SCOPE_MARGIN_M } = args;
+  if ((nextScope ?? []).length >= 3) return null;
+  if (nextBoundary.length < 3) return null;
+  if (sameRing(currentBoundary, nextBoundary)) return null;
+  return expandRect(nextBoundary, marginM);
+}
+
+/** 同一条环（顶点数一致、逐点同值）；不判方向、不做容差——提案与现场都是同一套米制数值。 */
+function sameRing(a: readonly ScopePoint[], b: readonly ScopePoint[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i]!.x !== b[i]!.x || a[i]!.y !== b[i]!.y) return false;
+  }
+  return true;
+}
+
 /** 环面积（鞋带公式，取绝对值；顶点顺时针/逆时针都能算）。 */
 export function scopeAreaM2(ring: readonly ScopePoint[]): number {
   if (ring.length < 3) return 0;
