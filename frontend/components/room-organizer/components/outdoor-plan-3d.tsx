@@ -66,7 +66,7 @@ import {
   nearestNearbyEntry,
   type InteractableEntry,
 } from '@/components/room-organizer/lib/interact-registry';
-import { facilityInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
+import { facilityInteractables, interactHintLabel, seatInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
 import {
   facilityProp,
   planFootprintShapes,
@@ -107,7 +107,7 @@ import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-eng
 import { clearPlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
 import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/plan-catalog-drag';
 import { CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/catalog-drag';
-import { useOutdoorWalk } from '@/components/room-organizer/hooks/use-outdoor-walk';
+import { useOutdoorWalk, type SeatWalkState } from '@/components/room-organizer/hooks/use-outdoor-walk';
 import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -350,7 +350,12 @@ export default function OutdoorPlan3D({
   }, []);
 
   useEffect(() => {
-    if (!walkEnabled) releaseControlledActor();
+    if (!walkEnabled) {
+      releaseControlledActor();
+      // 退出漫游清掉落座，避免下次进漫游钉在旧座位。
+      seatStateRef.current = null;
+      setSeatActiveId(null);
+    }
   }, [walkEnabled, releaseControlledActor]);
 
   useEffect(() => {
@@ -398,6 +403,30 @@ export default function OutdoorPlan3D({
   const [nearEntry, setNearEntry] = useState<InteractableEntry | null>(null);
   const nearEntryIdRef = useRef<string | null>(null);
   const nearEntryRef = useRef<InteractableEntry | null>(null);
+  // 落座态：E 键座位条目写入 / 起身清空；hook 每帧据此钉住锚点与坐姿眼高。
+  const seatStateRef = useRef<SeatWalkState | null>(null);
+  const [seatActiveId, setSeatActiveId] = useState<string | null>(null);
+
+  // 座位条目落座 / 起身：同一座位再按一次 E 起身。
+  const toggleSeatEntry = (entry: InteractableEntry) => {
+    const seat = entry.seat;
+    if (!seat) return;
+    const current = seatStateRef.current;
+    if (current?.active && current.seatId === entry.id) {
+      seatStateRef.current = { active: false, x: current.x, z: current.z, eyeY: 1.6 };
+      setSeatActiveId(null);
+      return;
+    }
+    seatStateRef.current = {
+      active: true,
+      seatId: entry.id,
+      x: seat.x,
+      z: -seat.y,
+      eyeY: seat.eyeY,
+      yaw: THREE.MathUtils.degToRad(seat.rotationDeg),
+    };
+    setSeatActiveId(entry.id);
+  };
   nearEntryRef.current = nearEntry;
   const onInteractRef = useRef(onInteract);
   onInteractRef.current = onInteract;
@@ -491,6 +520,7 @@ export default function OutdoorPlan3D({
     spawn: controlledActorRef.current?.spawn,
     boundary: plan.designScope?.length ? plan.designScope : plan.boundary,
     viewMode,
+    seatRef: seatStateRef,
     onWalkFrame: (frame) => {
       walkFrameRef.current = frame;
       const controlled = controlledActorRef.current;
@@ -501,6 +531,7 @@ export default function OutdoorPlan3D({
       group.rotation.y = frame.yaw;
       group.visible = viewModeRef.current !== 'first';
       controlled.control.setMoving(frame.moving);
+      controlled.control.setSeated(frame.seated === true);
     },
     onExit: onWalkExit,
   });
@@ -548,7 +579,12 @@ export default function OutdoorPlan3D({
     const workers = Array.isArray(plan.workers) ? plan.workers : [];
     for (const entry of workerInteractables(workers)) bind(entry);
     const facilities = Array.isArray(plan.facilities) ? plan.facilities : [];
-    for (const entry of facilityInteractables(facilities)) bind(entry);
+    const seatEntries = seatInteractables(facilities);
+    const seatIds = new Set(seatEntries.map((entry) => entry.id));
+    for (const entry of facilityInteractables(facilities.filter((facility) => !seatIds.has(facility.id)))) bind(entry);
+    for (const entry of seatEntries) {
+      registry.register(entry, ({ entry: e }) => toggleSeatEntry(e));
+    }
   }, [plan.workers, plan.facilities]);
 
   // E 键触发：仅漫游激活态绑定；跳过重复触发与输入框聚焦；近邻条目才生效。
@@ -938,7 +974,7 @@ export default function OutdoorPlan3D({
               id: item.id,
               mixer: avatar.mixer,
               rig: null,
-              clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip() },
+              clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip(), sit: avatar.sit ? avatar.sit.getClip() : null },
               action: 'idle',
               paused: false,
               route: walkRoute ?? null,
@@ -2274,7 +2310,7 @@ export default function OutdoorPlan3D({
             E
           </span>
           <span>
-            {nearEntry.label}
+            {interactHintLabel(nearEntry, seatActiveId === nearEntry.id)}
             {nearEntry.subtitle ? ` · ${nearEntry.subtitle}` : ''}
           </span>
         </div>
