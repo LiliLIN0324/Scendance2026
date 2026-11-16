@@ -22,6 +22,20 @@ describe('joint plan/map snapshot and relations', () => {
   it('handles concave containment without claiming a line through an exterior notch is contained', () => { const outer: Geometry = { type: 'polygon', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 7, y: 10 }, { x: 7, y: 3 }, { x: 3, y: 3 }, { x: 3, y: 10 }, { x: 0, y: 10 }] }; expect(containsGeometry(outer, { type: 'line', points: [{ x: 1, y: 8 }, { x: 9, y: 8 }] })).toBe(false); });
   it('does not turn crossing roads or restricted/grade separated topology into real connections', () => { const road = map('road', 'osm:way/1', { type: 'line', points: [{ x: -5, y: 0 }, { x: 5, y: 0 }] }, { bridge: 'yes' }); road.nodeIds = ['osm:node/9']; const gate = map('entrance', 'osm:node/9', { type: 'point', points: [{ x: 0, y: 0 }] }); gate.nodeIds = ['osm:node/9']; const s = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: plan(), mapScope: { anchor, radiusM: 100, crs: 'gcj-02' }, mapFeatures: [road, gate] }); expect(s.relations.some(r => r.from === road.id && r.to === gate.id && r.type === 'connected')).toBe(false); expect(s.relations.some(r => r.from === road.id && r.to === gate.id && r.type === 'connection-candidate')).toBe(true); });
   it('only accepts map geometry with anchor and isolates project IDs', () => { const p = plan(); delete p.anchor; const s = buildSiteSnapshot({ projectId: 'a', geometryRevision: 1, plan: p, mapScope: { anchor, radiusM: 100, crs: 'gcj-02' }, mapFeatures: [map('building', 'osm:way/1', square(0, 0, 5))] }); expect(s.features.every(f => f.evidence.source === 'user-plan')).toBe(true); expect(planObjectId('a', 'zone', uuid(1))).not.toBe(planObjectId('b', 'zone', uuid(1))); });
+  // 2026-11-17 生产实测：证据每次重拉都打新的 observedAt，若进版本签名，同一份地图也会算出
+  // 新版本 → 用户预览出来 60 秒后再点「确认」必被判「旧提案已失效」。观测时间不进版本。
+  it('keeps the snapshot revision stable when the same map evidence is observed again later, and still changes when the geometry changes', () => {
+    const p = plan();
+    const first = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: p, mapScope: { anchor, radiusM: 100, crs: 'gcj-02' }, mapFeatures: [map('building', 'osm:way/1', square(0, 0, 10))] });
+    const observed = map('building', 'osm:way/1', square(0, 0, 10));
+    observed.evidence.observedAt = '2026-11-17T00:00:00.000Z';
+    const again = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: p, mapScope: { anchor, radiusM: 100, crs: 'gcj-02' }, mapFeatures: [observed] });
+    expect(again.revision).toBe(first.revision);
+    const moved = map('building', 'osm:way/1', square(0, 1, 10));
+    moved.evidence.observedAt = '2026-11-17T00:00:00.000Z';
+    const changed = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: p, mapScope: { anchor, radiusM: 100, crs: 'gcj-02' }, mapFeatures: [moved] });
+    expect(changed.revision).not.toBe(first.revision);
+  });
 });
 describe('pure conversational references and bounded model context', () => {
   it('offers ID candidates without selection, asks ambiguity and can resolve confirmed conversational focus', () => { const p = plan(), s = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: p }); expect(resolveReferences(s, { name: '展览区' }).status).toBe('ambiguous'); expect(resolveReferences(s, { name: '不存在' }).status).toBe('missing'); const id = planObjectId('p', 'zone', uuid(2)); const focused = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: p, confirmations: { featureIds: [id] } }); expect(resolveReferences(focused, { kind: 'zone' }).candidates[0]?.reference.id).toBe(id); expect(resolveReferences(focused, { kind: 'zone' }).status).toBe('resolved'); });

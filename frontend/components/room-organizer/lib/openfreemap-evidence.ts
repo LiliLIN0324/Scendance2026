@@ -121,31 +121,17 @@ function buildingFeature(ring: LngLatRing, anchor: { lng: number; lat: number },
  * 取 OpenFreeMap 客户端证据。任一瓦片源整体不可用（TileJSON 拿不到等）返回 null，
  * 由调用方退服务端 Overpass 后手；道路/建筑各自独立失败，互不拖累。
  */
-/** 临时诊断旁路：定位浏览器生产环境证据线退兜底的根因，验收后删除。 */
-function debug(part: string, payload: unknown) {
-  try {
-    const w = window as unknown as { __ofmDebug?: unknown[] };
-    w.__ofmDebug = w.__ofmDebug ?? [];
-    w.__ofmDebug.push({ part, ...(payload as object), at: new Date().toISOString() });
-    console.warn("[ofm-evidence]", part, payload);
-  } catch {
-    /* 诊断旁路自身不得影响主流程 */
-  }
-}
-
 export async function fetchOfmEvidence(
   anchor: { lng: number; lat: number },
   radiusM: number,
   signal?: AbortSignal,
 ): Promise<MapEvidenceResult | null> {
-  debug("enter", { lng: anchor.lng, lat: anchor.lat, radiusM, aborted: Boolean(signal?.aborted) });
   let radius: number;
   let bbox: BBox;
   try {
     radius = boundedRadius(radiusM);
     bbox = bboxFor(anchor, radius);
   } catch (error) {
-    debug("throw-before-fetch", { error: String(error) });
     throw error;
   }
   let settled: PromiseSettledResult<unknown>[];
@@ -155,18 +141,14 @@ export async function fetchOfmEvidence(
       fetchOpenFreeMapBuildings(bbox, signal),
     ]);
   } catch (error) {
-    debug("settled-throw", { error: String(error) });
     throw error;
   }
   const roadSettled = settled[0]!;
   const buildingSettled = settled[1]!;
-  if (roadSettled.status === "rejected") debug("roads-rejected", { reason: String(roadSettled.reason) });
-  if (buildingSettled.status === "rejected") debug("buildings-rejected", { reason: String(buildingSettled.reason) });
   const roads: RoadSegment[] =
     roadSettled.status === "fulfilled" ? (roadSettled.value as RoadSegment[]) : [];
   const rings: LngLatRing[] =
     buildingSettled.status === "fulfilled" ? (buildingSettled.value as LngLatRing[]) : [];
-  debug("settled", { roads: roads.length, rings: rings.length, roadStatus: roadSettled.status, buildingStatus: buildingSettled.status });
 
   const features: MapFeature[] = [];
   for (const road of roads.slice(0, MAX_FEATURES)) {
@@ -177,11 +159,7 @@ export async function fetchOfmEvidence(
     const feature = buildingFeature(ring, anchor, radius);
     if (feature) features.push(feature);
   }
-  if (!features.length) {
-    debug("empty-features", { roads: roads.length, rings: rings.length });
-    return null;
-  }
-  debug("features", { count: features.length });
+  if (!features.length) return null;
 
   const fetchedAt = new Date().toISOString();
   for (const feature of features) feature.evidence.observedAt = fetchedAt;
