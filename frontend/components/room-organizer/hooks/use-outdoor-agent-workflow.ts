@@ -4,7 +4,6 @@ import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_sh
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import {
   boundaryKey,
-  emptyOutdoorFlow,
   mergeOutdoorFacts,
   planVersion,
   type OutdoorAgentBridge,
@@ -17,6 +16,7 @@ import {
   type OutdoorTurn,
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
+import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -112,22 +112,15 @@ const unknownMap: OutdoorMapContext = {
   featureIds: [],
   unknowns: ["建筑/开放空间/入口证据未知", "地图像素没有提交模型"],
 };
-function readState(scope: string): OutdoorFlowState {
+function readState(scope: string, planVersionNow: string | null = null): OutdoorFlowState {
+  let raw: unknown = null;
   try {
-    const value = JSON.parse(
-      localStorage.getItem(`scendance:outdoor-flow:${scope}`) ?? "null",
-    ) as OutdoorFlowState | null;
-    if (
-      value?.scope === scope &&
-      stages.includes(value.stage) &&
-      Array.isArray(value.brief?.zones) &&
-      Array.isArray(value.brief?.items) &&
-      Array.isArray(value.brief?.people) &&
-      Array.isArray(value.completed)
-    )
-      return value;
-  } catch {}
-  return emptyOutdoorFlow(scope);
+    raw = JSON.parse(localStorage.getItem(`scendance:outdoor-flow:${scope}`) ?? "null");
+  } catch {
+    raw = null;
+  }
+  // 刷新恢复同一套口径：旧草稿降级保留；过期的登录等待、未确认边界不还原（见 lib/outdoor-flow-restore）。
+  return restoreOutdoorFlow({ raw, scope, stages, planVersion: planVersionNow }).state;
 }
 /** Confirmation is an authorization boundary, never delegated to model classification. */
 export function explicitProposalApproval(message: string): boolean {
@@ -249,7 +242,14 @@ export function useOutdoorAgentWorkflow(input: {
   model?: () => string | null;
   simulate?: (active: boolean) => boolean;
 }) {
-  const [state, setState] = useState(() => readState(input.scope));
+  // 当前方案版本：刷新恢复时用它判登录等待/未确认边界是否过期。
+  // 注意：首次 render 时 callbacks ref 还没建，只能先用入参 bridge；后续（换活动）再用 ref 里的最新回调。
+  const planVersionFrom = (bridge: () => OutdoorAgentBridge | null) => {
+    const plan = bridge()?.getPlan();
+    return plan ? planVersion(plan) : null;
+  };
+  const currentPlanVersion = () => planVersionFrom(() => callbacks.current.bridge());
+  const [state, setState] = useState(() => readState(input.scope, planVersionFrom(input.bridge)));
   const stateRef = useRef(state);
   stateRef.current = state;
   const [proposal, setProposal] = useState<OutdoorWorkflowProposal | null>(
@@ -413,7 +413,7 @@ export function useOutdoorAgentWorkflow(input: {
     setSelectedLibraryId(undefined);
     setBusy(false);
     setSimulating(false);
-    const next = readState(input.scope);
+    const next = readState(input.scope, currentPlanVersion());
     stateRef.current = next;
     setState(next);
   }, [input.scope]);
