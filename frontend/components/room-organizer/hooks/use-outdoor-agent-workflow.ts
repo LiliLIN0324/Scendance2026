@@ -346,7 +346,12 @@ export function useOutdoorAgentWorkflow(input: {
     setDesignSteps(steps => steps.at(-1) === text ? steps : [...steps.slice(-9), text]);
   }
   function start(continueDesign = false) {
-    if (!continueDesign) setDesignSteps([]);
+    if (!continueDesign) {
+      setDesignSteps([]);
+      setThought(null);
+      setThoughtMs(null);
+      setThoughtRequest(null);
+    }
     updatePendingPlan(null);
     setAwaitingThought(false);
     setThoughtDraft("");
@@ -1464,8 +1469,6 @@ export function useOutdoorAgentWorkflow(input: {
     // 不抓地图、不请求模型。确定性动作（确认/取消/物件清单）在更前面已经处理完，不受影响。
     const session = callbacks.current.controller();
     const viewer = session?.getSnapshot?.().user;
-    setThought(null);
-    setThoughtMs(null);
     if (session?.getSnapshot && (!viewer || viewer.is_anonymous)) {
       start();
       setBusy(false);
