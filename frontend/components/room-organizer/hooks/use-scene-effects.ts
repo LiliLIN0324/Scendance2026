@@ -8,7 +8,7 @@ import { floorKeepOut, type KeepOutBuilding } from '../lib/floor-keep-out';
 import { isMapReferenceImage } from '../lib/amap-venue';
 import { hasCollisions } from '../lib/geometry';
 import { mountBand } from '../lib/mount-band';
-import { readPlanGroundSource, subscribePlanGroundSource } from '../lib/plan-basemap-source';
+import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, subscribePlanGroundSource } from '../lib/plan-basemap-source';
 import { planFootprintShapes } from '../lib/plan-footprint-geometry';
 import { planShellFrame } from '../lib/plan-footprint-geometry';
 import { mapVenueFootprint } from '../lib/scene-anchor';
@@ -224,10 +224,15 @@ export function useSceneEffects({
   // 真实地图瓦片铺进主舞台：管线复用 three/plan-basemap-tiles（自 outdoor-plan-3d 抽出），
   // 用父组仿射把 ENU 瓦片变换到壳体世界系，与 buildPlanFootprint 的色块同一把
   // planShellFrame 尺——瓦片正好垫在色块下面。
+  // docs/46 V-P1：地面形态（map=瓦片 / paper=纸面虚拟场地）。纸面态 GeoGround 整层不铺，
+  // 0 层素色地板回归——虚拟场地在主舞台 3D 里就是干净的素面。
+  const geoGroundMode = useSyncExternalStore(subscribePlanGroundMode, readPlanGroundMode, () => 'map' as const);
   // 壳体层的激活判定（跳过纸面地板/地基）：有锚点 + 允许底图 + 边界可用。不看 view2D——
   // 这是结构开关，2D/3D 切换不该重建壳体。
+  // docs/46 V-P1：paper 形态瓦片地面整层不铺，素色地板不让位（geoGroundShellActive=false）。
   const geoGroundShellActive = !!(
-    outdoorPlan?.anchor
+    geoGroundMode === 'map'
+    && outdoorPlan?.anchor
     && showBasemap
     && (outdoorPlan.boundary.length >= 3)
     && layout.width >= 1
@@ -504,9 +509,11 @@ export function useSceneEffects({
   // controls 'change' 补高清瓦片。瓦片 quad 在 ENU 空间落位（three.x=plan.x、
   // three.z=-plan.y），挂到按 planShellFrame 仿射变换的 geoRoot 组上，正好与
   // buildPlanFootprint 色块对齐（同一把边界→壳体映射）。图源用与户外 2D 同一份偏好。
+  // 素面地面回归。纸面态落素面（docs/46 V-P1）。
   useEffect(() => {
     invalidate();
     if (!isReady) return;
+    if (geoGroundMode === 'paper') return;
     const THREE = threeModuleRef.current;
     const scene = sceneRef.current;
     const plan = outdoorPlanRef.current;
@@ -709,10 +716,10 @@ export function useSceneEffects({
       if (geoRoot.parent === scene) scene.remove(geoRoot);
       invalidate();
     };
-    // 锚点 / 图源 / 壳体尺寸 / 边界 / 2D·3D / 扫描隔离变化才重建；普通 plan 编辑不改边界，不重铺。
+    // 锚点 / 图源 / 地面形态 / 壳体尺寸 / 边界 / 2D·3D / 扫描隔离变化才重建；普通 plan 编辑不改边界，不重铺。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, invalidate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef,
-    outdoorPlan?.anchor?.lng, outdoorPlan?.anchor?.lat, geoBoundaryKey, geoBasemapSource,
+    outdoorPlan?.anchor?.lng, outdoorPlan?.anchor?.lat, geoBoundaryKey, geoBasemapSource, geoGroundMode,
     layout.width, layout.height, view.view2D, showBasemap]);
 
   // —— 计划设施 GLB 模型层（2026-11-12，与户外 3D 共享 three/plan-model-layer.ts）——

@@ -68,3 +68,60 @@ export function writePlanGroundSource(value: string | null | undefined): void {
   }
   if (changed) listeners.forEach((listener) => listener());
 }
+
+/* ---------------- 地面形态（docs/46 V-P1）：真地图 / 纸面（虚拟场地） ---------------- */
+
+/**
+ * 2026-11-17 docs/46 V-P1：地面形态偏好——`map` = 铺图源瓦片，`paper` = 纸面（虚拟场地）。
+ * 与图源同一套模块级 store 口径：2D 覆盖层的「纸面」开关写进来，3D 地面（主舞台
+ * GeoGround / 户外接管 OutdoorPlan3D）经 useSyncExternalStore 订阅——纸面态不铺瓦片，
+ * 落素面地面。独立 key：图源切换不改变形态，形态切换不改图源。
+ */
+
+const MODE_STORAGE_KEY = 'scendance-plan-ground-mode-v1';
+
+export type PlanGroundMode = 'map' | 'paper';
+
+export const PLAN_GROUND_MODES: readonly PlanGroundMode[] = ['map', 'paper'];
+
+export function isPlanGroundMode(value: unknown): value is PlanGroundMode {
+  return value === 'map' || value === 'paper';
+}
+
+let cachedMode: PlanGroundMode | null = null;
+
+const modeListeners = new Set<() => void>();
+
+export function subscribePlanGroundMode(listener: () => void): () => void {
+  modeListeners.add(listener);
+  return () => {
+    modeListeners.delete(listener);
+  };
+}
+
+export function readPlanGroundMode(): PlanGroundMode {
+  if (cachedMode) return cachedMode;
+  try {
+    const stored = globalThis.localStorage?.getItem(MODE_STORAGE_KEY);
+    if (isPlanGroundMode(stored)) {
+      cachedMode = stored;
+      return stored;
+    }
+  } catch {
+    // 隐私模式 / 无 localStorage 时用缺省。
+  }
+  cachedMode = 'map';
+  return 'map';
+}
+
+export function writePlanGroundMode(value: string | null | undefined): void {
+  if (!isPlanGroundMode(value)) return;
+  const changed = cachedMode !== value;
+  cachedMode = value;
+  try {
+    globalThis.localStorage?.setItem(MODE_STORAGE_KEY, value);
+  } catch {
+    // 存不下就算了，本会话内仍然生效。
+  }
+  if (changed) modeListeners.forEach((listener) => listener());
+}

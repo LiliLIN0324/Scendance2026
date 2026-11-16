@@ -121,7 +121,7 @@ export function formatAreaM2(m2: number): string {
 }
 
 /**
- * 画布草稿实时读数（临时测量）：距离 = 当前段长；路径 = 已收点 + 指针的总长；
+ * 画布草稿实时读数（临时测量）：距离/路径 = 已收点 + 指针的折线总长；
  * 面积 = 按已收点 + 指针闭合的预览环面积。点数不够时返回 null（不画读数）。
  */
 export function measureDraftReadout(
@@ -130,10 +130,11 @@ export function measureDraftReadout(
   cursor?: PlanPoint,
 ): string | null {
   if (kind === 'distance') {
-    const a = points[0];
-    const b = points.length === 2 ? points[1] : cursor;
-    if (!a || !b) return null;
-    return formatLengthM(planPointDistanceM(a, b));
+    // 2026-11-16 用户：「可以多段线测量」——距离不再只认两点：
+    // 已收点 + 指针走折线累计，单段时就是两点距离（旧口径不变）。
+    const path = cursor && points.length >= 1 ? [...points, cursor] : points;
+    if (path.length < 2) return null;
+    return formatLengthM(planRouteLengthM(path));
   }
   if (kind === 'path') {
     const hasLive = points.length >= 1 && cursor;

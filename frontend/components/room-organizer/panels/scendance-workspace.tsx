@@ -583,10 +583,12 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const suppressCompassClick = useRef(false);
   const outdoorRef = useRef(outdoor);
   outdoorRef.current = outdoor;
-  const compassIs3D = outdoor?.view === '3d' && !walkPressed && Boolean(outdoor?.orbitByDelta);
+  // 2026-11-16 用户指令「2D 的时候罗盘也要能转」：罗盘在 2D/3D 都可拖转+点击回正北
+  // （2D 走画布 bearing，3D 走相机方位；漫游态除外）。compassDraggable 取代旧 compassIs3D 门。
+  const compassDraggable = !walkPressed && Boolean(outdoor?.orbitByDelta);
 
   useEffect(() => {
-    if (outdoor?.view !== '3d' || !outdoor.bearingRad) {
+    if (!outdoor?.view || !outdoor.bearingRad) {
       setCompassBearing(0);
       return undefined;
     }
@@ -625,7 +627,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   }, [dockOpen]);
 
   const handleCompassPointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    if (!compassIs3D) return;
+    if (!compassDraggable) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -653,7 +655,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   };
   // 保留给 `SHOW_COMPASS_TURN_ARROWS` 打开时使用；当前按钮隐藏，不影响点击回正北。
   const turnCompass = (turn: 'left' | 'right'): void => {
-    if (!compassIs3D) return;
+    if (!compassDraggable) return;
     if (turn === 'left') {
       outdoor?.orbitByDelta?.(Math.PI / 2);
       setCompassBearing(prev => prev + Math.PI / 2);
@@ -682,9 +684,9 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
     outdoor?.resetNorth?.();
     setCompassBearing(0);
   };
-  const compassTip = compassIs3D
+  const compassTip = compassDraggable
     ? '罗盘：拖动旋转 · 点击回正北'
-    : '罗盘：回到场地';
+    : '罗盘：点击回正北';
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
@@ -1199,7 +1201,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             视觉口径：44px 控件、64px 罗盘、44×88 连体缩放；漫游钮与其余控件同轴同尺寸。 */}
         <div className="oc-cluster oc-br oc-gmaps" role="group" aria-label="地图控制">
           <div className="oc-gm-compass-wrap" role="group" aria-label="罗盘与转向">
-            {SHOW_COMPASS_TURN_ARROWS && compassIs3D && (
+            {SHOW_COMPASS_TURN_ARROWS && compassDraggable && (
               <button
                 type="button"
                 className="oc-gm-turn is-left"
@@ -1211,7 +1213,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             <button
               type="button"
               id="tool-compass"
-              className={`oc-gm-round oc-gm-compass${compassIs3D ? ' is-interactive' : ''}${compassDragging ? ' is-dragging' : ''}`}
+              className={`oc-gm-round oc-gm-compass${compassDraggable ? ' is-interactive' : ''}${compassDragging ? ' is-dragging' : ''}`}
               data-tip={compassTip}
               aria-label={compassTip}
               onClick={handleCompassClick}
@@ -1220,9 +1222,9 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
               onPointerUp={event => finishCompassDrag(event, false)}
               onPointerCancel={event => finishCompassDrag(event, true)}
             >
-              <CompassDial size={64} rotationDeg={(compassBearing * 180) / Math.PI} showTurns={SHOW_COMPASS_TURN_ARROWS && compassIs3D} />
+              <CompassDial size={64} rotationDeg={(compassBearing * 180) / Math.PI} showTurns={SHOW_COMPASS_TURN_ARROWS && compassDraggable} />
             </button>
-            {SHOW_COMPASS_TURN_ARROWS && compassIs3D && (
+            {SHOW_COMPASS_TURN_ARROWS && compassDraggable && (
               <button
                 type="button"
                 className="oc-gm-turn is-right"

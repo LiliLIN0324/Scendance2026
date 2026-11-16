@@ -10,6 +10,11 @@ import {
   drawMapEditHighlight,
   drawMeasureDraft,
   drawMeasureLayer,
+  drawMeasureRuler,
+  MEASURE_RULER_MIN_TICK_PX,
+  measureReadoutAnchor,
+  measureRulerStepM,
+  readableSegmentAngle,
   drawNodeGhost,
   drawRouteDraft,
   drawRouteLayer,
@@ -28,7 +33,7 @@ import {
   type PlanViewport,
 } from './outdoor-plan-canvas';
 import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
-
+import { formatLengthM } from './site-plan-measure';
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
 describe('outdoor plan canvas core (H2-a)', () => {
@@ -55,6 +60,26 @@ describe('outdoor plan canvas core (H2-a)', () => {
     const backY = (geo.lat - anchor.lat) * 111132.92;
     expect(backX).toBeCloseTo(p.x, 1);
     expect(backY).toBeCloseTo(p.y, 1);
+  });
+
+  // 2026-11-16 罗盘拖转 2D：bearing 把地图绕画布中心旋转，投影与逆投影必须严格互逆。
+  it('rotates the projection by bearing around the canvas center and round-trips', () => {
+    const rotated: PlanViewport = { ...view, bearing: Math.PI / 4 };
+    // bearing=90°：北在屏幕左、东在屏幕下（地图内容屏幕转角 = -bearing）。
+    const quarter: PlanViewport = { ...view, bearing: Math.PI / 2 };
+    const metersPerPx = planMetersPerPixel(quarter);
+    const north = planPointToPixel({ x: 0, y: metersPerPx * 10 }, quarter);
+    expect(north.x).toBeCloseTo(view.canvasW / 2 - 10, 3);
+    expect(north.y).toBeCloseTo(view.canvasH / 2, 3);
+    // 逆投影是正投影的严格逆：任意点往返归位（bearing=45° 非对称角度）。
+    const p = { x: 87.3, y: -42.1 };
+    const back = planPixelToPoint(planPointToPixel(p, rotated), rotated);
+    expect(back.x).toBeCloseTo(p.x, 6);
+    expect(back.y).toBeCloseTo(p.y, 6);
+    // 中心点恒在画布中心（绕中心旋转不动中心）。
+    const center = planPointToPixel({ x: 0, y: 0 }, rotated);
+    expect(center.x).toBeCloseTo(view.canvasW / 2, 6);
+    expect(center.y).toBeCloseTo(view.canvasH / 2, 6);
   });
 
   it('orders the layer stack bottom-up with the business layers plus measure/annotate on top (H3-a + 2026-11-11 用户指令)', () => {
@@ -163,10 +188,12 @@ interface CtxCapture {
   haloTexts: string[];
   strokes: string[];
   fills: string[];
+  /** 圆弧（`arc:x,y,r`）：用来锁「人员点位到底画的是圆点还是只有芯片」。 */
+  arcs: string[];
 }
 
 function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
-  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [] };
+  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [], arcs: [] };
   const ctx = {
     save: () => {},
     restore: () => {},
@@ -178,7 +205,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
     closePath: () => {},
     stroke: () => {},
     fill: () => {},
-    arc: () => {},
+    arc: (x: number, y: number, r: number) => cap.arcs.push(`arc:${x},${y},${r}`),
     setLineDash: (d: number[]) => cap.dash.push([...d]),
     strokeRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`stroke:${x},${y},${w},${h}`),
     fillRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`fill:${x},${y},${w},${h}`),
@@ -405,17 +432,24 @@ describe('route / node / worker drawing (H2-d)', () => {
     const darkWorker = makeCtx();
     drawWorkerLayer(
       { ctx: darkWorker.ctx, viewport: view } as PlanCanvasContext,
-      [{ role: '安保', count: 1, position: { x: 3, y: 57 } }],
+      [{ role: '安保', count: 2, position: { x: 3, y: 57 } }],
       { tone: 'dark' },
     );
     expect(darkWorker.cap.fills).toContain(planLabelInk('dark').fill);
   });
 
-  it('labels workers with role and count and halos the selected one', () => {
+  it('writes only the headcount on the map (岗位名已由图标表达) and halos the selected one', () => {
     const worker = { id: 'w1', role: '安保', count: 2, position: { x: 3, y: 57 } };
     const plain = makeCtx();
     drawWorkerLayer({ ctx: plain.ctx, viewport: view } as PlanCanvasContext, [worker]);
-    expect(plain.cap.texts).toContain('安保 ×2');
+    // 2026-11-16 用户：图标细分后不再写岗位名，只留人数。
+    expect(plain.cap.texts).toContain('×2');
+    expect(plain.cap.texts.join('')).not.toContain('安保');
+
+    // 单人位连「×1」也不写（一枚图标就是一个人）。
+    const single = makeCtx();
+    drawWorkerLayer({ ctx: single.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, count: 1 }]);
+    expect(single.cap.texts).toEqual([]);
 
     const selected = makeCtx();
     drawWorkerLayer({ ctx: selected.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, selected: true }]);
@@ -424,6 +458,35 @@ describe('route / node / worker drawing (H2-d)', () => {
     const warned = makeCtx();
     drawWorkerLayer({ ctx: warned.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, warning: true }]);
     expect(warned.cap.strokes).toContain('#c0392b');
+  });
+
+  it('draws the role icon chip instead of a dot when the caller supplies one (2026-11-16)', () => {
+    const worker = { id: 'w1', role: '安保', count: 3, position: { x: 3, y: 57 } };
+
+    // 无岗位贴纸的岗位：仍是圆点（定位与命中都靠它）。
+    const dot = makeCtx();
+    drawWorkerLayer({ ctx: dot.ctx, viewport: view } as PlanCanvasContext, [worker]);
+    expect(dot.cap.arcs.some(a => a.endsWith(',5'))).toBe(true);
+    expect(dot.cap.fills).toContain(hexWithAlpha(PLANNING_LAYER_COLORS.worker, 0.85));
+
+    // 有芯片的岗位：不再画圆点，也不再填人员色——一枚图标就是这一个人位。
+    const chip = makeCtx();
+    drawWorkerLayer({ ctx: chip.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, chip: true }]);
+    expect(chip.cap.arcs).toEqual([]);
+    expect(chip.cap.fills).not.toContain(hexWithAlpha(PLANNING_LAYER_COLORS.worker, 0.85));
+    // 岗位与人数文字：岗位名不再写，只补×3（图标不表达数量）。
+    expect(chip.cap.texts).toContain('×3');
+
+    // 选中圈 / 越界红圈仍按芯片外径让位，不被 16 px 芯片盖掉。
+    const warned = makeCtx();
+    drawWorkerLayer({ ctx: warned.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, chip: true, warning: true }]);
+    expect(warned.cap.strokes).toContain('#c0392b');
+    expect(warned.cap.arcs.some(a => a.endsWith(',9'))).toBe(true);
+
+    const selected = makeCtx();
+    drawWorkerLayer({ ctx: selected.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, chip: true, selected: true }]);
+    expect(selected.cap.strokes).toContain('#ffffff');
+    expect(selected.cap.arcs.some(a => a.endsWith(',11.5'))).toBe(true);
   });
 
   it('draws entry / exit / both with their own colors (green in, red out, teal two-way)', () => {
@@ -532,6 +595,115 @@ describe('measurement drawing (H3-a)', () => {
       { x: 0, y: 10 },
     );
     expect(area.cap.texts).toContain('100 m²');
+  });
+
+  /* 2026-11-16 用户：「点击下面的×就消失了」——读数改走图上贴片（白胶囊 + ×），
+     画布不再重复写字；选中态另加白晕，让“这条被选中了”在图上看得见。 */
+  it('skips canvas label when the reading is rendered as a DOM chip', () => {
+    const { ctx, cap } = makeCtx();
+    drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm4', kind: 'distance', points: [{ x: 0, y: 0 }, { x: 3, y: 4 }], showLabel: false },
+    ]);
+    expect(cap.texts).toEqual([]);
+    // 几何照画（贴片只接管文字）。
+    expect(cap.fills).toContain('#ffffff');
+  });
+
+  it('haloes the selected measurement with white so the pick is visible', () => {
+    const { ctx, cap } = makeCtx();
+    drawMeasureLayer({ ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm5', kind: 'distance', points: [{ x: 0, y: 0 }, { x: 3, y: 4 }], selected: true },
+    ]);
+    expect(cap.strokes).toContain('rgba(255,255,255,0.9)');
+
+    const plain = makeCtx();
+    drawMeasureLayer({ ctx: plain.ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm6', kind: 'distance', points: [{ x: 0, y: 0 }, { x: 3, y: 4 }] },
+    ]);
+    expect(plain.cap.strokes).not.toContain('rgba(255,255,255,0.9)');
+  });
+
+  it('anchors readout chips exactly where the canvas label sits', () => {
+    // 距离：两点段中点。
+    const distance = measureReadoutAnchor(view, { kind: 'distance', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] });
+    const mid = planPointToPixel({ x: 5, y: 0 }, view);
+    expect(distance?.x).toBeCloseTo(mid.x, 5);
+    expect(distance?.y).toBeCloseTo(mid.y, 5);
+
+    // 面积：与画布读数同一落点（首边中点），不是质心。
+    const ring = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] as const;
+    const area = measureReadoutAnchor(view, { kind: 'area', points: ring });
+    const edgeMid = planPointToPixel({ x: 5, y: 0 }, view);
+    expect(area?.x).toBeCloseTo(edgeMid.x, 5);
+    expect(area?.y).toBeCloseTo(edgeMid.y, 5);
+
+    // 路径：中点顶点。
+    const pathPt = measureReadoutAnchor(view, { kind: 'path', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] });
+    const vertex = planPointToPixel({ x: 10, y: 0 }, view);
+    expect(pathPt?.x).toBeCloseTo(vertex.x, 5);
+    expect(pathPt?.y).toBeCloseTo(vertex.y, 5);
+
+    expect(measureReadoutAnchor(view, { kind: 'distance', points: [{ x: 0, y: 0 }] })).toBeNull();
+    expect(measureReadoutAnchor(view, { kind: 'area', points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] })).toBeNull();
+  });
+
+  /* 2026-11-16 用户四条：文字跟线平行 / 过程标尺 / 多段线 / 退出删线（最后一条在组件层）。 */
+  it('picks a ruler step that stays readable when zooming', () => {
+    const at16 = measureRulerStepM(view);
+    const at19 = measureRulerStepM({ ...view, zoom: 19 });
+    const at13 = measureRulerStepM({ ...view, zoom: 13 });
+    // 放得越大，刻度越密（步长不会变大）；缩得越小，步长越大。
+    expect(at19).toBeLessThanOrEqual(at16);
+    expect(at13).toBeGreaterThanOrEqual(at16);
+    // 相邻刻度在屏幕上不挤：步长的像素间隔不小于下限。
+    expect(at16 / planMetersPerPixel(view)).toBeGreaterThanOrEqual(MEASURE_RULER_MIN_TICK_PX);
+  });
+
+  it('writes cumulative ruler labels parallel to the segment', () => {
+    const step = measureRulerStepM(view);
+    const east = step * 3.4;
+    const { ctx, cap } = makeCtx();
+    const rotate = vi.spyOn(ctx, 'rotate');
+    const result = drawMeasureRuler(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ x: 0, y: 0 }, { x: east, y: 0 }],
+      { total: false },
+    );
+    // 累计刻度：step、2×step、3×step（3.4 段打不下第四个）。
+    expect(result.ticksM).toEqual([step, step * 2, step * 3]);
+    expect(result.labels).toEqual([formatLengthM(step), formatLengthM(step * 2), formatLengthM(step * 3)]);
+    // 水平线：文字角度 0（不歪、也不倒字）。
+    expect(rotate.mock.calls.length).toBeGreaterThan(0);
+    expect(rotate.mock.calls.every(([angle]) => Math.abs(angle as number) < 1e-9)).toBe(true);
+    expect(cap.texts).toEqual(expect.arrayContaining(result.labels));
+  });
+
+  it('flips the label angle so a segment never reads upside down', () => {
+    expect(readableSegmentAngle(10, 0)).toBeCloseTo(0, 6);
+    expect(readableSegmentAngle(-10, 0)).toBeCloseTo(0, 6); // 向左：翻 180° 回正
+    // 竖直线一律归到 +90°（从下往上读），两个方向都不会出现倒字。
+    expect(readableSegmentAngle(0, -10)).toBeCloseTo(Math.PI / 2, 6); // 向北（屏幕向上）
+    expect(readableSegmentAngle(0, 10)).toBeCloseTo(Math.PI / 2, 6); // 向南（屏幕向下）
+    // 角度始终落在 (-90°, 90°]：不会把文字转成 180° 倒字。
+    for (const [dx, dy] of [[10, 3], [-10, 3], [4, -9], [-4, -9], [0, 5], [0, -5]] as const) {
+      const angle = readableSegmentAngle(dx, dy);
+      expect(angle).toBeGreaterThan(-Math.PI / 2 - 1e-9);
+      expect(angle).toBeLessThanOrEqual(Math.PI / 2 + 1e-9);
+    }
+  });
+
+  it('draws the draft ruler along the rubber band while still measuring', () => {
+    const { ctx, cap } = makeCtx();
+    const step = measureRulerStepM(view);
+    drawMeasureDraft(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ x: 0, y: 0 }],
+      'distance',
+      { x: step * 2, y: 0 },
+    );
+    // 草稿阶段就有过程刻度（不是等提交后才出现）。
+    expect(cap.texts).toContain(formatLengthM(step));
+    expect(cap.texts).toContain(formatLengthM(step * 2));
   });
 });
 

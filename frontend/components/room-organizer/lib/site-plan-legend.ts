@@ -38,6 +38,7 @@ import {
   facilitySticker,
   nodeSticker,
   routeSticker,
+  workerRoleColor,
   workerSticker,
   zoneSticker,
   type OneplanStickerDescriptor,
@@ -242,7 +243,9 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
         const bucket = roleMap.get(role)!;
         return {
           icon: iconOf('users'),
-          swatch: PLANNING_LAYER_COLORS.worker,
+          // 2026-11-16：人员图例色块跟岗位主题色（与左侧行/地图芯片/3D 同一张表）；
+          // 表里没有的岗位仍用图层人员色。
+          swatch: workerRoleColor(role) ?? PLANNING_LAYER_COLORS.worker,
           label: role,
           count: bucket.people,
           detail: `${bucket.posts} 个点位`,

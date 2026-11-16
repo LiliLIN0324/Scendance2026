@@ -186,7 +186,7 @@ import {
   type MapGroundFrame,
 } from './lib/amap-venue';
 import { capturePlanGround, type PlanGroundSource } from './lib/plan-ground-capture';
-import { readPlanGroundSource, subscribePlanGroundSource } from './lib/plan-basemap-source';
+import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, subscribePlanGroundSource } from './lib/plan-basemap-source';
 import { planCatalogDragFor, planCatalogDragForScenePreset } from './lib/plan-catalog-drag';
 import type { ScenePresetKey } from './lib/scene-presets';
 import { publicSourceTileUrl, basemapSourceAttribution } from './lib/tdt-probe';
@@ -1824,6 +1824,8 @@ useEffect(() => {
   }, [outdoorPlan, outdoor3dWarm]);
   // GeoGround 瓦片地面（2026-11-12）与户外 2D 同一份图源偏好；署名随源切换。
   const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
+  // docs/46 V-P1：地面形态（纸面=虚拟场地）也走同一族偏好，接管态 3D 据此落纸面地面。
+  const groundMode = useSyncExternalStore(subscribePlanGroundMode, readPlanGroundMode, () => 'map' as const);
   // 左下「比例尺+指北针+署名」簇的 DOM refs（与户外 3D 同款组件，下方 effect 驱动更新）。
   const geoScaleLabelRef = useRef<HTMLSpanElement | null>(null);
   const geoScaleBarRef = useRef<HTMLDivElement | null>(null);
@@ -2735,14 +2737,20 @@ useEffect(() => {
     // 2026-11-15 方案 A：2D/3D 收进右列一枚可切换圆钮；回选址靶心聚焦场地边界。
     view: outdoor3dTakeoverActive && !outdoor2DOpen ? '3d' as const : '2d' as const,
     onToggleView: () => handleOutdoorViewSwitch(outdoor3dTakeoverActive && !outdoor2DOpen ? '2d' : '3d'),
-    // 指北针：3D 接管回正相机朝向正北；2D 平面复位视图到场地边界。
+    // 指北针：3D 接管回正相机朝向正北；2D 平面把地图方位角转回 0（罗盘拖转后用）。
     resetNorth: () => {
       if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
-      else outdoorOverlayRef.current?.focusVenue();
+      else outdoorOverlayRef.current?.resetNorth();
     },
-    // 大罗盘：3D 接管时读相机方位并支持拖动转视角；2D 这两项不生效。
-    bearingRad: () => outdoorPlan3DRef.current?.getBearing() ?? 0,
-    orbitByDelta: (deltaTheta: number) => { outdoorPlan3DRef.current?.orbitByDelta(deltaTheta); },
+    // 大罗盘：3D 接管读相机方位；2D 读画布 bearing（罗盘拖转 2D，2026-11-16 用户指令）。
+    bearingRad: () => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) return outdoorPlan3DRef.current?.getBearing() ?? 0;
+      return outdoorOverlayRef.current?.getBearing() ?? 0;
+    },
+    orbitByDelta: (deltaTheta: number) => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.orbitByDelta(deltaTheta);
+      else outdoorOverlayRef.current?.orbitByDelta(deltaTheta);
+    },
   } : null;
   const splatLodEnabled = showGaussianInCanvas && !!layout.researchArea && !!environment && !scanIsolated;
   const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
@@ -3282,8 +3290,14 @@ useEffect(() => {
   }, [setView, setSceneFocus]);
   // 2026-11-16 用户指令：左栏那行「定位到设计范围」去掉，功能改到右轨焦点钮。
   // 2D 户外画布：优先框设计范围；没有圈设计范围时回到地块边界/锚点（不落到 3D 场地取景，2D 下无足迹会静默失效）。
-  // 3D 接管 / 实景隔离：维持原来的场地取景。只动视图、不改 plan。
+  // 3D 接管：可见相机在 OutdoorPlan3D 里，取景必须交给它（主场景相机此刻无内容，
+  // 只调 focusMapVenue 会「点了没反应」）。
+  // 实景隔离：维持原来的场地取景。只动视图、不改 plan。
   const focusScopeOrVenue = useCallback(() => {
+    if (outdoor3dTakeover) {
+      outdoorPlan3DRef.current?.focusVenue();
+      return;
+    }
     if (outdoor2DOpen) {
       if ((outdoorPlan?.designScope ?? []).length >= 3) {
         outdoorOverlayRef.current?.focusDesignScope();
@@ -3293,7 +3307,7 @@ useEffect(() => {
       return;
     }
     focusMapVenue();
-  }, [outdoor2DOpen, outdoorPlan, focusMapVenue]);
+  }, [outdoor2DOpen, outdoor3dTakeover, outdoorPlan, focusMapVenue]);
   useEffect(() => {
     if (walkthroughActive || !mapVenueTrialRef.current) return;
     mapVenueTrialRef.current = false;
@@ -4953,6 +4967,7 @@ useEffect(() => {
                 <OutdoorPlan3D
                   plan={outdoorPlan}
                   source={geoGroundSource}
+                  groundMode={groundMode}
                   sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
                   apiRef={outdoorPlan3DRef}
                   canvasApiRef={outdoorCanvasBridgeRef}
@@ -5200,7 +5215,7 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={outdoor2DOpen && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

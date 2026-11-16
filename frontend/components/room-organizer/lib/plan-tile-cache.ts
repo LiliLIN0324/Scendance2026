@@ -281,6 +281,13 @@ export interface BasemapPaintSpec {
   /** 优先加载的焦点（画布 CSS 像素）；缺省用视口中心。 */
   focusX?: number;
   focusY?: number;
+  /**
+   * 2026-11-16 罗盘拖转 2D：视口旋转后可见区在轴对齐瓦片系里是旋转矩形的 AABB——
+   * 传旋转扩展尺寸（cssW·|cos|+cssH·|sin| 等），裁剪从「[0, cssW]」放宽为「中心 ± cullW/2」。
+   * 缺省 cullW/cullH = cssW/cssH，与旧轴对齐行为逐像素一致。
+   */
+  cullW?: number;
+  cullH?: number;
 }
 
 export interface BasemapPaintResult {
@@ -314,6 +321,11 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
   const result: BasemapPaintResult = { drawn: 0, fallback: 0, pending: 0 };
   const focusX = spec.focusX ?? cssW / 2;
   const focusY = spec.focusY ?? cssH / 2;
+  // 2026-11-16 旋转扩覆盖：缺省 = 轴对齐整屏（与旧行为一致）。
+  const cullW = spec.cullW ?? cssW;
+  const cullH = spec.cullH ?? cssH;
+  const cullLeft = cssW / 2 - cullW / 2;
+  const cullTop = cssH / 2 - cullH / 2;
   // overzoom：视图级别高于图源上限时，按上限取瓦片再等比放大（drawSize > tileSize）。
   const tileZoom = Math.min(zoom, spec.tileZoom ?? zoom);
   const drawSize = tileSize * 2 ** (zoom - tileZoom);
@@ -322,7 +334,7 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
   for (const { x, y } of tiles) {
     const left = x * drawSize - centerPx + cssW / 2;
     const top = y * drawSize - centerPy + cssH / 2;
-    if (left > cssW || top > cssH || left + drawSize < 0 || top + drawSize < 0) continue;
+    if (left > cullLeft + cullW || top > cullTop + cullH || left + drawSize < cullLeft || top + drawSize < cullTop) continue;
     visible.push({ x, y, left, top });
   }
   visible.sort((a, b) => {

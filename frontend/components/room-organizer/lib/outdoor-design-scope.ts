@@ -54,6 +54,34 @@ export function rectRing(a: ScopePoint, b: ScopePoint): ScopePoint[] {
   return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 }
 
+/**
+ * 2026-11-17 用户拍板「红线跟着白框走」的同步规则：
+ * - 红线改动后**仍完整落在白框内** → 白框不动（在框里拖不用管）；
+ * - 红线任一边**顶出白框** → 白框重置为「新红线外扩 margin」（框永远兜得住红线）；
+ * - 本来就没有白框 → 顺手生成一个。
+ *
+ * 返回 null = 白框无需改动；返回环 = 调用方把它写进 plan.designScope。
+ * 只看外接矩形够用：白框恒为矩形（2026-11-15 拍板），红线再怎么绕外接矩形超了就是超了。
+ */
+export function syncScopeForBoundary(
+  currentScope: readonly ScopePoint[] | undefined,
+  boundary: readonly ScopePoint[],
+  marginM: number,
+): ScopePoint[] | null {
+  if (boundary.length < 3) return null;
+  const scope = currentScope ?? [];
+  if (scope.length < 3) return expandRect(boundary, marginM);
+  const bx = boundary.map((point) => point.x);
+  const by = boundary.map((point) => point.y);
+  const sx = scope.map((point) => point.x);
+  const sy = scope.map((point) => point.y);
+  const sticksOut = Math.max(...bx) > Math.max(...sx)
+    || Math.min(...bx) < Math.min(...sx)
+    || Math.max(...by) > Math.max(...sy)
+    || Math.min(...by) < Math.min(...sy);
+  return sticksOut ? expandRect(boundary, marginM) : null;
+}
+
 /** 拖框够不够大：两边都不小于 minSideM 才认（挡掉手抖单击与细条）。 */
 export function rectBigEnough(ring: readonly ScopePoint[], minSideM = MIN_SCOPE_SIDE_M): boolean {
   if (ring.length !== 4) return false;

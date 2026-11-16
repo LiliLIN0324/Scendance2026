@@ -675,7 +675,7 @@ describe('ScendanceViewTools outdoor Google Maps rail', () => {
     render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} onFocusVenue={focus}/></Providers>);
     const stack = screen.getByRole('group', { name: '地图控制' });
     expect(within(stack).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      '罗盘：回到场地',
+      '罗盘：点击回正北',
       '当前 2D 平面，点击切到 3D 场景',
       '回到框选场地',
       '放大',
