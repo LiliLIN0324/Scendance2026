@@ -230,6 +230,7 @@ import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
 import { type ShareMenuActions } from './panels/share-menu';
+import { type ServerShare } from './lib/share-records';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
@@ -1009,6 +1010,17 @@ useEffect(() => {
     } catch (error) {
       throw new Error(shareErrorMessage(error));
     }
+  }, [controller]);
+  // 分享记录：版本 / 时间 / 撤回状态以服务端为准；链接 token 只在生成时返回一次，URL 由卡片记在本机日志里。
+  const listProjectShares = useCallback(async (): Promise<ServerShare[]> => {
+    const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
+    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    return controller.businessRequest<ServerShare[]>(`/projects/${encodeURIComponent(projectId)}/shares`, 'GET');
+  }, [controller]);
+  const revokeProjectShare = useCallback(async (shareId: string) => {
+    const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
+    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    await controller.businessRequest(`/projects/${encodeURIComponent(projectId)}/shares/${encodeURIComponent(shareId)}`, 'DELETE');
   }, [controller]);
   const exportHandoff = useCallback(() => {
     setSidePanel(null);
@@ -4375,6 +4387,13 @@ useEffect(() => {
       return null;
     },
   }),[planAnnot.getSnapshot,activitySession.isCurrent,sessionToken,sessionScope,flushPendingBeforeSwitch]);
+  // 分享卡预览：打开时抓当前画布真实一帧（户外 3D 接管 / 户外 2D / 室内各走各的抓帧句柄）；抓不到由卡片退回示意图。
+  // 必须放在会话提前 return 之前，hooks 不能条件调用。
+  const captureSharePreview = useCallback(async () => {
+    if (outdoor3dTakeover) return outdoorPlan3DRef.current?.captureImage() ?? null;
+    if (outdoor2DOpen) return outdoorOverlayRef.current?.captureImage() ?? null;
+    return captureRenderImage({ view: 'current', scale: 1 });
+  }, [outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
   if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
 
   // P4-c：发布卡片只实现一次；3D 工具轨与 2D 画布右上交付簇各自挂一份触发钮，
@@ -4382,6 +4401,9 @@ useEffect(() => {
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
     onPublish: publishVersion,
+    onListShares: listProjectShares,
+    onRevokeShare: revokeProjectShare,
+    onCapturePreview: captureSharePreview,
     onExportHandoff: exportHandoff,
     onGenerateShareLink: handleShareLink,
     onOpenMaterials: openMaterialsFromShare,
