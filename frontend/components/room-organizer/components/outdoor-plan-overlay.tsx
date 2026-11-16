@@ -22,7 +22,7 @@ import { GuideBubble, useGuide } from '@/components/room-organizer/components/ou
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
 import { OutdoorDeliveryPanel } from '@/components/room-organizer/components/outdoor-delivery-panel';
 import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
-import { readPlanGroundSource, writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
+import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, writePlanGroundMode, writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
 import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
@@ -31,6 +31,8 @@ import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-g
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
+import { alignedTileCenter } from '../lib/basemap-alignment';
+import { lngLatToTileXY, publicSourceTileUrl, tdtProbeTileUrl } from '../lib/tdt-probe';
 import type { BackendSession } from '@/lib/backend-session';
 import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
@@ -40,13 +42,16 @@ import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { openGenerationSheet } from '../lib/generation-sheet';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
-import { Layers3, X } from 'lucide-react';
+import { Layers3, LayoutGrid, X } from 'lucide-react';
 import {
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
   readOutdoorProjectRecord,
   saveOutdoorProjectRecord,
+  type OutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
+import { pushOutdoorPlan, forcePushOutdoorPlan, pullOutdoorPlan } from '@/components/room-organizer/lib/outdoor-plan-sync';
+import { OutdoorSyncBanner, type OutdoorSyncConflict } from './outdoor-sync-banner';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { DisplayUnit } from '../lib/types';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
@@ -106,6 +111,46 @@ function SourceThumb({ id }: { id: CanvasBasemapSource }) {
   );
 }
 
+/**
+ * 2026-11-16 用户指令「成熟的地图产品是怎么做的」：真瓦片缩略图——拿当前锚点那一块
+ * 真实地图渲染成小图（Google Maps / Apple Maps 范式），不再用手绘示意图糊弄。
+ * URL 与画布底图同源（publicSourceTileUrl / tdtProbeTileUrl + alignedTileCenter 处理
+ * GCJ/WGS 口径），画布已拉过的瓦片缩略图直接命中缓存；加载失败回落手绘示意图，
+ * 网络断也不开天窗。天地图只取底图瓦片（注记在缩略图尺寸下看不清，不值得多一次请求）。
+ */
+function RealSourceThumb({ id, lngLat }: { id: CanvasBasemapSource; lngLat: { lng: number; lat: number } | null }) {
+  const [state, setState] = useState<'pending' | 'ok' | 'failed'>('pending');
+  const url = useMemo(() => {
+    if (!lngLat) return null;
+    // z16（低纬约 600 m 视野）：比 z15 更贴近场地尺度，像 Google 选底图缩略的取景密度。
+    const zoom = 16;
+    const center = alignedTileCenter(lngLat.lng, lngLat.lat, id);
+    const { x, y } = lngLatToTileXY(center.lng, center.lat, zoom);
+    // CanvasBasemapSource 里排除天地图两档后恰好就是 6 个公开源（ProbePublicSource）。
+    if (id === 'vec' || id === 'img') return tdtProbeTileUrl(id, zoom, x, y).base;
+    return publicSourceTileUrl(id, zoom, x, y);
+  }, [id, lngLat?.lng, lngLat?.lat]);
+  // 2026-11-16 用户实测：境外源（OSM 直连 / Carto 代理）在网络坏窗口会挂几十秒，
+  // 缩略图一直空着像坏了——6s 没加载出来就回落手绘示意，不让用户盯着空格等浏览器超时。
+  useEffect(() => {
+    if (!url) return;
+    const timer = window.setTimeout(() => setState(value => (value === 'pending' ? 'failed' : value)), 6000);
+    return () => window.clearTimeout(timer);
+  }, [url, state]);
+  if (!url || state === 'failed') return <SourceThumb id={id} />;
+  return (
+    <img
+      src={url}
+      alt=""
+      aria-hidden="true"
+      decoding="async"
+      onLoad={() => setState('ok')}
+      onError={() => setState('failed')}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+    />
+  );
+}
+
 /** 地图详情面板的第一组：对应 Google Maps 的「默认 / 卫星 / 深色」。 */
 const PRIMARY_MAP_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
   { id: 'amap-streets', label: '默认' },
@@ -130,9 +175,13 @@ const FEATURED_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
   { id: 'carto-dark', label: '深色' },
 ];
 
-function MapDetailsPanel({ source, geoHidden, onPickSource, onTogglePaper, onClose }: {
+function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPickSource, onTogglePaper, onClose }: {
   source: CanvasBasemapSource;
   geoHidden: boolean;
+  /** 2026-11-17 docs/46 V-P1：纸面升为一等形态（3D 地面也认），默认渲染；保留参数只为将来按需隐藏。 */
+  showPaperMode?: boolean;
+  /** 真瓦片缩略图取图中心（plan.anchor，GCJ-02）；null 时缩略图回落手绘示意。 */
+  lngLat: { lng: number; lat: number } | null;
   onPickSource: (id: CanvasBasemapSource) => void;
   onTogglePaper: () => void;
   onClose: () => void;
@@ -151,7 +200,7 @@ function MapDetailsPanel({ source, geoHidden, onPickSource, onTogglePaper, onClo
         className="oc-map-details__source"
       >
         <span className="oc-map-details__thumb" aria-hidden="true">
-          <SourceThumb id={id} />
+          <RealSourceThumb id={id} lngLat={lngLat} />
         </span>
         <span className="oc-map-details__name">{label}</span>
       </button>
@@ -182,24 +231,28 @@ function MapDetailsPanel({ source, geoHidden, onPickSource, onTogglePaper, onClo
         <div className="oc-map-details__label">地图类型</div>
         <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
           {PRIMARY_MAP_SOURCES.map(sourceTile)}
+          {/* 2026-11-17 用户指令：纸面模式升为默认组一等选项（虚拟场地主形态）。
+              docs/46 V-P1 落地后 3D 地面也认纸面（ground-mode store），接管态照常出镜。 */}
+          {showPaperMode && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={geoHidden}
+              aria-label="纸面模式"
+              data-testid="map-picker-toggle-geo"
+              onClick={onTogglePaper}
+              className="oc-map-details__source"
+            >
+              <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
+              <span className="oc-map-details__name">纸面</span>
+            </button>
+          )}
         </div>
       </div>
       <div className="oc-map-details__section">
         <div className="oc-map-details__label">更多底图</div>
         <div className="oc-map-details__grid" role="radiogroup" aria-label="更多底图">
           {MORE_MAP_SOURCES.map(sourceTile)}
-          <button
-            type="button"
-            role="radio"
-            aria-checked={geoHidden}
-            aria-label="纸面模式"
-            data-testid="map-picker-toggle-geo"
-            onClick={onTogglePaper}
-            className="oc-map-details__source"
-          >
-            <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
-            <span className="oc-map-details__name">纸面模式</span>
-          </button>
         </div>
       </div>
     </div>
@@ -207,6 +260,10 @@ function MapDetailsPanel({ source, geoHidden, onPickSource, onTogglePaper, onClo
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
+/** 云端副本推失败后的冷却：这段时间内不再重试，避免每条编辑都撞一次（用户嫌顶部提示烦）。 */
+const CLOUD_RETRY_MS = 60_000;
+/** 普通提示（如“已换成服务器那版”）自己退场的时间；版本冲突不自动消失。 */
+const NOTE_AUTOCLEAR_MS = 6000;
 const GUIDE_STORAGE_KEY = 'outdoor-plan-guide-v1';
 /** 本地活动没有稳定 id 时的兜底草稿槽（单草稿；云项目 id 恒走按项目隔离）。 */
 const LOCAL_DRAFT_SLOT = 'local-draft';
@@ -303,6 +360,12 @@ export interface OutdoorPlanOverlayHandle {
   focusVenue(): void;
   /** 2026-11-16：把视野框到设计范围（右下焦点钮在圈了范围时改派这里）。 */
   focusDesignScope(): void;
+  /** 2026-11-16 罗盘拖转 2D：转盘增量（弧度，与 3D orbitByDelta 同口径）；无画布时 no-op。 */
+  orbitByDelta(deltaRad: number): void;
+  /** 罗盘点击回正北（2D bearing 归 0）；无画布时 no-op。 */
+  resetNorth(): void;
+  /** 当前 2D 地图方位角（弧度，0=正北朝上）；无画布时 0。 */
+  getBearing(): number;
 }
 
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
@@ -339,6 +402,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const [plan, setPlan] = useState<SitePlanData | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // 2026-11-17：云端副本的人话状态（冲突/未上传）；空串不占位。
+  const [syncNote, setSyncNote] = useState<string>('');
+  // 版本冲突：让用户二选一（不自动合并、不后写胜）。ref 供防抖回调同步读。
+  const [syncConflict, setSyncConflict] = useState<OutdoorSyncConflict | null>(null);
+  const syncConflictRef = useRef<OutdoorSyncConflict | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  // 云端副本重试闸：失败后 60s 内不再尝试（不跟着每条编辑发请求）。
+  const cloudRetryAtRef = useRef(0);
   const [shareOpen, setShareOpen] = useState(false);
   const guide = useGuide(GUIDE_STORAGE_KEY);
   const [guideHidden, setGuideHidden] = useState(false);
@@ -364,14 +435,16 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
   // 不再把「OSM」这种图源缩写塞进室内工具排里让人猜。
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
-  // 2026-11-16 用户指令：恢复上一版竖排手感——常态一枚「图层」缩略钮；鼠标悬停（或手机点按）
-  // 在右侧浮出竖列；点竖列末尾的「展开」才进入完整「地图详情」，X 关掉后只剩图层钮。
+  // 2026-11-16 用户指令（参考高德）：点图层钮开合紧凑弹层（地图/卫星/深色/展开），
+  // 单击即切即关；「展开」才进完整「地图详情」面板，X 关掉后回到图层钮。
+  // 悬停竖列手感太低效（误触开、移开即关），拆除 hover 计时器；点外部/Esc 收起走下方 effect。
   const [layerStripOpen, setLayerStripOpen] = useState(false);
-  const layerHoverTimer = useRef<number | null>(null);
   const layerDockRef = useRef<HTMLDivElement | null>(null);
   // 2026-11-11 用户拍板：户外默认铺真地图（起步计划自带预置锚点）；纸面格网降级为
   // 用户显式「隐藏底图」的形态。geoHidden = true 时切纸面，业务图层不受影响。
-  const [geoHidden, setGeoHidden] = useState(false);
+  // 2026-11-17 docs/46 V-P1：纸面升为一等形态——初始值读地面形态偏好（虚拟场地起稿即纸面），
+  // 开关写回 store，3D 地面同步落纸面；2D/3D 一个开关管到底。
+  const [geoHidden, setGeoHidden] = useState(() => readPlanGroundMode() === 'paper');
   // 2D 画布始终挂载（左栏图层/测量/标注都 portal 到它上面）。
   // 3D 场地由壳体全屏 OutdoorPlan3D 唯一接管；本覆盖层只保留 2D 画布编辑桥，不再自挂 3D 实例。
 
@@ -403,6 +476,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     writePlanGroundSource(source);
   }, [source]);
 
+  // docs/46 V-P1：纸面/地图形态写进同一族偏好，3D 地面订阅跟随（真地图瓦片 ↔ 素面）。
+  useEffect(() => {
+    writePlanGroundMode(geoHidden ? 'paper' : 'map');
+  }, [geoHidden]);
+  // V-P2：Agent 侧（虚拟场地意图）也会写 ground-mode store——订阅回来，2D 覆盖层跟随切换。
+  useEffect(() => subscribePlanGroundMode(() => {
+    setGeoHidden(readPlanGroundMode() === 'paper');
+  }), []);
+
   // 载入本机草稿：室内活动第一次开户外面用起步矩形（同户外项目口径）。
   // P2-g：没有草稿但有 3D 场地时，按 3D 壳体的轮廓起稿（同一个场地的两个视图）。
   const seedPlanRef = useRef<SitePlanData | null | undefined>(seedPlan);
@@ -420,6 +502,12 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan(),
     );
     if (!loaded.anchor && !anchorRef.current) {
+      // docs/46 V-P2：虚拟场地（纸面形态）不回填预置锚点——无锚点是虚拟场地的合法态；
+      // 等用户画完红线再决定要不要定位。切回真地图（store='map'）时下次载入照常回填。
+      if (readPlanGroundMode() === 'paper') {
+        setPlan(loaded);
+        return;
+      }
       setPlan({ ...loaded, anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR });
       return;
     }
@@ -435,6 +523,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const mapContextRef=useRef(createOutdoorMapContext());
   const [evidenceHighlights,setEvidenceHighlights]=useState<OutdoorEvidenceHighlight[]>([]);
   useEffect(()=>{mapContextRef.current.invalidate();setEvidenceHighlights([]);},[slotId]);
+  // 换活动：上一份的云端提示/冲突不带过去。
+  useEffect(()=>{setSyncNote('');setSyncConflict(null);syncConflictRef.current=null;cloudRetryAtRef.current=0;},[slotId]);
+  // 普通提示自己退场（冲突提示不走这条——它要等用户选）。
+  useEffect(() => {
+    if (!syncNote || syncConflict) return undefined;
+    const timer = window.setTimeout(() => setSyncNote(''), NOTE_AUTOCLEAR_MS);
+    return () => window.clearTimeout(timer);
+  }, [syncNote, syncConflict]);
   const flowRef=useRef(agent?.outdoorWorkflow);flowRef.current=agent?.outdoorWorkflow;
   const viewChangeRef=useRef(onViewChange);viewChangeRef.current=onViewChange;
   const planRef = useRef<SitePlanData | null>(plan);
@@ -505,18 +601,102 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const flushSave = useCallback(() => {
     const current = planRef.current;
     if (current == null) return;
-    const record = readOutdoorProjectRecord(slotId);
-    saveOutdoorProjectRecord({
+    const existing = readOutdoorProjectRecord(slotId);
+    const record: OutdoorProjectRecord = {
       v: 1,
       projectId: slotId,
-      name: activityName?.trim() || record?.name || '户外规划',
-      createdAt: record?.createdAt ?? new Date().toISOString(),
+      name: activityName?.trim() || existing?.name || '户外规划',
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       plan: current,
-    });
+      ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
+      ...(typeof existing?.remoteRevision === 'number' ? { remoteRevision: existing.remoteRevision } : {}),
+    };
+    saveOutdoorProjectRecord(record);
     setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
     setSaveState('saved');
-  }, [slotId, activityName]);
+    // 后端副本：本机已落盘；推不上去只是少一份副本，不改本机、不拦编辑。
+    // 2026-11-17（用户：顶部这条提示很烦人）：例行失败**不弹任何东西**，只是安静地退回去，
+    // 并隔 60s 再试一次（不跟着每条编辑撞一次）；真正需要用户决定的只有版本冲突。
+    if (syncConflictRef.current) return;
+    if (Date.now() < cloudRetryAtRef.current) return;
+    void pushOutdoorPlan(controller ?? null, record, current).then(outcome => {
+      if (outcome.status === 'saved') {
+        cloudRetryAtRef.current = 0;
+        saveOutdoorProjectRecord({
+          ...record,
+          remoteActivityId: outcome.remoteActivityId,
+          remoteRevision: outcome.remoteRevision,
+        });
+        return;
+      }
+      if (outcome.status === 'conflict') {
+        const conflict: OutdoorSyncConflict = { revision: outcome.remoteRevision, name: outcome.remoteName };
+        syncConflictRef.current = conflict;
+        setSyncConflict(conflict);
+        setSyncNote('');
+        return;
+      }
+      // 未登录 / 未部署 / 断网：静默降级，过一会儿再试。
+      cloudRetryAtRef.current = Date.now() + CLOUD_RETRY_MS;
+    });
+  }, [slotId, activityName, controller]);
+
+  /** 冲突二选一「用我这版」：明确覆盖服务器（revision 仍 +1）。 */
+  const useMyVersion = useCallback(() => {
+    const current = planRef.current;
+    const existing = readOutdoorProjectRecord(slotId);
+    if (!current || !existing) return;
+    setSyncBusy(true);
+    void forcePushOutdoorPlan(controller ?? null, existing, current).then(outcome => {
+      setSyncBusy(false);
+      if (outcome.status !== 'saved') {
+        setSyncNote('这次没传上去，本机这版还在，稍后再试。');
+        return;
+      }
+      saveOutdoorProjectRecord({
+        ...existing,
+        plan: current,
+        updatedAt: new Date().toISOString(),
+        remoteActivityId: outcome.remoteActivityId,
+        remoteRevision: outcome.remoteRevision,
+      });
+      syncConflictRef.current = null;
+      setSyncConflict(null);
+      setSyncNote(`已用本机这版覆盖，现在是版本 ${outcome.remoteRevision}。`);
+    });
+  }, [slotId, controller]);
+
+  /** 冲突二选一「用服务器那版」：读回来盖掉本机这版。 */
+  const useServerVersion = useCallback(() => {
+    const existing = readOutdoorProjectRecord(slotId);
+    setSyncBusy(true);
+    void pullOutdoorPlan(controller ?? null, existing?.remoteActivityId).then(remote => {
+      setSyncBusy(false);
+      if (!remote) {
+        setSyncNote('没读到服务器那版，本机先不动。');
+        return;
+      }
+      // 画布跟着 `plan` prop 走（outdoor-plan-canvas 里 `planRef.current = plan`），
+      // 所以整份换成服务器那版只需换 state，不用逐项合。
+      setPlan(remote.plan);
+      setPlacePin(null);
+      setPlaceArea(null);
+      saveOutdoorProjectRecord({
+        v: 1,
+        projectId: slotId,
+        name: remote.name || existing?.name || '户外规划',
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        plan: remote.plan,
+        ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
+        remoteRevision: remote.revision,
+      });
+      syncConflictRef.current = null;
+      setSyncConflict(null);
+      setSyncNote(`已换成服务器那版（版本 ${remote.revision}）。`);
+    });
+  }, [slotId, controller]);
   useEffect(() => {
     if (plan == null) return;
     setSaveState('saving');
@@ -529,7 +709,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }, [plan, flushSave]);
   useEffect(() => () => {
     if (pendingSaveRef.current !== null) flushSave();
-    if (layerHoverTimer.current !== null) window.clearTimeout(layerHoverTimer.current);
   }, [flushSave]);
   // 快捷条只在鼠标悬停/点按时展开；点外面或 Esc 收起（完整面板仍只认 X）。
   useEffect(() => {
@@ -611,6 +790,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     // 只框视图、不改 plan；没范围时画布内部静默不动，调用方自己回落。
     canvasApiRef.current?.focusDesignScope();
   },
+  // 2026-11-16 罗盘拖转 2D：句柄透传（无画布时 no-op）。
+  orbitByDelta: (deltaRad: number) => canvasApiRef.current?.orbitByDelta(deltaRad),
+  resetNorth: () => canvasApiRef.current?.resetNorth(),
+  getBearing: () => canvasApiRef.current?.getBearing() ?? 0,
   }));
 
   // P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动的入口；初次载入也报一次）。
@@ -646,7 +829,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   };
 
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
-  // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜。
+  // 真瓦片缩略图的取图中心：plan.anchor（GCJ-02，铺瓦片同口径）；plan 未载入时回落手绘示意。
+  const thumbAnchor = plan?.anchor ?? null;
+  // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜；
+  // 例外是左下「图层」dock（2026-11-16 用户指令 3D 也要可换底图，dock 自行翻回 visible）。
   const canvasHidden = dormant;
 
   return (
@@ -655,6 +841,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       style={{ position: 'absolute', inset: 0, zIndex: 30, background: dormant ? 'transparent' : 'var(--sc-surface, #ffffff)', color: 'var(--sc-ink, #141416)', ...(dormant ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}) }}
     >
       {/* 2026-11-15：属性卡不再自己开一张原位生成表单，统一进「生成」面板（见 GenerationSheetHost）。 */}
+      {syncNote || syncConflict ? (
+        <OutdoorSyncBanner
+          note={syncNote}
+          conflict={syncConflict}
+          busy={syncBusy}
+          onUseMine={useMyVersion}
+          onUseRemote={useServerVersion}
+        />
+      ) : null}
       {showGuide && guide.activeStep && (
         <GuideBubble
           step={guide.activeStep}
@@ -743,25 +938,20 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，
           本覆盖层不再自摆快捷钮。OutdoorDeliveryPanel 仅保留为面板挂载宿主，不再由此处按钮打开。 */}
       {/* 2026-11-16 用户指令：左下只保留一枚「图层」缩略钮；点开是「地图详情」面板，
-          面板盖住地图和入口，关闭只走右上角 X，关掉后回到这一枚图层钮。 */}
+          面板盖住地图和入口，关闭只走右上角 X，关掉后回到这一枚图层钮。
+          2026-11-16 用户指令「这个在 3D 的时候也补上」：接管态（dormant）下整层 visibility:hidden，
+          但图层 dock 单独翻回 visible（CSS visibility 子元素可覆盖；同 inspector 卡出镜手法）——
+          换图源写 writePlanGroundSource、纸面写 writePlanGroundMode（docs/46 V-P1），3D 地面经 useSyncExternalStore 自动跟随。 */}
       <div
         ref={layerDockRef}
         className="oc-layer-dock"
-        onMouseEnter={() => {
-          if (layerHoverTimer.current !== null) { window.clearTimeout(layerHoverTimer.current); layerHoverTimer.current = null; }
-          setLayerStripOpen(true);
-        }}
-        onMouseLeave={() => {
-          if (layerHoverTimer.current !== null) window.clearTimeout(layerHoverTimer.current);
-          layerHoverTimer.current = window.setTimeout(() => setLayerStripOpen(false), 160);
-        }}
-        onFocus={() => setLayerStripOpen(true)}
-        style={{ position: 'absolute', left: 24, bottom: 'var(--oc-layer-bottom, 20px)', zIndex: mapPickerOpen ? 20 : 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}
+        style={{ position: 'absolute', left: 24, bottom: 'var(--oc-layer-bottom, 20px)', zIndex: mapPickerOpen ? 20 : 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, ...(dormant ? { visibility: 'visible' as const, pointerEvents: 'auto' as const } : {}) }}
       >
         {mapPickerOpen ? (
           <MapDetailsPanel
             source={source}
             geoHidden={geoHidden}
+            lngLat={thumbAnchor}
             onPickSource={id => { setSource(id); setGeoHidden(false); }}
             onTogglePaper={() => setGeoHidden(value => !value)}
             onClose={() => setMapPickerOpen(false)}
@@ -775,12 +965,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
               aria-label={`图层，当前底图 ${currentSource.label}${geoHidden ? '（纸面）' : ''}`}
               aria-expanded={layerStripOpen}
               aria-controls="outdoor-layer-strip"
-              data-tip="图层 · 悬停或点按快速换底图"
-              onClick={() => setLayerStripOpen(true)}
+              data-tip="图层 · 点按快速换底图"
+              onClick={() => setLayerStripOpen(value => !value)}
               className="oc-layer-entry"
             >
+              {/* 2026-11-16 用户指令：缩略图跟当前图源走（原来写死 amap-satellite）；纸面态给纸面格。 */}
               <span className="oc-layer-entry__thumb" aria-hidden="true">
-                <SourceThumb id="amap-satellite" />
+                {geoHidden
+                  ? <span className="oc-layer-entry__thumb--paper" />
+                  : <RealSourceThumb id={source} lngLat={thumbAnchor} />}
               </span>
               <span className="oc-layer-entry__caption">
                 <Layers3 size={16} strokeWidth={1.8} aria-hidden="true" />
@@ -805,30 +998,41 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
                       aria-label={`底图：${option.label}`}
                       aria-pressed={active}
                       className="oc-layer-strip__row"
-                      onClick={() => { setSource(option.id); setGeoHidden(false); }}
+                      onClick={() => { setSource(option.id); setGeoHidden(false); setLayerStripOpen(false); }}
                     >
                       <span className="oc-layer-strip__thumb" aria-hidden="true">
-                        <SourceThumb id={option.id} />
+                        <RealSourceThumb id={option.id} lngLat={thumbAnchor} />
                       </span>
                       <span className="oc-layer-strip__label">{option.label}</span>
                     </button>
                   );
                 })}
+                {/* 2026-11-17 用户指令：纸面进快速弹层（虚拟场地主形态）；docs/46 V-P1 后 3D 也认纸面，接管态照常给。 */}
+                <button
+                  type="button"
+                  data-testid="map-strip-paper"
+                  aria-label="底图：纸面"
+                  aria-pressed={geoHidden}
+                  className="oc-layer-strip__row"
+                  onClick={() => { setGeoHidden(true); setLayerStripOpen(false); }}
+                >
+                  <span className="oc-layer-strip__thumb oc-layer-strip__thumb--paper" aria-hidden="true" />
+                  <span className="oc-layer-strip__label">纸面</span>
+                </button>
+                {/* 2026-11-17 用户指令：展开不再占一格缩略钮——缩成底部一小行文字。 */}
                 <button
                   type="button"
                   data-testid="map-strip-expand"
                   aria-label="展开地图详情"
                   aria-haspopup="dialog"
                   aria-controls="outdoor-map-details"
-                  className="oc-layer-strip__row"
+                  className="oc-layer-strip__row oc-layer-strip__row--slim"
                   onClick={() => { setLayerStripOpen(false); setMapPickerOpen(true); }}
                 >
-                  <span className="oc-layer-strip__thumb oc-layer-strip__thumb--expand" aria-hidden="true">
-                    <span className="oc-layer-strip__grid">
-                      {[0, 1, 2, 3].map(i => <i key={i} />)}
-                    </span>
+                  <span className="oc-layer-strip__label oc-layer-strip__label--with-icon">
+                    <LayoutGrid size={12} strokeWidth={1.8} aria-hidden="true" />
+                    <span>展开</span>
                   </span>
-                  <span className="oc-layer-strip__label">展开</span>
                 </button>
               </div>
             )}

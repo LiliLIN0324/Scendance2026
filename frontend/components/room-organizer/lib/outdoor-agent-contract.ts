@@ -26,6 +26,23 @@ export interface OutdoorBrief {
   items: NonNullable<OutdoorTurn["facts"]["items"]>;
   people: NonNullable<OutdoorTurn["facts"]["people"]>;
 }
+/**
+ * 地图证据对不上时的提示。2026-11-16：scope 阶段边界还没定，证据天然对不上，
+ * 用户在圈范围时无法据此做任何事；这条只在排设施、画流线这种真靠证据判断的步骤展开。
+ */
+export const MAP_EVIDENCE_MISSING_NOTE =
+  "地图证据没取到：门/障碍/通行未核对，不代表无冲突。";
+
+/** scope 卡过滤掉地图证据缺口；其它 kind 原样保留。 */
+export function proposalMapWarnings(
+  kind: string,
+  warnings: readonly string[],
+): string[] {
+  return kind === "scope"
+    ? warnings.filter((warning) => warning !== MAP_EVIDENCE_MISSING_NOTE)
+    : [...warnings];
+}
+
 export interface OutdoorFlowState {
   scope: string;
   stage: OutdoorStage;

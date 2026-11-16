@@ -6,6 +6,7 @@ import {
   boundaryKey,
   mergeOutdoorFacts,
   planVersion,
+  proposalMapWarnings,
   type OutdoorAgentBridge,
   type OutdoorFlowState,
   type OutdoorMapContext,
@@ -17,6 +18,14 @@ import {
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
+import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
+import {
+  loadRemoteCardHistory,
+  mergeCardHistory,
+  pushRemoteCardHistory,
+  sanitizeCardHistory,
+  type CardHistoryEntry,
+} from "../lib/outdoor-card-history-sync";
 import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
@@ -35,8 +44,50 @@ import {
   type ObjectsLayoutStrategy,
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
+// docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
+import { writePlanGroundMode } from "../lib/plan-basemap-source";
 // 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
 import { enuToLngLat, lngLatToEnu } from "../lib/outdoor-plan-canvas";
+
+/**
+ * 2026-11-16 用户要求「每次的引导卡片不要消失，历史记录很重要」：
+ * 一张卡被确认、被撤回、或被新提案顶掉时都留一条记录，在卡片底部按时间顺序列出来；
+ * 按 scope 存 localStorage，刷新/切活动后还在。
+ */
+export type OutdoorCardRecord = CardHistoryEntry & {
+  stage: OutdoorStage;
+  kind: OutdoorWorkflowProposal["kind"];
+};
+
+function cardActionsFor(kind: OutdoorWorkflowProposal["kind"]): string[] {
+  return [
+    "确认并应用这一版",
+    ...(kind === "scope" ? ["在地图上重画实际活动范围"] : []),
+    ...(kind === "objects" ? ["换一种排法"] : []),
+    "撤回预览",
+  ];
+}
+export const OUTDOOR_CARD_RECORDS_LIMIT = 30;
+const cardRecordsKey = (scope: string) => `scendance:outdoor-cards:${scope}`;
+
+export function readCardRecords(scope: string): OutdoorCardRecord[] {
+  try {
+    return sanitizeCardHistory(
+      JSON.parse(localStorage.getItem(cardRecordsKey(scope)) ?? "[]"),
+    ) as OutdoorCardRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function writeCardRecords(scope: string, records: OutdoorCardRecord[]) {
+  try {
+    localStorage.setItem(
+      cardRecordsKey(scope),
+      JSON.stringify(records.slice(-OUTDOOR_CARD_RECORDS_LIMIT)),
+    );
+  } catch {}
+}
 import { fetchOpenFreeMapBuildings, lngLatRingsToEnu } from "../lib/openfreemap-buildings";
 import { planPointInRing } from "../lib/site-plan-editing";
 import { planRingAreaM2 } from "../../../../supabase/functions/_shared/site-plan";
@@ -265,6 +316,63 @@ export function useOutdoorAgentWorkflow(input: {
   const [appliedHighlight, setAppliedHighlight] = useState<OutdoorMapEditHighlight | null>(null);
   const proposalRef = useRef(proposal);
   proposalRef.current = proposal;
+  const [cardRecords, setCardRecords] = useState<OutdoorCardRecord[]>(() =>
+    readCardRecords(cardHistoryKey()),
+  );
+  /**
+   * 2026-11-17：历史跟随后端活动身份——一旦这份活动拿到了 `remoteActivityId`，
+   * 就按它当 key 读写，换设备才读得到；还没同步时退回本机 scope。
+   */
+  function cardHistoryKey(): string {
+    try {
+      return readOutdoorProjectRecord(input.scope)?.remoteActivityId ?? input.scope;
+    } catch {
+      return input.scope;
+    }
+  }
+  const cardRecordsRef = useRef(cardRecords);
+  cardRecordsRef.current = cardRecords;
+  // 2026-11-17：后端副本仅在访问到账号时补一次（换设备/清缓存后靠它把历史接回来）。
+  useEffect(() => {
+    const scope = cardHistoryKey();
+    let cancelled = false;
+    void loadRemoteCardHistory(callbacks.current.controller(), scope).then((remote) => {
+      if (cancelled || !remote.length || scope !== stateRef.current.scope) return;
+      const merged = mergeCardHistory(
+        cardRecordsRef.current,
+        remote,
+      ) as OutdoorCardRecord[];
+      if (merged.length === cardRecordsRef.current.length) return;
+      cardRecordsRef.current = merged;
+      setCardRecords(merged);
+      writeCardRecords(scope, merged);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [input.scope]);
+  /** 一张卡收场时留痕：确认、撤回、被新提案顶掉都算。 */
+  function recordCard(
+    target: OutdoorWorkflowProposal,
+    decision: OutdoorCardRecord["decision"],
+  ) {
+    const scope = cardHistoryKey();
+    const entry: OutdoorCardRecord = {
+      at: Date.now(),
+      stage: stateRef.current.stage,
+      kind: target.kind,
+      title: target.label,
+      decision,
+      notes: [...target.warnings],
+      actions: cardActionsFor(target.kind),
+    };
+    const next = [...cardRecordsRef.current, entry].slice(-OUTDOOR_CARD_RECORDS_LIMIT);
+    cardRecordsRef.current = next;
+    setCardRecords(next);
+    writeCardRecords(scope, next);
+    // 后端副本：未登录 / 离线 / 服务未部署都只是少一份副本，不拦本机记录。
+    void pushRemoteCardHistory(callbacks.current.controller(), scope, next);
+  }
   const [models, setModels] = useState<{
     facilityId: string;
     choices: OutdoorModelChoice[];
@@ -394,6 +502,7 @@ export function useOutdoorAgentWorkflow(input: {
     );
   }
   function cancel(options?: { preservePendingLogin?: boolean }) {
+    const withdrawnCard = proposalRef.current;
     setDesignSteps([]);
     updatePendingPlan(null);
     setAwaitingThought(false);
@@ -408,6 +517,7 @@ export function useOutdoorAgentWorkflow(input: {
     setProposal(null);
     setModels(null);
     setBusy(false);
+    if (withdrawnCard) recordCard(withdrawnCard, "withdrawn");
     if (!options?.preservePendingLogin) {
       const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
       persist({ ...kept, pendingBoundary: undefined });
@@ -434,6 +544,9 @@ export function useOutdoorAgentWorkflow(input: {
     setBusy(false);
     setSimulating(false);
     const next = readState(input.scope, currentPlanVersion());
+    const localCards = readCardRecords(cardHistoryKey());
+    cardRecordsRef.current = localCards;
+    setCardRecords(localCards);
     stateRef.current = next;
     setState(next);
   }, [input.scope]);
@@ -485,9 +598,12 @@ export function useOutdoorAgentWorkflow(input: {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base || !live(job)) return;
     validateWorkflowPlan(base, next);
+    // 地图证据类警告（"证据没取到"）只在真靠证据做判断的阶段给：scope 阶段边界还没定，
+    // 证据必然对不上，摆上去就是噪声。validateMapPlan 该 throw 的阻断一如既往保留。
+    const mapWarnings = callbacks.current.bridge()?.validateMapPlan?.(base, next) ?? [];
     warnings = [
       ...warnings,
-      ...(callbacks.current.bridge()?.validateMapPlan?.(base, next) ?? []),
+      ...proposalMapWarnings(kind, mapWarnings),
     ];
     const p = {
       kind,
@@ -500,6 +616,8 @@ export function useOutdoorAgentWorkflow(input: {
       references: [...refsRef.current],
       ...(afterConfirm ? { afterConfirm } : {}),
     };
+    const replaced = proposalRef.current;
+    if (replaced && replaced.base !== p.base) recordCard(replaced, "replaced");
     proposalRef.current = p;
     setProposal(p);
     if (kind === "scope" && next.anchor) {
@@ -642,6 +760,7 @@ export function useOutdoorAgentWorkflow(input: {
     setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
     liveTurn.current.markApplied();
     liveTurn.current.log();
+    recordCard(p, "confirmed");
     proposalRef.current = null;
     setProposal(null);
     if (p.kind === "scope") {
@@ -704,12 +823,12 @@ export function useOutdoorAgentWorkflow(input: {
       offer(
         { ...pruned.next, anchor, boundary },
         "scope",
-        `核对“${name}”中的具体活动范围`,
+        `确认“${name}”的活动范围`,
         job,
         [
-          "地图轮廓只是候选，不代表整座商场均可使用；部分使用请重画。",
-          ...(pruned.swept ? ["地理锚点已切换：旧场地内容已全部随场清空（确认后整批可撤销）。"] : []),
-          ...(!pruned.swept && dropped.length ? [`按新边界随场淘汰：${dropped.join("；")}（确认后整批可撤销）。`] : []),
+          "商场轮廓只是候选；只用到一部分就重画。",
+          ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
+          ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],
       );
     } catch (error) {
@@ -819,9 +938,9 @@ export function useOutdoorAgentWorkflow(input: {
       pruned.droppedFacilities.length ? `物件 ${pruned.droppedFacilities.join("、")}` : "",
       pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
     ].filter(Boolean);
-    offer(pruned.next, "scope", "手画活动范围核对", job, [
-      "手画范围来自用户，仍需核对本次活动可用范围。",
-      ...(dropped.length ? [`按新边界随场淘汰：${dropped.join("；")}（确认后整批可撤销）。`] : []),
+    offer(pruned.next, "scope", "确认手画的活动范围", job, [
+      "这是你手画的范围，确认后才写进方案。",
+      ...(dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
     ]);
     setBusy(false);
   }
@@ -859,6 +978,23 @@ export function useOutdoorAgentWorkflow(input: {
         completed: [],
       });
       callbacks.current.search(turn.query);
+      return;
+    }
+    if (turn.action === "virtual-venue") {
+      // docs/46 V-P2：虚拟场地意图——跳过「搜索目标地点」，切纸面起稿；地理锚点缺失变成合法态
+      // （覆盖层对 paper 态不回填预置锚点）。引导用户画红线：闭合同帧自动生成设计范围。
+      writePlanGroundMode("paper");
+      persist({
+        ...stateRef.current,
+        stage: "scope",
+        confirmedBoundary: null,
+        completed: [],
+      });
+      status(
+        turn.reply?.trim()
+          || "已切到纸面模式：不关联真实地点。用物件库「用地红线（重画）」画出场地边界，闭合后自动生成设计范围，我们接着分区、摆物件。",
+        "ready",
+      );
       return;
     }
     const bridge = callbacks.current.bridge(),
@@ -911,8 +1047,8 @@ export function useOutdoorAgentWorkflow(input: {
           return;
         }
         persist({ ...stateRef.current, stage: "scope" });
-        offer(plan, "scope", "当前地图活动范围", job, [
-          "确认的是本次活动范围，不是地图产权或消防认证。",
+        offer(plan, "scope", "确认当前活动范围", job, [
+          "确认只代表活动范围，不代表产权/消防认证。",
         ]);
         return;
       }
@@ -1836,6 +1972,55 @@ export function useOutdoorAgentWorkflow(input: {
       status(error instanceof Error ? error.message : "未能执行已批准的计划。", "blocked");
     }
   }
+  /** 登录完成后恢复这条等待的需求；原账户与规划版本守卫保持原样。 */
+  async function resumeAfterLogin(): Promise<void> {
+    if (
+      renderedScope !== scopeRef.current ||
+      renderedToken !== token.current
+    ) {
+      status("这张恢复卡已过期，未恢复其他任务。", "blocked");
+      return;
+    }
+    const pending = stateRef.current.pendingLogin,
+      plan = callbacks.current.bridge()?.getPlan();
+    if (!pending || !plan) return;
+    if (
+      pending.ownerId &&
+      callbacks.current.controller()?.getSnapshot?.().user?.id !==
+        pending.ownerId
+    ) {
+      status("请以原账户登录后恢复这条需求；未跨账户执行。", "blocked");
+      return;
+    }
+    if (pending.planVersion !== planVersion(plan)) {
+      status(
+        "登录期间活动规划已变化；原需求仍保留，请结合当前场地重新说明，未自动恢复旧操作。",
+        "blocked",
+      );
+      return;
+    }
+    await handle(pending.message);
+  }
+  // 2026-11-16 用户指令：登录后不要再让人点一次「继续这次搜索」——待续需求自动接上，
+  // 「已登录 · 可以继续」那张卡不再存在。每条等待只自动续一次；过期/跨账户等守卫失败时
+  // resumeAfterLogin 只落一句 blocked 提示，不重复触发。
+  const autoResumedLogin = useRef<string | null>(null);
+  const accountReady = (() => {
+    const viewer = callbacks.current.controller()?.getSnapshot?.().user;
+    return Boolean(viewer && !viewer.is_anonymous);
+  })();
+  useEffect(() => {
+    const pending = stateRef.current.pendingLogin;
+    if (!pending) {
+      autoResumedLogin.current = null;
+      return;
+    }
+    if (!accountReady) return;
+    const key = `${pending.planVersion}\u0000${pending.message}`;
+    if (autoResumedLogin.current === key) return;
+    autoResumedLogin.current = key;
+    void resumeAfterLogin();
+  }, [state.pendingLogin, accountReady]);
   return {
     state,
     designSteps,
@@ -1845,6 +2030,7 @@ export function useOutdoorAgentWorkflow(input: {
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
+    cardRecords: state.scope === input.scope ? cardRecords : [],
     mapGap,
     /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
     metricsSummary: () => summarizeMetrics(metricsBook.current),
@@ -1852,7 +2038,7 @@ export function useOutdoorAgentWorkflow(input: {
     exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
     /** 轨迹 + 指标一份导出（两份都是白名单字段）。 */
     sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
-    /** 把会话报告存成本地 .txt（浏览器下载）；导不出只返回 ok:false，不抛。 */
+    /** 把会话报告存成本地 .txt（Web 下载）；导不出时只返回 ok:false，不抛。 */
     downloadReport: () => downloadSessionReport(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
     /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
     acceptanceCheck: () => {
@@ -1888,7 +2074,8 @@ export function useOutdoorAgentWorkflow(input: {
       setNoticeKind("info");
     },
     loginRequired: Boolean(state.pendingLogin),
-    // 2026-11-14 用户指令：登录完成后这张卡要跟着变——已登录时切换为「继续这次搜索」。
+    // 2026-11-16：登录卡只在真的没登录时出现（见 outdoor-workflow-card）；登录一旦到位就由
+    // 上面的自动恢复 effect 直接续上。loginSatisfied 仍给输入框锁定（agent-panel 的 loginBlocked）用。
     loginSatisfied:
       Boolean(state.pendingLogin) &&
       (() => {
@@ -1906,34 +2093,7 @@ export function useOutdoorAgentWorkflow(input: {
         ),
       });
     },
-    resumeAfterLogin: async () => {
-      if (
-        renderedScope !== scopeRef.current ||
-        renderedToken !== token.current
-      ) {
-        status("这张恢复卡已过期，未恢复其他任务。", "blocked");
-        return;
-      }
-      const pending = stateRef.current.pendingLogin,
-        plan = callbacks.current.bridge()?.getPlan();
-      if (!pending || !plan) return;
-      if (
-        pending.ownerId &&
-        callbacks.current.controller()?.getSnapshot?.().user?.id !==
-          pending.ownerId
-      ) {
-        status("请以原账户登录后恢复这条需求；未跨账户执行。", "blocked");
-        return;
-      }
-      if (pending.planVersion !== planVersion(plan)) {
-        status(
-          "登录期间活动规划已变化；原需求仍保留，请结合当前场地重新说明，未自动恢复旧操作。",
-          "blocked",
-        );
-        return;
-      }
-      await handle(pending.message);
-    },
+    resumeAfterLogin,
     unverifiedEntrances: (
       callbacks.current.bridge()?.getPlan()?.nodes ?? []
     ).filter(

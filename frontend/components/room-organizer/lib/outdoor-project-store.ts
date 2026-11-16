@@ -32,6 +32,10 @@ export interface OutdoorProjectRecord {
   updatedAt: string;
   /** 本机最新规划数据；null = 尚未落盘（新项目起步由上层工厂生成）。 */
   plan: SitePlanData | null;
+  /** 2026-11-17：后端发号的活动 id（跨设备身份）。未同步时为空。 */
+  remoteActivityId?: string;
+  /** 本机已同步到的后端版本号；后端 revision 不匹配即冲突，不静默覆盖。 */
+  remoteRevision?: number;
 }
 
 function safeDefaultStorage(): KeyValueStorage | null {
