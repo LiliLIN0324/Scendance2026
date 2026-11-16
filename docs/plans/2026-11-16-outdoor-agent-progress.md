@@ -4,12 +4,13 @@
 
 ## 当前续跑点
 
-- 总状态：**M0 已收口**；**M1a 切片 1–2 已交付**（轮次 8–9）；**M2 待办模型已交付但未推**（轮次 10，本地 `8f6a66ff`，推送被 GitHub 网络/TLS 中断拦住）；M2/M3 的接回验仍受登录阻塞。M4–M7 待开始。
+- 总状态：**M0 已收口**；**M1a 切片 1–2 已交付**（轮次 8–9）；**M2 待办模型已推送**（轮次 11，`ea74d9f0`）；M2/M3 的接回验仍受登录阻塞。M4–M7 待开始。
 - 验收口径：以计划 §0「用户口径」为准（不卡第一步 / 地图听懂人话 / 每步有下一步 / 会做设计 / 分层指令 / 一口气做完 / 可回看取证），优先级高于功能清单；任一不满足不得标已验收。
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：先把卡住的推送完成——`git fetch origin` 重试（本轮连续失败：`schannel: failed to receive handshake`、`TLS connect error`，push 报 non-fast-forward），恢复后 `git rebase origin/main` 再 push；本地已有一笔未推提交 `8f6a66ff`。推送通了再做 M1a 切片 3 接线（`panels/agent-panel.tsx` 仍带用户 WIP）。
+- 下一条操作：M1a 切片 3 接线（`turn-trace` 接进 `sendCore`、失败卡显示可复制编号）；`panels/agent-panel.tsx` 仍带用户 WIP，开工前先查 `git status --porcelain | findstr agent-panel`，脏则转 M4 预览契约等无依赖切片。
+- 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
 - 上一步已验（不依赖登录）：turnId/attemptId 不重复且无身份字段；每轮恰一个终态（第二次只留 `conflictingTerminal`）；重试复用 turnId、换 attemptId；错误码按“像不像错误码”判定，自然语言整体丢成 null。
 - 阻塞（轮次 7 实浏）：待恢复槽写入后可验，但「地图上圈范围 → 确认边界」这一步要先进选址，而选址卡在未登录时只给“登录后继续这次选址”，成品页没有无登录的圈选入口。解除条件：有一个可用的登录态（或内测账号）在 3210 上跑一次圈选。
 - 分支状态（轮次 7）：本地与远端同为 `e8a95e02`（快进 18 笔，含用户合并后的分支）。做法：`git stash` 46 项在途 → `git merge --ff-only origin/main` → `git stash pop`，零冲突、无重复提交。
@@ -82,6 +83,30 @@ scripts/probe-basemap-zoom.mjs
 其中与地图优先直接相关、本轮必须保留在基线的四个文件：`lib/place-first.ts`（入口守卫，07:30）、`lib/outdoor-place-handover.ts`（地图→对话交接，07:11）、`lib/focus-place-search.ts`（焦点送到地名搜索，07:57）、`panels/agent-panel.tsx` 中的守卫接线（08:04）。
 
 ## 执行记录
+
+### 2026-11-16 13:20–13:35 · 自动轮次 11 · 合并收口（四段冲突全取上游并留撑）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 13:20–13:35，自动轮次 11，无外部运行 ID
+批次 / 切片 / 状态：M2 待办模型入库（补轮次 10 的推送）+ 合并 / 已完成
+工作目录 / 分支 / 开始与结束 HEAD：仓库根 / main / 9ecdb743（未推）→ rebase 到 32844f72 上 → ea74d9f0（已推）
+修改、提交或未提交路径：无新代码；轮次 10 的两笔（`outdoor-pending-task` + 文档）已 rebase 后推送；本轮只改本文件
+复现及第一失败步骤：① 上轮遗留：push 报 non-fast-forward，fetch 因 TLS 失败；本轮 fetch 成功，远端多了 `32844f72`；② rebase 后 `stash pop` 在 4 个文件上冲突：`agent-task-examples.tsx` 与它的 react 测试（户外示例 vs 杭州示例）、`outdoor-agent-planning.ts` 与它的测试（室内分区措辞/旧“抛图纸”口径）
+验证命令、结果及环境：
+  · 冲突判定依据：上游测试里有“2026-11-16 用户指令「无室内，后续是造墙」”的注释与新增用例，晚于在途 WIP → 四段全取上游
+  · 放弃版的保留：`.temp/round11-stash.patch`（3299 行）+ `stash@{0}` 未删
+  · frontend: npm test -- components/agent-task-examples.react.test.tsx → 3 passed
+  · frontend: npm test -- components/room-organizer/lib/outdoor-agent-planning.test.ts → 15 passed
+  · push：`32844f72..ea74d9f0 main -> main`，本地与远端一致
+证据位置及安全诊断编号：无请求路径变更，无诊断编号
+剩余项、解除阻塞条件：M1a 接线需 `agent-panel.tsx` 干净；M2/M3 接回验需登录态
+下次准确从哪条命令或哪个文件继续：`git rev-parse HEAD` → 读本文件 → 查 `agent-panel` 是否已提交，干净则接线
+```
+
+- **取上游的依据不是“谁新谁赢”，而是上游带着更晚的用户口径**：室内边界不卡分区、改由造墙阶段承接，这条写在上游用例里。
+- **没删东西**：被放弃的那一版留在 patch 文件和 `stash@{0}` 里，要回看随时能取。
+- **推上了才好说**：本地与远端现在同为 `ea74d9f0`，上轮那两笔不再是“只在本地”。
+
 
 ### 2026-11-16 12:55–13:15 · 自动轮次 10 · M2 待办模型（结论：代码已验，推送阻塞）
 

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearGlbAssetCache, cloneOwnedGlb, createCachedGlbModel, createGlbCatalogItem, disposeOwnedModel,
-  ensureGlbAsset, getGlbAssetState, normalizeGlbInstance, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
+  ensureGlbAsset, getGlbAssetState, inPlaceWalkClip, normalizeGlbInstance, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
 import { advancePeopleAnimations, personOdometer } from './people-anim';
 
 function realGlb(): ArrayBuffer {
@@ -20,6 +20,22 @@ function template(): THREE.Group {
 afterEach(() => { clearGlbAssetCache(); vi.restoreAllMocks(); });
 
 describe('owned GLB model instances', () => {
+  it('removes the cumulative horizontal displacement from a looping walk while preserving vertical motion', () => {
+    const track = new THREE.VectorKeyframeTrack('mixamorigHips.position', [0, 0.5, 1], [
+      0, 0.1, 0,
+      0.05, 0.2, 0.68,
+      0, 0.1, 1.29,
+    ]);
+    const clip = new THREE.AnimationClip('Walk_Loop', 1, [track]);
+    const adjusted = inPlaceWalkClip(clip);
+    const values = adjusted.tracks[0]!.values;
+    expect(values[8]).toBeCloseTo(0);
+    expect(values[5]).toBeCloseTo(0.035);
+    expect(values[4]).toBeCloseTo(0.2);
+    expect(track.values[8]).toBeCloseTo(1.29);
+    expect(inPlaceWalkClip(clip)).toBe(adjusted);
+  });
+
   it('moves an imported rigged person on an editor route', async () => {
     const bytes = new Uint8Array(readFileSync(new URL('../assets/people.glb', import.meta.url))).buffer;
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(bytes));

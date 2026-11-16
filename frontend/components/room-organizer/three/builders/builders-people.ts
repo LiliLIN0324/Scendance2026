@@ -53,7 +53,10 @@ function buildRiggedPerson({ THREE, item, hasCollision, baseColor, opacity }: Bu
   return group;
 }
 
-function buildProceduralPerson({ THREE, item, hasCollision, baseColor, opacity }: BuilderContext): ThreeNS.Group {
+export function buildProceduralPerson(
+  { THREE, item, hasCollision, baseColor, opacity }: BuilderContext,
+  registerIdle = false,
+): ThreeNS.Group {
   // The item colour dresses the figure; skin, trousers, shoes and hair are fixed.
   const { group: figure, rig } = buildHumanFigure(THREE, {
     top: material(THREE, baseColor, hasCollision, opacity, { roughness: 0.8 }),
@@ -67,7 +70,7 @@ function buildProceduralPerson({ THREE, item, hasCollision, baseColor, opacity }
   const group = new THREE.Group();
   group.add(figure);
   // 程序化兜底同样支持路线行走：模型没加载时用关节摆动代替 clip（ PEOPLE-04 不空转）。
-  if (personIsAnimated(item.walkRoute, item.personAction, item.personPaused)) {
+  if (registerIdle || personIsAnimated(item.walkRoute, item.personAction, item.personPaused)) {
     registerPersonAnim(group, {
       id: item.id,
       mixer: null,

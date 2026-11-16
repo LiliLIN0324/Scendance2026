@@ -41,6 +41,8 @@ let root: Root,
   epoch: number,
   scope: string;
 let chatMeta: { provider: unknown; model: unknown };
+// undefined = 会话不给 getSnapshot（旧用例口径）；null = 未登录；对象 = 已登录。
+let sessionUser: { id: string; is_anonymous?: boolean } | null | undefined;
 let providerOverride: (() => ChatProviderId | undefined) | undefined;
 let modelOverride: (() => string | null) | undefined;
 let understand: ReturnType<
@@ -88,6 +90,7 @@ function Harness() {
           assistantChatRequestSchema.parse({ message, history });
           return understand(message, history, signal);
         },
+        ...(sessionUser === undefined ? {} : { getSnapshot: () => ({ user: sessionUser }) }),
       }) as unknown as BackendSession,
     provider: () => providerOverride?.(),
     model: () => modelOverride?.() ?? null,
@@ -138,6 +141,7 @@ beforeEach(() => {
   epoch = 0;
   scope = "project-a";
   chatMeta = { provider: undefined, model: null };
+  sessionUser = undefined;
   providerOverride = undefined;
   modelOverride = undefined;
   understand = vi.fn<(...args: unknown[]) => Promise<unknown>>();
@@ -482,7 +486,7 @@ it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单�
         name: "已核对活动双向主出入口",
         kind: "both",
         verification: "user-confirmed",
-        position: { x: 5, y: 35 },
+        position: { x: 5, y: 5 },
         notes: "",
       },
     ],
@@ -993,3 +997,80 @@ it.each(["没问题", "同意这版方案", "就按它落下去吧"])(
     expect(flow.state.stage).toBe("zones");
   },
 );
+
+it(
+  "未登录时不再先抓十几秒地图上下文：立刻给登录卡，不调模型",
+  async () => {
+    sessionUser = null;
+    const mapContext = vi.fn(async (): Promise<OutdoorMapContext> => {
+      throw new Error("未登录不该去抓地图上下文");
+    });
+    Object.assign(bridge, { mapContext });
+    const before = JSON.stringify(plan);
+    await act(async () => {
+      await flow.handle("你好");
+    });
+    expect(mapContext).not.toHaveBeenCalled();
+    expect(understand).not.toHaveBeenCalled();
+    expect(flow.loginRequired).toBe(true);
+    expect(flow.notice).toContain("登录后即可");
+    expect(flow.state.pendingLogin?.message).toBe("你好");
+    // 草稿与规划一字未动。
+    expect(JSON.stringify(plan)).toBe(before);
+  },
+);
+
+it("已登录时照常走地图上下文与理解模型", async () => {
+  sessionUser = { id: "user-a", is_anonymous: false };
+  const mapContext = vi.fn(async (): Promise<OutdoorMapContext> => ({
+    version: "map:unavailable",
+    status: "unavailable",
+    text: "不可用",
+    featureIds: [],
+    unknowns: [],
+  }));
+  Object.assign(bridge, { mapContext });
+  await turn("帮我看看这个场地", response("ask"));
+  expect(mapContext).toHaveBeenCalledOnce();
+  expect(understand).toHaveBeenCalledOnce();
+  expect(flow.loginRequired).toBe(false);
+});
+
+it("place 阶段卡上直接能点「在地图上手画活动范围」", async () => {
+  expect(flow.state.stage).toBe("place");
+  const button = [...host.querySelectorAll("button")].find(
+    (item) => item.textContent?.trim() === "在地图上手画活动范围",
+  );
+  expect(button).toBeTruthy();
+  await act(async () => {
+    button!.click();
+  });
+  expect(bridge.beginVenueBoundary).toHaveBeenCalledOnce();
+  expect(flow.state.stage).toBe("scope");
+});
+
+it("要你动手的提示不倒计时自己消失", async () => {
+  await turn("帮我看看这个场地", response("ask"));
+  expect(flow.noticeSticky).toBe(true);
+  // 卡上出现的是「补充对话里的信息后可以继续」，不应带倒计时收场。
+  expect(host.textContent).toContain("补充对话里的信息后可以继续");
+  expect(host.textContent).not.toContain("后收起");
+});
+
+it("地图依据没取全时，place 卡不再承诺自动框选", async () => {
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:failed",
+      status: "unavailable",
+      text: "底图服务 503不可用",
+      featureIds: [],
+      unknowns: ["建筑轮廓未知"],
+    }),
+  });
+  await turn("就用杭州湖滨银泰in77", response("ask"));
+  expect(flow.mapGap).toBe(true);
+  act(() => flow.dismissNotice());
+  expect(host.textContent).toContain("没有取到可核对的真实地图/轮廓");
+  expect(host.textContent).toContain("在地图上手画活动范围");
+  expect(host.textContent).not.toContain("自动为你框选项目区域");
+});

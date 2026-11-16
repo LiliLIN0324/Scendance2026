@@ -1,5 +1,6 @@
 import { outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
+import { planPointInRing } from './site-plan-editing';
 /**
  * V-4a（2026-11-13）：子出入口提案（纯函数，预览不落盘）。
  *
@@ -72,17 +73,25 @@ export function buildSubEntranceProposal(
     // 不会钉在角上）；取离最近流线最近者作子口位置。
     let bestSpur: { nodePos: PlanPoint; routePoint: PlanPoint; dist: number; route: PlanRoute } | null = null;
     const samples: PlanPoint[] = [];
-    const boundaryNodes=plan.nodes.filter(n=>n.verification!=='unverified'&&zone.polygon.some((a,i)=>{const hit=nearestPointOnSegment(n.position,a,zone.polygon[(i+1)%zone.polygon.length]!);return Math.hypot(hit.x-n.position.x,hit.y-n.position.y)<=1;}));
-    const verifiedIndoor=boundaryNodes.filter(n=>n.verification==='user-confirmed');
+    const onRing=(n:PlanNode)=>zone.polygon.some((a,i)=>{const hit=nearestPointOnSegment(n.position,a,zone.polygon[(i+1)%zone.polygon.length]!);return Math.hypot(hit.x-n.position.x,hit.y-n.position.y)<=1;});
+    const boundaryNodes=plan.nodes.filter(n=>n.verification!=='unverified'&&onRing(n));
+    // 2026-11-16 用户指令：区内已有确认节点就复用该节点。旧口径只认「贴在环边 1m 内」的节点，
+    // 节点落在分区里面（例如主入口就在区边内侧）时 boundaryNodes 为空 → 边界采样点全部落在
+    // NODE_DEDUPE_M 半径里 → 整区被当作「重复立口」跳过 → 小分区永远拿不到驳线。
+    const insideConfirmed=plan.nodes.filter(n=>n.verification==='user-confirmed'&&(onRing(n)||planPointInRing(n.position,zone.polygon)));
+    const zonePortals=[...new Set([...boundaryNodes,...insideConfirmed])];
+    const portalAt=(p:PlanPoint)=>zonePortals.find(n=>Math.hypot(n.position.x-p.x,n.position.y-p.y)<=1);
+    const verifiedIndoor=zonePortals.filter(n=>n.verification==='user-confirmed');
     if(zone.environment==='indoor'&&!verifiedIndoor.length){skippedFar++;continue;}
     for (let i = 0; i < zone.polygon.length; i += 1) {
       const next = zone.polygon[(i + 1) % zone.polygon.length]!;
       samples.push({ x: (zone.polygon[i]!.x + next.x) / 2, y: (zone.polygon[i]!.y + next.y) / 2 }, zone.polygon[i]!);
     }
-    for (const sample of zone.environment==='indoor'?verifiedIndoor.map(n=>n.position):boundaryNodes.length?boundaryNodes.map(n=>n.position):samples) {
+    for (const sample of zone.environment==='indoor'?verifiedIndoor.map(n=>n.position):zonePortals.length?zonePortals.map(n=>n.position):samples) {
       for (const route of plan.routes) {
         if (route.kind !== 'pedestrian') continue; // 不把观众驳线接到车行/装卸线上。
-        if(!boundaryNodes.length&&zone.environment!=='indoor'&&[...plan.nodes,...nodes].some(n=>Math.hypot(n.position.x-sample.x,n.position.y-sample.y)<=NODE_DEDUPE_M))continue;
+        // 复用区内的既有确认口不算「重复立口」；只有新位置才受 15m 去重约束。
+        if(!portalAt(sample)&&zone.environment!=='indoor'&&[...plan.nodes,...nodes].some(n=>Math.hypot(n.position.x-sample.x,n.position.y-sample.y)<=NODE_DEDUPE_M))continue;
         const hit = nearestPointOnPolyline(sample, route.points);
         if(hit.dist<0.1)continue;
         const points = [sample, hit.point];
@@ -99,7 +108,7 @@ export function buildSubEntranceProposal(
     if (!bestSpur || bestSpur.dist > MAX_SPUR_M) { skippedFar += 1; continue; }
     // 与既有节点太近不重复立
     const tooClose = [...plan.nodes, ...nodes].some(node => Math.hypot(node.position.x - bestSpur.nodePos.x, node.position.y - bestSpur.nodePos.y) <= NODE_DEDUPE_M);
-    const reuse=boundaryNodes.find(n=>Math.hypot(n.position.x-bestSpur.nodePos.x,n.position.y-bestSpur.nodePos.y)<=1);
+    const reuse=zonePortals.find(n=>Math.hypot(n.position.x-bestSpur.nodePos.x,n.position.y-bestSpur.nodePos.y)<=1);
     if (tooClose&&!reuse) continue;
     const label = zone.name.slice(0, 40);
     const nodeId=reuse?.id??idFactory();

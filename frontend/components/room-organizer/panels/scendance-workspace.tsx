@@ -434,6 +434,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   // 不翻室内 view.walkthroughMode。
   const outdoorWalkOn = outdoor?.walkActive ?? false;
   const walkPressed = outdoorEditing ? outdoorWalkOn : view.walkthroughMode;
+  // 2026-11-16 用户定稿「就是我的设计场地里面随便走」：漫游钮不再按室内/户外、2D/3D 分档置灰，
+  // 一律可点；点下去由 toggleWalk 自己把视图切到能走的那台相机（户外 2D 会先接管 3D 场地再进第一人称）。
   // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
   // 这里只剩纯室内场景的平面/立体兜底切换。
   const showing3D = !view.view2D;
@@ -991,7 +993,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
               <MaterialSymbol name="iconpark_zoom_out_solid" />
             </button>
           </div>
-          <button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => onToggleWalkthrough?.(!walkPressed)}>
+          <button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
             <PegmanIcon size={22} />
           </button>
           <button type="button" id="tool-opacity" className={`is-ghost-eye${chromeHidden ? ' is-active' : ''}`} data-tip={chromeHidden ? '显示工具栏' : '隐藏工具栏'} aria-label={chromeHidden ? '显示工具栏' : '隐藏工具栏'} aria-pressed={chromeHidden} onClick={() => onToggleChrome?.()}>

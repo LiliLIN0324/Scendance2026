@@ -255,6 +255,16 @@ export function useOutdoorAgentWorkflow(input: {
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
+  /**
+   * 2026-11-16 用户拍板：要你动手的提示（反问补充/待确认/需要补充）不许倒计时自己消失——
+   * 线上实测就是提示 8s 收起后卡片回落成「自动为你框选」，看起来像一点没动。
+   */
+  const [noticeSticky, setNoticeSticky] = useState(false);
+  /**
+   * 本轮结构化地图依据没取全（服务端地图 503/failed 时 status 不是 ready）：
+   * place 阶段就不能再承诺「自动为你框选」。
+   */
+  const [mapGap, setMapGap] = useState(false);
   const refsRef = useRef<OutdoorTurn["references"]>([]);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
@@ -285,6 +295,7 @@ export function useOutdoorAgentWorkflow(input: {
     const friendly = friendlyErrorNotice(action);
     setNotice(friendly);
     setNoticeKind(phase === "blocked" ? "error" : "info");
+    setNoticeSticky(phase === "ask" || phase === "blocked" || phase === "confirm");
     callbacks.current.status({
       intent: OUTDOOR_STAGE_LABELS[stateRef.current.stage],
       state: phase,
@@ -553,6 +564,7 @@ export function useOutdoorAgentWorkflow(input: {
     setProposal(null);
     if (p.kind === "scope") {
       persist({ ...stateRef.current, confirmedBoundary: boundaryKey(p.next), pendingBoundary: undefined });
+      setMapGap(false);
       nextStage("scope");
     } else if (p.kind === "verify-access") {
       persist({
@@ -1384,6 +1396,21 @@ export function useOutdoorAgentWorkflow(input: {
       return true;
     }
     const previousProposal = proposalRef.current;
+    // 2026-11-16 线上实测：未登录时先花 14~16s 抓结构化地图上下文，之后才被 UNAUTHENTICATED 拒掉——
+    // 用户看到的就是「输入完干等十几秒，最后只有一句登录提示」。先判登录：未登录立刻给登录卡，
+    // 不抓地图、不请求模型。确定性动作（确认/取消/物件清单）在更前面已经处理完，不受影响。
+    const session = callbacks.current.controller();
+    const viewer = session?.getSnapshot?.().user;
+    if (session?.getSnapshot && (!viewer || viewer.is_anonymous)) {
+      start();
+      setBusy(false);
+      persist({
+        ...stateRef.current,
+        pendingLogin: { message, planVersion: planVersion(plan) },
+      });
+      status("登录后即可使用当前 Agent 模型，场地草稿已保存。", "blocked");
+      return true;
+    }
     const job = start();
     designStep("读取当前活动边界、已有分区与设施。");
     status(
@@ -1394,6 +1421,8 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       const map = await mapContext(job.controller.signal);
       if (!live(job)) return true;
+      // 本轮地图依据是否取全：place 阶段卡据此决定要不要继续承诺「自动为你框选」。
+      setMapGap(map.status !== "ready");
       if (map.status === "ready") designStep("已取得结构化地图依据，用来核对请求涉及的位置。");
       if (map.status === "partial") designStep("地图依据只有一部分，缺失的位置需要核对。");
       const turn = await understandOutdoorTurn({
@@ -1665,6 +1694,8 @@ export function useOutdoorAgentWorkflow(input: {
   return {
     state,
     designSteps,
+    noticeSticky,
+    mapGap,
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);

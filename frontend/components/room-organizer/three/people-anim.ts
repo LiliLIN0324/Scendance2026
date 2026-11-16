@@ -52,6 +52,7 @@ interface PersonAnimEntry extends PersonAnimSpec {
   playingAction: ThreeNS.AnimationAction | null;
   /** 程序化兜底的步态相位。 */
   phase: number;
+  manualMoving: boolean | null;
 }
 
 const entries = new Map<string, PersonAnimEntry>();
@@ -137,20 +138,49 @@ export function registerPersonAnim(group: ThreeNS.Group, spec: PersonAnimSpec): 
     currentAction: spec.action,
     playingAction: null,
     phase: existing?.phase ?? 0,
+    manualMoving: existing?.group === group ? existing.manualMoving : null,
   };
   entries.set(spec.id, entry);
-  if (entry.follower) {
+  if (entry.follower && entry.manualMoving === null) {
     // 重建出来的新 group 停在锚点/原点：注册时立刻落到行进位姿，暂停中也不瞬移。
     group.position.x = entry.follower.x;
     group.position.z = entry.follower.z;
     group.rotation.y = entry.follower.facing;
   }
   if (entry.mixer) {
-    playClip(entry, entry.follower ? 'idle' : spec.action, 0);
+    playClip(entry, entry.manualMoving === true ? 'walk' : entry.follower || entry.manualMoving === false ? 'idle' : spec.action, 0);
     entry.mixer.update(stanceSeed(spec.id));
   } else if (entry.rig) {
     poseWalk(entry.rig, 0, 0);
   }
+}
+
+/** 暂停这个实例的巡游，复用它的站立和走路动画；释放后续走原路线。 */
+export function takePersonControl(id: string, group: ThreeNS.Group) {
+  const entry = entries.get(id);
+  if (!entry || entry.group !== group || !group.parent || entry.manualMoving !== null) return null;
+  const position = group.position.clone();
+  const rotation = group.rotation.y;
+  entry.manualMoving = false;
+  const current = () => {
+    const live = entries.get(id);
+    return live?.group === group && live.manualMoving !== null ? live : null;
+  };
+  return {
+    setMoving(moving: boolean) {
+      const live = current();
+      if (live) live.manualMoving = moving;
+    },
+    release() {
+      const live = current();
+      if (!live) return;
+      live.manualMoving = null;
+      group.position.copy(position);
+      group.rotation.y = rotation;
+      group.visible = true;
+      if (!live.follower) playClip(live, live.action);
+    },
+  };
 }
 
 /** 测试用：当前注册表里的实例 id。 */
@@ -231,7 +261,7 @@ if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
  * 推进所有人物实例（路线行走 + mixer）。返回活跃实例数；0 表示这一帧可以早退。
  * 脱离场景的旧实例顺手摘除——disposeObject 只清 GPU 资源，不管这张表。
  */
-export function advancePeopleAnimations(deltaSeconds: number): number {
+export function advancePeopleAnimations(deltaSeconds: number, scene?: ThreeNS.Scene): number {
   advanceCalls += 1;
   if (entries.size === 0 || !(deltaSeconds > 0)) return 0;
   let active = 0;
@@ -245,7 +275,21 @@ export function advancePeopleAnimations(deltaSeconds: number): number {
       entries.delete(id);
       continue;
     }
+    if (scene) {
+      let owner: ThreeNS.Object3D | null = entry.group.parent;
+      while (owner && owner !== scene) owner = owner.parent;
+      if (!owner) continue;
+    }
     active += 1;
+    if (entry.manualMoving !== null) {
+      playClip(entry, entry.manualMoving ? 'walk' : 'idle');
+      if (entry.rig) {
+        if (entry.manualMoving) entry.phase += deltaSeconds * 5.5;
+        poseWalk(entry.rig, entry.phase, entry.manualMoving ? 1 : 0);
+      }
+      if (entry.mixer) entry.mixer.update(deltaSeconds);
+      continue;
+    }
     if (entry.paused) continue; // 暂停 = 全停：路线冻结在原地，mixer 停在当前帧。
 
     if (entry.follower && entry.route) {

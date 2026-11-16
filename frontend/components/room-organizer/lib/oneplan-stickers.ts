@@ -164,6 +164,8 @@ export const WORKER_ROLE_STICKERS: Record<string, OneplanStickerDescriptor> = {
   摄影: { kind: 'icon', slug: 'camera-fixed', icon: 'users' },
   停车: { kind: 'icon', slug: 'parking', icon: 'users' },
   调度: { kind: 'icon', slug: 'event-control', icon: 'users' },
+  主管: { kind: 'icon', slug: 'event-control', icon: 'users' },
+  管理员: { kind: 'icon', slug: 'information-point', icon: 'users' },
 };
 
 /** 自定义岗位/设施名的关键词回落（契约里 role/templateId 都是自由字符串）。 */

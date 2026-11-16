@@ -141,6 +141,10 @@ export interface WalkRoute {
   speed?: number;
   /** 每个途经点的停留时长 ms，省缺 900；0 表示不停留。 */
   pauseMs?: number;
+  /** 户外预览：从沿线距离开始，避免多人在首点重叠。 */
+  startDistance?: number;
+  /** 户外单向动线：到终点后从起点重新进入。 */
+  oneWay?: boolean;
 }
 
 export interface FurnitureItem {

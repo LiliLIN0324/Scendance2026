@@ -393,9 +393,12 @@ function paintStickerCanvas(
  * 没有对应库模型时，把 2D 贴纸铺在占地里：比例尺贴纸铺满占地，点位图标画在中心。
  * 图片未就绪时先立一张隐藏的地贴，加载完再贴上纹理；没有贴纸则返回空组，只保留地面色块。
  */
-function buildStickerPlaceholder(THREE: typeof import('three'), prop: PlanPropShape): ThreeNS.Group {
+export function buildPlanGroundSticker(
+  THREE: typeof import('three'),
+  sticker: OneplanStickerDescriptor | null,
+  prop: Pick<PlanPropShape, 'width' | 'depth' | 'color'>,
+): ThreeNS.Group {
   const group = new THREE.Group();
-  const sticker = planStickerFor(prop.templateId);
   if (!sticker) return group;
 
   const width = Math.max(0.2, prop.width);
@@ -457,6 +460,9 @@ function buildStickerPlaceholder(THREE: typeof import('three'), prop: PlanPropSh
   return group;
 }
 
+function buildStickerPlaceholder(THREE: typeof import('three'), prop: PlanPropShape): ThreeNS.Group {
+  return buildPlanGroundSticker(THREE, planStickerFor(prop.templateId), prop);
+}
 
 /** 一个设施的 3D 物件（不含定位；调用方负责摆位与朝向）。 */
 export function buildPlanPropObject(THREE: typeof import('three'), prop: PlanPropShape): ThreeNS.Group {

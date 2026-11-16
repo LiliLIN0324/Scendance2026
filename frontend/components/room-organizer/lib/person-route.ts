@@ -100,12 +100,32 @@ export function routeLength(points: readonly Vec2[], loop: boolean): number {
 }
 
 export function createRouteFollower(route: WalkRoute): RouteFollowerState {
-  const first = route.points[0] ?? { x: 0, z: 0 };
+  let start = route.points[0] ?? { x: 0, z: 0 };
+  let segment = Math.min(1, Math.max(0, route.points.length - 1));
+  let facing = 0;
+  let remaining = Math.max(0, route.startDistance ?? 0);
+  if (route.startDistance !== undefined) {
+    for (; segment < route.points.length; segment += 1) {
+      const target = route.points[segment]!;
+      const dx = target.x - start.x;
+      const dz = target.z - start.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > remaining || (distance > 0 && segment === route.points.length - 1)) {
+        const ratio = Math.min(1, remaining / distance);
+        start = { x: start.x + dx * ratio, z: start.z + dz * ratio };
+        facing = Math.atan2(dx, dz);
+        break;
+      }
+      remaining -= distance;
+      start = target;
+    }
+    segment = Math.min(segment, Math.max(0, route.points.length - 1));
+  }
   return {
-    x: first.x,
-    z: first.z,
-    facing: 0,
-    segment: Math.min(1, Math.max(0, route.points.length - 1)),
+    x: start.x,
+    z: start.z,
+    facing,
+    segment,
     dir: 1,
     remainingPause: 0,
     travelled: 0,
@@ -117,11 +137,15 @@ export function createRouteFollower(route: WalkRoute): RouteFollowerState {
 /** 路线内容是否真的变了（同一布局重建后决定要不要保留行走进度）。 */
 export function routeSignature(route: WalkRoute | undefined): string | null {
   if (!route || route.points.length < 2) return null;
-  return JSON.stringify([route.points, route.loop !== false]);
+  return JSON.stringify([route.points, route.loop !== false, route.oneWay === true, route.startDistance ?? null]);
 }
 
 function advanceSegment(route: WalkRoute, state: RouteFollowerState): void {
   const n = route.points.length;
+  if (route.oneWay) {
+    state.segment += 1;
+    return;
+  }
   if (routeIsLoop(route)) {
     // 闭环按当前方向环走；抵达首点（无论顺逆）计一圈。
     const arrived = state.segment;
@@ -187,6 +211,12 @@ export function stepRouteFollower(
     return { x: state.x, z: state.z, facing: state.facing, moving: false, blocked: false };
   }
 
+  if (route.oneWay && state.segment >= points.length) {
+    const start = createRouteFollower({ ...route, startDistance: 0 });
+    Object.assign(state, start, { travelled: state.travelled, laps: state.laps + 1 });
+    return { x: state.x, z: state.z, facing: state.facing, moving: false, blocked: false };
+  }
+
   const target = points[state.segment] ?? points[points.length - 1]!;
   const speed = normalizeRouteSpeed(route);
   const intended = Math.min(speed * deltaSeconds, Math.hypot(target.x - state.x, target.z - state.z));
@@ -223,7 +253,7 @@ export function stepRouteFollower(
   if (blocked) {
     state.blockedFor += deltaSeconds;
     // 被挡超过阈值就地掉头：目标换成身后的路点，下一帧沿原路反走。
-    if (state.blockedFor >= BLOCKED_TURNAROUND_S) {
+    if (!route.oneWay && state.blockedFor >= BLOCKED_TURNAROUND_S) {
       reverseDirection(route, state);
       return { x: state.x, z: state.z, facing: state.facing, moving: false, blocked: true };
     }
@@ -231,7 +261,7 @@ export function stepRouteFollower(
     state.blockedFor = 0;
   }
 
-  if (reached && distance > 1e-6) {
+  if (reached && (distance > 1e-6 || route.startDistance !== undefined || route.oneWay)) {
     state.x = target.x;
     state.z = target.z;
     advanceSegment(route, state);

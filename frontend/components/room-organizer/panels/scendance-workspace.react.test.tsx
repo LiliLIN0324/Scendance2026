@@ -677,3 +677,44 @@ describe('MaterialDrawerHandle', () => {
     expect(screen.getByRole('button', { name: '收起物料库' }).getAttribute('aria-expanded')).toBe('true');
   });
 });
+
+// 2026-11-16 合并 ff63f8dc 回归：户外那颗 #tool-walk 丢了「只走 outdoor.toggleWalk 并就地返回」的分支，
+// 点了会外溢到共用 onToggleWalkthrough → 室内 startWalk()/tryMapVenue，在当前 OutdoorPlan 上直接报错。
+describe('ScendanceViewTools 户外漫游入口', () => {
+  function renderOutdoorWalk(overrides: { walkIn3D?: boolean; walkActive?: boolean } = {}) {
+    const values = contexts(makeLayout(), makeViewSettings());
+    const toggleWalk = vi.fn(), onToggleWalkthrough = vi.fn(), onZoom = vi.fn();
+    const outdoorActions = {
+      canUndo: false, canRedo: false, undo: vi.fn(), redo: vi.fn(), zoomBy: vi.fn(),
+      view: '2d' as const, onToggleView: vi.fn(), resetNorth: vi.fn(), focusVenue: vi.fn(),
+      walkActive: false, walkIn3D: true, toggleWalk,
+      ...overrides,
+    };
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={onZoom} outdoorActions={outdoorActions} onToggleWalkthrough={onToggleWalkthrough}/></Providers>);
+    return { toggleWalk, onToggleWalkthrough };
+  }
+
+  it('户外 2D 平面点漫游钮也直接调 toggleWalk，由它自己接管 3D 场地', () => {
+    const { toggleWalk, onToggleWalkthrough } = renderOutdoorWalk({ walkIn3D: false });
+    const button = screen.getByRole('button', { name: '第一人称漫游' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(toggleWalk).toHaveBeenCalledWith(true);
+    expect(onToggleWalkthrough).not.toHaveBeenCalled();
+  });
+
+  it('3D 接管态点漫游只调 outdoor.toggleWalk，不经过共用 onToggleWalkthrough', () => {
+    const { toggleWalk, onToggleWalkthrough } = renderOutdoorWalk({ walkIn3D: true });
+    const button = screen.getByRole('button', { name: '第一人称漫游' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(toggleWalk).toHaveBeenCalledWith(true);
+    expect(onToggleWalkthrough).not.toHaveBeenCalled();
+  });
+
+  it('漫游激活态再点一次交给同一个 toggleWalk 退出', () => {
+    const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true, walkActive: true });
+    fireEvent.click(screen.getByRole('button', { name: '退出漫游' }));
+    expect(toggleWalk).toHaveBeenCalledWith(false);
+  });
+});

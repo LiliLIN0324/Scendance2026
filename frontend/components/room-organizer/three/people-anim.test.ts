@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildPerson } from './builders/builders-people';
+import { buildPerson, buildProceduralPerson } from './builders/builders-people';
 import {
   advancePeopleAnimations,
   personAnimIds,
@@ -12,6 +12,7 @@ import {
   personOdometer,
   registerPersonAnim,
   setPersonWalkContext,
+  takePersonControl,
 } from './people-anim';
 import { type PeopleModel, preparePeopleModel, setPeopleModelForTests } from './people-model';
 import type { FurnitureItem, WalkRoute } from '../lib/types';
@@ -77,6 +78,51 @@ describe('personIsAnimated', () => {
 });
 
 describe('rigged person animation registry', () => {
+  it('allows taking over the lightweight figure before its model arrives and keeps control through upgrade', () => {
+    const route = { ...loopRoute, pauseMs: 0 };
+    const group = buildProceduralPerson({
+      THREE, item: { ...adult, walkRoute: route }, hasCollision: false, baseColor: adult.color, opacity: 1,
+    }, true);
+    scene.add(group);
+    expect(group.getObjectsByProperty('isMesh', true).length).toBeGreaterThan(5);
+    const control = takePersonControl(adult.id, group)!;
+    group.position.set(3, 0, 4);
+    control.setMoving(true);
+    registerPersonAnim(group, {
+      id: adult.id, mixer: new THREE.AnimationMixer(group), rig: null,
+      clips: { idle: null, walk: null, talk: null }, route, action: 'idle', paused: false,
+    });
+    tick(0.5);
+    expect(group.position.toArray()).toEqual([3, 0, 4]);
+    control.release();
+    expect(group.position.toArray()).toEqual([2, 0, 2]);
+    tick(0.5);
+    expect(personOdometer(adult.id)?.travelled).toBeGreaterThan(0);
+  });
+
+  it('freezes only the selected patrol and resumes its original route after release', async () => {
+    setPeopleModelForTests(await loadAsset());
+    const route = { ...loopRoute, pauseMs: 0 };
+    const selected = buildAndMount({ ...adult, walkRoute: route });
+    buildAndMount({ ...adult, id: 'p2', walkRoute: route });
+    tick(1);
+    const priorPosition = selected.position.clone();
+    const priorDistance = personOdometer('p1')!.travelled;
+
+    const control = takePersonControl('p1', selected)!;
+    control.setMoving(true);
+    selected.position.x += 2;
+    tick(1);
+    expect(selected.position.x).toBeCloseTo(priorPosition.x + 2);
+    expect(personOdometer('p1')!.travelled).toBe(priorDistance);
+    expect(personOdometer('p2')!.travelled).toBeGreaterThan(priorDistance);
+
+    control.release();
+    expect(selected.position.toArray()).toEqual(priorPosition.toArray());
+    tick(1);
+    expect(personOdometer('p1')!.travelled).toBeGreaterThan(priorDistance);
+  });
+
   it('keeps plain persons out of the registry (static mannequin, as before)', async () => {
     setPeopleModelForTests(await loadAsset());
     buildAndMount(adult);

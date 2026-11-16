@@ -2,7 +2,7 @@
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
-import { boundaryAtNewAnchor, canReanchorOutdoorPlan } from '../lib/outdoor-plan-protection';
+import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
 import { CAR_ROW_LABEL } from '../lib/vehicle-types';
 
 import type { BackendSession } from '@/lib/backend-session';
@@ -608,7 +608,8 @@ function ScopeSwatch({ size = 22, plus = false }: { size?: number; plus?: boolea
  */
 function mapMaxZoomFor(source: CanvasBasemapSource): number {
   return basemapNativeMaxZoom(source);
-}/**
+}
+/**
  * 2026-11-12 用户「放大倍数不够」：视图允许拉到的最大级别（不等于瓦片级别）。
  * 超过图源上限的部分由 `paintBasemapTiles` 的 overzoom 把上限级瓦片等比放大，
  * 再往里就是模糊放大——但缩放/平移/标尺照常工作，不会因为「没有 z20 瓦片」卡住。
@@ -2397,17 +2398,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const baseCanvas = baseCanvasRef.current;
     const planCanvas = planCanvasRef.current;
     if (!stage || !baseCanvas || !planCanvas) return;
-    const baseCtx = baseCanvas.getContext('2d');
-    const planCtx = planCanvas.getContext('2d');
-    if (!baseCtx || !planCtx) return;
-
     const cssW = stage.clientWidth;
     const cssH = stage.clientHeight;
     const dpr = window.devicePixelRatio || 1;
+    const width = Math.round(cssW * dpr);
+    const height = Math.round(cssH * dpr);
+    // 漫游会隐藏 2D 舞台。保留上一帧，等 ResizeObserver 报告可用尺寸后再绘制。
+    if (width <= 0 || height <= 0) return;
+
+    const baseCtx = baseCanvas.getContext('2d');
+    const planCtx = planCanvas.getContext('2d');
+    if (!baseCtx || !planCtx) return;
     for (const canvas of [baseCanvas, planCanvas]) {
-      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssH * dpr);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
       }
     }
     baseCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2870,7 +2875,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const sticker = workerSticker(worker.role);
         if (!sticker) continue;
         const pt = planPointToPixel(worker.position, viewport);
-        drawOneplanSticker(planCtx, sticker, pt.x, pt.y - 13, 14, { alpha: 0.95 });
+        // 2026-11-16 用户「场地上的人物的 icon 全都是黑色的，左侧明明是有颜色的」：
+        // 这里原来没传 color，落到 ONEOPLAN_CHIP_FILL 深色芯片（白字形＋近黑底＝一片黑），
+        // 而左侧「工作人员」九行用的是 libraryEntryColor（同岗位永远同色），3D 那边也是同一张
+        // 调色板（outdoor-plan-3d.tsx 的 roleColor）——只有 2D 这一处掉队。
+        // 现按设施芯片同口径跟色：活动包点位自带色（worker.color）优先，其余按岗位 slug 回落。
+        const chipColor = worker.color ?? libraryEntryColor({ slug: sticker.slug });
+        // 芯片 14 → 16 px：卫星底图上 14 px 的白字形本身也偏糊；上移 1 px 保持与圆点的间隙。
+        drawOneplanSticker(planCtx, sticker, pt.x, pt.y - 14, 16, { alpha: 0.95, color: chipColor });
       }
     }
     if (isLayerVisible(vis, 'access')) {
@@ -3677,8 +3689,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
-      if (!checkBoundaryRing(boundary).ok || !canReanchorOutdoorPlan(planRef.current, anchor)) return false;
-      commitPlan({ ...planRef.current, anchor, boundary });
+      if (!checkBoundaryRing(boundary).ok) return false;
+      // 2026-11-16 用户定稿「换场地就是新场地」：锚点真挪了，旧草稿的分区/设施/流线/点位/人员整批删掉，
+      // 只留新锚点与新用地红线（仍走 commitPlan，可整批撤销）；同一锚点重画边界则保留内容。
+      const { plan: next, replaced, cleared } = planForPickedVenue(planRef.current, anchor, boundary);
+      commitPlan(next);
+      if (replaced) {
+        setEditMessage(cleared > 0
+          ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。`
+          : '已换场地：旧草稿已清空，可撤销。');
+      }
       return true;
     },
     /** V-2d：应用流线提案（合并进 plan，走 commitPlan 可撤销）；成功返回 true。 */
@@ -4161,17 +4181,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setEditMessage(check.issue.message);
         return;
       }
+      const initialScope = current.boundary.length === 0 && !current.designScope?.length
+        ? expandRect(boundary, DEFAULT_SCOPE_MARGIN_M)
+        : undefined;
       const nextBoundaryPlan: SitePlanData = {
         ...current,
         ...(nextAnchor ? { anchor: nextAnchor } : {}),
         boundary: boundary.map(p => ({ x: p.x, y: p.y })),
+        ...(initialScope ? { designScope: initialScope } : {}),
       };
       commitPlan(nextBoundaryPlan);
       if (nextAnchor) onVenueBoundaryApplied?.(nextAnchor);
       pendingVenueAnchorRef.current = undefined;
       setMode('view');
+      if (initialScope) focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²）。${overflowSuffix(boundaryOverflow)}`);
+      const scopeMessage = initialScope ? `已自动生成设计范围，向四边各外扩 ${DEFAULT_SCOPE_MARGIN_M} m。` : '';
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²）。${scopeMessage}${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），

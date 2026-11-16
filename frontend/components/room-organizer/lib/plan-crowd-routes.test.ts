@@ -68,11 +68,11 @@ describe('assignCrowdWalkRoutes', () => {
     expect(map.size).toBe(0);
   });
 
-  it('可走实例按序号循环挂到各条人行动线；非可走实例不挂', () => {
+  it('从最近的人行线接入，同一落点的人错开；非可走实例不挂', () => {
     const placements = [
-      placement({ id: 'p#0', assetId: 'a007' }),
-      placement({ id: 'p#1', assetId: 'a008' }),
-      placement({ id: 'p#2', assetId: 'a009' }),
+      placement({ id: 'p#0', assetId: 'a007', at: { x: 50, y: 60 } }),
+      placement({ id: 'p#1', assetId: 'a008', at: { x: 60, y: 20 } }),
+      placement({ id: 'p#2', assetId: 'a009', at: { x: 50, y: 60 } }),
       placement({ id: 'p#3', assetId: null, slug: 'lowpoly' }),
     ];
     const map = assignCrowdWalkRoutes(
@@ -82,9 +82,11 @@ describe('assignCrowdWalkRoutes', () => {
       METRICS,
     );
     expect([...map.keys()]).toEqual(['p#0', 'p#1', 'p#2']);
-    // 循环分配：第 0/2 条落 pa，第 1 条落 pb
+    // 第 0/2 个人都从 pa 接入，保持起步间距；第 1 个人在 pb。
     expect(map.get('p#0')!.points[0]).toEqual(map.get('p#2')!.points[0]);
     expect(map.get('p#1')!.points[0]).not.toEqual(map.get('p#0')!.points[0]);
+    expect(map.get('p#0')!.startDistance).toBe(25);
+    expect(Math.abs(map.get('p#2')!.startDistance! - 25)).toBeCloseTo(1.2);
     expect(map.has('p#3')).toBe(false);
   });
 

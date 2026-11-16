@@ -166,8 +166,11 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
 export function OutdoorWorkflowCard({
   flow,
   onCancelPreview,
+  onSearchPlace,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
+  /** 地图优先第一步：任务卡上直接给「搜索地点」入口，不用让人去画布左上角找。 */
+  onSearchPlace?: (() => void) | undefined;
   /** 「下一句」建议芯片的预填回调：点芯片只填输入框，发送仍是用户按键确认。 */
   /** 2026-11-15 用户拍板：撤回预览要在对话流留「已放弃」徽章——按钮经此回调，
    *  由面板调 cancel() 并补一条决策留痕气泡；不传则保持原直调 cancel() 的行为。 */
@@ -178,7 +181,9 @@ export function OutdoorWorkflowCard({
   // 提案时才启动倒计时；「预览已就绪，核对后确认」这类要等动作的提示不自动消失。
   const [noticeCountdown, setNoticeCountdown] = useState<number | null>(null);
   useEffect(() => {
-    if (!flow.notice || flow.noticeKind === "error" || flow.busy || flow.proposal) {
+    // 2026-11-16 用户拍板：要你动手的提示（noticeSticky）不倒计时——8s 自动收起后卡片回落成
+    // 「自动为你框选」，线上实测就是让人以为一点没动。
+    if (!flow.notice || flow.noticeKind === "error" || flow.busy || flow.proposal || flow.noticeSticky) {
       setNoticeCountdown(null);
       return;
     }
@@ -187,7 +192,7 @@ export function OutdoorWorkflowCard({
       setNoticeCountdown((value) => (value === null ? null : value - 1));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [flow.notice, flow.noticeKind, flow.busy, flow.proposal]);
+  }, [flow.notice, flow.noticeKind, flow.busy, flow.proposal, flow.noticeSticky]);
   useEffect(() => {
     if (noticeCountdown !== null && noticeCountdown <= 0) {
       setNoticeCountdown(null);
@@ -224,7 +229,7 @@ export function OutdoorWorkflowCard({
         <div className="ap-task-progress" aria-hidden="true" />
       )}
       <StageThumb stage={flow.state.stage} />
-      {flow.notice && flow.noticeKind === "error" ? (
+      {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         <div className="ap-task-error" role="alert">
           <TriangleAlert size={14} aria-hidden="true" />
           <p>{flow.notice}</p>
@@ -241,7 +246,12 @@ export function OutdoorWorkflowCard({
       ) : (
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
-          {flow.notice || STAGE_CAPTIONS[flow.state.stage]}
+          {flow.loginRequired
+            ? STAGE_CAPTIONS[flow.state.stage]
+            : flow.notice ||
+              (flow.state.stage === "place" && flow.mapGap
+                ? "没有取到可核对的真实地图/轮廓（地图服务本轮不可用）：请在地图上手画活动范围，或上传边界文件"
+                : STAGE_CAPTIONS[flow.state.stage])}
           {noticeCountdown !== null && noticeCountdown > 0 && (
             <span className="ap-task-countdown" aria-hidden="true"> · {noticeCountdown}s 后收起</span>
           )}
@@ -480,6 +490,29 @@ export function OutdoorWorkflowCard({
           上传图片准备生成（另行确认费用）
         </button>
       )}
+      {/* 2026-11-16 用户拍板：模型说「轮廓取不到，请手画」时，place 阶段卡上就得能点进去手画，
+          不用让人自己到工具栏里翻。实现在 manualBoundary 的既有守卫里（无锚点/不可换场原位报错，不乱改）。 */}
+      {!flow.proposal && flow.state.stage === "place" && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          {onSearchPlace && (
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={flow.busy}
+              onClick={onSearchPlace}
+            >
+              搜索地点
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={flow.busy}
+            onClick={() => flow.manualBoundary()}
+          >
+            在地图上手画活动范围
+          </button>
+        </div>
+      )}
       {!flow.proposal && flow.state.stage === "zones" && (
         <button
           type="button"
@@ -526,14 +559,14 @@ export function OutdoorWorkflowCard({
       >
         <header className="ap-card-head">
           <strong>
-            {flow.loginSatisfied ? "已登录 · 可以继续" : "需要登录 · 才能继续"}
+            {flow.loginSatisfied ? "已登录 · 可以继续" : "登录后继续这次选址"}
           </strong>
         </header>
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
           {flow.loginSatisfied
             ? "继续后这次搜索会写入项目，结果不再只留在本页。"
-            : "登录后这次搜索才写入项目；当前结果先留在本页。"}
+            : "场地草稿已保存；登录只影响写入项目，不改动当前范围。"}
         </p>
         {/* 2026-11-14 用户指令：登录完成后卡片切换为可继续态；恢复走 resumeAfterLogin 的既有守卫（原账户/规划未漂移）。 */}
         {flow.loginSatisfied ? (
