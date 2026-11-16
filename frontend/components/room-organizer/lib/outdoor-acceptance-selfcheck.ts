@@ -186,3 +186,25 @@ export function summarizeAssessment(rows: readonly CaseAssessment[]): Assessment
   ].join('\n');
   return { ready: ready.length, missing: missing.length, browserOnly: browserOnly.length, text };
 }
+
+/**
+ * 一行可粘进 PR / 工单的验收声明。
+ * 固定以「三类全绿 0 条，未验部分不作通过」收尾——这句话不允许被生成成“已验收”。
+ */
+export function formatAcceptanceStatement(rows: readonly CaseAssessment[]): string {
+  const totals = summarizeAssessment(rows);
+  const ids = (pick: (verdict: AssessmentVerdict) => boolean) =>
+    rows.filter((row) => pick(row.verdict)).map((row) => `#${row.id}`).join(' ');
+  const ready = ids((verdict) => verdict === 'ready');
+  const missing = rows
+    .filter((row) => row.verdict === 'missing')
+    .map((row) => `#${row.id}缺${row.missing.join('/')}`)
+    .join('，');
+  const browserOnly = ids((verdict) => verdict === 'browser-only');
+  return (
+    `户外 Agent 验收：可判 ${totals.ready} 条${ready ? `（${ready}）` : ''}；` +
+    `缺料 ${totals.missing} 条${missing ? `（${missing}）` : ''}；` +
+    `只能浏览器 ${totals.browserOnly} 条${browserOnly ? `（${browserOnly}）` : ''}；` +
+    '三类全绿 0 条，未验部分不作通过。'
+  );
+}
