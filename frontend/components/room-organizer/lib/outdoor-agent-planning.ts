@@ -21,6 +21,8 @@ import {
   outdoorCorridorStrips,
   outdoorRingsOverlap,
 } from "./outdoor-event-logic";
+// 2026-11-17 死结 4：岗位缺通道时按需补一条专用驳线（复用 V-4a 的几何护栏）。
+import { buildZoneSpur, spurAudiencesFor } from "./sub-entrance";
 import type {
   OutdoorBrief,
   OutdoorLibraryItem,
@@ -583,6 +585,42 @@ export function clipWorkflowRoutes(
   }
   return result;
 }
+/** 这类岗位能走的动线：动线上要有落在这个分区里、且入场与出场都走得通的点。 */
+function eligibleWorkerRoutes(
+  access: ReturnType<typeof personnelAccess>,
+  zone: PlanZone,
+): SitePlanData["routes"] {
+  return access.routes.filter((r) =>
+    r.points.some(
+      (p) => planPointInRing(p, zone.polygon) && access.paths(p, r.levelId) !== null,
+    ),
+  );
+}
+
+/**
+ * 2026-11-17 死结 4：没有可用通道时把「为什么不行、你能做什么」写清楚。
+ * 旧文案让用户「先安排子流线/子入口」，但那条补救路径实际不成立（重跑子动线还是同样的跳过）——
+ * 新文案要说清缺的是哪一类通道、补不出来是什么原因，以及可以改做什么。
+ */
+function describeMissingWorkerAccess(
+  zone: PlanZone,
+  need: OutdoorBrief["people"][number],
+): string {
+  const kind =
+    need.audience === "service"
+      ? "后勤"
+      : need.audience === "performers"
+        ? "表演"
+        : need.audience === "security"
+          ? "安保"
+          : "人行";
+  return (
+    `“${zone.name}”没有可用于${kind}岗位的进出通道：现有动线里没有一条能让人既从入口进场、又从出口离场` +
+    `（可能是单向流线只出不能入、流线服务人群不含这类岗位、或这一区离人行流线太远），本区也没有已确认的子口可以接驳。` +
+    `请在画布上给“${zone.name}”补一条接驳线/子口（确认后即可排岗），或把这个岗位改到已有通道的分区；不会把岗位放到不连通的区域。`
+  );
+}
+
 export function proposeRoleWorkers(
   plan: SitePlanData,
   brief: OutdoorBrief,
@@ -597,22 +635,32 @@ export function proposeRoleWorkers(
   const { matched: matchedPeople, mismatched } = splitNeedsByZone(plan, brief.people);
   if (mismatched.length && !matchedPeople.length)
     throw new Error(describeZoneMismatch(mismatched, plan, { subject: "岗位未安排" }));
+  // 2026-11-17 死结 4：该分区没有这类岗位能走的通道时，先补一条专用驳线写进方案，
+  // 岗位落在真正连通的支线上（提案卡里能看到新补的线）；补不出来才报错。
+  let working = plan;
   for (const need of matchedPeople) {
-    const zone = plan.zones.find(
+    const zone = working.zones.find(
       (z) => z.id === need.zone || z.name === need.zone,
     )!;
-    const access = personnelAccess(plan, need.audience);
-    const eligible = access.routes.filter((r) =>
-      r.points.some(
-        (p) =>
-          planPointInRing(p, zone.polygon) &&
-          access.paths(p, r.levelId) !== null,
-      ),
-    );
-    if (!eligible.length)
-      throw new Error(
-        `“${zone.name}”尚无同时满足入场与出场的${need.audience === "service" ? "后勤" : "人行"}接驳，请先安排子流线/子入口；不会把岗位放到不连通的区域。`,
-      );
+    let access = personnelAccess(working, need.audience);
+    let eligible = eligibleWorkerRoutes(access, zone);
+    if (!eligible.length) {
+      const spur = buildZoneSpur(working, zone, id, {
+        audiences: spurAudiencesFor(zone, need.audience),
+        // 只复用已经确认过的出入口：不自己发明新门（否则单向流线那种只出不能入的区
+        // 会因为多一个新节点而看起来也连通，既有守卫就被绕开了）。
+        requireExistingPortal: true,
+      });
+      if (!spur) throw new Error(describeMissingWorkerAccess(zone, need));
+      working = {
+        ...working,
+        routes: [...working.routes, spur.route],
+        nodes: spur.node ? [...working.nodes, spur.node] : working.nodes,
+      };
+      access = personnelAccess(working, need.audience);
+      eligible = eligibleWorkerRoutes(access, zone);
+      if (!eligible.length) throw new Error(describeMissingWorkerAccess(zone, need));
+    }
     const point = eligible
       .flatMap((r) => r.points)
       .find(
@@ -622,7 +670,7 @@ export function proposeRoleWorkers(
             p,
             eligible.find((r) => r.points.includes(p))?.levelId,
           ) !== null &&
-          !plan.facilities.some((f) =>
+          !working.facilities.some((f) =>
             planPointInRing(p, facilityFootprintRing(f)),
           ),
       );
@@ -667,7 +715,7 @@ export function proposeRoleWorkers(
         "岗位分配提案；数量来自用户，活动范围为关联分区，进出限关联路线；非排班或安全认证。",
     });
   }
-  return { ...plan, workers };
+  return { ...working, workers };
 }
 export function validateWorkflowPlan(
   base: SitePlanData,
