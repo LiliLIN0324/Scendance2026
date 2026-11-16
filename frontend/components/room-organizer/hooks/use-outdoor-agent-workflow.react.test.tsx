@@ -176,6 +176,27 @@ it("户外问答跟随面板所选 provider 与 model 透传到对话请求", as
   expect(chatMeta.provider).toBe("tokendance");
   expect(chatMeta.model).toBe("tk-another");
 });
+it("户外选址阶段的「你好」显示本轮模型自述，切换活动后清除", async () => {
+  const thought = "收到的是问候，我先回应，并等待具体需求。";
+  let complete!: (value: ReturnType<typeof response>) => void;
+  understand.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+  let pending!: Promise<boolean>;
+  await act(async () => { pending = flow.handle("你好"); });
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("模型返回后会显示摘要");
+  await act(async () => {
+    complete(response("ask", {}, { reply: "你好，有什么可以帮你？", thought }));
+    await pending;
+  });
+  const record = host.querySelector("details.ap-run-thoughts");
+  expect(understand).toHaveBeenCalledOnce();
+  expect(record?.hasAttribute("open")).toBe(true);
+  expect(record?.textContent).toContain("思考记录 · 1 条");
+  expect(record?.textContent).toContain(thought);
+  expect(apply).not.toHaveBeenCalled();
+  scope = "project-b";
+  mount();
+  expect(host.querySelector("details.ap-run-thoughts")).toBeNull();
+});
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();
   apply.mockClear();
