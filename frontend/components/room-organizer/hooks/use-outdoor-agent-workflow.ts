@@ -22,6 +22,7 @@ import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
+import { downloadSessionReport } from "../lib/outdoor-report-download";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -1850,6 +1851,8 @@ export function useOutdoorAgentWorkflow(input: {
     exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
     /** 轨迹 + 指标一份导出（两份都是白名单字段）。 */
     sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
+    /** 把会话报告存成本地 .txt（浏览器下载）；导不出只返回 ok:false，不抛。 */
+    downloadReport: () => downloadSessionReport(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
