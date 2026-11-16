@@ -156,21 +156,20 @@ export const RailCrate = makeCustomIcon((size, active) => (
   </svg>
 ));
 
-/** 拍摄场地（C10）：经典相机轮廓——中央取景器凸起、左右斜切肩、中央镜头圈；描边闭合无缺口。常态描边，激活实心、镜头镂空。 */
-export const RailShoot = makeCustomIcon((size, active) => (
+/** 场地（新建/生成功能区）：圆形容器包裹居中加号，表达新建一块可布置场地；24 网格、round 端点，圆径与户外星球同口径。常态圆与加号描边，激活圆实心、加号反白负形。 */
+export const RailPlus = makeCustomIcon((size, active) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
     fill={active ? 'currentColor' : 'none'}
     stroke={active ? 'none' : 'currentColor'}
     strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
     {active
       ? <>
-          <path d="M14.4 4.4h-4.8L7.4 7.4H4.8a1.9 1.9 0 0 0-1.9 1.9v8.4a1.9 1.9 0 0 0 1.9 1.9h14.4a1.9 1.9 0 0 0 1.9-1.9V9.3a1.9 1.9 0 0 0-1.9-1.9h-2.6z"/>
-          <circle cx="12" cy="12.8" r="3.1" fill="#FFFFFF"/>
-          <circle cx="12" cy="12.8" r="1.6" fill="currentColor"/>
+          <circle cx="12" cy="12" r="9.2"/>
+          <path d="M8.0 12.0 h8.0 M12.0 8.0 v8.0" stroke="#FFFFFF" strokeWidth="1.8" fill="none"/>
         </>
       : <>
-          <path d="M14.4 4.4h-4.8L7.4 7.4H4.8a1.9 1.9 0 0 0-1.9 1.9v8.4a1.9 1.9 0 0 0 1.9 1.9h14.4a1.9 1.9 0 0 0 1.9-1.9V9.3a1.9 1.9 0 0 0-1.9-1.9h-2.6z"/>
-          <circle cx="12" cy="12.8" r="3.0"/>
+          <circle cx="12" cy="12" r="9.2"/>
+          <path d="M8.0 12.0 h8.0 M12.0 8.0 v8.0"/>
         </>}
   </svg>
 ));

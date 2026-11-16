@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Camera, FileImage, Globe, Scan, Sparkles, Upload, X } from '@/components/solid-icons';
+import { Camera, FileImage, Globe, Sparkles, Upload, X } from '@/components/solid-icons';
 import { type BackendSession, type BackendSnapshot, type GenerationCapabilities } from '@/lib/backend-session';
 import type { CatalogItem } from '../lib/types';
 import {
@@ -298,7 +298,8 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
                     onClick={() => chooseGenerationTask(task)}
                   >
                     <span className="gs-task-icon" aria-hidden>
-                      {task === 'scene-recon' ? <Scan size={15} /> : task === 'scene-new' ? <Globe size={15} /> : <Sparkles size={15} />}
+                      {/* 重建真实场地＝现场拍摄/上传照片视频，主图标用相机；不再用文档扫描框。 */}
+                      {task === 'scene-recon' ? <Camera size={15} /> : task === 'scene-new' ? <Globe size={15} /> : <Sparkles size={15} />}
                     </span>
                     <span className="gs-task-text">
                       <strong>{copy.title}</strong>

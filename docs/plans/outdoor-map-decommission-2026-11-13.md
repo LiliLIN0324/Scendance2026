@@ -293,6 +293,33 @@ M5 智能体工具桥接扩充（独立，不依赖 R 线）
 
 **策略**：去耦合侧只推进 G1 安全区（不改 bridge 九方法签名、不改 SitePlanData 契约、不换会话 scope、不动壳体）；M3a/M3b、M2 墙体新契约、R1–R4 壳体退役继续挂起，等智能体 flow 稳定 + 全流程真机确认后成套推进。
 
+### 7.5.6 远端基线刷新与冻结面复核（2026-11-16，origin/main @ d0f3801d）
+
+**基线漂移**：复核锚点由 `aceb87f3` 前进到 `d0f3801d`，区间 26 提交、1150 文件（其中 894 为物料库 GLB/缩略图/图标资产，源码与配置约 256）。
+
+**远端新域分类**：
+1. people06 漫游/人群层：云端人物 follower、路线纯函数层、人群随岗位刷新、三类动线 3D 对齐 2D、第一人称步行档跳过环绕控制器；
+2. 工作台工具轨/图层/分享/指北针测距重设计收尾；
+3. 物料库 543→976、图标↔模型映射、车组与货不对板素材修正；物料生成面板/我的库/监督三档；
+4. 画布范围/区域/拖拽、动线 carrier、设施拖拽/模型映射/落区；
+5. 底图：三处图源上限收敛一张表 + 逐级探测脚本、代理 key 运行时、carto 放大上限 z18；
+6. 智能体：agent-panel 三批拆展示组件、户外地图编辑高亮、place-shape 库存优先、无地点设计句入待恢复槽、token 上限 4096 断言；
+7. 文档/版本：v4.14.0、玉泉案例、M0 切片 1a 记录。
+
+**冻结面复核（区间内逐类核）**：
+- `site-plan.ts` 契约：+50 行，纯新增可选字段 `carrier`（动线载体枚举）/`assetId`（UUID）/`designScope`（边界），必填结构未删未改；
+- `outdoor-agent-contract.ts`：纯新增 `OutdoorMapEditHighlight` 类型，九方法类型与签名未动；
+- M3 影子（layout-store/state/reducer/persistence、assistant-sessions/project-session-scope、history/version-history/restore-point/review-share）区间内零改动；
+- `agent-chat-bridge.tsx` 仅 −30 行桥接壳调整，九方法定义（canvas/overlay/workflow）签名未变。
+
+**本地分叉状态（2026-11-16）**：
+- 工作树分支 `feat/orbit-left-compass` @46ec7e80，behind 2（`0391efed`、`d0f3801d`）；
+- 本地 `main` `0f831efa` ahead 38 / behind 50，领先提交三类：docs(decouple) 安全集、test(m2) 纯函数边界、skill/bench 手册（已独立到 dsh-skills），外加 feat(chat) 两级模型分叉与 fix(brief/types)；
+- 本地领先文件与远端本批交集 7 个：`use-outdoor-agent-workflow(.ts/.test)`、`outdoor-agent-understanding`、`agent-panel.css/.test/.tsx`、`backend-session`——均智能体/聊天分叉域，按口径不回灌；安全集 docs 与 m2 测试零交集；
+- 隔离分支 `wip/m2-agent-slots-20261113` @f06155dc 保留；工作树 4 个 tracked 未提交（canvas/overlay/generation-sheet/room-organizer）属并行在途，不 commit 不 revert。
+
+**结论**：G1 稳定面未破；隔离切片将来重落基底升到 `d0f3801d`；G2/G3 仍挂起，前置条件不变（#110 V1–V5 真机确认 + 智能体 flow 稳定）。
+
 ## 8. 未决决策
 
 1. **墙体归属**：独立 `walls` 集合 vs `facilities` 物料类别——M2 动工前对照物料模板体系定；倾向先按独立折线实体建模，再评估是否归并 facility 模板。
