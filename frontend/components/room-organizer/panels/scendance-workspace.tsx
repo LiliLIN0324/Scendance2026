@@ -393,11 +393,14 @@ function CompassDial({ size = 44, rotationDeg = 0, showTurns = false }: { size?:
     }
     if (!canvas || !ctx) return;
     const resolution = 4;
+    const base = 44;
+    const scale = size / base;
     const pixels = size * resolution;
     canvas.width = pixels;
     canvas.height = pixels;
-    ctx.setTransform(resolution, 0, 0, resolution, 0, 0);
-    ctx.clearRect(0, 0, size, size);
+    // 指针几何按 44 基准坐标绘制，再整体缩放到目标直径；64px 罗盘也保持清晰。
+    ctx.setTransform(resolution * scale, 0, 0, resolution * scale, 0, 0);
+    ctx.clearRect(0, 0, base, base);
 
     // 外圈与内盘：只保留极轻的层次，避免看起来像靶心。
     ctx.beginPath();
@@ -1194,7 +1197,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         </div>
         {/* 2026-11-16 用户指令：右下角一比一复刻 Google Maps 竖向控制列——
             罗盘 → 2D/3D → 定位 → 连体缩放 → Pegman，最后隔一条发丝线放宽图眼睛。
-            视觉口径：40px 白圆、40×80 连体缩放、外层 56px 白色胶囊。 */}
+            视觉口径：44px 控件、64px 罗盘、44×88 连体缩放；漫游钮与其余控件同轴同尺寸。 */}
         <div className="oc-cluster oc-br oc-gmaps" role="group" aria-label="地图控制">
           <div className="oc-gm-compass-wrap" role="group" aria-label="罗盘与转向">
             {SHOW_COMPASS_TURN_ARROWS && compassIs3D && (
@@ -1218,7 +1221,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
               onPointerUp={event => finishCompassDrag(event, false)}
               onPointerCancel={event => finishCompassDrag(event, true)}
             >
-              <CompassDial size={44} rotationDeg={(compassBearing * 180) / Math.PI} showTurns={SHOW_COMPASS_TURN_ARROWS && compassIs3D} />
+              <CompassDial size={64} rotationDeg={(compassBearing * 180) / Math.PI} showTurns={SHOW_COMPASS_TURN_ARROWS && compassIs3D} />
             </button>
             {SHOW_COMPASS_TURN_ARROWS && compassIs3D && (
               <button
@@ -1234,22 +1237,22 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             <span className="oc-gm-mode-text">{outdoor?.view === '3d' ? '3D' : '2D'}</span>
           </button>
           <button type="button" id="tool-focus" className="oc-gm-round" data-tip={focusVenueTip ?? '回到框选场地'} aria-label={focusVenueTip ?? '回到框选场地'} disabled={!onFocusVenue} onClick={() => onFocusVenue?.()}>
-            <MyLocationIcon size={16} />
+            <MyLocationIcon size={18} />
           </button>
           <div className="oc-gm-zoom" role="group" aria-label="缩放">
             <button type="button" id="tool-zoom-in" className="oc-gm-zoom-btn" data-tip="放大" aria-label="放大" onClick={() => outdoor!.zoomBy(1)}>
-              <MaterialSymbol name="add" size={18} />
+              <MaterialSymbol name="add" size={20} />
             </button>
             <button type="button" id="tool-zoom-out" className="oc-gm-zoom-btn" data-tip="缩小" aria-label="缩小" onClick={() => outdoor!.zoomBy(-1)}>
-              <MaterialSymbol name="remove" size={18} />
+              <MaterialSymbol name="remove" size={20} />
             </button>
           </div>
-          <button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
-            <PegmanIcon size={22} />
+          <button type="button" id="tool-walk" data-tip={walkPressed ? '退出漫游' : '第一人称漫游'} aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={`oc-gm-round oc-gm-walk${walkPressed ? ' is-active' : ''}`} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
+            <PegmanIcon size={20} />
           </button>
           <span className="oc-gm-divider" aria-hidden="true" />
           <button type="button" id="tool-opacity" className={`oc-gm-round oc-gm-eye${chromeHidden ? ' is-active' : ''}`} data-tip={chromeHidden ? '退出干净看图' : '干净看图'} aria-label={chromeHidden ? '退出干净看图' : '干净看图：隐藏全部浮层'} aria-pressed={chromeHidden} onClick={() => onToggleChrome?.()}>
-            <MaterialSymbol name="visibility" size={16} />
+            <MaterialSymbol name="visibility" size={18} />
           </button>
         </div>
         {/* 2026-11-16 我们自己的工具栏：贴底一条，可收成一颗把手。
