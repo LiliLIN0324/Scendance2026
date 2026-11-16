@@ -46,7 +46,6 @@ import {
   readOutdoorProjectRecord,
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
-import { createDemoOutdoorPlan } from '@/components/room-organizer/lib/outdoor-demo-plan';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { DisplayUnit } from '../lib/types';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
@@ -524,22 +523,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     onPrintDeck: printDeck,
   };
 
-  // #81：一键载入内置示范场景（7 岗位 · 5 设施 · 矩形边界），替代过去靠脚本注入的一次性测试场景。
-  // 覆写当前平面后经既有 setPlan 链路自动上报 3D 镜像、400ms 防抖落盘。
-  const loadDemoPlan = () => {
-    const demo = createDemoOutdoorPlan();
-    setPlacePin(null);
-    setPlaceArea(null);
-    setPlan(demo);
-    if (demo.anchor && demo.boundary.length > 0) {
-      const geos = demo.boundary.map(point => enuToLngLat(point.x, point.y, demo.anchor!.lng, demo.anchor!.lat));
-      canvasApiRef.current?.focusBounds([
-        Math.min(...geos.map(p => p.lng)), Math.min(...geos.map(p => p.lat)),
-        Math.max(...geos.map(p => p.lng)), Math.max(...geos.map(p => p.lat)),
-      ]);
-    }
-  };
-
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
   // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜。
   const canvasHidden = dormant;
@@ -637,43 +620,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           本覆盖层不再自摆快捷钮。OutdoorDeliveryPanel 仅保留为面板挂载宿主，不再由此处按钮打开。 */}
       {/* 2026-11-15 底图切换（Google 地图「图层」范式）：左下常态露三枚高频底图缩略直选，
           第四格「展开」进完整底图面板（缩略网格 + 纸面模式 + 重看引导）。 */}
-      {/* #81：内置示范场景一键载入（7 岗位 · 5 设施）；覆写当前平面，经 autosave 落盘。 */}
-      {plan && (
-        <button
-          type="button"
-          id="tool-outdoor-demo"
-          data-testid="outdoor-load-demo"
-          aria-label="载入内置示范场景"
-          data-tip="载入示范场景（7 岗位 · 5 设施，覆盖当前平面）"
-          onClick={loadDemoPlan}
-          style={{
-            position: 'absolute',
-            top: 16,
-            right: 112,
-            zIndex: 4,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 34,
-            width: 34,
-            borderRadius: 999,
-            border: '1px solid #e4e4e7',
-            background: '#ffffff',
-            color: '#141416',
-            cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
-            fontFamily: 'inherit',
-            pointerEvents: 'auto',
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="3" width="18" height="18" rx="3" />
-            <circle cx="8.5" cy="9" r="1.4" fill="currentColor" stroke="none" />
-            <circle cx="15.5" cy="14.5" r="1.4" fill="currentColor" stroke="none" />
-            <path d="M3 15.5h5M15.5 9H21" />
-          </svg>
-        </button>
-      )}
       {/* 右下：底图选择（OnePlan 的 Select a map）+ 隐藏底图 + 重看引导。
           2026-11-11 用户指令：整簇往右挪（right 80→24），贴近画布右缘；
           只动右下簇，右上交付簇的 right:80 是给 3D 楼层切换芯片让位的，不动。 */}

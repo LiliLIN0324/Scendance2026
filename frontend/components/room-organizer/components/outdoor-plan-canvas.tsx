@@ -1928,6 +1928,61 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const toggleInspectorCollapsed = useCallback((tab: 'measure' | 'annotate' | 'selection') => {
     setInspectorCollapsed(current => ({ ...current, [tab]: !current[tab] }));
   }, []);
+  // 2026-11-16 工具卡簇浮窗：默认右上角避让右轨圆钮列；标题栏可拖到画布内任意位置。
+  const [inspectorPanelPos, setInspectorPanelPos] = useState<{ x: number; y: number } | null>(null);
+  const inspectorPanelRef = useRef<HTMLDivElement>(null);
+  const inspectorDragRef = useRef<{ pointerId: number; startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
+  // 拖拽抬起后抑制紧随的那次 click，避免拖完面板误触发卡头折叠。
+  const inspectorSuppressClickRef = useRef(false);
+  const onInspectorPanelPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const panel = inspectorPanelRef.current;
+    // 只允许从卡头拖拽；卡片内容区不拖。
+    if (!panel || !(event.target as HTMLElement).closest('[data-inspector-header]')) return;
+    const rect = panel.getBoundingClientRect();
+    inspectorDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, baseX: rect.left, baseY: rect.top, moved: false };
+  }, []);
+  const onInspectorPanelPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = inspectorDragRef.current;
+    const panel = inspectorPanelRef.current;
+    if (!drag || !panel || drag.pointerId !== event.pointerId) return;
+    const parent = panel.offsetParent as HTMLElement | null;
+    const parentRect = parent?.getBoundingClientRect();
+    const parentL = parentRect?.left ?? 0;
+    const parentT = parentRect?.top ?? 0;
+    const parentW = parent?.clientWidth ?? window.innerWidth;
+    const parentH = parent?.clientHeight ?? window.innerHeight;
+    const w = panel.offsetWidth;
+    const h = panel.offsetHeight;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    // 未越过阈值前不进入拖拽，保留单击折叠；越过才捕获指针并开始挪面板。
+    if (!drag.moved) {
+      if (Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      panel.setPointerCapture(event.pointerId);
+    }
+    const left = drag.baseX - parentL + dx;
+    const top = drag.baseY - parentT + dy;
+    const x = Math.min(Math.max(0, left), Math.max(0, parentW - w));
+    const y = Math.min(Math.max(0, top), Math.max(0, parentH - h));
+    setInspectorPanelPos({ x, y });
+  }, []);
+  const onInspectorPanelPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = inspectorDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.moved) {
+      inspectorSuppressClickRef.current = true;
+      inspectorPanelRef.current?.releasePointerCapture(event.pointerId);
+    }
+    inspectorDragRef.current = null;
+  }, []);
+  const onInspectorPanelHeaderClickCapture = useCallback((event: React.SyntheticEvent) => {
+    if (inspectorSuppressClickRef.current) {
+      event.stopPropagation();
+      event.preventDefault();
+      inspectorSuppressClickRef.current = false;
+    }
+  }, []);
   const [infoTab, setInfoTab] = useState<(typeof INFO_TABS)[number]>('overview');
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [invKind, setInvKind] = useState<PlanInventoryFilter['kind']>('all');
@@ -11329,11 +11384,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return (
           <PanelPortal host={inspectorPanelHost}>
           <div
+            ref={inspectorPanelRef}
             data-testid="outdoor-inspector-stack"
             data-plan-panel=""
             onWheel={stopPanelWheel}
+            onPointerDown={onInspectorPanelPointerDown}
+            onPointerMove={onInspectorPanelPointerMove}
+            onPointerUp={onInspectorPanelPointerUp}
+            onPointerCancel={onInspectorPanelPointerUp}
             style={{
-              position: 'absolute', bottom: 72, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
+              position: 'absolute', zIndex: 6,
+              ...(inspectorPanelPos
+                ? { left: inspectorPanelPos.x, top: inspectorPanelPos.y, right: 'auto', bottom: 'auto', transform: 'none' }
+                : { top: 16, right: 68, left: 'auto', bottom: 'auto', transform: 'none' }),
               pointerEvents: 'auto',
               display: 'flex', flexDirection: 'row', gap: 8,
               width: 'max-content', maxWidth: 'calc(100% - 32px)',
@@ -11367,7 +11430,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   onDoubleClick={stopPanelMouse}
                 >
                   {card.key !== 'annotate' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px' }}>
+                  <div data-inspector-header="" onClickCapture={onInspectorPanelHeaderClickCapture} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px', cursor: 'grab' }}>
                     <button
                       type="button"
                       onClick={() => toggleInspectorCollapsed(card.key)}

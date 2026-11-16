@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { ArrowUpDown, Loader2, Minimize2, PanelLeftClose, RailCrate, RailMap, RailSpace, Scan, X } from '@/components/solid-icons';
+import { ArrowUpDown, Loader2, Minimize2, PanelLeftClose, RailCrate, RailMap, RailPlus, RailSpace, Scan, X } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -3278,11 +3278,16 @@ useEffect(() => {
     setSceneFocus({ width: east - west, depth: south - north, centerX: (west + east) / 2, centerZ: (north + south) / 2 });
     setPendingMapVenueFrame(current.mapGroundPolygon);
   }, [setView, setSceneFocus]);
-  // 2026-11-16 用户指令：左栏那行「定位到设计范围」去掉，功能改到右轨焦点钮（#tool-focus）。
-  // 2D 户外画布开着且圈了设计范围 → 框到范围（只动视图、不改 plan）；其余情况维持原来的场地取景。
+  // 2026-11-16 用户指令：左栏那行「定位到设计范围」去掉，功能改到右轨焦点钮。
+  // 2D 户外画布：优先框设计范围；没有圈设计范围时回到地块边界/锚点（不落到 3D 场地取景，2D 下无足迹会静默失效）。
+  // 3D 接管 / 实景隔离：维持原来的场地取景。只动视图、不改 plan。
   const focusScopeOrVenue = useCallback(() => {
-    if (outdoor2DOpen && (outdoorPlan?.designScope ?? []).length >= 3) {
-      outdoorOverlayRef.current?.focusDesignScope();
+    if (outdoor2DOpen) {
+      if ((outdoorPlan?.designScope ?? []).length >= 3) {
+        outdoorOverlayRef.current?.focusDesignScope();
+        return;
+      }
+      outdoorOverlayRef.current?.focusVenue();
       return;
     }
     focusMapVenue();
@@ -4553,13 +4558,8 @@ useEffect(() => {
                     openGenerationSheet({ scope: 'venue' });
                   }}
                 >
-                  <span className="sc-rail-capture-icon" aria-hidden="true">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
-                      <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
-                    </svg>
-                    <span className="sc-rail-3d-tag">3D</span>
-                  </span>
+                  <RailPlus size={28} active={captureOpen || generationOpen} aria-hidden="true" />
+                  <span className="sc-rail-3d-tag" aria-hidden="true">3D</span>
                   <span className="sc-rail-label" aria-hidden="true">场地</span>
                 </button>
                 <button
