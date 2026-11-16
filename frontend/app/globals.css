@@ -2114,11 +2114,11 @@ body.sc-panel-dragging * {
 /* 网页版口径：44px 小圆角方块、6px 间距、各自独立阴影、无外层白胶囊；
    罗盘为圆形，其余为 8px 圆角方块，缩放为 44×88 连体条。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps {
-  /* 桌面按 44/64 复刻；窗口压到约 1000px 时平滑收到 30/44，避免控件压住地图。 */
-  --oc-gm-control: clamp(30px, 3.06vw, 44px);
-  --oc-gm-compass: clamp(44px, 4.45vw, 64px);
-  --oc-gm-gap: clamp(3px, .42vw, 6px);
-  --oc-gm-icon: clamp(15px, 1.25vw, 18px);
+  /* 固定按 Google Maps 桌面口径复刻，不随窗口压缩缩回旧尺寸。 */
+  --oc-gm-control: 44px;
+  --oc-gm-compass: 64px;
+  --oc-gm-gap: 6px;
+  --oc-gm-icon: 18px;
   right: 20px; bottom: 20px; gap: var(--oc-gm-gap); padding: 0;
   width: var(--oc-gm-compass);
   background: transparent;
@@ -2183,9 +2183,9 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode { color: #5f6368; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text {
-  font-size: clamp(11px, .9vw, 13px); font-weight: 600; letter-spacing: .1px; line-height: 1;
+  font-size: 13px; font-weight: 600; letter-spacing: .1px; line-height: 1;
 }
-/* 图标随钮径一起收，避免 30px 钮里塞 20px 图标。 */
+/* 图标固定 18px，与 44px 控件保持 Google 口径比例。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round > svg,
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol {
   width: var(--oc-gm-icon); height: var(--oc-gm-icon);
