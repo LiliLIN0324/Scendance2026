@@ -91,7 +91,7 @@ scripts/probe-basemap-zoom.mjs
 ```text
 日期时间（中国标准时间）及运行 ID：2026-11-16 05:25，自动轮次 30
 批次 / 切片 / 状态：M5 / 刷新后恢复口径 / 已交付（固定数据 + hook 套件）
-开工 HEAD：a7c6bc38；收工 HEAD 见推送结果
+开工 HEAD：a7c6bc38；收工 HEAD：**47daf775**（已推，远端同；中途远端两次前进：7ddafd31 与 49af1360）
 先解决合并：远端进 1 笔 7ddafd31（show live work and ask before executing a plan），与脏文件零重叠，ff-only 成功
 复现的毛病（读代码 + 套件实跑）：
   · 旧 readState 一条铁律：字段不全就整份丢；早一点的草稿没有 brief.people，刷新后连分区物料一起丢
@@ -107,9 +107,16 @@ scripts/probe-basemap-zoom.mjs
   · 第一版把 callbacks 引用提到 useRef 声明之前，整套 react 套件 40 个全挂（TDZ）；改成首次 render 用入参 bridge
   · 第一版把“方案版本不同的 pendingBoundary”也丢了，把“刷新后重新预览”那条用例跑挂；改成保留并仍需确认
 未完成：双击确认/切活动/撤销的浏览器验收仍要登录态
+两次合并的处置（含用户在途文件）：
+  · 第一次 7ddafd31：与脏文件零重叠，ff-only 直成
+  · 第二次 49af1360：忘了带 push 先推不了，且它改了 `agent-panel.tsx/.css` 两个用户正在改的文件（工作树版本与 HEAD、origin 都不同）
+  · 做法：先把两个文件字节备份到 `.temp/r30-user-backup/`，`git stash push -- <两文件>`，`git merge --no-edit origin/main`（本地有本轮提交，所以不是 ff），`git stash pop` 回来
+  · 验：stash pop 干净无冲突标记，两文件仍为“用户 WIP + 上游改动”的叠加态（+11/−4），用户内容一行未丢
 ```
 
-- **先跑套件再交**：改恢复逻辑影响面大，先跑 hook 的 40 条，才发现自己把“未确认候选重出”弄没了。
+- **自己挖的错自己扫**：抱错 TDZ 时先信基线结论（“只有 sub-routes 一条失败”），一跑发现 40 条全挂，立刻回到自己改的 36 行里找。
+- **用户在改的文件不硬碰**：备份→stash→merge→pop→验标记，四步都留痕；宁可多写一行记录，也不赌“应该能自动合”。
+- **先把套件跑绿再交**：改恢复逻辑影响面大，先跑 hook 的 40 条，才发现自己把“未确认候选重出”弄没了。
 - **把自损写进记录**：两处自损（TDZ、边界被丢）都写清楚，后面接手的人不会以为是别人的回归。
 
 ### 2026-11-16 04:10 · 自动轮次 29 · 合并收口 + M5 幂等票号
