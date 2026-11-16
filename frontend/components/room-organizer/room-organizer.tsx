@@ -2732,6 +2732,13 @@ useEffect(() => {
       toggleOutdoorWalk(on);
       return;
     }
+    // 2026-11-16 修（用户反馈：点右侧黄色漫游钮整页白屏）：户外工作流开着、却没有可走的 3D 相机时，
+    // 以前会沉到下面的 startWalk()——mappedWorkspace 时转 tryMapVenue 打开室内漫游，
+    // 在户外布局上跑室内 PointerLock 链路，点一次就白屏、Esc 也退不回来。这里就地收口，只提示不改视图。
+    if (!scanIsolated && (outdoor2DOpen || outdoor3dTakeoverActive)) {
+      if (on) notify('先切到 3D 场地，再进第一人称漫游。', 'info');
+      return;
+    }
     if (on) { startWalk(); return; }
     exitWalkthrough();
   }
