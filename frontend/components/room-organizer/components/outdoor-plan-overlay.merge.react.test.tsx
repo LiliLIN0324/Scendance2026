@@ -87,7 +87,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-it("keeps the guide buttons usable and hides the guide when the user works outside it", () => {
+it("keeps outside guide actions working and exposes a clean map details panel", () => {
   render(<Overlay projectId="guide-outside-action" seedPlan={createStarterOutdoorPlan()} />);
   const begin = screen.getByRole("button", { name: "开始浏览" });
   fireEvent.pointerDown(begin);
@@ -108,15 +108,16 @@ it("keeps the guide buttons usable and hides the guide when the user works outsi
     outsideTool.remove();
   }
 
-  // 折叠卡本身直切街道/卫星；完整底图面板从悬停竖列的「展开」格进入。
-  const cycleBtn = screen.getByRole("button", { name: /^底图：/ });
-  fireEvent.mouseEnter(cycleBtn.parentElement!);
-  fireEvent.click(screen.getByRole("button", { name: "展开更多图层" }));
-  fireEvent.mouseLeave(cycleBtn.parentElement!);
-  fireEvent.click(screen.getByRole("button", { name: "重看首次开图引导" }));
-  expect(screen.getByRole("dialog", { name: /这是你的场地画布/ })).toBeTruthy();
-  fireEvent.wheel(screen.getByTestId("merge-canvas"));
-  expect(screen.queryByTestId("guide-bubble")).toBeNull();
+  // 悬停图层先出竖排快捷列表；点末尾「展开」才进完整「地图详情」。
+  const layerBtn = screen.getByTestId("outdoor-source-cycle");
+  fireEvent.mouseEnter(layerBtn.parentElement!);
+  expect(screen.getByTestId("outdoor-layer-strip")).toBeTruthy();
+  fireEvent.click(screen.getByTestId("map-strip-expand"));
+  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
+  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
+  expect(screen.queryByTestId("map-picker-restart-guide")).toBeNull();
+  fireEvent.click(screen.getByTestId("map-picker-close"));
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
   const plan = createStarterOutdoorPlan();
@@ -182,14 +183,19 @@ it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3
       onPlanChange={onPlan}
     />,
   );
-  // 折叠卡直切街道/卫星；其余图源从悬停竖列「展开」格进面板再选。
-  const cycleBtn = screen.getByRole("button", { name: /^底图：/ });
-  fireEvent.mouseEnter(cycleBtn.parentElement!);
-  fireEvent.click(screen.getByRole("button", { name: "展开更多图层" }));
-  fireEvent.mouseLeave(cycleBtn.parentElement!);
-  fireEvent.click(screen.getByText("Carto 深色"));
+  // 手机点图层入口也能展开快捷条；选图源只换底图，面板保持到用户点 X。
+  fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
+  fireEvent.click(screen.getByTestId("map-strip-expand"));
+  fireEvent.click(screen.getByTestId("map-source-carto-dark"));
   expect(state.canvas?.source).toBe("carto-dark");
   expect(readPlanGroundSource()).toBe("carto-dark");
+  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
+  // 点地图空白处不关；用户明确要求只走面板上的 X。
+  fireEvent.click(screen.getByTestId("merge-canvas"));
+  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
+  fireEvent.click(screen.getByTestId("map-picker-close"));
+  expect(screen.queryByTestId("outdoor-map-picker-panel")).toBeNull();
+  expect(screen.getByTestId("outdoor-source-cycle")).toBeTruthy();
   expect(JSON.stringify(state.bridge!.getPlan())).toBe(before);
   expect(state.three).toBeNull();
   expect(JSON.stringify(onPlan.mock.calls.at(-1)?.[0])).toBe(before);

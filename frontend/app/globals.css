@@ -1106,6 +1106,28 @@ body {
   grid-template-columns: var(--sc-nav-rail-width) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   background: var(--wk-canvas);
+  transition: grid-template-columns .26s cubic-bezier(.2, .8, .2, 1);
+}
+/* 干净看图：左轨 + 左栏一起收起，画布补满，带过渡。 */
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail > .sc-mode-rail,
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail > .sc-left-column {
+  transition: opacity .18s ease, transform .24s cubic-bezier(.2, .8, .2, 1), visibility 0s;
+}
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden > .sc-mode-rail,
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden > .sc-left-column {
+  opacity: 0;
+  transform: translateX(-14px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .24s cubic-bezier(.2, .8, .2, 1), visibility 0s .24s;
+}
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+@media (min-width: 1081px) {
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-chrome-hidden {
+    grid-template-columns: 0 0 minmax(0, 1fr);
+  }
 }
 @media (min-width: 1081px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
@@ -1798,6 +1820,43 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column [data-tip]:hover::after,
 .sc-workbench .sc-tool-column [data-tip]:focus-visible::after { opacity: 1; }
+/* 底部工具条是横向排列：提示必须放到钮上方，不能沿用右轨的左侧浮层，
+   否则会盖住旁边的撤销/重做等图标（用户实测反馈）。 */
+.sc-workbench .sc-tool-column .oc-dock [data-tip]::after {
+  right: auto; left: 50%; top: auto; bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  z-index: 80;
+}
+.sc-workbench .sc-tool-column .oc-dock [data-tip]:hover::after,
+.sc-workbench .sc-tool-column .oc-dock [data-tip]:focus-visible::after { opacity: 1; }
+/* 标注面板已弹出时不再冒提示，避免黑胶囊压住刚展开的面板。 */
+.sc-workbench .sc-tool-column #tool-annotate[aria-pressed="true"][data-tip]::after { display: none; }
+/* 标注面板是底条「标注」钮的上浮 popover：小尖角指向按钮，与右上属性卡分开。 */
+.sc-outdoor-toolcard--annotate::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  background: #fff;
+  border-right: 1px solid #e2e4e8;
+  border-bottom: 1px solid #e2e4e8;
+}
+.sc-outdoor-toolcard--annotate[data-anchored="above-tool"] {
+  animation: sc-annotate-pop .14s ease-out;
+}
+@keyframes sc-annotate-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@media (max-width: 760px) {
+  /* 窄屏首尾钮贴着视口边：提示向条内对齐，避免居中后越出屏幕。 */
+  .sc-workbench .sc-tool-column .oc-dock #tool-select[data-tip]::after { left: 0; right: auto; transform: none; }
+  .sc-workbench .sc-tool-column .oc-dock #tool-dock-close[data-tip]::after { left: auto; right: 0; transform: none; }
+  .sc-workbench .sc-tool-column .oc-dock [data-tip]::after { max-width: calc(100vw - 24px); }
+}
 .sc-workbench .sc-tool-column .sc-rail-2d {
   font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 11px;
   letter-spacing: .2px; color: inherit;
@@ -1822,7 +1881,9 @@ body.sc-panel-dragging * {
   background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: var(--r-md, 14px);
   box-shadow: var(--e1, 0 6px 18px rgba(20, 20, 22, .10)); pointer-events: auto; z-index: 35;
 }
-.oc-cluster.oc-tr { top: 20px; right: 20px; flex-direction: column; }
+/* 2026-11-16 用户截图反馈：分享钮比顶部搜索条低 6px。搜索条 40px 高、居中在 y=36，
+   分享钮 30px，簇顶同步上移到 14px，二者中心线对齐。 */
+.oc-cluster.oc-tr { top: 14px; right: 20px; flex-direction: column; }
 .oc-cluster.oc-br { bottom: 20px; right: 20px; flex-direction: column; }
 .oc-cluster.oc-bb { bottom: 20px; left: 50%; transform: translateX(-50%); flex-direction: row; max-width: calc(100vw - 150px); flex-wrap: wrap; justify-content: center; row-gap: 6px; }
 .oc-cluster.oc-bl { bottom: 4px; left: 51px; flex-direction: row; }
@@ -1832,13 +1893,125 @@ body.sc-panel-dragging * {
   .oc-cluster.oc-bb button { width: 30px; height: 30px; min-width: 30px; min-height: 30px; }
   .oc-cluster.oc-bb .oc-sep { height: 16px; }
 }
+/* ===== 左下「图层」入口 / 地图详情（Google Maps 范式） ===== */
+.oc-layer-entry {
+  position: relative; width: 64px; height: 64px; padding: 0;
+  border: 2px solid rgba(255, 255, 255, .94); border-radius: 12px;
+  overflow: hidden; background: #dfe8da; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(20, 20, 22, .22);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.oc-layer-entry:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(20, 20, 22, .26); }
+.oc-layer-entry:focus-visible { outline: 2px solid #4a7c59; outline-offset: 2px; }
+.oc-layer-entry__thumb { position: absolute; inset: 0; display: block; }
+.oc-layer-entry__caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 18px 4px 6px; color: #fff; font-size: 11px; font-weight: 600; line-height: 14px;
+  background: linear-gradient(180deg, rgba(20, 20, 22, 0) 0%, rgba(20, 20, 22, .72) 100%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35); white-space: nowrap;
+}
+.oc-layer-entry__caption .sc-material-symbol { color: #fff; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); }
+/* 悬停/点按图层后浮出的竖排快捷列表（恢复 2026-11-15 版：36px 缩略图 + 单行文字）。 */
+.oc-layer-strip {
+  position: absolute; left: calc(100% + 10px); bottom: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 8px;
+  border: 1px solid #e4e4e7; border-radius: 14px; background: #fff;
+  box-shadow: 0 8px 24px rgba(20, 20, 22, .14); white-space: nowrap;
+}
+.oc-layer-strip__row {
+  display: flex; flex-direction: row; align-items: center; gap: 8px; width: 116px;
+  padding: 0; border: 0; background: transparent; color: #3c4043;
+  font-family: inherit; font-size: 12px; line-height: 16px; text-align: left; cursor: pointer;
+}
+.oc-layer-strip__row:focus-visible { outline: 2px solid #4a7c59; outline-offset: 2px; border-radius: 8px; }
+.oc-layer-strip__thumb {
+  width: 36px; height: 36px; flex: none; box-sizing: border-box; overflow: hidden;
+  border: 2px solid #e4e4e7; border-radius: 8px; background: #f4f5f7;
+}
+.oc-layer-strip__row[aria-pressed="true"] .oc-layer-strip__thumb { border-color: #4a7c59; }
+.oc-layer-strip__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: .72; }
+.oc-layer-strip__row[aria-pressed="true"] .oc-layer-strip__label { color: #202124; font-weight: 600; opacity: 1; }
+.oc-layer-strip__row:hover .oc-layer-strip__label { color: #202124; opacity: 1; }
+.oc-layer-strip__thumb--expand {
+  display: grid; place-items: center; border: 2px dashed #d4d4d8; background: #f4f5f7;
+}
+.oc-layer-strip__grid { display: grid; grid-template-columns: repeat(2, 6px); gap: 4px; }
+.oc-layer-strip__grid i { width: 6px; height: 6px; border-radius: 2px; background: #a1a1aa; }
+.oc-map-details {
+  /* Google 地图「地图详情」的实测尺寸：268 宽、12 内边距、8 圆角、底部与图层钮齐平。 */
+  width: min(268px, calc(100vw - 48px));
+  /* 面板从图层钮往上长；限制在视口内，矮屏改为内部滚动，别把标题和 X 顶出屏幕。 */
+  max-height: min(560px, calc(100vh - 210px));
+  overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+  padding: 12px; border: 0; border-radius: 8px;
+  background: #fff; color: #202124;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, .3), 0 4px 8px 3px rgba(60, 64, 67, .15);
+  font-family: inherit;
+}
+.oc-map-details__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.oc-map-details__title { font-size: 14px; font-weight: 500; line-height: 20px; }
+.oc-map-details__close {
+  display: grid; place-items: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: #3c4043; cursor: pointer;
+}
+.oc-map-details__close:hover { background: #f1f3f4; }
+.oc-map-details__close:focus-visible { outline: 2px solid #4a7c59; outline-offset: 1px; }
+.oc-map-details__section + .oc-map-details__section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eceef0; }
+.oc-map-details__label { margin-bottom: 8px; color: #3c4043; font-size: 12px; font-weight: 500; line-height: 16px; }
+.oc-map-details__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 14px; }
+.oc-map-details__source {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0;
+  padding: 0; border: 0; background: transparent; color: #202124; cursor: pointer; font-family: inherit;
+}
+.oc-map-details__source:focus-visible { outline: 2px solid #4a7c59; outline-offset: 2px; border-radius: 8px; }
+.oc-map-details__thumb {
+  display: block; width: 44px; height: 44px; box-sizing: border-box;
+  border: 2px solid #dadce0; border-radius: 8px; overflow: hidden; background: #fff;
+  transition: border-color .12s ease;
+}
+.oc-map-details__source[aria-checked="true"] .oc-map-details__thumb { border-color: #4a7c59; }
+.oc-map-details__source:hover .oc-map-details__thumb { border-color: #9aa0a6; }
+.oc-map-details__source[aria-checked="true"]:hover .oc-map-details__thumb { border-color: #4a7c59; }
+.oc-map-details__name {
+  max-width: 100%; overflow: hidden; color: #3c4043; font-size: 12px; line-height: 16px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-map-details__source[aria-checked="true"] .oc-map-details__name { color: #202124; font-weight: 600; }
+.oc-map-details__thumb--paper {
+  background-color: #fff;
+  background-image: linear-gradient(#e4e4e7 1px, transparent 1px), linear-gradient(90deg, #e4e4e7 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+@media (max-width: 768px) {
+  /* 手机左下角还有一枚 48px「助理菜单」圆钮（bottom 约 110px）；图层钮上移 58px 让开它，
+     两块仍贴左缘，展开的地图详情也留出底部工具条。 */
+  .oc-layer-dock { --oc-layer-bottom: 78px; }
+  /* 手机上竖列改到图层钮上方，避开底部居中的「工具」把手。 */
+  .oc-layer-strip { left: 0; bottom: calc(100% + 10px); }
+  /* 手机上面板底部会压到居中的「工具」把手；打开地图详情时先收起它，X 关掉后自然回来。 */
+  .sc-canvas-stage:has([data-testid="outdoor-map-picker-panel"]) .oc-dock {
+    visibility: hidden; pointer-events: none;
+  }
+}
+@media (max-width: 480px) {
+  .oc-map-details__thumb { width: 40px; height: 40px; }
+}
+@media (max-width: 340px) {
+  .oc-map-details { width: min(268px, calc(100vw - 84px)); }
+}
+
 /* 干净看图模式：藏右上簇、底中条、左下图层卡与面板；右下簇只留眼睛复位钮。 */
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-tr,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-bb,
 .sc-canvas-stage.is-chrome-hidden #tool-outdoor-source,
 .sc-canvas-stage.is-chrome-hidden [data-testid="outdoor-map-picker-panel"] { display: none !important; }
+.sc-workspace.is-chrome-hidden .sc-plan-place-search { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br button:not(#tool-opacity) { display: none; }
-.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-zoom { display: none; }
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-zoom,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-zoom,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-divider { display: none !important; }
+.sc-canvas-stage.is-chrome-hidden .oc-dock { display: none !important; }
 .oc-cluster .oc-sep { width: 1px; height: 20px; background: var(--wk-hair); flex: none; }
 .oc-cluster .oc-share { display: inline-flex; align-items: center; }
 /* 簇内圆钮沿用右轨形制（34 白底气泡）。 */
@@ -1873,7 +2046,24 @@ body.sc-panel-dragging * {
 /* 2026-11-15 用户指令：右上簇钮与图标整体放大一档（34→38，图标 20→22）。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr button,
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button {
-  width: 38px; height: 38px; min-width: 38px; min-height: 38px;
+  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
+}
+/* 2026-11-16 用户反馈：分享钮本体比搜索钮显大。收到 30px，内层图标 15px，
+   与搜索图标同尺寸；桌面与窄屏都保持 30×30。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button#tool-share {
+  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
+  border-radius: 8px;
+}
+/* 窄屏的触控规则 `.sc-tool-menu > button` 会把分享钮的 flex-basis 拉到 44px，
+   宽度仍是 30，结果变成 30×44 的竖长块（用户截图的“放大”）。这里把包裹层、
+   sc-tool-menu 和按钮一起锁回 30×30，保持与搜索条同心。 */
+@media (max-width: 768px) {
+  .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share .sc-tool-menu,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share .sc-tool-menu > button#tool-share {
+    flex: 0 0 30px;
+    width: 30px; height: 30px; min-width: 30px; min-height: 30px;
+  }
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr button > svg,
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr button > span,
@@ -1908,10 +2098,189 @@ body.sc-panel-dragging * {
 /* 底中条贴底边：模式菜单向上弹出到钮正上方，水平居中，不向左侧飘。 */
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop {
   right: auto; left: 50%; transform: translateX(-50%);
-  top: auto; bottom: calc(100% + 8px); min-width: 104px;
+  top: auto; bottom: calc(100% + 8px); width: 112px; min-width: 112px;
 }
-.sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-canvas-tool-row { width: 100%; }
-.sc-workbench .sc-tool-pop {
+/* 三行固定同一套栅格：16 图标列 / 文字列 / 14 勾选列；
+   未选中也保留勾选槽，切换时菜单宽度和文字起点都不跳。 */
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-canvas-tool-row {
+  display: grid !important; grid-template-columns: 16px minmax(0, 1fr) 14px;
+  align-items: center; column-gap: 8px; width: 100%;
+}
+.sc-measure-row-label { text-align: left; }
+.sc-measure-check-slot { display: grid; place-items: center; width: 14px; height: 14px; justify-self: end; }
+.sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-tool-check { margin-left: 0; display: block; }
+
+/* ===== 2026-11-16 用户指令：Google Maps 桌面网页版控制列一比一复刻 ===== */
+/* 网页版口径：30px 小圆角方块、2px 间距、各自独立阴影、无外层白胶囊；
+   罗盘为圆形，其余为 8px 圆角方块，缩放为 30×62 连体条。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps {
+  right: 20px; bottom: 20px; gap: 3px; padding: 0;
+  width: 44px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
+  width: 29px; height: 29px; min-width: 29px; min-height: 29px; padding: 0;
+  border: 0; border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .30), 0 1px 4px rgba(60, 64, 67, .15);
+  color: #5f6368;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* 罗盘是圆钮，其余是圆角方块。罗盘单独放大到 44px：白底双色指针，
+   交互对齐 MapLibre：拖动旋转、点击回正北。
+   2026-11-16：两侧各叠一枚显式转向箭头，不再只靠指针左右落点分区。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap {
+  position: relative; width: 44px; height: 44px; flex: 0 0 44px;
+  margin-bottom: 2px;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn {
+  position: absolute; top: 4px; z-index: 2;
+  width: 18px; height: 33px; min-width: 18px; min-height: 33px; padding: 0;
+  border: 0; border-radius: 999px; background: transparent; box-shadow: none;
+  display: grid; place-items: center; cursor: pointer;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-left { left: 2px; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-right { right: 2px; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn:hover { background: transparent; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, .72); outline-offset: -2px;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass {
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  margin-bottom: 0; border-radius: 50%;
+  background: #202124; color: #f1f3f4;
+  box-shadow: 0 1px 3px rgba(20, 20, 22, .28), 0 2px 8px rgba(20, 20, 22, .18);
+  cursor: pointer; touch-action: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass.is-interactive { cursor: grab; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass.is-dragging { cursor: grabbing; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass .oc-gm-compass-canvas {
+  display: block; width: 44px; height: 44px;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass:hover {
+  background: #2b2c2f;
+  box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round:not(.oc-gm-compass):hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom:hover {
+  background: #f8f9fa; box-shadow: 0 1px 3px rgba(60, 64, 67, .34), 0 2px 6px rgba(60, 64, 67, .20);
+}
+/* 按下态不套品牌绿描边：网页版 3D 钮仍是中性底。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.is-active {
+  border: 0; background: #fff; color: #3c4043;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode { color: #5f6368; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text {
+  font-size: 11px; font-weight: 500; letter-spacing: .1px; line-height: 1;
+}
+/* 缩放连体条：+ / − 同背板，中间一条发丝线。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
+  height: 44px; min-height: 44px;
+  flex-direction: column; border-radius: 8px; overflow: hidden;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn {
+  width: 29px; height: 22px; min-width: 29px; min-height: 22px; padding: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #5f6368;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:first-child {
+  border-bottom: 1px solid rgba(60, 64, 67, .22);
+}
+/* 截图里的 +/− 笔画更实；Material Symbols 默认 wght 300 偏细，只在缩放条内加粗。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol {
+  font-weight: 400 !important;
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 20 !important;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:hover {
+  background: #f8f9fa; box-shadow: none;
+}
+/* 桌面网页版没有分隔线；这条 span 只留作间距占位。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-divider {
+  display: none;
+}
+/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 6px 间距，不冒充网页版控件。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
+  margin-top: 6px;
+  background: #e6f1f2; color: #5f6c70;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye:hover { background: #d9eaec; }
+/* 干净看图态：眼睛留成半透明玻璃片，既不抢地图，又明确可点回。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye.is-active {
+  background: rgba(255, 255, 255, .46);
+  border: 1px solid rgba(255, 255, 255, .58);
+  color: #5f6c70;
+  box-shadow: 0 1px 4px rgba(20, 20, 22, .10);
+  opacity: .68;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye.is-active:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye.is-active:focus-visible {
+  background: rgba(255, 255, 255, .64);
+  opacity: .9;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk { color: #fbbc04; }
+
+/* 我们自己的隐藏工具栏：贴底居中，收起后只剩一颗小把手。 */
+.sc-workbench .sc-tool-column .oc-dock {
+  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+  z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 0;
+  pointer-events: none;
+}
+/* 展开态：只保留工具这一行（图2）；关闭用点外部 / Esc，
+   不再加一条“工具”标题栏或另挂一颗收起胶囊。 */
+.sc-workbench .sc-tool-column .oc-dock.is-open {
+  align-items: center;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+.sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb {
+  animation: oc-dock-unfold .16s ease-out;
+}
+/* 末尾小 × 是明确关闭口；Esc 是快捷键，悬停提示里带出来。 */
+.sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close {
+  width: 26px; height: 26px; min-width: 26px; min-height: 26px;
+  margin-left: 1px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; box-shadow: none; color: #80868b;
+}
+.sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close:hover {
+  background: #f1f3f4; box-shadow: none; color: #3c4043;
+}
+@keyframes oc-dock-unfold {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+.sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb {
+  position: static; left: auto; right: auto; bottom: auto; transform: none;
+  max-width: min(92vw, 760px); padding: 5px 7px; gap: 6px;
+  background: rgba(255, 255, 255, .98);
+  border: 1px solid rgba(60, 64, 67, .10);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(60, 64, 67, .16);
+  flex-wrap: wrap; justify-content: center;
+}
+.sc-workbench .sc-tool-column .oc-dock-handle {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 5px;
+  height: 28px; padding: 0 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid rgba(60, 64, 67, .12);
+  box-shadow: 0 2px 8px rgba(60, 64, 67, .14);
+  color: #5f6368; font-size: 11px; font-weight: 500; letter-spacing: .02em;
+  cursor: pointer; transition: background .12s ease, box-shadow .12s ease;
+}
+.sc-workbench .sc-tool-column .oc-dock-handle:hover {
+  background: #fff; box-shadow: 0 3px 10px rgba(60, 64, 67, .20);
+}
+.sc-workbench .sc-tool-column .oc-dock-handle:focus-visible {
+  outline: 2px solid #4a7c59; outline-offset: 2px;
+}
+.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-dock-handle { opacity: .92; }
+@media (max-width: 760px) {
+  .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps { right: 12px; bottom: 14px; }
+  .sc-workbench .sc-tool-column .oc-dock { bottom: 14px; }
+}.sc-workbench .sc-tool-pop {
   position: absolute; right: calc(100% + 8px); top: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;
   padding: 4px; border-radius: var(--r-md); background: var(--wk-paper); border: 1px solid var(--wk-hair);
