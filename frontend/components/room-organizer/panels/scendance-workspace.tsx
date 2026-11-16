@@ -467,7 +467,6 @@ function CompassDial({ size = 44, rotationDeg = 0, showTurns = false }: { size?:
       className="oc-gm-compass-canvas"
       width={size * 4}
       height={size * 4}
-      style={{ width: size, height: size }}
       aria-hidden="true"
     />
   );
