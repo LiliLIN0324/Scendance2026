@@ -35,6 +35,15 @@ describe('assistant session bodies', () => {
   it('keeps its storage key off the layout draft', () => {
     expect(ASSISTANT_SESSION_BODIES_STORAGE_KEY).not.toBe(STORAGE_KEY);
   });
+  it('preserves reply card metadata for assistant questions only', () => {
+    const raw = JSON.stringify({ version: 1, byId: { session: [
+      { id: '1', role: 'agent', text: '预计多少人？', outdoorQuestion: true },
+      { id: '2', role: 'user', text: '200人', outdoorQuestion: true },
+    ] } });
+    const rows = readSessionBubbles(parseAssistantSessionBodies(raw)!, 'session');
+    expect(rows[0]?.outdoorQuestion).toBe(true);
+    expect(rows[1]?.outdoorQuestion).toBeUndefined();
+  });
 
   it('writes, reads, deletes, and prunes by session id', () => {
     let bodies = emptyAssistantSessionBodies();

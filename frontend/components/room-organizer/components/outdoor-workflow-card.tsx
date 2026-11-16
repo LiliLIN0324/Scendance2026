@@ -166,12 +166,13 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
   );
 }
 
-export function OutdoorThoughtRecord({ thought, awaiting = false, draft = "", steps = [], elapsedMs = null }: {
+export function OutdoorThoughtRecord({ thought, awaiting = false, draft = "", steps = [], elapsedMs = null, compact = false }: {
   thought: string | null;
   awaiting?: boolean;
   draft?: string;
   steps?: readonly string[];
   elapsedMs?: number | null;
+  compact?: boolean;
 }) {
   if (!thought && !awaiting) return null;
   const modelIndex = steps.indexOf(OUTDOOR_MODEL_INPUT_STEP) + 1;
@@ -183,9 +184,10 @@ export function OutdoorThoughtRecord({ thought, awaiting = false, draft = "", st
   );
   const stepRow = (step: string, index: number) => <li key={index} className="ap-run-thought-text">{step}</li>;
   return (
-    <details className="ap-run-thoughts" open aria-busy={awaiting || undefined}>
+    <details className="ap-run-thoughts" open={awaiting || !compact} aria-busy={awaiting || undefined}>
       <summary className="ap-run-thoughts-summary">
         {awaiting ? "思考中" : "思考记录 · 1 条"}
+        {compact && !awaiting && elapsedMs !== null && <span className="ap-run-thoughts-hint">思考了 {formatDurationClock(elapsedMs)}</span>}
       </summary>
       <ol className="ap-outdoor-thought-steps">
         {steps.slice(0, modelIndex).map(stepRow)}
@@ -200,8 +202,10 @@ export function OutdoorWorkflowCard({
   flow,
   onCancelPreview,
   onSearchPlace,
+  replyPending = false,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
+  replyPending?: boolean;
   /** 地图优先第一步：任务卡上直接给「搜索地点」入口，不用让人去画布左上角找。 */
   onSearchPlace?: (() => void) | undefined;
   /** 「下一句」建议芯片的预填回调：点芯片只填输入框，发送仍是用户按键确认。 */
@@ -243,6 +247,8 @@ export function OutdoorWorkflowCard({
     people: "people",
     "refine-3d": "refine-3d",
   };
+  const thoughtRecord = <OutdoorThoughtRecord thought={flow.thought} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} />;
+  if (replyPending && !flow.proposal && !flow.pendingPlan && !flow.loginRequired) return thoughtRecord;
   return (
     <>
     {/* 2026-11-14 用户指令：「前往登录」独立成一张卡，不再混在任务卡底部。 */}
@@ -261,7 +267,7 @@ export function OutdoorWorkflowCard({
       {flow.busy && (
         <div className="ap-task-progress" aria-hidden="true" />
       )}
-      <OutdoorThoughtRecord thought={flow.thought} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} />
+      {thoughtRecord}
       <StageThumb stage={flow.state.stage} />
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         <div className="ap-task-error" role="alert">
@@ -367,6 +373,8 @@ export function OutdoorWorkflowCard({
         >
           {flow.state.stage === "scope"
             ? "核对当前实际活动范围"
+            : flow.state.stage === "zones"
+              ? "生成分区预览"
             : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
         </button>
       ) : null}
@@ -554,7 +562,7 @@ export function OutdoorWorkflowCard({
           disabled={flow.busy}
           onClick={() => void flow.action("draw-zone")}
         >
-          依据图纸/实测，在同地图画真实分区
+          在地图上手画分区
         </button>
       )}
       {!flow.proposal && flow.state.stage === "main-routes" && (
