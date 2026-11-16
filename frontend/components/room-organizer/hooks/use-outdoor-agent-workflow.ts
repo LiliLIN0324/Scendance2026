@@ -23,6 +23,7 @@ import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
 import { downloadSessionReport } from "../lib/outdoor-report-download";
+import { assessAcceptance, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -1853,6 +1854,11 @@ export function useOutdoorAgentWorkflow(input: {
     sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
     /** 把会话报告存成本地 .txt（浏览器下载）；导不出只返回 ok:false，不抛。 */
     downloadReport: () => downloadSessionReport(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
+    /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
+    acceptanceCheck: () => {
+      const rows = assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }));
+      return { rows, totals: summarizeAssessment(rows) };
+    },
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
