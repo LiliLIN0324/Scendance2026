@@ -295,6 +295,69 @@ function zonePlacementCandidates(
   return grid;
 }
 
+/**
+ * 2026-11-17 正式站走查实测（死结 3）：需求里的分区名对不上画布上的分区时，整轮否掉会把用户永久卡死——
+ * 需求清单只能「按分区替换」、不能删区（协议里 count 最小是 1），所以画布上没有的分区
+ * （多半是上一轮留下的旧需求，或用户口误）永远清不掉，每一轮都报同一个错，物件阶段再也走不下去。
+ * 画布上的分区才是权威：对不上的需求跳过并如实报出，其余分区照常排布，不在这些分区猜位置。
+ */
+export type OutdoorZoneMismatchReason = "missing" | "duplicate";
+export interface OutdoorZoneMismatch<TNeed extends { zone: string }> {
+  need: TNeed;
+  /** missing=画布上没有这个分区；duplicate=画布上同名分区不止一个。 */
+  reason: OutdoorZoneMismatchReason;
+}
+
+/** 按画布分区给需求里的分区名定身：唯一命中才算对得上，其余都如实记为对不上。 */
+export function splitNeedsByZone<TNeed extends { zone: string }>(
+  plan: SitePlanData,
+  needs: readonly TNeed[],
+): {
+  matched: TNeed[];
+  mismatched: OutdoorZoneMismatch<TNeed>[];
+} {
+  const matched: TNeed[] = [];
+  const mismatched: OutdoorZoneMismatch<TNeed>[] = [];
+  for (const need of needs) {
+    const hits = plan.zones.filter((z) => z.id === need.zone || z.name === need.zone);
+    if (hits.length === 1) matched.push(need);
+    else
+      mismatched.push({
+        need,
+        reason: hits.length > 1 ? "duplicate" : "missing",
+      });
+  }
+  return { matched, mismatched };
+}
+
+/** 对不上分区的如实说明：写清是哪些分区、画布上真实有哪些分区，怎么补救；不替用户猜。 */
+export function describeZoneMismatch<TNeed extends { zone: string }>(
+  mismatched: readonly OutdoorZoneMismatch<TNeed>[],
+  plan: SitePlanData,
+  options?: { removed?: boolean; subject?: string },
+): string {
+  const names = [...new Set(mismatched.map((m) => m.need.zone))];
+  const duplicates = new Set(
+    mismatched.filter((m) => m.reason === "duplicate").map((m) => m.need.zone),
+  );
+  const why = names
+    .map((n) =>
+      duplicates.has(n)
+        ? `「${n}」在画布上有同名分区，分不清是哪一个`
+        : `「${n}」不在画布上`,
+    )
+    .join("、");
+  const zones = plan.zones.map((z) => z.name);
+  return [
+    `${why}，这 ${names.length} 条${options?.subject ?? "需求未摆放"}（没有在这些分区猜位置）`,
+    options?.removed ? "已从需求清单移除" : "",
+    zones.length ? `当前画布分区：${zones.join("、")}` : "当前画布还没有分区",
+    "要保留请先在画布上补出该分区，再重新说明清单",
+  ]
+    .filter(Boolean)
+    .join("；") + "。";
+}
+
 export async function proposeInventoryObjects(
   plan: SitePlanData,
   brief: OutdoorBrief,
@@ -307,7 +370,12 @@ export async function proposeInventoryObjects(
     onPhase?: ((phase: string) => void) | undefined;
     signal?: AbortSignal | undefined;
   },
-): Promise<{ plan: SitePlanData; used: OutdoorLibraryItem[] }> {
+): Promise<{
+  plan: SitePlanData;
+  used: OutdoorLibraryItem[];
+  /** 2026-11-17：需求分区对不上画布的那些条（跳过了，没有摆放）。 */
+  mismatched: OutdoorZoneMismatch<OutdoorBrief["items"][number]>[];
+}> {
   if (!brief.items.length)
     throw new Error(
       "各区需要哪些物件、各多少？例如“展览区6个展板、表演区1个舞台2只音响”。将先检索你的真实物料库，不自动生成。",
@@ -322,21 +390,19 @@ export async function proposeInventoryObjects(
   const indoorZoneBBoxes = indoorZones.map(zone => ({ zone, bbox: bboxLoose(zone.polygon) }));
   let next = { ...plan, facilities: [...plan.facilities] };
   const used: OutdoorLibraryItem[] = [];
-  for (const need of brief.items) {
+  // 2026-11-17 死结 3：需求分区对不上画布的先分出来——对不上的跳过（并如实报出），
+  // 其余分区照常排布；一条都对不上时仍然报错（没有可排的东西，不能出空提案）。
+  const { matched: matchedNeeds, mismatched } = splitNeedsByZone(plan, brief.items);
+  if (mismatched.length && !matchedNeeds.length)
+    throw new Error(describeZoneMismatch(mismatched, plan));
+  for (const need of matchedNeeds) {
     // 2026-11-14 用户指令「进度条要显示在干嘛」：每区让出主线程一帧，让状态文字与进度条真实刷新。
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (options?.signal?.aborted)
       throw new Error("已取消本次物件排布。");
-    const matchesZones = plan.zones.filter(
+    const zone = plan.zones.find(
       (z) => z.id === need.zone || z.name === need.zone,
-    );
-    if (matchesZones.length > 1)
-      throw new Error("分区名称重复，请引用唯一真实分区，不自动猜第一个。");
-    const zone = matchesZones[0];
-    if (!zone)
-      throw new Error(
-        `“${need.zone}”没有唯一对应分区，请选中并说明分区；未摆放物件。`,
-      );
+    )!;
     let matches = library.filter(
       (item) =>
         // 2026-11-14 用户指令「按主题排物件」：内置 OnePlan 物件库（source='built-in'）与个人库同权参与。
@@ -441,7 +507,7 @@ export async function proposeInventoryObjects(
     }
   }
   validateWorkflowDemand(next, brief);
-  return { plan: next, used };
+  return { plan: next, used, mismatched };
 }
 export function reachablePedestrianRoutes(
   plan: SitePlanData,
@@ -527,14 +593,14 @@ export function proposeRoleWorkers(
       "服务、保安、工作人员、表演人员分别多少、负责哪个区？我会按岗位和已确认进出路径安排，不随机撒人。",
     );
   const workers: PlanWorker[] = [...plan.workers];
-  for (const need of brief.people) {
-    const matchesZones = plan.zones.filter(
+  // 2026-11-17 死结 3：岗位分区对不上画布的同样跳过并如实报出（物件侧的同一处死结）。
+  const { matched: matchedPeople, mismatched } = splitNeedsByZone(plan, brief.people);
+  if (mismatched.length && !matchedPeople.length)
+    throw new Error(describeZoneMismatch(mismatched, plan, { subject: "岗位未安排" }));
+  for (const need of matchedPeople) {
+    const zone = plan.zones.find(
       (z) => z.id === need.zone || z.name === need.zone,
-    );
-    if (matchesZones.length > 1)
-      throw new Error("分区名称重复，请引用唯一真实分区，不自动猜第一个。");
-    const zone = matchesZones[0];
-    if (!zone) throw new Error(`请明确“${need.role}”负责的真实区域。`);
+    )!;
     const access = personnelAccess(plan, need.audience);
     const eligible = access.routes.filter((r) =>
       r.points.some(

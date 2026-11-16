@@ -6,6 +6,7 @@ import {
   proposeRoleWorkers,
   validateWorkflowPlan,
   validateWorkflowDemand,
+  describeZoneMismatch,
   clearForObject,
 } from "./outdoor-agent-planning";
 import { sitePlanDataSchema } from "../../../../supabase/functions/_shared/site-plan";
@@ -557,4 +558,149 @@ it("有向入场与独立出口闭环可安排岗位，保存关联真实进出�
     new Set([incoming.id, outgoing.id]),
   );
   expect(next.workers[0]!.position).toEqual({ x: 50, y: 10 });
+});
+
+// 2026-11-17 正式站走查实测（死结 3）：需求里的分区名对不上画布上的分区时，
+// 旧行为是整轮否掉（“没有唯一对应分区…未摆放物件”）。但需求清单只能按分区替换、
+// 不能删区（协议 count 最小为 1），画布上没有的分区永远清不掉 → 物件阶段被永久卡死。
+// 新行为：画布上的分区是权威，对不上的需求跳过并如实报出，其余分区照常排布。
+describe("需求分区对不上画布时不再整轮卡死", () => {
+  const smallBoard = {
+    id: "real-board",
+    name: "展板",
+    source: "personal" as const,
+    width: 2,
+    depth: 1,
+    height: 2,
+    modelSlug: "generated:real",
+    available: true,
+  };
+  const oneZonePlan = () =>
+    proposeUseZones(base(), { ...brief, zones: [brief.zones[0]!] });
+
+  it("对不上的那条跳过，其余分区照常排布，并如实报出对不上的分区", async () => {
+    const plan = oneZonePlan();
+    const out = await proposeInventoryObjects(
+      plan,
+      {
+        ...brief,
+        items: [
+          { zone: "展览区", query: "展板", count: 1, evidence: "展览区放1个展板" },
+          { zone: "餐饮区", query: "桌子", count: 4, evidence: "餐饮区放4张桌子" },
+        ],
+      },
+      [smallBoard],
+    );
+    expect(out.plan.facilities).toHaveLength(1);
+    expect(out.mismatched).toHaveLength(1);
+    expect(out.mismatched[0]!.need.zone).toBe("餐饮区");
+    expect(out.mismatched[0]!.reason).toBe("missing");
+  });
+
+  it("跳过的分区要写清画布上真实有哪些分区，不替用户猜位置", async () => {
+    const plan = oneZonePlan();
+    const out = await proposeInventoryObjects(
+      plan,
+      {
+        ...brief,
+        items: [
+          { zone: "展览区", query: "展板", count: 1, evidence: "展览区放1个展板" },
+          { zone: "餐饮区", query: "桌子", count: 4, evidence: "餐饮区放4张桌子" },
+        ],
+      },
+      [smallBoard],
+    );
+    const notice = describeZoneMismatch(out.mismatched, plan);
+    expect(notice).toContain("餐饮区");
+    expect(notice).toContain("展览区");
+    expect(notice).toContain("没有在这些分区猜位置");
+  });
+
+  it("全部需求都对不上时仍然报错（没有可排的东西不能出空提案）", async () => {
+    const plan = oneZonePlan();
+    await expect(
+      proposeInventoryObjects(
+        plan,
+        {
+          ...brief,
+          items: [
+            { zone: "餐饮区", query: "桌子", count: 4, evidence: "餐饮区放4张桌子" },
+          ],
+        },
+        [smallBoard],
+      ),
+    ).rejects.toThrow(/餐饮区/);
+  });
+
+  it("画布上同名分区分不清时也不整轮否掉，如实报出", async () => {
+    const plan = oneZonePlan();
+    const serviceA = {
+      id: crypto.randomUUID(),
+      name: "餐饮区",
+      semantic: "reserved" as const,
+      purpose: "service" as const,
+      environment: "outdoor" as const,
+      polygon: square(10, 10),
+      notes: "",
+    };
+    const serviceB = { ...serviceA, id: crypto.randomUUID(), polygon: square(20, 20) };
+    const out = await proposeInventoryObjects(
+      { ...plan, zones: [...plan.zones, serviceA, serviceB] },
+      {
+        ...brief,
+        items: [
+          { zone: "展览区", query: "展板", count: 1, evidence: "展览区放1个展板" },
+          { zone: "餐饮区", query: "展板", count: 1, evidence: "餐饮区放1个展板" },
+        ],
+      },
+      [smallBoard],
+    );
+    expect(out.mismatched).toHaveLength(1);
+    expect(out.mismatched[0]!.need.zone).toBe("餐饮区");
+    expect(out.mismatched[0]!.reason).toBe("duplicate");
+    expect(out.plan.facilities).toHaveLength(1);
+  });
+
+  it("岗位分区对不上时同样跳过，不整轮否掉", () => {
+    const p = roleFixture();
+    const next = proposeRoleWorkers(p, {
+      ...brief,
+      people: [
+        {
+          role: "保安",
+          zone: "展览区",
+          count: 2,
+          audience: "security",
+          evidence: "2保安",
+        },
+        {
+          role: "服务人员",
+          zone: "餐饮区",
+          count: 1,
+          audience: "service",
+          evidence: "1服务人员",
+        },
+      ],
+    });
+    expect(next.workers).toHaveLength(1);
+    expect(next.workers[0]!.role).toBe("保安");
+  });
+
+  it("岗位全部对不上时仍然报错，并写清画布上真实分区", () => {
+    const p = roleFixture();
+    expect(() =>
+      proposeRoleWorkers(p, {
+        ...brief,
+        people: [
+          {
+            role: "服务人员",
+            zone: "餐饮区",
+            count: 1,
+            audience: "service",
+            evidence: "1服务人员",
+          },
+        ],
+      }),
+    ).toThrow(/餐饮区/);
+  });
 });
