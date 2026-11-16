@@ -2672,7 +2672,9 @@ useEffect(() => {
     setGameMode(mode => (mode === 'live' ? 'build' : mode));
   }, [setView, setGameMode]);
   function toggleOutdoorWalk(on: boolean) {
-    if (!on || outdoorWalkChooserOpen) {
+    // 漫游是显式开关：只要已经在走或角色选择框开着，再按一次就收口——
+    // 不依赖按钮闭包里的 outdoorWalkOn，避免状态晚一帧时又弹一次角色框。
+    if (outdoorWalkActive || outdoorWalkChooserOpen || !on) {
       setOutdoorWalkChooserOpen(false);
       setOutdoorWalkActive(false);
       return;
@@ -4484,7 +4486,7 @@ useEffect(() => {
         onOpenLux3d: openAholoWorkflow,
         luxToolsVisible: luxDirectVisible,
       }}>
-      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive || outdoorWalkActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
+      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive || outdoorWalkActive ? ' is-walkthrough' : ''}${outdoorWalkActive ? ' is-outdoor-walk' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
           <span

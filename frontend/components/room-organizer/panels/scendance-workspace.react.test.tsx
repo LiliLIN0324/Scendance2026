@@ -762,4 +762,16 @@ describe('ScendanceViewTools 户外漫游入口', () => {
     fireEvent.click(screen.getByRole('button', { name: '退出漫游' }));
     expect(toggleWalk).toHaveBeenCalledWith(false);
   });
+
+  it('漫游钮套用与其余地图控件相同的 44px 圆钮类，激活时保持黄人图标', () => {
+    const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true, walkActive: true });
+    const button = screen.getByRole('button', { name: '退出漫游' });
+    expect(button.className).toContain('oc-gm-round');
+    expect(button.className).toContain('oc-gm-walk');
+    expect(button.className).toContain('is-walk');
+    expect(button.className).toContain('is-active');
+    expect(button.getAttribute('data-tip')).toBe('退出漫游');
+    fireEvent.click(button);
+    expect(toggleWalk).toHaveBeenCalledWith(false);
+  });
 });

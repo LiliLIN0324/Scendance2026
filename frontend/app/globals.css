@@ -2111,11 +2111,16 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-tool-check { margin-left: 0; display: block; }
 
 /* ===== 2026-11-16 用户指令：Google Maps 桌面网页版控制列一比一复刻 ===== */
-/* 网页版口径：30px 小圆角方块、2px 间距、各自独立阴影、无外层白胶囊；
-   罗盘为圆形，其余为 8px 圆角方块，缩放为 30×62 连体条。 */
+/* 网页版口径：44px 小圆角方块、6px 间距、各自独立阴影、无外层白胶囊；
+   罗盘为圆形，其余为 8px 圆角方块，缩放为 44×88 连体条。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps {
-  right: 20px; bottom: 20px; gap: 3px; padding: 0;
-  width: 44px;
+  /* 桌面按 44/64 复刻；窗口压到约 1000px 时平滑收到 30/44，避免控件压住地图。 */
+  --oc-gm-control: clamp(30px, 3.06vw, 44px);
+  --oc-gm-compass: clamp(44px, 4.45vw, 64px);
+  --oc-gm-gap: clamp(3px, .42vw, 6px);
+  --oc-gm-icon: clamp(15px, 1.25vw, 18px);
+  right: 20px; bottom: 20px; gap: var(--oc-gm-gap); padding: 0;
+  width: var(--oc-gm-compass);
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -2123,34 +2128,37 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round,
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
-  width: 29px; height: 29px; min-width: 29px; min-height: 29px; padding: 0;
+  width: var(--oc-gm-control); height: var(--oc-gm-control);
+  min-width: var(--oc-gm-control); min-height: var(--oc-gm-control); padding: 0;
   border: 0; border-radius: 8px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(60, 64, 67, .30), 0 1px 4px rgba(60, 64, 67, .15);
   color: #5f6368;
   display: inline-flex; align-items: center; justify-content: center;
 }
-/* 罗盘是圆钮，其余是圆角方块。罗盘单独放大到 44px：白底双色指针，
+/* 罗盘是圆钮，其余是圆角方块。罗盘单独放大到 64px：白底双色指针，
    交互对齐 MapLibre：拖动旋转、点击回正北。
    2026-11-16：两侧各叠一枚显式转向箭头，不再只靠指针左右落点分区。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap {
-  position: relative; width: 44px; height: 44px; flex: 0 0 44px;
-  margin-bottom: 2px;
+  position: relative; width: var(--oc-gm-compass); height: var(--oc-gm-compass);
+  flex: 0 0 var(--oc-gm-compass); margin-bottom: 0;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn {
-  position: absolute; top: 4px; z-index: 2;
-  width: 18px; height: 33px; min-width: 18px; min-height: 33px; padding: 0;
+  position: absolute; top: 8px; z-index: 2;
+  width: calc(var(--oc-gm-control) * .55); height: calc(var(--oc-gm-control) * 1.1);
+  min-width: calc(var(--oc-gm-control) * .55); min-height: calc(var(--oc-gm-control) * 1.1); padding: 0;
   border: 0; border-radius: 999px; background: transparent; box-shadow: none;
   display: grid; place-items: center; cursor: pointer;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-left { left: 2px; }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-right { right: 2px; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-left { left: 4px; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-right { right: 4px; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn:hover { background: transparent; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn:focus-visible {
   outline: 2px solid rgba(255, 255, 255, .72); outline-offset: -2px;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass {
-  width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  width: var(--oc-gm-compass); height: var(--oc-gm-compass);
+  min-width: var(--oc-gm-compass); min-height: var(--oc-gm-compass);
   margin-bottom: 0; border-radius: 50%;
   background: #202124; color: #f1f3f4;
   box-shadow: 0 1px 3px rgba(20, 20, 22, .28), 0 2px 8px rgba(20, 20, 22, .18);
@@ -2159,7 +2167,7 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass.is-interactive { cursor: grab; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass.is-dragging { cursor: grabbing; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass .oc-gm-compass-canvas {
-  display: block; width: 44px; height: 44px;
+  display: block; width: var(--oc-gm-compass); height: var(--oc-gm-compass);
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass:hover {
   background: #2b2c2f;
@@ -2175,15 +2183,28 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode { color: #5f6368; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text {
-  font-size: 11px; font-weight: 500; letter-spacing: .1px; line-height: 1;
+  font-size: clamp(11px, .9vw, 13px); font-weight: 600; letter-spacing: .1px; line-height: 1;
+}
+/* 图标随钮径一起收，避免 30px 钮里塞 20px 图标。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round > svg,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol {
+  width: var(--oc-gm-icon); height: var(--oc-gm-icon);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye > .sc-material-symbol {
+  font-size: var(--oc-gm-icon) !important;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye > .sc-material-symbol {
+  width: var(--oc-gm-icon); height: var(--oc-gm-icon);
 }
 /* 缩放连体条：+ / − 同背板，中间一条发丝线。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
-  height: 44px; min-height: 44px;
+  height: calc(var(--oc-gm-control) * 2); min-height: calc(var(--oc-gm-control) * 2);
   flex-direction: column; border-radius: 8px; overflow: hidden;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn {
-  width: 29px; height: 22px; min-width: 29px; min-height: 22px; padding: 0;
+  width: var(--oc-gm-control); height: var(--oc-gm-control);
+  min-width: var(--oc-gm-control); min-height: var(--oc-gm-control); padding: 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #5f6368;
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -2202,9 +2223,9 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-divider {
   display: none;
 }
-/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 6px 间距，不冒充网页版控件。 */
+/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 4px 间距，不冒充网页版控件。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
-  margin-top: 6px;
+  margin-top: 4px;
   background: #e6f1f2; color: #5f6c70;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye:hover { background: #d9eaec; }
@@ -2221,7 +2242,19 @@ body.sc-panel-dragging * {
   background: rgba(255, 255, 255, .64);
   opacity: .9;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk { color: #fbbc04; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk {
+  border-radius: 50%; color: #fbbc04;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk.is-active { color: #fbbc04; }
+/* 户外第一人称漫游时只留这颗漫游钮：再点一次即退出，不让整条控制列挡住走查。 */
+.sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools { display: block !important; }
+.sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-tr,
+.sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-bb,
+.sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-bl,
+.sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-dock,
+.sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-br > *:not(#tool-walk) {
+  display: none !important;
+}
 
 /* 我们自己的隐藏工具栏：贴底居中，收起后只剩一颗小把手。 */
 .sc-workbench .sc-tool-column .oc-dock {
