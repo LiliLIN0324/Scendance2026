@@ -285,7 +285,9 @@ begin
     return scene_private.agent_view(r)||'{"accepted":true}'::jsonb;
   elsif p_action='take_notes' then
     result:=public.agent_rpc_scene_unguarded_internal(p_actor,p_action,p_data);
-    return result||jsonb_build_object('steerTotal',r.steer_total);
+    -- 重读一次：加锁前的 r 可能已被并发 note 推进，回旧值会让前端少报送达数。
+    select steer_total into expected from scene_private.agent_runs where id=r.id;
+    return result||jsonb_build_object('steerTotal',coalesce(expected,r.steer_total));
   elsif p_action in ('checkpoint','finish') then
     select * into r from scene_private.agent_runs where id=r.id for update;
     begin expected:=(p_data->>'steerTotal')::integer;
