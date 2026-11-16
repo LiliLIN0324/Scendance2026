@@ -15,8 +15,8 @@ import {
   type WalkViewMode,
 } from '../lib/walk-view-modes';
 
-/** 鸟瞰档 WASD 平移速度（米/秒）；比步行快，等同拖地图。 */
-const ORBIT_PAN_SPEED_MPS = 9;
+/** 鸟瞰档里 WASD 推人的速度（米/秒）；鸟瞰看的是全局，给得比步行快一点。 */
+const ORBIT_MOVE_SPEED_MPS = 3.2;
 
 /** 每帧透出的玩家锚点姿态，供户外组件摆占位 avatar 与跟随相机。 */
 export interface OutdoorWalkFrame {
@@ -372,41 +372,54 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         // 帧照常透出（avatar 按 thirdPerson=false 隐藏；近邻 E 提示由场景层在鸟瞰档跳过）。
         if (rig.orbitCamera) {
           if (controls?.isLocked) controls.unlock();
-          moving = false;
-          // 鸟瞰档：WASD / 方向键平移机位（等同拖地图），俯仰与距离仍交给 OrbitControls。
-          let panX = 0;
-          let panZ = 0;
-          if (pressed.has('KeyW') || pressed.has('ArrowUp')) panZ -= 1;
-          if (pressed.has('KeyS') || pressed.has('ArrowDown')) panZ += 1;
-          if (pressed.has('KeyA') || pressed.has('ArrowLeft')) panX -= 1;
-          if (pressed.has('KeyD') || pressed.has('ArrowRight')) panX += 1;
-          if ((panX !== 0 || panZ !== 0) && controls) {
-            const sprintPan = pressed.has('ShiftLeft') || pressed.has('ShiftRight');
-            const step = ORBIT_PAN_SPEED_MPS * (sprintPan ? 2.4 : 1) * delta;
+          // 鸟瞰档：WASD 推的是「接管中的人」，机位保持俯视整体跟着人平移。
+          const sprintAerial = pressed.has('ShiftLeft') || pressed.has('ShiftRight');
+          const aerialSpeed = ORBIT_MOVE_SPEED_MPS * (sprintAerial ? 2 : 1);
+          let adz = 0;
+          let adx = 0;
+          if (pressed.has('KeyW') || pressed.has('ArrowUp')) adz -= 1;
+          if (pressed.has('KeyS') || pressed.has('ArrowDown')) adz += 1;
+          if (pressed.has('KeyA') || pressed.has('ArrowLeft')) adx -= 1;
+          if (pressed.has('KeyD') || pressed.has('ArrowRight')) adx += 1;
+          const prevX = player.x;
+          const prevZ = player.z;
+          if (adx !== 0 || adz !== 0) {
             camera.getWorldDirection(cameraForward);
             forward.set(cameraForward.x, 0, cameraForward.z);
             if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
             forward.normalize();
             right.crossVectors(forward, camera.up).normalize();
-            const moveX = -forward.x * panZ * step + right.x * panX * step;
-            const moveZ = -forward.z * panZ * step + right.z * panX * step;
-            camera.position.x += moveX;
-            camera.position.z += moveZ;
-            // 环绕中心一起平移，否则左键环绕仍绕原地点转。
-            const orbit = orbitRef.current;
-            if (orbit) {
-              orbit.target.x += moveX;
-              orbit.target.z += moveZ;
-              orbit.update();
-            }
+            const len = Math.hypot(adx, adz) || 1;
+            const distance = (aerialSpeed * delta) / len;
+            stepTo.x = player.x + (-adz * forward.x + adx * right.x) * distance;
+            stepTo.z = player.z + (-adz * forward.z + adx * right.z) * distance;
+            // 与步行同一套边界约束，鸟瞰里也不能把人推出场地。
+            const clamped = enteredBounds ? constrainWorldToBoundary(player, stepTo, boundaryRef.current) : stepTo;
+            player.x = clamped.x;
+            player.z = clamped.z;
+            if (!enteredBounds) enteredBounds = pointInBoundaryRing(worldToEnu(player.x, player.z), boundaryRef.current);
           }
+          const movedX = player.x - prevX;
+          const movedZ = player.z - prevZ;
+          const orbitMoving = Math.hypot(movedX, movedZ) > 0.0001;
+          if (orbitMoving) yaw = Math.atan2(movedX, movedZ);
+          // 机位保持原有高空偏移，按人的位移整体平移（环绕中心跟着人）。
+          camera.position.x += movedX;
+          camera.position.z += movedZ;
+          const orbit = orbitRef.current;
+          if (orbit) {
+            orbit.target.x += movedX;
+            orbit.target.z += movedZ;
+            orbit.update();
+          }
+          moving = orbitMoving;
           onWalkFrameRef.current?.({
             x: player.x,
             y: player.y,
             z: player.z,
             yaw,
-            moving: false,
-            thirdPerson: false,
+            moving: orbitMoving,
+            thirdPerson: rig.thirdPerson,
             delta,
           });
           return;

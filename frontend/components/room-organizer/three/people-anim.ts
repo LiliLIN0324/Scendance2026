@@ -88,6 +88,11 @@ export function setPeopleShadowRefresher(fn: (() => void) | null): void {
  */
 function alignSeatedGroup(entry: PersonAnimEntry): void {
   if (entry.seatHeight === null) return;
+  // 闸一：等坐姿真正生效再量。落座头几帧还在从站立交叉淡入，那时髋关节是站立高度，
+  // 拿它反算会算出负抬升，人直接陷入地面。
+  if (entry.currentAction !== 'sit') return;
+  const action = entry.playingAction;
+  if (!action || action.getEffectiveWeight() < 0.9 || action.time < 0.15) return;
   entry.group.updateMatrixWorld(true);
   if (entry.sitLift === null) {
     let hips: ThreeNS.Object3D | null = null;
@@ -97,7 +102,10 @@ function alignSeatedGroup(entry: PersonAnimEntry): void {
     if (!hips) return;
     const hipsWorldY = (hips as ThreeNS.Object3D).matrixWorld.elements[13] ?? 0;
     const groupWorldY = entry.group.matrixWorld.elements[13] ?? 0;
-    entry.sitLift = entry.seatHeight - (hipsWorldY - groupWorldY);
+    const hipsRelY = hipsWorldY - groupWorldY;
+    // 闸二：坐姿髋高应明显低于站立（站姿约 0.9 m），量出来不像坐着就不采用。
+    if (!(hipsRelY > -1.2 && hipsRelY < 0.45)) return;
+    entry.sitLift = entry.seatHeight - hipsRelY;
   }
   entry.group.position.y = entry.baseY + entry.sitLift;
 }

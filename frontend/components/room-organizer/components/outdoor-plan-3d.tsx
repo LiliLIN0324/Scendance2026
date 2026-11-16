@@ -2255,7 +2255,7 @@ export default function OutdoorPlan3D({
           }}
         >
           {controlledActorRef.current && <span>接管中 · {controlledActorRef.current.actor.label}</span>}
-          <span>{viewMode === 'orbit' ? 'WASD 平移 · 左键环绕 · 滚轮缩放 · Esc 退出漫游' : 'WASD / 方向键行走 · Shift 加速 · Esc 退出漫游'}</span>
+          <span>{viewMode === 'orbit' ? 'WASD 移动角色 · 左键环绕 · 滚轮缩放 · Esc 退出漫游' : 'WASD / 方向键行走 · Shift 加速 · Esc 退出漫游'}</span>
           {viewMode !== 'orbit' && (walkPhase === 'drag' || walkPhase === 'unlocked') && <span>拖动鼠标转头</span>}
           {onCycleView && (
             <button
