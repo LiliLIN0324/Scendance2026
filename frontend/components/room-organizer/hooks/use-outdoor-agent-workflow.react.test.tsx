@@ -238,6 +238,17 @@ it("模型提出分区计划后，批准计划才生成预览，再确认才写�
   await action("confirm");
   expect(plan.zones.map(zone => zone.name)).toEqual(["展览区"]);
 });
+it("在地图上手画分区按钮直接进入绘制模式", async () => {
+  await confirmScope();
+  const beginDrawing = vi.fn(() => true);
+  bridge.beginDrawing = beginDrawing;
+  const buttons = [...host.querySelectorAll("button")];
+  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(true);
+  const draw = buttons.find(button => button.textContent?.trim() === "在地图上手画分区");
+  await act(async () => { draw!.click(); });
+  expect(beginDrawing).toHaveBeenCalledWith("zone");
+  expect(flow.notice).toContain("请在地图上画出分区轮廓并闭合");
+});
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();
   apply.mockClear();
