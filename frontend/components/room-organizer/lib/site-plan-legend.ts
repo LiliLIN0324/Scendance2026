@@ -22,8 +22,6 @@ import {
   planRouteLengthM,
   planZoneSemantics,
   planZoneSemanticLabels,
-  planMeasurementKinds,
-  planMeasurementKindLabels,
   routeCarrier,
   type PlanPoint,
   type PlanRoute,
@@ -43,7 +41,7 @@ import {
   zoneSticker,
   type OneplanStickerDescriptor,
 } from './oneplan-stickers';
-import { formatAreaM2, formatLengthM, measureValue } from './site-plan-measure';
+import { formatAreaM2, formatLengthM, measureKindLabel, measureValue } from './site-plan-measure';
 
 /**
  * 车辆缺模型时的统一文案（2026-11-16 #122）：图例/清单/CSV/GeoJSON/PNG/PDF 六处
@@ -289,16 +287,17 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     });
   }
 
-  // 8) 测量：按三类聚合，distance/path 汇总长度、area 汇总面积。
+  // 8) 测量：距离（含多段折线，历史 kind='path' 同口径）汇总长度、面积汇总面积；
+  // 2026-11-17 路径入口下线后，折线一律读作距离，不再单出「路径」一栏。
   const measureEntries: PlanLegendEntry[] = [];
-  for (const kind of planMeasurementKinds) {
-    const measurements = (plan.measurements ?? []).filter(m => m.kind === kind);
+  for (const kind of ['distance', 'area'] as const) {
+    const measurements = (plan.measurements ?? []).filter(m => (kind === 'area' ? m.kind === 'area' : m.kind !== 'area'));
     if (measurements.length === 0) continue;
     const total = measurements.reduce((sum, m) => sum + measureValue(m), 0);
     measureEntries.push({
       icon: iconOf('ruler'),
       swatch: PLANNING_LAYER_COLORS.measure,
-      label: planMeasurementKindLabels[kind],
+      label: measureKindLabel(kind),
       count: measurements.length,
       detail: `共 ${kind === 'area' ? formatAreaM2(total) : formatLengthM(total)}`,
     });
