@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { database, owner, editor, outsider, studio, session, scene, chair } from './fixtures.ts';
 import { createApi } from '../supabase/functions/_shared/api.ts';
 import { agentDispatchRunSchema, agentRunRequestSchema, agentRunSchema } from '../supabase/functions/_shared/agent-contract.ts';
+import { agentFingerprint } from '../supabase/functions/_shared/agent-fingerprint.ts';
 import { activityTaskRunSchema } from '../supabase/functions/_shared/activity-task-contract.ts';
 import { ApiError, canonical, sceneHash, sha256 } from '../supabase/functions/_shared/domain.ts';
 import type { Rpc } from '../supabase/functions/_shared/backend.ts';
@@ -398,13 +399,14 @@ describe('bounded read-only activity task runs', () => {
     expect(await f.backend.agent!(owner, 'get', active)).toEqual(finished);
     expect(await snapshot(i.projectId)).toEqual(before);
   });
-  it('replays an original no-kind Scene run using its original normalized fingerprint and response', async () => {
+  it('replays an original no-kind Scene run from its stored business-input fingerprint', async () => {
     const i = await input();
     const oldBody = { requestId: crypto.randomUUID(), sessionId: session, generation: i.generation, expectedRevision: 0,
       localRevision: 0, scene: scene(), selectedIds: [], instruction: '先预览旧 Scene 方案' };
     const normalized = agentRunRequestSchema.parse(oldBody);
+    // Stored by the current create path: business input only, lease fields excluded.
     const stored = await f.backend.agent!(owner, 'create', { projectId: i.projectId, input: normalized,
-      fingerprint: await sha256(canonical(normalized)), baseHash: await sceneHash(normalized.scene), executionMode: 'preview' });
+      fingerprint: await agentFingerprint(normalized), baseHash: await sceneHash(normalized.scene), executionMode: 'preview' });
     const start = await f.backend.agent!(owner, 'start', { projectId: i.projectId, id: stored.id });
     const finished = agentRunSchema.parse(await f.backend.agent!(owner, 'finish', { projectId: i.projectId, id: stored.id,
       claim: start.claim, candidates: [], evaluation: null }));

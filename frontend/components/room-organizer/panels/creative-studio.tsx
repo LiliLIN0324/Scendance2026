@@ -1592,7 +1592,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       if(Date.now()>=pollingDeadline)throw new Error('任务仍在处理，已暂停自动查询。请稍后查询原任务，不要重复提交。');
       await new Promise(resolve=>setTimeout(resolve,2000));
       if(!active()){pauseIfSourceChanged();return;}
-      result=await controller.getAgentRun(result.id);
+      result=await controller.getAgentRun(result.id,{slim:true});
     }
     if(lastProgress)closeAgentStep(Date.now()-stepStartedAt);
     streamAbort.abort();

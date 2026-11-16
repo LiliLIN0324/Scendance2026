@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { agentDispatchRequestSchema } from './agent-contract.ts';
+import { agentFingerprint } from './agent-fingerprint.ts';
+import { containsSensitiveInput } from './sensitive-input.ts';
 import { agentExecutionMode, executeAgentRun } from './agent-runner.ts';
 import { executeActivityTaskRun } from './activity-task-runner.ts';
 import { parametricAssetRequestSchema } from './parametric-contract.ts';
@@ -398,6 +400,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(tail==='/agent-runs'&&method==='POST') {
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
           const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;
+          // A pasted credential must not reach a provider or the run table. Same
+          // narrow rule as the frontend context builder: ordinary links are fine,
+          // only credential-shaped text is refused, and nothing is rewritten.
+          if([input.instruction,...('context' in input?input.context.recentMessages.map(message=>message.text):[])].some(containsSensitiveInput))
+            throw new ApiError('AI_INPUT_SENSITIVE',422);
           // Reject before storing a run or contacting a provider. An older
           // worker or legacy workflow must not silently ignore planning marks.
           if(!activity&&input.context.annotationObservation!==undefined&&
@@ -432,7 +439,9 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           }
           if(!z.strictObject({capability:z.literal('agent_steering_guard'),version:z.literal(1)}).safeParse(guard).success)
             throw new ApiError('AGENT_STEERING_GUARD_UNAVAILABLE',503);
-          const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await sha256(canonical(input)),
+          // The fingerprint covers business input only: a retry after a lease renewal
+          // must reuse the run instead of colliding on IDEMPOTENCY_CONFLICT.
+          const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await agentFingerprint(input),
             baseHash:activity?await sha256(canonical(input.activityContext)):await sceneHash(input.scene),
             executionMode:activity||miniMaxPreview||env('DEEPSEEK_AGENT_MODE')==='legacy'?'preview':agentExecutionMode(input)});
           if(!stored.reused){
@@ -484,7 +493,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const agentRun=tail.match(/^\/agent-runs\/(by-request\/)?([^/]+)(\/cancel)?$/);
         if(agentRun&&backend.agent) {
           if(agentRun[1]&&method==='GET'&&!agentRun[3])return respond(withAgentTextNotice(await backend.agent(actor,'by_request',{projectId,requestId:uuid.parse(agentRun[2])})));
-          if(!agentRun[1]&&((method==='GET'&&!agentRun[3])||(method==='POST'&&agentRun[3])))return respond(withAgentTextNotice(await backend.agent(actor,agentRun[3]?'cancel':'get',{projectId,id:uuid.parse(agentRun[2])})));
+          if(!agentRun[1]&&((method==='GET'&&!agentRun[3])||(method==='POST'&&agentRun[3]))){
+            // 轮询期显式要摘要：运行中不回传整包候选场景，终态仍回全量（前端确认卡要用）。
+            const slim=url.searchParams.get('slim');
+            if(slim!==null&&slim!=='1')throw new ApiError('INVALID_AGENT_VIEW',422);
+            return respond(withAgentTextNotice(await backend.agent(actor,agentRun[3]?'cancel':'get',{projectId,id:uuid.parse(agentRun[2]),...(slim==='1'?{slim:true}:{})})));
+          }
         }
         if(tail==='/material-variants' && method==='POST') {
           const {reused,...proposal}=await prepareMaterialVariant(backend,actor,projectId,await json());
