@@ -93,6 +93,18 @@ function mapEditHighlight(kind: OutdoorWorkflowProposal["kind"], before: SitePla
   }
 }
 const stages = Object.keys(OUTDOOR_STAGE_LABELS) as OutdoorStage[];
+export const OUTDOOR_MODEL_INPUT_STEP = "将本轮输入和场地资料交给模型判断。";
+const outdoorPlanSteps: Partial<Record<OutdoorTurn["action"], readonly string[]>> = {
+  zones: ["核对活动范围和已有分区", "按活动用途和室内外依据生成分区预览"],
+  revise: ["核对要调整的分区和需要保留的内容", "生成调整后的分区预览"],
+  "main-routes": ["核对边界、道路和入口依据", "预览连接活动区域的主通道"],
+  objects: ["核对各分区的物料与数量", "从可用物料中匹配尺寸，生成排布预览"],
+  "sub-routes": ["核对主通道和各分区的连接点", "预览通往各分区的支线"],
+  people: ["核对各分区的岗位和人数", "预览人员点位"],
+  "refine-3d": ["核对所选设施及其现有尺寸", "打开对应设施的 3D 深化"],
+  adjust: ["核对要调整的设施和参考位置", "在原有规划上生成调整预览"],
+  connect: ["核对入口和目标通道", "预览两者的连接方式"],
+};
 const unknownMap: OutdoorMapContext = {
   version: "map:unavailable",
   status: "unavailable",
@@ -264,6 +276,21 @@ export function useOutdoorAgentWorkflow(input: {
   const [thought, setThought] = useState<string | null>(null);
   const [awaitingThought, setAwaitingThought] = useState(false);
   const [thoughtDraft, setThoughtDraft] = useState("");
+  const [thoughtMs, setThoughtMs] = useState<number | null>(null);
+  type PendingPlan = {
+    steps: readonly string[];
+    turn: OutdoorTurn;
+    message: string;
+    base: string;
+    selected: string;
+    job: { epoch: number; controller: AbortController; scope: string };
+  };
+  const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
+  const pendingPlanRef = useRef<PendingPlan | null>(null);
+  function updatePendingPlan(plan: PendingPlan | null) {
+    pendingPlanRef.current = plan;
+    setPendingPlan(plan);
+  }
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   /**
    * 2026-11-16 用户拍板：要你动手的提示（反问补充/待确认/需要补充）不许倒计时自己消失——
@@ -319,6 +346,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   function start(continueDesign = false) {
     if (!continueDesign) setDesignSteps([]);
+    updatePendingPlan(null);
     setAwaitingThought(false);
     setThoughtDraft("");
     setAppliedHighlight(null);
@@ -349,6 +377,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   function cancel(options?: { preservePendingLogin?: boolean }) {
     setDesignSteps([]);
+    updatePendingPlan(null);
     setAwaitingThought(false);
     setThoughtDraft("");
     setAppliedHighlight(null);
@@ -370,6 +399,8 @@ export function useOutdoorAgentWorkflow(input: {
   useEffect(() => {
     setDesignSteps([]);
     setThought(null);
+    setThoughtMs(null);
+    updatePendingPlan(null);
     setAwaitingThought(false);
     setThoughtDraft("");
     setAppliedHighlight(null);
@@ -1395,6 +1426,11 @@ export function useOutdoorAgentWorkflow(input: {
 
   async function handle(message: string, clarification?: OutdoorClarification): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
+    const waiting = pendingPlanRef.current;
+    if (waiting && (explicitProposalApproval(message) || /^批准(?:这(?:份|个))?计划[。！!]?$/u.test(message.trim()))) {
+      await approvePlan(waiting);
+      return true;
+    }
     if (explicitProposalApproval(message) && proposalRef.current) {
       await confirm();
       return true;
@@ -1427,6 +1463,7 @@ export function useOutdoorAgentWorkflow(input: {
     const session = callbacks.current.controller();
     const viewer = session?.getSnapshot?.().user;
     setThought(null);
+    setThoughtMs(null);
     if (session?.getSnapshot && (!viewer || viewer.is_anonymous)) {
       start();
       setBusy(false);
@@ -1438,7 +1475,10 @@ export function useOutdoorAgentWorkflow(input: {
       return true;
     }
     const job = start();
-    designStep("读取当前活动边界、已有分区与设施。");
+    const base = JSON.stringify(plan);
+    const selected = callbacks.current.bridge()?.selectedIds?.() ?? [];
+    let modelStarted: number | undefined;
+    designStep(`核对活动范围和地图依据。当前画布有 ${plan.zones.length} 个分区、${plan.facilities.length} 项设施。`);
     setAwaitingThought(true);
     status(
       "结合当前需求、选中对象与结构化地图依据理解本句；未读取地图像素、未执行修改。",
@@ -1452,9 +1492,12 @@ export function useOutdoorAgentWorkflow(input: {
       setMapGap(map.status !== "ready");
       if (map.status === "ready") designStep("已取得结构化地图依据，用来核对请求涉及的位置。");
       if (map.status === "partial") designStep("地图依据只有一部分，缺失的位置需要核对。");
+      if (map.status === "unavailable") designStep("本轮未取得地图依据，将使用已有规划和输入内容。");
       const turn = await understandOutdoorTurn({
         message,
-        clarification,
+        clarification: waiting
+          ? { request: waiting.message, question: `待批准的计划：${waiting.steps.join("；")}。请结合用户补充的要求理解本句。` }
+          : clarification,
         libraryChoices: libraryChoices.map(
           ({ id, name, width, depth, height }) => ({
             id,
@@ -1477,10 +1520,16 @@ export function useOutdoorAgentWorkflow(input: {
               },
             }
           : {}),
-        selected: callbacks.current.bridge()?.selectedIds?.() ?? [],
+        selected,
         map,
         controller: callbacks.current.controller(),
         signal: job.controller.signal,
+        onRequest: () => {
+          if (live(job)) {
+            modelStarted = performance.now();
+            designStep(OUTDOOR_MODEL_INPUT_STEP);
+          }
+        },
         onThought: text => {
           if (live(job)) setThoughtDraft(draft => draft + text);
         },
@@ -1489,12 +1538,12 @@ export function useOutdoorAgentWorkflow(input: {
       });
       if (
         !live(job) ||
-        JSON.stringify(callbacks.current.bridge()?.getPlan()) !==
-          JSON.stringify(plan)
+        JSON.stringify(callbacks.current.bridge()?.getPlan()) !== base
       )
         return true;
       setAwaitingThought(false);
       setThoughtDraft("");
+      if (modelStarted !== undefined) setThoughtMs(performance.now() - modelStarted);
       if (stateRef.current.pendingLogin) {
         const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
         persist(kept);
@@ -1522,6 +1571,21 @@ export function useOutdoorAgentWorkflow(input: {
         proposalRef.current = { ...previousProposal, epoch: job.epoch };
         setProposal(proposalRef.current);
         await confirm();
+        return true;
+      }
+      const steps = outdoorPlanSteps[turn.action];
+      if (steps) {
+        const zoneNames = turn.facts.zones?.filter(zone => message.includes(zone.evidence)).map(zone => zone.name) ?? [];
+        const needsZones = !plan.zones.length && (turn.action === "main-routes" || turn.action === "objects");
+        const proposedSteps = [
+          ...(needsZones ? ["根据已知用途先拟分区，核对后再推进下一步"] : []),
+          ...steps,
+          ...(zoneNames.length && (turn.action === "zones" || turn.action === "revise")
+            ? [`本轮涉及的分区：${zoneNames.join("、")}`]
+            : []),
+        ];
+        updatePendingPlan({ steps: proposedSteps, turn, message, base, selected: JSON.stringify(selected), job });
+        status("计划已拟好，等你批准。", "confirm");
         return true;
       }
       const constraintBefore = JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed});
@@ -1732,10 +1796,26 @@ export function useOutdoorAgentWorkflow(input: {
       setBusy(false);
     }
   }
+  async function approvePlan(expected: PendingPlan) {
+    if (pendingPlanRef.current !== expected || !live(expected.job)) return;
+    updatePendingPlan(null);
+    const bridge = callbacks.current.bridge();
+    if (JSON.stringify(bridge?.getPlan()) !== expected.base ||
+        JSON.stringify(bridge?.selectedIds?.() ?? []) !== expected.selected) {
+      status("画布或选中对象已变化，请按当前画布重新拟计划。", "blocked");
+      return;
+    }
+    try {
+      await act(expected.turn, expected.message, true);
+    } catch (error) {
+      status(error instanceof Error ? error.message : "未能执行已批准的计划。", "blocked");
+    }
+  }
   return {
     state,
     designSteps,
     thought: state.scope === input.scope ? thought : null,
+    thoughtMs: state.scope === input.scope ? thoughtMs : null,
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
@@ -1745,6 +1825,8 @@ export function useOutdoorAgentWorkflow(input: {
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
     },
     proposal,
+    pendingPlan: state.scope === input.scope ? pendingPlan : null,
+    approvePlan,
     appliedHighlight: state.scope === input.scope ? appliedHighlight : null,
     models,
     busy,

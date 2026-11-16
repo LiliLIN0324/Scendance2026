@@ -4396,7 +4396,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
   const composerPlaceholder = loginBlocked ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
-    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
+    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'
     : generating ? '为下一步添加备注'
@@ -4422,7 +4422,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const showOutdoorSuggestion = activity && mode === 'layout' && agent.outdoorBridgeReady && !showHistory
     && !placePending
     && !draft.trim() && !agent.pendingFile && !agent.venuePick && !agent.mapPickerOpen
-    && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal && !agent.outdoorWorkflow.loginRequired
+    && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal && !agent.outdoorWorkflow.pendingPlan && !agent.outdoorWorkflow.loginRequired
     && !['working', 'confirm', 'ask', 'blocked'].includes(agent.outdoorTask?.state ?? '');
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
@@ -4554,7 +4554,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       )}
       {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onSearchPlace={() => focusPlaceSearch()} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
-      {agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} />}
+      {agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}

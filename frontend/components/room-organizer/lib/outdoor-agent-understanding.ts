@@ -63,6 +63,7 @@ export async function understandOutdoorTurn(input: {
       })
     | null;
   signal: AbortSignal;
+  onRequest?: () => void;
   onThought?: (text: string) => void;
   provider?: ChatProviderId | undefined;
   model?: string | null | undefined;
@@ -167,6 +168,7 @@ export async function understandOutdoorTurn(input: {
   const history = chunks.map((text) => ({ role: "user" as const, text }));
   const provider = input.provider && input.provider !== "default" ? input.provider : undefined;
   const model = input.model ?? null;
+  input.onRequest?.();
   const response = input.onThought && input.controller.assistantChatStream
     ? await input.controller.assistantChatStream(input.message, history, input.signal, input.onThought, provider, model, "outdoor_v1")
     : await input.controller.assistantChat(input.message, history, input.signal, "outdoor_v1", provider, model, true);
