@@ -255,6 +255,10 @@ export interface OutdoorPlan3DApi {
   focusLngLat(lng: number, lat: number): void;
   /** 相机回正正北（保留距离与俯仰角）；右上指北针钮调用。 */
   resetNorth(): void;
+  /** 当前相机水平方位角（弧度，0 = 正北）；右列大罗盘实时读指针用。 */
+  getBearing(): number;
+  /** 罗盘左右拖动：按弧度增量绕目标旋转相机，保留距离与俯仰角。 */
+  orbitByDelta(deltaTheta: number): void;
   /** 同步渲染一帧后读 canvas：接管态（主画布复用本组件）导出效果图用。 */
   captureImage(): string | null;
 }
@@ -496,6 +500,16 @@ export default function OutdoorPlan3D({
     controls.update();
   }, []);
 
+  /** 当前水平方位角（弧度）。与渲染循环里的 heading 同口径，0 = 正北。 */
+  const getBearing = useCallback((): number => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return 0;
+    const dx = camera.position.x - controls.target.x;
+    const dz = camera.position.z - controls.target.z;
+    return Math.atan2(-dx, dz);
+  }, []);
+
   const captureImage = useCallback((): string | null => {
     const renderer = rendererRef.current;
     const scene = sceneRef.current;
@@ -512,9 +526,9 @@ export default function OutdoorPlan3D({
 
   useEffect(() => {
     if (!apiRef) return undefined;
-    apiRef.current = { zoomBy: zoomByStep, focusLngLat, resetNorth, captureImage };
+    apiRef.current = { zoomBy: zoomByStep, focusLngLat, resetNorth, getBearing, orbitByDelta, captureImage };
     return () => { apiRef.current = null; };
-  }, [apiRef, zoomByStep, focusLngLat, resetNorth, captureImage]);
+  }, [apiRef, zoomByStep, focusLngLat, resetNorth, getBearing, orbitByDelta, captureImage]);
 
   // 一期裸第一人称步行：指针锁 / WASD / 边界钳制自管在本组件内，旧室内
   // walkthroughMode 链路不动；退出由 onWalkExit 交外层收口。
