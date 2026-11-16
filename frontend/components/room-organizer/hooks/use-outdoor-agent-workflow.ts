@@ -18,7 +18,7 @@ import {
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { createLiveTurn } from "../lib/outdoor-turn-live";
-import { createMetricsBook } from "../lib/outdoor-metrics-book";
+import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -1840,6 +1840,8 @@ export function useOutdoorAgentWorkflow(input: {
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
     mapGap,
+    /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
+    metricsSummary: () => summarizeMetrics(metricsBook.current),
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
