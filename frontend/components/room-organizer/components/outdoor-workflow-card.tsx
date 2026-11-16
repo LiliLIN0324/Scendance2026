@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Map as MapIcon, TriangleAlert } from "@/components/solid-icons";
+import { ClipboardList, Map as MapIcon, TriangleAlert } from "@/components/solid-icons";
 import {
   OUTDOOR_MODEL_INPUT_STEP,
   OUTDOOR_STAGE_LABELS,
@@ -166,14 +166,16 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
   );
 }
 
-export function OutdoorThoughtRecord({ thought, awaiting = false, draft = "", steps = [], elapsedMs = null, compact = false }: {
+export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft = "", steps = [], elapsedMs = null, compact = false }: {
   thought: string | null;
+  request?: string | null;
   awaiting?: boolean;
   draft?: string;
   steps?: readonly string[];
   elapsedMs?: number | null;
   compact?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
   if (!thought && !awaiting) return null;
   const modelIndex = steps.indexOf(OUTDOOR_MODEL_INPUT_STEP) + 1;
   const modelNote = (thought || draft) && (
@@ -183,18 +185,28 @@ export function OutdoorThoughtRecord({ thought, awaiting = false, draft = "", st
     </details>
   );
   const stepRow = (step: string, index: number) => <li key={index} className="ap-run-thought-text">{step}</li>;
+  const rows = [
+    ...steps.slice(0, modelIndex).map(stepRow),
+    ...(modelNote ? [<li key="model">{modelNote}</li>] : []),
+    ...steps.slice(modelIndex).map((step, index) => stepRow(step, modelIndex + index)),
+  ];
   return (
+    <article className="ap-card ap-outdoor-thought-card" aria-label="思考卡片">
+    {request && <header className="ap-outdoor-thought-heading">{request}</header>}
+    {awaiting && <div className="ap-task-progress" aria-hidden="true" />}
     <details className="ap-run-thoughts" open={awaiting || !compact} aria-busy={awaiting || undefined}>
       <summary className="ap-run-thoughts-summary">
         {awaiting ? "思考中" : "思考记录 · 1 条"}
         {compact && !awaiting && elapsedMs !== null && <span className="ap-run-thoughts-hint">思考了 {formatDurationClock(elapsedMs)}</span>}
       </summary>
-      <ol className="ap-outdoor-thought-steps">
-        {steps.slice(0, modelIndex).map(stepRow)}
-        {modelNote && <li>{modelNote}</li>}
-        {steps.slice(modelIndex).map((step, index) => stepRow(step, modelIndex + index))}
+      {rows.length > 3 && <button className="ap-outdoor-thought-more" type="button" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>
+        {showAll ? "收起较早步骤" : `共 ${rows.length} 步，查看较早步骤`}
+      </button>}
+      <ol className="ap-outdoor-thought-steps" start={showAll ? 1 : Math.max(1, rows.length - 2)}>
+        {showAll ? rows : rows.slice(-3)}
       </ol>
     </details>
+    </article>
   );
 }
 
@@ -202,10 +214,12 @@ export function OutdoorWorkflowCard({
   flow,
   onCancelPreview,
   onSearchPlace,
+  onAdjustPlan,
   replyPending = false,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
   replyPending?: boolean;
+  onAdjustPlan?: () => void;
   /** 地图优先第一步：任务卡上直接给「搜索地点」入口，不用让人去画布左上角找。 */
   onSearchPlace?: (() => void) | undefined;
   /** 「下一句」建议芯片的预填回调：点芯片只填输入框，发送仍是用户按键确认。 */
@@ -247,10 +261,33 @@ export function OutdoorWorkflowCard({
     people: "people",
     "refine-3d": "refine-3d",
   };
-  const thoughtRecord = <OutdoorThoughtRecord thought={flow.thought} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} />;
-  if (replyPending && !flow.proposal && !flow.pendingPlan && !flow.loginRequired) return thoughtRecord;
+  const thoughtRecord = <OutdoorThoughtRecord key={flow.thoughtRequest} thought={flow.thought} request={flow.thoughtRequest} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} />;
+  const pendingPlan = flow.pendingPlan;
+  if (pendingPlan) return (
+    <>
+      {thoughtRecord}
+      <section className="ap-card ap-outdoor-plan-approval" aria-label="待批准计划">
+        <header className="ap-card-head ap-outdoor-plan-title">
+          <strong><ClipboardList size={16} aria-hidden="true" />计划</strong>
+          <span>{pendingPlan.steps.length} 个步骤</span>
+        </header>
+        <p className="ap-task-caption">批准后开始执行本轮计划。</p>
+        <ol className="ap-outdoor-plan-steps">
+          {pendingPlan.steps.map(step => <li key={step}>{step}</li>)}
+        </ol>
+        <div className="ap-outdoor-plan-actions">
+          <button className="btn-primary" type="button" onClick={() => void flow.approvePlan(pendingPlan)}>批准并执行</button>
+          {onAdjustPlan && <button className="chip" type="button" onClick={onAdjustPlan}>调整计划</button>}
+        </div>
+        <button className="ap-outdoor-plan-cancel" type="button" onClick={() => flow.cancel()}>取消计划</button>
+      </section>
+    </>
+  );
+  if (flow.awaitingThought) return thoughtRecord;
+  if (replyPending && !flow.proposal && !flow.loginRequired) return thoughtRecord;
   return (
     <>
+    {thoughtRecord}
     {/* 2026-11-14 用户指令：「前往登录」独立成一张卡，不再混在任务卡底部。 */}
     <section
       className="ap-card ap-status-card"
@@ -260,14 +297,13 @@ export function OutdoorWorkflowCard({
     >
       <header className="ap-card-head">
         <strong>
-          {flow.busy ? "正在处理" : flow.pendingPlan ? "等你批准" : flow.proposal ? "待你核对" : "当前任务"} ·{" "}
+          {flow.busy ? "正在处理" : flow.proposal ? "待你核对" : "当前任务"} ·{" "}
           {OUTDOOR_STAGE_LABELS[flow.state.stage]}
         </strong>
       </header>
       {flow.busy && (
         <div className="ap-task-progress" aria-hidden="true" />
       )}
-      {thoughtRecord}
       <StageThumb stage={flow.state.stage} />
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         <div className="ap-task-error" role="alert">
@@ -311,7 +347,6 @@ export function OutdoorWorkflowCard({
           </ol>
         </details>
       )}
-      {!flow.pendingPlan && <>
       {flow.proposal ? (
         <div>
           <strong>{flow.proposal.label}</strong>
@@ -593,21 +628,7 @@ export function OutdoorWorkflowCard({
           </button>
         </footer>
       )}
-      </>}
     </section>
-    {flow.pendingPlan && (
-      <section className="ap-card ap-status-card ap-outdoor-plan-approval" aria-label="待批准计划">
-        <header className="ap-card-head"><strong>计划</strong></header>
-        <p className="ap-task-caption">批准后开始执行。你也可以补充要求，先调整计划。</p>
-        <ol className="ap-outdoor-thought-steps">
-          {flow.pendingPlan.steps.map(step => <li key={step}>{step}</li>)}
-        </ol>
-        <button className="btn-primary" type="button" onClick={() => {
-          if (flow.pendingPlan) void flow.approvePlan(flow.pendingPlan);
-        }}>批准计划</button>
-        <button type="button" onClick={() => flow.cancel()}>取消计划</button>
-      </section>
-    )}
     {flow.loginRequired && (
       <section
         className="ap-card ap-status-card"

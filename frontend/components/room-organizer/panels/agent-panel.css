@@ -962,7 +962,20 @@ button.ap-ghost {
 .ap-run-thought-text { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12px; line-height: 1.6; color: var(--wk-ink-soft); }
 .ap-outdoor-thought-steps { margin: 5px 0; padding-inline-start: 18px; }
 .ap-outdoor-model-note summary { cursor: pointer; color: var(--wk-ink-soft); font-size: 12px; }
+.ap-outdoor-thought-card { gap: 8px; }
+.ap-outdoor-thought-heading { color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 700; overflow-wrap: anywhere; }
+.ap-outdoor-thought-card > .ap-run-thoughts { border: 0; padding: 0; background: transparent; }
+.ap-outdoor-model-note > p { max-block-size: 11rem; overflow: auto; padding: 8px; border-radius: 8px; background: var(--wk-plane); }
+.ap-outdoor-thought-more, .ap-outdoor-plan-cancel { align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--wk-ink-soft); cursor: pointer; font-size: var(--fs-cap); }
+.ap-outdoor-thought-more { margin-top: 6px; }
 .ap-outdoor-plan-approval { border-inline-start: 3px solid var(--wk-green); }
+.ap-outdoor-plan-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ap-outdoor-plan-title strong { display: flex; align-items: center; gap: 6px; }
+.ap-outdoor-plan-title > span { font-size: var(--fs-cap); color: var(--wk-muted); }
+.ap-outdoor-plan-steps { display: grid; gap: 6px; margin: 0; padding-inline-start: 20px; font-size: var(--fs-p2); line-height: 1.5; }
+.ap-outdoor-plan-steps li::marker { color: var(--wk-green); font-weight: 600; }
+.ap-outdoor-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-outdoor-plan-actions .btn-primary { flex: 1 1 8rem; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }
