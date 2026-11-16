@@ -4,14 +4,14 @@
 
 ## 当前续跑点
 
-- 总状态：计划编写阶段已完成；**M0 进行中**（浏览器入口复现未做），M2 已开工（切片 2a）。M1、M3–M7 待开始。
+- 总状态：计划编写阶段已完成；**M0 进行中**（浏览器入口复现未做），M2 已开工（切片 2a、2b 已交付）。M1、M3–M7 待开始。
 - 验收口径：以计划 §0「用户口径」为准（不卡第一步 / 地图听懂人话 / 每步有下一步 / 会做设计 / 分层指令 / 一口气做完 / 可回看取证），优先级高于功能清单；任一不满足不得标已验收。
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：把待恢复槽接回工作流——选完地点、确认范围后，读 `readPendingBrief(scope)`，把原句送进现有 send 入口（或卡片“接着这句”先行），并在成功后 `clearPendingBrief`。接回后立刻清槽，避免重复消费。
-- 执行位置、分支、当前 HEAD：`C:\Users\13266\.dsh\bot\workspace\Scendance2026`；`main`；HEAD `0391efed`（aab96e70 → 8ff699b8 → 46ec7e80 → 0391efed，均已推 `origin/main`）。2026-11-16 08:52 实读。
-- 未提交在途（本轮新增，因所在文件带用户 WIP，未单独提交）：`panels/agent-panel.tsx` 里退回分支新增两行——`writePendingBrief(state.scope, trimmed, state.stage)` 与对应 import。
+- 下一条操作：在浏览器里验一次真实接回（起 dev server 3210 → 空白活动发玉泉市集句 → 看退回气泡 + 待恢复槽写入 → 地图选地点、确认范围 → 看是否自动接着跑一次），并记 `/assistant/chat` 是否发出；同时确认切活动后槽不串。
+- 执行位置、分支、当前 HEAD：`C:\Users\13266\.dsh\bot\workspace\Scendance2026`；`main`；HEAD `fd6906e8`（已推 `origin/main`，93ebb8a9..fd6906e8）。2026-11-16 09:12 实读。
+- 未提交在途（本轮新增，因文件带用户 WIP，未单独提交）：`panels/agent-panel.tsx`——退回分支 `writePendingBrief(...)` 两行 + 范围确认后的接回 effect（`shouldResumeBrief` 门控、先清槽再发）。
 - 已核实的第一失败点、实际后端部署及日志编号：待 M0。
 - 协作依赖：当前工作区有未提交改动，服务端段由 B 主责。M1a 可独立推进，M1b/c 的最终服务端验收需对应环境和权限。
 
@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | M0 固定复现 | 进行中 | 切片 1a 已交付：基线重取（HEAD 已从 f1c5a525 前进到 aab96e70，三笔底图提交来自用户侧）；确认 sub-routes 失败已不存在（41 过），token 断言已修；根与前端 typecheck 均 0 错。下一切片：浏览器入口复现地点接续。 |
 | M1 诊断 | 待开始 | 先 M1a，再补服务端关联和双路径验收。 |
-| M2 恢复需求 | 进行中 | 切片 2a 已交付：`lib/pending-brief.ts` 按活动存原句，带 24 h 过期、跨活动隔离、坏数据容错、7 条测试全过；agent-panel 退回分支已接线（所在文件带用户 WIP，未单独提交）。下一切片：选地后读回并接续。 |
+| M2 恢复需求 | 进行中 | 切片 2a：`pending-brief.ts` 按活动存原句（过期/隔离/坏数据，9 条测试）。切片 2b：`shouldResumeBrief` 按边界去重接回，面板侧已接线（未提交）。下一切片：浏览器验接回 + 跨活动不串。 |
 | M3 分流与上下文 | 待开始 | 先固定真实入口行为，再调整地图数据访问。 |
 | M4 组合预览 | 待开始 | 以首条代表需求和直接编辑为中心。 |
 | M5 应用与恢复 | 待开始 | 补版本、应用幂等、撤销及中断验收。 |
@@ -80,6 +80,27 @@ scripts/probe-basemap-zoom.mjs
 其中与地图优先直接相关、本轮必须保留在基线的四个文件：`lib/place-first.ts`（入口守卫，07:30）、`lib/outdoor-place-handover.ts`（地图→对话交接，07:11）、`lib/focus-place-search.ts`（焦点送到地名搜索，07:57）、`panels/agent-panel.tsx` 中的守卫接线（08:04）。
 
 ## 执行记录
+
+### 2026-11-16 09:00–09:15 · 自动轮次 3 · M2 切片 2b（接回判定）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 09:00–09:15，自动轮次 3，无外部运行 ID
+批次 / 切片 / 状态：M2 / 切片 2b 范围确认后接回 / 已验收（判定层 + 类型），浏览器未验
+工作目录 / 分支 / 开始与结束 HEAD：仓库根 / main / 93ebb8a9 → fd6906e8（已推 origin/main）
+修改、提交或未提交路径：lib/pending-brief.ts、lib/pending-brief.test.ts（commit fd6906e8）；panels/agent-panel.tsx 接线未提交（文件带用户 WIP）
+复现及第一失败步骤：仓作失误——首次提交 cf3982c3 把用户 WIP 的 room-organizer.tsx（31 行）误带进 commit；发现时未推，立即 reset --soft 回退、只提交自己的两个文件，用户改动留在工作树
+验证命令、结果及环境（固定数据 / 浏览器 / 真实云端）：
+  · frontend: npm test -- components/room-organizer/lib/pending-brief.test.ts → 9 passed
+  · frontend: npm run typecheck → 0 错
+  · frontend: npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx → 38 passed
+  · 固定数据；浏览器与真实云端本轮未跑
+证据位置及安全诊断编号：无（本地逻辑）
+剩余项、解除阻塞条件：接回只在代码层，需浏览器验一次（退回到接回的完整链路、切活动不串槽）；M0 浏览器复现仍未做
+下次准确从哪条命令或哪个文件继续：cd frontend && npm run dev -- -p 3210，发玉泉市集句 → 选地点确认范围 → 看是否自动重发；若未触发，先查 agent-panel 接回 effect 的 deps 与 confirmedBoundary 赋值时机
+```
+
+- **教训（写给下一轮）**：`git add` 只加自己文件不保证干净——索引里可能已存在别人的暂存。提交前必须先看 `git diff --cached --name-only`，推之前再看 `git show --stat HEAD`。
+- **边界**：`shouldResumeBrief` 只看“有槽、有边界、边界未消费过”，不判断地点是否真的变了；真换场地导致旧需求失效的情形留给 M5。
 
 ### 2026-11-16 08:40–08:55 · 自动轮次 2 · M2 切片 2a（待恢复槽）
 
