@@ -83,13 +83,20 @@ export function collectOutdoorTurnMetrics(input: {
     events.filter((event) => event.kind === "applied").map((event) => event.at),
   ).size;
 
+  // 预览的起算点：确认在前（点了「预览」才出结果）就从确认算；
+  // 预览在前（先出预览再让人确认）就从开轮算，不用「确认 − 预览」这种负值。
+  const previewAnchor =
+    firstConfirm !== null && firstPreview !== null && firstConfirm <= firstPreview
+      ? firstConfirm
+      : startedAt;
+
   return {
     modelCalls: count(events, "model_request"),
     mapCalls: count(events, "map_request"),
     confirmations: count(events, "confirm"),
     appliedCount,
     firstUsefulFeedbackMs: span(startedAt, firstBubble),
-    previewMs: span(firstConfirm ?? startedAt, firstPreview),
+    previewMs: span(previewAnchor, firstPreview),
     applyMs: span(firstPreview, firstApplied),
   };
 }
