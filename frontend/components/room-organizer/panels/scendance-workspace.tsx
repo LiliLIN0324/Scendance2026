@@ -1,8 +1,8 @@
-﻿'use client';
+'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
 import { Check } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { listMyItems, subscribeMyItems } from '../lib/my-items';
 import {
@@ -320,6 +320,10 @@ interface ViewToolsProps {
     focusVenue?(): void;
     /** 指北针：3D 相机回正正北；2D 复位视图到场地边界。 */
     resetNorth?(): void;
+    /** 3D 相机当前水平方位（弧度，0 = 正北）；大罗盘指针实时读数。 */
+    bearingRad?(): number;
+    /** 大罗盘左右拖动：按弧度增量绕目标旋转 3D 相机。 */
+    orbitByDelta?(deltaTheta: number): void;
   } | null;
   /**
    * GeoGround（2026-11-12）：主画布 3D 地面由户外计划的地理瓦片接管时置真。
@@ -366,13 +370,103 @@ function HandStopIcon({ size }: { size: number }): JSX.Element {
     </svg>
   );
 }
-// 朝向指北针：上蓝三角朝北、下深灰三角朝南（图1 双色箭头），不是罗盘菱形。
-function CompassArrowIcon({ size = 20 }: { size?: number }): JSX.Element {
+// Needle geometry adapted from MapLibre GL JS NavigationControl (BSD-3-Clause):
+// https://github.com/maplibre/maplibre-gl-js/blob/main/src/css/svg/maplibregl-ctrl-compass.svg
+// 指针放大并改成红/灰双色；交互沿用 MapLibre 的「拖动旋转 + 点击回正北」。
+// 2026-11-16：两侧转向箭头的弧度和箭头头部仍未达到 Google 1:1，先全局关闭，
+// 保留 Canvas 绘制代码供后续 agent 重做；交接见 docs/COMPASS_TURN_ARROWS_PLAN.md。
+const SHOW_COMPASS_TURN_ARROWS = false;
+
+// 罗盘改用 Canvas：圆弧的角度、半径、起始角/结束角直接按数值绘制，不再靠
+// SVG 贝塞尔控制点试。画布按 4 倍像素渲染，显示尺寸仍是 44px。
+function CompassDial({ size = 44, rotationDeg = 0, showTurns = false }: { size?: number; rotationDeg?: number; showTurns?: boolean }): JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    let ctx: CanvasRenderingContext2D | null = null;
+    try {
+      ctx = canvas?.getContext('2d') ?? null;
+    } catch {
+      // jsdom 等无 Canvas 实现的环境直接跳过绘制，不影响交互与测试。
+      return;
+    }
+    if (!canvas || !ctx) return;
+    const resolution = 4;
+    const pixels = size * resolution;
+    canvas.width = pixels;
+    canvas.height = pixels;
+    ctx.setTransform(resolution, 0, 0, resolution, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+
+    // 外圈与内盘：只保留极轻的层次，避免看起来像靶心。
+    ctx.beginPath();
+    ctx.arc(22, 22, 21, 0, Math.PI * 2);
+    ctx.fillStyle = '#252220';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(22, 22, 17, 0, Math.PI * 2);
+    ctx.fillStyle = '#2d2926';
+    ctx.fill();
+
+    // 指针：红上白下的细长菱形，绕 (22,22) 旋转。
+    ctx.save();
+    ctx.translate(22, 22);
+    ctx.rotate((rotationDeg * Math.PI) / 180);
+    ctx.translate(-22, -22);
+    ctx.beginPath();
+    ctx.moveTo(22, 9.2);
+    ctx.lineTo(27.2, 24.8);
+    ctx.lineTo(16.8, 24.8);
+    ctx.closePath();
+    ctx.fillStyle = '#D02B1E';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(22, 34.8);
+    ctx.lineTo(27.2, 24.8);
+    ctx.lineTo(16.8, 24.8);
+    ctx.closePath();
+    ctx.fillStyle = '#DCD9D4';
+    ctx.fill();
+    ctx.restore();
+
+    if (showTurns) {
+      // 左侧转向箭头：接近四分之一椭圆的浅弧（横半径 11.8、纵半径 9.2），
+      // 从针尖旁 (13.5,16.5) 起笔，向外鼓到 x≈6.9，再落到 (8.2,32.4)。
+      // 底部独立三角头指向左下方；右侧整体镜像。
+      const drawTurn = (): void => {
+        ctx.beginPath();
+        ctx.ellipse(18.7, 25.5, 11.8, 9.2, 0, (245.8 * Math.PI) / 180, (138.6 * Math.PI) / 180, true);
+        ctx.strokeStyle = '#CFCCC7';
+        ctx.lineWidth = 1.45;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(5.2, 36.2);
+        ctx.lineTo(3.4, 31.3);
+        ctx.lineTo(10.5, 31.7);
+        ctx.closePath();
+        ctx.fillStyle = '#CFCCC7';
+        ctx.fill();
+      };
+      drawTurn();
+      ctx.save();
+      ctx.translate(44, 0);
+      ctx.scale(-1, 1);
+      drawTurn();
+      ctx.restore();
+    }
+  }, [size, rotationDeg, showTurns]);
+
   return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 3 L17 12 L7 12 Z" fill="#2563EB" />
-      <path d="M12 21 L7 12 L17 12 Z" fill="#55585F" />
-    </svg>
+    <canvas
+      ref={canvasRef}
+      className="oc-gm-compass-canvas"
+      width={size * 4}
+      height={size * 4}
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+    />
   );
 }
 // 第一人称漫游：复刻 Google Maps Pegman——黄圆头、橙领巾、直立小人；悬停时由 CSS 上浮微倾。
@@ -387,7 +481,17 @@ function PegmanIcon({ size = 22 }: { size?: number }): JSX.Element {
         <rect x="9.7" y="13.6" width="1.9" height="6.6" rx="0.95" />
         <rect x="12.4" y="13.6" width="1.9" height="6.6" rx="0.95" />
       </g>
-      <path d="M10.3 9.3 L13.7 9.3 L12 11.7 Z" fill="#E8732A" />
+    </svg>
+  );
+}
+// 定位钮：Google 网页版的准星——细圆环 + 实心点 + 四向短刻线，
+// 不用 center_focus_strong 的"对焦框"四角，避免一眼看出不是同一套图标。
+function MyLocationIcon({ size = 16 }: { size?: number }): JSX.Element {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <circle cx="12" cy="12" r="6.3" />
+      <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
+      <path d="M12 2.4v3.1M12 18.5v3.1M2.4 12h3.1M18.5 12h3.1" />
     </svg>
   );
 }
@@ -466,6 +570,119 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const [selectMenuOpen, setSelectMenuOpen] = useState(false);
   // 2026-11-15 测量直进：图标右下小标展开 距离/面积/路径。
   const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
+  // 2026-11-16 用户指令：底部只留一颗薄把手，规划工具收进可展开的「隐藏工具栏」；
+  // 初始收起，让 Google Maps 控制列与地图本身保持干净。
+  const [dockOpen, setDockOpen] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+  // 2026-11-16 罗盘改用 MapLibre NavigationControl 的成熟交互：拖动旋转、点击回正北。
+  const [compassBearing, setCompassBearing] = useState(0);
+  const [compassDragging, setCompassDragging] = useState(false);
+  const compassDragRef = useRef<{ pointerId: number; centerX: number; centerY: number; lastAngle: number; travel: number; dragging: boolean } | null>(null);
+  const suppressCompassClick = useRef(false);
+  const outdoorRef = useRef(outdoor);
+  outdoorRef.current = outdoor;
+  const compassIs3D = outdoor?.view === '3d' && !walkPressed && Boolean(outdoor?.orbitByDelta);
+
+  useEffect(() => {
+    if (outdoor?.view !== '3d' || !outdoor.bearingRad) {
+      setCompassBearing(0);
+      return undefined;
+    }
+    let raf = 0;
+    let last = 0;
+    const tick = (now: number) => {
+      if (now - last >= 90) {
+        // 相机方位角顺时针为正；屏幕上的指北针要反向转，才是真正的北。
+        const next = -(outdoorRef.current?.bearingRad?.() ?? 0);
+        setCompassBearing(prev => (Math.abs(prev - next) > 0.004 ? next : prev));
+        last = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // 只跟随 2D/3D 切换启停；实时值走 outdoorRef，避免父级对象每次渲染重启 rAF。
+  }, [outdoor?.view]);
+
+  useEffect(() => {
+    if (!dockOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDockOpen(false);
+    };
+    // 成熟浮层工具栏的关闭方式：点外部或 Esc；展开态不再放一条“工具”标题栏。
+    const onPointerDown = (event: PointerEvent) => {
+      const root = dockRef.current;
+      if (root && !root.contains(event.target as Node)) setDockOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [dockOpen]);
+
+  const handleCompassPointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+    if (!compassIs3D) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+    compassDragRef.current = { pointerId: event.pointerId, centerX, centerY, lastAngle: angle, travel: 0, dragging: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const handleCompassPointerMove = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+    const state = compassDragRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    const angle = Math.atan2(event.clientY - state.centerY, event.clientX - state.centerX);
+    let delta = angle - state.lastAngle;
+    if (delta > Math.PI) delta -= Math.PI * 2;
+    if (delta < -Math.PI) delta += Math.PI * 2;
+    state.lastAngle = angle;
+    state.travel += Math.abs(delta);
+    if (!state.dragging && state.travel > 0.12) {
+      state.dragging = true;
+      setCompassDragging(true);
+    }
+    if (!state.dragging) return;
+    // 指针顺时针拖，针顺时针转；相机方位角反向变化，因此读数取反后仍与手指同向。
+    outdoor?.orbitByDelta?.(delta);
+    setCompassBearing(prev => prev + delta);
+  };
+  // 保留给 `SHOW_COMPASS_TURN_ARROWS` 打开时使用；当前按钮隐藏，不影响点击回正北。
+  const turnCompass = (turn: 'left' | 'right'): void => {
+    if (!compassIs3D) return;
+    if (turn === 'left') {
+      outdoor?.orbitByDelta?.(Math.PI / 2);
+      setCompassBearing(prev => prev + Math.PI / 2);
+    } else {
+      outdoor?.orbitByDelta?.(-Math.PI / 2);
+      setCompassBearing(prev => prev - Math.PI / 2);
+    }
+  };
+  const finishCompassDrag = (event: ReactPointerEvent<HTMLButtonElement>, cancelled: boolean): void => {
+    const state = compassDragRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    const dragged = state.dragging;
+    compassDragRef.current = null;
+    setCompassDragging(false);
+    suppressCompassClick.current = true;
+    window.setTimeout(() => { suppressCompassClick.current = false; }, 0);
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* 指针已释放。 */ }
+    if (!cancelled && !dragged) {
+      // 转向箭头暂停后，点击罗盘统一回正北；任意角度仍可拖动。
+      outdoor?.resetNorth?.();
+      setCompassBearing(0);
+    }
+  };
+  const handleCompassClick = (): void => {
+    if (suppressCompassClick.current) { suppressCompassClick.current = false; return; }
+    outdoor?.resetNorth?.();
+    setCompassBearing(0);
+  };
+  const compassTip = compassIs3D
+    ? '罗盘：拖动旋转 · 点击回正北'
+    : '罗盘：回到场地';
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
@@ -975,32 +1192,71 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         <div className="oc-cluster oc-tr" aria-label="右上工具簇">
           <div className="oc-share"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/></div>
         </div>
-        <div className="oc-cluster oc-br" aria-label="右下工具簇">
-          <button type="button" id="tool-compass" data-tip="指北针：回正朝北" aria-label="指北针：回正朝北" onClick={() => outdoor?.resetNorth?.()}>
-            <CompassArrowIcon size={22} />
-          </button>
-          <button type="button" id="tool-view-toggle" data-tip={outdoor?.view === '3d' ? '当前 3D · 切回 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={outdoor?.view === '3d' ? '当前 3D 场景，点击切回 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={outdoor?.view === '3d'} className={outdoor?.view === '3d' ? 'is-active' : ''} onClick={() => outdoor?.onToggleView?.()}>
-            <span className="oc-view-text">{outdoor?.view === '3d' ? '3D' : '2D'}</span>
-          </button>
-          <button type="button" id="tool-focus" data-tip={focusVenueTip ?? '回到框选场地'} aria-label={focusVenueTip ?? '回到框选场地'} disabled={!onFocusVenue} onClick={() => onFocusVenue?.()}>
-            <MaterialSymbol name="center_focus_strong" />
-          </button>
-          <div className="oc-zoom" role="group" aria-label="缩放">
-            <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" onClick={() => outdoor!.zoomBy(1)}>
-              <MaterialSymbol name="iconpark_zoom_in_solid" />
+        {/* 2026-11-16 用户指令：右下角一比一复刻 Google Maps 竖向控制列——
+            罗盘 → 2D/3D → 定位 → 连体缩放 → Pegman，最后隔一条发丝线放宽图眼睛。
+            视觉口径：40px 白圆、40×80 连体缩放、外层 56px 白色胶囊。 */}
+        <div className="oc-cluster oc-br oc-gmaps" role="group" aria-label="地图控制">
+          <div className="oc-gm-compass-wrap" role="group" aria-label="罗盘与转向">
+            {SHOW_COMPASS_TURN_ARROWS && compassIs3D && (
+              <button
+                type="button"
+                className="oc-gm-turn is-left"
+                aria-label="向左旋转 90 度"
+                title="向左旋转 90°"
+                onClick={event => { event.stopPropagation(); turnCompass('left'); }}
+              />
+            )}
+            <button
+              type="button"
+              id="tool-compass"
+              className={`oc-gm-round oc-gm-compass${compassIs3D ? ' is-interactive' : ''}${compassDragging ? ' is-dragging' : ''}`}
+              data-tip={compassTip}
+              aria-label={compassTip}
+              onClick={handleCompassClick}
+              onPointerDown={handleCompassPointerDown}
+              onPointerMove={handleCompassPointerMove}
+              onPointerUp={event => finishCompassDrag(event, false)}
+              onPointerCancel={event => finishCompassDrag(event, true)}
+            >
+              <CompassDial size={44} rotationDeg={(compassBearing * 180) / Math.PI} showTurns={SHOW_COMPASS_TURN_ARROWS && compassIs3D} />
             </button>
-            <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" onClick={() => outdoor!.zoomBy(-1)}>
-              <MaterialSymbol name="iconpark_zoom_out_solid" />
+            {SHOW_COMPASS_TURN_ARROWS && compassIs3D && (
+              <button
+                type="button"
+                className="oc-gm-turn is-right"
+                aria-label="向右旋转 90 度"
+                title="向右旋转 90°"
+                onClick={event => { event.stopPropagation(); turnCompass('right'); }}
+              />
+            )}
+          </div>
+          <button type="button" id="tool-view-toggle" className="oc-gm-round oc-gm-mode" data-tip={outdoor?.view === '3d' ? '当前 3D · 切回 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={outdoor?.view === '3d' ? '当前 3D 场景，点击切回 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={outdoor?.view === '3d'} onClick={() => outdoor?.onToggleView?.()}>
+            <span className="oc-gm-mode-text">{outdoor?.view === '3d' ? '3D' : '2D'}</span>
+          </button>
+          <button type="button" id="tool-focus" className="oc-gm-round" data-tip={focusVenueTip ?? '回到框选场地'} aria-label={focusVenueTip ?? '回到框选场地'} disabled={!onFocusVenue} onClick={() => onFocusVenue?.()}>
+            <MyLocationIcon size={16} />
+          </button>
+          <div className="oc-gm-zoom" role="group" aria-label="缩放">
+            <button type="button" id="tool-zoom-in" className="oc-gm-zoom-btn" data-tip="放大" aria-label="放大" onClick={() => outdoor!.zoomBy(1)}>
+              <MaterialSymbol name="add" size={18} />
+            </button>
+            <button type="button" id="tool-zoom-out" className="oc-gm-zoom-btn" data-tip="缩小" aria-label="缩小" onClick={() => outdoor!.zoomBy(-1)}>
+              <MaterialSymbol name="remove" size={18} />
             </button>
           </div>
           <button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
             <PegmanIcon size={22} />
           </button>
-          <button type="button" id="tool-opacity" className={`is-ghost-eye${chromeHidden ? ' is-active' : ''}`} data-tip={chromeHidden ? '显示工具栏' : '隐藏工具栏'} aria-label={chromeHidden ? '显示工具栏' : '隐藏工具栏'} aria-pressed={chromeHidden} onClick={() => onToggleChrome?.()}>
-            <MaterialSymbol name="visibility" />
+          <span className="oc-gm-divider" aria-hidden="true" />
+          <button type="button" id="tool-opacity" className={`oc-gm-round oc-gm-eye${chromeHidden ? ' is-active' : ''}`} data-tip={chromeHidden ? '退出干净看图' : '干净看图'} aria-label={chromeHidden ? '退出干净看图' : '干净看图：隐藏全部浮层'} aria-pressed={chromeHidden} onClick={() => onToggleChrome?.()}>
+            <MaterialSymbol name="visibility" size={16} />
           </button>
         </div>
-        <div className="oc-cluster oc-bb" aria-label="底部工具条">
+        {/* 2026-11-16 我们自己的工具栏：贴底一条，可收成一颗把手。
+            Google 控制列只放地图语义钮，规划工具（选择/测量/标注/吸附/历史）全部收进这里。 */}
+        <div className={`oc-dock${dockOpen ? ' is-open' : ''}`} ref={dockRef}>
+          {dockOpen && (
+          <div id="oc-tool-dock" className="oc-cluster oc-bb" aria-label="底部工具条">
           {/* 2026-11-15 直切：户外选择/抓手不再弹二级菜单，点钮在 抓手⇄选择 之间直切；图标随当前态，H/S 快捷键保留。 */}
           <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { if (canvasSelectOn) chooseHandTool(); else chooseSelectTool(); }}>
             {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <HandStopIcon size={20} />}
@@ -1017,13 +1273,18 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             </div>
               {measureMenuOpen && (
                 <div id="tool-measure-panel" className="sc-tool-pop sc-measure-pop" role="menu" aria-label="测量模式">
-                  {([['distance', '距离', 'straighten'], ['area', '面积', 'crop_square'], ['path', '路径', 'progress_activity']] as const).map(([kind, label, icon]) => (
-                    <button key={kind} type="button" role="menuitemradio" aria-checked={outdoor.measureKind === kind} className={`sc-canvas-tool-row${outdoor.measureKind === kind ? ' is-active' : ''}`} onClick={() => { outdoor.setMeasureKind?.(kind); if (!outdoor.measureActive) outdoor.enterMeasure?.(); setMeasureMenuOpen(false); }}>
-                      <MaterialSymbol name={icon} size={16} />
-                      <span>{label}</span>
-                      {outdoor.measureKind === kind && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
-                    </button>
-                  ))}
+                  {([['distance', '距离', 'straighten'], ['area', '面积', 'crop_square'], ['path', '路径', 'progress_activity']] as const).map(([kind, label, icon]) => {
+                    const active = outdoor.measureKind === kind;
+                    return (
+                      <button key={kind} type="button" role="menuitemradio" aria-checked={active} className={`sc-canvas-tool-row${active ? ' is-active' : ''}`} onClick={() => { outdoor.setMeasureKind?.(kind); if (!outdoor.measureActive) outdoor.enterMeasure?.(); setMeasureMenuOpen(false); }}>
+                        <MaterialSymbol name={icon} size={16} />
+                        <span className="sc-measure-row-label">{label}</span>
+                        <span className="sc-measure-check-slot" aria-hidden="true">
+                          {active && <Check size={14} strokeWidth={2.5} className="sc-tool-check" />}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1045,6 +1306,33 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <button type="button" id="tool-redo" data-tip="重做（平面编辑）" aria-label="重做" disabled={!outdoor!.canRedo} onClick={() => outdoor!.redo()}>
             <MaterialSymbol name="redo" />
           </button>
+          <span className="oc-sep" aria-hidden="true" />
+          <button
+            type="button"
+            id="tool-dock-close"
+            className="oc-dock-close"
+            data-tip="收起工具条 · Esc"
+            aria-label="收起工具条（Esc）"
+            title="收起工具条（Esc）"
+            onClick={() => setDockOpen(false)}
+          >
+            <MaterialSymbol name="close" size={16} />
+          </button>
+          </div>)}
+          {!dockOpen && (
+          <button
+            type="button"
+            className="oc-dock-handle"
+            aria-expanded={false}
+            aria-controls="oc-tool-dock"
+            aria-label="展开工具条"
+            title="展开工具条"
+            onClick={() => setDockOpen(true)}
+          >
+            <MaterialSymbol name="keyboard_arrow_up" size={16} />
+            <span>工具</span>
+          </button>
+          )}
         </div>
       </>)}
     </nav>

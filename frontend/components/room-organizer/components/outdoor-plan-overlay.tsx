@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
 
 /**
@@ -40,7 +40,7 @@ import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { openGenerationSheet } from '../lib/generation-sheet';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
-import { PLANNING_SURFACE, PLANNING_TYPOGRAPHY } from '@/lib/outdoor-plan-tokens';
+import { Layers3, X } from 'lucide-react';
 import {
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
@@ -106,10 +106,105 @@ function SourceThumb({ id }: { id: CanvasBasemapSource }) {
   );
 }
 
-/** 常态入口直选的三枚高频底图（顺序：街道 / 卫星 / 深色），其余图源收进展开面板。 */
-const FEATURED_SOURCES = ['amap-streets', 'amap-satellite', 'carto-dark']
-  .map(id => SOURCE_CYCLE.find(o => o.id === id))
-  .filter((o): o is NonNullable<typeof o> => Boolean(o));
+/** 地图详情面板的第一组：对应 Google Maps 的「默认 / 卫星 / 深色」。 */
+const PRIMARY_MAP_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
+  { id: 'amap-streets', label: '默认' },
+  { id: 'amap-satellite', label: '卫星' },
+  { id: 'carto-dark', label: '深色' },
+];
+
+/** 268px 宽的面板一列只有 72px；长名保留原意但改用更短的标签，避免被省略号截断。 */
+const MORE_MAP_LABELS: Record<string, string> = {
+  'amap-streets-labels': '高德注记',
+};
+
+/** 其余可用图源放在「更多底图」组里，避免把 8 种图源平铺成一整面墙。 */
+const MORE_MAP_SOURCES = SOURCE_CYCLE
+  .filter(option => !PRIMARY_MAP_SOURCES.some(primary => primary.id === option.id))
+  .map(option => ({ id: option.id, label: MORE_MAP_LABELS[option.id] ?? option.label }));
+
+/** 悬停竖列里的高频底图（上一版结构）：地图 / 卫星 / 深色，其余走「展开」。 */
+const FEATURED_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
+  { id: 'amap-streets', label: '地图' },
+  { id: 'amap-satellite', label: '卫星' },
+  { id: 'carto-dark', label: '深色' },
+];
+
+function MapDetailsPanel({ source, geoHidden, onPickSource, onTogglePaper, onClose }: {
+  source: CanvasBasemapSource;
+  geoHidden: boolean;
+  onPickSource: (id: CanvasBasemapSource) => void;
+  onTogglePaper: () => void;
+  onClose: () => void;
+}) {
+  const sourceTile = ({ id, label }: { id: CanvasBasemapSource; label: string }) => {
+    const active = !geoHidden && id === source;
+    return (
+      <button
+        key={id}
+        type="button"
+        role="radio"
+        aria-checked={active}
+        aria-label={`底图：${label}`}
+        data-testid={`map-source-${id}`}
+        onClick={() => onPickSource(id)}
+        className="oc-map-details__source"
+      >
+        <span className="oc-map-details__thumb" aria-hidden="true">
+          <SourceThumb id={id} />
+        </span>
+        <span className="oc-map-details__name">{label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div
+      id="outdoor-map-details"
+      data-testid="outdoor-map-picker-panel"
+      role="dialog"
+      aria-label="地图详情"
+      className="oc-map-details"
+    >
+      <div className="oc-map-details__head">
+        <span className="oc-map-details__title">地图详情</span>
+        <button
+          type="button"
+          data-testid="map-picker-close"
+          aria-label="关闭地图详情"
+          className="oc-map-details__close"
+          onClick={onClose}
+        >
+          <X size={18} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="oc-map-details__section">
+        <div className="oc-map-details__label">地图类型</div>
+        <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
+          {PRIMARY_MAP_SOURCES.map(sourceTile)}
+        </div>
+      </div>
+      <div className="oc-map-details__section">
+        <div className="oc-map-details__label">更多底图</div>
+        <div className="oc-map-details__grid" role="radiogroup" aria-label="更多底图">
+          {MORE_MAP_SOURCES.map(sourceTile)}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={geoHidden}
+            aria-label="纸面模式"
+            data-testid="map-picker-toggle-geo"
+            onClick={onTogglePaper}
+            className="oc-map-details__source"
+          >
+            <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
+            <span className="oc-map-details__name">纸面模式</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 const GUIDE_STORAGE_KEY = 'outdoor-plan-guide-v1';
@@ -269,10 +364,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
   // 不再把「OSM」这种图源缩写塞进室内工具排里让人猜。
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
-  // 2026-11-15 Google 图层范式：常态只露折叠钮；指针进入入口区域才浮出高频缩略竖列，移出收回。
-  const [layerHover, setLayerHover] = useState(false);
-  // 折叠钮与浮层之间留有间隙：离开后延迟收起，指针横穿间隙进入浮层时立即取消，避免移动途中浮层消失。
+  // 2026-11-16 用户指令：恢复上一版竖排手感——常态一枚「图层」缩略钮；鼠标悬停（或手机点按）
+  // 在右侧浮出竖列；点竖列末尾的「展开」才进入完整「地图详情」，X 关掉后只剩图层钮。
+  const [layerStripOpen, setLayerStripOpen] = useState(false);
   const layerHoverTimer = useRef<number | null>(null);
+  const layerDockRef = useRef<HTMLDivElement | null>(null);
   // 2026-11-11 用户拍板：户外默认铺真地图（起步计划自带预置锚点）；纸面格网降级为
   // 用户显式「隐藏底图」的形态。geoHidden = true 时切纸面，业务图层不受影响。
   const [geoHidden, setGeoHidden] = useState(false);
@@ -435,6 +531,23 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     if (pendingSaveRef.current !== null) flushSave();
     if (layerHoverTimer.current !== null) window.clearTimeout(layerHoverTimer.current);
   }, [flushSave]);
+  // 快捷条只在鼠标悬停/点按时展开；点外面或 Esc 收起（完整面板仍只认 X）。
+  useEffect(() => {
+    if (!layerStripOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (layerDockRef.current?.contains(event.target as Node)) return;
+      setLayerStripOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLayerStripOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutside, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [layerStripOpen]);
   useEffect(() => {
     onSaveStateChange?.({ state: saveState, savedAt });
   }, [saveState, savedAt, onSaveStateChange]);
@@ -629,226 +742,98 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       )}
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，
           本覆盖层不再自摆快捷钮。OutdoorDeliveryPanel 仅保留为面板挂载宿主，不再由此处按钮打开。 */}
-      {/* 2026-11-15 底图切换（Google 地图「图层」范式）：左下常态露三枚高频底图缩略直选，
-          第四格「展开」进完整底图面板（缩略网格 + 纸面模式 + 重看引导）。 */}
-      {/* 右下：底图选择（OnePlan 的 Select a map）+ 隐藏底图 + 重看引导。
-          2026-11-11 用户指令：整簇往右挪（right 80→24），贴近画布右缘；
-          只动右下簇，右上交付簇的 right:80 是给 3D 楼层切换芯片让位的，不动。 */}
+      {/* 2026-11-16 用户指令：左下只保留一枚「图层」缩略钮；点开是「地图详情」面板，
+          面板盖住地图和入口，关闭只走右上角 X，关掉后回到这一枚图层钮。 */}
       <div
-        style={{ position: 'absolute', left: 24, bottom: 20, zIndex: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}
+        ref={layerDockRef}
+        className="oc-layer-dock"
+        onMouseEnter={() => {
+          if (layerHoverTimer.current !== null) { window.clearTimeout(layerHoverTimer.current); layerHoverTimer.current = null; }
+          setLayerStripOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (layerHoverTimer.current !== null) window.clearTimeout(layerHoverTimer.current);
+          layerHoverTimer.current = window.setTimeout(() => setLayerStripOpen(false), 160);
+        }}
+        onFocus={() => setLayerStripOpen(true)}
+        style={{ position: 'absolute', left: 24, bottom: 'var(--oc-layer-bottom, 20px)', zIndex: mapPickerOpen ? 20 : 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}
       >
-        {mapPickerOpen && (
-          <div
-            data-testid="outdoor-map-picker-panel"
-            role="radiogroup"
-            aria-label="选择底图"
-            style={{
-              width: 288,
-              borderRadius: 14,
-              background: PLANNING_SURFACE.panelBg,
-              border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-              boxShadow: '0 12px 32px rgba(20, 20, 22, 0.18)',
-              padding: 12,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-              fontFamily: 'inherit',
-            }}
-          >
-            <div style={{ fontSize: PLANNING_TYPOGRAPHY.panel, fontWeight: 700, color: PLANNING_SURFACE.panelText }}>选择底图</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-              {SOURCE_CYCLE.map(option => {
-                const active = !geoHidden && option.id === source;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    data-testid={`map-source-${option.id}`}
-                    onClick={() => { setSource(option.id); setGeoHidden(false); setMapPickerOpen(false); }}
-                    style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{ height: 46, borderRadius: 10, border: `2px solid ${active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`, overflow: 'hidden', background: '#fff', boxSizing: 'border-box' }}
-                    >
-                      <SourceThumb id={option.id} />
-                    </span>
-                    <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: active ? PLANNING_SURFACE.panelText : PLANNING_SURFACE.panelText, fontWeight: active ? 600 : 400, textAlign: 'center', whiteSpace: 'nowrap', opacity: active ? 1 : 0.72 }}>
-                      {option.label}
-                    </span>
-                  </button>
-                );
-              })}
-              {/* 纸面模式：与底图同列的一格，勾选即隐藏真地图、切平面格网底。 */}
-              <button
-                type="button"
-                data-testid="map-picker-toggle-geo"
-                aria-pressed={geoHidden}
-                onClick={() => { setGeoHidden(value => !value); setMapPickerOpen(false); }}
-                style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    height: 46, borderRadius: 10, boxSizing: 'border-box',
-                    border: `2px solid ${geoHidden ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
-                    background: '#ffffff',
-                    backgroundImage: 'linear-gradient(#e4e4e7 1px, transparent 1px), linear-gradient(90deg, #e4e4e7 1px, transparent 1px)',
-                    backgroundSize: '14px 14px',
-                  }}
-                />
-                <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_SURFACE.panelText, fontWeight: geoHidden ? 600 : 400, textAlign: 'center', whiteSpace: 'nowrap', opacity: geoHidden ? 1 : 0.72 }}>
-                  纸面模式
-                </span>
-              </button>
-            </div>
-            {/* 2026-11-11：重看引导收进面板（原右下 ？ 钮按用户指令撤并）。 */}
+        {mapPickerOpen ? (
+          <MapDetailsPanel
+            source={source}
+            geoHidden={geoHidden}
+            onPickSource={id => { setSource(id); setGeoHidden(false); }}
+            onTogglePaper={() => setGeoHidden(value => !value)}
+            onClose={() => setMapPickerOpen(false)}
+          />
+        ) : (
+          <>
             <button
               type="button"
-              data-testid="map-picker-restart-guide"
-              onClick={() => { guide.restart(); setGuideHidden(false); setMapPickerOpen(false); }}
-              style={{
-                padding: '6px 9px',
-                borderRadius: 9,
-                border: 'none',
-                background: 'transparent',
-                color: PLANNING_SURFACE.panelText,
-                fontSize: PLANNING_TYPOGRAPHY.row,
-                opacity: 0.75,
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontFamily: 'inherit',
-                width: '100%',
-              }}
+              id="tool-outdoor-source"
+              data-testid="outdoor-source-cycle"
+              aria-label={`图层，当前底图 ${currentSource.label}${geoHidden ? '（纸面）' : ''}`}
+              aria-expanded={layerStripOpen}
+              aria-controls="outdoor-layer-strip"
+              data-tip="图层 · 悬停或点按快速换底图"
+              onClick={() => setLayerStripOpen(true)}
+              className="oc-layer-entry"
             >
-              重看首次开图引导
+              <span className="oc-layer-entry__thumb" aria-hidden="true">
+                <SourceThumb id="amap-satellite" />
+              </span>
+              <span className="oc-layer-entry__caption">
+                <Layers3 size={16} strokeWidth={1.8} aria-hidden="true" />
+                <span>图层</span>
+              </span>
             </button>
-          </div>
-        )}
-        {/* 图层入口（Google 折叠-悬停范式）：常态一枚折叠钮；指针进入区域在右侧浮出高频缩略竖列，移出收回；点展开格进完整底图面板。 */}
-        <div
-          onMouseEnter={() => {
-            if (layerHoverTimer.current !== null) { window.clearTimeout(layerHoverTimer.current); layerHoverTimer.current = null; }
-            setLayerHover(true);
-          }}
-          onMouseLeave={() => {
-            layerHoverTimer.current = window.setTimeout(() => setLayerHover(false), 140);
-          }}
-          style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 10 }}
-        >
-          <button
-            type="button"
-            id="tool-outdoor-source"
-            data-testid="outdoor-source-cycle"
-            aria-label={`底图：${currentSource.label}${geoHidden ? '（当前纸面）' : ''}（点击在街道与卫星地图之间切换）`}
-            data-tip={`底图${geoHidden ? ' · 已关闭' : ` · ${currentSource.label}`} · 点击切换街道/卫星`}
-            onClick={() => {
-              // 折叠卡直切：街道 ↔ 卫星互切；完整图源面板走悬停竖列里的「展开」格。
-              const toSatellite = !(source === 'amap-satellite' && !geoHidden);
-              setSource(toSatellite ? 'amap-satellite' : 'amap-streets');
-              setGeoHidden(false);
-            }}
-            style={{
-              position: 'relative',
-              width: 64,
-              height: 72,
-              borderRadius: 12,
-              border: `2px solid ${PLANNING_SURFACE.panelBorder}`,
-              overflow: 'hidden',
-              padding: 0,
-              background: PLANNING_SURFACE.fieldBg,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              boxShadow: '0 4px 14px rgba(20, 20, 22, 0.18)',
-            }}
-          >
-            <span aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'block' }}>
-              {geoHidden ? (
-                <svg viewBox="0 0 48 48" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                  <rect width="48" height="48" fill="#F4F5F7" />
-                  <path d="M0 16h48M0 32h48M16 0v48M32 0v48" stroke="#D7D9DE" strokeWidth="1" />
-                </svg>
-              ) : (
-                <SourceThumb id={source} />
-              )}
-            </span>
-            <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 6px 6px', background: 'linear-gradient(180deg, rgba(20,20,22,0) 0%, rgba(20,20,22,0.72) 100%)', color: '#ffffff', fontSize: 10, fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-              {geoHidden ? '纸面' : currentSource.label}
-            </span>
-          </button>
-
-          {layerHover && (
-            <div
-              style={{
-                position: 'absolute',
-                left: 'calc(100% + 10px)',
-                bottom: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-                alignItems: 'stretch',
-                padding: 8,
-                background: PLANNING_SURFACE.panelBg,
-                border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                borderRadius: 14,
-                boxShadow: '0 8px 24px rgba(20, 20, 22, 0.14)',
-                zIndex: 5,
-              }}
-            >
-              {FEATURED_SOURCES.map(option => {
-                const active = !geoHidden && option.id === source;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    data-testid={`map-source-${option.id}-entry`}
-                    aria-label={`底图：${option.label}`}
-                    aria-pressed={active}
-                    onClick={() => { setSource(option.id); setGeoHidden(false); }}
-                    style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, width: 116, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 36, height: 36, borderRadius: 8, boxSizing: 'border-box', overflow: 'hidden', flex: 'none',
-                        border: `2px solid ${active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
-                      }}
-                    >
-                      <SourceThumb id={option.id} />
-                    </span>
-                    <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_SURFACE.panelText, fontWeight: active ? 600 : 400, textAlign: 'left', whiteSpace: 'nowrap', opacity: active ? 1 : 0.72 }}>
-                      {option.label}
-                    </span>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                aria-label="展开更多图层"
-                onClick={() => { setMapPickerOpen(true); setLayerHover(false); }}
-                style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, width: 116, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+            {layerStripOpen && (
+              <div
+                id="outdoor-layer-strip"
+                data-testid="outdoor-layer-strip"
+                role="group"
+                aria-label="快速切换底图"
+                className="oc-layer-strip"
               >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 36, height: 36, borderRadius: 8, boxSizing: 'border-box', flex: 'none',
-                    border: '2px dashed #d4d4d8',
-                    background: PLANNING_SURFACE.fieldBg,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: `${PLANNING_SURFACE.panelText}99`,
-                  }}
+                {FEATURED_SOURCES.map(option => {
+                  const active = !geoHidden && source === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      data-testid={option.id === 'amap-streets' ? 'map-strip-current' : `map-strip-${option.id}`}
+                      aria-label={`底图：${option.label}`}
+                      aria-pressed={active}
+                      className="oc-layer-strip__row"
+                      onClick={() => { setSource(option.id); setGeoHidden(false); }}
+                    >
+                      <span className="oc-layer-strip__thumb" aria-hidden="true">
+                        <SourceThumb id={option.id} />
+                      </span>
+                      <span className="oc-layer-strip__label">{option.label}</span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  data-testid="map-strip-expand"
+                  aria-label="展开地图详情"
+                  aria-haspopup="dialog"
+                  aria-controls="outdoor-map-details"
+                  className="oc-layer-strip__row"
+                  onClick={() => { setLayerStripOpen(false); setMapPickerOpen(true); }}
                 >
-                  <span style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 6px)', gap: 4 }}>
-                    {[0, 1, 2, 3].map(i => <span key={i} style={{ width: 6, height: 6, borderRadius: 2, background: `${PLANNING_SURFACE.panelText}66` }} />)}
+                  <span className="oc-layer-strip__thumb oc-layer-strip__thumb--expand" aria-hidden="true">
+                    <span className="oc-layer-strip__grid">
+                      {[0, 1, 2, 3].map(i => <i key={i} />)}
+                    </span>
                   </span>
-                </span>
-                <span style={{ fontSize: PLANNING_TYPOGRAPHY.row, color: `${PLANNING_SURFACE.panelText}99`, textAlign: 'left', whiteSpace: 'nowrap' }}>展开</span>
-              </button>
-            </div>
-          )}
-        </div>
+                  <span className="oc-layer-strip__label">展开</span>
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
       {plan && (
         <OutdoorDeliveryPanel
