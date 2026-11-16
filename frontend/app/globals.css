@@ -1904,6 +1904,8 @@ body.sc-panel-dragging * {
 .oc-layer-entry:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(20, 20, 22, .26); }
 .oc-layer-entry:focus-visible { outline: 2px solid #4a7c59; outline-offset: 2px; }
 .oc-layer-entry__thumb { position: absolute; inset: 0; display: block; }
+/* 纸面态的入口缩略图：同「地图详情」里的纸面格（白底格网）。 */
+.oc-layer-entry__thumb--paper { position: absolute; inset: 0; background-color: #fff; background-image: linear-gradient(#e4e4e7 1px, transparent 1px), linear-gradient(90deg, #e4e4e7 1px, transparent 1px); background-size: 14px 14px; }
 .oc-layer-entry__caption {
   position: absolute; left: 0; right: 0; bottom: 0;
   display: flex; align-items: center; justify-content: center; gap: 4px;
@@ -1912,32 +1914,44 @@ body.sc-panel-dragging * {
   text-shadow: 0 1px 2px rgba(0, 0, 0, .35); white-space: nowrap;
 }
 .oc-layer-entry__caption .sc-material-symbol { color: #fff; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); }
-/* 悬停/点按图层后浮出的竖排快捷列表（恢复 2026-11-15 版：36px 缩略图 + 单行文字）。 */
+/* 2026-11-16 参考高德：点图层钮在上方弹出紧凑卡片（地图/卫星/深色/展开），
+   单击即切即关；真瓦片缩略 44px + 单行文字，选中行标签加粗 + 绿描边。
+   2026-11-17 用户拍板：卡片/缩略不收缩（保持 44px），文字变小、间距收紧。 */
 .oc-layer-strip {
-  position: absolute; left: calc(100% + 10px); bottom: 0; z-index: 5;
-  display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 8px;
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 5;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px;
   border: 1px solid #e4e4e7; border-radius: 14px; background: #fff;
   box-shadow: 0 8px 24px rgba(20, 20, 22, .14); white-space: nowrap;
 }
-.oc-layer-strip__row {
-  display: flex; flex-direction: row; align-items: center; gap: 8px; width: 116px;
-  padding: 0; border: 0; background: transparent; color: #3c4043;
-  font-family: inherit; font-size: 12px; line-height: 16px; text-align: left; cursor: pointer;
+/* 特异性：.sc-workbench button (0,1,1) 会压过单类选择器，这里挂 .sc-workbench 前缀 (0,2,0) 才生效。 */
+.sc-workbench .oc-layer-strip__row {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  padding: 2px; border: 0; background: transparent; color: #3c4043;
+  font-family: inherit; font-size: 11px; line-height: 14px; text-align: left; cursor: pointer;
 }
 .oc-layer-strip__row:focus-visible { outline: 2px solid #4a7c59; outline-offset: 2px; border-radius: 8px; }
 .oc-layer-strip__thumb {
-  width: 36px; height: 36px; flex: none; box-sizing: border-box; overflow: hidden;
-  border: 2px solid #e4e4e7; border-radius: 8px; background: #f4f5f7;
+  width: 44px; height: 44px; flex: none; box-sizing: border-box; overflow: hidden;
+  border: 2px solid #e4e4e7; border-radius: 10px; background: #f4f5f7;
 }
 .oc-layer-strip__row[aria-pressed="true"] .oc-layer-strip__thumb { border-color: #4a7c59; }
 .oc-layer-strip__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: .72; }
 .oc-layer-strip__row[aria-pressed="true"] .oc-layer-strip__label { color: #202124; font-weight: 600; opacity: 1; }
 .oc-layer-strip__row:hover .oc-layer-strip__label { color: #202124; opacity: 1; }
-.oc-layer-strip__thumb--expand {
-  display: grid; place-items: center; border: 2px dashed #d4d4d8; background: #f4f5f7;
+.oc-layer-strip__thumb--paper {
+  background-color: #fff;
+  background-image: linear-gradient(#e4e4e7 1px, transparent 1px), linear-gradient(90deg, #e4e4e7 1px, transparent 1px);
+  background-size: 12px 12px;
 }
-.oc-layer-strip__grid { display: grid; grid-template-columns: repeat(2, 6px); gap: 4px; }
-.oc-layer-strip__grid i { width: 6px; height: 6px; border-radius: 2px; background: #a1a1aa; }
+/* 2026-11-17 用户指令：展开缩成底部一小行文字，不再占一格 44px 缩略钮。 */
+.oc-layer-strip__row--slim {
+  justify-content: center; padding: 4px 2px 2px; margin-top: 2px;
+  border-top: 1px solid #eceef0; color: #6b7280; font-size: 11px;
+}
+.oc-layer-strip__row--slim:hover { color: #202124; }
+.oc-layer-strip__row--slim .oc-layer-strip__label { opacity: 1; }
+.oc-layer-strip__label--with-icon { display: inline-flex; align-items: center; gap: 4px; }
+.oc-layer-strip__label--with-icon svg { display: block; opacity: .8; }
 .oc-map-details {
   /* Google 地图「地图详情」的实测尺寸：268 宽、12 内边距、8 圆角、底部与图层钮齐平。 */
   width: min(268px, calc(100vw - 48px));
@@ -1987,9 +2001,7 @@ body.sc-panel-dragging * {
   /* 手机左下角还有一枚 48px「助理菜单」圆钮（bottom 约 110px）；图层钮上移 58px 让开它，
      两块仍贴左缘，展开的地图详情也留出底部工具条。 */
   .oc-layer-dock { --oc-layer-bottom: 78px; }
-  /* 手机上竖列改到图层钮上方，避开底部居中的「工具」把手。 */
-  .oc-layer-strip { left: 0; bottom: calc(100% + 10px); }
-  /* 手机上面板底部会压到居中的「工具」把手；打开地图详情时先收起它，X 关掉后自然回来。 */
+  /* 面板底部会压到居中的「工具」把手；打开地图详情时先收起它，X 关掉后自然回来。 */
   .sc-canvas-stage:has([data-testid="outdoor-map-picker-panel"]) .oc-dock {
     visibility: hidden; pointer-events: none;
   }

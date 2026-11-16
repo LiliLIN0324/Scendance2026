@@ -59,7 +59,7 @@ import { findWalkRole } from '@/components/room-organizer/lib/walk-roles';
 import { createPlanTrafficLayer } from '@/components/room-organizer/three/plan-traffic-layer';
 import { createPlanRoleLabels } from '@/components/room-organizer/three/plan-role-labels';
 import { libraryEntryColor } from '@/components/room-organizer/lib/oneplan-library';
-import { workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
+import { workerRoleColor, workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
 import type { WalkViewMode } from '@/components/room-organizer/lib/walk-view-modes';
 import {
   InteractRegistry,
@@ -253,6 +253,11 @@ function cameraPose(target: THREE.Vector3, span: number, polar: number, fovDeg: 
 export interface OutdoorPlan3DApi {
   zoomBy(direction: 1 | -1): void;
   focusLngLat(lng: number, lat: number): void;
+  /**
+   * 回到框选场地（右下回选址靶心）：有设计范围就框设计范围，没圈就框场地边界，
+   * 镜头回到「北在上、俯视整块场地」的默认机位。与 2D 那颗回调同口径（2026-11-16）。
+   */
+  focusVenue(): void;
   /** 相机回正正北（保留距离与俯仰角）；右上指北针钮调用。 */
   resetNorth(): void;
   /** 当前相机水平方位角（弧度，0 = 正北）；右列大罗盘实时读指针用。 */
@@ -267,6 +272,11 @@ export interface OutdoorPlan3DProps {
   plan: SitePlanData;
   /** 跟 2D 画布同一个图源，3D 地面直接贴同一套瓦片（默认 osm）。 */
   source?: CanvasBasemapSource;
+  /**
+   * docs/46 V-P1：地面形态（2D 覆盖层的纸面开关写进 ground-mode store，外层订阅传入）。
+   * paper = 纸面虚拟场地：不铺瓦片，落纸面地面 + 米制网格（与「无锚点纯纸面」同一套）。
+   */
+  groundMode?: 'map' | 'paper';
   /** 2D 上的物料 / 场景落点（由 plan-item-bridge 派生）。 */
   sceneObjects?: readonly PlanSceneObject[] | undefined;
   /** 顶左角状态文案（切回 2D 由外层按钮负责，这里只报状态）。 */
@@ -310,6 +320,7 @@ interface WalkActor {
 export default function OutdoorPlan3D({
   plan,
   source = 'amap-streets',
+  groundMode = 'map',
   sceneObjects,
   onReady,
   mapView,
@@ -470,6 +481,27 @@ export default function OutdoorPlan3D({
     controls.update();
   }, [plan.anchor]);
 
+  /**
+   * 回到框选场地：2D 焦点钮在 3D 接管态落到这里（此前只动了主场景相机，用户看到的
+   * 3D 相机毫无反应）。取景口径与初始机位、漫游退出后的鸟瞰一致：目标点 = 场地中心，
+   * 距离按包围盒跨度算到能看全，俯仰回到默认斜角、正北朝上。只动相机，不改 plan。
+   */
+  const focusVenue = useCallback((): void => {
+    if (walkEnabledRef.current) return;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+    const scope = plan.designScope ?? [];
+    const ring = scope.length >= 3 ? scope : plan.boundary;
+    const frame = ringFrame(ring);
+    const target = new THREE.Vector3(frame.cx, 0, -frame.cy);
+    const span = Math.max(12, frame.span);
+    camera.position.copy(cameraPose(target, span, MAP_TILT_POLAR, camera.fov));
+    controls.target.copy(target);
+    camera.lookAt(target);
+    controls.update();
+  }, [plan.boundary, plan.designScope]);
+
   /** 罗盘回正朝北：保留目标点、距离与俯仰角，只把水平方位角归 0（北 = -z）。 */
   const resetNorth = useCallback((): void => {
     if (walkEnabledRef.current) return;
@@ -526,9 +558,9 @@ export default function OutdoorPlan3D({
 
   useEffect(() => {
     if (!apiRef) return undefined;
-    apiRef.current = { zoomBy: zoomByStep, focusLngLat, resetNorth, getBearing, orbitByDelta, captureImage };
+    apiRef.current = { zoomBy: zoomByStep, focusLngLat, focusVenue, resetNorth, getBearing, orbitByDelta, captureImage };
     return () => { apiRef.current = null; };
-  }, [apiRef, zoomByStep, focusLngLat, resetNorth, getBearing, orbitByDelta, captureImage]);
+  }, [apiRef, zoomByStep, focusLngLat, focusVenue, resetNorth, getBearing, orbitByDelta, captureImage]);
 
   // 一期裸第一人称步行：指针锁 / WASD / 边界钳制自管在本组件内，旧室内
   // walkthroughMode 链路不动；退出由 onWalkExit 交外层收口。
@@ -636,9 +668,13 @@ export default function OutdoorPlan3D({
     let renderer: THREE.WebGLRenderer | null = null;
     let controls: OrbitControls | null = null;
     const disposables: { dispose: () => void }[] = [];
+    // docs/46 V-P1：paper 形态（纸面虚拟场地）不铺瓦片——纸面地面 + 米制网格，
+    // 与「无锚点纯纸面」同一套；锚点保留（瓦片层跳过即可，镜头对位照常）。
+    const paperGround = groundMode === 'paper';
+    const tileAnchor = paperGround ? null : (plan.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null);
     const anchor = plan.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null;
     const siteFrame = ringFrame(plan.boundary);
-    const viewFrame = mapView && anchor ? frameFromMapView(mapView, anchor) : siteFrame;
+    const viewFrame = mapView && tileAnchor ? frameFromMapView(mapView, tileAnchor) : siteFrame;
     const span = Math.max(12, viewFrame.span);
     const aspect = Math.max(0.2, (stage.clientWidth || 800) / Math.max(1, stage.clientHeight || 600));
 
@@ -686,9 +722,9 @@ export default function OutdoorPlan3D({
     basemapRoot.name = "plan-basemap";
     scene.add(basemapRoot);
 
-    // 只有纯纸面规划（没有地图锚点）才铺一块场地大小的纸；
+    // 只有纯纸面规划（没有地图锚点 / docs/46 V-P1 纸面形态）才铺一块场地大小的纸；
     // 有底图时不要再垫一块灰色平面，否则会在地图背后露出垫块。
-    if (!anchor) {
+    if (!tileAnchor) {
       const paperW = Math.max(viewFrame.width, siteFrame.width) * 1.2;
       const paperD = Math.max(viewFrame.depth, siteFrame.depth) * 1.2;
       const paperGeometry = new THREE.PlaneGeometry(paperW, paperD);
@@ -737,7 +773,7 @@ export default function OutdoorPlan3D({
     const focusEnu = { x: siteFrame.cx, y: siteFrame.cy };
     const nearPad = Math.max(siteFrame.span * 1.3, siteFrame.span + 240, 320);
     const nearFrame = squareFrame(siteFrame.cx, siteFrame.cy, nearPad);
-    if (anchor) {
+    if (tileAnchor) {
       void (async () => {
         const shared = canvasEditApiRef.current?.current?.getTileCache();
         if (shared) tileCache.imageCache = shared;
@@ -764,10 +800,10 @@ export default function OutdoorPlan3D({
         await paintTilePyramid({
           scene,
           disposables,
-          closeBounds: frameToBounds(nearFrame, anchor),
-          midBounds: frameToBounds(nearFrame, anchor),
-          farBounds: frameToBounds(nearFrame, anchor),
-          anchor,
+          closeBounds: frameToBounds(nearFrame, tileAnchor),
+          midBounds: frameToBounds(nearFrame, tileAnchor),
+          farBounds: frameToBounds(nearFrame, tileAnchor),
+          anchor: tileAnchor,
           source,
           topZoom: hiZoom,
           isDisposed: () => disposed,
@@ -782,10 +818,10 @@ export default function OutdoorPlan3D({
         await paintTilePyramid({
           scene,
           disposables,
-          closeBounds: frameToBounds(closeFrame, anchor),
-          midBounds: frameToBounds(workFrame, anchor),
-          farBounds: frameToBounds(workFrame, anchor),
-          anchor,
+          closeBounds: frameToBounds(closeFrame, tileAnchor),
+          midBounds: frameToBounds(workFrame, tileAnchor),
+          farBounds: frameToBounds(workFrame, tileAnchor),
+          anchor: tileAnchor,
           source,
           topZoom: hiZoom,
           isDisposed: () => disposed,
@@ -800,8 +836,8 @@ export default function OutdoorPlan3D({
         await paintTiledGround({
           scene,
           disposables,
-          bounds: frameToBounds(groundFrame, anchor),
-          anchor,
+          bounds: frameToBounds(groundFrame, tileAnchor),
+          anchor: tileAnchor,
           source,
           preferredZoom: Math.min(preferredZoom - 3, 11),
           maxTiles: 80,
@@ -957,10 +993,10 @@ export default function OutdoorPlan3D({
       const actors = crowdPlacements.map((placement): WalkActor => {
         const { assetId, glbUrl, role, shell } = placement;
         const customColor = colors.get(placement.workerId);
-        const roleColor = libraryEntryColor({
-          slug: workerSticker(role)?.slug ?? 'information-point',
-          ...(customColor ? { color: customColor } : {}),
-        });
+        // 主题色（2026-11-16）：点位自带色 > 岗位表写死的九岗色 > slug 调色板。
+        const roleColor = customColor
+          ?? workerRoleColor(role)
+          ?? libraryEntryColor({ slug: workerSticker(role)?.slug ?? 'information-point' });
         const ordinal = (ordinals.get(role) ?? 0) + 1;
         ordinals.set(role, ordinal);
         const walkRoute = walkRouteMap.get(placement.id);
@@ -1474,12 +1510,12 @@ export default function OutdoorPlan3D({
     let lastLodAt = 0;
     let lastLodFocus = { x: focusEnu.x, y: focusEnu.y };
     const loadCloserTiles = (): void => {
-      if (!anchor || disposed || lodBusy) return;
+      if (!tileAnchor || disposed || lodBusy) return;
       const now = performance.now();
       if (now - lastLodAt < 80) return;
       const aim = controls?.target ?? lookTarget;
       const canvasH = stage.clientHeight || 600;
-      const needed = neededMapZoom(camera, aim, canvasH, anchor.lat);
+      const needed = neededMapZoom(camera, aim, canvasH, tileAnchor.lat);
       const cap = maxZoomForSource(source);
       // 只要靠近看场地，就直接拉到图源最高级别，避免 16→17→18 一档一跳。
       const zoom = needed >= 15 || needed >= preferredZoom + 0.3
@@ -1500,10 +1536,10 @@ export default function OutdoorPlan3D({
       void paintTilePyramid({
         scene,
         disposables,
-        closeBounds: frameToBounds(visible, anchor),
-        midBounds: frameToBounds(midVisible, anchor),
-        farBounds: frameToBounds(farVisible, anchor),
-        anchor,
+        closeBounds: frameToBounds(visible, tileAnchor),
+        midBounds: frameToBounds(midVisible, tileAnchor),
+        farBounds: frameToBounds(farVisible, tileAnchor),
+        anchor: tileAnchor,
         source,
         topZoom: zoom,
         isDisposed: () => disposed,
@@ -2159,7 +2195,7 @@ export default function OutdoorPlan3D({
       if (canvas && canvas.parentNode === stage) stage.removeChild(canvas);
     };
     // 图源 / 初始视口变化才重建场景；规划线的增改走 syncFootprint，避免编辑时镜头被重置。
-  }, [onReady, source, mapView, plan.anchor?.lng, plan.anchor?.lat, releaseControlledActor]);
+  }, [onReady, source, groundMode, mapView, plan.anchor?.lng, plan.anchor?.lat, releaseControlledActor]);
 
   useEffect(() => {
     if (layerApiRef.current?.syncEditVisuals) layerApiRef.current.syncEditVisuals();
@@ -2350,7 +2386,9 @@ export default function OutdoorPlan3D({
             lineHeight: '18px',
           }}
         >
-          地图底图未取到，先用纸面网格（低模草图）
+          {groundMode === 'paper'
+            ? '纸面模式 · 虚拟场地（不关联真实地图）'
+            : '地图底图未取到，先用纸面网格（低模草图）'}
         </div>
       )}
       <GeoScaleCompass

@@ -4,7 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { ROOM_OBJECT_TAGS } from './room-builder';
 import { planFootprintShapes, type PlanFootprintStrokeShape, type ShellPoint } from '../lib/plan-footprint-geometry';
 import { buildGroundLabel, buildPlanGroundSticker, buildPlanPropObject } from './plan-props-builder';
-import { workerSticker } from '../lib/oneplan-stickers';
+import { workerRoleColor, workerSticker } from '../lib/oneplan-stickers';
 import { libraryEntryColor } from '../lib/oneplan-library';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type * as ThreeNS from 'three';
@@ -423,7 +423,9 @@ export function buildPlanFootprint(
     group.add(mesh);
     const source = workersById.get(worker.id);
     const sticker = workerSticker(source?.role ?? '') ?? { kind: 'icon', slug: 'information-point', icon: 'users' };
-    const color = libraryEntryColor({ slug: sticker.slug, ...(source?.color ? { color: source.color } : {}) });
+    const color = source?.color
+      ?? workerRoleColor(source?.role ?? '')
+      ?? libraryEntryColor({ slug: sticker.slug });
     const badge = buildPlanGroundSticker(THREE, sticker, { width: 1.15, depth: 1.15, color });
     badge.position.set(x, ELEVATION.marker, -y);
     badge.name = 'plan-worker-badge';

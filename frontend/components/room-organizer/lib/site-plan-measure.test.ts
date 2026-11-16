@@ -120,9 +120,12 @@ describe('buildMeasurement validation (H3-a)', () => {
 /* ---------------- 临时测量：草稿实时读数 ---------------- */
 
 describe('measureDraftReadout (临时测量)', () => {
-  it('shows the live segment length for a distance draft', () => {
+  it('accumulates a multi-segment distance draft (2026-11-16 多段线测量)', () => {
     expect(measureDraftReadout('distance', [{ x: 0, y: 0 }], { x: 3, y: 4 })).toBe('5 m');
     expect(measureDraftReadout('distance', [{ x: 0, y: 0 }, { x: 3, y: 4 }])).toBe('5 m');
+    // 继续加段：不再只算最后一段，而是从起点累计。
+    expect(measureDraftReadout('distance', [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }])).toBe('20 m');
+    expect(measureDraftReadout('distance', [{ x: 0, y: 0 }, { x: 10, y: 0 }], { x: 10, y: 10 })).toBe('20 m');
     expect(measureDraftReadout('distance', [])).toBeNull();
     expect(measureDraftReadout('distance', [], { x: 1, y: 1 })).toBeNull();
   });

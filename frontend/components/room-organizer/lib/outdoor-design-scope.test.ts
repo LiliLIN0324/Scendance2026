@@ -13,6 +13,7 @@ import {
   scopeContainsPoint,
   scopeEdgeIsHorizontal,
   scopeEdgeLabel,
+  syncScopeForBoundary,
 } from './outdoor-design-scope';
 
 /** 10×10 的正方形场地（米），左下角在原点。 */
@@ -204,5 +205,27 @@ describe('设计范围：路径串（蒙版与描边共用一份）', () => {
 
   it('空环给空串，调用方据此跳过蒙版', () => {
     expect(ringToPath([])).toBe('');
+  });
+});
+
+describe('syncScopeForBoundary（2026-11-17 用户拍板：红线拖拽后白框跟不跟）', () => {
+  const scope = expandRect(square, DEFAULT_SCOPE_MARGIN_M); // -20..30，兜住默认红线
+  it('红线仍在白框内（往里拖/微调）→ 白框不动', () => {
+    const inside = [{ x: 2, y: 2 }, { x: 8, y: 2 }, { x: 8, y: 8 }, { x: 2, y: 8 }];
+    expect(syncScopeForBoundary(scope, inside, DEFAULT_SCOPE_MARGIN_M)).toBeNull();
+  });
+  it('红线顶出白框（向外拖）→ 白框重置为新红线外扩', () => {
+    const grown = [{ x: -30, y: -30 }, { x: 10, y: -30 }, { x: 10, y: 10 }, { x: -30, y: 10 }];
+    expect(syncScopeForBoundary(scope, grown, DEFAULT_SCOPE_MARGIN_M)).toEqual(expandRect(grown, DEFAULT_SCOPE_MARGIN_M));
+  });
+  it('只有一边顶出也算顶出', () => {
+    const up = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 40 }, { x: 0, y: 40 }];
+    expect(syncScopeForBoundary(scope, up, DEFAULT_SCOPE_MARGIN_M)).toEqual(expandRect(up, DEFAULT_SCOPE_MARGIN_M));
+  });
+  it('本来没有白框 → 顺手生成一个', () => {
+    expect(syncScopeForBoundary(undefined, square, DEFAULT_SCOPE_MARGIN_M)).toEqual(expandRect(square, DEFAULT_SCOPE_MARGIN_M));
+  });
+  it('红线不足 3 点 → 不动白框也不生成', () => {
+    expect(syncScopeForBoundary(scope, [{ x: 0, y: 0 }], DEFAULT_SCOPE_MARGIN_M)).toBeNull();
   });
 });

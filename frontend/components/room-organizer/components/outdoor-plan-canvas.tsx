@@ -133,6 +133,7 @@ import {
   scopeContainsPoint,
   scopeEdgeIsHorizontal,
   scopeEdgeLabel,
+  syncScopeForBoundary,
   type ScopeEdge,
 } from '../lib/outdoor-design-scope';
 import { createFlowWalkers, stepFlowWalkers, walkerPoints, routeDensity, type FlowWalker } from '../lib/flow-sim';
@@ -300,6 +301,7 @@ import {
   planStickerDescriptors,
   preloadOneplanStickers,
   subscribeOneplanStickerLoads,
+  workerRoleColor,
   workerSticker,
 } from '../lib/oneplan-stickers';
 import {
@@ -382,6 +384,8 @@ interface View {
   lng: number;
   lat: number;
   zoom: number;
+  /** 2026-11-16 用户指令：地图方位角（弧度，顺时针为正，0=正北朝上；罗盘拖转 2D 生效）。缺省 0。 */
+  bearing?: number;
 }
 
 export interface OutdoorPlanCanvasProps {
@@ -642,10 +646,22 @@ function paintFloorGrid(
   viewport: PlanViewport,
   cssW: number,
   cssH: number,
+  /**
+   * 2026-11-16 罗盘拖转：true = 调用方已把 ctx 包进「绕中心旋转 bearing」的变换、
+   * 传入的 viewport 是轴对齐口径（bearing:0），纸面与网格覆盖按对角线扩到旋转可视区。
+   * 缺省 false = 旧行为逐像素不变。
+   */
+  rotatedFrame = false,
 ): void {
   ctx.save();
   ctx.fillStyle = FLOOR_PAPER;
-  ctx.fillRect(0, 0, cssW, cssH);
+  if (rotatedFrame) {
+    // 旋转系里的矩形纸会露出四角：按对角线铺满中心 ± halfSpan。
+    const halfSpan = Math.hypot(cssW, cssH) / 2;
+    ctx.fillRect(cssW / 2 - halfSpan, cssH / 2 - halfSpan, halfSpan * 2, halfSpan * 2);
+  } else {
+    ctx.fillRect(0, 0, cssW, cssH);
+  }
   const metersPerPx = planMetersPerPixel(viewport);
   if (Number.isFinite(metersPerPx) && metersPerPx > 0) {
     const pxPerMeter = 1 / metersPerPx;
@@ -653,8 +669,12 @@ function paintFloorGrid(
     const spacing = stepM * pxPerMeter;
     if (spacing >= 4) {
       const origin = planPointToPixel({ x: 0, y: 0 }, viewport);
-      const fromCol = Math.floor((0 - origin.x) / spacing) - 1;
-      const toCol = Math.ceil((cssW - origin.x) / spacing) + 1;
+      // 旋转系可视范围是旋转矩形的 AABB（中心 ± 对角线/2）；轴对齐时与旧公式等价。
+      const halfSpan = rotatedFrame ? Math.hypot(cssW, cssH) / 2 + spacing : null;
+      const centerX = cssW / 2;
+      const centerY = cssH / 2;
+      const fromCol = halfSpan !== null ? Math.floor((centerX - halfSpan - origin.x) / spacing) - 1 : Math.floor((0 - origin.x) / spacing) - 1;
+      const toCol = halfSpan !== null ? Math.ceil((centerX + halfSpan - origin.x) / spacing) + 1 : Math.ceil((cssW - origin.x) / spacing) + 1;
       ctx.lineWidth = 1;
       for (let col = fromCol; col <= toCol; col += 1) {
         ctx.strokeStyle = col % 5 === 0 ? FLOOR_GRID_MAJOR : FLOOR_GRID_MINOR;
@@ -664,8 +684,8 @@ function paintFloorGrid(
         ctx.lineTo(x, cssH);
         ctx.stroke();
       }
-      const fromRow = Math.floor((origin.y - cssH) / spacing) - 1;
-      const toRow = Math.ceil(origin.y / spacing) + 1;
+      const fromRow = halfSpan !== null ? Math.floor((centerY - halfSpan - origin.y) / spacing) - 1 : Math.floor((origin.y - cssH) / spacing) - 1;
+      const toRow = halfSpan !== null ? Math.ceil((centerY + halfSpan - origin.y) / spacing) + 1 : Math.ceil(origin.y / spacing) + 1;
       for (let row = fromRow; row <= toRow; row += 1) {
         ctx.strokeStyle = row % 5 === 0 ? FLOOR_GRID_MAJOR : FLOOR_GRID_MINOR;
         const y = Math.round(origin.y - row * spacing) + 0.5;
@@ -758,6 +778,8 @@ const NODE_HIT_PX = 11;
 const WORKER_HIT_PX = 9;
 /** 2026-11-11 用户指令：自由标注命中半径（CSS px）：点选文本 pill 与形状边缘共用。 */
 const ANNOTATION_HIT_PX = 8;
+/** 2026-11-16 固定测量标注的点选半径（点到折线/闭合环的像素距离）。 */
+const MEASUREMENT_HIT_PX = 9;
 /** 路线折线命中半径（CSS px）：点到段距离。 */
 const ROUTE_HIT_PX = 8;
 /* ---------------- 2026-11-12 OnePlan Selection tool：组选/框选绘制（B2/B3） ---------------- */
@@ -789,6 +811,73 @@ function marqueePlanRect(marquee: { startPx: { x: number; y: number }; curPx: { 
     maxX: Math.max(a.x, b.x),
     maxY: Math.max(a.y, b.y),
   };
+}
+
+/** marquee 的屏幕像素矩形（轴对齐）。bearing≠0 时屏幕矩形在平面系是斜矩形，命中改在屏幕系做。 */
+function marqueeScreenRect(marquee: { startPx: { x: number; y: number }; curPx: { x: number; y: number } }): PlanRect {
+  return {
+    minX: Math.min(marquee.startPx.x, marquee.curPx.x),
+    minY: Math.min(marquee.startPx.y, marquee.curPx.y),
+    maxX: Math.max(marquee.startPx.x, marquee.curPx.x),
+    maxY: Math.max(marquee.startPx.y, marquee.curPx.y),
+  };
+}
+
+/** 屏幕系框选命中（bearing≠0 用）：设施中心或足迹环任一顶点投到屏幕 px 后落进 marquee 矩形。 */
+function facilityInScreenRect(
+  facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },
+  marquee: { startPx: { x: number; y: number }; curPx: { x: number; y: number } },
+  viewport: PlanViewport,
+): boolean {
+  const rect = marqueeScreenRect(marquee);
+  const inRect = (p: { x: number; y: number }) => p.x >= rect.minX && p.x <= rect.maxX && p.y >= rect.minY && p.y <= rect.maxY;
+  if (inRect(planPointToPixel(facility.position, viewport))) return true;
+  return facilityFootprintRing(facility).some(pt => inRect(planPointToPixel(pt, viewport)));
+}
+
+/**
+ * 屏幕系折线框选（bearing≠0 用）：与 routeLengthInRect 同款 Liang–Barsky，只是把端点投到
+ * 屏幕 px 后裁剪——旋转是等距仿射，参数 t 不变，px 长度按米/像素换回米制读数。
+ */
+function routeLengthInScreenRect(
+  points: PlanPoint[],
+  marquee: { startPx: { x: number; y: number }; curPx: { x: number; y: number } },
+  viewport: PlanViewport,
+): number {
+  const rect = marqueeScreenRect(marquee);
+  const px = points.map(p => planPointToPixel(p, viewport));
+  let totalPx = 0;
+  for (let i = 1; i < px.length; i += 1) {
+    const ax = px[i - 1]!.x;
+    const ay = px[i - 1]!.y;
+    const dx = px[i]!.x - ax;
+    const dy = px[i]!.y - ay;
+    let t0 = 0;
+    let t1 = 1;
+    let clipped = true;
+    for (const [p, q] of [
+      [-dx, ax - rect.minX],
+      [dx, rect.maxX - ax],
+      [-dy, ay - rect.minY],
+      [dy, rect.maxY - ay],
+    ] as const) {
+      if (p === 0) {
+        if (q < 0) { clipped = false; break; }
+        continue;
+      }
+      const t = q / p;
+      if (p < 0) {
+        if (t > t1) { clipped = false; break; }
+        if (t > t0) t0 = t;
+      } else {
+        if (t < t0) { clipped = false; break; }
+        if (t < t1) t1 = t;
+      }
+    }
+    if (!clipped || t1 <= t0) continue;
+    totalPx += Math.hypot(dx * (t1 - t0), dy * (t1 - t0));
+  }
+  return totalPx * planMetersPerPixel(viewport);
 }
 
 /** 2026-11-14 用户指令「框选要能选上线段」：折线落在矩形内的长度（逐段 Liang–Barsky 裁剪求和）。 */
@@ -1188,6 +1277,15 @@ function PanelPortal({ host, children }: { host: HTMLElement | null; children: R
 export interface OutdoorPlanCanvasHandle {
   /** 缩放一档（+/-1）与滚轮同源。 */
   zoomBy(direction: 1 | -1): void;
+  /**
+   * 2026-11-16 用户指令「2D 的时候罗盘也要能转」：罗盘拖转入参（弧度增量，与 3D
+   * orbitByDelta 同口径——正增量 = 指针顺时针 = 罗盘针顺时针 = bearing 减）。
+   */
+  orbitByDelta(deltaRad: number): void;
+  /** 罗盘点击回正北（bearing 归 0）。 */
+  resetNorth(): void;
+  /** 当前地图方位角（弧度，顺时针为正，0=正北朝上）；罗盘针实时轮询用。 */
+  getBearing(): number;
   /** 当前业务层画布截图 dataURL（无 canvas 时 null）。 */
   captureImage(): string | null;
   /**
@@ -1554,6 +1652,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** 2026-11-11 拖拽式测量：左键按下起点 + 是否已越过点击阈值（进入拖拽）。 */
   const measureDragRef = useRef<{ startPx: { x: number; y: number }; startPt: PlanPoint; active: boolean } | null>(null);
   /**
+   * 2026-11-16 用户：「退出的时候自动删掉测量的线段」——本次测量会话里提交进 plan 的 id。
+   * 离开测量工具时一次性删掉，测量只当“一次性标尺”，不在图上越积越多。
+   */
+  const measureSessionIdsRef = useRef<string[]>([]);
+  /**
    * 2026-11-11 用户指令：自由标注（OnePlan T + 形状）。形状四类共用一份草稿/拖拽会话
    * （rect/circle/line 拖拽或两点、triangle 单击 3 点）；文本走 noteInput 就地输入，不占草稿。
    */
@@ -1565,6 +1668,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const annotateColorRef = useRef<string>(PLANNING_LAYER_COLORS.annotate);
   const annotateStrokeWidthRef = useRef<PlanAnnotationStrokeWidth>('thin');
   const selectedAnnotationRef = useRef<string | null>(null);
+  /**
+   * 2026-11-16 用户：「场地上的测量和面积画完了就不会动，也清理不掉」——
+   * 固定测量不再是“画上去就钉死的图像”：画布上可点选、按住拖动移位、Delete 删除。
+   * 选中态与 drag 会话都走 ref（draw 闭包读最新值）。
+   */
+  const selectedMeasurementRef = useRef<string | null>(null);
+  const dragMeasurementRef = useRef<{ id: string; kind: PlanMeasureKind; startPt: PlanPoint; base: PlanPoint[]; moved: boolean } | null>(null);
+  const measurementDragPreviewRef = useRef<{ id: string; points: PlanPoint[] } | null>(null);
   // H3-b 冲突/缺失：可定位标记（规则检查输出，恒在业务层之上）。
   const conflictIssuesRef = useRef<PlanConflictIssue[]>([]);
   /**
@@ -1946,6 +2057,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [annotateStrokeWidth, setAnnotateStrokeWidth] = useState<PlanAnnotationStrokeWidth>('thin');
   const [annotateMenuOpen, setAnnotateMenuOpen] = useState(false);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
+  /** 拖动测量时不再需要额外的 DOM 贴片，画布 draw() 自己会重画读数。 */
   /** 文本标注就地输入框：锚点（米制）+ 屏幕位置（渲染时现算）+ 草稿文本。 */
   const [noteInput, setNoteInput] = useState<{ pt: PlanPoint; value: string } | null>(null);
   /** noteInput 的 ref 镜像（事件回调里读最新值，避免闭包旧值）。 */
@@ -2072,6 +2185,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function setMode(next: PlanningEditMode) {
     if (next !== 'boundary') pendingVenueAnchorRef.current = undefined;
+    // 2026-11-16 用户：「退出的时候自动删掉测量的线段」——测量是一次性标尺：
+    // 离开测量工具就把本次会话的线全清掉，不留“画完就钉在图上”的残留。
+    if (modeRef.current === 'measure' && next !== 'measure') dropMeasureSession();
+    if (next === 'measure') measureSessionIdsRef.current = [];
     modeRef.current = next;
     draftRef.current = [];
     previewRingRef.current = null;
@@ -2095,6 +2212,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     measureDraftRef.current = [];
     measureCursorRef.current = null;
     measureDragRef.current = null;
+    // 切工具时收掉测量的选中/拖动会话（绘制模式下点击是收点，不是选中）。
+    selectedMeasurementRef.current = null;
+    setSelectedMeasurementId(null);
+    dragMeasurementRef.current = null;
+    measurementDragPreviewRef.current = null;
     // 2026-11-11 用户指令：切模式清空标注草稿与文本输入框。
     annotateDraftRef.current = [];
     annotateCursorRef.current = null;
@@ -2555,6 +2677,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // H3-c：传真实锚点，平移/定位时规划层随地图同步移动（不再是钉死的画布中心）。
       anchorLng: current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
       anchorLat: current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+      bearing: v.bearing ?? 0,
+    };
+    // 2026-11-16 罗盘拖转 2D：bearing≠0 时底图/纸面画进「绕中心旋转」的 ctx 包裹层，
+    // 业务层经投影函数（同一旋转口径）自动跟随；屏幕系角标在包裹层外保持水平。
+    // 地图内容屏幕转角 = -bearing，与罗盘针同向（针 = -bearing）。
+    const mapBearing = v.bearing ?? 0;
+    const rotateBaseCtx = (): void => {
+      if (!mapBearing) return;
+      baseCtx.save();
+      baseCtx.translate(cssW / 2, cssH / 2);
+      baseCtx.rotate(-mapBearing);
+      baseCtx.translate(-cssW / 2, -cssH / 2);
     };
     const world = 2 ** v.zoom * TILE;
     // 2026-11-12 用户「放大倍数不够」：视图 zoom 可以超过图源瓦片级别，超过部分把上限级
@@ -2571,13 +2705,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (baseModeRef.current === 'floor') {
       // P4-b：室内平面底——不请求任何瓦片，只铺纸面 + 米制网格。
       // 场地轮廓/分区/设施/动线由下面的业务层照常叠上来，所以室内外是同一套画布代码。
-      paintFloorGrid(baseCtx, viewport, cssW, cssH);
+      // 罗盘拖转：ctx 包一层旋转，投影传轴对齐口径（bearing:0）避免双重旋转。
+      rotateBaseCtx();
+      paintFloorGrid(baseCtx, { ...viewport, bearing: 0 }, cssW, cssH, Boolean(mapBearing));
+      if (mapBearing) baseCtx.restore();
       publishBasemapLoading(false);
     } else if (!basemapVisibleRef.current) {
       // 图层里关了底图：不再铺瓦片，业务层照常画。
       publishBasemapLoading(false);
     } else {
-    const grid = visibleTileGrid(tileCenter.lng, tileCenter.lat, tileZoom, cssW / overScale, cssH / overScale);
+    // 旋转可视区在轴对齐瓦片系里是旋转矩形的 AABB：W'=W|cos|+H|sin|、H'=W|sin|+H|cos|。
+    const cosB = Math.abs(Math.cos(mapBearing));
+    const sinB = Math.abs(Math.sin(mapBearing));
+    const effW = (cssW * cosB + cssH * sinB) / overScale;
+    const effH = (cssW * sinB + cssH * cosB) / overScale;
+    const grid = visibleTileGrid(tileCenter.lng, tileCenter.lat, tileZoom, effW, effH);
     if (!basemapCacheRef.current) basemapCacheRef.current = new BasemapTileCache({ max: 1200 });
     const siteFocus = (() => {
       if (current.boundary.length >= 3) {
@@ -2592,6 +2734,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
       return planPointToPixel({ x: 0, y: 0 }, viewport);
     })();
+    rotateBaseCtx();
     paintBasemapTiles({
       ctx: baseCtx,
       cache: basemapCacheRef.current,
@@ -2603,6 +2746,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       cssH,
       tileSize: TILE,
       tiles: grid.tiles,
+      ...(mapBearing ? { cullW: cssW * cosB + cssH * sinB, cullH: cssW * sinB + cssH * cosB } : {}),
       focusX: siteFocus.x,
       focusY: siteFocus.y,
       urlsFor: (z, x, y) => {
@@ -2621,6 +2765,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         });
       },
     });
+    if (mapBearing) baseCtx.restore();
     // 「加载中」信号取限流器视角（在途+排队）：成败都会结算，归零可靠；
     // paint 结果里的 pending 含已失败格（网络断时永远 >0），不能拿来当转圈依据。
     publishBasemapLoading(basemapCacheRef.current.loadingCount > 0);
@@ -3011,10 +3156,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           ...w,
           selected: w.id === selectedWorkerRef.current,
           warning: warningWorkerIds.has(w.id),
+          // 2026-11-16 用户：「地图上直接就是图标，不要一个点、上面再一个图标」——
+          // 有岗位贴纸的人位只留图标（圆点交给贴纸自己当底），无贴纸的岗位仍画圆点。
+          chip: workerSticker(w.role) !== null,
         })),
         { tone: labelTone },
       );
-      // H4-b：人员岗位贴纸（画在圆点上方，避开圆点与「岗位 ×人数」文本）。
+      // H4-b：人员岗位图标（画在点位中心，就是这一个人位本身）。
       for (const worker of drawnWorkers) {
         const sticker = workerSticker(worker.role);
         if (!sticker) continue;
@@ -3024,9 +3172,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 而左侧「工作人员」九行用的是 libraryEntryColor（同岗位永远同色），3D 那边也是同一张
         // 调色板（outdoor-plan-3d.tsx 的 roleColor）——只有 2D 这一处掉队。
         // 现按设施芯片同口径跟色：活动包点位自带色（worker.color）优先，其余按岗位 slug 回落。
-        const chipColor = worker.color ?? libraryEntryColor({ slug: sticker.slug });
-        // 芯片 14 → 16 px：卫星底图上 14 px 的白字形本身也偏糊；上移 1 px 保持与圆点的间隙。
-        drawOneplanSticker(planCtx, sticker, pt.x, pt.y - 14, 16, { alpha: 0.95, color: chipColor });
+        // 主题色优先级（2026-11-16）：点位自带色（活动包）> 岗位表里写死的九岗色 > slug 调色板。
+        const chipColor = worker.color
+          ?? workerRoleColor(worker.role)
+          ?? libraryEntryColor({ slug: sticker.slug });
+        drawOneplanSticker(planCtx, sticker, pt.x, pt.y, 16, { alpha: 0.95, color: chipColor });
       }
     }
     if (isLayerVisible(vis, 'access')) {
@@ -3068,7 +3218,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     // H3-a 固定测量标注（测量图层在最上层；隐藏测量层不影响数据与统计）。
     if (isLayerVisible(vis, 'measure')) {
-      drawMeasureLayer({ ctx: planCtx, viewport, dark: darkBasemap }, current.measurements ?? []);
+      drawMeasureLayer(
+        { ctx: planCtx, viewport, dark: darkBasemap },
+        (current.measurements ?? []).map(m => ({
+          ...m,
+          // 拖动中的预览几何优先（松手才进 plan，一条 undo）。
+          ...(measurementDragPreviewRef.current?.id === m.id ? { points: measurementDragPreviewRef.current.points } : {}),
+          selected: m.id === selectedMeasurementRef.current,
+          // 可编辑时读数走图上贴片（带 ×），画布不再重复画一遍文字。
+          showLabel: readOnly,
+        })),
+      );
     }
     // 2026-11-11 用户指令：自由标注图层（文本/形状；随「标注」图层开关隐藏，不影响数据与统计）。
     if (isLayerVisible(vis, 'annotate')) {
@@ -3234,10 +3394,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         viewport: { zoom: viewport.zoom, metersPerPixel: planMetersPerPixel(viewport) },
         mode: modeRef.current,
         canvas: { width: cssW, height: cssH },
+        /** 2026-11-17 自动设计范围验收：边界点数 + 设计范围是否在（面积 m²）。 */
+        boundaryPoints: current.boundary.length,
+        /** 顶点数组（拖拽验收要精确按住顶点）。 */
+        boundary: current.boundary.map(p => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })),
+        boundaryBBoxM: current.boundary.length ? {
+          w: Math.round(Math.max(...current.boundary.map(p => p.x)) - Math.min(...current.boundary.map(p => p.x))),
+          h: Math.round(Math.max(...current.boundary.map(p => p.y)) - Math.min(...current.boundary.map(p => p.y))),
+        } : null,
+        scopeBBoxM: current.designScope?.length ? {
+          w: Math.round(Math.max(...current.designScope.map(p => p.x)) - Math.min(...current.designScope.map(p => p.x))),
+          h: Math.round(Math.max(...current.designScope.map(p => p.y)) - Math.min(...current.designScope.map(p => p.y))),
+        } : null,
+        designScopeAreaM2: current.designScope?.length ? Math.round(scopeAreaM2(current.designScope)) : null,
         /** 当前吸附网格步长（米），验收脚本用它判断顶点是否真的落在网格上。 */
         gridStepM: planGridStepM(viewport),
         /** ENU 米 → 画布 CSS 像素（验收脚本用它把边界顶点/分区顶点换到鼠标坐标）。 */
         project: (pt: PlanPoint) => planPointToPixel(pt, viewport),
+        /** 画布 CSS 像素 → ENU 米（2026-11-17：屏幕中心画框验收用）。 */
+        unproject: (px: { x: number; y: number }) => planPixelToPoint(px, viewport),
         selected: selectedNow
           ? {
               id: selectedNow.id,
@@ -3538,6 +3713,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           || selectedRouteRef.current
           || selectedNodeRef.current
           || selectedWorkerRef.current
+          || selectedAnnotationRef.current
+          || selectedMeasurementRef.current
         ) {
           clearEntitySelection();
         }
@@ -3648,6 +3825,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           deleteAnnotation(annotationId);
           return;
         }
+        // 2026-11-16 用户：「测量画完清理不掉」——选中的测量同样一条 Delete 就删。
+        const measurementId = selectedMeasurementRef.current;
+        if (measurementId) {
+          event.preventDefault();
+          deleteMeasurement(measurementId);
+          return;
+        }
         return;
       }
       if (!facilityId) return;
@@ -3681,6 +3865,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       canvasH: stage?.clientHeight ?? 0,
       anchorLng: anchor?.lng ?? DEFAULT_ANCHOR_LNG,
       anchorLat: anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+      bearing: viewRef.current.bearing ?? 0,
     };
   }
 
@@ -3698,24 +3883,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function commitView(next: View) {
-    viewRef.current = next;
-    setView({ ...next });
-    onViewChange?.(next);
+    // bearing 缺省保留当前转角（focusBounds/focusLngLat/fit 等不重置旋转）；显式传 0 才回正北。
+    const merged: View = { ...next, bearing: next.bearing ?? viewRef.current.bearing ?? 0 };
+    viewRef.current = merged;
+    setView({ ...merged });
+    onViewChange?.(merged);
     draw();
   }
 
   function pan(dx: number, dy: number) {
     const v = viewRef.current;
+    // 2026-11-16 bearing：屏幕位移先转回北朝上（轴对齐）系再走原有经纬换算——
+    // 屏幕系内容位移 Δscreen → 轴系 Δaxis = R(bearing)·Δscreen（绕中心的同一旋转）。
+    const bearing = v.bearing ?? 0;
+    const ax = bearing ? dx * Math.cos(bearing) - dy * Math.sin(bearing) : dx;
+    const ay = bearing ? dx * Math.sin(bearing) + dy * Math.cos(bearing) : dy;
     const w = 2 ** v.zoom * TILE;
-    const dLng = -dx / w * 360;
+    const dLng = -ax / w * 360;
     const latRad = v.lat * Math.PI / 180;
     // H3-c 修复：跟手平移——下拖（dy 正）相机北移，屏幕位移 = dLat·world·sec/360 = dy；
     // 旧版符号相反且少 2π 因子（下拖 40px 内容反而上移约 6px）。
-    const dLat = dy / w * 360 * Math.cos(latRad);
+    const dLat = ay / w * 360 * Math.cos(latRad);
     commitView({
       lng: clamp(v.lng + dLng, -180, 180),
       lat: clamp(v.lat + dLat, -85, 85),
       zoom: v.zoom,
+      ...(v.bearing !== undefined ? { bearing: v.bearing } : {}),
     });
   }
 
@@ -3757,8 +3950,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const px = rect && clientX !== undefined && clientY !== undefined
       ? { x: clientX - rect.left, y: clientY - rect.top }
       : { x: W / 2, y: H / 2 };
-    const dx = px.x - W / 2;
-    const dy = px.y - H / 2;
+    const dx0 = px.x - W / 2;
+    const dy0 = px.y - H / 2;
+    // 2026-11-16 bearing：指针相对中心的位移转回轴对齐系（R(bearing)）再走径向锚定数学——
+    // 缩放锚定是绕中心的径向运算，旋转不变，只需把指针位置换到北朝上系。
+    const bearing = v.bearing ?? 0;
+    const dx = bearing ? dx0 * Math.cos(bearing) - dy0 * Math.sin(bearing) : dx0;
+    const dy = bearing ? dx0 * Math.sin(bearing) + dy0 * Math.cos(bearing) : dy0;
     const world = 2 ** v.zoom * TILE;
     const world2 = 2 ** nextZoom * TILE;
     // 与 pan() 同一套小角度线性近似：先取指针相对中心的经纬度，缩放后再把中心挪到
@@ -3772,6 +3970,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       lng: clamp(nextLng, -180, 180),
       lat: clamp(nextLat, -85, 85),
       zoom: nextZoom,
+      ...(v.bearing !== undefined ? { bearing: v.bearing } : {}),
     });
   }
 
@@ -3803,6 +4002,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     redo: () => redoPlan(),
     canUndo: () => historyRef.current.length > 0,
     canRedo: () => redoRef.current.length > 0,
+    // 2026-11-16 罗盘拖转 2D：与 3D orbitByDelta 同口径（正增量 = 针顺时针 = bearing 减）。
+    orbitByDelta: (deltaRad: number) => {
+      const v = viewRef.current;
+      commitView({
+        lng: v.lng,
+        lat: v.lat,
+        zoom: v.zoom,
+        bearing: ((v.bearing ?? 0) - deltaRad) % (Math.PI * 2),
+      });
+    },
+    resetNorth: () => {
+      const v = viewRef.current;
+      commitView({ lng: v.lng, lat: v.lat, zoom: v.zoom, bearing: 0 });
+    },
+    getBearing: () => viewRef.current.bearing ?? 0,
     focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
     focusBounds: (bounds: [number, number, number, number]) => focusBounds(bounds),
     focusDesignScope: () => focusDesignScope(planRef.current.designScope ?? []),
@@ -3836,12 +4050,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (!checkBoundaryRing(boundary).ok) return false;
       // 2026-11-16 用户定稿「换场地就是新场地」：锚点真挪了，旧草稿的分区/设施/流线/点位/人员整批删掉，
       // 只留新锚点与新用地红线（仍走 commitPlan，可整批撤销）；同一锚点重画边界则保留内容。
+      // 2026-11-17 用户指令「画好红线默认=设计范围」：两条分支都自动生成外扩 20 m 的设计范围。
       const { plan: next, replaced, cleared } = planForPickedVenue(planRef.current, anchor, boundary);
-      commitPlan(next);
+      const withScope: SitePlanData = { ...next, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) };
+      commitPlan(withScope);
       if (replaced) {
         setEditMessage(cleared > 0
-          ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。`
-          : '已换场地：旧草稿已清空，可撤销。');
+          ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
+          : `已换场地：旧草稿已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`);
+      } else {
+        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。`);
       }
       return true;
     },
@@ -4195,9 +4413,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(check.issue.message);
       return;
     }
-    commitPlan({ ...current, boundary: result.value });
+    // 2026-11-17 用户拍板：红线改动只要还在白框里就不动框；顶出去才重置为外扩 20 m。
+    const scope = syncScopeForBoundary(current.designScope, result.value, DEFAULT_SCOPE_MARGIN_M);
+    commitPlan({ ...current, boundary: result.value, ...(scope ? { designScope: scope } : {}) });
     boundaryInsertedAtRef.current = performance.now();
-    setEditMessage(`红线已插入顶点（约 ${Math.round(check.areaM2)} m²）。`);
+    setEditMessage(`红线已插入顶点（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`);
   }
 
   /** P2-j：双击边界顶点 → 删掉它（最少 3 点、面积下限由 checkBoundaryRing 把关）。 */
@@ -4213,6 +4433,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(check.issue.message);
       return;
     }
+    // 删顶点只会缩小红线，白框必然还兜得住——不触发同步。
     commitPlan({ ...current, boundary: result.value });
     clearBoundaryDeleteArm();
     setEditMessage(`红线已删除顶点（约 ${Math.round(check.areaM2)} m²）。`);
@@ -4335,23 +4556,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setEditMessage(check.issue.message);
         return;
       }
-      const initialScope = current.boundary.length === 0 && !current.designScope?.length
-        ? expandRect(boundary, DEFAULT_SCOPE_MARGIN_M)
-        : undefined;
+      // 2026-11-17 用户指令「画好用地红线，默认就是画好了设计范围，扩 20 m，不用画两次」：
+      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要自定义再点「重拖设计范围」。
+      const initialScope = expandRect(boundary, DEFAULT_SCOPE_MARGIN_M);
       const nextBoundaryPlan: SitePlanData = {
         ...current,
         ...(nextAnchor ? { anchor: nextAnchor } : {}),
         boundary: boundary.map(p => ({ x: p.x, y: p.y })),
-        ...(initialScope ? { designScope: initialScope } : {}),
+        designScope: initialScope,
       };
       commitPlan(nextBoundaryPlan);
       if (nextAnchor) onVenueBoundaryApplied?.(nextAnchor);
       pendingVenueAnchorRef.current = undefined;
       setMode('view');
-      if (initialScope) focusDesignScope(initialScope);
+      focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      const scopeMessage = initialScope ? `已自动生成设计范围，向四边各外扩 ${DEFAULT_SCOPE_MARGIN_M} m。` : '';
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²）。${scopeMessage}${overflowSuffix(boundaryOverflow)}`);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -4412,6 +4632,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectRoute(null);
       selectNode(null);
       selectWorker(null);
+      selectMeasurement(null);
       clearMultiSelection(false);
     }
     draw();
@@ -4424,6 +4645,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectRoute(null);
     selectNode(null);
     selectWorker(null);
+    selectAnnotation(null);
+    selectMeasurement(null);
   }
 
   /* ---------------- P2-l 设施层级（右键菜单）---------------- */
@@ -4470,6 +4693,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectRoute(null);
       selectNode(null);
       selectWorker(null);
+      selectMeasurement(null);
       clearMultiSelection(false);
     }
     draw();
@@ -5700,7 +5924,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedRouteRef.current = id;
     setSelectedRouteId(id);
     if (id !== null) {
-      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null);
+      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null); selectMeasurement(null);
       clearMultiSelection(false);
     }
     draw();
@@ -5710,7 +5934,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedNodeRef.current = id;
     setSelectedNodeId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectWorker(null);
+      selectFacility(null); selectRoute(null); selectWorker(null); selectMeasurement(null);
       clearMultiSelection(false);
     }
     draw();
@@ -5720,7 +5944,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedWorkerRef.current = id;
     setSelectedWorkerId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectNode(null);
+      selectFacility(null); selectRoute(null); selectNode(null); selectMeasurement(null);
     }
     draw();
   }
@@ -6102,6 +6326,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /* ---------------- H3-a 测量（临时读数 + 固定测量） ---------------- */
 
+  /**
+   * 丢弃本次测量画上的全部线（退出测量工具 / 点卡片 × 时自动执行）。
+   * 只删本会话的 id：历史/别人留下的测量不动。
+   */
+  function dropMeasureSession() {
+    const ids = measureSessionIdsRef.current;
+    measureSessionIdsRef.current = [];
+    measureDraftRef.current = [];
+    measureCursorRef.current = null;
+    measureDragRef.current = null;
+    measurementDragPreviewRef.current = null;
+    dragMeasurementRef.current = null;
+    setMeasureDraftCount(0);
+    if (ids.length === 0) return;
+    const current = planRef.current;
+    const remaining = (current.measurements ?? []).filter(item => !ids.includes(item.id));
+    if (remaining.length !== (current.measurements ?? []).length) {
+      commitPlan({ ...current, measurements: remaining });
+    }
+    if (selectedMeasurementRef.current && ids.includes(selectedMeasurementRef.current)) {
+      selectedMeasurementRef.current = null;
+      setSelectedMeasurementId(null);
+    }
+  }
+
+  /** 测量卡片的 ×：退出测量并清掉本次画的线（与 Esc / 切工具同一结果）。 */
+  function closeMeasureRuler() {
+    dropMeasureSession();
+    setMode('view');
+    setEditMessage('测量已清除。');
+  }
+
   /** 2026-11-11 面积拖拽：起止点对角张成 ENU 轴对齐矩形（ENU x 东 y 北与屏幕轴一致）；Shift = 正方形。 */
   function measureRectPoints(a: PlanPoint, b: PlanPoint, square: boolean): PlanPoint[] {
     let dx = b.x - a.x;
@@ -6143,10 +6399,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     measureDraftRef.current = [...draft, { x: pt.x, y: pt.y }];
     setMeasureDraftCount(measureDraftRef.current.length);
     setEditMessage(null);
-    if (kind === 'distance' && measureDraftRef.current.length >= 2) {
-      finishMeasure();
-      return;
-    }
+    // 2026-11-16 用户：「可以多段线测量」——距离不再收满两点就自动提交，
+    // 单击继续加段（累计读数 + 过程标尺跟着长），双击 / 「完成」 / 右键结束。
     draw();
   }
 
@@ -6164,9 +6418,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     const current = planRef.current;
     const existing = current.measurements ?? [];
+    // 契约：distance 恰好 2 点；多段距离按 path 提交（读数同为折线总长）。
+    const commitKind: PlanMeasureKind = kind === 'distance' && draft.length > 2 ? 'path' : kind;
     const result = buildMeasurement({
-      kind,
-      name: `${planMeasurementKindLabels[kind]} ${(viewPlan().measurements ?? []).length + 1}`,
+      kind: commitKind,
+      name: `${planMeasurementKindLabels[commitKind]} ${(viewPlan().measurements ?? []).length + 1}`,
       points: draft,
     });
     if (!result.ok) {
@@ -6174,20 +6430,65 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     commitPlan({ ...current, measurements: [...existing, { ...result.value, ...activeLevelStamp() }] });
+    measureSessionIdsRef.current = [...measureSessionIdsRef.current, result.value.id];
     measureDraftRef.current = [];
     measureCursorRef.current = null;
     setMeasureDraftCount(0);
     const valueText = result.value.kind === 'area'
       ? formatAreaM2(measureValue(result.value))
       : formatLengthM(measureValue(result.value));
-    setEditMessage(`已固定测量「${result.value.name}」= ${valueText}；继续测量或 Esc 结束。`);
+    setEditMessage(`已量「${result.value.name}」= ${valueText}；可接着加一段，或双击 / Esc 结束（退出会自动清掉这条线）。`);
   }
 
   /** 删除固定测量标注（测量不是实体，删了就没了；不参与冲突判定，无需剥离引用）。 */
   function deleteMeasurement(id: string) {
     const current = planRef.current;
     commitPlan({ ...current, measurements: (current.measurements ?? []).filter(m => m.id !== id) });
+    if (selectedMeasurementRef.current === id) {
+      selectedMeasurementRef.current = null;
+      setSelectedMeasurementId(null);
+    }
     setEditMessage('测量标注已删除。');
+    draw();
+  }
+
+  /**
+   * 2026-11-16 选中固定测量（与其它实体互斥）：选中后信息条直接报读数与可做的事，
+   * 画布上可拖动移位、Delete 删除；面板行的「删除」保留不动。
+   */
+  function selectMeasurement(id: string | null) {
+    selectedMeasurementRef.current = id;
+    setSelectedMeasurementId(id);
+    if (id) {
+      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectAnnotation(null);
+      clearMultiSelection(false);
+      const measurement = (planRef.current.measurements ?? []).find(m => m.id === id);
+      if (measurement) {
+        const valueText = measurement.kind === 'area'
+          ? formatAreaM2(measureValue(measurement))
+          : formatLengthM(measureValue(measurement));
+        setEditMessage(`已选中${planMeasurementKindLabels[measurement.kind]}测量「${measurement.name}」= ${valueText}：按住拖动可移位，Delete 删除。`);
+      }
+    }
+    draw();
+  }
+
+  /** 指针位置下的固定测量（轮廓/环 9 px 内，取最近一条）。 */
+  function measurementAt(px: { x: number; y: number }): PlanMeasurement | null {
+    const id = nearestMeasurementIdAt(px);
+    return id ? (planRef.current.measurements ?? []).find(m => m.id === id) ?? null : null;
+  }
+
+  /** 开始一条测量拖动会话（浏览/选择模式共用）；返回 true = 这次按下被测量吃掉。 */
+  function beginMeasurementDrag(measurement: PlanMeasurement, hit: { px: { x: number; y: number }; pt: PlanPoint }): boolean {
+    selectMeasurement(measurement.id);
+    const base = measurement.points.map(p => ({ x: p.x, y: p.y }));
+    dragMeasurementRef.current = { id: measurement.id, kind: measurement.kind, startPt: hit.pt, base, moved: false };
+    measurementDragPreviewRef.current = { id: measurement.id, points: base.map(p => ({ ...p })) };
+    pointerConsumedRef.current = true;
+    downPxRef.current = hit.px;
+    setDragging(true);
+    return true;
   }
 
   /* ---------------- 2026-11-11 用户指令：自由标注（文本 + 形状） ---------------- */
@@ -6197,7 +6498,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedAnnotationRef.current = id;
     setSelectedAnnotationId(id);
     if (id !== null) {
-      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null);
+      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectMeasurement(null);
     }
     draw();
   }
@@ -6278,6 +6579,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (annotationDistanceM(pt, a) <= toleranceM) return a.id;
     }
     return null;
+  }
+
+  /**
+   * 2026-11-16 命中检测：最近的固定测量（点到描边折线/闭合环的像素距离）。
+   * 只命中外轮廓与环，不把整块面积填充当热区（否则盖在大片场地上会抢走设施点选）。
+   * 拖动中的预览几何同样参与命中，拖动时指针不会“掉”出标注。
+   */
+  function nearestMeasurementIdAt(px: { x: number; y: number }): string | null {
+    const viewport = currentViewport();
+    const measurements = viewPlan().measurements ?? [];
+    let best: { id: string; d: number } | null = null;
+    for (const m of measurements) {
+      const preview = measurementDragPreviewRef.current;
+      const points = preview?.id === m.id ? preview.points : m.points;
+      if (points.length < 2) continue;
+      const closed = m.kind === 'area' && points.length >= 3;
+      const segmentCount = closed ? points.length : points.length - 1;
+      for (let index = 0; index < segmentCount; index += 1) {
+        const a = planPointToPixel(points[index]!, viewport);
+        const b = planPointToPixel(points[(index + 1) % points.length]!, viewport);
+        const d = pointSegmentDistancePx(px, a, b);
+        if (d <= MEASUREMENT_HIT_PX && (best === null || d < best.d)) best = { id: m.id, d };
+      }
+    }
+    return best?.id ?? null;
   }
 
   /* ---------------- H3-c 双向定位 ---------------- */
@@ -6608,6 +6934,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function handleStageMouseDown(event: React.MouseEvent) {
+    // 2026-11-16 罗盘拖转 2D：右下 Google 控制簇（罗盘/2D3D/缩放/漫游）挂在 stage 里，
+    // 控件上的指针事件会一路冒泡到这里被当成画布手势——罗盘拖转就会连带平移地图。
+    // 控件目标一律不当画布手势处理（其余 UI 冒泡行为不变）。
+    if (event.target instanceof Element && event.target.closest('.oc-gmaps')) return;
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
     // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：Alt + 点已有点 = 从它分叉一条新动线。
@@ -6832,6 +7162,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const route = routeId ? planRef.current.routes.find(r => r.id === routeId) ?? null : null;
         if (route && beginRouteVertexEdit(route, hit)) return;
       }
+      // 2026-11-16 用户：「场地上的测量和面积画完了就不会动」——浏览模式按住测量本体就能拖动移位。
+      if (hit && onPlanChange && !layerLocked('measure')) {
+        const measurement = measurementAt(hit.px);
+        if (measurement && beginMeasurementDrag(measurement, hit)) return;
+      }
       // H2-d：浏览模式按住出入口节点即拖动（引用路线端点随动），不启动平移（锁定层不响应）。
       if (hit && !layerLocked('node')) {
         const nodeId = nearestNodeIdAt(hit.px);
@@ -6872,6 +7207,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (activeMode === 'select') {
       // 2026-11-12 B2 框选模式：组角柄(缩放) > 已选单件手柄 > 组内件(整组移动) > 新命中(shift 加减选/单选拖动) > 空白(marquee)。
       if (!hit) return;
+      // 2026-11-16 测量与实体同权：选择模式下按住测量本体即可拖动移位（与浏览模式同一套）。
+      if (onPlanChange && !layerLocked('measure')) {
+        const measurement = measurementAt(hit.px);
+        if (measurement && beginMeasurementDrag(measurement, hit)) return;
+      }
       // 2026-11-14：选中流线的 polyline 控制点抓取（跨模式，与浏览模式同一套）。
       // 2026-11-15：同样补上点线加点（与浏览模式完全同一套命中顺序）。
       if (onPlanChange && !layerLocked('route')) {
@@ -7441,6 +7781,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }
         return;
       }
+      // 2026-11-16 测量拖动预览：整条标注平移（松手才进 plan），读数随几何现算。
+      if (dragMeasurementRef.current) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        const drag = dragMeasurementRef.current;
+        const down = downPxRef.current;
+        if (down && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) > CLICK_MAX_MOVE_PX) drag.moved = true;
+        if (drag.moved) {
+          const dx = hit.pt.x - drag.startPt.x;
+          const dy = hit.pt.y - drag.startPt.y;
+          measurementDragPreviewRef.current = { id: drag.id, points: drag.base.map(p => ({ x: p.x + dx, y: p.y + dy })) };
+          setEditMessage(null);
+          draw();
+        }
+        return;
+      }
       if (!panRef.current) return;
       pan(event.clientX - panRef.current.x, event.clientY - panRef.current.y);
       panRef.current = { x: event.clientX, y: event.clientY };
@@ -7746,15 +8102,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (marquee && down && Math.hypot(marquee.curPx.x - marquee.startPx.x, marquee.curPx.y - marquee.startPx.y) > CLICK_MAX_MOVE_PX) {
         // 拖出了矩形 → 框选（中心或足迹顶点入矩形；单件回落单选，多件成组）。
         if (!onPlanChange) return;
-        const rect = marqueePlanRect(marquee, currentViewport());
-        const hits = layerLocked('facility') ? [] : viewPlan().facilities.filter(f => facilityInRect(f, rect));
+        const viewportNow = currentViewport();
+        // 2026-11-16 bearing：屏幕矩形在旋转平面系是斜矩形，AABB 命中会多选——
+        // bearing≠0 改走屏幕系（投影自带旋转）；bearing=0 原平面系路径逐字节不变。
+        const rotatedHit = Boolean(viewportNow.bearing);
+        const rect = marqueePlanRect(marquee, viewportNow);
+        const hits = layerLocked('facility')
+          ? []
+          : viewPlan().facilities.filter(f => (rotatedHit ? facilityInScreenRect(f, marquee, viewportNow) : facilityInRect(f, rect)));
         // 2026-11-14 用户指令「框住多少选多少」：流线（段与矩形相交）与出入口（点在矩形内）一并入多选。
         const routeIds = layerLocked('route')
           ? []
-          : viewPlan().routes.filter(r => routeLengthInRect(r.points, rect) > 0).map(r => r.id);
+          : viewPlan().routes.filter(r => (rotatedHit ? routeLengthInScreenRect(r.points, marquee, viewportNow) : routeLengthInRect(r.points, rect)) > 0).map(r => r.id);
+        const nodeInRect = (p: PlanPoint) => {
+          if (!rotatedHit) return p.x >= rect.minX && p.x <= rect.maxX && p.y >= rect.minY && p.y <= rect.maxY;
+          const sp = planPointToPixel(p, viewportNow);
+          const srect = marqueeScreenRect(marquee);
+          return sp.x >= srect.minX && sp.x <= srect.maxX && sp.y >= srect.minY && sp.y <= srect.maxY;
+        };
         const nodeIds = layerLocked('node')
           ? []
-          : viewPlan().nodes.filter(n => n.position.x >= rect.minX && n.position.x <= rect.maxX && n.position.y >= rect.minY && n.position.y <= rect.maxY).map(n => n.id);
+          : viewPlan().nodes.filter(n => nodeInRect(n.position)).map(n => n.id);
         // shift+框选 = 与现有组选取并集（OnePlan 同语义）；无 shift = 替换。
         const base = event.shiftKey ? multiSelectedFacilityIdsRef.current : [];
         const merged = Array.from(new Set([...base, ...hits.map(f => f.id)]));
@@ -7879,10 +8247,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               setEditMessage('红线顶点未移动（拖动可改形）。');
               return;
             }
-            commitPlan({ ...planRef.current, boundary: nextRing });
+            // 2026-11-17 用户拍板：拖拽后仍在白框里不动框；顶出去重置为外扩 20 m。
+            const scope = syncScopeForBoundary(planRef.current.designScope, nextRing, DEFAULT_SCOPE_MARGIN_M);
+            commitPlan({ ...planRef.current, boundary: nextRing, ...(scope ? { designScope: scope } : {}) });
             clearBoundaryDeleteArm();
             setEditMessage(mergeIndex === -1
-              ? '红线顶点已更新。'
+              ? `红线顶点已更新。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`
               : '两个顶点已合并（撤销可找回）。');
           }
         }
@@ -8019,6 +8389,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         selectNode(drag.id);
         return;
       }
+      // 2026-11-16 测量拖动松手：moved 才提交（一条 undo），没拖动留给点选。
+      const measureMove = dragMeasurementRef.current;
+      if (measureMove) {
+        const preview = measurementDragPreviewRef.current;
+        dragMeasurementRef.current = null;
+        measurementDragPreviewRef.current = null;
+        if (measureMove.moved && preview && onPlanChange) {
+          const current = planRef.current;
+          commitPlan({
+            ...current,
+            measurements: (current.measurements ?? []).map(m => (m.id === measureMove.id ? { ...m, points: preview.points } : m)),
+          });
+          selectMeasurement(measureMove.id);
+          const valueText = measureMove.kind === 'area'
+            ? formatAreaM2(measureValue({ kind: measureMove.kind, points: preview.points }))
+            : formatLengthM(measureValue({ kind: measureMove.kind, points: preview.points }));
+          setEditMessage(`${planMeasurementKindLabels[measureMove.kind]}测量已移动 = ${valueText}（原位已释放）。`);
+          draw();
+          return;
+        }
+        selectMeasurement(measureMove.id);
+        return;
+      }
       // 2026-11-14：人员点位拖动松手——moved 才提交（一条 undo），没拖动留给点选逻辑。
       if (dragWorkerRef.current) {
         const drag = dragWorkerRef.current;
@@ -8111,8 +8504,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       if (hitIndex !== null && previewRingRef.current && onPlanChange) {
-        commitPlan({ ...planRef.current, boundary: previewRingRef.current });
-        setEditMessage('红线顶点已更新。');
+        // 2026-11-17 用户拍板：拖拽后仍在白框里不动框；顶出去重置为外扩 20 m。
+        const scope = syncScopeForBoundary(planRef.current.designScope, previewRingRef.current, DEFAULT_SCOPE_MARGIN_M);
+        commitPlan({ ...planRef.current, boundary: previewRingRef.current, ...(scope ? { designScope: scope } : {}) });
+        setEditMessage(`红线顶点已更新。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`);
       }
       setPreviewRing(null);
       return;
@@ -8652,11 +9047,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       </div>
       {/* 2026-11-12 精简：不再常驻三模式长说明，只给当前模式一句短引导；拖拽快速、单击逐点两种手势都保留。 */}
       <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-        {measureKind === 'distance' && '点两点，或拖一条线'}
+        {measureKind === 'distance' && '点起点，连续单击加段；双击 /「完成」结束'}
         {measureKind === 'area' && '拖矩形（Shift 正方形），或点选闭合'}
         {measureKind === 'path' && '按住手绘，或逐点单击、双击结束'}
       </div>
-      {mode === 'measure' && measureKind !== 'distance' && (
+      {mode === 'measure' && (
         <button
           type="button"
           data-testid="measure-finish"
@@ -8671,8 +9066,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         key: `measure-${m.id}`,
         testId: `layer-entity-measurement-${m.id}`,
         label: `${m.name} = ${m.kind === 'area' ? formatAreaM2(measureValue(m)) : formatLengthM(measureValue(m))}`,
-        active: false,
+        active: selectedMeasurementId === m.id,
         onClick: () => {
+          selectMeasurement(m.id);
           const row = inventoryRows.find(r => r.kind === 'measurement' && r.id === m.id);
           if (row) locateRow(row);
         },
@@ -10111,6 +10507,85 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     </>
   );
 
+  /* 2026-11-16 用户指令（量距手感，四条一起落地）：
+     ① 文字与线段平行、② 线段中间带过程标尺 → lib 的 drawMeasureRuler 直接画在线上；
+     ③ 可多段线测量 → 距离/路径都按折线累计；
+     ④ 退出自动删线 → setMode 离开 measure 时 dropMeasureSession()。
+     这条底部卡片是“当前标尺”的总览与关闭口（× = 退出并清除）。 */
+  const measureSessionIds = measureSessionIdsRef.current;
+  const sessionMeasurements = (levelView.measurements ?? []).filter(item => measureSessionIds.includes(item.id));
+  const measureDraftText = measureDraftReadout(measureKind, measureDraftRef.current, measureCursorRef.current ?? undefined);
+  const measureRulerCard = mode === 'measure' && !readOnly ? (() => {
+    let sessionLengthM = 0;
+    let sessionAreaM2 = 0;
+    for (const item of sessionMeasurements) {
+      if (item.kind === 'area') sessionAreaM2 += measureValue(item);
+      else sessionLengthM += measureValue(item);
+    }
+    const title = measureKind === 'area' ? '测量面积' : measureKind === 'path' ? '测量路径' : '测量距离';
+    const value = measureKind === 'area'
+      ? (measureDraftText ?? (sessionAreaM2 > 0 ? formatAreaM2(sessionAreaM2) : '拖出矩形或点选闭合'))
+      : (measureDraftText ?? (sessionLengthM > 0 ? formatLengthM(sessionLengthM) : '点起点开始，可连续加段'));
+    return (
+      <div
+        data-testid="measure-ruler-card"
+        style={{
+          position: 'absolute',
+          left: '50%',
+          bottom: 92,
+          transform: 'translateX(-50%)',
+          zIndex: 25,
+          minWidth: 232,
+          maxWidth: 320,
+          background: 'var(--sc-surface, #ffffff)',
+          color: PLANNING_SURFACE.panelText,
+          borderRadius: 12,
+          border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+          boxShadow: '0 6px 22px rgba(15,22,32,0.24)',
+          padding: '8px 10px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          pointerEvents: 'auto',
+          fontSize: PLANNING_TYPOGRAPHY.row,
+        }}
+        onPointerDown={event => event.stopPropagation()}
+        onDoubleClick={event => event.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <strong style={{ fontWeight: 700 }}>{title}</strong>
+          <span style={{ flex: 1 }} />
+          <button
+            type="button"
+            data-testid="measure-ruler-close"
+            aria-label="退出测量并清除本次测量"
+            title="退出测量并清除本次测量"
+            style={{
+              all: 'unset',
+              cursor: 'pointer',
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              lineHeight: 1,
+              color: 'rgba(15,22,32,0.62)',
+            }}
+            onClick={event => { event.stopPropagation(); closeMeasureRuler(); }}
+          >
+            ×
+          </button>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        <div style={{ opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+          单击继续加点 / 拖动量一段；双击或「完成」结束；退出测量会自动清掉这条线
+        </div>
+      </div>
+    );
+  })() : null;
+
   return (
     <div
       ref={stageRef}
@@ -10222,6 +10697,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {measureRulerCard}
       {/* 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间顶部居中一枚轻提示，
           全部结算（含失败）即收；pointer-events 无、不挡任何画布交互。 */}
       {basemapLoading && (
@@ -11424,7 +11900,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                     height: 22,
                                     flex: '0 0 auto',
                                     borderRadius: 999,
-                                    background: libraryEntryColor({ slug: sticker.slug }),
+                                    background: workerRoleColor(role) ?? libraryEntryColor({ slug: sticker.slug }),
                                     boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.28)',
                                   }}
                                 >
