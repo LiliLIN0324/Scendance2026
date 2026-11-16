@@ -7,3 +7,4 @@ ts	phase	decision	why	evidence	result
 2026-11-11T18:15:22Z	outdoor3d-takeover	户外项目主画布 3D 归一：OutdoorPlan3D 接管态（同一组件两处挂载）	卡内 3D 与退出后主 3D 各渲染各的——用户指出两套 tsx 应收敛为一套	接管门+右轨改派+罗盘去重+漫游 overlay 修复；探针接管态全过；tsc 0/vitest 54 绿	open
 2026-11-11T18:50:13Z	inspector-rail	测量/标注收进右轨圆钮（工具与属性浮条拆除）	右上两套圆钮不统一——用户指令	探针：右轨钮开浮窗/切页签/按下态/再点收起全过；tsc 全清	open
 2026-11-11T18:57:21Z	inspector-rail	右轨补第三颗「属性」圆钮（测量/标注/属性三开）	用户澄清三钮分别拆开	探针三钮齐+属性页签开+按下态 ✓；tsc CLEAN	open
+2026-11-16T11:37:33Z	worker-identity	人员身份「色系=类别、明度档=身份」+ 古装（汉服/唐服/明服）归游客 + OnePlan 台账与产物分离（方案 C）	用户：颜色认大类但「每个身份的颜色有点不一样」；传统服饰算游客不算演员；观众要补图标；台账留在 public 怕 OnePlan 法务	岗位/图例/画布/人群 6 文件 107/107（含「岗位表每枚图标文件真实存在」守卫）；清单 4 文件 51/51；check-oneplan-artifacts 实测旧产物 4 违规 exit 1 → 新产物 0 违规 exit 0，--strict 3 条；tsc 红但报错全在并行会话 agent-panel/creative-studio/agent-events	open
