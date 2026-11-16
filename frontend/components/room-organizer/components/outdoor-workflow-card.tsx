@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, Map as MapIcon, TriangleAlert } from "@/components/solid-icons";
+import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, Search, TriangleAlert } from "@/components/solid-icons";
 import {
   OUTDOOR_MODEL_INPUT_STEP,
   OUTDOOR_STAGE_LABELS,
+  type OutdoorCardRecord,
   type useOutdoorAgentWorkflow,
 } from "../hooks/use-outdoor-agent-workflow";
 import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
@@ -228,8 +229,42 @@ export function OutdoorWorkflowCard({
   onCancelPreview?: (() => void) | undefined;
 }) {
   const [libraryQuery, setLibraryQuery] = useState("");
+  // 2026-11-16：历史行可点开——展开当时的说明与按钮，看回这张卡当时到底问了什么。
+  const [openRecordAt, setOpenRecordAt] = useState<number | null>(null);
   // 低风险提示条倒计时收场（对标谷地工坊「8 秒后自动按下」）：非错误提示、空闲且无待确认
   // 提案时才启动倒计时；「预览已就绪，核对后确认」这类要等动作的提示不自动消失。
+  const recordRow = (record: OutdoorCardRecord, extraClass: string) => {
+    const open = openRecordAt === record.at;
+    const decision =
+      record.decision === "confirmed" ? "已确认" : record.decision === "withdrawn" ? "已撤回" : "已替换";
+    return (
+      <li key={record.at} data-decision={record.decision} className={extraClass}>
+        <button
+          type="button"
+          className="ap-card-history-row"
+          aria-expanded={open}
+          onClick={() => setOpenRecordAt(open ? null : record.at)}
+        >
+          <span className="ap-card-history-decision">{decision}</span>
+          <span className="ap-card-history-title">{record.title}</span>
+        </button>
+        {open && (
+          <div className="ap-card-history-detail">
+            {record.notes.length > 0 && (
+              <ul className="ap-card-history-notes">
+                {record.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            )}
+            {record.actions.length > 0 && (
+              <p className="ap-card-history-actions">{record.actions.join(" · ")}</p>
+            )}
+          </div>
+        )}
+      </li>
+    );
+  };
   const [noticeCountdown, setNoticeCountdown] = useState<number | null>(null);
   useEffect(() => {
     // 2026-11-16 用户拍板：要你动手的提示（noticeSticky）不倒计时——8s 自动收起后卡片回落成
@@ -297,14 +332,38 @@ export function OutdoorWorkflowCard({
     >
       <header className="ap-card-head">
         <strong>
-          {flow.busy ? "正在处理" : flow.proposal ? "待你核对" : "当前任务"} ·{" "}
-          {OUTDOOR_STAGE_LABELS[flow.state.stage]}
+          {flow.busy
+            ? `正在处理 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`
+            : flow.proposal
+              ? "待你核对"
+              : `当前任务 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
         </strong>
       </header>
       {flow.busy && (
         <div className="ap-task-progress" aria-hidden="true" />
       )}
-      <StageThumb stage={flow.state.stage} />
+      {/* 2026-11-16：有提案时不再放阶段缩略图——右侧地图已经画着这一版，缩略图只是重复信息。 */}
+      {/* 2026-11-16 用户要求「引导卡片不要消失，历史记录很重要」：最近一条始终可见，点一下展开
+          当时的说明与按钮；更早的收在展开项里。按活动存 localStorage，刷新还在。 */}
+      {flow.cardRecords.length > 0 && (
+        <div className="ap-card-history" aria-label="已完成的引导">
+          <ol className="ap-card-history-list">
+            {recordRow(flow.cardRecords.at(-1)!, "is-latest")}
+          </ol>
+          {flow.cardRecords.length > 1 && (
+            <details className="ap-card-history-more">
+              <summary>更早的引导 · {flow.cardRecords.length - 1}</summary>
+              <ol className="ap-card-history-list">
+                {flow.cardRecords
+                  .slice(0, -1)
+                  .reverse()
+                  .map((record) => recordRow(record, ""))}
+              </ol>
+            </details>
+          )}
+        </div>
+      )}
+      {!flow.proposal && <StageThumb stage={flow.state.stage} />}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         <div className="ap-task-error" role="alert">
           <TriangleAlert size={14} aria-hidden="true" />
@@ -319,7 +378,7 @@ export function OutdoorWorkflowCard({
             重试
           </button>
         </div>
-      ) : (
+      ) : flow.proposal ? null : (
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
           {flow.loginRequired
@@ -348,56 +407,74 @@ export function OutdoorWorkflowCard({
         </details>
       )}
       {flow.proposal ? (
-        <div>
-          <strong>{flow.proposal.label}</strong>
-          <ul>
-            {flow.proposal.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-          {flow.proposal.kind === "scope" && (
+        <div className="ap-proposal">
+          <strong className="ap-proposal-title">{flow.proposal.label}</strong>
+          {flow.proposal.warnings.length > 0 && (
+            <ul className="ap-proposal-notes">
+              {flow.proposal.warnings.map((w) => (
+                <li key={w}>
+                  <Info size={12} aria-hidden="true" />
+                  <span>{w}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* 2026-11-16 用户：「这个确认的卡片做的一坨」——重排成
+              标题 → 说明条目 → 一颗主动作 → 一行紧凑次要动作，不再有裸文字按钮和重复的取消入口。 */}
+          <div className="ap-proposal-actions">
             <button
+              className="ap-proposal-confirm"
               type="button"
               disabled={flow.busy}
               onClick={() =>
-                flow.proposal && flow.manualBoundary(flow.proposal)
+                flow.proposal && void flow.confirmProposal(flow.proposal)
               }
             >
-              在地图上重画实际活动范围
+              <Check size={14} aria-hidden="true" />
+              {flow.proposal.afterConfirm === "main-routes"
+                ? "确认分区并预览主通道"
+                : flow.proposal.afterConfirm === "objects"
+                  ? "确认分区并预览物料排布"
+                  : "确认并应用这一版"}
             </button>
-          )}
-          <button
-            className="btn-primary"
-            type="button"
-            disabled={flow.busy}
-            onClick={() =>
-              flow.proposal && void flow.confirmProposal(flow.proposal)
-            }
-          >
-            {flow.proposal.afterConfirm === "main-routes"
-              ? "确认分区并预览主通道"
-              : flow.proposal.afterConfirm === "objects"
-                ? "确认分区并预览物料排布"
-                : "确认并应用这一版"}
-          </button>
-          <button
-            type="button"
-            onClick={() => (onCancelPreview ? onCancelPreview() : flow.cancel())}
-          >
-            撤回预览
-          </button>
-          {/* 2026-11-14 用户指令「给我几个方案」：物件排布方案循环切换（行列/居中/沿边），确认哪版算哪版。 */}
-          {flow.proposal.kind === "objects" && (
-            <button
-              type="button"
-              disabled={flow.busy}
-              onClick={() => {
-                void flow.cycleObjectsLayout();
-              }}
-            >
-              换一种排法
-            </button>
-          )}
+            <div className="ap-proposal-quiet-row">
+              {flow.proposal.kind === "scope" && (
+                <button
+                  type="button"
+                  className="ap-quiet-action"
+                  disabled={flow.busy}
+                  onClick={() =>
+                    flow.proposal && flow.manualBoundary(flow.proposal)
+                  }
+                >
+                  <PenTool size={13} aria-hidden="true" />
+                  在地图上重画实际活动范围
+                </button>
+              )}
+              {/* 2026-11-14 用户指令「给我几个方案」：物件排布方案循环切换（行列/居中/沿边）。 */}
+              {flow.proposal.kind === "objects" && (
+                <button
+                  type="button"
+                  className="ap-quiet-action"
+                  disabled={flow.busy}
+                  onClick={() => {
+                    void flow.cycleObjectsLayout();
+                  }}
+                >
+                  <LayoutGrid size={13} aria-hidden="true" />
+                  换一种排法
+                </button>
+              )}
+              <button
+                type="button"
+                className="ap-quiet-action"
+                onClick={() => (onCancelPreview ? onCancelPreview() : flow.cancel())}
+              >
+                <RotateCcw size={13} aria-hidden="true" />
+                撤回预览
+              </button>
+            </div>
+          </div>
         </div>
       ) : flow.state.stage !== "place" ? (
         <button
@@ -571,22 +648,25 @@ export function OutdoorWorkflowCard({
       {/* 2026-11-16 用户拍板：模型说「轮廓取不到，请手画」时，place 阶段卡上就得能点进去手画，
           不用让人自己到工具栏里翻。实现在 manualBoundary 的既有守卫里（无锚点/不可换场原位报错，不乱改）。 */}
       {!flow.proposal && flow.state.stage === "place" && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        <div className="ap-place-actions">
           {onSearchPlace && (
             <button
               type="button"
-              className="btn-primary"
+              className="ap-place-action is-search"
               disabled={flow.busy}
               onClick={onSearchPlace}
             >
+              <Search size={13} aria-hidden="true" />
               搜索地点
             </button>
           )}
           <button
             type="button"
+            className="ap-place-action is-draw"
             disabled={flow.busy}
             onClick={() => flow.manualBoundary()}
           >
+            <PenTool size={13} aria-hidden="true" />
             在地图上手画活动范围
           </button>
         </div>
@@ -618,53 +698,33 @@ export function OutdoorWorkflowCard({
           </button>
         </div>
       )}
-      {flow.proposal && (
-        <footer>
-          <button
-            type="button"
-            onClick={() => (onCancelPreview ? onCancelPreview() : flow.cancel())}
-          >
-            取消本次预览
-          </button>
-        </footer>
-      )}
     </section>
-    {flow.loginRequired && (
+    {flow.loginRequired && !flow.loginSatisfied && (
       <section
         className="ap-card ap-status-card"
         role="status"
-        aria-label={flow.loginSatisfied ? "登录完成" : "需要登录"}
+        aria-label="需要登录"
       >
         <header className="ap-card-head">
           <strong>
-            {loginResumeHeadline({ loginSatisfied: flow.loginSatisfied, rangeConfirmed: flow.scopeConfirmed() })}
+            {loginResumeHeadline({ rangeConfirmed: flow.scopeConfirmed() })}
           </strong>
         </header>
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
-          {loginResumeCaption({ loginSatisfied: flow.loginSatisfied, rangeConfirmed: flow.scopeConfirmed() })}
+          {loginResumeCaption({ rangeConfirmed: flow.scopeConfirmed() })}
         </p>
-        {/* 2026-11-14 用户指令：登录完成后卡片切换为可继续态；恢复走 resumeAfterLogin 的既有守卫（原账户/规划未漂移）。 */}
-        {flow.loginSatisfied ? (
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={flow.busy}
-            onClick={() => void flow.resumeAfterLogin()}
-          >
-            继续这次搜索
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() =>
-              window.dispatchEvent(new Event("scendance:request-account-login"))
-            }
-          >
-            前往登录
-          </button>
-        )}
+        {/* 2026-11-16 用户指令：登录完成后不再留「已登录 · 可以继续」再点一次——
+            登录一到位就由 useOutdoorAgentWorkflow 自动续上，这张卡只在真的没登录时出现。 */}
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() =>
+            window.dispatchEvent(new Event("scendance:request-account-login"))
+          }
+        >
+          前往登录
+        </button>
       </section>
     )}
     </>

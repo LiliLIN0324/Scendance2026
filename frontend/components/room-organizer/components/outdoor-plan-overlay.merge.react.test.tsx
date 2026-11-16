@@ -5,13 +5,15 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import type { OutdoorAgentBridge, OutdoorMapEditHighlight } from "../lib/outdoor-agent-contract";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import type { BackendSession } from "@/lib/backend-session";
 import Overlay from "./outdoor-plan-overlay";
-import { createStarterOutdoorPlan } from "../lib/outdoor-project-store";
+import { createStarterOutdoorPlan, readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import {
   readPlanGroundSource,
   writePlanGroundSource,
@@ -108,10 +110,14 @@ it("keeps outside guide actions working and exposes a clean map details panel", 
     outsideTool.remove();
   }
 
-  // 悬停图层先出竖排快捷列表；点末尾「展开」才进完整「地图详情」。
+  // 点图层钮弹出紧凑快捷卡（高德范式）；点末尾「展开」才进完整「地图详情」，弹层随之收起。
   const layerBtn = screen.getByTestId("outdoor-source-cycle");
-  fireEvent.mouseEnter(layerBtn.parentElement!);
+  fireEvent.click(layerBtn);
   expect(screen.getByTestId("outdoor-layer-strip")).toBeTruthy();
+  // 再点一次图层钮收起（点按开合）。
+  fireEvent.click(layerBtn);
+  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
+  fireEvent.click(layerBtn);
   fireEvent.click(screen.getByTestId("map-strip-expand"));
   expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
   expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
@@ -202,4 +208,111 @@ it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3
   expect(state.bridge?.applyPlan).toBeTypeOf("function");
   expect(state.bridge?.applyWorkers).toBeTypeOf("function");
   expect(state.bridge?.getLevels).toBeTypeOf("function");
+});
+
+it("版本冲突给二选一：点「用我这版」才 force 覆盖，点「用服务器那版」才换成本机", async () => {
+  const projectId = "sync-conflict";
+  const localPlan = createStarterOutdoorPlan();
+  saveOutdoorProjectRecord({
+    v: 1,
+    projectId,
+    name: "湖滨夜集",
+    createdAt: "2026-11-17T00:00:00.000Z",
+    updatedAt: "2026-11-17T00:00:00.000Z",
+    plan: localPlan,
+    remoteActivityId: "a-1",
+    remoteRevision: 2,
+  });
+  const remotePlan = { ...createStarterOutdoorPlan(), anchor: { lng: 120.99, lat: 30.99 } };
+  const saveOutdoorPlan = vi.fn().mockResolvedValue({
+    conflict: true,
+    activityId: "a-1",
+    revision: 3,
+    updatedAt: "2026-11-17T01:00:00.000Z",
+    name: "另一台设备的版本",
+  });
+  const getOutdoorPlan = vi.fn().mockResolvedValue({
+    found: true,
+    activityId: "a-1",
+    name: "服务器那版",
+    revision: 3,
+    plan: remotePlan,
+  });
+  const controller = { saveOutdoorPlan, getOutdoorPlan } as unknown as BackendSession;
+
+  render(<Overlay projectId={projectId} controller={controller} />);
+
+  // 自动保存落地后撞上服务器更新版本：不覆盖，先问用户。
+  await waitFor(() => expect(screen.getByTestId("outdoor-sync-banner")).toBeTruthy(), { timeout: 3000 });
+  expect(screen.getByTestId("outdoor-sync-banner").textContent).toContain("版本 3");
+  expect(saveOutdoorPlan.mock.calls.at(-1)?.[0]).toMatchObject({ baseRevision: 2, activityId: "a-1" });
+
+  // 选「用我这版」：带 force 覆盖，写回新版本号。
+  fireEvent.click(screen.getByTestId("outdoor-sync-use-mine"));
+  await waitFor(() =>
+    expect(saveOutdoorPlan.mock.calls.at(-1)?.[0]).toMatchObject({ force: true, activityId: "a-1" }),
+  );
+});
+
+it("冲突时选「用服务器那版」：本机换成服务器版本并记住它", async () => {  const projectId = "sync-server";
+  saveOutdoorProjectRecord({
+    v: 1,
+    projectId,
+    name: "本机版本",
+    createdAt: "2026-11-17T00:00:00.000Z",
+    updatedAt: "2026-11-17T00:00:00.000Z",
+    plan: createStarterOutdoorPlan(),
+    remoteActivityId: "a-2",
+    remoteRevision: 2,
+  });
+  const basePlan = createStarterOutdoorPlan();
+  const remotePlan = { ...basePlan, anchor: { ...(basePlan.anchor ?? { lng: 0, lat: 0 }), lng: 120.99 } };
+  const saveOutdoorPlan = vi.fn().mockResolvedValue({
+    conflict: true,
+    activityId: "a-2",
+    revision: 5,
+    updatedAt: "2026-11-17T03:00:00.000Z",
+    name: "服务器那版",
+  });
+  const getOutdoorPlan = vi.fn().mockResolvedValue({
+    found: true,
+    activityId: "a-2",
+    name: "服务器那版",
+    revision: 5,
+    plan: remotePlan,
+  });
+
+  render(<Overlay projectId={projectId} controller={{ saveOutdoorPlan, getOutdoorPlan } as unknown as BackendSession} />);
+  await waitFor(() => expect(screen.getByTestId("outdoor-sync-banner")).toBeTruthy(), { timeout: 3000 });
+
+  fireEvent.click(screen.getByTestId("outdoor-sync-use-remote"));
+  await waitFor(() => expect(getOutdoorPlan).toHaveBeenCalledWith("a-2"));
+  await waitFor(() => {
+    const stored = readOutdoorProjectRecord(projectId);
+    expect(stored?.remoteRevision).toBe(5);
+    expect(stored?.plan?.anchor?.lng).toBeCloseTo(120.99);
+  });
+  expect(saveOutdoorPlan.mock.calls.every((call) => call[0].force !== true)).toBe(true);
+});
+
+it("云端副本传不上去时不出任何提示（本机照常保存）", async () => {
+  const projectId = "sync-silent";
+  const saveOutdoorPlan = vi.fn().mockRejectedValue(new Error("offline"));
+  render(
+    <Overlay
+      projectId={projectId}
+      controller={{ saveOutdoorPlan } as unknown as BackendSession}
+      seedPlan={createStarterOutdoorPlan()}
+    />,
+  );
+
+  await waitFor(() => expect(saveOutdoorPlan).toHaveBeenCalled(), { timeout: 3000 });
+  // 本机记录照写（不因云端失败而丢）
+  await waitFor(() => expect(readOutdoorProjectRecord(projectId)?.plan).toBeTruthy());
+  // 但屏幕上不该出现任何「云端副本…」提示
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  });
+  expect(screen.queryByTestId("outdoor-sync-banner")).toBeNull();
+  expect(document.body.textContent).not.toContain("云端副本");
 });

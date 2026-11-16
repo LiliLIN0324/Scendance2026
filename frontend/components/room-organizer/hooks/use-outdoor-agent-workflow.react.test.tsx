@@ -5,7 +5,7 @@ import { beforeEach, afterEach, it, expect, vi } from "vitest";
 import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
-import { createStarterOutdoorPlan } from "../lib/outdoor-project-store";
+import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import type {
@@ -73,6 +73,7 @@ const response = (
     ...extra,
   }),
 });
+let cardHistorySession: Record<string, unknown> = {};
 function Harness() {
   flow = useOutdoorAgentWorkflow({
     scope,
@@ -93,6 +94,7 @@ function Harness() {
         },
         ...(streamUnderstand ? { assistantChatStream: streamUnderstand } : {}),
         ...(sessionUser === undefined ? {} : { getSnapshot: () => ({ user: sessionUser }) }),
+        ...cardHistorySession,
       }) as unknown as BackendSession,
     provider: () => providerOverride?.(),
     model: () => modelOverride?.() ?? null,
@@ -148,6 +150,7 @@ beforeEach(() => {
   scope = "project-a";
   chatMeta = { provider: undefined, model: null };
   sessionUser = undefined;
+  cardHistorySession = {};
   providerOverride = undefined;
   modelOverride = undefined;
   streamUnderstand = undefined;
@@ -302,9 +305,9 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   act(() => flow.offerBoundary(anchor, ring, "IN77"));
   expect(apply).not.toHaveBeenCalled();
   expect(flow.appliedHighlight).toBeNull();
-  expect(host.textContent).toContain("部分使用请重画");
+  expect(host.textContent).toContain("商场轮廓只是候选");
   const confirm = [...host.querySelectorAll("button")].find(
-    (b) => b.textContent === "确认并应用这一版",
+    (b) => b.textContent?.includes("确认并应用这一版"),
   )!;
   await act(async () => {
     confirm.click();
@@ -315,11 +318,105 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
   expect(host.textContent).toContain("拖动顶点调整后，请重新核对活动范围");
 });
+it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => {
+  const anchor = { ...plan.anchor!, lng: 120.25 };
+  const before = flow.cardRecords.length;
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  expect(flow.cardRecords).toHaveLength(before);
+  const confirm = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.includes("确认并应用这一版"),
+  )!;
+  await act(async () => {
+    confirm.click();
+  });
+  expect(flow.cardRecords).toHaveLength(before + 1);
+  expect(flow.cardRecords.at(-1)).toMatchObject({ decision: "confirmed", kind: "scope" });
+  expect(flow.cardRecords.at(-1)!.title).toContain("活动范围");
+  const history = host.querySelector('[aria-label="已完成的引导"]');
+  expect(history?.textContent).toContain("已确认");
+  expect(history?.textContent).toContain("活动范围");
+  // 点开历史行：能看到当时那张卡的说明与按钮（只作记录，不提供点击）
+  const row = host.querySelector<HTMLButtonElement>(".ap-card-history-row")!;
+  act(() => row.click());
+  const detail = host.querySelector(".ap-card-history-detail");
+  expect(detail?.textContent).toContain("商场轮廓只是候选");
+  expect(detail?.textContent).toContain("确认并应用这一版");
+  expect(detail?.textContent).toContain("在地图上重画实际活动范围");
+  expect(detail?.textContent).toContain("撤回预览");
+  // 撤回也留痕：下一张卡不再出现时，上一条记录还能看见
+  act(() => flow.offerBoundary({ ...plan.anchor!, lng: 120.28 }, ring, "IN77"));
+  act(() => flow.cancel());
+  expect(flow.cardRecords).toHaveLength(before + 2);
+  expect(flow.cardRecords.at(-1)?.decision).toBe("withdrawn");
+  expect(host.textContent).toContain("已撤回");
+});
+it("卡的历史会推到后端副本，换设备首屏从后端接回", async () => {
+  const save = vi.fn().mockResolvedValue([]);
+  const load = vi.fn().mockResolvedValue([
+    {
+      at: 111,
+      stage: "scope",
+      kind: "scope",
+      title: "另一台设备上的旧卡",
+      decision: "confirmed",
+      notes: [],
+      actions: [],
+    },
+  ]);
+  cardHistorySession = { getOutdoorCardHistory: load, saveOutdoorCardHistory: save };
+  // 换设备 = 新挂载；同一 scope 不重挂的话 effect 不会重跑。
+  act(() => root.unmount());
+  root = createRoot(host);
+  await act(async () => {
+    mount();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  // 新设备：本地为空时，首屏从后端接回旧记录
+  expect(flow.cardRecords.some((record) => record.title === "另一台设备上的旧卡")).toBe(true);
+  // 确认一张卡后：本机记一条，同时推一份后端副本
+  act(() => flow.offerBoundary({ ...plan.anchor!, lng: 120.4 }, ring, "IN77"));
+  const confirm = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.includes("确认并应用这一版"),
+  )!;
+  await act(async () => {
+    confirm.click();
+  });
+  expect(save).toHaveBeenCalled();
+  const [projectId, pushed] = save.mock.calls.at(-1)! as [string, Array<{ title: string }>];
+  expect(projectId).toBe(scope);
+  expect(pushed.some((record) => record.title.includes("活动范围"))).toBe(true);
+});
+it("拿到后端活动 id 后，历史改为按它存（换设备才读得到）", async () => {
+  const save = vi.fn().mockResolvedValue([]);
+  cardHistorySession = { saveOutdoorCardHistory: save };
+  saveOutdoorProjectRecord({
+    v: 1,
+    projectId: scope,
+    name: "湖滨夜集",
+    createdAt: "2026-11-17T00:00:00.000Z",
+    updatedAt: "2026-11-17T00:00:00.000Z",
+    plan: null,
+    remoteActivityId: "remote-9",
+    remoteRevision: 2,
+  });
+  act(() => root.unmount());
+  root = createRoot(host);
+  act(() => mount());
+  act(() => flow.offerBoundary({ ...plan.anchor!, lng: 120.7 }, ring, "IN77"));
+  const confirm = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.includes("确认并应用这一版"),
+  )!;
+  await act(async () => {
+    confirm.click();
+  });
+  expect(save.mock.calls.at(-1)?.[0]).toBe("remote-9");
+});
 it("可从候选范围直接重画地图边界，重画前不写入提案", () => {
   const anchor = { ...plan.anchor!, lng: 120.1 };
   act(() => flow.offerBoundary(anchor, ring, "IN77"));
   const redraw = [...host.querySelectorAll("button")].find(
-    (button) => button.textContent === "在地图上重画实际活动范围",
+    (button) => button.textContent?.includes("在地图上重画实际活动范围"),
   )!;
   act(() => redraw.click());
   expect(bridge.beginVenueBoundary).toHaveBeenCalledWith(anchor);
@@ -988,6 +1085,32 @@ it("未登录错误保留原句和草稿，正规账户中心入口可操作，�
   expect(flow.loginRequired).toBe(false);
   expect(apply).not.toHaveBeenCalled();
 });
+// 2026-11-16 用户指令：「已登录 · 可以继续」这张卡没保留必要——登录到位就自动接上。
+it("登录一到位就自动接上待续需求，不再留一张「已登录 · 可以继续」等用户点", async () => {
+  sessionUser = null;
+  await act(async () => {
+    await flow.handle("先找IN77，核对活动区域");
+  });
+  expect(flow.loginRequired).toBe(true);
+  expect(flow.loginSatisfied).toBe(false);
+  // 真没登录时仍然是登录卡，且文案不提「已登录」。
+  expect(host.textContent).toContain("登录后继续这次选址");
+  expect(host.textContent).not.toContain("已登录");
+  // 账号恢复（真实登录）后重渲染：不需要再点「继续这次搜索」，需求自己接上。
+  sessionUser = { id: "user-a", is_anonymous: false };
+  understand.mockResolvedValueOnce(response("ask"));
+  await act(async () => {
+    mount();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(flow.loginRequired).toBe(false);
+  expect(understand).toHaveBeenCalledTimes(1);
+  expect(understand.mock.calls[0]![0]).toBe("先找IN77，核对活动区域");
+  expect(host.textContent).not.toContain("已登录");
+});
 it("登录待恢复原句不跟到其他活动；取消后不能复活", async () => {
   understand.mockRejectedValueOnce(new Error("UNAUTHENTICATED"));
   await act(async () => {
@@ -1115,7 +1238,7 @@ it("已登录时照常走地图上下文与理解模型", async () => {
 it("place 阶段卡上直接能点「在地图上手画活动范围」", async () => {
   expect(flow.state.stage).toBe("place");
   const button = [...host.querySelectorAll("button")].find(
-    (item) => item.textContent?.trim() === "在地图上手画活动范围",
+    (item) => item.textContent?.includes("在地图上手画活动范围"),
   );
   expect(button).toBeTruthy();
   await act(async () => {

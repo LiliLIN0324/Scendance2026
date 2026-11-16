@@ -301,6 +301,33 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const input=z.strictObject({unit:z.enum(['m','ft']).optional(),showMeasurements:z.boolean().optional()}).parse(await json());
         return respond(await backend.scene(actor,'preferences.put',input));
       }
+      // 2026-11-17 户外引导卡历史：跟活动存后端，换设备/清缓存不丢。只存决策流水，不动规划。
+      if(path==='/outdoor-history' && method==='GET') {
+        const projectId=z.string().trim().min(1).max(200).parse(url.searchParams.get('projectId') ?? '');
+        return respond(await backend.scene(actor,'outdoor-history.get',{projectId}));
+      }
+      if(path==='/outdoor-history' && method==='PUT') {
+        const input=z.strictObject({projectId:z.string().trim().min(1).max(200),entries:z.array(z.unknown()).max(200)}).parse(await json());
+        return respond(await backend.scene(actor,'outdoor-history.put',input));
+      }
+      // 2026-11-17 户外活动本体：后端发号 + revision 乐观并发，换设备靠 activityId 找回。
+      if(path==='/outdoor-plans' && method==='GET') return respond(await backend.scene(actor,'outdoor-plan.list',{}));
+      if(path==='/outdoor-plans' && method==='PUT') {
+        const input=z.strictObject({
+          activityId:uuid.optional(),
+          localActivityId:z.string().trim().min(1).max(200).optional(),
+          baseRevision:z.number().int().min(0).optional(),
+          // 2026-11-17：用户在冲突提示里明确选「用我这版」才传 true。
+          force:z.boolean().optional(),
+          name:z.string().trim().min(1).max(120),
+          plan:z.unknown(),
+        }).parse(await json());
+        return respond(await backend.scene(actor,'outdoor-plan.put',input));
+      }
+      const outdoorPlan=path.match(/^\/outdoor-plans\/([^/]+)$/);
+      if(outdoorPlan && method==='GET') {
+        return respond(await backend.scene(actor,'outdoor-plan.get',{activityId:uuid.parse(outdoorPlan[1])}));
+      }
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
       if(path==='/studios' && method==='POST') {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());

@@ -32,12 +32,15 @@ import { enuToLngLat } from "./outdoor-plan-canvas";
 import { planPointInRing } from "./site-plan-editing";
 import { fetchOfmEvidence } from "./openfreemap-evidence";
 import {
+  MAP_EVIDENCE_MISSING_NOTE,
   boundaryKey,
   planVersion,
   type OutdoorMapContext,
   type OutdoorTurn,
   type OutdoorBrief,
 } from "./outdoor-agent-contract";
+
+export { MAP_EVIDENCE_MISSING_NOTE };
 export type OutdoorEvidenceHighlight = ReturnType<
   typeof evidenceHighlights
 >["highlights"][number];
@@ -557,9 +560,7 @@ export function createOutdoorMapContext() {
         !cached ||
         cached.key !== `${snapshot.projectId}:${boundaryKey(base)}`
       )
-        return [
-          "基础地图证据未取得；建筑门/障碍/通行权限仍需核对，不代表无冲突。",
-        ];
+        return [MAP_EVIDENCE_MISSING_NOTE];
       const changed = new Set([
         ...next.facilities
           .filter((f) => {
