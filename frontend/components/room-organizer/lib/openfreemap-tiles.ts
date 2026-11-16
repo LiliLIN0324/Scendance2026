@@ -27,21 +27,58 @@ let tileSourcePromise: Promise<OfmTileSource> | null = null;
  * （响应头 `x-ofm-debug: empty tile wildcard`，实测 0 字节），真模板是带版本号的
  * `/planet/<版本>_pt/{z}/{x}/{y}.pbf`。版本号随行星数据更新会变，所以不硬编码。
  */
+/** 测试用：清空模块级 TileJSON 缓存，避免用例互相污染。 */
+export function resetOfmTileSourceForTests(): void {
+  tileSourcePromise = null;
+}
+
+function ofmAbortError(): DOMException {
+  return new DOMException("Cancelled", "AbortError");
+}
+
+/**
+ * 只取消这一路的等待。共享 TileJSON 继续飞，其它调用方和后续缓存不受影响。
+ * 已经 abort 的 signal 不再挂监听，避免把共享失败变成未处理拒绝。
+ */
+function followOfmAbort<T>(shared: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(ofmAbortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(ofmAbortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    const finish = (settle: () => void) => {
+      signal.removeEventListener("abort", onAbort);
+      if (signal.aborted) reject(ofmAbortError());
+      else settle();
+    };
+    shared.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
+
 export function loadOfmTileSource(signal?: AbortSignal): Promise<OfmTileSource> {
+  // 调用方进来时已经取消：不要为了这一路新开 TileJSON。
+  if (signal?.aborted) return Promise.reject(ofmAbortError());
   if (!tileSourcePromise) {
-    tileSourcePromise = (async () => {
-      const response = await fetch(OFM_TILEJSON_URL, { signal: signal ?? null });
+    // 共享 TileJSON 不能绑到某一个调用方的 AbortSignal，
+    // 否则首次被取消会把所有并发等待方一起毒死，证据线全部退回 Overpass。
+    const sharedKey = (async () => {
+      const response = await fetch(OFM_TILEJSON_URL);
       if (!response.ok) throw new Error(`OpenFreeMap TileJSON ${response.status}`);
       const json = (await response.json()) as { tiles?: string[]; maxzoom?: number };
       const template = json.tiles?.[0];
       if (!template) throw new Error("OpenFreeMap TileJSON 缺少 tiles 模板");
       return { template, maxzoom: json.maxzoom ?? OFM_MAX_USEFUL_ZOOM };
     })().catch((error: unknown) => {
-      tileSourcePromise = null; // 失败不钉死缓存，下次调用重试
+      if (tileSourcePromise === sharedKey) tileSourcePromise = null; // 失败不钉死缓存，下次调用重试
       throw error;
     });
+    tileSourcePromise = sharedKey;
   }
-  return tileSourcePromise;
+  const shared = tileSourcePromise;
+  if (!signal) return shared;
+  return followOfmAbort(shared, signal);
 }
 
 export const ofmTileUrl = (template: string, z: number, x: number, y: number): string =>

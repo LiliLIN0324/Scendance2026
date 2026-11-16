@@ -29,6 +29,7 @@ import {
 import type { Geometry } from "@/lib/site-intelligence/types";
 import { enuToLngLat } from "./outdoor-plan-canvas";
 import { planPointInRing } from "./site-plan-editing";
+import { fetchOfmEvidence } from "./openfreemap-evidence";
 import {
   boundaryKey,
   planVersion,
@@ -39,12 +40,42 @@ import {
 export type OutdoorEvidenceHighlight = ReturnType<
   typeof evidenceHighlights
 >["highlights"][number];
+
+function mapAbortError(): DOMException {
+  return new DOMException("Cancelled", "AbortError");
+}
+
+/**
+ * 只取消这一路的等待。共享证据请求继续，缓存仍写入，其它并发 load 不受影响。
+ */
+function followMapAbort<T>(shared: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(mapAbortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(mapAbortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    const finish = (settle: () => void) => {
+      signal.removeEventListener("abort", onAbort);
+      if (signal.aborted) reject(mapAbortError());
+      else settle();
+    };
+    shared.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
+
 /** Shared map module is the only geometry/evidence implementation. Adapter owns bounded model serialization. */
 export function createOutdoorMapContext() {
   let cached: { key: string; at: number; evidence: MapEvidenceResult } | null =
     null;
   let snapshot: SiteSnapshot | null = null;
   const loader = createEvidenceLoader();
+  let lastInvalidateKey: string | null = null;
+  const inflightEvidence = new Map<
+    string,
+    Promise<MapEvidenceResult | undefined>
+  >();
   return {
     async load(
       projectId: string,
@@ -53,34 +84,66 @@ export function createOutdoorMapContext() {
       confirmedBoundary: boolean,
       signal: AbortSignal,
     ): Promise<OutdoorMapContext> {
+      // 进来时已经取消：不要 invalidate，也不要新开证据请求，避免打断其它 key 的兜底。
+      if (signal.aborted) throw mapAbortError();
       const key = `${projectId}:${boundaryKey(plan)}`;
       const requestKey = `${projectId}:${planVersion(plan)}`;
-      loader.invalidate(requestKey);
+      // 同一 plan 版本并发 load 不要反复 invalidate，避免 9 路同时打空缓存。
+      if (lastInvalidateKey !== requestKey) {
+        loader.invalidate(requestKey);
+        lastInvalidateKey = requestKey;
+      }
       let evidence =
         cached?.key === key && Date.now() - cached.at < 60000
           ? cached.evidence
           : undefined;
       if (!evidence && plan.anchor) {
-        const xs = plan.boundary.map((p) => p.x),
-          ys = plan.boundary.map((p) => p.y);
-        const radiusM = Math.min(
-          750,
-          Math.max(150, ...xs.map(Math.abs), ...ys.map(Math.abs)) + 50,
-        );
-        evidence = await loader.load(requestKey, {
-          anchor: plan.anchor,
-          radiusM,
-          semanticEndpoint: "/api/site-context",
-          signal,
-        });
-        if (
-          signal.aborted ||
-          evidence.status === "stale" ||
-          evidence.status === "cancelled"
-        )
-          throw new DOMException("Cancelled", "AbortError");
-        if (evidence.status === "ready" || evidence.status === "partial")
-          cached = { key, at: Date.now(), evidence };
+        const inflightKey = `${key}:${requestKey}`;
+        let shared = inflightEvidence.get(inflightKey);
+        if (!shared) {
+          // 已取消且没有可加入的共享请求：不要为了这一路去打 OFM / 兜底。
+          if (signal.aborted) throw mapAbortError();
+          const xs = plan.boundary.map((p) => p.x),
+            ys = plan.boundary.map((p) => p.y);
+          const radiusM = Math.min(
+            750,
+            Math.max(150, ...xs.map(Math.abs), ...ys.map(Math.abs)) + 50,
+          );
+          const anchor = plan.anchor;
+          const cacheKey = key;
+          let task!: Promise<MapEvidenceResult | undefined>;
+          task = (async () => {
+            let next: MapEvidenceResult | undefined;
+            // 共享证据请求不绑调用方 AbortSignal，避免一路取消把其它 8 路一起毒死。
+            try {
+              next = (await fetchOfmEvidence(anchor, radiusM)) ?? undefined;
+            } catch {
+              next = undefined;
+            }
+            if (!next) {
+              next = await loader.load(requestKey, {
+                anchor,
+                radiusM,
+                semanticEndpoint: "/api/site-context",
+              });
+            }
+            if (
+              next &&
+              (next.status === "ready" || next.status === "partial")
+            )
+              cached = { key: cacheKey, at: Date.now(), evidence: next };
+            return next;
+          })().finally(() => {
+            if (inflightEvidence.get(inflightKey) === task)
+              inflightEvidence.delete(inflightKey);
+          });
+          inflightEvidence.set(inflightKey, task);
+          shared = task;
+        }
+        const next = await followMapAbort(shared, signal);
+        if (next?.status === "stale" || next?.status === "cancelled")
+          throw mapAbortError();
+        evidence = next;
       }
       const selected = selectedIds.flatMap((id) =>
         ["zone", "facility", "route", "entrance", "worker"].map((kind) =>
