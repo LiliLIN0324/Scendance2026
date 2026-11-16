@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { parseRoadNetwork, routeClassForHighway, routeClassLabel } from './road-network';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchRoadNetwork, parseRoadNetwork, routeClassForHighway, routeClassLabel } from './road-network';
+import { fetchOpenFreeMapRoads } from './openfreemap-roads';
+
+vi.mock('./openfreemap-roads', () => ({ fetchOpenFreeMapRoads: vi.fn() }));
+const ofmRoads = vi.mocked(fetchOpenFreeMapRoads);
 
 describe('road-network（OSM 等级 → 流线类别 / 坏段裁剪）', () => {
   describe('routeClassForHighway', () => {
@@ -55,6 +59,80 @@ describe('road-network（OSM 等级 → 流线类别 / 坏段裁剪）', () => {
         ],
       });
       expect(network.roads.map(r => r.id)).toEqual(['ok']);
+    });
+  });
+
+  // 2026-11-16：生产 Overpass 三镜像全坏（实测 26.5s 恒回空），瓦片源是主源、Overpass 只是兜底。
+  describe('fetchRoadNetwork 取源顺序', () => {
+    beforeEach(() => {
+      ofmRoads.mockReset();
+    });
+
+    it('瓦片源有路就直接用，不再打服务端', async () => {
+      ofmRoads.mockResolvedValue([
+        { id: 'ofm:1', highway: 'primary', name: '延安路', points: [[120.16, 30.25], [120.17, 30.26]] },
+      ]);
+      const api = vi.fn();
+      const network = await fetchRoadNetwork({ lng: 120.1637, lat: 30.2528 }, 600, {
+        fetchImpl: api as unknown as typeof fetch,
+        local: false,
+      });
+      expect(network.roads).toHaveLength(1);
+      expect(api).not.toHaveBeenCalled();
+    });
+
+    it('瓦片源空就退服务端，并把 buildings 一起带出', async () => {
+      ofmRoads.mockResolvedValue([]);
+      const api = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          roads: [{ id: 'osm:1', highway: 'service', name: '', points: [[120.16, 30.25], [120.17, 30.26]] }],
+          buildings: [{ id: 'b1', name: '', points: [[120.16, 30.25], [120.17, 30.25], [120.17, 30.26]] }],
+        }),
+      }));
+      const network = await fetchRoadNetwork({ lng: 120.1637, lat: 30.2528 }, 600, {
+        fetchImpl: api as unknown as typeof fetch,
+        local: false,
+      });
+      expect(api).toHaveBeenCalledTimes(1);
+      expect(network.roads.map(r => r.id)).toEqual(['osm:1']);
+      expect(network.buildings).toHaveLength(1);
+    });
+
+    it('瓦片源抛错不阻塞兜底', async () => {
+      ofmRoads.mockRejectedValue(new Error('tilejson down'));
+      const api = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ roads: [{ id: 'osm:2', highway: 'path', name: '', points: [[120.16, 30.25], [120.17, 30.26]] }] }),
+      }));
+      const network = await fetchRoadNetwork({ lng: 120.1637, lat: 30.2528 }, 600, {
+        fetchImpl: api as unknown as typeof fetch,
+        local: false,
+      });
+      expect(network.roads.map(r => r.id)).toEqual(['osm:2']);
+    });
+
+    it('两头都拿不到时回空路网，不抛', async () => {
+      ofmRoads.mockResolvedValue([]);
+      const api = vi.fn(async () => {
+        throw new Error('network down');
+      });
+      const network = await fetchRoadNetwork({ lng: 120.1637, lat: 30.2528 }, 600, {
+        fetchImpl: api as unknown as typeof fetch,
+        local: false,
+      });
+      expect(network).toEqual({ roads: [] });
+    });
+
+    it('ofm: false 显式只用服务端（本地代理面板调试用）', async () => {
+      const api = vi.fn(async () => ({ ok: true, json: async () => ({ roads: [] }) }));
+      await fetchRoadNetwork({ lng: 120.1637, lat: 30.2528 }, 600, {
+        fetchImpl: api as unknown as typeof fetch,
+        local: false,
+        ofm: false,
+      });
+      expect(ofmRoads).not.toHaveBeenCalled();
+      expect(api).toHaveBeenCalledTimes(1);
     });
   });
 });

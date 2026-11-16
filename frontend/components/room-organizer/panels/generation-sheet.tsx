@@ -346,7 +346,7 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
                     maxLength={400}
                     aria-label="场地描述"
                     value={prompt}
-                    placeholder="一句话描述场地，如：80 人发布会，室内"
+                    placeholder="一句话描述场地，如：80 人发布会，户外广场"
                     onChange={event => setPrompt(event.target.value)}
                     onKeyDown={event => {
                       // 和原来那条输入栏一样：回车就提交，Shift+Enter 换行。

@@ -6,8 +6,8 @@ import './agent-task-examples.css';
 
 /** 卡面把「活动」和「场地参数」摆在一条线上，标题里不带标点；标点只在拼成一句话时补。 */
 const examples = [
-  { title: '80 人发布会', detail: '室内 12×9', icon: Megaphone },
-  { title: '30 人圆桌晚宴', detail: '室内 15×10', icon: Utensils },
+  { title: '80 人发布会', detail: '户外广场 30×20', icon: Megaphone },
+  { title: '30 人圆桌晚宴', detail: '户外露台 15×10', icon: Utensils },
   { title: '120 人市集', detail: '户外 20×14', icon: Store },
 ] as const;
 

@@ -9,6 +9,7 @@
  */
 
 import { usesLocalPlaceProxy } from './place-search';
+import { fetchOpenFreeMapRoads } from './openfreemap-roads';
 
 export interface RoadSegment {
   id: string;
@@ -122,21 +123,48 @@ export function parseRoadNetwork(body: unknown): RoadNetwork {
 export async function fetchRoadNetwork(
   center: { lng: number; lat: number },
   spanM: number,
-  options: { signal?: AbortSignal; local?: boolean; fetchImpl?: typeof fetch } = {},
+  options: { signal?: AbortSignal; local?: boolean; fetchImpl?: typeof fetch; ofm?: boolean } = {},
 ): Promise<RoadNetwork> {
   const local = options.local ?? usesLocalPlaceProxy();
   const doFetch = options.fetchImpl ?? fetch;
+  const span = Math.round(spanM);
+  // 2026-11-16 用户指令「先修路网」「第一性原理」：先取与底图同源的 OpenFreeMap 瓦片。
+  // 服务端 Overpass 从 Cloudflare 侧三个镜像全坏（实测 26.5s 后恒回空），
+  // 而瓦片是浏览器直连 CDN 的（CORS *、十年缓存），实测 1–2s 就有真实道路。
+  if (options.ofm !== false) {
+    try {
+      const halfDegLat = span / 111132.92 / 2;
+      const halfDegLng = span / (Math.cos((center.lat * Math.PI) / 180) * 111319.49) / 2;
+      const roads = await fetchOpenFreeMapRoads(
+        {
+          west: center.lng - halfDegLng,
+          south: center.lat - halfDegLat,
+          east: center.lng + halfDegLng,
+          north: center.lat + halfDegLat,
+        },
+        options.signal ? { signal: options.signal } : {},
+      );
+      if (roads.length) return { roads };
+    } catch {
+      // 瓦片源异常就静默退服务端，不把「路网拿不到」的锅甩给用户。
+    }
+  }
   const params = new URLSearchParams({
     lat: center.lat.toFixed(6),
     lng: center.lng.toFixed(6),
-    span: String(Math.round(spanM)),
+    span: String(span),
   });
   const url = local
     ? `http://127.0.0.1:3199/api/road-network?${params.toString()}`
     : `/api/road-network?${params.toString()}`;
-  // Overpass 忙时要排队：给足 90s 预算（实测坏窗口镜像重试要 70s+），失败回空路网（调用方回「路网暂时拿不到」）。
-  const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(90000)]) : AbortSignal.timeout(90000) });
-  if (!response.ok) return { roads: [] };
+  // 兜底源不该再让用户干等：Overpass 忙时 90s 预算已经等死过一次，收到 15s 就放弃
+  // （瓦片源已经先试过，这里只是农村/稀疏区域的后手）。
+  const response = await doFetch(url, {
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(15000)])
+      : AbortSignal.timeout(15000),
+  }).catch(() => null);
+  if (!response || !response.ok) return { roads: [] };
   // 2026-11-14 修复：原写法 { roads: parseRoadNetwork(...) } 把解析出的 buildings 丢了——
   // 探针实证：代理交付 323 栋、fetchedBuildings 恒 0。
   return parseRoadNetwork(await response.json());

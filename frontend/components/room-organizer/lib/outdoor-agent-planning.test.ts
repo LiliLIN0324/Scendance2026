@@ -45,13 +45,16 @@ describe("户外用途、真实库、人员几何守卫", () => {
     expect(plan.facilities).toHaveLength(0);
     expect(() => validateWorkflowPlan(base(), plan)).not.toThrow();
   });
-  it("室内未知边界不猜；已有用户画区才能赋室内展览用途", () => {
-    expect(() =>
-      proposeUseZones(base(), {
-        ...brief,
-        zones: [{ ...brief.zones[0]!, environment: "indoor" }],
-      }),
-    ).toThrow("图纸");
+  it("室内未知边界不再卡死户外分区；已有用户画区时仍按室内落 environment", () => {
+    // 2026-11-16 用户指令「无室内，后续是造墙」：室内边界改由造墙阶段承接，
+    // 这里只给占位几何（否则一条「室内 12×9」的输入就能把主链卡死在分区步）。
+    const drafted = proposeUseZones(base(), {
+      ...brief,
+      zones: [{ ...brief.zones[0]!, environment: "indoor" }],
+    });
+    expect(drafted.zones).toHaveLength(1);
+    expect(drafted.zones[0]!.environment).toBe("indoor");
+    expect(drafted.zones[0]!.notes).toContain("造墙");
     const p = {
       ...base(),
       zones: [

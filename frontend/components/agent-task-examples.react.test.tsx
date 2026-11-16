@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentTaskExamples } from './agent-task-examples';
 
-const sentences = ['80 人发布会，室内 12×9', '30 人圆桌晚宴，室内 15×10', '120 人市集，户外 20×14'];
+const sentences = ['80 人发布会，户外广场 30×20', '30 人圆桌晚宴，户外露台 15×10', '120 人市集，户外 20×14'];
 const nameOf = (sentence: string) => `试试这样描述你的活动：${sentence}`;
 
 const mount = (onPick = vi.fn(), onExpand = vi.fn()) => render(<AgentTaskExamples onPick={onPick} onExpand={onExpand} />);
@@ -35,7 +35,7 @@ describe('输入框上方的例句行', () => {
     expect(screen.getByRole('group', { name: '需求例句' })).toBeTruthy();
     expect(container.querySelectorAll('.sc-task-example')).toHaveLength(1);
     expect(container.querySelector('.sc-task-example strong')?.textContent).toBe('80 人发布会');
-    expect(container.querySelector('.sc-task-example small')?.textContent).toBe('室内 12×9');
+    expect(container.querySelector('.sc-task-example small')?.textContent).toBe('户外广场 30×20');
     // 这一格里没有独立的「你可以做什么」折叠行，也没有压在下面的补位卡。
     expect(container.querySelector('.sc-task-example-repeat')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '展开你可以做什么' }));
