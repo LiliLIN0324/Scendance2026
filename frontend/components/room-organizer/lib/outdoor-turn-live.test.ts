@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createLiveTurn, formatMetricsLine } from './outdoor-turn-live';
+import { createMetricsBook } from './outdoor-metrics-book';
 
 function harness() {
   const lines: string[] = [];
@@ -134,5 +135,61 @@ describe('formatMetricsLine', () => {
     );
     expect(line).toContain('terminal=preview_ready');
     expect(line).toContain('turn=t-abc-1234');
+  });
+});
+
+describe('createLiveTurn + 指标簿', () => {
+  it('带了簿子就记一笔：确认后补的日志是更新同一行，不是新增', () => {
+    const book = createMetricsBook();
+    const lines: string[] = [];
+    const turn = createLiveTurn({ sink: (line) => lines.push(line), book });
+    turn.begin('scene', 1_000);
+    turn.markPreview(2_000);
+    turn.log();
+    turn.markConfirm(2_300);
+    turn.markApplied(2_600);
+    turn.log();
+
+    const rows = book.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].confirmations).toBe(1);
+    expect(rows[0].appliedCount).toBe(1);
+    expect(lines).toHaveLength(2);
+  });
+
+  it('只出预览没收口就换轮：换轮时自动结掉上一轮，不留“进行中”的假记录', () => {
+    const book = createMetricsBook();
+    const turn = createLiveTurn({ sink: () => {}, book });
+    turn.begin('scene', 1_000);
+    turn.markPreview(1_800);
+    turn.begin('scene', 5_000);
+    const rows = book.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].terminal).toBe('preview_ready');
+    expect(rows[0].previewMs).toBe(800);
+  });
+
+  it('簿子里的数字与日志行逐项一致', () => {
+    const book = createMetricsBook();
+    const lines: string[] = [];
+    const turn = createLiveTurn({ sink: (line) => lines.push(line), book });
+    turn.begin('scene', 1_000);
+    turn.markMap(1_200);
+    turn.attempt(1_300);
+    turn.markPreview(3_000);
+    turn.settle('preview_ready', 3_200);
+    const row = book.list()[0];
+    const expected = [
+      '[outdoor-metrics]',
+      `model=${row.modelCalls}`,
+      `map=${row.mapCalls}`,
+      `confirm=${row.confirmations}`,
+      `applied=${row.appliedCount}`,
+      `firstFeedback=${row.firstUsefulFeedbackMs ?? 'null'}`,
+      `preview=${row.previewMs ?? 'null'}`,
+      `apply=${row.applyMs ?? 'null'}`,
+      `terminal=${row.terminal ?? 'null'}`,
+    ].join(' ');
+    expect(lines[0].replace(/ turn=\S+/, '')).toBe(expected);
   });
 });
