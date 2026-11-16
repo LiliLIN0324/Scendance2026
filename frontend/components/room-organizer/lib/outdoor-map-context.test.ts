@@ -467,7 +467,9 @@ it("2026-11-17 生产实测：综合体是整块建筑多边形时，场地本�
     ),
   ).not.toThrow();
 
-  // ③ 活动范围之外的建筑仍然阻断：那是越界占用，不是场地本体。
+  // ③ 活动范围之外的建筑不再一票否决整轮（2026-11-17 生产实测改判据）：
+  //    路网草案与建筑足迹同出 OSM、互相打架是常态，整轮否掉会让主链永远排不出流线，
+  //    而用户连提案都看不到、无从在画布上改。改为如实写出位置与长度，让用户去核对。
   const outside = await loadWith([
     {
       type: "way",
@@ -481,16 +483,144 @@ it("2026-11-17 生产实测：综合体是整块建筑多边形时，场地本�
       tags: { building: "yes" },
     },
   ]);
+  const outsideNotes = outside.validate(
+    plan,
+    route(
+      [
+        { x: 40, y: 0 },
+        { x: 60, y: 0 },
+      ],
+      "越界流线",
+    ),
+  );
+  expect(outsideNotes.join(" ")).toContain("未命名建筑足迹");
+  expect(outsideNotes.join(" ")).toMatch(/活动范围.+侧约.+m/);
+  // 物件（用户摆的）放进同一栋楼仍然硬拦：那才是真占位，不能跟着放宽。
   expect(() =>
-    outside.validate(
-      plan,
-      route(
-        [
+    outside.validate(plan, {
+      ...plan,
+      facilities: [
+        { ...plan.facilities[0]!, position: { x: 55, y: 0 } },
+      ],
+    }),
+  ).toThrow(/建筑\/障碍/);
+});
+
+/**
+ * 2026-11-17 生产实测（杭州湖滨路）：OSM 道路中心线与 OSM 建筑轮廓互相打架时，
+ * 不能拿「离墙多近」当冲突判据，也不能整轮否掉主链。
+ */
+it("2026-11-17 生产实测：路线从建筑足迹里穿过 → 不再整轮否掉，但写清穿楼长度与位置", async () => {
+  const ring = (pts: [number, number][]) =>
+    [...pts, pts[0]!].map(([x, y]) => {
+      const p = wgs(x, y);
+      return { lon: p.lng, lat: p.lat };
+    });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            crs: "wgs84",
+            complete: true,
+            warnings: [],
+            elements: [
+              {
+                type: "way",
+                id: 98,
+                geometry: ring([
+                  [50, -10],
+                  [70, -10],
+                  [70, 10],
+                  [50, 10],
+                ]),
+                tags: { building: "yes" },
+              },
+            ],
+          }),
+        ),
+    ),
+  );
+  const adapter = createOutdoorMapContext();
+  await adapter.load("project-a", plan, [], true, new AbortController().signal);
+  const notes = adapter.validate(plan, {
+    ...plan,
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian" as const,
+        name: "人行流线（湖滨路）",
+        points: [
           { x: 40, y: 0 },
           { x: 60, y: 0 },
         ],
-        "越界流线",
-      ),
+        oneWay: false,
+        widthM: 3,
+        notes: "",
+      },
+    ],
+  });
+  const text = notes.join(" ");
+  expect(text).toContain("未命名建筑足迹");
+  expect(text).toMatch(/约\d+m/);
+  expect(text).toContain("活动范围");
+  expect(text).toContain("未自动判定为可通行");
+});
+
+it("2026-11-17 生产实测：贴着建筑外墙走的路线不算穿楼（OSM 共享墙角顶点不是占用）", async () => {
+  const ring = (pts: [number, number][]) =>
+    [...pts, pts[0]!].map(([x, y]) => {
+      const p = wgs(x, y);
+      return { lon: p.lng, lat: p.lat };
+    });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            crs: "wgs84",
+            complete: true,
+            warnings: [],
+            elements: [
+              {
+                type: "way",
+                id: 97,
+                geometry: ring([
+                  [50, -10],
+                  [70, -10],
+                  [70, 10],
+                  [50, 10],
+                ]),
+                tags: { building: "yes" },
+              },
+            ],
+          }),
+        ),
     ),
-  ).toThrow(/建筑\/障碍/);
+  );
+  const adapter = createOutdoorMapContext();
+  await adapter.load("project-a", plan, [], true, new AbortController().signal);
+  // 中心线在墙外 0.4m、宽 1m：旧判据（离墙 ≤ 半宽）会否掉整轮；贴墙不是穿楼。
+  const notes = adapter.validate(plan, {
+    ...plan,
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian" as const,
+        name: "贴墙流线",
+        points: [
+          { x: 40, y: -10.4 },
+          { x: 70, y: -10.4 },
+        ],
+        oneWay: false,
+        widthM: 1,
+        notes: "",
+      },
+    ],
+  });
+  expect(notes.join(" ")).not.toContain("未命名建筑足迹");
 });
