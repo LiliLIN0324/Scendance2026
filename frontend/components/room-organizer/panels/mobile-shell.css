@@ -242,6 +242,11 @@
     border: 0 !important; border-radius: 0 !important; width: 100% !important;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-heading { display: none !important; }
+  /* 2026-11-16：手机上左栏标题统一收起，但户外卡片那枚「收起左侧面板」就在标题栏里——
+     卡片恰好按住左轨入口，收起后变成「进得去出不来」。只给户外卡片把标题栏放回来。 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.is-outdoor-card > .sc-left-heading {
+    display: flex !important; align-items: center; gap: 8px; padding: 6px 10px 6px 14px;
+  }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-head { padding: 10px 14px; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-feed { padding: 12px 14px 16px; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-body { flex: 1 1 auto; min-height: 0; }
