@@ -460,6 +460,9 @@ export function useOutdoorAgentWorkflow(input: {
       status("当前规划已变化，旧提案已失效；请基于最新场地重算。", "blocked");
       return;
     }
+    // 2026-11-16 用户生产实测：点「确认并应用这一版」后界面毫无反应（地图核对与写盘都是异步的，
+    // 期间没有一个字反馈）。一点就先给可见状态，避免被当成没点上而重复点。
+    status(`正在应用「${p.label}」…`, "working");
     // 2026-11-14 用户实测：提案基座拍快照之后用户新画的实体（如室内分区）不该让提案整张失效，
     // 也不该在应用时被基座快照冲掉——「纯新增」放行并把新增实体并回提案（一条 undo）；
     // 基座实体被删改、或边界/锚点等非实体字段变了仍然失效（防静默丢失用户内容）。
@@ -537,6 +540,7 @@ export function useOutdoorAgentWorkflow(input: {
       status("当前对象引用已失效，请重新核对；未修改规划。", "blocked");
       return;
     }
+    designStep(`正在把「${p.label}」写入画布…`);
     try {
       validateWorkflowPlan(plan, p.next);
       bridge?.validateMapPlan?.(plan, p.next);
@@ -554,7 +558,11 @@ export function useOutdoorAgentWorkflow(input: {
     if (!owns()) return;
     const applyBase = bridge?.getPlan();
     // 应用前按最新画布再并一次：新增实体已带进 p.next，所以应用基准就是当前画布（仍是同一条 undo）。
-    if (!applyBase || !mergeLatest(applyBase)) return;
+    if (!applyBase) {
+      status("画布当前不可用，未应用；原规划保留。", "blocked");
+      return;
+    }
+    if (!mergeLatest(applyBase)) return; // 基座已被改：mergeLatest 内部已给出失效提示
     if (!bridge?.applyPlan?.(p.next, JSON.stringify(applyBase))) {
       status("画布当前不可写或保存身份变化，未应用；原规划保留。", "blocked");
       return;
