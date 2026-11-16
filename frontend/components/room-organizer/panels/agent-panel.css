@@ -963,6 +963,11 @@ button.ap-ghost {
 .ap-outdoor-thought-steps { margin: 5px 0; padding-inline-start: 18px; }
 .ap-outdoor-model-note summary { cursor: pointer; color: var(--wk-ink-soft); font-size: 12px; }
 .ap-outdoor-plan-approval { border-inline-start: 3px solid var(--wk-green); }
+.ap-outdoor-reply-wrap { gap: 8px; }
+.ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
+.ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }
+.ap-outdoor-reply-body { display: grid; gap: 6px; font-size: var(--fs-p2); line-height: 1.5; }
+.ap-outdoor-reply-body p { margin: 0; }
 
 /* ===== AgentRunPanel：停止确认行 + 过往任务归档折叠区（任务 1/2）===== */
 .ap-stop-confirm {

@@ -186,7 +186,7 @@ export type { Bubble };
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
   // zoneApply 是闭包，落盘时丢掉；翻回话文字还在，按钮不重现。
-  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, materialQueries, alert }) => {
+  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, outdoorQuestion, materialQueries, alert }) => {
     return {
       id, role, text,
       ...(meta !== undefined ? { meta } : {}),
@@ -195,6 +195,7 @@ function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
       ...(long ? { long: true } : {}),
       ...(image !== undefined ? { image } : {}),
       ...(role === 'agent' && modelConversation === true ? { modelConversation: true } : {}),
+      ...(role === 'agent' && outdoorQuestion ? { outdoorQuestion: true as const } : {}),
       ...(role === 'agent' && materialQueries?.length ? { materialQueries } : {}),
       ...(role === 'agent' && alert?.stamp ? { alertStamp: alert.stamp, ...(alert.tone ? { alertTone: alert.tone } : {}) } : {}),
     } satisfies StoredAssistantBubble;
@@ -1023,7 +1024,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }, [persistBubbles]);
 
   function searchOutdoorVenue(query:string){outdoorWorkflow.cancel();const epoch=beginOutdoorTask('venue');setVenuePick({epoch,query,candidates:[],loading:true,picking:null});setOutdoorTask({intent:`搜索“${query}”`,state:'working',action:'检索真实场地候选；未修改活动范围',steps:[]});}
-  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:(text,clarification)=>say({role:'agent',text,...(clarification?{modelConversation:true}:{})}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
+  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:(text,clarification)=>say({role:'agent',text,...(clarification?{modelConversation:true,outdoorQuestion:true as const}:{})}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
 
   useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
     if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
@@ -4426,6 +4427,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     && !['working', 'confirm', 'ask', 'blocked'].includes(agent.outdoorTask?.state ?? '');
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
+  const waitingOutdoorReply = !bingo && agent.outdoorTask?.state === 'ask' && agent.bubbles.at(-1)?.outdoorQuestion === true;
+  const outdoorWorkflowCard = agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply) && (
+    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} onSearchPlace={focusPlaceSearch} onCancelPreview={() => {
+      agent.outdoorWorkflow.cancel();
+      agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。');
+    }}/>
+  );
   const showPlanHome = activity && mode === 'layout' && !agent.outdoorBridgeReady
     && isPlanHome(agent.state, layout, agent.proposal !== null);
   // 例句行占的就是输入框上方那一格；能力卡展开时同一格换成卡片，不再另占一行。
@@ -4539,7 +4547,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
+      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} beforeLatestQuestion={waitingOutdoorReply ? outdoorWorkflowCard : undefined} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
       {/* 运行中排队备注上屏（对标谷地工坊）：写了还没送达的备注挂「下一步」标签，可撤回；
           送达后由运行条「已送达 N 条」接手，这里只显示未送达的。 */}
       {activity && runState.isRunning && runState.scope === 'layout' && runState.steerNotes.length > 0 && (
@@ -4553,8 +4561,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           ))}
         </div>
       )}
-      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onSearchPlace={() => focusPlaceSearch()} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
-      {agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
+      {!waitingOutdoorReply && outdoorWorkflowCard}
+      {!waitingOutdoorReply && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}
