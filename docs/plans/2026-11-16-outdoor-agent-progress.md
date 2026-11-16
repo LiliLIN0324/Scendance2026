@@ -91,7 +91,7 @@ scripts/probe-basemap-zoom.mjs
 日期时间（中国标准时间）及运行 ID：2026-11-16 00:55，自动轮次 27
 批次 / 切片 / 状态：M3 / 分层指令接线 / **已验收**
 工作目录 / 分支：仓库根 / main
-开工 HEAD：796b3267（远端同步，div 0 0，无需合并）；收工 HEAD 见文末
+开工 HEAD：796b3267（远端同步，div 0 0，无需合并）；收工 HEAD：**596f1735**（已推，远端同）
 修改路径：
   · lib/outdoor-layered-task.ts（新）——把一句多层的话接成一件待办
   · lib/outdoor-layered-task.test.ts（新，8 条）
@@ -104,7 +104,8 @@ scripts/probe-basemap-zoom.mjs
   · 固定数据：`npm test -- outdoor-layered-task.test.ts` 8/8；连跑 instruction-layers + place-first 共 25/25
   · 真实浏览器（https://127.0.0.1:3210/editor，1440×900，未登录）：发「先摆摊位，最后再调通道」→ 气泡三层齐全，HAS_QUESTION=false，NET=[]（零 xhr/fetch），截图 `.temp/m3-wire1.png`
   · 真实云端：本轮不涉及
-  · 隔离 worktree typedcheck：见下方结论
+  · 隔离 worktree typedcheck：`git worktree add --detach .temp/wt-r27 596f1735` + node_modules junction → `npx tsc --noEmit` **0 行输出**（即本轮提交单独看零错），验完已 `rmdir` junction 并 `git worktree remove`
+  · 为什么得用隔离 worktree：工作树里的用户在途改动（thoughts 特性、api.ts 守卫）会让 `tsc` 报错且错误集合在变（本轮中途 4 条→2 条），不能把别人的半成品算成本轮回归，也不能拿它阻住自己的提交
 未提交/未做：
   · `agent-panel.tsx` 里用户正在做的“流式草稿上屏”（streamPreview 在 Provider 里、AgentPanel 用不到）本轮**没修没提交**，只在工作树里临时看得到；作者在改，我不抦
   · 环境口径虽已进 `LayeredTask.environment`，但目前只到待办层，尚未写进 brief.zones（属于 M4 的接线）
