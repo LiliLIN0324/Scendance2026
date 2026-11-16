@@ -120,6 +120,20 @@ export const CURATED_MANIFEST_ASSETS: readonly OneplanManifestAsset[] = [
     pack: 'Vehicles',
     viewBox: '0 0 24 10',
   },
+  // 2026-11-16 用户指令：「门是不是也应该在我的图标库里面？就用户在室内分区，然后他自己手动放门」。
+  // 室内分区的门由用户自己摆在具体位置（自动那扇只是占位），所以这枚门必须能像其它入口图标一样从库里点出来。
+  // 归在「出入口与通行图标」组（与无障碍坡道、闸机同一组），默认占地 1.2×0.1 m，详见 oneplan-library-size 的 door 规则。
+  {
+    path: '/oneplan-icons/icon/door.svg',
+    kind: 'icon',
+    slug: 'door',
+    name_zh: '门',
+    name_en: 'Door',
+    category_zh: '活动区域·流线与通行 / 出入口与通行图标',
+    category_en: 'Event Areas / Circulation / Entrances and Access Icons',
+    pack: null,
+    viewBox: '0 0 24 24',
+  },
 ];
 
 /** 物件库里一件可选物件。 */
