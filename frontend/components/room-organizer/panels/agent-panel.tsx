@@ -86,7 +86,7 @@ import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, roadFetchPlanForBoundary, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
 import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-outdoor-agent-workflow';
-import { OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
+import { OutdoorThoughtRecord, OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
 import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
 import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
@@ -4549,6 +4549,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       )}
       {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onSearchPlace={() => focusPlaceSearch()} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
+      {agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}

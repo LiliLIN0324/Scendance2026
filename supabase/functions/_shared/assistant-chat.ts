@@ -1,4 +1,4 @@
-import {OUTDOOR_AGENT_SYSTEM_PROMPT,outdoorTurnSchema} from './outdoor-agent-response-contract.ts';
+import {OUTDOOR_AGENT_SYSTEM_PROMPT,OUTDOOR_THOUGHT_PROMPT,outdoorTurnSchema,type OutdoorTurn} from './outdoor-agent-response-contract.ts';
 import {z} from 'zod';
 import {ApiError} from './domain.ts';
 import {chatProfile,chatRequest,resolveOpenAINextBase} from './providers.ts';
@@ -11,6 +11,11 @@ export const ASSISTANT_CHAT_PROMPT='你是幕景的活动策划助手。回答�
 // secrets or resource addresses. Never treat the absence of a match as proof of privacy.
 const sensitive=/(?:https?:\/\/|www\.|\b(?:data|blob|file):|(?:api[_ -]?key|access[_ -]?token|secret|password|密码|密钥)\s*[:=：]\s*\S+|\bbearer\s+\S+|\bsk-[A-Za-z0-9_-]{8,})/i;
 function privateOrLink(value:string):boolean{return sensitive.test(value);}
+function outdoorAnswer(turn:OutdoorTurn,includeThought:boolean):string {
+ const {thought,...decision}=turn;
+ const visible=includeThought?thought?.replace(/\s+/gu,' ').trim():undefined;
+ return JSON.stringify(visible&&!privateOrLink(visible)?{...decision,thought:visible}:decision);
+}
 /** Backstop for a provider that streams far more than a 3000-character answer. */
 const STREAM_MAX_CHARS=20_000;
 /**
@@ -59,7 +64,7 @@ async function readProviderStream(url:string,init:RequestInit,fetcher:Fetcher,ti
 }
 
 /** One read-only provider attempt. No tools, retries, search, scene or requirement writes. */
-export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId;model?:string|null|undefined;onDelta?:(text:string)=>void}):Promise<AssistantChatResult>{
+export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;includeThought?:true|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId;model?:string|null|undefined;onDelta?:(text:string)=>void}):Promise<AssistantChatResult>{
  // Never log raw errors, bodies, prompts, endpoints, headers, model names or configuration.
  // One categorical event per slot attempt; response contract and fail-closed behavior stay unchanged.
  const diagnose=(slot:ChatProviderId,reason:'cancelled'|'provider_status'|'output_truncated'|'finish_reason'|'empty_answer'|'answer_too_long'|'unsupported_output'|'timeout'|'http_error'|'invalid_json'|'response_too_large'|'invalid_shape'|'transport_error'|'configuration_error'|'slot_skipped'|'quota_exhausted',fields:{httpStatus?:number;providerCode?:number;finishReason?:'length'|'content_filter'|'tool_calls'|'function_call'|'unknown'}={})=>{
@@ -67,7 +72,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  };
  const fail=(status:'disabled'|'invalid'|'unavailable'|'timeout'|'provider_error'|'quota_exhausted'):AssistantChatResult=>({status,answer:null});
  if(!input.enabled)return fail('disabled');
- const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history,...(input.responseMode?{responseMode:input.responseMode}:{})});
+ const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history,responseMode:input.responseMode,includeThought:input.includeThought});
  if(!parsed.success||privateOrLink(parsed.data.message)||parsed.data.history.some(item=>privateOrLink(item.text)))return fail('invalid');
  const timeoutMs=input.timeoutMs??25000;
  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>110000)return fail('invalid');
@@ -116,7 +121,11 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
    // outdoor_v1 is a JSON contract. OpenAI-compatible slots honor response_format;
    // the MiniMax adapter strips this field and keeps its own token/reasoning shape.
    const structured=parsed.data.responseMode==='outdoor_v1'?{response_format:{type:'json_object' as const}}:{};
-   const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:parsed.data.responseMode==='outdoor_v1'?OUTDOOR_AGENT_SYSTEM_PROMPT:ASSISTANT_CHAT_PROMPT},{role:'user',content:context}],...tokenLimit,...structured,...(input.onDelta?{stream:true}:{})},{purpose:'brief'});
+   const includeThought=parsed.data.includeThought===true&&!input.onDelta;
+   const systemPrompt=parsed.data.responseMode==='outdoor_v1'
+    ? OUTDOOR_AGENT_SYSTEM_PROMPT+(includeThought?OUTDOOR_THOUGHT_PROMPT:'')
+    : ASSISTANT_CHAT_PROMPT;
+   const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:systemPrompt},{role:'user',content:context}],...tokenLimit,...structured,...(input.onDelta?{stream:true}:{})},{purpose:'brief'});
    const operation=(async():Promise<AssistantChatResult>=>{
     try{
      // Streaming first: the caller receives visible content deltas as they arrive.
@@ -135,7 +144,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
       if(parsed.data.responseMode==='outdoor_v1'){
        let value:unknown;try{value=JSON.parse(answer);}catch{diagnose(slot,'invalid_shape');return fail('provider_error');}
        const checked=outdoorTurnSchema.safeParse(value);if(!checked.success){diagnose(slot,'invalid_shape');return fail('provider_error');}
-       return {status:'ok',answer:JSON.stringify(checked.data)};
+       return {status:'ok',answer:outdoorAnswer(checked.data,false)};
       }
       return {status:'ok',answer};
      }
@@ -163,7 +172,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
      if(parsed.data.responseMode==='outdoor_v1'){
       let value:unknown;try{value=JSON.parse(answer);}catch{diagnose(slot,'invalid_shape');return fail('provider_error');}
       const checked=outdoorTurnSchema.safeParse(value);if(!checked.success){diagnose(slot,'invalid_shape');return fail('provider_error');}
-      return {status:'ok',answer:JSON.stringify(checked.data)};
+      return {status:'ok',answer:outdoorAnswer(checked.data,includeThought)};
      }
      return {status:'ok',answer};
     }catch(error){

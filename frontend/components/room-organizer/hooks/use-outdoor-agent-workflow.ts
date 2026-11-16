@@ -261,6 +261,8 @@ export function useOutdoorAgentWorkflow(input: {
   const [simulating, setSimulating] = useState(false);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
+  const [thought, setThought] = useState<string | null>(null);
+  const [awaitingThought, setAwaitingThought] = useState(false);
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   /**
    * 2026-11-16 用户拍板：要你动手的提示（反问补充/待确认/需要补充）不许倒计时自己消失——
@@ -316,6 +318,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   function start(continueDesign = false) {
     if (!continueDesign) setDesignSteps([]);
+    setAwaitingThought(false);
     setAppliedHighlight(null);
     setSimulating(false);
     refsRef.current = [];
@@ -344,6 +347,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   function cancel(options?: { preservePendingLogin?: boolean }) {
     setDesignSteps([]);
+    setAwaitingThought(false);
     setAppliedHighlight(null);
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
@@ -362,6 +366,8 @@ export function useOutdoorAgentWorkflow(input: {
   }
   useEffect(() => {
     setDesignSteps([]);
+    setThought(null);
+    setAwaitingThought(false);
     setAppliedHighlight(null);
     abort.current?.abort();
     token.current = null;
@@ -1416,6 +1422,7 @@ export function useOutdoorAgentWorkflow(input: {
     // 不抓地图、不请求模型。确定性动作（确认/取消/物件清单）在更前面已经处理完，不受影响。
     const session = callbacks.current.controller();
     const viewer = session?.getSnapshot?.().user;
+    setThought(null);
     if (session?.getSnapshot && (!viewer || viewer.is_anonymous)) {
       start();
       setBusy(false);
@@ -1428,6 +1435,7 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const job = start();
     designStep("读取当前活动边界、已有分区与设施。");
+    setAwaitingThought(true);
     status(
       "结合当前需求、选中对象与结构化地图依据理解本句；未读取地图像素、未执行修改。",
       "working",
@@ -1478,10 +1486,16 @@ export function useOutdoorAgentWorkflow(input: {
           JSON.stringify(plan)
       )
         return true;
+      setAwaitingThought(false);
       if (stateRef.current.pendingLogin) {
         const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
         persist(kept);
       }
+      setThought(turn.thought?.replace(/\s+/gu, " ").trim() || (
+        turn.action === "ask" ? "模型选择直接回复或请你补充信息。"
+          : turn.action === "search" ? "模型选择查找目标地点。"
+          : "模型已返回本轮处理决定，工作台会按当前任务的规则核对。"
+      ));
       callbacks.current.bridge()?.highlightReferences?.(turn.references);
       // Ordinary model output cannot grant confirmation or fees on the user's behalf.
       if (turn.action === "confirm") {
@@ -1564,7 +1578,10 @@ export function useOutdoorAgentWorkflow(input: {
           "blocked",
         );
     } finally {
-      if (live(job)) setBusy(false);
+      if (live(job)) {
+        setAwaitingThought(false);
+        setBusy(false);
+      }
     }
     return true;
   }
@@ -1709,6 +1726,8 @@ export function useOutdoorAgentWorkflow(input: {
   return {
     state,
     designSteps,
+    thought: state.scope === input.scope ? thought : null,
+    awaitingThought: state.scope === input.scope && busy && awaitingThought,
     noticeSticky,
     mapGap,
     scopeConfirmed: () => {
@@ -1746,6 +1765,7 @@ export function useOutdoorAgentWorkflow(input: {
         return Boolean(user && !user.is_anonymous);
       })(),
     authChanged: (nextActor: string | null) => {
+      setThought(null);
       const pending = stateRef.current.pendingLogin;
       cancel({
         preservePendingLogin: Boolean(
