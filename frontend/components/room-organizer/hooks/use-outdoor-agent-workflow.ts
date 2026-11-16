@@ -18,6 +18,7 @@ import {
   type OutdoorTurn,
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
+import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import {
@@ -125,6 +126,17 @@ export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   "refine-3d": "同规划3D深化",
 };
 
+/**
+ * 2026-11-17 用户拍「都做」：缺前置条件不是「再试一次」能解决的——红卡上那颗「重试」只是把同一个动作
+ * 原样重放，点完还是同一句话。这类拦阻改成给一个真能改变状态的动作按钮（如「去核对主要入口与通道」）。
+ */
+export type OutdoorNoticeFix = { action: OutdoorTurn["action"]; label: string };
+/** 带「下一步」的拦阻：抛出点在 act() 内部，catch 统一把 fix 挂到红卡上。 */
+class OutdoorStepBlocked extends Error {
+  constructor(message: string, readonly fix: OutdoorNoticeFix) {
+    super(message);
+  }
+}
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
   scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
   zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
@@ -422,7 +434,14 @@ export function useOutdoorAgentWorkflow(input: {
    */
   const [mapGap, setMapGap] = useState(false);
   const [noticeView, setNoticeView] = useState<AgentErrorView | null>(null);
+  /** 红卡上的「下一步」（缺前置条件时替代无意义的「重试」）；null = 走原有的重试口径。 */
+  const [noticeFix, setNoticeFix] = useState<OutdoorNoticeFix | null>(null);
   const refsRef = useRef<OutdoorTurn["references"]>([]);
+  /**
+   * 2026-11-17：用户刚刚从上一轮二选一里挑了第 N 项（原请求 + 选中的分支）。
+   * 只在同一轮内有效：模型如果又把同一句追问端回来，靠它本地接着走，而不是把问题重复一遍。
+   */
+  const pendingChoiceRef = useRef<{ request: string; chosen: { index: number; text: string } } | null>(null);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
   // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
@@ -451,11 +470,14 @@ export function useOutdoorAgentWorkflow(input: {
   function status(
     action: string,
     phase: OutdoorTaskProgress["state"] = "ready",
-    extra: Partial<OutdoorTaskProgress> = {},
+    extra: Partial<OutdoorTaskProgress> & { fix?: OutdoorNoticeFix | null } = {},
   ) {
+    // fix 只给卡片用，不进 task progress（它不属于任务进度字段）。
+    const { fix, ...rest } = extra;
     const friendly = friendlyErrorNotice(action);
     setNotice(friendly);
     setNoticeView(null);
+    setNoticeFix(fix ?? null);
     setNoticeKind(phase === "blocked" ? "error" : "info");
     setNoticeSticky(phase === "ask" || phase === "blocked" || phase === "confirm");
     callbacks.current.status({
@@ -463,7 +485,7 @@ export function useOutdoorAgentWorkflow(input: {
       state: phase,
       action: friendly,
       steps: stateRef.current.completed.map((s) => OUTDOOR_STAGE_LABELS[s]),
-      ...extra,
+      ...rest,
     });
   }
   function designStep(text: string) {
@@ -1038,6 +1060,24 @@ export function useOutdoorAgentWorkflow(input: {
     };
     persist(mergeOutdoorFacts(stateRef.current, normalized, message));
     if (turn.action === "ask") {
+      // 2026-11-17 用户拍「都做」的第二个卡点：用户已经明确选了上一轮二选一里的第 N 项，
+      // 模型却又把同一件事反问一遍——原样端回去，用户看到的就是「我选了第一个方案，什么都没发生」。
+      // 这时不再重复追问：按原请求确定性地推到对应预览（只出预览，不写画布）。
+      const chosen = pendingChoiceRef.current;
+      pendingChoiceRef.current = null;
+      const resume = chosen ? resumeActionForRequest(chosen.request) : null;
+      if (chosen && resume) {
+        await act(
+          { action: resume, reply: "", references: [], facts: {} },
+          chosen.request,
+        );
+        // offer() 会把提示条换成「预览已就绪」；把这轮的来历记进设计过程，
+        // 让人在卡上仍能看到「这一版是按我选的那一项走的」，而不是默默换了个东西。
+        designStep(
+          `按你选的「${chosen.chosen.text}」继续原请求；本轮只出预览，未写入画布。`,
+        );
+        return;
+      }
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
       askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
@@ -1172,8 +1212,9 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       if (!plan.zones.length)
-        throw new Error(
+        throw new OutdoorStepBlocked(
           "先明确并确认区域用途和边界，再安排通道/物件；不会跳过分区。",
+          { action: "zones", label: "先生成分区预览" },
         );
       if (turn.action === "main-routes") {
         persist({ ...stateRef.current, stage: "main-routes" });
@@ -1307,15 +1348,18 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       if (turn.action === "objects") {
-        persist({ ...stateRef.current, stage: "objects" });
         if (!hasVerifiedMainAccess(plan))
-          throw new Error(
+          throw new OutdoorStepBlocked(
             "请先核对主入口和主要通道；道路交点不当作已经核实的门。",
+            { action: "main-routes", label: "去核对主要入口与通道" },
           );
-        if (!stateRef.current.brief.guests)
-          throw new Error(
-            "预计同时在场多少人？先保留这个人数需求，再核对分区与设施占地；不从物件数量猜人数。",
-          );
+        // 2026-11-17 用户口径：「人数也不确定吧，有的时候先搞活动也有」。人数是活动定下来才知道的事，
+        // 先布场、后补人数是常态，所以这里不再把「没有人数」当错误拦下——规划层的 validateWorkflowDemand
+        // 本来就按人数可空设计（没有人数就跳过 2㎡/人 粗筛），本分支的 throw 与它自相矛盾，
+        // 且失败卡只有一个「重试」（= 原样重跑 objects），人数不变就永远撞同一堵墙。
+        // 仍然不从物件数量反推人数：缺人数就如实写在提案卡上，不假装做过容量核对。
+        // 阶段改到通过前置校验之后再落盘：一次失败不该把任务卡永久改成「按用途复用我的物料」。
+        persist({ ...stateRef.current, stage: "objects" });
         status(
           "检索我的物料库真实候选与尺寸；尚未摆放，也没有启动收费生成。",
           "working",
@@ -1413,7 +1457,9 @@ export function useOutdoorAgentWorkflow(input: {
           mismatchNotice.push(describeZoneMismatch(result.mismatched, plan, { removed: true }));
         }
         offer(result.plan, "objects", "逐区复用库内真实设施", job, [
-          "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。",
+          stateRef.current.brief.guests
+            ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
+            : "人数还没定：本版只按分区用途和库内物料的真实尺寸排布，没有做 2㎡/人 容量粗筛，也没有从物件数量反猜人数；补一句「预计多少人在场」可以再核一遍容量。",
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
           `已识别边界内建筑 ${buildingsForPlan?.length ?? 0} 栋${buildingsForPlan?.length ? "：标为室内禁区，排物件自动避开（灰色块 2D/3D 同步）。" : "（地图服务暂未提供建筑数据，稍后重试或用物件库「室内区域」手画）。"}`,
           ...mismatchNotice,
@@ -1423,8 +1469,9 @@ export function useOutdoorAgentWorkflow(input: {
       if (turn.action === "sub-routes") {
         persist({ ...stateRef.current, stage: "sub-routes" });
         if (!plan.facilities.length)
-          throw new Error(
+          throw new OutdoorStepBlocked(
             "先确认各区实际物件，再沿物件空隙安排子入口和支线；不能先穿过未来展位/表演区。",
+            { action: "objects", label: "先去排各区物件" },
           );
         const proposal = buildSubEntranceProposal(plan);
         if (!proposal)
@@ -1589,6 +1636,7 @@ export function useOutdoorAgentWorkflow(input: {
         status(
           error instanceof Error ? error.message : "当前提案无法核对，未执行。",
           "blocked",
+          error instanceof OutdoorStepBlocked ? { fix: error.fix } : {},
         );
     } finally {
       if (live(job)) setBusy(false);
@@ -1645,6 +1693,13 @@ export function useOutdoorAgentWorkflow(input: {
     callbacks.current.say(question, true);
     status("补充对话里的信息后可以继续。", "ask");
   }
+  /** 2026-11-17：红卡上的「下一步」——按卡上写的那个动作真正推进，而不是把同一个动作原样重放。 */
+  async function applyNoticeFix() {
+    const fix = noticeFix;
+    if (!fix) return;
+    setNoticeFix(null);
+    await action(fix.action);
+  }
 
   function clarify(message: string): boolean {
     const bridge = callbacks.current.bridge();
@@ -1681,6 +1736,15 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return false;
+    // 2026-11-17：先认「这句是不是在回答上一轮的二选一」。认出来就把选中的那一项结构化带进理解层；
+    // 认不出就清空——绝不让上一轮的选项影响下一句无关的话。
+    const choiceReply = clarification
+      ? resolveChoiceReply(message, clarification.question)
+      : null;
+    pendingChoiceRef.current =
+      choiceReply && clarification
+        ? { request: clarification.request, chosen: choiceReply.chosen }
+        : null;
     // 2026-11-14：确定性 objects 预路由（先于理解模型）——「分区名+数量+物件名」清单句直接合成。
     const planForSynth = plan;
     const synthesizedTurn = synthesizeObjectsTurn(message, planForSynth);
@@ -1734,7 +1798,10 @@ export function useOutdoorAgentWorkflow(input: {
         message,
         clarification: waiting
           ? { request: waiting.message, question: `待批准的计划：${waiting.steps.join("；")}。请结合用户补充的要求理解本句。` }
-          : clarification,
+          : clarification && {
+              ...clarification,
+              ...(choiceReply ? { choice: choiceReply.chosen } : {}),
+            },
         libraryChoices: libraryChoices.map(
           ({ id, name, width, depth, height }) => ({
             id,
@@ -2036,6 +2103,7 @@ export function useOutdoorAgentWorkflow(input: {
       status(
         error instanceof Error ? error.message : "未执行当前动作。",
         "blocked",
+        error instanceof OutdoorStepBlocked ? { fix: error.fix } : {},
       );
       setBusy(false);
     }
@@ -2157,8 +2225,12 @@ export function useOutdoorAgentWorkflow(input: {
     dismissNotice: () => {
       setNotice("");
       setNoticeKind("info");
+      setNoticeFix(null);
     },
     noticeView,
+    /** 缺前置条件时红卡上的「下一步」；null 时卡片仍按原口径提供「重试」。 */
+    noticeFix,
+    applyNoticeFix,
     loginRequired: Boolean(state.pendingLogin),
     // 2026-11-16：登录卡只在真的没登录时出现（见 outdoor-workflow-card）；登录一旦到位就由
     // 上面的自动恢复 effect 直接续上。loginSatisfied 仍给输入框锁定（agent-panel 的 loginBlocked）用。
