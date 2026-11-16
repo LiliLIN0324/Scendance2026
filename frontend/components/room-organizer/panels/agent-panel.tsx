@@ -136,6 +136,7 @@ import { isCompositeDesignBrief, looksLikeDesignInstruction, PLACE_FIRST_BOUNCE,
 import { clearPendingBrief, readPendingBrief, shouldResumeBrief, writePendingBrief } from '../lib/pending-brief';
 import { describeModelFailure } from '../lib/turn-failure-diag';
 import { absorbLayeredInstruction, layeredBounceText } from '../lib/outdoor-layered-task';
+import { loginBlockedPlaceholder } from '../lib/outdoor-login-copy';
 import { BingoAuditCard } from './bingo-audit-card';
 import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushAgentSteerNote, pushLocalLayoutStep, removeAgentSteerNote, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { subscribeComposerPrefill } from './composer-prefill-bus';
@@ -4389,7 +4390,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
-  const composerPlaceholder = loginBlocked ? '登录后继续这次选址'
+  const composerPlaceholder = loginBlocked ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
     : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'

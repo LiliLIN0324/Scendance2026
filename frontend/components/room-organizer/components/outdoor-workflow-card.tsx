@@ -5,6 +5,7 @@ import {
   type useOutdoorAgentWorkflow,
 } from "../hooks/use-outdoor-agent-workflow";
 import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
+import { loginResumeCaption, loginResumeHeadline } from "../lib/outdoor-login-copy";
 
 /** 每阶段一句图注；进行中的真实进度文案会临时顶替它，报错走红卡。 */
 const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
@@ -559,14 +560,12 @@ export function OutdoorWorkflowCard({
       >
         <header className="ap-card-head">
           <strong>
-            {flow.loginSatisfied ? "已登录 · 可以继续" : "登录后继续这次选址"}
+            {loginResumeHeadline({ loginSatisfied: flow.loginSatisfied, rangeConfirmed: flow.scopeConfirmed() })}
           </strong>
         </header>
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
-          {flow.loginSatisfied
-            ? "继续后这次搜索会写入项目，结果不再只留在本页。"
-            : "场地草稿已保存；登录只影响写入项目，不改动当前范围。"}
+          {loginResumeCaption({ loginSatisfied: flow.loginSatisfied, rangeConfirmed: flow.scopeConfirmed() })}
         </p>
         {/* 2026-11-14 用户指令：登录完成后卡片切换为可继续态；恢复走 resumeAfterLogin 的既有守卫（原账户/规划未漂移）。 */}
         {flow.loginSatisfied ? (
