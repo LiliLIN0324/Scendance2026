@@ -371,3 +371,126 @@ it("访客身份不调用模型，必须正常账户登录而非匿名续跑", a
   ).rejects.toThrow("UNAUTHENTICATED");
   expect(controller.assistantChat).not.toHaveBeenCalled();
 });
+
+it("2026-11-17 生产实测：综合体是整块建筑多边形时，场地本体不阻断排布；范围外的建筑仍然阻断", async () => {
+  // 建筑要素必须是闭合环（证据适配器只收闭合多边形）。
+  const ring = (pts: [number, number][]) =>
+    [...pts, pts[0]!].map(([x, y]) => {
+      const p = wgs(x, y);
+      return { lon: p.lng, lat: p.lat };
+    });
+  const loadWith = async (elements: unknown[]) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              schemaVersion: 1,
+              crs: "wgs84",
+              complete: true,
+              warnings: [],
+              elements,
+            }),
+          ),
+      ),
+    );
+    const adapter = createOutdoorMapContext();
+    await adapter.load("project-a", plan, [], true, new AbortController().signal);
+    return adapter;
+  };
+  const route = (points: { x: number; y: number }[], name: string) => ({
+    ...plan,
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian" as const,
+        name,
+        points,
+        oneWay: false,
+        widthM: 3,
+        notes: "",
+      },
+    ],
+  });
+
+  // ① 场地本体：OSM 把整个综合体画成一整块包住活动范围的建筑多边形（顶点都在范围外）。
+  const venueBuilding = await loadWith([
+    {
+      type: "way",
+      id: 99,
+      geometry: ring([
+        [-45, -40],
+        [45, -40],
+        [45, 40],
+        [-45, 40],
+      ]),
+      tags: { building: "yes" },
+    },
+  ]);
+  const notes = venueBuilding.validate(
+    plan,
+    route(
+      [
+        { x: -20, y: 0 },
+        { x: 20, y: 0 },
+      ],
+      "人行流线（湖滨路）",
+    ),
+  );
+  expect(notes.join(" ")).toContain("未计入障碍");
+
+  // ② 综合体内部的子环（步行街/裙房）：顶点落在已确认范围内，同样是场地本体。
+  const innerRing = await loadWith([
+    {
+      type: "way",
+      id: 97,
+      geometry: ring([
+        [-30, -30],
+        [-20, -30],
+        [-20, 30],
+        [-30, 30],
+      ]),
+      tags: { building: "yes" },
+    },
+  ]);
+  expect(() =>
+    innerRing.validate(
+      plan,
+      route(
+        [
+          { x: -25, y: 0 },
+          { x: 20, y: 0 },
+        ],
+        "人行流线（湖滨路）",
+      ),
+    ),
+  ).not.toThrow();
+
+  // ③ 活动范围之外的建筑仍然阻断：那是越界占用，不是场地本体。
+  const outside = await loadWith([
+    {
+      type: "way",
+      id: 98,
+      geometry: ring([
+        [50, -10],
+        [70, -10],
+        [70, 10],
+        [50, 10],
+      ]),
+      tags: { building: "yes" },
+    },
+  ]);
+  expect(() =>
+    outside.validate(
+      plan,
+      route(
+        [
+          { x: 40, y: 0 },
+          { x: 60, y: 0 },
+        ],
+        "越界流线",
+      ),
+    ),
+  ).toThrow(/建筑\/障碍/);
+});

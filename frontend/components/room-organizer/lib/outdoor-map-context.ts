@@ -46,6 +46,46 @@ function mapAbortError(): DOMException {
 }
 
 /**
+ * 障碍的可读标签（2026-11-17 生产实测补）。
+ * OSM 的建筑要素绝大多数没有 name，直接把内部 id 甩给用户等于让用户没法核对。
+ */
+function obstacleLabel(feature: {
+  kind: string;
+  name: string;
+}): string {
+  if (feature.name.trim()) return feature.name.trim();
+  return feature.kind === "building" ? "未命名建筑足迹" : "未命名地图要素";
+}
+
+/**
+ * 这个地图要素是不是「用户已确认活动范围之内/包住活动范围」的建筑本体。
+ *
+ * 2026-11-17 生产实测（杭州湖滨银泰in77）：OSM 把整个综合体画成**一块 800+ 环**的建筑
+ * 多边形，站内的步行街、广场、连廊全被包在这块多边形里。拿「场地自己的建筑足迹」当障碍，
+ * 会让任何综合体场馆的主通道都必然被判「建筑/障碍冲突」——而地图并不提供室内/连廊事实，
+ * 不能拿它反推「这里是室内、不可通行」。
+ *
+ * 判定：要素顶点落在已确认范围内，或该要素把范围中心点包住 → 视为场地本体，不当障碍。
+ * 真正落在范围**之外**的相邻建筑仍然阻断（那是越界占用，不是场地本体）。
+ */
+function isVenueBuilding(
+  geometry: Geometry,
+  venue: Geometry["points"],
+): boolean {
+  if (venue.length < 3) return false;
+  if (geometry.points.some((p) => planPointInRing(p, venue))) return true;
+  let cx = 0;
+  let cy = 0;
+  for (const p of venue) {
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= venue.length;
+  cy /= venue.length;
+  return planPointInRing({ x: cx, y: cy }, geometry.points);
+}
+
+/**
  * 只取消这一路的等待。共享证据请求继续，缓存仍写入，其它并发 load 不受影响。
  */
 function followMapAbort<T>(shared: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -562,6 +602,11 @@ export function createOutdoorMapContext() {
           })),
       ];
       let cost = 0;
+      // 用户已确认的活动范围（用地红线）= 场地本体判定的基准。
+      const venueRing = (
+        next.boundary.length >= 3 ? next.boundary : base.boundary
+      ) as Geometry["points"];
+      let skippedVenueBuilding = false;
       for (const object of planned) {
         const box = bounds(object.geometry),
           clearance = Math.max(1.5, object.widthM / 2 + 0.1);
@@ -596,6 +641,12 @@ export function createOutdoorMapContext() {
               ),
           );
           if (other.kind === "building" && indoors) continue;
+          // 场地本体的建筑足迹不当障碍（见 isVenueBuilding 注释）：综合体是一整块多边形，
+          // 拿它当障碍会让站内主通道永远排不出来。
+          if (other.kind === "building" && isVenueBuilding(other.geometry, venueRing)) {
+            skippedVenueBuilding = true;
+            continue;
+          }
           if (other.kind === "entrance" && object.kind === "route") continue; // A pedestrian access line may intentionally connect a known door.
           const threshold =
             other.kind === "entrance"
@@ -603,17 +654,24 @@ export function createOutdoorMapContext() {
               : object.widthM / 2 + (other.kind === "barrier" ? 0.1 : 0);
           if (geometryDistance(object.geometry, other.geometry) <= threshold)
             throw new Error(
-              `“${object.name}”与地图依据“${other.name || other.id}”${other.kind === "entrance" ? "门前净空" : "建筑/障碍"}冲突。请核对室内层级/真实通道，或调整物件/路线后重算；未应用。`,
+              `“${object.name}”与地图依据“${obstacleLabel(other)}”${other.kind === "entrance" ? "门前净空" : "建筑/障碍"}冲突。请核对室内层级/真实通道，或调整物件/路线后重算；未应用。`,
             );
         }
       }
-      return cached.evidence.complete
-        ? [
-            "地图为OSM结构化证据，不含底图像素阅读，也不代表权属、现场通行或安全认证。",
-          ]
-        : [
-            "结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。",
-          ];
+      const notes: string[] = [];
+      if (skippedVenueBuilding)
+        notes.push(
+          "已确认活动范围内的建筑足迹未计入障碍（可能是商场裙房/连廊/上盖）；未计入不等于确认可通行，室内通道仍需现场核对。",
+        );
+      if (cached.evidence.complete)
+        notes.push(
+          "地图为OSM结构化证据，不含底图像素阅读，也不代表权属、现场通行或安全认证。",
+        );
+      else
+        notes.push(
+          "结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。",
+        );
+      return notes;
     },
     invalidate() {
       loader.invalidate("invalidated");

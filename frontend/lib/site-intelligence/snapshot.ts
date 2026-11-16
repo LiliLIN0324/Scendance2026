@@ -3,6 +3,16 @@ import { bounds, boundsIntersect, containsGeometry, geometryDistance, isValidGeo
 /** Content signature catches geometry mutation even when caller forgets to bump its revision. Not a security digest. */
 function signature(value: unknown): string { const text = JSON.stringify(value); let a = 2166136261, b = 5381; for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ text.charCodeAt(i); } return `${(a >>> 0).toString(36)}${(b >>> 0).toString(36)}`; }
 export function planObjectId(projectId: string, kind: string, id: string): string { return `plan:${encodeURIComponent(projectId)}:${kind}:${id}`; }
+/**
+ * 2026-11-17 生产实测：地图证据每次重拉都会给要素打新的 `observedAt`（见 evidence.ts /
+ * openfreemap-evidence.ts）。若把它算进 revision 签名，同一份地图也会算出新版本 →
+ * 用户在预览出来 60 秒后再点「确认并应用这一版」必被判「地图或规划依据已更新，旧提案已失效」。
+ * 版本只描述「依据的内容」，观测时间不进签名；几何/范围/锚点变了仍然会变版本。
+ */
+function withoutObservedAt(feature: MapFeature & { levelId?: string; widthM?: number }) {
+  const { observedAt: _observedAt, ...evidence } = feature.evidence;
+  return { ...feature, evidence };
+}
 function goodGeometry(g: Geometry): boolean { return isValidGeometry(g) && g.points.length >= (g.type === 'polygon' ? 3 : g.type === 'line' ? 2 : 1) && g.points.length <= 256 && g.points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x) <= 10000 && Math.abs(p.y) <= 10000); }
 export function buildSiteSnapshot(input: SnapshotInput): SiteSnapshot {
   const { plan, projectId } = input;
@@ -87,6 +97,6 @@ export function buildSiteSnapshot(input: SnapshotInput): SiteSnapshot {
   const unknowns = ['Event-use authorization is not implied by map footprints.', 'Indoor doors, passageways and elevation are unknown unless mapped or user-confirmed.', 'Missing map objects/access tags do not prove absence or public access.'];
   if (!input.confirmations?.boundary) unknowns.push('Activity boundary requires user confirmation; a POI/building outline is not authorization.');
   if (plan.routes.some(r => r.widthM === undefined)) unknowns.push('Some planned routes have unknown width.');
-  const revision = `${encodeURIComponent(projectId)}:${input.geometryRevision}:${signature({ anchor: plan.anchor, raw, activeLevelId: input.activeLevelId, confirmations: input.confirmations })}`;
+  const revision = `${encodeURIComponent(projectId)}:${input.geometryRevision}:${signature({ anchor: plan.anchor, raw: raw.map(withoutObservedAt), activeLevelId: input.activeLevelId, confirmations: input.confirmations })}`;
   return { schemaVersion: 1, projectId, geometryRevision: String(input.geometryRevision), revision, crs: 'local-enu-gcj02', anchor: plan.anchor ? { ...plan.anchor } : undefined, features, relations, warnings, truncated: omitted > 0 || relationOmitted, confirmedIds: features.filter(f => f.evidence.certainty === 'user-confirmed').map(f => f.id), coverage: { ...(mapAccepted && scope ? { scope } : {}), ...(input.mapEvidence?.fetchedAt ? { fetchedAt: input.mapEvidence.fetchedAt } : {}), mapStatus: !mapAccepted && (evidence || input.mapFeatures?.length) ? 'failed' : evidence?.status ?? (input.mapFeatures ? 'partial' : 'not-loaded'), complete: mapAccepted && Boolean(evidence?.complete) && omitted === 0 && !relationOmitted, unknowns } };
 }
