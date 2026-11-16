@@ -113,7 +113,7 @@ scripts/probe-basemap-zoom.mjs
   · lib/outdoor-session-report.ts：buildSessionReport({turns, metrics, now}) → {version, exportedAt, traces, metrics, text}；轨迹在上、空行、指标行；本层不新加字段
   · outdoor-turn-live 新增可选 traceBook：settle 时把这一轮记进轨迹簿（未收口不入簿）
   · hook 暴露 sessionReport()（4 处接线）
-验证：session-report 7/7、turn-live 12→14；hook 套件 45/45；hook 仍走 HEAD blob 替换 + cacheinfo（staged 实测 6 行）
+验证：session-report 7/7、turn-live 12→14；hook 套件 45/45（工作树，含用户新增用例）/ 41/41（干净 HEAD）；hook 仍走 HEAD blob 替换 + cacheinfo（staged 实测 6 行）；隔离 worktree tsc 0、三份合计 62/62
 自损一条：确定性用例先挂——`trace()` 每次生成新 turnId（随机后缀），自己写用例时没注意到“输入是不确定的”，改成复用同一条轨迹。
 未完成：报告还没落成文件；面板按钮待面板稳定；浏览器与云端未验
 ```
