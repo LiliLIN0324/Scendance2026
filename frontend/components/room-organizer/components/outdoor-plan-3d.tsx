@@ -423,6 +423,7 @@ export default function OutdoorPlan3D({
       x: seat.x,
       z: -seat.y,
       eyeY: seat.eyeY,
+      ...(typeof seat.seatHeight === 'number' ? { seatHeight: seat.seatHeight } : {}),
       yaw: THREE.MathUtils.degToRad(seat.rotationDeg),
     };
     setSeatActiveId(entry.id);
@@ -531,7 +532,7 @@ export default function OutdoorPlan3D({
       group.rotation.y = frame.yaw;
       group.visible = viewModeRef.current !== 'first';
       controlled.control.setMoving(frame.moving);
-      controlled.control.setSeated(frame.seated === true);
+      controlled.control.setSeated(frame.seated === true, frame.seatHeight);
     },
     onExit: onWalkExit,
   });
@@ -2254,7 +2255,7 @@ export default function OutdoorPlan3D({
           }}
         >
           {controlledActorRef.current && <span>接管中 · {controlledActorRef.current.actor.label}</span>}
-          <span>{viewMode === 'orbit' ? '左键环绕 · 滚轮缩放 · Esc 退出漫游' : 'WASD / 方向键行走 · Shift 加速 · Esc 退出漫游'}</span>
+          <span>{viewMode === 'orbit' ? 'WASD 平移 · 左键环绕 · 滚轮缩放 · Esc 退出漫游' : 'WASD / 方向键行走 · Shift 加速 · Esc 退出漫游'}</span>
           {viewMode !== 'orbit' && (walkPhase === 'drag' || walkPhase === 'unlocked') && <span>拖动鼠标转头</span>}
           {onCycleView && (
             <button
