@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, Search, TriangleAlert } from "@/components/solid-icons";
+import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, RotateCw, Search, TriangleAlert } from "@/components/solid-icons";
 import {
   OUTDOOR_MODEL_INPUT_STEP,
   OUTDOOR_STAGE_LABELS,
@@ -342,42 +342,51 @@ export function OutdoorWorkflowCard({
       {flow.busy && (
         <div className="ap-task-progress" aria-hidden="true" />
       )}
-      {/* 2026-11-16：有提案时不再放阶段缩略图——右侧地图已经画着这一版，缩略图只是重复信息。 */}
-      {/* 2026-11-16 用户要求「引导卡片不要消失，历史记录很重要」：最近一条始终可见，点一下展开
-          当时的说明与按钮；更早的收在展开项里。按活动存 localStorage，刷新还在。 */}
-      {flow.cardRecords.length > 0 && (
-        <div className="ap-card-history" aria-label="已完成的引导">
-          <ol className="ap-card-history-list">
-            {recordRow(flow.cardRecords.at(-1)!, "is-latest")}
-          </ol>
-          {flow.cardRecords.length > 1 && (
-            <details className="ap-card-history-more">
-              <summary>更早的引导 · {flow.cardRecords.length - 1}</summary>
-              <ol className="ap-card-history-list">
-                {flow.cardRecords
-                  .slice(0, -1)
-                  .reverse()
-                  .map((record) => recordRow(record, ""))}
-              </ol>
-            </details>
-          )}
-        </div>
-      )}
-      {!flow.proposal && <StageThumb stage={flow.state.stage} />}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
-        <div className="ap-task-error" role="alert">
-          <TriangleAlert size={14} aria-hidden="true" />
-          <p>{flow.notice}</p>
-          {/* 2026-11-14 用户指令：错误卡直接给「重试」，按当前阶段动作原样再跑一遍。 */}
-          <button
-            type="button"
-            className="ap-task-retry"
-            disabled={flow.busy}
-            onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+        flow.noticeView ? (
+          <section
+            className={`ap-card ap-error-card${flow.noticeView.tone === "muted" ? " is-muted" : ""}`}
+            role="alert"
           >
-            重试
-          </button>
-        </div>
+            <span className="ap-error-stamp">
+              <TriangleAlert size={12} aria-hidden="true" />
+              {flow.noticeView.stamp}
+            </span>
+            <p className="ap-error-summary">{flow.noticeView.message}</p>
+            <div className="ap-error-actions">
+              {/* 按既定口径：重试是手动重发当前阶段动作，不自动换模型；两按钮都保留。 */}
+              <button
+                type="button"
+                className="chip"
+                disabled={flow.busy}
+                onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+              >
+                <RotateCw size={14} aria-hidden="true" />
+                重试云端理解
+              </button>
+              <button
+                type="button"
+                className="chip btn-outline"
+                onClick={() => document.getElementById("ap-input")?.focus()}
+              >
+                改一句再说
+              </button>
+            </div>
+          </section>
+        ) : (
+          <div className="ap-task-error" role="alert">
+            <TriangleAlert size={14} aria-hidden="true" />
+            <p>{flow.notice}</p>
+            <button
+              type="button"
+              className="ap-task-retry"
+              disabled={flow.busy}
+              onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+            >
+              重试
+            </button>
+          </div>
+        )
       ) : flow.proposal ? null : (
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
