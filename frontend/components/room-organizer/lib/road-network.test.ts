@@ -28,25 +28,25 @@ describe('road-network（OSM 等级 → 流线类别 / 坏段裁剪）', () => {
 
   describe('parseRoadNetwork', () => {
     it('非对象 / 无 roads 数组返回空', () => {
-      expect(parseRoadNetwork(null)).toEqual([]);
-      expect(parseRoadNetwork({})).toEqual([]);
-      expect(parseRoadNetwork({ roads: 'x' })).toEqual([]);
+      expect(parseRoadNetwork(null)).toEqual({ roads: [] });
+      expect(parseRoadNetwork({})).toEqual({ roads: [] });
+      expect(parseRoadNetwork({ roads: 'x' })).toEqual({ roads: [] });
     });
 
     it('保留合法段，name 去空白；缺 id 时回首点坐标拼接', () => {
-      const roads = parseRoadNetwork({
+      const network = parseRoadNetwork({
         roads: [
           { id: 'r1', highway: 'motorway', name: ' 天目山路 ', points: [[120.14, 30.25], [120.15, 30.26]] },
           { highway: 'footway', name: '步径', points: [[120.14, 30.25], [120.14, 30.26]] },
         ],
       });
-      expect(roads).toHaveLength(2);
-      expect(roads[0]).toMatchObject({ id: 'r1', highway: 'motorway', name: '天目山路' });
-      expect(roads[1]!.id).toBe('120.14,30.25');
+      expect(network.roads).toHaveLength(2);
+      expect(network.roads[0]).toMatchObject({ id: 'r1', highway: 'motorway', name: '天目山路' });
+      expect(network.roads[1]!.id).toBe('120.14,30.25');
     });
 
     it('裁掉缺 points、点非有限、不足两点的段', () => {
-      const roads = parseRoadNetwork({
+      const network = parseRoadNetwork({
         roads: [
           { id: 'skip-short', highway: 'path', points: [[120.14, 30.25]] },
           { id: 'skip-nopoints', highway: 'service' },
@@ -54,7 +54,7 @@ describe('road-network（OSM 等级 → 流线类别 / 坏段裁剪）', () => {
           { id: 'ok', highway: 'secondary', name: '路', points: [[120.14, 30.25], [120.16, 30.27]] },
         ],
       });
-      expect(roads.map(r => r.id)).toEqual(['ok']);
+      expect(network.roads.map(r => r.id)).toEqual(['ok']);
     });
   });
 });
