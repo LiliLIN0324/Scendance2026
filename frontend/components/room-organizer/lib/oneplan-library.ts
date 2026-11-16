@@ -134,6 +134,25 @@ export const CURATED_MANIFEST_ASSETS: readonly OneplanManifestAsset[] = [
     pack: null,
     viewBox: '0 0 24 24',
   },
+  // 2026-11-16 用户指令「门可以多给几个图标」：单开之外再补双开 / 推拉 / 旋转 / 卷帘 / 折叠，
+  // 都在同一组（出入口与通行图标）里，自己挑一种摆。
+  ...[
+    { slug: 'double-door', name_zh: '双开门', name_en: 'Double Door' },
+    { slug: 'sliding-door', name_zh: '推拉门', name_en: 'Sliding Door' },
+    { slug: 'revolving-door', name_zh: '旋转门', name_en: 'Revolving Door' },
+    { slug: 'roller-shutter', name_zh: '卷帘门', name_en: 'Roller Shutter' },
+    { slug: 'folding-door', name_zh: '折叠门', name_en: 'Folding Door' },
+  ].map(item => ({
+    path: `/oneplan-icons/icon/${item.slug}.svg`,
+    kind: 'icon',
+    slug: item.slug,
+    name_zh: item.name_zh,
+    name_en: item.name_en,
+    category_zh: '活动区域·流线与通行 / 出入口与通行图标',
+    category_en: 'Event Areas / Circulation / Entrances and Access Icons',
+    pack: null,
+    viewBox: '0 0 24 24',
+  })),
 ];
 
 /** 物件库里一件可选物件。 */

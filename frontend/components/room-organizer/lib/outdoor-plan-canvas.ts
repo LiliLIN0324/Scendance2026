@@ -922,56 +922,6 @@ function paintPlanLabel(
 }
 
 /**
- * 2026-11-16 用户指令「室内分区要为他有一个门的图标，让人知道怎么进入就行了」：
- * 室内分区在 2D 上只补一扇门——洞口 + 门扇 + 开门弧，不画真墙体也不做门禁判断。
- * 位置取最长那段边的中点：最长边通常是面向场内/通道的那面墙，比按经纬方向猜更稳。
- * 返回的 inward 是指向分区内部的单位向量（米制），画弧时用它决定开向。
- */
-export interface IndoorZoneDoor {
-  /** 洞口一端（门轴，米制）。 */
-  hinge: PlanPoint;
-  /** 洞口另一端（米制）。 */
-  latch: PlanPoint;
-  /** 朝分区内部的单位向量（米制）。 */
-  inward: PlanPoint;
-}
-
-export function indoorZoneDoor(polygon: readonly PlanPoint[]): IndoorZoneDoor | null {
-  if (polygon.length < 3) return null;
-  const n = polygon.length;
-  const center = polygon.reduce(
-    (acc, p) => ({ x: acc.x + p.x / n, y: acc.y + p.y / n }),
-    { x: 0, y: 0 },
-  );
-  let best: { a: PlanPoint; b: PlanPoint; len: number } | null = null;
-  for (let i = 0; i < n; i += 1) {
-    const a = polygon[i] as PlanPoint;
-    const b = polygon[(i + 1) % n] as PlanPoint;
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (!(len > 1e-6)) continue;
-    if (!best || len > best.len) best = { a, b, len };
-  }
-  if (!best) return null;
-  const mx = (best.a.x + best.b.x) / 2;
-  const my = (best.a.y + best.b.y) / 2;
-  const ux = (best.b.x - best.a.x) / best.len;
-  const uy = (best.b.y - best.a.y) / best.len;
-  let nx = -uy;
-  let ny = ux;
-  if (nx * (center.x - mx) + ny * (center.y - my) < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
-  // 门洞只占这段边的一小段：太长的边不会把门开成一整面墙。
-  const half = Math.min(best.len * 0.18, 2.5);
-  return {
-    hinge: { x: mx - ux * half, y: my - uy * half },
-    latch: { x: mx + ux * half, y: my + uy * half },
-    inward: { x: nx, y: ny },
-  };
-}
-
-/**
  * 分区：填充色 + 名称标注；分区自带色/透明度优先（H2-b）。
  * warning 为 true 时改红虚线描边（越界/重叠警示，分区数据本身保留原色）。
  */
@@ -986,8 +936,6 @@ export function drawZoneLayer(
     semantic?: PlanningZoneSemantic | undefined;
     opacity?: number | undefined;
     warning?: boolean | undefined;
-    /** 2026-11-16：室内分区要标一扇门，让看图纸的人知道从哪进。 */
-    environment?: 'indoor' | 'outdoor' | 'unknown' | undefined;
   }[],
   /** 2026-11-16：分区名跟着底图明暗走（深色卫星图用白字），滑入即适配。 */
   opts: { tone?: PlanBasemapTone } = {},
@@ -1015,64 +963,9 @@ export function drawZoneLayer(
     if (label) {
       paintPlanLabel(c, zone.name, label.x, label.y, opts.tone ?? 'light', '11px system-ui, sans-serif');
     }
-    // 2026-11-16 用户指令：室内分区加一扇门，让人知道怎么进入；室外分区不画。
-    if (zone.environment === 'indoor') drawIndoorZoneDoor(c, zone.polygon, opts.tone ?? 'light', label);
+    // 2026-11-16 用户指令「室内分区上那扇自动门先关掉，只留图标库里手动放的」：
+    // 分区不再自动画门（上一条指令先做的那扇作废），门由用户在「入口和通道图标」里自己摆。
   }
-}
-
-/** 室内分区的那扇门：洞口（白底断口）+ 门扇 + 90° 开门弧，必要时带「入口」小字。 */
-function drawIndoorZoneDoor(
-  c: PlanCanvasContext,
-  polygon: readonly PlanPoint[],
-  tone: PlanBasemapTone,
-  label: { x: number; y: number } | null,
-): void {
-  const door = indoorZoneDoor(polygon);
-  if (!door) return;
-  const { ctx, viewport } = c;
-  const hinge = planPointToPixel(door.hinge, viewport);
-  const latch = planPointToPixel(door.latch, viewport);
-  const swing = planPointToPixel(
-    { x: door.hinge.x + door.inward.x * Math.hypot(door.latch.x - door.hinge.x, door.latch.y - door.hinge.y), y: door.hinge.y + door.inward.y * Math.hypot(door.latch.x - door.hinge.x, door.latch.y - door.hinge.y) },
-    viewport,
-  );
-  const ink = planLabelInk(tone);
-  ctx.save();
-  ctx.lineCap = 'round';
-  // 洞口：先把这段边擦成底色断口，再描出洞口两侧的短脚，像平面图的门口。
-  ctx.strokeStyle = ink.halo;
-  ctx.lineWidth = 3.2;
-  ctx.beginPath();
-  ctx.moveTo(hinge.x, hinge.y);
-  ctx.lineTo(latch.x, latch.y);
-  ctx.stroke();
-  // 门扇 + 开门弧（半径 = 门洞宽）。
-  ctx.strokeStyle = ink.fill;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(hinge.x, hinge.y);
-  ctx.lineTo(swing.x, swing.y);
-  ctx.stroke();
-  const radius = Math.hypot(latch.x - hinge.x, latch.y - hinge.y);
-  const a0 = Math.atan2(latch.y - hinge.y, latch.x - hinge.x);
-  const a1 = Math.atan2(swing.y - hinge.y, swing.x - hinge.x);
-  ctx.beginPath();
-  ctx.arc(hinge.x, hinge.y, Math.max(4, radius), a0, a1, a0 > a1);
-  ctx.stroke();
-  // 「入口」小字贴在门内侧；分区很小或算不出质心时不写，免得盖住分区名。
-  if (label && radius >= 7) {
-    const mid = { x: (hinge.x + latch.x) / 2, y: (hinge.y + latch.y) / 2 };
-    const toCenterX = label.x - mid.x;
-    const toCenterY = label.y - mid.y;
-    const dist = Math.hypot(toCenterX, toCenterY) || 1;
-    paintPlanLabel(
-      c, '入口',
-      mid.x + (toCenterX / dist) * (radius + 10),
-      mid.y + (toCenterY / dist) * (radius + 10),
-      tone, '9px system-ui, sans-serif',
-    );
-  }
-  ctx.restore();
 }
 
 /**
