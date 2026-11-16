@@ -972,7 +972,7 @@ button.ap-ghost {
 .ap-outdoor-plan-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ap-outdoor-plan-title strong { display: flex; align-items: center; gap: 6px; }
 .ap-outdoor-plan-title > span { font-size: var(--fs-cap); color: var(--wk-muted); }
-.ap-outdoor-plan-steps { display: grid; gap: 6px; margin: 0; padding-inline-start: 20px; font-size: var(--fs-p2); line-height: 1.5; }
+.ap-outdoor-plan-steps { display: grid; gap: 6px; margin: 0; padding-inline-start: 20px; list-style: decimal; font-size: var(--fs-p2); line-height: 1.5; }
 .ap-outdoor-plan-steps li::marker { color: var(--wk-green); font-weight: 600; }
 .ap-outdoor-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ap-outdoor-plan-actions .btn-primary { flex: 1 1 8rem; }
