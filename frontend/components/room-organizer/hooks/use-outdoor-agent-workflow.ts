@@ -565,18 +565,15 @@ export function useOutdoorAgentWorkflow(input: {
       stage: stages[Math.min(stages.length - 1, i + 1)]!,
     });
   }
-  function requireScope(plan: SitePlanData) {
-    if (stateRef.current.confirmedBoundary !== boundaryKey(plan)) {
-      persist({
-        ...stateRef.current,
-        stage: "scope",
-        confirmedBoundary: null,
-        completed: stateRef.current.completed.filter((s) => s === "place"),
-      });
-      throw new Error(
-        "先核对地图上具体哪一片是本次活动范围。地点/商场轮廓不是活动授权边界；确认前不会分区或摆物件。",
-      );
-    }
+  function requireScope(plan: SitePlanData): boolean {
+    if (stateRef.current.confirmedBoundary === boundaryKey(plan)) return true;
+    persist({
+      ...stateRef.current,
+      stage: "scope",
+      confirmedBoundary: null,
+      completed: stateRef.current.completed.filter((s) => s === "place"),
+    });
+    return false;
   }
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
@@ -655,15 +652,24 @@ export function useOutdoorAgentWorkflow(input: {
     // 2026-11-14 用户实测：提案基座拍快照之后用户新画的实体（如室内分区）不该让提案整张失效，
     // 也不该在应用时被基座快照冲掉——「纯新增」放行并把新增实体并回提案（一条 undo）；
     // 基座实体被删改、或边界/锚点等非实体字段变了仍然失效（防静默丢失用户内容）。
-    const baseObj = JSON.parse(p.base) as SitePlanData;
+    let baseObj = JSON.parse(p.base) as SitePlanData;
     const expire = () => {
       proposalRef.current = null;
       setProposal(null);
       status("当前规划已变化，旧提案已失效；请基于最新场地重算。", "blocked");
     };
     if (!baseStillIntact(baseObj, plan)) {
-      expire();
-      return;
+      // 2026-11-17 玉泉鱼跃实测卡点：scope 提案（确认活动范围）只锁「边界+锚点」，不锁实体快照。
+      // 预览期间用户用画布工具改实体（一键收进红线、拖顶点、增删物件）不作废确认卡——
+      // 那些是用户自己的操作，确认时按此刻画布重新按边界安置即可；边界/锚点变了才失效。
+      if (p.kind !== "scope" || boundaryKey(plan) !== boundaryKey(baseObj)) {
+        expire();
+        return;
+      }
+      baseObj = plan;
+      p = { ...p, next: prunePlanForBoundary(plan, plan.boundary, plan.anchor ?? undefined).next };
+      proposalRef.current = p;
+      setProposal(p);
     }
     /** 按「最新画布」把新增实体并回提案；await 期间画布若再变，重新判定再合并。 */
     const mergeLatest = (current: SitePlanData): boolean => {
@@ -971,11 +977,14 @@ export function useOutdoorAgentWorkflow(input: {
     if (turn.action === "search") {
       if (!turn.query?.trim())
         throw new Error("想在哪个地点做？请给地点名或地址。");
+      // 2026-11-17 玉泉鱼跃实测卡点：已确认场地后，一次 search（哪怕只是模型误判）不再
+      // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
+      // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
+      const confirmed = Boolean(stateRef.current.confirmedBoundary);
       persist({
         ...stateRef.current,
         stage: "place",
-        confirmedBoundary: null,
-        completed: [],
+        ...(confirmed ? {} : { confirmedBoundary: null, completed: [] }),
       });
       callbacks.current.search(turn.query);
       return;
@@ -1052,7 +1061,20 @@ export function useOutdoorAgentWorkflow(input: {
         ]);
         return;
       }
-      requireScope(plan);
+      if (!requireScope(plan)) {
+        // 2026-11-17 玉泉鱼跃实测卡点：范围未确认不硬抛死路（原文案把用户引回重新搜索地点，
+        // 对检索不到轮廓的 POI 就是 85 秒白等）。画布上已有合法闭合边界时直接出确认卡，
+        // 一键回到主流程；没有边界才走重新搜索/手画的提示。
+        if (!checkBoundaryRing(plan.boundary).ok) {
+          persist({ ...stateRef.current, stage: "place", pendingBoundary: undefined, completed: [] });
+          status("当前没有可核对的活动边界，请重新搜索地点并选择候选，或在地图圈出实际范围。");
+          return;
+        }
+        offer(plan, "scope", "确认当前活动范围", job, [
+          "确认只代表活动范围，不代表产权/消防认证。",
+        ]);
+        return;
+      }
       const designingRoutes = turn.action === "main-routes";
       const designingObjects = turn.action === "objects";
       if (designingRoutes || designingObjects || turn.action === "zones" || turn.action === "revise") {

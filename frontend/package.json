@@ -1,16 +1,18 @@
 {
   "name": "scendance-frontend",
-  "version": "4.15.6",
+  "version": "4.16.0",
   "description": "Scendance event layout editor; adapted from threejs-sims-house-builder",
   "author": "Bassem Chagra",
   "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "node ../scripts/package-pages.mjs && node ../scripts/dev-with-amap-proxy.mjs",
-    "build": "node ../scripts/package-pages.mjs && next build",
+    "build": "node ../scripts/package-pages.mjs && next build && node ../scripts/check-oneplan-artifacts.mjs",
     "start": "next start",
     "lint": "eslint --ext .ts,.tsx app components lib",
     "typecheck": "tsc --noEmit",
+    "sync:manifest": "node ../scripts/sync-oneplan-manifest.mjs",
+    "check:artifacts": "node ../scripts/check-oneplan-artifacts.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

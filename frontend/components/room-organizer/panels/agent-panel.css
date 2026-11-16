@@ -203,6 +203,54 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-pending-x:hover, .ap-pending-x:focus-visible { color: var(--wk-ink); background: var(--wk-paper); outline: none; }
 .sc-agent-panel .ap-status-card .btn-primary { width: 100%; }
 .sc-agent-panel .ap-status-card .btn-primary:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); cursor: not-allowed; }
+/* 2026-11-16 用户指令：place 阶段两个入口重新设计——「搜索地点」改成紧凑胶囊（不再通栏墨条，
+   宽度跟内容走），「在地图上手画活动范围」补画笔图标、同高同圆角；两者都是「可点的做法」，
+   不是一步提交，次要动作用浅底 + 发丝边，而不是一行裸文字。 */
+.sc-agent-panel .ap-place-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sc-agent-panel .ap-place-action { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--r-sm); font-size: var(--fs-cap); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.sc-agent-panel .ap-place-action .sc-material-symbol { color: inherit; }
+.sc-agent-panel .ap-place-action.is-search { border: 0; background: var(--ink); color: #fff; }
+.sc-agent-panel .ap-place-action.is-search:hover:not(:disabled) { background: #2A2C31; }
+.sc-agent-panel .ap-place-action.is-search:active:not(:disabled) { background: #3D3F45; }
+.sc-agent-panel .ap-place-action.is-draw { border: 1px solid var(--wk-hair); background: var(--wk-paper); color: var(--wk-ink-soft); }
+.sc-agent-panel .ap-place-action.is-draw:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane-deep); color: var(--wk-ink); }
+.sc-agent-panel .ap-place-action:disabled { opacity: .55; cursor: not-allowed; }
+.sc-agent-panel .ap-place-action:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
+/* 2026-11-16 用户：「这个确认的卡片做的一坨」——方案卡重排。
+   标题 → 说明条目（带信息图标、11px 弱化）→ 一颗满宽主动作（带勾）→ 一行紧凑次要动作（重画/换排法/撤回）。
+   原来的裸文字按钮、重复的「取消本次预览」全部收进这一套里。 */
+.sc-agent-panel .ap-proposal { display: flex; flex-direction: column; gap: 8px; }
+.sc-agent-panel .ap-proposal-title { font-size: 13px; font-weight: 600; color: var(--wk-ink); line-height: 1.4; }
+.sc-agent-panel .ap-proposal-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sc-agent-panel .ap-proposal-notes li { display: flex; align-items: flex-start; gap: 5px; font-size: var(--fs-cap); line-height: 1.55; color: var(--wk-ink-soft); }
+.sc-agent-panel .ap-proposal-notes li .sc-material-symbol { flex: none; margin-top: 2px; color: var(--wk-ink-faint); }
+.sc-agent-panel .ap-proposal-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.sc-agent-panel .ap-proposal-confirm { width: 100%; height: 34px; border: 0; border-radius: var(--r-sm); background: var(--ink); color: #fff; font-size: var(--fs-c1); font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: background .15s ease; }
+.sc-agent-panel .ap-proposal-confirm:hover:not(:disabled) { background: #2A2C31; }
+.sc-agent-panel .ap-proposal-confirm:active:not(:disabled) { background: #3D3F45; }
+.sc-agent-panel .ap-proposal-confirm:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); cursor: not-allowed; }
+.sc-agent-panel .ap-proposal-quiet-row { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 2026-11-16：卡片历史不消失——最近一条常驻、可点开看当时的说明与按钮；更早的收在展开项里。 */
+.sc-agent-panel .ap-card-history { margin: 8px 0 2px; padding-top: 6px; border-top: 1px solid rgba(20, 20, 22, 0.08); }
+.sc-agent-panel .ap-card-history-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.sc-agent-panel .ap-card-history-list li { font-size: 11px; line-height: 1.45; color: #6b7178; }
+.sc-agent-panel .ap-card-history-row { display: flex; gap: 6px; align-items: baseline; width: 100%; padding: 1px 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.sc-agent-panel .ap-card-history-decision { flex: none; padding: 0 4px; border-radius: 3px; background: rgba(53, 98, 74, 0.1); color: #35624a; }
+.sc-agent-panel .ap-card-history-list li[data-decision="withdrawn"] .ap-card-history-decision { color: #8a6a3a; background: rgba(138, 106, 58, 0.1); }
+.sc-agent-panel .ap-card-history-list li[data-decision="replaced"] .ap-card-history-decision { color: #9a9fa6; background: rgba(20, 20, 22, 0.05); }
+.sc-agent-panel .ap-card-history-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-agent-panel .ap-card-history-list li.is-latest .ap-card-history-title { color: #4a5058; }
+.sc-agent-panel .ap-card-history-detail { margin: 3px 0 6px; padding: 6px 8px; border-radius: 6px; background: rgba(20, 20, 22, 0.03); }
+.sc-agent-panel .ap-card-history-notes { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.sc-agent-panel .ap-card-history-notes li { color: #6b7178; }
+.sc-agent-panel .ap-card-history-actions { margin: 4px 0 0; color: #9a9fa6; }
+.sc-agent-panel .ap-card-history-more { margin-top: 3px; }
+.sc-agent-panel .ap-card-history-more summary { font-size: 11px; line-height: 1.4; color: #9a9fa6; cursor: pointer; list-style: none; }
+/* 次要动作统一外观（方案卡的撤回/换排法，与 place 阶段的手画同一个语言）。 */
+.sc-agent-panel .ap-quiet-action { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.sc-agent-panel .ap-quiet-action:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane-deep); color: var(--wk-ink); }
+.sc-agent-panel .ap-quiet-action:disabled { opacity: .55; cursor: not-allowed; }
+.sc-agent-panel .ap-quiet-action:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
 /* 户外渐进任务卡：进行中是不定时长条纹进度（只表达在跑，不编执行时长）；报错是红色语义块，不裸显机器错误码。 */
 .ap-task-progress { height: 6px; border-radius: 999px; background: var(--wk-plane); border: 1px solid var(--wk-hair-soft); overflow: hidden; }
 .ap-task-progress::before { content: ''; display: block; height: 100%; width: 36%; border-radius: inherit; background: repeating-linear-gradient(45deg, var(--green) 0 5px, color-mix(in srgb, var(--green) 42%, var(--wk-paper)) 5px 10px); animation: ap-task-stripes 900ms linear infinite; }
@@ -695,6 +743,9 @@ button.ap-ghost {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 12px;
 }
+/* 空间/物料两张卡常驻，只按 lane 切显隐：[hidden] 要压过上面的 display:flex，
+   否则切走后那张卡还在占位。 */
+.ap-agent-surface[hidden] { display: none; }
 
 /* 让资源列表滚动，把创建入口留在侧栏底部。 */
 .sc-agent-panel :is(.ap-agent-surface.is-material, .ap-agent-surface.is-space) { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

@@ -4185,6 +4185,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const providerMenuRef = useRef<HTMLDivElement>(null);
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
+  // 空间卡与物料卡：第一次点到才挂，之后常驻、只切显隐。既不在打开面板时就预取，
+  // 也不会「切去空间再切回物料」时整块重建（那会让缩略图全部回到 ◇ 等加载）。
+  const visitedLanes = useRef<Set<AgentId>>(new Set([activeAgent]));
+  visitedLanes.current.add(activeAgent);
   // 「你可以做什么」的展开状态提到面板这一层：展开时顶掉上方的例句行，两处建议不并排。
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   // 渲染后再读本机选择：首帧与 SSR 一致，避免水合不一致。
@@ -4484,9 +4488,21 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     {floatBar}
     <header className="ap-head ap-session-head" data-tone={headStatus?.tone} onPointerDown={onHeaderPointerDown}>
       <div className="ap-session-identity">
-        <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
-          <RailAvatar key={activeAgent} form={meta.form} size={36} />
-        </span>
+        {/* 2026-11-17 用户：面板标题旁的形体图标一律拿下——**只留第一格「活动（门）」那颗**。
+            Bingo / 空间 / 物料 用 display:none 的零尺寸锚点占位，头像飞行测不到盒会自动不跑。 */}
+        {activeAgent === 'door' ? (
+          <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
+            <RailAvatar key={activeAgent} form={meta.form} size={36} />
+          </span>
+        ) : (
+          <span
+            ref={headerAvatarRef}
+            className="ap-session-avatar-slot"
+            data-visible={headerAvatarVisible ? 'true' : 'false'}
+            aria-hidden="true"
+            style={{ display: 'none' }}
+          />
+        )}
         <h1 className="ap-session-title" title={activity ? sessionTitle : meta.name}>{activity ? sessionTitle : meta.name}</h1>
         {headStatus && <span className={`ap-head-status ap-head-status--${headStatus.tone}`} role="status">
           {headStatus.icon}<span>{headStatus.label}</span>
@@ -4735,10 +4751,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       </div>}
     </div>
-    : <div key={activeAgent} className={`ap-agent-surface is-${activeAgent}`}>
-      {activeAgent === 'space' && spaceSlot}
-      {activeAgent === 'material' && materialSlot}
-    </div>}
+    : <>
+      {visitedLanes.current.has('space') && <div className="ap-agent-surface is-space" hidden={activeAgent !== 'space'}>{spaceSlot}</div>}
+      {visitedLanes.current.has('material') && <div className="ap-agent-surface is-material" hidden={activeAgent !== 'material'}>{materialSlot}</div>}
+    </>}
     {activeAgent === 'bingo' && bingoSlot}
     {!conversation && chatSlot}
     </div>
