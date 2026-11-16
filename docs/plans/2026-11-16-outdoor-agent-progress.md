@@ -10,7 +10,7 @@
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
 - 下一条操作：浏览器验“范围确认 → 自动接回”。上一轮已知：复合句发出去后待恢复槽已写入 `scendance:outdoor-pending-brief:<scope>`（含原句与 stage=place）。本轮要验：地图上圈出并确认范围后，是否自动重发一次并清槽；不做重跑整份复现。
-- 执行位置、分支、当前 HEAD：`C:\Users\13266\.dsh\bot\workspace\Scendance2026`；`main`；HEAD `f65f339b`。2026-11-16 10:45 实读。
+- 分支状态（轮次 6 已解决）：本地与远端同为 `eb6920b7`，无重复提交。做法：将 47 项在途改动 `git stash` → `git rebase origin/main`（我轮三笔补丁已在远端，被跳过）→ `git stash pop`，无冲突，你的在途修改全部保留。远端已含 `df3cd330`（复合句分流）与 `1d9f84a8`（轮次 5 文档）；后续直接在本工作树开发，不再用临时 worktree。
 - 未提交在途（本轮新增，因文件带用户 WIP，未单独提交）：`panels/agent-panel.tsx`——退回分支 `writePendingBrief(...)` 两行 + 范围确认后的接回 effect（`shouldResumeBrief` 门控、先清槽再发）。
 - 已核实的第一失败点、实际后端部署及日志编号：待 M0。
 - 协作依赖：当前工作区有未提交改动，服务端段由 B 主责。M1a 可独立推进，M1b/c 的最终服务端验收需对应环境和权限。
