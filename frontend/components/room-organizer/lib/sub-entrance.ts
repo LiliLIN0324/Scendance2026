@@ -71,7 +71,6 @@ export function buildSubEntranceProposal(
     if (nodes.length >= NODE_CAP) break;
     // 分区边界采样：边中点先、顶点后——几何平局时中点胜出（子口落在边中央=居中门位，
     // 不会钉在角上）；取离最近流线最近者作子口位置。
-    let bestSpur: { nodePos: PlanPoint; routePoint: PlanPoint; dist: number; route: PlanRoute } | null = null;
     const samples: PlanPoint[] = [];
     const onRing=(n:PlanNode)=>zone.polygon.some((a,i)=>{const hit=nearestPointOnSegment(n.position,a,zone.polygon[(i+1)%zone.polygon.length]!);return Math.hypot(hit.x-n.position.x,hit.y-n.position.y)<=1;});
     const boundaryNodes=plan.nodes.filter(n=>n.verification!=='unverified'&&onRing(n));
@@ -87,24 +86,37 @@ export function buildSubEntranceProposal(
       const next = zone.polygon[(i + 1) % zone.polygon.length]!;
       samples.push({ x: (zone.polygon[i]!.x + next.x) / 2, y: (zone.polygon[i]!.y + next.y) / 2 }, zone.polygon[i]!);
     }
-    for (const sample of zone.environment==='indoor'?verifiedIndoor.map(n=>n.position):zonePortals.length?zonePortals.map(n=>n.position):samples) {
-      for (const route of plan.routes) {
-        if (route.kind !== 'pedestrian') continue; // 不把观众驳线接到车行/装卸线上。
-        // 复用区内的既有确认口不算「重复立口」；只有新位置才受 15m 去重约束。
-        if(!portalAt(sample)&&zone.environment!=='indoor'&&[...plan.nodes,...nodes].some(n=>Math.hypot(n.position.x-sample.x,n.position.y-sample.y)<=NODE_DEDUPE_M))continue;
-        const hit = nearestPointOnPolyline(sample, route.points);
-        if(hit.dist<0.1)continue;
-        const points = [sample, hit.point];
-        const strips = outdoorCorridorStrips(points, 2);
-        if (plan.boundary && strips.some(strip => facilityPlacementIssues(strip, plan.boundary!).length)) continue;
-        if ((plan.facilities ?? []).some(f => strips.some(strip => outdoorRingsOverlap(strip, facilityFootprintRing(f))))) continue;
-        if(plan.zones.some(other=>other.id!==zone.id&&['performance','exhibition'].includes(other.purpose??'')&&strips.some(strip=>outdoorRingsOverlap(strip,other.polygon))))continue;
-        if (plan.routes.some(r => r.kind !== 'pedestrian' && outdoorCorridorStrips(r.points, (r.widthM ?? 4) + 2).some(road => strips.some(strip => outdoorRingsOverlap(strip, road))))) continue;
-        if (!bestSpur || hit.dist < bestSpur.dist) {
-          bestSpur = { nodePos: sample, routePoint: hit.point, dist: hit.dist, route };
+    type Spur = { nodePos: PlanPoint; routePoint: PlanPoint; dist: number; route: PlanRoute };
+    const findSpur = (list: readonly PlanPoint[]): Spur | null => {
+      let best: Spur | null = null;
+      for (const sample of list) {
+        for (const route of plan.routes) {
+          if (route.kind !== 'pedestrian') continue; // 不把观众驳线接到车行/装卸线上。
+          // 复用区内的既有确认口不算「重复立口」；只有新位置才受 15m 去重约束。
+          if(!portalAt(sample)&&zone.environment!=='indoor'&&[...plan.nodes,...nodes].some(n=>Math.hypot(n.position.x-sample.x,n.position.y-sample.y)<=NODE_DEDUPE_M))continue;
+          const hit = nearestPointOnPolyline(sample, route.points);
+          if(hit.dist<0.1)continue;
+          const points = [sample, hit.point];
+          const strips = outdoorCorridorStrips(points, 2);
+          if (plan.boundary && strips.some(strip => facilityPlacementIssues(strip, plan.boundary!).length)) continue;
+          if ((plan.facilities ?? []).some(f => strips.some(strip => outdoorRingsOverlap(strip, facilityFootprintRing(f))))) continue;
+          if(plan.zones.some(other=>other.id!==zone.id&&['performance','exhibition'].includes(other.purpose??'')&&strips.some(strip=>outdoorRingsOverlap(strip,other.polygon))))continue;
+          if (plan.routes.some(r => r.kind !== 'pedestrian' && outdoorCorridorStrips(r.points, (r.widthM ?? 4) + 2).some(road => strips.some(strip => outdoorRingsOverlap(strip, road))))) continue;
+          if (!best || hit.dist < best.dist) {
+            best = { nodePos: sample, routePoint: hit.point, dist: hit.dist, route };
+          }
         }
       }
-    }
+      return best;
+    };
+    // 2026-11-16 用户生产实测卡点：区内的已确认口恰好落在人行主线上时（驳线退化为零长），
+    // 「太近就跳过」会让整区拿不到驳线，报「没有可连通的2m人行支线」——已有入口反而变成没有入口。
+    // 口径：先试已确认口（户外优先复用它），全都不可用再回退分区边界采样；室内仍需已核实的门，不回退。
+    const preferredSamples = zone.environment === 'indoor'
+      ? verifiedIndoor.map(n => n.position)
+      : zonePortals.map(n => n.position);
+    let bestSpur = findSpur(preferredSamples);
+    if (!bestSpur && zone.environment !== 'indoor') bestSpur = findSpur(samples);
     if (!bestSpur || bestSpur.dist > MAX_SPUR_M) { skippedFar += 1; continue; }
     // 与既有节点太近不重复立
     const tooClose = [...plan.nodes, ...nodes].some(node => Math.hypot(node.position.x - bestSpur.nodePos.x, node.position.y - bestSpur.nodePos.y) <= NODE_DEDUPE_M);
