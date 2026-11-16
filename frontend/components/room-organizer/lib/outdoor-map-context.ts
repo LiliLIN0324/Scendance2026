@@ -15,6 +15,7 @@ import { clearForObject, proposeUseZones } from "./outdoor-agent-planning";
 import {
   outdoorCorridorStrips,
   outdoorRingsOverlap,
+  outdoorRouteInsideRingLength,
 } from "./outdoor-event-logic";
 import {
   facilityPlacementIssues,
@@ -83,6 +84,33 @@ function isVenueBuilding(
   cx /= venue.length;
   cy /= venue.length;
   return planPointInRing({ x: cx, y: cy }, geometry.points);
+}
+
+/**
+ * 障碍相对已确认活动范围的位置（用户要在地图上找它，光给一个内部 id 没法核对）。
+ * 2026-11-17 生产实测：OSM 建筑多数没有 name，id 又是内部串，用户根本没法找。
+ */
+function venueHint(geometry: Geometry, venue: Geometry["points"]): string {
+  if (venue.length < 3) return "";
+  const xs = venue.map((p) => p.x),
+    ys = venue.map((p) => p.y);
+  const bx = (Math.min(...xs) + Math.max(...xs)) / 2,
+    by = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const cx =
+    geometry.points.reduce((n, p) => n + p.x, 0) / geometry.points.length,
+    cy =
+      geometry.points.reduce((n, p) => n + p.y, 0) / geometry.points.length;
+  const dx = cx - bx,
+    dy = cy - by;
+  const ns = dy >= 0 ? "北" : "南",
+    ew = dx >= 0 ? "东" : "西";
+  const dir =
+    Math.abs(dx) > Math.abs(dy) * 2
+      ? ew
+      : Math.abs(dy) > Math.abs(dx) * 2
+        ? ns
+        : `${ns}${ew}`;
+  return `（活动范围${dir}侧约${Math.round(Math.hypot(dx, dy))}m）`;
 }
 
 /**
@@ -607,6 +635,7 @@ export function createOutdoorMapContext() {
         next.boundary.length >= 3 ? next.boundary : base.boundary
       ) as Geometry["points"];
       let skippedVenueBuilding = false;
+      const conflicts: string[] = [];
       for (const object of planned) {
         const box = bounds(object.geometry),
           clearance = Math.max(1.5, object.widthM / 2 + 0.1);
@@ -648,6 +677,28 @@ export function createOutdoorMapContext() {
             continue;
           }
           if (other.kind === "entrance" && object.kind === "route") continue; // A pedestrian access line may intentionally connect a known door.
+          /**
+           * 2026-11-17 生产实测（杭州湖滨路）：OSM 道路中心线与 OSM 建筑轮廓会互相打架——
+           * 湖滨路的 way 与两块无名建筑在墙角共享顶点，还真的从足迹里穿过去几十米。
+           * 两边都是同一份 OSM 的粗几何，app 判不出谁对；拿它一票否决整轮，
+           * 结果是「主要入口与通道」永远排不出流线，而用户连提案都看不到、无从在画布上改。
+           *
+           * 所以分级处置：
+           *  ① 流线 × 建筑足迹 → 提案级警告（写清在哪、多长、怎么改），不再整轮否掉；
+           *  ② 物件（用户摆的）× 建筑/障碍/门前净空 → 照旧硬拦，那才是真占位。
+           * 判据从「中心线离墙多近」换成「中心线是否真的走进足迹内部」：贴墙共顶点不算穿楼。
+           */
+          if (other.kind === "building" && object.kind === "route") {
+            const overlapM = outdoorRouteInsideRingLength(
+              object.geometry.points,
+              other.geometry.points,
+            );
+            if (overlapM > 0)
+              conflicts.push(
+                `“${object.name}”有一段约${Math.round(overlapM)}m走进地图依据“${obstacleLabel(other)}”${venueHint(other.geometry, venueRing)}的足迹内。路网中心线与建筑轮廓同出 OSM、可能互有出入；该段未自动判定为可通行，请在画布上绕开或现场核对后再确认。`,
+              );
+            continue;
+          }
           const threshold =
             other.kind === "entrance"
               ? 1.5
@@ -658,7 +709,7 @@ export function createOutdoorMapContext() {
             );
         }
       }
-      const notes: string[] = [];
+      const notes: string[] = [...conflicts];
       if (skippedVenueBuilding)
         notes.push(
           "已确认活动范围内的建筑足迹未计入障碍（可能是商场裙房/连廊/上盖）；未计入不等于确认可通行，室内通道仍需现场核对。",

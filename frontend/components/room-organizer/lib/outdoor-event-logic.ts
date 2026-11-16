@@ -51,6 +51,62 @@ export function outdoorRingsOverlap(a: PlanPoint[], b: PlanPoint[]): boolean {
   return pathCrossesRing([...a, a[0]!], b) || pathCrossesRing([...b, b[0]!], a);
 }
 
+/** 点是否在环的严格内部（贴边不算）。OSM 道路与建筑常共享墙角顶点，贴边不是「穿楼」。 */
+function strictlyInsideRing(pt: PlanPoint, ring: PlanPoint[]): boolean {
+  if (!planPointInRing(pt, ring)) return false;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!,
+      b = ring[(i + 1) % ring.length]!,
+      dx = b.x - a.x,
+      dy = b.y - a.y,
+      len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) continue;
+    const t = ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / len2;
+    if (t < 0 || t > 1) continue;
+    if (Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy)) <= 1e-6)
+      return false;
+  }
+  return true;
+}
+
+/**
+ * 路线中心线真正走进足迹内部的段长（米）。
+ *
+ * 判据是「中心线进入足迹内部」，不是「离墙多近」：
+ * OSM 的道路中心线与建筑轮廓常在墙角共享顶点、互相「贴」着走，
+ * 拿中心线距离当冲突判据会把这种贴墙路线整轮否掉；
+ * 反过来，中心线从楼里穿过去（离墙远）才是真问题。
+ * 只碰边界不算进入——碰边是共顶点，不是占用。
+ * 用 1m 采样量长度：长线段只要有一截进楼，量到的就是那一截，不按整段算。
+ */
+export function outdoorRouteInsideRingLength(
+  points: PlanPoint[],
+  ring: PlanPoint[],
+): number {
+  if (ring.length < 3 || points.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!,
+      b = points[i]!,
+      length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 0.01) continue;
+    const steps = Math.max(1, Math.ceil(length));
+    let inside = 0;
+    for (let s = 0; s < steps; s++) {
+      const t = (s + 0.5) / steps;
+      if (
+        strictlyInsideRing(
+          { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
+          ring,
+        )
+      )
+        inside += 1;
+    }
+    total += (inside / steps) * length;
+  }
+  return total;
+}
+
 function distanceToRoute(point: PlanPoint, route: PlanRoute): number {
   let best = Infinity;
   for (let i = 1; i < route.points.length; i += 1) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildZoneEventProposal } from './zone-event-proposal';
-import { outdoorEventIssue, outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
+import { outdoorEventIssue, outdoorCorridorStrips, outdoorRingsOverlap, outdoorRouteInsideRingLength } from './outdoor-event-logic';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { planPointInRing } from './site-plan-editing';
 import type { PlanPoint, PlanNode, PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
@@ -92,4 +92,23 @@ it('translated ENU anchors do not turn an 80x70m site into a different scale',()
  const ring=[{x:410,y:-230},{x:490,y:-230},{x:490,y:-160},{x:410,y:-160}];
  const p=build('讲座',45,ring,[{...south,position:{x:490,y:-197}}]);expect(p).not.toBeNull();
  for(const z of p!.zones)expect(facilityPlacementIssues(z.polygon,ring)).toEqual([]);
+});
+/**
+ * 2026-11-17 生产实测（杭州湖滨路）：判据从「中心线离墙多近」改成「中心线是否真的走进足迹」。
+ * OSM 道路与建筑常在墙角共享顶点，贴墙走不是穿楼；真穿楼才是要提醒的事。
+ */
+describe('outdoorRouteInsideRingLength（穿楼长度）',()=>{
+ const building: PlanPoint[]=[{x:0,y:0},{x:30,y:0},{x:30,y:20},{x:0,y:20}];
+ it('中心线从建筑里穿过：量到穿楼那一截，不按整条线段算',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:10},{x:50,y:10}],building)).toBeCloseTo(30,0);
+ });
+ it('中心线贴着外墙走（共享墙角顶点）：不算穿楼',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:0},{x:50,y:0}],building)).toBe(0);
+ });
+ it('中心线离墙一臂远：不算穿楼',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:-0.4},{x:50,y:-0.4}],building)).toBe(0);
+ });
+ it('只擦到墙角一个点：不算穿楼',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:0},{x:0,y:0},{x:0,y:20}],building)).toBe(0);
+ });
 });
