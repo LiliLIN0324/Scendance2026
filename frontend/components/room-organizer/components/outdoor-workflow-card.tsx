@@ -163,6 +163,18 @@ function StageThumb({ stage }: { stage: OutdoorStage }): JSX.Element {
   );
 }
 
+export function OutdoorThoughtRecord({ thought, awaiting = false }: { thought: string | null; awaiting?: boolean }) {
+  if (!thought && !awaiting) return null;
+  return (
+    <details key={thought ?? "pending"} className="ap-run-thoughts" open>
+      <summary className="ap-run-thoughts-summary">
+        {thought ? "思考记录 · 1 条" : "思考记录"}<span className="ap-run-thoughts-hint">模型处理摘要</span>
+      </summary>
+      <p className="ap-run-thought-text">{thought ?? "正在处理本轮输入，模型返回后会显示摘要。"}</p>
+    </details>
+  );
+}
+
 export function OutdoorWorkflowCard({
   flow,
   onCancelPreview,
@@ -228,6 +240,7 @@ export function OutdoorWorkflowCard({
       {flow.busy && (
         <div className="ap-task-progress" aria-hidden="true" />
       )}
+      <OutdoorThoughtRecord thought={flow.thought} awaiting={flow.awaitingThought} />
       <StageThumb stage={flow.state.stage} />
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         <div className="ap-task-error" role="alert">

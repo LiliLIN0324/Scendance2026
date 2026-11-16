@@ -170,6 +170,7 @@ export async function understandOutdoorTurn(input: {
     "outdoor_v1",
     input.provider && input.provider !== "default" ? input.provider : undefined,
     input.model ?? null,
+    true,
   );
   if (response.status !== "ok") {
     const error = new Error(
