@@ -39,6 +39,8 @@ import {
   proposeRoleWorkers,
   validateWorkflowPlan,
   prunePlanForBoundary,
+  splitNeedsByZone,
+  describeZoneMismatch,
   OBJECTS_LAYOUT_STRATEGIES,
   OBJECTS_LAYOUT_LABELS,
   type ObjectsLayoutStrategy,
@@ -1389,10 +1391,29 @@ export function useOutdoorAgentWorkflow(input: {
             signal: job.controller.signal,
           },
         );
+        // 2026-11-17 死结 3：需求分区对不上画布的（如上一轮遗留的旧需求）跳过并如实报出，
+        // 同时从需求清单里摘掉——留着的话每一轮都会重复报同一批，物件阶段永远走不下去。
+        const mismatchNotice: string[] = [];
+        if (result.mismatched.length) {
+          const dropped = new Set(
+            result.mismatched.map((m) => `${m.need.zone} ${m.need.query} ${m.need.count}`),
+          );
+          persist({
+            ...stateRef.current,
+            brief: {
+              ...stateRef.current.brief,
+              items: stateRef.current.brief.items.filter(
+                (i) => !dropped.has(`${i.zone} ${i.query} ${i.count}`),
+              ),
+            },
+          });
+          mismatchNotice.push(describeZoneMismatch(result.mismatched, plan, { removed: true }));
+        }
         offer(result.plan, "objects", "逐区复用库内真实设施", job, [
           "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。",
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
           `已识别边界内建筑 ${buildingsForPlan?.length ?? 0} 栋${buildingsForPlan?.length ? "：标为室内禁区，排物件自动避开（灰色块 2D/3D 同步）。" : "（地图服务暂未提供建筑数据，稍后重试或用物件库「室内区域」手画）。"}`,
+          ...mismatchNotice,
         ]);
         return;
       }
@@ -1422,13 +1443,43 @@ export function useOutdoorAgentWorkflow(input: {
       }
       if (turn.action === "people") {
         persist({ ...stateRef.current, stage: "people" });
+        const peoplePlan = proposeRoleWorkers(plan, stateRef.current.brief);
+        // 2026-11-17 死结 3：岗位分区对不上画布的同样跳过并如实报出，并从需求清单摘掉。
+        const peopleMismatch: string[] = [];
+        const { mismatched: peopleMismatched } = splitNeedsByZone(
+          plan,
+          stateRef.current.brief.people,
+        );
+        if (peopleMismatched.length) {
+          const droppedPeople = new Set(
+            peopleMismatched.map(
+              (m) => `${m.need.zone} ${m.need.role} ${m.need.count}`,
+            ),
+          );
+          persist({
+            ...stateRef.current,
+            brief: {
+              ...stateRef.current.brief,
+              people: stateRef.current.brief.people.filter(
+                (p) => !droppedPeople.has(`${p.zone} ${p.role} ${p.count}`),
+              ),
+            },
+          });
+          peopleMismatch.push(
+            describeZoneMismatch(peopleMismatched, plan, {
+              removed: true,
+              subject: "岗位未安排",
+            }),
+          );
+        }
         offer(
-          proposeRoleWorkers(plan, stateRef.current.brief),
+          peoplePlan,
           "people",
           "按岗位、数量与通路安排人员",
           job,
           [
             "人员活动范围/路线由关联区域及路径限定，不是随机散布或真实疏散模拟。",
+            ...peopleMismatch,
           ],
         );
         return;
