@@ -20,6 +20,8 @@ import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
+import { buildSessionReport } from "../lib/outdoor-session-report";
+import { createTurnTraceBook } from "../lib/turn-trace-log";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -311,7 +313,8 @@ export function useOutdoorAgentWorkflow(input: {
   const abort = useRef<AbortController | null>(null);
   // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
   const metricsBook = useRef(createMetricsBook());
-  const liveTurn = useRef(createLiveTurn({ book: metricsBook.current }));
+  const traceBook = useRef(createTurnTraceBook());
+  const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
   scopeRef.current = input.scope;
@@ -1845,6 +1848,8 @@ export function useOutdoorAgentWorkflow(input: {
     metricsSummary: () => summarizeMetrics(metricsBook.current),
     /** 把汇总打到控制台并尽量写进剪贴板；返回值说明剪贴板是否发起成功。 */
     exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
+    /** 轨迹 + 指标一份导出（两份都是白名单字段）。 */
+    sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
