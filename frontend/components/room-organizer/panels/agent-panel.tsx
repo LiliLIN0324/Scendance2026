@@ -134,6 +134,7 @@ import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
 import { isCompositeDesignBrief, looksLikeDesignInstruction, PLACE_FIRST_BOUNCE, placeStillPending } from '../lib/place-first';
 import { clearPendingBrief, readPendingBrief, shouldResumeBrief, writePendingBrief } from '../lib/pending-brief';
+import { describeModelFailure } from '../lib/turn-failure-diag';
 import { BingoAuditCard } from './bingo-audit-card';
 import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushAgentSteerNote, pushLocalLayoutStep, removeAgentSteerNote, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { subscribeComposerPrefill } from './composer-prefill-bus';
@@ -549,7 +550,7 @@ interface AgentValue {
   /** 只给「这次没出成」那张卡用：重跑上一句，不另开一个生成入口。 */
   retry(): void; stop(): void; resume(): void; regenerate(label?: string): void;
   /** 智能理解瞬态失败的重试卡；null = 不显示。 */
-  modelFailure: {text:string;retry:()=>void} | null; dismissModelFailure(): void;
+  modelFailure: {text:string;retry:()=>void;diag:string;hint:string} | null; dismissModelFailure(): void;
   /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   inventoryWorkspace: ReactNode; inventoryBlocked: boolean; inventoryInvalid: boolean;
@@ -839,7 +840,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const [cancelledInput,setCancelledInput]=useState<{id:number;text:string}|null>(null);
   const [retryUncertain,setRetryUncertain]=useState<string|null>(null);
   // 模型瞬态失败的可重试提示卡：文案 + 重试回调。
-  const [modelFailure,setModelFailure]=useState<{text:string;retry:()=>void}|null>(null);
+  const [modelFailure,setModelFailure]=useState<{text:string;retry:()=>void;diag:string;hint:string}|null>(null);
   const dialogueTurnStartRef=useRef(onDialogueTurnStart);dialogueTurnStartRef.current=onDialogueTurnStart;
   const dialogueIncompleteRef=useRef(onDialogueIncompleteChange);dialogueIncompleteRef.current=onDialogueIncompleteChange;
   const incompleteDialogueTurns=useRef(new Map<string,Set<string>>());
@@ -3516,7 +3517,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 瞬态失败（网络/超时/400/429/5xx）：给一张可一键重试的卡，把原句重发；配置类失败不挂。
     if (turn.modelRetryable && turn.modelNotice) {
       const retryText = trimmed;
-      setModelFailure({ text: turn.modelNotice, retry: () => { if (!briefRequest.current) void send(retryText); } });
+      // 失败卡带一个可抄的编号：同一编号跟着重试走，事后能按它对账（M1a）。
+      const view = describeModelFailure(turn.modelNotice);
+      setModelFailure({ text: view.text, hint: view.hint, diag: view.diag, retry: () => { if (!briefRequest.current) void send(retryText); } });
     } else {
       setModelFailure(null);
     }
@@ -4637,6 +4640,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {agent.modelFailure && <section className="ap-card ap-error-card" role="alert">
           <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>智能理解</span>
           <p className="ap-error-summary">{agent.modelFailure.text}</p>
+          <p className="ap-error-hint">{agent.modelFailure.hint}</p>
+          <p className="ap-error-diag" style={{userSelect:'all'}}>{agent.modelFailure.diag}</p>
           <div className="ap-error-actions">
             <button type="button" className="chip" onClick={() => { const retry = agent.modelFailure?.retry; agent.dismissModelFailure(); retry?.(); }}><RotateCw size={14} aria-hidden="true"/>重试云端理解</button>
             <button type="button" className="chip btn-outline" onClick={() => { agent.dismissModelFailure(); document.getElementById('ap-input')?.focus(); }}>改一句再说</button>
