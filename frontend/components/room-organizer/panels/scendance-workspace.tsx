@@ -1247,7 +1247,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
               <MaterialSymbol name="remove" size={20} />
             </button>
           </div>
-          <button type="button" id="tool-walk" data-tip={walkPressed ? '退出漫游' : '第一人称漫游'} aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={`oc-gm-round oc-gm-walk${walkPressed ? ' is-active' : ''}`} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
+          <button type="button" id="tool-walk" data-tip={walkPressed ? '退出漫游' : '第一人称漫游'} aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={`oc-gm-round oc-gm-walk is-walk${walkPressed ? ' is-active' : ''}`} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
             <PegmanIcon size={20} />
           </button>
           <span className="oc-gm-divider" aria-hidden="true" />

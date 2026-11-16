@@ -768,6 +768,7 @@ describe('ScendanceViewTools 户外漫游入口', () => {
     const button = screen.getByRole('button', { name: '退出漫游' });
     expect(button.className).toContain('oc-gm-round');
     expect(button.className).toContain('oc-gm-walk');
+    expect(button.className).toContain('is-walk');
     expect(button.className).toContain('is-active');
     expect(button.getAttribute('data-tip')).toBe('退出漫游');
     fireEvent.click(button);
