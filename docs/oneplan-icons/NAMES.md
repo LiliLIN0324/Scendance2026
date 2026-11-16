@@ -1,11 +1,11 @@
 # OnePlan 物件名 ↔ 图标文件对照表
 
-本文件是 [manifest.json](manifest.json) 的人读版：454 个物件库名称、549 个素材文件全部在表内。
+本文件是 [manifest.audit.json](manifest.audit.json) 的人读版：454 个物件库名称、549 个素材文件全部在表内。
 
 - 素材文件共 **549** 个（icon 245 / scale-fg 149 / scale-bg 149 / area 3 / categories 3）。
 - **395 个 slug / 549 个文件全部有中文名**：其中 345 个 slug 直接来自物件库名称表（`sticker-taxonomy.zh.json`），50 个是 CDN 文件名与显示名不一致、我按语义补充命名的（manifest 里 `name_source` 标 `curated`，本表以 `*` 标记）。
 - 一个物件可能只有 `scale-*` 而没有 `icon`：OnePlan 这类物件在画布上按真实占地画，不提供 24×24 符号。
-- 附录列出 109 个**在 CDN 上没有任何同名文件**的物件名（不是抓漏，见 ATTRIBUTION.md 的完整性口径）。
+- 附录列出 109 个**在 CDN 上没有任何同名文件**的物件名（不是抓漏，见 ATTRIBUTION.md 的文件与清单口径）。
 
 ## 列含义
 

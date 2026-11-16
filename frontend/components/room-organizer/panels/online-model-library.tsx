@@ -9,6 +9,7 @@ import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementBatchGuard, type CatalogPlacementGuard, type CatalogPlacementResult } from '../lib/catalog-placement-guard';
 import { layoutStore } from '../hooks/use-layout-store';
 import { CROWD_TYPES, crowdTypeModelSlugs } from '../lib/crowd-types';
+import { walkRoleCrowdType } from '../lib/walk-roles';
 import { planningIcon } from '../components/outdoor-plan-icons';
 import { CROWD_GROUP_LABEL, MATERIAL_GROUP_LABELS, materialGroupLabel } from '../lib/material-taxonomy';
 import { INFRA_CATEGORY_ORDER, INFRA_ROW_LABEL } from '../lib/oneplan-catalog';
@@ -30,7 +31,7 @@ import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
 import { CharacterDesignPanel } from './character-design-panel';
 import { MaterialCreateCell } from './material-create-cell';
 import { openGenerationSheet } from '../lib/generation-sheet';
-import { MaterialThumb } from './material-thumb';
+import { MaterialThumb, warmMaterialThumbs } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem, FurnitureItem, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
@@ -619,6 +620,20 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     const styleThumb = (bundle: StyleBundle, small = false) => <span className={`sc-lib-style-thumb${small ? ' is-small' : ''}`} aria-hidden="true">
       {bundle.swatches.map(color => <span className="sc-lib-style-swatch" key={color} style={{ background: color }}/>)}
     </span>;
+    // 这一屏的缩略图提前预热（命中缓存的直接跳过）：切页/翻页后滚到哪一格都已经是图。
+    warmMaterialThumbs(pane === 'fav'
+      ? [...favoriteModels.map(model => model.thumb), ...favoriteGenerated.map(card => card.image)]
+      : pane === 'mine'
+        ? [...generatedShown.map(card => card.image), ...pending.map(card => card.image)]
+        : pane === 'crowd'
+          ? peopleModels.map(model => model.thumb)
+          : searching
+            ? libraryShown.map(model => model.thumb)
+            : [
+              ...(libSection === 'recent' ? recentInLib.map(model => model.thumb) : []),
+              ...(infraGroups.find(group => group.label === openSubgroup)?.models ?? []).map(model => model.thumb),
+              ...(libSection === 'crowd' ? crowdInLib.map(model => model.thumb) : []),
+            ]);
     // 点哪一块就切到哪一页并展开：tabs 与素材同属一张卡，切换即看到完整内容。
     return <div className="sc-lib-wrap sc-lib-shell is-browse">
       <nav className="sc-library-tabs-equal" aria-label="物料来源">
@@ -635,7 +650,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               const model = peopleModels.find(entry => entry.slug === slug);
               return model ? [model] : [];
             });
-            const roles = walkRoles.filter(role => (role.crowdType ?? 'performer') === type.id);
+            const roles = walkRoles.filter(role => walkRoleCrowdType(role) === type.id);
             const count = models.length + roles.length;
             if (count === 0) return null;
             const open = crowdSection === type.id;
@@ -758,6 +773,9 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       </div>
     </div>;
   }
+
+  // 抽屉形态同理：当前这一屏先预热，滚动时不再逐格从 ◇ 起。
+  warmMaterialThumbs([...shown.map(model => model.thumb), ...recentModels.map(model => model.thumb), ...generatedShown.map(card => card.image)]);
 
   return <>
     <div className="sc-material-toolbar">

@@ -47,8 +47,11 @@ describe('walk-roles 派生清单', () => {
     expect(DEFAULT_WALK_ROLE_ID).toBe(first.assetId);
   });
 
-  it('未标人群类型的古装角色归演员；角色 GLB 地址走云端', () => {
-    expect(walkRoleCrowdType(WALK_ROLES[0]!)).toBe('performer');
+  it('古装（汉服/唐服/明服）角色归游客，不再算演员；角色 GLB 地址走云端', () => {
+    expect(walkRoleCrowdType(WALK_ROLES[0]!)).toBe('visitor');
+    for (const role of WALK_ROLES.filter(r => /唐|宋|明/.test(r.name))) {
+      expect(walkRoleCrowdType(role), role.name).toBe('visitor');
+    }
     const role = WALK_ROLES.find(r => r.crowdType === 'security')!;
     expect(walkRoleGlbUrl(role.assetId)).toContain(role.assetId);
   });

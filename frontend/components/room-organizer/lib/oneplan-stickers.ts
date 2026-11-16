@@ -33,6 +33,15 @@ export interface OneplanStickerDescriptor {
   slug: string;
   /** 回落 Lucide 图标名（PLANNING_ICONS 登记范围内）。 */
   icon: PlanningIconName;
+  /**
+   * 岗位主题色（2026-11-16）：**只有 WORKER_ROLE_STICKERS 用**，且现在只给「自定义点」这种
+   * 不属于任何色系的岗位；普通岗位用 `family` + `tone` 从色系明度梯里取色。
+   */
+  color?: string;
+  /** 所属身份色系（只有岗位表用）；「自定义点」没有岗位语义，留空。 */
+  family?: WorkerRoleFamily;
+  /** 色系内明度档（0 = 最深）：同色系里**每个身份占一档**，见 WORKER_ROLE_FAMILIES[*].shades。 */
+  tone?: number;
 }
 
 export const ONEOPLAN_STICKER_BASE = '/oneplan-icons';
@@ -144,42 +153,106 @@ export const ROUTE_STICKERS: Record<PlanningRouteKind, OneplanStickerDescriptor>
   service: { kind: 'icon', slug: 'load-zone', icon: 'route' },
 };
 
-/** 人员岗位精确命中（样例「安保」「引导员」必须有）。 */
-export const WORKER_ROLE_STICKERS: Record<string, OneplanStickerDescriptor> = {
-  安保: { kind: 'icon', slug: 'police', icon: 'users' },
-  保安: { kind: 'icon', slug: 'police', icon: 'users' },
-  安保队长: { kind: 'icon', slug: 'security-checkpoint', icon: 'users' },
-  引导员: { kind: 'icon', slug: 'information-point', icon: 'users' },
-  志愿者: { kind: 'icon', slug: 'welfare-point', icon: 'users' },
-  医疗: { kind: 'icon', slug: 'first-aid-point', icon: 'users' },
-  医护: { kind: 'icon', slug: 'first-aid-point', icon: 'users' },
-  检票: { kind: 'icon', slug: 'ticket-check', icon: 'users' },
-  验票: { kind: 'icon', slug: 'ticket-check', icon: 'users' },
-  保洁: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'users' },
-  环卫: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'users' },
-  消防: { kind: 'icon', slug: 'fire-extinguisher', icon: 'users' },
-  技术: { kind: 'icon', slug: 'pa-speakers', icon: 'users' },
-  音响: { kind: 'icon', slug: 'pa-speakers', icon: 'users' },
-  摄像: { kind: 'icon', slug: 'camera-fixed', icon: 'users' },
-  摄影: { kind: 'icon', slug: 'camera-fixed', icon: 'users' },
-  停车: { kind: 'icon', slug: 'parking', icon: 'users' },
-  调度: { kind: 'icon', slug: 'event-control', icon: 'users' },
-  主管: { kind: 'icon', slug: 'event-control', icon: 'users' },
-  管理员: { kind: 'icon', slug: 'information-point', icon: 'users' },
+/**
+ * 人员身份大类 → 色系（2026-11-16 用户：「偏后勤的应该是后勤色系，工作人员是工作人员色系，
+ * 游客/参观者是另一个色系」）——**色相定大类，明度定身份，图标定岗位**。
+ *
+ * 同一天用户补一句：「虽然是一个色系，每个身份的颜色有点不一样」：
+ * 所以每套色系是一条「同色相明度梯」`shades`（深 → 浅），岗位在表里用 `tone` 取其中一档。
+ * 负责人（经理/主管/调度）占最深档，应急三岗、后勤两岗各占不同档，不会两岗同色。
+ * 新增岗位：选色系 → 挑一个未被占用的 tone → 再取一枚未被占用的图标。
+ */
+export type WorkerRoleFamily = 'staff' | 'logistics' | 'emergency' | 'visitor';
+
+export const WORKER_ROLE_FAMILIES: Record<WorkerRoleFamily, { label: string; shades: readonly string[] }> = {
+  // 工作人员：蓝系九档（最浅那档仍保证芯片上的白字形读得出来）。
+  staff: {
+    label: '工作人员',
+    shades: ['#16304B', '#1C3D5F', '#234A73', '#295787', '#2F649B', '#3671AF', '#3D7EC3', '#4589CB', '#4D95D3'],
+  },
+  // 后勤：金系（与后勤动线同色相）。
+  logistics: { label: '后勤', shades: ['#8A6414', '#A8821F', '#C9A22C'] },
+  // 应急：砖红系，整体比越界警示的亮红 #c0392b 暗，不会跟告警混。
+  emergency: { label: '应急', shades: ['#8E2B33', '#B23A48', '#C95C67'] },
+  // 游客/参观者：青系（岗位接入时用）。
+  visitor: { label: '游客/参观者', shades: ['#1F7A6B', '#2E8FA3', '#43A6B5'] },
 };
 
-/** 自定义岗位/设施名的关键词回落（契约里 role/templateId 都是自由字符串）。 */
+/** 「自定义点」没有岗位语义，用中性石板灰，不算任何一套色系。 */
+export const WORKER_ROLE_NEUTRAL_COLOR = '#5B6570';
+
+/**
+ * 人员岗位精确命中（样例「安保」「引导员」必须有）。
+ *
+ * 2026-11-16 用户：「人物图标可以再细分一下，不要共享图标，这样地图上就不用显示名字了」——
+ * **一个岗位一枚图标，不同岗位不共用 slug**，图标本身就当岗职识别（地图上已不画岗位名）。
+ * 同一天用户又定：「颜色认大类」——所以 `color` 取 WORKER_ROLE_FAMILIES 里该岗位所属色系，
+ * 不再追求十五个岗位十五种颜色（调色板也给不了那么多）。
+ * 改名/加岗位时先看这张表有没有重复的 slug；同族别名（安保/保安/安保队长）算同一个岗位，允许共用。
+ */
+export const WORKER_ROLE_STICKERS: Record<string, OneplanStickerDescriptor> = {
+  // 安保族（岗亭）——与「警察」（警徽）分开，二者不再共用 police；工作人员色系第 3 档。
+  安保: { kind: 'icon', slug: 'security-checkpoint', icon: 'users', family: 'staff', tone: 2 },
+  保安: { kind: 'icon', slug: 'security-checkpoint', icon: 'users', family: 'staff', tone: 2 },
+  安保队长: { kind: 'icon', slug: 'security-checkpoint', icon: 'users', family: 'staff', tone: 2 },
+  // 应急三岗：同色系三个明度档，一岗一档。
+  警察: { kind: 'icon', slug: 'police', icon: 'users', family: 'emergency', tone: 0 },
+  消防: { kind: 'icon', slug: 'fire-extinguisher', icon: 'users', family: 'emergency', tone: 1 },
+  医疗: { kind: 'icon', slug: 'first-aid-point', icon: 'users', family: 'emergency', tone: 2 },
+  医护: { kind: 'icon', slug: 'first-aid-point', icon: 'users', family: 'emergency', tone: 2 },
+  医务人员: { kind: 'icon', slug: 'first-aid-point', icon: 'users', family: 'emergency', tone: 2 },
+  // 现场执行全归工作人员色系（2026-11-16 用户：技术/音响/摄像/摄影/检票/引导都算工作人员），各自一档。
+  引导员: { kind: 'icon', slug: 'information-point', icon: 'users', family: 'staff', tone: 5 },
+  检票: { kind: 'icon', slug: 'ticket-check', icon: 'users', family: 'staff', tone: 6 },
+  验票: { kind: 'icon', slug: 'ticket-check', icon: 'users', family: 'staff', tone: 6 },
+  技术: { kind: 'icon', slug: 'pa-speakers', icon: 'users', family: 'staff', tone: 7 },
+  音响: { kind: 'icon', slug: 'pa-speakers', icon: 'users', family: 'staff', tone: 7 },
+  摄像: { kind: 'icon', slug: 'camera-fixed', icon: 'users', family: 'staff', tone: 8 },
+  摄影: { kind: 'icon', slug: 'camera-fixed', icon: 'users', family: 'staff', tone: 8 },
+  志愿者: { kind: 'icon', slug: 'charity', icon: 'users', family: 'staff', tone: 4 },
+  管理员: { kind: 'icon', slug: 'accreditation', icon: 'users', family: 'staff', tone: 3 },
+  // 负责人（经理/主管/调度）占工作人员色系最深的两档。
+  主管: { kind: 'icon', slug: 'event-control', icon: 'users', family: 'staff', tone: 1 },
+  调度: { kind: 'icon', slug: 'event-control', icon: 'users', family: 'staff', tone: 1 },
+  经理: { kind: 'icon', slug: 'event-management-office', icon: 'users', family: 'staff', tone: 0 },
+  // 保洁/环卫、停车是后勤色系。
+  保洁: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'users', family: 'logistics', tone: 0 },
+  环卫: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'users', family: 'logistics', tone: 0 },
+  停车: { kind: 'icon', slug: 'parking', icon: 'users', family: 'logistics', tone: 2 },
+  // 游客/参观者：游客色系；图标是 tourist——Fluent UI System Icons 的 person-walking
+  // （MIT），套进 OnePlan 的 24 网格并加同一道外圈。试过库内 school-children（大人牵小孩），
+  // 用户觉得怪，换成一枚干净的行人形；人员身份用人形、岗位用设施图形，反而更好认。
+  游客: { kind: 'icon', slug: 'tourist', icon: 'users', family: 'visitor', tone: 1 },
+  参观者: { kind: 'icon', slug: 'tourist', icon: 'users', family: 'visitor', tone: 1 },
+  参观: { kind: 'icon', slug: 'tourist', icon: 'users', family: 'visitor', tone: 1 },
+  // 观众：同一套游客青系，占第 3 档（最深）；图标用自制 audience（一头排 + 座位排）。
+  // 官方 OnePlan 库里没有观众图形——Cricket pack 的「Spectator Services」登记的是
+  // asset_slug: transparent（通用透明点），所以这枚图是照同套 24×24 白字形规范画的。
+  观众: { kind: 'icon', slug: 'audience', icon: 'users', family: 'visitor', tone: 2 },
+  // 自定义点：没有岗位语义，给一枚通用点位标记（公里桩造型），走中性色不冒充任何色系。
+  自定义点: { kind: 'icon', slug: 'km-marker', icon: 'users', color: WORKER_ROLE_NEUTRAL_COLOR },
+};
+
+/** 自定义岗位/设施名的关键词回落（契约里 role/templateId 都是自由字符串）。
+ * 顺序即优先级：先具体（管理员→胸牌）后笼统（主管/经理→管理），否则「现场管理员」会被管理族吃掉。 */
 const WORKER_ROLE_RULES: readonly { pattern: RegExp; sticker: OneplanStickerDescriptor }[] = [
-  { pattern: /医|救|first.?aid|medic/i, sticker: { kind: 'icon', slug: 'first-aid-point', icon: 'users' } },
-  { pattern: /安保|保安|护卫|警察|警|security|guard|police/i, sticker: { kind: 'icon', slug: 'police', icon: 'users' } },
-  { pattern: /检票|验票|票务|ticket/i, sticker: { kind: 'icon', slug: 'ticket-check', icon: 'users' } },
-  { pattern: /引导|问询|咨询|接待|志愿|information|steward|guide/i, sticker: { kind: 'icon', slug: 'information-point', icon: 'users' } },
-  { pattern: /保洁|环卫|垃圾|清洁|clean|waste/i, sticker: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'users' } },
-  { pattern: /消防|fire/i, sticker: { kind: 'icon', slug: 'fire-extinguisher', icon: 'users' } },
-  { pattern: /技术|音响|扩声|audio|sound|pa\b/i, sticker: { kind: 'icon', slug: 'pa-speakers', icon: 'users' } },
-  { pattern: /摄|photo|camera/i, sticker: { kind: 'icon', slug: 'camera-fixed', icon: 'users' } },
-  { pattern: /停车|泊车|parking/i, sticker: { kind: 'icon', slug: 'parking', icon: 'users' } },
-  { pattern: /调度|指挥|control|dispatch/i, sticker: { kind: 'icon', slug: 'event-control', icon: 'users' } },
+  { pattern: /医|救|first.?aid|medic/i, sticker: { kind: 'icon', slug: 'first-aid-point', icon: 'users', family: 'emergency', tone: 2 } },
+  { pattern: /警察|police/i, sticker: { kind: 'icon', slug: 'police', icon: 'users', family: 'emergency', tone: 0 } },
+  { pattern: /安保|保安|护卫|警|security|guard/i, sticker: { kind: 'icon', slug: 'security-checkpoint', icon: 'users', family: 'staff', tone: 2 } },
+  { pattern: /检票|验票|票务|ticket/i, sticker: { kind: 'icon', slug: 'ticket-check', icon: 'users', family: 'staff', tone: 6 } },
+  { pattern: /管理员|admin/i, sticker: { kind: 'icon', slug: 'accreditation', icon: 'users', family: 'staff', tone: 3 } },
+  { pattern: /志愿|volunteer|charity/i, sticker: { kind: 'icon', slug: 'charity', icon: 'users', family: 'staff', tone: 4 } },
+  { pattern: /引导|问询|咨询|接待|inform|steward|guide/i, sticker: { kind: 'icon', slug: 'information-point', icon: 'users', family: 'staff', tone: 5 } },
+  { pattern: /保洁|环卫|垃圾|清洁|clean|waste/i, sticker: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'users', family: 'logistics', tone: 0 } },
+  { pattern: /消防|fire/i, sticker: { kind: 'icon', slug: 'fire-extinguisher', icon: 'users', family: 'emergency', tone: 1 } },
+  { pattern: /技术|音响|扩声|audio|sound|pa\b/i, sticker: { kind: 'icon', slug: 'pa-speakers', icon: 'users', family: 'staff', tone: 7 } },
+  { pattern: /摄|photo|camera/i, sticker: { kind: 'icon', slug: 'camera-fixed', icon: 'users', family: 'staff', tone: 8 } },
+  { pattern: /停车|泊车|parking/i, sticker: { kind: 'icon', slug: 'parking', icon: 'users', family: 'logistics', tone: 2 } },
+  { pattern: /调度|指挥|control|dispatch/i, sticker: { kind: 'icon', slug: 'event-control', icon: 'users', family: 'staff', tone: 1 } },
+  { pattern: /主管|经理|领班|supervisor|manager/i, sticker: { kind: 'icon', slug: 'event-management-office', icon: 'users', family: 'staff', tone: 0 } },
+  { pattern: /游客|参观|visitor|tourist/i, sticker: { kind: 'icon', slug: 'tourist', icon: 'users', family: 'visitor', tone: 1 } },
+  { pattern: /观众|观演|audience|spectator/i, sticker: { kind: 'icon', slug: 'audience', icon: 'users', family: 'visitor', tone: 2 } },
+  { pattern: /自定义|custom/i, sticker: { kind: 'icon', slug: 'km-marker', icon: 'users', color: WORKER_ROLE_NEUTRAL_COLOR } },
 ];
 
 /** 自定义设施 templateId 的关键词回落（例如 sample 里的 custom-gate-4x1）。 */
@@ -236,6 +309,22 @@ export function workerSticker(role: string): OneplanStickerDescriptor | null {
     if (rule.pattern.test(key)) return rule.sticker;
   }
   return null;
+}
+
+/**
+ * 岗位主题色：色系（family）+ 明度档（tone）→ 调色梯里的 hex。
+ * 同色系里每个身份占不同档（2026-11-16 用户：「虽然是一个色系，每个身份的颜色有点不一样」）；
+ * 不属任何色系的岗位（自定义点）直接用表里的 color；表里没写的岗位返回 null 交给调用方回落。
+ * 左侧「工作人员」行、地图芯片、3D 人形/地贴、图例四处共用这一个入口。
+ */
+export function workerRoleColor(role: string): string | null {
+  const sticker = workerSticker(role);
+  if (!sticker) return null;
+  if (sticker.family) {
+    const shades = WORKER_ROLE_FAMILIES[sticker.family].shades;
+    return shades[sticker.tone ?? 0] ?? shades[shades.length - 1] ?? null;
+  }
+  return sticker.color ?? null;
 }
 
 /** 动线类型 → 贴纸。 */
