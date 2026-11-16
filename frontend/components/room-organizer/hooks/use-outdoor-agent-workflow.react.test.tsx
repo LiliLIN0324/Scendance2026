@@ -183,9 +183,9 @@ it("户外选址阶段的「你好」显示本轮模型自述，切换活动后�
   const thought = "收到的是问候，我先回应，并等待具体需求。";
   let complete!: (value: ReturnType<typeof response>) => void;
   let streamThought!: (text: string) => void;
-  streamUnderstand = vi.fn((_message, _history, _signal, onDelta) => {
+  streamUnderstand = vi.fn<BackendSession["assistantChatStream"]>((_message, _history, _signal, onDelta) => {
     streamThought = onDelta;
-    return new Promise(resolve => { complete = resolve; });
+    return new Promise<ReturnType<typeof response>>(resolve => { complete = resolve; });
   });
   let pending!: Promise<boolean>;
   await act(async () => { pending = flow.handle("你好"); });
