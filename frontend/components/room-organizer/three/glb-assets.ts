@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { cloudPeopleUrl } from '../lib/cloud-assets';
 import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
@@ -11,6 +12,14 @@ import type { CatalogItem, FurnitureItem } from '../lib/types';
 // 蒙皮人物 GLB 31–48MB，公网并发下载 + 解码易压过 30s（真机复现 AbortError）；
 // 超时窗口放宽到 90s，给大对象下载与 GLTFLoader 解析留足余量，物件小模型不受影响。
 const TIMEOUT_MS = 90_000;
+
+/**
+ * 压缩资产（EXT_meshopt_compression）必须挂解码器，否则 GLTFLoader 直接抛错。
+ * 人物 GLB 经 gltf-transform 压到 2–3 MB 后就是这个形态；未压缩资产挂了解码器也不受影响。
+ */
+function createGlbLoader(): GLTFLoader {
+  return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+}
 export type GlbAssetState = Readonly<{
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
@@ -249,7 +258,7 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
     let source: THREE.Object3D | undefined;
     try {
       const buffer = await downloadGlb(url, controller.signal);
-      const gltf = await new GLTFLoader().parseAsync(buffer, '');
+      const gltf = await createGlbLoader().parseAsync(buffer, '');
       source = gltf.scene;
       assertRenderableGlb(source);
       // 米制 / Y-up / 底面中心：加载时统一一次，实例只按目录尺寸缩放。
@@ -408,6 +417,38 @@ export function createCachedGlbModel(item: FurnitureItem, autoplay = true): THRE
   return group;
 }
 
+const inPlaceWalkClips = new WeakMap<THREE.AnimationClip, THREE.AnimationClip>();
+
+/** 角色由路线或玩家推进；移除行走循环里髋部的水平累计位移，保留步态和上下起伏。 */
+export function inPlaceWalkClip(clip: THREE.AnimationClip): THREE.AnimationClip {
+  const cached = inPlaceWalkClips.get(clip);
+  if (cached) return cached;
+  const tracks = clip.tracks.map(track => {
+    if (!/(hips?|pelvis|root|armature)\.position$/i.test(track.name) || track.getValueSize() !== 3 || track.times.length < 2) {
+      return track;
+    }
+    const last = track.times.length - 1;
+    const start = track.times[0]!;
+    const duration = track.times[last]! - start;
+    if (duration <= 0) return track;
+    const xDrift = track.values[last * 3]! - track.values[0]!;
+    const zDrift = track.values[last * 3 + 2]! - track.values[2]!;
+    if (Math.hypot(xDrift, zDrift) < 0.001) return track;
+    const adjusted = track.clone();
+    for (let index = 1; index <= last; index += 1) {
+      const progress = (track.times[index]! - start) / duration;
+      adjusted.values[index * 3] = track.values[index * 3]! - xDrift * progress;
+      adjusted.values[index * 3 + 2] = track.values[index * 3 + 2]! - zDrift * progress;
+    }
+    return adjusted;
+  });
+  const result = tracks.some((track, index) => track !== clip.tracks[index])
+    ? new THREE.AnimationClip(clip.name, clip.duration, tracks, clip.blendMode)
+    : clip;
+  inPlaceWalkClips.set(clip, result);
+  return result;
+}
+
 export function createWalkAvatar(item: FurnitureItem) {
   const key = glbAssetKey(item);
   const clips = key ? cache.get(key)?.animations : undefined;
@@ -417,7 +458,7 @@ export function createWalkAvatar(item: FurnitureItem) {
   const group = createCachedGlbModel(item, false);
   if (!group) return null;
   const mixer = new THREE.AnimationMixer(group);
-  return { group, mixer, idle: mixer.clipAction(idle), walk: mixer.clipAction(walk) };
+  return { group, mixer, idle: mixer.clipAction(idle), walk: mixer.clipAction(inPlaceWalkClip(walk)) };
 }
 
 export interface GlbCatalogInput {
@@ -502,7 +543,7 @@ export async function importLocalGlb(file: File, key: string): Promise<ImportedG
   try {
     const buffer = await file.arrayBuffer();
     validateGlbBuffer(buffer);
-    const gltf = await new GLTFLoader().parseAsync(buffer, '').catch(() => {
+    const gltf = await createGlbLoader().parseAsync(buffer, '').catch(() => {
       throw new Error('模型解析失败：文件损坏或不是标准 glTF 2.0。');
     });
     source = gltf.scene;
