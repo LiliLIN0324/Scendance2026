@@ -53,7 +53,9 @@ export function metricEventsFromTrace(
     typeof ui.firstBubbleAt === 'number' ? ui.firstBubbleAt : null,
     ...(ui.confirmAts ?? []),
   ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  const windowEnd = [trace.finishedAt, ...uiTimes]
+  // 窗口末端必须在所有已知时刻之后：轨迹自己的阶段打点（如确认之后才发生的 apply）
+  // 与前一条给过的界面时刻都算，否则“确认 2.4s、落盘 2.9s”会被空窗口裁掉。
+  const windowEnd = [trace.finishedAt, ...uiTimes, ...trace.stages.map((mark) => mark.at)]
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
     .reduce<number | null>((max, value) => (max === null || value > max ? value : max), null);
 
