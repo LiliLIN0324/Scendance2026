@@ -56,13 +56,14 @@ export async function understandOutdoorTurn(input: {
   selectedLibraryId?: string;
   proposal?: { label: string; baseVersion: string };
   controller:
-    | (Pick<BackendSession, "assistantChat"> & {
+    | (Pick<BackendSession, "assistantChat"> & Partial<Pick<BackendSession, "assistantChatStream">> & {
         getSnapshot?: () => {
           user: { id: string; is_anonymous?: boolean } | null;
         };
       })
     | null;
   signal: AbortSignal;
+  onThought?: (text: string) => void;
   provider?: ChatProviderId | undefined;
   model?: string | null | undefined;
 }): Promise<OutdoorTurn> {
@@ -163,15 +164,12 @@ export async function understandOutdoorTurn(input: {
     throw new Error(
       "当前地图与需求上下文过大，请先选中具体区域或物件缩小范围；未省略关键约束、未执行。",
     );
-  const response = await input.controller.assistantChat(
-    input.message,
-    chunks.map((text) => ({ role: "user", text })),
-    input.signal,
-    "outdoor_v1",
-    input.provider && input.provider !== "default" ? input.provider : undefined,
-    input.model ?? null,
-    true,
-  );
+  const history = chunks.map((text) => ({ role: "user" as const, text }));
+  const provider = input.provider && input.provider !== "default" ? input.provider : undefined;
+  const model = input.model ?? null;
+  const response = input.onThought && input.controller.assistantChatStream
+    ? await input.controller.assistantChatStream(input.message, history, input.signal, input.onThought, provider, model, "outdoor_v1")
+    : await input.controller.assistantChat(input.message, history, input.signal, "outdoor_v1", provider, model, true);
   if (response.status !== "ok") {
     const error = new Error(
       response.status === "disabled"

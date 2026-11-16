@@ -144,16 +144,19 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
      * Streamed read-only answer. `onDelta` receives visible content only; a
      * done frame carries the final status and the full answer text.
      */
-    async streamAssistantChat(body:unknown,onDelta:(text:string)=>void,signal?:AbortSignal):Promise<{status:string;answer:string|null}> {
+    async streamAssistantChat(body:unknown,onDelta:(text:string)=>void,signal?:AbortSignal,eventType:'delta'|'thought'='delta'):Promise<{status:string;answer:string|null}> {
       const response=await openStream('/assistant/chat/stream',{method:'POST',body:JSON.stringify(body)},signal);
       let answer='',status='provider_error';
       await readSse(response,(event,data)=>{
         let parsed:unknown;
         try { parsed=JSON.parse(data); } catch { throw new SceneApiError('INVALID_RESPONSE',502,null); }
         const frame=parsed&&typeof parsed==='object'?parsed as Record<string,unknown>:{};
-        if(event==='delta') {
+        if(event===eventType) {
           const text=typeof frame.text==='string'?frame.text:'';
-          if(text){answer+=text;onDelta(text);}
+          if(text){
+            if(eventType==='delta')answer+=text;
+            onDelta(text);
+          }
         } else if(event==='done') {
           status=typeof frame.status==='string'?frame.status:'provider_error';
           if(typeof frame.answer==='string')answer=frame.answer;

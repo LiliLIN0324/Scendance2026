@@ -45,6 +45,7 @@ let chatMeta: { provider: unknown; model: unknown };
 let sessionUser: { id: string; is_anonymous?: boolean } | null | undefined;
 let providerOverride: (() => ChatProviderId | undefined) | undefined;
 let modelOverride: (() => string | null) | undefined;
+let streamUnderstand: BackendSession["assistantChatStream"] | undefined;
 let understand: ReturnType<
     typeof vi.fn<(...args: unknown[]) => Promise<unknown>>
   >,
@@ -63,7 +64,7 @@ const response = (
   facts: OutdoorTurn["facts"] = {},
   extra: Partial<OutdoorTurn> = {},
 ) => ({
-  status: "ok",
+  status: "ok" as const,
   answer: JSON.stringify({
     action,
     reply: "",
@@ -90,6 +91,7 @@ function Harness() {
           assistantChatRequestSchema.parse({ message, history });
           return understand(message, history, signal);
         },
+        ...(streamUnderstand ? { assistantChatStream: streamUnderstand } : {}),
         ...(sessionUser === undefined ? {} : { getSnapshot: () => ({ user: sessionUser }) }),
       }) as unknown as BackendSession,
     provider: () => providerOverride?.(),
@@ -144,6 +146,7 @@ beforeEach(() => {
   sessionUser = undefined;
   providerOverride = undefined;
   modelOverride = undefined;
+  streamUnderstand = undefined;
   understand = vi.fn<(...args: unknown[]) => Promise<unknown>>();
   apply = vi.fn((next: SitePlanData, expected: string) => {
     if (JSON.stringify(plan) !== expected) return false;
@@ -179,16 +182,26 @@ it("户外问答跟随面板所选 provider 与 model 透传到对话请求", as
 it("户外选址阶段的「你好」显示本轮模型自述，切换活动后清除", async () => {
   const thought = "收到的是问候，我先回应，并等待具体需求。";
   let complete!: (value: ReturnType<typeof response>) => void;
-  understand.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+  let streamThought!: (text: string) => void;
+  streamUnderstand = vi.fn((_message, _history, _signal, onDelta) => {
+    streamThought = onDelta;
+    return new Promise(resolve => { complete = resolve; });
+  });
   let pending!: Promise<boolean>;
   await act(async () => { pending = flow.handle("你好"); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("模型返回后会显示摘要");
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("正在思考");
+  act(() => { streamThought("收到的是问候，"); });
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("收到的是问候，");
+  expect(host.querySelector("details.ap-run-thoughts")?.getAttribute("aria-busy")).toBe("true");
+  act(() => { streamThought("我先回应，并等待具体需求。"); });
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain(thought);
   await act(async () => {
     complete(response("ask", {}, { reply: "你好，有什么可以帮你？", thought }));
     await pending;
   });
   const record = host.querySelector("details.ap-run-thoughts");
-  expect(understand).toHaveBeenCalledOnce();
+  expect(streamUnderstand).toHaveBeenCalledOnce();
+  expect(understand).not.toHaveBeenCalled();
   expect(record?.hasAttribute("open")).toBe(true);
   expect(record?.textContent).toContain("思考记录 · 1 条");
   expect(record?.textContent).toContain(thought);
