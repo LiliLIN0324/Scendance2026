@@ -28,6 +28,8 @@ export interface PersonClips {
   idle: ThreeNS.AnimationClip | null;
   talk: ThreeNS.AnimationClip | null;
   walk: ThreeNS.AnimationClip | null;
+  /** 坐姿循环（PEOPLE-06 起人物资产带 Sit_Idle_Loop）；旧资产缺省。 */
+  sit?: ThreeNS.AnimationClip | null;
 }
 
 /** builders-people 每次重建人物时提交的快照。mixer 由本次新建。 */
@@ -53,6 +55,8 @@ interface PersonAnimEntry extends PersonAnimSpec {
   /** 程序化兜底的步态相位。 */
   phase: number;
   manualMoving: boolean | null;
+  /** 漫游落座态：坐在座位上时播坐姿循环，起身清除。 */
+  seated: boolean;
 }
 
 const entries = new Map<string, PersonAnimEntry>();
@@ -88,7 +92,8 @@ function stanceSeed(id: string): number {
 
 function playClip(entry: PersonAnimEntry, action: PersonAction, fadeSeconds = 0.18): void {
   if (!entry.mixer) return;
-  const clip = entry.clips[action];
+  // PersonAction 比 PersonClips 宽（wave / emote 未落资产），按可空索引取片段。
+  const clip = (entry.clips as unknown as Record<string, ThreeNS.AnimationClip | null | undefined>)[action] ?? null;
   if (!clip) return;
   const next = entry.mixer.clipAction(clip);
   if (entry.playingAction === next) return;
@@ -139,6 +144,7 @@ export function registerPersonAnim(group: ThreeNS.Group, spec: PersonAnimSpec): 
     playingAction: null,
     phase: existing?.phase ?? 0,
     manualMoving: existing?.group === group ? existing.manualMoving : null,
+    seated: existing?.group === group ? existing.seated : false,
   };
   entries.set(spec.id, entry);
   if (entry.follower && entry.manualMoving === null) {
@@ -171,10 +177,16 @@ export function takePersonControl(id: string, group: ThreeNS.Group) {
       const live = current();
       if (live) live.manualMoving = moving;
     },
+    /** 落座 / 起身：坐姿循环与站立待机互换，位置仍由漫游层每帧钉在座位上。 */
+    setSeated(seated: boolean) {
+      const live = current();
+      if (live) live.seated = seated;
+    },
     release() {
       const live = current();
       if (!live) return;
       live.manualMoving = null;
+      live.seated = false;
       group.position.copy(position);
       group.rotation.y = rotation;
       group.visible = true;
@@ -282,10 +294,10 @@ export function advancePeopleAnimations(deltaSeconds: number, scene?: ThreeNS.Sc
     }
     active += 1;
     if (entry.manualMoving !== null) {
-      playClip(entry, entry.manualMoving ? 'walk' : 'idle');
+      playClip(entry, entry.seated && entry.clips.sit ? 'sit' : entry.manualMoving ? 'walk' : 'idle');
       if (entry.rig) {
-        if (entry.manualMoving) entry.phase += deltaSeconds * 5.5;
-        poseWalk(entry.rig, entry.phase, entry.manualMoving ? 1 : 0);
+        if (!entry.seated && entry.manualMoving) entry.phase += deltaSeconds * 5.5;
+        poseWalk(entry.rig, entry.phase, !entry.seated && entry.manualMoving ? 1 : 0);
       }
       if (entry.mixer) entry.mixer.update(deltaSeconds);
       continue;
