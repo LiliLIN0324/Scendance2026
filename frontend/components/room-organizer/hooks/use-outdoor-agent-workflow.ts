@@ -18,6 +18,7 @@ import {
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { createLiveTurn } from "../lib/outdoor-turn-live";
+import { createMetricsBook } from "../lib/outdoor-metrics-book";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -307,8 +308,9 @@ export function useOutdoorAgentWorkflow(input: {
   const refsRef = useRef<OutdoorTurn["references"]>([]);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
-  // M7.1：一轮对话的轨迹与指标（只打日志，不影响界面与请求）。
-  const liveTurn = useRef(createLiveTurn());
+  // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
+  const metricsBook = useRef(createMetricsBook());
+  const liveTurn = useRef(createLiveTurn({ book: metricsBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
   scopeRef.current = input.scope;
@@ -404,6 +406,7 @@ export function useOutdoorAgentWorkflow(input: {
       const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
       persist({ ...kept, pendingBoundary: undefined });
     }
+    liveTurn.current.settle("cancelled");
     status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
   }
   useEffect(() => {
@@ -573,6 +576,7 @@ export function useOutdoorAgentWorkflow(input: {
         map = await bridge.mapContext(check!.signal);
       } catch (error) {
         if (!owns()) return;
+        liveTurn.current.settle("failed");
         status(
           error instanceof Error
             ? error.message
