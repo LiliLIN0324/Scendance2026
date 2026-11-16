@@ -4432,7 +4432,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     connected();vi.mocked(controller.getAgentRunEvents).mockResolvedValueOnce({events:[
       {seq:1,tool:'get_scene',stage:'started',outcome:null,errorCode:null},
       {seq:2,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null},
-    ],nextCursor:2,mayBeIncomplete:true});
+    ],thoughts:[],nextCursor:2,mayBeIncomplete:true});
     render(ui());send();await screen.findByText('方案提案 · 尚未应用');
     expect(controller.getAgentRunEvents).toHaveBeenCalledWith('60000000-0000-4000-8000-000000000001',0);
     expect(getAgentRun().eventLog.map(event=>event.seq)).toEqual([1,2]);expect(onApply).not.toHaveBeenCalled();

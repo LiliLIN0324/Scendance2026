@@ -534,6 +534,8 @@ interface AgentValue {
   assertSessionWrite: () => void;
   sessionSaveFailed: boolean;
   understanding: boolean; isUnderstanding(text?:string): boolean; cancelUnderstanding(): void;
+  /** 流式问答正在生成的可见草稿；只在生成过程中非空。 */
+  streamPreview: string | null;
   /** A bridge must not clear text when the main conversation cannot accept it. */
   canForward(text:string):boolean;
   cancelledInput: {id:number;text:string}|null; retryUncertain: string|null; confirmUncertainRetry(): void; dismissUncertainRetry(): void; generationQueued:number;
@@ -833,6 +835,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const pendingModelInputs = useRef(new Set<string>());
   const [understanding,setUnderstanding]=useState(false);
   const [briefBusy,setBriefBusy]=useState(false);
+  // 流式问答的可见草稿：边生成边上屏，完成后清掉，正式气泡接上。
+  const [streamPreview,setStreamPreview]=useState<string|null>(null);
   const [toolPending,setToolPending]=useState(false);
   const [processFailed,setProcessFailed]=useState<ProcessFailure|null>(null);
   const layoutAttempt=useRef(false);
@@ -3030,7 +3034,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const cancelled=new Promise<never>((_,reject)=>request.controller.signal.addEventListener('abort',()=>reject(new DOMException('已停止等待','AbortError')),{once:true}));
       const provider=studioRef.current?.activeProvider;
       const selectedModel=provider&&provider!=='default'?studioRef.current?.activeModel??null:null;
-      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel),cancelled]);
+      // 流式优先：可见内容边到边上屏。旧后端没有该路由时，assistantChatStream 内部退回一次性请求。
+      const streamFn=typeof controller.assistantChatStream==='function'?controller.assistantChatStream.bind(controller):null;
+      const streamed=streamFn
+        ? streamFn(text,history,request.controller.signal,(delta)=>setStreamPreview(prev=>(prev??'')+delta),provider&&provider!=='default'?provider:undefined,selectedModel)
+        : controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel);
+      const result=await Promise.race([streamed,cancelled]);
       if(!current())return;
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
       else {
@@ -3048,7 +3057,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       }
     } catch {
       if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
-    } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}release();}
+    } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}setStreamPreview(null);release();}
   }
 
   // 2026-11-16：地点定完、范围确认后，把退回时存下的那句接回来跑一次。
@@ -3782,7 +3791,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     pickFile: (accept?: string) => { const input = fileInput.current; if (!input) return; input.accept = accept ?? DEFAULT_FILE_ACCEPT; input.click(); },
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
     removePendingFile: () => setPendingFile(null),
-    send, say, rainOn: view.weather === 'rain',
+    send, say, rainOn: view.weather === 'rain', streamPreview,
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
     walkthrough: () => {
       setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false }));
@@ -4574,7 +4583,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
       </OutdoorTaskCard>}
-      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} draft={agent.streamPreview} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {/* 云端真跑时由 AgentRunPanel 接管：真步骤时间线 + 停止确认行 + 过往任务归档；
           processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。
           onRestoreStart：收尾卡「还原到本轮开始」——开跑瞬间的整盘快照一键写回。 */}

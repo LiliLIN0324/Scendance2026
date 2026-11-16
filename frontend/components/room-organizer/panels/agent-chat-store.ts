@@ -156,8 +156,21 @@ export interface AgentStepLogEntry {
 }
 
 /**
+ * 一轮模型可见的自述记录（界面上「思考记录」那张折叠区）。
+ * - round：第几轮模型调用。
+ * - at：前端收到这条的时刻（云端只给轮次和文本，不给墙钟）。
+ * - text：云端归一化并截断后的可见自述；不是服务商原始推理。
+ */
+export interface AgentThoughtEntry {
+  round: number;
+  at: number;
+  text: string;
+}
+
+/**
  * 运行时整盘状态。一份账本对应一次生成任务；start/end 之间持续累加。
- * - thoughtCount：头部"N 条思考"用——模型每出一段自述就 +1。
+ * - thoughtCount：头部“N 条思考”用——模型每出一段自述就 +1。
+ * - thoughts：逐轮可见自述，供运行面板折叠区渲染。
  * - shouldPauseAfterStep：「跑完这步停」一次性 checkpoint，当前步收尾即停。
  * - stopRequested：「停止」优雅停，等当前步在 turn 边界收尾。
  * - steerNotes：用户在运行条输入框塞进来的备注，按顺序注入下一轮上下文。
@@ -170,6 +183,7 @@ export interface AgentRunState {
   isRunning: boolean;
   startedAt: number;
   thoughtCount: number;
+  thoughts: AgentThoughtEntry[];
   stepLog: AgentStepLogEntry[];
   /** Validated, ordered tool events for this run; no arguments or model text. */
   eventLog: Array<Pick<AgentRunEvent,'seq'|'tool'|'stage'|'outcome'>>;
@@ -198,6 +212,7 @@ const IDLE_RUN: AgentRunState = {
   isRunning: false,
   startedAt: 0,
   thoughtCount: 0,
+  thoughts: [],
   stepLog: [],
   eventLog: [],
   shouldPauseAfterStep: false,
@@ -209,7 +224,7 @@ const IDLE_RUN: AgentRunState = {
   scope: 'layout',
 };
 
-let run: AgentRunState = { ...IDLE_RUN, stepLog: [], eventLog: [], steerNotes: [] };
+let run: AgentRunState = { ...IDLE_RUN, stepLog: [], eventLog: [], steerNotes: [], thoughts: [] };
 const runListeners = new Set<() => void>();
 
 function commitRun(next: AgentRunState): void {
@@ -238,6 +253,7 @@ export function startAgentRun(scope: AgentRunScope = 'layout'): void {
     stepLog: [],
     eventLog: [],
     steerNotes: [],
+    thoughts: [],
   });
 }
 
@@ -299,7 +315,7 @@ export function pushLocalLayoutStep(kind: LocalLayoutKind, outcome: 'running' | 
 
 /** Drop the in-memory run. Used when the chat panel goes away. */
 export function resetAgentRun(): void {
-  commitRun({ ...IDLE_RUN, stepLog: [], eventLog: [], steerNotes: [] });
+  commitRun({ ...IDLE_RUN, stepLog: [], eventLog: [], steerNotes: [], thoughts: [] });
 }
 
 /** Mark the open local step failed without starting a new timeline. */
@@ -355,6 +371,31 @@ export function appendAgentRunEvents(events:readonly AgentRunEvent[]):void {
     next.push({seq:event.seq,tool:event.tool,stage:event.stage,outcome:event.outcome});last=event.seq;
   }
   if(next.length!==run.eventLog.length)commitRun({...run,eventLog:next});
+}
+
+/**
+ * 逐轮可见自述入账。
+ *
+ * 同一轮只留一条：轮询/流式重连会重复读到同一段自述，按「轮次 + 文本」去重，
+ * 不按到达次数累加。这里不编造轮次——云端给第几轮就是第几轮。
+ * 轮次不会倒退：断线重连后先到的新轮次已经上屏时，旧轮次不再插回列表尾部。
+ */
+export function appendAgentThoughts(items:readonly {round:number;thought:string}[], at=Date.now()):void {
+  if(!items.length)return;
+  const seen=new Set(run.thoughts.map(item=>`${item.round}|${item.text}`));
+  const next=[...run.thoughts];
+  for(const item of items){
+    if(!Number.isInteger(item.round)||item.round<1)continue;
+    const text=item.thought.trim();
+    if(!text||text.length>400)continue;
+    const key=`${item.round}|${text}`;
+    if(seen.has(key))continue;
+    seen.add(key);
+    next.push({round:item.round,at,text});
+  }
+  if(next.length===run.thoughts.length)return;
+  next.sort((left,right)=>left.round-right.round);
+  commitRun({...run,thoughts:next,thoughtCount:Math.max(run.thoughtCount,next.at(-1)?.round??0)});
 }
 
 /** 模型每出一段自述思考 +1，用来驱动头部"N 条思考"。 */
@@ -493,6 +534,11 @@ export function __demoStartMockRun(): void {
     isRunning: true,
     startedAt: now - 15000,
     thoughtCount: 3,
+    thoughts: [
+      { round: 1, at: now - 15000, text: '先把场地上已有的物件盘一遍，看看哪些能留、哪些要挪。' },
+      { round: 2, at: now - 13800, text: '量一下主舞台和观众席之间的间距，按 80 人发布会估一下桌位。' },
+      { round: 3, at: now - 13000, text: '主区摆 3 桌圆桌，每桌 8 人，留出主通道 1.8 米。' },
+    ],
     stepLog: [
       { toolName: 'list_items', durationMs: 1200, isReadonly: true, startedAt: now - 15000, thought: '先把场地上已有的物件盘一遍，看看哪些能留、哪些要挪。' },
       { toolName: 'query_region', durationMs: 800, isReadonly: true, startedAt: now - 13800, thought: '量一下主舞台和观众席之间的间距，按 80 人发布会估一下桌位。' },

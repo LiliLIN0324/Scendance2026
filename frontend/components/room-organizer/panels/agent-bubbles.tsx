@@ -40,8 +40,10 @@ export type Bubble = {
   decision?: 'approved' | 'rejected' | 'cancelled';
 };
 
-export function ToolCallTrace({ line, rows, understanding, onStop }: {
+export function ToolCallTrace({ line, draft, rows, understanding, onStop }: {
   line: string | null;
+  /** 流式问答已经收到的可见正文；只在生成过程中出现，完成后清空。 */
+  draft?: string | null;
   rows: ReturnType<typeof toolTraceRows>;
   understanding: boolean;
   onStop(): void;
@@ -60,7 +62,7 @@ export function ToolCallTrace({ line, rows, understanding, onStop }: {
     const timer = window.setInterval(() => setUnderstandingSeconds(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, [understanding]);
-  if (!line && rows.length === 0 && !failed) return null;
+  if (!line && rows.length === 0 && !failed && !draft) return null;
   const understandingClock = understanding && understandingSeconds > 0
     ? `${Math.floor(understandingSeconds / 60)}:${(understandingSeconds % 60).toString().padStart(2, '0')}`
     : null;
@@ -71,6 +73,7 @@ export function ToolCallTrace({ line, rows, understanding, onStop }: {
       {understandingClock && <span className="ap-tool-clock" aria-hidden="true">{understandingClock}</span>}
       {understanding && line === '正在理解活动需求…' && <button type="button" onClick={onStop}>停止等待</button>}
     </p>}
+    {draft && <p className="ap-tool-draft" aria-live="polite" aria-label="正在生成的回答">{draft}</p>}
     {!line && failed && <p role="status" className="ap-tool-chip is-error">
       <span className="ap-tool-state">未完成</span>
       <button type="button" onClick={() => setOpened(value => !value)}>{failed.result || failed.name}</button>

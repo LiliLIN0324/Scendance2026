@@ -33,7 +33,7 @@ import { briefTarget, deadlinePressure, renderTurnBrief, type TurnTraceEntry } f
 import { rankCandidates, explainRanking, type ScoreInput } from './scorecard.ts';
 import {reviewAgentCandidate} from './agent-candidate-review.ts';
 import {trialModelRoundDiagnostic,trialSubmissionDiagnostic,trialValidationDiagnostic,type AgentTrialDiagnostic} from './agent-trial-diagnostic.ts';
-import {agentEventOutcome,agentEventTool,type AgentEvent} from './agent-events.ts';
+import {agentEventOutcome,agentEventTool,agentRoundThought,type AgentEvent} from './agent-events.ts';
 import type { Backend } from './backend.ts';
 import {
   addPlanFacilities,addPlanRoutes,addPlanWorkers,addPlanZones,buildPlanCandidate,createStarterOutdoorPlan,
@@ -307,6 +307,16 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     if(!backend.agentEvents||eventCount>=128)return;
     eventCount++;
     eventChain=eventChain.then(()=>backend.agentEvents!(actor,'append',{projectId,id,claim,event})).catch(()=>{});
+  };
+  //
+  // One visible self-report per model round, ordered with the tool receipts.
+  // Only what the model itself made visible is summarized; provider reasoning is
+  // never read here, and a sanitizer/truncation bound is applied before append.
+  const observeThought=(round:number,content:string|null|undefined,toolNames:readonly string[])=>{
+    const thought=agentRoundThought(round,content,toolNames);
+    if(!thought||!backend.agentEvents||eventCount>=128)return;
+    eventCount++;
+    eventChain=eventChain.then(()=>backend.agentEvents!(actor,'append',{projectId,id,claim,event:thought})).catch(()=>{});
   };
   // Older clients have no structured field. Only a plain instruction or the
   // explicitly delimited current user sentence can serve as user evidence.
@@ -653,6 +663,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(backend.agentTrialDiagnostic)trialDiagnostic(trialModelRoundDiagnostic(turn,'response',Math.max(0,Math.min(900000,deadline-now())),Math.max(0,Math.min(900000,now()-requestStarted))));
       const reply=parseAgentModelReply(raw);
       if(reply.finishReason==='length')throw new ApiError('AGENT_OUTPUT_TRUNCATED',502);
+      // Record the round's visible self-report before any tool is dispatched, so the
+      // user sees "what it said" ahead of the receipts for what it then did.
+      observeThought(turn,reply.content,reply.toolCalls.map(tool=>tool.function.name));
       // Validate the whole batch before executing anything; private reasoning stays in memory.
       const miniMaxTurn=miniMax?parseMiniMaxToolTurn(raw,offered.map(t=>t.function.name),miniMaxCallIds,forceSubmit,true):null;
       const batchProblems=new Map<string,unknown>();

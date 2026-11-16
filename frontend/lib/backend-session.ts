@@ -1471,6 +1471,29 @@ export class BackendSession {
       return parseAgentRunEvents(value,after);
     }finally{stop();}
   }
+  /**
+   * 运行帧流（SSE）：与 getAgentRunEvents 同一个游标与校验，只是改成服务器推。
+   * 返回 'done' 表示服务端已看到运行收尾；'ended' 表示这条连接到期，调用方重连即可。
+   * 旧部署没有该路由时抛 STREAM_UNAVAILABLE / 404，调用方退回轮询。
+   */
+  async streamAgentRunEvents(runId:string,after:number,onPage:(page:AgentRunEventPage)=>void,signal?:AbortSignal):Promise<'done'|'ended'> {
+    const projectId=this.snapshot.project?.id,actor=this.snapshot.user?.id;
+    if(!projectId||!actor)throw new SceneApiError('PROJECT_REQUIRED',409,null);
+    if(!Number.isSafeInteger(after)||after<0||after>128)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const epoch=this.epoch,lease=this.snapshot.lease;
+    const matches=()=>this.epoch===epoch&&this.snapshot.project?.id===projectId&&this.snapshot.user?.id===actor&&
+      this.snapshot.lease?.projectId===lease?.projectId&&this.snapshot.lease?.sessionId===lease?.sessionId&&this.snapshot.lease?.generation===lease?.generation;
+    let invalidated=false;const stop=this.subscribe(()=>{if(!matches())invalidated=true;});
+    try{
+      this.requireConfig();
+      const ending=await this.client.streamAgentRunEvents(projectId,runId,after,(value)=>{
+        if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);
+        onPage(parseAgentRunEvents(value,after));
+      },signal);
+      if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);
+      return ending;
+    }finally{stop();}
+  }
   async getAgentRunByRequest(requestId: string): Promise<AgentRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
@@ -1563,6 +1586,29 @@ export class BackendSession {
     const dispatch=this.scopedDispatchGuard(false);
     const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch,true);
     dispatch();return assistantChatResponseSchema.parse(result);
+  }
+  /**
+   * 流式问答：边生成边把可见内容交给调用方，完成时返回与 assistantChat 同样的结果。
+   *
+   * 旧部署没有流式路由时（404/405/非 SSE）退回一次性请求，不把「不支持流」当成问答失败。
+   * 取消只会停掉这一条请求；不会把已生成的部分当成完整答案。
+   */
+  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null):Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}) });
+    const client=this.conversationClient();
+    if(!client)return {status:'disabled',answer:null};
+    const dispatch=this.scopedDispatchGuard(false);
+    try{
+      const result=await client.streamAssistantChat(input,onDelta,signal);
+      dispatch();
+      return assistantChatResponseSchema.parse(result);
+    }catch(error){
+      dispatch();
+      if(error instanceof SceneApiError&&(error.status===404||error.status===405||error.code==='STREAM_UNAVAILABLE'||error.code==='NON_JSON_RESPONSE')){
+        return this.assistantChat(message,history,signal,undefined,provider,model);
+      }
+      throw error;
+    }
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;
