@@ -100,3 +100,17 @@ export function clearPendingBrief(scope: string): void {
     storage.removeItem(key(scope));
   } catch {}
 }
+
+/**
+ * 范围刚确认时该不该把这句话接回来。
+ * 只有「有槽、已有边界、且与上次接回的边界不同」才动；同一边界不重复消费。
+ */
+export function shouldResumeBrief(input: {
+  pending: PendingBrief | null;
+  boundary: string | null | undefined;
+  lastBoundary: string | null;
+}): boolean {
+  if (!input.pending) return false;
+  if (!input.boundary) return false;
+  return input.lastBoundary !== input.boundary;
+}

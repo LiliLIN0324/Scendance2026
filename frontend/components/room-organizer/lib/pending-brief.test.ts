@@ -4,6 +4,7 @@ import {
   clearPendingBrief,
   normalizeBriefText,
   readPendingBrief,
+  shouldResumeBrief,
   writePendingBrief,
 } from "./pending-brief";
 
@@ -56,5 +57,21 @@ describe("无地点设计句的待恢复槽", () => {
 
   it("折叠空白但不改字面", () => {
     expect(normalizeBriefText("  排入口\n和后勤动线  ")).toBe("排入口 和后勤动线");
+  });
+
+  it("范围刚确认时接回，同一边界不重复接", () => {
+    writePendingBrief(SCOPE, TEXT, "place", 1_000);
+    const pending = readPendingBrief(SCOPE, 2_000);
+    expect(shouldResumeBrief({ pending, boundary: "b1", lastBoundary: null })).toBe(true);
+    expect(shouldResumeBrief({ pending, boundary: "b1", lastBoundary: "b1" })).toBe(false);
+    expect(shouldResumeBrief({ pending, boundary: "b2", lastBoundary: "b1" })).toBe(true);
+  });
+
+  it("没槽或没边界都不接，避免开局自动跑一句", () => {
+    expect(shouldResumeBrief({ pending: null, boundary: "b1", lastBoundary: null })).toBe(false);
+    writePendingBrief(SCOPE, TEXT, "place", 1_000);
+    const pending = readPendingBrief(SCOPE, 2_000);
+    expect(shouldResumeBrief({ pending, boundary: null, lastBoundary: null })).toBe(false);
+    expect(shouldResumeBrief({ pending, boundary: undefined, lastBoundary: null })).toBe(false);
   });
 });
