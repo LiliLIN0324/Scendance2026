@@ -123,3 +123,16 @@ export function formatMetricsTotals(totals: MetricsTotals): string {
     `applyAvg=${totals.applyAvgMs ?? 'null'}`,
   ].join(' ');
 }
+
+export interface MetricsSummary {
+  totals: MetricsTotals;
+  rows: MetricsRow[];
+  /** 可直接贴走的一行文本（与 `formatMetricsTotals` 同源）。 */
+  text: string;
+}
+
+/** 只读快照：面板或控制台要“抄出来”时调它，不暴露簿子本身。 */
+export function summarizeMetrics(book: MetricsBook, limit?: number): MetricsSummary {
+  const totals = book.totals();
+  return { totals, rows: book.list(limit), text: formatMetricsTotals(totals) };
+}

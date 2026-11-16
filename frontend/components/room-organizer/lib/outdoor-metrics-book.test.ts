@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMetricsBook, formatMetricsTotals } from './outdoor-metrics-book';
+import { createMetricsBook, formatMetricsTotals, summarizeMetrics } from './outdoor-metrics-book';
 import type { OutdoorTurnMetrics } from './outdoor-turn-metrics';
 
 function metrics(over: Partial<OutdoorTurnMetrics> = {}): OutdoorTurnMetrics {
@@ -109,6 +109,34 @@ describe('createMetricsBook', () => {
     expect(book.list()).toHaveLength(0);
     expect(book.totals().turns).toBe(0);
     expect(book.totals().previewAvgMs).toBeNull();
+  });
+});
+
+describe('summarizeMetrics', () => {
+  it('给出汇总、最近几行和可直接贴走的一行文本', () => {
+    const book = createMetricsBook();
+    book.record('t-1', metrics({ modelCalls: 2, previewMs: 1_000 }), 'preview_ready');
+    const summary = summarizeMetrics(book);
+    expect(summary.totals.turns).toBe(1);
+    expect(summary.rows).toHaveLength(1);
+    expect(summary.text).toBe(formatMetricsTotals(summary.totals));
+    expect(summary.text).toContain('model=2');
+  });
+
+  it('limit 只限制行数，汇总仍按全簿算', () => {
+    const book = createMetricsBook();
+    book.record('t-1', metrics({ modelCalls: 1 }));
+    book.record('t-2', metrics({ modelCalls: 4 }));
+    const summary = summarizeMetrics(book, 1);
+    expect(summary.rows).toHaveLength(1);
+    expect(summary.totals.modelCalls).toBe(5);
+  });
+
+  it('空簿：汇总为 0、平均值为 null、行隐为空', () => {
+    const summary = summarizeMetrics(createMetricsBook());
+    expect(summary.rows).toHaveLength(0);
+    expect(summary.totals.turns).toBe(0);
+    expect(summary.text).toContain('previewAvg=null');
   });
 });
 
