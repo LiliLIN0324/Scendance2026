@@ -3,42 +3,49 @@ import { entranceIconItems } from './oneplan-catalog';
 import { CURATED_MANIFEST_ASSETS, libraryEntries } from './oneplan-library';
 import { libraryFootprint } from './oneplan-library-size';
 
+const category = '活动区域·流线与通行 / 出入口与通行图标';
+
+const doorFootprint = (slug: string) => libraryFootprint({ slug, kind: 'icon', categoryZh: category, viewBox: '0 0 24 24' });
+
 describe('门图标进库', () => {
-  it('手工登记的「门」出现在「入口和通道图标」组里', () => {
+  it('六种门都在「入口和通道图标」组里', () => {
     const entries = libraryEntries([]);
-    const door = entries.find(entry => entry.slug === 'door');
-    expect(door).toBeTruthy();
-    expect(door!.nameZh).toBe('门');
     const group = entranceIconItems(entries).map(entry => entry.slug);
-    expect(group).toContain('door');
+    expect(group).toEqual(
+      expect.arrayContaining(['door', 'double-door', 'sliding-door', 'revolving-door', 'roller-shutter', 'folding-door']),
+    );
+    const names = entranceIconItems(entries)
+      .filter(entry => group.includes(entry.slug))
+      .map(entry => entry.nameZh);
+    expect(names).toEqual(expect.arrayContaining(['门', '双开门', '推拉门', '旋转门', '卷帘门', '折叠门']));
   });
 
-  it('门有自己的素材文件路径，不是借用别的图标', () => {
-    const asset = CURATED_MANIFEST_ASSETS.find(item => item.slug === 'door');
-    expect(asset?.path).toBe('/oneplan-icons/icon/door.svg');
-    expect(asset?.category_zh).toContain('出入口与通行图标');
+  it('每种门都有自己的素材文件，不共用一张图标', () => {
+    const paths = CURATED_MANIFEST_ASSETS.filter(item => /door|shutter/.test(item.slug)).map(item => item.path);
+    expect(new Set(paths).size).toBe(paths.length);
+    for (const path of paths) expect(path.startsWith('/oneplan-icons/icon/')).toBe(true);
+    expect(paths).toEqual(expect.arrayContaining(['/oneplan-icons/icon/door.svg', '/oneplan-icons/icon/roller-shutter.svg']));
   });
 
-  it('默认占地是一扇门的大小，不是 10 米通行区', () => {
-    const size = libraryFootprint({
-      slug: 'door',
-      kind: 'icon',
-      categoryZh: '活动区域·流线与通行 / 出入口与通行图标',
-      viewBox: '0 0 24 24',
-    });
-    expect(size.width).toBeCloseTo(1.2, 5);
-    // 占地至少 0.1 m 起步，取整后是 0.2；关键是不能落到 10 m 那条回落。
-    expect(size.depth).toBeLessThanOrEqual(0.25);
+  it('默认占地是门的大小，不是 10 米通行区', () => {
+    const single = doorFootprint('door');
+    expect(single.width).toBeCloseTo(1.2, 5);
+    expect(single.depth).toBeLessThanOrEqual(0.25);
+    expect(doorFootprint('double-door').width).toBeCloseTo(2.4, 5);
+    expect(doorFootprint('sliding-door').width).toBeCloseTo(2.4, 5);
+    expect(doorFootprint('folding-door').width).toBeCloseTo(2, 5);
+    expect(doorFootprint('roller-shutter').width).toBeCloseTo(3, 5);
+    expect(doorFootprint('revolving-door').width).toBeCloseTo(1.8, 5);
   });
 
-  it('闸机之类的 gate 走同一套门尺寸，不会落到 10 米那条回落', () => {
-    const size = libraryFootprint({
-      slug: 'turnstile-gate',
-      kind: 'icon',
-      categoryZh: '活动区域·流线与通行 / 出入口与通行图标',
-      viewBox: '0 0 24 24',
-    });
-    expect(size.width).toBeCloseTo(1.2, 5);
+  it('所有门的占地都远小于分类回落值 10 米', () => {
+    for (const slug of ['door', 'double-door', 'sliding-door', 'revolving-door', 'roller-shutter', 'folding-door']) {
+      expect(doorFootprint(slug).width).toBeLessThan(4);
+    }
+  });
+
+  it('闸机之类的 gate 走同一套门尺寸', () => {
+    expect(doorFootprint('turnstile-gate').width).toBeCloseTo(1.2, 5);
   });
 
   it('不加 curated 时清单里没有门（避免把手绘素材混进清单断言）', () => {
