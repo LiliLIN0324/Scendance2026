@@ -1906,6 +1906,18 @@ $env:NEXT_DIST_DIR = '.next-ci'; npm run build    # 跑完记得 Remove-Item Env
    - plans 先动哪件（建议按上段五条影响排序，从 batch13 fencing 或 P0-1 起）；
    - 小鸡绘本 P01 **暂停中**，未续。
 
+## 十五、户外 Agent 设计智能升级计划开工（2026-11-17，给定时任务的领取清单）
+
+**规格真源：`docs/47-户外Agent设计智能升级计划-20261117.md`**（A–E 五阶段 17 张卡：场地证据扩展 A1–A3 / 可布置域与分区引擎 B1–B3 / 设计意图通道 C1–C4 / 活动模板库 D1–D4 / 理解层健壮性 E1–E3）。背景：docs/43 的 V-1～V-5 已全部落码，但侦察证实模型目前只是「意图分类器」，分区=等宽切条、活动只认讲座/市集、不看水系绿地。本计划把设计能力补上，同时钉死架构不变量（模型不出坐标、确认门不松、拒绝优先保留）。
+
+**定时任务领取规则**：
+
+1. 按 docs/47 §五 的顺序取第一张「未领取」卡（当前从 **A1** 开始：`/api/site-context` 证据集扩展 water/park/parking/square；E1 上下文预算分级降级已于 2026-11-17 落码 `d19d456f`）；卡状态以 docs/47 §九 进度台账为准。
+2. 每卡：开工前重查 `git status`（多写者并行）→ 红测先行（至少一个修前红的真实函数反例）→ 落码 → `node node_modules\typescript\bin\tsc -p frontend/tsconfig.json --noEmit` + 卡内定向 vitest → 一卡一提交（中文 commit 用 `commit -F` UTF-8 文件；**禁 `git add -A`**）→ 回写 docs/47 §九 台账（日期+SHA+测试数字）→ 把下一张待办写回本节。
+3. push/PR/tag 判断沿用既有授权；**但 Supabase functions 发布、真实额度生成、E3 实机验收是人工卡，一律不得代做**。
+4. 契约卡顺序钉死：C1（layoutIntent 契约）必须先于 D3（多活动 events[]），两次 strictObject 变更不能同批。
+5. 工作树现状：2026-11-14 起有大量未提交 UI/agent 批次（`git status` 可见），与本计划卡无关的改动**不要混进本计划卡的提交**；不确定归属就先跳过该卡等人工。
+
 > 下次开新会话第一句：先读 HANDOFF.md。
 
 > AI生成
