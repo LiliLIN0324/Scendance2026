@@ -178,7 +178,7 @@ scripts/probe-basemap-zoom.mjs
   · lib/outdoor-report-download.ts：downloadSessionReport(report, deps?) → {ok, filename, reason?}；文件名用导出时刻（UTC）而不是“现在”，便于对账
   · 三件外部能力全可注入（createObjectURL / revokeObjectURL / anchorFactory）；无 API、建 URL 报错、拿不到锚点 均返 ok:false 不抛；无论成败都回收 blob URL（click 抛错也回收）
   · hook 暴露 downloadReport()（2 处接线）
-验证：report-download 7/7；session-report 7/7；hook 套件 45/45（工作树）；hook 仍走 HEAD blob 替换 + cacheinfo（staged 实测 3 行）
+验证：report-download 7/7；session-report 7/7；hook 套件 45/45（工作树）；隔离 worktree tsc 首次 3 行错（`exactOptionalPropertyTypes` 不认 `undefined` 传给可选函数属性，故 deps 三个字段写成 `| undefined`）→ 改后 0 行，三文件 55/55（干净 HEAD 上 hook 41 条）；hook 仍走 HEAD blob 替换 + cacheinfo（staged 实测 3 行）
 本轮遇到的一件怪事（如实记）：开工后第一次跑 hook 套件直接报 “Failed to resolve import ../lib/outdoor-session-report”——上轮提交的 outdoor-session-report.ts / .test.ts 在工作树里被删了（git status 显示 D，index 里还在）。用 git restore --source=HEAD 把这两个自己的文件取回，重跑 3 文件 59/59。这不是本轮回归，但提醒：可能有别的会话也在改这个仓库。
 未完成：文件还没接按钮（面板仍由另一个会话在动）；真实浏览器未验（需 9222）；发布前自检清单未做
 ```
