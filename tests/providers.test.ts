@@ -53,7 +53,7 @@ describe('real provider request formats with controlled responses',()=>{
   it('labels isolated OpenAI Next usage as custom and keeps MiniMax usage on a raw dual-key env',()=>{
     const both:Record<string,string>={OPENAI_NEXT_API_KEY:'onk-fixture',AGENT_CHAT_PROFILE:'minimax',AGENT_CHAT_BASE_URL:'https://api.minimax.cn/v1',AGENT_CHAT_KEY:'mini-fixture',AGENT_CHAT_MODEL:'MiniMax-M3.1-Flash'};
     expect(chatUsageProvider(key=>both[key])).toBe('minimax');
-    const isolated={OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_MODEL:'deepseek-v4.1-flash'};
+    const isolated:Record<string,string>={OPENAI_NEXT_API_KEY:'onk-fixture',OPENAI_NEXT_MODEL:'deepseek-v4.1-flash'};
     expect(chatUsageProvider(key=>isolated[key])).toBe('custom');
   });
   it('does not silently send agent-tool MiniMax traffic through OpenAI Next when both keys exist',()=>{
