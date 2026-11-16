@@ -960,6 +960,9 @@ button.ap-ghost {
 .ap-run-thought-round { font-size: 10.5px; color: var(--wk-green); background: rgba(92, 122, 84, .12); border-radius: 999px; padding: 1px 6px; }
 .ap-run-thought-time { font-size: 10.5px; color: var(--wk-muted); font-variant-numeric: tabular-nums; }
 .ap-run-thought-text { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12px; line-height: 1.6; color: var(--wk-ink-soft); }
+.ap-outdoor-thought-steps { margin: 5px 0; padding-inline-start: 18px; }
+.ap-outdoor-model-note summary { cursor: pointer; color: var(--wk-ink-soft); font-size: 12px; }
+.ap-outdoor-plan-approval { border-inline-start: 3px solid var(--wk-green); }
 
 /* ===== AgentRunPanel：停止确认行 + 过往任务归档折叠区（任务 1/2）===== */
 .ap-stop-confirm {

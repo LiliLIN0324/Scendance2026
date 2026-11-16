@@ -116,6 +116,10 @@ async function turn(text: string, reply: ReturnType<typeof response>) {
   await act(async () => {
     await flow.handle(text);
   });
+  if (flow.pendingPlan) {
+    const plan = flow.pendingPlan;
+    await act(async () => { await flow.approvePlan(plan); });
+  }
 }
 async function action(
   name: OutdoorTurn["action"],
@@ -179,8 +183,10 @@ it("户外问答跟随面板所选 provider 与 model 透传到对话请求", as
   expect(chatMeta.provider).toBe("tokendance");
   expect(chatMeta.model).toBe("tk-another");
 });
-it("户外选址阶段的「你好」显示本轮模型自述，切换活动后清除", async () => {
-  const thought = "收到的是问候，我先回应，并等待具体需求。";
+it("「你在做」在地图和模型响应完成前显示实际工作步骤与模型片段", async () => {
+  const thought = "我在核对当前活动的分区用途，并等待你补充要求。";
+  let mapReady!: (value: OutdoorMapContext) => void;
+  bridge.mapContext = vi.fn(() => new Promise<OutdoorMapContext>(resolve => { mapReady = resolve; }));
   let complete!: (value: ReturnType<typeof response>) => void;
   let streamThought!: (text: string) => void;
   streamUnderstand = vi.fn<BackendSession["assistantChatStream"]>((_message, _history, _signal, onDelta) => {
@@ -188,15 +194,18 @@ it("户外选址阶段的「你好」显示本轮模型自述，切换活动后�
     return new Promise<ReturnType<typeof response>>(resolve => { complete = resolve; });
   });
   let pending!: Promise<boolean>;
-  await act(async () => { pending = flow.handle("你好"); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("正在思考");
-  act(() => { streamThought("收到的是问候，"); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("收到的是问候，");
+  await act(async () => { pending = flow.handle("你在做"); });
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("核对活动范围和地图依据");
+  expect(streamUnderstand).not.toHaveBeenCalled();
+  await act(async () => { mapReady({ version: "map:unavailable", status: "unavailable", text: "地图不可用", featureIds: [], unknowns: [] }); });
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("将本轮输入和场地资料交给模型判断");
+  act(() => { streamThought("我在核对当前活动的分区用途，"); });
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("我在核对当前活动的分区用途，");
   expect(host.querySelector("details.ap-run-thoughts")?.getAttribute("aria-busy")).toBe("true");
-  act(() => { streamThought("我先回应，并等待具体需求。"); });
+  act(() => { streamThought("并等待你补充要求。"); });
   expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain(thought);
   await act(async () => {
-    complete(response("ask", {}, { reply: "你好，有什么可以帮你？", thought }));
+    complete(response("ask", {}, { reply: "我在核对分区用途。", thought }));
     await pending;
   });
   const record = host.querySelector("details.ap-run-thoughts");
@@ -209,6 +218,25 @@ it("户外选址阶段的「你好」显示本轮模型自述，切换活动后�
   scope = "project-b";
   mount();
   expect(host.querySelector("details.ap-run-thoughts")).toBeNull();
+});
+it("模型提出分区计划后，批准计划才生成预览，再确认才写入画布", async () => {
+  await confirmScope();
+  apply.mockClear();
+  understand.mockResolvedValueOnce(response("zones", {
+    zones: [{ name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "室外展览区" }],
+  }));
+  await act(async () => { await flow.handle("安排室外展览区"); });
+  const planCard = host.querySelector('[aria-label="待批准计划"]');
+  expect(planCard?.textContent).toContain("按活动用途和室内外依据生成分区预览");
+  expect(flow.proposal).toBeNull();
+  expect(apply).not.toHaveBeenCalled();
+  const approve = [...planCard!.querySelectorAll("button")].find(button => button.textContent === "批准计划");
+  await act(async () => { approve!.click(); });
+  expect(flow.pendingPlan).toBeNull();
+  expect(flow.proposal?.kind, flow.notice).toBe("zones");
+  expect(apply).not.toHaveBeenCalled();
+  await action("confirm");
+  expect(plan.zones.map(zone => zone.name)).toEqual(["展览区"]);
 });
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();
@@ -230,7 +258,7 @@ it.each([true, false])("缺分区时先预览分区，按确认结果处理后�
     ],
   }));
   expect(flow.proposal).toMatchObject({ kind: "zones", afterConfirm: "main-routes" });
-  expect(host.querySelector(".ap-design-process")?.textContent).toContain("先按已知用途划分区域");
+  expect(host.textContent).toContain("先按已知用途划分区域");
   expect(host.textContent).toContain("确认分区并预览主通道");
   expect(plan.zones).toHaveLength(0);
   expect(roads).not.toHaveBeenCalled();
@@ -241,7 +269,7 @@ it.each([true, false])("缺分区时先预览分区，按确认结果处理后�
     expect(plan.zones.map(zone => zone.name)).toEqual(["展览区", "表演区"]);
     expect(roads).toHaveBeenCalledOnce();
     expect(flow.proposal?.kind, flow.notice).toBe("main-routes");
-    expect(host.querySelector(".ap-design-process")?.textContent).toContain("把真实道路与活动边界相交的位置作为入口候选");
+    expect(host.textContent).toContain("把真实道路与活动边界相交的位置作为入口候选");
     expect(apply).toHaveBeenCalledOnce();
     expect(plan.routes).toHaveLength(0);
     await action("confirm");
