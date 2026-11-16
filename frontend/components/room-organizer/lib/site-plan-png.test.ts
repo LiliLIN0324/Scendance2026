@@ -9,6 +9,7 @@ import {
   snapshotCaption,
 } from './site-plan-png';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import { buildPlanLegend } from './site-plan-legend';
 
 function samplePlan(): SitePlanData {
   return {
@@ -50,6 +51,46 @@ function samplePlan(): SitePlanData {
     measurements: [],
   } as unknown as SitePlanData;
 }
+
+/** 车辆夹具（2026-11-16 #122）：车停在边界外 (260,150)，快照必须把它框进来。 */
+function planWithVehicles(): SitePlanData {
+  const plan = samplePlan();
+  plan.vehicles = [
+    { id: 'aa000000-0000-4000-8000-000000000001', type: 'coach', count: 3, position: { x: 260, y: 150 }, notes: '' },
+  ];
+  return plan;
+}
+
+describe('png snapshot 车辆外接框（#122）', () => {
+  it('includes vehicle positions in the snapshot bounds', () => {
+    const bounds = planBoundsM(planWithVehicles());
+    expect(bounds.maxX).toBe(260);
+    expect(bounds.maxY).toBe(150);
+    // 左下角仍由场地红线决定（车辆只向右上撑大）。
+    expect(bounds.minX).toBe(0);
+    expect(bounds.minY).toBe(0);
+  });
+
+  it('keeps legacy bounds identical when there are no vehicles', () => {
+    const bounds = planBoundsM(samplePlan());
+    expect(bounds).toEqual({ minX: 0, minY: 0, maxX: 200, maxY: 120 });
+    expect(planBoundsM({ ...samplePlan(), vehicles: [] })).toEqual(bounds);
+  });
+
+  it('counts the vehicle legend entry in the legend band height', () => {
+    const legacyCount = legendEntryCount(samplePlan());
+    // 车辆只多 1 个图例条目（按车型聚合），不把 3 台拆成 3 行。
+    expect(legendEntryCount(planWithVehicles())).toBe(legacyCount + 1);
+  });
+
+  it('draws the vehicle legend chip from the same entry: 台数 + 待补模型', () => {
+    // composePlanPng 的图例循环直接消费 buildPlanLegend 的 label/count，这里锁住那条文本来源。
+    const entry = buildPlanLegend(planWithVehicles()).find(g => g.title === '车辆')!.entries[0]!;
+    expect(entry.label).toContain('待补模型');
+    expect(entry.count).toBe(3);
+    expect(`${entry.label} ×${entry.count}`).toContain('×3');
+  });
+});
 
 describe('png snapshot layout (H5-a)', () => {
   it('computes bounds over every entity kind', () => {

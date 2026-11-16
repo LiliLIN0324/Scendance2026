@@ -121,6 +121,7 @@ import {
   type LayerVisibility,
   type PlanViewport,
 } from '../lib/outdoor-plan-canvas';
+import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
 import {
   DEFAULT_SCOPE_MARGIN_M,
   expandRect,
@@ -690,6 +691,7 @@ const PLACED_KIND_COLORS: Record<PlanInventoryKind, string> = {
   route: PLANNING_LAYER_COLORS.route,
   node: PLANNING_LAYER_COLORS.access,
   worker: PLANNING_LAYER_COLORS.worker,
+  vehicle: PLANNING_ROUTE_KIND_COLORS.vehicle,
   measurement: PLANNING_LAYER_COLORS.measure,
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
@@ -714,6 +716,8 @@ const LAYER_OF_INVENTORY_KIND: Record<PlanInventoryKind, PlanLayerRow> = {
   route: 'route',
   node: 'access',
   worker: 'worker',
+  // 车辆实体挂在动线行下管理（车由路线承载，不另开图层行）。
+  vehicle: 'route',
   measurement: 'measure',
   annotation: 'annotate',
 };
@@ -943,6 +947,63 @@ function niceScaleMeters(metersPerPx: number, targetPx: number): { meters: numbe
  * 样式对齐 Google 式：细线两端竖须、柔和白色光晕（shadowBlur，不再粗白描边）、深字。
  * 与导出 PNG（site-plan-png 的 scaleBarMeters）同口径：比例尺按当前缩放级真实换算。
  */
+/**
+ * 2026-11-16 #118 方案 B：车辆实体只读标记。
+ * 规格来源于 `lib/vehicle-markers`（与 3D 的 `plan-vehicle-entities` 同源），这里只负责
+ * 米→像素与描边：缺模型用虚线框 + 「待补模型」文案，绝不假装有车模。
+ */
+function drawVehicleMarkers(
+  { ctx, viewport }: { ctx: CanvasRenderingContext2D; viewport: PlanViewport },
+  plan: Parameters<typeof vehicleMarkerSpecs>[0],
+): void {
+  const specs = vehicleMarkerSpecs(plan);
+  if (specs.length === 0) return;
+  ctx.save();
+  ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  for (const spec of specs) {
+    // plan 系：长沿朝向 (cos,sin)，宽沿法向 (-sin,cos)。四角直接投到屏幕，矩形随缩放走。
+    const cos = Math.cos(spec.headingRad);
+    const sin = Math.sin(spec.headingRad);
+    const halfLength = spec.lengthM / 2;
+    const halfWidth = spec.widthM / 2;
+    const corners = [
+      [halfLength, halfWidth],
+      [halfLength, -halfWidth],
+      [-halfLength, -halfWidth],
+      [-halfLength, halfWidth],
+    ].map(([along, across]) => planPointToPixel({
+      x: spec.x + along! * cos - across! * sin,
+      y: spec.y + along! * sin + across! * cos,
+    }, viewport));
+    ctx.beginPath();
+    corners.forEach((corner, index) => {
+      if (index === 0) ctx.moveTo(corner.x, corner.y);
+      else ctx.lineTo(corner.x, corner.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = hexWithAlpha(spec.color, 0.18);
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = spec.color;
+    if (spec.modelMissing) ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (spec.label) {
+      const textWidth = ctx.measureText(spec.label).width;
+      const topY = Math.min(...corners.map((corner) => corner.y));
+      const textX = (corners[0]!.x + corners[3]!.x) / 2 - textWidth / 2;
+      const textY = topY - 10;
+      // 白底托一下：压在正射底图/航拍上也读得出来。
+      ctx.fillStyle = 'rgba(255,255,255,0.86)';
+      ctx.fillRect(textX - 4, textY - 8, textWidth + 8, 16);
+      ctx.fillStyle = PLANNING_SURFACE.panelText;
+      ctx.fillText(spec.label, textX, textY);
+    }
+  }
+  ctx.restore();
+}
+
 function drawScaleAttribution(ctx: CanvasRenderingContext2D, viewport: PlanViewport, cssW: number, cssH: number, source: CanvasBasemapSource | null) {
   const mPerPx = planMetersPerPixel(viewport);
   if (!Number.isFinite(mPerPx) || mPerPx <= 0) return;
@@ -1020,6 +1081,7 @@ const INVENTORY_KIND_ICONS: Record<PlanInventoryKind, PlanningIconName> = {
   route: PLANNING_LAYER_ICONS.route,
   node: PLANNING_LAYER_ICONS.node,
   worker: PLANNING_LAYER_ICONS.worker,
+  vehicle: 'truck',
   measurement: PLANNING_LAYER_ICONS.measure,
   annotation: PLANNING_LAYER_ICONS.annotate,
 };
@@ -1029,6 +1091,7 @@ const INVENTORY_KIND_COLORS: Record<PlanInventoryKind, string> = {
   route: PLANNING_LAYER_COLORS.route,
   node: PLANNING_LAYER_COLORS.node,
   worker: PLANNING_LAYER_COLORS.worker,
+  vehicle: PLANNING_ROUTE_KIND_COLORS.vehicle,
   measurement: PLANNING_LAYER_COLORS.measure,
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
@@ -2783,6 +2846,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-11 统一视图：室内 3D 场景的落位（物料 + 实景扫描）投影层——业务层画完后叠上去。
     // 只读展示，不参与命中测试/交互。
     drawSceneObjectsLayer({ ctx: planCtx, viewport }, sceneObjects ?? []);
+    // 2026-11-16 #118 方案 B：车辆实体（只读标记，与 3D plan-vehicle-entities 同源规格）。
+    // 放在业务层之后、动线之前：车压住分区/设施底图，但不盖动线与节点手柄。
+    drawVehicleMarkers({ ctx: planCtx, viewport }, filterPlanByLevel(plan, activeLevelIdRef.current));
     if (isLayerVisible(vis, 'route')) {
       drawRouteLayer(
         { ctx: planCtx, viewport },

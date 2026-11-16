@@ -10,7 +10,7 @@
  * 模型落位成功后写入；人物走动后由场景层失效旧快照。缺位置的条目不参与距离筛选。
  */
 
-export type InteractableKind = 'facility' | 'scene-object' | 'npc' | 'crowd';
+export type InteractableKind = 'facility' | 'scene-object' | 'npc' | 'crowd' | 'seat';
 
 /** 一期交互键固定 E（旧室内坐姿 F 键随壳体退役，不复活）。 */
 export const INTERACT_ACTION_KEY = 'E' as const;
@@ -22,6 +22,15 @@ export interface InteractablePosition {
   x: number;
   y: number;
   z: number;
+}
+
+/** seat 条目携带的落座元数据（ENU 落点 + 坐面高 + 坐姿眼高），由场景层换算世界坐标。 */
+export interface SeatInteractInfo {
+  x: number;
+  y: number;
+  rotationDeg: number;
+  seatHeight: number;
+  eyeY: number;
 }
 
 /** 注册表条目：与 plan 数据对齐的稳定 id；元数据用于提示卡。 */
@@ -40,6 +49,8 @@ export interface InteractableEntry {
   enabled: boolean;
   /** 世界坐标快照；null / 缺省表示暂无可测距位置。 */
   position?: InteractablePosition | undefined;
+  /** kind === 'seat' 时填：落座点 / 坐面高 / 眼高。 */
+  seat?: SeatInteractInfo | undefined;
 }
 
 /** E 键触发上下文：回调只拿条目与必要的只读快照，不直接碰 three 场景结构。 */

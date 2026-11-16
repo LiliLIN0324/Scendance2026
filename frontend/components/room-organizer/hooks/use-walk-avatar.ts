@@ -4,10 +4,33 @@ import { buildPerson } from '../three/builders/builders-people';
 import { createWalkAvatar, disposeOwnedModel, ensureGlbAsset } from '../three/glb-assets';
 import type { FurnitureItem } from '../lib/types';
 
-type WalkFrame = { x: number; y: number; z: number; yaw: number; moving: boolean; thirdPerson: boolean; delta: number };
+type WalkFrame = { x: number; y: number; z: number; yaw: number; moving: boolean; thirdPerson: boolean; delta: number; seated?: boolean };
+
+type WalkActor = NonNullable<ReturnType<typeof createWalkAvatar>>;
+
+/**
+ * 坐姿头部相对高度：让角色按落座眼高对齐，而不是按站立身高往下扣 1.6 m。
+ * 坐姿 clip 自带根位移，各角色下陷量不同，所以每个模型量一次。
+ */
+function measureSitHeadY(avatar: WalkActor): number | null {
+  if (!avatar.sit) return null;
+  avatar.sit.reset().setEffectiveWeight(1).play();
+  avatar.mixer.setTime(0.6);
+  avatar.group.updateMatrixWorld(true);
+  let found: THREE.Object3D | null = null;
+  avatar.group.traverse(node => {
+    if (!found && /head/i.test(node.name)) found = node;
+  });
+  avatar.sit.stop();
+  if (!found) return null;
+  const world = new THREE.Vector3();
+  (found as THREE.Object3D).getWorldPosition(world);
+  const height = world.y - avatar.group.position.y;
+  return Number.isFinite(height) ? height : null;
+}
 
 export function useWalkAvatar(enabled: boolean, url: string, sceneRef: React.RefObject<THREE.Scene | null>, label = '角色') {
-  const actors = useRef<{ avatar: NonNullable<ReturnType<typeof createWalkAvatar>>; visitor: THREE.Group; spawned: boolean; moving: boolean } | null>(null);
+  const actors = useRef<{ avatar: WalkActor; visitor: THREE.Group; spawned: boolean; moving: boolean; seated: boolean; sitHeadY: number | null } | null>(null);
   const nearRef = useRef(false);
   const [near, setNear] = useState(false);
   const [greeted, setGreeted] = useState(false);
@@ -37,7 +60,7 @@ export function useWalkAvatar(enabled: boolean, url: string, sceneRef: React.Ref
       avatar.idle.play();
       avatar.group.visible = false;
       visitor.visible = false;
-      actors.current = { avatar, visitor, spawned: false, moving: false };
+      actors.current = { avatar, visitor, spawned: false, moving: false, seated: false, sitHeadY: null };
       scene.add(avatar.group, visitor);
     }).catch(reason => {
       if (cancelled) return;
@@ -64,8 +87,24 @@ export function useWalkAvatar(enabled: boolean, url: string, sceneRef: React.Ref
     if (!current || !scene) return;
     const { avatar, visitor } = current;
     const x = value.x - scene.position.x;
-    const y = value.y - scene.position.y - 1.6;
     const z = value.z - scene.position.z;
+
+    // 落座：切坐姿动作，并把角色按坐姿头部高度对齐到座位眼高（不再代固定 1.6 m）。
+    const seated = value.seated === true && !!avatar.sit;
+    if (seated !== current.seated) {
+      current.seated = seated;
+      if (seated) {
+        if (current.sitHeadY === null) current.sitHeadY = measureSitHeadY(avatar);
+        avatar.idle.fadeOut(0.25);
+        avatar.walk.fadeOut(0.25);
+        avatar.sit!.reset().fadeIn(0.25).play();
+      } else {
+        avatar.sit?.fadeOut(0.25);
+        avatar.idle.reset().fadeIn(0.25).play();
+      }
+    }
+    const headOffset = seated && current.sitHeadY !== null ? current.sitHeadY : 1.6;
+    const y = value.y - scene.position.y - headOffset;
     avatar.group.position.set(x, y, z);
     avatar.group.rotation.y = value.yaw;
     avatar.group.visible = value.thirdPerson;
@@ -75,7 +114,7 @@ export function useWalkAvatar(enabled: boolean, url: string, sceneRef: React.Ref
       visitor.visible = true;
     }
     visitor.rotation.y = Math.atan2(x - visitor.position.x, z - visitor.position.z);
-    if (current.moving !== value.moving) {
+    if (!seated && current.moving !== value.moving) {
       current.moving = value.moving;
       const next = value.moving ? avatar.walk : avatar.idle;
       const previous = value.moving ? avatar.idle : avatar.walk;

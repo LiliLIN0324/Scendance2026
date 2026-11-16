@@ -48,7 +48,7 @@ export const VEHICLE_TYPES: readonly VehicleType[] = [
     note: '办公迎宾、VIP 接送；短停、就近落客',
     kind: 'vehicle',
     carrier: 'vehicle',
-    modelSlugs: ['road-vehicle-fleet-saloon-ad831b1f'],
+    modelSlugs: ['car-park-and-road-vehicle-fleet-saloon-ad831b1f'],
   },
   {
     id: 'daily',
@@ -56,7 +56,7 @@ export const VEHICLE_TYPES: readonly VehicleType[] = [
     note: '大部分人流自驾抵达；停车时长最长，占用车位是主项',
     kind: 'vehicle',
     carrier: 'vehicle',
-    modelSlugs: ['road-vehicle-fleet-city-car-033e3215'],
+    modelSlugs: ['car-park-and-road-vehicle-fleet-city-car-033e3215'],
   },
   {
     id: 'taxi',
@@ -64,7 +64,7 @@ export const VEHICLE_TYPES: readonly VehicleType[] = [
     note: '临时落客；停靠短、周转快，最好与自驾车流分开',
     kind: 'vehicle',
     carrier: 'vehicle',
-    modelSlugs: ['road-vehicle-fleet-saloon-ad831b1f'],
+    modelSlugs: ['car-park-and-road-vehicle-fleet-saloon-ad831b1f'],
   },
   {
     id: 'bus',
@@ -104,7 +104,7 @@ export const VEHICLE_TYPES: readonly VehicleType[] = [
     note: '后勤：装卸货，必须有装卸位，倒车扫掠要留出来',
     kind: 'service',
     carrier: 'vehicle',
-    modelSlugs: ['road-vehicle-fleet-box-truck-4574c765'],
+    modelSlugs: ['car-park-and-road-vehicle-fleet-box-truck-4574c765'],
   },
 ] as const;
 

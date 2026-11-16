@@ -17,6 +17,8 @@ const LEVEL_2 = '22222222-2222-4222-8222-222222222222';
 const ZONE_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ZONE_2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const FACILITY_1 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const VEHICLE_1 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const VEHICLE_2 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
 function basePlan(): SitePlanData {
   return {
@@ -72,6 +74,33 @@ describe('filterPlanByLevel', () => {
     expect(viewA.boundary).toHaveLength(3);
     const viewB = filterPlanByLevel(plan, LEVEL_2);
     expect(viewB.zones.map(z => z.id)).toEqual([ZONE_2]);
+  });
+
+  it('filters vehicles by level: 有 levelId 归该层，无 levelId 归第一层', () => {
+    const plan: SitePlanData = {
+      ...basePlan(),
+      levels: [{ id: LEVEL_1, name: '方案 A' }, { id: LEVEL_2, name: '方案 B' }],
+      vehicles: [
+        { id: VEHICLE_1, type: 'coach', count: 2, position: { x: 3, y: 4 }, notes: '' },
+        { id: VEHICLE_2, type: 'daily', count: 1, position: { x: 30, y: 30 }, levelId: LEVEL_2, notes: '' },
+      ],
+    };
+    const viewA = filterPlanByLevel(plan, LEVEL_1);
+    expect(viewA.vehicles?.map(v => v.id)).toEqual([VEHICLE_1]);
+    const viewB = filterPlanByLevel(plan, LEVEL_2);
+    expect(viewB.vehicles?.map(v => v.id)).toEqual([VEHICLE_2]);
+    // 过滤是视图，不是新真源：原 plan 的车一个不少。
+    expect(plan.vehicles).toHaveLength(2);
+  });
+
+  it('旧 plan 没有 vehicles 字段时过滤行为不变（不凭空生车）', () => {
+    const plan = basePlan();
+    const view = filterPlanByLevel(plan, DEFAULT_PLAN_LEVEL_ID);
+    expect(view.vehicles ?? []).toHaveLength(0);
+    expect(view.zones.map(z => z.id)).toEqual([ZONE_1]);
+    expect(view.facilities.map(f => f.id)).toEqual([FACILITY_1]);
+    // 读取层不把字段写回原 plan。
+    expect('vehicles' in plan).toBe(false);
   });
 });
 
@@ -140,6 +169,23 @@ describe('deletePlanLevel', () => {
     if (!result.ok) return;
     expect(result.value.levels).toEqual([{ id: LEVEL_1, name: '方案 A' }]);
     expect(result.value.zones.map(z => z.id)).toEqual([ZONE_1]);
+    expect(sitePlanDataSchema.safeParse(result.value).success).toBe(true);
+  });
+
+  it('deleting a level removes that level’s vehicles too', () => {
+    const plan: SitePlanData = {
+      ...basePlan(),
+      levels: [{ id: LEVEL_1, name: '方案 A' }, { id: LEVEL_2, name: '方案 B' }],
+      vehicles: [
+        { id: VEHICLE_1, type: 'coach', count: 2, position: { x: 3, y: 4 }, notes: '' },
+        { id: VEHICLE_2, type: 'daily', count: 1, position: { x: 30, y: 30 }, levelId: LEVEL_2, notes: '' },
+      ],
+    };
+    const result = deletePlanLevel(plan, LEVEL_2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 无 levelId 的车归第一层，删第二层不该带走它。
+    expect(result.value.vehicles?.map(v => v.id)).toEqual([VEHICLE_1]);
     expect(sitePlanDataSchema.safeParse(result.value).success).toBe(true);
   });
 

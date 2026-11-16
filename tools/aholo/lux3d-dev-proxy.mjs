@@ -207,6 +207,30 @@ function httpsUrl(value, field) {
   return value;
 }
 
+/** 任务详情结构探针：只回字段名与类型，URL 一律打码，用于定位上游把产物放在哪个字段。 */
+function shapeOf(value, depth = 0) {
+  if (depth > 9) return '…';
+  if (Array.isArray(value)) return value.length ? [shapeOf(value[0], depth + 1)] : [];
+  if (isRecord(value)) {
+    const out = {};
+    for (const [name, item] of Object.entries(value)) out[name] = shapeOf(item, depth + 1);
+    return out;
+  }
+  if (typeof value === 'string') {
+    if (value.startsWith('http')) return '<url>';
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return { json: shapeOf(JSON.parse(trimmed), depth + 1) };
+      } catch {
+        // 不是 JSON，落到下面的普通字符串分支。
+      }
+    }
+    return value.slice(0, 40);
+  }
+  return value === null ? null : typeof value;
+}
+
 /** 动作重定向清单：1..10 条非空动作名（与上游预设动作枚举一致）。 */
 function animationList(value) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 10) {
@@ -951,7 +975,40 @@ export function createServer({
           const pano = detail.assets?.imagery?.panoUrl;
           if (safeHttps(pano)) result.panoUrl = pano;
         } else {
-          result.outputs = (Array.isArray(detail.outputs) ? detail.outputs : []).map(output => output?.content).filter(safeHttps);
+          // 生成类任务返回 {content} 对象，动作重定向的 content 是一段 JSON 字符串，
+          // 形如 {"actions":[{"animation_id":"…","animationGlbUrl":"…"}]}，两种都摊平。
+          const outputs = Array.isArray(detail.outputs) ? detail.outputs : [];
+          const urls = [];
+          const actions = [];
+          for (const output of outputs) {
+            const content = typeof output === 'string' ? output : output?.content;
+            if (typeof content !== 'string') {
+              urls.push(content);
+              continue;
+            }
+            let parsed = null;
+            try {
+              parsed = JSON.parse(content);
+            } catch {
+              // 不是 JSON，就当 URL 本身。
+            }
+            const list = Array.isArray(parsed?.actions) ? parsed.actions : [];
+            if (!list.length) {
+              urls.push(content);
+              continue;
+            }
+            for (const action of list) {
+              urls.push(action?.animationGlbUrl);
+              actions.push({
+                animationId: typeof action?.animation_id === 'string' ? action.animation_id : '',
+                status: typeof action?.status === 'string' ? action.status : '',
+                url: safeHttps(action?.animationGlbUrl) ? action.animationGlbUrl : '',
+              });
+            }
+          }
+          result.outputs = urls.filter(safeHttps);
+          if (actions.length) result.actions = actions;
+          if (url.searchParams.get('shape') === '1') result.shape = shapeOf(detail);
         }
       } else {
         throw new HttpError(404, '未知接口');

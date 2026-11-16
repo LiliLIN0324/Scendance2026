@@ -19,10 +19,12 @@ export interface DeckPage {
   lines: string[];
 }
 
-/** 生成演示稿全部页面：封面 → 总览 → 清单（分区/设施/动线/人员分组）。 */
+/** 生成演示稿全部页面：封面 → 总览 → 清单（分区/设施/动线/出入口与人员/车辆分组）。 */
 export function buildDeckPages(snapshot: SitePlanSnapshot, snapshotPngDataUrl?: string): DeckPage[] {
   const plan = snapshot.data;
   const stats = planOverviewStats(plan);
+  const vehicles = plan.vehicles ?? [];
+  const vehicleTotal = vehicles.reduce((sum, vehicle) => sum + vehicle.count, 0);
   const pages: DeckPage[] = [];
 
   pages.push({
@@ -44,6 +46,9 @@ export function buildDeckPages(snapshot: SitePlanSnapshot, snapshotPngDataUrl?: 
       `动线：${stats.routeCount} 条 · 全长 ${formatLengthM(stats.routeLengthTotalM)}`,
       `出入口：${plan.nodes.length} 个`,
       `人员：${stats.workerTotalCount} 人 / ${plan.workers.length} 点位`,
+      // 2026-11-16 #122：车辆独立一行（台数 / 点位数），不并进上面的人员口径；
+      // 没有车辆时整行不输出，旧快照的 PDF 逐行不变。
+      ...(vehicles.length > 0 ? [`车辆：${vehicleTotal} 台 / ${vehicles.length} 点位`] : []),
       `测量：${stats.measurementCount} 条`,
       `冲突/缺失：${stats.conflictCount} 项`,
     ],
@@ -55,6 +60,8 @@ export function buildDeckPages(snapshot: SitePlanSnapshot, snapshotPngDataUrl?: 
     { kind: '设施', rows: inventory.filter(r => r.kind === 'facility') },
     { kind: '动线', rows: inventory.filter(r => r.kind === 'route') },
     { kind: '出入口与人员', rows: inventory.filter(r => r.kind === 'node' || r.kind === 'worker') },
+    // 2026-11-16 #122：车辆单独一页（空组不输出，旧快照页码不变）。
+    { kind: '车辆', rows: inventory.filter(r => r.kind === 'vehicle') },
   ];
   for (const group of groups) {
     if (group.rows.length === 0) continue;

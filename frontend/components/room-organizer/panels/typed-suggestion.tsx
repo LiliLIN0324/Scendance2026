@@ -38,25 +38,28 @@ export const AGENT_INPUT_SUGGESTIONS: Record<ChatAgent, readonly string[]> = {
  * 空输入时框里那句引导句：逐字打出来，轮换几条；按 Tab 一次填整句。
  * 「布置」「生成」共用这一套，别各写一份打字逻辑。
  */
-export function useSuggestion(list: readonly string[]): { full: string; shown: string } {
+const EMPTY_SUGGESTIONS: readonly string[] = [];
+
+export function useSuggestion(list: readonly string[] | undefined): { full: string; shown: string } {
+  const safe = list ?? EMPTY_SUGGESTIONS;
   const [index, setIndex] = useState(0);
-  const [count, setCount] = useState(() => (prefersStill() ? list[0]!.length : 0));
-  const key = list.join('|');
-  useEffect(() => { setIndex(0); setCount(prefersStill() ? (list[0]?.length ?? 0) : 0); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [count, setCount] = useState(() => (prefersStill() ? safe[0]?.length ?? 0 : 0));
+  const key = safe.join('|');
+  useEffect(() => { setIndex(0); setCount(prefersStill() ? (safe[0]?.length ?? 0) : 0); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (prefersStill()) return;
-    const full = list[index] ?? list[0] ?? '';
+    const full = safe[index] ?? safe[0] ?? '';
     if (count < full.length) {
       const timer = window.setTimeout(() => setCount(value => value + 1), 72);
       return () => window.clearTimeout(timer);
     }
     const timer = window.setTimeout(() => {
-      setIndex(value => (value + 1) % list.length);
+      setIndex(value => (safe.length ? (value + 1) % safe.length : 0));
       setCount(0);
     }, 1400);
     return () => window.clearTimeout(timer);
-  }, [list, index, count]);
-  const full = list[index] ?? list[0] ?? '';
+  }, [safe, index, count]);
+  const full = safe[index] ?? safe[0] ?? '';
   return { full, shown: prefersStill() ? full : full.slice(0, count) };
 }
 

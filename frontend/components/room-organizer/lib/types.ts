@@ -124,8 +124,12 @@ export interface CategoryMeta {
   icon: string;
 }
 
-/** 人物可切换的动作（people.glb 的三个 clip；见 three/people-model.ts）。 */
-export type PersonAction = 'idle' | 'talk' | 'walk';
+/**
+ * 人物可切换的动作（clip 命名见 three/people-model.ts）。
+ * - idle / talk / walk / sit 为循环态；walk 由人流动线 follower 每帧覆盖。
+ * - wave / emote 为一次性动作预留位，素材与重定向链路到位后再接。
+ */
+export type PersonAction = 'idle' | 'talk' | 'walk' | 'sit' | 'wave' | 'emote';
 
 /**
  * 人物沿米制平面行走的路线（PEOPLE-04）。路点是场景坐标（SW 原点，米），

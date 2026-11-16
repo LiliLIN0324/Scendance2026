@@ -1,25 +1,19 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { cloudPeopleUrl } from '../lib/cloud-assets';
 import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { normalizeGlbRoot } from '../lib/glb-normalize';
 import { isGlbUrl } from '../lib/glb-url';
+import { createGlbLoader } from './glb-loader';
 import { personIsAnimated, registerPersonAnim } from './people-anim';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
-// 蒙皮人物 GLB 31–48MB，公网并发下载 + 解码易压过 30s（真机复现 AbortError）；
-// 超时窗口放宽到 90s，给大对象下载与 GLTFLoader 解析留足余量，物件小模型不受影响。
-const TIMEOUT_MS = 90_000;
+// 蒙皮人物 GLB 两档 LOD 压缩后 1.1–3.6 MB（2026-11-16 上线），45s 已是实测耗时的十余倍；
+// 余量留给弱网首帧与 GLTFLoader 解析，物件小模型不受影响。
+const TIMEOUT_MS = 45_000;
 
-/**
- * 压缩资产（EXT_meshopt_compression）必须挂解码器，否则 GLTFLoader 直接抛错。
- * 人物 GLB 经 gltf-transform 压到 2–3 MB 后就是这个形态；未压缩资产挂了解码器也不受影响。
- */
-function createGlbLoader(): GLTFLoader {
-  return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-}
+// 压缩资产（EXT_meshopt_compression）必须挂解码器，否则 GLTFLoader 直接抛错。
+// 工厂统一放在 ./glb-loader：资产缓存、打包内人物、交付场景共用同一份，避免有一处漏挂。
 export type GlbAssetState = Readonly<{
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
@@ -401,6 +395,7 @@ export function createCachedGlbModel(item: FurnitureItem, autoplay = true): THRE
           walk,
           idle: clips.find(clip => clip.name === 'Idle_Loop') ?? null,
           talk: clips.find(clip => clip.name === 'Idle_Talking_Loop') ?? null,
+          sit: clips.find(clip => clip.name === 'Sit_Idle_Loop') ?? null,
         },
         action: item.personAction ?? 'idle',
         paused: item.personPaused === true,
@@ -454,11 +449,19 @@ export function createWalkAvatar(item: FurnitureItem) {
   const clips = key ? cache.get(key)?.animations : undefined;
   const idle = clips?.find(clip => clip.name === 'Idle_Loop');
   const walk = clips?.find(clip => clip.name === 'Walk_Formal_Loop') ?? clips?.find(clip => clip.name === 'Walk_Loop');
+  const sit = clips?.find(clip => clip.name === 'Sit_Idle_Loop') ?? null;
   if (!idle || !walk) return null;
   const group = createCachedGlbModel(item, false);
   if (!group) return null;
   const mixer = new THREE.AnimationMixer(group);
-  return { group, mixer, idle: mixer.clipAction(idle), walk: mixer.clipAction(inPlaceWalkClip(walk)) };
+  return {
+    group,
+    mixer,
+    idle: mixer.clipAction(idle),
+    // 上游 eb6920b7 前后的根位移修正：走路 clip 先去前进位移，位置只由路线/WASD 决定。
+    walk: mixer.clipAction(inPlaceWalkClip(walk)),
+    sit: sit ? mixer.clipAction(sit) : null,
+  };
 }
 
 export interface GlbCatalogInput {

@@ -7,6 +7,7 @@
  *   ——不虚构坐标是红线）。
  * - ENU 米 → 经纬度：沿用 site-plan-csv 同一套局部近似投影（锚点每度米数）。
  * - 属性表：kind/名称/类型/分区/备注/问题标记——GIS 里可直接筛选着色。
+ *   2026-11-16 #122：车辆实体输出 kind=vehicle 的 Point（台数进 count、模型有无进 model_slug）。
  */
 
 import {
@@ -15,6 +16,8 @@ import {
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 import { buildPlanInventory } from './site-plan-inventory';
+import { planVehicleDisplayLabel } from './site-plan-legend';
+import { vehicleModelSlugOf } from './vehicle-entities';
 
 interface GeoFeatureBase {
   type: 'Feature';
@@ -145,6 +148,27 @@ export function buildPlanGeoJson(plan: SitePlanData): GeoJsonExport {
         ...baseProperties({ kind: 'worker', name: worker.role, typeLabel: row?.typeLabel ?? '人员', zoneName, hasIssue: row?.hasIssue ?? false }),
         count: worker.count,
         notes: worker.notes,
+      },
+    });
+  }
+
+  // 车辆：Point（2026-11-16 #122）。一个车辆实体一个 Point，`count` = 台数；
+  // 缺 modelSlug 时 label 带「待补模型」、model_slug=null——不造近似车型/尺寸。
+  for (const vehicle of plan.vehicles ?? []) {
+    const row = inventory.find(r => r.id === vehicle.id);
+    const zoneName = vehicle.zoneId ? zoneById.get(vehicle.zoneId)?.name ?? null : null;
+    const modelSlug = vehicleModelSlugOf(vehicle);
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: enuToLngLat(vehicle.position, anchor.lng, anchor.lat) },
+      properties: {
+        ...baseProperties({ kind: 'vehicle', name: row?.name ?? planVehicleDisplayLabel(vehicle), typeLabel: row?.typeLabel ?? '车辆', zoneName, hasIssue: false }),
+        vehicle_type: vehicle.type,
+        label: planVehicleDisplayLabel(vehicle),
+        count: vehicle.count,
+        model_slug: modelSlug,
+        model_pending: modelSlug === null,
+        notes: vehicle.notes,
       },
     });
   }

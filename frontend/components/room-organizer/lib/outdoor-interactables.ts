@@ -12,6 +12,21 @@ import {
   makeInteractableEntry,
   type InteractableEntry,
 } from './interact-registry';
+import {
+  seatFacilityTargets,
+  type SeatFacilityInput,
+} from './seat-placement';
+
+/**
+ * 提示卡文案：座位条目已落座时切「起身 · <名称>」，其余沿用条目原 label。
+ * `seated` 由场景层按当前落座条目 id 判定传入。
+ */
+export function interactHintLabel(entry: InteractableEntry, seated: boolean): string {
+  if (entry.kind === 'seat' && seated) {
+    return `起身 · ${entry.label.replace(/^坐下 · /, '')}`;
+  }
+  return entry.label;
+}
 
 /** 岗位点位最小结构（与 `PlanWorker` 对齐的子集，避免前端直连 supabase shared 类型）。 */
 export interface InteractableWorkerInput {
@@ -45,6 +60,34 @@ export function facilityInteractables(
       kind: 'facility',
       label: facility.name,
       position: { x: facility.position.x, y: groundY, z: -facility.position.y },
+    }),
+  );
+}
+
+/** 座位类设施最小结构（与 SeatFacilityInput 对齐的户外设施子集）。 */
+export interface SeatInteractableInput extends SeatFacilityInput {}
+
+/**
+ * 把座位类设施派生为 seat 可交互条目。
+ * 仅可坐物件（椅 / 沙发 / 凳）成条；探测位置取地面，落座眼高 / 坐面高放 seat 元数据。
+ */
+export function seatInteractables(
+  facilities: readonly SeatInteractableInput[],
+  groundY: number = INTERACTABLE_GROUND_Y,
+): InteractableEntry[] {
+  return seatFacilityTargets(facilities, groundY).map((target) =>
+    makeInteractableEntry({
+      id: target.id,
+      kind: 'seat',
+      label: `坐下 · ${target.name}`,
+      position: { x: target.x, y: groundY, z: -target.y },
+      seat: {
+        x: target.x,
+        y: target.y,
+        rotationDeg: target.rotationDeg,
+        seatHeight: target.seatHeight,
+        eyeY: target.eyeY,
+      },
     }),
   );
 }

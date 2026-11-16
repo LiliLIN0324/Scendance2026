@@ -13,6 +13,25 @@ it('空规划允许真实选址；已有入口/物料等不随新地名悄悄搬
   expect(canReanchorOutdoorPlan(plan, plan.anchor!)).toBe(true);
   expect(JSON.stringify(plan)).toBe(before);
 });
+it('只有车（plan.vehicles）的平面也算有内容：不许整体改锤点把车搬走', () => {
+  const plan = createStarterOutdoorPlan();
+  plan.vehicles = [
+    { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', type: 'coach', count: 3, position: { x: 6, y: 8 }, notes: '' },
+  ];
+  const moved = { ...plan.anchor!, lng: plan.anchor!.lng + 0.1 };
+  const before = JSON.stringify(plan);
+  expect(canReanchorOutdoorPlan(plan, moved)).toBe(false);
+  // 锤点没变时仍允许重复提交同一锤点（幂等），且判定纯读不改 plan。
+  expect(canReanchorOutdoorPlan(plan, plan.anchor!)).toBe(true);
+  expect(JSON.stringify(plan)).toBe(before);
+});
+
+it('旧 plan 不带 vehicles 字段不虚构车：空规划仍可换锤点', () => {
+  const plan = createStarterOutdoorPlan();
+  delete (plan as { vehicles?: unknown }).vehicles;
+  expect(canReanchorOutdoorPlan(plan, { ...plan.anchor!, lng: plan.anchor!.lng + 0.1 })).toBe(true);
+});
+
 it('真实面写米制坐标，场景西北原点与缩放可反映射到同一地理场地', () => {
   const anchor = { lng: 120.163, lat: 30.25, crs: 'gcj-02' as const, source: 'lookup' as const };
   const footprint = [{ lng: 120.163, lat: 30.25 }, { lng: 120.165, lat: 30.25 }, { lng: 120.165, lat: 30.251 }, { lng: 120.163, lat: 30.251 }];

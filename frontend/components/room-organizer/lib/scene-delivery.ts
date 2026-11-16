@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
 import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { createFurnitureModel } from '../three/furniture-builders';
+import { createGlbLoader } from '../three/glb-loader';
 import { disposeOwnedModel, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
 import { buildRoom } from '../three/room-builder';
 import { buildStructureShell } from '../three/structure-builder';
@@ -434,7 +434,7 @@ export async function exportDeliveryGlb(layout: RoomLayout, controller?: Backend
     });
     const output = await new GLTFExporter().parseAsync(scene,{binary:true,onlyVisible:false});
     if (!(output instanceof ArrayBuffer)) throw new Error('导出器未返回 GLB 文件。');
-    loaded = (await new GLTFLoader().parseAsync(output,'')).scene;
+    loaded = (await createGlbLoader().parseAsync(output,'')).scene;
     return {buffer:output,objectCount:verifyChecks(before,geometryChecks(loaded,pixelId))};
   } finally { disposeOwnedModel(scene); if(loaded)disposeOwnedModel(loaded); }
 }

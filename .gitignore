@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+.r2.env
+!.r2.env.example
 __pycache__/
 node_modules/
 *.log

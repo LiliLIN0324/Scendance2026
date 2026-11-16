@@ -110,11 +110,13 @@ const DEFAULT_WORKER_COLOR = '#5e7fa6';
 
 /**
  * 散布偏移：黄金角螺旋，保证第 i 个人不会叠在同一点上。
- * 半径随序号缓增，点位附近人挤一点、外圈散一点。
+ * 首人居中对齐岗位落点圆盘；其余人小半径簇拥在圆盘范围内，
+ * 半径随序号缓增（多人时外圈才逐步散开）。
  */
 export function crowdSpreadOffset(index: number): { x: number; y: number } {
+  if (index <= 0) return { x: 0, y: 0 };
   const angle = index * 2.399963229728653;
-  const radius = 0.45 + 0.26 * Math.sqrt(index);
+  const radius = 0.26 + 0.12 * Math.sqrt(index - 1);
   return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
 }
 

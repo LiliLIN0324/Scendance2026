@@ -12,6 +12,14 @@ export const PEOPLE_CLIPS = {
   idle: 'Idle_Loop',
   talk: 'Idle_Talking_Loop',
   walk: 'Walk_Loop',
+  // 坐姿循环片段（素材/重定向到位后随 people.glb 打包进来；缺省时注册表回退 idle）。
+  sit: 'Sit_Idle_Loop',
+} as const;
+
+/** 一次性过渡片段命名预留：坐下 / 起身（批次 C 素材链路接入后消费）。 */
+export const PEOPLE_TRANSITION_CLIPS = {
+  sitDown: 'Stand_To_Sit',
+  standUp: 'Sit_To_Stand',
 } as const;
 
 export interface PeopleModel {
@@ -47,14 +55,14 @@ export function loadPeopleModel(THREE: ThreeModule): Promise<PeopleModel | null>
   if (!pending) {
     pending = (async () => {
       try {
-        const [{ GLTFLoader }, SkeletonUtils] = await Promise.all([
-          import('three/examples/jsm/loaders/GLTFLoader.js'),
+        const [{ createGlbLoader }, SkeletonUtils] = await Promise.all([
+          import('./glb-loader'),
           import('three/examples/jsm/utils/SkeletonUtils.js'),
         ]);
         // webpack emits the file with a content hash and applies the Pages
         // assetPrefix, so this URL is right in dev and on GitHub Pages.
         const url = new URL('../assets/people.glb', import.meta.url).href;
-        const gltf = await new GLTFLoader().loadAsync(url);
+        const gltf = await createGlbLoader().loadAsync(url);
         model = preparePeopleModel(THREE, gltf.scene, gltf.animations, SkeletonUtils.clone);
         return model;
       } catch (error) {

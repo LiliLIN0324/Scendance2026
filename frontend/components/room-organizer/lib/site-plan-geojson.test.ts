@@ -32,6 +32,45 @@ function samplePlan(): SitePlanData {
   } as unknown as SitePlanData;
 }
 
+/** 车辆夹具（2026-11-16 #122）：一台待补模型的大巴 + 一台有模型的商务车。 */
+function planWithVehicles(): SitePlanData {
+  const plan = samplePlan();
+  plan.vehicles = [
+    { id: 'aa000000-0000-4000-8000-000000000001', type: 'coach', count: 3, position: { x: 20, y: 100 }, notes: '大巴停车位' },
+    { id: 'aa000000-0000-4000-8000-000000000002', type: 'business', count: 2, position: { x: 120, y: 100 }, modelSlug: 'car-park-and-road-vehicle-fleet-saloon-ad831b1f', notes: '' },
+  ];
+  return plan;
+}
+
+describe('geojson export 车辆 Point（#122）', () => {
+  it('emits one Point per vehicle entity with type/label/count/model_slug', () => {
+    const features = buildPlanGeoJson(planWithVehicles()).features.filter(f => f.properties.kind === 'vehicle');
+    expect(features).toHaveLength(2);
+    expect(features[0]!.geometry.type).toBe('Point');
+    expect(features[0]!.properties.type).toBe('车辆');
+    expect(features[0]!.properties.label).toBe('服务大巴车（待补模型）');
+    expect(features[0]!.properties.vehicle_type).toBe('coach');
+    expect(features[0]!.properties.count).toBe(3);
+    expect(features[0]!.properties.model_slug).toBeNull();
+    expect(features[0]!.properties.model_pending).toBe(true);
+    expect(features[0]!.properties.notes).toBe('大巴停车位');
+    expect(features[1]!.properties.label).toBe('商务车');
+    expect(features[1]!.properties.count).toBe(2);
+    expect(features[1]!.properties.model_slug).toBe('car-park-and-road-vehicle-fleet-saloon-ad831b1f');
+    expect(features[1]!.properties.model_pending).toBe(false);
+    // ENU (20,100) → 锚点东侧 20 m、北侧 100 m。
+    const [lng, lat] = features[0]!.geometry.coordinates as [number, number];
+    expect(lng).toBeGreaterThan(120.1443);
+    expect(lat).toBeCloseTo(30.2459 + 100 / 111132.92, 5);
+  });
+
+  it('leaves legacy plans without vehicles byte-identical', () => {
+    const geo = buildPlanGeoJson(samplePlan());
+    expect(geo.features.map(f => f.properties.kind)).toEqual(['boundary', 'zone', 'facility', 'route', 'node', 'worker']);
+    expect(buildPlanGeoJsonText({ ...samplePlan(), vehicles: [] })).toBe(buildPlanGeoJsonText(samplePlan()));
+  });
+});
+
 describe('geojson export (H5-c)', () => {
   it('exports a FeatureCollection with every entity kind', () => {
     const geo = buildPlanGeoJson(samplePlan());
