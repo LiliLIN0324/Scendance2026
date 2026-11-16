@@ -399,14 +399,27 @@ export function OutdoorWorkflowCard({
           <div className="ap-task-error" role="alert">
             <TriangleAlert size={14} aria-hidden="true" />
             <p>{flow.notice}</p>
-            <button
-              type="button"
-              className="ap-task-retry"
-              disabled={flow.busy}
-              onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
-            >
-              重试
-            </button>
+            {/* 2026-11-17 用户拍「都做」：缺前置条件时「重试」只是把同一个动作原样重放，点完还是同一句话
+                （正式站实测就是这样反复撞同一堵墙）。这时换成卡上写明、真能改变状态的那个动作。 */}
+            {flow.noticeFix ? (
+              <button
+                type="button"
+                className="ap-task-retry"
+                disabled={flow.busy}
+                onClick={() => void flow.applyNoticeFix()}
+              >
+                {flow.noticeFix.label}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="ap-task-retry"
+                disabled={flow.busy}
+                onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+              >
+                重试
+              </button>
+            )}
           </div>
         )
       ) : flow.proposal ? null : (

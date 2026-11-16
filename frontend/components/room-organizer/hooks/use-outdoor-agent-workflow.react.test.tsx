@@ -880,6 +880,172 @@ it("物料数量自然改口是原设施增减，不重复铺一版", async () =
   expect(plan.facilities).toHaveLength(2);
   expect(plan.facilities[0]!.id).toBe(first);
 });
+// 2026-11-17 正式站卡点：用户没说过人数（很常见——先布场、人数活动定了才知道），
+// 点「预览按用途复用我的物料」拿到的是一张红卡「预计同时在场多少人？」+ 重试；
+// 而重试只是原样重跑 objects，人数不变就永远撞同一堵墙，任务卡标题也被永久改成物件阶段。
+// 规划层（validateWorkflowDemand）本来就允许没有人数，这个 throw 是唯一拦住的地方。
+it("人数还没定也能排物料：不拦成红卡、阶段照样前进，并如实说明没做容量粗筛", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        {
+          name: "展览区",
+          purpose: "exhibition",
+          environment: "outdoor",
+          evidence: "展览区",
+        },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  plan = {
+    ...plan,
+    nodes: [
+      {
+        id: crypto.randomUUID(),
+        name: "已核对活动双向主出入口",
+        kind: "both",
+        verification: "user-confirmed",
+        position: { x: 5, y: 5 },
+        notes: "",
+      },
+    ],
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian",
+        name: "已核对人行主线",
+        points: [
+          { x: 5, y: 5 },
+          { x: 5, y: 65 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+  bridge.readLibrary = vi.fn(async () => [
+    {
+      id: "my-display",
+      name: "展板",
+      source: "personal" as const,
+      width: 2,
+      depth: 1,
+      height: 2,
+      modelSlug: "generated:library-my-display",
+      available: true,
+    },
+  ]);
+  // 全程没人说过人数：不编、也不拿物件数量去凑。
+  expect(flow.state.brief.guests).toBeUndefined();
+  await action("objects");
+  expect(flow.notice).not.toContain("预计同时在场多少人");
+  expect(flow.noticeKind).not.toBe("error");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.warnings.join()).toContain("人数还没定");
+  expect(flow.proposal?.warnings.join()).not.toContain("仅按2㎡/人");
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(1);
+});
+it("缺主入口时失败不把任务卡改名成物件阶段", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        {
+          name: "展览区",
+          purpose: "exhibition",
+          environment: "outdoor",
+          evidence: "展览区",
+        },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  // 未核对主入口时，分区确认后下一站就是主通道阶段。
+  expect(flow.state.stage).toBe("main-routes");
+  await action("objects");
+  expect(flow.notice).toContain("请先核对主入口和主要通道");
+  // 阶段落盘挪到前置校验之后：失败一次不该把标题永久改成「按用途复用我的物料」。
+  expect(flow.state.stage).toBe("main-routes");
+});
+// 2026-11-17 用户拍「都做」之一：红卡上的「重试」= 原样重放当前阶段动作，缺前置条件时点了还是同一句话。
+// 这类拦阻改成给一个真能改变状态的动作。
+it("缺前置条件时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区" },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  await action("objects");
+  expect(flow.notice).toContain("请先核对主入口和主要通道");
+  expect(flow.noticeFix).toEqual({ action: "main-routes", label: "去核对主要入口与通道" });
+  const labels = [...host.querySelectorAll("button")].map(button => button.textContent?.trim());
+  expect(labels).toContain("去核对主要入口与通道");
+  // 不再同时给一个只会重放 objects 的「重试」。
+  expect(labels).not.toContain("重试");
+  const fix = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "去核对主要入口与通道");
+  await act(async () => { (fix as HTMLButtonElement).click(); });
+  // 真的去跑了主通道：本机拉不到路网，会落到一个明确的下一步，而不是同一句重复提示。
+  expect(flow.notice).not.toContain("请先核对主入口和主要通道");
+  expect(flow.notice).toContain("未取得可核对路网");
+});
+// 2026-11-17 用户拍「都做」之二：答「第一个方案」后模型又把同一句追问端回来，
+// 旧行为就是「我明明选了，却什么都没发生」。现在本地按原请求接着走。
+const SCREENSHOT_QUESTION =
+  "重新分区会覆盖现有 8 个户外分区，想先和你确认一下：你是想（1）保留全部功能但压缩成 3-4 个复合区，还是（2）完全按一套新分区清单来重排？如果是新清单，请把分区名、用途和环境（室内/室外）逐条列出；现有分区我会原样保留直到你确认。";
+it("答「第一个方案」后模型再反问同一句，本地按原请求接着走，不再重复追问", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区" },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  // 模型对这一轮仍然只反问（就是截图那一屏的形态）。
+  understand.mockResolvedValueOnce(response("ask", {}, { reply: SCREENSHOT_QUESTION }));
+  await act(async () => {
+    await flow.handle("第一个方案", {
+      request: "我希望你把我的分区重新做一遍",
+      question: SCREENSHOT_QUESTION,
+    });
+  });
+  expect(flow.proposal?.kind, flow.notice).toBe("zones");
+  expect(flow.state.stage).toBe("zones");
+  // 卡上能看见这一版是按哪一项走的（提示条留给「预览已就绪」，这句进设计过程）。
+  expect(flow.designSteps.join()).toContain("按你选的「保留全部功能但压缩成 3-4 个复合区」继续原请求");
+  // 仍然是预览，没写画布。
+  expect(plan.zones).toHaveLength(1);
+});
+it("选项里夹带别的要求时不本地强制推进，仍走追问", async () => {
+  await confirmScope();
+  understand.mockResolvedValueOnce(response("ask", {}, { reply: "你想怎么调整？" }));
+  await act(async () => {
+    await flow.handle("第一个方案，但保留舞台区", {
+      request: "我希望你把我的分区重新做一遍",
+      question: SCREENSHOT_QUESTION,
+    });
+  });
+  expect(flow.proposal).toBeNull();
+  expect(flow.notice).toContain("补充对话里的信息后可以继续");
+});
 it("模型不可用/格式错误明确阻断，不用关键词假装理解或落固定模板", async () => {
   understand.mockResolvedValueOnce({ status: "disabled" });
   await act(async () => {
