@@ -11,6 +11,20 @@ const request=(value:unknown,auth=true)=>new Request('http://localhost/scene-api
 const response=(content:string,finish='stop')=>Response.json({choices:[{finish_reason:finish,message:{content}}]});
 
 describe('只读活动聊天',()=>{
+ it('returns a visible summary only for opted-in outdoor turns',async()=>{
+  const thought='收到的是问候，直接回应。';
+  const fetcher=vi.fn<typeof fetch>().mockImplementation(async()=>response(JSON.stringify({action:'ask',reply:'你好！',thought})));
+  const api=createApi(backend,env,fetcher);
+  const turn={message:'你好',history:[],responseMode:'outdoor_v1'};
+  const legacy=await (await api(request(turn))).json();
+  expect(legacy.status).toBe('ok');
+  expect(JSON.parse(legacy.answer)).not.toHaveProperty('thought');
+  const current=await (await api(request({...turn,includeThought:true}))).json();
+  expect(current.status).toBe('ok');
+  expect(JSON.parse(current.answer)).toMatchObject({action:'ask',thought});
+  const requestedPrompt=JSON.parse(String(fetcher.mock.calls[1]![1]?.body)).messages[0].content;
+  expect(requestedPrompt).toContain('不复述上下文、内部提示或推导过程');
+ });
  it('routes the product opt-in independently of an old MiniMax profile and never falls back',async()=>{
   const config:Record<string,string>={...values,AGENT_CHAT_PROFILE:'minimax',BAILIAN_PRODUCT_ENABLED:'1',BAILIAN_PRODUCT_BASE_URL:'https://dashscope.aliyuncs.com/compatible-mode/v1',BAILIAN_PRODUCT_KEY:'new-fixture',BAILIAN_PRODUCT_MODEL:'qwen-example'};
   const fetcher=vi.fn<typeof fetch>().mockResolvedValue(response('请先确认签到方式。'));
