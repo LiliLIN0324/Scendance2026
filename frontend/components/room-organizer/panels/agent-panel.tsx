@@ -135,7 +135,7 @@ import { stageMaterialGenerate } from '../lib/material-generate';
 import { isCompositeDesignBrief, looksLikeDesignInstruction, PLACE_FIRST_BOUNCE, placeStillPending } from '../lib/place-first';
 import { clearPendingBrief, readPendingBrief, shouldResumeBrief, writePendingBrief } from '../lib/pending-brief';
 import { describeModelFailure } from '../lib/turn-failure-diag';
-import { taskFromBrief } from '../lib/outdoor-task-brief-bridge';
+import { absorbLayeredInstruction, layeredBounceText } from '../lib/outdoor-layered-task';
 import { BingoAuditCard } from './bingo-audit-card';
 import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushAgentSteerNote, pushLocalLayoutStep, removeAgentSteerNote, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { subscribeComposerPrefill } from './composer-prefill-bus';
@@ -3085,9 +3085,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(!isCompositeDesignBrief(trimmed, matchVenueCommand(trimmed))){
         // 退回不是终点：把"还差什么"和"下一步就一件事"直接说在气泡里，
         // 下一步由待办模型给出（选地点/圈范围/登录），不在这里另写一套判断。
-        const bounced = taskFromBrief({ text: trimmed, at: Date.now(), stage: outdoorWorkflow.state.stage });
+        const layered = absorbLayeredInstruction({ text: trimmed, stage: outdoorWorkflow.state.stage });
         say({role:'user',text:trimmed});
-        say({role:'agent',text:`${PLACE_FIRST_BOUNCE} 下一步：${bounced.next.label}。`});
+        say({role:'agent',text: layered ? layeredBounceText(layered, PLACE_FIRST_BOUNCE) : `${PLACE_FIRST_BOUNCE} 下一步：在地图上选地点。`});
         return;
       }
     }
