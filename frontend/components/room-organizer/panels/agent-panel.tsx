@@ -137,6 +137,7 @@ import { clearPendingBrief, readPendingBrief, shouldResumeBrief, writePendingBri
 import { describeModelFailure } from '../lib/turn-failure-diag';
 import { absorbLayeredInstruction, layeredBounceText } from '../lib/outdoor-layered-task';
 import { loginBlockedPlaceholder } from '../lib/outdoor-login-copy';
+import { ApplyOnce, applyTicketKey } from '../lib/outdoor-apply-once';
 import { BingoAuditCard } from './bingo-audit-card';
 import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushAgentSteerNote, pushLocalLayoutStep, removeAgentSteerNote, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { subscribeComposerPrefill } from './composer-prefill-bus';
@@ -746,6 +747,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const outdoorKindRef = useRef<OutdoorTaskKind | null>(null);
   const routeTicketRef = useRef<{ epoch: number; proposal: RouteProposal } | null>(null);
   const zoneTicketRef = useRef<{ epoch: number; proposal: ZoneEventProposal } | null>(null);
+  // 同一版预览只允许落一次：双击「应用」或浏览器重放同一击时，第二次直接 return。
+  const zoneApplyOnceRef = useRef(new ApplyOnce());
   const outdoorScopeRef = useRef(sessionScope);
   outdoorScopeRef.current = sessionScope;
   function beginOutdoorTask(kind: OutdoorTaskKind | null, keepVenue = false): number {
@@ -1855,6 +1858,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (zoneProposalBaseRef.current !== JSON.stringify(routeBridgeRef.current?.getPlan())) {
       setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'blocked', action: '场地/内容已变化，旧提案已失效，请重新生成', steps: [] }); return;
     }
+    // 双击/重放只写一次：同一个 epoch + 基准版本已经有票就不再写。
+    if (!zoneApplyOnceRef.current.take(applyTicketKey(String(ticket.epoch), zoneProposalBaseRef.current))) return;
     const ok = routeBridgeRef.current?.applyZoneProposal(proposal.zones, proposal.facilities, proposal.routes, proposal.nodes) ?? false;
     if (ok) { zoneTicketRef.current = null; zoneProposalBaseRef.current = null; setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'done', action: '已应用。选设施可切模型/生成/上传；选区域可编辑事件', steps: ['区域物料预览', '用户确认', '写入同一份户外规划'], focusFacilityId: (proposal.facilities.find(f => f.name.includes('舞台')) ?? proposal.facilities[0])?.id, prompts: ['补子出入口', '开始模拟'] }); }
     if (ok) say({ role: 'agent', decision: 'approved', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
