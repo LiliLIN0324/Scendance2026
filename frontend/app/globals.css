@@ -2111,14 +2111,15 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-tool-check { margin-left: 0; display: block; }
 
 /* ===== 2026-11-16 用户指令：Google Maps 桌面网页版控制列一比一复刻 ===== */
-/* 网页版口径：44px 小圆角方块、6px 间距、各自独立阴影、无外层白胶囊；
-   罗盘为圆形，其余为 8px 圆角方块，缩放为 44×88 连体条。 */
+/* 网页版口径：29px 小圆角方块、3px 间距、各自独立阴影、无外层白胶囊；
+   罗盘为圆形，其余为 4px 圆角方块，缩放为 29×58 连体条。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps {
-  /* 固定按 Google Maps 桌面口径复刻，不随窗口压缩缩回旧尺寸。 */
-  --oc-gm-control: 44px;
-  --oc-gm-compass: 64px;
-  --oc-gm-gap: 6px;
-  --oc-gm-icon: 18px;
+  /* 2026-11-16 实测 Google Maps DOM：普通控件 29×29、罗盘 44、间距 3、右边距 20。
+     不再把 2x 截图里的物理像素误当成 CSS 尺寸。 */
+  --oc-gm-control: 29px;
+  --oc-gm-compass: 44px;
+  --oc-gm-gap: 3px;
+  --oc-gm-icon: 15px;
   right: 20px; bottom: 20px; gap: var(--oc-gm-gap); padding: 0;
   width: var(--oc-gm-compass);
   background: transparent;
@@ -2130,13 +2131,13 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
   width: var(--oc-gm-control); height: var(--oc-gm-control);
   min-width: var(--oc-gm-control); min-height: var(--oc-gm-control); padding: 0;
-  border: 0; border-radius: 8px;
+  border: 0; border-radius: 4px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(60, 64, 67, .30), 0 1px 4px rgba(60, 64, 67, .15);
   color: #5f6368;
   display: inline-flex; align-items: center; justify-content: center;
 }
-/* 罗盘是圆钮，其余是圆角方块。罗盘单独放大到 64px：白底双色指针，
+/* 罗盘是圆钮，其余是圆角方块。罗盘单独放大到 44px：白底双色指针，
    交互对齐 MapLibre：拖动旋转、点击回正北。
    2026-11-16：两侧各叠一枚显式转向箭头，不再只靠指针左右落点分区。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap {
@@ -2183,9 +2184,9 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode { color: #5f6368; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text {
-  font-size: 13px; font-weight: 600; letter-spacing: .1px; line-height: 1;
+  font-size: 11px; font-weight: 600; letter-spacing: .1px; line-height: 1;
 }
-/* 图标固定 18px，与 44px 控件保持 Google 口径比例。 */
+/* 图标固定 15px，与 29px 控件保持 Google 口径比例。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round > svg,
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol {
   width: var(--oc-gm-icon); height: var(--oc-gm-icon);
@@ -2200,7 +2201,7 @@ body.sc-panel-dragging * {
 /* 缩放连体条：+ / − 同背板，中间一条发丝线。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
   height: calc(var(--oc-gm-control) * 2); min-height: calc(var(--oc-gm-control) * 2);
-  flex-direction: column; border-radius: 8px; overflow: hidden;
+  flex-direction: column; border-radius: 4px; overflow: hidden;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn {
   width: var(--oc-gm-control); height: var(--oc-gm-control);
@@ -2225,7 +2226,7 @@ body.sc-panel-dragging * {
 }
 /* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 4px 间距，不冒充网页版控件。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
-  margin-top: 4px;
+  margin-top: 3px;
   background: #e6f1f2; color: #5f6c70;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye:hover { background: #d9eaec; }
