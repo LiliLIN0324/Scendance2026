@@ -44,6 +44,7 @@ import { openGenerationSheet } from '../lib/generation-sheet';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
 import { Layers3, LayoutGrid, X } from 'lucide-react';
 import {
+  adoptLegacyOutdoorPlanForActivity,
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
   readOutdoorProjectRecord,
@@ -273,6 +274,12 @@ export type OutdoorSaveState = { state: 'idle' | 'saving' | 'saved'; savedAt: st
 export interface OutdoorPlanOverlayProps {
   /** 草稿归属：layout.id（云项目 id 或本地活动 uuid）；null 落固定兜底槽。 */
   projectId: string | null;
+  /**
+   * 2026-11-17：旧版把整台设备的户外规划都放在工作台项目 id 下，所有本机活动共用一份。
+   * 传入那个旧项目 id 时，本活动首次载入会一次性接管它（见 adoptLegacyOutdoorPlanForActivity），
+   * 之后的空活动不再继承——新活动必须是空场地。
+   */
+  legacyPlanProjectId?: string | null;
   /** 活动点位（sceneAnchor/mapLngLat，GCJ-02）：仅用于底图初始定位，不写进 plan.anchor。 */
   anchor?: { lng: number; lat: number } | null;
   activityName?: string | null;
@@ -348,10 +355,10 @@ export interface OutdoorPlanOverlayHandle {
   setCanvasMode(mode: 'view' | 'select'): void;
   /** 2026-11-15 测量直进：直接切画布编辑模式（measure / view 等）。 */
   setToolMode(mode: string): void;
-  /** 2026-11-15 测量直进：切距离/面积/路径（工具条小标转发）。 */
-  setMeasureKind(kind: 'distance' | 'area' | 'path'): void;
+  /** 2026-11-15 测量直进：切距离/面积（工具条小标转发）；2026-11-17 路径入口下线。 */
+  setMeasureKind(kind: 'distance' | 'area'): void;
   /** 读取当前测量模式（工具条小标回显图标用）。 */
-  getMeasureKind(): 'distance' | 'area' | 'path';
+  getMeasureKind(): 'distance' | 'area';
   /** 2026-11-15 户外网格吸附开关：开=对齐网格，关=自由摆放。 */
   setSnapOn(on: boolean): void;
   /** 2026-11-12 测量/标注收进右轨圆钮：开/关「工具与属性」浮窗并切页签（右轨圆钮转发）。 */
@@ -370,6 +377,7 @@ export interface OutdoorPlanOverlayHandle {
 
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
   projectId,
+  legacyPlanProjectId = null,
   anchor,
   activityName,
   onSaveStateChange,
@@ -397,6 +405,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }, [agent?.venuePick?.query, agent?.venuePick?.candidates, agent?.venuePick?.loading]);
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
+  // 本机活动：规划按活动存（草稿归属就是 layout.id），写入时不动「最近项目」指针。
+  const activityScopedPlan = slotId !== LOCAL_DRAFT_SLOT && slotId !== legacyPlanProjectId;
   // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
   const [source, setSource] = useState<CanvasBasemapSource>(() => readPlanGroundSource());
   const [plan, setPlan] = useState<SitePlanData | null>(null);
@@ -496,6 +506,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   anchorRef.current = anchor;
   useEffect(() => {
     cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
+    // 2026-11-17：升级前整台设备只有一份规划，先交给当时打开的活动；之后新建活动不再继承。
+    if (legacyPlanProjectId && activityScopedPlan) adoptLegacyOutdoorPlanForActivity(slotId, legacyPlanProjectId);
     const record = readOutdoorProjectRecord(slotId);
     // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
     const loaded = normalizePlanFacilityFootprints(
@@ -612,7 +624,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
       ...(typeof existing?.remoteRevision === 'number' ? { remoteRevision: existing.remoteRevision } : {}),
     };
-    saveOutdoorProjectRecord(record);
+    saveOutdoorProjectRecord(record, undefined, !activityScopedPlan);
     setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
     setSaveState('saved');
     // 后端副本：本机已落盘；推不上去只是少一份副本，不改本机、不拦编辑。
@@ -627,7 +639,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           ...record,
           remoteActivityId: outcome.remoteActivityId,
           remoteRevision: outcome.remoteRevision,
-        });
+        }, undefined, !activityScopedPlan);
         return;
       }
       if (outcome.status === 'conflict') {
@@ -660,7 +672,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         updatedAt: new Date().toISOString(),
         remoteActivityId: outcome.remoteActivityId,
         remoteRevision: outcome.remoteRevision,
-      });
+      }, undefined, !activityScopedPlan);
       syncConflictRef.current = null;
       setSyncConflict(null);
       setSyncNote(`已用本机这版覆盖，现在是版本 ${outcome.remoteRevision}。`);
@@ -691,7 +703,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         plan: remote.plan,
         ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
         remoteRevision: remote.revision,
-      });
+      }, undefined, !activityScopedPlan);
       syncConflictRef.current = null;
       setSyncConflict(null);
       setSyncNote(`已换成服务器那版（版本 ${remote.revision}）。`);
@@ -768,7 +780,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     redo: () => canvasApiRef.current?.redo(),
     setCanvasMode: (mode: 'view' | 'select') => canvasApiRef.current?.setMode(mode),
     setToolMode: (mode: string) => canvasApiRef.current?.setMode(mode),
-    setMeasureKind: (kind: 'distance' | 'area' | 'path') => canvasApiRef.current?.setMeasureKind(kind),
+    setMeasureKind: (kind: 'distance' | 'area') => canvasApiRef.current?.setMeasureKind(kind),
     getMeasureKind: () => canvasApiRef.current?.getMeasureKind() ?? 'distance',
     setSnapOn: (on: boolean) => canvasApiRef.current?.setSnapOn(on),
   setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => canvasApiRef.current?.setInspector(open, tab),

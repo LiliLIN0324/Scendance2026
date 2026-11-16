@@ -8,17 +8,18 @@
  * 项目卡带俯视缩略预览，选中同标签 router.push（认证在 sessionStorage，新标签会变访客）；
  * 新建只输名字——没有工作室时静默建「个人工作室」。「云」一词不面向用户（§二.4 默认在云上）。模板与导入在下一期。
  */
-import { Check, FolderOpen, Globe, Loader2, Plus, SquareDashed } from '@/components/solid-icons';
+import { Check, Crown, FolderOpen, Globe, Loader2, Plus, SquareDashed } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from '../../../lib/auth-provider';
 import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
 import { createStarterOutdoorPlan, ensureDefaultOutdoorProject, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
 import { matchRecentPlaces, mergePlaceSuggestions, rememberPlace, searchPlaces, type PlaceSuggestion } from '../lib/place-search';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 
-type Selection = { kind: 'blank' } | { kind: 'map' } | { kind: 'new' } | { kind: 'project'; id: string };
+type Selection = { kind: 'blank' } | { kind: 'map' } | { kind: 'replica' } | { kind: 'new' } | { kind: 'project'; id: string };
 
 type CloudState =
   | { status: 'guest' }
@@ -80,6 +81,8 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
   const router = useRouter();
   const userId = user?.id ?? '';
   const [selection, setSelection] = useState<Selection>({ kind: initialSelection ?? 'blank' });
+  // 复刻示例选中的案例（默认首案 = Scotiabank 冰球日）。
+  const [replicaCaseId, setReplicaCaseId] = useState<string>(REPLICA_CASES[0]?.id ?? '');
   const [cloud, setCloud] = useState<CloudState>({ status: 'loading' });
   const [previews, setPreviews] = useState<Record<string, Scene | 'failed'>>({});
   const [name, setName] = useState(NEW_PROJECT_DEFAULT);
@@ -207,6 +210,7 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
   const nameReady = !!name.trim() && cloud.status === 'ready';
   const canStart = !busy && (
     selection.kind === 'blank'
+    || selection.kind === 'replica'
     || (selection.kind === 'project' && !!selectedProject)
     || (selection.kind === 'new' && nameReady)
     || (selection.kind === 'map' && nameReady && !!place)
@@ -215,6 +219,41 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
   function confirm(): void {
     if (!canStart) return;
     if (selection.kind === 'project') { router.push(`/editor/?project=${encodeURIComponent(selection.id)}`); return; }
+    // 复刻示例（OnePlan 经典案例，学习库首件）：整套区块/设施/流线预先摆好，进 2D 规划即得。
+    // 登录态同 map/new 主路径建云项目；访客落专用本机草稿（不动 default-outdoor）。
+    if (selection.kind === 'replica') {
+      const replica: ReplicaCase = REPLICA_CASES.find(item => item.id === replicaCaseId) ?? REPLICA_CASES[0];
+      const replicaName = `复刻示例 · ${replica.title}`.slice(0, 60);
+      if (cloud.status !== 'ready') {
+        const now = new Date().toISOString();
+        saveOutdoorProjectRecord({
+          v: 1,
+          projectId: `replica-${replica.id.slice(0, 40)}`,
+          name: replicaName,
+          createdAt: now,
+          updatedAt: now,
+          plan: replica.buildPlan(),
+        });
+        window.location.assign(`/editor/?project=${encodeURIComponent(`replica-${replica.id.slice(0, 40)}`)}&mode=outdoor`);
+        return;
+      }
+      setBusy(true); setNotice('');
+      void controller.createProject(cloud.studioId, replicaName, emptyProjectScene())
+        .then(created => {
+          const now = new Date().toISOString();
+          saveOutdoorProjectRecord({
+            v: 1,
+            projectId: created.id,
+            name: replicaName,
+            createdAt: now,
+            updatedAt: now,
+            plan: replica.buildPlan(),
+          });
+          window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&mode=outdoor`);
+        })
+        .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
+      return;
+    }
     // 访客 / 云列表未就绪：不建云项目，落本机默认地图草稿整页进 2D 规划。
     if (cloud.status !== 'ready') {
       const fallbackId = ensureDefaultOutdoorProject();
@@ -253,6 +292,8 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
         <Card selected={selection.kind === 'map'} onSelect={() => setSelection({ kind: 'map' })}
           visual={<Globe size={32} />} title="从地图开始" meta="户外活动 · 选地点后直接进 2D 规划" />
       )}
+      <Card selected={selection.kind === 'replica'} onSelect={() => setSelection({ kind: 'replica' })}
+        visual={<Crown size={32} />} title="复刻示例" meta="OnePlan 经典案例 44 案 · 选一个整套摆好" />
       {projects.map(project => {
         const scene = previews[project.id];
         const loaded = scene && scene !== 'failed' ? scene : null;
@@ -316,6 +357,22 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
         </p>
       )}
     </>)}
+    {selection.kind === 'replica' && (
+      <div className="sc-venue-place-list" role="listbox" aria-label="复刻案例清单">
+        {REPLICA_CASES.map(replica => (
+          <button key={replica.id} type="button" role="option"
+            aria-selected={replicaCaseId === replica.id}
+            className={`sc-venue-place${replicaCaseId === replica.id ? ' is-active' : ''}`}
+            onClick={() => setReplicaCaseId(replica.id)}>
+            <span className="sc-venue-place-title">
+              <strong>{replica.title}</strong>
+              <small className="sc-venue-place-tag">{replica.category}</small>
+            </span>
+            <small>{replica.region}{replica.locationNote ? ` · ${replica.locationNote}` : ''}</small>
+          </button>
+        ))}
+      </div>
+    )}
     <div className="sc-venue-picker-foot">
       <p className="sc-venue-picker-note" role="status">{notice}</p>
       <button type="button" className="sc-button" onClick={onClose} disabled={busy}>取消</button>

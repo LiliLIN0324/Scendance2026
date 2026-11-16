@@ -12,10 +12,8 @@
  * 图层内，保持未知并在 warnings 如实标注。
  */
 import { fetchOpenFreeMapRoads } from "./openfreemap-roads";
-import {
-  fetchOpenFreeMapBuildings,
-  type LngLatRing,
-} from "./openfreemap-buildings";
+import { fetchOpenFreeMapBuildings, type LngLatRing } from "./openfreemap-buildings";
+import { fetchOpenFreeMapWater, type WaterWire } from "./openfreemap-water";
 import type { RoadSegment } from "./road-network";
 import {
   boundedRadius,
@@ -118,9 +116,62 @@ function buildingFeature(ring: LngLatRing, anchor: { lng: number; lat: number },
 }
 
 /**
- * 取 OpenFreeMap 客户端证据。任一瓦片源整体不可用（TileJSON 拿不到等）返回 null，
- * 由调用方退服务端 Overpass 后手；道路/建筑各自独立失败，互不拖累。
+ * 水体要素（2026-11-17）：面状水按 polygon 出，线状水按 line 出。
+ * 面环若因抽稀/自交过不了 `isValidGeometry`，就降级成闭合折线——岸线仍可用，只是不声称它是水面面积。
  */
+function waterFeature(
+  wire: WaterWire,
+  anchor: { lng: number; lat: number },
+  radius: number,
+): MapFeature | null {
+  try {
+    let points = wire.lngLat.map(([lng, lat]) => toLocal(lng, lat, anchor, "wgs84"));
+    if (points.length < 2) return null;
+    const closed =
+      wire.shape === "area" &&
+      points.length >= 4 &&
+      Math.hypot(
+        points[0]!.x - points[points.length - 1]!.x,
+        points[0]!.y - points[points.length - 1]!.y,
+      ) < 0.01;
+    if (closed) points = points.slice(0, -1);
+    if (!inRange(points, radius)) return null;
+    const areaGeometry = { type: "polygon" as const, points };
+    const lineGeometry = { type: "line" as const, points: [...points, points[0]!] };
+    const polygon =
+      wire.shape === "area" && points.length >= 3 && isValidGeometry(areaGeometry);
+    const geometry = polygon ? areaGeometry : lineGeometry;
+    if (!isValidGeometry(geometry)) return null;
+    const label =
+      wire.name ||
+      (wire.waterClass === "lake"
+        ? "湖区"
+        : wire.waterClass === "pond"
+          ? "水塘"
+          : wire.waterClass === "ocean"
+            ? "海域"
+            : wire.shape === "area"
+              ? "水面"
+              : "河道");
+    return {
+      id: wire.id,
+      kind: "water",
+      name: label,
+      geometry,
+      tags: { water: wire.waterClass },
+      evidence: {
+        source: "osm",
+        sourceId: wire.id,
+        certainty: "mapped",
+        note: "OpenFreeMap（OSM 同源瓦片）水体/水道几何；不是岸线测量，不代表可下水、权属或救生条件。",
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 export async function fetchOfmEvidence(
   anchor: { lng: number; lat: number },
   radiusM: number,
@@ -139,16 +190,20 @@ export async function fetchOfmEvidence(
     settled = await Promise.allSettled([
       fetchOpenFreeMapRoads(bbox, signal ? { signal } : {}),
       fetchOpenFreeMapBuildings(bbox, signal),
+      fetchOpenFreeMapWater(bbox, signal),
     ]);
   } catch (error) {
     throw error;
   }
   const roadSettled = settled[0]!;
   const buildingSettled = settled[1]!;
+  const waterSettled = settled[2]!;
   const roads: RoadSegment[] =
     roadSettled.status === "fulfilled" ? (roadSettled.value as RoadSegment[]) : [];
   const rings: LngLatRing[] =
     buildingSettled.status === "fulfilled" ? (buildingSettled.value as LngLatRing[]) : [];
+  const waters: WaterWire[] =
+    waterSettled?.status === "fulfilled" ? (waterSettled.value as WaterWire[]) : [];
 
   const features: MapFeature[] = [];
   for (const road of roads.slice(0, MAX_FEATURES)) {
@@ -159,6 +214,10 @@ export async function fetchOfmEvidence(
     const feature = buildingFeature(ring, anchor, radius);
     if (feature) features.push(feature);
   }
+  for (const wire of waters.slice(0, MAX_FEATURES)) {
+    const feature = waterFeature(wire, anchor, radius);
+    if (feature) features.push(feature);
+  }
   if (!features.length) return null;
 
   const fetchedAt = new Date().toISOString();
@@ -167,7 +226,8 @@ export async function fetchOfmEvidence(
     status: "partial",
     features,
     warnings: [
-      "OpenFreeMap（OSM 同源瓦片）道路与建筑足迹；真实入口、障碍、开放空间与室内连接仍未知，需现场核对。",
+      "OpenFreeMap（OSM 同源瓦片）道路、建筑足迹与水体几何；真实入口、障碍、开放空间与室内连接仍未知，需现场核对。",
+      ...(waters.length ? [] : ["本轮瓦片未取到水体/水道几何：沿岸类需求应先确认水在哪一侧，不能凭底图像素推断。"]),
     ],
     complete: false,
     fetchedAt,

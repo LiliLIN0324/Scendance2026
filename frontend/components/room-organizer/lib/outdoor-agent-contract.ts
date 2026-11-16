@@ -217,6 +217,11 @@ export interface OutdoorMapContext {
   ): import("@/lib/site-intelligence/context").ModelContext;
   sourceIds?: Record<string, string>;
   unknowns: string[];
+  /**
+   * 2026-11-17「就沿着水岸线」：地图里的水体/水道几何（局部 ENU 米，与 plan 同基准）。
+   * 没有就回空数组——岸线缺失要如实说，不能拿底图像素冒充。
+   */
+  water?: () => import("./outdoor-shoreline-layout").Shoreline[];
 }
 export interface OutdoorLibraryItem {
   id: string;

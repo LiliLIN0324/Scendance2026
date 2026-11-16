@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { beforeEach, afterEach, it, expect, vi } from "vitest";
+import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
 import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
@@ -74,6 +74,7 @@ const response = (
   }),
 });
 let cardHistorySession: Record<string, unknown> = {};
+let saySpy: Mock<(text: string, clarification?: boolean) => void>;
 function Harness() {
   flow = useOutdoorAgentWorkflow({
     scope,
@@ -101,7 +102,7 @@ function Harness() {
     begin: () => ++epoch,
     current: (e) => e === epoch,
     status: vi.fn(),
-    say: vi.fn(),
+    say: saySpy,
     search: vi.fn(),
   });
   return (
@@ -155,6 +156,7 @@ beforeEach(() => {
   modelOverride = undefined;
   streamUnderstand = undefined;
   understand = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+  saySpy = vi.fn();
   apply = vi.fn((next: SitePlanData, expected: string) => {
     if (JSON.stringify(plan) !== expected) return false;
     plan = next;
@@ -198,10 +200,14 @@ it("「你在做」在地图和模型响应完成前显示实际工作步骤与�
   });
   let pending!: Promise<boolean>;
   await act(async () => { pending = flow.handle("你在做"); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("核对活动范围和地图依据");
+  // 画布规模并进摘要，不再单独占一行步骤。
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("已读画布");
   expect(streamUnderstand).not.toHaveBeenCalled();
   await act(async () => { mapReady({ version: "map:unavailable", status: "unavailable", text: "地图不可用", featureIds: [], unknowns: [] }); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("将本轮输入和场地资料交给模型判断");
+  // 「将本轮输入和场地资料交给模型判断」是恒真过程句，已从步骤里删除。
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).not.toContain("交给模型判断");
+  // 地图依据取不全属于真异常：这一轮自动展开。
+  expect(host.querySelector("details.ap-run-thoughts")?.hasAttribute("open")).toBe(true);
   act(() => { streamThought("我在核对当前活动的分区用途，"); });
   expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("我在核对当前活动的分区用途，");
   expect(host.querySelector("details.ap-run-thoughts")?.getAttribute("aria-busy")).toBe("true");
@@ -214,13 +220,35 @@ it("「你在做」在地图和模型响应完成前显示实际工作步骤与�
   const record = host.querySelector("details.ap-run-thoughts");
   expect(streamUnderstand).toHaveBeenCalledOnce();
   expect(understand).not.toHaveBeenCalled();
-  expect(record?.hasAttribute("open")).toBe(true);
+  // 跑完之后是记录态：默认收起，用户想看再点开。
+  expect(record?.hasAttribute("open")).toBe(false);
   expect(record?.textContent).toContain("思考记录 · 1 条");
   expect(record?.textContent).toContain(thought);
   expect(apply).not.toHaveBeenCalled();
   scope = "project-b";
   mount();
   expect(host.querySelector("details.ap-run-thoughts")).toBeNull();
+});
+it("地图依据取全、无异常时思考卡默认收起，画布规模只在摘要里出现", async () => {
+  bridge.mapContext = vi.fn(async (): Promise<OutdoorMapContext> => ({
+    version: "map:ready",
+    status: "ready",
+    text: "已取到结构化地图依据",
+    featureIds: [],
+    unknowns: [],
+  }));
+  let complete!: (value: ReturnType<typeof response>) => void;
+  streamUnderstand = vi.fn<BackendSession["assistantChatStream"]>(() => new Promise<ReturnType<typeof response>>(resolve => { complete = resolve; }));
+  let pending!: Promise<boolean>;
+  await act(async () => { pending = flow.handle("整理一下分区"); });
+  const record = host.querySelector("details.ap-run-thoughts");
+  expect(record?.getAttribute("aria-busy")).toBe("true");
+  expect(record?.hasAttribute("open")).toBe(false);
+  expect(record?.textContent).toContain("已读画布");
+  await act(async () => {
+    complete(response("ask", {}));
+    await pending;
+  });
 });
 it("模型提出分区计划后，批准计划才生成预览，再确认才写入画布", async () => {
   await confirmScope();
@@ -1496,4 +1524,159 @@ it("地图依据没取全时，place 卡不再承诺自动框选", async () => {
   expect(host.textContent).toContain("没有取到可核对的真实地图/轮廓");
   expect(host.textContent).toContain("在地图上手画活动范围");
   expect(host.textContent).not.toContain("自动为你框选项目区域");
+});
+
+// 2026-11-17 用户实测：说「就沿着水岸线」，智能体回「工作台里没有可识别的水岸线……请告诉我哪一侧」。
+// 水岸进快照之后，这句必须变成沿岸预览，而不是又一个方位追问。
+it("说「就沿着水岸线」时沿真实岸线出预览，不再反问北/东/南/西", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/1",
+    name: "南侧河",
+    closed: false,
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(
+    response("ask", {}, {
+      reply:
+        "我理解你想让比赛沿水岸线排布。但当前工作台里没有可识别的真实水岸线/水域对象。请先告诉我哪一侧。",
+    }),
+  );
+  await act(async () => {
+    await flow.handle("就沿着水岸线");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("钓位")) ?? [];
+  expect(stations.length).toBeGreaterThan(5);
+  expect(host.textContent).not.toContain("没有可识别的真实水岸线");
+});
+
+it("地图上没有水系时，沿岸请求给可执行下一步（画一条岸线），不说「请告诉我方位」", async () => {
+  await confirmScope();
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:dry",
+      status: "partial",
+      text: "{}",
+      featureIds: [],
+      unknowns: [],
+      water: () => [],
+    }),
+  });
+  understand.mockResolvedValueOnce(
+    response("ask", {}, { reply: "请告诉我水岸在哪一侧。" }),
+  );
+  await act(async () => {
+    await flow.handle("就沿着水岸线");
+  });
+  expect(flow.proposal).toBeNull();
+  const said = saySpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
+  expect(said).toContain("没有水系");
+  expect(said).toContain("标注");
+});
+
+// 2026-11-17 用户拍板：沿岸活动不依赖模型回 ask——模型直接给设计动作时同样落沿岸排布。
+it("模型不回 ask 也能沿岸：钓鱼比赛 + zones 动作直接出预览，不落「只支持讲座/市集」", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/2",
+    name: "南侧河",
+    closed: false,
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water2",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("zones"));
+  await act(async () => {
+    await flow.handle("这里要办一个钓鱼比赛，就沿着水岸线");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("钓位")) ?? [];
+  expect(stations.length).toBeGreaterThan(5);
+});
+
+it("objects 动作同样沿岸，不被主入口核对拦住", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/3",
+    name: "湖岸",
+    closed: false,
+    points: [
+      { x: 0, y: 40 },
+      { x: 80, y: 40 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water3",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("objects"));
+  await act(async () => {
+    await flow.handle("这里要办一个钓鱼比赛");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
+});
+
+it("brief 记下钓鱼比赛后，后续一句 zones 也走沿岸", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/4",
+    name: "河岸",
+    closed: false,
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water4",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(
+    response("ask", { event: { value: "钓鱼比赛", evidence: "这里要办一个钓鱼比赛" } }),
+  );
+  await act(async () => {
+    await flow.handle("这里要办一个钓鱼比赛");
+  });
+  understand.mockResolvedValueOnce(response("zones"));
+  await act(async () => {
+    await flow.handle("先排吧");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
 });

@@ -1,7 +1,7 @@
 import { toLocal, isValidGeometry } from './geometry';
 import type { MapEvidenceResult, MapFeature } from './types';
 const MAX_FEATURES = 300, MAX_POINTS = 256;
-const TAGS = ['name', 'building', 'highway', 'leisure', 'landuse', 'place', 'entrance', 'access', 'foot', 'vehicle', 'barrier', 'layer', 'level', 'bridge', 'tunnel', 'indoor', 'area'];
+const TAGS = ['name', 'building', 'highway', 'leisure', 'landuse', 'place', 'entrance', 'access', 'foot', 'vehicle', 'barrier', 'layer', 'level', 'bridge', 'tunnel', 'indoor', 'area', 'natural', 'waterway', 'water', 'intermittent'];
 const record = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export function boundedRadius(radiusM: number): number { if (!Number.isFinite(radiusM) || radiusM < 1) throw new Error('Invalid radius'); return Math.min(750, Math.max(50, radiusM)); }
 function inRange(feature: MapFeature, radius: number): boolean {
@@ -32,9 +32,13 @@ export function parseOverpassEvidence(body: unknown, anchor: { lng: number; lat:
     const id = `osm:${el.type}/${el.id}`;
     if (ids.has(id)) continue;
     let kind: MapFeature['kind'] | undefined;
+    // 水必须先于 open-space 判：landuse=reservoir/basin 否则会被当成草地类开放空间。
+    const waterArea = tags.natural === 'water' || Boolean(tags.water) || ['reservoir', 'basin', 'salt_pond', 'aquaculture'].includes(tags.landuse ?? '') || tags.waterway === 'riverbank' || tags.natural === 'wetland';
+    const waterLine = !waterArea && ['river', 'stream', 'canal', 'ditch', 'drain', 'tidal_channel'].includes(tags.waterway ?? '');
     if (tags.entrance && tags.entrance !== 'no') kind = 'entrance';
     else if (tags.barrier && tags.barrier !== 'no') kind = 'barrier';
     else if (tags.building && tags.building !== 'no') kind = 'building';
+    else if (waterArea || waterLine) kind = 'water';
     else if (tags.highway) kind = tags.area === 'yes' ? 'open-space' : 'road';
     else if (tags.leisure === 'park' || tags.leisure === 'garden' || tags.landuse === 'grass' || tags.place === 'square') kind = 'open-space';
     if (!kind) continue;
@@ -43,7 +47,7 @@ export function parseOverpassEvidence(body: unknown, anchor: { lng: number; lat:
     try {
       const points = rawPoints.map(p => { const v = record(p); if (typeof v.lon !== 'number' || typeof v.lat !== 'number') throw new Error('Missing coordinate'); return toLocal(v.lon, v.lat, anchor, 'wgs84'); });
       const closed = points.length >= 4 && Math.hypot(points[0]!.x - points[points.length - 1]!.x, points[0]!.y - points[points.length - 1]!.y) < 0.01;
-      const polygon = kind === 'building' || kind === 'open-space';
+      const polygon = kind === 'building' || kind === 'open-space' || (kind === 'water' && waterArea);
       if (polygon && (unsupportedMembers.has(Number(el.id)) || unknownAreaMembership)) { omitted++; continue; }
       if (polygon && !closed || points.length < (el.type === 'node' ? 1 : 2)) { omitted++; continue; }
       if (closed && polygon) points.pop();
