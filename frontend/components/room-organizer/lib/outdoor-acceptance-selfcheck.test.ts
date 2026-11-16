@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACCEPTANCE_RULES,
   assessAcceptance,
+  formatAcceptanceStatement,
   reportSignals,
   summarizeAssessment,
 } from './outdoor-acceptance-selfcheck';
@@ -166,5 +167,44 @@ describe('summarizeAssessment', () => {
     const totals = summarizeAssessment(assessAcceptance(report()));
     expect(totals.text).toContain('#1 缺 turn/map-call/preview');
     expect(totals.missing).toBe(5);
+  });
+});
+
+describe('formatAcceptanceStatement', () => {
+  it('一行写清三档条数与具体用例号，并以「0 条全绿」收尾', () => {
+    const statement = formatAcceptanceStatement(
+      assessAcceptance(report({ rows: [row()], mapCalls: 1 })),
+    );
+    expect(statement.startsWith('户外 Agent 验收：可判 2 条（#1 #3）；')).toBe(true);
+    expect(statement).toContain('只能浏览器 6 条（#2 #5 #7 #8 #9 #11）');
+    expect(statement.endsWith('三类全绿 0 条，未验部分不作通过。')).toBe(true);
+  });
+
+  it('即使每条都有料，也不允许出现「已验收 / 通过」这类结论', () => {
+    const statement = formatAcceptanceStatement(
+      assessAcceptance(
+        report({
+          rows: [
+            row({ turnId: 'a', terminal: 'local_done' }),
+            row({ turnId: 'b', terminal: 'awaiting_place' }),
+            row({ turnId: 'c', terminal: 'failed', errorCode: 'provider_error' }),
+          ],
+          mapCalls: 4,
+          confirmations: 2,
+          appliedCount: 1,
+          previewAvgMs: 700,
+        }),
+      ),
+    );
+    expect(statement).toContain('可判 5 条');
+    expect(statement).not.toContain('已验收');
+    expect(statement).not.toContain('通过（');
+    expect(statement).toContain('未验部分不作通过');
+  });
+
+  it('空报告也给出完整句子（不出现空括号）', () => {
+    const statement = formatAcceptanceStatement(assessAcceptance(report()));
+    expect(statement).toContain('可判 0 条；');
+    expect(statement).not.toContain('（）');
   });
 });

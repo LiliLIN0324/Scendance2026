@@ -33,7 +33,7 @@ import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
 import { downloadSessionReport } from "../lib/outdoor-report-download";
-import { assessAcceptance, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
+import { assessAcceptance, formatAcceptanceStatement, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -2128,6 +2128,8 @@ export function useOutdoorAgentWorkflow(input: {
       const rows = assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }));
       return { rows, totals: summarizeAssessment(rows) };
     },
+    /** 一行可粘进 PR 的验收声明（固定收尾“三类全绿 0 条，未验部分不作通过”）。 */
+    acceptanceStatement: () => formatAcceptanceStatement(assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }))),
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);

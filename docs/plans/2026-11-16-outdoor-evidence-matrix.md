@@ -63,3 +63,34 @@ npx vitest run components/room-organizer/lib/outdoor-event-turn.test.ts \
   --reporter=json --outputFile=../.temp/r33-tests.json
 # 期望：14 文件 / 148 条全过（本轮实测值）
 ```
+
+## 5. 轮次 44 合并后回归与「可判口径」映射（2026-11-17）
+
+上游合进 5 个分支（`docs/intelligence-gap-roadmap`、`fix/agent-run-hygiene`、`fix/quota-notice` 等）后，把 M7 自己那 8 个文件重跑了一遍：
+
+```bash
+cd C:/Users/13266/.dsh/bot/workspace/Scendance2026/frontend
+npx vitest run \
+  components/room-organizer/lib/outdoor-turn-metrics.test.ts \
+  components/room-organizer/lib/outdoor-trace-metrics.test.ts \
+  components/room-organizer/lib/outdoor-turn-live.test.ts \
+  components/room-organizer/lib/outdoor-metrics-book.test.ts \
+  components/room-organizer/lib/outdoor-metrics-export.test.ts \
+  components/room-organizer/lib/outdoor-session-report.test.ts \
+  components/room-organizer/lib/outdoor-report-download.test.ts \
+  components/room-organizer/lib/outdoor-acceptance-selfcheck.test.ts
+# 实测：8 文件 / 77 条全过（9 + 9 + 14 + 13 + 6 + 7 + 7 + 12）
+```
+
+`lib/outdoor-acceptance-selfcheck.ts` 把上表 11 条写成了可计算规则，但**它只判「有没有料」，不判「是否通过」**：
+
+| 口径 | 用例 | 报告里要出现的信号 |
+| --- | --- | --- |
+| 可从报告找料（5 条） | #1 | 至少一轮 + 调过地图 + 出过预览 |
+| | #3 | 出过预览 |
+| | #4 | 观测到 `awaiting_place`（先要地点） |
+| | #6 | 至少一条失败样本（终态 failed 或 errorCode 非空） |
+| | #10 | 失败样本 + 成功预览各一 |
+| 只能真实浏览器（6 条） | #2 #5 #7 #8 #9 #11 | 报告再全也不给「可判」，必须 9222 实跑 |
+
+结论不变：**11 条依旧 0 条三类全绿**，发布门禁继续关闭。轮次 44 探过 `http://127.0.0.1:9222/json/version`，本机返回「无法连接到远程服务器」（端口未开），所以 #1/#3/#7/#8/#9 那条连贯链路仍未跑。
