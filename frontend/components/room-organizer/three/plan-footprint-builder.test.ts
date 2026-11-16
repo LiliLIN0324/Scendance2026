@@ -63,6 +63,16 @@ function colorHex(object: THREE.Object3D): number | null {
 }
 
 describe('3D 规划层：设计范围与场地边界同步', () => {
+  it('places a role badge at its actual position outside the red line', () => {
+    const group = build(makePlan({
+      workers: [{ id: 'guard', role: '保安', count: 1, position: { x: 12, y: -8 }, notes: '' }],
+    }));
+    const badge = group.getObjectByName('plan-worker-badge')!;
+    expect(badge.userData.planWorkerId).toBe('guard');
+    expect(badge.position.x).toBe(12);
+    expect(badge.position.z).toBe(8);
+  });
+
   it('有设计范围时：白纱蒙版 + 四角白色 L 角标（各带一圈淡墨底线），与 2D 同一个形', () => {
     const group = build(makePlan({ designScope: SCOPE }));
     const marked = group.children.filter(child => child.userData.planDesignScope === true);

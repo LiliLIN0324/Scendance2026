@@ -585,6 +585,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 一期户外第一人称漫游启用态：独立于室内 walkthroughMode 的信号，避免翻旧链路
   // 把 OutdoorPlan3D 卸载；控制器与边界钳制自管在户外 3D 组件内。
   const [outdoorWalkActive, setOutdoorWalkActive] = useState(false);
+  const [outdoorWalkChooserOpen, setOutdoorWalkChooserOpen] = useState(false);
   // 2026-11-15 干净看图模式：隐藏右上/底中浮动工具簇与左下图层卡，右下眼睛钮保留可切回。
   const [chromeHidden, setChromeHidden] = useState(false);
   // 户外漫游视角档位（四档：鸟瞰/第一/第三/过肩），独立于室内 walkViewMode。
@@ -660,58 +661,6 @@ useEffect(() => {
       return same ? current : next;
     });
   }, []);
-  /**
-   * 一期户外漫游进出收口：独立状态位，不碰室内 walkthroughMode。指针锁必须在按钮
-   * 点击手势内同步发起（晚一个 render 手势就没了），控制器在 OutdoorPlan3D 内自管。
-   */
-  const toggleOutdoorWalk = useCallback((on: boolean) => {
-    if (on) {
-      requestOutdoorWalkPointerLock();
-      setOutdoorWalkView('first');
-    }
-    setOutdoorWalkActive(on);
-  }, []);
-  // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
-  const outdoorActions = useMemo(() => ((outdoor2DOpen || !!outdoorPlanState) ? {
-    canUndo: outdoorHistory.canUndo,
-    canRedo: outdoorHistory.canRedo,
-    undo: () => outdoorOverlayRef.current?.undo(),
-    redo: () => outdoorOverlayRef.current?.redo(),
-    zoomBy: (direction: 1 | -1) => outdoorZoomRef.current(direction),
-    exportPng: () => outdoorOverlayRef.current?.exportPng() ?? false,
-    // 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（右栏工具排「选择」钮的按下态与切换）。
-    canvasMode: outdoorCanvasMode,
-    setCanvasMode: (mode: 'view' | 'select') => outdoorOverlayRef.current?.setCanvasMode(mode),
-    // 2026-11-15 测量直进：激活态 / 当前模式 + 进入退出 / 切距离·面积·路径（工具条小标转发）。
-    measureActive: outdoorMeasureActive,
-    measureKind: outdoorMeasureKind,
-    setMeasureKind: (kind: 'distance' | 'area' | 'path') => { setOutdoorMeasureKind(kind); outdoorOverlayRef.current?.setMeasureKind(kind); },
-    // 2026-11-15 网格吸附开关：底条吸附钮切换，转发到 2D 画布。
-    snapOn: outdoorSnapOn,
-    setSnapOn: (on: boolean) => { setOutdoorSnapOn(on); outdoorOverlayRef.current?.setSnapOn(on); },
-    enterMeasure: () => outdoorOverlayRef.current?.setToolMode('measure'),
-    exitMeasure: () => outdoorOverlayRef.current?.setToolMode('view'),
-    // 2026-11-12 三张卡拆开：右轨每枚圆钮只管自己那张卡的展开态。
-    inspectorTabs: outdoorInspector.openTabs,
-    setInspector: (tab: 'measure' | 'annotate' | 'selection') => {
-      const open = !outdoorInspector.openTabs[tab];
-      outdoorOverlayRef.current?.setInspector(open, tab);
-    },
-    // 一期户外漫游：启用态 / 是否处于可步行的 3D 视图 / 进出收口（按钮手势内发起指针锁）。
-    walkActive: outdoorWalkActive,
-    // 注意：memo 在 outdoorPlan / scanIsolated 声明之前执行，这里只能引用前置状态；
-    // 实景隔离 / 无 plan 时 takeover 本身不成立，按钮态由下游接管条件兜底。
-    walkIn3D: outdoor3dTakeoverActive && !outdoor2DOpen && !walkthroughActive,
-    toggleWalk: (on: boolean) => toggleOutdoorWalk(on),
-    // 2026-11-15 方案 A：2D/3D 收进右列一枚可切换圆钮；回选址靶心聚焦场地边界。
-    view: outdoor3dTakeoverActive && !outdoor2DOpen ? '3d' as const : '2d' as const,
-    onToggleView: () => handleOutdoorViewSwitch(outdoor3dTakeoverActive && !outdoor2DOpen ? '2d' : '3d'),
-    // 指北针：3D 接管回正相机朝向正北；2D 平面复位视图到场地边界。
-    resetNorth: () => {
-      if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
-      else outdoorOverlayRef.current?.focusVenue();
-    },
-  } : null), [outdoor2DOpen, outdoorHistory, outdoorCanvasMode, outdoorMeasureActive, outdoorMeasureKind, outdoorSnapOn, outdoorInspector, outdoorWalkActive, outdoor3dTakeoverActive, walkthroughActive, toggleOutdoorWalk]);
   // 2026-11-11 用户要求：Bingo 与户外规划同开时——中间分隔要清楚、可上下换序、可拖动改高度、
   // 可把其中一个抓成独立小窗（还能收回去）。排版状态落本地，下次打开还是上次的样子。
   const [leftStack, setLeftStack] = useState<LeftStackState>(() => defaultLeftStackState());
@@ -2596,24 +2545,22 @@ useEffect(() => {
     }
     outdoorOverlayRef.current?.zoomBy(direction);
   };
-  // 离开户外 3D 接管（切 2D / 实景隔离 / 收起）时收口户外漫游态：控制器随
-  // walkEnabled=false 清理指针锁与监听，这里只把独立信号复位。
   useEffect(() => {
-    if (!outdoor3dTakeoverActive || outdoor2DOpen || scanIsolated) setOutdoorWalkActive(false);
-  }, [outdoor3dTakeoverActive, outdoor2DOpen, scanIsolated]);
+    if (!outdoor3dTakeover) {
+      setOutdoorWalkActive(false);
+      setOutdoorWalkChooserOpen(false);
+    }
+  }, [outdoor3dTakeover]);
   // 2026-11-13 定稿：2D/3D 胶囊固定在画布左下动作簇，2D 覆盖层与 3D 接管同一入口；
   // 右轨 44px 竖轨不再纳横排文字胶囊。状态机沿用原 outdoorStage.onSwitch 的三态流转。
   const handleOutdoorViewSwitch = (next: '2d' | '3d') => {
     if (next === '3d') {
       setSplatTransformModeState('off');
-      if (outdoor2DOpen) {
-        setOutdoor2DOpen(false);
-        setOutdoor3dTakeoverActive(true);
-        setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-      } else if (!outdoor3dTakeoverActive) {
-        setOutdoor3dTakeoverActive(true);
-        setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
-      }
+      setOutdoor2DOpen(false);
+      setOutdoor3dTakeoverActive(true);
+      setView(current => current.view2D || current.walkthroughMode
+        ? { ...current, view2D: false, walkthroughMode: false }
+        : current);
       return;
     }
     clearPendingPlacement();
@@ -2724,24 +2671,74 @@ useEffect(() => {
     setView(current => (current.walkthroughMode ? { ...current, walkthroughMode: false } : current));
     setGameMode(mode => (mode === 'live' ? 'build' : mode));
   }, [setView, setGameMode]);
-  /** 右侧 tool-walk 与场地卡共用：进 = startWalk（带当前角色），出 = 收漫游。 */
-  function toggleWalkthrough(on: boolean) {
-    // 户外 3D 接管视图：走独立的一期裸步行链路，不翻室内 walkthroughMode（否则
-    // OutdoorPlan3D 会被 walkthroughActive 卸载）；2D 平面与室内态仍走旧路径。
-    if (outdoor3dTakeover && outdoorPlan && !scanIsolated) {
-      toggleOutdoorWalk(on);
+  function toggleOutdoorWalk(on: boolean) {
+    if (!on || outdoorWalkChooserOpen) {
+      setOutdoorWalkChooserOpen(false);
+      setOutdoorWalkActive(false);
       return;
     }
-    // 2026-11-16 修（用户反馈：点右侧黄色漫游钮整页白屏）：户外工作流开着、却没有可走的 3D 相机时，
-    // 以前会沉到下面的 startWalk()——mappedWorkspace 时转 tryMapVenue 打开室内漫游，
-    // 在户外布局上跑室内 PointerLock 链路，点一次就白屏、Esc 也退不回来。这里就地收口，只提示不改视图。
-    if (!scanIsolated && (outdoor2DOpen || outdoor3dTakeoverActive)) {
-      if (on) notify('先切到 3D 场地，再进第一人称漫游。', 'info');
+    if (!outdoorPlan) {
+      notify('等地图加载完成后再进漫游。', 'info');
+      return;
+    }
+
+    if (!outdoor3dTakeover) handleOutdoorViewSwitch('3d');
+    setOutdoorWalkChooserOpen(true);
+  }
+
+  function startOutdoorWalk(viewMode: OutdoorWalkViewMode) {
+    requestOutdoorWalkPointerLock();
+    setOutdoorWalkChooserOpen(false);
+    setOutdoorWalkView(viewMode);
+    setOutdoorWalkActive(true);
+  }
+
+  function toggleWalkthrough(on: boolean) {
+    if (!scanIsolated && (isOutdoorProject || outdoor2DOpen || outdoor3dTakeoverActive)) {
+      toggleOutdoorWalk(on);
       return;
     }
     if (on) { startWalk(); return; }
     exitWalkthrough();
   }
+
+  // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
+  const outdoorActions = !scanIsolated && (outdoor2DOpen || !!outdoorPlan) ? {
+    canUndo: outdoorHistory.canUndo,
+    canRedo: outdoorHistory.canRedo,
+    undo: () => outdoorOverlayRef.current?.undo(),
+    redo: () => outdoorOverlayRef.current?.redo(),
+    zoomBy: (direction: 1 | -1) => outdoorZoomRef.current(direction),
+    exportPng: () => outdoorOverlayRef.current?.exportPng() ?? false,
+    // 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（右栏工具排「选择」钮的按下态与切换）。
+    canvasMode: outdoorCanvasMode,
+    setCanvasMode: (mode: 'view' | 'select') => outdoorOverlayRef.current?.setCanvasMode(mode),
+    // 2026-11-15 测量直进：激活态 / 当前模式 + 进入退出 / 切距离·面积·路径（工具条小标转发）。
+    measureActive: outdoorMeasureActive,
+    measureKind: outdoorMeasureKind,
+    setMeasureKind: (kind: 'distance' | 'area' | 'path') => { setOutdoorMeasureKind(kind); outdoorOverlayRef.current?.setMeasureKind(kind); },
+    // 2026-11-15 网格吸附开关：底条吸附钮切换，转发到 2D 画布。
+    snapOn: outdoorSnapOn,
+    setSnapOn: (on: boolean) => { setOutdoorSnapOn(on); outdoorOverlayRef.current?.setSnapOn(on); },
+    enterMeasure: () => outdoorOverlayRef.current?.setToolMode('measure'),
+    exitMeasure: () => outdoorOverlayRef.current?.setToolMode('view'),
+    // 2026-11-12 三张卡拆开：右轨每枚圆钮只管自己那张卡的展开态。
+    inspectorTabs: outdoorInspector.openTabs,
+    setInspector: (tab: 'measure' | 'annotate' | 'selection') => {
+      const open = !outdoorInspector.openTabs[tab];
+      outdoorOverlayRef.current?.setInspector(open, tab);
+    },
+    walkActive: outdoorWalkActive,
+    toggleWalk: toggleOutdoorWalk,
+    // 2026-11-15 方案 A：2D/3D 收进右列一枚可切换圆钮；回选址靶心聚焦场地边界。
+    view: outdoor3dTakeoverActive && !outdoor2DOpen ? '3d' as const : '2d' as const,
+    onToggleView: () => handleOutdoorViewSwitch(outdoor3dTakeoverActive && !outdoor2DOpen ? '2d' : '3d'),
+    // 指北针：3D 接管回正相机朝向正北；2D 平面复位视图到场地边界。
+    resetNorth: () => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
+      else outdoorOverlayRef.current?.focusVenue();
+    },
+  } : null;
   const splatLodEnabled = showGaussianInCanvas && !!layout.researchArea && !!environment && !scanIsolated;
   const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
   const { mode: splatLod, measured: splatLodMeasured } = useSplatLod({
@@ -4955,7 +4952,10 @@ useEffect(() => {
                   apiRef={outdoorPlan3DRef}
                   canvasApiRef={outdoorCanvasBridgeRef}
                   active={outdoor3dTakeover}
-                  walkEnabled={outdoorWalkActive}
+                  walkEnabled={outdoor3dTakeover && outdoorWalkActive}
+                  walkChooserOpen={outdoor3dTakeover && outdoorWalkChooserOpen}
+                  onCloseWalkChooser={() => setOutdoorWalkChooserOpen(false)}
+                  onWalkStart={startOutdoorWalk}
                   onWalkExit={() => setOutdoorWalkActive(false)}
                   viewMode={outdoorWalkView}
                   onCycleView={cycleOutdoorWalkView}

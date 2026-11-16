@@ -65,6 +65,36 @@ describe('buildSubEntranceProposal（V-4a 子出入口）', () => {
     expect(buildSubEntranceProposal({ zones: [nearZone], routes: [], nodes: [] }, ids)).toBeNull();
   });
 
+  it('分区贴边 + 已确认主入口在区边内侧：复用该口补驳线，不整区跳过也不另造重复门', () => {
+    // 分区西侧贴场地边界（x=0），只有 10×10 m：八个边界采样点全落在 15m 去重半径内，
+    // 旧口径会因为没有「贴在环边 1m 内」的节点而把整区当成重复立口跳过 → 返回 null。
+    const edgeZone = zone('z-edge', '美食区', [
+      { x: 0, y: 30 },
+      { x: 10, y: 30 },
+      { x: 10, y: 40 },
+      { x: 0, y: 40 },
+    ]);
+    const entrance: PlanNode = {
+      ...node('node-main', '已核对主入口', { x: 8.5, y: 35 }),
+      verification: 'user-confirmed',
+    };
+    const proposal = buildSubEntranceProposal(
+      {
+        zones: [edgeZone],
+        routes: [route('route-2', 'pedestrian', [{ x: 30, y: -20 }, { x: 30, y: 80 }])],
+        nodes: [entrance],
+        boundary: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 60 }, { x: 0, y: 60 }],
+      },
+      ids,
+    );
+    expect(proposal).not.toBeNull();
+    expect(proposal!.nodes).toHaveLength(0); // 复用既有确认口，不另造 15m 内的重复门
+    const spur = proposal!.routes[0]!;
+    expect(spur.startNodeId).toBe(entrance.id);
+    expect(spur.points[0]).toEqual({ x: 8.5, y: 35 }); // 起点就是那个已确认入口
+    expect(spur.points[1]).toEqual({ x: 30, y: 35 }); // 终点落在主线上
+  });
+
   it('多分区批量出驳线，id 全唯一，数量 ≤ 上限', () => {
     // 同一 y 带沿流线一字排开（离主流线都是 60m），只按 x 错开
     const zones = [0, 220, 440].map((x, i) =>

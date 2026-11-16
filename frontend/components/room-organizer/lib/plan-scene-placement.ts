@@ -97,8 +97,12 @@ export function planCrowdShellPlacements(
   boundary: readonly PlanPoint[],
   metrics: PlanSiteMetrics,
 ): CrowdShellPlacement[] {
+  const frame = planShellFrame(boundary, metrics, { clampPoints: false });
   return planCrowdPlacements(workers).map((placement) => ({
     ...placement,
-    shell: planPointToShell(placement.at, boundary, metrics),
+    shell: frame?.toShell(placement.at) ?? {
+      x: placement.at.x + metrics.width / 2,
+      z: -placement.at.y + metrics.depth / 2,
+    },
   }));
 }

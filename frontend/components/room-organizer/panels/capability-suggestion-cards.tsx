@@ -13,44 +13,58 @@ const THUMB_HEIGHT = 62;
 export interface CapabilitySuggestionCardsProps {
   /** 点卡片主体：把一句可直接发送的指令预填进输入框（不发送），由父级聚焦输入框。 */
   onPrefill(text: string): void;
+  /** 地图优先：地点未定时，能力卡只提供选址入口。 */
+  placeFirst?: boolean;
 }
 
 /**
  * 「你可以做什么」建议卡（petitmaker 风）：缩略图 + 落点虚线圈 + 一句话。
  * 点卡片主体 = 预填一句人话指令到 composer；卡内小次按钮保留原 picker 动作。
  */
-export function CapabilitySuggestionCards({ onPrefill }: CapabilitySuggestionCardsProps): JSX.Element | null {
+export function CapabilitySuggestionCards({ onPrefill, placeFirst = false }: CapabilitySuggestionCardsProps): JSX.Element | null {
   const agent = useAgent();
   const { layout, activeFloor } = useRoomEditor();
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const hasVenue = agent.venueUp;
 
-  const cards = [
-    {
-      id: 'map',
-      title: '地图选址',
-      desc: '先圈出真实场地范围',
-      prefill: '先帮我看看这块场地能放什么',
-      actionLabel: agent.mapPickerOpen ? '收起地图圈地' : '打开地图圈地',
-      action: agent.startMapVenuePicker,
-      active: agent.mapPickerOpen,
-      icon: <MapIcon size={13} aria-hidden="true"/>,
-      emptyIcon: <MapPin size={20} aria-hidden="true"/>,
-      ringClass: '',
-    },
-    {
-      id: 'style',
-      title: '按风格配一套',
-      desc: '按场地气质配现成风格',
-      prefill: STYLE_CAPABILITY_PREFILL,
-      actionLabel: agent.stylePickerOpen ? '收起风格套' : '选风格',
-      action: () => { if (agent.stylePickerOpen) agent.closeStylePicker(); else agent.startStylePicker(); },
-      active: agent.stylePickerOpen,
-      icon: <Palette size={13} aria-hidden="true"/>,
-      emptyIcon: <Palette size={20} aria-hidden="true"/>,
-      ringClass: 'cs-thumb-ring--offset',
-    },
-  ];
+  const mapCard = {
+    id: 'map',
+    title: '地图选址',
+    desc: '先圈出真实场地范围',
+    prefill: '先帮我看看这块场地能放什么',
+    actionLabel: agent.mapPickerOpen ? '收起地图圈地' : '打开地图圈地',
+    action: agent.startMapVenuePicker,
+    active: agent.mapPickerOpen,
+    icon: <MapIcon size={13} aria-hidden="true"/>,
+    emptyIcon: <MapPin size={20} aria-hidden="true"/>,
+    ringClass: '',
+  } as const;
+  /** 地图优先：地点没定时，第二张卡也只教人把地点说出来，不给按风格配（那是定完地点以后的事）。 */
+  const placeCard = {
+    id: 'place',
+    title: '说出地点',
+    desc: '城市、场馆或地址都行',
+    prefill: '先找杭州 IN77，核对可用范围',
+    actionLabel: undefined,
+    action: undefined,
+    active: false,
+    icon: <MapPin size={13} aria-hidden="true"/>,
+    emptyIcon: <MapPin size={20} aria-hidden="true"/>,
+    ringClass: 'cs-thumb-ring--offset',
+  };
+  const styleCard = {
+    id: 'style',
+    title: '按风格配一套',
+    desc: '按场地气质配现成风格',
+    prefill: STYLE_CAPABILITY_PREFILL,
+    actionLabel: agent.stylePickerOpen ? '收起风格套' : '选风格',
+    action: () => { if (agent.stylePickerOpen) agent.closeStylePicker(); else agent.startStylePicker(); },
+    active: agent.stylePickerOpen,
+    icon: <Palette size={13} aria-hidden="true"/>,
+    emptyIcon: <Palette size={20} aria-hidden="true"/>,
+    ringClass: 'cs-thumb-ring--offset',
+  } as const;
+  const cards = placeFirst ? [mapCard, placeCard] : [mapCard, styleCard];
 
   return (
     <div className="cs-card-row" role="group" aria-label="你可以做什么">
@@ -79,12 +93,14 @@ export function CapabilitySuggestionCards({ onPrefill }: CapabilitySuggestionCar
             <span className="cs-card-title">{card.icon}{card.title}</span>
             <span className="cs-card-desc">{card.desc}</span>
           </span>
-          <button
-            type="button"
-            className={card.active ? 'cs-card-action is-on' : 'cs-card-action'}
-            aria-pressed={card.active}
-            onClick={event => { event.stopPropagation(); card.action(); }}
-          >{card.actionLabel}</button>
+          {card.actionLabel && card.action && (
+            <button
+              type="button"
+              className={card.active ? 'cs-card-action is-on' : 'cs-card-action'}
+              aria-pressed={card.active}
+              onClick={event => { event.stopPropagation(); card.action?.(); }}
+            >{card.actionLabel}</button>
+          )}
         </div>
       ))}
     </div>

@@ -6,9 +6,9 @@ import type { OutdoorStage } from '../lib/outdoor-agent-contract';
 
 const stageSuggestions: Record<OutdoorStage, readonly { hint: string; prompt: string }[]> = {
   place: [
-    { hint: '先找场地，再核对可用范围。', prompt: '先找杭州 IN77，核对可用的活动范围' },
-    { hint: '也可以从想办的活动开始。', prompt: '帮我找一个能办周末市集的户外场地' },
-    { hint: '知道大致位置？直接告诉我。', prompt: '在杭州西湖边找一块能办活动的场地' },
+    { hint: '先找场地，再核对可用范围。', prompt: '先找杭州 IN77，核对可用范围' },
+    { hint: '带上城市和场馆名，我才能核。', prompt: '在杭州西湖文化广场找一块能办周末市集的场地' },
+    { hint: '地址、场馆、路口都行。', prompt: '杭州国际博览中心，核对可用范围' },
   ],
   scope: [
     { hint: '确认哪一片场地真的能用。', prompt: '帮我核对本次活动的实际可用范围' },

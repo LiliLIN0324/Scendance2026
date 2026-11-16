@@ -47,9 +47,11 @@ export type OutdoorWalkPhase = 'pending' | 'locked' | 'drag' | 'unlocked';
 
 export interface UseOutdoorWalkOptions {
   enabled: boolean;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  canvas: HTMLCanvasElement | null;
   cameraRef: React.MutableRefObject<THREE.PerspectiveCamera | null>;
   orbitRef: React.MutableRefObject<OrbitControlsType | null>;
+  /** 接管巡游人物时，从人物当前位置和朝向进场。 */
+  spawn?: { x: number; z: number; yaw: number } | undefined;
   /** 场地边界（ENU 米制）；不足 3 点时不做越界判定。 */
   boundary: readonly WalkBoundaryPoint[];
   /** 固定眼高（米），默认 1.6。 */
@@ -87,9 +89,10 @@ const pointerLockControlsPromise = import('three/examples/jsm/controls/PointerLo
 export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: OutdoorWalkPhase } {
   const {
     enabled,
-    canvasRef,
+    canvas,
     cameraRef,
     orbitRef,
+    spawn,
     boundary,
     eyeHeight = 1.6,
     walkSpeed = 1.8,
@@ -105,6 +108,8 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
 
   const boundaryRef = useRef(boundary);
   boundaryRef.current = boundary;
+  const spawnRef = useRef(spawn);
+  spawnRef.current = spawn;
   const eyeHeightRef = useRef(eyeHeight);
   eyeHeightRef.current = eyeHeight;
   const walkSpeedRef = useRef(walkSpeed);
@@ -119,12 +124,11 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
   // 指针锁状态同步：锁落地 → locked；锁曾工作过又被 Esc 释放 → unlocked；
   // 浏览器拒绝锁 / 手势丢失 → drag（拖拽看视角兜底，不走进死胡同）。
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !canvas) {
       setPhase('pending');
       return undefined;
     }
-    const canvas = canvasRef.current;
-    const doc = canvas?.ownerDocument ?? document;
+    const doc = canvas.ownerDocument;
     let settled = false;
     const sync = () => {
       const locked = walkPointerLocked(canvas);
@@ -154,12 +158,11 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       doc.removeEventListener('pointerlockchange', sync);
       doc.removeEventListener('pointerlockerror', onError);
     };
-  }, [enabled, canvasRef]);
+  }, [enabled, canvas]);
 
   useEffect(() => {
     if (!enabled) return undefined;
 
-    const canvas = canvasRef.current;
     const camera = cameraRef.current;
     if (!canvas || !camera) return undefined;
 
@@ -208,12 +211,16 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       cleanup.push(() => canvas.ownerDocument.removeEventListener('pointerlockchange', adopt));
 
       savedCameraPosition = camera.position.clone();
+      const spawnPosition = spawnRef.current;
 
       // 进场落点：当前 x/z 已在边界内就站原地；在环外（环绕镜头拉到了场外）
       // 就落到边界质心。眼高固定，朝向保持当前 yaw/pitch。
       const ring = boundaryRef.current;
       const currentEnu = worldToEnu(camera.position.x, camera.position.z);
-      if (ring.length >= 3 && !pointInBoundaryRing(currentEnu, ring)) {
+      if (spawnPosition) {
+        camera.position.set(spawnPosition.x, eyeHeightRef.current, spawnPosition.z);
+        camera.lookAt(camera.position.x + Math.sin(spawnPosition.yaw), camera.position.y, camera.position.z + Math.cos(spawnPosition.yaw));
+      } else if (ring.length >= 3 && !pointInBoundaryRing(currentEnu, ring)) {
         const centroid = boundaryCentroid(ring);
         if (centroid) {
           camera.position.set(centroid.x, eyeHeightRef.current, -centroid.y);
@@ -222,6 +229,7 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         camera.position.y = eyeHeightRef.current;
       }
       const player = camera.position.clone();
+      let enteredBounds = !spawnPosition || ring.length < 3 || pointInBoundaryRing(worldToEnu(player.x, player.z), ring);
       const lookDir = new THREE.Vector3();
       camera.getWorldDirection(lookDir);
       let yaw = Math.atan2(lookDir.x, lookDir.z);
@@ -261,14 +269,14 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       cleanup.push(() => controls?.removeEventListener('unlock', releaseHeldKeys));
 
       // 指针锁兜底：锁被拒 / 掉锁后，左键拖拽看视角，WASD 照常走；
-      // 曾成功过的锁，点按（无位移）重新抢锁。
+      // 点按（无位移）可在冷启动或退锁后请求锁定。
       const dragEuler = new THREE.Euler(0, 0, 0, 'YXZ');
       let dragPointer: number | null = null;
       let dragX = 0;
       let dragY = 0;
       let dragMoved = false;
       const onDragStart = (event: PointerEvent) => {
-        if (controls?.isLocked || event.button !== 0) return;
+        if (viewModeRef.current === 'orbit' || controls?.isLocked || event.button !== 0) return;
         dragPointer = event.pointerId;
         dragX = event.clientX;
         dragY = event.clientY;
@@ -296,7 +304,7 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         if (dragPointer !== event.pointerId) return;
         const wasClick = !dragMoved;
         onDragCancel(event);
-        if (wasClick && !controls?.isLocked && lockedOnceRef.current) requestLock();
+        if (wasClick) requestLock();
       };
       canvas.addEventListener('pointerdown', onDragStart);
       canvas.addEventListener('pointermove', onDragMove);
@@ -368,9 +376,11 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           const distance = (speed * delta) / len;
           stepTo.x = player.x + (-dz * forward.x + dx * right.x) * distance;
           stepTo.z = player.z + (-dz * forward.z + dx * right.z) * distance;
-          const clamped = constrainWorldToBoundary(player, stepTo, boundaryRef.current);
+          // 接管场地外路段上的人物时，可以先沿线走回范围；从进入范围起再限制越界。
+          const clamped = enteredBounds ? constrainWorldToBoundary(player, stepTo, boundaryRef.current) : stepTo;
           player.x = clamped.x;
           player.z = clamped.z;
+          if (!enteredBounds) enteredBounds = pointInBoundaryRing(worldToEnu(player.x, player.z), boundaryRef.current);
         }
         player.y = eyeHeightRef.current;
         const movedX = player.x - prevX;
@@ -403,7 +413,7 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       }
       if (orbit) orbit.enabled = true;
     };
-  }, [enabled, canvasRef, cameraRef, orbitRef]);
+  }, [enabled, canvas, cameraRef, orbitRef]);
 
   return { phase };
 }

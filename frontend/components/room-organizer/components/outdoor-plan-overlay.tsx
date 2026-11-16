@@ -35,6 +35,7 @@ import type { BackendSession } from '@/lib/backend-session';
 import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
 import { boundaryKey } from '../lib/outdoor-agent-contract';
+import { answersPlaceRequest } from '../lib/outdoor-place-handover';
 import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { openGenerationSheet } from '../lib/generation-sheet';
@@ -292,6 +293,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       ...(shape.kind === 'line' ? { kind: 'line' as const } : {}) });
     canvasApiRef.current?.focusBounds(shape.bounds);
   }, JSON.stringify(plan?.boundary ?? []));
+  /**
+   * 2026-11-16 线上实测卡点：对话停在「搜索目标地点」时，用户在画布左上角搜到的地点只会飞视图、落钉，
+   * 对话不接手，户外主线就断在这——两边各搜各的，谁也不知道对方找到了什么。
+   * 这里把这次选点当成对那句「找场地」的回答，直接送进对话的候选确认卡（仍要用户点候选才算确认，
+   * 不自动锚定场地）；其它阶段保持原来的「只看一眼」语义，不打断分区/流线工作。
+   */
+  const handOverPlaceToChat = (name: string) =>
+    answersPlaceRequest(agent?.outdoorWorkflow.state.stage, name, query => agent?.searchOutdoorVenue(query));
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
@@ -594,6 +603,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             setPlacePin(null);
             setPlaceArea({ polygon: area.polygon, label: `${area.name} · ${area.level}` });
             canvasApiRef.current?.focusBounds(area.bounds);
+            handOverPlaceToChat(area.name);
           }}
           onPick={place => {
             setPlaceArea(null);
@@ -601,6 +611,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
             // Pin immediately. Retries, abort, and the centered outline stay on this project/place.
             lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
+            handOverPlaceToChat(place.name);
           }}
           onClear={() => { cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); }}
         />

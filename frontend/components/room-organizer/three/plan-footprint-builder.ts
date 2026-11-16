@@ -3,7 +3,9 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { ROOM_OBJECT_TAGS } from './room-builder';
 import { planFootprintShapes, type PlanFootprintStrokeShape, type ShellPoint } from '../lib/plan-footprint-geometry';
-import { buildGroundLabel, buildPlanPropObject } from './plan-props-builder';
+import { buildGroundLabel, buildPlanGroundSticker, buildPlanPropObject } from './plan-props-builder';
+import { workerSticker } from '../lib/oneplan-stickers';
+import { libraryEntryColor } from '../lib/oneplan-library';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type * as ThreeNS from 'three';
 
@@ -409,6 +411,7 @@ export function buildPlanFootprint(
     mesh.userData.planNodeId = node.id;
     group.add(mesh);
   }
+  const workersById = new Map(plan.workers.map(worker => [worker.id, worker]));
   for (const worker of shapes.workers) {
     const [x, y] = shapePoint(worker.at, metrics);
     const geometry = new THREE.CircleGeometry(MARKER_RADIUS * 0.45, 18);
@@ -418,6 +421,14 @@ export function buildPlanFootprint(
     mesh.position.y = ELEVATION.marker;
     mesh.userData.planWorkerId = worker.id;
     group.add(mesh);
+    const source = workersById.get(worker.id);
+    const sticker = workerSticker(source?.role ?? '') ?? { kind: 'icon', slug: 'information-point', icon: 'users' };
+    const color = libraryEntryColor({ slug: sticker.slug, ...(source?.color ? { color: source.color } : {}) });
+    const badge = buildPlanGroundSticker(THREE, sticker, { width: 1.15, depth: 1.15, color });
+    badge.position.set(x, ELEVATION.marker, -y);
+    badge.name = 'plan-worker-badge';
+    badge.userData.planWorkerId = worker.id;
+    group.add(badge);
   }
 
   // 地面文字：只在区块中心写分区名（舞台 / 排队区这类区域语义）。
