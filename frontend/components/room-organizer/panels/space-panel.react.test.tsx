@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
+import { REPLICA_CASES } from '../lib/replica-cases';
 import { SpacePanel } from './space-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
@@ -65,8 +66,28 @@ describe('SpacePanel', () => {
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} currentScanId={current.assetId}/>);
     expect(screen.getByLabelText('应用真实场地 午后咖啡馆').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByText('更多场地选项'));
-    fireEvent.click(screen.getByText('项目中的场景 · 1'));
+    fireEvent.click(screen.getByText('项目中的场景'));
     fireEvent.click(screen.getByRole('button', { name: '移除午后咖啡馆' }));
     expect(preview.onRemove).toHaveBeenCalledWith(current.assetId);
+  });
+
+  // 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」
+  // ＋「经典案例我要的也是和其他的视觉一样的卡片预览图」。
+  it('card：案例与模板库在前、实景扫描在后，项目中的场景不再占位', () => {
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+    const labels = [...document.querySelectorAll('details.sc-scene-group')]
+      .map(group => group.querySelector('.sc-scene-group-label')?.textContent);
+    expect(labels[0]).toBe('经典案例');
+    expect(labels).not.toContain('项目中的场景');
+    expect(labels[labels.length - 1]).toBe('我的实景扫描');
+    // 收起时不建卡（44 案各自要算一遍方案，懒挂载）。
+    expect(document.querySelectorAll('.sc-space-cases .sc-space-sample').length).toBe(0);
+    const group = document.querySelector('[data-testid="space-group-cases"]') as HTMLDetailsElement;
+    group.open = true;
+    fireEvent(group, new Event('toggle'));
+    const cards = document.querySelectorAll('[data-testid="space-group-cases"] .sc-space-sample');
+    expect(cards.length).toBe(REPLICA_CASES.length);
+    expect(cards[0].querySelector('svg.sc-case-thumb')).toBeTruthy();
+    expect(cards[0].textContent).toContain(REPLICA_CASES[0].title);
   });
 });
