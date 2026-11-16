@@ -1,0 +1,8 @@
+# Cloudflare Pages 响应头（next.config 的 headers() 在 output: 'export' 下不生效，
+# 这条必须走产物根的 _headers；public/ 里的文件会原样进 out/）。
+#
+# 物料卡的缩略图是内容不变的静态 webp（assets/library/thumb/<slug>-<hash>.webp，
+# 文件名带内容哈希，改图必然换名），所以可以放心长期强缓存：面板每次挂载/翻页
+# 都直接命中浏览器缓存，不再回源重取。
+/showcase/assets/library/thumb/*
+  Cache-Control: public, max-age=31536000, immutable

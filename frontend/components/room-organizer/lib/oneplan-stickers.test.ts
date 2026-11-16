@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   drawOneplanScaleSticker,
   drawOneplanSticker,
@@ -13,6 +15,9 @@ import {
   routeSticker,
   subscribeOneplanStickerLoads,
   workerSticker,
+  workerRoleColor,
+  WORKER_ROLE_FAMILIES,
+  WORKER_ROLE_NEUTRAL_COLOR,
   zoneSticker,
   FACILITY_STICKERS,
   NODE_STICKERS,
@@ -22,7 +27,8 @@ import {
   type OneplanStickerDescriptor,
 } from './oneplan-stickers';
 import { buildPlanLegend } from './site-plan-legend';
-import { PLANNING_NODE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
+import { LABOR_ROLES } from './oneplan-catalog';
+import { PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 import { PLANNING_ICONS } from '@/lib/outdoor-plan-tokens';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -161,13 +167,130 @@ describe('OnePlan 贴纸映射', () => {
     expect(new Set([nodeSticker('entry')!.slug, nodeSticker('exit')!.slug, nodeSticker('both')!.slug]).size).toBe(3);
   });
 
-  it('样例人员岗位命中：安保→警察、引导员→问询处；未知岗位返回 null', () => {
-    expect(workerSticker('安保')).toMatchObject({ kind: 'icon', slug: 'police' });
+  it('样例人员岗位命中：保安→岗亭、警察→警徽、引导员→问询处；未知岗位返回 null', () => {
+    expect(workerSticker('安保')).toMatchObject({ kind: 'icon', slug: 'security-checkpoint' });
+    expect(workerSticker('警察')).toMatchObject({ kind: 'icon', slug: 'police' });
     expect(workerSticker('引导员')).toMatchObject({ kind: 'icon', slug: 'information-point' });
     expect(workerSticker('医疗组')).toMatchObject({ slug: 'first-aid-point' });
     expect(workerSticker('安保队长')).toMatchObject({ slug: 'security-checkpoint' });
     expect(workerSticker('完全未登记的岗位')).toBeNull();
     expect(workerSticker('')).toBeNull();
+  });
+
+  it('九个内置岗位都写死主题色：色系定色相、同色系里每个身份占不同明度档', () => {
+    // 九岗都有显式色，不再落哈希。
+    expect(LABOR_ROLES.map(role => workerRoleColor(role)).filter(color => color === null)).toEqual([]);
+    // 工作人员色系（蓝）：现场执行都在这套里……
+    const staffRoles = ['保安', '志愿者', '管理员', '引导员', '检票', '技术', '摄像'];
+    for (const role of staffRoles) {
+      expect(WORKER_ROLE_FAMILIES.staff.shades, role).toContain(workerRoleColor(role));
+    }
+    // ……但身份之间不再同色（用户：「虽然是一个色系，每个身份的颜色有点不一样」）。
+    const staffColors = staffRoles.map(role => workerRoleColor(role));
+    expect(new Set(staffColors).size).toBe(staffRoles.length);
+    // 应急三岗（消防/警察/医务）另成红系，内部也各占一档。
+    const emergencyColors = ['消防', '警察', '医务人员'].map(role => workerRoleColor(role));
+    expect(new Set(emergencyColors).size).toBe(3);
+    for (const color of emergencyColors) expect(WORKER_ROLE_FAMILIES.emergency.shades).toContain(color);
+    // 色系之间不串色。
+    expect(workerRoleColor('保安')).not.toBe(workerRoleColor('警察'));
+    // 负责人占工作人员色系最深的两档，不另开新色系。
+    expect(workerRoleColor('经理')).toBe(WORKER_ROLE_FAMILIES.staff.shades[0]);
+    expect(workerRoleColor('主管')).toBe(WORKER_ROLE_FAMILIES.staff.shades[1]);
+    // 「自定义点」中性色，不冒充任何色系。
+    expect(workerRoleColor('自定义点')).toBe(WORKER_ROLE_NEUTRAL_COLOR);
+    // 同族别名与主岗位同色同档。
+    expect(workerRoleColor('安保')).toBe(workerRoleColor('保安'));
+    expect(workerRoleColor('安保队长')).toBe(workerRoleColor('保安'));
+    // 自动输入的同族岗位也拿同一档（关键词回落表同样带 family/tone）。
+    expect(workerRoleColor('医务岗')).toBe(workerRoleColor('医务人员'));
+    expect(workerRoleColor('现场管理员')).toBe(workerRoleColor('管理员'));
+    expect(workerRoleColor('警务岗')).toBe(workerRoleColor('保安'));
+    // 表里没写的岗位返回 null，交给调色板回落。
+    expect(workerRoleColor('完全未登记的岗位')).toBeNull();
+    expect(workerRoleColor('')).toBeNull();
+  });
+
+  it('剩下六个岗位（引导/检票/保洁/技术/摄像/停车）也在色系里各有各的档', () => {
+    for (const role of ['引导员', '检票', '保洁', '技术', '摄像', '停车']) {
+      expect(workerRoleColor(role), role).not.toBeNull();
+    }
+    // 2026-11-16 用户：后勤走后勤色系，不跟工作人员同色。
+    for (const role of ['引导员', '检票', '技术', '摄像']) {
+      expect(WORKER_ROLE_FAMILIES.staff.shades, role).toContain(workerRoleColor(role));
+    }
+    for (const role of ['保洁', '环卫', '停车']) {
+      expect(WORKER_ROLE_FAMILIES.logistics.shades, role).toContain(workerRoleColor(role));
+    }
+    // 后勤两岗也不同档。
+    expect(workerRoleColor('保洁')).not.toBe(workerRoleColor('停车'));
+    // 四套色系（工作人员/后勤/应急/游客）都有明度梯，主色相两两不同。
+    const families = Object.values(WORKER_ROLE_FAMILIES);
+    expect(families.every(family => family.shades.length >= 3)).toBe(true);
+    const mids = families.map(family => family.shades[Math.floor(family.shades.length / 2)]!);
+    expect(new Set(mids).size).toBe(families.length);
+    expect(new Set(families.map(family => family.label)).size).toBe(4);
+  });
+
+  it('游客/参观者拿游客色系与行人图标（tourist），不与岗位设施图标撞', () => {
+    expect(workerSticker('游客')).toMatchObject({ kind: 'icon', slug: 'tourist' });
+    expect(workerRoleColor('游客')).toBe(WORKER_ROLE_FAMILIES.visitor.shades[1]);
+    // 同族别名同色同图标。
+    expect(workerRoleColor('参观者')).toBe(workerRoleColor('游客'));
+    expect(workerSticker('参观者')?.slug).toBe('tourist');
+    // 手打的「参观人群」走关键词回落，也拿游客色系。
+    expect(workerRoleColor('参观人群')).toBe(workerRoleColor('游客'));
+    // 游客图标不被任何岗位占用（岗位上就是同一张图上认人）。
+    expect(LABOR_ROLES.map(role => workerSticker(role)?.slug)).not.toContain('tourist');
+    // 游客色与其他三套色系不串。
+    for (const family of ['staff', 'logistics', 'emergency'] as const) {
+      expect(WORKER_ROLE_FAMILIES[family].shades).not.toContain(workerRoleColor('游客'));
+    }
+  });
+
+  it('观众用自制 audience 图标 + 游客青系第 3 档，跟游客不同档不同图标', () => {
+    // 官方库里没有观众图形（spectator-services 是透明通用点），这枚是自画的白字形。
+    expect(workerSticker('观众')).toMatchObject({ kind: 'icon', slug: 'audience' });
+    expect(workerRoleColor('观众')).toBe(WORKER_ROLE_FAMILIES.visitor.shades[2]);
+    // 同色系但不同身份：颜色不同、图标也不同。
+    expect(workerRoleColor('观众')).not.toBe(workerRoleColor('游客'));
+    expect(workerSticker('观众')?.slug).not.toBe(workerSticker('游客')?.slug);
+    // 手打的「观演人群」走关键词回落。
+    expect(workerRoleColor('观演人群')).toBe(workerRoleColor('观众'));
+    expect(workerSticker('观演人群')?.slug).toBe('audience');
+    // 观众图标不被任何岗位占用。
+    expect(LABOR_ROLES.map(role => workerSticker(role)?.slug)).not.toContain('audience');
+  });
+
+  it('岗位表里的每枚图标文件都真实存在（含自制的 audience）', () => {
+    const slugs = new Set(Object.values(WORKER_ROLE_STICKERS).map(sticker => sticker.slug));
+    const missing = [...slugs].filter(slug => !existsSync(join(process.cwd(), 'public/oneplan-icons/icon', `${slug}.svg`)));
+    // 官方库里没有观众图形，audience.svg 是照同套规范自画的，别让人误删。
+    expect(slugs.has('audience')).toBe(true);
+    expect(missing).toEqual([]);
+  });
+
+  it('图例人员色块取岗位主题色（与左侧行/地图芯片/3D 同源）', () => {
+    const groups = buildPlanLegend(samplePlan());
+    const people = groups.find(g => g.title === '人员')!;
+    // 样例岗位是「安保」→ 安保族显式色。
+    expect(people.entries[0]!.swatch).toBe(workerRoleColor('安保'));
+    expect(people.entries[0]!.swatch).not.toBe(PLANNING_LAYER_COLORS.worker);
+  });
+
+  it('左侧「工作人员」九个岗位各有一枚图标，不同岗位不共用 slug（地图上已不写岗位名）', () => {
+    const slugs = LABOR_ROLES.map(role => workerSticker(role)?.slug ?? null);
+    // 每个岗位都必须命中贴纸，否则地图上会退回圆点、认不出岗位。
+    expect(slugs.filter(slug => slug === null)).toEqual([]);
+    // 不共享图标：九个岗位九个 slug。
+    expect(new Set(slugs).size).toBe(LABOR_ROLES.length);
+  });
+
+  it('关键词回落也按「一岗一图标」分开：管理员→胸牌、经理→管理办公室、志愿→爱心、自定义→星标', () => {
+    expect(workerSticker('现场管理员')).toMatchObject({ slug: 'accreditation' });
+    expect(workerSticker('项目经理')).toMatchObject({ slug: 'event-management-office' });
+    expect(workerSticker('志愿者')).toMatchObject({ slug: 'charity' });
+    expect(workerSticker('自定义岗')).toMatchObject({ slug: 'km-marker' });
   });
 
   it('planStickerDescriptors 按 kind+slug 去重（两个摊位只预加载一张贴纸）', () => {
@@ -178,7 +301,7 @@ describe('OnePlan 贴纸映射', () => {
     expect(keys).toContain('scale:market-stall');
     expect(keys).toContain('icon:entry-gate'); // 动线徽标与自定义闸机共用入口闸门
     expect(keys).toContain('icon:pedestrian-access');
-    expect(keys).toContain('icon:police');
+    expect(keys).toContain('icon:security-checkpoint');
     expect(keys.filter(key => key === 'scale:market-stall')).toHaveLength(1);
   });
 
@@ -208,7 +331,7 @@ describe('图例接入 OnePlan 贴纸', () => {
     expect(group('设施').entries[0]).toMatchObject({ sticker: { kind: 'scale', slug: 'market-stall' } });
     expect(group('动线').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'pedestrian-access' } });
     expect(group('出入口').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'entry-gate' } });
-    expect(group('人员').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'police' } });
+    expect(group('人员').entries[0]).toMatchObject({ sticker: { kind: 'icon', slug: 'security-checkpoint' } });
     expect(group('用地红线').entries[0]!.sticker).toBeUndefined();
     expect(group('测量') ?? null).toBeNull(); // 样例无测量
     // 既有 icon 字段保持不变（PNG/PDF 图例与既有测试契约继续成立）。
