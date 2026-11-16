@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createLiveTurn, formatMetricsLine } from './outdoor-turn-live';
 import { createMetricsBook } from './outdoor-metrics-book';
+import { createTurnTraceBook } from './turn-trace-log';
 
 function harness() {
   const lines: string[] = [];
@@ -191,5 +192,25 @@ describe('createLiveTurn + 指标簿', () => {
       `terminal=${row.terminal ?? 'null'}`,
     ].join(' ');
     expect(lines[0].replace(/ turn=\S+/, '')).toBe(expected);
+  });
+
+  it('传了轨迹簿子就记下收口的那一轮（供会话报告导出）', () => {
+    const traceBook = createTurnTraceBook();
+    const turn = createLiveTurn({ sink: () => {}, traceBook });
+    turn.begin('scene', 1_000);
+    turn.markPreview(1_500);
+    turn.settle('preview_ready', 1_600);
+    const rows = traceBook.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].terminal).toBe('preview_ready');
+    expect(rows[0].stages.map((mark) => mark.stage)).toEqual(['dispatch', 'preview']);
+  });
+
+  it('没收口就不进轨迹簿子', () => {
+    const traceBook = createTurnTraceBook();
+    const turn = createLiveTurn({ sink: () => {}, traceBook });
+    turn.begin('scene', 1_000);
+    turn.markPreview(1_500);
+    expect(traceBook.list()).toHaveLength(0);
   });
 });

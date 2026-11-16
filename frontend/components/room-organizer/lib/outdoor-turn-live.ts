@@ -23,6 +23,7 @@ import {
 } from './turn-trace';
 import { metricsFromTurnTrace, type TurnTraceUiHints } from './outdoor-trace-metrics';
 import type { MetricsBook } from './outdoor-metrics-book';
+import type { TurnTraceBook } from './turn-trace-log';
 import type { OutdoorTurnMetrics } from './outdoor-turn-metrics';
 
 export interface LiveTurnOptions {
@@ -30,6 +31,8 @@ export interface LiveTurnOptions {
   now?: () => number;
   /** 传了簿子就顺手记一笔（同 turnId 是更新，不会一轮留两条）。 */
   book?: MetricsBook;
+  /** 传了轨迹簿子就把收口的这一轮也记进去（供会话报告导出）。 */
+  traceBook?: TurnTraceBook;
 }
 
 export interface LiveTurn {
@@ -84,6 +87,7 @@ export function createLiveTurn(options: LiveTurnOptions = {}): LiveTurn {
     trace = finishTurn(trace, terminal, { now: now ?? clock() });
     const metrics = metricsOf(trace);
     options.book?.record(trace.turnId, metrics, trace.terminal);
+    options.traceBook?.record(trace);
     sink(formatMetricsLine(metrics, { turnId: trace.turnId, terminal: trace.terminal }));
     // 已收口过的一轮：只补日志，别让人以为又结算了一次。
     if (already) {
