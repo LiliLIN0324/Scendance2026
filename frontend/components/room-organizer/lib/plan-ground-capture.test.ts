@@ -16,13 +16,14 @@ import { isPlanGroundSource, readPlanGroundSource, writePlanGroundSource } from 
 const BOUNDS = { west: 120.1472, south: 30.2455, east: 120.14825, north: 30.24622 };
 
 describe('plan-ground-capture 投影', () => {
-  it('各图源的贴地拼图上限：Carto / 高德矢量到 z18，OSM 与卫星到 z19', () => {
-    // Carto 同一把 key 下 z18 是真图、z19/z20 回 403（2026-11-16 实测），拼图级别封顶 18。
+  it('各图源的贴地拼图上限跟公共常量表一致：Carto / 高德到 z18，OSM 到 z19', () => {
+    // Carto 同一把 key 下 z18 是真图、z19/z20 回 403（2026-11-16 实测），拼图级别封顶 18；
+    // 高德卫星 z19 是 4235 B 的「此区域无卫星图」占位（两点同图），矢量 z19 是空瓦片。
     expect(planGroundMaxZoom('carto-light')).toBe(18);
     expect(planGroundMaxZoom('carto-dark')).toBe(18);
     expect(planGroundMaxZoom('amap-streets')).toBe(18);
+    expect(planGroundMaxZoom('amap-satellite')).toBe(18);
     expect(planGroundMaxZoom('osm')).toBe(19);
-    expect(planGroundMaxZoom('amap-satellite')).toBe(19);
   });
 
   it('墨卡托瓦片边界：zoom 0 的北缘是 ±85.05°，y=1 处回到赤道', () => {

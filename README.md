@@ -52,6 +52,7 @@ npm --prefix frontend run typecheck
 npm test                            # 根目录：后端 tests/
 npm --prefix frontend run test      # 前端 Vitest
 npm --prefix frontend run build     # 静态导出到 frontend/out
+node scripts/probe-basemap-zoom.mjs # 逐级探测底图真实上限，与 lib/basemap-zoom-caps.ts 的表比对（--apply 写回）
 ```
 
 ## 结构

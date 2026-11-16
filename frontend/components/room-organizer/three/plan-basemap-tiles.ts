@@ -28,6 +28,7 @@ import {
 import { publicSourceTileUrl, tdtDirectTileUrl } from '@/components/room-organizer/lib/tdt-probe';
 import { alignedTileBounds, needsWgs84Alignment } from '@/components/room-organizer/lib/basemap-alignment';
 import { ancestorTileCrop, BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
+import { basemapNativeMaxZoom } from '@/components/room-organizer/lib/basemap-zoom-caps';
 import { wgs84ToGcj02 } from '@/components/room-organizer/lib/geo-coords';
 import { RESEARCH_BASEMAP_TAG } from '@/components/room-organizer/three/research-basemap';
 import type { CanvasBasemapSource } from '@/components/room-organizer/components/outdoor-plan-canvas';
@@ -153,13 +154,8 @@ export function zoomFromSpan(spanM: number): number {
 }
 
 export function maxZoomForSource(source: CanvasBasemapSource): number {
-  // 3D 默认用图源真正有高清瓦片的最高级；高德街道 z18 仍为真图（z19 才回空瓦片）。
-  // Carto 2026-11-16 实测同一把 key：z18 真图、z19/z20 回 403，所以也不超过 18。
-  if (source === 'amap-satellite') return 18;
-  if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
-  if (source === 'carto-light' || source === 'carto-dark') return 18;
-  if (source === 'vec' || source === 'img') return 18;
-  return 19;
+  // 图源真实上限只有一张表（lib/basemap-zoom-caps.ts），2D 画布 / 3D 贴地 / 瓦片金字塔同源。
+  return basemapNativeMaxZoom(source);
 }
 
 /**
