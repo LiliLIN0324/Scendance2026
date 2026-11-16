@@ -408,6 +408,8 @@ export default function OutdoorPlan3D({
   const [seatActiveId, setSeatActiveId] = useState<string | null>(null);
 
   // 座位条目落座 / 起身：同一座位再按一次 E 起身。
+  // 落座锚点按真实坐姿：朝椅面外、背靠椅背，髂部落在座面偏后一点。
+  const SEAT_HIP_BACK_M = 0.12;
   const toggleSeatEntry = (entry: InteractableEntry) => {
     const seat = entry.seat;
     if (!seat) return;
@@ -420,11 +422,14 @@ export default function OutdoorPlan3D({
     seatStateRef.current = {
       active: true,
       seatId: entry.id,
-      x: seat.x,
-      z: -seat.y,
+      // 与设施模型同一套朝向：模型 rotation.y = -deg，且资产默认朝「画布上方」= 北（three 的 -Z），
+      // 而人物模型正面是 +Z，所以人要转 π - deg 才与椅面同向、背靠椅背；
+      // 再沿朝向后退一点，让髂部落在座面偏后（游戏里通行的坐姿锚点）。
+      x: seat.x - Math.sin(Math.PI - THREE.MathUtils.degToRad(seat.rotationDeg)) * SEAT_HIP_BACK_M,
+      z: -seat.y - Math.cos(Math.PI - THREE.MathUtils.degToRad(seat.rotationDeg)) * SEAT_HIP_BACK_M,
       eyeY: seat.eyeY,
       ...(typeof seat.seatHeight === 'number' ? { seatHeight: seat.seatHeight } : {}),
-      yaw: THREE.MathUtils.degToRad(seat.rotationDeg),
+      yaw: Math.PI - THREE.MathUtils.degToRad(seat.rotationDeg),
     };
     setSeatActiveId(entry.id);
   };
