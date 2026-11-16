@@ -446,7 +446,7 @@ it("旧记录没有候选和边界时回到场地搜索", async () => {
   expect(host.textContent).toContain("重新搜索地点");
   expect(apply).not.toHaveBeenCalled();
 });
-it("未确认活动边界不能跳过到库布置，保留本句自然补充", async () => {
+it("未确认活动边界先出范围确认卡而不是死路，保留本句自然补充", async () => {
   await turn(
     "户外市集45人，展览区6个展板",
     response("objects", {
@@ -457,9 +457,16 @@ it("未确认活动边界不能跳过到库布置，保留本句自然补充", a
       ],
     }),
   );
-  expect(flow.notice).toContain("先核对");
+  // 2026-11-17：画布已有闭合边界时不再硬抛死路（原报错把用户引回重新搜索地点），
+  // 直接给「确认当前活动范围」卡，一键回主流程；物件仍不落盘。
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(flow.proposal?.label).toBe("确认当前活动范围");
   expect(plan.facilities).toHaveLength(0);
   expect(flow.state.brief.guests).toBe(45);
+  // 一键确认后本句需求已记入记忆，继续走不丢人数。
+  await action("confirm");
+  expect(flow.state.brief.guests).toBe(45);
+  expect(flow.proposal).toBeNull();
 });
 it("多轮事实延续、改口人数，分区预览及自然非暗号确认推进同规划", async () => {
   await confirmScope();
@@ -631,6 +638,57 @@ it("提案后用户新加的实体不让提案失效，确认时并回且不丢�
   expect(apply).toHaveBeenCalled();
   expect(plan.zones.map((z) => z.name)).toContain("展览区");
   expect(plan.nodes.map((n) => n.name)).toContain("我核对的分期入口");
+});
+it("范围确认卡在预览期间被画布改动（如一键收进红线）不作废，确认按最新画布安置", async () => {
+  // 2026-11-17 玉泉鱼跃实测：手画范围出确认卡后，用户点「一键收进红线」挪了实体，
+  // 旧逻辑按实体快照整卡作废 → confirmedBoundary 永远写不进 → 下一句需求被打回死路。
+  const nodeId = crypto.randomUUID();
+  plan = {
+    ...plan,
+    nodes: [{
+      id: nodeId,
+      name: "签到入口",
+      kind: "entry" as const,
+      verification: "user-confirmed" as const,
+      position: { x: 5, y: 35 },
+      notes: "",
+    }],
+  };
+  await action("scope");
+  expect(flow.proposal?.kind).toBe("scope");
+  // 预览期间用户挪动实体：边界、锚点都没变，只动了内容。
+  plan = {
+    ...plan,
+    nodes: [{ ...plan.nodes[0]!, position: { x: 12, y: 35 } }],
+  };
+  await action("confirm");
+  expect(flow.notice).not.toContain("失效");
+  expect(apply).toHaveBeenCalled();
+  expect(plan.nodes.map((n) => n.id)).toContain(nodeId);
+  expect(flow.scopeConfirmed()).toBe(true);
+});
+it("已确认场地后一次 search 不再静默丢场地：继续说需求仍按已确认范围推进", async () => {
+  await confirmScope();
+  const before = JSON.stringify(plan);
+  await turn("看看别的地点", response("search", {}, { query: "别的地点" }));
+  expect(flow.state.stage).toBe("place");
+  expect(JSON.stringify(plan)).toBe(before);
+  await turn(
+    "户外市集45人，展览区在室外",
+    response("zones", {
+      guests: { value: 45, evidence: "45人" },
+      zones: [
+        {
+          name: "展览区",
+          purpose: "exhibition",
+          environment: "outdoor",
+          evidence: "展览区在室外",
+        },
+      ],
+    }),
+  );
+  // 旧代码这里 confirmedBoundary 已被清掉，需求被打回范围死路；新代码直接出分区预览。
+  expect(flow.proposal?.kind).toBe("zones");
 });
 it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单，不启动收费请求", async () => {
   await confirmScope();
