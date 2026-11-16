@@ -159,4 +159,74 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
     expect(result.facilities[1]!.notes).toHaveLength(500);
     expect(result.facilities[1]!.notes).toBe('备'.repeat(500));
   });
+
+  it('空名或纯空白名回落通用占位名', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'n1', type: 'chair', name: '', position: { x: 2, z: 2 } }),
+          makeItem({ id: 'n2', type: 'bed', name: '   ', position: { x: 6, z: 6 } }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities).toHaveLength(2);
+    expect(result.facilities.every(f => f.name === '通用物件')).toBe(true);
+  });
+
+  it('非法十六进制色丢弃，不把脏颜色带进 plan', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'c1', type: 'chair', color: 'red', position: { x: 2, z: 2 } }),
+          makeItem({ id: 'c2', type: 'bed', color: '#fff', position: { x: 6, z: 6 } }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities.every(f => f.color === undefined)).toBe(true);
+  });
+
+  it('非有限旋转角回落 0，不把 NaN/Infinity 传进工厂', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({ id: 'r1', type: 'chair', rotation: NaN, position: { x: 2, z: 2 } })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities).toHaveLength(1);
+    expect(Number.isFinite(result.facilities[0]!.rotationDeg)).toBe(true);
+    expect(result.facilities[0]!.rotationDeg).toBe(0);
+  });
+
+  it('物件名超 60 字符按契约截断', () => {
+    const longName = '甲'.repeat(70);
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({ items: [makeItem({ id: 'l1', type: 'chair', name: longName, position: { x: 2, z: 2 } })] })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities[0]!.name).toHaveLength(60);
+    expect(result.facilities[0]!.name).toBe('甲'.repeat(60));
+  });
+
+  it('空布局（无楼层）退成空设施清单，不抛错', () => {
+    const layout = makeLayout({ ...SHELL, floors: [] });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities).toHaveLength(0);
+    expect(result.skipped).toHaveLength(0);
+  });
 });

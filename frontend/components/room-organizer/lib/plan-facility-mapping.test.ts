@@ -32,9 +32,15 @@ describe('plan-facility-mapping（室内类型 → plan 设施模板落点）', 
   });
 
   it('纯室内家居 / 装饰与未知 legacy 类型回落 misc 占位', () => {
-    for (const type of ['bed', 'wardrobe', 'rug', 'painting', 'vase', 'curtains', 'unknown-legacy-thing']) {
+    for (const type of ['bed', 'wardrobe', 'rug', 'painting', 'vase', 'curtains', 'unknown-legacy-thing', 'glb-asset']) {
       expect(resolveFacilityTarget(type)).toEqual({ kind: 'misc' });
     }
+  });
+
+  it('类型先 trim 归一；空串 / 纯空白回落 misc', () => {
+    expect(resolveFacilityTarget(' chair ')).toEqual({ kind: 'oneplan', templateId: 'oneplan:scale:chair' });
+    expect(resolveFacilityTarget('')).toEqual({ kind: 'misc' });
+    expect(resolveFacilityTarget('   ')).toEqual({ kind: 'misc' });
   });
 
   it('守卫：内置映射全部命中内置模板目录，oneplan 映射全部命中可放置白名单', () => {
