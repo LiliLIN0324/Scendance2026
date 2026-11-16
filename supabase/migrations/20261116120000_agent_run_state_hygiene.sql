@@ -16,7 +16,10 @@
 -- Design rules kept intact:
 --   * fingerprint/idempotency semantics stay in the caller; this file only adds
 --     the per-run cost ledger.
---   * `agent_view` output is unchanged (the client schema is strict).
+--   * `agent_view` keeps its exact key set: the client parses it with z.object
+--     (unknown keys are stripped, missing required keys throw) and the embedded
+--     scene schemas are strict. The slim poll reuses the same keys, only the
+--     two candidate arrays are empty while the run is live.
 --   * Writes still lock the run row; only read paths stop locking.
 --   * A run may renew its deadline while it makes progress, capped at ten
 --     minutes of total lifetime so a crashed worker cannot block forever.
@@ -144,7 +147,14 @@ begin
     end if;
     if not found then raise exception 'AGENT_RUN_NOT_FOUND'; end if;
   end if;
-  if p_action in ('get','by_request') then return scene_private.agent_view(r); end if;
+  if p_action in ('get','by_request') then
+    -- 轮询走 slim：运行中只回摘要，终态照旧回全量（确认卡要 base_scene/candidate）。
+    -- 不传 slim 的调用方（恢复、旧客户端、测试）语义完全不变。
+    if coalesce((p_data->>'slim')::boolean,false) and r.state in ('queued','running') then
+      return scene_private.agent_view(r)||'{"candidates":[],"planCandidates":[]}'::jsonb;
+    end if;
+    return scene_private.agent_view(r);
+  end if;
   -- Every remaining action mutates (or must observe a stable row): lock now.
   select * into r from scene_private.agent_runs where id=r.id for update;
   if not found then raise exception 'AGENT_RUN_NOT_FOUND'; end if;
@@ -345,3 +355,21 @@ begin
 end $$;
 revoke all on function public.agent_run_events_rpc(uuid,text,jsonb) from public,anon,authenticated;
 grant execute on function public.agent_run_events_rpc(uuid,text,jsonb) to service_role;
+
+-- The insert above still took a KEY SHARE lock on the parent run row through the
+-- FK, which a concurrent run update (FOR UPDATE) blocks. Telemetry must never
+-- wait for the work it observes, so the FK is replaced by an equivalent
+-- delete-time cleanup trigger: no lock on insert, same cascade on delete.
+alter table scene_private.agent_run_events drop constraint if exists agent_run_events_run_id_fkey;
+
+create or replace function scene_private.delete_agent_run_events() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  delete from scene_private.agent_run_events where run_id=OLD.id;
+  return OLD;
+end $$;
+revoke all on function scene_private.delete_agent_run_events() from public,anon,authenticated;
+
+ drop trigger if exists agent_run_events_cleanup on scene_private.agent_runs;
+create trigger agent_run_events_cleanup before delete on scene_private.agent_runs
+  for each row execute function scene_private.delete_agent_run_events();

@@ -27,6 +27,10 @@ begin
     where r.state in ('complete','failed','cancelled')
       and r.created_at < clock_timestamp() - make_interval(days=>p_keep_days);
   get diagnostics v_runs = row_count;
+  -- The event table no longer has an FK (telemetry must not lock the run row),
+  -- so a delete racing with an append can leave an orphan. Sweep them here.
+  delete from scene_private.agent_run_events e
+    where not exists(select 1 from scene_private.agent_runs r where r.id=e.run_id);
   return jsonb_build_object('runsDeleted',v_runs,'proposalsDeleted',v_props);
 end $$;
 revoke all on function scene_private.purge_agent_data(integer,integer) from public,anon,authenticated;

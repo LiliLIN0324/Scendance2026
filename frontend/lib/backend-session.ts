@@ -1447,10 +1447,10 @@ export class BackendSession {
     if (run.projectId !== state.projectId || run.requestId !== input.requestId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
   }
-  async getAgentRun(runId: string): Promise<AgentRun> {
+  async getAgentRun(runId: string, options?: { slim?: boolean }): Promise<AgentRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
-    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}`));
+    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}${options?.slim?'?slim=1':''}`));
     if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
   }
