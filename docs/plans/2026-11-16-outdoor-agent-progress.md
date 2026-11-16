@@ -111,7 +111,7 @@ scripts/probe-basemap-zoom.mjs
 交付：
   · lib/outdoor-metrics-export.ts：exportMetricsReport(summary, deps?) → { line, copied }；先打日志（一定成功），再尽力写剪贴板（无 API / Promise 被拒 / 同步抛错都退回只打日志），6/6
   · hook 暴露 exportMetrics()（一行接上）
-为什举不做面板按钮：本轮去接面板时发现工作树版的标题栏已被用户重构（`新开会话` 区域变了，HEAD 的锚点在当前文件里已不存在）。若只改 HEAD，用户下次提交自己的面板会把按钮冲掉；若改工作树，就得替他改正在重构的 JSX。两种都不合适，所以先交可测的动作层，按钮等面板稳定。
+为什么不做面板按钮：本轮去接面板时发现工作树版的标题栏已被用户重构（`新开会话` 区域变了，HEAD 的锚点在当前文件里已不存在）。若只改 HEAD，用户下次提交自己的面板会把按钮冲掉；若改工作树，就得替他改正在重构的 JSX。两种都不合适，所以先交可测的动作层，按钮等面板稳定。
 验证：固定数据 export 6/6；hook 套件 45/45；hook 仍走 HEAD blob 单行替换后 cacheinfo（staged 3 行）
 未完成：面板按钮、浏览器主流程（需 9222）、云端
 ```
