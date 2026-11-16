@@ -342,6 +342,28 @@ export function OutdoorWorkflowCard({
       {flow.busy && (
         <div className="ap-task-progress" aria-hidden="true" />
       )}
+      {/* 2026-11-16：有提案时不再放阶段缩略图——右侧地图已经画着这一版，缩略图只是重复信息。 */}
+      {/* 2026-11-16 用户要求「引导卡片不要消失，历史记录很重要」：最近一条始终可见，点一下展开
+          当时的说明与按钮；更早的收在展开项里。按活动存 localStorage，刷新还在。 */}
+      {flow.cardRecords.length > 0 && (
+        <div className="ap-card-history" aria-label="已完成的引导">
+          <ol className="ap-card-history-list">
+            {recordRow(flow.cardRecords.at(-1)!, "is-latest")}
+          </ol>
+          {flow.cardRecords.length > 1 && (
+            <details className="ap-card-history-more">
+              <summary>更早的引导 · {flow.cardRecords.length - 1}</summary>
+              <ol className="ap-card-history-list">
+                {flow.cardRecords
+                  .slice(0, -1)
+                  .reverse()
+                  .map((record) => recordRow(record, ""))}
+              </ol>
+            </details>
+          )}
+        </div>
+      )}
+      {!flow.proposal && <StageThumb stage={flow.state.stage} />}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         flow.noticeView ? (
           <section
