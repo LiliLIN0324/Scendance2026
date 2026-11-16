@@ -28,7 +28,8 @@ export const CSV_EXPORT_HEADERS = [
 /** 行数据先按类型次序再按名称排序，导出字节稳定。 */
 const KIND_ORDER: Record<PlanInventoryRow['kind'], number> = {
   // 2026-11-11 用户指令：自由标注排在测量之后。
-  zone: 0, facility: 1, route: 2, node: 3, worker: 4, measurement: 5, annotation: 6,
+  // 2026-11-16 #122：车辆排在人员之后、测量之前（与清单/图例顺序同构）。
+  zone: 0, facility: 1, route: 2, node: 3, worker: 4, vehicle: 5, measurement: 6, annotation: 7,
 };
 
 /** 单元格转义：RFC 4180。 */
@@ -70,7 +71,8 @@ function rowToCells(row: PlanInventoryRow, plan: SitePlanData, unit: DisplayUnit
 function kindLabel(kind: PlanInventoryRow['kind']): string {
   const labels: Record<PlanInventoryRow['kind'], string> = {
     // 2026-11-11 用户指令：自由标注（文本/形状）。
-    zone: '分区', facility: '设施', route: '动线', node: '出入口', worker: '人员', measurement: '测量', annotation: '标注',
+    // 2026-11-16 #122：车辆行与人员行并列，表头/列数不变。
+    zone: '分区', facility: '设施', route: '动线', node: '出入口', worker: '人员', vehicle: '车辆', measurement: '测量', annotation: '标注',
   };
   return labels[kind];
 }
@@ -102,6 +104,12 @@ function entityDetail(row: PlanInventoryRow, plan: SitePlanData): { areaM2?: num
       const worker = plan.workers.find(w => w.id === row.id);
       if (!worker) return {};
       return { notes: worker.notes };
+    }
+    // 2026-11-16 #122：车辆行只带备注；尺寸不落库，不凭空填面积/长度列。
+    case 'vehicle': {
+      const vehicle = (plan.vehicles ?? []).find(v => v.id === row.id);
+      if (!vehicle) return {};
+      return { notes: vehicle.notes };
     }
     // 2026-11-11 用户指令：标注行导出备注列带文本内容（形状行只有 notes）。
     case 'annotation': {

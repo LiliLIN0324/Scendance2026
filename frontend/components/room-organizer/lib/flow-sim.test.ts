@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createFlowWalkers, pointAtDistance, polylineLength, routeDensity, stepFlowWalkers, walkerCountFor, walkerPoints } from './flow-sim';
-import type { PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
+import { createFlowWalkers, pointAtDistance, polylineLength, routeDensity, speedRangeForCarrier, stepFlowWalkers, walkerCountFor, walkerPoints } from './flow-sim';
+import type { PlanRoute, PlanRouteCarrier } from '../../../../supabase/functions/_shared/site-plan';
 
-function route(id: string, kind: PlanRoute['kind'], points: { x: number; y: number }[]): PlanRoute {
-  return { id, kind, name: id, points, oneWay: false, notes: '' };
+function route(id: string, kind: PlanRoute['kind'], points: { x: number; y: number }[], carrier?: PlanRouteCarrier): PlanRoute {
+  return { id, kind, name: id, points, oneWay: false, notes: '', ...(carrier ? { carrier } : {}) };
 }
 
 /** 100m 直线（0,0)→(100,0)。 */
@@ -39,10 +39,34 @@ describe('flow-sim（V-4b 流动模拟）', () => {
     expect(walkers.length).toBe(24);
     expect(walkers.some(w => w.dir === -1)).toBe(true);
     expect(walkers.some(w => w.dir === 1)).toBe(true);
-    // 速度都在 1.0–1.3
+    // 人行流线速度都在步行档 1.0–1.3
     for (const walker of walkers) {
       expect(walker.speed).toBeGreaterThanOrEqual(1.0);
       expect(walker.speed).toBeLessThanOrEqual(1.3);
+    }
+  });
+
+  it('速度按 carrier 分档：步行 / 推车 / 机动车 / 混流', () => {
+    const checks: [PlanRouteCarrier, number, number][] = [
+      ['walk', 1.0, 1.3],
+      ['trolley', 0.6, 0.9],
+      ['vehicle', 3.0, 5.0],
+      ['mixed', 1.0, 1.3],
+    ];
+    for (const [carrier, lo, hi] of checks) {
+      const r = route(`r-${carrier}`, carrier === 'vehicle' ? 'vehicle' : 'pedestrian', [{ x: 0, y: 0 }, { x: 100, y: 0 }], carrier);
+      const walkers = createFlowWalkers([r]);
+      expect(speedRangeForCarrier(carrier)).toEqual([lo, hi]);
+      for (const w of walkers) {
+        expect(w.speed).toBeGreaterThanOrEqual(lo - 1e-9);
+        expect(w.speed).toBeLessThanOrEqual(hi + 1e-9);
+      }
+    }
+    // 后勤（service）缺省 carrier=mixed，走混流步行档，不落到机动车速度。
+    const service = route('r-svc', 'service', [{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    for (const w of createFlowWalkers([service])) {
+      expect(w.speed).toBeGreaterThanOrEqual(1.0);
+      expect(w.speed).toBeLessThanOrEqual(1.3);
     }
   });
 

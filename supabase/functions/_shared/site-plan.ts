@@ -232,6 +232,41 @@ export const planWorkerSchema = z.strictObject({
 });
 export type PlanWorker = z.infer<typeof planWorkerSchema>;
 
+/** 2026-11-16 #118 用户「把车从人群和基础设施里摘出来」：车型枚举，与前端 vehicle-types.ts 的 VEHICLE_TYPES.id 逐条对齐（前端测试锁顺序）。 */
+export const planVehicleTypes = [
+  'coach', 'business', 'daily', 'taxi', 'bus', 'bike', 'cleaning', 'garbage', 'truck',
+] as const;
+export type PlanVehicleType = (typeof planVehicleTypes)[number];
+
+/**
+ * 车辆实体（2026-11-16 #118，方案 B：独立集合）。
+ *
+ * 与 planWorkerSchema 并列，**不是**人员点位：
+ * - `count` 是车数（台），不是人数——不进人员统计、不进容量估算、不进 3D 人群散布；
+ * - `routeIds` 指向它跑的动线（缺省 = 停放/待命点，不挂动态对象）；
+ * - `modelSlug` 是物料库主键（car-park-and-road-vehicle-fleet-*）；缺省 = 库内无该
+ *   车型 GLB，只能画线 + 占位盒，不得借用近似车型（12m 大巴按 7.5m 箱货会算小
+ *   落客区与转弯半径）；
+ * - 尺寸不落库：渲染时按 modelSlug 从物料库现算（派生量一律现算，不落盘）。
+ *
+ * 仅用于 2D/3D 预览与现场走查；车数、车型与行进节奏**不代表**载客容量、通行能力、
+ * 限速或合规核算。可选集合：旧快照不带 vehicles 照常解析（缺省 = 没有车，读取层
+ * 不合成空数组、不落盘）。
+ */
+export const planVehicleSchema = z.strictObject({
+  id: z.uuid(),
+  type: z.enum(planVehicleTypes),
+  count: z.number().int().min(1).max(99),
+  position: planPointSchema,
+  routeIds: z.array(z.uuid()).max(20).optional(),
+  modelSlug: z.string().min(1).max(160).optional(),
+  zoneId: z.uuid().optional(),
+  levelId: z.uuid().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
+  notes: z.string().max(500).default(''),
+});
+export type PlanVehicle = z.infer<typeof planVehicleSchema>;
+
 /** 测量标注三类：距离（2 点段长）/ 面积（≥3 点闭合环）/ 路径（≥2 点折线）。 */
 export const planMeasurementKinds = ['distance', 'area', 'path'] as const;
 export const planMeasurementKindLabels: Record<(typeof planMeasurementKinds)[number], string> = {
@@ -315,6 +350,8 @@ export const sitePlanDataSchema = z.strictObject({
   routes: z.array(planRouteSchema).max(200),
   nodes: z.array(planNodeSchema).max(100),
   workers: z.array(planWorkerSchema).max(500),
+  /** 车辆集合（可选，2026-11-16 #118 方案 B）：旧数据不带照常解析；缺省 = 没有车，读取层不合成空数组、不落盘。 */
+  vehicles: z.array(planVehicleSchema).max(200).optional(),
   /** 固定测量标注（H3-a，可选）：旧数据不带该字段照常解析。 */
   measurements: z.array(planMeasurementSchema).max(200).optional(),
   /** 2026-11-14 用户指令「建筑给室内分区，设计别做进室内」：边界内建筑足迹=室内禁区（可选）。
@@ -333,7 +370,7 @@ export const sitePlanDataSchema = z.strictObject({
   annotations: z.array(planAnnotationSchema).max(500).optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
-    ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['measurements', '测量'], ['annotations', '标注'],
+    ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'],
   ];
   const seen = new Set<string>();
   for (const [key, label] of collections) {
@@ -352,6 +389,7 @@ export const sitePlanDataSchema = z.strictObject({
     ...plan.routes.map(item => [`路线 ${item.name}`, item.levelId] as [string, string | undefined]),
     ...plan.nodes.map(item => [`出入口 ${item.name}`, item.levelId] as [string, string | undefined]),
     ...plan.workers.map(item => [`人员 ${item.role}`, item.levelId] as [string, string | undefined]),
+    ...(plan.vehicles ?? []).map(item => [`车辆 ${item.type}`, item.levelId] as [string, string | undefined]),
     ...(plan.measurements ?? []).map(item => [`测量 ${item.name}`, item.levelId] as [string, string | undefined]),
     ...(plan.annotations ?? []).map(item => [`标注 ${item.name}`, item.levelId] as [string, string | undefined]),
   ];
@@ -369,6 +407,23 @@ export const sitePlanDataSchema = z.strictObject({
   for (const worker of plan.workers) {
     if (worker.zoneId && !zoneIds.has(worker.zoneId.toLowerCase())) {
       ctx.addIssue({ code: 'custom', message: `人员 ${worker.role} 的归属分区不存在` });
+    }
+  }
+  for (const vehicle of plan.vehicles ?? []) {
+    if (vehicle.zoneId && !zoneIds.has(vehicle.zoneId.toLowerCase())) {
+      ctx.addIssue({ code: 'custom', message: `车辆 ${vehicle.type} 的归属分区不存在` });
+    }
+    for (const routeId of vehicle.routeIds ?? []) {
+      const route = plan.routes.find(item => item.id === routeId);
+      if (!route) {
+        ctx.addIssue({ code: 'custom', message: `车辆 ${vehicle.type} 引用的动线不存在` });
+        continue;
+      }
+      // 车必须挂在车行动线上：冲突层按 carrier 判「载体不同才算一对」，若放行
+      // 「大巴挂 carrier='walk' 的线」，图上会出现车在人群里走而冲突层不报。
+      if (routeCarrier(route) !== 'vehicle') {
+        ctx.addIssue({ code: 'custom', message: `车辆 ${vehicle.type} 只能挂在车行动线上` });
+      }
     }
   }
   for (const node of plan.nodes) {

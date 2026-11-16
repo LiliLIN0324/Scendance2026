@@ -6,7 +6,7 @@
  * 画布据此给流线着色深浅。3D 真行走（person-route 户外化）是后置增强，接口面留这。
  */
 
-import { routeCarrier, type PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
+import { routeCarrier, type PlanRoute, type PlanRouteCarrier } from '../../../../supabase/functions/_shared/site-plan';
 
 export interface FlowWalker {
   /** 第几条流线（对齐传入 routes 数组下标）。 */
@@ -17,6 +17,25 @@ export interface FlowWalker {
   dir: 1 | -1;
   /** 个体速度 m/s（1.0–1.3 假随机，固定种子=下标，保证可复现）。 */
   speed: number;
+}
+
+/**
+ * 各载体的预览速度档（m/s）。仅 2D 动画预览节奏，不代表现场限速、通行能力或真实车速。
+ * - walk 步行：1.0–1.3（沿用原行人步速，与 Walk_Loop 步态口径一致）；
+ * - trolley 推车：0.6–0.9，低于步行；
+ * - vehicle 机动车：3.0–5.0（场地内低速接驳 / 货运预览，不取街道高速值）；
+ * - mixed 人车一起：混流以慢的人方节奏为准，步行档。
+ */
+const SPEED_RANGE: Record<PlanRouteCarrier, readonly [number, number]> = {
+  walk: [1.0, 1.3],
+  trolley: [0.6, 0.9],
+  vehicle: [3.0, 5.0],
+  mixed: [1.0, 1.3],
+};
+
+/** 取某载体的预览速度区间 [下限, 上限]（m/s）。导出供 3D 车辆 follower 复用同档口径。 */
+export function speedRangeForCarrier(carrier: PlanRouteCarrier): readonly [number, number] {
+  return SPEED_RANGE[carrier];
 }
 
 /**
@@ -44,13 +63,14 @@ export function createFlowWalkers(routes: readonly PlanRoute[]): FlowWalker[] {
   routes.forEach((route, routeIndex) => {
     const count = walkerCountFor(route);
     const total = polylineLength(route.points);
+    const [lo, hi] = SPEED_RANGE[routeCarrier(route)];
     for (let i = 0; i < count; i += 1) {
       const seed = routeIndex * 100 + i;
       walkers.push({
         routeIndex,
         dist: total > 0 ? (total * (i / count) + pseudoRandom(seed) * 4) % total : 0,
         dir: route.oneWay || i % 2 === 0 ? 1 : -1,
-        speed: 1.0 + pseudoRandom(seed + 7) * 0.3,
+        speed: lo + pseudoRandom(seed + 7) * (hi - lo),
       });
     }
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlanLegend, polylineHalfLengthPoint } from './site-plan-legend';
 import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_BOUNDARY_LINE_COLOR } from '@/lib/outdoor-plan-tokens';
+import { CARRIER_COLOR_KIND } from './route-carrier-color';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 复用演示页「平湖秋月市集」同构的迷你样例（3 分区 / 2 摊位 + 1 帐篷 / 3 动线 / 2 节点 / 2 人员 / 2 测量）。 */
@@ -246,6 +247,57 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     for (const group of groups) {
       for (const entry of group.entries) expect(PLANNING_ICONS).toContain(entry.icon);
     }
+  });
+});
+
+/** 车辆夹具（2026-11-16 #122）：同车型两个点位合并、一台有模型一台待补。 */
+function planWithVehicles(): SitePlanData {
+  const plan = samplePlan();
+  plan.vehicles = [
+    { id: 'aa000000-0000-4000-8000-000000000001', type: 'coach', count: 3, position: { x: 10, y: 110 }, notes: '' },
+    { id: 'aa000000-0000-4000-8000-000000000002', type: 'business', count: 2, position: { x: 100, y: 110 }, modelSlug: 'car-park-and-road-vehicle-fleet-saloon-ad831b1f', notes: '' },
+    { id: 'aa000000-0000-4000-8000-000000000003', type: 'coach', count: 4, position: { x: 120, y: 110 }, notes: '' },
+  ];
+  return plan;
+}
+
+describe('buildPlanLegend 车辆分组（#122）', () => {
+  it('aggregates vehicles by type: count = 台数合计, detail = 点位数, color from the route-vehicle token', () => {
+    const vehicles = buildPlanLegend(planWithVehicles()).find(g => g.title === '车辆')!;
+    // 同车型两个点位聚合：3 + 4 = 7 台，不是 7 人。
+    expect(vehicles.entries.map(e => e.label)).toEqual(['服务大巴车（待补模型）', '商务车']);
+    expect(vehicles.entries.map(e => e.count)).toEqual([7, 2]);
+    expect(vehicles.entries.map(e => e.detail)).toEqual(['2 个点位', '1 个点位']);
+    expect(vehicles.entries.map(e => e.icon)).toEqual(['truck', 'truck']);
+    // 与动线图例同源：CARRIER_COLOR_KIND.vehicle → 车辆紫。
+    expect(vehicles.entries[0]!.swatch).toBe(PLANNING_ROUTE_KIND_COLORS[CARRIER_COLOR_KIND.vehicle]);
+    expect(vehicles.entries[1]!.swatch).toBe(PLANNING_ROUTE_KIND_COLORS.vehicle);
+  });
+
+  it('shows 待补模型 only for a type whose entity has no modelSlug', () => {
+    const plan = samplePlan();
+    plan.vehicles = [
+      { id: 'aa000000-0000-4000-8000-000000000010', type: 'coach', count: 3, position: { x: 10, y: 110 }, modelSlug: 'coach-model-x', notes: '' },
+    ];
+    const vehicles = buildPlanLegend(plan).find(g => g.title === '车辆')!;
+    expect(vehicles.entries[0]!.label).toBe('服务大巴车');
+    expect(vehicles.entries[0]!.label).not.toContain('待补模型');
+  });
+
+  it('keeps the people group headcount untouched when vehicles exist', () => {
+    const groups = buildPlanLegend(planWithVehicles());
+    expect(groups.map(g => g.title)).toEqual(['用地红线', '功能分区', '设施', '动线', '出入口', '人员', '车辆', '测量']);
+    const workers = groups.find(g => g.title === '人员')!;
+    // 人员条目仍是 3 + 3 = 6 人；9 台车不进这一组。
+    expect(workers.entries.map(e => e.count)).toEqual([3, 3]);
+    expect(workers.entries.reduce((sum, entry) => sum + entry.count, 0)).toBe(6);
+  });
+
+  it('emits no vehicle group for legacy plans without vehicles', () => {
+    const groups = buildPlanLegend(samplePlan());
+    expect(groups.map(g => g.title)).toEqual(['用地红线', '功能分区', '设施', '动线', '出入口', '人员', '测量']);
+    expect(groups.some(g => g.title === '车辆')).toBe(false);
+    expect(groups.find(g => g.title === '人员')!.entries.map(e => e.count)).toEqual([3, 3]);
   });
 });
 

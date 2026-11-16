@@ -2,7 +2,8 @@ import { enuToLngLat, lngLatToEnu } from './outdoor-plan-canvas';
 import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 /** Changing the local geographic frame must never silently relocate existing work. */
 export function canReanchorOutdoorPlan(plan: SitePlanData, anchor: NonNullable<SitePlanData['anchor']>): boolean {
-  const populated = [plan.zones, plan.routes, plan.nodes, plan.facilities, plan.workers, plan.annotations, plan.measurements].some(items => items?.length);
+  // 车辆也算内容：只有车（plan.vehicles，2026-11-16 #118）的平面若被判为空，换锚点会让所有车整体位移。
+  const populated = [plan.zones, plan.routes, plan.nodes, plan.facilities, plan.workers, plan.vehicles, plan.annotations, plan.measurements].some(items => items?.length);
   if (!populated) return true;
   if (!plan.anchor) return false;
   const dx = (anchor.lng - plan.anchor.lng) * 111320 * Math.cos(anchor.lat * Math.PI / 180);

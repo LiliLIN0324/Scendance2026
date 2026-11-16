@@ -203,6 +203,57 @@ describe('buildPlanInventory (H3-c 清单构建)', () => {
   });
 });
 
+/** 车辆夹具（2026-11-16 #122）：一台待补模型的大巴 + 一台有模型的货车。 */
+function planWithVehicles(): SitePlanData {
+  const plan = samplePlan();
+  plan.vehicles = [
+    { id: 'aa000000-0000-4000-8000-000000000001', type: 'coach', count: 3, position: { x: 20, y: 100 }, notes: '司机待命' },
+    { id: 'aa000000-0000-4000-8000-000000000002', type: 'truck', count: 1, position: { x: 180, y: 20 }, modelSlug: 'car-park-and-road-vehicle-fleet-box-truck-4574c765', zoneId: ZONE_A, notes: '' },
+  ];
+  return plan;
+}
+
+describe('buildPlanInventory 车辆行（#122）', () => {
+  it('lists vehicles with a 台数 metric after 人员 and before 测量', () => {
+    const rows = buildPlanInventory(planWithVehicles());
+    expect(rows.map(r => r.kind)).toEqual([
+      'zone', 'zone', 'facility', 'facility', 'facility',
+      'route', 'route', 'route', 'node', 'node', 'worker', 'worker',
+      'vehicle', 'vehicle', 'measurement',
+    ]);
+    const coach = rowOf(rows, 'aa000000-0000-4000-8000-000000000001');
+    expect(coach.kind).toBe('vehicle');
+    expect(coach.typeLabel).toBe('车辆');
+    expect(coach.name).toBe('服务大巴车（待补模型）');
+    expect(coach.metric).toBe('3 台');
+    expect(coach.anchor).toEqual({ x: 20, y: 100 });
+    expect(coach.zoneName).toBeNull();
+    const truck = rowOf(rows, 'aa000000-0000-4000-8000-000000000002');
+    expect(truck.name).toBe('货车');
+    expect(truck.metric).toBe('1 台');
+    expect(truck.zoneName).toBe('观众区');
+  });
+
+  it('never blends 台数 into people rows and never writes 人 into vehicle rows', () => {
+    const rows = buildPlanInventory(planWithVehicles());
+    const workerRows = rows.filter(r => r.kind === 'worker');
+    expect(workerRows.map(r => r.metric)).toEqual(['2 人', '3 人']);
+    expect(rows.filter(r => r.kind === 'vehicle').every(r => r.metric.endsWith(' 台'))).toBe(true);
+    expect(rows.filter(r => r.kind === 'vehicle').every(r => !r.metric.includes('人'))).toBe(true);
+  });
+
+  it('leaves legacy plans without vehicles byte-identical', () => {
+    const legacy = buildPlanInventory(samplePlan());
+    expect(legacy.map(r => r.kind)).toEqual([
+      'zone', 'zone', 'facility', 'facility', 'facility',
+      'route', 'route', 'route', 'node', 'node', 'worker', 'worker', 'measurement',
+    ]);
+    expect(legacy.some(r => r.kind === 'vehicle')).toBe(false);
+    // 旧快照（无 vehicles 字段）与显式空数组两份输出逐字段相同。
+    expect(buildPlanInventory({ ...samplePlan(), vehicles: [] })).toEqual(legacy);
+  });
+});
+
 describe('filterPlanInventory (H3-c 清单筛选)', () => {
   const rows = buildPlanInventory(samplePlan());
 
@@ -250,6 +301,8 @@ describe('planInventoryKindLabel', () => {
     expect(planInventoryKindLabel('route')).toBe('动线');
     expect(planInventoryKindLabel('node')).toBe('出入口');
     expect(planInventoryKindLabel('worker')).toBe('人员');
+    // 2026-11-16 #122：车辆是独立类型行。
+    expect(planInventoryKindLabel('vehicle')).toBe('车辆');
     expect(planInventoryKindLabel('measurement')).toBe('测量');
   });
 });

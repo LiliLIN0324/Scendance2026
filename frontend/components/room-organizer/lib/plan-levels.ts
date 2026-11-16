@@ -46,6 +46,8 @@ export function filterPlanByLevel(plan: SitePlanData, levelId?: string | null): 
     routes: plan.routes.filter(belongs),
     nodes: plan.nodes.filter(belongs),
     workers: plan.workers.filter(belongs),
+    // 车辆（plan.vehicles，2026-11-16 #118）：与其它实体同规则——有 levelId 归该层，无 levelId 归第一层。
+    vehicles: (plan.vehicles ?? []).filter(belongs),
     measurements: (plan.measurements ?? []).filter(belongs),
     // 2026-11-11 用户指令：自由标注同样按图层过滤。
     annotations: (plan.annotations ?? []).filter(belongs),
@@ -113,6 +115,8 @@ export function deletePlanLevel(plan: SitePlanData, levelId: string): PlanLevelR
       routes: plan.routes.filter(keep),
       nodes: plan.nodes.filter(keep),
       workers: plan.workers.filter(keep),
+      // 删图层连同该层的车一起删（车跨层保留会让删掉的方案残留在别的图层视图里）。
+      vehicles: (plan.vehicles ?? []).filter(keep),
       measurements: (plan.measurements ?? []).filter(keep),
       // 2026-11-11 用户指令：删图层连同该层自由标注一起删。
       annotations: (plan.annotations ?? []).filter(keep),

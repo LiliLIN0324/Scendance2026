@@ -10,11 +10,20 @@ import { glbOutputOf } from './lux3d-import';
  * 最终重定向产物必须带 Idle_Loop 与 Walk_Loop，现有加载器才播放得起来。
  */
 
-/** 预设动作清单：Idle/Walk 是漫游 avatar 的必需剪辑，Talk 是交谈可选。 */
+/**
+ * 预设动作清单（上游真实 id，已逐个实探）。
+ * - `Idle_Loop` / `Walk_Loop` 是漫游 avatar 的必需剪辑；
+ * - `Idle_Talking_Loop` 交谈、`Sitting_Idle_Loop` 坐姿循环为可选重定向项；
+ * - 动作库**没有**坐下/起身过渡（`Stand_To_Sit`、`Sit_To_Stand` 均被上游拒绝），
+ *   过渡由前端交叉淡入兜底，不要往这里加。
+ * - 坐姿重定向产物内部剪辑名是 `animation_1`，归仓时由
+ *   tools/aholo/build-sit-assets.mjs 改名成前端认的 `Sit_Idle_Loop`。
+ */
 export const CHARACTER_ANIMATION_PRESETS = [
   { id: 'Idle_Loop', label: '待机动画' },
   { id: 'Walk_Loop', label: '行走动画' },
   { id: 'Idle_Talking_Loop', label: '交谈动画' },
+  { id: 'Sitting_Idle_Loop', label: '坐姿循环' },
 ] as const;
 
 const MAX_PROMPT = 4000;

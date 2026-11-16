@@ -410,14 +410,83 @@ scripts/probe-basemap-zoom.mjs
 
 在此追加短记录。原始大日志和截图放本机临时目录，登记脱敏摘要和可重跑命令。
 
+### 2026-11-16 09:38 · 车流/后勤二期（#117+#118）三子智能体并行，已验收
+
 ```text
-日期时间（中国标准时间）及运行 ID：
-批次 / 切片 / 状态：
-工作目录 / 分支 / 开始与结束 HEAD：
-修改、提交或未提交路径：
-复现及第一失败步骤：
-验证命令、结果及环境（固定数据 / 浏览器 / 真实云端）：
-证据位置及安全诊断编号：
-剩余项、解除阻塞条件：
-下次准确从哪条命令或哪个文件继续：
+日期时间（中国标准时间）及运行 ID：2026-11-16 09:38，无运行 ID（人工一轮，三子智能体并行：#117 实现 / #118 契约 / #120 复核）
+批次 / 切片 / 状态：车流后勤二期纯函数层 / #117 车辆 follower 参数分档 + #118 车辆实体落盘契约对比 / 已验收（three 接线与 schema 落盘未动）
+工作目录 / 分支 / 开始与结束 HEAD：C:\幕景\Scendance2026\.worktrees\people06-on-main / feat/people06-labor / 46ec7e80 → d0f3801d（期间快进合并 origin/main 新增 0391efed+d0f3801d，与本批零重叠）
+修改、提交或未提交路径：新增 frontend/components/room-organizer/lib/vehicle-follower-profile.ts 与 .test.ts、docs/plans/2026-11-16-vehicle-entity-contract-118.md；#116/#119 既有未提交（flow-sim.ts/.test.ts、vehicle-types.ts/.test.ts、typed-suggestion.tsx、people-anim.ts/.test.ts）保持不动；全部未提交、未推
+复现及第一失败步骤：#120 复核回执未回传，改由主控逐条抽查 10 项证据：发现 #118 文档消费面计数为旧口径（74 文件/196 处），实测 git grep 为 72 文件/222 处（38 生产+34 测试），plan-candidate-apply 行号 :165→:157，已改
+验证命令、结果及环境（固定数据 / 浏览器 / 真实云端）：frontend 下 vitest run 定向 17 套件=166 通过 0 失败；npm run typecheck frontend 与根均 0 错；本地固定数据走查：cd frontend; npm run dev -- -p 3210 → Ready 7.7s、3199 代理复用、GET / =200（工作台标题正常）
+证据位置及安全诊断编号：docs/plans/2026-11-16-vehicle-entity-contract-118.md（244 行，已发布为对话附件）；logs/dev-3210-out.log；无真实外部请求，无诊断编号
+剩余项、解除阻塞条件：① 合并带入的上游 pending-brief.test.ts 7 例红：失败在裸 localStorage.clear()，Node 26.2.0 全局 webstorage 遮蔽 jsdom（--environment jsdom 仍复现）；仓库 .nvmrc=24.15.0，本机无 nvm 未复验，解除条件=钉住版本跑或上游加守卫，非本批引入；② plan-facility-models sweeper 缺 GLB 1 例基线遗留仍红；③ #118 A/B/C 待用户拍板后按文档 §6 迁移顺序落 schema；④ #117 3D 接线待真人值守验收
+下次准确从哪条命令或哪个文件继续：cd C:\幕景\Scendance2026\.worktrees\people06-on-main\frontend; npm run dev -- -p 3210（已在本机运行）；#118 拍板后从 supabase/functions/_shared/site-plan.ts 的 planVehicleSchema 草图开始
 ```
+
+### 2026-11-16 10:04 · #117 3D 接线 + #118 方案 B schema 落盘，已验收
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 10:04，无运行 ID（人工一轮，用户授权：3D follower 接线 + 多做做）
+批次 / 切片 / 状态：车流后勤二期 / #117 3D 接线（车体块占位）+ #118 方案 B schema 切片 / 已验收（前端读层、2D marker、AI 产车未动）
+工作目录 / 分支 / 开始与结束 HEAD：C:\幕景\Scendance2026\.worktrees\people06-on-main / feat/people06-labor / d0f3801d → d0f3801d（未提交，无新提交）
+修改、提交或未提交路径：新增 three/vehicle-flow.ts 与 .test.ts（6 例）；改 components/outdoor-plan-3d.tsx（plan-vehicle-flow 层 + 每帧步进 + 签名重建）；改 supabase/functions/_shared/site-plan.ts（planVehicleTypes/planVehicleSchema/可选 vehicles 数组/superRefine 三处校验）；tests/site-plan.test.ts +5 例；全部未提交、未推
+复现及第一失败步骤：根 typecheck 报 tests/site-plan.test.ts:339 TS2322——测试助手用交叉类型拓宽 routes 与 samplePlan 的 kind 字面量类型冲突；改 Omit 拓宽后复跑 0 错
+验证命令、结果及环境（固定数据 / 浏览器 / 真实云端）：frontend typecheck 0 错、根 typecheck 0 错；前端定向 18 文件 172 例全绿（含 vehicle-flow 6 例）；根 tests/site-plan.test.ts 21 例全绿（含车辆集合 5 例）；本地 3210 dev 热更新可走查
+证据位置及安全诊断编号：无真实外部请求；3D 走查入口 http://localhost:3210（画 vehicle/service 流线看车体块沿线跑）
+剩余项、解除阻塞条件：① #118 前端读层（PLAN_ENTITY_KEYS/plan-levels/保护/canvas 三入口）与 2D marker/图例/导出按文档 §6 步骤 2–3 逐步落；② AI 产车延后（候选带 vehicleIds 会被 strict 解析拒，fail-closed，不静默丢）；③ 上游 pending-brief 7 例红（Node 26 环境）与 sweeper 缺 GLB 1 例基线遗留不变
+下次准确从哪条命令或哪个文件继续：cd frontend; npm run dev -- -p 3210 走查 3D 车体块；下一步按文档 §6 步骤 2 落前端读层（use-outdoor-agent-workflow.ts PLAN_ENTITY_KEYS + plan-levels.ts + outdoor-plan-protection.ts）
+```
+
+### 2026-11-16 10:30 · #121 前端读层 + #122 六个 2D 出口 + 3D 实体层 + 画布标记，已验收
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 10:30，无运行 ID（人工一轮：#121 读层 / #122 导出面 两子智能体并行，#123 画布标记空转→主控自做）
+批次 / 切片 / 状态：车流后勤二期 / #121 读层（提案合并·图层过滤·锚点保护）+ #122 图例/清单/CSV/GeoJSON/PNG/PDF + #123 画布只读标记 + 3D 实体实例层 / 已验收（选中·拖拽·删除、AI 产车未做）
+工作目录 / 分支 / 开始与结束 HEAD：C:\幕景\Scendance2026\.worktrees\people06-on-main / feat/people06-labor / d0f3801d → 4802a43d（快进合并 origin/main 5 提交；因 canvas.tsx 与进度文档重叠，先 stash 再 ff-only 再 pop，零冲突）
+修改、提交或未提交路径：新增 lib/vehicle-entities.ts(+test 6)、lib/vehicle-markers.ts(+test 7)、hooks/use-outdoor-agent-workflow.carry.test.ts；改 hooks/use-outdoor-agent-workflow.ts（PLAN_ENTITY_KEYS + carryList）、lib/plan-levels.ts(+test)、lib/outdoor-plan-protection.ts(+test)、lib/site-plan-{legend,inventory,csv,geojson,png,pdf}.ts(+test)、components/outdoor-plan-3d.tsx（plan-vehicle-entities 层：车型 GLB 优先、缺模型占位盒、签名重建、gen 防竞态）、components/outdoor-plan-canvas.tsx（drawVehicleMarkers 只读层 + 四张 Record<PlanInventoryKind> 补 vehicle）；全部未提交、未推
+复现及第一失败步骤：① vehicleEntitySlots 用 -row*… 在 row=0 产出 -0，toEqual 与 0 不等→显式归零；② 切线角是数学角（π/2=北），测试里按「0=北」写反→改断言；③ 上游新增 PlanInventoryKind='vehicle' 使 canvas 四张映射表 TS2741 缺键→补面临时色/图标/图层行；④ drawVehicleMarkers 误传外层 View（lng/lat/zoom）→改为 filterPlanByLevel(plan, activeLevelIdRef.current)
+验证命令、结果及环境（固定数据 / 浏览器 / 真实云端）：frontend typecheck 0 错、根 typecheck 0 错；前端定向 24 文件 248 通过，7 红仅 room-organizer-canvas-session.react（Node 26.2.0 无 --localstorage-file，全局 localStorage 遮蔽 jsdom）；加 NODE_OPTIONS=--localstorage-file 后该文件 + pending-brief 16/16、use-outdoor-agent-workflow.react 33/33 全绿→7 红与 33 红均环境级，非本批代码；本地 3210：合并后 Compiled 8.6s，GET / =200（标题正常）
+证据位置及安全诊断编号：无真实外部请求；走查入口 http://localhost:3210（画 vehicle 流线 + 带 vehicles 的 plan 看 2D 标记与 3D 实体）；日志 logs/dev-3210-out.log
+剩余项、解除阻塞条件：① 画布选中/拖拽/删除与「新增车辆」入口未做（需真人验收后再接编辑链路）；② AI 产车仍延后：plan-candidate-apply.ts 的 expected 只拼五类 id，候选带 vehicleIds 会被 strict 解析拒（fail-closed），接入前必须显式禁止服务端产车；③ 服务端契约（agent-contract.ts / site-plan-store.ts / site-plan-migrate.ts）需先部署再发前端写入；④ 停放点是否算设施、非车行线是否阻断保存待拍板；⑤ sweeper 缺 GLB 1 例基线遗留
+下次准确从哪条命令或哪个文件继续：cd C:\幕景\Scendance2026\.worktrees\people06-on-main\frontend; npm run dev -- -p 3210（已在跑）；下一批从 components/outdoor-plan-canvas.tsx 的 drawVehicleMarkers 接命中/选中，或先部署 supabase 契约再说 AI 产车
+```
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 11:20–12:05
+批次 / 切片 / 状态：人物资产管线（#131 加载器收口 / #132 清单 / #134 两档 LOD）——代码与产物完成，仅剩 R2 上传凭据
+工作目录 / 分支 / 开始与结束 HEAD：.worktrees/people06-on-main / feat/people06-labor / eb6920b7（全程未提交、未推送）
+修改、提交或未提交路径：three/glb-loader.ts（新增，接线 3 处：glb-assets.ts / people-model.ts:65 / scene-delivery.ts:437）；tools/aholo/compress-people.mjs（--preset hero|far + 修 spawn）；新增 tools/aholo/{inspect-people-glb,people-manifest,r2-upload,verify-people-lods}.mjs；docs/plans/2026-11-16-people-asset-pipeline.md
+复现及第一失败步骤：① Node 26 + Windows 下 execFileSync('npx.cmd') 抛 EINVAL（禁止不带 shell 启 .cmd）→ 改走 node <npm-cli.js> exec --yes -- <cli>；② people-manifest.mjs 的 basename(name, name.length-4) 传了数字 → ERR_INVALID_ARG_TYPE → 改 name.slice(0,-4)；③ r2-upload.mjs 用 process.exit 退出触发 undici 断言 !(handle->flags & UV_HANDLE_CLOSING) → 改 process.exitCode
+验证命令、结果及环境（固定数据 / 真实云端）：公开基址 HEAD 28 个 ID：27 个 200（合计 1004.7 MB）、1 个 404（LOCAL_HANFU_WALK_ID 9b9bb4da…）；curl -Z 并发 6 路下载 1004.7 MB / 394 s；compress-people far 全量 1004.7→41.2 MB（−95.9%）、hero 全量 1004.7→66.6 MB（−93.4%）；verify-people-lods 27/27 通过（hero 三角面与原始逐一相等、52 关节、2 clip）；people-manifest 27 资产 15 KB + --check 通过；frontend tsc 0；people-model/scene-delivery/glb-assets/people-anim 4 文件 64 通过；r2-upload --dry-run 规划 2 对象、--verify-only 准确报出线上仍是 41,870,312 B 与 lod1 404
+证据位置及安全诊断编号：.cache/aholo（原始 27 个 + hero/ + far/ + people-manifest.json）；tools/aholo/*.mjs 可复跑；凭据零接触（脚本自读环境变量，输出不含密钥）
+剩余项、解除阻塞条件：① R2 上传被阻：当前登录账号 913b868b… 未开通 R2（访问桶被重定向 /r2/plans，S3 端点 TLS 不通），需属于该桶账号的 R2 API Token（Access Key ID/Secret）或换账号登录；② 默认汉服 GLB 404，要么补传要么摘默认引用；③ 阈值仍为 48 MB / 90 s，建议 12 MB / 45 s，等上传回读通过后再改；④ people-manifest.json 未进仓库，等对象上云后再随前端提交
+下次准确从哪条命令或哪个文件继续：在 .worktrees/people06-on-main 下 `node tools/aholo/r2-upload.mjs --hero .cache/aholo/hero --far .cache/aholo/far --dry-run` → 有凭据后加 `--env-file .env.local` → 再 `--verify-only` 全 OK 后改 frontend/components/room-organizer/lib/glb-limits.ts 的 LOCAL_WALK_MAX_FILE_BYTES 与 three/glb-assets.ts 的 TIMEOUT_MS
+```
+
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 12:40–13:10，retarget taskid=8038610
+批次 / 切片 / 状态：人物资产管线（坐姿落仓）——27 个模型全部带坐姿循环，仅剩 R2 上传凭据
+工作目录 / 分支 / 开始与结束 HEAD：.worktrees/people06-on-main / feat/people06-labor / eb6920b7（未提交、未推送）
+修改、提交或未提交路径：新增 tools/aholo/{fetch-sit-clips,build-sit-assets,probe-animation-ids}.mjs；改 tools/aholo/lux3d-dev-proxy.mjs（/task 解析 outputs[].content 内层 JSON + 返回 actions[]，新增 ?shape=1 结构探针）；改 frontend/components/room-organizer/lib/character-generate.ts 与 .test.ts（预设改上游真实 id）
+复现及第一失败步骤：① 3199 上的代理是当日 08:49 改代码前启动的旧进程，/retarget 回 404「未知接口」——但代理自身用 readEnvFile 从仓库根 .env.local 读 LUX3D_API_KEY、端口读 LUX3D_PROXY_PORT，故 `$env:LUX3D_PROXY_PORT='3200'; node tools/aholo/lux3d-dev-proxy.mjs` 即可起新实例，全程不碰密钥；② 原预设 id 是猜的：Sit_Idle_Loop / Stand_To_Sit / Sit_To_Stand 全被上游拒（unknown animation_id）；③ 用「候选 + 必不存在哨兵」逐条提交（整单必失败→零扣费）实探出真实 id：Sitting_Idle_Loop、Idle_Talking_Loop（连同 Idle_Loop/Walk_Loop），47 个候选里没有任何坐下/起身过渡；④ 任务 status=3 但 outputs 为空——上游把产物塞在 outputs[0].content 这段 JSON 字符串的 actions[].animationGlbUrl 里；⑤ 加 shapeOf 探针时误删 animationList 函数头导致 Illegal return，已修回
+验证命令、结果及环境（固定数据 / 真实云端）：retarget 单条 Sitting_Idle_Loop 约 85 s，产物 39.99 MB / 52 关节 / 1 条 1.67 s 循环（~6 credits；三次被拒的 create 均 consumedCredits=0）；build-sit-assets 全量：合并 27（内部 clip animation_1 --as Sit_Idle_Loop，逐个断言 3 条 clip）→ far 801.7→41.7 MB（−94.8%）→ hero 801.7→67.1 MB（−91.6%，最大 3.54 MB）→ verify-people-lods 27/27（52 关节、3 clip、hero 三角面与原件逐一相等）→ people-manifest 27 资产新 hash；frontend tsc 0；character-generate 16 通过；probe-animation-ids 阳性对照 Idle_Loop/Walk_Loop 均通过（哨兵法成立）
+证据位置及安全诊断编号：.cache/aholo/{sit/Sitting_Idle_Loop.glb, with-sit-20261116050039/, hero/, far/, people-manifest.json}；build-sit.log；凭据零接触，所有输出不含密钥
+剩余项、解除阻塞条件：① R2 上传仍缺 f0273e54… 账号的 R2 API Token；② 阈值仍 48 MB / 90 s，等上传回读后改 12 MB / 45 s；③ 上游无坐下/起身过渡动作，过渡靠交叉淡入，若要真过渡只能外部 Mixamo FBX；④ people-manifest.json 待对象上云后随前端提交
+下次准确从哪条命令或哪个文件继续：`node tools/aholo/r2-upload.mjs --hero .cache/aholo/hero --far .cache/aholo/far --dry-run` → 凭据就位后加 `--env-file .r2.env` → `--verify-only` 全 OK 后改 glb-limits.ts 的 LOCAL_WALK_MAX_FILE_BYTES 与 three/glb-assets.ts 的 TIMEOUT_MS
+```
+
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 13:20–13:55
+批次 / 切片 / 状态：人物资产管线收口（R2 上传 + 阈值下调）——54 个对象已上云并回读校验，管线全绿
+工作目录 / 分支 / 开始与结束 HEAD：.worktrees/people06-on-main / feat/people06-labor / eb6920b7（未提交、未推送）
+修改、提交或未提交路径：tools/aholo/r2-upload.mjs（逐条容错 + 4 次退避重试 + 默认自动读仓库根 .r2.env）；.gitignore（加 .r2.env / !.r2.env.example）；frontend/components/room-organizer/lib/glb-limits.ts（LOCAL_WALK_MAX_FILE_BYTES 48→12 MB）；three/glb-assets.ts（TIMEOUT_MS 90→45 s）；docs/plans/2026-11-16-people-asset-pipeline.md
+复现及第一失败步骤：① 首次上传前 11 个对象全 OK（200 + 回读字节一致，证明令牌与桶都对），第 12 个抛 ECONNRESET 且未捕获，整批中断 → 加 putWithRetry（网络错误与 5xx 退避 800/1600/3200 ms，共 4 次）与 headPublic 的 try/catch，单条失败只跳过不中断；② 对象数按 54 算（不是 58），hero 27 覆盖 + far 27 新增
+验证命令、结果及环境（真实云端）：node tools/aholo/r2-upload.mjs --hero .cache/aholo/hero --far .cache/aholo/far → 54 个对象 108.88 MB 全部上传并回读一致；--verify-only → 54/54 OK（本地字节数 = 线上 Content-Length，lod1 路径齐全）；frontend tsc 0 错；in-place-walk / asset-lod / asset-manifest / character-generate 四文件 53 项全绿（无测试断言旧阈值）
+证据位置及安全诊断编号：桶 scendance-assets（账号 f0273e54d22c215389dd6065a802ddae）；凭据仅存本机 .r2.env，git status --ignored 确认 !! .r2.env 被忽略；所有脚本输出不含密钥
+剩余项、解除阻塞条件：① 前端实机验证未做：需在本地 3210 打开户外计划，确认 27 个角色能加载 3.5 MB 内新资产并播放坐姿；② people-manifest.json 保持为 .cache 构建产物（.cache/ 已被 git 忽略，代码里 parsePeopleAssetManifest 只有测试、无 fetch 消费方），等 loader 真正读取时再入库；③ 汉服 id 9b9bb4da… 已从 glb-limits.ts 白名单与常量一并摘除（残留引用 0，白名单 27 项，tsc 0，44 项测试通过）；④ 画布选中/拖拽/删除与车辆新增入口仍未做
+下次准确从哪条命令或哪个文件继续：cd frontend && npm run dev -- -p 3210 → 打开户外计划看人物坐下；若资产加载报错，先查 three/glb-assets.ts 的 TIMEOUT_MS 与新阈值 12 MB 是否被缓存命中旧值
+```
+

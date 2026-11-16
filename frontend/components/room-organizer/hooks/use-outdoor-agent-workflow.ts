@@ -161,6 +161,9 @@ const PLAN_ENTITY_KEYS = [
   "routes",
   "nodes",
   "workers",
+  // 车辆（plan.vehicles，2026-11-16 #118）：与其它实体同口径——基座之后的纯新增不算「规划已变化」，
+  // 但要靠 carryNewEntities 一并带回，两处必须成对。
+  "vehicles",
   "annotations",
   "measurements",
 ] as const;
@@ -169,7 +172,7 @@ const PLAN_ENTITY_KEYS = [
  * 基座快照是否仍原样在画布上：基座里每个实体都没被删/改，且边界、锚点等非实体字段一字未动。
  * 任何一处变动都算「规划已变化」，绝不拿基座快照覆盖用户内容。
  */
-function baseStillIntact(base: SitePlanData, current: SitePlanData): boolean {
+export function baseStillIntact(base: SitePlanData, current: SitePlanData): boolean {
   const baseObj = base as unknown as Record<string, unknown>;
   const nowObj = current as unknown as Record<string, unknown>;
   for (const key of PLAN_ENTITY_KEYS) {
@@ -188,7 +191,7 @@ function baseStillIntact(base: SitePlanData, current: SitePlanData): boolean {
 }
 
 /** 把基座之后用户新画的实体并进提案；对没加东西的画布是恒等运算。 */
-function carryNewEntities(
+export function carryNewEntities(
   base: SitePlanData,
   next: SitePlanData,
   current: SitePlanData,
@@ -205,6 +208,7 @@ function carryNewEntities(
       ...currentItems.filter(item => !baseIds.has(item.id) && !nextIds.has(item.id)),
     ];
   };
+  const vehicles = carryList(base.vehicles ?? [], next.vehicles ?? [], current.vehicles ?? []);
   return {
     ...next,
     zones: carryList(base.zones, next.zones, current.zones),
@@ -214,6 +218,9 @@ function carryNewEntities(
     workers: carryList(base.workers, next.workers, current.workers),
     annotations: carryList(base.annotations ?? [], next.annotations ?? [], current.annotations ?? []),
     measurements: carryList(base.measurements ?? [], next.measurements ?? [], current.measurements ?? []),
+    // 车辆按契约是可选集合：缺省 = 没有车，读取层不合成空数组、不落盘。
+    // 因此只有真存在车（提案里有，或用户新画了）时才写回该键；旧 plan 应用提案后仍不带 vehicles 字段。
+    ...(next.vehicles !== undefined || vehicles.length > 0 ? { vehicles } : {}),
   };
 }
 

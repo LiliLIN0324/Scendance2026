@@ -7,7 +7,7 @@
  * - 配色与图标消费 `outdoor-plan-tokens`（图层色/三类动线色/分区语义默认色），
  *   与画布渲染同一来源，保证「图例即所见」。
  *
- * 结构：分组（边界/分区/设施/动线/出入口/人员/测量），组内按出现语义聚合，
+ * 结构：分组（边界/分区/设施/动线/出入口/人员/车辆/测量），组内按出现语义聚合，
  * 每条 = { icon, swatch, label, count, detail }。顺序稳定（契约枚举序 / 首次出现序），
  * 空组不输出（只画了边界的全案只有边界一组）。
  */
@@ -27,8 +27,11 @@ import {
   routeCarrier,
   type PlanPoint,
   type PlanRoute,
+  type PlanVehicle,
+  type PlanVehicleType,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { vehicleLabelOf, vehicleModelSlugOf } from './vehicle-entities';
 import { CARRIER_COLOR_KIND } from './route-carrier-color';
 import { facilityTypeLabel } from './plan-facility-catalog';
 import {
@@ -40,6 +43,22 @@ import {
   type OneplanStickerDescriptor,
 } from './oneplan-stickers';
 import { formatAreaM2, formatLengthM, measureValue } from './site-plan-measure';
+
+/**
+ * 车辆缺模型时的统一文案（2026-11-16 #122）：图例/清单/CSV/GeoJSON/PNG/PDF 六处
+ * 必须逐字相同。缺 `modelSlug` 只表示物料库没有该车型 GLB（占位盒），
+ * 绝不回落近似车型、也不凭空给尺寸。
+ */
+export const VEHICLE_MODEL_PENDING_LABEL = '待补模型';
+
+/**
+ * 车辆显示名：车型中文名；实体自己没写 `modelSlug` 时带「（待补模型）」。
+ * 只认实体字段（`vehicleModelSlugOf` 严格、无回落），聚合入口不要另拼一遍。
+ */
+export function planVehicleDisplayLabel(vehicle: Pick<PlanVehicle, 'type' | 'modelSlug'>): string {
+  const label = vehicleLabelOf(vehicle);
+  return vehicleModelSlugOf(vehicle) ? label : `${label}（${VEHICLE_MODEL_PENDING_LABEL}）`;
+}
 
 /** 图例单条：「图标 + 名称 + 数量」（+ 可选汇总 detail，如总长/总面积）。 */
 export interface PlanLegendEntry {
@@ -97,7 +116,8 @@ export function polylineHalfLengthPoint(points: readonly PlanPoint[]): PlanPoint
 
 /**
  * 全案图例（同一 SitePlan 快照来源，顺序稳定）：
- * 边界 → 分区（按语义） → 设施（按模板） → 动线（按三类） → 出入口（按类型） → 人员（按岗位） → 测量（按三类）。
+ * 边界 → 分区（按语义） → 设施（按模板） → 动线（按三类） → 出入口（按类型） → 人员（按岗位）
+ * → 车辆（按车型，2026-11-16 #122 独立成组，不并进人员） → 测量（按三类）。
  * 空组不输出；设施/人员/测量的聚合键按首次出现序（无契约枚举序可用）。
  */
 export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
@@ -232,7 +252,41 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     });
   }
 
-  // 7) 测量：按三类聚合，distance/path 汇总长度、area 汇总面积。
+  // 7) 车辆：独立一组（2026-11-16 #122），**不并进人员**。
+  //    按车型聚合（首现序），count = 台数合计，detail = 点位数；颜色与动线图例同源
+  //    （CARRIER_COLOR_KIND.vehicle → PLANNING_ROUTE_KIND_COLORS.vehicle）。
+  //    同一车型里只要有一处实体没写 modelSlug，这一行就标「待补模型」——
+  //    那是「该车型还有车没挂模型」，不是把有模型的车也一起说成待补。
+  const vehicleKeys: PlanVehicleType[] = [];
+  const vehicleMap = new Map<PlanVehicleType, { cars: number; posts: number; pending: boolean }>();
+  for (const vehicle of plan.vehicles ?? []) {
+    if (!vehicleMap.has(vehicle.type)) {
+      vehicleKeys.push(vehicle.type);
+      vehicleMap.set(vehicle.type, { cars: 0, posts: 0, pending: false });
+    }
+    const bucket = vehicleMap.get(vehicle.type)!;
+    bucket.cars += vehicle.count;
+    bucket.posts += 1;
+    if (!vehicleModelSlugOf(vehicle)) bucket.pending = true;
+  }
+  if (vehicleKeys.length > 0) {
+    groups.push({
+      title: '车辆',
+      entries: vehicleKeys.map(type => {
+        const bucket = vehicleMap.get(type)!;
+        const label = vehicleLabelOf({ type });
+        return {
+          icon: iconOf('truck'),
+          swatch: PLANNING_ROUTE_KIND_COLORS[CARRIER_COLOR_KIND.vehicle],
+          label: bucket.pending ? `${label}（${VEHICLE_MODEL_PENDING_LABEL}）` : label,
+          count: bucket.cars,
+          detail: `${bucket.posts} 个点位`,
+        };
+      }),
+    });
+  }
+
+  // 8) 测量：按三类聚合，distance/path 汇总长度、area 汇总面积。
   const measureEntries: PlanLegendEntry[] = [];
   for (const kind of planMeasurementKinds) {
     const measurements = (plan.measurements ?? []).filter(m => m.kind === kind);

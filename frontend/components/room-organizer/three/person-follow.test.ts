@@ -30,7 +30,7 @@ function mountPerson(id: string, x = 2, z = 3, facing = 0): THREE.Group {
     id,
     mixer: null,
     rig: null,
-    clips: { idle: null, talk: null, walk: null },
+    clips: { idle: null, talk: null, walk: null, sit: null },
     action: 'idle',
     paused: false,
     route: null,

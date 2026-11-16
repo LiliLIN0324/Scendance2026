@@ -23,13 +23,13 @@ import {
 } from '../../../../supabase/functions/_shared/site-plan';
 import { facilityTypeLabel } from './plan-facility-catalog';
 import { formatAreaM2, formatLengthM, measureValue } from './site-plan-measure';
-import { routeAnchorPoint } from './site-plan-legend';
+import { routeAnchorPoint, planVehicleDisplayLabel } from './site-plan-legend';
 import { planConflictIssues } from './site-plan-conflicts';
 import { planFacilityIssues } from './site-plan-facilities';
 import { planNodeIssues, planWorkerIssues } from './site-plan-routes';
 import { planZoneIssues } from './site-plan-editing';
 
-export type PlanInventoryKind = 'zone' | 'facility' | 'route' | 'node' | 'worker' | 'measurement' | 'annotation';
+export type PlanInventoryKind = 'zone' | 'facility' | 'route' | 'node' | 'worker' | 'measurement' | 'annotation' | 'vehicle';
 
 /** 出入口节点类型文案（契约无 labels，组件与清单同源此处）。 */
 export const PLAN_NODE_KIND_LABELS: Record<'entry' | 'exit' | 'both', string> = {
@@ -73,6 +73,8 @@ const KIND_LABELS: Record<PlanInventoryKind, string> = {
   route: '动线',
   node: '出入口',
   worker: '人员',
+  // 2026-11-16 #122：车辆是独立实体集合，不是人员。
+  vehicle: '车辆',
   measurement: '测量',
   // 2026-11-11 用户指令：自由标注（文本/形状）也进清单，可定位可删。
   annotation: '标注',
@@ -167,6 +169,23 @@ export function buildPlanInventory(plan: SitePlanData): PlanInventoryRow[] {
       metric: `${worker.count} 人`,
       anchor: { x: worker.position.x, y: worker.position.y },
       hasIssue: workerIssueIds.has(worker.id),
+    });
+  }
+
+  // 2026-11-16 #122：车辆行（台数口径，绝不进人数）。
+  // name 带「待补模型」标记（缺 modelSlug），typeLabel 固定「车辆」——与人员行的
+  // 「岗位 / 人员」同构；anchor 用车位落点，metric 写「N 台」。
+  for (const vehicle of plan.vehicles ?? []) {
+    rows.push({
+      id: vehicle.id,
+      kind: 'vehicle',
+      name: planVehicleDisplayLabel(vehicle),
+      typeLabel: '车辆',
+      zoneName: vehicle.zoneId ? zoneNameById.get(vehicle.zoneId) ?? null : null,
+      zoneId: vehicle.zoneId ?? null,
+      metric: `${vehicle.count} 台`,
+      anchor: { x: vehicle.position.x, y: vehicle.position.y },
+      hasIssue: false,
     });
   }
 

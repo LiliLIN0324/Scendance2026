@@ -99,6 +99,52 @@ function parseCsv(text: string): string[][] {
   if (cell || row.length) { row.push(cell); rows.push(row); }
   return rows.filter(cells => cells.length > 1 || cells[0] !== '');
 }
+/** 车辆夹具（2026-11-16 #122）：一台待补模型的大巴 + 一台有模型的商务车。 */
+function planWithVehicles(): SitePlanData {
+  const plan = samplePlan();
+  plan.vehicles = [
+    { id: 'aa000000-0000-4000-8000-000000000001', type: 'coach', count: 3, position: { x: 20, y: 100 }, notes: '大巴停车位' },
+    { id: 'aa000000-0000-4000-8000-000000000002', type: 'business', count: 2, position: { x: 120, y: 100 }, modelSlug: 'car-park-and-road-vehicle-fleet-saloon-ad831b1f', notes: '' },
+  ];
+  return plan;
+}
+
+describe('csv plan export 车辆行（#122）', () => {
+  it('exports vehicle rows with kind 车辆 and a 台数 metric, keeping the 14-field header', () => {
+    const csv = buildPlanCsv(planWithVehicles());
+    const header = csv.replace(/^\uFEFF/, '').split('\r\n')[0]!;
+    expect(header.split(',')).toHaveLength(14);
+    expect(header).toBe(CSV_EXPORT_HEADERS.join(','));
+    const rows = parseCsv(csv.replace(/^\uFEFF/, ''));
+    const vehicleRows = rows.filter(cells => cells[0] === '车辆');
+    expect(vehicleRows).toHaveLength(2);
+    expect(vehicleRows[0]![1]).toBe('服务大巴车（待补模型）');
+    expect(vehicleRows[0]![2]).toBe('车辆');
+    expect(vehicleRows[0]![4]).toBe('3 台');
+    expect(vehicleRows[0]![5]).toBe('20.00');
+    expect(vehicleRows[0]![6]).toBe('100.00');
+    expect(vehicleRows[0]![13]).toBe('大巴停车位');
+    expect(vehicleRows[1]![1]).toBe('商务车');
+    expect(vehicleRows[1]![4]).toBe('2 台');
+  });
+
+  it('sorts vehicles after 人员 and before 测量 without touching existing rows', () => {
+    const plan = planWithVehicles();
+    plan.measurements = [{ id: 'f6000000-0000-4000-8000-000000000001', kind: 'distance', name: '距离 1', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], notes: '' }];
+    const rows = parseCsv(buildPlanCsv(plan).replace(/^\uFEFF/, ''));
+    const kinds = rows.slice(1).map(cells => cells[0]);
+    expect(kinds).toEqual(['分区', '设施', '动线', '出入口', '人员', '车辆', '车辆', '测量']);
+  });
+
+  it('leaves legacy CSV output byte-identical when the plan has no vehicles', () => {
+    const legacy = buildPlanCsv(samplePlan());
+    // 旧快照（无 vehicles 字段）与显式空数组两份导出字节相同，且不含车辆行。
+    expect(buildPlanCsv({ ...samplePlan(), vehicles: [] })).toBe(legacy);
+    expect(legacy).not.toContain('车辆');
+    expect(legacy.replace(/^\uFEFF/, '').trim().split('\r\n')).toHaveLength(6);
+  });
+});
+
 describe('csv plan export (H5-a)', () => {
   it('escapes values per RFC 4180', () => {
     expect(csvEscape('plain')).toBe('plain');

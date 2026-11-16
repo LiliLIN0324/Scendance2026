@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DIRECT_BASE } from './aholo-assets';
 import {
+  CHARACTER_ANIMATION_PRESETS,
   imageOutputOf,
   modelOutputOf,
   submitCharacterFourView,
@@ -93,6 +94,19 @@ describe('人物设计链服务层', () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: 'rejected' }), { status: 400 }));
     const result = await submitCharacterRig(MODEL, { localProxy: true, fetchImpl });
     expect(result).toMatchObject({ ok: false, outcome: 'unknown' });
+  });
+
+  it('动作预设含必需循环态与坐姿三段，id 唯一', () => {
+    const ids = CHARACTER_ANIMATION_PRESETS.map((preset) => preset.id);
+    // 上游真实存在的四条：坐下/起身过渡不在动作库里，故不再列入。
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+    expect(ids).toEqual([
+      'Idle_Loop',
+      'Walk_Loop',
+      'Idle_Talking_Loop',
+      'Sitting_Idle_Loop',
+    ]);
   });
 
   it('产物挑选：图片给图片地址，模型给 GLB 地址', () => {

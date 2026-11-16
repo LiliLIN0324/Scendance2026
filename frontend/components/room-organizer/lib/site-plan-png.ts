@@ -35,7 +35,7 @@ export interface SnapshotLayout {
   zoom: number;
 }
 
-/** 实体外接框：边界+分区+设施+动线+人员+节点全部参与（快照框住全部实体）。 */
+/** 实体外接框：边界+分区+设施+动线+人员+节点+车辆全部参与（快照框住全部实体）。 */
 export function planBoundsM(plan: SitePlanData): { minX: number; minY: number; maxX: number; maxY: number } {
   const points: PlanPoint[] = [
     ...plan.boundary,
@@ -44,6 +44,9 @@ export function planBoundsM(plan: SitePlanData): { minX: number; minY: number; m
     ...plan.routes.flatMap(r => r.points),
     ...plan.workers.map(w => w.position),
     ...plan.nodes.map(n => n.position),
+    // 2026-11-16 #122：车辆停在边界外也得进快照，否则导出会把边上的车裁掉。
+    // 只取落点（尺寸不落库，不凭空外扩半个车长）。
+    ...(plan.vehicles ?? []).map(v => v.position),
   ];
   const xs = points.map(p => p.x);
   const ys = points.map(p => p.y);

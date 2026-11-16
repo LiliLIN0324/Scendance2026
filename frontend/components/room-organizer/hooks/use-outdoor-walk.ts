@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { PointerLockControls as PointerLockControlsType } from 'three/examples/jsm/controls/PointerLockControls.js';
@@ -24,6 +24,25 @@ export interface OutdoorWalkFrame {
   moving: boolean;
   thirdPerson: boolean;
   delta: number;
+  /** 落座态：占位 avatar 据此切坐姿并改用坐姿眼高对齐。 */
+  seated?: boolean;
+}
+
+/**
+ * 坐姿锁定状态：落座后锚点被钉在座位世界坐标、眼高切坐姿、忽略步行输入；
+ * `active = false`（或置 null）即起身回到站立眼高与自由步行。
+ */
+export interface SeatWalkState {
+  active: boolean;
+  /** 当前落座条目 id（起身时判断是否同一座位）。 */
+  seatId?: string;
+  /** 座位世界坐标（x 东、z 北，three 世界系）。 */
+  x: number;
+  z: number;
+  /** 坐姿眼高（含楼层基准，米）。 */
+  eyeY: number;
+  /** 落座朝向（弧度，可选；缺省保持当前 yaw）。 */
+  yaw?: number;
 }
 
 /**
@@ -64,6 +83,8 @@ export interface UseOutdoorWalkOptions {
   onWalkFrame?: (frame: OutdoorWalkFrame) => void;
   /** 第二次 Esc / 退出钮：整条漫游态交回外层收口。 */
   onExit?: (() => void) | undefined;
+  /** 坐姿锁定口：组件 E 键落座 / 起身时写入；缺省为站立自由步行。 */
+  seatRef?: MutableRefObject<SeatWalkState | null>;
 }
 
 const MOVEMENT_KEYS = new Set([
@@ -99,6 +120,7 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
     viewMode = 'first',
     onWalkFrame,
     onExit,
+    seatRef,
   } = options;
 
   const [phase, setPhase] = useState<OutdoorWalkPhase>('pending');
@@ -120,6 +142,8 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
   onWalkFrameRef.current = onWalkFrame;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const seatRefLocal = useRef(seatRef);
+  seatRefLocal.current = seatRef;
 
   // 指针锁状态同步：锁落地 → locked；锁曾工作过又被 Esc 释放 → unlocked；
   // 浏览器拒绝锁 / 手势丢失 → drag（拖拽看视角兜底，不走进死胡同）。
@@ -355,6 +379,32 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         }
 
         if (!controls?.isLocked && phaseRef.current !== 'drag' && phaseRef.current !== 'unlocked') return;
+
+        // 落座态：锚点钉在座位点、眼高切坐姿、忽略 WASD；起身由组件把 active 置 false。
+        const seatState = seatRefLocal.current?.current ?? null;
+        if (seatState?.active) {
+          player.x = seatState.x;
+          player.z = seatState.z;
+          player.y = seatState.eyeY;
+          if (typeof seatState.yaw === 'number') yaw = seatState.yaw;
+          moving = false;
+          camera.position.set(
+            player.x + rig.x,
+            player.y + rig.heightDelta,
+            player.z + rig.z,
+          );
+          onWalkFrameRef.current?.({
+            x: player.x,
+            y: player.y,
+            z: player.z,
+            yaw,
+            moving: false,
+            thirdPerson: rig.thirdPerson,
+            delta,
+            seated: true,
+          });
+          return;
+        }
 
         const sprint = pressed.has('ShiftLeft') || pressed.has('ShiftRight');
         const speed = walkSpeedRef.current * (sprint ? 2 : 1);

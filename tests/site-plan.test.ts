@@ -327,3 +327,75 @@ describe('site plan contract', () => {
     )).success).toBe(false);
   });
 });
+
+describe('vehicles（#118 方案 B 车辆集合）', () => {
+  const vehicleId = '77777777-7777-4777-8777-777777777771';
+  const vehicleRouteId = '88888888-8888-4888-8888-888888888881';
+
+  function planWithVehicle(vehicle: Record<string, unknown>) {
+    // Omit 掉 samplePlan 推断出的窄 kind 字面量类型，才能把 vehicle 路线混进同一条数组。
+    const plan = samplePlan() as Omit<ReturnType<typeof samplePlan>, 'routes'> & {
+      routes: { id: string; kind: string; name: string; points: { x: number; y: number }[]; oneWay: boolean; notes: string }[];
+      vehicles?: unknown[];
+    };
+    plan.routes = [...plan.routes, {
+      id: vehicleRouteId,
+      kind: 'vehicle',
+      name: '车行接驳线',
+      points: [{ x: 0, y: 0 }, { x: 20, y: 0 }],
+      oneWay: false,
+      notes: '',
+    }];
+    plan.vehicles = [vehicle];
+    return plan;
+  }
+
+  function sampleVehicle() {
+    return {
+      id: vehicleId,
+      type: 'coach',
+      count: 2,
+      position: { x: 5, y: 5 },
+      routeIds: [vehicleRouteId],
+      modelSlug: 'car-park-and-road-vehicle-fleet-saloon-ad831b1f',
+      color: '#AABBCC',
+      notes: '',
+    };
+  }
+
+  it('旧快照不带 vehicles：解析成功且不虚构字段（缺省 = 没有车）', () => {
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.vehicles).toBeUndefined();
+  });
+
+  it('带 vehicles 往返逐字段保留，color 小写化与其它实体同口径', () => {
+    const plan = planWithVehicle(sampleVehicle());
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(plan)));
+    expect(restored.vehicles).toHaveLength(1);
+    const vehicle = restored.vehicles![0];
+    expect(vehicle.type).toBe('coach');
+    expect(vehicle.count).toBe(2);
+    expect(vehicle.routeIds).toEqual([vehicleRouteId]);
+    expect(vehicle.modelSlug).toBe('car-park-and-road-vehicle-fleet-saloon-ad831b1f');
+    expect(vehicle.color).toBe('#aabbcc');
+  });
+
+  it('车辆 id 与其它实体重复 → 拒（跨集合唯一）', () => {
+    const plan = planWithVehicle({ ...sampleVehicle(), id: '11111111-1111-4111-8111-111111111111' });
+    const result = sitePlanDataSchema.safeParse(plan);
+    expect(result.success).toBe(false);
+  });
+
+  it('routeIds 指向人行线 → 拒（车只能挂车行线）；指向不存在的动线 → 拒', () => {
+    const walkLine = planWithVehicle({ ...sampleVehicle(), routeIds: ['33333333-3333-4333-8333-333333333333'] });
+    expect(sitePlanDataSchema.safeParse(walkLine).success).toBe(false);
+
+    const missing = planWithVehicle({ ...sampleVehicle(), routeIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'] });
+    expect(sitePlanDataSchema.safeParse(missing).success).toBe(false);
+  });
+
+  it('count 0 / 100 → 拒（车数是 1–99 台，不占人数语义）', () => {
+    expect(sitePlanDataSchema.safeParse(planWithVehicle({ ...sampleVehicle(), count: 0 })).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse(planWithVehicle({ ...sampleVehicle(), count: 100 })).success).toBe(false);
+  });
+});

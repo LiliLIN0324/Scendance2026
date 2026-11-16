@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { makeInteractableEntry } from './interact-registry';
 import {
   INTERACTABLE_GROUND_Y,
   facilityInteractables,
+  interactHintLabel,
+  seatInteractables,
   workerInteractables,
 } from './outdoor-interactables';
 
@@ -54,5 +57,47 @@ describe('facilityInteractables', () => {
     );
     expect(entry?.position?.y).toBe(0.1);
     expect(facilityInteractables([])).toEqual([]);
+  });
+});
+
+describe('seatInteractables', () => {
+  it('maps a chair to a seat entry with world position and seat metadata', () => {
+    const [entry] = seatInteractables([
+      { id: 'c1', name: '餐椅', ref: 'x-dining-chair-y', position: { x: 3, y: -4 }, rotationDeg: 90 },
+    ]);
+    expect(entry?.kind).toBe('seat');
+    expect(entry?.label).toBe('坐下 · 餐椅');
+    expect(entry?.position).toEqual({ x: 3, y: INTERACTABLE_GROUND_Y, z: 4 });
+    expect(entry?.seat).toEqual({
+      x: 3,
+      y: -4,
+      rotationDeg: 90,
+      seatHeight: 0.45,
+      eyeY: INTERACTABLE_GROUND_Y + 0.45 + 0.63,
+    });
+  });
+
+  it('drops non-seat facilities and keeps an empty list empty', () => {
+    const entries = seatInteractables([
+      { id: 't1', name: '长桌', ref: 'x-table-y', position: { x: 0, y: 0 } },
+    ]);
+    expect(entries).toEqual([]);
+  });
+});
+
+describe('interactHintLabel', () => {
+  const seat = makeInteractableEntry({ id: 'c1', kind: 'seat', label: '坐下 · 餐椅', position: { x: 3, y: 0.052, z: 4 } });
+  const facility = makeInteractableEntry({ id: 'f1', kind: 'facility', label: '签到岗亭', position: { x: 0, y: 0.052, z: 0 } });
+
+  it('keeps the sit label when not seated', () => {
+    expect(interactHintLabel(seat, false)).toBe('坐下 · 餐椅');
+  });
+
+  it('switches to stand-up label when seated on the same seat', () => {
+    expect(interactHintLabel(seat, true)).toBe('起身 · 餐椅');
+  });
+
+  it('never rewrites a non-seat entry label', () => {
+    expect(interactHintLabel(facility, true)).toBe('签到岗亭');
   });
 });

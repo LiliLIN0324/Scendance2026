@@ -36,12 +36,19 @@ describe('plan-crowd-placement（2D 岗位 → 3D 人群实例）', () => {
     expect(crowdGlbUrl('some-slug')).toBe('/showcase/assets/library/model/some-slug.glb');
   });
 
-  it('散布偏移确定且不重叠', () => {
+  it('散布偏移确定：首人居中对齐落点圆盘，其余簇拥在盘内', () => {
     const a = crowdSpreadOffset(0);
     const b = crowdSpreadOffset(0);
     expect(a).toEqual(b);
-    expect(crowdSpreadOffset(1)).not.toEqual(crowdSpreadOffset(0));
-    expect(Math.hypot(a.x, a.y)).toBeGreaterThan(0);
+    expect(a).toEqual({ x: 0, y: 0 });
+    const first = crowdSpreadOffset(1);
+    expect(first).not.toEqual(a);
+    // 岗位落点圆盘半径约 0.405m，前几位实例收在盘内/边缘。
+    expect(Math.hypot(first.x, first.y)).toBeLessThan(0.45);
+    for (let i = 1; i <= 4; i += 1) {
+      const o = crowdSpreadOffset(i);
+      expect(Math.hypot(o.x, o.y)).toBeLessThan(0.55);
+    }
   });
 
   it('未绑定角色时按人群类型取默认云端 walk 角色，count 份都是同一角色副本', () => {
