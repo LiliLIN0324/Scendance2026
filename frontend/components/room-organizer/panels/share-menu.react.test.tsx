@@ -17,7 +17,7 @@ function actions(): ShareMenuActions {
 }
 
 describe('分享卡片', () => {
-  it('opens from the single 分享 control, shows preview, scan, and outline, and closes on Escape', () => {
+  it('opens from the single 分享 control, shows preview and meta, folds exports away, and closes on Escape', () => {
     localStorage.clear();
     render(<ShareMenu actions={actions()} layout={sampleLayout()}/>);
     const trigger = screen.getByRole('button', { name: '分享' });
@@ -25,32 +25,51 @@ describe('分享卡片', () => {
     expect(screen.getAllByRole('button', { name: '分享' })).toHaveLength(1);
     fireEvent.click(trigger);
     const dialog = screen.getByRole('dialog', { name: '分享' });
-    for (const name of ['方案预览', '手机看方案', '项目大纲', '生成分享链接', '发评审链接', '导出交接', '打开资料', '到场清单']) {
-      expect(dialog.textContent).toContain(name);
-    }
+    expect(dialog.textContent).toContain('方案预览');
+    expect(dialog.textContent).toContain('生成分享链接');
     expect(dialog.textContent).toContain('12 × 8 m');
     expect(dialog.textContent).toContain('1 件');
     expect(dialog.textContent).toContain('签到');
+    expect(dialog.textContent).toContain('分享记录');
+    fireEvent.click(screen.getByRole('button', { name: /交付物/ }));
+    for (const name of ['发评审链接', '导出交接', '打开资料', '到场清单']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '分享' })).toBeNull();
   });
 
-  it('publishes the saved version, draws the QR, and copies the link', async () => {
+  it('publishes the saved version, draws the QR, logs the record, and copies the link', async () => {
     localStorage.clear();
     const share = actions();
     const clipboard = vi.fn(async () => undefined);
     Object.assign(navigator, { clipboard: { writeText: clipboard } });
     render(<ShareMenu actions={share} layout={sampleLayout()}/>);
     fireEvent.click(screen.getByRole('button', { name: '分享' }));
-    expect(screen.getByText(/生成链接后这里出二维码/)).toBeTruthy();
+    expect(screen.queryByRole('img', { name: '只读方案二维码' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '生成分享链接' }));
     expect(await screen.findByRole('img', { name: '只读方案二维码' })).toBeTruthy();
-    expect((screen.getByRole('status')).textContent).toContain('版本 3 链接已生成');
+    expect((screen.getByRole('status')).textContent).toContain('已生成 v3');
     expect(screen.getByRole('link', { name: '打开只读页' })).toHaveProperty('href', 'https://studio.example/view/#token');
     fireEvent.click(screen.getByRole('button', { name: '复制链接' }));
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/view/#token');
     expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toContain('https://studio.example/view/#token');
+    expect(localStorage.getItem('scendance.shareLog.v1.project-1')).toContain('https://studio.example/view/#token');
+    expect(screen.getByRole('button', { name: '再生成一个 v4 链接' })).toBeTruthy();
     expect(share.onPublish).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: /分享记录/ }));
+    expect(await screen.findByText('v3')).toBeTruthy();
+    expect(screen.getByRole('link', { name: '打开' })).toBeTruthy();
+  });
+
+  it('shows a live canvas capture as the preview and keeps the schematic only as fallback', async () => {
+    localStorage.clear();
+    const share = { ...actions(), onCapturePreview: vi.fn(async () => 'data:image/png;base64,abc') };
+    render(<ShareMenu actions={share} layout={sampleLayout()}/>);
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    expect(await screen.findByRole('img', { name: '发布会 的当前画布截图' })).toHaveProperty('src', 'data:image/png;base64,abc');
+    expect(screen.queryByRole('img', { name: '发布会 的平面预览' })).toBeNull();
+    expect(share.onCapturePreview).toHaveBeenCalledOnce();
   });
 
   it('shows the reason when publishing is refused', async () => {
@@ -76,16 +95,20 @@ describe('分享卡片', () => {
     expect(screen.getByRole('textbox', { name: '评审链接' })).toHaveProperty('value', 'https://studio.example/review/issued');
     expect(clipboard).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'复制评审链接'}));
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/review/issued');
+    fireEvent.click(screen.getByRole('button', { name: /交付物/ }));
     fireEvent.click(screen.getByRole('button', { name: '导出交接' }));
     expect(share.onExportHandoff).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog', { name: '分享' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    fireEvent.click(screen.getByRole('button', { name: /交付物/ }));
     fireEvent.click(screen.getByRole('button', { name: '打开资料' }));
     expect(share.onOpenMaterials).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    fireEvent.click(screen.getByRole('button', { name: /交付物/ }));
     fireEvent.click(screen.getByRole('button', { name: '到场清单' }));
     expect(share.onOpenChecklist).toHaveBeenCalledOnce();
   });
+
   it('never copies a link whose activity changes before the async result returns',async()=>{
     const share=actions(),clipboard=vi.fn(async()=>undefined);Object.assign(navigator,{clipboard:{writeText:clipboard}});
     let finish!:(value:{url:string;isCurrent:()=>boolean})=>void,epoch=0;const token=epoch;
@@ -93,6 +116,48 @@ describe('分享卡片', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()}/>);fireEvent.click(screen.getByRole('button',{name:'分享'}));fireEvent.click(screen.getByRole('button',{name:'发评审链接'}));
     act(()=>{epoch++;epoch++;});await act(async()=>finish({url:'https://studio.example/review/old',isCurrent:()=>epoch===token}));
     expect(screen.getByRole('status').textContent).toContain('旧链接未复制');expect(clipboard).not.toHaveBeenCalled();expect(screen.queryByRole('textbox',{name:'评审链接'})).toBeNull();
+  });
+
+  it('lists server shares in the record drawer and revokes after a confirm click', async () => {
+    localStorage.clear();
+    let server: { shareId: string; publicationId: string; revision: number; createdAt: string; revokedAt: string | null }[] = [
+      { shareId: 'sh-1', publicationId: 'pub-1', revision: 2, createdAt: '2026-11-17T04:12:00Z', revokedAt: null },
+    ];
+    const share = {
+      ...actions(),
+      onListShares: vi.fn(async () => server),
+      onRevokeShare: vi.fn(async () => { server = server.map(row => ({ ...row, revokedAt: '2026-11-17T05:30:00Z' })); }),
+    };
+    render(<ShareMenu actions={share} layout={sampleLayout()}/>);
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    fireEvent.click(screen.getByRole('button', { name: /分享记录/ }));
+    expect(await screen.findByText('v2')).toBeTruthy();
+    expect(screen.getByText('链接只在生成设备上')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '撤回' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认撤回' }));
+    expect(share.onRevokeShare).toHaveBeenCalledWith('sh-1');
+    expect(await screen.findByText('已失效')).toBeTruthy();
+    expect(share.onListShares).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the local URL when the server list matches the same revision', async () => {
+    localStorage.clear();
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    localStorage.setItem('scendance.shareLog.v1.project-1', JSON.stringify([
+      { id: 'r1', kind: 'web', url: 'https://studio.example/view/#tok', revision: 2, at: Date.parse('2026-11-17T04:12:00Z') },
+    ]));
+    const share = {
+      ...actions(),
+      onListShares: vi.fn(async () => [{ shareId: 'sh-9', publicationId: 'pub-9', revision: 2, createdAt: '2026-11-17T04:12:30Z', revokedAt: null }]),
+    };
+    render(<ShareMenu actions={share} layout={sampleLayout()}/>);
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    fireEvent.click(screen.getByRole('button', { name: /分享记录/ }));
+    expect(await screen.findByText('v2')).toBeTruthy();
+    expect(screen.queryByText('链接只在生成设备上')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '复制' }));
+    expect(clipboard).toHaveBeenCalledWith('https://studio.example/view/#tok');
   });
 });
 
@@ -137,4 +202,3 @@ function sampleLayout(): RoomLayout {
     }],
   };
 }
-
