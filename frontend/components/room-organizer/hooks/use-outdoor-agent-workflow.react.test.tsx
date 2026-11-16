@@ -462,6 +462,11 @@ it("刷新后重新预览未确认候选，仍需显式确认才写入", async (
   expect(flow.proposal).toBeNull();
   await action("scope");
   expect(flow.proposal?.next.boundary).toEqual(ring);
+  // 2026-11-17 「同一标准」：范围提案自己就带白框（外扩 20 m），预览与落地一致，
+  // 不再靠画布那条事后兜底去补——兜底只留给旧提案。
+  expect(flow.proposal?.next.designScope).toHaveLength(4);
+  expect(Math.min(...flow.proposal!.next.designScope!.map(p => p.x)))
+    .toBeCloseTo(Math.min(...ring.map(p => p.x)) - 20, 5);
   expect(apply).not.toHaveBeenCalled();
   await action("confirm");
   expect(plan.boundary).toEqual(ring);

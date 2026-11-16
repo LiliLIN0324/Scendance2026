@@ -133,6 +133,7 @@ import {
   scopeContainsPoint,
   scopeEdgeIsHorizontal,
   scopeEdgeLabel,
+  scopeForAppliedPlan,
   syncScopeForBoundary,
   type ScopeEdge,
 } from '../lib/outdoor-design-scope';
@@ -4046,7 +4047,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const frameBound=[next.zones,next.routes,next.nodes,next.facilities,next.workers,next.annotations,next.measurements].some(items=>items?.length);
       if(frameBound&&!canReanchorOutdoorPlan(current,next.anchor))return false;
       try{validateWorkflowPlan(current,next);}catch{return false;}
-      commitPlan(next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
+      // 2026-11-17 「同一标准」兜底：提议自己换了红线却没带白框（旧提案 / 别的产出路径），
+      // 落地时按新红线外扩 20 m 补一只；来件带框就听它的，红线未变则保留现场那只（可能是用户拖过的）。
+      const scope = scopeForAppliedPlan({
+        currentBoundary: current.boundary,
+        nextBoundary: next.boundary,
+        nextScope: next.designScope,
+      });
+      commitPlan(scope ? { ...next, designScope: scope } : next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
     },
     openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
