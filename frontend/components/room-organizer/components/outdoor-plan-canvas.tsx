@@ -2,7 +2,7 @@
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
-import { boundaryAtNewAnchor, canReanchorOutdoorPlan } from '../lib/outdoor-plan-protection';
+import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
 import { CAR_ROW_LABEL } from '../lib/vehicle-types';
 
 import type { BackendSession } from '@/lib/backend-session';
@@ -282,6 +282,7 @@ import {
   type TdtProbeLayer,
 } from '../lib/tdt-probe';
 import { alignedTileCenter } from '../lib/basemap-alignment';
+import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
 import { ZoneEventInput } from './zone-event-input';
@@ -601,29 +602,12 @@ function ScopeSwatch({ size = 22, plus = false }: { size?: number; plus?: boolea
   );
 }
 /**
- * 2026-11-11 用户反馈「放大倍数不够」：按图源分档放大上限——天地图影像/矢量 z18（z19+ 返回占位图）；
- * 2026-11-16 实测 Carto 也不到 z21：同一把 key 下 z18 仍是真图（6–15 KB），z19/z20 一律 403
- * （代理返回 `X-Carto-Fallback: upstream-403`）——上限改按 18，19~22 级由 overzoom 拉伸 z18，
- * 与高德卫星 z18 之后的处理同口径，不会放大到一定级别就整屏空白。
- * OSM 官方瓦片 z20 直接 400（实测 tile.openstreetmap.org/20/... → 400 Bad Request，
- * 且 400 响应无 CORS 头，浏览器报「blocked by CORS policy」），所以 OSM 上限是 z19。
+ * 2026-11-11 用户反馈「放大倍数不够」：按图源分档放大上限——具体数字与实测依据全部收敛在
+ * `lib/basemap-zoom-caps.ts` 的 `BASEMAP_NATIVE_MAX_ZOOM`，2D 画布 / 3D 贴地 / 瓦片金字塔共用一张表。
+ * 超过上限的部分由 `paintBasemapTiles` 的 overzoom 把上限级瓦片等比拉伸，不再出现整屏灰块。
  */
 function mapMaxZoomFor(source: CanvasBasemapSource): number {
-  if (source === 'carto-light' || source === 'carto-dark') return 18;
-  if (source === 'osm') return 19;
-  // 2026-11-12 实测（杭州大剧院同坐标瓦片）：天地图影像 z18 是真影像（7487b），
-  // z19/z20 返回的是同一张占位图（同 4769b、同 MD5）——真实数据到 z18 为止。
-  // 上限按 18，更高级别由 paintBasemapTiles 的 overzoom 把 z18 瓦片等比拉伸
-  // （清晰度优于占位图），与 3D 的 maxZoomForSource('img')=18 口径一致。
-  if (source === 'img') return 18;
-  // 2026-11-12 用户反馈「放大后满屏此区域无卫星图」实测（杭州/上海/北京/深圳/广州/成都六城
-  // 同一哈希）：高德卫星 z19/z20 一律返回 4235 字节的灰色占位图（图上就印着「此区域无卫星图」），
-  // 真影像到 z18 为止。原生级别按 18，19~22 级由 paintBasemapTiles 的 overzoom 把 z18
-  // 瓦片等比拉伸——放大后保留最大精度影像（模糊放大），不再出现占位灰块。
-  // 矢量（街道/街道注记）z19 起返回 100 多字节空瓦片 → 上限同为 18。
-  if (source === 'amap-satellite') return 18;
-  if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
-  return 18;
+  return basemapNativeMaxZoom(source);
 }
 /**
  * 2026-11-12 用户「放大倍数不够」：视图允许拉到的最大级别（不等于瓦片级别）。
@@ -3639,8 +3623,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
-      if (!checkBoundaryRing(boundary).ok || !canReanchorOutdoorPlan(planRef.current, anchor)) return false;
-      commitPlan({ ...planRef.current, anchor, boundary });
+      if (!checkBoundaryRing(boundary).ok) return false;
+      // 2026-11-16 用户定稿「换场地就是新场地」：锚点真挪了，旧草稿的分区/设施/流线/点位/人员整批删掉，
+      // 只留新锚点与新用地红线（仍走 commitPlan，可整批撤销）；同一锚点重画边界则保留内容。
+      const { plan: next, replaced, cleared } = planForPickedVenue(planRef.current, anchor, boundary);
+      commitPlan(next);
+      if (replaced) {
+        setEditMessage(cleared > 0
+          ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。`
+          : '已换场地：旧草稿已清空，可撤销。');
+      }
       return true;
     },
     /** V-2d：应用流线提案（合并进 plan，走 commitPlan 可撤销）；成功返回 true。 */

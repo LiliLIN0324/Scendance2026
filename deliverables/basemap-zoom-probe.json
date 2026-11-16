@@ -1,0 +1,1614 @@
+{
+  "base": "https://scendance.lilicoding.space",
+  "points": [
+    {
+      "name": "杭州西湖",
+      "lng": 120.148,
+      "lat": 30.246
+    },
+    {
+      "name": "北京天安门",
+      "lng": 116.397,
+      "lat": 39.909
+    }
+  ],
+  "minZoom": 14,
+  "maxZoom": 21,
+  "generatedAt": "2026-11-16T00:10:22.295Z",
+  "rows": [
+    {
+      "source": "osm",
+      "table": 19,
+      "realMax": null,
+      "status": "skip",
+      "firstBad": "z14 error (fetch failed)",
+      "reason": "网络不可达"
+    },
+    {
+      "source": "carto-light",
+      "table": 18,
+      "realMax": 18,
+      "status": "ok",
+      "firstBad": "z19 placeholder (fallback=upstream-403 image/svg+xml 118B)",
+      "reason": null
+    },
+    {
+      "source": "carto-dark",
+      "table": 18,
+      "realMax": 18,
+      "status": "ok",
+      "firstBad": "z19 placeholder (fallback=upstream-403 image/svg+xml 118B)",
+      "reason": null
+    },
+    {
+      "source": "amap-satellite",
+      "table": 18,
+      "realMax": 18,
+      "status": "ok",
+      "firstBad": "z19 placeholder (bitmap 4235B · 两点同图)",
+      "reason": null
+    },
+    {
+      "source": "amap-streets",
+      "table": 18,
+      "realMax": 18,
+      "status": "ok",
+      "firstBad": "z19 empty (bitmap 124B)",
+      "reason": null
+    },
+    {
+      "source": "amap-streets-labels",
+      "table": 18,
+      "realMax": 18,
+      "status": "ok",
+      "firstBad": "z19 empty (bitmap 179B)",
+      "reason": null
+    },
+    {
+      "source": "vec",
+      "table": 18,
+      "realMax": null,
+      "status": "skip",
+      "firstBad": "z14 placeholder (fallback=placeholder image/svg+xml 118B)",
+      "reason": "整源都是占位/空瓦片"
+    },
+    {
+      "source": "img",
+      "table": 18,
+      "realMax": null,
+      "status": "skip",
+      "firstBad": "z14 placeholder (fallback=placeholder image/svg+xml 118B)",
+      "reason": "整源都是占位/空瓦片"
+    }
+  ],
+  "results": [
+    {
+      "source": "osm",
+      "label": "OSM 街道",
+      "realMax": null,
+      "firstBad": {
+        "z": 14,
+        "verdict": "error",
+        "detail": "fetch failed"
+      },
+      "table": 19,
+      "unreachable": true,
+      "reason": "网络不可达",
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "error",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "error",
+              "detail": "fetch failed",
+              "hash": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "carto-light",
+      "label": "Carto 浅色",
+      "realMax": 18,
+      "firstBad": {
+        "z": 19,
+        "verdict": "placeholder",
+        "detail": "fallback=upstream-403 image/svg+xml 118B"
+      },
+      "table": 18,
+      "unreachable": false,
+      "reason": null,
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "real",
+              "detail": "bitmap 13811B",
+              "hash": "ca23bd0df1d9a77f355483d4dd783684d1fa9301c48d75854f742682500fb195"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "real",
+              "detail": "bitmap 17233B",
+              "hash": "f1f8d9f906b7b735b53b22f8f986572d88cfea10179c9f41fe3670dfd8f75b02"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "real",
+              "detail": "bitmap 10392B",
+              "hash": "37ab21cf024cf32548faffa803eb614a047a7c114acac1faca47b842ca546332"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "real",
+              "detail": "bitmap 17363B",
+              "hash": "a6001f72baf0cddca2d4f21d18bb7fc80f1fdb8a295bd11f3c305762cfad09d1"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "empty",
+              "detail": "bitmap 425B",
+              "hash": "ff42bbb0f76cef1f382a809a4b394b6960bac461b7d367d279692f45ffda88dd"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "real",
+              "detail": "bitmap 14921B",
+              "hash": "655f62f2a0ba0fbd2ed2cbf661dbed2b1a432f22034bb79c689935e8d98c4196"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "empty",
+              "detail": "bitmap 103B",
+              "hash": "ecdd69cda7b9cfb860b9c816a896d3ce1fda47cbaf76e0168192b2c8d8fcfb5a"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "real",
+              "detail": "bitmap 10471B",
+              "hash": "b5227db5ed1bca1c6cbaf87f8fad753d39e9601cd86a81a7ffea416be81c59cf"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "empty",
+              "detail": "bitmap 103B",
+              "hash": "ecdd69cda7b9cfb860b9c816a896d3ce1fda47cbaf76e0168192b2c8d8fcfb5a"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "real",
+              "detail": "bitmap 6489B",
+              "hash": "4f05c2611829b6e3599e6d70b6176c787f70ee7080d047a4464ad949fd116869"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "carto-dark",
+      "label": "Carto 深色",
+      "realMax": 18,
+      "firstBad": {
+        "z": 19,
+        "verdict": "placeholder",
+        "detail": "fallback=upstream-403 image/svg+xml 118B"
+      },
+      "table": 18,
+      "unreachable": false,
+      "reason": null,
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "real",
+              "detail": "bitmap 15467B",
+              "hash": "ca1631a43718e55fa92f5f71e7ec9cff9d38f891c84c0bcea6a2baceb11d3ea1"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "real",
+              "detail": "bitmap 13571B",
+              "hash": "95f0a8cc501504090b087b5926512733b2575054a0ac6f8a242890d65c47a14d"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "real",
+              "detail": "bitmap 8787B",
+              "hash": "4f855cce1b8c577975ad4a05ddb9f981c9517edb64e2360da8cf516241d5a988"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "real",
+              "detail": "bitmap 16810B",
+              "hash": "475be6f3efe1d7e0ffb476624041c078de54e466e51e796e3eb7e060203b3173"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "empty",
+              "detail": "bitmap 403B",
+              "hash": "48d6417d3db463c6108c0ad4dfaf55335e427df0692fed2c2ef293be17cb0b42"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "real",
+              "detail": "bitmap 10184B",
+              "hash": "09fc52eaa93bda232234c923d852cdac41b0351ec58a182beab096eda4fba2a6"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "empty",
+              "detail": "bitmap 103B",
+              "hash": "9153142287928eb7c61344bbff1a513e348be323ccf0c144b2453ab1f682a9c7"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "real",
+              "detail": "bitmap 10744B",
+              "hash": "8bf6a739c32d76b55db8b7b0e9802ad08760bda34f5b2c11d611ebebc61295c8"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "empty",
+              "detail": "bitmap 103B",
+              "hash": "9153142287928eb7c61344bbff1a513e348be323ccf0c144b2453ab1f682a9c7"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "real",
+              "detail": "bitmap 4409B",
+              "hash": "4ed94cb5362130ac0b558f329bee9fbb8dc6889f4a7eddea4108b3775c475f1f"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "placeholder",
+              "detail": "fallback=upstream-403 image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "amap-satellite",
+      "label": "高德卫星",
+      "realMax": 18,
+      "firstBad": {
+        "z": 19,
+        "verdict": "placeholder",
+        "detail": "bitmap 4235B · 两点同图"
+      },
+      "table": 18,
+      "unreachable": false,
+      "reason": null,
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "real",
+              "detail": "bitmap 8569B",
+              "hash": "8f3a4bceab56cc1e95a331261ecc63be56ea28257e6aa49a478db43f7d628910"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "real",
+              "detail": "bitmap 16429B",
+              "hash": "1a78a7b3998c7e4daed631748b60bd42958a21af14d00dcf2a01faa82627b60c"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "real",
+              "detail": "bitmap 2838B",
+              "hash": "3c57e50c3762ccf8ca554a0a2de72e0d0cbca63de1dcc83fe9a1dd33e1405ede"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "real",
+              "detail": "bitmap 14747B",
+              "hash": "ae8ab90e2990fffd7f25dfdecd50fd082ee4d7284ed8ed762f5934b9117c1ba2"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "real",
+              "detail": "bitmap 2094B",
+              "hash": "638e220b6fc7790a95b56bfed62e7374deeef6a1a2921b34a3aac337ce804caa"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "real",
+              "detail": "bitmap 13773B",
+              "hash": "97a5aef4695d90c2ef1c01d21635c1700a62e814bc497b8808779bb2990b84c1"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "real",
+              "detail": "bitmap 2326B",
+              "hash": "c26023e431f63998f4a94033361c619f976d71cd97a558f1cf876fa133a40a7c"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "real",
+              "detail": "bitmap 12867B",
+              "hash": "91ae1ef1311ed7b9043658b2d5493e8977a33488593764d4ca2c7f2827d2dbb7"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "real",
+              "detail": "bitmap 2970B",
+              "hash": "1a6a411894cd9202977fd4644b285ef59fea891cfcc6652745780b6365b91208"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "real",
+              "detail": "bitmap 9351B",
+              "hash": "c9b1143f211a4fb5944c6134273681fd9ff696f11d73c94a5ba71d8e1aa5503e"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "placeholder",
+              "detail": "bitmap 4235B · 两点同图",
+              "hash": "24b9a6081f06fe76f8461e18f27375f90a1349932fbe635256fd72d523a16854"
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "placeholder",
+              "detail": "bitmap 4235B · 两点同图",
+              "hash": "24b9a6081f06fe76f8461e18f27375f90a1349932fbe635256fd72d523a16854"
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "placeholder",
+              "detail": "bitmap 4235B · 两点同图",
+              "hash": "24b9a6081f06fe76f8461e18f27375f90a1349932fbe635256fd72d523a16854"
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "placeholder",
+              "detail": "bitmap 4235B · 两点同图",
+              "hash": "24b9a6081f06fe76f8461e18f27375f90a1349932fbe635256fd72d523a16854"
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "placeholder",
+              "detail": "bitmap 4235B · 两点同图",
+              "hash": "24b9a6081f06fe76f8461e18f27375f90a1349932fbe635256fd72d523a16854"
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "placeholder",
+              "detail": "bitmap 4235B · 两点同图",
+              "hash": "24b9a6081f06fe76f8461e18f27375f90a1349932fbe635256fd72d523a16854"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "amap-streets",
+      "label": "高德街道",
+      "realMax": 18,
+      "firstBad": {
+        "z": 19,
+        "verdict": "empty",
+        "detail": "bitmap 124B"
+      },
+      "table": 18,
+      "unreachable": false,
+      "reason": null,
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "real",
+              "detail": "bitmap 15548B",
+              "hash": "67fd2cb7a87c9d641c8d8a086d666b4aee80a377b9ad219e8e60db3d31472b0b"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "real",
+              "detail": "bitmap 17821B",
+              "hash": "accf84b0a89316b66823e4b8eb720a7051af7ea9ff72aa5d6627153feb5e68a1"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "real",
+              "detail": "bitmap 3475B",
+              "hash": "0b8f400d5ba4df49dc06356fc91355e24982b7ded4f5887e95529d9adb746176"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "real",
+              "detail": "bitmap 15491B",
+              "hash": "6c5734b3dc9f95e0df4f05c32e578c7f1fee9119f678be07c8674e128575fc26"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "empty",
+              "detail": "bitmap 154B",
+              "hash": "a8a0c338607cce644e6312876a66359c57d5cedb306e53d68b3510213cd65095"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "real",
+              "detail": "bitmap 14824B",
+              "hash": "a02ba90d19cc49542919f3131e9f372733b4da48bb87af67299592677ebf9403"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "bf04161b5ba1f7cd8a3b4c8a1f8f17ef2773110835e114eab7e814e6f4939889"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "real",
+              "detail": "bitmap 12507B",
+              "hash": "93c2efbe96af19ce84ba01a2ec34521fb7d4fccc03ab5291a98da371427b4de3"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "bf04161b5ba1f7cd8a3b4c8a1f8f17ef2773110835e114eab7e814e6f4939889"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "real",
+              "detail": "bitmap 6059B",
+              "hash": "e59c648acb7dc0af9fa5ad8317231ff7a74c142404b2be2c8c6127174412493d"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "empty",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "b6a1668e09b04b052bbba659ec12aa45932d8db9685872139bb6b737eb6de0b4"
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "b6a1668e09b04b052bbba659ec12aa45932d8db9685872139bb6b737eb6de0b4"
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "empty",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "b6a1668e09b04b052bbba659ec12aa45932d8db9685872139bb6b737eb6de0b4"
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "b6a1668e09b04b052bbba659ec12aa45932d8db9685872139bb6b737eb6de0b4"
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "empty",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "b6a1668e09b04b052bbba659ec12aa45932d8db9685872139bb6b737eb6de0b4"
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "empty",
+              "detail": "bitmap 124B",
+              "hash": "b6a1668e09b04b052bbba659ec12aa45932d8db9685872139bb6b737eb6de0b4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "amap-streets-labels",
+      "label": "高德街道注记",
+      "realMax": 18,
+      "firstBad": {
+        "z": 19,
+        "verdict": "empty",
+        "detail": "bitmap 179B"
+      },
+      "table": 18,
+      "unreachable": false,
+      "reason": null,
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "real",
+              "detail": "bitmap 14513B",
+              "hash": "c035c112e847d6381a6cb63d156b9adb2eb02948a69023db23e4109f1c928393"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "real",
+              "detail": "bitmap 12091B",
+              "hash": "5f51044a58f0e647796cddc78ca915a5a2ef5ad09e1853f72724548aa6ff4aa3"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "real",
+              "detail": "bitmap 4263B",
+              "hash": "b1121dfc586535a860cc3a6c1b3444b2904c64191863bec3bf36d4d9e9a4060f"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "real",
+              "detail": "bitmap 15575B",
+              "hash": "62b1e143935ce1c9b191443337698734c09cdd44832d7fc23df86eb16dbabeb6"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "empty",
+              "detail": "bitmap 2016B",
+              "hash": "985561ba775932a93f9544470c9c0a343152973de96a7bc2cc9ab8d556e505ff"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "real",
+              "detail": "bitmap 13199B",
+              "hash": "456bcef09d63a659095e36a1857319febabe0effd6c2fa0ce248297aba544043"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "empty",
+              "detail": "bitmap 1733B",
+              "hash": "d1e85b3e32266c401efa14fc4c52fcce8cb52dbb73bfd196e4c2edc4d93bccfd"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "real",
+              "detail": "bitmap 9429B",
+              "hash": "8870a98c692d2923c2c975c66e33be2c6320636ffa4006859e34dab7a00bfa05"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "real",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "empty",
+              "detail": "bitmap 1197B",
+              "hash": "e4d816b3c2a877331dd63ebef79230ec53cfaba80961635ba26519fe9b8512f3"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "real",
+              "detail": "bitmap 4569B",
+              "hash": "d219152b591f209ed624418b03bcd1fcc568ade6d0d95258b10167bf1fe6366f"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "empty",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "empty",
+              "detail": "bitmap 179B",
+              "hash": "f0174a23064d692909052e6409989b3ce8b4cf541e5519d4b4205ce23be33967"
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "empty",
+              "detail": "bitmap 179B",
+              "hash": "f0174a23064d692909052e6409989b3ce8b4cf541e5519d4b4205ce23be33967"
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "empty",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "empty",
+              "detail": "bitmap 179B",
+              "hash": "f0174a23064d692909052e6409989b3ce8b4cf541e5519d4b4205ce23be33967"
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "empty",
+              "detail": "bitmap 179B",
+              "hash": "f0174a23064d692909052e6409989b3ce8b4cf541e5519d4b4205ce23be33967"
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "empty",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "empty",
+              "detail": "bitmap 179B",
+              "hash": "f0174a23064d692909052e6409989b3ce8b4cf541e5519d4b4205ce23be33967"
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "empty",
+              "detail": "bitmap 179B",
+              "hash": "f0174a23064d692909052e6409989b3ce8b4cf541e5519d4b4205ce23be33967"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "vec",
+      "label": "天地图矢量",
+      "realMax": null,
+      "firstBad": {
+        "z": 14,
+        "verdict": "placeholder",
+        "detail": "fallback=placeholder image/svg+xml 118B"
+      },
+      "table": 18,
+      "unreachable": true,
+      "reason": "整源都是占位/空瓦片",
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "http",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "http",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "http",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "img",
+      "label": "天地图影像",
+      "realMax": null,
+      "firstBad": {
+        "z": 14,
+        "verdict": "placeholder",
+        "detail": "fallback=placeholder image/svg+xml 118B"
+      },
+      "table": 18,
+      "unreachable": true,
+      "reason": "整源都是占位/空瓦片",
+      "levels": [
+        {
+          "z": 14,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 13660,
+              "y": 6746,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 13489,
+              "y": 6208,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 15,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 27320,
+              "y": 13493,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 26978,
+              "y": 12416,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 16,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 54640,
+              "y": 26986,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 53957,
+              "y": 24832,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 17,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 109280,
+              "y": 53973,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 107914,
+              "y": 49664,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 18,
+          "verdict": "placeholder",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 218561,
+              "y": 107947,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            },
+            {
+              "point": "北京天安门",
+              "x": 215829,
+              "y": 99328,
+              "verdict": "placeholder",
+              "detail": "fallback=placeholder image/svg+xml 118B",
+              "hash": "bc0af586c9ced59201f85a072f425792d0e864a08b2857ce38896ea211f6ce55"
+            }
+          ]
+        },
+        {
+          "z": 19,
+          "verdict": "http",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 437122,
+              "y": 215894,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 431659,
+              "y": 198657,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 20,
+          "verdict": "http",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 874244,
+              "y": 431788,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 863318,
+              "y": 397314,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            }
+          ]
+        },
+        {
+          "z": 21,
+          "verdict": "http",
+          "tiles": [
+            {
+              "point": "杭州西湖",
+              "x": 1748488,
+              "y": 863576,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            },
+            {
+              "point": "北京天安门",
+              "x": 1726637,
+              "y": 794629,
+              "verdict": "http",
+              "detail": "HTTP 400",
+              "hash": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@
  */
 
 import { alignedTileBounds } from './basemap-alignment';
+import { basemapNativeMaxZoom } from './basemap-zoom-caps';
 
 export interface PlanGroundBounds {
   west: number;
@@ -57,14 +58,11 @@ export const PLAN_GROUND_BACKDROP: Record<PlanGroundSource, string> = {
 };
 
 /**
- * 各底图的瓦片上限（贴地拼图用）。
- * 高德矢量档 z19 返回 100 多字节的空瓦片，只有 z18 及以下是真图；卫星档 z19 仍有影像。
- * OSM z19（z20 是 400）；Carto 2026-11-16 实测 z18 是真图、z19/z20 回 403，上限同样按 18。
+ * 各底图的瓦片上限（贴地拼图用）：数字全部来自 `lib/basemap-zoom-caps.ts` 的同一张表，
+ * 与 2D 画布、3D 瓦片金字塔共用；换 key 后跑 `scripts/probe-basemap-zoom.mjs` 校一次即可。
  */
 export function planGroundMaxZoom(source: PlanGroundSource): number {
-  if (source === 'amap-streets' || source === 'amap-streets-labels') return 18;
-  if (source === 'carto-light' || source === 'carto-dark') return 18;
-  return 19;
+  return basemapNativeMaxZoom(source);
 }
 
 /** Web 墨卡托：瓦片 y 对应的北缘纬度。 */
