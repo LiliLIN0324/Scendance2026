@@ -236,6 +236,8 @@ import {
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
 import { clampRingMoveToBoundary, nearestMergeTarget, nearestPolylineEdge, nearestRingEdge, nearestRouteSnapPoint, planGridStepM, snapPointToGrid, stickPointToBoundary } from '../lib/site-plan-snap';
+// 2026-11-16 用户指令：门放到室内区域边线 10px 内要贴边、朝向垂直墙面。
+import { snapDoorToIndoorEdge } from '../lib/plan-door-snap';
 import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
 import { WALK_ROLES, walkRoleCrowdType } from '../lib/walk-roles';
 import { crowdTypeForRole } from '../lib/plan-crowd-placement';
@@ -730,6 +732,15 @@ const VERTEX_EDGE_HIT_PX = 14;
 const DRAFT_CLOSE_HIT_PX = 10;
 /** 区分「单击加顶点」与「拖拽平移」的位移阈值（CSS px）。 */
 const CLICK_MAX_MOVE_PX = 4;
+
+/**
+ * 2026-11-16 用户指令：门的六种图标（单开/双开/推拉/旋转/卷帘/折叠）。
+ * 只有它们走「贴室内分区边线」的吸附；其它物件仍按原样自由摆放。
+ */
+const DOOR_TEMPLATE_ID = /(^|:)(door|double-door|sliding-door|revolving-door|roller-shutter|folding-door)$/;
+function isDoorTemplateId(templateId: string): boolean {
+  return DOOR_TEMPLATE_ID.test(templateId);
+}
 /** 「再点一下会删」琥珀框的保留时长（ms）：手离开后不挂太久。 */
 const BOUNDARY_DELETE_ARM_MS = 2400;
 /** 刚插入顶点的宽限期（ms）：双击边线加点时，紧接着的那一下不该被当成“双击顶点删点”。 */
@@ -1484,6 +1495,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const facilityTemplateRef = useRef<string | null>(null);
   const facilityTemplateObjRef = useRef<PlanFacilityTemplate | null>(null);
   const ghostPointRef = useRef<PlanPoint | null>(null);
+  /** 2026-11-16 门的贴边吸附：悬停算出的落点 / 法线，高亮与落位共用这一份。 */
+  const doorSnapRef = useRef<{ point: PlanPoint; rotationDeg: number; zoneId: string; edge: readonly [PlanPoint, PlanPoint] } | null>(null);
   /** 2026-11-16 落位前旋转：R / Shift+R 每次 ±15°，2D 与 3D draft 共用同一个角度。 */
   const facilityRotationRef = useRef(0);
   /** 拖放刚落的 250ms 内不因 dragleave 清幽灵，否则连放第二件会丢预览。 */
@@ -2719,6 +2732,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         drawnZones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
         { tone: labelTone },
       );
+      // 2026-11-16 用户指令：门贴边时把那条边高亮出来，并在落点画一道法线小刻度，
+      // 让人一眼看出「会被吸到这条边、门朝这边」；松手后高亮自动消失。
+      const doorSnap = doorSnapRef.current;
+      if (doorSnap && modeRef.current === 'facility') {
+        const [edgeA, edgeB] = doorSnap.edge;
+        const pa = planPointToPixel(edgeA, viewport);
+        const pb = planPointToPixel(edgeB, viewport);
+        const at = planPointToPixel(doorSnap.point, viewport);
+        const rad = (doorSnap.rotationDeg * Math.PI) / 180;
+        planCtx.save();
+        planCtx.strokeStyle = '#1f8a5b';
+        planCtx.lineCap = 'round';
+        planCtx.lineWidth = 3;
+        planCtx.beginPath();
+        planCtx.moveTo(pa.x, pa.y);
+        planCtx.lineTo(pb.x, pb.y);
+        planCtx.stroke();
+        planCtx.lineWidth = 2;
+        planCtx.beginPath();
+        planCtx.moveTo(at.x, at.y);
+        // 屏幕系 y 向下，所以世界法线的 y 轴取反。
+        planCtx.lineTo(at.x + Math.cos(rad) * 16, at.y - Math.sin(rad) * 16);
+        planCtx.stroke();
+        planCtx.restore();
+      }
       if (review?.kind === 'zones') {
         for (const zone of drawnZones) {
           if (review.zoneIds.includes(zone.id)) drawMapEditHighlight(layer, zone.polygon, 'area');
@@ -4018,7 +4056,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 templateId: template.templateId,
                 name: template.name,
                 position: { x: ghostPointRef.current.x, y: ghostPointRef.current.y },
-                rotationDeg: facilityRotationRef.current,
+                rotationDeg: doorSnapRef.current?.rotationDeg ?? facilityRotationRef.current,
                 size: { width: spec.width, depth: spec.depth },
                 notes: "",
               },
@@ -4207,6 +4245,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (modeRef.current === 'scope') return;
     // H2-c：放设施模式单击提交（可连续放置）。
     if (modeRef.current === 'facility') {
+      // 2026-11-16 用户指令：门在室内分区边线 10px 内落位时贴边、朝向垂直墙面。
+      const armed = facilityTemplateRef.current;
+      const snap = armed && isDoorTemplateId(armed)
+        ? snapDoorToIndoorEdge({ pt, zones: planRef.current.zones, viewport: currentViewport() })
+        : null;
+      if (snap) {
+        facilityRotationRef.current = snap.rotationDeg;
+        placeFacilityAt(snap.point);
+        return;
+      }
       placeFacilityAt(pt);
       return;
     }
@@ -7421,9 +7469,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (activeMode === 'facility' && facilityTemplateRef.current) {
       const hit = eventPlanPoint(event);
       if (!hit) return;
+      // 2026-11-16 用户指令：门靠近室内区域边线时先吸过去，悬停就给贴边高亮。
+      const snap = isDoorTemplateId(facilityTemplateRef.current)
+        ? snapDoorToIndoorEdge({ pt: hit.pt, zones: planRef.current.zones, viewport: currentViewport() })
+        : null;
+      const nextPoint = snap ? snap.point : hit.pt;
+      const snapChanged =
+        (doorSnapRef.current?.zoneId ?? null) !== (snap?.zoneId ?? null) ||
+        (snap !== null && (Math.abs(doorSnapRef.current!.point.x - snap.point.x) > 1e-9 || Math.abs(doorSnapRef.current!.point.y - snap.point.y) > 1e-9));
+      doorSnapRef.current = snap;
       const ghost = ghostPointRef.current;
-      if (!ghost || ghost.x !== hit.pt.x || ghost.y !== hit.pt.y) {
-        ghostPointRef.current = hit.pt;
+      if (snapChanged || !ghost || ghost.x !== nextPoint.x || ghost.y !== nextPoint.y) {
+        ghostPointRef.current = nextPoint;
         draw();
       }
       return;
