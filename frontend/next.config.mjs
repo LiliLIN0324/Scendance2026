@@ -31,10 +31,13 @@ const nextConfig = {
       { source: '/guide', destination: '/guide.html' },
       // 天地图瓦片：线上由 Cloudflare Pages Functions（functions/api/tdt-tiles.ts）处理；
       // 本机 next dev 没有 Functions，转发到 3199 本机代理，见 tools/aholo/lux3d-dev-proxy.mjs。
+      // 云端资产（R2 桶）同理：R2 的 CORS 白名单只放行线上站点，浏览器从 localhost 直取会被拦，
+      // dev 下改走这个同源重写，不需要改桶的跨域配置，也不用把开发机加进白名单。
       ...(process.env.NODE_ENV === 'development'
         ? [
           ...['tdt-tiles', 'tdt-search', 'tdt-area', 'carto-tiles', 'place-shape', 'place-shape-hints', 'road-network', 'site-context'].map(name => ({ source: `/api/${name}`, destination: `http://127.0.0.1:3199/api/${name}` })),
           { source: '/api/amap-place', destination: 'http://127.0.0.1:3199/amap-place' },
+          { source: '/cloud-assets/:path*', destination: 'https://pub-048147e4c4ad482d95df092dc8098e1d.r2.dev/:path*' },
         ]
         : []),
     ];
