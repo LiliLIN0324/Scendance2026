@@ -11615,7 +11615,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 {/* 2026-11-16：图上默认只画真冲突（红）；缺宽度/容量待核实属于提示，这里给一个口子放出来。 */}
                 <label
                   style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: PLANNING_SPACING.xs, opacity: 0.8, cursor: 'pointer' }}
-                  title="缺宽度 = 通行带没评估；容量是按面积估算的规划假设，不是法规口径；两者都是提示，不是冲突"
+                  title="缺宽度：补上宽度会一起算通行带；容量按面积估，改分区跟着变"
                 >
                   <input
                     type="checkbox"

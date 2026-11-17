@@ -31,7 +31,7 @@ export interface OutdoorBrief {
  * 用户在圈范围时无法据此做任何事；这条只在排设施、画流线这种真靠证据判断的步骤展开。
  */
 export const MAP_EVIDENCE_MISSING_NOTE =
-  "地图证据没取到：门/障碍/通行未核对，不代表无冲突。";
+  "地图证据没取到，先按你给的场地参数排；门、障碍、通行补进地图后再核冲突。";
 
 /** scope 卡过滤掉地图证据缺口；其它 kind 原样保留。 */
 export function proposalMapWarnings(
