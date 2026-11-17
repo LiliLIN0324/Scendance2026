@@ -10,7 +10,8 @@ import type { EventProfile } from '../../lib/event-profile';
  * 组件本身不落盘：确认后把新档案交回调用方，由现有的本地布局写入链路保存。
  */
 export interface EventProfileCardProps {
-  profile?: EventProfile;
+  /** 缺省或显式 undefined 都表示尚未创建；exactOptionalPropertyTypes 下两者不是一回事。 */
+  profile?: EventProfile | undefined;
   proposal?: EventProfileProposal;
   /** 内部字段（预算、分工）默认不显示，避免被顺手贴进客户产物。 */
   showInternal?: boolean;
