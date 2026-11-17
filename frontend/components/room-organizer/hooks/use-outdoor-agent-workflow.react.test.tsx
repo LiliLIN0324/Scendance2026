@@ -973,9 +973,31 @@ it("要的数量放不下：按「硬挤」出预览塞到物理极限，需求�
   // 确认后的回话说清「需求没变、画布已到物理上限」。
   expect(flow.notice).toContain("硬挤");
 }, 20000);
-// 2026-11-17 断点遗留：「摊位都撤了」（count=0 清空）的合并逻辑已在契约层备好并测过
-// （outdoor-agent-contract.test.ts d4），但模型响应契约 count min(1) 拦在门外——
-// 共享契约（supabase/functions/_shared/outdoor-agent-response-contract.ts）改动需要人 review，等点头。
+// 2026-11-17 断点修复完成：用户 review 批准共享契约 items count min(1)→min(0)，
+// 「摊位都撤了」count=0 清空全链打通（schema→合并→落位回收→预览→确认）。
+it("「摊位都撤了」：整区清空出预览，确认后画布同步清空", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "摆摊区放8个摊位",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 8, evidence: "8个摊位" }] }),
+  );
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(8);
+  await turn(
+    "摊位都撤了",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 0, evidence: "都撤了" }] }),
+  );
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  // 中间校验：合并层必须已经把需求改成 count=0，否则问题在合并层而非落位层。
+  expect(flow.state.brief.items[0]?.count, flow.notice).toBe(0);
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.next.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(0);
+  expect(flow.state.brief.items[0]).toMatchObject({ query: "市集摊位", count: 0 });
+}, 30000);
 // 2026-11-17 正式站卡点：用户没说过人数（很常见——先布场、人数活动定了才知道），
 // 点「预览按用途复用我的物料」拿到的是一张红卡「预计同时在场多少人？」+ 重试；
 // 而重试只是原样重跑 objects，人数不变就永远撞同一堵墙，任务卡标题也被永久改成物件阶段。
