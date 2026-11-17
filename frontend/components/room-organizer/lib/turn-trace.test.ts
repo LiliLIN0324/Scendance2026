@@ -20,6 +20,28 @@ describe('编号', () => {
     expect(newAttemptId(1_700_000_000_000).startsWith('a-')).toBe(true);
   });
 
+  // 2026-11-17 补：原来只有 200 次这一条，纯随机 16 位后缀有 26% 概率撞车，
+  // 断言会随机变红。这里把次数拉到 1000，把「同毫秒必不重复」钉成硬约束。
+  it('同一毫秒里连取一千个编号也不会重复', () => {
+    const turns = new Set(Array.from({ length: 1000 }, () => newTurnId(1_700_000_000_000)));
+    expect(turns.size).toBe(1000);
+  });
+
+  it('跨毫秒的编号靠前缀里的毫秒区分开', () => {
+    const ids = new Set([newTurnId(1_700_000_000_000), newTurnId(1_700_000_000_001)]);
+    expect(ids.size).toBe(2);
+  });
+
+  it('同一毫秒里的 turn 与 attempt 也不会互相撞车', () => {
+    const ids = new Set([
+      newTurnId(1_700_000_000_000),
+      newAttemptId(1_700_000_000_000),
+      newTurnId(1_700_000_000_000),
+      newAttemptId(1_700_000_000_000),
+    ]);
+    expect(ids.size).toBe(4);
+  });
+
   it('编号里不含身份、原话或坐标这类字段', () => {
     const id = newTurnId(1_700_000_000_000);
     expect(id).toMatch(/^t-[0-9a-z]+-[0-9a-f]{4}$/);
