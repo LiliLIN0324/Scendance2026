@@ -175,6 +175,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     if (!userId || busy) return;
     const id = requestedProjectId;
     if (!id || openedRequest.current === `${userId}:${id}`) return;
+    // 经典案例是本机户外项目（space-panel 用 replica- 伪 id 占住 ?project=，刷新靠本机记录复原），
+    // 云端没有它：静默跳过云端绑定，不报「项目链接无效」。
+    if (id.startsWith('replica-')) { openedRequest.current = `${userId}:${id}`; return; }
     // 无感挂云自己同步的 ?project=：项目刚建好、画布已是内容本体，重开会清掉撤销历史，凭标记跳过。
     if (consumeSelfAttachedProject(userId, id)) { openedRequest.current = `${userId}:${id}`; return; }
     if (!cloud.writeBlocked && cloud.project?.id !== id) {
