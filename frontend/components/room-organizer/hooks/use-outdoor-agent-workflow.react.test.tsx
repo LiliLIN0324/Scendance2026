@@ -1765,6 +1765,10 @@ it("走查记录本：标一条才算看过，非法编号这一标不生效", (
   });
   expect(flow.walkthroughLine()).toContain("已看 1/11");
   expect(flow.walkthroughLine()).toContain("通过 1");
+  // 已落盘：刷新后能读回来（键里确实有 #3）。
+  const stored = window.localStorage.getItem("scendance.outdoor.walkthrough.v1");
+  expect(stored).toBeTruthy();
+  expect(JSON.parse(stored!).seen["3"]).toBe("pass");
   // 编号不在 1..11：返回 null，且记录本不变。
   expect(flow.recordWalkthrough(99, "pass")).toBeNull();
   expect(flow.walkthroughLine()).toContain("已看 1/11");
