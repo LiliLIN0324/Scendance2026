@@ -2333,8 +2333,8 @@ body.sc-panel-dragging * {
   z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 0;
   pointer-events: none;
 }
-/* 展开态：只保留工具这一行（图2）；关闭用点外部 / Esc，
-   不再加一条“工具”标题栏或另挂一颗收起胶囊。 */
+/* 展开态：只保留工具这一行（图2）；关闭只认末尾 × / Esc，
+   点画布或点卡内按钮不收起——用户可连续操作，不会把上浮的标注卡变成无锚点空卡。 */
 .sc-workbench .sc-tool-column .oc-dock.is-open {
   align-items: center;
   width: max-content;

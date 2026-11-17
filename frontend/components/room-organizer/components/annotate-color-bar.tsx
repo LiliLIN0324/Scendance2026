@@ -56,6 +56,7 @@ export function AnnotateColorBar({
         flexWrap: 'nowrap',
         gap: PLANNING_SPACING.sm,
         width: '100%',
+        height: 34,
         boxSizing: 'border-box',
         marginTop: PLANNING_SPACING.sm,
         padding: '5px 7px',
