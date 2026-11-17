@@ -1838,7 +1838,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** 刚插完的点：紧接的松手别把它当成「点击删除」，否则插点会原地被抹掉。 */
   const justInsertedRouteVertexRef = useRef(false);
 
-  const [view, setView] = useState<View>({ ...viewRef.current });
+  // 2026-11-18：缩放角标删除后组件不再读 view（视图真值在 viewRef，绘制自持）。
+  const [, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
   const [layerState, setLayerState] = useState<LayerVisibility>(visibility ?? defaultLayerVisibility());
   /** P2-i 图层锁定（UI 状态；命中过滤读 lockedLayersRef，避免闭包过期）。 */
@@ -11309,9 +11310,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   )}
                 </div>
               ))}
-              <div style={{ padding: '6px 8px 2px', opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.row }}>
-                图层是同一套场地的不同设计方案；用地红线与定位跨图层共享。
-              </div>
             </div>
           )}
         </div>
@@ -11646,7 +11644,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         >
           <LibraryFooterIcon size={PLANNING_ICON_SIZES.legend} aria-hidden color={PLANNING_SURFACE.panelText} />
           <span style={{ flex: 1 }}>已放置物件</span>
-          <span style={{ opacity: 0.7, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.hint }}>({inventoryRows.length}/{libraryTotal})</span>
           <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint }}>{panelOpen ? '▾' : '▸'}</span>
         </button>
         {panelOpen && (
@@ -11892,8 +11889,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
             {/* 2026-11-11 用户指令：选中物体的编辑已移到画布右上角「工具与属性」浮窗；独立工作台（无宿主）仍留在这里。 */}
             {!outdoorInspectorActive && selectionInspectorZone}
-
-            <div style={{ marginTop: PLANNING_SPACING.sm, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>缩放 z{view.zoom}{readOnly ? ' · 只读浏览' : ''}</div>
           </>
         )}
       </div>
