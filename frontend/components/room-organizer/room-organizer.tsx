@@ -4895,7 +4895,7 @@ useEffect(() => {
               style={{ position: 'absolute', inset: 0, zIndex: 31, pointerEvents: 'none', visibility: outdoor3dTakeover ? 'visible' : 'hidden' }}
             />
             {/* 2026-11-15 方案 A：2D/3D 分段胶囊退役，切换入口收进右下工具簇一枚可切换圆钮（#tool-view-toggle）。
-                原左下胶囊挂载不再渲染；OutdoorViewSwitch 组件文件保留待后续整体清理。 */}
+                原左下胶囊挂载不再渲染；OutdoorViewSwitch 组件文件已于 2026-11-17 零引用清理删除。 */}
       {/* 2026-11-13 用户拍板：右侧唯一画面 = 户外地图 2D/3D；室内房间 three 画布整体退役出镜，
           容器常驻隐藏但保留保活管线（renderer/canvas ref 仍被环境、漫游、就绪态逻辑复用），
           彻底卸载 Viewport 与室内 layout 回写链路作为后续清理。 */}
