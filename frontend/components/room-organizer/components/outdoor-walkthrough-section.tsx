@@ -20,20 +20,35 @@ export function OutdoorWalkthroughSection({
   defaultOpen = false,
   cloudPass,
   onCloud,
+  onExportCsv,
 }: {
   initialBook: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
   defaultOpen?: boolean;
   cloudPass?: readonly number[];
   onCloud?: (id: number, pass: boolean) => void;
+  /** 给就渲染「导出 CSV」；不传就整块不出现（与云端那列同一个规矩）。 */
+  onExportCsv?: () => void;
 }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [book, setBook] = useState(initialBook);
   return (
     <div className="ap-card-walkthrough">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        {open ? "收起走查记录" : "走查记录（验收时逐条标记）"}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          {open ? "收起走查记录" : "走查记录（验收时逐条标记）"}
+        </button>
+        {onExportCsv && (
+          <button
+            type="button"
+            aria-label="导出台账 CSV"
+            title="五列：编号 / 用例 / 固定数据 / 浏览器 / 云端；没有结论列"
+            onClick={() => onExportCsv()}
+          >
+            导出 CSV
+          </button>
+        )}
+      </div>
       {open && (
         <OutdoorWalkthroughBoard
           book={book}
