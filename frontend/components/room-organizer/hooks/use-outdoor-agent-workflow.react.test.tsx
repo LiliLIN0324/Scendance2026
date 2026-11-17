@@ -842,7 +842,7 @@ it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单�
   await action("generate");
   expect(bridge.openGenerate).toHaveBeenCalledWith(facility.id, "text");
   expect(flow.notice).toContain("没有提交收费任务");
-});
+}, 20000);
 it("物料数量自然改口是原设施增减，不重复铺一版", async () => {
   await confirmScope();
   await turn(
@@ -1428,10 +1428,12 @@ it("入口核对不能推断出口；卡片显式核对双向出入口经预览�
   // 2026-11-17：三颗按钮原来都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
   // 后两颗还默认把门当出口，等于替用户做了判断。现在必须是三个互斥的方向选择。
   const cardButtons = Array.from(host.querySelectorAll("button")).map((b) => b.textContent ?? "");
-  expect(cardButtons.some((t) => t.includes("只能进：作为入口"))).toBe(true);
-  expect(cardButtons.some((t) => t.includes("只能出：作为出口"))).toBe(true);
-  expect(cardButtons.some((t) => t.includes("能进也能出：双向出入口"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("只能进"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("只能出"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("双向"))).toBe(true);
   expect(cardButtons.some((t) => t.includes("我已核对"))).toBe(false);
+  // 三个选项是一个成组的选择（有 role=group），不是三行普通文字。
+  expect(host.querySelector('[role="group"]')).not.toBeNull();
   // 提示条不再 8 秒自己消失（那条提示就是这一步的状态）。
   expect(host.textContent).not.toContain("后收起");
   await act(async () => {

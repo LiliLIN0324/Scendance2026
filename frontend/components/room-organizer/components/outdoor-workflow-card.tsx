@@ -541,38 +541,43 @@ export function OutdoorWorkflowCard({
           flow.state.stage,
         ) &&
         flow.unverifiedEntrances.slice(0, 1).map((n) => (
-          <div key={n.id}>
-            <p>
-              “{n.name}”是地图上的候选入口。它到底能不能走、是只进、只出还是双向，要你看过现场才知道——
-              选一个，我按你的判断出预览。入口不自动等于出口，也不代表安全认证。
+          <div key={n.id} className="ap-access-check">
+            <p className="ap-access-question">
+              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
+              入口不自动等于出口，也不代表安全认证。
             </p>
-            {/* 2026-11-17：原来三个按钮都叫「我已核对…预览标记」，只有后半句不同，
-                用户根本分不清点哪个；后两个还默认把门当出口，等于替用户做了判断。
-                改成三个互斥、各自说清「记成什么」的方向选择。 */}
-            <button
-              type="button"
-              onClick={() =>
-                void flow.action("verify-access", undefined, n.id, undefined, "entry")
-              }
-            >
-              只能进：作为入口
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void flow.action("verify-access", undefined, n.id, undefined, "exit")
-              }
-            >
-              只能出：作为出口
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void flow.action("verify-access", undefined, n.id, undefined, "both")
-              }
-            >
-              能进也能出：双向出入口
-            </button>
+            {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
+                而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
+                改成三个等宽选项：大字号说方向，小字说记成什么。 */}
+            <div className="ap-access-choices" role="group" aria-label={`“${n.name}”的进出方向`}>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "entry")
+                }
+              >
+                只能进<span>入口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "exit")
+                }
+              >
+                只能出<span>出口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "both")
+                }
+              >
+                双向<span>入口 + 出口</span>
+              </button>
+            </div>
           </div>
         ))}
       {(flow.state.stage === "objects" || flow.libraryChoices.length > 0) &&
