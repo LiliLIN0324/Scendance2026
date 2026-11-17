@@ -38,38 +38,44 @@
   gap: 9px;
 }
 
-.sc-generation-card .gs-question { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: #5b6067; }
-
-.sc-generation-card .gs-tasks { display: flex; flex-direction: column; gap: 6px; }
+/* 2026-11-18 用户：「场地的视觉层次很奇怪，应该和「空间」一样的字号与布局」。
+   入口不再是一句加粗问句 + 大圆角卡片，改成和空间分组行同一套：
+   发丝分隔行、13px 名称、11px 说明、右侧箭头，悬停只给淡底。 */
+.sc-generation-card .gs-tasks { display: flex; flex-direction: column; gap: 0; }
 
 .sc-generation-card .gs-task {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
   width: 100%;
-  padding: 9px 10px;
-  border: 1px solid #e4e4e7;
-  border-radius: 10px;
-  background: #fff;
+  padding: 9px 2px;
+  border: 0;
+  border-top: 1px solid #efeff1;
+  border-radius: 0;
+  background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease;
 }
-.sc-generation-card .gs-task:hover { background: #fafafa; border-color: #d4d4d8; }
+.sc-generation-card .gs-task:first-child { border-top: 0; }
+.sc-generation-card .gs-task:hover { background: #f7f8f8; }
+.sc-generation-card .gs-task::after { content: '›'; font-size: 13px; line-height: 1; color: #a8adb5; }
 .sc-generation-card .gs-task-icon {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  background: #f4f5f7;
-  color: #3f4249;
+  border-radius: 0;
+  background: transparent;
+  color: #71767e;
 }
-.sc-generation-card .gs-task-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sc-generation-card .gs-task-text strong { font-size: 12px; font-weight: 600; color: #141416; }
-.sc-generation-card .gs-task-text small { font-size: 10.5px; line-height: 14px; color: #71767e; }
+.sc-generation-card .gs-task:hover .gs-task-icon { color: #141416; }
+.sc-generation-card .gs-task-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sc-generation-card .gs-task-text strong { font-size: 13px; font-weight: 600; line-height: 20px; color: #141416; }
+.sc-generation-card .gs-task-text small { font-size: 11px; line-height: 16px; color: #71767e; }
 
 .sc-generation-card .gs-crumb {
   display: flex;

@@ -54,7 +54,8 @@ describe('统一生成面板', () => {
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
 
     act(() => openGenerationSheet({ scope: 'venue' }));
-    expect(screen.getByText('你想做什么？')).toBeTruthy();
+    // 2026-11-18 用户：入口不再是一句加粗问句，直接给三个任务行（读法对齐「空间」）。
+    expect(screen.queryByText('你想做什么？')).toBeNull();
     expect(screen.getByRole('complementary', { name: '场地' })).toBeTruthy();
     expect(screen.getByTestId('generation-task-scene-recon')).toBeTruthy();
     expect(screen.getByTestId('generation-task-model')).toBeTruthy();
