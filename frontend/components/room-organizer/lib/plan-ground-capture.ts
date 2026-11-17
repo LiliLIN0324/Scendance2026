@@ -12,7 +12,7 @@
  * - 高德静态图仍是兜底：这里返回 null 时调用方继续走老路径。
  */
 
-import { alignedTileBounds } from './basemap-alignment';
+import { alignedTileBounds, sourceForLocation } from './basemap-alignment';
 import { basemapNativeMaxZoom } from './basemap-zoom-caps';
 
 export interface PlanGroundBounds {
@@ -28,7 +28,8 @@ export type PlanGroundSource =
   | 'carto-dark'
   | 'amap-satellite'
   | 'amap-streets'
-  | 'amap-streets-labels';
+  | 'amap-streets-labels'
+  | 'esri-satellite';
 
 export interface PlanGroundTilePlacement {
   url: string;
@@ -55,6 +56,7 @@ export const PLAN_GROUND_BACKDROP: Record<PlanGroundSource, string> = {
   'amap-satellite': '#12161b',
   'amap-streets': '#f4f1ea',
   'amap-streets-labels': '#f4f1ea',
+  'esri-satellite': '#12161b',
 };
 
 /**
@@ -127,11 +129,12 @@ export function planGroundTiles(
 }
 
 /** 场地米数 → 合适的瓦片级别：1024 px 图铺满场地时，一像素约等于多少米决定级别。 */
-export function zoomForGroundSpan(widthM: number, depthM: number, size: number): number {
+export function zoomForGroundSpan(widthM: number, depthM: number, size: number, lat = 30): number {
   const span = Math.max(widthM, depthM, 8);
   const metersPerPixel = span / Math.max(size, 128);
-  // 每像素米数 ≈ 156543.03392 * cos(lat) / 2^zoom；纬度按 30°（杭州）算，误差 2% 以内。
-  const target = Math.log2((156543.03392 * Math.cos((30 * Math.PI) / 180)) / metersPerPixel);
+  // 每像素米数 ≈ 156543.03392 * cos(lat) / 2^zoom；缺省纬度按 30°（杭州）。
+  // 境外场地要传真纬度：高纬处同样的米数只占更少像素，按 30° 算会多级、多拉一大批瓦片。
+  const target = Math.log2((156543.03392 * Math.cos((lat * Math.PI) / 180)) / metersPerPixel);
   return Math.max(13, Math.min(19, Math.round(target)));
 }
 
@@ -179,6 +182,8 @@ export interface PlanGroundCapture {
   zoom: number;
   tileCount: number;
   missing: number;
+  /** 实际用的图源。境外场地请求的是中国专属源时会被换成全球卫星源（见 basemap-alignment）。 */
+  source: PlanGroundSource;
 }
 
 /**
@@ -195,12 +200,19 @@ export async function capturePlanGround(options: {
 }): Promise<PlanGroundCapture | null> {
   if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
   const size = Math.max(256, Math.min(2048, Math.round(options.size ?? 1024)));
+  // 境外场地：请求的是高德/天地图就换成全球卫星（否则只会拼出一张灰图/空白），境内原样。
+  const source = sourceForLocation(
+    options.source,
+    (options.bounds.west + options.bounds.east) / 2,
+    (options.bounds.south + options.bounds.north) / 2,
+  );
+  const latMid = (options.bounds.south + options.bounds.north) / 2;
   const span = boundsSpanMeters(options.bounds);
-  const zoom = Math.max(4, Math.min(planGroundMaxZoom(options.source), options.zoom ?? zoomForGroundSpan(span.width, span.depth, size)));
-  // 高德三档本身就是 GCJ-02（与应用锚点同系）；OSM/Carto 是 WGS-84，
+  const zoom = Math.max(4, Math.min(planGroundMaxZoom(source), options.zoom ?? zoomForGroundSpan(span.width, span.depth, size, latMid)));
+  // 高德三档本身就是 GCJ-02（与应用锚点同系）；OSM/Carto/Esri 是 WGS-84，
   // 拼图前把范围挪到 WGS-84 网格，免得贴到 3D 地面后相对场地偏几百米。
-  const tileBounds = alignedTileBounds(options.bounds, options.source);
-  const plan = planGroundTiles(tileBounds, size, zoom, (z, x, y) => options.urlFor(options.source, z, x, y));
+  const tileBounds = alignedTileBounds(options.bounds, source);
+  const plan = planGroundTiles(tileBounds, size, zoom, (z, x, y) => options.urlFor(source, z, x, y));
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -212,7 +224,7 @@ export async function capturePlanGround(options: {
     return null;
   }
   if (!ctx) return null;
-  ctx.fillStyle = PLAN_GROUND_BACKDROP[options.source];
+  ctx.fillStyle = PLAN_GROUND_BACKDROP[source];
   ctx.fillRect(0, 0, size, size);
   const timeoutMs = options.timeoutMs ?? 9000;
   const images = await Promise.all(plan.placements.map(tile => loadTile(tile.url, timeoutMs)));
@@ -230,5 +242,6 @@ export async function capturePlanGround(options: {
     zoom,
     tileCount: plan.placements.length,
     missing: plan.placements.length - drawn,
+    source,
   };
 }

@@ -371,6 +371,24 @@ export function createOutdoorMapContext() {
           closed: f.geometry.type === "polygon",
         }));
     },
+    roadLines() {
+      // 2026-11-17：沿线排布的参照输入。快照道路坐标已是 plan 同基准的 ENU 米，直接交给排布层。
+      return (snapshot?.features ?? [])
+        .filter(
+          (f) =>
+            f.kind === "road" &&
+            f.geometry.type === "line" &&
+            f.geometry.points.length >= 2 &&
+            f.geometry.points.every(
+              (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+            ),
+        )
+        .map((f) => ({
+          id: f.id,
+          name: f.name,
+          points: f.geometry.points.map((p) => ({ x: p.x, y: p.y })),
+        }));
+    },
     spatial(turn: OutdoorTurn, plan: SitePlanData): SitePlanData {
       if (!snapshot || !turn.operation)
         throw new Error(

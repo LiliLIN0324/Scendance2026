@@ -1997,6 +1997,23 @@ body.sc-panel-dragging * {
   background-image: linear-gradient(#e4e4e7 1px, transparent 1px), linear-gradient(90deg, #e4e4e7 1px, transparent 1px);
   background-size: 14px 14px;
 }
+/* 2026-11-17 用户指令：上排四格（卫星/街道/单色/无）一行排开；下排分组清单每项带「置顶」。 */
+.oc-map-details__grid--slots { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.oc-map-details__sub {
+  max-width: 100%; overflow: hidden; color: #80868b; font-size: 10px; line-height: 12px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-map-details__source[aria-checked="true"] .oc-map-details__sub { color: #4a7c59; }
+.oc-map-details__item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.oc-map-details__item .oc-map-details__source { width: 100%; }
+.oc-map-details__pin {
+  padding: 0 0 0 2px; border: 0; background: transparent; color: #5f6368; cursor: pointer;
+  font-family: inherit; font-size: 10px; line-height: 14px;
+}
+.oc-map-details__pin:hover:not(:disabled) { color: #4a7c59; text-decoration: underline; }
+.oc-map-details__pin:disabled { color: #bdc1c6; cursor: default; }
+.oc-map-details__pin:focus-visible { outline: 2px solid #4a7c59; outline-offset: 1px; border-radius: 4px; }
+.oc-map-details__hint { margin-top: 6px; color: #80868b; font-size: 11px; line-height: 15px; }
 @media (max-width: 768px) {
   /* 手机左下角还有一枚 48px「助理菜单」圆钮（bottom 约 110px）；图层钮上移 58px 让开它，
      两块仍贴左缘，展开的地图详情也留出底部工具条。 */
@@ -2471,6 +2488,9 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-map-type-copy strong { font-size: 15px; font-weight: 600; color: #1d4ed8; line-height: 1.2; }
 .sc-workbench .sc-map-type-copy small { font-size: 11px; color: #71717a; line-height: 1.2; }
 .sc-workbench .sc-map-type-provider { margin-left: auto; font-size: 12px; font-weight: 700; color: #111; letter-spacing: -0.03em; }
+/* 2026-11-17 用户指令：三维「地图切换」四行复用 2D 的缩略图样式（oc-map-details__thumb），
+   只需固定不缩放；尺寸/边框/圆角全部沿用同一套。 */
+.sc-workbench .sc-tool-pop button.sc-map-type-row .oc-map-details__thumb { flex: none; }
 .sc-workbench .sc-tool-pop button.sc-map-type-off {
   margin-top: 4px; color: var(--wk-muted); font-size: 12px;
 }

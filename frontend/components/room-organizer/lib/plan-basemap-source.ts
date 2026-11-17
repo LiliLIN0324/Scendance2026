@@ -18,6 +18,7 @@ export const PLAN_GROUND_SOURCES: readonly PlanGroundSource[] = [
   'amap-satellite',
   'amap-streets',
   'amap-streets-labels',
+  'esri-satellite',
 ];
 
 export function isPlanGroundSource(value: unknown): value is PlanGroundSource {
