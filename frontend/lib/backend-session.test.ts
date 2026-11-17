@@ -1089,9 +1089,11 @@ describe('canvas and cloud project mismatch',()=>{
 describe('backendFailureText', () => {
   it('turns an unmapped SceneApiError into a sentence instead of the raw code', () => {
     const text = backendFailureText(new SceneApiError('ROUTE_NOT_FOUND', 404, null));
-    expect(text).toContain('ROUTE_NOT_FOUND');
+    expect(text).toBe('请求的接口不存在，这次操作没有发出。');
     expect(text).not.toBe('ROUTE_NOT_FOUND');
-    expect(text).toContain('云端操作失败');
+    const unmapped = backendFailureText(new SceneApiError('NOT_A_REAL_CODE', 404, null));
+    expect(unmapped).toBe('云端操作失败（NOT_A_REAL_CODE），草稿已保留。');
+    expect(unmapped).not.toBe('NOT_A_REAL_CODE');
   });
 
   it('keeps a mapped code and a local error sentence', () => {
