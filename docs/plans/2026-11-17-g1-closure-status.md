@@ -108,3 +108,30 @@
 - G1 纯函数 / 契约层已基本见底：不碰壳体、不等产品口径能做的切片本轮清完。
 - 下一步可控动作：推进 §3-C 待决口径拍板（哪怕先定 assetId↔slug、旧云投影两项）；其余等渲染线解锁接画布墙体、等智能体 V1–V5 flow 稳定后成套进 G2，再按依赖顺序进 R 线。
 - 不建议再硬挖纯函数切片；再往下即 G2 壳体换绑，须成套推进。
+
+## 8. §C 决策建议（待拍板，未改代码）
+
+> 下面只给选项与推荐，不等于已拍板。未拍板前不改契约、不接壳体；拍板后按表中「解锁」另开切片。
+
+| 项 | 代码现状 | 选项 | 推荐 | 拍板后解锁 |
+| --- | --- | --- | --- | --- |
+| C1 assetId ↔ slug | `FurnitureItem.assetId` 是后端资产 id，`glbUrl` 是前端加载引用；plan 侧 `sourceAssetId` 是 1–160 字符串、`modelOverride` 是物料库 slug；迁移已把 `assetId` 直通 `sourceAssetId`，slug 只经注入 `modelSlug` 取，不硬猜 | A. 严格分离：assetId 只存后端 id，modelOverride 只存 slug；B. 统一用 slug；C. 新增 `assetNamespace` 字段 | **A**。G1 不改字段；先在迁移/物料卡两处守住「不把 slug 写进 sourceAssetId、不把 UUID 写进 modelOverride」。数据审干净后，G2 再把 `sourceAssetId` 收紧为 UUID | 迁移不再有命名空间歧义；3D 选型可按 slug 稳定回查 |
+| C2 manifest 加载 | `public/oneplan-icons/manifest.json` 是 549 条权威清单；纯函数层拿不到全局 manifest，`findLibraryEntryByTemplateId(entries, …)` / `facilityLibrarySizeResolver(entries)` 都要求调用方注入条目 | A. 壳体启动时静态加载一次并注入；B. 纯函数直接 import manifest；C. 运行时 fetch 远端 manifest | **A**。manifest 是构建期抓取产物，随包发布；壳体加载一次，迁移与画布共用同一份 entries。B 破坏纯函数注入边界，C 多一层失败态且当前无动态库需求 | 迁移可拿真实占地；仍保持纯函数可测 |
+| C3 室内特化字段 | `FurnitureItem` 有 WiFi/CCTV/`signalRange`/锥角四件套/`elevation`/`structuralOpeningId`/`structuralColumnId`/`wallId`/`price`/`handoff`；`PlanFacility` 没有这些字段；迁移器已明确本轮不落 notes | A. 留在 3D/RoomLayout，不迁 plan；B. 塞 `notes` 自由文本；C. 契约新增可选 `indoor3d` 子对象 | **A（G1）**。这些是室内 3D 语义，plan 是二维场地规划；B 不可检索、不可校验；C 等产品确认真需要「户外 plan 带摄像头/WiFi 语义」再开，且要 3D 渲染同步 | 迁移可如实标记 lossy；契约不膨胀 |
+| C4 旧云项目投影 | 项目页用 `/editor/?project=<id>` 打开，无 mode；云项目走 `backendSceneToLayout` 旧室内 schema；plan 草稿按 projectId 单独存储 | A. 只读旧室内视图 + 显式「复制为 plan 草稿」；B. 打开即自动投影；C. 直接砍掉旧入口 | **A**。旧链接不断、原项目不被静默改写；投影只在用户点按后生成派生草稿。B 有数据语义风险，C 会打断存量项目 | 决定 R3 是否保留迁移降级通路；旧项目可平滑过渡 |
+| C5 plan lease 语义 | 本地写租约是 capability + `localWriteCapabilityGuard`；后端快照已有项目级 lease（projectId/sessionId/generation/revision/expiresAt）；plan 持久化尚未接 | A. 近期复用「本地 capability + 项目级 lease」守卫 plan 写；B. 现在新建 plan 专用租约；C. plan 写先不做 | **A**。先复用现有租约，plan 落盘时再加 revision 检查；B 等多人同时编辑 plan 的真实需求；C 会挡住 3c 守卫迁移 | `assertLayoutWrite` 可 plan 化，3c 可继续 |
+| C6 户外旧预设 lawn/market | `ScenePresetKey` 含 lawn/market，GLB 已打包；`SCENE_PRESET_FACILITY_PREFIX` 已能把预设落成 `scene-preset:<key>` 设施；8 个室内预设随 G3 整组卸 | A. 保留为户外样例预设，按现有设施前缀落 plan；B. 迁到 SitePlan 草稿预设体系；C. 跟室内预设一起删 | **A**。现有路径已通，不新增预设 schema；等 plan 预设体系真立项再迁 B。C 会丢掉两个户外样例 | 不需要 G1 代码动作 |
+
+### 8.1 建议拍板顺序
+
+1. **C1 + C4**：直接决定迁移正确性与 R3 降级通路，先定这两项即可继续。
+2. **C5**：决定 3c 写守卫能否 plan 化。
+3. **C3 → C2 → C6**：影响面小，可按上面推荐默认执行；有异议再单独改。
+
+### 8.2 未拍板前不动的面
+
+- 不改 `planFacilitySchema` / `sourceAssetId` / `modelOverride` 约束；
+- 不在纯函数层加载 manifest；
+- 不把 3D 特化字段写进 notes；
+- 不新建 plan 级写守卫或租约；
+- 不动 lawn/market 预设与室内预设清单。
