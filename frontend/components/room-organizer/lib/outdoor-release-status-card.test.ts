@@ -5,6 +5,8 @@ import {
   formatReleaseStatusCard,
   logReleaseStatus,
   RELEASE_STATUS_PREFIX,
+  summarizeLedger,
+  type CaseLedgerRow,
 } from './outdoor-release-status-card';
 import { gateFactsForCard, readGates } from './outdoor-gate-reading';
 import { assessAcceptance } from './outdoor-acceptance-selfcheck';
@@ -182,6 +184,57 @@ describe('门禁读数接进状态卡', () => {
       gate: gateFactsForCard(reading),
     });
     expect(card).toContain('类型 未验 / 用例 通过 / 构建 未验（门禁未齐）');
+  });
+});
+
+describe('逐条台账算全绿（不靠手填）', () => {
+  const row = (
+    id: number,
+    fixedData: boolean,
+    browser: CaseLedgerRow['browser'],
+    cloud: CaseLedgerRow['cloud'],
+  ): CaseLedgerRow => ({ id, fixedData, browser, cloud });
+
+  it('空台账就是 0 条', () => {
+    expect(summarizeLedger([])).toEqual({ allGreen: 0, fixedOnly: 0, total: 0 });
+  });
+
+  it('只有固定数据、浏览器/云端是 partial 或 none 的，不算全绿', () => {
+    const totals = summarizeLedger([
+      row(1, true, 'partial', 'none'),
+      row(2, true, 'partial', 'none'),
+      row(5, true, 'none', 'none'),
+    ]);
+    expect(totals.allGreen).toBe(0);
+    expect(totals.fixedOnly).toBe(3);
+    expect(totals.total).toBe(3);
+  });
+
+  it('三类都对上才算一条全绿', () => {
+    const totals = summarizeLedger([
+      row(1, true, 'pass', 'pass'),
+      row(2, true, 'pass', 'partial'),
+      row(3, false, 'pass', 'pass'),
+    ]);
+    expect(totals.allGreen).toBe(1);
+    expect(totals.fixedOnly).toBe(1);
+  });
+
+  it('对照表 11 条全是 partial：台账算出 0 条', () => {
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    const totals = summarizeLedger(ids.map((id) => row(id, true, 'partial', 'none')));
+    expect(totals).toEqual({ allGreen: 0, fixedOnly: 11, total: 11 });
+  });
+
+  it('卡里给了台账，就忽略手填的 allGreen', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: [row(1, true, 'partial', 'none'), row(2, true, 'none', 'none')],
+      allGreen: 9,
+    });
+    expect(card).toContain('· 结论：不可发布（三类全绿 0 条）');
+    expect(card).not.toContain('三类全绿 9 条');
   });
 });
 
