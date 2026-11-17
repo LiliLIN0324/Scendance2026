@@ -135,3 +135,19 @@
 - 不把 3D 特化字段写进 notes；
 - 不新建 plan 级写守卫或租约；
 - 不动 lawn/market 预设与室内预设清单。
+
+### 8.3 C1/C4 只读备料（2026-11-17）
+
+**C1 物料命名空间实测**（`assets/library/merged.json`、`assets/library/asset-ids.json`、`frontend/public/oneplan-icons/manifest.json`，三者均入库）：
+
+| 数据 | 规模 | 结论 |
+| --- | --- | --- |
+| `merged.json` models | 976 条，976 个唯一 slug | 3D 物料主键是 slug |
+| 其中带 `assetId` | 528 条，全部 UUID、无重复 | assetId 只覆盖一部分物料 |
+| 不带 `assetId` | 448 条（`open-extra` 213、`scendance-icon-props` 220、其余 15） | 不能假定每个 slug 都有后端 id |
+| `asset-ids.json` | 762 个 glb URL → 528 个唯一 assetId | 同一 assetId 可有多个加载 URL 别名 |
+| OnePlan manifest | 549 条 / 395 个唯一 slug；与 merged slug 交集 **0** | OnePlan 模板 slug 与 3D 物料 slug 是第三套命名空间 |
+
+结论：C1 推荐 A（严格分离）有数据支撑——`sourceAssetId` 只承载后端 UUID，`modelOverride` 只承载 `merged.json` slug，`templateId` 里的 `oneplan:` slug 不参与两者转换。528 条有 id 的物料可确定性反查；448 条无 id 的物料只能靠 slug 选型，不得伪造 assetId。
+
+**C4 旧云读取链路**：`cloud-panel.tsx` 的 `openRequested` 走 `controller.getProject` → `backendSceneToLayout` → `acceptScene`，直接把旧 Scene 换进 `RoomLayout`；当前只有 `projection.requiresOriginalSceneForWrite` 会置 `readOnlyProjects`，普通旧室内项目没有「只读 + 复制为 plan 草稿」分支。推荐 A 可行，但需要新增显式动作，不能在现有 `acceptScene` 里偷做投影。
