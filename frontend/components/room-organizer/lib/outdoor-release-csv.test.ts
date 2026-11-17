@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEDGER_CSV_HEADER, ledgerCsvName, ledgerToCsv } from './outdoor-release-csv';
+import { LEDGER_CSV_HEADER, downloadLedgerCsv, ledgerCsvName, ledgerToCsv } from './outdoor-release-csv';
 import { defaultLedger, ledgerFromEvidence, type CaseLedgerRow } from './outdoor-release-status-card';
 
 /**
@@ -73,5 +73,80 @@ describe('台账 CSV', () => {
       'outdoor-acceptance-ledger-2026-11-18-正式站走查第三轮.csv',
     );
     expect(ledgerCsvName('2026/11/18:第三轮', '2026-11-18')).not.toMatch(/[\\/:*?"<>|]/);
+  });
+});
+
+describe('台账 CSV 落盘', () => {
+  const deps = () => {
+    const created: { blob: Blob }[] = [];
+    const clicked: string[] = [];
+    const revoked: string[] = [];
+    return {
+      created,
+      clicked,
+      revoked,
+      deps: {
+        createObjectURL: (blob: Blob) => {
+          created.push({ blob });
+          return `blob:csv-${created.length}`;
+        },
+        revokeObjectURL: (url: string) => revoked.push(url),
+        anchorFactory: (url: string, filename: string) => {
+          clicked.push(`${filename}|${url}`);
+          return { click: () => {} };
+        },
+      },
+    };
+  };
+
+  it('落盘一次、点一次、回收一次；文件名与 MIME 都对', async () => {
+    const h = deps();
+    const result = downloadLedgerCsv(defaultLedger(), {
+      asOf: '2026-11-18 第三轮',
+      today: '2026-11-18',
+      deps: h.deps,
+    });
+    expect(result).toEqual({ ok: true, filename: 'outdoor-acceptance-ledger-2026-11-18-第三轮.csv' });
+    expect(h.created).toHaveLength(1);
+    expect(h.created[0].blob.type).toBe('text/csv;charset=utf-8');
+    expect(h.clicked).toHaveLength(1);
+    expect(h.revoked).toEqual(['blob:csv-1']);
+  });
+
+  it('CSV 头一字节是 UTF-8 BOM，Excel 打开中文不乱码', async () => {
+    const h = deps();
+    downloadLedgerCsv(defaultLedger(), { today: '2026-11-18', deps: h.deps });
+    // `Blob.text()` 会自己剥掉开头的 BOM，所以只能看原始字节。
+    const bytes = new Uint8Array(await h.created[0].blob.arrayBuffer());
+    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
+    const text = await h.created[0].blob.text();
+    expect(text.startsWith('编号,用例')).toBe(true);
+  });
+
+  it('没有 URL 能力时返回 ok:false 与原因，不抛', () => {
+    const result = downloadLedgerCsv(defaultLedger(), {
+      today: '2026-11-18',
+      deps: { createObjectURL: undefined },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.filename).toBe('outdoor-acceptance-ledger-2026-11-18.csv');
+  });
+
+  it('创建失败、找不到锚点都只回报原因', () => {
+    const boom = downloadLedgerCsv(defaultLedger(), {
+      today: '2026-11-18',
+      deps: {
+        createObjectURL: () => {
+          throw new Error('nope');
+        },
+      },
+    });
+    expect(boom.reason).toBe('create-failed');
+
+    const noAnchor = downloadLedgerCsv(defaultLedger(), {
+      today: '2026-11-18',
+      deps: { createObjectURL: () => 'blob:x', anchorFactory: () => null },
+    });
+    expect(noAnchor).toMatchObject({ ok: false, reason: 'no-anchor' });
   });
 });

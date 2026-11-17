@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：新增 `outdoor-release-csv.ts`（`ledgerToCsv()` 五列、无“结论”列；`LEDGER_CSV_HEADER`；`ledgerCsvName()` 文件名带日期并清非法字符），hook 加 `releaseCsv()`。**本地 main = origin = `fd725edd`（`div 0/0`，开工即齐）**；工作区仍在 `main`、脏文件 31。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–87 十七个切片。9222 四十三轮不通。**口径补正**：`defaultLedger()` 的浏览器列来自 `BROWSER_EVIDENCE`，**不是全 none**（#1 partial、#2 none）；导出必须原样戳，不得拉平。下一条：把 CSV 接到界面上（`outdoor-walkthrough-section.tsx` 加「导出 CSV」按钮，下载函数可注入，方便单测）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-csv.test.ts`。
+- 下一条操作：CSV 现在能真落盘——`downloadTextFile()` 从报告下载里抽出来共用（一套 blob/anchor 逻辑），`downloadLedgerCsv()` 带 UTF-8 BOM；hook 加 `downloadLedgerCsv()`。**本地 main = origin = `fd725edd`（`div 0/0`，本轮 `merge` 报 Already up to date）**；工作区仍在 `main`、脏文件 31。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–88 十八个切片。9222 四十四轮不通。下一条：把「导出 CSV」接到界面上（`outdoor-walkthrough-section.tsx` 加一个按钮，`onExportCsv` 可注入；无此 prop 不渲染）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-csv.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 22:00 · 自动轮次 88 · CSV 落盘（BOM + 共用下载路径）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 22:00，自动轮次 88
+批次 / 切片 / 状态：合并（Already up to date，无待合）+ M7 / CSV 落盘 / 已交付（分支待 PR）
+开工事实：HEAD = `fd725edd`，分支 `main`，脏文件 31；local main = origin = `fd725edd`（`div 0/0`）
+合并：`git merge main` 报 Already up to date，分支仍在 `382458b3`
+交付：`outdoor-report-download.ts` 抽出 `downloadTextFile()`（报告与 CSV 共用一套 blob/anchor/回收）；`outdoor-release-csv.ts` 加 `downloadLedgerCsv()`（UTF-8 BOM + `text/csv`）；hook 加 `downloadLedgerCsv()`
+验证（固定数据）：csv+download+session 28/28，csv+download+hook 100/100；`tsc --noEmit` 0 行（先报 5 行：未使用 `vi`、`exactOptionalPropertyTypes` 下 `deps?: T` 不收显式 undefined，两处都改掉）
+真实浏览器/云端：仍未验（9222 第四十四轮 down）
+未完成：#2/#5 真实浏览器；按钮还没接到界面
+```
+
+- **`Blob.text()` 会剥掉 BOM**：断言 `text.charCodeAt(0) === 0xfeff` 永远红（拿到的是“编”字的 32534）；要看原始字节 `arrayBuffer()` 的前三个 `EF BB BF`。
+- **`exactOptionalPropertyTypes` 下接口要写 `deps?: T | undefined`**：否则“把可能为 undefined 的变量传进去”直接编译失败。
 
 ### 2026-11-18 21:00 · 自动轮次 87 · 台账 CSV（给人逐行填的表）
 

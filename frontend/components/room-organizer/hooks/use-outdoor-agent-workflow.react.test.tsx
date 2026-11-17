@@ -2270,3 +2270,12 @@ it("台账 CSV：表头五列 + 11 行，标了浏览器与云端就分别落列
   expect(case2.endsWith(",有,pass,pass")).toBe(true);
   expect(after.join("\n")).not.toContain("可发布");
 });
+
+it("台账 CSV 落盘：jsdom 里导不出也只回报原因，不抛", () => {
+  const result = flow.downloadLedgerCsv();
+  expect(result.filename).toMatch(/^outdoor-acceptance-ledger-.*\.csv$/);
+  // jsdom 没有 URL.createObjectURL：这里只验“如实回报失败”，不假装成功。
+  if (!("createObjectURL" in URL)) {
+    expect(result).toMatchObject({ ok: false, reason: "no-url-api" });
+  }
+});
