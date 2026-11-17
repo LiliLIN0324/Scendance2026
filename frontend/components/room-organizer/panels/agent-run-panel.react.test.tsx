@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendAgentStep,
   appendAgentRunEvents,
+  appendAgentThoughts,
   clearAgentSteerNotes,
   closeAgentStep,
   endAgentRun,
@@ -278,5 +279,46 @@ describe('AgentRunPanel', () => {
     render(<AgentRunPanel scope="layout"/>);
     expect(screen.getByText('本轮没有在画布上留下改动。')).toBeTruthy();
     expect(screen.queryByText(/处改动/)).toBeNull();
+  });
+});
+
+describe('思考记录（逐轮可见自述）', () => {
+  it('同轮重复到达只留一条，轮数不倒退', () => {
+    appendAgentThoughts([{round:1,thought:'先盘点场地'}],1000);
+    appendAgentThoughts([{round:1,thought:'先盘点场地'}],2000);
+    appendAgentThoughts([{round:2,thought:'再试排圆桌'}],3000);
+    const run=getAgentRun();
+    expect(run.thoughts.map(item=>[item.round,item.text])).toEqual([[1,'先盘点场地'],[2,'再试排圆桌']]);
+    expect(run.thoughts[0]?.at).toBe(1000);
+    // 云端给的轮次是权威读数，账本至少跟上已收到的最大轮次。
+    expect(run.thoughtCount).toBe(2);
+  });
+
+  it('空文本与越界轮次不入账', () => {
+    appendAgentThoughts([{round:0,thought:'越界'},{round:1,thought:'   '},{round:2,thought:'有效'}],1000);
+    expect(getAgentRun().thoughts.map(item=>item.text)).toEqual(['有效']);
+  });
+
+  it('面板把逐轮自述渲染成可折叠区，不冒充执行步骤', () => {
+    appendAgentThoughts([{round:1,thought:'先把场地上已有的物件盘一遍。'},{round:2,thought:'主区摆 3 桌，留出主通道。'}],1000);
+    render(<AgentRunPanel scope="layout" controls={false}/>);
+    expect(screen.getByText(/思考记录 · 2 条/)).toBeTruthy();
+    expect(screen.getByText('模型自述，非原始推理')).toBeTruthy();
+    expect(screen.getByText('第 1 轮')).toBeTruthy();
+    expect(screen.getByText('第 2 轮')).toBeTruthy();
+    expect(screen.getByText('先把场地上已有的物件盘一遍。')).toBeTruthy();
+    // 思考不是工具回执：执行过程列表里不应出现它。
+    expect(document.querySelector('.ap-run-list')?.textContent ?? '').not.toContain('先把场地上已有');
+  });
+
+  it('跑完收起后仍可在归档卡里回看', () => {
+    render(<AgentRunPanel scope="layout" controls={false}/>);
+    act(() => {
+      appendAgentThoughts([{round:1,thought:'这一轮的可见自述。'}],1000);
+      appendAgentRunEvents([{seq:1,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null}]);
+      endAgentRun();
+    });
+    fireEvent.click(screen.getByRole('button',{name:/过往任务/}));
+    expect(screen.getByText('这一轮的可见自述。')).toBeTruthy();
   });
 });

@@ -4,8 +4,8 @@
  * 只接渲染需要的数据与回调，不再接整个 AgentValue——
  * 会话、写保护、提案确认仍留在 LayoutAgentProvider 与面板主体。
  */
-import { useEffect, useState } from 'react';
-import { Check, Clock, Copy, FileImage, Pencil, RotateCw, SquareDashed, TriangleAlert } from '@/components/solid-icons';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Check, Clock, Copy, FileImage, HelpCircle, Pencil, RotateCw, SquareDashed, TriangleAlert } from '@/components/solid-icons';
 import { parseFollowUpOptions, segmentBubbleBlocks } from '../lib/bubble-text';
 import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -14,6 +14,7 @@ export type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
   /** Only model-authored conversation may be used as model history. */
   modelConversation?: boolean;
+  outdoorQuestion?: true;
   materialQueries?: readonly string[];
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
@@ -40,8 +41,10 @@ export type Bubble = {
   decision?: 'approved' | 'rejected' | 'cancelled';
 };
 
-export function ToolCallTrace({ line, rows, understanding, onStop }: {
+export function ToolCallTrace({ line, draft, rows, understanding, onStop }: {
   line: string | null;
+  /** 流式问答已经收到的可见正文；只在生成过程中出现，完成后清空。 */
+  draft?: string | null;
   rows: ReturnType<typeof toolTraceRows>;
   understanding: boolean;
   onStop(): void;
@@ -60,7 +63,7 @@ export function ToolCallTrace({ line, rows, understanding, onStop }: {
     const timer = window.setInterval(() => setUnderstandingSeconds(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, [understanding]);
-  if (!line && rows.length === 0 && !failed) return null;
+  if (!line && rows.length === 0 && !failed && !draft) return null;
   const understandingClock = understanding && understandingSeconds > 0
     ? `${Math.floor(understandingSeconds / 60)}:${(understandingSeconds % 60).toString().padStart(2, '0')}`
     : null;
@@ -71,6 +74,7 @@ export function ToolCallTrace({ line, rows, understanding, onStop }: {
       {understandingClock && <span className="ap-tool-clock" aria-hidden="true">{understandingClock}</span>}
       {understanding && line === '正在理解活动需求…' && <button type="button" onClick={onStop}>停止等待</button>}
     </p>}
+    {draft && <p className="ap-tool-draft" aria-live="polite" aria-label="正在生成的回答">{draft}</p>}
     {!line && failed && <p role="status" className="ap-tool-chip is-error">
       <span className="ap-tool-state">未完成</span>
       <button type="button" onClick={() => setOpened(value => !value)}>{failed.result || failed.name}</button>
@@ -93,11 +97,12 @@ export function ToolCallTrace({ line, rows, understanding, onStop }: {
   </section>;
 }
 
-export function Bubbles({ bubbles, sessionKey, reviewOnly = false, onPickOption, onResendMessage, onOpenMaterials }: {
+export function Bubbles({ bubbles, sessionKey, reviewOnly = false, beforeLatestQuestion, onPickOption, onResendMessage, onOpenMaterials }: {
   bubbles: readonly Bubble[];
   /** 面板算好的会话标识：物料候选卡的 key 用它，组件本身不认识 session。 */
   sessionKey: string;
   reviewOnly?: boolean;
+  beforeLatestQuestion?: ReactNode;
   onPickOption: (text: string) => void;
   onResendMessage?: (text: string) => void;
   onOpenMaterials: () => void;
@@ -130,6 +135,7 @@ export function Bubbles({ bubbles, sessionKey, reviewOnly = false, onPickOption,
     const laterUserTexts = list.slice(bubbleIndex + 1).filter(b => b.role === 'user').map(b => b.text.trim());
     const pickedOption = followups.find(option => laterUserTexts.includes(option));
     const settled = pickedOption !== undefined;
+    const activeQuestion = bubble.outdoorQuestion && bubbleIndex === list.length - 1;
     return bubble.role === 'user'
     ? <div key={bubble.id} className="ap-bubble-wrap is-user">
       {editingId === bubble.id ? (
@@ -160,7 +166,18 @@ export function Bubbles({ bubbles, sessionKey, reviewOnly = false, onPickOption,
         </div>
       </>)}
     </div>
-    : <div key={bubble.id} className="ap-bubble-wrap"><div className="ap-turn">{bubble.alert ? (
+    : <div key={bubble.id} className={activeQuestion ? 'ap-bubble-wrap ap-outdoor-reply-wrap' : 'ap-bubble-wrap'}>
+      {activeQuestion && beforeLatestQuestion}
+      <div className="ap-turn">{bubble.outdoorQuestion ? (
+      <section className="ap-card ap-status-card ap-outdoor-reply-card" aria-label={activeQuestion ? '待你回复' : '追问'}>
+        <header className="ap-outdoor-reply-title"><HelpCircle size={15} aria-hidden="true" />{activeQuestion ? '待你回复' : '追问'}</header>
+        <div className="ap-outdoor-reply-body">
+          {segmentBubbleBlocks(bubble.text).map((block, index) => block.kind === 'list'
+            ? <ol key={index} className="ap-agent-list">{block.items!.map((item, itemIndex) => <li key={itemIndex} className="ap-agent-list-item">{item}</li>)}</ol>
+            : <p key={index} className="ap-agent-line">{block.text}</p>)}
+        </div>
+      </section>
+    ) : bubble.alert ? (
       <section className={`ap-card ap-error-card${bubble.alert.tone === 'muted' ? ' is-muted' : ''}`} role="alert">
         <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>{bubble.alert.stamp}</span>
         <div className={`ap-error-body${bubble.long ? ' is-long' : ''}`}>

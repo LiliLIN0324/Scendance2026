@@ -95,6 +95,43 @@ describe('buildSubEntranceProposal（V-4a 子出入口）', () => {
     expect(spur.points[1]).toEqual({ x: 30, y: 35 }); // 终点落在主线上
   });
 
+  it('邻区子口就在旁边时，本区接驳到那个口：不整区放弃，也不重复立口', () => {
+    // 2026-11-17 死结 4（正式站实测）：签到台与观众区贴边，观众区口落在共边中点旁 4m。
+    // 旧口径「样本离既有节点 15m 内就跳过」会把整个签到台放弃 → 该区永远拿不到驳线，
+    // 岗位阶段随后报「尚无后勤接驳，请先安排子流线/子入口」，而重跑子动线还是同样的跳过。
+    const portal: PlanNode = {
+      ...node('node-portal', '观众区口', { x: 56, y: 205 }),
+      verification: 'user-confirmed',
+    };
+    const checkin = zone('z-checkin', '签到台', [
+      { x: 60, y: 10 },
+      { x: 100, y: 10 },
+      { x: 100, y: 400 },
+      { x: 60, y: 400 },
+    ]);
+    const proposal = buildSubEntranceProposal(
+      {
+        zones: [checkin],
+        routes: [route('route-9', 'pedestrian', [{ x: 56, y: 205 }, { x: -40, y: 205 }])],
+        nodes: [portal],
+        boundary: [
+          { x: 0, y: 0 },
+          { x: 400, y: 0 },
+          { x: 400, y: 500 },
+          { x: 0, y: 500 },
+        ],
+      },
+      ids,
+    );
+    expect(proposal).not.toBeNull();
+    expect(proposal!.summary.spurs).toBe(1);
+    expect(proposal!.nodes).toHaveLength(0); // 复用邻区那个口，不在 15m 内另造重复门
+    const spur = proposal!.routes[0]!;
+    expect(spur.startNodeId).toBe(portal.id);
+    expect(spur.points[0]).toEqual({ x: 60, y: 205 }); // 落在这个区的边上
+    expect(spur.points[1]).toEqual({ x: 56, y: 205 }); // 接到邻区那个口
+  });
+
   it('多分区批量出驳线，id 全唯一，数量 ≤ 上限', () => {
     // 同一 y 带沿流线一字排开（离主流线都是 60m），只按 x 错开
     const zones = [0, 220, 440].map((x, i) =>

@@ -4760,7 +4760,7 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
     act(() => oldConfirm()); expect(apply).toHaveBeenCalledTimes(1); expect(current.outdoorTask?.state).toBe('done');
     expect(current.zoneProposal).toBeNull();
   });
-  it('没有真实入口只追问下一步；不支持活动不走旧生成器', async () => {
+  it('没有真实入口只追问下一步；无模板活动如实指路，不走旧生成器', async () => {
     const plan = createStarterOutdoorPlan();
     plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
     let current!: NonNullable<ReturnType<typeof useAgent>>;
@@ -4768,7 +4768,8 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
     send('45人讲座'); await waitFor(() => expect(current.outdoorTask?.action).toContain('入口'));
     expect(current.zoneProposal).toBeNull();
-    send('改办100人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('只支持'));
+    send('改办100人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('没有现成排布模板'));
+    expect(current.outdoorTask?.action).not.toContain('只支持');
     expect(current.zoneProposal).toBeNull(); expect(studioMock.generate).not.toHaveBeenCalled();
   });
 });
@@ -4909,7 +4910,7 @@ describe('outdoor contextual workflow production Provider dispatch',()=>{
   const plan={...createStarterOutdoorPlan(),boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}]};let current!:NonNullable<ReturnType<typeof useAgent>>;const apply=vi.fn(()=>true);
   function Probe(){current=useAgent()!;useEffect(()=>{current.registerRouteBridge({getPlan:()=>plan,applyPlan:apply,applyVenue:()=>true,beginVenueBoundary:()=>true,applyRoutes:()=>true,applyZoneProposal:()=>true});return()=>current.registerRouteBridge(null);},[]);return null;}
   studioMock.controller.assistantChat.mockResolvedValue({status:'disabled',answer:null});render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
-  send('45人草坪演出');await waitFor(()=>expect(current.outdoorWorkflow.notice).toContain('disabled'));expect(current.zoneProposal).toBeNull();expect(current.outdoorWorkflow.proposal).toBeNull();expect(apply).not.toHaveBeenCalled();expect(studioMock.generate).not.toHaveBeenCalled();
+  send('45人草坪演出');await waitFor(()=>expect(current.outdoorWorkflow.noticeView?.stamp).toBe('暂未启用'));expect(current.zoneProposal).toBeNull();expect(current.outdoorWorkflow.proposal).toBeNull();expect(apply).not.toHaveBeenCalled();expect(studioMock.generate).not.toHaveBeenCalled();
  });
 });
 

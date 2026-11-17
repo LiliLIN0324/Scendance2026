@@ -116,4 +116,21 @@ describe('structured Agent context',()=>{
     expect(result.context.recentMessages).toHaveLength(12);expect(result.omittedHistory).toBe(8);
     expect(()=>buildAgentContext({briefInstruction:'x'.repeat(12001),message:'当前操作'})).toThrow('不会自动截断');
   });
+  it('drops a whole history message that carries a credential and reports the omission',()=>{
+    const history=[{role:'user' as const,text:'门厅净高 3 米。'},{role:'assistant' as const,text:'对接方给的 token: abc123456'},{role:'user' as const,text:'签到区放右边。'}];
+    const result=buildAgentContext({briefInstruction:'30人活动',message:'继续排布',recentMessages:history});
+    expect(result.context.recentMessages).toEqual([{role:'user',text:'门厅净高 3 米。'},{role:'user',text:'签到区放右边。'}]);
+    expect(result.omittedHistory).toBe(1);
+    expect(JSON.stringify(result)).not.toContain('abc123456');
+    expect(result.instruction).toBe('继续排布');
+  });
+  it('keeps ordinary history with plain links and never edits the current instruction',()=>{
+    // The edge entry rejects a credential in the instruction with AI_INPUT_SENSITIVE;
+    // the context builder must not silently rewrite it before that decision.
+    const request='参考 https://example.com/floorplan.png 排桌子，别用 sk-abcdefgh1234 这个密钥';
+    const result=buildAgentContext({briefInstruction:'',message:request,recentMessages:[{role:'user',text:'尺寸见 http://example.com/plan?a=1'}]});
+    expect(result.context.recentMessages).toEqual([{role:'user',text:'尺寸见 http://example.com/plan?a=1'}]);
+    expect(result.omittedHistory).toBe(0);
+    expect(result.instruction).toBe(request);
+  });
 });

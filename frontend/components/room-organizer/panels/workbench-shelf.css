@@ -1029,35 +1029,13 @@
   height: 2px; border-radius: 1px; background: var(--wk-green);
 }
 .sc-library-tabs-equal > button:focus-visible { outline: 2px solid var(--wk-green); outline-offset: -2px; border-radius: 4px; }
-.sc-library-chat { position: relative; margin-bottom: 6px; }
-.sc-library-chat-title {
-  position: absolute; top: 0; left: 0; min-height: 34px;
-  display: flex; align-items: center; gap: 6px;
-}
-.sc-library-chat-title h3 { margin: 0; font-size: 16px; font-weight: 650; color: var(--wk-ink); }
-.sc-library-chat-disclosure > summary {
-  box-sizing: border-box; width: max-content; min-height: 34px; margin-inline-start: auto; padding: 4px 8px;
-  display: flex; align-items: center; justify-content: center; gap: 4px;
-  border-radius: 7px; background: var(--wk-green-pale, #edf4f1);
-  color: var(--wk-green-deep, #245c4a); cursor: pointer; list-style: none;
-  font-size: 12px; font-weight: 650;
-}
-.sc-library-chat-disclosure > summary::-webkit-details-marker { display: none; }
-.sc-library-chat-disclosure[open] > summary > :last-child { transform: rotate(180deg); }
-.sc-library-chat-content {
-  box-sizing: border-box; display: grid; align-content: start; gap: 8px;
-  height: max(70px, calc(25cqh - 40px)); overflow-y: auto; overscroll-behavior: contain;
-  margin-top: 6px; padding: 10px;
-  background: var(--wk-plane); border-radius: 8px;
-}
-.sc-library-chat-content p { margin: 0; font-size: 12px; color: var(--wk-ink-soft); }
+/* material-create-cell 仍在用：场景库对话面板已删，但这对按钮排版规则还挂在"新增物料"单元格上。 */
 .sc-library-chat-choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-library-chat-choices > :is(button, a) {
   display: inline-flex; align-items: center; gap: 5px; padding: 7px 8px;
   border: 0; border-radius: 6px; background: var(--wk-paper); color: var(--wk-ink);
   font: inherit; font-size: 12px; cursor: pointer; text-decoration: none;
 }
-.sc-library-chat :is(summary, button, a):focus-visible { outline: 2px solid #245c4a; outline-offset: -2px; }
 .sc-material-create-menu.is-inline {
   position: static; z-index: auto; min-width: 0; max-width: none;
   padding: 0; border: 0; background: transparent; box-shadow: none;

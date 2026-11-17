@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 import { createPreviewObject, createPreviewStructure } from '../../business/scene-preview';
 import { disposeOwnedModel } from '../three/glb-assets';
+import { acquireWebGLSurface } from '../lib/webgl-context';
 
 export interface SceneThumbProps {
   scene: Scene;
@@ -42,7 +43,10 @@ export function SceneThumb({ scene, width = 320, height = 190, className, style,
     const element = host.current;
     if (!element) return undefined;
     let renderer: THREE.WebGLRenderer;
-    try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' }); }
+    // 2026-11-17：先自己拿上下文，拿不到就静默不出缩略图（不再让 three 往控制台报错）。
+    const surface = acquireWebGLSurface({ antialias: true, alpha: false, powerPreference: 'low-power' });
+    if (!surface) return undefined;
+    try { renderer = new THREE.WebGLRenderer({ canvas: surface.canvas, context: surface.context, antialias: true, alpha: false }); }
     catch { return undefined; }
     let disposed = false;
     const world = new THREE.Scene();

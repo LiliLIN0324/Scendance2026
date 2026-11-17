@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { BackendSession } from "@/lib/backend-session";
+import { agentErrorView, type AgentErrorView } from "@/lib/agent-error-view";
 import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import {
   boundaryKey,
-  emptyOutdoorFlow,
   mergeOutdoorFacts,
   planVersion,
+  proposalMapWarnings,
   type OutdoorAgentBridge,
   type OutdoorFlowState,
   type OutdoorMapContext,
@@ -17,19 +18,81 @@ import {
   type OutdoorTurn,
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
+import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
+import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
+import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
+import { DEFAULT_SCOPE_MARGIN_M, expandRect } from "../lib/outdoor-design-scope";
+import {
+  loadRemoteCardHistory,
+  mergeCardHistory,
+  pushRemoteCardHistory,
+  sanitizeCardHistory,
+  type CardHistoryEntry,
+} from "../lib/outdoor-card-history-sync";
+import { createLiveTurn } from "../lib/outdoor-turn-live";
+import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
+import { exportMetricsReport } from "../lib/outdoor-metrics-export";
+import { buildSessionReport } from "../lib/outdoor-session-report";
+import { createTurnTraceBook } from "../lib/turn-trace-log";
+import { downloadSessionReport } from "../lib/outdoor-report-download";
+import { assessAcceptance, formatAcceptanceStatement, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
 import {
   proposeUseZones,
   proposeInventoryObjects,
   proposeRoleWorkers,
   validateWorkflowPlan,
   prunePlanForBoundary,
+  splitNeedsByZone,
+  describeZoneMismatch,
   OBJECTS_LAYOUT_STRATEGIES,
   OBJECTS_LAYOUT_LABELS,
   type ObjectsLayoutStrategy,
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
+// docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
+import { writePlanGroundMode } from "../lib/plan-basemap-source";
 // 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
 import { enuToLngLat, lngLatToEnu } from "../lib/outdoor-plan-canvas";
+
+/**
+ * 2026-11-16 用户要求「每次的引导卡片不要消失，历史记录很重要」：
+ * 一张卡被确认、被撤回、或被新提案顶掉时都留一条记录，在卡片底部按时间顺序列出来；
+ * 按 scope 存 localStorage，刷新/切活动后还在。
+ */
+export type OutdoorCardRecord = CardHistoryEntry & {
+  stage: OutdoorStage;
+  kind: OutdoorWorkflowProposal["kind"];
+};
+
+function cardActionsFor(kind: OutdoorWorkflowProposal["kind"]): string[] {
+  return [
+    "确认并应用这一版",
+    ...(kind === "scope" ? ["在地图上重画实际活动范围"] : []),
+    ...(kind === "objects" ? ["换一种排法"] : []),
+    "撤回预览",
+  ];
+}
+export const OUTDOOR_CARD_RECORDS_LIMIT = 30;
+const cardRecordsKey = (scope: string) => `scendance:outdoor-cards:${scope}`;
+
+export function readCardRecords(scope: string): OutdoorCardRecord[] {
+  try {
+    return sanitizeCardHistory(
+      JSON.parse(localStorage.getItem(cardRecordsKey(scope)) ?? "[]"),
+    ) as OutdoorCardRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function writeCardRecords(scope: string, records: OutdoorCardRecord[]) {
+  try {
+    localStorage.setItem(
+      cardRecordsKey(scope),
+      JSON.stringify(records.slice(-OUTDOOR_CARD_RECORDS_LIMIT)),
+    );
+  } catch {}
+}
 import { fetchOpenFreeMapBuildings, lngLatRingsToEnu } from "../lib/openfreemap-buildings";
 import { planPointInRing } from "../lib/site-plan-editing";
 import { planRingAreaM2 } from "../../../../supabase/functions/_shared/site-plan";
@@ -39,6 +102,13 @@ import { fetchRoadNetwork } from "../lib/road-network";
 import { checkBoundaryRing } from "../lib/site-plan-editing";
 import { buildRouteProposal, roadFetchPlanForBoundary } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
+import {
+  parseShorelineDemand,
+  proposeShorelineLayout,
+  shorelineIntent,
+} from "../lib/outdoor-shoreline-layout";
+import { isShorelineEvent } from "../lib/outdoor-event-logic";
+import { facilityFootprintRing } from "../lib/site-plan-facilities";
 import { renamedNodeName } from "../lib/site-plan-node-names";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
 
@@ -64,6 +134,17 @@ export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   "refine-3d": "同规划3D深化",
 };
 
+/**
+ * 2026-11-17 用户拍「都做」：缺前置条件不是「再试一次」能解决的——红卡上那颗「重试」只是把同一个动作
+ * 原样重放，点完还是同一句话。这类拦阻改成给一个真能改变状态的动作按钮（如「去核对主要入口与通道」）。
+ */
+export type OutdoorNoticeFix = { action: OutdoorTurn["action"]; label: string };
+/** 带「下一步」的拦阻：抛出点在 act() 内部，catch 统一把 fix 挂到红卡上。 */
+class OutdoorStepBlocked extends Error {
+  constructor(message: string, readonly fix: OutdoorNoticeFix) {
+    super(message);
+  }
+}
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
   scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
   zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
@@ -93,6 +174,17 @@ function mapEditHighlight(kind: OutdoorWorkflowProposal["kind"], before: SitePla
   }
 }
 const stages = Object.keys(OUTDOOR_STAGE_LABELS) as OutdoorStage[];
+const outdoorPlanSteps: Partial<Record<OutdoorTurn["action"], readonly string[]>> = {
+  zones: ["核对活动范围和已有分区", "按活动用途和室内外依据生成分区预览"],
+  revise: ["核对要调整的分区和需要保留的内容", "生成调整后的分区预览"],
+  "main-routes": ["核对边界、道路和入口依据", "预览连接活动区域的主通道"],
+  objects: ["核对各分区的物料与数量", "从可用物料中匹配尺寸，生成排布预览"],
+  "sub-routes": ["核对主通道和各分区的连接点", "预览通往各分区的支线"],
+  people: ["核对各分区的岗位和人数", "预览人员点位"],
+  "refine-3d": ["核对所选设施及其现有尺寸", "打开对应设施的 3D 深化"],
+  adjust: ["核对要调整的设施和参考位置", "在原有规划上生成调整预览"],
+  connect: ["核对入口和目标通道", "预览两者的连接方式"],
+};
 const unknownMap: OutdoorMapContext = {
   version: "map:unavailable",
   status: "unavailable",
@@ -100,22 +192,15 @@ const unknownMap: OutdoorMapContext = {
   featureIds: [],
   unknowns: ["建筑/开放空间/入口证据未知", "地图像素没有提交模型"],
 };
-function readState(scope: string): OutdoorFlowState {
+function readState(scope: string, planVersionNow: string | null = null): OutdoorFlowState {
+  let raw: unknown = null;
   try {
-    const value = JSON.parse(
-      localStorage.getItem(`scendance:outdoor-flow:${scope}`) ?? "null",
-    ) as OutdoorFlowState | null;
-    if (
-      value?.scope === scope &&
-      stages.includes(value.stage) &&
-      Array.isArray(value.brief?.zones) &&
-      Array.isArray(value.brief?.items) &&
-      Array.isArray(value.brief?.people) &&
-      Array.isArray(value.completed)
-    )
-      return value;
-  } catch {}
-  return emptyOutdoorFlow(scope);
+    raw = JSON.parse(localStorage.getItem(`scendance:outdoor-flow:${scope}`) ?? "null");
+  } catch {
+    raw = null;
+  }
+  // 刷新恢复同一套口径：旧草稿降级保留；过期的登录等待、未确认边界不还原（见 lib/outdoor-flow-restore）。
+  return restoreOutdoorFlow({ raw, scope, stages, planVersion: planVersionNow }).state;
 }
 /** Confirmation is an authorization boundary, never delegated to model classification. */
 export function explicitProposalApproval(message: string): boolean {
@@ -237,7 +322,14 @@ export function useOutdoorAgentWorkflow(input: {
   model?: () => string | null;
   simulate?: (active: boolean) => boolean;
 }) {
-  const [state, setState] = useState(() => readState(input.scope));
+  // 当前方案版本：刷新恢复时用它判登录等待/未确认边界是否过期。
+  // 注意：首次 render 时 callbacks ref 还没建，只能先用入参 bridge；后续（换活动）再用 ref 里的最新回调。
+  const planVersionFrom = (bridge: () => OutdoorAgentBridge | null) => {
+    const plan = bridge()?.getPlan();
+    return plan ? planVersion(plan) : null;
+  };
+  const currentPlanVersion = () => planVersionFrom(() => callbacks.current.bridge());
+  const [state, setState] = useState(() => readState(input.scope, planVersionFrom(input.bridge)));
   const stateRef = useRef(state);
   stateRef.current = state;
   const [proposal, setProposal] = useState<OutdoorWorkflowProposal | null>(
@@ -246,6 +338,63 @@ export function useOutdoorAgentWorkflow(input: {
   const [appliedHighlight, setAppliedHighlight] = useState<OutdoorMapEditHighlight | null>(null);
   const proposalRef = useRef(proposal);
   proposalRef.current = proposal;
+  const [cardRecords, setCardRecords] = useState<OutdoorCardRecord[]>(() =>
+    readCardRecords(cardHistoryKey()),
+  );
+  /**
+   * 2026-11-17：历史跟随后端活动身份——一旦这份活动拿到了 `remoteActivityId`，
+   * 就按它当 key 读写，换设备才读得到；还没同步时退回本机 scope。
+   */
+  function cardHistoryKey(): string {
+    try {
+      return readOutdoorProjectRecord(input.scope)?.remoteActivityId ?? input.scope;
+    } catch {
+      return input.scope;
+    }
+  }
+  const cardRecordsRef = useRef(cardRecords);
+  cardRecordsRef.current = cardRecords;
+  // 2026-11-17：后端副本仅在访问到账号时补一次（换设备/清缓存后靠它把历史接回来）。
+  useEffect(() => {
+    const scope = cardHistoryKey();
+    let cancelled = false;
+    void loadRemoteCardHistory(callbacks.current.controller(), scope).then((remote) => {
+      if (cancelled || !remote.length || scope !== stateRef.current.scope) return;
+      const merged = mergeCardHistory(
+        cardRecordsRef.current,
+        remote,
+      ) as OutdoorCardRecord[];
+      if (merged.length === cardRecordsRef.current.length) return;
+      cardRecordsRef.current = merged;
+      setCardRecords(merged);
+      writeCardRecords(scope, merged);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [input.scope]);
+  /** 一张卡收场时留痕：确认、撤回、被新提案顶掉都算。 */
+  function recordCard(
+    target: OutdoorWorkflowProposal,
+    decision: OutdoorCardRecord["decision"],
+  ) {
+    const scope = cardHistoryKey();
+    const entry: OutdoorCardRecord = {
+      at: Date.now(),
+      stage: stateRef.current.stage,
+      kind: target.kind,
+      title: target.label,
+      decision,
+      notes: [...target.warnings],
+      actions: cardActionsFor(target.kind),
+    };
+    const next = [...cardRecordsRef.current, entry].slice(-OUTDOOR_CARD_RECORDS_LIMIT);
+    cardRecordsRef.current = next;
+    setCardRecords(next);
+    writeCardRecords(scope, next);
+    // 后端副本：未登录 / 离线 / 服务未部署都只是少一份副本，不拦本机记录。
+    void pushRemoteCardHistory(callbacks.current.controller(), scope, next);
+  }
   const [models, setModels] = useState<{
     facilityId: string;
     choices: OutdoorModelChoice[];
@@ -261,6 +410,27 @@ export function useOutdoorAgentWorkflow(input: {
   const [simulating, setSimulating] = useState(false);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
+  /** 2026-11-17：画布规模并进思考卡摘要（一行），不再作为一条步骤占一行。 */
+  const [canvasNote, setCanvasNote] = useState<string | null>(null);
+  const [thought, setThought] = useState<string | null>(null);
+  const [awaitingThought, setAwaitingThought] = useState(false);
+  const [thoughtDraft, setThoughtDraft] = useState("");
+  const [thoughtMs, setThoughtMs] = useState<number | null>(null);
+  const [thoughtRequest, setThoughtRequest] = useState<string | null>(null);
+  type PendingPlan = {
+    steps: readonly string[];
+    turn: OutdoorTurn;
+    message: string;
+    base: string;
+    selected: string;
+    job: { epoch: number; controller: AbortController; scope: string };
+  };
+  const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
+  const pendingPlanRef = useRef<PendingPlan | null>(null);
+  function updatePendingPlan(plan: PendingPlan | null) {
+    pendingPlanRef.current = plan;
+    setPendingPlan(plan);
+  }
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   /**
    * 2026-11-16 用户拍板：要你动手的提示（反问补充/待确认/需要补充）不许倒计时自己消失——
@@ -272,9 +442,21 @@ export function useOutdoorAgentWorkflow(input: {
    * place 阶段就不能再承诺「自动为你框选」。
    */
   const [mapGap, setMapGap] = useState(false);
+  const [noticeView, setNoticeView] = useState<AgentErrorView | null>(null);
+  /** 红卡上的「下一步」（缺前置条件时替代无意义的「重试」）；null = 走原有的重试口径。 */
+  const [noticeFix, setNoticeFix] = useState<OutdoorNoticeFix | null>(null);
   const refsRef = useRef<OutdoorTurn["references"]>([]);
+  /**
+   * 2026-11-17：用户刚刚从上一轮二选一里挑了第 N 项（原请求 + 选中的分支）。
+   * 只在同一轮内有效：模型如果又把同一句追问端回来，靠它本地接着走，而不是把问题重复一遍。
+   */
+  const pendingChoiceRef = useRef<{ request: string; chosen: { index: number; text: string } } | null>(null);
   const mapRef = useRef<OutdoorMapContext>(unknownMap);
   const abort = useRef<AbortController | null>(null);
+  // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
+  const metricsBook = useRef(createMetricsBook());
+  const traceBook = useRef(createTurnTraceBook());
+  const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
   scopeRef.current = input.scope;
@@ -297,10 +479,14 @@ export function useOutdoorAgentWorkflow(input: {
   function status(
     action: string,
     phase: OutdoorTaskProgress["state"] = "ready",
-    extra: Partial<OutdoorTaskProgress> = {},
+    extra: Partial<OutdoorTaskProgress> & { fix?: OutdoorNoticeFix | null } = {},
   ) {
+    // fix 只给卡片用，不进 task progress（它不属于任务进度字段）。
+    const { fix, ...rest } = extra;
     const friendly = friendlyErrorNotice(action);
     setNotice(friendly);
+    setNoticeView(null);
+    setNoticeFix(fix ?? null);
     setNoticeKind(phase === "blocked" ? "error" : "info");
     setNoticeSticky(phase === "ask" || phase === "blocked" || phase === "confirm");
     callbacks.current.status({
@@ -308,19 +494,29 @@ export function useOutdoorAgentWorkflow(input: {
       state: phase,
       action: friendly,
       steps: stateRef.current.completed.map((s) => OUTDOOR_STAGE_LABELS[s]),
-      ...extra,
+      ...rest,
     });
   }
   function designStep(text: string) {
     setDesignSteps(steps => steps.at(-1) === text ? steps : [...steps.slice(-9), text]);
   }
   function start(continueDesign = false) {
-    if (!continueDesign) setDesignSteps([]);
+    if (!continueDesign) {
+      setDesignSteps([]);
+      setCanvasNote(null);
+      setThought(null);
+      setThoughtMs(null);
+      setThoughtRequest(null);
+    }
+    updatePendingPlan(null);
+    setAwaitingThought(false);
+    setThoughtDraft("");
     setAppliedHighlight(null);
     setSimulating(false);
     refsRef.current = [];
     abort.current?.abort();
     const epoch = callbacks.current.begin();
+    liveTurn.current.begin("scene");
     token.current = epoch;
     const controller = new AbortController();
     abort.current = controller;
@@ -343,7 +539,12 @@ export function useOutdoorAgentWorkflow(input: {
     );
   }
   function cancel(options?: { preservePendingLogin?: boolean }) {
+    const withdrawnCard = proposalRef.current;
     setDesignSteps([]);
+    setCanvasNote(null);
+    updatePendingPlan(null);
+    setAwaitingThought(false);
+    setThoughtDraft("");
     setAppliedHighlight(null);
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
@@ -354,14 +555,22 @@ export function useOutdoorAgentWorkflow(input: {
     setProposal(null);
     setModels(null);
     setBusy(false);
+    if (withdrawnCard) recordCard(withdrawnCard, "withdrawn");
     if (!options?.preservePendingLogin) {
       const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
       persist({ ...kept, pendingBoundary: undefined });
     }
+    liveTurn.current.settle("cancelled");
     status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
   }
   useEffect(() => {
     setDesignSteps([]);
+    setThought(null);
+    setThoughtMs(null);
+    setThoughtRequest(null);
+    updatePendingPlan(null);
+    setAwaitingThought(false);
+    setThoughtDraft("");
     setAppliedHighlight(null);
     abort.current?.abort();
     token.current = null;
@@ -372,7 +581,10 @@ export function useOutdoorAgentWorkflow(input: {
     setSelectedLibraryId(undefined);
     setBusy(false);
     setSimulating(false);
-    const next = readState(input.scope);
+    const next = readState(input.scope, currentPlanVersion());
+    const localCards = readCardRecords(cardHistoryKey());
+    cardRecordsRef.current = localCards;
+    setCardRecords(localCards);
     stateRef.current = next;
     setState(next);
   }, [input.scope]);
@@ -391,18 +603,15 @@ export function useOutdoorAgentWorkflow(input: {
       stage: stages[Math.min(stages.length - 1, i + 1)]!,
     });
   }
-  function requireScope(plan: SitePlanData) {
-    if (stateRef.current.confirmedBoundary !== boundaryKey(plan)) {
-      persist({
-        ...stateRef.current,
-        stage: "scope",
-        confirmedBoundary: null,
-        completed: stateRef.current.completed.filter((s) => s === "place"),
-      });
-      throw new Error(
-        "先核对地图上具体哪一片是本次活动范围。地点/商场轮廓不是活动授权边界；确认前不会分区或摆物件。",
-      );
-    }
+  function requireScope(plan: SitePlanData): boolean {
+    if (stateRef.current.confirmedBoundary === boundaryKey(plan)) return true;
+    persist({
+      ...stateRef.current,
+      stage: "scope",
+      confirmedBoundary: null,
+      completed: stateRef.current.completed.filter((s) => s === "place"),
+    });
+    return false;
   }
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
@@ -424,9 +633,12 @@ export function useOutdoorAgentWorkflow(input: {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base || !live(job)) return;
     validateWorkflowPlan(base, next);
+    // 地图证据类警告（"证据没取到"）只在真靠证据做判断的阶段给：scope 阶段边界还没定，
+    // 证据必然对不上，摆上去就是噪声。validateMapPlan 该 throw 的阻断一如既往保留。
+    const mapWarnings = callbacks.current.bridge()?.validateMapPlan?.(base, next) ?? [];
     warnings = [
       ...warnings,
-      ...(callbacks.current.bridge()?.validateMapPlan?.(base, next) ?? []),
+      ...proposalMapWarnings(kind, mapWarnings),
     ];
     const p = {
       kind,
@@ -439,6 +651,8 @@ export function useOutdoorAgentWorkflow(input: {
       references: [...refsRef.current],
       ...(afterConfirm ? { afterConfirm } : {}),
     };
+    const replaced = proposalRef.current;
+    if (replaced && replaced.base !== p.base) recordCard(replaced, "replaced");
     proposalRef.current = p;
     setProposal(p);
     if (kind === "scope" && next.anchor) {
@@ -448,8 +662,11 @@ export function useOutdoorAgentWorkflow(input: {
       designStep(`已生成「${label}」预览，等待核对。`);
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
+    liveTurn.current.markPreview();
+    liveTurn.current.log();
   }
   async function confirm(expected?: OutdoorWorkflowProposal) {
+    liveTurn.current.markConfirm();
     if (expected && proposalRef.current !== expected) {
       status("这张确认卡已过期，未应用其他任务的提案。", "blocked");
       return;
@@ -473,15 +690,24 @@ export function useOutdoorAgentWorkflow(input: {
     // 2026-11-14 用户实测：提案基座拍快照之后用户新画的实体（如室内分区）不该让提案整张失效，
     // 也不该在应用时被基座快照冲掉——「纯新增」放行并把新增实体并回提案（一条 undo）；
     // 基座实体被删改、或边界/锚点等非实体字段变了仍然失效（防静默丢失用户内容）。
-    const baseObj = JSON.parse(p.base) as SitePlanData;
+    let baseObj = JSON.parse(p.base) as SitePlanData;
     const expire = () => {
       proposalRef.current = null;
       setProposal(null);
       status("当前规划已变化，旧提案已失效；请基于最新场地重算。", "blocked");
     };
     if (!baseStillIntact(baseObj, plan)) {
-      expire();
-      return;
+      // 2026-11-17 玉泉鱼跃实测卡点：scope 提案（确认活动范围）只锁「边界+锚点」，不锁实体快照。
+      // 预览期间用户用画布工具改实体（一键收进红线、拖顶点、增删物件）不作废确认卡——
+      // 那些是用户自己的操作，确认时按此刻画布重新按边界安置即可；边界/锚点变了才失效。
+      if (p.kind !== "scope" || boundaryKey(plan) !== boundaryKey(baseObj)) {
+        expire();
+        return;
+      }
+      baseObj = plan;
+      p = { ...p, next: prunePlanForBoundary(plan, plan.boundary, plan.anchor ?? undefined).next };
+      proposalRef.current = p;
+      setProposal(p);
     }
     /** 按「最新画布」把新增实体并回提案；await 期间画布若再变，重新判定再合并。 */
     const mergeLatest = (current: SitePlanData): boolean => {
@@ -518,6 +744,7 @@ export function useOutdoorAgentWorkflow(input: {
         map = await bridge.mapContext(check!.signal);
       } catch (error) {
         if (!owns()) return;
+        liveTurn.current.settle("failed");
         status(
           error instanceof Error
             ? error.message
@@ -575,6 +802,9 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
+    liveTurn.current.markApplied();
+    liveTurn.current.log();
+    recordCard(p, "confirmed");
     proposalRef.current = null;
     setProposal(null);
     if (p.kind === "scope") {
@@ -635,14 +865,16 @@ export function useOutdoorAgentWorkflow(input: {
         pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
       ].filter(Boolean);
       offer(
-        { ...pruned.next, anchor, boundary },
+        // 2026-11-17 「同一标准」：范围确认卡是一个自带红线的方案，落地后必须配白框——
+        // 预览与确认走同一份数据，不靠画布那边事后补（那条路留给手画红线和换场地）。
+        { ...pruned.next, anchor, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) },
         "scope",
-        `核对“${name}”中的具体活动范围`,
+        `确认“${name}”的活动范围`,
         job,
         [
-          "地图轮廓只是候选，不代表整座商场均可使用；部分使用请重画。",
-          ...(pruned.swept ? ["地理锚点已切换：旧场地内容已全部随场清空（确认后整批可撤销）。"] : []),
-          ...(!pruned.swept && dropped.length ? [`按新边界随场淘汰：${dropped.join("；")}（确认后整批可撤销）。`] : []),
+          "商场轮廓只是候选；只用到一部分就重画。",
+          ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
+          ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],
       );
     } catch (error) {
@@ -752,9 +984,9 @@ export function useOutdoorAgentWorkflow(input: {
       pruned.droppedFacilities.length ? `物件 ${pruned.droppedFacilities.join("、")}` : "",
       pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
     ].filter(Boolean);
-    offer(pruned.next, "scope", "手画活动范围核对", job, [
-      "手画范围来自用户，仍需核对本次活动可用范围。",
-      ...(dropped.length ? [`按新边界随场淘汰：${dropped.join("；")}（确认后整批可撤销）。`] : []),
+    offer(pruned.next, "scope", "确认手画的活动范围", job, [
+      "这是你手画的范围，确认后才写进方案。",
+      ...(dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
     ]);
     setBusy(false);
   }
@@ -785,13 +1017,33 @@ export function useOutdoorAgentWorkflow(input: {
     if (turn.action === "search") {
       if (!turn.query?.trim())
         throw new Error("想在哪个地点做？请给地点名或地址。");
+      // 2026-11-17 玉泉鱼跃实测卡点：已确认场地后，一次 search（哪怕只是模型误判）不再
+      // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
+      // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
+      const confirmed = Boolean(stateRef.current.confirmedBoundary);
       persist({
         ...stateRef.current,
         stage: "place",
+        ...(confirmed ? {} : { confirmedBoundary: null, completed: [] }),
+      });
+      callbacks.current.search(turn.query);
+      return;
+    }
+    if (turn.action === "virtual-venue") {
+      // docs/46 V-P2：虚拟场地意图——跳过「搜索目标地点」，切纸面起稿；地理锚点缺失变成合法态
+      // （覆盖层对 paper 态不回填预置锚点）。引导用户画红线：闭合同帧自动生成设计范围。
+      writePlanGroundMode("paper");
+      persist({
+        ...stateRef.current,
+        stage: "scope",
         confirmedBoundary: null,
         completed: [],
       });
-      callbacks.current.search(turn.query);
+      status(
+        turn.reply?.trim()
+          || "已切到纸面模式：不关联真实地点。用物件库「用地红线（重画）」画出场地边界，闭合后自动生成设计范围，我们接着分区、摆物件。",
+        "ready",
+      );
       return;
     }
     const bridge = callbacks.current.bridge(),
@@ -821,6 +1073,28 @@ export function useOutdoorAgentWorkflow(input: {
     };
     persist(mergeOutdoorFacts(stateRef.current, normalized, message));
     if (turn.action === "ask") {
+      // 2026-11-17 用户拍「都做」的第二个卡点：用户已经明确选了上一轮二选一里的第 N 项，
+      // 模型却又把同一件事反问一遍——原样端回去，用户看到的就是「我选了第一个方案，什么都没发生」。
+      // 这时不再重复追问：按原请求确定性地推到对应预览（只出预览，不写画布）。
+      const chosen = pendingChoiceRef.current;
+      pendingChoiceRef.current = null;
+      const resume = chosen ? resumeActionForRequest(chosen.request) : null;
+      if (chosen && resume) {
+        await act(
+          { action: resume, reply: "", references: [], facts: {} },
+          chosen.request,
+        );
+        // offer() 会把提示条换成「预览已就绪」；把这轮的来历记进设计过程，
+        // 让人在卡上仍能看到「这一版是按我选的那一项走的」，而不是默默换了个东西。
+        designStep(
+          `按你选的「${chosen.chosen.text}」继续原请求；本轮只出预览，未写入画布。`,
+        );
+        return;
+      }
+      // 2026-11-17 用户实测「就沿着水岸线」→ 被反問「北/东/南/西」，而画布上河就在那儿。
+      // 水体/水道已进快照（openfreemap-water），沿岸意图的追问不再问方位：
+      // 沿真实岸线直接出预览；真没有水系/界外才给可执行的下一步。ask 与非 ask 共用 shorelineTurn。
+      if (shorelineIntent(message) && (await shorelineTurn(message, continueDesign, null))) return;
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
       askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
@@ -844,12 +1118,25 @@ export function useOutdoorAgentWorkflow(input: {
           return;
         }
         persist({ ...stateRef.current, stage: "scope" });
-        offer(plan, "scope", "当前地图活动范围", job, [
-          "确认的是本次活动范围，不是地图产权或消防认证。",
+        offer(plan, "scope", "确认当前活动范围", job, [
+          "确认只代表活动范围，不代表产权/消防认证。",
         ]);
         return;
       }
-      requireScope(plan);
+      if (!requireScope(plan)) {
+        // 2026-11-17 玉泉鱼跃实测卡点：范围未确认不硬抛死路（原文案把用户引回重新搜索地点，
+        // 对检索不到轮廓的 POI 就是 85 秒白等）。画布上已有合法闭合边界时直接出确认卡，
+        // 一键回到主流程；没有边界才走重新搜索/手画的提示。
+        if (!checkBoundaryRing(plan.boundary).ok) {
+          persist({ ...stateRef.current, stage: "place", pendingBoundary: undefined, completed: [] });
+          status("当前没有可核对的活动边界，请重新搜索地点并选择候选，或在地图圈出实际范围。");
+          return;
+        }
+        offer(plan, "scope", "确认当前活动范围", job, [
+          "确认只代表活动范围，不代表产权/消防认证。",
+        ]);
+        return;
+      }
       const designingRoutes = turn.action === "main-routes";
       const designingObjects = turn.action === "objects";
       if (designingRoutes || designingObjects || turn.action === "zones" || turn.action === "revise") {
@@ -872,7 +1159,7 @@ export function useOutdoorAgentWorkflow(input: {
           throw new Error("当前画布尚未准备好，原规划保留。");
         status(
           mode === "zone"
-            ? "已在同一地图启动分区手画。按图纸/实测闭合后，告诉我名称、用途和室内外属性，再预览确认。"
+            ? "已进入手画模式。请在地图上画出分区轮廓并闭合，再补充分区名称、用途和室内外属性。"
             : mode === "route"
               ? "已启动同一地图的人行主通道绘制；请沿真实可用通道连接入口，不把未知室内通路当真实。"
               : "已启动同一地图的入口标注；位置来自用户意图，仍需核对真实门与通行权限。",
@@ -942,8 +1229,9 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       if (!plan.zones.length)
-        throw new Error(
+        throw new OutdoorStepBlocked(
           "先明确并确认区域用途和边界，再安排通道/物件；不会跳过分区。",
+          { action: "zones", label: "先生成分区预览" },
         );
       if (turn.action === "main-routes") {
         persist({ ...stateRef.current, stage: "main-routes" });
@@ -1077,15 +1365,18 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       if (turn.action === "objects") {
-        persist({ ...stateRef.current, stage: "objects" });
         if (!hasVerifiedMainAccess(plan))
-          throw new Error(
+          throw new OutdoorStepBlocked(
             "请先核对主入口和主要通道；道路交点不当作已经核实的门。",
+            { action: "main-routes", label: "去核对主要入口与通道" },
           );
-        if (!stateRef.current.brief.guests)
-          throw new Error(
-            "预计同时在场多少人？先保留这个人数需求，再核对分区与设施占地；不从物件数量猜人数。",
-          );
+        // 2026-11-17 用户口径：「人数也不确定吧，有的时候先搞活动也有」。人数是活动定下来才知道的事，
+        // 先布场、后补人数是常态，所以这里不再把「没有人数」当错误拦下——规划层的 validateWorkflowDemand
+        // 本来就按人数可空设计（没有人数就跳过 2㎡/人 粗筛），本分支的 throw 与它自相矛盾，
+        // 且失败卡只有一个「重试」（= 原样重跑 objects），人数不变就永远撞同一堵墙。
+        // 仍然不从物件数量反推人数：缺人数就如实写在提案卡上，不假装做过容量核对。
+        // 阶段改到通过前置校验之后再落盘：一次失败不该把任务卡永久改成「按用途复用我的物料」。
+        persist({ ...stateRef.current, stage: "objects" });
         status(
           "检索我的物料库真实候选与尺寸；尚未摆放，也没有启动收费生成。",
           "working",
@@ -1164,18 +1455,40 @@ export function useOutdoorAgentWorkflow(input: {
             signal: job.controller.signal,
           },
         );
+        // 2026-11-17 死结 3：需求分区对不上画布的（如上一轮遗留的旧需求）跳过并如实报出，
+        // 同时从需求清单里摘掉——留着的话每一轮都会重复报同一批，物件阶段永远走不下去。
+        const mismatchNotice: string[] = [];
+        if (result.mismatched.length) {
+          const dropped = new Set(
+            result.mismatched.map((m) => `${m.need.zone} ${m.need.query} ${m.need.count}`),
+          );
+          persist({
+            ...stateRef.current,
+            brief: {
+              ...stateRef.current.brief,
+              items: stateRef.current.brief.items.filter(
+                (i) => !dropped.has(`${i.zone} ${i.query} ${i.count}`),
+              ),
+            },
+          });
+          mismatchNotice.push(describeZoneMismatch(result.mismatched, plan, { removed: true }));
+        }
         offer(result.plan, "objects", "逐区复用库内真实设施", job, [
-          "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。",
+          stateRef.current.brief.guests
+            ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
+            : "人数还没定：本版只按分区用途和库内物料的真实尺寸排布，没有做 2㎡/人 容量粗筛，也没有从物件数量反猜人数；补一句「预计多少人在场」可以再核一遍容量。",
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
           `已识别边界内建筑 ${buildingsForPlan?.length ?? 0} 栋${buildingsForPlan?.length ? "：标为室内禁区，排物件自动避开（灰色块 2D/3D 同步）。" : "（地图服务暂未提供建筑数据，稍后重试或用物件库「室内区域」手画）。"}`,
+          ...mismatchNotice,
         ]);
         return;
       }
       if (turn.action === "sub-routes") {
         persist({ ...stateRef.current, stage: "sub-routes" });
         if (!plan.facilities.length)
-          throw new Error(
+          throw new OutdoorStepBlocked(
             "先确认各区实际物件，再沿物件空隙安排子入口和支线；不能先穿过未来展位/表演区。",
+            { action: "objects", label: "先去排各区物件" },
           );
         const proposal = buildSubEntranceProposal(plan);
         if (!proposal)
@@ -1197,13 +1510,43 @@ export function useOutdoorAgentWorkflow(input: {
       }
       if (turn.action === "people") {
         persist({ ...stateRef.current, stage: "people" });
+        const peoplePlan = proposeRoleWorkers(plan, stateRef.current.brief);
+        // 2026-11-17 死结 3：岗位分区对不上画布的同样跳过并如实报出，并从需求清单摘掉。
+        const peopleMismatch: string[] = [];
+        const { mismatched: peopleMismatched } = splitNeedsByZone(
+          plan,
+          stateRef.current.brief.people,
+        );
+        if (peopleMismatched.length) {
+          const droppedPeople = new Set(
+            peopleMismatched.map(
+              (m) => `${m.need.zone} ${m.need.role} ${m.need.count}`,
+            ),
+          );
+          persist({
+            ...stateRef.current,
+            brief: {
+              ...stateRef.current.brief,
+              people: stateRef.current.brief.people.filter(
+                (p) => !droppedPeople.has(`${p.zone} ${p.role} ${p.count}`),
+              ),
+            },
+          });
+          peopleMismatch.push(
+            describeZoneMismatch(peopleMismatched, plan, {
+              removed: true,
+              subject: "岗位未安排",
+            }),
+          );
+        }
         offer(
-          proposeRoleWorkers(plan, stateRef.current.brief),
+          peoplePlan,
           "people",
           "按岗位、数量与通路安排人员",
           job,
           [
             "人员活动范围/路线由关联区域及路径限定，不是随机散布或真实疏散模拟。",
+            ...peopleMismatch,
           ],
         );
         return;
@@ -1310,6 +1653,7 @@ export function useOutdoorAgentWorkflow(input: {
         status(
           error instanceof Error ? error.message : "当前提案无法核对，未执行。",
           "blocked",
+          error instanceof OutdoorStepBlocked ? { fix: error.fix } : {},
         );
     } finally {
       if (live(job)) setBusy(false);
@@ -1362,9 +1706,80 @@ export function useOutdoorAgentWorkflow(input: {
     } as OutdoorTurn;
   }
 
+  /**
+   * 2026-11-17：沿岸排布的确定性接管——ask 与 zones/objects/revise 共用一条路径。
+   * 返回 true = 本轮已按沿岸处理（出预览/给下一步/亮失败），调用方直接 return；
+   * 返回 false = 没接管（画布未就绪），调用方落回原路径。
+   */
+  async function shorelineTurn(
+    message: string,
+    continueDesign: boolean,
+    existingJob?: { epoch: number; controller: AbortController; scope: string } | null,
+  ): Promise<boolean> {
+    const job = existingJob ?? start(continueDesign);
+    const before = JSON.stringify(callbacks.current.bridge()?.getPlan());
+    try {
+      await mapContext(job.controller.signal);
+      const shorePlan = callbacks.current.bridge()?.getPlan();
+      if (!live(job)) return true;
+      if (!shorePlan) return false;
+      if (JSON.stringify(shorePlan) !== before) {
+        status("读取期间画布已变化，请基于当前规划重新预览。", "blocked");
+        return true;
+      }
+      const shoreline = proposeShorelineLayout(
+        {
+          shorelines: mapRef.current.water?.() ?? [],
+          boundary: shorePlan.boundary,
+          demand: parseShorelineDemand(message),
+          obstacles: shorePlan.facilities.map(facilityFootprintRing),
+          exclusions: shorePlan.zones.map(zone => zone.polygon),
+        },
+        () => crypto.randomUUID(),
+      );
+      if (shoreline.ok) {
+        const { layout } = shoreline;
+        designStep(
+          `沿真实岸线 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个钓位；本版只出预览，未写入画布。`,
+        );
+        offer(
+          {
+            ...shorePlan,
+            zones: [...shorePlan.zones, ...layout.zones],
+            facilities: [...shorePlan.facilities, ...layout.facilities],
+            routes: [...shorePlan.routes, ...layout.routes],
+          },
+          "objects",
+          `沿岸排布·${layout.summary.waterName}（${layout.summary.stations} 个钓位）`,
+          job,
+          layout.summary.warnings,
+        );
+        return true;
+      }
+      askForDetails(shoreline.message);
+      return true;
+    } catch (error) {
+      // 取消就静默结束；真失败（如校验拦截）如实亮出原因，不回退到「问方位」。
+      if (error instanceof DOMException && error.name === "AbortError") return true;
+      status(
+        error instanceof Error
+          ? error.message
+          : "沿岸排布未完成；请在地图上确认水岸位置后重试。",
+        "blocked",
+      );
+      return true;
+    }
+  }
   function askForDetails(question: string) {
     callbacks.current.say(question, true);
     status("补充对话里的信息后可以继续。", "ask");
+  }
+  /** 2026-11-17：红卡上的「下一步」——按卡上写的那个动作真正推进，而不是把同一个动作原样重放。 */
+  async function applyNoticeFix() {
+    const fix = noticeFix;
+    if (!fix) return;
+    setNoticeFix(null);
+    await action(fix.action);
   }
 
   function clarify(message: string): boolean {
@@ -1385,6 +1800,11 @@ export function useOutdoorAgentWorkflow(input: {
 
   async function handle(message: string, clarification?: OutdoorClarification): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
+    const waiting = pendingPlanRef.current;
+    if (waiting && (explicitProposalApproval(message) || /^批准(?:这(?:份|个))?计划[。！!]?$/u.test(message.trim()))) {
+      await approvePlan(waiting);
+      return true;
+    }
     if (explicitProposalApproval(message) && proposalRef.current) {
       await confirm();
       return true;
@@ -1397,6 +1817,15 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return false;
+    // 2026-11-17：先认「这句是不是在回答上一轮的二选一」。认出来就把选中的那一项结构化带进理解层；
+    // 认不出就清空——绝不让上一轮的选项影响下一句无关的话。
+    const choiceReply = clarification
+      ? resolveChoiceReply(message, clarification.question)
+      : null;
+    pendingChoiceRef.current =
+      choiceReply && clarification
+        ? { request: clarification.request, chosen: choiceReply.chosen }
+        : null;
     // 2026-11-14：确定性 objects 预路由（先于理解模型）——「分区名+数量+物件名」清单句直接合成。
     const planForSynth = plan;
     const synthesizedTurn = synthesizeObjectsTurn(message, planForSynth);
@@ -1427,7 +1856,12 @@ export function useOutdoorAgentWorkflow(input: {
       return true;
     }
     const job = start();
-    designStep("读取当前活动边界、已有分区与设施。");
+    const base = JSON.stringify(plan);
+    const selected = callbacks.current.bridge()?.selectedIds?.() ?? [];
+    let modelStarted: number | undefined;
+    setThoughtRequest(message);
+    setCanvasNote(`已读画布 ${plan.zones.length} 个分区 · ${plan.facilities.length} 项设施`);
+    setAwaitingThought(true);
     status(
       "结合当前需求、选中对象与结构化地图依据理解本句；未读取地图像素、未执行修改。",
       "working",
@@ -1440,9 +1874,15 @@ export function useOutdoorAgentWorkflow(input: {
       setMapGap(map.status !== "ready");
       if (map.status === "ready") designStep("已取得结构化地图依据，用来核对请求涉及的位置。");
       if (map.status === "partial") designStep("地图依据只有一部分，缺失的位置需要核对。");
+      if (map.status === "unavailable") designStep("本轮未取得地图依据，将使用已有规划和输入内容。");
       const turn = await understandOutdoorTurn({
         message,
-        clarification,
+        clarification: waiting
+          ? { request: waiting.message, question: `待批准的计划：${waiting.steps.join("；")}。请结合用户补充的要求理解本句。` }
+          : clarification && {
+              ...clarification,
+              ...(choiceReply ? { choice: choiceReply.chosen } : {}),
+            },
         libraryChoices: libraryChoices.map(
           ({ id, name, width, depth, height }) => ({
             id,
@@ -1465,23 +1905,38 @@ export function useOutdoorAgentWorkflow(input: {
               },
             }
           : {}),
-        selected: callbacks.current.bridge()?.selectedIds?.() ?? [],
+        selected,
         map,
         controller: callbacks.current.controller(),
         signal: job.controller.signal,
+        onRequest: () => {
+          if (live(job)) {
+            modelStarted = performance.now();
+          }
+        },
+        onThought: text => {
+          if (live(job)) setThoughtDraft(draft => draft + text);
+        },
         provider: callbacks.current.provider?.(),
         model: callbacks.current.model?.() ?? null,
       });
       if (
         !live(job) ||
-        JSON.stringify(callbacks.current.bridge()?.getPlan()) !==
-          JSON.stringify(plan)
+        JSON.stringify(callbacks.current.bridge()?.getPlan()) !== base
       )
         return true;
+      setAwaitingThought(false);
+      setThoughtDraft("");
+      if (modelStarted !== undefined) setThoughtMs(performance.now() - modelStarted);
       if (stateRef.current.pendingLogin) {
         const { pendingLogin: _pendingLogin, ...kept } = stateRef.current;
         persist(kept);
       }
+      setThought(turn.thought?.replace(/\s+/gu, " ").trim() || (
+        turn.action === "ask" ? "模型选择直接回复或请你补充信息。"
+          : turn.action === "search" ? "模型选择查找目标地点。"
+          : "模型已返回本轮处理决定，工作台会按当前任务的规则核对。"
+      ));
       callbacks.current.bridge()?.highlightReferences?.(turn.references);
       // Ordinary model output cannot grant confirmation or fees on the user's behalf.
       if (turn.action === "confirm") {
@@ -1502,6 +1957,32 @@ export function useOutdoorAgentWorkflow(input: {
         await confirm();
         return true;
       }
+      // 2026-11-17 用户拍板：沿岸活动（钓鱼比赛等）模型不回 ask、直接给设计动作时，
+      // 跳过通用计划批准闸门直接沿岸出预览（预览本身就是确认环节）；范围未确认则落回通用流程先确认范围。
+      if (
+        (turn.action === "zones" || turn.action === "objects" || turn.action === "revise") &&
+        stateRef.current.confirmedBoundary === boundaryKey(plan) &&
+        (shorelineIntent(message) ||
+          isShorelineEvent(message) ||
+          isShorelineEvent(stateRef.current.brief.event))
+      ) {
+        if (await shorelineTurn(message, true, job)) return true;
+      }
+      const steps = outdoorPlanSteps[turn.action];
+      if (steps) {
+        const zoneNames = turn.facts.zones?.filter(zone => message.includes(zone.evidence)).map(zone => zone.name) ?? [];
+        const needsZones = !plan.zones.length && (turn.action === "main-routes" || turn.action === "objects");
+        const showZoneNames = zoneNames.length > 0 && (turn.action === "zones" || turn.action === "revise");
+        const proposedSteps = [
+          ...(needsZones ? ["根据已知用途先拟分区，核对后再推进下一步"] : []),
+          ...steps.map((step, index) => showZoneNames && index === steps.length - 1
+            ? `${step}（${zoneNames.join("、")}）`
+            : step),
+        ];
+        updatePendingPlan({ steps: proposedSteps, turn, message, base, selected: JSON.stringify(selected), job });
+        status("计划已拟好，等你批准。", "confirm");
+        return true;
+      }
       const constraintBefore = JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed});
       await act(turn, message, true);
       // A neutral clarification is not cancellation or authorization. Only the unchanged
@@ -1514,6 +1995,10 @@ export function useOutdoorAgentWorkflow(input: {
         setProposal(proposalRef.current);
       }
     } catch (error) {
+      const errorStatus =
+        error && typeof error === "object" && "status" in error
+          ? String((error as { status?: unknown }).status)
+          : undefined;
       if (
         live(job) &&
         error &&
@@ -1556,15 +2041,22 @@ export function useOutdoorAgentWorkflow(input: {
             : "当前环境未开启 Agent 理解模型，规划未变。",
           "blocked",
         );
-      } else if (live(job))
+        if (errorStatus) setNoticeView(agentErrorView(errorStatus));
+      } else if (live(job)) {
         status(
           error instanceof Error
             ? error.message
             : "本次理解/提案无法核对，未执行。",
           "blocked",
         );
+        if (errorStatus) setNoticeView(agentErrorView(errorStatus));
+      }
     } finally {
-      if (live(job)) setBusy(false);
+      if (live(job)) {
+        setAwaitingThought(false);
+        setThoughtDraft("");
+        setBusy(false);
+      }
     }
     return true;
   }
@@ -1702,20 +2194,109 @@ export function useOutdoorAgentWorkflow(input: {
       status(
         error instanceof Error ? error.message : "未执行当前动作。",
         "blocked",
+        error instanceof OutdoorStepBlocked ? { fix: error.fix } : {},
       );
       setBusy(false);
     }
   }
+  async function approvePlan(expected: PendingPlan) {
+    if (pendingPlanRef.current !== expected || !live(expected.job)) return;
+    updatePendingPlan(null);
+    const bridge = callbacks.current.bridge();
+    if (JSON.stringify(bridge?.getPlan()) !== expected.base ||
+        JSON.stringify(bridge?.selectedIds?.() ?? []) !== expected.selected) {
+      status("画布或选中对象已变化，请按当前画布重新拟计划。", "blocked");
+      return;
+    }
+    try {
+      await act(expected.turn, expected.message, true);
+    } catch (error) {
+      status(error instanceof Error ? error.message : "未能执行已批准的计划。", "blocked");
+    }
+  }
+  /** 登录完成后恢复这条等待的需求；原账户与规划版本守卫保持原样。 */
+  async function resumeAfterLogin(): Promise<void> {
+    if (
+      renderedScope !== scopeRef.current ||
+      renderedToken !== token.current
+    ) {
+      status("这张恢复卡已过期，未恢复其他任务。", "blocked");
+      return;
+    }
+    const pending = stateRef.current.pendingLogin,
+      plan = callbacks.current.bridge()?.getPlan();
+    if (!pending || !plan) return;
+    if (
+      pending.ownerId &&
+      callbacks.current.controller()?.getSnapshot?.().user?.id !==
+        pending.ownerId
+    ) {
+      status("请以原账户登录后恢复这条需求；未跨账户执行。", "blocked");
+      return;
+    }
+    if (pending.planVersion !== planVersion(plan)) {
+      status(
+        "登录期间活动规划已变化；原需求仍保留，请结合当前场地重新说明，未自动恢复旧操作。",
+        "blocked",
+      );
+      return;
+    }
+    await handle(pending.message);
+  }
+  // 2026-11-16 用户指令：登录后不要再让人点一次「继续这次搜索」——待续需求自动接上，
+  // 「已登录 · 可以继续」那张卡不再存在。每条等待只自动续一次；过期/跨账户等守卫失败时
+  // resumeAfterLogin 只落一句 blocked 提示，不重复触发。
+  const autoResumedLogin = useRef<string | null>(null);
+  const accountReady = (() => {
+    const viewer = callbacks.current.controller()?.getSnapshot?.().user;
+    return Boolean(viewer && !viewer.is_anonymous);
+  })();
+  useEffect(() => {
+    const pending = stateRef.current.pendingLogin;
+    if (!pending) {
+      autoResumedLogin.current = null;
+      return;
+    }
+    if (!accountReady) return;
+    const key = `${pending.planVersion}\u0000${pending.message}`;
+    if (autoResumedLogin.current === key) return;
+    autoResumedLogin.current = key;
+    void resumeAfterLogin();
+  }, [state.pendingLogin, accountReady]);
   return {
     state,
     designSteps,
+    canvasNote: state.scope === input.scope ? canvasNote : null,
+    thought: state.scope === input.scope ? thought : null,
+    thoughtMs: state.scope === input.scope ? thoughtMs : null,
+    thoughtRequest: state.scope === input.scope ? thoughtRequest : null,
+    awaitingThought: state.scope === input.scope && busy && awaitingThought,
+    thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
+    cardRecords: state.scope === input.scope ? cardRecords : [],
     mapGap,
+    /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
+    metricsSummary: () => summarizeMetrics(metricsBook.current),
+    /** 把汇总打到控制台并尽量写进剪贴板；返回值说明剪贴板是否发起成功。 */
+    exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
+    /** 轨迹 + 指标一份导出（两份都是白名单字段）。 */
+    sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
+    /** 把会话报告存成本地 .txt（Web 下载）；导不出时只返回 ok:false，不抛。 */
+    downloadReport: () => downloadSessionReport(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
+    /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
+    acceptanceCheck: () => {
+      const rows = assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }));
+      return { rows, totals: summarizeAssessment(rows) };
+    },
+    /** 一行可粘进 PR 的验收声明（固定收尾“三类全绿 0 条，未验部分不作通过”）。 */
+    acceptanceStatement: () => formatAcceptanceStatement(assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }))),
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
     },
     proposal,
+    pendingPlan: state.scope === input.scope ? pendingPlan : null,
+    approvePlan,
     appliedHighlight: state.scope === input.scope ? appliedHighlight : null,
     models,
     busy,
@@ -1736,9 +2317,15 @@ export function useOutdoorAgentWorkflow(input: {
     dismissNotice: () => {
       setNotice("");
       setNoticeKind("info");
+      setNoticeFix(null);
     },
+    noticeView,
+    /** 缺前置条件时红卡上的「下一步」；null 时卡片仍按原口径提供「重试」。 */
+    noticeFix,
+    applyNoticeFix,
     loginRequired: Boolean(state.pendingLogin),
-    // 2026-11-14 用户指令：登录完成后这张卡要跟着变——已登录时切换为「继续这次搜索」。
+    // 2026-11-16：登录卡只在真的没登录时出现（见 outdoor-workflow-card）；登录一旦到位就由
+    // 上面的自动恢复 effect 直接续上。loginSatisfied 仍给输入框锁定（agent-panel 的 loginBlocked）用。
     loginSatisfied:
       Boolean(state.pendingLogin) &&
       (() => {
@@ -1746,6 +2333,8 @@ export function useOutdoorAgentWorkflow(input: {
         return Boolean(user && !user.is_anonymous);
       })(),
     authChanged: (nextActor: string | null) => {
+      setThought(null);
+      setThoughtRequest(null);
       const pending = stateRef.current.pendingLogin;
       cancel({
         preservePendingLogin: Boolean(
@@ -1754,34 +2343,7 @@ export function useOutdoorAgentWorkflow(input: {
         ),
       });
     },
-    resumeAfterLogin: async () => {
-      if (
-        renderedScope !== scopeRef.current ||
-        renderedToken !== token.current
-      ) {
-        status("这张恢复卡已过期，未恢复其他任务。", "blocked");
-        return;
-      }
-      const pending = stateRef.current.pendingLogin,
-        plan = callbacks.current.bridge()?.getPlan();
-      if (!pending || !plan) return;
-      if (
-        pending.ownerId &&
-        callbacks.current.controller()?.getSnapshot?.().user?.id !==
-          pending.ownerId
-      ) {
-        status("请以原账户登录后恢复这条需求；未跨账户执行。", "blocked");
-        return;
-      }
-      if (pending.planVersion !== planVersion(plan)) {
-        status(
-          "登录期间活动规划已变化；原需求仍保留，请结合当前场地重新说明，未自动恢复旧操作。",
-          "blocked",
-        );
-        return;
-      }
-      await handle(pending.message);
-    },
+    resumeAfterLogin,
     unverifiedEntrances: (
       callbacks.current.bridge()?.getPlan()?.nodes ?? []
     ).filter(

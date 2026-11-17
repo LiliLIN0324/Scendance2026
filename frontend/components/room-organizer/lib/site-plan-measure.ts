@@ -2,7 +2,9 @@
  * 米制测量与派生统计纯函数层（H3-a）。
  *
  * 口径（评审稿 §8 功能矩阵「测量与计算」/ §9.1 步骤 9 / §4 顶栏规划信息）：
- * - 测量标注三类：距离（2 点段长）、面积（≥3 点闭合环）、路径（≥2 点折线）；
+ * - 测量入口两类：距离（含多段折线）、面积（≥3 点闭合环）。2026-11-17 用户指令
+ *   「距离和路径好像一样，把路径删掉」——路径入口下线，契约里的 path 只作为旧快照与
+ *   多段距离的落盘口径保留，UI 一律读作距离。
  *   公式不另立——距离/路径复用契约 planRouteLengthM，面积复用 planRingAreaM2，
  *   「3–4–5 m 距离显示 5 m、10×10 m 区域显示 100 m²、两段各 10 m 折线显示 20 m」，
  *   且读数来自米制 ENU 真值，缩放后结果一致。
@@ -13,6 +15,7 @@
  */
 
 import {
+  planMeasurementKindLabels,
   planRingAreaM2,
   planRouteLengthM,
   type PlanMeasurement,
@@ -38,6 +41,17 @@ const PLAN_COORD_LIMIT_M = 5000;
 
 export type PlanMeasureKind = PlanMeasurement['kind'];
 
+/**
+ * 测量工具的入口类型（2026-11-17：路径入口下线，只留距离/面积）。
+ * 距离本身支持多段折线，多段提交时按契约的 path 口径落盘（读数同为折线总长）。
+ */
+export type PlanMeasureToolKind = Extract<PlanMeasureKind, 'distance' | 'area'>;
+
+/** 展示名：path 只是折线距离，不再单独叫「路径」（旧快照照常读作距离）。 */
+export function measureKindLabel(kind: PlanMeasureKind): string {
+  return planMeasurementKindLabels[kind === 'area' ? 'area' : 'distance'];
+}
+
 function pointInRange(pt: PlanPoint): boolean {
   return Number.isFinite(pt.x) && Number.isFinite(pt.y)
     && Math.abs(pt.x) <= PLAN_COORD_LIMIT_M && Math.abs(pt.y) <= PLAN_COORD_LIMIT_M;
@@ -48,7 +62,7 @@ function measureGeometryIssues(kind: PlanMeasureKind, points: readonly PlanPoint
   const issues: PlanEditIssue[] = [];
   if (kind === 'distance') {
     if (points.length < 2) issues.push({ code: 'too-few-vertices', message: '距离测量需要 2 个点（起点和终点）。' });
-    if (points.length > 2) issues.push({ code: 'too-many-vertices', message: '距离测量只要 2 个点，多段请用路径测量。' });
+    if (points.length > 2) issues.push({ code: 'too-many-vertices', message: '距离测量只要 2 个点；多段按折线口径提交。' });
   }
   if (kind === 'area' && points.length < 3) {
     issues.push({ code: 'too-few-vertices', message: '面积测量至少要 3 个点才能围出区域。' });
@@ -121,7 +135,7 @@ export function formatAreaM2(m2: number): string {
 }
 
 /**
- * 画布草稿实时读数（临时测量）：距离 = 当前段长；路径 = 已收点 + 指针的总长；
+ * 画布草稿实时读数（临时测量）：距离/路径 = 已收点 + 指针的折线总长；
  * 面积 = 按已收点 + 指针闭合的预览环面积。点数不够时返回 null（不画读数）。
  */
 export function measureDraftReadout(
@@ -130,10 +144,11 @@ export function measureDraftReadout(
   cursor?: PlanPoint,
 ): string | null {
   if (kind === 'distance') {
-    const a = points[0];
-    const b = points.length === 2 ? points[1] : cursor;
-    if (!a || !b) return null;
-    return formatLengthM(planPointDistanceM(a, b));
+    // 2026-11-16 用户：「可以多段线测量」——距离不再只认两点：
+    // 已收点 + 指针走折线累计，单段时就是两点距离（旧口径不变）。
+    const path = cursor && points.length >= 1 ? [...points, cursor] : points;
+    if (path.length < 2) return null;
+    return formatLengthM(planRouteLengthM(path));
   }
   if (kind === 'path') {
     const hasLive = points.length >= 1 && cursor;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_ROOM_DIMENSION } from './constants';
+import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
 import {
   planBoundaryToShellVenue,
   samePlanRing,
@@ -351,5 +352,43 @@ describe('trueFootprintBoundary · IN77 真实商场足迹', () => {
     expect(spanX).toBeLessThan(600);
     expect(spanY).toBeGreaterThan(200);
     expect(spanY).toBeLessThan(800);
+  });
+});
+
+// 2026-11-17 用户：「同一标准检查其他会生成方案的入口」。播种（场景模板 / 3D 壳体 / 真实足迹）
+// 同样会凭空交出一份带红线的方案，所以同样要配那只白框；不然 2D 一打开又是「有红线、没白框」。
+describe('播种出的方案自带设计范围（红线外扩 20 m）', () => {
+  const scopeOf = (boundary: readonly { x: number; y: number }[]) => expandRect(boundary, DEFAULT_SCOPE_MARGIN_M);
+
+  it('seededPlanFromVenue：壳体直接播种时白框跟着红线生', () => {
+    const plan = seededPlanFromVenue({ width: 20, depth: 10 }, null)!;
+    expect(plan.designScope).toHaveLength(4);
+    expect(plan.designScope).toEqual(scopeOf(plan.boundary));
+  });
+
+  it('seededPlanFromLayout：模板场景只有宽高时也有白框', () => {
+    const plan = seededPlanFromLayout({ width: 23.8, height: 16.1 })!;
+    expect(plan.designScope).toEqual(scopeOf(plan.boundary));
+  });
+
+  it('seededPlanFromLayout：真实足迹分支同样带白框', () => {
+    const anchor = { lng: 120.54, lat: 30.4 };
+    const plan = seededPlanFromLayout({
+      width: 10,
+      height: 10,
+      mapLngLat: anchor,
+      mapGroundPolygon: [
+        { lng: anchor.lng - 0.0045, lat: anchor.lat - 0.004 },
+        { lng: anchor.lng + 0.0045, lat: anchor.lat - 0.004 },
+        { lng: anchor.lng + 0.0045, lat: anchor.lat + 0.004 },
+        { lng: anchor.lng - 0.0045, lat: anchor.lat + 0.004 },
+      ],
+    })!;
+    expect(plan.designScope).toEqual(scopeOf(plan.boundary));
+  });
+
+  it('退化输入仍不播种（也就没有白框可补）', () => {
+    expect(seededPlanFromVenue({ width: 0, depth: 0 }, null)).toBeNull();
+    expect(seededPlanFromLayout({ width: 0, height: 10 })).toBeNull();
   });
 });

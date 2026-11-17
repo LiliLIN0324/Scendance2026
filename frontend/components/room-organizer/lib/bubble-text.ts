@@ -7,8 +7,8 @@
  *   宁可不出选项，也不硬拆出不通顺的话。
  */
 
-/** 编号条目起点：行首或空格/分号/冒号后的 1~2 位数字 + 点号/顿号，后面跟中文或字母。 */
-const NUMBERED_SPLIT = /(?<=^|[\s；;：:])(?=\d{1,2}[.、．](?=\s*[一-龥a-zA-Z]))/;
+/** 编号条目起点：行首或分隔符后的数字编号。 */
+const NUMBERED_SPLIT = /(?<=^|[\s；;：:])(?=(?:\d{1,2}[.、．]|[①-⑳])\s*[一-龥a-zA-Z])/u;
 
 /** 去掉选项头尾的语气词与标点，留下能直接当输入框话术的短句。 */
 function cleanOption(raw: string): string {
@@ -22,7 +22,7 @@ function cleanOption(raw: string): string {
 }
 
 /** 列表条目起点：行首编号 + 点号/顿号后接中文或字母，或项目符号。 */
-const LIST_ITEM = /^\d{1,2}[.、．]\s*(?=[一-龥a-zA-Z])|^[-•·]\s*/;
+const LIST_ITEM = /^(?:\d{1,2}[.、．]|[①-⑳])\s*(?=[一-龥a-zA-Z])|^[-•·]\s*/u;
 
 export interface BubbleBlock {
   kind: 'text' | 'list';

@@ -6,9 +6,11 @@ import {
   proposeRoleWorkers,
   validateWorkflowPlan,
   validateWorkflowDemand,
+  describeZoneMismatch,
   clearForObject,
 } from "./outdoor-agent-planning";
 import { sitePlanDataSchema } from "../../../../supabase/functions/_shared/site-plan";
+import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import { buildSubEntranceProposal } from "./sub-entrance";
 import type { OutdoorBrief } from "./outdoor-agent-contract";
 const square = (w = 80, h = 70) => [
@@ -557,4 +559,250 @@ it("有向入场与独立出口闭环可安排岗位，保存关联真实进出�
     new Set([incoming.id, outgoing.id]),
   );
   expect(next.workers[0]!.position).toEqual({ x: 50, y: 10 });
+});
+
+// 2026-11-17 正式站走查实测（死结 3）：需求里的分区名对不上画布上的分区时，
+// 旧行为是整轮否掉（“没有唯一对应分区…未摆放物件”）。但需求清单只能按分区替换、
+// 不能删区（协议 count 最小为 1），画布上没有的分区永远清不掉 → 物件阶段被永久卡死。
+// 新行为：画布上的分区是权威，对不上的需求跳过并如实报出，其余分区照常排布。
+describe("需求分区对不上画布时不再整轮卡死", () => {
+  const smallBoard = {
+    id: "real-board",
+    name: "展板",
+    source: "personal" as const,
+    width: 2,
+    depth: 1,
+    height: 2,
+    modelSlug: "generated:real",
+    available: true,
+  };
+  const oneZonePlan = () =>
+    proposeUseZones(base(), { ...brief, zones: [brief.zones[0]!] });
+
+  it("对不上的那条跳过，其余分区照常排布，并如实报出对不上的分区", async () => {
+    const plan = oneZonePlan();
+    const out = await proposeInventoryObjects(
+      plan,
+      {
+        ...brief,
+        items: [
+          { zone: "展览区", query: "展板", count: 1, evidence: "展览区放1个展板" },
+          { zone: "餐饮区", query: "桌子", count: 4, evidence: "餐饮区放4张桌子" },
+        ],
+      },
+      [smallBoard],
+    );
+    expect(out.plan.facilities).toHaveLength(1);
+    expect(out.mismatched).toHaveLength(1);
+    expect(out.mismatched[0]!.need.zone).toBe("餐饮区");
+    expect(out.mismatched[0]!.reason).toBe("missing");
+  });
+
+  it("跳过的分区要写清画布上真实有哪些分区，不替用户猜位置", async () => {
+    const plan = oneZonePlan();
+    const out = await proposeInventoryObjects(
+      plan,
+      {
+        ...brief,
+        items: [
+          { zone: "展览区", query: "展板", count: 1, evidence: "展览区放1个展板" },
+          { zone: "餐饮区", query: "桌子", count: 4, evidence: "餐饮区放4张桌子" },
+        ],
+      },
+      [smallBoard],
+    );
+    const notice = describeZoneMismatch(out.mismatched, plan);
+    expect(notice).toContain("餐饮区");
+    expect(notice).toContain("展览区");
+    expect(notice).toContain("没有在这些分区猜位置");
+  });
+
+  it("全部需求都对不上时仍然报错（没有可排的东西不能出空提案）", async () => {
+    const plan = oneZonePlan();
+    await expect(
+      proposeInventoryObjects(
+        plan,
+        {
+          ...brief,
+          items: [
+            { zone: "餐饮区", query: "桌子", count: 4, evidence: "餐饮区放4张桌子" },
+          ],
+        },
+        [smallBoard],
+      ),
+    ).rejects.toThrow(/餐饮区/);
+  });
+
+  it("画布上同名分区分不清时也不整轮否掉，如实报出", async () => {
+    const plan = oneZonePlan();
+    const serviceA = {
+      id: crypto.randomUUID(),
+      name: "餐饮区",
+      semantic: "reserved" as const,
+      purpose: "service" as const,
+      environment: "outdoor" as const,
+      polygon: square(10, 10),
+      notes: "",
+    };
+    const serviceB = { ...serviceA, id: crypto.randomUUID(), polygon: square(20, 20) };
+    const out = await proposeInventoryObjects(
+      { ...plan, zones: [...plan.zones, serviceA, serviceB] },
+      {
+        ...brief,
+        items: [
+          { zone: "展览区", query: "展板", count: 1, evidence: "展览区放1个展板" },
+          { zone: "餐饮区", query: "展板", count: 1, evidence: "餐饮区放1个展板" },
+        ],
+      },
+      [smallBoard],
+    );
+    expect(out.mismatched).toHaveLength(1);
+    expect(out.mismatched[0]!.need.zone).toBe("餐饮区");
+    expect(out.mismatched[0]!.reason).toBe("duplicate");
+    expect(out.plan.facilities).toHaveLength(1);
+  });
+
+  it("岗位分区对不上时同样跳过，不整轮否掉", () => {
+    const p = roleFixture();
+    const next = proposeRoleWorkers(p, {
+      ...brief,
+      people: [
+        {
+          role: "保安",
+          zone: "展览区",
+          count: 2,
+          audience: "security",
+          evidence: "2保安",
+        },
+        {
+          role: "服务人员",
+          zone: "餐饮区",
+          count: 1,
+          audience: "service",
+          evidence: "1服务人员",
+        },
+      ],
+    });
+    expect(next.workers).toHaveLength(1);
+    expect(next.workers[0]!.role).toBe("保安");
+  });
+
+  it("岗位全部对不上时仍然报错，并写清画布上真实分区", () => {
+    const p = roleFixture();
+    expect(() =>
+      proposeRoleWorkers(p, {
+        ...brief,
+        people: [
+          {
+            role: "服务人员",
+            zone: "餐饮区",
+            count: 1,
+            audience: "service",
+            evidence: "1服务人员",
+          },
+        ],
+      }),
+    ).toThrow(/餐饮区/);
+  });
+});
+
+describe("岗位通道缺失时按需补驳线（2026-11-17 死结 4）", () => {
+  /**
+   * 正式站实测的形状：签到台贴邻区、邻区子口就在共边旁 4m；
+   * 现有动线里没有一条服务「服务人员」——旧口径整轮报错，且报错让用户去做的补救并不成立。
+   */
+  function serviceZoneFixture(): { plan: SitePlanData; zoneId: string; portalId: string } {
+    const zoneId = crypto.randomUUID();
+    const portalId = crypto.randomUUID();
+    const plan: SitePlanData = {
+      ...base(),
+      boundary: [
+        { x: 0, y: 0 },
+        { x: 400, y: 0 },
+        { x: 400, y: 500 },
+        { x: 0, y: 500 },
+      ],
+      zones: [
+        {
+          id: zoneId,
+          name: "签到台",
+          semantic: "reserved",
+          purpose: "service",
+          environment: "outdoor",
+          polygon: [
+            { x: 60, y: 10 },
+            { x: 100, y: 10 },
+            { x: 100, y: 400 },
+            { x: 60, y: 400 },
+          ],
+          notes: "",
+        },
+      ],
+      routes: [
+        {
+          id: crypto.randomUUID(),
+          name: "观众区驳线",
+          kind: "pedestrian",
+          audiences: ["visitors", "staff", "security"],
+          points: [
+            { x: 56, y: 205 },
+            { x: -40, y: 205 },
+          ],
+          widthM: 2,
+          oneWay: false,
+          notes: "",
+        },
+      ],
+      nodes: [
+        {
+          id: portalId,
+          name: "观众区口",
+          kind: "both",
+          verification: "user-confirmed",
+          position: { x: 56, y: 205 },
+          notes: "",
+        },
+      ],
+    };
+    return { plan, zoneId, portalId };
+  }
+
+  const serviceNeed = {
+    role: "服务人员",
+    zone: "签到台",
+    count: 2,
+    audience: "service" as const,
+    evidence: "签到台安排 2 名服务人员",
+  };
+
+  it("该分区没有这类岗位能走的通道时，先补一条专用驳线再排岗位", () => {
+    const { plan, zoneId } = serviceZoneFixture();
+    const next = proposeRoleWorkers(plan, { ...brief, people: [serviceNeed] });
+    const spur = next.routes.find((r) => r.name.includes("签到台"));
+    expect(spur).toBeTruthy();
+    expect(spur!.audiences).toContain("service");
+    expect(next.workers).toHaveLength(1);
+    expect(next.workers[0]).toMatchObject({
+      role: "服务人员",
+      count: 2,
+      audience: "service",
+      activityZoneIds: [zoneId],
+    });
+    expect(next.workers[0]!.routeIds).toContain(spur!.id);
+  });
+
+  it("补不出通道时仍然硬拦，并写清缺什么、能改做什么", () => {
+    const { plan } = serviceZoneFixture();
+    let message = "";
+    try {
+      proposeRoleWorkers({ ...plan, routes: [] }, { ...brief, people: [serviceNeed] });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain("签到台");
+    expect(message).toMatch(/接驳|通道/);
+    // 旧文案让用户「先安排子流线/子入口」——那条补救路径实际不成立，不能再这么写。
+    expect(message).not.toContain("请先安排子流线/子入口");
+    expect(message).toMatch(/补一条接驳线|改到已有通道/);
+  });
 });

@@ -12,6 +12,7 @@
 
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { DEFAULT_OUTDOOR_PLAN_ANCHOR } from './outdoor-project-store';
+import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
 
 /** 示范场景岗位总数 / 设施总数（面板提示与单测复用）。 */
 export const DEMO_OUTDOOR_WORKER_COUNT = 7;
@@ -30,6 +31,9 @@ export function createDemoOutdoorPlan(): SitePlanData {
     schemaVersion: 1,
     anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR,
     boundary: DEMO_BOUNDARY.map(point => ({ ...point })),
+    // 2026-11-17 同一标准：带红线的成品方案一律配一只白框（外扩 20 m），
+    // 不靠“载入后另点一次按场地外扩”才长出来。
+    designScope: expandRect(DEMO_BOUNDARY, DEFAULT_SCOPE_MARGIN_M),
     zones: [],
     facilities: [
       {

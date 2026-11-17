@@ -1,7 +1,55 @@
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** 读 .env 文件里的 KEY=VALUE（只给下面的本机免登录用，不参与线上构建）。 */
+function readEnvFile(file) {
+  if (!existsSync(file)) return {};
+  const values = {};
+  for (const raw of readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const separator = line.indexOf('=');
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim();
+    let value = line.slice(separator + 1).trim();
+    if (value.length > 1 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) value = value.slice(1, -1);
+    if (key && value) values[key] = value;
+  }
+  return values;
+}
+
+/**
+ * 本机开发免登录：把 .env.local 里已有的账号密码带进 dev 构建，登录卡不再要求手填。
+ * 只在 `next dev`（NODE_ENV=development）注入——`next build` 的静态产物里没有这段，
+ * 线上不会拿任何账号自动登录。
+ *
+ * 顺序即尝试顺序：local_account_*（本机 Supabase 用）→ Account_*（云端账号）→ NEXT_PUBLIC_DEMO_*。
+ * `scope` 用来区分：后端是云端项目时不拿本机账号去撞一次必然失败的密码。
+ */
+function localAutoLoginEnv() {
+  if (process.env.NODE_ENV !== 'development') return '';
+  const fromFiles = {
+    ...readEnvFile(path.resolve(__dirname, '..', '.env.local')),
+    ...readEnvFile(path.resolve(__dirname, '.env.local')),
+  };
+  const lookup = key => (process.env[key] ?? fromFiles[key] ?? '').trim();
+  const pairs = [
+    ['local_account_id', 'local_account_pw', 'local'],
+    ['Account_id', 'Account_pw', 'cloud'],
+    ['NEXT_PUBLIC_DEMO_EMAIL', 'NEXT_PUBLIC_DEMO_PASSWORD', 'cloud'],
+  ];
+  const accounts = [];
+  for (const [idKey, passwordKey, scope] of pairs) {
+    const email = lookup(idKey), password = lookup(passwordKey);
+    if (!email || !password) continue;
+    if (accounts.some(account => account.email.toLowerCase() === email.toLowerCase())) continue;
+    accounts.push({ email, password, scope });
+  }
+  return accounts.length ? JSON.stringify(accounts) : '';
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -10,6 +58,12 @@ const nextConfig = {
   // 页面报「reading 'call'」的 chunk 错。后启动的那个用 NEXT_DIST_DIR 单独起目录。
   distDir: process.env.NEXT_DIST_DIR || '.next',
   output: 'export',
+  // 本机 dev 免登录：把 .env.local 的账号注入开发构建，登录卡不再要求手填。
+  // 生产构建 localAutoLoginEnv 返回空串，产物里没有这段凭据。
+  env: (() => {
+    const injected = localAutoLoginEnv();
+    return injected ? { NEXT_PUBLIC_SCENDANCE_LOCAL_LOGIN: injected } : {};
+  })(),
   images: { unoptimized: true },
   devIndicators: false,
   experimental: { externalDir: true },

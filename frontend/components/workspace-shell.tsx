@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
@@ -12,6 +12,12 @@ import {
   latestOutdoorProjectId,
   resolveOutdoorProjectId,
 } from '@/components/room-organizer/lib/outdoor-project-store';
+import {
+  adoptOutdoorActivity,
+  listAdoptableActivities,
+  type AdoptableActivity,
+} from '@/components/room-organizer/lib/outdoor-plan-adoption';
+import { OutdoorCloudRecover } from '@/components/room-organizer/components/outdoor-cloud-recover';
 import { useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
@@ -100,6 +106,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   const entered = workspacePath && ready;
   // 户外项目判定（P2-a）：与 editorStarted 同批同步判定，户外命中时不挂 RoomOrganizer。
   const [outdoorProjectId, setOutdoorProjectId] = useState<string | null>(null);
+  // 换设备找回：本机没有任何草稿、云端却有活动时问一次（只问一次，不打扰）。
+  const [recover, setRecover] = useState<AdoptableActivity[] | null>(null);
+  const [recoverBusy, setRecoverBusy] = useState<string | null>(null);
+  const recoverAskedRef = useRef(false);
+  // 采纳云端活动时异地同 id（如都在 default-outdoor）也要让工作台重挂一次，读新记录。
+  const [projectEpoch, setProjectEpoch] = useState(0);
 
   useEffect(() => {
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
@@ -109,14 +121,35 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
     if (!window.location.search) {
       // 无参数：续最近地图项目，没有则起步默认地图草稿。所有项目统一进地图工作台。
-      setOutdoorProjectId(decideDefaultOutdoorProject());
+      const fresh = latestOutdoorProjectId() === null;
+      setOutdoorProjectId(current => current ?? decideDefaultOutdoorProject());
       setEditorStarted(true);
+      // 2026-11-17：这台设备上什么都没有、云端却有活动 → 问一次要不要接着编。
+      // 失败/空列表一律安静退回默认草稿（云端只是副本，不该拦着开工）。
+      if (fresh && controller && !recoverAskedRef.current) {
+        recoverAskedRef.current = true;
+        void listAdoptableActivities(controller).then(list => {
+          if (list.length > 0) setRecover(list);
+        });
+      }
       return;
     }
     // 带参但无本机草稿（旧链接/登录回跳/恢复备份）也统一落默认地图草稿，不再回退室内壳体。
     setOutdoorProjectId(resolveOutdoorProjectId(window.location.search) ?? decideDefaultOutdoorProject());
     setEditorStarted(true);
-  }, [workspacePath, ready, pathname]);
+  }, [workspacePath, ready, pathname, controller]);
+
+  /** 选一份云端活动：拉回整份并落本机，然后直接打开它。 */
+  const handleRecoverPick = (activity: AdoptableActivity) => {
+    setRecoverBusy(activity.activityId);
+    void adoptOutdoorActivity(controller ?? null, activity).then(result => {
+      setRecoverBusy(null);
+      setRecover(null);
+      if (!result) return; // 读不到/不合法：安静留在本机草稿
+      setOutdoorProjectId(result.projectId);
+      setProjectEpoch(epoch => epoch + 1);
+    });
+  };
 
   useEffect(() => {
     if (entered) window.dispatchEvent(new Event('resize'));
@@ -128,7 +161,15 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     {/* 所有项目统一挂同一壳体；地图草稿按 outdoorProjectId 落本机 store，右侧常驻唯一地图。 */}
     {editorStarted && (
       <div hidden={!entered}>
-        <RoomOrganizer isActive={entered} controller={controller} outdoorProjectId={outdoorProjectId} />
+        <RoomOrganizer key={projectEpoch} isActive={entered} controller={controller} outdoorProjectId={outdoorProjectId} />
       </div>)}
+    {recover && recover.length > 0 && (
+      <OutdoorCloudRecover
+        activities={recover}
+        busyId={recoverBusy}
+        onPick={handleRecoverPick}
+        onDismiss={() => setRecover(null)}
+      />
+    )}
   </>;
 }

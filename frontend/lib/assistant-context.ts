@@ -1,3 +1,5 @@
+import { containsSensitiveInput } from "../../supabase/functions/_shared/sensitive-input";
+
 export const ASSISTANT_INSTRUCTION_LIMIT = 3000;
 
 export interface AssistantContextMessage {
@@ -73,7 +75,11 @@ export function buildAgentContext(input: AssistantContextInput) {
     throw new Error('本次请求、完整需求或已确认决定过长，请精简后重试；必需条件不会自动截断。');
   }
   const history = input.recentMessages ?? [];
-  const recentMessages = history.filter(message => message.text.length <= 3000).slice(-12).map(({role,text}) => ({role,text}));
+  // Same single credential rule as the edge entry (imported, not copied): drop the
+  // whole message, never rewrite it, and count it as omitted so the loss is visible.
+  // The current instruction is never silently edited.
+  const recentMessages = history.filter(message => !containsSensitiveInput(message.text))
+    .filter(message => message.text.length <= 3000).slice(-12).map(({role,text}) => ({role,text}));
   return {
     instruction: input.message.trim(),
     context: {

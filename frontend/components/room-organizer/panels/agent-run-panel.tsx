@@ -137,6 +137,7 @@ interface ArchivedRun {
   id: number;
   phase: AgentRunState['phase'];
   thoughtCount: number;
+  thoughts: AgentRunState['thoughts'];
   stepLog: AgentStepLogEntry[];
   eventLog: AgentRunState['eventLog'];
 }
@@ -203,6 +204,33 @@ function useStall(run: AgentRunState): StallResult {
   }, [run.isRunning, run.startedAt]);
 
   return stall;
+}
+
+/**
+ * 逐轮可见自述（思考记录）。折叠区默认跟随运行态展开，跑完收起。
+ *
+ * 这里只展示云端归一化、截断后的模型可见自述；不展示、也无从展示服务商原始推理。
+ * 空数组时整块不渲染，不给「暂无」占位。
+ */
+function RunThoughtList({ thoughts, running }: { thoughts: AgentRunState['thoughts']; running: boolean }): JSX.Element | null {
+  const [open, setOpen] = useState(running);
+  useEffect(() => { setOpen(running); }, [running]);
+  if (!thoughts.length) return null;
+  const first = thoughts[0]!.at;
+  return (
+    <details className="ap-run-thoughts" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+      <summary className="ap-run-thoughts-summary">思考记录 · {thoughts.length} 条<span className="ap-run-thoughts-hint">模型自述，非原始推理</span></summary>
+      <ol className="ap-run-thought-list">
+        {thoughts.map(item => (
+          <li key={`${item.round}-${item.at}`} className="ap-run-thought">
+            <span className="ap-run-thought-round">第 {item.round} 轮</span>
+            <time className="ap-run-thought-time" dateTime={new Date(item.at).toISOString()}>{formatDurationClock(item.at - first)}</time>
+            <p className="ap-run-thought-text">{item.text}</p>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
 }
 
 /**
@@ -304,6 +332,7 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
           id: run.startedAt || Date.now(),
           phase: run.phase,
           thoughtCount: run.thoughtCount,
+          thoughts: run.thoughts,
           stepLog: run.stepLog,
           eventLog: run.eventLog,
         };
@@ -314,7 +343,7 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
     if (!wasRunning && run.isRunning) {
       setCurrentArchived(false);
     }
-  }, [run.isRunning, run.startedAt, run.phase, run.thoughtCount, run.stepLog, run.eventLog]);
+  }, [run.isRunning, run.startedAt, run.phase, run.thoughtCount, run.thoughts, run.stepLog, run.eventLog]);
 
   // 跑停了或已请求收尾，确认行自动收起，别留半截。
   useEffect(() => {
@@ -361,13 +390,13 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
   // 账本是四张脸共用的：只认自己那张脸的账，别把别的功能域的运行过程搬过来。
   if (run.scope !== scope) return null;
   // 既没在跑、也没有留下任何一步：这不是「运行态」，别占版面。
-  if (!run.isRunning && run.stepLog.length === 0 && run.eventLog.length === 0 && !run.emptyOutcome && archive.length === 0) return null;
+  if (!run.isRunning && run.stepLog.length === 0 && run.eventLog.length === 0 && run.thoughts.length === 0 && !run.emptyOutcome && archive.length === 0) return null;
 
   // 跑完后这一行仍要说清「这一趟用了多久」，所以结束时按当前时刻算总耗时。
   const elapsedMs = run.startedAt && run.isRunning ? Math.max(0,now-run.startedAt) : 0;
 
   // 当前卡要不要展开：运行中展开；已被归档折叠的那一趟不再以主卡出现。
-  const showCurrentCard = (run.isRunning || run.stepLog.length > 0 || run.eventLog.length > 0) && !currentArchived;
+  const showCurrentCard = (run.isRunning || run.stepLog.length > 0 || run.eventLog.length > 0 || run.thoughts.length > 0) && !currentArchived;
 
   // 停滞提示的入口：聚焦到父组件里那个已有的「运行中改道」输入框。面板自己
   // 不造新输入框——没有传 steerInputId 就只显示文字提示，不给按钮。
@@ -415,6 +444,9 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
           <div className="ap-run-meta">
             <span>{run.isRunning && <>已用时 {formatDurationClock(elapsedMs)} · </>}已进行 {run.thoughtCount} 轮模型调用</span>
           </div>
+
+          {/* 思考记录（折叠区）：跑着的时候边收到边上屏；跑完收起但仍可回看。 */}
+          <RunThoughtList thoughts={run.thoughts} running={run.isRunning} />
 
           {/* 停滞提示（纯前端推断）：连续 N 次轮询进度毫无变化，就提醒用户「似乎在同一处
               打转」，并给一个去写改道备注的入口。进度一旦前进立即移除（detectStall 判的）。 */}
@@ -540,6 +572,7 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
                     {item.phase && <span className="ap-run-phase">· 当前阶段：{phaseLabel(item.phase)}</span>}
                     <span className="ap-run-meta-inline">已进行 {item.thoughtCount} 轮模型调用</span>
                   </div>
+                  <RunThoughtList thoughts={item.thoughts} running={false} />
                   <RunProcessList entry={{ stepLog: item.stepLog, eventLog: item.eventLog }} scope={scope} />
                   {idx < archive.length - 1 && <div className="ap-archive-divider" aria-hidden="true" />}
                 </div>

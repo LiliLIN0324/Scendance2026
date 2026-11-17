@@ -137,3 +137,13 @@ docs/research/evidence-*/
 scope-shots/
 scope-out/
 /p0-*
+
+# Deno 工具缓存（一次性 1500+ 文件，2026-11-17 已清理，规则常驻）
+.deno-cache/
+
+# OnePlan 图标普查用一次性探针脚本
+/frontend/public/.tmp-*.js
+frontend/public/_internal-learning/
+
+# OnePlan 版权参考图母本（仅本地学习，不入仓；报告页拷贝件见 frontend/public/_internal-learning/）
+/learning-library/

@@ -120,6 +120,39 @@ export const CURATED_MANIFEST_ASSETS: readonly OneplanManifestAsset[] = [
     pack: 'Vehicles',
     viewBox: '0 0 24 10',
   },
+  // 2026-11-16 用户指令：「门是不是也应该在我的图标库里面？就用户在室内分区，然后他自己手动放门」。
+  // 室内分区的门由用户自己摆在具体位置（自动那扇只是占位），所以这枚门必须能像其它入口图标一样从库里点出来。
+  // 归在「出入口与通行图标」组（与无障碍坡道、闸机同一组），默认占地 1.2×0.1 m，详见 oneplan-library-size 的 door 规则。
+  {
+    path: '/oneplan-icons/icon/door.svg',
+    kind: 'icon',
+    slug: 'door',
+    name_zh: '门',
+    name_en: 'Door',
+    category_zh: '活动区域·流线与通行 / 出入口与通行图标',
+    category_en: 'Event Areas / Circulation / Entrances and Access Icons',
+    pack: null,
+    viewBox: '0 0 24 24',
+  },
+  // 2026-11-16 用户指令「门可以多给几个图标」：单开之外再补双开 / 推拉 / 旋转 / 卷帘 / 折叠，
+  // 都在同一组（出入口与通行图标）里，自己挑一种摆。
+  ...[
+    { slug: 'double-door', name_zh: '双开门', name_en: 'Double Door' },
+    { slug: 'sliding-door', name_zh: '推拉门', name_en: 'Sliding Door' },
+    { slug: 'revolving-door', name_zh: '旋转门', name_en: 'Revolving Door' },
+    { slug: 'roller-shutter', name_zh: '卷帘门', name_en: 'Roller Shutter' },
+    { slug: 'folding-door', name_zh: '折叠门', name_en: 'Folding Door' },
+  ].map(item => ({
+    path: `/oneplan-icons/icon/${item.slug}.svg`,
+    kind: 'icon',
+    slug: item.slug,
+    name_zh: item.name_zh,
+    name_en: item.name_en,
+    category_zh: '活动区域·流线与通行 / 出入口与通行图标',
+    category_en: 'Event Areas / Circulation / Entrances and Access Icons',
+    pack: null,
+    viewBox: '0 0 24 24',
+  })),
 ];
 
 /** 物件库里一件可选物件。 */
@@ -478,6 +511,32 @@ export function parseLibraryTemplateId(
   if (!slug) return null;
   if (kind !== 'icon' && kind !== 'scale' && kind !== 'area') return null;
   return { kind, slug };
+}
+
+/**
+ * 按 templateId 在给定条目集合里反查条目（`oneplan:` 规范前缀 + `library:` 存量兼容）。
+ * 纯函数层拿不到全局 manifest，条目由调用方注入；找不到返回 null。
+ */
+export function findLibraryEntryByTemplateId(
+  entries: readonly LibraryEntry[],
+  templateId: string,
+): LibraryEntry | null {
+  const parsed = parseLibraryTemplateId(templateId);
+  if (!parsed) return null;
+  return entries.find(entry => entry.kind === parsed.kind && entry.slug === parsed.slug) ?? null;
+}
+
+/**
+ * 迁移器 `libraryEntry` 注入点适配：按 templateId 取默认占地。
+ * 查不到返回 undefined，由 `migrateFacilities` 保持 2×2 兜底（不虚构尺寸）。
+ */
+export function facilityLibrarySizeResolver(
+  entries: readonly LibraryEntry[],
+): (templateId: string) => { width: number; depth: number } | undefined {
+  return templateId => {
+    const entry = findLibraryEntryByTemplateId(entries, templateId);
+    return entry ? { width: entry.width, depth: entry.depth } : undefined;
+  };
 }
 
 /** 物件库设施在 2D 画布上用的贴纸描述；内置模板返回 null。 */
