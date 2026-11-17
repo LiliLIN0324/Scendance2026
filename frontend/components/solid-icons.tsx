@@ -124,13 +124,22 @@ export const RAIL_STROKE = 1.65;
 
 const RAIL_INK = 'var(--ink-soft, #55585F)';
 
-/** 户外：完整外环 + 左小右大两圆。适中缝 2.0 是描边外缘间距；等距外沿让大圆圆心更靠近环心。 */
+/**
+ * 户外：完整外环。左上小、右下大。
+ * 适中缝 2.0 是两圆半径之间的空隙，圆心距 = r_s + r_l + 2。
+ * 两圆心沿 45° 对角线以相等分量偏移（|dx| = |dy|，且离环心一样远），
+ * 大圆半径更大，所以圆身更靠近环心。外环不开口。
+ */
+const RAIL_OUTDOOR_SMALL_R = 2.05;
+const RAIL_OUTDOOR_LARGE_R = 3.45;
+const RAIL_OUTDOOR_GAP = 2;
+const railOutdoorOffset = (RAIL_OUTDOOR_SMALL_R + RAIL_OUTDOOR_LARGE_R + RAIL_OUTDOOR_GAP) / (2 * Math.SQRT2);
+
 export const RAIL_OUTDOOR = {
-  ring: { cx: 12, cy: 12, r: 9.05 },
-  small: { cx: 7.375, cy: 12, r: 1.625 },
-  large: { cx: 15.45, cy: 12, r: 2.8 },
-  /** 两圆描边外缘之间的空隙（24 网格）。 */
-  gap: 2,
+  ring: { cx: 12, cy: 12, r: 9.2 },
+  small: { cx: 12 - railOutdoorOffset, cy: 12 - railOutdoorOffset, r: RAIL_OUTDOOR_SMALL_R },
+  large: { cx: 12 + railOutdoorOffset, cy: 12 + railOutdoorOffset, r: RAIL_OUTDOOR_LARGE_R },
+  gap: RAIL_OUTDOOR_GAP,
 } as const;
 
 /**
@@ -222,7 +231,7 @@ export const RailPlus = makeCustomIcon(size => (
   </svg>
 ));
 
-/** 户外：完整外环，内放左小右大两枚完整圆，适中缝 2.0。外环不开口。 */
+/** 户外：完整外环，左上小、右下大，适中缝 2.0。外环不开口。 */
 export const RailMap = makeCustomIcon(size => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <circle cx={RAIL_OUTDOOR.ring.cx} cy={RAIL_OUTDOOR.ring.cy} r={RAIL_OUTDOOR.ring.r} {...railPen} />
