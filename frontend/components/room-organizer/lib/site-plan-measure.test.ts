@@ -272,6 +272,26 @@ describe('planOverviewStats (派生统计)', () => {
     const stats = planOverviewStats(statsPlan());
     expect(planOverviewStats(statsPlan())).toEqual(stats);
   });
+
+  // 2026-11-17 #118 补录入 UI：车辆是独立集合——台数单独成列，绝不加进人的人数口径。
+  it('counts vehicles separately from people', () => {
+    const plan = statsPlan();
+    plan.vehicles = [
+      { id: 'aa000000-0000-4000-8000-000000000001', type: 'coach', count: 3, position: { x: 20, y: 100 }, notes: '' },
+      { id: 'aa000000-0000-4000-8000-000000000002', type: 'truck', count: 1, position: { x: 180, y: 20 }, notes: '' },
+    ];
+    const stats = planOverviewStats(plan);
+    expect(stats.vehicleCount).toBe(2);
+    expect(stats.vehicleTotalCount).toBe(4);
+    // 4 台车不许变成 4 个人。
+    expect(stats.workerTotalCount).toBe(3);
+    expect(stats.workerPostCount).toBe(2);
+    // 旧快照（无 vehicles 字段）：车辆计数为 0，其余统计一字不变。
+    const legacy = planOverviewStats(statsPlan());
+    expect(legacy.vehicleCount).toBe(0);
+    expect(legacy.vehicleTotalCount).toBe(0);
+    expect(legacy.workerTotalCount).toBe(3);
+  });
 });
 
 /* ---------------- 契约往返（测量字段在 SitePlanData 内的兼容性） ---------------- */

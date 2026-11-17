@@ -3,9 +3,11 @@ import type { PlanNode, PlanRoute } from '../../../../supabase/functions/_shared
 import {
   buildNode,
   buildRoute,
+  buildVehicle,
   buildWorker,
   detachNodeFromRoutes,
   inferNodeZoneId,
+  inferVehicleZoneId,
   inferWorkerZoneId,
   movePlanNode,
   nodeOnRoutes,
@@ -267,5 +269,66 @@ describe('site-plan nodes (buildNode 归属分区)', () => {
     expect(inferNodeZoneId({ x: 30, y: 30 }, ZONES)).toBe(ZONES[0].id);
     expect(inferNodeZoneId({ x: 20, y: 90 }, ZONES)).toBe(ZONES[1].id);
     expect(inferNodeZoneId({ x: 150, y: 90 }, ZONES)).toBeUndefined();
+  });
+});
+
+/**
+ * 车辆录入（2026-11-17 #118 补 UI）：与人员同策略，但两处口径故意不同——
+ * `modelSlug` 缺省就是「没有模型」（不回落登记表首项），台数上限按契约的 99。
+ */
+describe('site-plan vehicles (#118)', () => {
+  it('builds a vehicle with automatic zone attribution and boundary hints', () => {
+    const inZone = buildVehicle({ type: 'business', count: 2, position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(inZone.ok).toBe(true);
+    if (!inZone.ok) return;
+    expect(inZone.value.type).toBe('business');
+    expect(inZone.value.count).toBe(2);
+    expect(inZone.value.zoneId).toBe(ZONES[0].id);
+    expect(inZone.issues).toBeUndefined();
+
+    const outside = buildVehicle({ type: 'bus', count: 1, position: { x: 250, y: 60 } }, BOUNDARY, ZONES);
+    expect(outside.ok).toBe(true);
+    if (!outside.ok) return;
+    expect(outside.value.zoneId).toBeUndefined();
+    expect(outside.issues?.[0].code).toBe('out-of-boundary');
+  });
+
+  it('does not invent a model when the entity does not name one', () => {
+    const plain = buildVehicle({ type: 'coach', count: 1, position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(plain.ok).toBe(true);
+    if (!plain.ok) return;
+    expect(plain.value.modelSlug).toBeUndefined(); // 缺省 = 待补模型，不回落登记表首项
+
+    const named = buildVehicle({ type: 'daily', count: 1, position: { x: 30, y: 30 }, modelSlug: 'car-park-and-road-vehicle-fleet-city-car-033e3215' }, BOUNDARY, ZONES);
+    expect(named.ok).toBe(true);
+    if (!named.ok) return;
+    expect(named.value.modelSlug).toBe('car-park-and-road-vehicle-fleet-city-car-033e3215');
+  });
+
+  it('rejects an unregistered model type and a bad vehicle count', () => {
+    const badType = buildVehicle({ type: 'spaceship' as never, count: 1, position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(badType.ok).toBe(false);
+
+    const zero = buildVehicle({ type: 'taxi', count: 0, position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(firstIssue(zero).code).toBe('out-of-range');
+
+    const tooMany = buildVehicle({ type: 'taxi', count: 100, position: { x: 30, y: 30 } }, BOUNDARY, ZONES);
+    expect(firstIssue(tooMany).code).toBe('out-of-range'); // 契约上限 99，不照抄人员的 9999
+
+    const far = buildVehicle({ type: 'bike', count: 1, position: { x: 6000, y: 0 } }, BOUNDARY, ZONES);
+    expect(firstIssue(far).code).toBe('out-of-range');
+  });
+
+  it('caps the bound routes at the contract limit', () => {
+    const many = buildVehicle({ type: 'truck', count: 1, position: { x: 30, y: 30 }, routeIds: Array.from({ length: 25 }, (_, index) => `c3000000-0000-4000-8000-${String(index).padStart(12, '0')}`) }, BOUNDARY, ZONES);
+    expect(many.ok).toBe(true);
+    if (!many.ok) return;
+    expect(many.value.routeIds).toHaveLength(20);
+  });
+
+  it('infers the containing zone by point-in-ring', () => {
+    expect(inferVehicleZoneId({ x: 30, y: 30 }, ZONES)).toBe(ZONES[0].id);
+    expect(inferVehicleZoneId({ x: 20, y: 90 }, ZONES)).toBe(ZONES[1].id);
+    expect(inferVehicleZoneId({ x: 150, y: 90 }, ZONES)).toBeUndefined();
   });
 });
