@@ -296,6 +296,7 @@ import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
 import { useAnnotateDrawShortcuts } from '../hooks/use-annotate-draw-shortcuts';
 import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib/annotate-draw-shortcuts';
+import { applyOutdoorInspectorPanel, type OutdoorInspectorPanel } from '../lib/outdoor-inspector-panels';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
 import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
@@ -707,6 +708,9 @@ function paintFloorGrid(
 }
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const isTdt = (s: CanvasBasemapSource): s is TdtProbeLayer => s === 'vec' || s === 'img';
+
+/** 标注浮卡固定宽度：切工具/切颜色时不做横向跳，底部锚定下也不会因文案长度改变视觉重心。 */
+const ANNOTATE_CARD_WIDTH = 286;
 
 const LAYER_ORDER: readonly ['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure', 'annotate'] = ['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure', 'annotate'];
 
@@ -2070,7 +2074,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
   // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
   const [infoOpen, setInfoOpen] = useState(true);
-  // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起，可并存。
+  // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起。
+  // 2026-11-17 用户：测量与标注不能同时用，就不该同时打开；开一张自动收另一张，属性卡保持独立。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
   // 2026-11-16 用户指令：标注卡不要再和属性卡一起挤在右上角；作为「标注」钮的
   // 上浮面板锚定到底条按钮上方，像地图工具栏的 popover 一样有明确的来处。
@@ -2091,8 +2096,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const snapPoint = useCallback((pt: PlanPoint, viewport: PlanViewport): PlanPoint => (
     snapOnRef.current ? snapPointToGrid(pt, viewport) : pt
   ), []);
-  const setInspectorPanel = useCallback((tab: 'measure' | 'annotate' | 'selection', open: boolean) => {
-    setInspectorPanels(current => (current[tab] === open ? current : { ...current, [tab]: open }));
+  const setInspectorPanel = useCallback((tab: OutdoorInspectorPanel, open: boolean) => {
+    setInspectorPanels(current => applyOutdoorInspectorPanel(current, tab, open));
   }, []);
   // 2026-11-12 「好用一点的交互」：卡头可折叠（只收内容、不关卡片），三张卡同时开着也不挤。
   const [inspectorCollapsed, setInspectorCollapsed] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
@@ -2216,6 +2221,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     groupDragRef.current = null;
     marqueeRectRef.current = null;
     if (next !== 'select' && next !== 'view') clearMultiSelection(false);
+    // 2026-11-17：测量/标注真正互斥——进入任一种绘制工具就收起另一张工具卡，避免“卡开着但不是当前工具”。
+    if (next === 'measure') setInspectorPanel('annotate', false);
+    if (next === 'note' || next === 'shape') setInspectorPanel('measure', false);
     setModeState(next);
     setEditMessage(null);
     setAnnotateNotice(null);
@@ -2487,6 +2495,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onInspectorChange?.({ openTabs: inspectorPanels });
   }, [inspectorPanels, onInspectorChange]);
 
+  // 标注卡关闭后不再保留上一次退出提示；下次开卡从默认提示开始。
+  useEffect(() => {
+    if (!inspectorPanels.annotate) setAnnotateNotice(null);
+  }, [inspectorPanels.annotate]);
+
   // 标注面板锚点跟随底条工具钮；窗口变化时重算，保证弹出层始终在按钮正上方。
   // 用 layout effect 在绘制前落位，避免先闪一下右上角再跳到底条上方。
   useLayoutEffect(() => {
@@ -2506,7 +2519,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setAnnotateAnchor(null);
         return;
       }
-      const halfPanel = 78;
+      const panelWidth = Math.min(ANNOTATE_CARD_WIDTH, window.innerWidth - 24);
+      const halfPanel = panelWidth / 2;
       const margin = 12;
       const left = Math.min(
         Math.max(rect.left + rect.width / 2, margin + halfPanel),
@@ -2514,12 +2528,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       );
       setAnnotateAnchor({ left, bottom: window.innerHeight - rect.top + 10 });
     };
+    // 先在 layout effect 里同步落位，避免首帧按右上角渲染后再跳到底条上方；
+    // 再排一帧兜底底条刚挂上、按钮尺寸尚未稳定的情况。
+    place();
     raf = window.requestAnimationFrame(place);
+    const onDockOpened = (): void => {
+      place();
+      window.requestAnimationFrame(place);
+    };
     window.addEventListener('resize', place);
+    window.addEventListener('scendance:outdoor-dock-opened', onDockOpened);
     document.addEventListener('scroll', place, true);
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener('resize', place);
+      window.removeEventListener('scendance:outdoor-dock-opened', onDockOpened);
       document.removeEventListener('scroll', place, true);
     };
   }, [inspectorPanels.annotate]);
@@ -3865,7 +3888,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     enabled: Boolean(onPlanChange),
     getMode: () => modeRef.current,
     getShape: () => annotateShapeRef.current,
-    onReveal: () => setInspectorPanel('annotate', true),
+    onReveal: () => {
+      // 底条收起时按 T/R/O/Y/L：先把底条展开，标注浮卡才有锚点，不会闪到右上角。
+      window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
+      setInspectorPanel('annotate', true);
+    },
     onNote: () => setMode('note'),
     onShape: kind => {
       annotateShapeRef.current = kind;
@@ -4208,14 +4235,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     getMeasureKind: () => measureKindRef.current,
     setSnapOn: (on: boolean) => setSnapOn(on),
     setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => {
-      // 2026-11-12 三张卡拆开：每张卡独立展开/收起，互不影响。
+      // 2026-11-17 用户：测量/标注不能同时用，就不该同时开；属性卡只读，保持独立。
       if (!tab) {
-        setInspectorPanels(open ? { measure: true, annotate: true, selection: true } : { measure: false, annotate: false, selection: false });
+        setInspectorPanels(open ? { measure: true, annotate: false, selection: true } : { measure: false, annotate: false, selection: false });
         setSelectionPanelEnabled(open);
         return;
       }
       // 属性卡是总开关：关闭后点选物件不再弹属性卡。
       if (tab === 'selection') { setSelectionPanelEnabled(open); return; }
+      // 打开一张工具卡时，先退出另一张卡对应的绘制模式，避免卡和画布工具各说各话。
+      if (open && tab === 'measure' && (modeRef.current === 'note' || modeRef.current === 'shape')) setMode('view');
+      if (open && tab === 'annotate') {
+        // 键盘 T/R/O/Y/L 会直接开卡；底条可能还收着，先展开底条让浮卡有锚点，再落卡。
+        window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
+        if (modeRef.current === 'measure') setMode('view');
+        // 重新开卡时清掉上次退出留下的轻提示，避免一开卡就显示旧消息。
+        setAnnotateNotice(null);
+      }
+      // 关闭标注卡等于收起标注工具；否则画布还在画、工具条却没了。
+      if (!open && tab === 'annotate') {
+        if (modeRef.current === 'note' || modeRef.current === 'shape') setMode('view');
+        setAnnotateNotice(null);
+      }
       setInspectorPanel(tab, open);
       // 从右轨重新打开时顺手展开卡身，避免「点了按钮但看不到内容」。
       if (open) setInspectorCollapsed(current => (current[tab] ? { ...current, [tab]: false } : current));
@@ -9117,6 +9158,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     </div>
   ) : null;
 
+  /** 提示行永远占位（含未选工具），底部锚定的卡片不会因切工具/提示消息而改高度。 */
+  const annotateHint = mode === 'note'
+    ? '文本 · 点一下输入，Enter 提交'
+    : mode === 'shape'
+      ? (annotateDraftCount > 0
+        ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
+        : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)
+      : '选一个工具，在图上绘制';
+
   /* 2026-11-11 用户指令：标注区独立成块（测量区下方）——文本 T + 形状（形状态出四类型选项），
      有 annotatePanelHost 时 portal 过去（两页签下常驻）；无宿主回落「已放置物件」面板内。 */
   const annotateZone = !readOnly ? (
@@ -9161,17 +9211,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         onColor={value => { annotateColorRef.current = value; setAnnotateColor(value); draw(); }}
         onStrokeWidth={value => { annotateStrokeWidthRef.current = value; setAnnotateStrokeWidth(value); draw(); }}
       />
-      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.78, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-        {mode === 'note' && '文本 · 点一下输入，Enter 提交'}
-        {mode === 'shape' && (annotateDraftCount > 0
-          ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
-          : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)}
+      <div
+        data-testid="annotate-hint"
+        role={annotateNotice ? 'status' : undefined}
+        aria-live={annotateNotice ? 'polite' : undefined}
+        title={annotateNotice ?? annotateHint}
+        style={{
+          marginTop: PLANNING_SPACING.xs,
+          height: 16,
+          lineHeight: '16px',
+          fontSize: PLANNING_TYPOGRAPHY.hint,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          color: annotateNotice ? PLANNING_SURFACE.warnText : undefined,
+          opacity: annotateNotice ? 1 : 0.78,
+        }}
+      >
+        {annotateNotice ?? annotateHint}
       </div>
-      {annotateNotice && (
-        <div role="status" aria-live="polite" style={{ marginTop: 4, fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: '15px', color: PLANNING_SURFACE.warnText }}>
-          {annotateNotice}
-        </div>
-      )}
       {(levelView.annotations?.length ?? 0) > 0 && levelView.annotations!.map(a => renderOneplanItemRow({
         key: `annotate-${a.id}`,
         testId: `layer-entity-annotation-${a.id}`,
@@ -12004,6 +12062,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     overflow: card.key === 'annotate' ? 'visible' : 'hidden',
                     color: PLANNING_SURFACE.panelText,
                     fontSize: PLANNING_TYPOGRAPHY.panel,
+                    ...(card.key === 'annotate'
+                      ? { width: ANNOTATE_CARD_WIDTH, maxWidth: 'calc(100vw - 24px)', boxSizing: 'border-box' as const }
+                      : {}),
                     ...(card.key === 'annotate' && annotateAnchor
                       ? {
                         position: 'fixed' as const,
@@ -12021,6 +12082,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   onMouseUp={stopPanelMouse}
                   onDoubleClick={stopPanelMouse}
                 >
+                  {card.key === 'annotate' && (
+                    <div
+                      data-testid="outdoor-inspector-card-annotate-head"
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 2px 10px' }}
+                    >
+                      <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: card.accent }} />
+                      <span style={{ fontWeight: 600, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{card.label}</span>
+                      {card.count > 0 && (
+                        <span
+                          aria-hidden
+                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: withAlphaHex(card.accent, 0.14), color: card.accent, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, lineHeight: '18px', textAlign: 'center' }}
+                        >
+                          {card.count}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        data-testid="outdoor-inspector-card-annotate-close"
+                        aria-label="关闭标注卡片"
+                        title="关闭标注"
+                        onClick={() => {
+                          setInspectorPanel('annotate', false);
+                          if (mode === 'note' || mode === 'shape') setMode('view');
+                          setAnnotateNotice(null);
+                        }}
+                        className="sc-outdoor-toolcard-btn"
+                        style={{ marginLeft: 'auto', cursor: 'pointer', width: 24, height: 24, flex: '0 0 auto', borderRadius: 7, display: 'grid', placeItems: 'center', color: '#3f4448' }}
+                      >
+                        <MaterialSymbol name="close" size={16} />
+                      </button>
+                    </div>
+                  )}
                   {card.key !== 'annotate' && (
                   <div data-inspector-header="" onClickCapture={onInspectorPanelHeaderClickCapture} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px', cursor: 'grab' }}>
                     <button

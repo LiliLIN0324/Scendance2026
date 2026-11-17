@@ -758,6 +758,29 @@ describe('ScendanceViewTools outdoor Google Maps rail', () => {
     expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
     expect(within(stack).getByRole('button', { name: '放大' })).toBeTruthy();
   });
+
+  it('keeps the planning dock open on outside pointerdown; only explicit × / Esc close it', () => {
+    const values = contexts();
+    const outdoor = outdoorActions();
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} /></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    fireEvent.pointerDown(screen.getByRole('group', { name: '地图控制' }));
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /收起工具条/ }));
+    expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
+  });
+
+  it('closes the annotation card together with the dock so no anchored panel is orphaned', () => {
+    const values = contexts();
+    const setInspector = vi.fn();
+    const outdoor = { ...outdoorActions(), setInspector, inspectorTabs: { measure: false, annotate: true, selection: false } };
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} /></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
+    fireEvent.click(screen.getByRole('button', { name: /收起工具条/ }));
+    expect(setInspector).toHaveBeenCalledWith('annotate');
+  });
 });
 
 describe('MaterialDrawerHandle', () => {
