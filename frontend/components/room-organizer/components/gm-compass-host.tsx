@@ -157,8 +157,8 @@ export const GmCompassHost = memo(function GmCompassHost({
       totalDelta,
       applied: 0,
       startBearing,
-      onComplete,
     };
+    if (onComplete) anim.onComplete = onComplete;
     const tick = (now: number) => {
       const live = animRef.current;
       if (live !== anim) return;
