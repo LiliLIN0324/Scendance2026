@@ -703,6 +703,53 @@ describe('ScendanceViewTools outdoor Google Maps rail', () => {
     expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
     expect(within(stack).getByRole('button', { name: '放大' })).toBeTruthy();
   });
+
+  it('keeps the planning dock open on outside pointerdown; only explicit × / Esc close it', () => {
+    const values = contexts();
+    const outdoor = outdoorActions();
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} /></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    fireEvent.pointerDown(screen.getByRole('group', { name: '地图控制' }));
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /收起工具条/ }));
+    expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
+  });
+
+  it('closes the annotation card together with the dock so no anchored panel is orphaned', () => {
+    const values = contexts();
+    const setInspector = vi.fn();
+    const outdoor = { ...outdoorActions(), setInspector, inspectorTabs: { measure: false, annotate: true, selection: false } };
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} /></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
+    fireEvent.click(screen.getByRole('button', { name: /收起工具条/ }));
+    expect(setInspector).toHaveBeenCalledWith('annotate');
+  });
+
+  it('2D/3D 钮用 aria-pressed 区分平面与立体，点击只调用 onToggleView', () => {
+    const values = contexts();
+    const onToggleView = vi.fn();
+    const outdoor = { ...outdoorActions(), onToggleView, view: '2d' as const };
+    const { rerender } = render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor}/></Providers>);
+    const flat = screen.getByRole('button', { name: '当前 2D 平面，点击切到 3D 场景' });
+    expect(flat.id).toBe('tool-view-toggle');
+    expect(flat.className).toContain('oc-gm-round');
+    expect(flat.className).toContain('oc-gm-mode');
+    expect(flat.className).not.toContain('is-active');
+    expect(flat.getAttribute('aria-pressed')).toBe('false');
+    expect(flat.querySelector('.oc-gm-mode-text')?.textContent).toBe('2D');
+    fireEvent.click(flat);
+    expect(onToggleView).toHaveBeenCalledTimes(1);
+
+    rerender(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={{ ...outdoor, view: '3d' }}/></Providers>);
+    const tilted = screen.getByRole('button', { name: '当前 3D 场景，点击切回 2D 平面' });
+    expect(tilted.getAttribute('aria-pressed')).toBe('true');
+    expect(tilted.className).not.toContain('is-active');
+    expect(tilted.querySelector('.oc-gm-mode-text')?.textContent).toBe('3D');
+    fireEvent.click(tilted);
+    expect(onToggleView).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('MaterialDrawerHandle', () => {

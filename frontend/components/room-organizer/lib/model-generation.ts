@@ -52,13 +52,18 @@ export interface SubmitModelJobInput {
   engine: GenerationEngine;
   /** 图片生成必填：先 uploadModelReference 拿到的参考图资产 id。 */
   referenceImageAssetId?: string;
+  /**
+   * 幂等键。面板在发请求**之前**生成并写进提交回执，网络中断后才查得到这次请求；
+   * 缺省时仍按一次性 UUID 生成（历史调用方行为不变）。
+   */
+  requestId?: string;
 }
 
 /** 真正扣额度的那一步：一次 createGenerationJob。调用方负责先过额度确认闸门。 */
 export function submitModelJob(controller: BackendSession, input: SubmitModelJobInput): Promise<GenerationJob> {
   const provider = providerFor(input.engine);
   const prompt = input.prompt.trim();
-  return controller.createGenerationJob(prompt, crypto.randomUUID(), input.mode === 'image' && input.referenceImageAssetId
+  return controller.createGenerationJob(prompt, input.requestId ?? crypto.randomUUID(), input.mode === 'image' && input.referenceImageAssetId
     ? { kind: 'image', referenceImageAssetId: input.referenceImageAssetId, ...provider }
     : { kind: 'text', ...provider });
 }
@@ -67,6 +72,36 @@ export function submitModelJob(controller: BackendSession, input: SubmitModelJob
 export async function uploadModelReference(controller: BackendSession, file: File): Promise<{ id: string; name: string }> {
   const uploaded = await controller.uploadGenerationReference(file);
   return { id: uploaded.id, name: file.name };
+}
+
+/**
+ * 提交结果未知时的统一文案。断网/超时/5xx/响应读不懂都可能已经创建了收费任务，
+ * 这时唯一的正确动作是去查任务记录与费用，而不是再点一次。
+ */
+export const UNKNOWN_SUBMISSION_NOTICE = '结果未知：可能已经创建任务并计费。先查任务记录与费用，不重试。';
+
+export type GenerationFailureDisposition = 'unknown' | 'failed';
+
+/**
+ * 把提交异常分成两类：
+ * - unknown：无法证明请求没到达服务端（断网、超时、5xx、响应解析失败），只能先查记录；
+ * - failed ：服务端明确拒绝（4xx，如预算不足、未登录、幂等冲突），没有新建任务。
+ * 本地 Zod 校验失败属于「请求没发出去」，同样归 failed。
+ */
+export function generationFailureDisposition(failure: unknown): GenerationFailureDisposition {
+  const error = failure as { code?: unknown; status?: unknown; name?: unknown } | null;
+  const code = error && typeof error.code === 'string' ? error.code : '';
+  const status = error && typeof error.status === 'number' ? error.status : null;
+  if (status !== null) {
+    if (status === 0 || status === 408 || status >= 500) return 'unknown';
+    if (status >= 400) return 'failed';
+  }
+  if (code === 'NETWORK_ERROR' || code === 'HTTP_ERROR' || code === 'INVALID_RESPONSE' || code === 'NON_JSON_RESPONSE') return 'unknown';
+  if (error?.name === 'ZodError') return 'failed';
+  const message = failure instanceof Error ? failure.message : '';
+  if (/failed to fetch|networkerror|load failed|network request failed|timeout|timed out|aborted/i.test(message)) return 'unknown';
+  // 没有状态码的异常无法证明请求没发出去：按未知处理，宁可按一次「先查记录」的流程走。
+  return 'unknown';
 }
 
 /** 面板顶部那一句「为什么现在不能提交」，登录/能力/编辑权三种原因按优先级说。 */

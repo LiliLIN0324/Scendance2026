@@ -614,7 +614,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   </nav> : null;
 
   return <>
-    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户中心" title="账户中心 · 身份、团队与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }}>
+    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户中心" data-tip="账户中心 · 身份、团队与项目" aria-haspopup="dialog" aria-expanded={accountOpen} aria-pressed={accountOpen} onClick={() => { setSection('projects'); setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><img src={avatar.src} alt=""/></span>
     </button>
     {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className={`sc-cloud-dialog sc-account-dialog${cloud.user ? '' : ' is-auth'}`} aria-labelledby="cloud-title" onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>

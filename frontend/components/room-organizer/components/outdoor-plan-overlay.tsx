@@ -44,7 +44,9 @@ import { Layers3, X } from 'lucide-react';
 import {
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
+  outdoorPlanStorageKey,
   readOutdoorProjectRecord,
+  readOutdoorProjectRecordDetailed,
   saveOutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -178,28 +180,30 @@ function MapDetailsPanel({ source, geoHidden, onPickSource, onTogglePaper, onClo
           <X size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
-      <div className="oc-map-details__section">
-        <div className="oc-map-details__label">地图类型</div>
-        <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
-          {PRIMARY_MAP_SOURCES.map(sourceTile)}
+      <div className="oc-map-details__body">
+        <div className="oc-map-details__section">
+          <div className="oc-map-details__label">地图类型</div>
+          <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
+            {PRIMARY_MAP_SOURCES.map(sourceTile)}
+          </div>
         </div>
-      </div>
-      <div className="oc-map-details__section">
-        <div className="oc-map-details__label">更多底图</div>
-        <div className="oc-map-details__grid" role="radiogroup" aria-label="更多底图">
-          {MORE_MAP_SOURCES.map(sourceTile)}
-          <button
-            type="button"
-            role="radio"
-            aria-checked={geoHidden}
-            aria-label="纸面模式"
-            data-testid="map-picker-toggle-geo"
-            onClick={onTogglePaper}
-            className="oc-map-details__source"
-          >
-            <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
-            <span className="oc-map-details__name">纸面模式</span>
-          </button>
+        <div className="oc-map-details__section">
+          <div className="oc-map-details__label">更多底图</div>
+          <div className="oc-map-details__grid" role="radiogroup" aria-label="更多底图">
+            {MORE_MAP_SOURCES.map(sourceTile)}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={geoHidden}
+              aria-label="纸面模式"
+              data-testid="map-picker-toggle-geo"
+              onClick={onTogglePaper}
+              className="oc-map-details__source"
+            >
+              <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
+              <span className="oc-map-details__name">纸面模式</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -225,7 +229,8 @@ export interface OutdoorPlanOverlayProps {
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
   /** 2026-11-12 B1 选择工具：2D 画布绘制/浏览模式上报（右栏工具排「选择」钮按下态）。 */
   onModeChange?: (mode: string) => void;
-  /** 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自展开态上报（右轨三枚圆钮的按下态）。 */
+  /** 2026-11-12 三张卡拆开：测量 / 标注 / 属性 各自展开态上报（右轨三枚圆钮的按下态）。
+   *  2026-11-17：测量/标注互斥，属性独立。 */
   onInspectorChange?: (state: { openTabs: Record<'measure' | 'annotate' | 'selection', boolean> }) => void;
   /** P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动用；含初次载入的那一帧）。 */
   onPlanChange?: (plan: SitePlanData) => void;
@@ -299,10 +304,16 @@ export interface OutdoorPlanOverlayHandle {
   setSnapOn(on: boolean): void;
   /** 2026-11-12 测量/标注收进右轨圆钮：开/关「工具与属性」浮窗并切页签（右轨圆钮转发）。 */
   setInspector(open: boolean, tab?: 'measure' | 'annotate' | 'selection'): void;
-  /** 指北针 2D 态：复位视图到场地边界外框，缺边界则回锚点居中。 */
+  /** 焦点钮：复位视图到场地边界外框，缺边界则回锚点居中。罗盘回正北不走这里。 */
   focusVenue(): void;
   /** 2026-11-16：把视野框到设计范围（右下焦点钮在圈了范围时改派这里）。 */
   focusDesignScope(): void;
+  /** 2D 罗盘方位角（弧度，与 3D getBearing 同号）。 */
+  getBearing(): number;
+  /** 2D 罗盘转角。正值让北在屏幕上顺时针转。 */
+  orbitByDelta(deltaTheta: number): void;
+  /** 2D 罗盘回正北：只清方位角，不改视口中心。框选场地仍走 focusVenue。 */
+  resetNorth(): void;
 }
 
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
@@ -337,6 +348,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
   const [source, setSource] = useState<CanvasBasemapSource>(() => readPlanGroundSource());
   const [plan, setPlan] = useState<SitePlanData | null>(null);
+  /** P0 加载三态：loading=正在读本机草稿；error=草稿存在但坏了，禁止静默播种覆盖。 */
+  const [planLoad, setPlanLoad] = useState<{ status: 'loading' | 'ready' | 'error'; message: string }>({ status: 'loading', message: '' });
+  const [planLoadAttempt, setPlanLoadAttempt] = useState(0);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [shareOpen, setShareOpen] = useState(false);
@@ -414,10 +428,23 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   anchorRef.current = anchor;
   useEffect(() => {
     cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
-    const record = readOutdoorProjectRecord(slotId);
+    const result = readOutdoorProjectRecordDetailed(slotId);
+    if (result.rawPresent && (result.error !== null || result.planInvalid)) {
+      const reason = result.planInvalid
+        ? '草稿里的方案数据没通过结构校验（可能是旧版本或字段损坏）。'
+        : result.error === 'json'
+          ? '草稿 JSON 无法解析。'
+          : result.error === 'envelope'
+            ? '草稿信封版本或项目 ID 不匹配。'
+            : '草稿缺少名称/时间等元信息。';
+      setPlan(null);
+      setPlanLoad({ status: 'error', message: `${reason} 已停止自动载入，原草稿没有被覆盖。` });
+      return;
+    }
+    setPlanLoad({ status: 'ready', message: '' });
     // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
     const loaded = normalizePlanFacilityFootprints(
-      record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan(),
+      result.record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan(),
     );
     if (!loaded.anchor && !anchorRef.current) {
       setPlan({ ...loaded, anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR });
@@ -425,7 +452,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     }
     setPlan(loaded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slotId]);
+  }, [slotId, planLoadAttempt]);
 
   // SitePlanData 是户外唯一正源。seedPlan 只在初次载入时播种；
   // 不能把 3D 壳体镜像反过来重播种（会清空刚确认的设施/流线，且把真边界缩成 100m）。
@@ -548,6 +575,26 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [layerStripOpen]);
+  // 完整「地图详情」是模态浮层：Esc 或点画布都能关；标题与 X 固定，不随面板内容滚动。
+  useEffect(() => {
+    if (!mapPickerOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (layerDockRef.current?.contains(event.target as Node)) return;
+      setMapPickerOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMapPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [mapPickerOpen]);
   useEffect(() => {
     onSaveStateChange?.({ state: saveState, savedAt });
   }, [saveState, savedAt, onSaveStateChange]);
@@ -611,6 +658,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     // 只框视图、不改 plan；没范围时画布内部静默不动，调用方自己回落。
     canvasApiRef.current?.focusDesignScope();
   },
+  getBearing: () => canvasApiRef.current?.getBearing() ?? 0,
+  orbitByDelta: (deltaTheta: number) => { canvasApiRef.current?.orbitByDelta(deltaTheta); },
+  resetNorth: () => { canvasApiRef.current?.resetNorth(); },
   }));
 
   // P2-g：计划变更上报（2D 边界 → 3D 场地壳体联动的入口；初次载入也报一次）。
@@ -645,6 +695,22 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     onPrintDeck: printDeck,
   };
 
+  /** 损坏草稿的显式恢复：先把原始 JSON 备份到同 key 的 :broken-时间戳，再落空白方案。 */
+  function startBlankAfterLoadError(): void {
+    const base = normalizePlanFacilityFootprints(seedPlanRef.current ?? createStarterOutdoorPlan());
+    const next = !base.anchor && !anchorRef.current ? { ...base, anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR } : base;
+    try {
+      const key = outdoorPlanStorageKey(slotId);
+      const raw = window.localStorage.getItem(key);
+      if (raw) window.localStorage.setItem(`${key}:broken-${Date.now()}`, raw);
+    } catch {
+      // 备份写不进去（配额/隐私模式）就不强推覆盖；用户可先复制原草稿再试。
+      return;
+    }
+    setPlan(next);
+    setPlanLoad({ status: 'ready', message: '' });
+  }
+
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
   // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜。
   const canvasHidden = dormant;
@@ -664,6 +730,39 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           onDismiss={guide.dismiss}
         />
       )}
+      {planLoad.status !== 'ready' && !dormant && (
+        <div
+          role={planLoad.status === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+          aria-label="方案载入状态"
+          style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'grid', placeItems: 'center', background: 'var(--sc-surface, #ffffff)', padding: 24 }}
+        >
+          {planLoad.status === 'loading' ? (
+            <p style={{ margin: 0, fontSize: 13, opacity: 0.72 }}>正在读取本机方案…</p>
+          ) : (
+            <div style={{ maxWidth: 440, display: 'grid', gap: 10 }}>
+              <strong style={{ fontSize: 15 }}>方案载入失败</strong>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, opacity: 0.78 }}>{planLoad.message}</p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => { setPlanLoad({ status: 'loading', message: '' }); setPlanLoadAttempt(value => value + 1); }}
+                  style={{ border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontSize: 13 }}
+                >
+                  重试读取
+                </button>
+                <button
+                  type="button"
+                  onClick={startBlankAfterLoadError}
+                  style={{ border: '1px solid rgba(0,0,0,0.2)', background: 'transparent', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontSize: 13 }}
+                >
+                  备份原草稿并用空白方案继续
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {plan && (
         <div style={{ position: 'absolute', inset: 0, visibility: canvasHidden ? 'hidden' : 'visible', pointerEvents: canvasHidden ? 'none' : 'auto' }}>
           <OutdoorPlanCanvas
@@ -677,6 +776,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             base={geoHidden ? 'floor' : 'map'}
             onPlanChange={setPlan}
             onVenueBoundaryApplied={agent?.manualOutdoorVenueApplied}
+            onVenueBoundaryCanceled={agent?.manualOutdoorVenueCanceled}
             {...(onHistoryChange ? { onHistoryChange } : {})}
             {...(onModeChange ? { onModeChange: mode => onModeChange(mode) } : {})}
             {...(onInspectorChange ? { onInspectorChange } : {})}
@@ -774,6 +874,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
               data-testid="outdoor-source-cycle"
               aria-label={`图层，当前底图 ${currentSource.label}${geoHidden ? '（纸面）' : ''}`}
               aria-expanded={layerStripOpen}
+              aria-pressed={layerStripOpen}
               aria-controls="outdoor-layer-strip"
               data-tip="图层 · 悬停或点按快速换底图"
               onClick={() => setLayerStripOpen(true)}

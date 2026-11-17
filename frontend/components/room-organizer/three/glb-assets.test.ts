@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearGlbAssetCache, cloneOwnedGlb, createCachedGlbModel, createGlbCatalogItem, disposeOwnedModel,
-  ensureGlbAsset, getGlbAssetState, inPlaceWalkClip, normalizeGlbInstance, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
+import { clearGlbAssetCache, cloneOwnedGlb, createCachedGlbModel, createGlbCatalogItem, degradeOversizedGlb, disposeOwnedModel,
+  ensureGlbAsset, getGlbAssetSource, getGlbAssetState, GLB_HIDDEN_RELEASE_MS, glbCacheKeyForUrl, holdVisibleGlbAssets, inPlaceWalkClip, normalizeGlbInstance, releaseHiddenGlbAssetLater, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
 import { advancePeopleAnimations, personOdometer } from './people-anim';
 
 function realGlb(): ArrayBuffer {
@@ -100,6 +100,26 @@ describe('owned GLB model instances', () => {
     expect(size.x).toBeCloseTo(1.6); expect(size.y).toBeCloseTo(0.75); expect(size.z).toBeCloseTo(0.9);
     disposeOwnedModel(instance!);
     expect(createCachedGlbModel(item)).not.toBeNull();
+  });
+
+  it('maps Aholo stable URLs to asset UUID cache keys', () => {
+    const id = '4165e104-e2c1-4f5e-b2a4-46602bf9f932';
+    expect(glbCacheKeyForUrl(`http://127.0.0.1:3199/asset/${id}.glb`)).toBe(id);
+    expect(glbCacheKeyForUrl('/showcase/assets/library/model/table.glb')).toBe('/showcase/assets/library/model/table.glb');
+  });
+
+  it('reuses an asset-id cache entry when createCachedGlbModel only has the Aholo URL', async () => {
+    const id = '4165e104-e2c1-4f5e-b2a4-46602bf9f932';
+    const url = `http://127.0.0.1:3199/asset/${id}.glb`;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response());
+    await ensureGlbAsset(id, url);
+    const item = {
+      ...createGlbCatalogItem({ name: '生成件', url, width: 1, depth: 1, height: 1 }),
+      id: 'scene-item',
+      glbUrl: url,
+    };
+    expect(createCachedGlbModel(item)).not.toBeNull();
+    expect(getGlbAssetState(id).status).toBe('ready');
   });
 
   it('keeps a newer successful result when an obsolete request fails later', async () => {
@@ -202,5 +222,86 @@ describe('owned GLB model instances', () => {
     const doc = { asset: { version: '2.0' }, buffers: [{ byteLength: 2 }], bufferViews: [{ buffer: 0, byteLength: 2 }] };
     const input = buildGlb(doc, bin);
     expect(repairGlbBufferViews(input)).toBe(input.buffer);
+  });
+});
+
+describe('generated model load budget', () => {
+  it('downloads one GLB when a library key and the Aholo URL share a UUID', async () => {
+    const id = '4165e104-e2c1-4f5e-b2a4-46602bf9f932';
+    const url = `http://127.0.0.1:3199/asset/${id}.glb`;
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response());
+    await Promise.all([
+      ensureGlbAsset(`outdoor-library:${id}`, url),
+      ensureGlbAsset(id, url),
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(getGlbAssetState(`outdoor-library:${id}`).status).toBe('ready');
+    expect(getGlbAssetState(id).status).toBe('ready');
+    expect(getGlbAssetSource(`outdoor-library:${id}`)).toBe(getGlbAssetSource(id));
+  });
+
+  it('keeps at most two GLB downloads in flight', async () => {
+    let started = 0;
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      started += 1;
+      if (started <= 2) await gate;
+      return response();
+    });
+    const pending = Promise.all([
+      ensureGlbAsset('slot-a', '/assets/models/a.glb'),
+      ensureGlbAsset('slot-b', '/assets/models/b.glb'),
+      ensureGlbAsset('slot-c', '/assets/models/c.glb'),
+    ]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(started).toBe(2);
+    release();
+    await pending;
+    expect(started).toBe(3);
+    expect(getGlbAssetState('slot-c').status).toBe('ready');
+  });
+
+  it('shrinks an oversized data texture and turns shadows off for a heavy mesh', () => {
+    const width = 3000;
+    const height = 4;
+    const data = new Uint8Array(width * height * 4);
+    data[0] = 12;
+    const texture = new THREE.DataTexture(data, width, height);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(80_001 * 3), 3));
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture }));
+    const group = new THREE.Group();
+    group.add(mesh);
+    degradeOversizedGlb(group);
+    const image = texture.image as { width: number; height: number; data: Uint8Array };
+    expect(Math.max(image.width, image.height)).toBeLessThanOrEqual(2048);
+    expect(image.data[0]).toBe(12);
+    const copy = cloneOwnedGlb(group);
+    const copied = copy.children[0] as THREE.Mesh;
+    expect(copied.castShadow).toBe(false);
+    expect(copied.receiveShadow).toBe(false);
+    disposeOwnedModel(copy);
+    disposeOwnedModel(group);
+  });
+
+  it('drops an unheld template after the release delay and keeps a held one', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => response());
+    await ensureGlbAsset('held-model', '/assets/models/table.glb');
+    await ensureGlbAsset('loose-model', '/assets/models/chair.glb');
+    vi.useFakeTimers();
+    try {
+      const stop = holdVisibleGlbAssets(['held-model']);
+      releaseHiddenGlbAssetLater('held-model');
+      releaseHiddenGlbAssetLater('loose-model');
+      await vi.advanceTimersByTimeAsync(GLB_HIDDEN_RELEASE_MS);
+      expect(getGlbAssetState('held-model').status).toBe('ready');
+      expect(getGlbAssetState('loose-model').status).toBe('idle');
+      stop();
+      await vi.advanceTimersByTimeAsync(GLB_HIDDEN_RELEASE_MS);
+      expect(getGlbAssetState('held-model').status).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

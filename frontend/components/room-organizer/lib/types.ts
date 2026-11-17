@@ -2,6 +2,7 @@ import type { Handoff } from '../../../../supabase/functions/_shared/delivery-co
 import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import type { EventProfile } from '../../../lib/event-profile';
 import type { Provenance } from '../../../lib/rng';
 import type { ZoneSemanticType } from '../../../lib/plan-annotation';
 
@@ -165,6 +166,8 @@ export interface FurnitureItem {
   source?: 'builtin' | 'public_library' | 'generated' | 'local_sample';
   /** A frontend loading reference; the backend scene stores assetId only. */
   glbUrl?: string;
+  /** 材质快改预设 id（`lib/material-presets.ts`）；缺省原样。 */
+  materialPreset?: string;
   /** Named editable fixture within an archived scene model. */
   glbNode?: string;
   /**
@@ -431,6 +434,8 @@ export interface SceneAnchor {
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /** Local activity metadata; never enters the cloud scene, share payload or customer projection. */
+  eventProfile?: EventProfile | undefined;
   /** Internal local production planning; excluded from public sharing. */
   productionPlan?: ProductionPlan | undefined;
   /** Local activity execution metadata, saved and restored with the layout. */

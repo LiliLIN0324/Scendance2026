@@ -26,8 +26,13 @@ export const CHARACTER_STEPS: readonly CharacterStepDef[] = [
 ] as const;
 
 /** 漫游 avatar 必需的两条剪辑：Idle_Loop 待机动画、Walk_Loop 行走动画。 */
+/**
+ * 默认重定向的剪辑（2026-11-17 补全）：站 / 走 / 坐 / 交谈。
+ * 坐下与交谈都是物料能力的默认动作，缺片段会让“能坐、能聊”的物料到 E 键才失败；
+ * 挥手（Wave_Loop）不进默认集：只有舞台类物料要，按需勾选。
+ */
 export const DEFAULT_CHARACTER_ANIMATIONS: readonly string[] = CHARACTER_ANIMATION_PRESETS
-  .filter(preset => preset.id === 'Idle_Loop' || preset.id === 'Walk_Loop')
+  .filter(preset => ['Idle_Loop', 'Walk_Loop', 'Sitting_Idle_Loop', 'Idle_Talking_Loop'].includes(preset.id))
   .map(preset => preset.id);
 
 export function characterStepIndex(id: CharacterStepId): number {

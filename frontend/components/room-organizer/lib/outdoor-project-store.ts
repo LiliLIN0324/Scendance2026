@@ -48,17 +48,36 @@ export function outdoorPlanStorageKey(projectId: string): string {
   return `scendance-outdoor-plan-v1:${projectId}`;
 }
 
+/** 读取结果：把「没有草稿」与「草稿坏了」分开，避免坏草稿被起步 plan 静默覆盖。 */
+export interface OutdoorProjectReadResult {
+  record: OutdoorProjectRecord | null;
+  /** 存储里确实有这个项目的 key（哪怕内容坏了）。 */
+  rawPresent: boolean;
+  /** 解析失败原因；rawPresent 且 record 为空时必有值。 */
+  error: 'storage' | 'json' | 'envelope' | 'meta' | null;
+  /** 信封与 meta 有效，但 plan 字段过不了严格校验。 */
+  planInvalid: boolean;
+}
+
 /** 宽容读取：JSON 坏/信封不符返回 null；plan 字段坏只把 plan 回落 null（meta 仍有效）。 */
 export function readOutdoorProjectRecord(projectId: string, storage?: KeyValueStorage | null): OutdoorProjectRecord | null {
+  return readOutdoorProjectRecordDetailed(projectId, storage).record;
+}
+
+/** 带原因的读取：上层据此显示「无草稿 / 草稿损坏」，损坏时不自动播种覆盖。 */
+export function readOutdoorProjectRecordDetailed(
+  projectId: string,
+  storage?: KeyValueStorage | null,
+): OutdoorProjectReadResult {
   const store = storage ?? safeDefaultStorage();
-  if (!store) return null;
+  if (!store) return { record: null, rawPresent: false, error: 'storage', planInvalid: false };
   let raw: string | null;
   try {
     raw = store.getItem(outdoorPlanStorageKey(projectId));
   } catch {
-    return null;
+    return { record: null, rawPresent: false, error: 'storage', planInvalid: false };
   }
-  if (!raw) return null;
+  if (!raw) return { record: null, rawPresent: false, error: null, planInvalid: false };
   try {
     const parsed: unknown = JSON.parse(raw);
     if (
@@ -67,17 +86,21 @@ export function readOutdoorProjectRecord(projectId: string, storage?: KeyValueSt
       (parsed as { projectId?: unknown }).projectId === projectId
     ) {
       const record = parsed as OutdoorProjectRecord;
-      if (typeof record.name !== 'string' || typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') return null;
+      if (typeof record.name !== 'string' || typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
+        return { record: null, rawPresent: true, error: 'meta', planInvalid: false };
+      }
       let plan: SitePlanData | null = null;
+      let planInvalid = false;
       if (record.plan != null) {
         const verified = sitePlanDataSchema.safeParse(record.plan);
-        plan = verified.success ? verified.data : null;
+        if (verified.success) plan = verified.data;
+        else planInvalid = true;
       }
-      return { ...record, plan };
+      return { record: { ...record, plan }, rawPresent: true, error: null, planInvalid };
     }
-    return null;
+    return { record: null, rawPresent: true, error: 'envelope', planInvalid: false };
   } catch {
-    return null;
+    return { record: null, rawPresent: true, error: 'json', planInvalid: false };
   }
 }
 

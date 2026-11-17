@@ -8,6 +8,7 @@ import {
   OUTDOOR_LAST_PROJECT_KEY,
   outdoorPlanStorageKey,
   readOutdoorProjectRecord,
+  readOutdoorProjectRecordDetailed,
   renameOutdoorProject,
   resolveOutdoorProjectId,
   saveOutdoorProjectRecord,
@@ -193,6 +194,38 @@ describe('outdoor-project-store', () => {
       clearOutdoorProjectRecord(PID, storage);
       expect(latestOutdoorProjectId(storage)).toBeNull();
       expect(storage.getItem(OUTDOOR_LAST_PROJECT_KEY)).toBeNull();
+    });
+  });
+
+  describe('加载三态读取', () => {
+    it('没有草稿：rawPresent=false、无错误，属于正常空态', () => {
+      expect(readOutdoorProjectRecordDetailed(PID, memoryStorage())).toEqual({
+        record: null, rawPresent: false, error: null, planInvalid: false,
+      });
+    });
+
+    it('草稿 JSON 坏：报 json，不当成没有草稿', () => {
+      const storage = memoryStorage();
+      storage.setItem(outdoorPlanStorageKey(PID), '{oops');
+      const result = readOutdoorProjectRecordDetailed(PID, storage);
+      expect(result.rawPresent).toBe(true);
+      expect(result.record).toBeNull();
+      expect(result.error).toBe('json');
+      expect(result.planInvalid).toBe(false);
+    });
+
+    it('plan 结构坏：保留 meta，标记 planInvalid，不静默回落到起步 plan', () => {
+      const storage = memoryStorage();
+      storage.setItem(
+        outdoorPlanStorageKey(PID),
+        JSON.stringify({ ...record(null), plan: { schemaVersion: 1, boundary: 'bad' } }),
+      );
+      const result = readOutdoorProjectRecordDetailed(PID, storage);
+      expect(result.record).not.toBeNull();
+      expect(result.record!.name).toBe('西湖市集');
+      expect(result.record!.plan).toBeNull();
+      expect(result.planInvalid).toBe(true);
+      expect(result.error).toBeNull();
     });
   });
 

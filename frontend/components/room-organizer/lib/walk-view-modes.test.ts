@@ -1,11 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EDITOR_MAX_POLAR,
   VIEW_RIG_OFFSETS,
+  WALK_AERIAL_CLEARANCE_M,
   WALK_VIEW_ORDER,
+  aerialPolarLimit,
   nextWalkViewMode,
   rigOffsetForYaw,
   viewRigOffset,
 } from './walk-view-modes';
+
+describe('aerial polar limit', () => {
+  it('keeps a close camera above the ground clearance', () => {
+    const distance = 2;
+    const phi = aerialPolarLimit(distance);
+    expect(phi).toBeLessThan(EDITOR_MAX_POLAR);
+    expect(distance * Math.cos(phi)).toBeGreaterThanOrEqual(WALK_AERIAL_CLEARANCE_M - 1e-6);
+  });
+
+  it('keeps the editor cap once the site is far enough', () => {
+    expect(aerialPolarLimit(80)).toBeCloseTo(EDITOR_MAX_POLAR);
+  });
+
+  it('forces a near-overhead angle inside the clearance distance', () => {
+    expect(aerialPolarLimit(1)).toBeCloseTo(0.05);
+  });
+});
 
 describe('walk view mode cycle', () => {
   it('cycles through the order and wraps around', () => {

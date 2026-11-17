@@ -683,6 +683,36 @@ export function useOutdoorAgentWorkflow(input: {
       "请在同一地图圈出实际活动范围并闭合；完成后还需在对话核对，不把商场整体当活动场地。",
     );
   }
+  /**
+   * 2026-11-17 用户实测：手画边界时按 Esc 退出后，任务仍停在「核对具体活动范围」并提示
+   * 「已框出项目区域、确认后写进方案」，可实际什么都没写入；再点核对就会把任务打回搜索。
+   * Esc 是显式取消：清掉这次未确认的候选，回到进入画线前的阶段；已经确认过的边界不动。
+   */
+  function manualCanceled() {
+    abort.current?.abort();
+    proposalRef.current = null;
+    setProposal(null);
+    setModels(null);
+    setBusy(false);
+    setAppliedHighlight(null);
+    setDesignSteps([]);
+    const confirmed = stateRef.current.confirmedBoundary;
+    persist({
+      ...stateRef.current,
+      stage: confirmed ? "scope" : "place",
+      confirmedBoundary: confirmed ?? null,
+      completed: stateRef.current.completed.filter(
+        (s) => s === "place" || (!!confirmed && s === "scope"),
+      ),
+      pendingBoundary: undefined,
+    });
+    status(
+      confirmed
+        ? "已取消这次画线；原有活动范围保留。需要时可重新手画。"
+        : "已取消这次画线；未写入活动范围。需要时可重新手画或搜索地点。",
+      "ready",
+    );
+  }
   // 2026-11-14 用户指令「给我几个方案」：物件排布方案基座（objects 动作时的 plan/候选/当前策略）。
   const objectsLayoutRef = useRef<{
     base: SitePlanData;
@@ -834,19 +864,36 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       if (turn.action === "scope") {
         const candidate = stateRef.current.pendingBoundary;
-        if (candidate && candidate.base === JSON.stringify(plan)) {
+        // 2026-11-17 用户实测：候选轮廓还在，只因为画布基座有了一点点变化（自动补设计范围、
+        // 新增实体等），旧的「base 完全一致」门就把候选判死，顺手把 pendingBoundary 也清掉，
+        // 任务退回搜索。候选来自用户刚看过的那张图，这里按当前画布重新签发一次候选，不清状态。
+        if (candidate && checkBoundaryRing(candidate.boundary).ok) {
           offerBoundary(candidate.anchor, candidate.boundary, candidate.name);
           return;
         }
-        if (!checkBoundaryRing(plan.boundary).ok) {
-          persist({ ...stateRef.current, stage: "place", pendingBoundary: undefined, completed: [] });
-          status("当前没有可核对的活动边界，请重新搜索地点并选择候选，或在地图圈出实际范围。");
+        if (checkBoundaryRing(plan.boundary).ok) {
+          // 地图上已经有有效用地红线（手画闭合或刷新后仍在）：重新签发一份核对预览，
+          // 边界与画布内容都不动；确认后才写入并推进，不把已有边界清掉。
+          persist({ ...stateRef.current, stage: "scope" });
+          offer(plan, "scope", "当前地图活动范围", job, [
+            "确认的是本次活动范围，不是地图产权或消防认证。",
+          ]);
+          setBusy(false);
           return;
         }
-        persist({ ...stateRef.current, stage: "scope" });
-        offer(plan, "scope", "当前地图活动范围", job, [
-          "确认的是本次活动范围，不是地图产权或消防认证。",
-        ]);
+        // 没有候选也没有有效边界时，不把任务打回搜索、不清任何已画几何——
+        // 留在核对阶段并直接告诉用户下一步：手画或重新搜索。
+        persist({
+          ...stateRef.current,
+          stage: "scope",
+          confirmedBoundary: null,
+          completed: stateRef.current.completed.filter((s) => s === "place"),
+        });
+        status(
+          "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+          "blocked",
+        );
+        setBusy(false);
         return;
       }
       requireScope(plan);
@@ -1797,6 +1844,7 @@ export function useOutdoorAgentWorkflow(input: {
     previewStyle,
     offerBoundary,
     manualBoundary,
+    manualCanceled,
     manualApplied,
     cycleObjectsLayout,
     active: token.current !== null && callbacks.current.current(token.current),

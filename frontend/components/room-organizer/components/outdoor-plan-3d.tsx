@@ -17,13 +17,15 @@
  * 这样「北」朝屏幕里侧（-Z），与底图影像上北下南一致。
  */
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { enuToLngLat, lngLatToEnu, planMetersPerPixel, planPointToPixel, type PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { basemapSourceAttribution } from '@/components/room-organizer/lib/tdt-probe';
 import { BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
 import { GeoScaleCompass } from '@/components/room-organizer/components/geo-scale-compass';
+import { shouldPublishBearing } from '@/components/room-organizer/lib/gm-compass-bearing';
+import { assignIfChanged, scaleChromeReadout } from '@/components/room-organizer/lib/map-chrome-publish';
 import { buildPlanFootprint } from '@/components/room-organizer/three/plan-footprint-builder';
 import {
   collectPlaceholdersByPropId,
@@ -52,21 +54,26 @@ import {
   createWalkAvatar,
   disposeOwnedModel,
   ensureGlbAsset,
+  glbCacheKeyForUrl,
+  holdVisibleGlbAssets,
 } from '@/components/room-organizer/three/glb-assets';
-import { advancePeopleAnimations, registerPersonAnim, takePersonControl } from '@/components/room-organizer/three/people-anim';
+import { advancePeopleAnimations, personActionState, registerPersonAnim, setNearestPersonAction, takePersonControl } from '@/components/room-organizer/three/people-anim';
+import { getPeopleModel, loadPeopleModel } from '@/components/room-organizer/three/people-model';
+import { buildWaveClip, retargetFromRigCached } from '@/components/room-organizer/three/person-clip-retarget';
 import { buildProceduralPerson } from '@/components/room-organizer/three/builders/builders-people';
 import { findWalkRole } from '@/components/room-organizer/lib/walk-roles';
 import { createPlanTrafficLayer } from '@/components/room-organizer/three/plan-traffic-layer';
 import { createPlanRoleLabels } from '@/components/room-organizer/three/plan-role-labels';
 import { libraryEntryColor } from '@/components/room-organizer/lib/oneplan-library';
 import { workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
-import type { WalkViewMode } from '@/components/room-organizer/lib/walk-view-modes';
+import { EDITOR_MAX_POLAR, aerialPolarLimit, type WalkViewMode } from '@/components/room-organizer/lib/walk-view-modes';
 import {
   InteractRegistry,
   nearestNearbyEntry,
   type InteractableEntry,
 } from '@/components/room-organizer/lib/interact-registry';
-import { facilityInteractables, interactHintLabel, seatInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
+import { propInteractables, interactHintLabel, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
+import { personActionUnavailableNote } from '@/components/room-organizer/lib/prop-interactions';
 import {
   facilityProp,
   planFootprintShapes,
@@ -80,6 +87,10 @@ import {
   type SceneObjectPlacement,
 } from '@/components/room-organizer/lib/plan-scene-placement';
 import { assignCrowdWalkRoutes } from '@/components/room-organizer/lib/plan-crowd-routes';
+import { RoamRuntime } from '@/components/room-organizer/lib/person-roam-runtime';
+import { seatFacilityTargets } from '@/components/room-organizer/lib/seat-placement';
+import { capabilityForSlug } from '@/components/room-organizer/lib/prop-capabilities';
+import { planPointToRoam } from '@/components/room-organizer/lib/plan-scene-frame';
 import {
   splatPlacementOffset,
   splatVenueSpan,
@@ -107,7 +118,13 @@ import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-eng
 import { clearPlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
 import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/plan-catalog-drag';
 import { CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/catalog-drag';
-import { useOutdoorWalk, type SeatWalkState } from '@/components/room-organizer/hooks/use-outdoor-walk';
+import { useOutdoorWalk, walkCompassHeading, type OutdoorWalkFrame, type OutdoorWalkObstacle, type SeatWalkState } from '@/components/room-organizer/hooks/use-outdoor-walk';
+import {
+  createOutdoorPlayerAvatarSlot,
+  outdoorPlayerPresentation,
+  type OutdoorPlayerAvatarRole,
+  type OutdoorPlayerAvatarSlot,
+} from '@/components/room-organizer/three/outdoor-player-avatar';
 import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -298,6 +315,8 @@ export interface OutdoorPlan3DProps {
   onCycleView?: () => void;
   /** E 键触发可交互物时回调条目（一期占位，#61 对话接这里）。 */
   onInteract?: (entry: InteractableEntry) => void;
+  /** 当前漫游角色；传入后才启用 GLB 玩家，加载失败或缺省时保留胶囊体。 */
+  walkRole?: OutdoorPlayerAvatarRole;
 }
 
 interface WalkActor {
@@ -324,6 +343,7 @@ export default function OutdoorPlan3D({
   viewMode = 'first',
   onCycleView,
   onInteract,
+  walkRole,
 }: OutdoorPlan3DProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement | null>(null);
   // 保活态：隐藏时仍旧跑 LOD，但不渲染（不可见的 GPU 耗时没意义）。
@@ -389,8 +409,18 @@ export default function OutdoorPlan3D({
   // 组件级引用（renderer/scene 本体在 mount effect 里）：captureImage 同步抓帧用。
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
+  // 场景 generation：场景重建后让 GLB 玩家 effect 重新挂载，不把角色 URL 加进场景重建依赖。
+  const [sceneEpoch, setSceneEpoch] = useState(0);
+  const playerAvatarSlotRef = useRef<OutdoorPlayerAvatarSlot | null>(null);
+  const playerCapsuleRef = useRef<{ body: THREE.Mesh; head: THREE.Mesh } | null>(null);
+  // 胶囊体与 GLB 的显隐统一由主循环的 `outdoorPlayerPresentation` 决定：
+  // 有 GLB 就没有胶囊体，加载中 / 失败 / 缺角色才回落到胶囊体，避免两套 visible 打架。
   // 真实模型层的“换代号”：plan 变化或组件卸载后自增，晚到的模型直接丢掉。
   const modelRunRef = useRef(0);
+  const pumpSceneModelsRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (active) pumpSceneModelsRef.current?.();
+  }, [active]);
   const canvasEditApiRef = useRef(canvasApiRef);
   canvasEditApiRef.current = canvasApiRef;
   const layerApiRef = useRef<{ syncFootprint: (next: SitePlanData, selectedZoneId?: string | null) => void; syncEditVisuals: () => void } | null>(null);
@@ -400,7 +430,7 @@ export default function OutdoorPlan3D({
   const lineMaterialsRef = useRef<{ resolution: THREE.Vector2 }[]>([]);
   // 漫游占位 avatar：第三人称 / 过肩档显示；帧姿态由 useOutdoorWalk 每帧写 ref，主 loop 摆位。
   const avatarGroupRef = useRef<THREE.Group | null>(null);
-  const walkFrameRef = useRef<{ x: number; y: number; z: number; yaw: number; moving: boolean; thirdPerson: boolean } | null>(null);
+  const walkFrameRef = useRef<OutdoorWalkFrame | null>(null);
   // E 键交互：注册表实例 + 当前近邻条目（HUD 提示 / E 键触发用）。
   const interactRegistryRef = useRef<InteractRegistry | null>(null);
   if (!interactRegistryRef.current) interactRegistryRef.current = new InteractRegistry();
@@ -410,10 +440,18 @@ export default function OutdoorPlan3D({
   // 落座态：E 键座位条目写入 / 起身清空；hook 每帧据此钉住锚点与坐姿眼高。
   const seatStateRef = useRef<SeatWalkState | null>(null);
   const [seatActiveId, setSeatActiveId] = useState<string | null>(null);
+  // 道具动作反馈：附近没有可响应的 NPC，或人物资产缺该片段时，给一条短提示。
+  const [actionNote, setActionNote] = useState<{ text: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!actionNote) return undefined;
+    const timer = window.setTimeout(() => setActionNote(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [actionNote]);
 
   // 座位条目落座 / 起身：同一座位再按一次 E 起身。
   // 落座锚点按真实坐姿：朝椅面外、背靠椅背，髂部落在座面偏后一点。
   const SEAT_HIP_BACK_M = 0.12;
+  const PROP_ACTION_RADIUS_M = 3.2;
   const toggleSeatEntry = (entry: InteractableEntry) => {
     const seat = entry.seat;
     if (!seat) return;
@@ -472,9 +510,17 @@ export default function OutdoorPlan3D({
 
   /** 罗盘回正朝北：保留目标点、距离与俯仰角，只把水平方位角归 0（北 = -z）。 */
   const resetNorth = useCallback((): void => {
-    if (walkEnabledRef.current) return;
     const camera = cameraRef.current;
     const controls = controlsRef.current;
+    const walkingLook = walkEnabledRef.current && viewModeRef.current !== 'orbit';
+    if (walkingLook) {
+      if (!camera) return;
+      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+      euler.y = 0;
+      euler.z = 0;
+      camera.quaternion.setFromEuler(euler);
+      return;
+    }
     if (!camera || !controls) return;
     const offset = camera.position.clone().sub(controls.target);
     const radius = offset.length();
@@ -488,10 +534,19 @@ export default function OutdoorPlan3D({
 
   /** 罗盘拖动转盘：按增量弧度绕目标水平旋转，保留距离与俯仰角。 */
   const orbitByDelta = useCallback((deltaTheta: number): void => {
-    if (walkEnabledRef.current) return;
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    if (!camera || !controls || !deltaTheta) return;
+    if (!deltaTheta) return;
+    const walkingLook = walkEnabledRef.current && viewModeRef.current !== 'orbit';
+    if (walkingLook) {
+      if (!camera) return;
+      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+      euler.y += deltaTheta;
+      euler.z = 0;
+      camera.quaternion.setFromEuler(euler);
+      return;
+    }
+    if (!camera || !controls) return;
     const offset = camera.position.clone().sub(controls.target);
     const spherical = new THREE.Spherical().setFromVector3(offset);
     spherical.theta += deltaTheta;
@@ -504,6 +559,13 @@ export default function OutdoorPlan3D({
   const getBearing = useCallback((): number => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
+    // 步行时轨道中心还停在进漫游前的目标，用它算方位会跟着人的位移乱转。
+    // 朝向只认视线，和画布罗盘同一公式。
+    if (camera && walkEnabledRef.current && viewModeRef.current !== 'orbit') {
+      const look = new THREE.Vector3();
+      camera.getWorldDirection(look);
+      return walkCompassHeading(look.x, look.z);
+    }
     if (!camera || !controls) return 0;
     const dx = camera.position.x - controls.target.x;
     const dz = camera.position.z - controls.target.z;
@@ -530,6 +592,31 @@ export default function OutdoorPlan3D({
     return () => { apiRef.current = null; };
   }, [apiRef, zoomByStep, focusLngLat, resetNorth, getBearing, orbitByDelta, captureImage]);
 
+  // 设施和场景物件占地：人走不穿模型，第三人称镜头被挡住时拉近。
+  const walkObstacles = useMemo<OutdoorWalkObstacle[]>(() => {
+    const blocks: OutdoorWalkObstacle[] = [];
+    for (const facility of plan.facilities ?? []) {
+      blocks.push({
+        x: facility.position.x,
+        y: facility.position.y,
+        width: facility.size.width,
+        depth: facility.size.depth,
+        rotationDeg: facility.rotationDeg,
+      });
+    }
+    for (const object of sceneObjects ?? []) {
+      if (!(object.height > 0.05) || !(object.width > 0) || !(object.depth > 0)) continue;
+      blocks.push({
+        x: object.center.x,
+        y: object.center.y,
+        width: object.width,
+        depth: object.depth,
+        rotationDeg: object.rotationDeg,
+      });
+    }
+    return blocks;
+  }, [plan.facilities, sceneObjects]);
+
   // 一期裸第一人称步行：指针锁 / WASD / 边界钳制自管在本组件内，旧室内
   // walkthroughMode 链路不动；退出由 onWalkExit 交外层收口。
   const { phase: walkPhase } = useOutdoorWalk({
@@ -539,6 +626,7 @@ export default function OutdoorPlan3D({
     orbitRef: controlsRef,
     spawn: controlledActorRef.current?.spawn,
     boundary: plan.designScope?.length ? plan.designScope : plan.boundary,
+    obstacles: walkObstacles,
     viewMode,
     seatRef: seatStateRef,
     onWalkFrame: (frame) => {
@@ -561,20 +649,49 @@ export default function OutdoorPlan3D({
   useEffect(() => {
     const controls = controlsRef.current;
     const camera = cameraRef.current;
-    if (!controls || !camera) return;
-    const aerial = walkEnabled && viewMode === 'orbit';
+    if (!controls || !camera || !walkEnabled) return undefined;
+    const canvas = walkCanvas;
+    const aerial = viewMode === 'orbit';
+    const saved = {
+      enabled: controls.enabled,
+      enableZoom: controls.enableZoom,
+      enablePan: controls.enablePan,
+      enableRotate: controls.enableRotate,
+      rotateSpeed: controls.rotateSpeed,
+      maxPolarAngle: controls.maxPolarAngle,
+      mouseButtons: { ...controls.mouseButtons },
+      touchAction: canvas?.style.touchAction ?? '',
+    };
+    const restoreControls = () => {
+      controls.enabled = saved.enabled;
+      controls.enableZoom = saved.enableZoom;
+      controls.enablePan = saved.enablePan;
+      controls.enableRotate = saved.enableRotate;
+      controls.rotateSpeed = saved.rotateSpeed;
+      controls.maxPolarAngle = saved.maxPolarAngle;
+      controls.mouseButtons = saved.mouseButtons;
+      if (canvas) canvas.style.touchAction = saved.touchAction;
+    };
     if (!aerial) {
-      if (walkEnabled) controls.enabled = false;
+      controls.enabled = false;
+      controls.enableZoom = false;
+      controls.enablePan = false;
+      controls.enableRotate = false;
       controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
-      return;
+      if (canvas) canvas.style.touchAction = 'none';
+      return restoreControls;
     }
-    const doc = walkCanvas?.ownerDocument ?? document;
+    const doc = canvas?.ownerDocument ?? document;
     if (doc.pointerLockElement) {
       try { doc.exitPointerLock(); } catch { /* already unlocked */ }
     }
     controls.enabled = true;
+    controls.enableZoom = true;
+    controls.enablePan = true;
     controls.enableRotate = true;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
+    controls.rotateSpeed = Math.min(saved.rotateSpeed, 0.6);
+    if (canvas) canvas.style.touchAction = '';
     // 高空 target 取玩家锚点；空方案 / 未出帧回退边界质心。
     const frame = ringFrame(plan.boundary);
     const player = walkFrameRef.current;
@@ -584,9 +701,11 @@ export default function OutdoorPlan3D({
     controls.target.copy(target);
     const span = Math.max(12, frame.span);
     const aerialEye = cameraPose(target, span, Math.min(MAP_TILT_POLAR + 0.28, Math.PI * 0.42), 52);
+    controls.maxPolarAngle = aerialPolarLimit(aerialEye.distanceTo(target));
     camera.position.copy(aerialEye);
     camera.lookAt(target);
     controls.update();
+    return restoreControls;
   }, [walkEnabled, viewMode, plan.boundary, walkCanvas]);
 
   // 岗位点位 / 设施 → 可交互条目：plan 变化时清空重登；动作回调交外层 onInteract（#61 对话接这里）。
@@ -595,15 +714,29 @@ export default function OutdoorPlan3D({
     if (!registry) return;
     registry.clear();
     const bind = (entry: InteractableEntry) =>
-      registry.register(entry, ({ entry: e }) => onInteractRef.current?.(e));
+      registry.register(entry, ({ entry: e }) => {
+        // 道具 → 人物动作：只选最近静止 NPC，不动巡游中/被接管的实例。
+        if (e.personAction && e.position) {
+          const target = setNearestPersonAction(e.position, e.personAction, PROP_ACTION_RADIUS_M);
+          if (!target) {
+            setActionNote({ text: e.personAction === 'talk' ? '附近没有可交谈的人' : '附近没有可回应的人', at: Date.now() });
+          } else {
+            const state = personActionState(target);
+            if (state && state.current !== e.personAction) {
+              // E7c：crowd / 玩家 GLB 只有 Idle/Walk，talk / wave 缺片段；说清楚缺哪种 clip，不用 idle 冒充。
+              setActionNote({ text: personActionUnavailableNote(e.personAction), at: Date.now() });
+            }
+          }
+        }
+        onInteractRef.current?.(e);
+      });
     const workers = Array.isArray(plan.workers) ? plan.workers : [];
     for (const entry of workerInteractables(workers)) bind(entry);
     const facilities = Array.isArray(plan.facilities) ? plan.facilities : [];
-    const seatEntries = seatInteractables(facilities);
-    const seatIds = new Set(seatEntries.map((entry) => entry.id));
-    for (const entry of facilityInteractables(facilities.filter((facility) => !seatIds.has(facility.id)))) bind(entry);
-    for (const entry of seatEntries) {
-      registry.register(entry, ({ entry: e }) => toggleSeatEntry(e));
+    // 2026-11-16：坐具仍走落座回调，其它道具带「交谈 / 挥手」文案；围栏等保持原名。
+    for (const entry of propInteractables(facilities)) {
+      if (entry.kind === 'seat') registry.register(entry, ({ entry: e }) => toggleSeatEntry(e));
+      else bind(entry);
     }
   }, [plan.workers, plan.facilities]);
 
@@ -621,6 +754,24 @@ export default function OutdoorPlan3D({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [walkEnabled]);
+
+  // E7b：场景一段 + 角色一段。场景重建只换槽，不把 walkRole 加进场景重建依赖。
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return undefined;
+    const slot = createOutdoorPlayerAvatarSlot({ scene });
+    playerAvatarSlotRef.current = slot;
+    return () => {
+      slot.dispose();
+      if (playerAvatarSlotRef.current === slot) playerAvatarSlotRef.current = null;
+    };
+  }, [sceneEpoch]);
+
+  // 挂槽后立即 setRole：这就是“进入漫游前预加载”，不依赖 walkEnabled / 第三人称。
+  // 换角色只让槽换代（旧实例先 dispose，晚到结果丢弃），地图与镜头不重建。
+  useEffect(() => {
+    playerAvatarSlotRef.current?.setRole(walkRole ?? null);
+  }, [sceneEpoch, walkRole?.assetId, walkRole?.glbUrl, walkRole?.name]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -644,6 +795,8 @@ export default function OutdoorPlan3D({
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
+    // 通知 GLB 玩家 effect：新的 scene 已就绪（不触发场景重建）。
+    setSceneEpoch(epoch => epoch + 1);
     scene.background = new THREE.Color(SKY_GROUND);
     // 雾只在很远处才淡出，避免默认俯视时地图上沿被洗成灰带。
     scene.fog = new THREE.Fog(SKY_GROUND, 25000, 90000);
@@ -868,6 +1021,10 @@ export default function OutdoorPlan3D({
     const modelRoots: THREE.Object3D[] = [];
     const run = modelRunRef.current + 1;
     modelRunRef.current = run;
+    const sceneModelJobs: Array<() => Promise<void>> = [];
+    const sceneModelKeys: string[] = [];
+    let releaseSceneModels = () => {};
+    let sceneModelsPumping = false;
 
     // —— 2D 物料 / 场景落点层（sceneObjects：室内家具 + 实景扫描场景）——
     // 落点口径与上面的真实模型层完全一致：组补 (w/2, 0, -d/2)，子对象用壳体偏移，
@@ -897,6 +1054,7 @@ export default function OutdoorPlan3D({
     avatarGroup.visible = false;
     scene.add(avatarGroup);
     avatarGroupRef.current = avatarGroup;
+    playerCapsuleRef.current = { body: avatarBody, head: avatarHead };
 
     /** 壳体坐标 → three 局部坐标（组再补 (w/2, 0, -d/2) 后与占位体重合）。 */
     const placeAt = (object: THREE.Object3D, shell: { x: number; z: number }, rotationDeg = 0): void => {
@@ -909,6 +1067,14 @@ export default function OutdoorPlan3D({
     // 代际号拦过期异步回调；人物动画注册表按 group.parent 在下一帧摘除脱离实例，无需手动反注册。
     let crowdGen = 0;
     let crowdSignature = '';
+    /**
+     * 人群漫游执行器（2026-11-17，A/B/C 接线）：B 分区自由活动、C 见椅就坐。
+     * 只接管已经注册进 people-anim 的实例（有 GLB 的），没 GLB 的人群保持原路线。
+     * A（沿流线走）仍由 plan-crowd-routes + people-anim 负责，本层不抢。
+     */
+    let roamRuntime: RoamRuntime | null = null;
+    const crowdGroups = new Map<string, THREE.Group>();
+    const crowdControls = new Map<string, ReturnType<typeof takePersonControl>>();
     const releaseCrowdChildren = (): void => {
       while (crowdLayer.children.length > 0) {
         const child = crowdLayer.children[0];
@@ -934,8 +1100,11 @@ export default function OutdoorPlan3D({
       if (signature === crowdSignature) return;
       crowdSignature = signature;
       if (releaseControlledActor()) onWalkExitRef.current?.();
+      roamRuntime = null;
+      crowdGroups.clear();
+      crowdControls.clear();
       releaseCrowdChildren();
-      const gen = ++crowdGen;
+      crowdGen += 1;
       const crowdPlacements = planCrowdShellPlacements(
         Array.isArray(nextPlan.workers) ? nextPlan.workers : [],
         nextPlan.boundary,
@@ -948,6 +1117,39 @@ export default function OutdoorPlan3D({
         nextPlan.boundary,
         nextMetrics,
       );
+      // 能力表定稿的座位（含桌椅套装四向锚点）：C 段“看见椅子就坐”的候选。
+      const capabilitySeats = seatFacilityTargets(
+        (nextPlan.facilities ?? []).map((facility) => {
+          const ref = facility.modelOverride ?? facility.templateId;
+          const capability = capabilityForSlug(ref);
+          return {
+            id: facility.id,
+            name: facility.name,
+            position: { x: facility.position.x, y: facility.position.y },
+            rotationDeg: facility.rotationDeg,
+            ref,
+            width: facility.size.width,
+            depth: facility.size.depth,
+            canSeat: capability?.kind === 'seat' || capability?.kind === 'seat-set',
+          };
+        }),
+        0,
+      );
+      const seatHeightById = new Map(capabilitySeats.map(seat => [seat.id, seat.seatHeight]));
+      // 2026-11-17 实机走查抓到的坐标系问题：3D 场地以边界包围盒中心为原点（
+      // world = (x − cx, −(y − cy))），不是绝对 ENU；执行器统一用场景坐标，
+      // 座位与分区在这里先换算（纯函数 `planPointToRoam` 已锁测试）。
+      const toRoam = (point: { x: number; y: number }) => planPointToRoam(point, nextFrame);
+      const zonePolygon = Array.isArray(nextPlan.boundary) && nextPlan.boundary.length >= 3
+        ? nextPlan.boundary.map(point => toRoam(point))
+        : null;
+      roamRuntime = new RoamRuntime({
+        seats: capabilitySeats.map(seat => ({
+          id: seat.id, ...toRoam({ x: seat.x, y: seat.y }), rotationDeg: seat.rotationDeg, zoneId: 'site',
+        })),
+        zones: zonePolygon ? [{ id: 'site', polygon: zonePolygon }] : [],
+        seatHeight: seatId => seatHeightById.get(seatId) ?? 0.45,
+      });
       const totals = new Map<string, number>();
       const ordinals = new Map<string, number>();
       const colors = new Map(nextPlan.workers.map(worker => [worker.id, worker.color]));
@@ -980,25 +1182,78 @@ export default function OutdoorPlan3D({
         group.name = `plan-crowd-${placement.crowdType}`;
         crowdLayer.add(group);
         modelRoots.push(group);
+        crowdGroups.set(item.id, group);
+        // B/C 接管起点：只接管没有流线的人，保住 A 段（沿流线）原行为。
+        if (!walkRoute) {
+          roamRuntime?.register(item.id, { x: group.position.x, y: group.position.z }, false);
+        }
 
         if (assetId && glbUrl) {
           const modelItem: FurnitureItem = { ...item, type: 'glb-asset', color: '#ffffff' };
           void ensureGlbAsset(assetId, glbUrl).then(() => {
-            if (disposed || modelRunRef.current !== run || gen !== crowdGen) return;
+            if (disposed || modelRunRef.current !== run) return;
             const avatar = createWalkAvatar(modelItem);
             if (!avatar) return;
             group.remove(lightweightFigure);
             disposeOwnedModel(lightweightFigure);
             group.add(avatar.group);
+            // crowd GLB 只有 Idle/Walk（52 骨 Mixamo）。交谈从 people.glb（Rigify）重定向，
+            // 挥手没有现成素材，用世界坐标抬臂的程序化片段。
+            // 重点：先**同步**注册一次（带挥手），people.glb 晚到再升级交谈，
+            // 不让 await 把整段富化卡在代际守卫上——那正是之前 wave/talk 都读不到的原因。
+            let waveClip = null;
+            let talkClip = null;
+            const people = getPeopleModel();
+            try {
+              avatar.group.updateMatrixWorld(true);
+              waveClip = buildWaveClip(avatar.group);
+              const talk = people?.animations.find(clip => clip.name === 'Idle_Talking_Loop');
+              if (people && talk) {
+                people.scene.updateMatrixWorld(true);
+                talkClip = retargetFromRigCached(avatar.group, people.scene, talk);
+              }
+            } catch (error) {
+              console.warn('Crowd clip enrichment failed; keeping idle/walk.', error);
+            }
+            const clips = {
+              idle: avatar.idle.getClip(),
+              talk: talkClip,
+              walk: avatar.walk.getClip(),
+              sit: avatar.sit ? avatar.sit.getClip() : null,
+              wave: waveClip,
+            };
             registerPersonAnim(group, {
               id: item.id,
               mixer: avatar.mixer,
               rig: null,
-              clips: { idle: avatar.idle.getClip(), talk: null, walk: avatar.walk.getClip(), sit: avatar.sit ? avatar.sit.getClip() : null },
+              clips,
               action: 'idle',
               paused: false,
               route: walkRoute ?? null,
             });
+            if (!talkClip) {
+              void loadPeopleModel(THREE).then(model => {
+                if (disposed || modelRunRef.current !== run) return;
+                const talk = model?.animations.find(clip => clip.name === 'Idle_Talking_Loop');
+                if (!model || !talk) return;
+                try {
+                  model.scene.updateMatrixWorld(true);
+                  const retargeted = retargetFromRigCached(avatar.group, model.scene, talk);
+                  if (!retargeted) return;
+                  registerPersonAnim(group, {
+                    id: item.id,
+                    mixer: avatar.mixer,
+                    rig: null,
+                    clips: { ...clips, talk: retargeted },
+                    action: 'idle',
+                    paused: false,
+                    route: walkRoute ?? null,
+                  });
+                } catch (error) {
+                  console.warn('Crowd talk upgrade failed.', error);
+                }
+              }).catch(() => { /* 交谈升级失败；挥手与漫游不受影响。 */ });
+            }
           }).catch(() => { /* The lightweight character remains active. */ });
         }
 
@@ -1072,6 +1327,7 @@ export default function OutdoorPlan3D({
       sceneLayer.add(box);
       const modelUrl = placement.modelUrl;
       if (!modelUrl) return;
+      const glbKey = glbCacheKeyForUrl(modelUrl);
       const item: FurnitureItem = {
         id: `plan-scene-${placement.id}`,
         type: 'glb-asset',
@@ -1082,9 +1338,11 @@ export default function OutdoorPlan3D({
         color: '#ffffff',
         icon: '◇',
         glbUrl: modelUrl,
+        ...(glbKey !== modelUrl ? { assetId: glbKey } : {}),
         uniformScale: true,
       };
-      void ensureGlbAsset(modelUrl, modelUrl)
+      sceneModelKeys.push(glbKey);
+      sceneModelJobs.push(() => ensureGlbAsset(glbKey, modelUrl)
         .then(() => {
           if (disposed || modelRunRef.current !== run) return;
           const model = createCachedGlbModel(item, false);
@@ -1101,8 +1359,23 @@ export default function OutdoorPlan3D({
         })
         .catch(() => {
           /* 模型拉不到：保留体块占位。 */
-        });
+        }));
     });
+    releaseSceneModels = holdVisibleGlbAssets(sceneModelKeys);
+    const pumpSceneModels = () => {
+      if (sceneModelsPumping || disposed || modelRunRef.current !== run || !activeRef.current) return;
+      const job = sceneModelJobs.shift();
+      if (!job) return;
+      sceneModelsPumping = true;
+      void job().finally(() => {
+        sceneModelsPumping = false;
+        if (disposed || modelRunRef.current !== run) return;
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => pumpSceneModels());
+        else pumpSceneModels();
+      });
+    };
+    pumpSceneModelsRef.current = pumpSceneModels;
+    pumpSceneModels();
 
     // 不同人群：2D 岗位点位按 count 展开成 N 个人（没模型的岗位先画人位柱）。
     rebuildCrowd(plan);
@@ -1255,6 +1528,27 @@ export default function OutdoorPlan3D({
         Date.now() < previewMutedUntil ? null : previewPropFor(visuals.plan, visuals.draft),
         previewTargetId(visuals.plan, visuals.draft),
       );
+      // 2026-11-17 一句话布置/套装：批量半透明体块预览（不加载 GLB，确认前不进 plan）。
+      const arrangePreview = visuals.arrangePreview;
+      if (arrangePreview?.length) {
+        const frame = ringFrame(visuals.plan.boundary);
+        const shell = frame
+          ? planShellFrame(visuals.plan.boundary, { width: frame.width, depth: frame.depth }, { clampPoints: false })
+          : null;
+        planModelLayer.setBatchPreview(shell
+          ? arrangePreview.map((item, index) => facilityProp({
+            id: `__arrange_${index}`,
+            templateId: item.templateId,
+            name: item.name,
+            position: item.position,
+            rotationDeg: item.rotationDeg,
+            size: { width: item.width, depth: item.depth },
+            ...(item.modelOverride ? { modelOverride: item.modelOverride } : {}),
+          }, shell))
+          : []);
+      } else {
+        planModelLayer.setBatchPreview([]);
+      }
       // 2026-11-12 3D 手柄目标：可编辑且有选中设施才挂柄（每帧按最新目标重摆位置）。
       handleFacilityRef.current = visuals.facilityEditable && visuals.selectedFacilityId
         ? visuals.plan.facilities.find(f => f.id === visuals.selectedFacilityId) ?? null
@@ -1330,7 +1624,7 @@ export default function OutdoorPlan3D({
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.minPolarAngle = 0;
-    controls.maxPolarAngle = Math.PI * 0.46;
+    controls.maxPolarAngle = EDITOR_MAX_POLAR;
     // 2026-11-12 用户「放大倍数不够」：原来最近只能到 8m 距离（≈看 7.8m 高一片），
     // 摆小设施/对照尺寸时不够贴近。再放宽到最快 1.2m、并按场地大小自适应。
     controls.minDistance = Math.max(1.2, Math.min(siteFrame.span * 0.02, 8));
@@ -1913,6 +2207,9 @@ export default function OutdoorPlan3D({
 
     let idleTick = 0;
     let lastFrameAt = performance.now();
+    let headingStamp: number | null = null;
+    let scaleWidth: string | null = null;
+    let scaleText: string | null = null;
     function loop(): void {
       frame = window.requestAnimationFrame(loop);
       const frameNow = performance.now();
@@ -1931,6 +2228,9 @@ export default function OutdoorPlan3D({
       // enabled=false，其 update() 仍会按内部过期球坐标把相机拽回环绕 target 并 lookAt，
       // 与步行落点 / 指针锁朝向打架（表现为按 WASD 时视角剧烈甩动）。仅非漫游态与鸟瞰
       // 环绕档调用 update()。
+      if (aerialView && controls) {
+        controls.maxPolarAngle = aerialPolarLimit(camera.position.distanceTo(controls.target));
+      }
       if (!walking || aerialView) controls?.update();
       if (controls) {
         const mode = canvasEditApiRef.current?.current?.getMode() ?? 'view';
@@ -1942,22 +2242,34 @@ export default function OutdoorPlan3D({
       }
       const api = canvasEditApiRef.current?.current;
       if (api?.getBasemapVisible) basemapRoot.visible = api.getBasemapVisible();
-      if (controls && compassRef.current) {
-        const dx = camera.position.x - controls.target.x;
-        const dz = camera.position.z - controls.target.z;
-        const heading = Math.atan2(-dx, dz);
-        compassRef.current.style.transform = `rotate(${-heading}rad)`;
+      if (compassRef.current) {
+        const walking = walkEnabledRef.current;
+        const aerialView = walking && viewModeRef.current === 'orbit';
+        let heading = 0;
+        if (walking && !aerialView) {
+          // 帧 yaw 在迈步时是身体朝向，不是视线。罗盘跟视线，北才是 0。
+          const look = new THREE.Vector3();
+          camera.getWorldDirection(look);
+          heading = walkCompassHeading(look.x, look.z);
+        } else if (controls) {
+          const dx = camera.position.x - controls.target.x;
+          const dz = camera.position.z - controls.target.z;
+          heading = Math.atan2(-dx, dz);
+        }
+        if (Number.isFinite(heading) && (headingStamp === null || shouldPublishBearing(headingStamp, heading))) {
+          compassRef.current.style.transform = `rotate(${-heading}rad)`;
+          headingStamp = heading;
+        }
       }
       if (controls && stage && scaleBarRef.current && scaleLabelRef.current) {
         const canvasH = stage.clientHeight || 600;
         const dist = Math.max(camera.position.distanceTo(controls.target), 4);
         const metersPerPixel = (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / canvasH;
-        const targetM = metersPerPixel * 80;
-        const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
-        const meters = nice.find((value) => value >= targetM) ?? Math.round(targetM);
-        const width = Math.max(24, Math.min(140, meters / Math.max(metersPerPixel, 0.01)));
-        scaleBarRef.current.style.width = `${width}px`;
-        scaleLabelRef.current.textContent = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+        const readout = scaleChromeReadout(metersPerPixel);
+        const bar = scaleBarRef.current;
+        const label = scaleLabelRef.current;
+        scaleWidth = assignIfChanged(scaleWidth, readout.width, (value) => { bar.style.width = value; });
+        scaleText = assignIfChanged(scaleText, readout.text, (value) => { label.textContent = value; });
       }
       loadCloserTiles();
       if (!activeRef.current) return;
@@ -1966,19 +2278,54 @@ export default function OutdoorPlan3D({
       updateZoneVertexHandles();
       // 户外人物动画：注册表推进待机/步态 + 自动播放的非人物 GLB 实例。
       advancePeopleAnimations(deltaSeconds, scene);
+      // 人群漫游执行器：B 分区活动 / C 见椅就坐。位的写入与朝向交给 people-anim 的手动档，
+      // 移动本身在这里按 ENU → 世界坐标应用；已带流线的人仍由上面的路线步进驱动，不抢。
+      if (roamRuntime) {
+        for (const command of roamRuntime.tick(deltaSeconds * 1000)) {
+          const group = crowdGroups.get(command.id);
+          if (!group) continue;
+          if (command.kind === 'walk') {
+            const control = crowdControls.get(command.id) ?? takePersonControl(command.id, group);
+            if (control) crowdControls.set(command.id, control);
+            const dx = command.x - group.position.x;
+            const dz = command.y - group.position.z;
+            group.position.x = command.x;
+            group.position.z = command.y;
+            if (Math.hypot(dx, dz) > 1e-4) group.rotation.y = Math.atan2(dx, dz);
+            control?.setMoving(true);
+          } else if (command.kind === 'sit') {
+            crowdControls.get(command.id)?.setSeated(true, command.seatHeight);
+          } else if (command.kind === 'stand') {
+            const control = crowdControls.get(command.id);
+            control?.setSeated(false);
+            control?.setMoving(false);
+          }
+        }
+      }
       advanceGlbAnimations(deltaSeconds);
       trafficLayer.advance(deltaSeconds);
-      // 漫游占位 avatar：第三人称 / 过肩档按帧姿态摆位；第一人称、鸟瞰或退出漫游时隐藏。
+      // 漫游占位 avatar：第三人称 / 过肩档按帧姿态摆位；第一人称、鸟瞰、退出漫游或接管 NPC 时隐藏。
+      // 显隐口径收敛到 `outdoorPlayerPresentation`：有 GLB 就不再叠胶囊体，加载中 / 失败才回落胶囊体。
       const walkAvatar = avatarGroupRef.current;
       const walkFrame = walkFrameRef.current;
+      const playerAvatar = playerAvatarSlotRef.current?.handle() ?? null;
+      const avatarPresentation = outdoorPlayerPresentation({
+        walkEnabled: walkEnabledRef.current,
+        thirdPerson: Boolean(walkFrame?.thirdPerson),
+        controlled: Boolean(controlledActorRef.current),
+        hasGlb: Boolean(playerAvatar),
+      });
       if (walkAvatar) {
-        const showAvatar = walkEnabledRef.current && !controlledActorRef.current && Boolean(walkFrame?.thirdPerson);
-        walkAvatar.visible = showAvatar;
-        if (showAvatar && walkFrame) {
+        walkAvatar.visible = avatarPresentation.showCapsule;
+        if (avatarPresentation.showCapsule && walkFrame) {
           walkAvatar.position.set(walkFrame.x, PLAN_LAYER_BASE_Y, walkFrame.z);
           walkAvatar.rotation.y = walkFrame.yaw;
         }
       }
+      playerAvatar?.setFrame({
+        ...(walkFrame ?? { x: 0, y: 0, z: 0, yaw: 0, moving: false, delta: 0 }),
+        thirdPerson: avatarPresentation.showGlb,
+      });
       // E 键交互：每帧用漫游锚点（非漫游回退相机位置）预筛最近条目，仅 id 变化回写 state。
       const interactRegistry = interactRegistryRef.current;
       if (interactRegistry) {
@@ -2008,6 +2355,10 @@ export default function OutdoorPlan3D({
         // 本机验收桥：3D 手柄屏幕坐标（CSS px）+ 选中设施尺寸，Playwright 脚本直接点柄用。
         const facility = handleFacilityRef.current;
         const viewport = derivedViewportNow();
+        // B2.4a 取证用：区分“当前是 GLB 还是胶囊体”、当前角色与是否可见，
+        // 不靠截图猜；生产环境不挂这个桥。
+        const avatarSlot = playerAvatarSlotRef.current;
+        const avatarDebugState = avatarSlot?.handle()?.state() ?? null;
         const project = (object: THREE.Object3D): { x: number; y: number } | null => {
           if (!renderer) return null;
           const rect = renderer.domElement.getBoundingClientRect();
@@ -2016,6 +2367,14 @@ export default function OutdoorPlan3D({
         };
         (window as unknown as { __scendancePlan3dDebug?: unknown }).__scendancePlan3dDebug = {
           selectedId: facility?.id ?? null,
+          avatar: {
+            role: avatarSlot?.role?.assetId ?? null,
+            mode: avatarDebugState ? 'glb' : 'capsule',
+            status: avatarSlot?.status ?? 'empty',
+            visible: avatarDebugState ? avatarDebugState.visible : Boolean(avatarGroup?.visible),
+            action: avatarDebugState?.action ?? null,
+            seated: avatarDebugState?.seated ?? false,
+          },
           info: handleInfoRef.current,
           facility: facility
             ? { id: facility.id, name: facility.name, width: facility.size.width, depth: facility.size.depth, rotationDeg: facility.rotationDeg, plan: { x: facility.position.x, y: facility.position.y } }
@@ -2080,6 +2439,8 @@ export default function OutdoorPlan3D({
 
     return () => {
       disposed = true;
+      pumpSceneModelsRef.current = null;
+      releaseSceneModels();
       if (releaseControlledActor()) onWalkExitRef.current?.();
       layerApiRef.current = null;
       modelRunRef.current += 1;
@@ -2136,8 +2497,11 @@ export default function OutdoorPlan3D({
         }
         root.parent?.remove(root);
       });
+      playerAvatarSlotRef.current?.dispose();
+      playerAvatarSlotRef.current = null;
       avatarGroup.parent?.remove(avatarGroup);
       avatarGroupRef.current = null;
+      playerCapsuleRef.current = null;
       walkFrameRef.current = null;
       interactRegistryRef.current?.clear();
       nearEntryIdRef.current = null;
@@ -2333,6 +2697,27 @@ export default function OutdoorPlan3D({
             {interactHintLabel(nearEntry, seatActiveId === nearEntry.id)}
             {nearEntry.subtitle ? ` · ${nearEntry.subtitle}` : ''}
           </span>
+        </div>
+      )}
+      {actionNote && (
+        <div
+          data-testid="outdoor-action-note"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 92,
+            transform: 'translateX(-50%)',
+            zIndex: 35,
+            padding: '5px 11px',
+            borderRadius: 9,
+            background: 'rgba(18, 20, 26, 0.72)',
+            color: '#fff',
+            fontSize: 12,
+            lineHeight: '18px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {actionNote.text}
         </div>
       )}
       {groundState === 'paper' && (

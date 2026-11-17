@@ -726,6 +726,7 @@ describe('persisted-field whitelist and bounds (#350)', () => {
       handoff: { ownerName: '现场负责人', dueDate: '2026-10-07', acceptance: '尺寸与位置核对通过', status: 'review', evidenceUrls: [], evidenceNote: '' },
       structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall',
       materialId: 'asset',
+      materialPreset: 'oak',
       personAction: 'talk',
       personPaused: false,
       walkRoute: { points: [{ x: 1, z: 2 }, { x: 3, z: 4 }], loop: true, speed: 1.2, pauseMs: 1200 },

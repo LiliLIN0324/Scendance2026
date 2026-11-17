@@ -116,3 +116,45 @@ npx vitest run components/room-organizer/components/outdoor-plan-overlay.merge.r
 - [ ] 先在开关关闭状态下替换实现，截图对比通过后再打开。
 - [ ] 恢复按钮后跑类型检查、目标测试和桌面/手机截图。
 - [ ] 经用户确认后，再删除 `SHOW_COMPASS_TURN_ARROWS` 开关和旧绘制代码。
+
+## 执行记录 · 2026-11-16 18:52
+
+右下角地图控制列的指北针改成圆形罗盘：深色圆盘、红白针、左右弯箭头画在同一旋转层，随方位一起转。2D / 3D 都走这枚罗盘。左箭头 `orbitByDelta(+π/2)`，右箭头 `orbitByDelta(-π/2)`，点针回正北，拖针按手指转角转。2D 在画布句柄上补了 `getBearing` / `orbitByDelta` / `resetNorth`（只改方位，不改视口中心；框选场地仍是焦点钮）。`scendance-workspace.tsx` 未改。
+
+改动文件：
+
+- `frontend/components/room-organizer/components/gm-compass.tsx`
+- `frontend/components/room-organizer/components/gm-compass.test.tsx`
+- `frontend/components/room-organizer/components/gm-compass-host.tsx`
+- `frontend/components/room-organizer/lib/gm-compass-bearing.ts`
+- `frontend/components/room-organizer/lib/gm-compass-bearing.test.ts`
+- `frontend/components/room-organizer/components/outdoor-plan-canvas.tsx`
+- `frontend/components/room-organizer/components/outdoor-plan-overlay.tsx`
+- `frontend/components/room-organizer/lib/plan-tile-cache.ts`
+- `frontend/components/room-organizer/room-organizer.tsx`
+- `frontend/app/globals.css`
+
+测试（Node 24.22.3，`vitest run` 上述两个新测试文件）：2 files, 5 passed。`tsc --noEmit` 里与这些文件相关的错误为 0；仓库里另有 `outdoor-map-context.ts` 两处既有报错，不是这次改动。
+
+## 执行记录 · 2026-11-16 19:00
+
+左右弯箭头从贴边大半圆改成短月牙：起笔贴红针，沿左缘下行，三角头朝下略向外，右侧镜像。针和两枚箭头仍在同一旋转层，随方位一起转。左箭头 `orbit(+π/2)`，右箭头 `orbit(-π/2)`，点针回正北。2D / 3D 仍走同一枚罗盘。`scendance-workspace.tsx` 未改。
+
+改动文件：
+
+- `frontend/components/room-organizer/components/gm-compass.tsx`
+- `frontend/components/room-organizer/components/gm-compass.test.tsx`
+
+测试（Node 24.22.3，`vitest run` `gm-compass.test.tsx` + `gm-compass-bearing.test.ts`）：2 files, 6 passed。
+
+## 执行记录 · 2026-11-16 19:12
+
+左右弯箭头改成短月牙：三次曲线从红针旁起笔，向外鼓到圆边内侧再收回，三角头朝下略向外，右侧整组镜像。针尖所在的圆面可以拖动和回正北，两侧热区只盖住弯箭头。合帧采样、2D `getBearing` / `orbitByDelta` / `resetNorth` 与 3D 同号旋转没有改。`scendance-workspace.tsx` 未改。
+
+改动文件：
+
+- `frontend/components/room-organizer/components/gm-compass.tsx`
+- `frontend/components/room-organizer/components/gm-compass.test.tsx`
+- `frontend/app/globals.css`
+
+测试（Node 24.22.3，`vitest run` `gm-compass.test.tsx` + `gm-compass-host.test.tsx` + `gm-compass-bearing.test.ts`）：3 files, 17 passed。

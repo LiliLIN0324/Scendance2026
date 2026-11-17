@@ -24,7 +24,9 @@ import {
   disposeOwnedModel,
   ensureGlbAsset,
   getGlbAssetState,
+  glbCacheKeyForUrl,
 } from './glb-assets';
+import { applyMaterialPreset } from './material-preset-apply';
 import {
   fitFacilityModel,
   loadFacilityModelCandidates,
@@ -102,6 +104,7 @@ export function candidateItemFor(
   const height = footprintFit !== null && actualDims
     ? actualDims.height * footprintFit
     : candidate.height;
+  const glbKey = glbCacheKeyForUrl(candidate.glbUrl);
   return {
     id: `plan-model-${prop.id}`,
     type: 'glb-asset',
@@ -112,8 +115,10 @@ export function candidateItemFor(
     color: '#ffffff',
     icon: '◇',
     glbUrl: candidate.glbUrl,
+    ...(glbKey !== candidate.glbUrl ? { assetId: glbKey } : {}),
     // 整馆 GLB 按 2D 占地的宽/深各自铺满（只让水平面切齐选框；高度用同一倍率，避免把人压扁）。
     uniformScale: footprintFit === null,
+    ...(prop.materialPreset ? { materialPreset: prop.materialPreset } : {}),
   };
 }
 
@@ -169,7 +174,7 @@ export function syncPlanModelPositions(
     const base = object.userData.planPropBaseScale as readonly [number, number, number] | undefined;
     object.scale.set(base?.[0] ?? 1, base?.[1] ?? 1, base?.[2] ?? 1);
     if (fit) {
-      const dims = fit.glbUrl ? getGlbAssetState(fit.glbUrl)?.dimensions : undefined;
+      const dims = fit.glbUrl ? getGlbAssetState(glbCacheKeyForUrl(fit.glbUrl))?.dimensions : undefined;
       // 按最新占地重算 contain：框变大模型跟放大、变小跟缩小（方案甲：框即模型真实外廓）。
       // 落模基底系数相对当时 contain_old，故跟随倍率 = 新 contain / 落模 contain。
       const contain = fit.swap
@@ -226,6 +231,8 @@ export interface PlanModelLayer {
    * 否则旧默认模型会和卡片预览叠在一起。传 null 清掉预览。
    */
   setPreview(preview: PlanPropShape | null, hiddenPropId?: string | null): void;
+  /** 2026-11-17 批量落位预览：一句话布置/套装在 3D 里以半透明体块显示，确认前不落库。 */
+  setBatchPreview(previews: readonly PlanPropShape[]): void;
 }
 
 export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
@@ -252,6 +259,22 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
   // 预览不放进 plan-models 组：那里按设施 id 做增删/同步，混进去会干扰已落模型的计数。
   // 外层用同一个 parent，位置在 setPreview 时跟 group 的场地偏移对齐。
   deps.parent.add(previewGroup);
+  /** 批量体块预览（一句话布置/套装）：半透明盒体，不加载 GLB，确认前不进 plan。 */
+  const batchPreviewGroup = new THREE.Group();
+  batchPreviewGroup.name = 'plan-model-preview-batch';
+  deps.parent.add(batchPreviewGroup);
+  const batchGhostMaterial = new THREE.MeshBasicMaterial({
+    color: 0x4a7c59,
+    transparent: true,
+    opacity: 0.28,
+    depthWrite: false,
+  });
+  const batchGhostEdgeMaterial = new THREE.LineBasicMaterial({
+    color: 0x4a7c59,
+    transparent: true,
+    opacity: 0.85,
+  });
+  let batchPreviewKey = '';
   let previewProp: PlanPropShape | null = null;
   let previewModel: THREE.Group | null = null;
   let previewFit: ShrinkFit | null = null;
@@ -310,11 +333,12 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     void loadFacilityModelOverride(overrideSlug)
       .then(async (candidate) => {
         if (deps.isDisposed() || token !== previewToken || !candidate) return;
-        await ensureGlbAsset(candidate.glbUrl, candidate.glbUrl);
+        const glbKey = glbCacheKeyForUrl(candidate.glbUrl);
+        await ensureGlbAsset(glbKey, candidate.glbUrl);
         const live = previewProp;
         if (deps.isDisposed() || token !== previewToken || !live || live.modelOverride !== overrideSlug) return;
         const fitted = { ...candidate, ...fitFacilityModel(live.width, live.depth, candidate) };
-        const dims = getGlbAssetState(candidate.glbUrl)?.dimensions;
+        const dims = getGlbAssetState(glbKey)?.dimensions;
         const model = createCachedGlbModel(candidateItemFor(live, fitted, dims), false);
         if (!model) return;
         // 预览半透明，不抢真实设施；材质是 createCachedGlbModel 的独立副本，改完不影响已落模型。
@@ -350,6 +374,34 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
       });
   };
 
+  const setBatchPreview = (previews: readonly PlanPropShape[]): void => {
+    const key = previews
+      .map(prop => `${prop.id}|${prop.center.x.toFixed(2)}|${prop.center.z.toFixed(2)}|${prop.rotationDeg}|${prop.width}|${prop.depth}`)
+      .join(';');
+    if (key === batchPreviewKey) return;
+    batchPreviewKey = key;
+    for (const child of [...batchPreviewGroup.children]) {
+      batchPreviewGroup.remove(child);
+      (child as THREE.Mesh).geometry?.dispose();
+    }
+    batchPreviewGroup.position.copy(group.position);
+    batchPreviewGroup.quaternion.copy(group.quaternion);
+    batchPreviewGroup.scale.copy(group.scale);
+    const height = 0.9;
+    for (const prop of previews) {
+      const { position, rotationY } = planModelTransform(prop, currentMetrics, false);
+      const geometry = new THREE.BoxGeometry(prop.width, height, prop.depth);
+      const body = new THREE.Mesh(geometry, batchGhostMaterial);
+      body.position.set(position[0], position[1] + height / 2, position[2]);
+      body.rotation.y = rotationY;
+      batchPreviewGroup.add(body);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), batchGhostEdgeMaterial);
+      edges.position.copy(body.position);
+      edges.rotation.y = rotationY;
+      batchPreviewGroup.add(edges);
+    }
+  };
+
   /**
    * 删除剪枝：plan 里已不存在的设施，把已落地的 GLB 从组里摘掉并释放几何/材质，
    * 同时从 placedPropIds 除名——否则旧模型会留在原位成孤儿（J1）。
@@ -378,14 +430,17 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     placedPropIds.add(prop.id);
     placedOverrides.set(prop.id, prop.modelOverride);
     placedUrls.set(prop.id, candidate.glbUrl);
-    void ensureGlbAsset(candidate.glbUrl, candidate.glbUrl)
+    const glbKey = glbCacheKeyForUrl(candidate.glbUrl);
+    void ensureGlbAsset(glbKey, candidate.glbUrl)
       .then(() => {
         if (deps.isDisposed() || run !== initialRun || generations.get(prop.id) !== generation || currentProps.find(p => p.id === prop.id)?.modelOverride !== prop.modelOverride) return;
         const liveProp = currentProps.find(p => p.id === prop.id);
         if (!liveProp) return;
-        const dims = getGlbAssetState(candidate.glbUrl)?.dimensions;
+        const dims = getGlbAssetState(glbKey)?.dimensions;
         const model = createCachedGlbModel(candidateItemFor(prop, candidate, dims), false);
         if (!model) return;
+        // 2026-11-17 材质快改：只改这一实例的材质（applyMaterialPreset 内部 clone），不动缓存。
+        applyMaterialPreset(model, liveProp.materialPreset);
         if (deps.isDisposed() || run !== initialRun) {
           disposeOwnedModel(model);
           return;
@@ -565,9 +620,17 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     },
     placeNew,
     setPreview,
+    setBatchPreview,
     dispose() {
       clearPreviewModel();
       previewGroup.parent?.remove(previewGroup);
+      for (const child of [...batchPreviewGroup.children]) {
+        batchPreviewGroup.remove(child);
+        (child as THREE.Mesh).geometry?.dispose();
+      }
+      batchPreviewGroup.parent?.remove(batchPreviewGroup);
+      batchGhostMaterial.dispose();
+      batchGhostEdgeMaterial.dispose();
       unsubscribeRegistry();
       run += 1;
       group.children.slice().forEach((child) => disposeOwnedModel(child));

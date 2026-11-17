@@ -6,6 +6,7 @@ import { normalizeGlbRoot } from '../lib/glb-normalize';
 import { isGlbUrl } from '../lib/glb-url';
 import { createGlbLoader } from './glb-loader';
 import { personIsAnimated, registerPersonAnim } from './people-anim';
+import { buildWaveClip } from './person-clip-retarget';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
 // 蒙皮人物 GLB 两档 LOD 压缩后 1.1–3.6 MB（2026-11-16 上线），45s 已是实测耗时的十余倍；
@@ -30,6 +31,28 @@ type CachedAsset = {
   controller: AbortController;
 };
 const cache = new Map<string, CachedAsset>();
+/** 调用方自造的键（如 outdoor-library:uuid）指到 URL 里的资产号，避免同一 GLB 双份下载。 */
+const aliases = new Map<string, string>();
+const visibleHolds = new Map<string, number>();
+const provisionalReleases = new Set<string>();
+const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** 当前楼层不再引用后，隔一段时间再丢掉 GPU 模板，切回来还能命中缓存。 */
+export const GLB_HIDDEN_RELEASE_MS = 20_000;
+const GLB_DOWNLOAD_SLOTS = 2;
+const MAX_TEXTURE_EDGE = 2048;
+const HEAVY_VERTEX_COUNT = 80_000;
+let glbDownloads = 0;
+const glbDownloadWaiters: Array<() => void> = [];
+let glbParseChain: Promise<void> = Promise.resolve();
+let glbParseDepth = 0;
+
+function storedCacheKey(key: string): string {
+  return aliases.get(key) ?? key;
+}
+
+function readCached(key: string): CachedAsset | undefined {
+  return cache.get(storedCacheKey(key));
+}
 
 /**
  * 正在播放的实例动画。只有 `createCachedGlbModel` 建出的、带 clip 的实例才会进这张表，
@@ -69,7 +92,7 @@ export function subscribeGlbAssets(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 export function getGlbAssetRevision(): number { return revision; }
-export function getGlbAssetState(key: string): GlbAssetState { return cache.get(key)?.state ?? IDLE; }
+export function getGlbAssetState(key: string): GlbAssetState { return readCached(key)?.state ?? IDLE; }
 
 export interface GlbCacheProbe {
   key: string;
@@ -99,8 +122,23 @@ if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
   (window as unknown as { __glbAssetCache?: typeof glbCacheProbe }).__glbAssetCache = glbCacheProbe;
 }
 /** Read-only source owned by the cache; callers must clone before mutation. */
-export function getGlbAssetSource(key: string): THREE.Object3D | undefined { return cache.get(key)?.source; }
-export function glbAssetKey(item: Pick<FurnitureItem, 'assetId' | 'glbUrl'>): string | undefined { return item.assetId ?? item.glbUrl; }
+export function getGlbAssetSource(key: string): THREE.Object3D | undefined { return readCached(key)?.source; }
+export function glbAssetKey(item: Pick<FurnitureItem, 'assetId' | 'glbUrl'>): string | undefined { return item.assetId ?? (item.glbUrl ? glbCacheKeyForUrl(item.glbUrl) : undefined); }
+
+const AHolo_ASSET_PATH = /\/asset\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.glb$/i;
+
+/** 本机/云端 Aholo 落盘 URL 嵌 UUID，与 `ensureGlbAsset(assetId, url)` 口径对齐，避免同文件双键重复下载。 */
+export function glbCacheKeyForUrl(url: string, preferred?: string): string {
+  if (preferred) return preferred;
+  try {
+    const match = new URL(url, 'http://local.invalid').pathname.match(AHolo_ASSET_PATH);
+    if (match?.[1]) return match[1].toLowerCase();
+  } catch {
+    /* 非绝对 URL 走相对路径分支 */
+  }
+  const relative = url.match(AHolo_ASSET_PATH);
+  return relative?.[1] ? relative[1].toLowerCase() : url;
+}
 
 /**
  * 部分批次产物用 NUL(0x00) 而非规范空格对齐 JSON chunk；预检与 GLTFLoader 都会
@@ -237,23 +275,234 @@ function assertRenderableGlb(source: THREE.Object3D): void {
   if (!meshCount) throw new Error('模型不含可显示网格。');
 }
 
+function aborted(): Error {
+  return new DOMException('The operation was aborted.', 'AbortError');
+}
+
+/** 同时只下少量 GLB，避免一屏生成模型把内存和带宽一次性占满。取消的请求立刻让出名额。 */
+async function withDownloadSlot<T>(signal: AbortSignal, run: () => Promise<T>): Promise<T> {
+  while (glbDownloads >= GLB_DOWNLOAD_SLOTS) {
+    if (signal.aborted) throw aborted();
+    await new Promise<void>((resolve, reject) => {
+      const wake = () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      };
+      const onAbort = () => {
+        const index = glbDownloadWaiters.indexOf(wake);
+        if (index >= 0) glbDownloadWaiters.splice(index, 1);
+        reject(aborted());
+      };
+      glbDownloadWaiters.push(wake);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+  if (signal.aborted) throw aborted();
+  glbDownloads += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    glbDownloads = Math.max(0, glbDownloads - 1);
+    glbDownloadWaiters.shift()?.();
+  };
+  const onAbort = () => release();
+  signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    return await run();
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+    release();
+  }
+}
+
+/** 解析挤在主线程上。第二份及以后先让出一帧，占位还在时轨道和点选仍能响应。 */
+function runParsed<T>(task: () => Promise<T>): Promise<T> {
+  const depth = glbParseDepth;
+  glbParseDepth += 1;
+  const run = glbParseChain.then(async () => {
+    if (depth > 0) await new Promise<void>(resolve => { setTimeout(resolve, 0); });
+    try {
+      return await task();
+    } finally {
+      glbParseDepth = Math.max(0, glbParseDepth - 1);
+    }
+  });
+  glbParseChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function downsampleRgba(data: Uint8Array, width: number, height: number): { data: Uint8Array; width: number; height: number } | undefined {
+  const edge = Math.max(width, height);
+  if (edge <= MAX_TEXTURE_EDGE || width < 1 || height < 1) return undefined;
+  const scale = MAX_TEXTURE_EDGE / edge;
+  const nextW = Math.max(1, Math.round(width * scale));
+  const nextH = Math.max(1, Math.round(height * scale));
+  const out = new Uint8Array(nextW * nextH * 4);
+  for (let y = 0; y < nextH; y += 1) {
+    const srcY = Math.min(height - 1, Math.floor((y / nextH) * height));
+    for (let x = 0; x < nextW; x += 1) {
+      const srcX = Math.min(width - 1, Math.floor((x / nextW) * width));
+      const from = (srcY * width + srcX) * 4;
+      const to = (y * nextW + x) * 4;
+      out[to] = data[from] ?? 0;
+      out[to + 1] = data[from + 1] ?? 0;
+      out[to + 2] = data[from + 2] ?? 0;
+      out[to + 3] = data[from + 3] ?? 0;
+    }
+  }
+  return { data: out, width: nextW, height: nextH };
+}
+
+function shrinkTexture(texture: THREE.Texture): boolean {
+  const image = texture.image as { data?: unknown; width?: number; height?: number; close?: () => void } | undefined;
+  const width = image?.width ?? 0;
+  const height = image?.height ?? 0;
+  if (!image || width <= MAX_TEXTURE_EDGE && height <= MAX_TEXTURE_EDGE) return false;
+  const pixels = image.data;
+  if ((pixels instanceof Uint8Array || pixels instanceof Uint8ClampedArray) && pixels.length >= width * height * 4) {
+    const next = downsampleRgba(pixels instanceof Uint8Array ? pixels : new Uint8Array(pixels), width, height);
+    if (!next) return false;
+    image.data = next.data;
+    image.width = next.width;
+    image.height = next.height;
+    texture.needsUpdate = true;
+    return true;
+  }
+  const drawable = image as CanvasImageSource;
+  const canDraw = (typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement)
+    || (typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement)
+    || (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap)
+    || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas);
+  if (!canDraw || typeof document === 'undefined') return false;
+  const scale = MAX_TEXTURE_EDGE / Math.max(width, height);
+  const nextW = Math.max(1, Math.round(width * scale));
+  const nextH = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = nextW;
+  canvas.height = nextH;
+  const context = canvas.getContext('2d');
+  if (!context) return false;
+  try {
+    context.drawImage(drawable, 0, 0, nextW, nextH);
+  } catch {
+    return false;
+  }
+  texture.image = canvas;
+  texture.needsUpdate = true;
+  if ('close' in image && typeof image.close === 'function') image.close();
+  return true;
+}
+
+/** 贴图边长超过 2048 时缩小再上传；超大网格关掉阴影，避免生成模型把主线程和显存撑满。 */
+export function degradeOversizedGlb(root: THREE.Object3D): void {
+  const seen = new Set<THREE.Texture>();
+  root.traverse(node => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const verts = mesh.geometry?.getAttribute('position')?.count ?? 0;
+    let shrunk = false;
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      for (const value of Object.values(material)) {
+        if (!(value instanceof THREE.Texture) || seen.has(value)) continue;
+        seen.add(value);
+        if (shrinkTexture(value)) shrunk = true;
+      }
+    }
+    if (verts > HEAVY_VERTEX_COUNT || shrunk) {
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.userData.glbDegraded = true;
+    }
+  });
+}
+
+function meshSkipsShadows(mesh: THREE.Mesh): boolean {
+  const verts = mesh.geometry?.getAttribute('position')?.count ?? 0;
+  return verts > HEAVY_VERTEX_COUNT || mesh.userData.glbDegraded === true;
+}
+
+function armHiddenRelease(key: string): void {
+  const existing = releaseTimers.get(key);
+  if (existing) clearTimeout(existing);
+  const watched = cache.get(key);
+  const timer = setTimeout(() => {
+    releaseTimers.delete(key);
+    if ((visibleHolds.get(key) ?? 0) > 0 || !provisionalReleases.has(key)) return;
+    const live = cache.get(key);
+    if (!live || live !== watched) return;
+    if (live.state.status === 'loading') {
+      armHiddenRelease(key);
+      return;
+    }
+    if (live.state.status !== 'ready') return;
+    if (live.source) disposeOwnedModel(live.source);
+    if (cache.get(key) === live) cache.delete(key);
+    provisionalReleases.delete(key);
+  }, GLB_HIDDEN_RELEASE_MS);
+  const unref = (timer as { unref?: unknown }).unref;
+  if (typeof unref === 'function') unref.call(timer);
+  releaseTimers.set(key, timer);
+}
+
+/** 当前能看见的模型保持模板；最后一个引用松开后才进入延迟释放。 */
+export function holdVisibleGlbAssets(keys: readonly string[]): () => void {
+  const held = [...new Set(keys.filter(Boolean).map(storedCacheKey))];
+  for (const key of held) {
+    provisionalReleases.delete(key);
+    visibleHolds.set(key, (visibleHolds.get(key) ?? 0) + 1);
+    const timer = releaseTimers.get(key);
+    if (timer) { clearTimeout(timer); releaseTimers.delete(key); }
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const key of held) {
+      const next = (visibleHolds.get(key) ?? 1) - 1;
+      if (next > 0) { visibleHolds.set(key, next); continue; }
+      visibleHolds.delete(key);
+      provisionalReleases.add(key);
+      armHiddenRelease(key);
+    }
+  };
+}
+
+/** 非当前楼层的预加载可以晚些丢掉，避免多层图纸把全部 GLB 常驻在显存里。 */
+export function releaseHiddenGlbAssetLater(key: string): void {
+  const stored = storedCacheKey(key);
+  if (!stored || (visibleHolds.get(stored) ?? 0) > 0) return;
+  provisionalReleases.add(stored);
+  armHiddenRelease(stored);
+}
+
 /** Cache is keyed by stable asset ID (or a local sample URL). A new URL supersedes a pending request. */
 export function ensureGlbAsset(key: string, url: string): Promise<void> {
   if (!key) return Promise.reject(new Error('缺少模型标识。'));
-  const prior = cache.get(key);
+  const fromUrl = glbCacheKeyForUrl(url);
+  const cacheKey = fromUrl !== url ? fromUrl : key;
+  if (cacheKey === key) aliases.delete(key);
+  else aliases.set(key, cacheKey);
+  const prior = cache.get(cacheKey);
   if (prior?.state.status === 'ready') return Promise.resolve();
   if (prior?.state.status === 'loading' && prior.url === url) return prior.promise;
   prior?.controller.abort();
   const controller = new AbortController();
   const entry: CachedAsset = { url, state: { status: 'loading' }, controller, promise: Promise.resolve() };
-  cache.set(key, entry);
+  cache.set(cacheKey, entry);
   entry.promise = (async () => {
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     let source: THREE.Object3D | undefined;
     try {
-      const buffer = await downloadGlb(url, controller.signal);
-      const gltf = await createGlbLoader().parseAsync(buffer, '');
+      const buffer = await withDownloadSlot(controller.signal, () => downloadGlb(url, controller.signal));
+      if (cache.get(cacheKey) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
+      const gltf = await runParsed(async () => {
+        if (cache.get(cacheKey) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
+        return createGlbLoader().parseAsync(buffer, '');
+      });
       source = gltf.scene;
+      degradeOversizedGlb(source);
       assertRenderableGlb(source);
       // 米制 / Y-up / 底面中心：加载时统一一次，实例只按目录尺寸缩放。
       // 2026-11-12 用户报告「桌椅组合在 3D 里翻倒 90°」：URL 加载的资产一律按 glTF
@@ -261,7 +510,7 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
       // Z-up 而整个立起来，且这里无人复核；猜轴向只保留在 importLocalGlb
       // （导入时有人工预览与登记的 upAxis 元数据兜底）。
       const normalized = normalizeGlbRoot(source, { upAxis: 'y' });
-      if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
+      if (cache.get(cacheKey) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
       entry.source = normalized.root;
       entry.animations = gltf.animations?.length ? gltf.animations : undefined;
       entry.state = { status: 'ready', dimensions: normalized.size };
@@ -271,7 +520,7 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
       if (source) disposeOwnedModel(source);
       const message = controller.signal.aborted ? '模型加载超时或请求已取消，请重试。' : error instanceof Error ? error.message : '模型加载失败，请重试。';
       const stack = error instanceof Error ? error.stack : undefined;
-      if (cache.get(key) === entry) { entry.state = { status: 'error', error: message, ...(stack ? { stack } : {}) }; changed(); }
+      if (cache.get(cacheKey) === entry) { entry.state = { status: 'error', error: message, ...(stack ? { stack } : {}) }; changed(); }
       if (process.env.NODE_ENV !== 'production') console.error('[glb-load]', error);
       throw new Error(message);
     } finally { clearTimeout(timer); }
@@ -307,7 +556,9 @@ export function cloneOwnedGlb(source: THREE.Object3D): THREE.Object3D {
     if (!geometry) { geometry = mesh.geometry.clone(); geometryCopies.set(mesh.geometry, geometry); }
     mesh.geometry = geometry;
     mesh.material = Array.isArray(mesh.material) ? mesh.material.map(materialCopy) : materialCopy(mesh.material);
-    mesh.castShadow = true; mesh.receiveShadow = true;
+    const lite = meshSkipsShadows(mesh);
+    mesh.castShadow = !lite;
+    mesh.receiveShadow = !lite;
   });
   return object;
 }
@@ -340,7 +591,7 @@ export function normalizeGlbInstance(
 
 export function createCachedGlbModel(item: FurnitureItem, autoplay = true): THREE.Group | null {
   const key = glbAssetKey(item);
-  const entry = key ? cache.get(key) : undefined;
+  const entry = key ? readCached(key) : undefined;
   const asset = entry?.source;
   const source = item.glbNode ? asset?.getObjectByName(item.glbNode) : asset;
   if (!source) return null;
@@ -396,6 +647,8 @@ export function createCachedGlbModel(item: FurnitureItem, autoplay = true): THRE
           idle: clips.find(clip => clip.name === 'Idle_Loop') ?? null,
           talk: clips.find(clip => clip.name === 'Idle_Talking_Loop') ?? null,
           sit: clips.find(clip => clip.name === 'Sit_Idle_Loop') ?? null,
+          // people.glb 没有挥手片段：用相对静止姿势的程序化片段兜底。
+          wave: buildWaveClip(group),
         },
         action: item.personAction ?? 'idle',
         paused: item.personPaused === true,
@@ -446,7 +699,7 @@ export function inPlaceWalkClip(clip: THREE.AnimationClip): THREE.AnimationClip 
 
 export function createWalkAvatar(item: FurnitureItem) {
   const key = glbAssetKey(item);
-  const clips = key ? cache.get(key)?.animations : undefined;
+  const clips = key ? readCached(key)?.animations : undefined;
   const idle = clips?.find(clip => clip.name === 'Idle_Loop');
   const walk = clips?.find(clip => clip.name === 'Walk_Formal_Loop') ?? clips?.find(clip => clip.name === 'Walk_Loop');
   const sit = clips?.find(clip => clip.name === 'Sit_Idle_Loop') ?? null;
@@ -500,8 +753,16 @@ export function disposeOwnedModel(root: THREE.Object3D): void {
 }
 
 export function clearGlbAssetCache(): void {
+  for (const timer of releaseTimers.values()) clearTimeout(timer);
+  releaseTimers.clear();
+  provisionalReleases.clear();
+  visibleHolds.clear();
+  aliases.clear();
   for (const entry of cache.values()) { entry.controller.abort(); if (entry.source) disposeOwnedModel(entry.source); }
-  cache.clear(); changed();
+  cache.clear();
+  glbDownloads = 0;
+  glbDownloadWaiters.length = 0;
+  changed();
 }
 
 /** A model the user picked off their own disk. Session-only: it never joins the shipped library. */
@@ -546,10 +807,11 @@ export async function importLocalGlb(file: File, key: string): Promise<ImportedG
   try {
     const buffer = await file.arrayBuffer();
     validateGlbBuffer(buffer);
-    const gltf = await createGlbLoader().parseAsync(buffer, '').catch(() => {
+    const gltf = await runParsed(() => createGlbLoader().parseAsync(buffer, '').catch(() => {
       throw new Error('模型解析失败：文件损坏或不是标准 glTF 2.0。');
-    });
+    }));
     source = gltf.scene;
+    degradeOversizedGlb(source);
     assertRenderableGlb(source);
     const normalized = normalizeGlbRoot(source);
     if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型导入请求已过期，请重试。');

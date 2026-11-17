@@ -30,6 +30,8 @@ const agent = vi.hoisted(() => ({
   registerRouteBridge: vi.fn((bridge: OutdoorAgentBridge | null) => {
     state.bridge = bridge;
   }),
+  manualOutdoorVenueApplied: vi.fn(),
+  manualOutdoorVenueCanceled: vi.fn(),
   outdoorWorkflow: {
     proposal: null as { kind: "scope"; next: SitePlanData } | null,
     appliedHighlight: null as OutdoorMapEditHighlight | null,
@@ -76,6 +78,8 @@ beforeEach(() => {
   state.three = null;
   state.csv.mockClear();
   state.apply.mockClear();
+  agent.manualOutdoorVenueApplied.mockClear();
+  agent.manualOutdoorVenueCanceled.mockClear();
   vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) =>
     window.setTimeout(() => cb(0), 0),
   );
@@ -86,6 +90,12 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+it("forwards hand-drawn boundary cancellation to the workflow", () => {
+  render(<Overlay projectId="boundary-cancel" seedPlan={createStarterOutdoorPlan()} />);
+  expect(typeof state.canvas?.onVenueBoundaryCanceled).toBe("function");
+  act(() => state.canvas?.onVenueBoundaryCanceled?.());
+  expect(agent.manualOutdoorVenueCanceled).toHaveBeenCalledOnce();
 });
 it("keeps outside guide actions working and exposes a clean map details panel", () => {
   render(<Overlay projectId="guide-outside-action" seedPlan={createStarterOutdoorPlan()} />);
@@ -109,14 +119,28 @@ it("keeps outside guide actions working and exposes a clean map details panel", 
   }
 
   // 悬停图层先出竖排快捷列表；点末尾「展开」才进完整「地图详情」。
-  const layerBtn = screen.getByTestId("outdoor-source-cycle");
-  fireEvent.mouseEnter(layerBtn.parentElement!);
-  expect(screen.getByTestId("outdoor-layer-strip")).toBeTruthy();
-  fireEvent.click(screen.getByTestId("map-strip-expand"));
+  const openDetails = () => {
+    const layerBtn = screen.getByTestId("outdoor-source-cycle");
+    fireEvent.mouseEnter(layerBtn.parentElement!);
+    fireEvent.click(screen.getByTestId("map-strip-expand"));
+    return screen.getByRole("dialog", { name: "地图详情" });
+  };
+  const openDetailsPanel = openDetails();
   expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
-  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
   expect(screen.queryByTestId("map-picker-restart-guide")).toBeNull();
-  fireEvent.click(screen.getByTestId("map-picker-close"));
+  // 标题与 X 在固定头里，滚动只发生在 body，不会把关闭按钮滚走。
+  const close = screen.getByTestId("map-picker-close");
+  expect(openDetailsPanel.querySelector(".oc-map-details__head")?.contains(close)).toBe(true);
+  expect(openDetailsPanel.querySelector(".oc-map-details__body .oc-map-details__section")).toBeTruthy();
+  fireEvent.click(close);
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+
+  // 关闭不只靠 X：Esc 和点画布（面板外）都要能关。
+  openDetails();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+  openDetails();
+  fireEvent.pointerDown(document.body);
   expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {

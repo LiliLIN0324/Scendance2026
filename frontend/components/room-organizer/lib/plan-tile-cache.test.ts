@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   BasemapTileCache,
   ancestorTileCrop,
+  isBasemapOffline,
   paintBasemapTiles,
 } from './plan-tile-cache';
 
@@ -386,5 +387,21 @@ describe('paintBasemapTiles', () => {
     });
     expect(result.drawn).toBe(2);
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe('isBasemapOffline', () => {
+  it('慢网仍在前途时不判离线', () => {
+    expect(isBasemapOffline({ loadingCount: 4, errors: 0, drawn: 0, fallback: 0 })).toBe(false);
+  });
+
+  it('全部重试失败且一张没画上才判离线', () => {
+    expect(isBasemapOffline({ loadingCount: 0, errors: 3, drawn: 0, fallback: 0 })).toBe(true);
+  });
+
+  it('有祖先瓦片兜底或已有当前级瓦片都不算离线', () => {
+    expect(isBasemapOffline({ loadingCount: 0, errors: 3, drawn: 0, fallback: 1 })).toBe(false);
+    expect(isBasemapOffline({ loadingCount: 0, errors: 3, drawn: 1, fallback: 0 })).toBe(false);
+    expect(isBasemapOffline({ loadingCount: 0, errors: 2, drawn: 0, fallback: 0 })).toBe(false);
   });
 });

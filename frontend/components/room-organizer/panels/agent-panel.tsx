@@ -514,6 +514,7 @@ interface AgentValue {
   /** M5：单条设施属性改；不存在或未接上回 false。 */
   updateOutdoorFacility(id: string, patch: Partial<Pick<PlanFacility, 'name'|'notes'|'rotationDeg'|'color'|'opacity'|'strokeStyle'|'modelOverride'|'vendorName'|'vendorZone'|'inDate'|'inTime'|'outDate'|'outTime'|'electricKw'>> & { size?: { width: number; depth: number } }): boolean;
   manualOutdoorVenueApplied(anchor: NonNullable<SitePlanData['anchor']>): void;
+  manualOutdoorVenueCanceled(): void;
   sessionScope: string;
   isSessionCurrent(): boolean;
   historyReviewRequired: boolean;
@@ -3749,6 +3750,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       manualVenueAnchorRef.current = undefined;
       setOutdoorTask({ intent: '手动确认真实场地', state: 'done', action: '手画边界已闭合并写入同一份规划；2D/3D 同步，可撤销', steps: ['地点已确认', '手画闭合并通过边界校验', '提交锚点与边界'], prompts: ['排一下流线'] });
     },
+    manualOutdoorVenueCanceled: () => {
+      manualVenueAnchorRef.current = undefined;
+      if(routeBridgeRef.current?.applyPlan){outdoorWorkflow.manualCanceled();return;}
+      setOutdoorTask({ intent: '确认场地', state: 'ready', action: '已取消这次画线；未写入活动范围。', steps: [] });
+    },
     inspectOutdoorFacility: id => { if (!routeBridgeRef.current?.inspectFacility?.(id)) setOutdoorTask(current => current ? { ...current, state: 'blocked', action: '该设施已不在当前户外方案，请重新选择画布中的设施', focusFacilityId: undefined } : null); },
     applyOutdoorWorkers: workers => routeBridgeRef.current?.applyWorkers?.(workers) ?? false,
     sayDecisionBadge: (decision, text) => { say({ role: 'agent', decision, text }); },
@@ -4482,6 +4488,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           type="button"
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}
           aria-expanded={showHistory}
+          aria-pressed={showHistory}
           aria-label="会话历史"
           data-tip="会话历史"
           onClick={() => setShowHistory(value => !value)}

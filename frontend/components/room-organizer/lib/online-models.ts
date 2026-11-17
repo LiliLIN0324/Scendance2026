@@ -168,11 +168,14 @@ export function filterOnlineModels(
   bucket: string
 ): OnlineModel[] {
   const needle = query.trim().toLowerCase();
+  const words = needle.split(/\s+/).filter(Boolean);
   return models.filter(model => {
     if (bucket && !matchesMaterialGroup(model.bucket, bucket)) return false;
     if (!needle) return true;
-    const text = [model.name, model.originalName, model.subcategory, onlineBucketLabel(model.bucket), ONLINE_BUCKET_LABELS[model.bucket], model.slug].join(' ').toLowerCase();
-    return needle.split(/\s+/).every(word => text.includes(word));
+    // 2026-11-17：撤掉「能坐 / 能聊」这类能力词搜索——规则检索不是产品路径，
+    // 排道具交给 Agent 按需求做；能力表只服务 3D / 属性卡。
+    const haystack = [model.name, model.originalName, model.subcategory, onlineBucketLabel(model.bucket), ONLINE_BUCKET_LABELS[model.bucket], model.slug].join(' ').toLowerCase();
+    return words.every(word => haystack.includes(word));
   });
 }
 

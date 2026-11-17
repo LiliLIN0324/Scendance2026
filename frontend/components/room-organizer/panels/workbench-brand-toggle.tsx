@@ -21,6 +21,7 @@ export function WorkbenchBrandToggle({ expanded, active = false, onToggle, butto
       type="button"
       className={`sc-nav-brand is-mark${active ? ' is-active' : ''}`}
       aria-expanded={expanded}
+      aria-pressed={active}
       aria-controls="workbench-nav-column"
       aria-label={label}
       data-tip={label}

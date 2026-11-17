@@ -165,6 +165,8 @@ export type PlanPropKind =
 export interface PlanPropShape {
   id: string;
   templateId: string;
+  /** 材质快改预设 id；缺省原样。 */
+  materialPreset?: string;
   kind: PlanPropKind;
   label: string;
   /** 占地中心（壳体坐标）。 */
@@ -294,7 +296,7 @@ export function facilityFootprint(
  * 没有任何信息量，不如按「最小可辨认物件」画。
  */
 export function facilityProp(
-  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size' | 'modelOverride'> & { color?: string | undefined },
+  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size' | 'modelOverride'> & { color?: string | undefined; materialPreset?: string | undefined },
   frame: PlanShellFrame,
 ): PlanPropShape {
   return {
@@ -309,6 +311,8 @@ export function facilityProp(
     ...(facility.color ? { color: facility.color } : {}),
     // V-5a：手动模型 override 原样透传给 plan-model-layer（undefined 不落键）。
     ...(facility.modelOverride !== undefined ? { modelOverride: facility.modelOverride } : {}),
+    // 2026-11-17 材质快改：同样透传，缺省不落键。
+    ...(facility.materialPreset !== undefined ? { materialPreset: facility.materialPreset } : {}),
   };
 }
 

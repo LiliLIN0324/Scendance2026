@@ -23,12 +23,16 @@ import type { PlanPropShape } from '@/components/room-organizer/lib/plan-footpri
 import { registerGeneratedFacilityModel } from '../lib/facility-generated-models';
 import { createCachedGlbModel, disposeOwnedModel, ensureGlbAsset, getGlbAssetState } from './glb-assets';
 
-vi.mock('./glb-assets', () => ({
-  ensureGlbAsset: vi.fn(() => Promise.resolve()),
-  createCachedGlbModel: vi.fn(() => new THREE.Group()),
-  getGlbAssetState: vi.fn(() => ({ status: 'idle' })),
-  disposeOwnedModel: vi.fn(),
-}));
+vi.mock('./glb-assets', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./glb-assets')>();
+  return {
+    ...actual,
+    ensureGlbAsset: vi.fn(() => Promise.resolve()),
+    createCachedGlbModel: vi.fn(() => new THREE.Group()),
+    getGlbAssetState: vi.fn(() => ({ status: 'idle' })),
+    disposeOwnedModel: vi.fn(),
+  };
+});
 
 const CANDIDATE: FacilityModelCandidate = {
   slug: 'event-tent-05m',

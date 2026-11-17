@@ -102,7 +102,7 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
           mainCount
         )}
         {cornerCount && (
-          <span className="sc-bingo-corner" data-count={cornerCount}>{cornerCount}</span>
+          <span className="sc-bingo-corner sc-rail-member-badge" data-count={cornerCount}>{cornerCount}</span>
         )}
       </span>
       <span className="sc-rail-label" aria-hidden="true">Bingo</span>

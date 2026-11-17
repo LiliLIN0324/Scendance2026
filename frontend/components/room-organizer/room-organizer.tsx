@@ -210,6 +210,11 @@ import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
+import { GmCompassHost } from './components/gm-compass-host';
+import { shouldPublishBearing } from './lib/gm-compass-bearing';
+import { assignIfChanged, scaleChromeReadout } from './lib/map-chrome-publish';
+import { GmLocateHost } from './components/gm-locate-host';
+import { locateReadiness } from './lib/gm-locate';
 /** 户外左栏卡片只剩两个页签：图层栈 / 物件库（物件库合入图层卡，规划信息改挂 Bingo 面板）。 */
 type OutdoorPanelKind = 'layers' | 'library';
 import { MemberChat } from './panels/member-chat';
@@ -229,7 +234,7 @@ import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
-import { type ShareMenuActions } from './panels/share-menu';
+import { shareExportPlan, type ShareMenuActions } from './panels/share-menu';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
@@ -2554,6 +2559,11 @@ useEffect(() => {
   // 2026-11-13 定稿：2D/3D 胶囊固定在画布左下动作簇，2D 覆盖层与 3D 接管同一入口；
   // 右轨 44px 竖轨不再纳横排文字胶囊。状态机沿用原 outdoorStage.onSwitch 的三态流转。
   const handleOutdoorViewSwitch = (next: '2d' | '3d') => {
+    // 2D/3D 切换与漫游互斥：先收口指针锁与步行 RAF，避免残留 captured 光标。
+    if (outdoorWalkActive || outdoorWalkChooserOpen) {
+      setOutdoorWalkChooserOpen(false);
+      setOutdoorWalkActive(false);
+    }
     if (next === '3d') {
       setSplatTransformModeState('off');
       setOutdoor2DOpen(false);
@@ -2610,24 +2620,30 @@ useEffect(() => {
     if (!geoClusterOn || !isReady) return undefined;
     const controls = controlsRef.current;
     if (!controls) return undefined;
+    let headingStamp: number | null = null;
+    let scaleWidth: string | null = null;
+    let scaleText: string | null = null;
     const update = (): void => {
       const camera = cameraRef.current;
       if (!camera) return;
       if (geoCompassRef.current) {
         const dx = camera.position.x - controls.target.x;
         const dz = camera.position.z - controls.target.z;
-        geoCompassRef.current.style.transform = `rotate(${-Math.atan2(-dx, dz)}rad)`;
+        const heading = Math.atan2(-dx, dz);
+        if (Number.isFinite(heading) && (headingStamp === null || shouldPublishBearing(headingStamp, heading))) {
+          geoCompassRef.current.style.transform = `rotate(${-heading}rad)`;
+          headingStamp = heading;
+        }
       }
       if (geoScaleBarRef.current && geoScaleLabelRef.current) {
         const canvasH = rendererRef.current?.domElement.clientHeight || 600;
         const dist = Math.max(camera.position.distanceTo(controls.target), 4);
         const metersPerPixel = (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(canvasH, 1);
-        const targetM = metersPerPixel * 80;
-        const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
-        const meters = nice.find((value) => value >= targetM) ?? Math.round(targetM);
-        const width = Math.max(24, Math.min(140, meters / Math.max(metersPerPixel, 0.01)));
-        geoScaleBarRef.current.style.width = `${width}px`;
-        geoScaleLabelRef.current.textContent = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+        const readout = scaleChromeReadout(metersPerPixel);
+        const bar = geoScaleBarRef.current;
+        const label = geoScaleLabelRef.current;
+        scaleWidth = assignIfChanged(scaleWidth, readout.width, (value) => { bar.style.width = value; });
+        scaleText = assignIfChanged(scaleText, readout.text, (value) => { label.textContent = value; });
       }
     };
     update();
@@ -3281,18 +3297,25 @@ useEffect(() => {
     setPendingMapVenueFrame(current.mapGroundPolygon);
   }, [setView, setSceneFocus]);
   // 2026-11-16 用户指令：左栏那行「定位到设计范围」去掉，功能改到右轨焦点钮。
-  // 2D 户外画布：优先框设计范围；没有圈设计范围时回到地块边界/锚点（不落到 3D 场地取景，2D 下无足迹会静默失效）。
+  // 2D 户外画布：优先框设计范围；没有圈设计范围时回到地块边界/锚点（2D 不借用地图足迹）。
   // 3D 接管 / 实景隔离：维持原来的场地取景。只动视图、不改 plan。
-  const focusScopeOrVenue = useCallback(() => {
+  // 返回 moved / miss，定位钮据此显示蓝点或失败说明。
+  const focusScopeOrVenue = useCallback((): 'moved' | 'miss' => {
+    const ready = locateReadiness({
+      outdoor2D: outdoor2DOpen,
+      designScopeCount: outdoorPlan?.designScope?.length ?? 0,
+      hasAnchor: outdoorPlan?.anchor != null,
+      hasOverlay: outdoorOverlayRef.current != null,
+      mapFootprintCount: mapVenueFootprint(layoutStore.getState().layout).length,
+    });
+    if (ready === 'miss') return 'miss';
     if (outdoor2DOpen) {
-      if ((outdoorPlan?.designScope ?? []).length >= 3) {
-        outdoorOverlayRef.current?.focusDesignScope();
-        return;
-      }
-      outdoorOverlayRef.current?.focusVenue();
-      return;
+      if ((outdoorPlan?.designScope?.length ?? 0) >= 3) outdoorOverlayRef.current?.focusDesignScope();
+      else outdoorOverlayRef.current?.focusVenue();
+      return 'moved';
     }
     focusMapVenue();
+    return 'moved';
   }, [outdoor2DOpen, outdoorPlan, focusMapVenue]);
   useEffect(() => {
     if (walkthroughActive || !mapVenueTrialRef.current) return;
@@ -4365,6 +4388,7 @@ useEffect(() => {
 
   // P4-c：发布卡片只实现一次；3D 工具轨与 2D 画布右上交付簇各自挂一份触发钮，
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
+  const exportPlan = shareExportPlan({ outdoor2D: outdoor2DOpen, outdoor3d: outdoor3dTakeover, hasPlan: !!outdoorPlan });
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
     onPublish: publishVersion,
@@ -4372,10 +4396,16 @@ useEffect(() => {
     onGenerateShareLink: handleShareLink,
     onOpenMaterials: openMaterialsFromShare,
     onOpenChecklist: () => setChecklistOpen(true),
-    // 2026-11-15 出图收编进分享面板：按当前视图抓帧下载 PNG，独立导出钮不再出镜。
+    // 勾选 PNG 后走既有导出：2D 用规划快照（exportPng），画不出来再抓当前画面；3D 仍抓三维帧。
     onExportImage: async () => {
-      if (outdoor3dTakeover) return handleOutdoor3dExport();
-      if (outdoor2DOpen) {
+      if (exportPlan.png === 'frame3d') return handleOutdoor3dExport();
+      if (exportPlan.png === 'plan') {
+        try {
+          if (outdoorOverlayRef.current?.exportPng()) {
+            notify('效果图已开始下载。', 'success');
+            return true;
+          }
+        } catch { /* 规划快照失败，改抓当前画面。 */ }
         const data = outdoorOverlayRef.current?.captureImage();
         if (!data) { notify('效果图导出失败，请稍后重试。', 'error'); return false; }
         const link = document.createElement('a');
@@ -4387,11 +4417,10 @@ useEffect(() => {
       }
       return handleExportImage({ view: 'current', scale: 1 });
     },
-    // 户外方案专属导出：CSV 物料清单 / GeoJSON 几何 / PDF 演示稿，经覆盖层句柄下发；
-    // 室内分支 ref 为空、回调不挂载，主分享卡也就不显示这三枚入口。
-    onExportCsv: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportCsv() : undefined,
-    onExportGeoJson: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportGeoJson() : undefined,
-    onPrintDeck: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportPdf() : undefined,
+    // CSV / GeoJSON / PDF 与覆盖层句柄同一条链路；3D 接管时覆盖层保活，方案还在就能下发。
+    onExportCsv: exportPlan.files ? () => outdoorOverlayRef.current?.exportCsv() : undefined,
+    onExportGeoJson: exportPlan.files ? () => outdoorOverlayRef.current?.exportGeoJson() : undefined,
+    onPrintDeck: exportPlan.files ? () => outdoorOverlayRef.current?.exportPdf() : undefined,
   };
 
   return (
@@ -4560,14 +4589,17 @@ useEffect(() => {
                     openGenerationSheet({ scope: 'venue' });
                   }}
                 >
-                  <RailPlus size={28} active={captureOpen || generationOpen} aria-hidden="true" />
-                  <span className="sc-rail-3d-tag" aria-hidden="true">3D</span>
+                  <span className="sc-rail-capture-icon" aria-hidden="true">
+                    <RailPlus size={28} active={captureOpen || generationOpen} aria-hidden="true" />
+                    <span className="sc-rail-3d-tag">3D</span>
+                  </span>
                   <span className="sc-rail-label" aria-hidden="true">场地</span>
                 </button>
                 <button
                   type="button"
                   className={`sc-rail-tool sc-rail-disc${outdoorPanel !== null ? ' is-active' : ''}`}
                   aria-pressed={outdoorPanel !== null}
+                  aria-expanded={outdoorPanel !== null}
                   aria-label="户外规划：在地图上画边界分区动线"
                   data-tip="户外规划 · 地图上画边界分区动线"
                   onClick={() => {
@@ -4599,7 +4631,7 @@ useEffect(() => {
                 </button>
               </nav>
             </div>
-            <RailTeamBlock controller={controller} team={team} onOpenChat={member => {
+            <RailTeamBlock controller={controller} team={team} activeUserId={chatPeerId} onOpenChat={member => {
               // 左栏一次只留一张卡：开私信就收掉生成卡。
               closeGenerationSheet();
               // 2026-11-16 用户指令：私信卡也浮在 3D 上，不再为开私信退回 2D。
@@ -4621,6 +4653,7 @@ useEffect(() => {
             className="sc-mobile-agent-entry"
             aria-label="助理菜单"
             aria-expanded={mobileRailOpen}
+            aria-pressed={mobileRailOpen}
             aria-controls="sc-agent-rail"
             onClick={() => setMobileRailOpen(value => !value)}
           >
@@ -4964,6 +4997,11 @@ useEffect(() => {
                   onWalkExit={() => setOutdoorWalkActive(false)}
                   viewMode={outdoorWalkView}
                   onCycleView={cycleOutdoorWalkView}
+                  walkRole={{
+                    assetId: walkRole.assetId,
+                    glbUrl: walkRoleUrl,
+                    name: walkRole.name,
+                  }}
                 />
               </div>
             )}
@@ -5200,6 +5238,17 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
+            <GmCompassHost
+              active={outdoorActions != null}
+              mode={outdoor3dTakeoverActive && !outdoor2DOpen ? '3d' : '2d'}
+              plan3dRef={outdoorPlan3DRef}
+              overlayRef={outdoorOverlayRef}
+            />
+            <GmLocateHost
+              active={outdoorActions != null}
+              label={outdoor2DOpen && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : '回到框选场地'}
+              onLocate={focusScopeOrVenue}
+            />
             <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={outdoor2DOpen && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {

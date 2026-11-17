@@ -39,6 +39,10 @@
 }
 .ap-icon-btn:hover { background: var(--wk-plane); color: var(--wk-ink); }
 .ap-icon-btn.is-on { background: var(--wk-plane); color: var(--wk-ink); }
+.ap-icon-btn:focus-visible {
+  outline: 2px solid var(--ink-soft, #55585f);
+  outline-offset: 2px;
+}
 .ap-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .ap-history-scrim {
   position: absolute; inset: 0; z-index: 8; margin: 0; padding: 0; border: 0;

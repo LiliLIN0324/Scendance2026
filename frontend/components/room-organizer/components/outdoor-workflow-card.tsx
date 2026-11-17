@@ -324,16 +324,27 @@ export function OutdoorWorkflowCard({
           )}
         </div>
       ) : flow.state.stage !== "place" ? (
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={flow.busy}
-          onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
-        >
-          {flow.state.stage === "scope"
-            ? "核对当前实际活动范围"
-            : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={flow.busy}
+            onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+          >
+            {flow.state.stage === "scope"
+              ? "核对当前实际活动范围"
+              : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+          </button>
+          {flow.state.stage === "scope" && (
+            <button
+              type="button"
+              disabled={flow.busy}
+              onClick={() => flow.manualBoundary()}
+            >
+              在地图上手画活动范围
+            </button>
+          )}
+        </>
       ) : null}
       {!flow.proposal &&
         !flow.busy &&

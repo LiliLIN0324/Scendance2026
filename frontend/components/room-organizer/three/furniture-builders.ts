@@ -111,6 +111,13 @@ export function createFurnitureModel(
     const state = key ? getGlbAssetState(key) : { status: 'error' as const };
     const placeholder = buildFallback({ THREE, item, hasCollision: false,
       baseColor: state.status === 'error' ? '#b94c4c' : '#b5a87b', opacity: 0.45 });
+    // 真模型还没到时，占位只是一块色块：不开阴影，避免加载过程把主线程占住。
+    placeholder.traverse(node => {
+      const mesh = node as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean };
+      if (!mesh.isMesh) return;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+    });
     placeholder.userData.glbStatus = state.status;
     placeholder.name = state.status === 'error' ? '模型加载失败（占位）' : '模型待加载（占位）';
     return withElevation(item, fitToDeclared(THREE, item, placeholder));

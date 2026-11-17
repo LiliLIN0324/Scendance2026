@@ -4,6 +4,7 @@ import {
   INTERACTABLE_GROUND_Y,
   facilityInteractables,
   interactHintLabel,
+  propInteractables,
   seatInteractables,
   workerInteractables,
 } from './outdoor-interactables';
@@ -75,6 +76,7 @@ describe('seatInteractables', () => {
       seatHeight: 0.45,
       eyeY: INTERACTABLE_GROUND_Y + 0.45 + 0.63,
     });
+    expect(entry?.personAction).toBe('sit');
   });
 
   it('drops non-seat facilities and keeps an empty list empty', () => {
@@ -82,6 +84,64 @@ describe('seatInteractables', () => {
       { id: 't1', name: '长桌', ref: 'x-table-y', position: { x: 0, y: 0 } },
     ]);
     expect(entries).toEqual([]);
+  });
+});
+
+describe('propInteractables', () => {
+  it('keeps seats as seat entries and gives tables / stages the matching action label', () => {
+    const entries = propInteractables([
+      { id: 'c1', name: '木质餐椅', position: { x: 1, y: 2 } },
+      { id: 't1', name: '木桌', position: { x: 3, y: -4 } },
+      { id: 's1', name: '舞台', position: { x: 0, y: 0 } },
+    ]);
+    const seat = entries.find(entry => entry.id === 'c1');
+    const table = entries.find(entry => entry.id === 't1');
+    const stage = entries.find(entry => entry.id === 's1');
+    expect(seat?.kind).toBe('seat');
+    expect(seat?.label).toBe('坐下 · 木质餐椅');
+    expect(seat?.seat?.seatHeight).toBe(0.45);
+    expect(seat?.personAction).toBe('sit');
+    expect(table?.kind).toBe('facility');
+    expect(table?.label).toBe('交谈 · 木桌');
+    expect(table?.personAction).toBe('talk');
+    expect(table?.position).toEqual({ x: 3, y: INTERACTABLE_GROUND_Y, z: 4 });
+    expect(stage?.label).toBe('挥手 · 舞台');
+    expect(stage?.personAction).toBe('wave');
+  });
+
+  it('keeps one entry per facility, including inert props, without duplicating seats', () => {
+    const entries = propInteractables([
+      { id: 'c1', name: '长椅', position: { x: 1, y: 2 } },
+      { id: 'f1', name: '围栏', position: { x: 3, y: 4 } },
+      { id: 'p1', name: '绿植', position: { x: 5, y: 6 } },
+    ]);
+    expect(entries).toHaveLength(3);
+    expect(entries.filter(entry => entry.id === 'c1')).toHaveLength(1);
+    expect(entries.find(entry => entry.id === 'f1')?.label).toBe('围栏');
+    expect(entries.find(entry => entry.id === 'p1')?.label).toBe('绿植');
+    expect(entries.find(entry => entry.id === 'f1')?.personAction).toBeUndefined();
+    expect(entries.find(entry => entry.id === 'p1')?.personAction).toBeUndefined();
+  });
+
+  it('uses templateId / modelOverride as the real PlanFacility ref', () => {
+    const entries = propInteractables([
+      { id: 'c1', name: '物件 A', templateId: 'dining-chair-timber', position: { x: 0, y: 0 } },
+      { id: 'b1', name: '物件 B', templateId: 'booth-2x2', position: { x: 1, y: 1 } },
+      { id: 's1', name: '物件 C', modelOverride: 'festival-stage-deck', position: { x: 2, y: 2 } },
+    ]);
+    expect(entries.find(entry => entry.id === 'c1')?.kind).toBe('seat');
+    expect(entries.find(entry => entry.id === 'c1')?.label).toBe('坐下 · 物件 A');
+    expect(entries.find(entry => entry.id === 'b1')?.label).toBe('交谈 · 物件 B');
+    expect(entries.find(entry => entry.id === 's1')?.label).toBe('挥手 · 物件 C');
+  });
+
+  it('honours a custom ground y and keeps an empty list empty', () => {
+    const [entry] = propInteractables(
+      [{ id: 't1', name: '服务台', position: { x: 0, y: 0 } }],
+      0.2,
+    );
+    expect(entry?.position?.y).toBe(0.2);
+    expect(propInteractables([])).toEqual([]);
   });
 });
 

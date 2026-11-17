@@ -835,3 +835,41 @@ test('/meta 上游失败转 502 且带原因', async t => {
   assert.equal(res.status, 502);
   assert.match(res.body.error, /上游 HTTP 404/);
 });
+
+test('/meta 失败不缓存，成功后再取不再打上游', async t => {
+  let n = 0;
+  const { request, calls } = await fixture(t, async () => {
+    n += 1;
+    if (n === 1) return new Response('nope', { status: 404 });
+    return new Response(JSON.stringify(LOD_META), { headers: { 'Content-Type': 'application/json' } });
+  });
+  const path = `/meta?url=${encodeURIComponent(META_URL)}`;
+  assert.equal((await request(path)).status, 502);
+  assert.deepEqual((await request(path)).body, LOD_META);
+  assert.deepEqual((await request(path)).body, LOD_META);
+  assert.equal(calls.length, 2);
+});
+
+test('POST /asset 同一链接并发只下载一次', async t => {
+  let downloads = 0;
+  let releaseDownload = () => {};
+  const blocked = new Promise(resolve => { releaseDownload = resolve; });
+  const store = memoryStore();
+  const f = await fixture(t, async () => {
+    downloads += 1;
+    if (downloads === 1) await blocked;
+    return new Response(glb());
+  }, { assets: store });
+  const first = f.request('/asset', { method: 'POST', body: { url: COS } });
+  for (let i = 0; i < 50 && downloads < 1; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+  const second = f.request('/asset', { method: 'POST', body: { url: COS } });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(downloads, 1);
+  releaseDownload();
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(a.status, 200);
+  assert.equal(b.status, 200);
+  assert.equal(a.body.assetId, b.body.assetId);
+  assert.equal(store.files.size, 1);
+  assert.equal(downloads, 1);
+});

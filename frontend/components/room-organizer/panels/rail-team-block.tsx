@@ -11,11 +11,13 @@ import type { BackendSession } from '@/lib/backend-session';
  * 窄轨不放名字，悬停或聚焦才出右侧黑胶囊。
  * 点谁的头就是给谁发消息（自己的那颗是留话），红数字只在真有未读时出现。
  */
-export function RailTeamBlock({ controller, team, onOpenChat, onOpenTeam }: {
+export function RailTeamBlock({ controller, team, onOpenChat, onOpenTeam, activeUserId = null }: {
   controller: BackendSession;
   team: TeamSnapshot;
   onOpenChat(member: TeamSnapshot['members'][number]): void;
   onOpenTeam(): void;
+  /** 当前私信对象。再点同一头像会收起，按下态跟这扇窗走。 */
+  activeUserId?: string | null;
 }): JSX.Element {
   const tones = avatarTonesFor(team.members);
   const presets = useAvatarPresetsFor(team.members, team.userId);
@@ -34,6 +36,7 @@ export function RailTeamBlock({ controller, team, onOpenChat, onOpenTeam }: {
       className="sc-rail-member"
       data-tip={`${member.displayName} · ${roleLabel(member.role)}${pending ? ` · ${pending} 条未读` : ''}`}
       aria-label={`${isSelf ? '给自己留话' : `给 ${member.displayName} 发消息`}${pending ? `，${pending} 条未读` : ''}`}
+      aria-pressed={member.userId === activeUserId}
       onClick={() => onOpenChat(member)}
     >
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">

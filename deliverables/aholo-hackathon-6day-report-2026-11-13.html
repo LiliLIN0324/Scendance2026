@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>幕景 Scendance × Aholo 3D AI 黑客松 · 6 天冲刺研究报告</title>
+<style>
+  :root {
+    --ink: #14201a;
+    --ink-2: #3d4a43;
+    --muted: #6b7a72;
+    --line: #d9e0db;
+    --bg: #f6f7f4;
+    --card: #ffffff;
+    --green: #1f5a42;
+    --green-soft: #e7f0ea;
+    --amber: #9a5b12;
+    --amber-soft: #fbf0df;
+    --red: #8f2f2a;
+    --red-soft: #f9e9e7;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 56px 28px 96px; }
+  header.hero {
+    background: linear-gradient(160deg, #143a2c 0%, #1f5a42 58%, #2c6f53 100%);
+    color: #f3f7f4;
+    border-radius: 18px;
+    padding: 40px 40px 34px;
+    box-shadow: 0 18px 40px rgba(20, 58, 44, .18);
+  }
+  .eyebrow {
+    font-size: 12.5px; letter-spacing: .22em; text-transform: uppercase;
+    color: #a8c9b7; margin: 0 0 14px;
+  }
+  header.hero h1 { font-size: 34px; line-height: 1.28; margin: 0 0 12px; font-weight: 650; letter-spacing: -.01em; }
+  header.hero p.lede { margin: 0; color: #d7e6dc; font-size: 16.5px; max-width: 44em; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 22px; font-size: 13px; color: #b9d2c4; }
+  .meta-row b { color: #fff; font-weight: 600; }
+
+  section { margin-top: 46px; }
+  h2 {
+    font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  h2 .num {
+    font-size: 13px; color: var(--green); background: var(--green-soft);
+    border-radius: 999px; padding: 2px 10px; font-weight: 600; letter-spacing: .04em;
+  }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  p { margin: 10px 0; color: var(--ink-2); }
+  ul, ol { margin: 10px 0; padding-left: 22px; color: var(--ink-2); }
+  li { margin: 6px 0; }
+  strong { color: var(--ink); }
+  code {
+    font-family: "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
+    font-size: .88em; background: #eef1ee; border: 1px solid #e2e7e3;
+    padding: 1px 5px; border-radius: 5px; color: #24372d;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 22px 24px; margin: 18px 0;
+  }
+  .grid { display: grid; gap: 14px; }
+  .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 760px) {
+    .grid.two, .grid.three { grid-template-columns: 1fr; }
+    header.hero { padding: 28px 22px; }
+    header.hero h1 { font-size: 26px; }
+    .wrap { padding: 28px 16px 64px; }
+  }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .kpi .n { font-size: 26px; font-weight: 700; color: var(--green); letter-spacing: -.02em; }
+  .kpi .l { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .note { border-left: 4px solid var(--green); background: var(--green-soft); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; }
+  .warn { border-left: 4px solid var(--amber); background: var(--amber-soft); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; }
+  .danger { border-left: 4px solid var(--red); background: var(--red-soft); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; }
+  .note p, .warn p, .danger p { color: var(--ink); margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; background: #fff; }
+  th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { background: #f1f4f1; font-weight: 600; color: var(--ink); }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .bar { height: 10px; background: #e8ece9; border-radius: 999px; overflow: hidden; min-width: 90px; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #2c6f53, #4f9573); border-radius: 999px; }
+  .tag { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: #fff; }
+  .tag.ok { color: var(--green); border-color: #b9d2c4; background: var(--green-soft); }
+  .tag.bad { color: var(--red); border-color: #e6c2be; background: var(--red-soft); }
+  .tag.mid { color: var(--amber); border-color: #e8d2ae; background: var(--amber-soft); }
+  .timeline { list-style: none; padding: 0; margin: 18px 0; }
+  .timeline li {
+    position: relative; padding: 0 0 18px 26px; border-left: 2px solid #d9e4dd; margin: 0;
+  }
+  .timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .timeline li::before {
+    content: ""; position: absolute; left: -7px; top: 8px; width: 12px; height: 12px;
+    border-radius: 50%; background: #fff; border: 3px solid var(--green);
+  }
+  .timeline .day { font-weight: 650; color: var(--ink); margin-right: 8px; }
+  .chk { list-style: none; padding-left: 0; }
+  .chk li { padding-left: 28px; position: relative; }
+  .chk li::before {
+    content: ""; position: absolute; left: 0; top: 6px; width: 15px; height: 15px;
+    border: 1.6px solid #9fb3a8; border-radius: 4px; background: #fff;
+  }
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  .small { font-size: 13px; color: var(--muted); }
+  a { color: var(--green); text-decoration: none; border-bottom: 1px solid #c3d6ca; }
+  a:hover { border-bottom-color: var(--green); }
+  @media print {
+    body { background: #fff; font-size: 12pt; }
+    .wrap { max-width: none; padding: 0; }
+    header.hero { box-shadow: none; border-radius: 0; }
+    section { break-inside: avoid; }
+    table { break-inside: auto; }
+    a { color: var(--ink); border: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">Hackathon Research · 内部决策用</p>
+  <h1>幕景 Scendance × 群核 Aholo 全球 3D AI 黑客松<br />6 天冲刺研究报告</h1>
+  <p class="lede">目标只有一个：在 11 月 19 日 19:00 前，用现有代码拿到这届比赛能拿到的最高分。本报告不谈“还能做什么功能”，只回答“哪 20% 的动作对应 80% 的分数”。</p>
+  <div class="meta-row">
+    <span>日期 <b>2026-11-13</b></span>
+    <span>距截止 <b>6 天</b></span>
+    <span>评分口径 <b>专业 70% + 玩家 30%</b></span>
+    <span>群核技术栈权重 <b>30%</b></span>
+    <span>版本 <b>v1.2</b> · 已核对答疑表 PDF</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">00</span>结论先行</h2>
+  <div class="grid three">
+    <div class="kpi"><div class="n">30%</div><div class="l">“群核技术栈应用”是单项最高权重，但我们目前在界面上几乎看不见它</div></div>
+    <div class="kpi"><div class="n">2 条</div><div class="l">当前构建只差 2 个类型错误即可转绿，代价极小、收益极大</div></div>
+    <div class="kpi"><div class="n">5%</div><div class="l">社媒传播分是白送的，不发就是 0 分</div></div>
+  </div>
+  <div class="danger">
+    <p><strong>最紧急的事实：HEAD 上 <code>npm --prefix frontend run build</code> 是失败的。</strong>线上站还能打开，但那是旧构建；在构建修绿之前，这 6 天写的任何东西都上不去。它同时压着“完成度 20%”和“Demo 链接必须可访问”两条硬要求。</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">01</span>研究目标与方法</h2>
+  <p><strong>目标：</strong>判定“6 天内做什么最能提高得分”，并把判断压到可核验的证据上，而不是复述课程内容。</p>
+  <p><strong>方法：</strong>三条线交叉。</p>
+  <ul>
+    <li><strong>一手规则线：</strong>直接解析赛事官网前端 bundle（<code>holo-global-main-hackathon</code>），拿到评分权重、奖项结构、提交表单字段与《参赛作品提交须知》原文；课程页只作为交叉验证。</li>
+    <li><strong>代码事实线：</strong>审计 Lux3D / Aholo 生成链路、资产追溯字段、分享快照与失败文案，全部对到具体文件与行号。</li>
+    <li><strong>可运行性线：</strong>实跑构建与类型检查，区分“真失败”和“本机 dev server 争用造成的假失败”。</li>
+  </ul>
+  <p class="small">说明：飞书答疑表已取得并逐条核对——导出 PDF 共 12 页、10 条问答，内容全部为<strong>产品相关</strong>，已摘入 §4.5。<strong>赛事类问答</strong>（报名与组队、选题命名、提交后能否修改）未出现在该导出文件中，报告中相关要求仍以官网 bundle 与《参赛作品提交须知》为准。</p>
+</section>
+
+<section>
+  <h2><span class="num">02</span>评分规则：分数是怎么算出来的</h2>
+  <p>专业评委 70%，玩家评委 30%，加权得最终分。流程为<strong>资格审核 → Top 50 初评 → Top 6 终评 → 公示</strong>。专业评分的五项拆分如下：</p>
+  <table>
+    <thead><tr><th>维度</th><th class="num">权重</th><th>占比</th><th>评的是什么</th></tr></thead>
+    <tbody>
+      <tr><td>群核技术栈应用</td><td class="num">30%</td><td><div class="bar"><i style="width:100%"></i></div></td><td>群核技术栈在项目中承担核心作用</td></tr>
+      <tr><td>作品有趣程度</td><td class="num">25%</td><td><div class="bar"><i style="width:83%"></i></div></td><td>玩法、空间交互的趣味性与传播潜力</td></tr>
+      <tr><td>创新性</td><td class="num">20%</td><td><div class="bar"><i style="width:67%"></i></div></td><td>区别于现有常见产品思路</td></tr>
+      <tr><td>完成度</td><td class="num">20%</td><td><div class="bar"><i style="width:67%"></i></div></td><td>Demo 稳定可运行，材料与成果匹配</td></tr>
+      <tr><td>社交媒体传播</td><td class="num">5%</td><td><div class="bar"><i style="width:17%"></i></div></td><td>带指定话题发布；未发布该项为 0，但不影响资格</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <p><strong>读法：</strong>“群核技术栈 + 有趣”合计 55%，决定名次；“完成度 + 创新”合计 40%，决定不被淘汰；社媒 5% 是唯一可以 10 分钟拿满的项。</p>
+  </div>
+
+  <h3>奖项结构（共 23 项，总奖金 32 万）</h3>
+  <table>
+    <thead><tr><th>类别</th><th>奖项</th><th class="num">奖金</th><th>对幕景的意义</th></tr></thead>
+    <tbody>
+      <tr><td>特别奖</td><td>新物种奖 ×1（可空缺）</td><td class="num">10 万</td><td>需要“新物种”级叙事，现实性低</td></tr>
+      <tr><td>主奖</td><td>一等 1 / 二等 2 / 三等 3</td><td class="num">5 万 / 3 万 / 1 万</td><td>Top 6，需压倒性有趣度</td></tr>
+      <tr><td rowspan="5">应用单项奖</td><td>具身智能应用</td><td class="num" rowspan="5">各 5 千</td><td>—</td></tr>
+      <tr><td>影视应用</td><td>—</td></tr>
+      <tr><td>游戏应用</td><td>—</td></tr>
+      <tr><td>打印应用</td><td>—</td></tr>
+      <tr><td><strong>空间设计应用</strong></td><td><strong>我们的现实目标</strong></td></tr>
+      <tr><td>创意单项奖</td><td>功德无量 / 最没有用 / 怪点子 / 技术学霸 / 看了都想投</td><td class="num">各 5 千</td><td>与 B 端工具气质不符</td></tr>
+      <tr><td>人气奖</td><td>国内 4 + 海外 2</td><td class="num">各 5 千</td><td>11/20–11/30 独立赛道，不影响 Top 6</td></tr>
+    </tbody>
+  </table>
+  <p class="small">提交表单要求勾选 1–2 个希望参评的应用奖——这是唯一能主动选择赛道的动作，务必勾“空间设计应用”。</p>
+</section>
+
+<section>
+  <h2><span class="num">03</span>提交规则：会被判无效的地方</h2>
+  <table>
+    <thead><tr><th>项</th><th>要求</th><th>风险点</th></tr></thead>
+    <tbody>
+      <tr><td>必交材料</td><td>项目报告书（PDF/PPT）+ 完整 Demo（链接或含真实运行画面的视频）</td><td>报告书要写清创意、开发过程、<strong>关键资产迭代对比</strong>、最终成果</td></tr>
+      <tr><td>源代码</td><td>《提交须知》列为可选；落地页文案写“必交项缺一不可”</td><td>口径不一致，按最严执行：交仓库链接</td></tr>
+      <tr><td>选题卡</td><td>想做什么、为谁而做、<strong>Lux3D 如何发挥作用</strong></td><td>漏掉第三点会直接削弱 30% 那一项</td></tr>
+      <tr><td>Demo 有效期</td><td>链接可访问至 <strong>2026-12-31</strong>，含测试账号</td><td>临时隧道 / 本机地址一票否决</td></tr>
+      <tr><td>提交方式</td><td>只能通过官网“作品提交”入口；社群、共享表格、社媒均不算正式提交</td><td>必须拿到项目编号与回执</td></tr>
+      <tr><td>多次提交</td><td>截止前可重复提交，以最后一次成功提交为准</td><td>先交保底版本是合法策略</td></tr>
+      <tr><td>无效判定</td><td>链接打不开、视频不能播、账号无效、仅概念素材无法验证、未实质使用 Lux3D</td><td>“材料与成果严重不符”同样会被判无效</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2><span class="num">04</span>项目现状体检（以代码与实跑为准）</h2>
+  <h3>4.1 构建：红，且是真红</h3>
+  <table>
+    <thead><tr><th>检查</th><th>结果</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td><code>npm --prefix frontend run build</code>（默认输出目录）</td><td><span class="tag bad">失败</span> <code>no direct app page entry found for /_not-found</code></td><td>本机 3210 端口 dev server 与构建共用 <code>frontend/.next</code>，属污染型失败</td></tr>
+      <tr><td>同上，隔离 <code>NEXT_DIST_DIR=.next-verify-build</code></td><td><span class="tag bad">失败</span> 类型检查中断</td><td><code>supabase/functions/_shared/api.ts:155</code> TS2379</td></tr>
+      <tr><td><code>npm --prefix frontend run typecheck</code></td><td><span class="tag bad">2 条错误</span></td><td>另加 <code>lib/backend-session.ts:13</code> TS6192（未使用 import）</td></tr>
+      <tr><td>根目录 <code>npx tsc -p tsconfig.json</code></td><td><span class="tag ok">通过</span></td><td>根配置未启用 <code>exactOptionalPropertyTypes</code>，故不能代表构建通过</td></tr>
+      <tr><td>线上站</td><td><span class="tag ok">200</span></td><td><code>scendance-scene-planner-ewz.pages.dev</code>（Cloudflare Pages，GitHub 集成）——是旧构建</td></tr>
+    </tbody>
+  </table>
+  <div class="warn">
+    <p><strong>判断：</strong>修完这 2 条之前，“改动能上线”这件事不成立。而它是 20% 完成度的前提，也是 Demo 链接可信度的前提。构建停在第一条错误，修绿之前无法确认是否还有第二层问题。</p>
+  </div>
+
+  <h3>4.2 测试：146 个红条不能当结论</h3>
+  <p>2026-11-13 14:58 的全量运行结果：<code>54 failed | 520 passed (574)</code> 文件，<code>146 failed | 7776 passed</code> 用例。但该次运行期间 3210 端口的 dev server 一直在跑，失败项含大量 <code>Test timed out in 20000ms</code>——属于资源争用放大，不等于 146 个真实缺陷。<strong>不要在这 6 天里清理测试</strong>；要的是“一条端到端演示链能跑通”。</p>
+
+  <h3>4.3 追溯链：数据层有，界面层没有</h3>
+  <p>上一轮曾判断“<code>providerMode</code>/<code>providerModel</code> 缺失”，此处更正：迁移 <code>supabase/migrations/20261028120000_aholo_lux3d.sql</code> 已把 <code>assets.source</code> 扩到含 <code>'aholo'</code>，并为 <code>generation_jobs</code> 增加 <code>provider_mode='aholo'</code>、<code>provider_model='lux3d'</code> 的约束。也就是说，<strong>“确实用了 Lux3D”在数据库里是可核验的</strong>；缺的是前端把来源显性展示给评委看。</p>
+
+  <h3>4.4 分享与失败文案</h3>
+  <ul>
+    <li><code>frontend/lib/share-snapshot.ts</code> 已有 <code>droppedAssets</code> 报告与 20 000 / 64 KiB 长度上限，说明“静默丢件”可能已改为显性提示——但尚未实机复验（<code>docs/04</code> 的 G2/G5 结论停留在 2026-11-04）。</li>
+    <li><code>material-generate.ts</code> 的 <code>cloudFailure()</code> 只识别未配置、额度耗尽、鉴权三类错误；Lux3D 免费账号<strong>同时只允许一个生成任务</strong>，并发被拒会落到“结果暂时无法确认，可能已创建任务或产生费用”，演示现场连点两下就会吓人。</li>
+  </ul>
+
+  <h3>4.5 厂商口径：答疑表里已经写死的边界</h3>
+  <p>以下摘自赛事官方答疑表（PDF 共 12 页、10 条，内容全部为产品类，2026-11-13 核对）。它最大的价值不是新功能，而是<strong>替我们已有的边界做官方背书</strong>，同时点出几处对外表述必须收口的地方。</p>
+  <table>
+    <thead><tr><th>主题</th><th>厂商口径</th><th>对我们的影响</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>3DGS 与碰撞</td>
+        <td>Viewer 提供 3DGS/Mesh 渲染、相机控制、拾取与碰撞查询；但<strong>3DGS 的视觉外观不会自动变成可碰撞实体</strong>，需要接触的区域必须另配碰撞网格或碰撞数据。</td>
+        <td><span class="tag ok">背书</span> 与我们“3DGS 不当量尺、不当碰撞体”的边界完全一致，报告书可直接引用，把限制讲成方法论。</td>
+      </tr>
+      <tr>
+        <td>精确测量</td>
+        <td>世界重建用于还原拍摄空间，世界生成用于创作新场景；<strong>两者都不能直接当作精确测量结果</strong>。</td>
+        <td><span class="tag ok">背书</span> 支撑我们“米制精度由 GLB / 矢量壳承担”的分工，避免对外承诺“扫完即量尺”。</td>
+      </tr>
+      <tr>
+        <td>重建输入</td>
+        <td>重建图片路径<strong>至少 20 张</strong>，也支持相应视频；提交后返回 <code>worldId</code>，还需查询状态与最终产物。</td>
+        <td><span class="tag ok">一致</span> 与我们采集导引的 180 张 / 3 层 / 330° 不冲突；视频仍是主通道。</td>
+      </tr>
+      <tr>
+        <td>采集重叠度</td>
+        <td>相邻照片<strong>至少约 70% 内容重叠</strong>，并从不同位置与高度覆盖主体；COLMAP 建议同一物体至少出现在 3 张图中。</td>
+        <td><span class="tag ok">背书</span> 与 <code>frontend/lib/capture-guide/</code> 的阈值一致；西湖素材 49 分、覆盖 102.6° 的判定有了外部依据。</td>
+      </tr>
+      <tr>
+        <td>文件识别与单位</td>
+        <td>PLY 要看 header 的元素与属性区分网格 / 普通点云 / Gaussian；SPZ 需对应版本的读取器；<strong>单位、轴向不能靠后缀或文件名猜</strong>，要记录最终变换。</td>
+        <td><span class="tag mid">待补</span> <code>venue-scans</code> 目前只按 <code>.spz/.ply</code> 过滤，资产元数据应记录 upAxis / 单位 / 变换（现有实测 upAxis=Z）。</td>
+      </tr>
+      <tr>
+        <td>渲染链路</td>
+        <td>Editor 的 Hybrid Mix、Viewer、云端成片<strong>不是同一条渲染链路</strong>，不能用一个入口的效果推断另一个入口的能力。</td>
+        <td><span class="tag mid">注意</span> 我们自己的 three.js splat 预览更不等于 Aholo 成片；对外只描述我们实际验证过的画面。</td>
+      </tr>
+      <tr>
+        <td>“穿模”归因</td>
+        <td>Fly / 自由观察模式允许镜头进入墙体，<strong>不能仅凭穿墙判定资产损坏</strong>；需要防穿墙应使用带碰撞数据的漫游模式。</td>
+        <td><span class="tag mid">话术</span> 评委试用时若出现穿墙，要能当场解释相机模式，而不是被当成缺陷。</td>
+      </tr>
+      <tr>
+        <td>图纸 / 效果图</td>
+        <td>空间图纸与效果图只表达部分尺寸与外观，<strong>仅上传图纸或效果图难以保证精确还原</strong>门窗与家具位置。</td>
+        <td><span class="tag mid">改文案</span> “上传平面图”只能表述为布局参考，不能承诺自动还原三维尺寸。</td>
+      </tr>
+      <tr>
+        <td>世界生成</td>
+        <td>世界生成最多 <strong>1 张图</strong>；SpatialGen 不承诺固定高斯点数，也没有指定点数的参数。</td>
+        <td><span class="tag mid">别报数</span> 报告中不要出现“多少万高斯点”这类未经核实的数字。</td>
+      </tr>
+      <tr>
+        <td>流体 / 动态</td>
+        <td>Viewer 未内置流体动力学求解，静态水面只能作带材质网格展示，真实流动需额外模拟系统。</td>
+        <td><span class="tag mid">不涉及</span> Demo 里不要承诺水面动效或流体交互。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <p><strong>怎么用：</strong>报告书里单开一小节“边界与取舍”，直接引用上面三条背书（3DGS 不碰撞、不用于精确测量、渲染链路不同），比反复解释“我们做不到”更有说服力——评委看到的是我们知道工具边界在哪。</p>
+  </div>
+
+  <div class="card">
+    <p><strong>能直接用在 Demo 里的三件事</strong></p>
+    <ol>
+      <li><strong>世界生成有网页入口，不必等 API。</strong>Aholo Reality 网页可按官方教程上传图片生成世界；API 额度或并发卡住时，这是现成的兜底。</li>
+      <li><strong>Crop 可裁背景与边缘噪点。</strong>重建结果四周的漂浮噪点不必重采，Editor 里裁掉即可；先留副本，再从多个视角检查，被前景遮住的墙面仍需重采。</li>
+      <li><strong>画质档位可调。</strong>Reality 自有项目支持 Original Quality (RAW)，独立 Viewer 也有质量配置；录屏用高画质，做对比时锁死同一资产、同一视角、同一分辨率。</li>
+    </ol>
+    <p class="small">另：采集建议是先拍小样确认多视角覆盖，再提交全量；物体重建与空间重建是两条路径，先按目标选对，再谈参数。</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span>按权重对账：我们缺什么</h2>
+  <table>
+    <thead><tr><th>维度</th><th class="num">权重</th><th>现状</th><th>6 天内能否补</th></tr></thead>
+    <tbody>
+      <tr><td>群核技术栈应用</td><td class="num">30%</td><td><span class="tag mid">能力有，不可见</span> 生成链路完整，但界面无来源标识</td><td>能，且性价比最高</td></tr>
+      <tr><td>作品有趣程度</td><td class="num">25%</td><td><span class="tag mid">弱</span> B 端策划工具，玩家评委不占优</td><td>只能靠“一句话→装置落地→手机看”的一个 wow 瞬间</td></tr>
+      <tr><td>创新性</td><td class="num">20%</td><td><span class="tag ok">中上</span> 真实场地 + 生成物料 + 交付三件套，组合有辨识度</td><td>靠叙事，不靠新功能</td></tr>
+      <tr><td>完成度</td><td class="num">20%</td><td><span class="tag bad">红</span> 构建失败、演示链未复验</td><td>能，且必须做</td></tr>
+      <tr><td>社交媒体传播</td><td class="num">5%</td><td><span class="tag bad">0</span> 尚未发布</td><td>能，10 分钟</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <p><strong>策略判断：</strong>Top 6 需要“敢玩”，我们的形态不是；<strong>空间设计应用奖（5 千）+ 进 Top 50</strong> 是与能力匹配的现实目标。把力气花在“让 30% 那一项看得见”和“让 Demo 真能打开”，比再做一个功能更划算。</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">06</span>6 天冲刺计划</h2>
+  <ul class="timeline">
+    <li><span class="day">D1 · 11/14</span><strong>修两条类型错误 → 构建转绿 → 部署 → 真机打开。</strong>先录一段 60 秒兜底视频。这是唯一有硬依赖的事，其他都能顺延，它不能。</li>
+    <li><span class="day">D2 · 11/15</span><strong>让 Lux3D 可见。</strong>生成卡片、资产详情、物料表备注、分享页页脚标注“Aholo Lux3D 生成”；同一物件的“第一版 vs 改进版”对比图（报告书直接用）。并发失败文案改成“排队中 / 并发已满”。</li>
+    <li><span class="day">D3 · 11/16</span><strong>真实场地链路实机复验。</strong>3DGS 场景 + 方案 + 分享页，手机打开一次，确认 G2/G5 是否仍是断的；把结果写进报告书，不写没验证的结论。</li>
+    <li><span class="day">D4 · 11/17</span><strong>报告书与视频。</strong>过程截图、资产迭代对比、关键效果截图；视频必须含真实运行画面。</li>
+    <li><span class="day">D5 · 11/18</span><strong>先交保底版本</strong>（报告书 + Demo + 代码仓库），拿回执；发小红书带话题。</li>
+    <li><span class="day">D6 · 11/19</span><strong>19:00 前最后一次提交</strong>，确认项目编号与回执，链接有效期覆盖到 12/31。</li>
+  </ul>
+
+  <h3>明确不做</h3>
+  <ul>
+    <li>M2 分区 / 人员 / 动线迁移——冲刺期只增加回归面。</li>
+    <li>清理那 146 个测试红条——与评分无关。</li>
+    <li>自建采集器——现场采集直接用 Aholo 3D 扫描 App / Reality 出 <code>.spz</code>。</li>
+    <li>人气奖冲榜——11/20–11/30 的独立赛道，不影响 Top 6。</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="num">07</span>提交清单（照勾即可）</h2>
+  <div class="card">
+    <ul class="chk">
+      <li>团队已报名并拿到团队编号（1–3 人，队长提交）</li>
+      <li>选题卡：想做什么 / 为谁而做 / <strong>Lux3D 如何发挥作用</strong></li>
+      <li>报告书 PDF 或 PPT：创意、开发过程、资产迭代对比、最终成果</li>
+      <li>Demo 链接（含测试账号，可用至 2026-12-31）或含真实运行画面的视频</li>
+      <li>源代码仓库链接或压缩包</li>
+      <li>应用奖勾选：<strong>空间设计应用</strong></li>
+      <li>小红书帖 + 指定话题词，链接登记到提交表单</li>
+      <li>提交后保存项目编号与回执截图</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">08</span>风险与未决</h2>
+  <table>
+    <thead><tr><th>风险</th><th>影响</th><th>处置</th></tr></thead>
+    <tbody>
+      <tr><td>修完 2 条类型错误后仍有构建错误</td><td>部署继续阻塞</td><td>D1 当天必须跑到 <code>next build</code> 成功，不隔夜</td></tr>
+      <tr><td>Cloudflare Pages 走 GitHub 集成构建</td><td>本地绿 ≠ 线上绿，环境变量差异可能导致失败</td><td>部署后打开线上站，用真实账号走一遍核心链路</td></tr>
+      <tr><td>3DGS 场景与分享页的真实表现未复验</td><td>“完成度”与“材料与成果匹配”双扣分</td><td>D3 实机验证，结论只写验证过的</td></tr>
+      <tr><td>免费账号单任务并发限制</td><td>演示现场失败文案误导</td><td>D2 改文案，彩排故意连点验证</td></tr>
+      <tr><td>赛事类问答未出现在导出文件</td><td>报名与组队、选题命名、提交后修改的细则仍以官网为准</td><td>若答疑表另有赛事类行，需补导出；否则按《提交须知》执行</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2><span class="num">09</span>证据索引</h2>
+  <table>
+    <thead><tr><th>证据</th><th>位置</th></tr></thead>
+    <tbody>
+      <tr><td>评分权重、奖项、提交须知原文</td><td>赛事官网前端 bundle：<code>qhstaticssl.kujiale.com/…/holo-global-main-hackathon/entry.0c1e26e68a5ba522.js</code></td></tr>
+      <tr><td>课程口径（Lux3D 导出 GLB、并发限制、3DGS 采集）</td><td><code>study.watcha.cn/ai-3d/{lux3d,aholo-api,capture-3dgs,demo-to-product}</code></td></tr>
+      <tr><td>构建失败日志</td><td><code>.verify-build-20261113.log</code>、<code>.verify-build-isolated-20261113.log</code></td></tr>
+      <tr><td>类型错误</td><td><code>supabase/functions/_shared/api.ts:155</code>、<code>frontend/lib/backend-session.ts:13</code></td></tr>
+      <tr><td>参赛可追溯字段</td><td><code>supabase/migrations/20261028120000_aholo_lux3d.sql</code></td></tr>
+      <tr><td>分享快照上限与丢件报告</td><td><code>frontend/lib/share-snapshot.ts</code>（<code>droppedAssets</code>、20 000 / 64 KiB）</td></tr>
+      <tr><td>生成失败文案映射</td><td><code>frontend/components/room-organizer/lib/material-generate.ts</code>（<code>cloudFailure</code>）</td></tr>
+      <tr><td>线上部署形态</td><td><code>CHANGELOG.md</code>（Cloudflare Pages + GitHub 集成，<code>scendance-scene-planner-ewz.pages.dev</code>）</td></tr>
+      <tr><td>厂商边界口径（3DGS 碰撞、测量精度、渲染链路、采集重叠）</td><td>赛事官方答疑表导出 PDF <code>C:\Users\endTree\Downloads\Aholo 黑客松赛事Q&amp;A.pdf</code>（12 页 / 10 条，产品类），已摘入 §4.5</td></tr>
+    </tbody>
+  </table>
+  <p class="small">规则以赛事官网与《参赛作品提交须知》为最终依据；本报告的规则摘录时间点为 2026-11-13，若官网更新以官网为准。</p>
+</section>
+
+<footer>
+  幕景 Scendance · 内部研究稿 · v1.2 · 2026-11-13 · 仅用于参赛决策，不对外分发
+</footer>
+
+</div>
+</body>
+</html>

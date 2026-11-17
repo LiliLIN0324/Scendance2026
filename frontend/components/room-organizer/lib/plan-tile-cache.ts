@@ -281,6 +281,8 @@ export interface BasemapPaintSpec {
   /** 优先加载的焦点（画布 CSS 像素）；缺省用视口中心。 */
   focusX?: number;
   focusY?: number;
+  /** 方位角非 0 时，轴对齐裁剪向外扩，转过的四角仍有瓦片。缺省 0。 */
+  cullPad?: number;
 }
 
 export interface BasemapPaintResult {
@@ -290,6 +292,19 @@ export interface BasemapPaintResult {
   fallback: number;
   /** 正在加载、这次没画上的数量。 */
   pending: number;
+}
+
+/**
+ * 底图是否应标「离线」：请求全部结算、没有任何瓦片/祖先可画、且失败达到阈值。
+ * 慢网仍在加载时不判离线，避免把「还没到」误报成「断网」。
+ */
+export function isBasemapOffline(state: {
+  loadingCount: number;
+  errors: number;
+  drawn: number;
+  fallback: number;
+}): boolean {
+  return state.loadingCount === 0 && state.errors >= 3 && state.drawn === 0 && state.fallback === 0;
 }
 
 /**
@@ -318,11 +333,12 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
   const tileZoom = Math.min(zoom, spec.tileZoom ?? zoom);
   const drawSize = tileSize * 2 ** (zoom - tileZoom);
 
+  const pad = spec.cullPad ?? 0;
   const visible: { x: number; y: number; left: number; top: number }[] = [];
   for (const { x, y } of tiles) {
     const left = x * drawSize - centerPx + cssW / 2;
     const top = y * drawSize - centerPy + cssH / 2;
-    if (left > cssW || top > cssH || left + drawSize < 0 || top + drawSize < 0) continue;
+    if (left > cssW + pad || top > cssH + pad || left + drawSize < -pad || top + drawSize < -pad) continue;
     visible.push({ x, y, left, top });
   }
   visible.sort((a, b) => {

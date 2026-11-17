@@ -301,7 +301,17 @@ export function createServer({
   }
 
   // 签名产物只有约两小时有效期，取回字节按魔数定类型落盘，之后只走本机地址。
+  const stashInFlight = new Map();
   async function stashAsset(remoteUrl) {
+    const active = stashInFlight.get(remoteUrl);
+    if (active) return active;
+    const job = stashAssetOnce(remoteUrl).finally(() => {
+      if (stashInFlight.get(remoteUrl) === job) stashInFlight.delete(remoteUrl);
+    });
+    stashInFlight.set(remoteUrl, job);
+    return job;
+  }
+  async function stashAssetOnce(remoteUrl) {
     if (!safeHttps(remoteUrl)) throw new HttpError(400, 'url 必须是公网 HTTPS 产物链接');
     let response;
     try {
@@ -346,7 +356,22 @@ export function createServer({
   }
 
   // lod-meta 是 World 产物里唯一带真实尺度（米制 forwardBox）的文件；只放行 Aholo 自家域名，浏览器侧 CORS 过不来。
+  const metaCache = new Map();
+  const metaInFlight = new Map();
   async function fetchMeta(remoteUrl) {
+    if (metaCache.has(remoteUrl)) return metaCache.get(remoteUrl);
+    const active = metaInFlight.get(remoteUrl);
+    if (active) return active;
+    const job = fetchMetaOnce(remoteUrl).then((body) => {
+      metaCache.set(remoteUrl, body);
+      return body;
+    }).finally(() => {
+      if (metaInFlight.get(remoteUrl) === job) metaInFlight.delete(remoteUrl);
+    });
+    metaInFlight.set(remoteUrl, job);
+    return job;
+  }
+  async function fetchMetaOnce(remoteUrl) {
     let parsed = null;
     try { parsed = new URL(remoteUrl ?? ''); } catch { parsed = null; }
     const hostOk = Boolean(parsed) && (/(?:^|\.)aholo3d\.cn$/.test(parsed.hostname) || /(?:^|\.)aholo\.ai$/.test(parsed.hostname));

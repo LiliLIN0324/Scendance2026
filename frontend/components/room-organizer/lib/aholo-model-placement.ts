@@ -19,16 +19,31 @@ function sceneSourceOf(asset: AssetLike | undefined, url: string | undefined): S
 /** lod-meta 的 forwardBox 换算真实尺度的实现住在 splat-meters，这里转出去给既有调用方。 */
 export { metersFromForwardBox } from './splat-meters';
 
+const metaInFlight = new Map<string, Promise<SplatMeters | null>>();
+const metaCache = new Map<string, SplatMeters>();
+
 /** lod-meta 经本机代理取回（Aholo 域名白名单在代理侧）；拿不到就返回 null，预览退回场地缩放。 */
 export async function loadAholoSceneMeters(metaUrl: string): Promise<SplatMeters | null> {
-  try {
-    const response = await fetch(`${DIRECT_BASE}/meta?url=${encodeURIComponent(metaUrl)}`);
-    if (!response.ok) return null;
-    const meta = await response.json() as { forwardBox?: unknown };
-    return metersFromForwardBox(meta?.forwardBox);
-  } catch {
-    return null;
-  }
+  const cached = metaCache.get(metaUrl);
+  if (cached) return cached;
+  const active = metaInFlight.get(metaUrl);
+  if (active) return active;
+  const job = (async (): Promise<SplatMeters | null> => {
+    try {
+      const response = await fetch(`${DIRECT_BASE}/meta?url=${encodeURIComponent(metaUrl)}`);
+      if (!response.ok) return null;
+      const meta = await response.json() as { forwardBox?: unknown };
+      const meters = metersFromForwardBox(meta?.forwardBox);
+      if (meters) metaCache.set(metaUrl, meters);
+      return meters;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    if (metaInFlight.get(metaUrl) === job) metaInFlight.delete(metaUrl);
+  });
+  metaInFlight.set(metaUrl, job);
+  return job;
 }
 
 /** 文件已经在，只是按模型量一次宽高深；缓存命中时不再读盘。 */

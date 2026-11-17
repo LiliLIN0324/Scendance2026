@@ -698,7 +698,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             {/* 搜索框常驻顶部，不再藏在折叠/筛选里；对齐 shelf 形态。 */}
             <label className="sc-search-mini sc-lib-search">
               <Search size={14} aria-hidden="true"/>
-              <input aria-label="搜索全库线上模型" placeholder="搜索库内素材" value={query} onChange={event => setQuery(event.target.value)}/>
+              <input aria-label="搜索全库线上模型" placeholder="搜索素材名称" value={query} onChange={event => setQuery(event.target.value)}/>
             </label>
             {searching ? <>
               <ul className="sc-lib-list">
@@ -777,7 +777,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       {/* 搜索框常驻：不再折叠成图标，也不依赖 focus 展开；对齐 shelf 形态。 */}
       <label className="sc-search-mini is-open">
         <Search size={16} aria-hidden="true"/>
-        <input aria-label="搜索全库线上模型" placeholder="搜索" value={query} onChange={event => setQuery(event.target.value)}/>
+        <input aria-label="搜索全库线上模型" placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)}/>
       </label>
     </div>
     {tagError && <p className="sc-warning sc-material-note" role="alert">{tagError}</p>}
@@ -875,3 +875,4 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     </div>
   </>;
 }
+

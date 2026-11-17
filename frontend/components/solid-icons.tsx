@@ -114,82 +114,61 @@ export const UsersRound = makeSolidIcon('groups');
 export const Video = makeSolidIcon('videocam');
 export const X = makeSolidIcon('close');
 
-/** 自绘左轨工具图标：不走 Material 字形，24 网格、currentColor、paper 镂空。 */
-function makeCustomIcon(render: (size: number, active: boolean) => JSX.Element): SolidIconComponent {
-  return function CustomIcon({ size = 20, active = false, color, style, ...props }: SolidIconProps): JSX.Element {
+/**
+ * 左轨工具图标共用一档：24 网格、描边 1.6、外接盒 3.25–20.75。
+ * 选中不改填充，只靠轨道的淡绿底和左缘绿条，避免一枚变实心、一枚仍是线。
+ */
+const RAIL_STROKE = 1.6;
+
+function makeCustomIcon(render: (size: number) => JSX.Element): SolidIconComponent {
+  return function CustomIcon({ size = 20, active = false, color, style, className, ...props }: SolidIconProps): JSX.Element {
     return (
-      <span style={{ display: 'inline-flex', flex: 'none', ...(color ? { color } : {}), ...(active ? { color: '#141416' } : {}), ...style }} {...props}>
-        {render(size, active)}
+      <span
+        className={['sc-rail-glyph', className].filter(Boolean).join(' ')}
+        data-active={active ? 'true' : 'false'}
+        style={{ display: 'inline-flex', flex: 'none', ...(color ? { color } : {}), ...style }}
+        {...props}
+      >
+        {render(size)}
       </span>
     );
   };
 }
 
-/** 空间（S01）：四块独立圆角矩形 2×2，块间留缝，表达分区/房间。常态描边，激活实心。 */
-export const RailSpace = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round">
-    <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5"/>
-    <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5"/>
-    <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5"/>
-    <rect x="13" y="13" width="7.5" height="7.5" rx="1.5"/>
-  </svg>
-));
+function railSvg(size: number, children: JSX.Element | JSX.Element[]): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth={RAIL_STROKE}
+      strokeLinejoin="round" strokeLinecap="round">
+      {children}
+    </svg>
+  );
+}
 
-/** 物料（M11d）：箱体 + 顶部拱形提手。常态描边，激活实心、提手以白负形弧留在最上层。 */
-export const RailCrate = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
-    {active
-      ? <>
-          <rect x="3.4" y="7.0" width="17.2" height="12.6" rx="2.4"/>
-          <path d="M8.8 7.5 a3.2 3.2 0 0 1 6.4 0" stroke="#FFFFFF" strokeWidth="1.7" fill="none"/>
-        </>
-      : <>
-          <path d="M8.8 7.5 a3.2 3.2 0 0 1 6.4 0"/>
-          <rect x="3.5" y="7.5" width="17" height="12.5" rx="2.2"/>
-        </>}
-  </svg>
-));
+/** 空间：四块等大圆角方。外接盒仍是 3.25–20.75，与加号圆、双圆外沿对齐；块间缝按描边外沿留 1.4，四块不会糊成一格。 */
+export const RailSpace = makeCustomIcon((size) => railSvg(size, [
+  <rect key="a" x="3.25" y="3.25" width="7.25" height="7.25" rx="1.25" />,
+  <rect key="b" x="13.5" y="3.25" width="7.25" height="7.25" rx="1.25" />,
+  <rect key="c" x="3.25" y="13.5" width="7.25" height="7.25" rx="1.25" />,
+  <rect key="d" x="13.5" y="13.5" width="7.25" height="7.25" rx="1.25" />,
+]));
 
-/** 场地（新建/生成功能区）：圆形容器包裹居中加号，表达新建一块可布置场地；24 网格、round 端点，圆径与户外星球同口径。常态圆与加号描边，激活圆实心、加号反白负形。 */
-export const RailPlus = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
-    {active
-      ? <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <path d="M8.0 12.0 h8.0 M12.0 8.0 v8.0" stroke="#FFFFFF" strokeWidth="1.8" fill="none"/>
-        </>
-      : <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <path d="M8.0 12.0 h8.0 M12.0 8.0 v8.0"/>
-        </>}
-  </svg>
-));
+/** 物料：公文包。提手顶、箱体底与宫格外接盒对齐，中缝只画在箱内。 */
+export const RailCrate = makeCustomIcon((size) => railSvg(size, [
+  <rect key="body" x="3.25" y="8.05" width="17.5" height="12.7" rx="2" />,
+  <path key="handle" d="M9.2 8.05V5.05a1.8 1.8 0 0 1 1.8-1.8h2a1.8 1.8 0 0 1 1.8 1.8V8.05" />,
+  <path key="seam" d="M6.15 12.55h11.7" />,
+]));
 
-/** 户外规划（O01）：星球圆 + 两块对角正圆大陆。常态描边，激活实心、大陆镂空。 */
-export const RailMap = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
-    {active
-      ? <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <circle cx="9.1" cy="9.1" r="2.7" fill="#FFFFFF"/>
-          <circle cx="14.9" cy="14.9" r="2.7" fill="#FFFFFF"/>
-        </>
-      : <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <circle cx="9.1" cy="9.1" r="2.7"/>
-          <circle cx="14.9" cy="14.9" r="2.7"/>
-        </>}
-  </svg>
-));
+/** 场地：与户外同一外圆，加号停在圆内，端点 round。选中仍是同一描边。 */
+export const RailPlus = makeCustomIcon((size) => railSvg(size, [
+  <circle key="ring" cx="12" cy="12" r="8.75" />,
+  <path key="plus" d="M12 7.7v8.6M7.7 12h8.6" />,
+]));
+
+/** 户外：外圆与加号同径，两枚等大圆沿对角线分开，不互相压住。 */
+export const RailMap = makeCustomIcon((size) => railSvg(size, [
+  <circle key="planet" cx="12" cy="12" r="8.75" />,
+  <circle key="nw" cx="9.2" cy="9.2" r="2.2" />,
+  <circle key="se" cx="14.8" cy="14.8" r="2.2" />,
+]));

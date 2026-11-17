@@ -1,0 +1,99 @@
+{
+  "total": 976,
+  "byKind": {
+    "seat": 40,
+    "none": 767,
+    "seat-set": 6,
+    "table": 39,
+    "booth": 62,
+    "stage": 29,
+    "operate": 9,
+    "person": 24
+  },
+  "overridden": 18,
+  "byBucket": {
+    "seating": {
+      "seat": 39,
+      "none": 5,
+      "seat-set": 1
+    },
+    "tools": {
+      "none": 29
+    },
+    "tables": {
+      "seat-set": 5,
+      "table": 32,
+      "booth": 9
+    },
+    "structure": {
+      "none": 109,
+      "operate": 2,
+      "booth": 1
+    },
+    "digital": {
+      "none": 41,
+      "booth": 1,
+      "operate": 2
+    },
+    "food": {
+      "table": 7,
+      "booth": 5,
+      "none": 31
+    },
+    "signage": {
+      "none": 93,
+      "booth": 2
+    },
+    "exhibition": {
+      "booth": 42,
+      "none": 24,
+      "operate": 1
+    },
+    "stage": {
+      "none": 15,
+      "stage": 24
+    },
+    "audio": {
+      "none": 39,
+      "stage": 1
+    },
+    "sports": {
+      "none": 69,
+      "seat": 1
+    },
+    "lighting": {
+      "none": 25,
+      "stage": 2
+    },
+    "scenes": {
+      "stage": 1,
+      "none": 4
+    },
+    "storage": {
+      "none": 27,
+      "operate": 3,
+      "booth": 1,
+      "stage": 1
+    },
+    "decor": {
+      "none": 64
+    },
+    "logistics": {
+      "none": 96,
+      "operate": 1,
+      "booth": 1
+    },
+    "plants": {
+      "none": 26
+    },
+    "vehicles": {
+      "none": 59
+    },
+    "rides": {
+      "none": 11
+    },
+    "people": {
+      "person": 24
+    }
+  }
+}

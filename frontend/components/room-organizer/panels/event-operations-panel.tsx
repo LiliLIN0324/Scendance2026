@@ -12,6 +12,7 @@ import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shar
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { CreativeBrief } from '../lib/creative-brief';
 import type { RoomLayout } from '../lib/types';
+import { EventProfileCard } from '../../event-profile/event-profile-card';
 import './scene-delivery-panel.css';
 import './event-operations-panel.css';
 
@@ -262,6 +263,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
     </div>
     <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
+    {layout.eventProfile && <EventProfileCard profile={layout.eventProfile} />}
     {suggestionsPanel}
     <div className="sc-operation-toolbar"><strong className="sc-operation-kind-label">{operations.dataKind === 'rehearsal' ? '演练安排' : operations.dataKind === 'real' ? '真实活动安排' : '活动任务'} · {operations.tasks.length} 项</strong><label className="sc-field sc-operation-kind">资料类型<select disabled={disabled} value={operations.dataKind} onChange={event => { if (update({ ...operations, dataKind: event.target.value as EventOperations['dataKind'] })) setNotice('资料类型已更新，请留意本机保存状态。'); }}><option value="unspecified">未标注</option><option value="rehearsal">演练</option><option value="real">真实</option></select></label></div>
     {(missingSummary || needsReview > 0 || failedReviews > 0) && <div className="sc-operation-overview" role="group" aria-label="任务待补与复核">

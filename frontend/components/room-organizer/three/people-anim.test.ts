@@ -7,10 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildPerson, buildProceduralPerson } from './builders/builders-people';
 import {
   advancePeopleAnimations,
+  personActionState,
   personAnimIds,
   personIsAnimated,
   personOdometer,
   registerPersonAnim,
+  setNearestPersonAction,
+  setPersonAction,
   setPersonWalkContext,
   takePersonControl,
 } from './people-anim';
@@ -226,5 +229,48 @@ describe('registerPersonAnim', () => {
     scene.remove(root);
     advancePeopleAnimations(STEP);
     expect(personAnimIds()).not.toContain('bare');
+  });
+});
+
+describe('external person actions', () => {
+  it('switches a static person to talk and falls back to idle when a clip is missing', async () => {
+    setPeopleModelForTests(await loadAsset());
+    buildAndMount({ ...adult, personAction: 'talk' });
+    expect(personActionState('p1')?.current).toBe('talk');
+    expect(personActionState('p1')?.hasClips.talk).toBe(true);
+
+    setPersonAction('p1', 'idle');
+    expect(personActionState('p1')?.current).toBe('idle');
+
+    setPersonAction('p1', 'wave');
+    const wave = personActionState('p1')!;
+    expect(wave.requested).toBe('wave');
+    expect(wave.current).toBe('idle');
+  });
+
+  it('picks the nearest attached non-routed person for a prop action', () => {
+    const idle = new THREE.AnimationClip('Idle_Loop', 1, []);
+    const talk = new THREE.AnimationClip('Idle_Talking_Loop', 1, []);
+    const add = (id: string, x: number) => {
+      const group = new THREE.Group();
+      group.position.set(x, 0, 0);
+      scene.add(group);
+      registerPersonAnim(group, {
+        id,
+        mixer: new THREE.AnimationMixer(group),
+        rig: null,
+        clips: { idle, talk, walk: null },
+        action: 'idle',
+        paused: false,
+        route: null,
+      });
+    };
+    add('near', 0);
+    add('far', 5);
+
+    expect(setNearestPersonAction({ x: 0.5, z: 0.2 }, 'talk', 2)).toBe('near');
+    expect(personActionState('near')?.current).toBe('talk');
+    expect(personActionState('far')?.current).toBe('idle');
+    expect(setNearestPersonAction({ x: -8, z: 0 }, 'talk', 2)).toBeNull();
   });
 });

@@ -41,7 +41,12 @@ describe('人物设计链步骤定义', () => {
     expect(characterStepIndex('retarget')).toBe(4);
   });
 
-  it('默认动作恰好包含漫游必需的 Idle 与 Walk', () => {
-    expect(DEFAULT_CHARACTER_ANIMATIONS).toEqual(['Idle_Loop', 'Walk_Loop']);
+  it('默认动作覆盖漫游 + 物料能力：站 / 走 / 坐 / 交谈', () => {
+    expect(DEFAULT_CHARACTER_ANIMATIONS).toEqual([
+      'Idle_Loop',
+      'Walk_Loop',
+      'Idle_Talking_Loop',
+      'Sitting_Idle_Loop',
+    ]);
   });
 });

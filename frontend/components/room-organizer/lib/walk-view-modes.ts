@@ -65,6 +65,30 @@ export interface RigPlanOffset {
   orbitCamera: boolean;
 }
 
+/** 编辑环绕的俯角上限（弧度）。小于 π/2，相机保持在目标水平面之上。 */
+export const EDITOR_MAX_POLAR = Math.PI * 0.46;
+
+/**
+ * 鸟瞰漫游时相机相对目标至少抬高这么多（米）。
+ * 近距离若仍用编辑俯角上限，近裁剪面会切进地面。
+ */
+export const WALK_AERIAL_CLEARANCE_M = 1.25;
+
+/**
+ * 按当前距离收紧俯角，使相机高度不低于 clearance。
+ * 远距离仍受编辑上限约束。
+ */
+export function aerialPolarLimit(
+  distance: number,
+  clearance = WALK_AERIAL_CLEARANCE_M,
+  editorMax = EDITOR_MAX_POLAR,
+): number {
+  if (!Number.isFinite(distance) || !Number.isFinite(clearance) || clearance <= 0) return editorMax;
+  if (!(distance > clearance + 1e-4)) return Math.min(editorMax, 0.05);
+  const byGround = Math.acos(Math.min(1, Math.max(0, clearance / distance)));
+  return Math.min(editorMax, byGround);
+}
+
 /**
  * 按朝向 yaw 把档位偏移换算成锚点到相机的平面位移。
  * 相机期望位置 = 锚点 + (x, heightDelta, z)；场景层再做跟随阻尼与遮挡回退。

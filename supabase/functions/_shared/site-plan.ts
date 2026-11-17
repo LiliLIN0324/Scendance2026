@@ -118,6 +118,21 @@ export const planFacilitySchema = z.strictObject({
    * 「自动」清回 undefined；与 opacity/color 同口径不写 default，旧数据缺字段照常解析（无需迁移）。
    */
   modelOverride: z.string().min(1).max(160).optional(),
+  /**
+   * 2026-11-17 材质快改：预设 id（`frontend/.../lib/material-presets.ts`）。
+   * 只改 PBR 参数（色/粗糙度/金属度），不动几何与贴图；缺省=原样，旧数据照常解析。
+   */
+  materialPreset: z.string().max(24).optional(),
+  /**
+   * 2026-11-17 单价（元/件）：人工填写；物料库暂无价格字段，缺省=未定价。
+   * 清单按此算小计，未填不按 0 计；旧数据缺字段照常解析。
+   */
+  /**
+   * 2026-11-17 设施角色：场景套装（如观礼区找舞台）优先按角色，不再只靠名字猜。
+   * 可选，旧数据缺字段照常解析。
+   */
+  role: z.enum(['stage', 'entrance', 'exit', 'booth', 'service']).optional(),
+  unitPrice: z.number().min(0).max(1_000_000).optional(),
 });
 export type PlanFacility = z.infer<typeof planFacilitySchema>;
 
@@ -368,6 +383,20 @@ export const sitePlanDataSchema = z.strictObject({
     .optional(),
   /** 2026-11-11 用户指令：自由标注（文本 + 形状，可选）：旧数据不带该字段照常解析。 */
   annotations: z.array(planAnnotationSchema).max(500).optional(),
+  /**
+   * 2026-11-17 软删除回收站：误删的设施先移到这里，导出/统计/3D 不再包含；可恢复。
+   * 旧数据缺字段照常解析。
+   */
+  trash: z.array(z.strictObject({
+    id: z.uuid(),
+    deletedAt: z.string().min(1).max(40),
+    facility: planFacilitySchema,
+  })).max(200).optional(),
+  /**
+   * 2026-11-17 项目级价格书：modelOverride slug → 单价（元）。
+   * 人工一次定价后写入；后续新放置的同款自动带价。旧数据不带照常解析。
+   */
+  priceBook: z.record(z.string().min(1).max(160), z.number().min(0).max(1_000_000)).optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
     ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'],

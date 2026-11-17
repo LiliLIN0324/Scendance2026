@@ -245,7 +245,7 @@ export function useSceneEffects({
   );
   // 图源与户外 2D 画布同一份模块级偏好（覆盖层切图源时 writePlanGroundSource 会通知）。
   const geoBasemapSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
-  const glbAssetsRevision = useGlbAssets(layout);
+  const glbAssetsRevision = useGlbAssets(layout, activeFloorIndex, view.showAllFloors);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
 
   // Storey heights stack every floor's Y, the wall heights, and the roof

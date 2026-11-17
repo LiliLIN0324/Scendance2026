@@ -34,7 +34,8 @@ describe('左轨四形与共用 Agent 面板', () => {
     // 所以标签不再写「拍摄场地」——否则用户会以为点开只有拍摄。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
     expect(primary).toContain('aria-label="场地：重建真实场地，或生成新场景"');
-    expect(primary).toContain('sc-rail-3d-tag');
+    expect(primary).toContain('sc-rail-capture-icon');
+    expect(primary).toMatch(/sc-rail-capture-icon[\s\S]*<span className="sc-rail-3d-tag">3D<\/span>/);
     // 点开的是统一生成面板首层（只列场地两项），再点一次收起。
     expect(primary).toContain("onClick={() => {");
     expect(primary).toContain("openGenerationSheet({ scope: 'venue' })");
@@ -82,6 +83,42 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(css).toMatch(/\.sc-rail-avatar-tilt\s*\{[^}]*rotateX\(var\(--tilt-x/);
     expect(css).toMatch(/\.sc-rail-eye\s*\{[^}]*background:\s*#fff/);
     expect(css).toMatch(/button\.sc-rail-disc\.is-active::before\s*\{[^}]*left:\s*-4px[^}]*top:\s*7px[^}]*bottom:\s*7px[^}]*width:\s*3px/);
+    expect(css).toMatch(/\.sc-mode-rail-primary\s*\{[^}]*gap:\s*4px/);
+    expect(css).toMatch(/button\.sc-rail-disc\.is-active\s*\{[^}]*background:\s*var\(--wk-green-pale\)/);
+    expect(css).toMatch(/button\.sc-rail-disc > span\.sc-rail-glyph\s*\{[^}]*width:\s*24px[^}]*height:\s*24px/);
+    expect(css).toMatch(/button\.sc-rail-disc > \.sc-rail-capture-icon\s*\{[^}]*width:\s*24px[^}]*height:\s*24px/);
+    expect(css).toMatch(/\.sc-rail-capture-icon > \.sc-rail-3d-tag\s*\{[^}]*position:\s*absolute[^}]*right:\s*-5px[^}]*bottom:\s*-3px/);
+    expect(css).toMatch(/button\.sc-nav-brand\.is-active::before\s*\{[^}]*left:\s*-4px[^}]*width:\s*3px/);
+    const icons = readFileSync(join(here, '../../solid-icons.tsx'), 'utf8');
+    const glyphStart = icons.indexOf('const RAIL_STROKE = 1.6');
+    const glyph = icons.slice(glyphStart);
+    expect(glyphStart).toBeGreaterThan(-1);
+    expect(glyph).toContain('sc-rail-glyph');
+    expect(glyph).not.toContain('fill={active');
+    expect(glyph).not.toContain('#FFFFFF');
+    expect(glyph).toContain('r="8.75"');
+    expect(glyph.match(/r="8\.75"/g)).toHaveLength(2);
+    const spaceIcon = glyph.slice(glyph.indexOf('export const RailSpace'), glyph.indexOf('export const RailCrate'));
+    const cells = [...spaceIcon.matchAll(/x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/g)]
+      .map(match => match.slice(1).map(Number));
+    expect(cells).toHaveLength(4);
+    const [cellWidth, cellHeight] = [cells[0][2], cells[0][3]];
+    for (const cell of cells) {
+      expect(cell[2]).toBe(cellWidth);
+      expect(cell[3]).toBe(cellHeight);
+    }
+    const xs = cells.map(cell => cell[0]).sort((a, b) => a - b);
+    const ys = cells.map(cell => cell[1]).sort((a, b) => a - b);
+    expect(xs[0]).toBe(3.25);
+    expect(ys[0]).toBe(3.25);
+    expect(xs[2] + cellWidth).toBeCloseTo(20.75);
+    expect(ys[2] + cellHeight).toBeCloseTo(20.75);
+    const gutter = xs[2] - (xs[0] + cellWidth);
+    expect(gutter).toBeGreaterThan(1.6);
+    expect(ys[2] - (ys[0] + cellHeight)).toBeCloseTo(gutter);
+    expect(css).toMatch(/button\.sc-rail-disc\[aria-label="空间"\]:active\s*\{[^}]*background:\s*var\(--wk-plane-deep\)/);
+    expect(css).toMatch(/button\.sc-rail-disc\[aria-label="空间"\]\.is-active:active\s*\{[^}]*color-mix\(in srgb, var\(--wk-green\) 22%, var\(--wk-paper\)\)/);
+    expect(spaceIcon).not.toContain('fill=');
     expect(css).not.toMatch(/button\.is-active::before\s*\{/);
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');

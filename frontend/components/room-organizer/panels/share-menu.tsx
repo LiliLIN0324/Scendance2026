@@ -2,8 +2,14 @@
 
 /**
  * 画布工具轨右上角的「分享」。
- * 一张卡片：方案预览、扫码看的只读链接、项目大纲，下面是带走资料的次要入口。
- * 二维码算法用 qrcode（MIT），图标与卡片样式是自写的。
+ * 先按受众分栏（发给客户 / 送评审方 / 内部协作），每栏里是方案网页和 3D 漫游。
+ * 左右方向键、Home、End 切换分栏；当前栏 aria-selected 为 true，其余为 false，只有当前栏进 Tab 序。
+ * 评审在送评审方与内部协作；交接、资料、到场清单只在内部协作。
+ * 导出勾选（PNG / CSV / GeoJSON）在发给客户和内部协作，按钮在卡片底部。
+ * 发布后右侧出预览和二维码。状态行是方案网页 / 3D 漫游 / 评审。
+ * 方案网页未发布、漫游未生成时，当前受众栏说明下一步，样式沿用说明文字。
+ * 二维码算法用 qrcode（MIT），图标与卡片样式沿用现有 token。
+ * 二维码只用已发布链接在本地绘制：绘制中是占位，画不出来时留下链接，可再画一次。
  */
 import QRCode from 'qrcode';
 import { ClipboardCheck, Copy, ExternalLink, FileDown, Info, Link2, PackageOpen, QrCode, Upload } from '@/components/solid-icons';
@@ -54,6 +60,55 @@ export interface PlanOutline {
   variants: { name: string; active: boolean }[];
 }
 
+type ShareAudience = 'client' | 'review' | 'internal';
+type ShareExportId = 'png' | 'csv' | 'geojson';
+
+/**
+ * 分享卡「导出 N 项资料」接到哪条既有导出。
+ * 2D 地图的 PNG 走规划快照（比例尺 / 指北 / 图例）；3D 仍抓当前画面。
+ * CSV / GeoJSON / PDF 在 2D 出镜，或覆盖层保活且已有方案时都可下发。
+ */
+export function shareExportPlan(input: {
+  outdoor2D: boolean;
+  outdoor3d: boolean;
+  hasPlan: boolean;
+}): { png: 'plan' | 'frame3d' | 'indoor'; files: boolean } {
+  const files = input.outdoor2D || input.hasPlan;
+  if (input.outdoor3d && !input.outdoor2D) return { png: 'frame3d', files };
+  if (input.outdoor2D) return { png: 'plan', files };
+  return { png: 'indoor', files: input.hasPlan };
+}
+
+const SHARE_AUDIENCES: { id: ShareAudience; label: string; note: string; emptyWeb: string; emptyWalk: string }[] = [
+  {
+    id: 'client',
+    label: '发给客户',
+    note: '对外交付：对方只读查看，不改动本地方案',
+    emptyWeb: '未发布。发布当前版本后，把方案网页发给客户，对方只能只读查看。',
+    emptyWalk: '未生成漫游。生成漫游链接后，再把这一版漫游发给客户。',
+  },
+  {
+    id: 'review',
+    label: '送评审方',
+    note: '送评审方：可在方案上落钉、完成评审，回执收进 Bingo',
+    emptyWeb: '未发布。发布当前版本后，评审方看到的是这一版只读方案网页。',
+    emptyWalk: '未生成漫游。生成漫游链接后，评审方看到的是这一版漫游。',
+  },
+  {
+    id: 'internal',
+    label: '内部协作',
+    note: '内部协作：含工作资料与导出，仅团队内部使用',
+    emptyWeb: '未发布。发布当前版本后，团队内部打开的是这一版只读方案网页。',
+    emptyWalk: '未生成漫游。生成漫游链接后，只在团队内传这一版漫游。',
+  },
+];
+
+/** 当前受众在方案网页未发布、漫游未生成时看到的下一步。已发布 / 已生成则不显示。 */
+export function shareAudienceEmptyCopy(audience: ShareAudience): { web: string; walk: string } {
+  const item = SHARE_AUDIENCES.find(entry => entry.id === audience) ?? SHARE_AUDIENCES[0]!;
+  return { web: item.emptyWeb, walk: item.emptyWalk };
+}
+
 /** 项目大纲：场地、楼层、物料分类、分区、设计簿。只读摘要，不改画布。 */
 export function planOutline(layout: RoomLayout, unit: DisplayUnit = 'm'): PlanOutline {
   const floors = layout.floors ?? [];
@@ -99,12 +154,19 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
   const [open, setOpen] = useState(false);
   const [published, setPublished] = useState<PublishedLink | null>(null);
   const [qrSvg, setQrSvg] = useState('');
+  const [qrReadyKey, setQrReadyKey] = useState('');
+  const [qrFailedKey, setQrFailedKey] = useState('');
+  const [qrAttempt, setQrAttempt] = useState(0);
   const [reviewUrl, setReviewUrl] = useState('');
   const reviewGuard=useRef<(()=>boolean)|null>(null);
   const reviewCurrent=()=>{try{return reviewGuard.current?.()===true;}catch{return false;}};
   const [viewerLink, setViewerLink] = useState<{ url: string; name: string; objects: number; droppedAssets: number } | null>(null);
   const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<null | 'publish' | 'review' | 'viewer'>(null);
+  const [audience, setAudience] = useState<ShareAudience>('client');
+  const audienceRef = useRef(audience);
+  audienceRef.current = audience;
+  const [exportChecked, setExportChecked] = useState<Record<ShareExportId, boolean>>({ png: true, csv: false, geojson: false });
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
@@ -145,20 +207,53 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
   }, [open, projectId]);
 
   useEffect(() => {
-    if (!published) { setQrSvg(''); return undefined; }
+    if (!published) {
+      setQrSvg('');
+      setQrReadyKey('');
+      setQrFailedKey('');
+      return undefined;
+    }
+    const key = publishedQrKey(published);
+    const publishedNote = `版本 ${published.revision} 链接已生成。`;
     let live = true;
+    setQrSvg('');
+    setQrReadyKey('');
+    setQrFailedKey('');
+    const markFailed = () => {
+      setQrSvg('');
+      setQrReadyKey('');
+      setQrFailedKey(key);
+      setNotice(current => current.startsWith(publishedNote)
+        ? `${publishedNote}二维码没有生成，可以复制或打开。`
+        : current);
+    };
+    // 只拿这一次的链接在本地画，失败也不再请求发布接口。
     void QRCode.toString(published.url, { type: 'svg', margin: 1, width: 168, errorCorrectionLevel: 'M' })
-      .then(svg => { if (live) setQrSvg(svg); })
-      .catch(() => { if (live) setQrSvg(''); });
+      .then(svg => {
+        if (!live) return;
+        if (typeof svg !== 'string' || svg.trim() === '') {
+          markFailed();
+          return;
+        }
+        setQrSvg(svg);
+        setQrReadyKey(key);
+        setNotice(current => current.startsWith(publishedNote)
+          ? `${publishedNote}手机扫码看到的就是这一版。`
+          : current);
+      })
+      .catch(() => {
+        if (!live) return;
+        markFailed();
+      });
     return () => { live = false; };
-  }, [published]);
+  }, [published, qrAttempt]);
 
   const publish = async () => {
     if (!actions || busy) {
       setNotice(actions ? '' : '分享还没接到工作台。');
       return;
     }
-    setBusy(true);
+    setBusy('publish');
     setNotice('');
     try {
       const result = await actions.onPublish();
@@ -168,7 +263,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '链接没有生成。');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -177,7 +272,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       setNotice(actions ? '' : '分享还没接到工作台。');
       return;
     }
-    setBusy(true);
+    setBusy('review');
     setNotice('');
     try {
       const result = await actions.onIssueReviewLink();
@@ -188,7 +283,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -202,7 +297,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       setNotice(blocked.message);
       return;
     }
-    setBusy(true);
+    setBusy('viewer');
     setNotice('');
     try {
       const result = await actions.onGenerateShareLink();
@@ -216,7 +311,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '只读 3D 链接没有生成。');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -241,8 +336,48 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
 
   // 链路就绪汇总：方案网页 / 只读 3D / 评审三条各自是否已生成，供状态行总览。
   const webLive = !!published;
+  const publishedKey = published ? publishedQrKey(published) : '';
+  const qrPhase: 'pending' | 'ready' | 'failed' =
+    published && qrReadyKey === publishedKey && qrSvg
+      ? 'ready'
+      : published && qrFailedKey === publishedKey
+        ? 'failed'
+        : 'pending';
   const viewerLive = !!viewerLink;
   const reviewLive = !!(reviewUrl && reviewCurrent());
+  const audienceNote = SHARE_AUDIENCES.find(item => item.id === audience)?.note ?? '';
+  const emptyCopy = shareAudienceEmptyCopy(audience);
+  const showReview = audience === 'review' || audience === 'internal';
+  const showExport = audience !== 'review';
+  const exportChoices: { id: ShareExportId; label: string; run: () => void }[] = [];
+  if (actions?.onExportImage) exportChoices.push({ id: 'png', label: 'PNG', run: () => { void actions.onExportImage?.(); } });
+  if (actions?.onExportCsv) exportChoices.push({ id: 'csv', label: 'CSV', run: () => { actions.onExportCsv?.(); } });
+  if (actions?.onExportGeoJson) exportChoices.push({ id: 'geojson', label: 'GeoJSON', run: () => { actions.onExportGeoJson?.(); } });
+  const selectedExports = exportChoices.filter(item => exportChecked[item.id]);
+  const exportSelected = () => {
+    if (!selectedExports.length) return;
+    for (const item of selectedExports) item.run();
+    setOpen(false);
+  };
+
+  const onAudienceKeyDown = (event: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; currentTarget: HTMLElement; preventDefault(): void; stopPropagation(): void }) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const count = SHARE_AUDIENCES.length;
+    const index = SHARE_AUDIENCES.findIndex(item => item.id === audienceRef.current);
+    const from = index < 0 ? 0 : index;
+    const nextIndex = event.key === 'ArrowRight' ? (from + 1) % count
+      : event.key === 'ArrowLeft' ? (from - 1 + count) % count
+      : event.key === 'Home' ? 0
+      : event.key === 'End' ? count - 1
+      : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = SHARE_AUDIENCES[nextIndex]!;
+    audienceRef.current = next.id;
+    setAudience(next.id);
+    event.currentTarget.querySelector<HTMLButtonElement>(`#share-audience-${next.id}`)?.focus();
+  };
 
   return <div className="sc-tool-menu" ref={rootRef}>
     {variant === 'canvas' ? (
@@ -280,7 +415,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
         <MaterialSymbol name="upload" size={15} />
       </button>
     )}
-    {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="分享">
+    {open && <div id="tool-share-menu" className={`sc-tool-pop sc-publish-card${published ? ' is-published' : ''}`} role="dialog" aria-label="分享">
       <header className="sc-publish-head">
         <span className="sc-publish-name">{titleOf(layout)}</span>
         <span className={`sc-publish-chip${published ? ' is-live' : ''}`}>{published ? `已分享 v${published.revision}` : '未分享'}</span>
@@ -290,46 +425,98 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
         </details>
       </header>
 
-      <section className="sc-publish-shot" aria-label="方案预览">
-        {layout ? <PlanPreview layout={layout} ariaLabel={`${titleOf(layout)} 的平面预览`}/> : <p className="sc-publish-note">画布还没就绪。</p>}
-        <span className="sc-publish-shot-kicker">方案预览</span>
-        {outline && <span className="sc-publish-shot-meta">{outline.size} · {outline.itemCount} 件</span>}
-      </section>
-
-      <div className="sc-publish-actions">
-        <button type="button" className="sc-publish-primary" disabled={busy} onClick={() => { void publish(); }}>
-          <Upload size={15} aria-hidden="true"/><span>{busy ? '正在生成…' : published ? `重新生成版本 ${published.revision + 1} 链接` : '生成分享链接'}</span>
-        </button>
-        {published && <>
-          <button type="button" aria-label="复制链接" data-tip="复制链接" onClick={() => { void copyPublished(); }}><Copy size={15} aria-hidden="true"/></button>
-          <a href={published.url} target="_blank" rel="noopener noreferrer" aria-label="打开只读页" data-tip="打开只读页"><ExternalLink size={15} aria-hidden="true"/></a>
-        </>}
+      <div className="sc-publish-row" role="tablist" aria-label="交付对象" onKeyDown={onAudienceKeyDown}>
+        {SHARE_AUDIENCES.map(item => {
+          const selected = audience === item.id;
+          return <button key={item.id} type="button" id={`share-audience-${item.id}`} role="tab" aria-selected={selected} tabIndex={selected ? 0 : -1} className={selected ? 'is-active' : ''} onClick={() => setAudience(item.id)}>
+            {item.label}
+          </button>;
+        })}
       </div>
-      {notice && <p className="sc-publish-note" role="status">{notice}</p>}
+      <p className="sc-publish-note">{audienceNote}</p>
 
-      <section className="sc-publish-row" aria-label="只读 3D 分享方案">
-        {viewerLink ? <>
-          <button type="button" aria-label="复制 3D 链接" onClick={() => { void copyViewer(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
-          <a href={viewerLink.url} target="_blank" rel="noopener noreferrer" aria-label="打开只读 3D 方案"><ExternalLink size={14} aria-hidden="true"/><span>打开</span></a>
-          <button type="button" aria-label="重新生成 3D 链接" disabled={busy} onClick={() => { void generateViewer(); }}><MaterialSymbol name="refresh"/><span>重新生成</span></button>
-        </> : <button type="button" disabled={busy} onClick={() => { void generateViewer(); }}>
-          <MaterialSymbol name="view_in_ar"/><span>{busy ? '正在生成…' : '生成只读 3D 分享方案'}</span>
-        </button>}
-      </section>
+      <div className="sc-publish-split">
+        <div className="sc-publish-main">
+          <section aria-label="方案网页">
+            <span className="sc-publish-kicker">方案网页</span>
+            <div className="sc-publish-actions">
+              <button type="button" className="sc-publish-primary" disabled={!!busy} onClick={() => { void publish(); }}>
+                <Upload size={15} aria-hidden="true"/><span>{busy === 'publish' ? '正在生成…' : '发布当前版本'}</span>
+              </button>
+              <button type="button" aria-label="复制链接" data-tip="复制链接" disabled={!published} onClick={() => { void copyPublished(); }}><Copy size={15} aria-hidden="true"/><span>复制链接</span></button>
+              {published
+                ? <a href={published.url} target="_blank" rel="noopener noreferrer" aria-label="打开方案网页"><ExternalLink size={15} aria-hidden="true"/><span>打开</span></a>
+                : <button type="button" aria-label="打开方案网页" disabled><ExternalLink size={15} aria-hidden="true"/><span>打开</span></button>}
+            </div>
+            {!webLive && <p className="sc-publish-note">{emptyCopy.web}</p>}
+          </section>
 
-      <section className="sc-publish-qr" aria-label="手机看方案">
-        <span className="sc-publish-kicker">手机看方案</span>
-        <div className="sc-publish-qr-body">
-          {published
-            ? (qrSvg
-              ? <div className="sc-publish-qr-frame" role="img" aria-label="只读方案二维码" dangerouslySetInnerHTML={{ __html: qrSvg }}/>
-              : <div className="sc-publish-qr-frame is-pending" aria-hidden="true"><QrCode size={26}/></div>)
-            : <div className="sc-publish-qr-frame is-empty" aria-hidden="true"><QrCode size={26}/></div>}
-          <div className="sc-publish-qr-side">
-            <p>{published ? `版本 ${published.revision} · 只读，扫码即看` : '生成链接后这里出二维码，手机扫码看到的就是同一版。'}</p>
-          </div>
+          <section aria-label="3D 漫游">
+            <span className="sc-publish-kicker">3D 漫游</span>
+            <div className="sc-publish-actions" style={{ flexWrap: 'wrap' }}>
+              <button type="button" disabled={!!busy} onClick={() => { void generateViewer(); }}><MaterialSymbol name="view_in_ar"/><span>{busy === 'viewer' && !viewerLink ? '正在生成…' : '生成漫游链接'}</span></button>
+              <button type="button" aria-label="复制漫游链接" disabled={!viewerLink} onClick={() => { void copyViewer(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
+              {viewerLink
+                ? <a href={viewerLink.url} target="_blank" rel="noopener noreferrer" aria-label="打开漫游"><ExternalLink size={14} aria-hidden="true"/><span>打开</span></a>
+                : <button type="button" aria-label="打开漫游" disabled><ExternalLink size={14} aria-hidden="true"/><span>打开</span></button>}
+              <button type="button" aria-label="重新生成漫游链接" disabled={!viewerLink || !!busy} onClick={() => { void generateViewer(); }}><MaterialSymbol name="refresh"/><span>{busy === 'viewer' && viewerLink ? '正在生成…' : '重新生成'}</span></button>
+            </div>
+            {!viewerLive && <p className="sc-publish-note">{emptyCopy.walk}</p>}
+          </section>
+
+          {showReview && <section aria-label="送审">
+            <span className="sc-publish-kicker">评审</span>
+            <div className="sc-publish-row">
+              <button type="button" disabled={!!busy} onClick={() => { void issue(); }}><Link2 size={15} aria-hidden="true"/><span>发评审链接</span></button>
+            </div>
+            {reviewUrl && reviewCurrent() && <>
+              <label>可留言的方案页
+                <input readOnly value={reviewUrl} aria-label="评审链接" onFocus={event => event.currentTarget.select()}/>
+              </label>
+              <div className="sc-publish-row">
+                <button type="button" aria-label="复制评审链接" onClick={() => { void copyReview(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
+                <a href={reviewUrl} target="_blank" rel="noopener noreferrer" onClick={event=>{if(!reviewCurrent()){event.preventDefault();setReviewUrl('');setNotice('活动、楼层或方案已变化，旧链接未打开。');}}}><ExternalLink size={14} aria-hidden="true"/><span>打开对方所见</span></a>
+              </div>
+            </>}
+          </section>}
+
+          {notice && <p className="sc-publish-note" role="status">{notice}</p>}
+
+          {audience === 'internal' && <div className="sc-publish-more">
+            <button type="button" onClick={() => { actions?.onExportHandoff(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出交接</span></button>
+            <button type="button" onClick={() => { actions?.onOpenMaterials(); setOpen(false); }}><PackageOpen size={15} aria-hidden="true"/><span>打开资料</span></button>
+            <button type="button" onClick={() => { actions?.onOpenChecklist(); setOpen(false); }}><ClipboardCheck size={15} aria-hidden="true"/><span>到场清单</span></button>
+          </div>}
         </div>
-      </section>
+
+        {published && <div className="sc-publish-aside">
+          <section className="sc-publish-shot" aria-label="方案预览">
+            {layout ? <PlanPreview layout={layout} ariaLabel={`${titleOf(layout)} 的平面预览`}/> : <p className="sc-publish-note">画布还没就绪。</p>}
+            <span className="sc-publish-shot-kicker">方案预览</span>
+            {outline && <span className="sc-publish-shot-meta">{outline.size} · {outline.itemCount} 件</span>}
+          </section>
+          <section className="sc-publish-qr" aria-label="手机看方案" aria-busy={qrPhase === 'pending'}>
+            <span className="sc-publish-kicker">手机看方案</span>
+            <div className="sc-publish-qr-body">
+              {qrPhase === 'ready'
+                ? <div className="sc-publish-qr-frame" role="img" aria-label="只读方案二维码" dangerouslySetInnerHTML={{ __html: qrSvg }}/>
+                : <div className={`sc-publish-qr-frame${qrPhase === 'failed' ? ' is-failed' : ' is-pending'}`} aria-hidden="true"><QrCode size={26}/></div>}
+              <div className="sc-publish-qr-side">
+                <p className={qrPhase === 'failed' ? 'sc-publish-qr-fail' : undefined}>
+                  {qrPhase === 'ready'
+                    ? `版本 ${published.revision} · 只读，扫码即看`
+                    : qrPhase === 'failed'
+                      ? '二维码没有生成。链接可以复制或打开。'
+                      : '正在生成二维码。'}
+                </p>
+              </div>
+            </div>
+            {qrPhase === 'failed' && <div className="sc-publish-actions">
+              <button type="button" onClick={() => setQrAttempt(current => current + 1)}>再画一次</button>
+            </div>}
+          </section>
+        </div>}
+      </div>
 
       <section className="sc-publish-status" aria-label="分享链路状态">
         <span className={`sc-publish-status-item${webLive ? ' is-live' : ''}`}>
@@ -340,7 +527,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
         <span className={`sc-publish-status-item${viewerLive ? ' is-live' : ''}`}>
           <i className="sc-publish-status-dot" aria-hidden="true"/>
           <span className="sc-publish-status-name">3D 漫游</span>
-          <span className="sc-publish-status-state">{viewerLive ? '已生成' : '未生成'}</span>
+          <span className="sc-publish-status-state">{viewerLive ? `已生成 · ${viewerLink!.objects} 件物件` : '未生成漫游'}</span>
         </span>
         <span className={`sc-publish-status-item${reviewLive ? ' is-live' : ''}`}>
           <i className="sc-publish-status-dot" aria-hidden="true"/>
@@ -348,16 +535,6 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
           <span className="sc-publish-status-state">{reviewLive ? '已发评审' : '未送审'}</span>
         </span>
       </section>
-
-      {reviewUrl && reviewCurrent() && <section className="sc-publish-review">
-        <label>可留言的方案页
-          <input readOnly value={reviewUrl} aria-label="评审链接" onFocus={event => event.currentTarget.select()}/>
-        </label>
-        <div className="sc-publish-row">
-          <button type="button" aria-label="复制评审链接" onClick={() => { void copyReview(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
-          <a href={reviewUrl} target="_blank" rel="noopener noreferrer" onClick={event=>{if(!reviewCurrent()){event.preventDefault();setReviewUrl('');setNotice('活动、楼层或方案已变化，旧链接未打开。');}}}><ExternalLink size={14} aria-hidden="true"/><span>打开对方所见</span></a>
-        </div>
-      </section>}
 
       {outline && <details className="sc-publish-outline">
         <summary><span>项目大纲</span><small>{outline.size} · {outline.itemCount} 件</small></summary>
@@ -369,21 +546,32 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
         </dl>
       </details>}
 
-      <div className="sc-publish-more">
-        <button type="button" onClick={() => { void issue(); }}><Link2 size={15} aria-hidden="true"/><span>发评审链接</span></button>
-        {actions?.onExportImage && <button type="button" onClick={() => { void actions.onExportImage?.(); setOpen(false); }}><MaterialSymbol name="image" size={15} /><span>导出效果图</span></button>}
-        {actions?.onExportCsv && <button type="button" onClick={() => { actions?.onExportCsv?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出物料清单 CSV</span></button>}
-        {actions?.onExportGeoJson && <button type="button" onClick={() => { actions?.onExportGeoJson?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出场地几何 GeoJSON</span></button>}
-        {actions?.onPrintDeck && <button type="button" onClick={() => { actions?.onPrintDeck?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出演示稿 PDF</span></button>}
-        <button type="button" onClick={() => { actions?.onExportHandoff(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出交接</span></button>
-        <button type="button" onClick={() => { actions?.onOpenMaterials(); setOpen(false); }}><PackageOpen size={15} aria-hidden="true"/><span>打开资料</span></button>
-        <button type="button" onClick={() => { actions?.onOpenChecklist(); setOpen(false); }}><ClipboardCheck size={15} aria-hidden="true"/><span>到场清单</span></button>
-      </div>
+      {showExport && (exportChoices.length > 0 || actions?.onPrintDeck) && <section aria-label="导出资料">
+        <span className="sc-publish-kicker">导出资料</span>
+        {exportChoices.length > 0 && <div role="group" aria-label="导出勾选" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          {exportChoices.map(item => (
+            <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--wk-ink)' }}>
+              <input type="checkbox" checked={exportChecked[item.id]} onChange={() => setExportChecked(current => ({ ...current, [item.id]: !current[item.id] }))}/>
+              {item.label}
+            </label>
+          ))}
+        </div>}
+        {exportChoices.length > 0 && <div className="sc-publish-actions">
+          <button type="button" className="sc-publish-primary" disabled={selectedExports.length === 0} onClick={exportSelected}>
+            <FileDown size={15} aria-hidden="true"/><span>{`导出 ${selectedExports.length} 项资料`}</span>
+          </button>
+        </div>}
+        {actions?.onPrintDeck && <button type="button" onClick={() => { actions.onPrintDeck?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出演示稿 PDF</span></button>}
+      </section>}
     </div>}
   </div>;
 }
 
 const LINK_KEY = 'scendance.publishedLink.v1.';
+
+function publishedQrKey(link: PublishedLink): string {
+  return `${link.revision}\n${link.url}`;
+}
 
 function readPublishedLink(projectId?: string): PublishedLink | null {
   if (!projectId) return null;

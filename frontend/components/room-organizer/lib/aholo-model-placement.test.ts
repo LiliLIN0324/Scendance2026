@@ -4,7 +4,7 @@ import { packGltf } from '../../../../supabase/functions/_shared/models';
 import { tetrahedron } from '../../../../tests/model-fixture';
 import { clearGlbAssetCache, getGlbAssetState } from '../three/glb-assets';
 import { DIRECT_BASE, listAholoAssets, rememberAholoAsset } from './aholo-assets';
-import { loadAholoCatalogItem, loadAholoSceneSource, loadStoredAholoCatalogItem, metersFromForwardBox, storedAholoSceneSource } from './aholo-model-placement';
+import { loadAholoCatalogItem, loadAholoSceneMeters, loadAholoSceneSource, loadStoredAholoCatalogItem, metersFromForwardBox, storedAholoSceneSource } from './aholo-model-placement';
 import { isPackagedGlbUrl } from './glb-url';
 
 const TASK_ID = '4475964';
@@ -79,6 +79,40 @@ describe('Aholo 产物摆进布置场景 (#66)', () => {
       { assetId: ASSET_ID, kind: 'glb', name: '一张白色圆桌', bytes: proxy.bytes.byteLength, savedAt: expect.any(Number), taskid: TASK_ID },
     ]);
     expect(JSON.stringify(item)).not.toMatch(/cos\.example\.test|q-signature/);
+  });
+
+  it('同一 metaUrl 并发只向代理请求一次', async () => {
+    let metaCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/meta') {
+        metaCalls += 1;
+        return json({ forwardBox: { min: [0, 0, 0], max: [4, 3, 6] } });
+      }
+      throw new Error(`unexpected ${url.pathname}`);
+    }));
+    const metaUrl = '/scans/tearoom-130/lod-meta.json';
+    const [a, b] = await Promise.all([
+      loadAholoSceneMeters(metaUrl),
+      loadAholoSceneMeters(metaUrl),
+    ]);
+    expect(metaCalls).toBe(1);
+    expect(a).toEqual({ width: 4, depth: 3, height: 6 });
+    expect(b).toEqual(a);
+  });
+
+  it('同一 metaUrl 成功后再打开不再请求', async () => {
+    let metaCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      metaCalls += 1;
+      return json({ forwardBox: { min: [0, 0, 0], max: [8, 4, 3] } });
+    }));
+    const metaUrl = '/scans/tearoom-reuse/lod-meta.json';
+    const first = await loadAholoSceneMeters(metaUrl);
+    const second = await loadAholoSceneMeters(metaUrl);
+    expect(metaCalls).toBe(1);
+    expect(second).toEqual(first);
+    expect(first).toEqual({ width: 8, depth: 4, height: 3 });
   });
 
   it('同一任务号再点一次复用本机文件，不再落盘也不再下载', async () => {

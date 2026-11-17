@@ -71,3 +71,28 @@ describe('seatFacilityTargets（批量过滤）', () => {
     expect(targets.map(target => target.id)).toEqual(['c1', 's1']);
   });
 });
+
+describe('2026-11-17 基线审计修正（防回归）', () => {
+  it('游乐设施与医疗器械不当坐具', () => {
+    expect(isSeatFacility({ id: 'r', name: '旋转飞椅', position: { x: 0, y: 0 }, category: 'rides' })).toBe(false);
+    expect(isSeatFacility({ id: 'e', name: '疏散椅', position: { x: 0, y: 0 } })).toBe(false);
+    expect(isSeatFacility({ id: 'z', name: '双沙发遮阳休息区', position: { x: 0, y: 0 } })).toBe(false);
+  });
+
+  it('桌椅套装拆成四向座位锚点，不再把设施中心当座位', () => {
+    const targets = seatFacilityTargets([{ id: 'set', name: '圆桌与椅', position: { x: 2, y: 3 }, width: 2, depth: 2 }]);
+    expect(targets.map(target => target.id)).toEqual(['set#seat1', 'set#seat2', 'set#seat3', 'set#seat4']);
+    for (const target of targets) {
+      expect(Math.hypot(target.x - 2, target.y - 3)).toBeGreaterThan(0.4);
+    }
+  });
+
+  it('slug 只比物件段，场景名前缀里的坐具词不算', () => {
+    expect(isSeatFacility({
+      id: 'x',
+      name: '展示物',
+      position: { x: 0, y: 0 },
+      ref: 'sofa-showroom-display-stand-1234abcd',
+    })).toBe(false);
+  });
+});

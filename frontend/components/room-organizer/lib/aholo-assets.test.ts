@@ -60,6 +60,21 @@ describe('Aholo 资产注册表', () => {
     expect(listAholoAssets()).toHaveLength(1);
   });
 
+  it('同一任务号并发落盘只打一次代理请求', async () => {
+    let posts = 0;
+    stubFetch(() => {
+      posts += 1;
+      return jsonResponse(stashed());
+    });
+    const [a, b] = await Promise.all([
+      importAholoAsset({ url: COS, name: '一把木椅', taskid: '4475964' }),
+      importAholoAsset({ url: COS.replace('abc', 'xyz'), name: '一把木椅', taskid: '4475964' }),
+    ]);
+    expect(posts).toBe(1);
+    expect(a.url).toBe(b.url);
+    expect(listAholoAssets()).toHaveLength(1);
+  });
+
   it('不同任务号各落一份，注册表按新到旧排列并封顶 40 条', async () => {
     stubFetch(() => jsonResponse({ ...stashed(), assetId: crypto.randomUUID() }));
     for (let index = 0; index < 41; index += 1) {

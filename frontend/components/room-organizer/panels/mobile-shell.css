@@ -161,6 +161,10 @@
   .sc-mobile-agent-entry[aria-expanded="true"] {
     background: var(--wk-green-pale); border-color: #c8d8cc; color: var(--wk-green-deep);
   }
+  .sc-mobile-agent-entry:focus-visible {
+    outline: 2px solid var(--ink-soft, #55585f);
+    outline-offset: 2px;
+  }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail {
     position: fixed !important;
     left: 12px; right: 12px;
@@ -201,6 +205,10 @@
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-avatar,
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
     display: grid; flex: none; width: 28px; height: 28px; margin: 0;
+  }
+  /* 手机徽标是 28px，角标外伸 4px，和桌面 28px 成员头像的外伸一致。 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
+    top: -4px; right: -4px;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-label,
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-capture > span.sc-rail-label {

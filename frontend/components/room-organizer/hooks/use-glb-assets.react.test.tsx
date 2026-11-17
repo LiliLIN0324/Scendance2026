@@ -191,3 +191,106 @@ describe('useGlbAssets — public model recovery', () => {
     expect(originalItem?.glbUrl).toBe(customUrl);
   });
 });
+
+describe('useGlbAssets — visible floor first', () => {
+  const SECOND_ID = '70000000-0000-4000-8000-000000000002';
+  const SECOND_URL = 'https://cdn.example.test/models/second.glb';
+
+  function twoFloorLayout(): RoomLayout {
+    return makeLayout({
+      floors: [
+        makeFloor({
+          id: 'f0',
+          items: [makeItem({ id: 'a', type: 'glb-asset', assetId: PUBLIC_ASSET_ID, glbUrl: storageUrl() })],
+        }),
+        makeFloor({
+          id: 'f1',
+          items: [makeItem({ id: 'b', type: 'glb-asset', assetId: SECOND_ID, glbUrl: SECOND_URL })],
+        }),
+      ],
+    });
+  }
+
+  function installIdleQueue(): Array<() => void> {
+    const queued: Array<() => void> = [];
+    vi.stubGlobal('requestIdleCallback', (cb: () => void) => {
+      queued.push(cb);
+      return queued.length;
+    });
+    vi.stubGlobal('cancelIdleCallback', (id: number) => {
+      const index = id - 1;
+      if (queued[index]) queued[index] = () => {};
+    });
+    return queued;
+  }
+
+  it('loads the active floor immediately and waits to preload hidden floors', async () => {
+    const queued = installIdleQueue();
+    let releaseFetch: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseFetch = resolve; });
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      calls.push(requestUrl(input));
+      await gate;
+      return response();
+    });
+    try {
+      renderHook(() => useGlbAssets(twoFloorLayout(), 0, false));
+      expect(calls.filter(url => url === SECOND_URL)).toEqual([]);
+      expect(calls.some(url => url === storageUrl())).toBe(true);
+      expect(queued.length).toBeGreaterThan(0);
+      for (const run of queued) run();
+      expect(calls.filter(url => url === SECOND_URL)).toHaveLength(1);
+      releaseFetch();
+      await waitFor(() => {
+        expect(getGlbAssetState(PUBLIC_ASSET_ID).status).toBe('ready');
+        expect(getGlbAssetState(SECOND_ID).status).toBe('ready');
+      });
+    } finally {
+      releaseFetch();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not start a hidden-floor preload after the view goes away', async () => {
+    const queued = installIdleQueue();
+    let releaseFetch: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseFetch = resolve; });
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      calls.push(requestUrl(input));
+      await gate;
+      return response();
+    });
+    try {
+      const hook = renderHook(() => useGlbAssets(twoFloorLayout(), 0, false));
+      hook.unmount();
+      for (const run of [...queued]) run();
+      expect(calls.filter(url => url === SECOND_URL)).toEqual([]);
+    } finally {
+      releaseFetch();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('loads every floor immediately when all floors are visible', async () => {
+    const queued = installIdleQueue();
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      calls.push(requestUrl(input));
+      return response();
+    });
+    try {
+      renderHook(() => useGlbAssets(twoFloorLayout(), 0, true));
+      expect(calls.filter(url => url === storageUrl())).toHaveLength(1);
+      expect(calls.filter(url => url === SECOND_URL)).toHaveLength(1);
+      expect(queued).toHaveLength(0);
+      await waitFor(() => {
+        expect(getGlbAssetState(PUBLIC_ASSET_ID).status).toBe('ready');
+        expect(getGlbAssetState(SECOND_ID).status).toBe('ready');
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

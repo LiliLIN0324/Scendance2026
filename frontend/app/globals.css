@@ -982,6 +982,11 @@ body {
   border: 0; border-radius: var(--r-sm); background: var(--wk-plane); color: var(--wk-ink); cursor: pointer;
 }
 .sc-workbench .sc-left-close:hover:not(:disabled) { background: var(--wk-plane-deep); }
+.sc-workbench .sc-left-close:focus-visible,
+.sc-workbench .sc-left-context button:focus-visible {
+  outline: 2px solid var(--ink-soft, #55585f);
+  outline-offset: 2px;
+}
 .sc-workbench .sc-left-context button { padding:var(--sc-space-sm); border:1px solid var(--sc-line); border-radius:var(--r-sm); background:var(--sc-surface); color:var(--sc-muted); font-size:var(--sc-type-body); }
 .sc-workbench .sc-left-context button[aria-pressed=true] { background:var(--sc-accent-soft); color:var(--sc-accent-ink); }
 .sc-workbench .sc-properties.is-embedded { position:relative; inset:auto; width:100%; height:100%; max-height:none; box-sizing:border-box; }
@@ -1164,7 +1169,7 @@ body {
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
   display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 40;
-  flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 10px 4px; box-sizing: border-box;
+  flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 8px 0; box-sizing: border-box;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
   overflow: visible;
 }
@@ -1172,8 +1177,9 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
 /* 轨顶门厅标常驻；点它收起或展开左列。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand {
-  flex-direction: row; justify-content: center; gap: 0; width: 100%; min-height: 44px;
-  margin: 0 0 6px; padding: 4px 0; color: var(--wk-ink);
+  flex-direction: row; justify-content: center; align-self: center; gap: 0;
+  width: 40px; height: 40px; min-height: 40px; margin: 0; padding: 0;
+  border-radius: 10px; color: var(--wk-ink);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark {
   display: grid; position: relative; width: 28px; height: 28px;
@@ -1186,31 +1192,38 @@ body {
 }
 /* 门洞也是四个 agent 之一：切到活动时跟其他三格一样，左侧一条绿。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active {
-  position: relative; color: var(--wk-ink);
+  position: relative; background: var(--wk-green-pale); color: var(--wk-ink);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before {
-  content: ""; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px;
+  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px; height: 26px;
   border-radius: 0 2px 2px 0; background: var(--wk-green);
 }
 /* 成员位：四个 bot 形体下面，圆片与「团队与权限」里的成员行同一个类，两处必然长得一样。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team {
-  display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 8px 0;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member {
-  display: grid; place-items: center; width: 100%; min-height: 32px; padding: 2px 0;
-  border: 0; border-radius: 0; background: transparent;
+  display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 0;
+  border: 0; border-radius: 10px; background: transparent;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member > span.sc-settings-avatar { display: grid; }
 /* 悬停只压暗一档，不能换底色——那圈颜色是这个人的身份。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member:hover > span.sc-settings-avatar,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member:focus-visible > span.sc-settings-avatar { filter: brightness(.93); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member.is-placeholder > span.sc-settings-avatar { color: var(--wk-ink-faint); }
-/* 未读的红数字只在真有新消息时出现，贴在圆片右上角；读完就没了。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-member-badge {
-  position: absolute; top: 1px; right: 3px; display: grid; place-items: center;
+/* 未读红数字与 Bingo 角标同一颗：15px、2px 纸色描边、10px 白字。
+   成员圆直接贴在 40px 钮上，右上内收 2px。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-member-badge,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
+  position: absolute; z-index: 2; display: grid; place-items: center; text-align: center;
   min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
-  border-radius: 999px; background: var(--err, #B4443C); color: #fff;
-  font-size: 10px; font-weight: 600; line-height: 1;
+  border: 2px solid var(--wk-paper, #F7F5F0); border-radius: 999px;
+  background: var(--err, #B4443C); color: #fff;
+  font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-member-badge {
+  top: 2px; right: 2px;
 }
 /* 展开：短品牌条铺满左卡当前宽度，不另写一列像素。 */
 .sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark {
@@ -1223,19 +1236,21 @@ body {
 .sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark .sc-brand-mark { display: grid; width: 29px; height: 31px; }
 .sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark .sc-brand-cn { display: inline; }
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]::after {
-  content: attr(data-tip); position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  padding: 3px 7px; border-radius: var(--r-sm); background: var(--wk-ink); color: #fff;
-  font-size: 11px; font-weight: 400; line-height: 15px; letter-spacing: 0; white-space: nowrap;
-  opacity: 0; pointer-events: none; transition: opacity .12s ease;
+  content: attr(data-tip); position: absolute; right: var(--sp-3); top: 50%; transform: translateY(-50%);
+  padding: 3px 7px; border-radius: var(--r-sm); background: var(--wk-ink); color: var(--paper);
+  box-shadow: var(--e1); font-size: var(--fs-cap); font-weight: 400; line-height: 15px; letter-spacing: 0;
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease-spec);
 }
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:hover::after,
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:focus-visible::after { opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
-  content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;
-  transform: translateY(-50%); padding: 3px 7px; border-radius: 999px;
-  background: var(--wk-ink); color: #fff; font-size: 11px; font-weight: 400; line-height: 15px;
-  letter-spacing: 0; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
+  content: attr(data-tip); position: absolute; left: calc(100% + var(--sp-2)); top: 50%;
+  transform: translateY(-50%); padding: 3px 7px; border-radius: var(--r-sm);
+  background: var(--wk-ink); color: var(--paper); box-shadow: var(--e1);
+  font-size: var(--fs-cap); font-weight: 400; line-height: 15px;
+  letter-spacing: 0; white-space: nowrap; opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-1) var(--ease-spec); z-index: 50;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:hover::after,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after { opacity: 1; }
@@ -1245,7 +1260,7 @@ body {
 }
 /* 左下「设置」：贴底 + 发丝线与上方阶段组分隔。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
-  margin-top: auto; width: 100%; padding-top: 8px; gap: 6px; border-top: 1px solid var(--wk-hair);
+  margin-top: auto; width: 100%; padding-top: 8px; gap: 4px; border-top: 1px solid var(--wk-hair);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft {
   margin: 0; max-width: 100%; padding: 0 2px;
@@ -1254,11 +1269,26 @@ body {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft.has-error { color: var(--err); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger {
-  width: 34px; height: 34px; min-height: 34px; padding: 0; flex: none; flex-direction: row; gap: 0;
-  border: 1px solid var(--sc-line); border-radius: 999px; background: transparent; box-shadow: none;
+  width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; flex-direction: row; gap: 0;
+  border: 0; border-radius: 10px; background: transparent; box-shadow: none;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger > .sc-account-trigger-avatar {
-  display: grid; width: 28px; height: 28px;
+  display: grid; width: 24px; height: 24px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-settings {
+  width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 10px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-settings.is-active {
+  background: var(--wk-green-pale); color: var(--wk-ink); font-weight: 400;
+}
+/* 设置与成员按下态用和门厅 / 工具钮同一条 3×26 绿条，左缘都在钮外 4px。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-settings.is-active::before,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member[aria-pressed="true"]::before {
+  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px; height: 26px;
+  border-radius: 0 2px 2px 0; background: var(--wk-green);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member[aria-pressed="true"] {
+  background: var(--wk-green-pale);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger:hover,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger:active { transform: none; }
@@ -1292,7 +1322,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:disabled { background: var(--plane); color: var(--faint); opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
 /* 左轨四格的状态点：活动一直在线，下面三格有事才醒、没事休眠，出错爆红。它是左轨唯一允许的点缀。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo {
   position: relative;
@@ -1309,36 +1339,57 @@ body {
 /* 活动那格是门厅标：点位跟着形体走，不贴着轨边。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > span.sc-rail-dot { right: -3px; bottom: -3px; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary {
-  display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none;
 }
-/* 左轨图形钮：只给 40px 触达区，不套圆罩；悬停淡底，选中左侧绿条。 */
+/* 左轨图形钮：40px 触达、10px 圆角。悬停淡底，选中淡绿底 + 左侧绿条。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
   width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
-  border: 0; border-radius: 12px; background: transparent; box-shadow: none;
+  border: 0; border-radius: 10px; background: transparent; box-shadow: none;
   color: var(--wk-ink-soft);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
-/* Bingo 圆徽标：28px 与其他图标槽同尺寸；三态——待发空圆 / 待评数字 / 已回执勾形。 */
+/* 宫格 / 公文包 / 加号 / 双圆：同一 24px 槽，图形在槽内居中，描边粗细由 SVG 的 1.6 决定。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; color: inherit;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-glyph > svg {
+  display: block; width: 24px; height: 24px;
+}
+/* 场地加号：图标槽与宫格同为 24px。3D 副标锚在图标上，不作为按钮的直接子 span，
+   否则被窄轨 `button > span { display:none }` 藏掉；桌面钮和手机菜单用同一角落。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none; color: inherit;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon > span.sc-rail-glyph {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon > span.sc-rail-glyph > svg {
+  display: block; width: 24px; height: 24px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-capture-icon > .sc-rail-3d-tag {
+  position: absolute; right: -5px; bottom: -3px; display: block; padding: 0 3px;
+  border-radius: 5px; border: 1px solid var(--wk-hair); background: var(--wk-paper, #fff);
+  color: var(--wk-ink-soft); font-size: 8px; font-weight: 600; line-height: 12px;
+  letter-spacing: .02em; white-space: nowrap; pointer-events: none;
+}
+/* Bingo 圆徽标：24px 槽，与工具图标对齐；三态——待发空圆 / 待评数字 / 已回执勾形。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
-  display: grid; place-items: center; width: 28px; height: 28px; flex: none;
+  display: grid; place-items: center; width: 24px; height: 24px; flex: none;
   box-sizing: border-box; border-radius: 50%; position: relative;
-  border: 1.5px solid var(--wk-hair); background: var(--wk-paper);
-  color: var(--wk-ink-soft); font-size: 11px; font-weight: 600; line-height: 1;
+  border: 1.6px solid var(--wk-hair); background: var(--wk-paper);
+  color: inherit; font-size: 11px; font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
   display: block; width: 13px; height: 13px;
 }
-/* 角标：对齐成员未读圆 `.sc-rail-member-badge`，15px 圆、err 底白字 10px、右上角落位。 */
+/* 24px 徽标在 40px 钮里居中，内缩 8px。角标 top/right -6px 才落到钮的 2px，与成员未读圆重合。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
-  position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px;
-  padding: 0 3px; box-sizing: border-box; border-radius: 999px;
-  background: var(--err, #B4443C); color: #fff;
-  font-size: 10px; font-weight: 600; line-height: 1;
-  display: grid; place-items: center; text-align: center;
-  border: 2px solid var(--wk-paper, #F7F5F0); font-variant-numeric: tabular-nums;
+  top: -6px; right: -6px;
 }
 /* Bingo 实心方案（B）：待评 / 回执两态整圆填状态色，圆内数字 / 勾形用 paper 白负形；空态仍描边空圆。状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、底色 / 字色退回中性。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="awaiting"] {
@@ -1347,16 +1398,17 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="returned"] {
   border-color: var(--err); background: var(--err); color: var(--wk-paper);
 }
-/* 空态：28 占位盒内收一枚 21px 中性深灰描边空心圆，外径对齐家族工具图形（实测 20.1–21.5px）；描边 3px 对齐线条基准；paper 底、不填色、不另加符号，静息态不用品牌绿。 */
+/* 空态：24 槽里一枚 19px 空心圆，描边 1.6，外径对齐宫格/加号/双圆的描边外沿。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"] {
   background: transparent;
   border-color: transparent;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"]::before {
   content: "";
-  width: 21px; height: 21px; border-radius: 50%;
-  border: 3px solid var(--wk-ink-soft);
-  background: var(--wk-paper);
+  width: 19px; height: 19px; border-radius: 50%;
+  border: 1.6px solid currentColor;
+  background: transparent;
+  box-sizing: border-box;
 }
 /* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }
@@ -1384,12 +1436,31 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:focus-visible {
   background: var(--wk-plane); color: var(--wk-ink);
 }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:focus-visible {
+  outline: 2px solid var(--ink-soft, #55585f);
+  outline-offset: 2px;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active {
-  background: transparent; color: var(--wk-ink); font-weight: 400;
+  background: var(--wk-green-pale); color: var(--wk-ink); font-weight: 400;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before {
-  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
+  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px; height: 26px;
   border-radius: 0 2px 2px 0; background: var(--wk-green);
+}
+/* 空间宫格的按下态，对齐 Linear 侧栏：手指按住立刻一档灰底，图标保持描边。已选中再按，淡绿再深一档，松手仍回到淡绿和左缘绿条。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc[aria-label="空间"] {
+  transition: background-color var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc[aria-label="空间"]:active {
+  background: var(--wk-plane-deep);
+  color: var(--wk-ink);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc[aria-label="空间"].is-active:active {
+  background: color-mix(in srgb, var(--wk-green) 22%, var(--wk-paper));
+  color: var(--wk-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc[aria-label="空间"] { transition: none; }
 }
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
@@ -1792,12 +1863,23 @@ body.sc-panel-dragging * {
   border-color: #b8b8b0;
   color: var(--wk-ink-soft, #71717a);
 }
-/* 第一人称是走进去，正面机位只是环绕。用石绿图标色区分，不再套一圈描边。 */
-.sc-workbench .sc-tool-column > #tool-walk {
-  border-color: transparent; color: #35624A;
+/* 室内第一人称：白圆底，和户外地图列同一只 Pegman。选中改浅蓝底 + 蓝环。 */
+.sc-workbench .sc-tool-column > #tool-walk,
+.sc-workbench .sc-tool-column > #tool-walk:hover,
+.sc-workbench .sc-tool-column > #tool-walk:focus-visible {
+  border-radius: 50%;
+  border-color: transparent;
+  background: #fff;
+  color: #f9ab00;
+  box-shadow: 0 1px 4px -1px rgba(0, 0, 0, .30), 0 2px 6px rgba(60, 64, 67, .16);
 }
-.sc-workbench .sc-tool-column > #tool-walk.is-active {
-  background: var(--wk-paper); border-color: #4A7C59; color: #35624A;
+.sc-workbench .sc-tool-column > #tool-walk.is-active,
+.sc-workbench .sc-tool-column > #tool-walk.is-active:hover,
+.sc-workbench .sc-tool-column > #tool-walk.is-active:focus-visible {
+  background: #e8f0fe;
+  border-color: transparent;
+  color: #f9ab00;
+  box-shadow: 0 0 0 2px #1a73e8, 0 1px 4px -1px rgba(0, 0, 0, .30), 0 2px 6px rgba(26, 115, 232, .22);
 }
 .sc-workbench .sc-tool-column > #tool-walk .sc-walk-label {
   position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%);
@@ -1820,6 +1902,15 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column [data-tip]:hover::after,
 .sc-workbench .sc-tool-column [data-tip]:focus-visible::after { opacity: 1; }
+/* 右下地图列与左轨同一套墨黑胶囊：向左出，字号/圆角/阴影走全局 token。
+   罗盘提示挂在不旋转的 .gm-rose 上，避免跟着针一起转。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-br [data-tip]::after {
+  padding: 3px 7px; border-radius: var(--r-sm); background: var(--wk-ink); color: var(--paper);
+  box-shadow: var(--e1); font-size: var(--fs-cap); font-weight: 400; line-height: 15px; letter-spacing: 0;
+  transition: opacity var(--dur-1) var(--ease-spec); z-index: 80;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-br .gm-rose[data-tip]:focus-within::after { opacity: 1; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-br .gm-rose.is-dragging[data-tip]::after { opacity: 0; }
 /* 底部工具条是横向排列：提示必须放到钮上方，不能沿用右轨的左侧浮层，
    否则会盖住旁边的撤销/重做等图标（用户实测反馈）。 */
 .sc-workbench .sc-tool-column .oc-dock [data-tip]::after {
@@ -1943,13 +2034,15 @@ body.sc-panel-dragging * {
   width: min(268px, calc(100vw - 48px));
   /* 面板从图层钮往上长；限制在视口内，矮屏改为内部滚动，别把标题和 X 顶出屏幕。 */
   max-height: min(560px, calc(100vh - 210px));
-  overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
-  padding: 12px; border: 0; border-radius: 8px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-sizing: border-box;
+  padding: 0; border: 0; border-radius: 8px;
   background: #fff; color: #202124;
   box-shadow: 0 1px 3px rgba(60, 64, 67, .3), 0 4px 8px 3px rgba(60, 64, 67, .15);
   font-family: inherit;
 }
-.oc-map-details__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.oc-map-details__head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px; background: #fff; position: relative; z-index: 1; }
+.oc-map-details__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; }
 .oc-map-details__title { font-size: 14px; font-weight: 500; line-height: 20px; }
 .oc-map-details__close {
   display: grid; place-items: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px;
@@ -2008,6 +2101,9 @@ body.sc-panel-dragging * {
 .sc-canvas-stage.is-chrome-hidden [data-testid="outdoor-map-picker-panel"] { display: none !important; }
 .sc-workspace.is-chrome-hidden .sc-plan-place-search { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br button:not(#tool-opacity) { display: none; }
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-compass-wrap,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .gm-rose,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .gm-locate-slot { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-zoom,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-zoom,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-divider { display: none !important; }
@@ -2073,9 +2169,6 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-br .oc-zoom button {
   width: 38px; height: 38px; min-width: 38px; min-height: 38px;
 }
-/* 漫游 Pegman：常态直立；悬停像被拎起一样上浮并微倾，离开平滑复位。 */
-.sc-workbench .sc-tool-column button.is-walk > svg { transition: transform .18s ease; }
-.sc-workbench .sc-tool-column button.is-walk:hover > svg { transform: translateY(-2px) rotate(-9deg); }
 .sc-workbench .sc-tool-column .oc-cluster .sc-tool-menu { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
 /* 2026-11-15 测量变体小标：对齐 Figma 工具栏——一颗合体钮，图标 + 右侧小 V 箭头水平同排，不另起圆钮。 */
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-menu { flex-direction: row; }
@@ -2111,17 +2204,28 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-tool-check { margin-left: 0; display: block; }
 
 /* ===== 2026-11-16 用户指令：Google Maps 桌面网页版控制列一比一复刻 ===== */
-/* 网页版口径：29px 小圆角方块、3px 间距、各自独立阴影、无外层白胶囊；
-   罗盘为圆形，其余为 4px 圆角方块，缩放为 29×58 连体条。 */
+/* 3× 卫星截图量到：普通控件 29×29，圆角约为边长的 0.28（约 8px，有直边的圆钮），
+   控件间距 4px，罗盘单独正圆 44px，缩放是 29×58 连体条。各自一块投影，没有外层白胶囊。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps {
-  /* 2026-11-16 实测 Google Maps DOM：普通控件 29×29、罗盘 44、间距 3、右边距 20。
-     不再把 2x 截图里的物理像素误当成 CSS 尺寸。 */
   --oc-gm-control: 29px;
   --oc-gm-compass: 44px;
-  --oc-gm-gap: 3px;
+  --oc-gm-gap: 4px;
   --oc-gm-icon: 15px;
-  right: 20px; bottom: 20px; gap: var(--oc-gm-gap); padding: 0;
+  --oc-gm-radius: calc(var(--oc-gm-control) * 0.28);
+  --oc-gm-inset-x: 20px;
+  --oc-gm-inset-y: 20px;
+  /* Maps 控件的接触阴影，再加一层短投影，白钮在浅色平面上仍能浮起来。
+     罗盘、悬停、选中环、看图态和定位提示都从这里取，窄屏只改边距。 */
+  --oc-gm-shadow: 0 1px 4px -1px rgba(0, 0, 0, .30), 0 2px 6px rgba(60, 64, 67, .16);
+  --oc-gm-shadow-hover: 0 1px 4px -1px rgba(0, 0, 0, .30), 0 4px 10px rgba(60, 64, 67, .20);
+  --oc-gm-compass-shadow: 0 1px 3px rgba(20, 20, 22, .28), 0 2px 8px rgba(20, 20, 22, .18);
+  --oc-gm-compass-shadow-hover: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
+  --oc-gm-shadow-active: 0 0 0 2px #1a73e8, 0 1px 4px -1px rgba(0, 0, 0, .30), 0 2px 6px rgba(26, 115, 232, .22);
+  --oc-gm-shadow-ghost: 0 1px 4px rgba(20, 20, 22, .10);
+  --oc-gm-pop-shadow: 0 1px 2px rgba(60, 64, 67, .30), 0 2px 6px rgba(60, 64, 67, .15);
+  right: var(--oc-gm-inset-x); bottom: var(--oc-gm-inset-y); gap: var(--oc-gm-gap); padding: 0;
   width: var(--oc-gm-compass);
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -2131,13 +2235,14 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
   width: var(--oc-gm-control); height: var(--oc-gm-control);
   min-width: var(--oc-gm-control); min-height: var(--oc-gm-control); padding: 0;
-  border: 0; border-radius: 4px;
+  border: 0; border-radius: var(--oc-gm-radius);
   background: #fff;
-  box-shadow: 0 1px 2px rgba(60, 64, 67, .30), 0 1px 4px rgba(60, 64, 67, .15);
+  box-shadow: var(--oc-gm-shadow);
   color: #5f6368;
   display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto;
 }
-/* 罗盘是圆钮，其余是圆角方块。罗盘单独放大到 44px：白底双色指针，
+/* 罗盘是正圆。2D/3D、定位、缩放、漫游共用 --oc-gm-radius，罗盘单独放大到 44px。
    交互对齐 MapLibre：拖动旋转、点击回正北。
    2026-11-16：两侧各叠一枚显式转向箭头，不再只靠指针左右落点分区。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap {
@@ -2145,14 +2250,14 @@ body.sc-panel-dragging * {
   flex: 0 0 var(--oc-gm-compass); margin-bottom: 0;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn {
-  position: absolute; top: 8px; z-index: 2;
+  position: absolute; top: calc(var(--oc-gm-gap) * 2); z-index: 2;
   width: calc(var(--oc-gm-control) * .55); height: calc(var(--oc-gm-control) * 1.1);
   min-width: calc(var(--oc-gm-control) * .55); min-height: calc(var(--oc-gm-control) * 1.1); padding: 0;
   border: 0; border-radius: 999px; background: transparent; box-shadow: none;
   display: grid; place-items: center; cursor: pointer;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-left { left: 4px; }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-right { right: 4px; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-left { left: var(--oc-gm-gap); }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn.is-right { right: var(--oc-gm-gap); }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn:hover { background: transparent; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap button.oc-gm-turn:focus-visible {
   outline: 2px solid rgba(255, 255, 255, .72); outline-offset: -2px;
@@ -2162,7 +2267,7 @@ body.sc-panel-dragging * {
   min-width: var(--oc-gm-compass); min-height: var(--oc-gm-compass);
   margin-bottom: 0; border-radius: 50%;
   background: #202124; color: #f1f3f4;
-  box-shadow: 0 1px 3px rgba(20, 20, 22, .28), 0 2px 8px rgba(20, 20, 22, .18);
+  box-shadow: var(--oc-gm-compass-shadow);
   cursor: pointer; touch-action: none;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass.is-interactive { cursor: grab; }
@@ -2170,21 +2275,132 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass .oc-gm-compass-canvas {
   display: block; width: var(--oc-gm-compass); height: var(--oc-gm-compass);
 }
+/* 圆形罗盘盖住原来的指北针按钮：针和两侧弯箭头在同一层里随方位旋转。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap.is-gm-rose > #tool-compass {
+  position: absolute; width: 1px; height: 1px; min-width: 0; min-height: 0;
+  margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); opacity: 0;
+  pointer-events: none; border: 0; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose {
+  position: absolute; inset: 0; z-index: 2; border-radius: 50%; overflow: hidden;
+  box-shadow: var(--oc-gm-compass-shadow);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-spin {
+  position: absolute; inset: 0; transform-origin: 50% 50%;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-art {
+  display: block; width: 100%; height: 100%; pointer-events: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
+  position: absolute; width: auto; height: auto; min-width: 0; min-height: 0;
+  padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: transparent;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face:hover {
+  background: transparent; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn {
+  top: 8px; bottom: 0; width: 16px; z-index: 2; cursor: pointer;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-left { left: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-right { right: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
+  inset: 0; z-index: 1; border-radius: 50%; cursor: pointer; touch-action: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose.is-dragging button.gm-rose-face { cursor: grabbing; }
+/* 定位钮盖住原来的 #tool-focus：闲置是准星，进行中换成 Google 定位点。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps #tool-focus.is-gm-locate-native {
+  position: absolute; width: 1px; height: 1px; min-width: 0; min-height: 0;
+  margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); opacity: 0;
+  pointer-events: none; border: 0; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-slot {
+  position: relative; width: var(--oc-gm-control); height: var(--oc-gm-control);
+  flex: 0 0 var(--oc-gm-control); overflow: visible;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.gm-locate.is-failed { color: #d93025; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.gm-locate.is-pending[data-tip]::after,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.gm-locate.is-failed[data-tip]::after { display: none; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-point {
+  position: relative; width: 20px; height: 20px; display: grid; place-items: center;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-point::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; background: rgba(66, 133, 244, .22);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-accuracy {
+  position: absolute; inset: 0; border-radius: 50%; background: rgba(66, 133, 244, .22);
+  animation: gm-locate-pulse 1.15s ease-out infinite;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-core {
+  position: relative; z-index: 1; width: 8px; height: 8px; border-radius: 50%;
+  background: #4285f4; box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(66, 133, 244, .45);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-status {
+  position: absolute; right: calc(100% + var(--sp-2)); top: 50%; transform: translateY(-50%);
+  z-index: 2; max-width: 240px; padding: var(--sp-2) var(--sp-3); border-radius: 8px;
+  background: #fff; color: #202124; font-size: 12px; font-weight: 500; line-height: 16px;
+  white-space: nowrap; pointer-events: none;
+  box-shadow: var(--oc-gm-pop-shadow);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.gm-locate.is-failed + .gm-locate-status { color: #d93025; }
+@keyframes gm-locate-pulse {
+  0% { transform: scale(.72); opacity: .9; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-locate-accuracy { animation: none; opacity: .9; transform: none; }
+}
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass:hover {
   background: #2b2c2f;
-  box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
+  box-shadow: var(--oc-gm-compass-shadow-hover);
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round:not(.oc-gm-compass):hover,
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom:hover {
-  background: #f8f9fa; box-shadow: 0 1px 3px rgba(60, 64, 67, .34), 0 2px 6px rgba(60, 64, 67, .20);
+  background: #f8f9fa;
+  box-shadow: var(--oc-gm-shadow-hover);
 }
 /* 按下态不套品牌绿描边：网页版 3D 钮仍是中性底。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.is-active {
   border: 0; background: #fff; color: #3c4043;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode { color: #5f6368; }
+/* 2D/3D：对齐 Google Maps 右下角那枚等轴立方体，不再印「2D / 3D」字。
+   平面（aria-pressed=false）屋顶更大、侧壁短；立体（true）屋顶变浅、侧壁拉开。
+   白底方块保持中性，按下不套品牌绿。字留在 DOM 里作无样式兜底，画面上藏掉。
+   体块比 15px 线标更大，29px 钮里才分得清三个面。不改切换与相机。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode {
+  --oc-gm-mode-flat: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffffff' d='M12 5.2 20 10 12 14.8 4 10Z'/><path fill='%23f1f3f4' d='M4 10 4 14 12 18.8 12 14.8Z'/><path fill='%23e3e5e8' d='M20 10 20 14 12 18.8 12 14.8Z'/><path fill='none' stroke='%2380868b' stroke-width='1.15' stroke-linejoin='round' stroke-linecap='round' d='M12 5.2 20 10 20 14 12 18.8 4 14 4 10Z M4 10 12 14.8 20 10 M12 14.8 12 18.8'/></svg>");
+  --oc-gm-mode-cube: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffffff' d='M12 3.6 20 7.4 12 11.2 4 7.4Z'/><path fill='%23e8eaed' d='M4 7.4 4 16.6 12 20.4 12 11.2Z'/><path fill='%23c8ccd1' d='M20 7.4 20 16.6 12 20.4 12 11.2Z'/><path fill='none' stroke='%235f6368' stroke-width='1.15' stroke-linejoin='round' stroke-linecap='round' d='M12 3.6 20 7.4 20 16.6 12 20.4 4 16.6 4 7.4Z M4 7.4 12 11.2 20 7.4 M12 11.2 12 20.4'/></svg>");
+  color: #5f6368;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-mode:active {
+  background: #f1f3f4;
+}
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text {
-  font-size: 11px; font-weight: 600; letter-spacing: .1px; line-height: 1;
+  position: relative; display: block; width: 22px; height: 22px;
+  font-size: 0; line-height: 0; color: transparent; user-select: none;
+  transition: transform 120ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text::before,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: center / 22px 22px no-repeat;
+  transition: opacity 200ms cubic-bezier(.2, 0, 0, 1);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text::before {
+  background-image: var(--oc-gm-mode-flat); opacity: 1;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text::after {
+  background-image: var(--oc-gm-mode-cube); opacity: 0;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode[aria-pressed="true"] .oc-gm-mode-text::before { opacity: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode[aria-pressed="true"] .oc-gm-mode-text::after { opacity: 1; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-mode:active .oc-gm-mode-text { transform: scale(.96); }
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text::before,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-mode-text::after { transition: none; }
 }
 /* 图标固定 15px，与 29px 控件保持 Google 口径比例。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round > svg,
@@ -2192,41 +2408,61 @@ body.sc-panel-dragging * {
   width: var(--oc-gm-icon); height: var(--oc-gm-icon);
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol,
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye > .sc-material-symbol {
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye > .sc-material-symbol,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye > .sc-material-symbol > span {
+  width: var(--oc-gm-icon) !important;
+  height: var(--oc-gm-icon) !important;
   font-size: var(--oc-gm-icon) !important;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye > .sc-material-symbol {
-  width: var(--oc-gm-icon); height: var(--oc-gm-icon);
-}
-/* 缩放连体条：+ / − 同背板，中间一条发丝线。 */
+/* 缩放圆形堆叠：29×58 连体条，圆角用 --oc-gm-radius（约 8px，两端呈圆）。
+   分隔线左右各内收 5px（线宽 19px），不贴到圆角侧边。
+   + / − 按截图画成 13px、3px 笔画的几何符号；Material 字形藏起，避免叠成双图标。
+   overflow 保持可见，放大/缩小的悬停提示才能向左伸出。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
+  position: relative;
   height: calc(var(--oc-gm-control) * 2); min-height: calc(var(--oc-gm-control) * 2);
-  flex-direction: column; border-radius: 4px; overflow: hidden;
+  flex-direction: column; border-radius: var(--oc-gm-radius); overflow: visible;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom::before {
+  content: ""; position: absolute; z-index: 1; left: 5px; right: 5px; top: 50%;
+  height: 1px; transform: translateY(-50%); pointer-events: none;
+  background: rgba(60, 64, 67, .28);
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn {
   width: var(--oc-gm-control); height: var(--oc-gm-control);
   min-width: var(--oc-gm-control); min-height: var(--oc-gm-control); padding: 0;
-  border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #5f6368;
+  border: 0; border-radius: 0; background-color: transparent; box-shadow: none; color: #5f6368;
+  background-repeat: no-repeat; background-position: center; background-size: 13px 13px;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:first-child {
-  border-bottom: 1px solid rgba(60, 64, 67, .22);
+  border-bottom: 0;
+  border-radius: var(--oc-gm-radius) var(--oc-gm-radius) 0 0;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'><path d='M6.5 1.5V11.5M1.5 6.5H11.5' fill='none' stroke='%235f6368' stroke-width='3' stroke-linecap='round'/></svg>");
 }
-/* 截图里的 +/− 笔画更实；Material Symbols 默认 wght 300 偏细，只在缩放条内加粗。 */
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom-btn .sc-material-symbol {
-  font-weight: 400 !important;
-  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 20 !important;
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:last-child {
+  border-radius: 0 0 var(--oc-gm-radius) var(--oc-gm-radius);
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'><path d='M1.5 6.5H11.5' fill='none' stroke='%235f6368' stroke-width='3' stroke-linecap='round'/></svg>");
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn .sc-material-symbol {
+  position: absolute !important; width: 1px !important; height: 1px !important;
+  margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important;
+  opacity: 0 !important; pointer-events: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom:hover {
+  background-color: #fff;
+  box-shadow: var(--oc-gm-shadow-hover);
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:hover {
-  background: #f8f9fa; box-shadow: none;
+  background-color: #f8f9fa; box-shadow: none;
 }
 /* 桌面网页版没有分隔线；这条 span 只留作间距占位。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-divider {
   display: none;
 }
-/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 4px 间距，不冒充网页版控件。 */
+/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，再用一档间距隔开，不冒充网页版控件。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
-  margin-top: 3px;
+  margin-top: var(--oc-gm-gap);
   background: #e6f1f2; color: #5f6c70;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye:hover { background: #d9eaec; }
@@ -2235,7 +2471,7 @@ body.sc-panel-dragging * {
   background: rgba(255, 255, 255, .46);
   border: 1px solid rgba(255, 255, 255, .58);
   color: #5f6c70;
-  box-shadow: 0 1px 4px rgba(20, 20, 22, .10);
+  box-shadow: var(--oc-gm-shadow-ghost);
   opacity: .68;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye.is-active:hover,
@@ -2243,10 +2479,157 @@ body.sc-panel-dragging * {
   background: rgba(255, 255, 255, .64);
   opacity: .9;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk {
-  border-radius: 50%; color: #fbbc04;
+/* 漫游 Pegman：黄圆头、橙身、四肢张开。2D 右轨与户外地图列画同一只，白圆底。
+   组件里的 svg 只占位；看得见的小人在 ::before。
+   悬停先蹲再拎起（手臂张开、上浮、微倾），选中停在拎起姿态；脚下影子留在圆底，不跟着身子走。 */
+.sc-workbench .sc-tool-column button.is-walk {
+  position: relative;
+  --pegman-rest: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cpath%20d%3D%22M15.2%2022.8c-3.4%201.2-6%203.8-6.4%207%22%20fill%3D%22none%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M32.8%2022.8c3.4%201.2%206%203.8%206.4%207%22%20fill%3D%22none%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M19.2%2032.4v9.2%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M28.8%2032.4v9.2%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%2F%3E%3Crect%20x%3D%2215.2%22%20y%3D%2217.6%22%20width%3D%2217.6%22%20height%3D%2215.4%22%20rx%3D%225.8%22%20fill%3D%22%23E37400%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2211.4%22%20r%3D%228%22%20fill%3D%22%23FBBC04%22%2F%3E%3C%2Fsvg%3E");
+  --pegman-up: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cpath%20d%3D%22M16.2%2022.2c-3.6-2.2-8.2-.6-8.6%202.4%22%20fill%3D%22none%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M31.8%2022.2c3.6-2.2%208.2-.6%208.6%202.4%22%20fill%3D%22none%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M19.2%2032.4v9.2%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M28.8%2032.4v9.2%22%20stroke%3D%22%23F9AB00%22%20stroke-width%3D%225.2%22%20stroke-linecap%3D%22round%22%2F%3E%3Crect%20x%3D%2215.2%22%20y%3D%2217.6%22%20width%3D%2217.6%22%20height%3D%2215.4%22%20rx%3D%225.8%22%20fill%3D%22%23E37400%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2211.4%22%20r%3D%228%22%20fill%3D%22%23FBBC04%22%2F%3E%3C%2Fsvg%3E");
+  --peg-shadow-size: 12px 3px;
+  --peg-shadow-y: calc(100% - 6px);
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk.is-active { color: #fbbc04; }
+.sc-workbench .sc-tool-column > #tool-walk > svg,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk > svg {
+  position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden;
+  opacity: 0; pointer-events: none;
+}
+.sc-workbench .sc-tool-column button.is-walk::before {
+  content: "";
+  position: absolute; left: 50%; top: 50%; z-index: 1;
+  width: 76%; height: 76%;
+  transform-origin: 50% 88%;
+  transform: translate(-50%, -50%) rotate(0deg) scale(1, 1);
+  background: center / contain no-repeat var(--pegman-rest);
+  pointer-events: none;
+  transition: transform .34s cubic-bezier(.34, 1.45, .5, 1);
+}
+.sc-workbench .sc-tool-column button.is-walk:hover::before,
+.sc-workbench .sc-tool-column button.is-walk:focus-visible::before {
+  transform: translate(-50%, calc(-50% - 3px)) rotate(-10deg) scale(1.04, 1.04);
+  background-image: var(--pegman-up);
+  animation: sc-pegman-pickup .42s cubic-bezier(.22, .85, .3, 1);
+}
+.sc-workbench .sc-tool-column button.is-walk.is-active::before {
+  transform: translate(-50%, calc(-50% - 2px)) rotate(-7deg) scale(1.02, 1.02);
+  background-image: var(--pegman-up);
+  animation: none;
+}
+.sc-workbench .sc-tool-column button.is-walk.is-active:hover::before,
+.sc-workbench .sc-tool-column button.is-walk.is-active:focus-visible::before {
+  transform: translate(-50%, calc(-50% - 3.5px)) rotate(-12deg) scale(1.05, 1.05);
+  background-image: var(--pegman-up);
+  animation: none;
+}
+.sc-workbench .sc-tool-column button.is-walk:hover,
+.sc-workbench .sc-tool-column button.is-walk:focus-visible {
+  --peg-shadow-size: 7px 2px;
+  --peg-shadow-y: calc(100% - 5px);
+}
+.sc-workbench .sc-tool-column button.is-walk.is-active {
+  --peg-shadow-size: 8px 2px;
+  --peg-shadow-y: calc(100% - 5px);
+}
+.sc-workbench .sc-tool-column button.is-walk.is-active:hover,
+.sc-workbench .sc-tool-column button.is-walk.is-active:focus-visible {
+  --peg-shadow-size: 6px 2px;
+  --peg-shadow-y: calc(100% - 4px);
+}
+@keyframes sc-pegman-pickup {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(1, 1); }
+  22% { transform: translate(-50%, calc(-50% + 1px)) rotate(-3deg) scale(1.04, 0.92); }
+  64% { transform: translate(-50%, calc(-50% - 3.5px)) rotate(-12deg) scale(1.05, 1.05); }
+  100% { transform: translate(-50%, calc(-50% - 3px)) rotate(-10deg) scale(1.04, 1.04); }
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible {
+  border-radius: 50%;
+  border: 0;
+  background: #fff;
+  color: #f9ab00;
+  box-shadow: var(--oc-gm-shadow);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:focus-visible {
+  background: #e8f0fe;
+  color: #f9ab00;
+  box-shadow: var(--oc-gm-shadow-active);
+}
+/* 影子画在圆底上，background 简写会清掉 background-image，所以放在底色规则之后。 */
+.sc-workbench .sc-tool-column > #tool-walk,
+.sc-workbench .sc-tool-column > #tool-walk:hover,
+.sc-workbench .sc-tool-column > #tool-walk:focus-visible,
+.sc-workbench .sc-tool-column > #tool-walk.is-active,
+.sc-workbench .sc-tool-column > #tool-walk.is-active:hover,
+.sc-workbench .sc-tool-column > #tool-walk.is-active:focus-visible,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:focus-visible {
+  background-image: radial-gradient(ellipse at center, rgba(60, 64, 67, .34) 0, rgba(60, 64, 67, 0) 72%);
+  background-repeat: no-repeat;
+  background-position: center var(--peg-shadow-y);
+  background-size: var(--peg-shadow-size);
+  transition: background-color .12s ease, box-shadow .12s ease, border-color .12s ease, background-size .34s cubic-bezier(.34, 1.45, .5, 1), background-position .34s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column button.is-walk::before,
+  .sc-workbench .sc-tool-column button.is-walk:hover::before,
+  .sc-workbench .sc-tool-column button.is-walk:focus-visible::before,
+  .sc-workbench .sc-tool-column button.is-walk.is-active::before,
+  .sc-workbench .sc-tool-column button.is-walk.is-active:hover::before,
+  .sc-workbench .sc-tool-column button.is-walk.is-active:focus-visible::before {
+    animation: none;
+    transition: none;
+    transform: translate(-50%, -50%) rotate(0deg) scale(1, 1);
+    background-image: var(--pegman-rest);
+  }
+  .sc-workbench .sc-tool-column button.is-walk,
+  .sc-workbench .sc-tool-column button.is-walk:hover,
+  .sc-workbench .sc-tool-column button.is-walk:focus-visible,
+  .sc-workbench .sc-tool-column button.is-walk.is-active,
+  .sc-workbench .sc-tool-column button.is-walk.is-active:hover,
+  .sc-workbench .sc-tool-column button.is-walk.is-active:focus-visible {
+    --peg-shadow-size: 12px 3px;
+    --peg-shadow-y: calc(100% - 6px);
+  }
+  .sc-workbench .sc-tool-column > #tool-walk,
+  .sc-workbench .sc-tool-column > #tool-walk:hover,
+  .sc-workbench .sc-tool-column > #tool-walk:focus-visible,
+  .sc-workbench .sc-tool-column > #tool-walk.is-active,
+  .sc-workbench .sc-tool-column > #tool-walk.is-active:hover,
+  .sc-workbench .sc-tool-column > #tool-walk.is-active:focus-visible,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:hover,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:focus-visible {
+    transition: none;
+  }
+}
+/* 键盘焦点环：右下地图控制（2D/3D、定位、缩放、漫游、看图）与室内地图/漫游钮。
+   缩放条 overflow:hidden，外环会被裁掉，所以连体条内改用内缩描边。 */
+.sc-workbench .sc-tool-column #tool-walk:focus-visible,
+.sc-workbench .sc-tool-column #tool-view-toggle:focus-visible,
+.sc-workbench .sc-tool-column #tool-map-type:focus-visible,
+.sc-workbench .sc-tool-column #tool-ground-source:focus-visible,
+.sc-workbench .sc-tool-column #tool-opacity:focus-visible,
+.sc-workbench .sc-tool-column #tool-focus:focus-visible,
+.sc-workbench .sc-tool-column #tool-zoom-in:focus-visible,
+.sc-workbench .sc-tool-column #tool-zoom-out:focus-visible,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round:focus-visible,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button:focus-visible {
+  outline: 2px solid var(--ink-soft, #55585f);
+  outline-offset: 2px;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button:focus-visible {
+  outline-offset: -2px;
+}
 /* 户外第一人称漫游时只留这颗漫游钮：再点一次即退出，不让整条控制列挡住走查。 */
 .sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools { display: block !important; }
 .sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-tr,
@@ -2263,8 +2646,8 @@ body.sc-panel-dragging * {
   z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 0;
   pointer-events: none;
 }
-/* 展开态：只保留工具这一行（图2）；关闭用点外部 / Esc，
-   不再加一条“工具”标题栏或另挂一颗收起胶囊。 */
+/* 展开态：只保留工具这一行（图2）；关闭只认末尾 × / Esc，
+   点画布或点卡内按钮不收起——用户可连续操作，不会把上浮的标注卡变成无锚点空卡。 */
 .sc-workbench .sc-tool-column .oc-dock.is-open {
   align-items: center;
   width: max-content;
@@ -2312,9 +2695,13 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-dock-handle { opacity: .92; }
 @media (max-width: 760px) {
-  .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps { right: 12px; bottom: 14px; }
+  .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps {
+    --oc-gm-inset-x: 12px;
+    --oc-gm-inset-y: 14px;
+  }
   .sc-workbench .sc-tool-column .oc-dock { bottom: 14px; }
-}.sc-workbench .sc-tool-pop {
+}
+.sc-workbench .sc-tool-pop {
   position: absolute; right: calc(100% + 8px); top: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;
   padding: 4px; border-radius: var(--r-md); background: var(--wk-paper); border: 1px solid var(--wk-hair);
@@ -2464,13 +2851,28 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-map-type-note { padding: 6px 4px 0; font-size: 10px; line-height: 1.4; color: var(--wk-muted); }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
-/* 发布卡片：一张图 + 一个主动作 + 扫码，项目大纲折叠，说明收进标题旁的 ⓘ。 */
+/* 发布卡片：未发布单列；发布后右侧是方案预览和二维码。项目大纲折叠，说明收进标题旁的 ⓘ。 */
 .sc-workbench .sc-publish-card {
-  width: 312px; min-width: 312px; max-width: 312px; max-height: min(76vh, 560px);
+  width: min(360px, calc(100vw - 24px)); min-width: 0; max-width: min(360px, calc(100vw - 24px));
+  max-height: min(76vh, 560px);
   padding: 10px; gap: 8px; align-items: stretch;
   box-sizing: border-box; overflow-x: hidden; overflow-y: auto;
 }
+.sc-workbench .sc-publish-card.is-published {
+  width: min(640px, calc(100vw - 24px));
+  max-width: min(640px, calc(100vw - 24px));
+}
 .sc-workbench .sc-publish-card > * { flex: 0 0 auto; max-width: 100%; }
+.sc-workbench .sc-publish-split {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; min-width: 0;
+}
+.sc-workbench .sc-publish-card.is-published .sc-publish-split {
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
+}
+.sc-workbench .sc-publish-main,
+.sc-workbench .sc-publish-aside {
+  display: grid; gap: 8px; min-width: 0; align-content: start;
+}
 .sc-workbench .sc-publish-card p,
 .sc-workbench .sc-publish-card label {
   margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--wk-muted);
@@ -2542,7 +2944,17 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   display: grid; place-items: center; border-style: dashed; color: var(--wk-muted);
   background: var(--wk-plane);
 }
+.sc-workbench .sc-publish-qr-frame.is-failed {
+  display: grid; place-items: center; border-style: dashed;
+  border-color: var(--warn); color: var(--warn); background: var(--wk-plane);
+}
+.sc-workbench .sc-publish-card p.sc-publish-qr-fail { color: var(--warn); }
 .sc-workbench .sc-publish-qr-side { flex: 1 1 auto; min-width: 0; }
+.sc-workbench .sc-publish-aside .sc-publish-plan { height: 168px; }
+.sc-workbench .sc-publish-aside .sc-publish-qr-body { flex-direction: column; align-items: flex-start; }
+.sc-workbench .sc-publish-aside .sc-publish-qr-frame {
+  flex: 0 0 auto; width: 148px; height: 148px; max-width: 100%;
+}
 /* 链路就绪状态行：方案网页 / 3D 漫游 / 评审，圆点灰=未就绪、绿=已就绪。 */
 .sc-workbench .sc-publish-card .sc-publish-status { display: flex; flex-direction: column; gap: 6px; }
 .sc-workbench .sc-publish-status-item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
@@ -2552,6 +2964,10 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-publish-status-state { margin-left: auto; color: var(--wk-muted); }
 .sc-workbench .sc-publish-status-item.is-live .sc-publish-status-state { color: var(--wk-green-deep, #35624A); }
 .sc-workbench .sc-publish-card .sc-publish-row { display: flex; gap: 5px; }
+.sc-workbench .sc-publish-card .sc-publish-row > button.is-active,
+.sc-workbench .sc-publish-card .sc-publish-row > button[aria-selected='true'] {
+  background: var(--sc-accent-soft) !important; color: var(--sc-accent-ink) !important;
+}
 .sc-workbench .sc-publish-card .sc-publish-row > button,
 .sc-workbench .sc-publish-card .sc-publish-row > a {
   flex: 1 1 0; min-width: 0; width: auto !important; text-align: center; font-size: 11.5px; padding: 5px 6px;

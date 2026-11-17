@@ -21,14 +21,27 @@ import {
   type GenerationTask,
 } from '../lib/generation-sheet';
 import {
+  UNKNOWN_SUBMISSION_NOTICE,
   generationBlockReason,
+  generationFailureDisposition,
   modeSupports,
   pickEngine,
   plainFailure,
   submitModelJob,
   uploadModelReference,
 } from '../lib/model-generation';
-import { consumeFacilityGenerateLink, recordFacilityGenerateLink, registerGeneratedFacilityModel } from '../lib/facility-generated-models';
+import {
+  beginGenerationSubmission,
+  consumeFacilityGenerateLink,
+  discardFacilityGenerateLink,
+  findUnresolvedGenerationSubmission,
+  getGenerationSubmissionsRevision,
+  latestGenerationSubmissionReceipt,
+  recordFacilityGenerateLink,
+  registerGeneratedFacilityModel,
+  settleGenerationSubmission,
+  subscribeGenerationSubmissions,
+} from '../lib/facility-generated-models';
 import { importDisplayName, newLocalGlbKey, validateLocalGlbPick } from '../lib/glb-import';
 import { subscribeStagedMaterialGenerate } from '../lib/material-generate';
 import { addMyItem } from '../lib/my-items';
@@ -80,6 +93,23 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<GenerationCapabilities | null>(null);
   const [capabilityState, setCapabilityState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+
+  // 提交回执：按「项目 + 设施」读最近一次提交与未知锁；刷新/重开面板后仍可核对。
+  const receiptsRevision = useSyncExternalStore(
+    subscribeGenerationSubmissions,
+    getGenerationSubmissionsRevision,
+    getGenerationSubmissionsRevision,
+  );
+  const projectId = cloud.project?.id;
+  const facilityId = state.facility?.id ?? null;
+  const receipt = useMemo(
+    () => latestGenerationSubmissionReceipt({ projectId, facilityId }),
+    [projectId, facilityId, receiptsRevision],
+  );
+  const unknownLock = useMemo(
+    () => findUnresolvedGenerationSubmission({ projectId, facilityId }),
+    [projectId, facilityId, receiptsRevision],
+  );
 
   const signedIn = Boolean(cloud.user?.id);
   const engine = useMemo(() => pickEngine(capabilities, source === 'image' ? 'image' : 'text'), [capabilities, source]);
@@ -148,6 +178,18 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
     writeBlocked: cloud.writeBlocked,
   });
   const modeReady = modeSupports(capabilities, source === 'image' ? 'image' : 'text');
+  // 正在提交时不要显示「上次结果未知」：那一条 submitting 回执就是本次请求。
+  const lockForUi = busy ? null : unknownLock;
+  const receiptShown = busy ? null : (unknownLock ?? receipt);
+  const receiptText = receiptShown
+    ? unknownLock
+      ? `上次提交结果未知：可能已经创建任务并计费。先查任务记录与费用，不重试。${unknownLock.taskid ? `任务号 ${unknownLock.taskid}。` : ''}请求号 ${unknownLock.requestId}。`
+      : receiptShown.state === 'submitted'
+        ? `上次提交已受理：任务号 ${receiptShown.taskid ?? '（服务端未返回）'}。请求号 ${receiptShown.requestId}。`
+        : receiptShown.state === 'failed'
+          ? `上次提交未被受理：${receiptShown.message ?? '服务端已拒绝'}。请求号 ${receiptShown.requestId}。`
+          : `上次提交尚未核对：请求号 ${receiptShown.requestId}。`
+    : '';
 
   /** 模型这条：真提交。额度确认是提交前的闸门，不是提交后的道歉。 */
   const submitModel = async (): Promise<void> => {
@@ -156,29 +198,63 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
     if (source === 'image' && !reference) { setNotice('先选一张参考图。'); return; }
     if (blocked) { setNotice(blocked); return; }
     if (!modeReady) { setNotice('当前没有开通这种生成方式。'); return; }
+    // 上一次结果未知：按钮已经灰了，回车也不能绕过；先查任务记录与费用。
+    if (unknownLock) { setNotice(UNKNOWN_SUBMISSION_NOTICE); return; }
     if (!credit) return; // 未勾额度时按钮本身就是灰的，不再弹提示。
+    // 提交当刻捕获目标：等待期间用户换了设施/项目，链接与回执也不能跟着串。
+    const facility = state.facility;
+    const requestId = crypto.randomUUID();
     setBusy(true);
     setNotice('');
     // 先记「这炉生成给哪件设施」（10 分钟内的 staged 链接），成功后用 taskid 落成正式链接。
-    if (state.facility) recordFacilityGenerateLink({ facilityId: state.facility.id, facilityName: state.facility.name });
+    if (facility) {
+      recordFacilityGenerateLink({
+        facilityId: facility.id,
+        facilityName: facility.name,
+        ...(projectId ? { projectId } : {}),
+      });
+    }
+    // 再落提交回执：requestId 必须在发请求前写盘，断网后才查得到这次提交。
+    beginGenerationSubmission({
+      requestId,
+      prompt: prompt.trim(),
+      ...(projectId ? { projectId } : {}),
+      ...(facility ? { facilityId: facility.id, facilityName: facility.name } : {}),
+    });
     try {
       const job = await submitModelJob(controller, {
         mode: source === 'image' ? 'image' : 'text',
         prompt,
         engine,
+        requestId,
         ...(source === 'image' && reference ? { referenceImageAssetId: reference.id } : {}),
       });
       // 属性卡来路：把 staged 链接落成 taskid↔facility，画布轮询到 ready 就回填模型条首位。
-      if (state.facility) consumeFacilityGenerateLink(job.id, job.prompt || prompt);
-      setNotice(state.facility
-        ? `已提交：「${job.prompt}」。生成完会回填到「${state.facility.name}」的模型条。`
-        : `已提交：「${job.prompt}」。生成完会出现在模型库。`);
+      if (facility) consumeFacilityGenerateLink(job.id, job.prompt || prompt);
+      if (job.state === 'submit_unknown') {
+        settleGenerationSubmission(requestId, { state: 'unknown', taskid: job.id, message: UNKNOWN_SUBMISSION_NOTICE });
+        setNotice(`已创建任务 ${job.id}，但结果暂不可核对。${UNKNOWN_SUBMISSION_NOTICE}`);
+        return;
+      }
+      settleGenerationSubmission(requestId, { state: 'submitted', taskid: job.id });
+      setNotice(`已提交：任务号 ${job.id}「${job.prompt || prompt}」。${facility
+        ? `生成完会回填到「${facility.name}」的模型条。`
+        : '生成完会出现在模型库。'}`);
       setPrompt('');
       setReference(null);
       setPhotoName('');
       setCredit(false);
     } catch (failure) {
-      setNotice(plainFailure(failure));
+      // 无论哪种失败都先清 staged：残留会把下一次生成错挂到这件设施。
+      if (facility) discardFacilityGenerateLink();
+      if (generationFailureDisposition(failure) === 'unknown') {
+        settleGenerationSubmission(requestId, { state: 'unknown', message: UNKNOWN_SUBMISSION_NOTICE });
+        setNotice(`结果未知：请求号 ${requestId}。先查任务记录与费用，不重试。`);
+      } else {
+        const message = plainFailure(failure);
+        settleGenerationSubmission(requestId, { state: 'failed', message });
+        setNotice(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -367,6 +443,9 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
             {state.task === 'model' && (
               <>
                 <p className="gs-target" data-testid="generation-target">{generationTargetLabel(state.facility)}</p>
+                {receiptText ? (
+                  <p className={receiptShown && unknownLock ? 'gs-notice' : 'gs-hint'} data-testid="generation-receipt">{receiptText}</p>
+                ) : null}
                 <div className="gs-seg" role="group" aria-label="模型输入方式">
                   <button type="button" aria-pressed={source === 'text'} onClick={() => setSource('text')}>描述</button>
                   <button type="button" aria-pressed={source === 'image'} onClick={() => setSource('image')}>图片</button>
@@ -451,8 +530,8 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
                 type="button"
                 className="gs-primary"
                 data-testid="generation-primary"
-                disabled={busy || (needsCredit && !credit) || (state.task === 'model' && source !== 'import' && Boolean(blocked))}
-                title={blocked || undefined}
+                disabled={busy || Boolean(lockForUi) || (needsCredit && !credit) || (state.task === 'model' && source !== 'import' && Boolean(blocked))}
+                title={(lockForUi ? UNKNOWN_SUBMISSION_NOTICE : blocked) || undefined}
                 onClick={primaryAction}
               >
                 {busy ? '提交中…' : primary}

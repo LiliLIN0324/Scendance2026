@@ -2,6 +2,7 @@ import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-c
 import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import { eventProfileSchema } from '../../../lib/event-profile';
 import { orientMapShellNorthUp } from './amap-venue';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
@@ -378,6 +379,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
 
   if (v.eventOperations !== undefined && !eventOperationsSchema.safeParse(v.eventOperations).success) return false;
   if (v.productionPlan !== undefined && !productionPlanSchema.safeParse(v.productionPlan).success) return false;
+  if (v.eventProfile !== undefined && !eventProfileSchema.safeParse(v.eventProfile).success) return false;
   if (typeof v.name !== 'string') return false;
   if (v.itemLayers !== undefined && (!Array.isArray(v.itemLayers) || v.itemLayers.length > 100 || !v.itemLayers.every(layer =>
     isPlainObject(layer) && typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= MAX_ID_LENGTH &&
@@ -388,7 +390,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
     if (!isPlainObject(book) || typeof book.activeId !== 'string' || !Array.isArray(book.variants) || book.variants.length > 20 ||
       !book.variants.every(variant => isPlainObject(variant) && typeof variant.id === 'string' && variant.id.length <= MAX_ID_LENGTH &&
         typeof variant.name === 'string' && variant.name.length <= MAX_NAME_LENGTH && isPlainObject(variant.layout) &&
-        variant.layout.designBook === undefined && isRoomLayout(variant.layout)) ||
+        variant.layout.designBook === undefined && variant.layout.eventProfile === undefined && isRoomLayout(variant.layout)) ||
       !book.variants.some(variant => variant.id === book.activeId) || new Set(book.variants.map(variant => variant.id)).size !== book.variants.length) return false;
   }
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
@@ -500,7 +502,7 @@ export function parseStoredLayout(value: unknown): RoomLayout | null {
 
 /** Validate local business metadata before a load or snapshot can replace the current draft. */
 export function parseLayoutEventOperations(layout: RoomLayout): RoomLayout | null {
-  if ((layout.eventOperations !== undefined || layout.productionPlan !== undefined) && !isRoomLayout(layout)) return null;
+  if ((layout.eventOperations !== undefined || layout.productionPlan !== undefined || layout.eventProfile !== undefined) && !isRoomLayout(layout)) return null;
   const parsed = layout.eventOperations === undefined ? undefined : eventOperationsSchema.safeParse(layout.eventOperations);
   if (parsed && !parsed.success) return null;
   const production = layout.productionPlan === undefined ? undefined : productionPlanSchema.safeParse(layout.productionPlan);
@@ -509,9 +511,16 @@ export function parseLayoutEventOperations(layout: RoomLayout): RoomLayout | nul
   let next = JSON.stringify(operations) === JSON.stringify(layout.eventOperations)
     ? layout : { ...layout, eventOperations: operations };
   if (JSON.stringify(production?.data) !== JSON.stringify(layout.productionPlan)) next = { ...next, productionPlan: production?.data };
+  const profile = layout.eventProfile === undefined ? undefined : eventProfileSchema.safeParse(layout.eventProfile);
+  if (profile && !profile.success) return null;
+  if (profile && JSON.stringify(profile.data) !== JSON.stringify(layout.eventProfile)) {
+    next = { ...next, eventProfile: profile.data };
+  }
   if (layout.designBook) {
     const variants = [];
     for (const variant of layout.designBook.variants) {
+      // 活动档案属于整场活动，不能随某个设计方案分裂。
+      if (variant.layout.eventProfile !== undefined) return null;
       const snapshot = parseLayoutEventOperations(variant.layout);
       if (!snapshot) return null;
       variants.push(snapshot === variant.layout ? variant : { ...variant, layout: snapshot });
@@ -580,6 +589,7 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  eventProfile: true,
   productionPlan: true,
   eventOperations: true,
   itemLayers: true,
@@ -630,6 +640,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   wallId: true,
   elevation: true,
   materialId: true,
+  materialPreset: true,
   assetId: true,
   notes: true,
   source: true,

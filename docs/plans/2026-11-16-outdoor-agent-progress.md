@@ -4,12 +4,13 @@
 
 ## 当前续跑点
 
-- 总状态：**M0 已收口**；**M1a 1–3 已交付**；**M2 已验到退回气泡唯一下一步**（桌面与 375/768 均通过）；**M6 已开工**：768 端到端通过，但 **375 宽左侧导航整个不可见**（已记为缺陷）。M2/M3 接回验仍受登录阻塞。M4/M5/M7 待开始。
+- 总状态：**M0 已收口**；**M1a 1–3 已交付**；**M2 已验到退回气泡唯一下一步**（桌面与 375/768 均通过）；**M6 已开工**：768 端到端通过；375 原报“左侧导航不可见”经 D1-verify 实测为探针误报（`助理菜单` 展开后空间/物料/场地/户外规划四项均可达，console 0 错误）。M2/M3 接回验仍受登录阻塞。M4/M5/M7 待开始。
 - 验收口径：以计划 §0「用户口径」为准（不卡第一步 / 地图听懂人话 / 每步有下一步 / 会做设计 / 分层指令 / 一口气做完 / 可回看取证），优先级高于功能清单；任一不满足不得标已验收。
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：修 375 宽左侧导航不可见——`展开导航栏` 按钮自身 `visibility:hidden`，空间/物料/场地/户外规划 四个入口全部不可达；先看 `sc-workspace` 的 rail/dock 模式判定，做最小响应式修正，再用本轮 `m6-probe9.mjs` 原样复验（可见按钮列表里应出现四个入口）。
+- 下一条操作：B2-run / C1 需真人（登录态、样例项目、积分生成）；375 导航已实测非缺陷，不再改 CSS。
+- 并行工作树（2026-11-16 19:05 实读，`fix/outdoor-walk-control` @ `b997da81`，未提交、未推）：OFM TileJSON 共享缓存已不再绑调用方 AbortSignal；证据线同一版本的并发 `load` 合成一次 `fetchOfmEvidence`。aholo 同一任务号 / 同一 metaUrl 并发只打一次代理，GLB 缓存键按落盘 URL 里的资产 UUID 对齐。分享受众分栏、圆形罗盘、漫游修复都在这份工作树里。本轮只补记，没有改这些代码。375 导航仍是下一条产品修复。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
 - 上一步已验（不依赖登录）：turnId/attemptId 不重复且无身份字段；每轮恰一个终态（第二次只留 `conflictingTerminal`）；重试复用 turnId、换 attemptId；错误码按“像不像错误码”判定，自然语言整体丢成 null。
 - 阻塞（轮次 7 实浏）：待恢复槽写入后可验，但「地图上圈范围 → 确认边界」这一步要先进选址，而选址卡在未登录时只给“登录后继续这次选址”，成品页没有无登录的圈选入口。解除条件：有一个可用的登录态（或内测账号）在 3210 上跑一次圈选。
@@ -26,7 +27,7 @@
 | M3 分流与上下文 | 进行中（登录阻塞） | 切片 3a：复合句保留整句、设计入槽，8 条测试通过；轮次 7 在新 HEAD 上重验仍零 `/assistant/chat`。下一切片同 M2，卡在圈选需登录。 |
 | M4 组合预览 | 待开始 | 以首条代表需求和直接编辑为中心。 |
 | M5 应用与恢复 | 待开始 | 补版本、应用幂等、撤销及中断验收。 |
-| M6 工作台体验 | 进行中（375 有缺陷） | 375/768 端到端退回流程已通（气泡带下一步、零 `/assistant/chat`、无横向溢出、槽写入）。**375 宽发现真缺陷：左侧导航整组 `visibility:hidden`，连带展开它的 `展开导航栏` 按钮也隐藏，空间/物料/场地/户外规划 四个入口均不可达；而地图工具与 dock 正常。** |
+| M6 工作台体验 | 进行中（375 误报已澄清） | 375/768 端到端退回流程已通（气泡带下一步、零 `/assistant/chat`、无横向溢出、槽写入）。375 导航实测：`助理菜单` 展开后空间/物料/场地/户外规划四项均可见，点空间能开左卡并收起菜单，console 0 错误；原“整组不可见”是探针未展开菜单。 |
 | M7 验收和发布准备 | 待开始 | 指标对照、真实云端、回退说明。 |
 
 ## 未提交改动清单（2026-11-16 08:12 基线 f1c5a525 实读；08:30 后 HEAD 已前进）
@@ -537,3 +538,484 @@ scripts/probe-basemap-zoom.mjs
 下次准确从哪条命令或哪个文件继续：cd frontend && npm run dev -- -p 3210 → 打开户外计划看人物坐下；若资产加载报错，先查 three/glb-assets.ts 的 TIMEOUT_MS 与新阈值 12 MB 是否被缓存命中旧值
 ```
 
+### 2026-11-16 16:45 · 新基底 60278a09 复核（V1 浏览器复验 + 定向回归）
+
+```text
+日期时间：2026-11-16 16:45，本地主树 / HEAD 60278a09（PR #118 merge）
+批次 / 切片 / 状态：基线复核，无代码改动
+三提交在位核对：22175027（子线判死修复）、9c86d57c（3D 车辆巡游层+岗位标签）、0c904b54（补回 focus-place-search/outdoor-place-handover）均在 main 历史
+定向回归：road-network 11 + sub-entrance 5 + carry 6 + plan-traffic-layer 14 + workflow.react 38 = 74 passed / 0 failed，exit 0；含此前唯一红的「个人库复用→子线岗位→3D 替换/上传/生成」用例
+浏览器复验（本地 3002 主树 dev，匿名态）：打开 /editor 渲染正常，console 无 error（仅 WebGL 精度 warning + camera-clamp debug）；发纯设计句「六个摊位排两列，签到台放进口处，园路留 4 米。」→ 气泡「…这句我先留着。下一步：在地图上选地点」，/assistant/chat=0，待恢复槽 house-y4ry0n56 写入原句 stage=place。V1 本地分流/入槽/唯一下一步在新基底未被回退
+卡点留痕：搜索地点检索框被侧栏 h1 坐标遮挡（bu 探针 obscured，非产品缺陷）；检索候选与圈范围确认仍归登录态回源段，本轮未走。线上 Pages chunk 已重构建；子线修复无可搜字符串标记，线上是否含只能页面点「子线」验到
+```
+
+- 八阶段枚举在位（use-outdoor-agent-workflow.ts：place/scope/zones/main-routes/objects/sub-routes/people/refine-3d）；子线回退 `findSpur(preferredSamples)` 无解再回退边界采样，室内不回退。
+- V2/V3 落库证据来自此前轮次，本轮仅测试回归；V4 objects→sub-routes 页面链路、V5 人物坐姿实机/车辆编辑入口仍未在本轮浏览器走查。
+
+### 2026-11-16 17:10 · 正式站登录态 V1–V5 走查（pages.dev，project house-uat5t1nz）
+
+```text
+环境：https://scendance-scene-planner-ewz.pages.dev/，已登录，模型槽 Tokendance 网关（deepseek-v4.1-flash）；锚点 120.163749,30.25283（杭州湖滨 in77 一带）
+V1 place/scope：检索出 6 条 in77 候选；选候选→场地确认卡→「确认并应用这一版」写边界；确认后接回待恢复槽原句并发出 chat。落库：confirmedBoundary 锚点+多边形在位 ✓
+V3 zones：首包 Agent 理解 timeout（规划未变，出重试卡）；重试后分区预览（展示区 exhibition / 交流区 audience / 休息区 service），确认落库 zones=3 ✓
+V2 main-routes：主线预览铺到地图（绿人流 / 蓝界外候选 / 黑待核对入口），确认落库 routes=9、nodes=7 ✓
+V4 objects：点「预览按用途复用我的物料」→ **conversation-api 始终未发起**（conv=[]），流程卡在前置 site-context 结构化上下文：该接口持续 inflight（函数侧 15s 截止应回 503，浏览器侧未收到终态/无独立超时），任务卡回「重试」；facilities=0、objects=0、brief.items=[]。手动检索「展板」未出候选列表；GLB 原位导入入口在位（≤10MB 仅本会话不上传）
+V4 sub-routes / V5 people/refine-3d：被 objects 阶段卡住，未走到；brief.people=[]
+```
+
+**卡点定性（外部数据源，非前端崩溃/契约破裂）：**
+
+- `/api/site-context` 直探两次均 **503**（3.6s / 14.8s）；`/api/road-network` 同坐标 20.3s 读超时。两函数上游都是同一组公共 Overpass 端点（maps.mail.ru / overpass-api.de / lz4），从 Pages 边缘不可达或超时；函数 fail-closed 返回空要素 + `structured_map_source_unavailable`，不虚构建筑/入口。
+- V3 首包模型 timeout 属偶发慢包，重试可恢复；V4 未走到模型——前置 site-context 挂起把流程挡住，conversation-api 未发起。`scene-api/studios` 多次 200；console 仅一条 503 resource，无 JS 崩溃。
+- 状态机推进正常：place→scope→zones→main-routes→objects 各阶段边界/分区/路线都持久化成功；断在 objects 的前置地图上下文抓取，不在去耦合链路，也不在模型槽。
+- 待解：① Overpass 公共源在边缘不可达——评估 site-context/road-network 是否改走与底图同源的 OpenFreeMap transportation（参照底图 32844f72 口径），或加可用兜底；② 前端对 site-context 挂起/503 缺独立超时与降级（空上下文也应允许明确报错或放行模型，而非无限 inflight）；③ 模型首包 timeout 阈值与重试口径；④ 物料库「展板」无候选需核对该账号库内是否真有匹配（scene-api/studios 200，但前端未渲染列表，归属待定）。
+
+### 2026-11-16 17:35 · 证据线（site-context）接 OpenFreeMap 客户端源，函数 Overpass 退后手
+
+```text
+环境：本地主树 C:\幕景\Scendance2026，分支 fix/outdoor-walk-control；前端 Node24（node-v24.22.3），vitest 4.1.12
+背景：32844f72 已把前端路网 fetchRoadNetwork 改成「OFM 客户端瓦片优先、服务端 Overpass 兜底」，所以 V2 主线能出；证据线（喂模型上下文 + 建筑/障碍安全校验）仍直连挂掉的 /api/site-context，没有 OFM 优先分支，V4 objects 卡在这里。
+决策：沿用同一口径给证据线加 OFM 客户端适配器；不在 Pages Function 内加 MVT 解码依赖（函数无独立 package.json 打包，解码放前端）；函数 Overpass 保留为 fail-closed 后手。
+本轮有意文件（提交只 add 这些）：
+- 新增 frontend/components/room-organizer/lib/openfreemap-evidence.ts：复用 fetchOpenFreeMapRoads（GCJ 折线）+ fetchOpenFreeMapBuildings（WGS 环），Promise.allSettled 各自独立失败；道路转 ENU(GCJ)、建筑环转 ENU(WGS)，复用 site-intelligence 的 toLocal/isValidGeometry/boundedRadius；要素为空返回 null（交上层退函数兜底）；产出 MapEvidenceResult，status partial、complete false、scope gcj-02 + anchor + radiusM，warnings 如实标注入口/障碍/开放空间/室内连接未知。
+- 新增 openfreemap-evidence.test.ts：4 例（要素转换与 scope / 双源空返 null / 单源失败不拖累 / 退化几何丢弃）。
+- 改 outdoor-map-context.ts：plan.anchor 存在时先 fetchOfmEvidence，异常或空再走原 loader.load（semanticEndpoint /api/site-context）；cached 缓存逻辑不变。
+- 改 openfreemap-buildings.ts：未导出的 LngLatRing 接口加 export。
+未碰：functions/api/site-context.ts、road-network.ts（仍 Overpass 后手）；并行在途 scendance-workspace.tsx + 测试不回灌。
+验证：
+- 定向套件全绿：evidence 4 + context 7 + roads 10 + road-network 11 + site-intelligence 24 + site-context-api 5 + workflow.react 38 + sub-entrance 5 + carry 6 + plan-traffic-layer 14。
+- 前端 tsc --noEmit EXIT=0（先递归清 *.tsbuildinfo，NODE_OPTIONS 6144）。
+- 浏览器直探 OFM：TileJSON https://tiles.openfreemap.org/planet 0.5s 可达；瓦片模板 …/planet/20261101_080013_pt/{z}/{x}/{y}.pbf；vector_layers 含 building、transportation、transportation_name、park、landuse、landcover、waterway、poi、place 等。
+未做 / 待解：
+- 本地 dev 缺登录态，端到端 V4 objects→sub-routes→people/refine-3d 未在本轮真机走查；需部署 Pages 后用登录态复核证据线是否非空、物件阶段能发 conversation-api。
+- 函数端 site-context/road-network 仍直连 Overpass；坏窗口时返回空/503，前端已有空容错，是否进一步切同源或退役函数端待评估。
+- OFM park/landuse/landcover 开放空间候选本轮未接入 evidence；适配器目前只产出 road + building；entrance/barrier 不在 planet 这两个图层，保持 unknown + warning。
+- 模型槽：tokendance 本轮确认有额度可出回复；deepseek-flash 余额耗尽、bailian 欠费（模型不是本轮卡点）。
+```
+
+### 2026-11-16 18:40 · 户外漫游 walk 模式 bug 修复（fix/outdoor-walk-control）
+
+```text
+已发现并已修的具体 bug：
+1. 指针锁永久被拒时，单击画布仍会 requestPointerLock，与室内 use-walkthrough 脱节，移动端/内嵌 WebView 反复刷 pointerlockerror。
+2. 再次进漫游时 lockedOnceRef 未清零，冷启动相位误判为 unlocked。
+3. 退出漫游只恢复相机 position、不恢复 OrbitControls.target，环绕中心残留步行期偏移，退出后第一帧 update() 甩视角。
+4. WASD 瞬时满速、无加减速；失焦/退锁后 smooth 输入未清零，回页会短暂滑步。
+5. 2D/3D 切换未同步收口 outdoorWalkActive，依赖 outdoor3dTakeover effect 晚一拍，存在指针锁残留窗口。
+
+改动文件：
+- frontend/components/room-organizer/hooks/use-outdoor-walk.ts
+- frontend/components/room-organizer/hooks/use-outdoor-walk.react.test.ts
+- frontend/components/room-organizer/room-organizer.tsx
+
+测试（Node v24.22.3 vitest 4.1.12）：
+- use-outdoor-walk.react.test.ts + walk-engage + outdoor-walk-boundary + walk-view-modes → 4 files / 36 passed / 0 failed
+- 证据：.verify-walk-agent.txt
+```
+
+### 2026-11-16 18:42 · 分享面板按受众分栏（fix/outdoor-walk-control）
+
+```text
+信息架构：先分「发给客户 / 送评审方 / 内部协作」。每栏都有方案网页（发布当前版本 / 复制链接 / 打开）和 3D 漫游（生成漫游链接 / 复制 / 打开 / 重新生成）。导出改为 PNG / CSV / GeoJSON 勾选，底部「导出 N 项资料」。发布后右侧出方案预览和二维码。状态行仍是方案网页 / 3D 漫游 / 评审。评审链接在送评审方与内部协作；交接 / 资料 / 到场清单只在内部协作。沿用 onPublish、onGenerateShareLink、onIssueReviewLink 与既有导出回调。
+
+改动文件：
+- frontend/components/room-organizer/panels/share-menu.tsx
+- frontend/components/room-organizer/panels/share-menu.react.test.tsx
+- frontend/app/globals.css（受众页签选中态，压过工具弹层按钮的 !important 底色）
+
+测试命令：
+C:\Users\endTree\tools\node-v24.22.3-win-x64\node.exe .\node_modules\vitest\vitest.mjs run components/room-organizer/panels/share-menu.react.test.tsx
+工作目录：frontend
+结果：Test Files 1 passed (1)，Tests 9 passed (9)，Duration 4.40s，exit 0
+复跑 18:45：同一命令，Test Files 1 passed (1)，Tests 9 passed (9)，Duration 8.46s，exit 0
+```
+
+### 2026-11-16 19:03–19:05 · 进度补记（OFM 缓存、aholo 去重、分享 / 罗盘 / 漫游）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-16 19:03–19:05，无外部运行 ID
+批次 / 切片 / 状态：工作树核对与补记 / 代码保持未提交现状 / 定向测试 15 文件通过，证据并发夹具 3 例红
+工作目录 / 分支 / 开始与结束 HEAD：C:\幕景\Scendance2026 / fix/outdoor-walk-control / b997da81 → b997da81（本轮只改本文件）
+修改、提交或未提交路径：仅 docs/plans/2026-11-16-outdoor-agent-progress.md。下列修复已在工作树，本轮没有再改它们，也没有提交。
+验证命令、结果及环境：frontend 下
+  C:\Users\endTree\tools\node-v24.22.3-win-x64\node.exe .\node_modules\vitest\vitest.mjs run
+  openfreemap-tiles.test.ts、outdoor-map-context.concurrency.test.ts、outdoor-map-context.test.ts、
+  openfreemap-evidence.test.ts、aholo-assets.test.ts、aholo-model-placement.test.ts、
+  three/glb-assets.test.ts、three/plan-model-layer.test.ts、share-menu.react.test.tsx、
+  gm-compass.test.tsx、gm-compass-bearing.test.ts、use-outdoor-walk.react.test.ts、
+  walk-engage.test.ts、outdoor-walk-boundary.test.ts、walk-view-modes.test.ts、plan-tile-cache.test.ts
+  vitest 4.1.12：Test Files 1 failed | 15 passed (16)；Tests 3 failed | 163 passed (166)；Duration 33.61s；exit 1
+  唯一失败文件：outdoor-map-context.concurrency.test.ts（3/3）。并发开始时 fetchOfmEvidence 次数断言已过，AbortError 断言已过；随后上下文 status 为 unavailable，夹具期望 partial。
+剩余项：把并发夹具的 scope.anchor 改成与 createStarterOutdoorPlan 相同的平湖秋月锚点（120.1460368, 30.2521924）后再看第二次 load 是否仍只打一次 OFM。375 宽左侧导航仍按上一条操作修。
+下次准确从哪条命令或哪个文件继续：修 375 导航，或先改 outdoor-map-context.concurrency.test.ts 的锚点再复跑该文件。
+```
+
+**OFM 缓存（已在工作树）**
+
+- `openfreemap-tiles.ts`：模块级 TileJSON Promise 不再把某一个调用方的 `AbortSignal` 传进 `fetch`。调用方取消只拒绝自己的等待；共享请求失败会清空缓存以便重试。`openfreemap-tiles.test.ts` 5 例在本轮 15 个通过文件里。
+- `outdoor-map-context.ts`：同一 plan 版本并发 `load` 只 `invalidate` 一次，并共用一条 `fetchOfmEvidence`；这条共享请求不绑调用方 signal。证据 `ready` / `partial` 写入 60 秒缓存。17:35 的证据适配器仍在，`openfreemap-evidence.test.ts` 与原 `outdoor-map-context.test.ts` 本轮同批通过。
+- 并发测试 3 例红的原因：夹具 `scope.anchor` 写成 `{lng:120, lat:30}`，方案锚点是平湖秋月 `120.1460368, 30.2521924`。`buildSiteSnapshot` 因锚点不一致拒收证据，`mapStatus` 变成 `failed`，适配器因此返回 `unavailable`。这不是 TileJSON 又被 AbortSignal 毒死。
+
+**aholo 去重（已在工作树）**
+
+- `aholo-assets.ts`：`importAholoAsset` 按任务号（无任务号则按 URL）合并 in-flight；已落盘的任务号直接复用，不再打代理。
+- `aholo-model-placement.ts`：同一 `metaUrl` 的 `loadAholoSceneMeters` 合并 in-flight。
+- `three/glb-assets.ts`：`glbCacheKeyForUrl` 把 `/asset/<uuid>.glb` 收成资产 UUID，与 `ensureGlbAsset(assetId, url)` 同一键。`plan-model-layer.ts` 与 `outdoor-plan-3d.tsx` 的场景模型按这个键加载。
+- 同批加载顺序：`useGlbAssets` 先加载当前楼层，其它楼层放 `requestIdleCallback`（无则 `setTimeout`）。`use-scene-effects.ts` 传入 `activeFloorIndex`。
+- 本轮 `aholo-assets`、`aholo-model-placement`、`glb-assets`、`plan-model-layer` 均在通过的 15 个文件里。
+
+**分享 / 罗盘 / 漫游（已在工作树；分享与漫游五条详见 18:42、18:40）**
+
+- 分享：受众分栏与 18:42 记录一致。本轮 `share-menu.react.test.tsx` 仍在通过文件中。`globals.css` 另有受众页签选中态。
+- 罗盘：`GmCompass` + `GmCompassHost` 挂进已有 `.oc-gm-compass-wrap`，原 `#tool-compass` 留在 DOM 里并被挡住。左箭头 `orbit(+π/2)`，右箭头 `orbit(-π/2)`，点针回正北，拖动按手指转角。2D 画布与 3D API 都提供 `getBearing` / `orbitByDelta` / `resetNorth`。方位非 0 时 `plan-tile-cache` 的 `cullPad` 按 `tileOverflowPad` 向外扩瓦片。`scendance-workspace.tsx` 未改。形状记录见 `docs/COMPASS_TURN_ARROWS_PLAN.md`（18:52 接上、19:00 短月牙）。本轮 `gm-compass.test.tsx` 与 `gm-compass-bearing.test.ts` 通过；`plan-tile-cache.test.ts` 通过（`cullPad` 缺省 0，北朝上裁剪与原来相同）。
+- 漫游：18:40 的五条仍在（永久拒锁不再单击重试、再次进入清 `lockedOnceRef`、退出恢复 Orbit target、WASD 平滑且失焦清零、2D/3D 切换先关 `outdoorWalkActive`）。工作树里 `outdoor-plan-3d.tsx` 另有：步行时保存并恢复 OrbitControls 的 enabled / zoom / pan / rotate / mouseButtons 和画布 `touchAction`；鸟瞰档先退出指针锁。比例尺罗盘在步行时跟 `yaw`。本轮 `use-outdoor-walk.react.test.ts`、`walk-engage.test.ts`、`outdoor-walk-boundary.test.ts`、`walk-view-modes.test.ts` 通过。
+
+### 2026-11-16 20:30–20:55 · 切片 A：工作树体检（fix/outdoor-walk-control）
+
+```text
+日期时间（中国标准时间）：2026-11-16 20:30–20:55，无外部运行 ID
+批次 / 切片 / 状态：切片 A 工作树体检 / 未提交、未 push / 当前红绿已核
+工作目录 / 分支 / HEAD：C:\幕景\Scendance2026 / fix/outdoor-walk-control / b997da81（HEAD 未动）
+本轮修改路径：8 个文件，均只修测试或类型，未改产品行为（见下）
+```
+
+**工作树规模**：已跟踪 42 个文件、+3189 / −670；未跟踪里与本轮相关的新组件 / 测试 / 文档与交接文档第 8 节一致。`.verify-*`、`.tmp-*`、`.g1-reports/`、`ia-mapping/_shots/` 仍是噪声，未纳入。
+
+**diff 体检结论**
+
+- 合同未动：`route-bridge`、`site-plan`、`outdoor-task-progress`、物料生成入参本轮 `git diff` 为空；`panels/scendance-workspace.tsx` 本体未被本批改动（只改了它的测试）。
+- OFM：`openfreemap-tiles.ts` 共享 TileJSON 已与调用方 `AbortSignal` 脱钩，取消只拒绝该路；失败只在仍占缓存位时清空。`outdoor-map-context.ts` 用 `lastInvalidateKey` 防止同版本反复 `invalidate`，并用 `inflightEvidence` 合并同 `project + 边界 + 版本` 的请求；共享请求不绑调用方 signal。
+- 漫游：`use-outdoor-walk.ts` 进场同步保存机位 / 四元数 / Orbit target，退出恢复并清阻尼；`orbitHoldRef` 防退出清理与鸟瞰还原互相覆盖；输入框内 WASD 不走路、方向键不滚页；障碍盒与第三人称回拉走 `walk-collision`。
+- 2D 罗盘：`bearingRef` 独立于 View，平移 / 缩放不清方位；`getBearing` / `orbitByDelta` / `resetNorth` 是新增 bridge 方法，不改既有签名；`cullPad` 缺省 0，北朝上时裁剪与原来一致。
+- 分享：受众分栏、空态、二维码三态（生成中 / 成功 / 画不出）、导出勾选都落在 `share-menu.tsx`；`shareExportPlan` 只决定 PNG 走规划快照还是 3D 帧，不改既有导出回调。
+- 样式：`globals.css` 新增的 `--pegman-*`、`@keyframes sc-pegman-pickup` 各只有一处定义；后出现的 `#tool-walk` / `.oc-gm-walk` 规则是覆盖底色与影子，注释已说明 `background` 简写顺序，未见互相打架。
+- `git diff --check` 干净；仅 `bingo-rail-button.tsx` 有 LF/CRLF 警告（交接文档已记）。
+- OFM 调试仍在：`openfreemap-evidence.ts` 的 `debug()` / `window.__ofmDebug` 与 `console.warn`，按交接文档留到真机验收后再删。
+
+**测试（Node24，frontend 目录，`--maxWorkers=1`）**
+
+```text
+命令：node node_modules/vitest/vitest.mjs run <交接第 5 节 35 个文件> --maxWorkers=1 --testTimeout=15000
+结果：Test Files 35 passed (35)；Tests 371 passed (371)；Duration 42.27s；exit 0
+```
+
+- 默认 5s 超时下连跑两次，两次各只有 1 例红，且不是同一例：第一次 `share-menu.react.test.tsx`，第二次 `scendance-workspace.react.test.tsx`（`Error: Test timed out in 5000ms`）。两文件单独复跑分别 17/17、33/33 通过，属重 React 文件在同批运行时的环境超时，不是断言失败；批量门槛改用 `--testTimeout=15000` 后全绿。
+- 首轮另有 2 例真红，已修：
+  1. `gm-walk-motion.test.ts` 直接读 CRLF 的 `globals.css` 却按 `\n` 找选择器 → 读取后统一换行再断言。
+  2. `use-annotate-draw-shortcuts.react.test.ts` 的 contenteditable 用例红：jsdom 不实现 `isContentEditable`，输入框守卫漏掉 contenteditable 容器 → `isTypingTarget` 增加 `closest('[contenteditable]...')`；测试改用 `setAttribute('contenteditable','true')` 建标准标记。
+
+**tsc --noEmit**
+
+```text
+命令：node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+首跑：10 个错误 / 5 个文件（annotate-draw-tools.test.tsx、gm-compass-host.test.tsx x2、
+      outdoor-map-context.concurrency.test.ts x3、share-menu.react.test.tsx、glb-assets.ts x2）
+修后：无输出，exit 0
+```
+
+- `glb-assets.ts` 是产品代码里唯一的类型错：`texture.image` 联合类型上直接读 `.close()`；改为 `'close' in image` 收窄到 `ImageBitmap | OffscreenCanvas`，行为不变。
+- 其余为测试夹具类型：`getByRole` 返回 `HTMLElement` 与 `HTMLButtonElement[]` 的 `indexOf`、部分句柄断言缺 `as unknown as`、`fetch` mock 未声明参数导致 `calls[0]` 成空元组、`qrcode.toString` 重载取到 `void` 返回。
+
+**代理测试**
+
+```text
+命令：node --test tools/aholo/lux3d-dev-proxy.test.mjs
+结果：tests 221 / pass 221 / fail 0；duration 1.74s
+```
+
+**本轮动过的文件**
+
+```text
+frontend/components/room-organizer/components/gm-walk-motion.test.ts
+frontend/components/room-organizer/components/annotate-draw-tools.test.tsx
+frontend/components/room-organizer/components/gm-compass-host.test.tsx
+frontend/components/room-organizer/hooks/use-annotate-draw-shortcuts.ts
+frontend/components/room-organizer/hooks/use-annotate-draw-shortcuts.react.test.ts
+frontend/components/room-organizer/lib/outdoor-map-context.concurrency.test.ts
+frontend/components/room-organizer/panels/share-menu.react.test.tsx
+frontend/components/room-organizer/three/glb-assets.ts
+```
+
+**仍缺（未因本轮变绿而消失）**
+
+- 真机 / 浏览器视觉验收全部未做：罗盘弯箭头、右下角控件堆、pegman、左栏、绘图五工具、分享三受众、漫游碰撞与穿地、OFM Network 证据、aholo 多模型加载。
+- OFM 调试代码仍在，验收通过后才删；`.verify-ofm-evidence.test.ts` 仍不要提交。
+- 提交白名单未列；`bingo-rail-button.tsx` 换行待统一。
+- 未 commit / 未 push / 未开 PR / 未部署。
+
+### 2026-11-16 21:05–21:15 · 新 main 研究与道具动作 A1
+
+```text
+origin/main = 7ddafd31，比 b997da81 多 26 个提交；HEAD 仍是 main 的祖先。
+新 main 主线：室内分区门符号（六种门）+ 10px 贴边吸附；分层指令；流式摘要；ApplyOnce。
+门是设施符号，不是墙体开口；分区自动门已被 2417ff5b 关掉；出入口仍是 PlanNode 的另一套数据。
+main 里没有按评分选「最佳/备选」道具的代码；现有是每设施最多 5 个模型候选 + 新生成模型置顶。
+feat/people06-labor（8bf2f68f）另有坐姿 clip、E 键交互注册表与两档 LOD，尚未进 main。
+```
+
+- 新增 `lib/prop-interactions.ts` + `prop-interactions.test.ts`：道具 → seat / table / stage / booth / display / barrier / plant / vehicle / unknown；坐具复用 `seat-placement`，椅子给 sit、桌子给 talk、舞台给 wave、围栏/绿植/垃圾桶不注册交互。
+- 命令：Node24 vitest 单文件；结果 9 passed；`tsc --noEmit` 无输出。
+- 队列与合并风险写入 `docs/plans/2026-11-16-main-sync-and-prop-actions.md`。
+- 已建 15 分钟定时任务「Scendance 15min 续跑：道具动作与验收」，下一项 A2 接 `outdoor-interactables`；积分生成 C1 明确不自动跑。
+
+### 2026-11-16 21:15–21:20 · 道具动作 A2（接进户外可交互）
+
+```text
+文件：lib/outdoor-interactables.ts、lib/outdoor-interactables.test.ts、components/outdoor-plan-3d.tsx
+结果：坐具仍走 seatInteractables（坐面高 / 眼高 / 落座回调不变）；桌 / 摊位 / 展柜 / 舞台新增「交谈 · 名称」「挥手 · 名称」条目；围栏 / 绿植 / 车辆保留原名，不冒充可交互动作。
+测试：prop-interactions 9 + outdoor-interactables 13 + use-outdoor-walk 19 + walk-collision 37 = 78 passed；tsc --noEmit 无输出。
+```
+
+- `outdoor-plan-3d.tsx` 的注册表改成 `propInteractables(facilities)`：seat 条目绑 `toggleSeatEntry`，其余绑 `onInteract`；不再重复注册。「交谈 / 挥手」目前只是提示文案与注册条目，真正播人物动作等 A3。
+- 定时任务首次运行（21:17）失败，提示「无法完成操作」；原因待查，优先怀疑自动化运行时的权限 / 外部路径（提示词里含 `C:\Users\endTree\Downloads` 与外部 node 路径）。
+
+### 2026-11-16 21:22–21:26 · A2 复核修正与合并冲突图
+
+```text
+复核（子智能体）：无 P0；P1 三条已修。
+修正：propInteractables 先 normalize ref = ref ?? modelOverride ?? templateId；
+      去掉「标签单独判坐具」分支，避免 kind=facility 却给「坐下」缺 seat 元数据；
+      断言补强：围栏 barrier / 绿植 plant / 垃圾桶、集装箱 unknown，并新增 templateId / modelOverride 生产路径用例。
+测试：prop-interactions 9 + outdoor-interactables 14 = 23 passed；tsc --noEmit 无输出。
+补：去「亭」出摊位词、服务台归桌、餐车归售卖摊位；prop-interactions 10 例，合计 24 passed。
+```
+
+- 子智能体冲突图：main 的 `09ad68aa` / `2417ff5b` / `54137efd` 与本地罗盘改动**无真文本冲突**，同函数不同行段；`54137efd` 的 tsx 7 个 hunk `git apply --check` 全过（最大偏移 +42）。
+- 合并顺序建议：先提交/收口本地罗盘 WIP → `09ad68aa` → `2417ff5b`（必须成对按序，2417 删 09ad 的自动门）→ `54137efd`。
+- 数据仍两套：门 = `PlanFacility`（六种 door templateId）；出入口 = `PlanNode`（entry/exit/both）；`plan-door-snap` 只读 `zone.environment`，不与 nodes 同步。
+- 已新建定时任务「Scendance 续跑 v2（15分钟·工作区内）」：`5,20,35,50 * * * *`，只引用工作区文档，失败不重试、不自动扣积分。旧任务「Scendance 15min 续跑：道具动作与验收」仍启用但无 `automationId`，需在 UI 手动删除。
+
+### 2026-11-16 21:30–21:33 · A3 属性卡只读交互提示
+
+```text
+文件：lib/prop-interactions.ts（新增 propInteractionSummary）
+      components/outdoor-plan-canvas.tsx（属性卡标题下加读条）
+      lib/prop-interactions.test.ts（+1 例）
+口径：ref = modelOverride ?? templateId；只读展示，不可交互的道具不出条。
+显示：可交互：坐下 · 木质餐椅 / 交谈 · 长桌 / 挥手 · 舞台；右侧「漫游中按 E」。
+测试：prop-interactions 11 + outdoor-interactables 14 = 25 passed；tsc --noEmit 无输出。
+未动：panels/scendance-workspace.tsx 本体、合同字段、routeBridge 签名。
+```
+
+### 2026-11-16 21:36–21:38 · B1 门吸附冲突图与 cherry-pick 顺序
+
+```text
+性质：只读研究 + 文档，不改代码，未跑 vitest / tsc。
+结论：origin/main 三笔门提交与本地罗盘/旋转改动无真文本冲突；
+      54137efd 的 tsx 7 个 hunk 对当前脏树 git apply --check 全过（最大偏移 +42）。
+顺序：先收口本地罗盘 WIP（需终树授权）→ 09ad68aa → 2417ff5b（必须紧跟）→ 54137efd。
+风险：10px 阈值用未旋转坐标，旋转下距离不变；合完手测贴边与法线方向。
+数据：门 = PlanFacility（六种 door templateId）；出入口 = PlanNode；plan-door-snap 不读 nodes。
+```
+
+- B1 详情已写入 `docs/plans/2026-11-16-main-sync-and-prop-actions.md` 的「§B1 门吸附 × 本地罗盘冲突图」。
+- 未执行 cherry-pick、commit、push；等终树明确说「合」。
+
+### 2026-11-16 21:42–21:45 · B2 真机验收清单
+
+```text
+性质：只读整理 + 文档，不改代码，未跑 vitest / tsc。
+交付：docs/plans/2026-11-16-main-sync-and-prop-actions.md §B2
+覆盖：OFM Network / 分享三受众 / 罗盘弯箭头 / 漫游碰撞 / aholo 多模型。
+每项含：前置条件、操作步骤、通过标准、取证方式、BLOCKED 口径。
+状态：清单已交付，实机未执行；不把清单完成当成验收通过。
+```
+
+- 新增未打勾项 `B2-run`：需登录态与样例项目，在真人浏览器里逐项打勾并留证。
+- 本次未启动 dev server、未开浏览器、未发布分享、未加载真实 aholo 资源。
+
+### 2026-11-16 21:50–21:54 · D1 375 宽左侧导航复核
+
+```text
+性质：只读复核 + 文档，不改代码，未跑 vitest / tsc。
+结论：原报告把桌面轨内的「展开导航栏」当成移动端入口；
+      375 实际可见入口是独立的「助理菜单」（sc-mobile-agent-entry）；
+      探针可见清单里已有它，但未先点开，所以四个导航项处于预期隐藏态。
+代码链：room-organizer.tsx:475 / 4541 / 4651–4666；mobile-shell.css:10–12 / 150–185。
+剩余：点开「助理菜单」后仍不可见，再查 main 是否带 is-chrome-hidden 与 computed style。
+```
+
+- 新增未打勾项 `D1-verify`：375 宽点一次 `助理菜单`，确认空间/物料/场地/户外规划可达；未复验前不改全局 `.is-chrome-hidden`。
+- 本轮未启动 dev server、未开浏览器，未把静态复核当成真机结论。
+
+### 2026-11-16 21:56–22:00 · D1-verify 375 宽实测（误报确认）
+
+```text
+环境：3210 dev（Node24）+ 本机 Chrome，Playwright 375×812，/editor?r=1。
+初始：main 无 is-chrome-hidden；左轨 data-mobile-open=false / visibility:hidden；助理菜单 visible=true；四项导航 visible=false。
+点助理菜单：左轨 open=true / visibility:visible；空间、物料、场地、户外规划四项全部 visible=true。
+点空间：main 变 has-left-column；左轨收起；四项回到 visible=false（预期）；助理菜单仍可见；consoleErrors=0。
+结论：原“375 左侧导航整组不可见”是探针未展开菜单导致的误报；无需改 CSS。
+```
+
+- D1 与 D1-verify 均已打勾；没有业务代码改动。
+- 临时 dev、Playwright 脚本、日志与截图在验证后清理，不进入工作树。
+
+### 2026-11-16 22:05–22:12 · E1 people06 接入图（只读研究）
+
+```text
+性质：只读研究 + 文档，不改代码，未跑 vitest / tsc。
+对象：origin/feat/people06-labor @ 8bf2f68f。
+结论：当前工作树已与分支同文的部分：seat-placement / walk-seat / interact-registry / use-walk-avatar；
+      当前树已有坐姿抬升、sit clip、E 键注册表、户外 seat 切换。
+真正缺口：person-action-state.ts 不存在；people-anim 缺 setPersonAction / personActionState；
+      outdoor-plan-3d 的 onInteract 只有定义、无调用方；propInteractables 未携带 personAction；
+      户外岗位 avatar 的 talk 被置 null；wave/emote 没有 clip，只能回退 idle。
+不能做：整支 merge、整文件覆盖 outdoor-plan-3d、把 talk:null 当已支持交谈。
+交付：docs/plans/2026-11-16-main-sync-and-prop-actions.md §E1（含模块表 + 最小接入顺序）。
+```
+
+- E1 已打勾；仍是研究项，没有“挥手已接通”这类功能交付。
+- 下一步若继续：先接玩家 avatar 的 talk/wave，再接 NPC；无 clip 前只保留文案。
+
+### 2026-11-16 22:18–22:28 · E2 main 剩余提交冲突图（只读研究）
+
+```text
+性质：只读研究 + 文档，不改代码，未跑 vitest / tsc。
+对象：origin/main = 7ddafd31，比 b997da81 多 26 个提交。
+重叠：只有 5 个文件（4 个代码 + 进度文档）。
+检查：4 个代码文件的整份 main diff 都能应用到当前脏树：
+      mobile-shell.css 1 hunk，offset +8；
+      outdoor-plan-canvas.tsx 7 hunk，offset +2/-8/-14/+43；
+      agent-panel.css 2 hunk，offset +4；
+      agent-panel.tsx 14 hunk，offset ≤1。
+注意：PowerShell 管道直接喂 git apply 会因编码假报 patch does not apply；
+      本次用 UTF-8 临时文件复测，旧“+42”更新为 +43。
+真正风险：agent-panel.tsx 依赖流式后端、Supabase migration、分层指令/ApplyOnce/登录文案新模块；
+      不能只拿一个文件。outdoor-plan-canvas.tsx 能落，但门吸附与本地罗盘需同轮测试手测。
+交付：docs/plans/2026-11-16-main-sync-and-prop-actions.md §E2。
+```
+
+- E2 已打勾；未执行 cherry-pick / merge / commit，仍等终树说「合」。
+- 发现 main 的 `2c6d4319` 修的是 375 户外卡片标题栏被收起、卡片压住唯一入口；这与 D1「整组不可见是误报」不矛盾，是另一个已修状态。
+
+### 2026-11-16 22:26–22:31 · E3 person-action-state 纯函数落地
+
+```text
+性质：代码切片，新增纯函数 + 单测；不接场景、不改现有播放逻辑。
+新增：frontend/components/room-organizer/lib/person-action-state.ts
+      frontend/components/room-organizer/lib/person-action-state.test.ts
+口径：缺片段回退 idle；idle 也缺返回 null；wave/emote 归一次性动作。
+验证：vitest 1 file / 6 tests passed；tsc --noEmit TSC_EXIT=0。
+边界：people-anim / use-walk-avatar / outdoor-plan-3d 均未改，当前无生产 import。
+```
+
+- E3 已打勾；这是“动作解析地基”，不是“挥手已接通”。
+- 下一步：把 `personAction` 挂到道具条目，或先给玩家 avatar 接 talk/wave；仍需单独一轮。
+
+### 2026-11-16 22:30–22:34 · E4 可交互条目携带 personAction
+
+```text
+性质：数据层代码切片；不接 E 键播放、不改座位行为。
+改动：interact-registry.ts 的 InteractableEntry 新增可选 personAction；
+      outdoor-interactables.ts 的 seat→sit、桌/摊位/展柜→talk、舞台→wave，惰性道具不带；
+      outdoor-interactables.test.ts 补断言。
+验证：outdoor-interactables 14 + prop-interactions 11 + person-action-state 6 = 31 passed；
+      interact-registry 11 passed；tsc --noEmit TSC_EXIT=0。
+边界：outdoor-plan-3d 没有消费 entry.personAction，E 键仍只出提示/切座位。
+```
+
+- E4 已打勾；这是“知道该播什么”，不是“已经播了”。
+- 下一步 E5：给玩家 avatar 接 talk/wave（或按 entry.personAction 调最近 NPC）；需单独一轮并补场景测试。
+
+### 2026-11-16 22:36–22:40 · E5/E6 人物动作 API 与道具 E 键
+
+```text
+性质：代码切片；接 NPC 动作，不改座位行为。
+E5：people-anim 新增 setPersonAction / personActionState / setNearestPersonAction；
+    playClip 改用 resolvePersonAction，缺片段回退 idle。
+E6：outdoor-plan-3d 的非座位条目按 entry.personAction 找最近静止 NPC
+    （talk/wave，半径 3.2 m）；无目标/缺片段出 1.8 s 动作提示；座位仍 toggleSeatEntry。
+验证：people-anim 12 + outdoor-interactables 14 + interact-registry 11 = 37 passed；
+      tsc --noEmit TSC_EXIT=0。
+核心回归：10 个相关文件 147 passed（含 glb-assets / use-outdoor-walk / walk-collision / walk-seat）。
+边界：未做浏览器 E2E；户外玩家仍是胶囊体，不会播 talk/wave；
+      wave/emote 无 clip，实际回退 idle 并提示“暂时没有该动作片段”。
+```
+
+- E5、E6 已打勾；这是“NPC 能响应道具动作”，不是“玩家 avatar 已会挥手”。
+- 交接状态与手测步骤已写入计划文档 §F；下一步可做：玩家 avatar 换 GLB（需处理 LOD/加载/漫游相机），或补 crowd 的 talk/wave clip 注册。
+
+### 2026-11-16 22:49 · E7 户外玩家 avatar 接 GLB 只读可行性
+
+```text
+性质：只读研究，不改代码、不跑测试。
+目的：为“玩家 avatar 换 GLB”铺路，避免直接搬室内 hook。
+```
+
+- 校正：`useWalkAvatar` 不是死代码，室内漫游已在 `room-organizer.tsx:3065-3066` 用它；户外 `OutdoorPlan3D` 的玩家仍是 `CapsuleGeometry` + `SphereGeometry`（1001-1013），主循环只摆位（2122-2131）。
+- 新发现（优先修）：户外 crowd 注册时写死 `talk: null`（1114）。E6 的桌/摊位 E 会回退 idle，然后出“这个人物暂时没有该动作片段”；测试假实例自带 talk，没覆盖这个真实注册项。不能用 idle 冒充交谈。
+- 资产边界：`createWalkAvatar` 只返回 idle/walk/sit，不返回 talk；本地 `people.glb` 有 idle/talk/walk、无 sit；people06 云端 27 个角色文档记录为 Idle/Walk/Sit 三条，talk 是否存在需逐个验。
+- 接入建议：新增 `three/outdoor-player-avatar.ts` 专用控制器（不搬 `useWalkAvatar` 的游客/打招呼语义），先做纯控制器 + 单测；再接 `OutdoorPlan3D`，用 `walkRole` 入参和场景 generation 管生命周期。站立/落座 y 都要加 `PLAN_LAYER_BASE_Y=0.052`，否则脚会沉 5.2 cm。
+- 已知边界：没有做代码、没有跑浏览器；E7a/E7b/E7c 已列入计划队列。详细证据与验收口径见计划文档 §E7。
+
+- 下一步建议：先做 E7a 控制器（纯单测、不接场景），再修 E6 的 talk 空片段；wave 仍无资产，不冒充。
+
+### 2026-11-16 22:53–22:55 · E7a 户外玩家 avatar 控制器
+
+```text
+性质：新代码切片；纯控制器 + 单测，不接 OutdoorPlan3D，不改生产入口。
+新增：frontend/components/room-organizer/three/outdoor-player-avatar.ts
+      frontend/components/room-organizer/three/outdoor-player-avatar.test.ts
+口径：加载失败/缺 idle/walk 返回 null；成功才入场景；初始 idle + 隐藏；
+      站立脚底 baseY=0.052；落座用 sitHeadY 对齐；缺 sit 不沉地；
+      thirdPerson 控制显隐；dispose 停 mixer + 移出场景 + 释放模型。
+验证：vitest 1 file / 6 tests passed；tsc --noEmit TSC_EXIT=0。
+边界：没有生产 import、没有接场景、没有浏览器 E2E；talk/wave/LOD 未做。
+```
+
+- E7a 已打勾；这是“可接场景的控制器”，不是“户外玩家已经显示 GLB”。
+- 下一步 E7b：在 `OutdoorPlan3D` 的 avatarGroup 上加载控制器，从 `room-organizer.tsx` 传当前 `walkRole`；保留胶囊体失败兜底。
+
+### 2026-11-16 23:08 · E7b 户外玩家 avatar 接场景 / E7c talk 核验
+
+```text
+性质：生产接线 + 资产只读核验；不改合同字段、routeBridge、SitePlanData。
+改动：outdoor-plan-3d.tsx 新增 walkRole 入参、sceneEpoch 加载 effect、胶囊体兜底；
+      room-organizer.tsx 传 assetId / glbUrl / name；walkFrameRef 改用 OutdoorWalkFrame。
+口径：GLB 加载成功才隐藏胶囊体；失败/加载中/缺角色保留占位；
+      换角色只重载 avatar，不重建地图；第一人称/鸟瞰/接管 NPC 时控制器隐藏。
+E7c：16 个 labor crowd GLB 逐个解析 JSON chunk，全部只有 Idle_Loop / Walk_Loop；
+      27 个角色清单记录为 Idle/Walk/Sit，无 Idle_Talking_Loop。
+      保留 talk: null 与缺片段提示，不把“交谈/挥手”写成已接通，只补证据注释。
+验证：outdoor-player-avatar 7 passed（新增 dispose 后挂新角色）；
+      核心回归 11 文件 154 passed；tsc --noEmit TSC_EXIT=0。
+边界：没有浏览器 E2E；没有真实 crowd GLB 视觉验收；玩家模型在 3D 场景建立后预加载。
+```
+
+- E7b / E7c 已打勾；E7c 是“核验后决定不接线”，不是“交谈已能播放”。
+- 队列剩 `B2-run`、`C1` 两项真人门：前者需登录样例项目逐项走查，后者需真人在场并授权积分。
+
+### 2026-11-16 23:14 · B2-run 只读预检（E7b 后补检查）
+
+```text
+性质：只读；不改代码、不跑浏览器、不打勾 B2-run。
+结论：B2.4 原清单只覆盖碰撞/机位，缺 E7b 玩家 GLB 检查；已在计划 §B2.4a 补 5 条 + 1 条可选。
+路径：户外 3D 接管 -> 左侧「物料」漫游角色分组选人 -> 进漫游 -> HUD/F5 切第三人称。
+选择器：outdoor-walk-hud / outdoor-walk-view / outdoor-interact-hint / outdoor-action-note。
+注意：sc-walk-avatar-controls 是室内 walkthrough，不是户外换角色入口。
+边界：仍需真人登录、样例项目和浏览器；C1 积分仍未动。
+```
+
+- 本轮没有可安全执行的代码项，因此没有重跑测试；上一次已验证 154 例 + tsc 0。
+- `B2-run` 仍未打勾；等真人按 §B2.4a 实机走查后再记 PASS / FAIL / BLOCKED。
+
+### 2026-11-16 23:19 · C1 生成额度跑通只读预检
+
+```text
+性质：只读；不改代码、不点击生成、不消耗额度、不打勾 C1。
+校正入口：属性卡三格打开的是左栏统一生成面板 GenerationSheetHost（room-organizer.tsx:4678），
+  不是 outdoor-facility-generate.tsx；后者无生产引用，仅自身测试引用。
+提交链：generation-sheet.tsx -> submitModelJob -> controller.createGenerationJob(..., crypto.randomUUID(), ...)。
+额度闸门：generationNeedsCredit 对文字/图片 true、导入 GLB false；勾选「消耗额度」后主按钮才亮。
+记录点：scendance:facility-generate-links 的 taskid；面板提示不显示 task id。
+计费：项目 AI 预算 reserved_cents/committed_cents，actual_cents 在 requests 表；
+  客户端 GET /jobs 无 actual_cents，UI 不显示具体金额；C1 扣费需管理端，或确认 provider_usage 含费用。
+风险：网络中断无 unknown 锁/requestId 持久化；成功后 link 无 projectId；
+  提交失败 staged link 不清；旧弹窗虽有回执锁但未挂载。
+结论：C1 仍未打勾；真人按计划 §C1 执行卡只跑一次；金额不可见时记 BLOCKED，不写 PASS。
+边界：未跑测试（无代码改动）；未登录、未提交、未扣费。
+```
+
+- 本轮只完成 C1 预检文档收尾，未执行 C1。
+- 队列仍是 18/20；剩余 `B2-run`、`C1` 两项真人门。

@@ -1,3 +1,5 @@
+import type { PersonAction } from './types';
+
 /**
  * E 键交互 —— 注册表与近邻探测纯函数层（一期零新增依赖）。
  *
@@ -51,6 +53,8 @@ export interface InteractableEntry {
   position?: InteractablePosition | undefined;
   /** kind === 'seat' 时填：落座点 / 坐面高 / 眼高。 */
   seat?: SeatInteractInfo | undefined;
+  /** 命中时建议播放的人物动作；缺省表示只提示、不播动作。 */
+  personAction?: PersonAction | undefined;
 }
 
 /** E 键触发上下文：回调只拿条目与必要的只读快照，不直接碰 three 场景结构。 */

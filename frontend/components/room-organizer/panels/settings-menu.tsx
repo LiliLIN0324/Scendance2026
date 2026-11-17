@@ -40,8 +40,8 @@ export function SettingsMenu({ buttonRef }: { buttonRef?: RefObject<HTMLButtonEl
   }, [open]);
 
   return <div className="sc-tool-menu sc-rail-settings-wrap" ref={rootRef}>
-    <button ref={buttonRef} type="button" className={`sc-rail-settings${open ? ' is-active' : ''}`} aria-label="更多" data-tip="更多" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)}>
-      <MoreHorizontal size={22} aria-hidden="true"/>
+    <button ref={buttonRef} type="button" className={`sc-rail-settings${open ? ' is-active' : ''}`} aria-label="更多" data-tip="更多" aria-haspopup="dialog" aria-expanded={open} aria-pressed={open} onClick={() => setOpen(current => !current)}>
+      <MoreHorizontal size={20} aria-hidden="true"/>
     </button>
     {open && <div className="sc-tool-pop sc-settings-pop" role="dialog" aria-label="更多">
       {/* 官网是站内页面，主层级；新手指引、GitHub 属次要导航，走浅底小胶囊拉开层级。 */}

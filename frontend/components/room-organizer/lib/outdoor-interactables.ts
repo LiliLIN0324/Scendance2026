@@ -12,6 +12,8 @@ import {
   makeInteractableEntry,
   type InteractableEntry,
 } from './interact-registry';
+import { propInteractionProfile } from './prop-interactions';
+import { capabilityForSlug } from './prop-capabilities';
 import {
   seatFacilityTargets,
   type SeatFacilityInput,
@@ -44,6 +46,58 @@ export interface InteractableFacilityInput {
   id: string;
   name: string;
   position: { x: number; y: number };
+}
+
+/**
+ * 把设施列表派生为「道具交互」条目（2026-11-16 丽丽要求）：
+ * - 坐具仍走 seatInteractables，保留坐面高 / 眼高，行为与原来一致；
+ * - 桌 / 柜台 / 摊位 / 展柜 / 舞台按 prop-interactions 给「交谈 / 挥手」文案；
+ * - 围栏 / 绿植 / 车辆等仍注册为 facility（与原 facilityInteractables 一样能被看到），
+ *   但不冒充可交互道具，label 保持原名。调用方若只想拿有动作的条目，按 label 前缀过滤。
+ *
+ * 与 facilityInteractables 二选一：本函数已经包含全部设施，重复调用会出两条。
+ */
+export function propInteractables(
+  facilities: readonly PropInteractableInput[],
+  groundY: number = INTERACTABLE_GROUND_Y,
+): InteractableEntry[] {
+  // PlanFacility 没有 ref；真实 slug 在 modelOverride，模板在 templateId。统一成 ref 再判。
+  const normalized = facilities.map((facility) => {
+    const ref = facility.ref ?? facility.modelOverride ?? facility.templateId;
+    // 能力表定稿（2026-11-17）：目录给什么就做什么，不再逐条猜词。
+    const capabilities = capabilityForSlug(ref);
+    return {
+      ...facility,
+      ref,
+      capabilities,
+      canSeat: capabilities?.kind === 'seat' || capabilities?.kind === 'seat-set',
+    };
+  });
+  const seats = seatInteractables(normalized, groundY);
+  const seatIds = new Set(seats.map(entry => entry.id));
+  const others = normalized
+    .filter(facility => !seatIds.has(facility.id))
+    .map((facility) => {
+      const profile = propInteractionProfile(facility);
+      return makeInteractableEntry({
+        id: facility.id,
+        kind: 'facility',
+        label: profile.interactions.length > 0 ? profile.label : facility.name,
+        position: { x: facility.position.x, y: groundY, z: -facility.position.y },
+        personAction: profile.personAction,
+      });
+    });
+  return [...seats, ...others];
+}
+
+/** 道具交互条目允许带的可选描述；与 prop-interactions 的输入保持同形。 */
+export interface PropInteractableInput extends SeatInteractableInput {
+  category?: string | undefined;
+  tags?: readonly string[] | undefined;
+  /** `PlanFacility.templateId`：内置模板（booth-2x2 / stage-platform-8x6…）。 */
+  templateId?: string | undefined;
+  /** `PlanFacility.modelOverride`：物料库 slug；真实可坐 / 摊位判定主要靠它。 */
+  modelOverride?: string | undefined;
 }
 
 /**
@@ -81,6 +135,7 @@ export function seatInteractables(
       kind: 'seat',
       label: `坐下 · ${target.name}`,
       position: { x: target.x, y: groundY, z: -target.y },
+      personAction: 'sit',
       seat: {
         x: target.x,
         y: target.y,

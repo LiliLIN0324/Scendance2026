@@ -10,6 +10,7 @@ import {
   stepRouteFollower,
 } from '../lib/person-route';
 import type { PersonAction, WalkRoute } from '../lib/types';
+import { resolvePersonAction } from '../lib/person-action-state';
 
 /**
  * PEOPLE-01/04：摆置人物动画的常驻注册表。
@@ -30,6 +31,8 @@ export interface PersonClips {
   walk: ThreeNS.AnimationClip | null;
   /** 坐姿循环（PEOPLE-06 起人物资产带 Sit_Idle_Loop）；旧资产缺省。 */
   sit?: ThreeNS.AnimationClip | null;
+  /** 挥手（2026-11-17）：crowd 无现成片段，由 `person-clip-retarget` 程序化生成。 */
+  wave?: ThreeNS.AnimationClip | null;
 }
 
 /** builders-people 每次重建人物时提交的快照。mixer 由本次新建。 */
@@ -125,20 +128,22 @@ function stanceSeed(id: string): number {
 
 function playClip(entry: PersonAnimEntry, action: PersonAction, fadeSeconds = 0.18): void {
   if (!entry.mixer) return;
-  // PersonAction 比 PersonClips 宽（wave / emote 未落资产），按可空索引取片段。
-  const clip = (entry.clips as unknown as Record<string, ThreeNS.AnimationClip | null | undefined>)[action] ?? null;
+  // 缺片段的动作回退 idle；idle 也缺则保持当前姿态，不播空动作。
+  const resolved = resolvePersonAction(action, entry.clips);
+  if (!resolved) return;
+  const clip = (entry.clips as unknown as Record<string, ThreeNS.AnimationClip | null | undefined>)[resolved] ?? null;
   if (!clip) return;
   const next = entry.mixer.clipAction(clip);
   if (entry.playingAction === next) return;
   if (entry.playingAction) entry.playingAction.fadeOut(fadeSeconds);
   next.reset().fadeIn(fadeSeconds).play();
-  if (action === 'walk') {
+  if (resolved === 'walk') {
     // 步幅同步：路线步速相对自然步速（1.05 m/s ≈ Walk_Loop timeScale 1）。
     const speed = entry.route ? clampWalkTimeScale(routeSpeedOf(entry.route)) : 1;
     next.timeScale = speed;
   }
   entry.playingAction = next;
-  entry.currentAction = action;
+  entry.currentAction = resolved;
 }
 
 function routeSpeedOf(route: WalkRoute): number {
@@ -245,6 +250,84 @@ export function personAnimIds(): string[] {
   return [...entries.keys()];
 }
 
+/** 单个实例的动作状态快照（交互层据此判断是否落座 / 能否播该动作）。 */
+export interface PersonActionState {
+  id: string;
+  /** 外部请求的动作（未被路线覆盖前的目标态）。 */
+  requested: PersonAction;
+  /** 实际正在播放的动作（缺 clip 已回退）。 */
+  current: PersonAction;
+  /** 是否已处于坐姿。 */
+  sitting: boolean;
+  /** 各循环态是否带有可播片段。 */
+  hasClips: Record<'idle' | 'talk' | 'walk' | 'sit' | 'wave', boolean>;
+}
+
+/**
+ * 外部（交互层）请求切换静态人物动作。挂了路线 follower 的实例仍由路线每帧
+ * 驱动 walk/idle，不在这里硬切；坐姿只给到静止岗位人物。
+ */
+export function setPersonAction(id: string, action: PersonAction): void {
+  const entry = entries.get(id);
+  if (!entry) return;
+  entry.action = action;
+  if (!entry.follower) playClip(entry, action);
+}
+
+/** 读一个在册实例的动作状态；不在册返回 null。 */
+export function personActionState(id: string): PersonActionState | null {
+  const entry = entries.get(id);
+  if (!entry) return null;
+  return {
+    id,
+    requested: entry.action,
+    current: entry.currentAction,
+    sitting: entry.currentAction === 'sit',
+    hasClips: {
+      idle: Boolean(entry.clips.idle),
+      talk: Boolean(entry.clips.talk),
+      walk: Boolean(entry.clips.walk),
+      sit: Boolean(entry.clips.sit),
+      wave: Boolean(entry.clips.wave),
+    },
+  };
+}
+
+/** 全部在册实例的动作状态（走查/诊断用）。 */
+export function personActionStates(): PersonActionState[] {
+  const out: PersonActionState[] = [];
+  for (const id of entries.keys()) {
+    const state = personActionState(id);
+    if (state) out.push(state);
+  }
+  return out;
+}
+
+/**
+ * 对道具附近最近的一个静止 NPC 请求动作。只认已挂场景、无路线 follower、
+ * 未被接管的实例；没有候选返回 null。交互层用它把桌/舞台映射到人物动作。
+ */
+export function setNearestPersonAction(
+  position: { x: number; z: number },
+  action: PersonAction,
+  radius = 2.2,
+): string | null {
+  let bestId: string | null = null;
+  let bestDistance = radius;
+  for (const [id, entry] of entries) {
+    if (!entry.group.parent || entry.follower || entry.manualMoving !== null || entry.paused) continue;
+    entry.group.updateWorldMatrix(true, false);
+    const e = entry.group.matrixWorld.elements;
+    const distance = Math.hypot(e[12]! - position.x, e[14]! - position.z);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestId = id;
+    }
+  }
+  if (bestId) setPersonAction(bestId, action);
+  return bestId;
+}
+
 /** 测试/调试用：读一个实例的里程与圈数。 */
 export function personOdometer(id: string): { travelled: number; laps: number } | null {
   const follower = entries.get(id)?.follower;
@@ -312,6 +395,11 @@ export function personWalkStates(): PersonWalkProbe[] {
 if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
   (window as unknown as { __peopleWalkStates?: typeof personWalkStates }).__peopleWalkStates =
     personWalkStates;
+  (window as unknown as { __personActionStates?: typeof personActionStates }).__personActionStates =
+    personActionStates;
+  // 走查用：把动作打到最近一个静止 NPC（仅 dev；生产不暴露）。
+  (window as unknown as { __setPersonAction?: typeof setNearestPersonAction }).__setPersonAction =
+    setNearestPersonAction;
 }
 
 /**

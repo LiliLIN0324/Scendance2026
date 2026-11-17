@@ -1,9 +1,33 @@
-﻿'use client';
+'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
 import { CAR_ROW_LABEL } from '../lib/vehicle-types';
+import { propInteractionProfile, propInteractionRequirement, propInteractionSummary } from '../lib/prop-interactions';
+import { capabilityForSlug } from '../lib/prop-capabilities';
+type ArrangeOption = {
+  slug: string;
+  name: string;
+  width: number;
+  depth: number;
+  reason: string;
+  count: number;
+  templateId: string;
+  material: string | null;
+  positions: ArrangePlacement[];
+};
+
+import { MATERIAL_PRESETS } from '../lib/material-presets';
+import { parseArrangeDemand, layoutGrid, rankArrangeCandidates, type ArrangePlacement } from '../lib/arrange-request';
+import { layoutBanquetSuites, parseSuiteDemand, pickSuiteFurniture } from '../lib/arrange-suite';
+import { layoutAudience, layoutAudienceFacing, layoutStalls, parseSceneDemand } from '../lib/arrange-scene';
+import { applyModelPrice, bomToCsv, bomToMarkdown, buildBom, buildPriceTable, materialLabel, type PlanBom, type PriceRow } from '../lib/plan-bom';
+import { inheritPrice, priceForModel, withModelPrice } from '../lib/price-book';
+import { buildQuoteHtml } from '../lib/quote-document';
+import { moveFacilityToTrash, restoreFacilityFromTrash, type PlanTrashEntry } from '../lib/plan-trash';
+import { materialScopeLabel, parseMaterialCommand } from '../lib/material-command';
+import { loadShippedOnlineModels } from '../lib/online-models';
 
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -74,7 +98,8 @@ import {
   Sparkles,
   Upload,
 } from 'lucide-react';
-import { BasemapTileCache, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
+import { BasemapTileCache, isBasemapOffline, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
+import { applyBearingTransform, bearingAfterOrbit, coalesceAnimationFrame, installUprightText, tileOverflowPad, uprightDelta } from '@/components/room-organizer/lib/gm-compass-bearing';
 import {
   defaultLayerVisibility,
   drawAccessLayer,
@@ -254,7 +279,6 @@ import {
   annotationDistanceM,
   buildAnnotation,
   planShapeDraftTarget,
-  PLAN_SHAPE_KINDS,
   type PlanAnnotationStrokeWidth,
   type PlanShapeKind,
 } from '../lib/site-plan-annotate';
@@ -286,6 +310,11 @@ import { alignedTileCenter } from '../lib/basemap-alignment';
 import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
+import { AnnotateColorBar } from './annotate-color-bar';
+import { AnnotateDrawTools } from './annotate-draw-tools';
+import { useAnnotateDrawShortcuts } from '../hooks/use-annotate-draw-shortcuts';
+import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib/annotate-draw-shortcuts';
+import { applyOutdoorInspectorPanel, type OutdoorInspectorPanel } from '../lib/outdoor-inspector-panels';
 import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
 import { OneplanSticker } from './oneplan-stickers';
@@ -394,7 +423,13 @@ export interface OutdoorPlanCanvasProps {
   onViewChange?: (next: View) => void;
   /** H2-b：编辑提交回调（边界更新/顶点移动/新增分区/分区样式）。不传则只读浏览。 */
   onPlanChange?: (plan: SitePlanData) => void;
+  /** 手画/选区边界闭合后回调（换锚点时通知外层写入状态）。 */
   onVenueBoundaryApplied?: ((anchor: NonNullable<SitePlanData['anchor']>) => void) | undefined;
+  /**
+   * 2026-11-17 用户实测：画红线时按 Esc 只切回浏览模式，外层工作流仍停在「核对具体活动范围」
+   * 并以为已框出范围。取消也是状态变更，必须通知外层清掉这次未确认的候选。
+   */
+  onVenueBoundaryCanceled?: (() => void) | undefined;
   /**
    * P2-c：图层栈与编辑浮窗的外挂宿主元素 id（左栏卡片）。传了则 portal 过去
    * （inline 卡片样式，宿主不存在时自动回落画布内浮窗）；缺省浮窗留在画布内。
@@ -442,7 +477,8 @@ export interface OutdoorPlanCanvasProps {
   onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
   /**
    * 2026-11-12 用户指令「三个按钮对应的卡片要拆开」：测量 / 标注 / 属性 不再共用一张带页签的
-   * 卡，各自一张独立卡片、可同时展开。这里按卡上报展开态（右轨三枚圆钮的按下态）。
+   * 卡，各自一张独立卡片。2026-11-17：测量/标注互斥，开一张收另一张；属性卡独立。
+   * 这里按卡上报展开态（右轨三枚圆钮的按下态）。
    */
   onInspectorChange?: (state: { openTabs: Record<'measure' | 'annotate' | 'selection', boolean> }) => void;
   /**
@@ -696,19 +732,6 @@ const PLACED_KIND_COLORS: Record<PlanInventoryKind, string> = {
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
 
-/**
- * 2026-11-13 自由标注色板：全部取自既有图层/表面 token，不另造 hex；第一项为缺省标注紫。
- * 文本/形状共用取色；旧快照不带 color 时渲染层回退标注紫。
- */
-const ANNOTATE_COLOR_SWATCHES: readonly { value: string; label: string }[] = [
-  { value: PLANNING_LAYER_COLORS.annotate, label: '紫' },
-  { value: PLANNING_SURFACE.panelText, label: '墨' },
-  { value: PLANNING_LAYER_COLORS.boundary, label: '绿' },
-  { value: PLANNING_LAYER_COLORS.route, label: '蓝' },
-  { value: PLANNING_LAYER_COLORS.facility, label: '橙' },
-  { value: PLANNING_LAYER_COLORS.worker, label: '粉' },
-];
-
 /** 2026-11-11 图层卡 OnePlan 镜像：清单 kind → 图层（文件夹行尾的可见性/锁定按层读写）。 */
 const LAYER_OF_INVENTORY_KIND: Record<PlanInventoryKind, PlanLayerRow> = {
   zone: 'zone',
@@ -721,6 +744,9 @@ const LAYER_OF_INVENTORY_KIND: Record<PlanInventoryKind, PlanLayerRow> = {
   measurement: 'measure',
   annotation: 'annotate',
 };
+
+/** 标注浮卡固定宽度：切工具/切颜色时不做横向跳，底部锚定下也不会因文案长度改变视觉重心。 */
+const ANNOTATE_CARD_WIDTH = 286;
 
 /** 顶点手柄的命中半径（CSS px），与 drawBoundaryLayer 的手柄绘制半径一致。 */
 const VERTEX_HANDLE_HIT_PX = 10;
@@ -892,6 +918,34 @@ interface FacilityDragState {
 
 /** P2-i + 2026-11-11「多个面」：画选中设施的编辑手柄（虚线占地框 + 四角改尺寸方柄 + 四边单面拉伸圆柄 + 顶部旋转圆柄）。
     小物件自动走虚拟外扩盒（FACILITY_HANDLE_MIN_FOOTPRINT_PX），手柄永不在不可达位置。 */
+/** 一句话布置 / 套装的落位预览：半透明虚线占地，不写 plan、不进 undo。 */
+function drawArrangePreview(
+  ctx: CanvasRenderingContext2D,
+  facilities: readonly PlanFacility[],
+  viewport: PlanViewport,
+) {
+  if (facilities.length === 0) return;
+  const metersPerPx = planMetersPerPixel(viewport);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  for (const facility of facilities) {
+    const point = planPointToPixel(facility.position, viewport);
+    const w = Math.max(3, facility.size.width / metersPerPx);
+    const h = Math.max(3, facility.size.depth / metersPerPx);
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.rotate((facility.rotationDeg * Math.PI) / 180);
+    ctx.fillStyle = 'rgba(74, 124, 89, 0.22)';
+    ctx.strokeStyle = 'rgba(74, 124, 89, 0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawFacilityHandles(ctx: CanvasRenderingContext2D, viewport: PlanViewport, facility: PlanFacility) {
   const handles = facilityHandles(facility, viewport, FACILITY_HANDLE_MIN_FOOTPRINT_PX);
   ctx.save();
@@ -1096,21 +1150,6 @@ const INVENTORY_KIND_COLORS: Record<PlanInventoryKind, string> = {
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
 
-/** 标注形状四类型图标：矩形/圆形/三角形/线段；与 Lucide 注册表编译期闭环。 */
-const ANNOTATE_SHAPE_ICONS: Record<PlanShapeKind, PlanningIconName> = {
-  rect: 'square',
-  circle: 'circle',
-  triangle: 'triangle-shape',
-  line: 'minus',
-};
-/** 形状菜单右侧点数短标：rect/circle/line 2 点、triangle 3 点。 */
-const ANNOTATE_SHAPE_META: Record<PlanShapeKind, string> = {
-  rect: '2 点',
-  circle: '2 点',
-  triangle: '3 点',
-  line: '2 点',
-};
-
 /** M4：出入口三型前置直选（工具箱目录分列，对齐动线三类），标签与放置命名同源。 */const NODE_KIND_OPTIONS: { kind: PlanNode['kind']; label: string }[] = [
   { kind: 'entry', label: '入口' },
   { kind: 'exit', label: '出口' },
@@ -1223,13 +1262,21 @@ export interface OutdoorPlanCanvasHandle {
   addFacility(facility: PlanFacility): boolean;
   /** M5：单条设施删除；不存在回 false。 */
   removeFacility(id: string): boolean;
+  /** 2026-11-17 从回收站恢复；条目不存在回 false。 */
+  restoreFacility(id: string): boolean;
   /** M5：单条设施属性改；不存在回 false。 */
   updateFacility(id: string, patch: Partial<Pick<PlanFacility,
-    'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride'
+    'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride' | 'materialPreset' | 'unitPrice' | 'role'
     | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
-  >> & { size?: { width: number; depth: number } }): boolean;
+  >> & { size?: { width: number; depth: number }; unitPrice?: number | undefined; role?: PlanFacility['role'] | undefined }): boolean;
   /** 当前 2D 视口（切 3D 时用来对着同一中心把地图斜起来）。 */
   getView(): PlanViewport;
+  /** 2D 罗盘方位角（弧度）。与 3D getBearing 同号：0 = 北朝上。 */
+  getBearing(): number;
+  /** 2D 罗盘转角。正值让方位角减小，屏幕上的北顺时针转。 */
+  orbitByDelta(deltaTheta: number): void;
+  /** 2D 罗盘回正北：只清方位角，不改中心与缩放。 */
+  resetNorth(): void;
   /** 当前绘制/浏览模式：3D 里非浏览态要关掉左键环绕，把点击交给编辑。 */
   getMode(): string;
   /** 2026-11-12 B1 选择工具：切绘制/浏览模式（右栏工具排「选择」钮转发）。 */
@@ -1301,6 +1348,16 @@ export interface PlanEditVisuals {
   selectedFacilityId: string | null;
   /** 2026-11-12 3D 手柄：设施层当前可直接编辑（浏览/选择模式 + 未锁定）；false 时 3D 不挂柄。 */
   facilityEditable: boolean;
+  /** 2026-11-17 一句话布置/套装的批量落位预览：3D 以半透明体块显示，确认前不落库。 */
+  arrangePreview: ReadonlyArray<{
+    templateId: string;
+    name: string;
+    position: PlanPoint;
+    rotationDeg: number;
+    width: number;
+    depth: number;
+    modelOverride?: string | undefined;
+  }> | null;
   draft: {
     ring: PlanPoint[];
     ringColor: string;
@@ -1368,6 +1425,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onViewChange,
   onPlanChange,
   onVenueBoundaryApplied,
+  onVenueBoundaryCanceled,
   panelsHostId,
   infoPanelHostId,
   libraryPanelHostId,
@@ -1436,6 +1494,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     lat: initialView?.lat ?? (plan.anchor?.lat ?? 30.2545),
     zoom: initialView?.zoom ?? (base === 'floor' ? 20 : 16),
   });
+  // 2D 罗盘方位角，不进 View：平移/缩放/飞点不该把它清掉。与 3D getBearing 同号。
+  const bearingRef = useRef(0);
+  const bearingDrawRafRef = useRef(0);
   const sourceRef = useRef<CanvasBasemapSource>(source);
   const planRef = useRef<SitePlanData>(plan);
   // 2026-11-11 图层（Level = 独立设计方案，非楼层）：活动层 id 同时进 state（面板渲染）与 ref（draw/命中读取）。
@@ -1472,6 +1533,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
+  // Esc 取消画线要通知外层工作流；保持最新回调，键盘监听只注册一次。
+  const onVenueBoundaryCanceledRef = useRef(onVenueBoundaryCanceled);
+  onVenueBoundaryCanceledRef.current = onVenueBoundaryCanceled;
   const draftRef = useRef<PlanPoint[]>([]);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
@@ -1514,6 +1578,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间在画布顶部给一枚轻提示。
   const [basemapLoading, setBasemapLoading] = useState(false);
   const basemapLoadingRef = useRef(false);
+  /** 2D 底图全部重试失败后的显式降级态：纸面底图 + 顶部「离线」标。 */
+  const [basemapOffline, setBasemapOffline] = useState(false);
+  const basemapOfflineRef = useRef(false);
   const workerRoleRef = useRef('安保');
   const workerCountRef = useRef(1);
   // 2026-11-12 活动包物件预设：动线（颜色/名称/线型）、分区（颜色/名称）、人员点位色。
@@ -1711,6 +1778,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [mode, setModeState] = useState<PlanningEditMode>('view');
   const [zoneSemantic, setZoneSemantic] = useState<PlanningZoneSemantic>('audience');
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [oneLine, setOneLine] = useState('');
+  const [oneLineBusy, setOneLineBusy] = useState(false);
+  const [arrangeOptions, setArrangeOptions] = useState<ArrangeOption[] | null>(null);
+  const [swapOptions, setSwapOptions] = useState<Array<{ slug: string; name: string; width: number; depth: number }> | null>(null);
+  const [swapBusy, setSwapBusy] = useState(false);
+  const [bomText, setBomText] = useState<string | null>(null);
+  /** 2026-11-17 清单面板改用真正的表格排版，不再把 Markdown 原文塞进 <pre>。 */
+  const [bomSnapshot, setBomSnapshot] = useState<PlanBom | null>(null);
+  const [arrangePreview, setArrangePreview] = useState<{ label: string; count: number } | null>(null);
+  const arrangePreviewRef = useRef<PlanFacility[] | null>(null);
+  const [priceRows, setPriceRows] = useState<PriceRow[]>([]);
+  /** 2026-11-17 报价单抬头：项目名/客户/有效期/报价人，由用户填写（不猜、不伪造）。 */
+  const [quoteMeta, setQuoteMeta] = useState({ projectName: '', client: '', validUntil: '', preparedBy: '' });
   /** 2026-11-15：边界/范围提交后的分区越界清单（提示条 + 一键收进）。 */
   const [zoneOverflow, setZoneOverflow] = useState<ZoneBoundsOverflow[]>([]);
   const [zoneUndoAvailable, setZoneUndoAvailable] = useState(false);
@@ -1929,9 +2009,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 2026-11-11 用户指令：自由标注 UI 态（形状类型/草稿计数/选中/文本就地输入框）。
   const [annotateShape, setAnnotateShape] = useState<PlanShapeKind>('rect');
   const [annotateDraftCount, setAnnotateDraftCount] = useState(0);
+  /** 再点当前工具退出时的轻提示（只在这一处展示，避免依赖选中实体卡的状态位）。 */
+  const [annotateNotice, setAnnotateNotice] = useState<string | null>(null);
   const [annotateColor, setAnnotateColor] = useState<string>(PLANNING_LAYER_COLORS.annotate);
   const [annotateStrokeWidth, setAnnotateStrokeWidth] = useState<PlanAnnotationStrokeWidth>('thin');
-  const [annotateMenuOpen, setAnnotateMenuOpen] = useState(false);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   /** 文本标注就地输入框：锚点（米制）+ 屏幕位置（渲染时现算）+ 草稿文本。 */
   const [noteInput, setNoteInput] = useState<{ pt: PlanPoint; value: string } | null>(null);
@@ -1966,7 +2047,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
   // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
   const [infoOpen, setInfoOpen] = useState(true);
-  // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起，可并存。
+  // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起。
+  // 2026-11-17 用户：测量与标注不能同时用，就不该同时打开；开一张自动收另一张，属性卡保持独立。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
   // 2026-11-16 用户指令：标注卡不要再和属性卡一起挤在右上角；作为「标注」钮的
   // 上浮面板锚定到底条按钮上方，像地图工具栏的 popover 一样有明确的来处。
@@ -1987,8 +2069,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const snapPoint = useCallback((pt: PlanPoint, viewport: PlanViewport): PlanPoint => (
     snapOnRef.current ? snapPointToGrid(pt, viewport) : pt
   ), []);
-  const setInspectorPanel = useCallback((tab: 'measure' | 'annotate' | 'selection', open: boolean) => {
-    setInspectorPanels(current => (current[tab] === open ? current : { ...current, [tab]: open }));
+  const setInspectorPanel = useCallback((tab: OutdoorInspectorPanel, open: boolean) => {
+    setInspectorPanels(current => applyOutdoorInspectorPanel(current, tab, open));
   }, []);
   // 2026-11-12 「好用一点的交互」：卡头可折叠（只收内容、不关卡片），三张卡同时开着也不挤。
   const [inspectorCollapsed, setInspectorCollapsed] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
@@ -2103,8 +2185,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     groupDragRef.current = null;
     marqueeRectRef.current = null;
     if (next !== 'select' && next !== 'view') clearMultiSelection(false);
+    // 2026-11-17：测量/标注真正互斥——进入任一种绘制工具就收起另一张工具卡，避免“卡开着但不是当前工具”。
+    if (next === 'measure') setInspectorPanel('annotate', false);
+    if (next === 'note' || next === 'shape') setInspectorPanel('measure', false);
     setModeState(next);
     setEditMessage(null);
+    setAnnotateNotice(null);
     onModeChange?.(next);
     // 2026-11-16 用户「我现在好像画不了场地边界了啊？」：
     // 锁只该挡「没选工具时的误触」。点了「画边界 / 编辑边界」就是明摆着要改几何，
@@ -2373,6 +2459,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onInspectorChange?.({ openTabs: inspectorPanels });
   }, [inspectorPanels, onInspectorChange]);
 
+  // 标注卡关闭后不再保留上一次退出提示；下次开卡从默认提示开始。
+  useEffect(() => {
+    if (!inspectorPanels.annotate) setAnnotateNotice(null);
+  }, [inspectorPanels.annotate]);
+
   // 标注面板锚点跟随底条工具钮；窗口变化时重算，保证弹出层始终在按钮正上方。
   // 用 layout effect 在绘制前落位，避免先闪一下右上角再跳到底条上方。
   useLayoutEffect(() => {
@@ -2392,7 +2483,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setAnnotateAnchor(null);
         return;
       }
-      const halfPanel = 78;
+      const panelWidth = Math.min(ANNOTATE_CARD_WIDTH, window.innerWidth - 24);
+      const halfPanel = panelWidth / 2;
       const margin = 12;
       const left = Math.min(
         Math.max(rect.left + rect.width / 2, margin + halfPanel),
@@ -2400,12 +2492,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       );
       setAnnotateAnchor({ left, bottom: window.innerHeight - rect.top + 10 });
     };
+    // 先在 layout effect 里同步落位，避免首帧按右上角渲染后再跳到底条上方；
+    // 再排一帧兜底底条刚挂上、按钮尺寸尚未稳定的情况。
+    place();
     raf = window.requestAnimationFrame(place);
+    // 底条从收起态展开时，按钮是后挂上的；收到通知再落一次位，避免浮卡留在右上角。
+    const onDockOpened = (): void => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(place);
+    };
     window.addEventListener('resize', place);
+    window.addEventListener('scendance:outdoor-dock-opened', onDockOpened);
     document.addEventListener('scroll', place, true);
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener('resize', place);
+      window.removeEventListener('scendance:outdoor-dock-opened', onDockOpened);
       document.removeEventListener('scroll', place, true);
     };
   }, [inspectorPanels.annotate]);
@@ -2495,6 +2597,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     basemapLoadingRef.current = loading;
     setBasemapLoading(loading);
   }, []);
+  const publishBasemapOffline = useCallback((offline: boolean) => {
+    if (basemapOfflineRef.current === offline) return;
+    basemapOfflineRef.current = offline;
+    setBasemapOffline(offline);
+  }, []);
 
   const draw = useCallback(() => {
     const stage = stageRef.current;
@@ -2522,6 +2629,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     baseCtx.clearRect(0, 0, cssW, cssH);
     planCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     planCtx.clearRect(0, 0, cssW, cssH);
+    const bearing = bearingRef.current;
+    applyBearingTransform(baseCtx, cssW, cssH, bearing);
+    applyBearingTransform(planCtx, cssW, cssH, bearing);
+    installUprightText(baseCtx, () => bearingRef.current);
+    installUprightText(planCtx, () => bearingRef.current);
 
     const v = viewRef.current;
     const activeSource = sourceRef.current;
@@ -2560,11 +2672,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 场地轮廓/分区/设施/动线由下面的业务层照常叠上来，所以室内外是同一套画布代码。
       paintFloorGrid(baseCtx, viewport, cssW, cssH);
       publishBasemapLoading(false);
+      publishBasemapOffline(false);
     } else if (!basemapVisibleRef.current) {
       // 图层里关了底图：不再铺瓦片，业务层照常画。
       publishBasemapLoading(false);
+      publishBasemapOffline(false);
     } else {
-    const grid = visibleTileGrid(tileCenter.lng, tileCenter.lat, tileZoom, cssW / overScale, cssH / overScale);
+    // 先铺纸面网格：瓦片全挂时不会留白屏，瓦片到了直接盖在上面。
+    paintFloorGrid(baseCtx, viewport, cssW, cssH);
+    const pad = tileOverflowPad(cssW, cssH, bearing);
+    const grid = visibleTileGrid(tileCenter.lng, tileCenter.lat, tileZoom, (cssW + pad * 2) / overScale, (cssH + pad * 2) / overScale);
     if (!basemapCacheRef.current) basemapCacheRef.current = new BasemapTileCache({ max: 1200 });
     const siteFocus = (() => {
       if (current.boundary.length >= 3) {
@@ -2579,7 +2696,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
       return planPointToPixel({ x: 0, y: 0 }, viewport);
     })();
-    paintBasemapTiles({
+    const painted = paintBasemapTiles({
       ctx: baseCtx,
       cache: basemapCacheRef.current,
       zoom: v.zoom,
@@ -2590,6 +2707,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       cssH,
       tileSize: TILE,
       tiles: grid.tiles,
+      cullPad: pad,
       focusX: siteFocus.x,
       focusY: siteFocus.y,
       urlsFor: (z, x, y) => {
@@ -2609,8 +2727,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       },
     });
     // 「加载中」信号取限流器视角（在途+排队）：成败都会结算，归零可靠；
-    // paint 结果里的 pending 含已失败格（网络断时永远 >0），不能拿来当转圈依据。
+    // 全部重试失败（在途已归零、一张没画上、错误≥3）才判离线，避免把慢网误报成断网。
     publishBasemapLoading(basemapCacheRef.current.loadingCount > 0);
+    publishBasemapOffline(isBasemapOffline({
+      loadingCount: basemapCacheRef.current.loadingCount,
+      errors: basemapCacheRef.current.stats.errors,
+      drawn: painted.drawn,
+      fallback: painted.fallback,
+    }));
     }
 
     // 2026-11-16 用户：「这个文字是不是也要根据不同的地图给适配？深色的话分区就要是白色的」。
@@ -2855,6 +2979,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           });
         }
       }
+      // 一句话布置 / 套装的落位预览（不落库、不进 undo，确认后才写 plan）。
+      const arrangeGhost = arrangePreviewRef.current;
+      if (arrangeGhost?.length) drawArrangePreview(planCtx, arrangeGhost, viewport);
       // P2-i：选中设施的可直接拖拽手柄（四角改尺寸 + 顶部旋转）；锁定设施层或非浏览模式不画。
       // 2026-11-12 B2：选择（select）模式同样可用（OnePlan Selection tool 下也能旋转/改尺寸）。
       const selectedForHandles = selectedFacilityRef.current
@@ -3215,6 +3342,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     drawRef.current = draw;
   }, [draw]);
 
+  useEffect(() => () => {
+    if (bearingDrawRafRef.current) cancelAnimationFrame(bearingDrawRafRef.current);
+  }, []);
+
   // 2026-11-11 统一视图：落位投影层变了（物料/实景扫描增删改）就重画一次。
   useEffect(() => {
     draw();
@@ -3471,6 +3602,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
+      // 2026-11-17 用户实测：手画活动范围时按 Esc 只切回浏览，外层仍停在「核对具体活动范围」，
+      // 地图上又留着这次草稿，看起来像「已框出、待写进方案」。Esc 是取消这次画线：
+      // 清掉草稿、退出模式，并通知工作流撤掉未确认候选，绝不把它留在待写入状态。
+      if (modeRef.current === 'boundary') {
+        event.preventDefault();
+        event.stopPropagation();
+        const hadDraft = draftRef.current.length > 0;
+        setMode('view');
+        setEditMessage(
+          hadDraft
+            ? '已取消这次画线：未写入活动范围。需要时再点「在地图上手画活动范围」。'
+            : '已退出画线模式；活动范围未改动。',
+        );
+        onVenueBoundaryCanceledRef.current?.();
+        return;
+      }
       // 2026-11-16 用户：「点 esc 就退出物体编辑模式」——选择模式的 Esc 一步到位：
       // 清空选中（属性卡、3D 手柄随之收回）并回到浏览模式。
       if (modeRef.current === 'select') {
@@ -3629,6 +3776,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // 2026-11-16 绘图五工具（Figma）：T 文本 / R 矩形 / O 圆形 / Y 三角形 / L 线段。
+  // 再按当前工具不重进，避免清掉半成品；落位旋转仍独占 facility 下的 R。
+  useAnnotateDrawShortcuts({
+    enabled: Boolean(onPlanChange),
+    getMode: () => modeRef.current,
+    getShape: () => annotateShapeRef.current,
+    onReveal: () => {
+      // 底条收起时按 T/R/O/Y/L：先把底条展开，标注浮卡才有锚点，不会闪到右上角。
+      window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
+      setInspectorPanel('annotate', true);
+    },
+    onNote: () => setMode('note'),
+    onShape: kind => {
+      annotateShapeRef.current = kind;
+      setAnnotateShape(kind);
+      setMode('shape');
+    },
+  });
+
   const viewportOverrideRef = useRef<PlanViewport | null>(null);
 
   function currentViewport(): PlanViewport {
@@ -3655,7 +3821,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const stage = stageRef.current;
     if (!stage) return null;
     const rect = stage.getBoundingClientRect();
-    const px = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const w = stage.clientWidth || rect.width;
+    const h = stage.clientHeight || rect.height;
+    const upright = uprightDelta(localX - w / 2, localY - h / 2, bearingRef.current);
+    const px = { x: upright.x + w / 2, y: upright.y + h / 2 };
     return { px, pt: planPixelToPoint(px, currentViewport()) };
   }
 
@@ -3668,12 +3839,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function pan(dx: number, dy: number) {
     const v = viewRef.current;
+    const moved = uprightDelta(dx, dy, bearingRef.current);
     const w = 2 ** v.zoom * TILE;
-    const dLng = -dx / w * 360;
+    const dLng = -moved.x / w * 360;
     const latRad = v.lat * Math.PI / 180;
     // H3-c 修复：跟手平移——下拖（dy 正）相机北移，屏幕位移 = dLat·world·sec/360 = dy；
     // 旧版符号相反且少 2π 因子（下拖 40px 内容反而上移约 6px）。
-    const dLat = dy / w * 360 * Math.cos(latRad);
+    // 罗盘转过之后，先把屏幕位移旋回北朝上，这条公式不用改号。
+    const dLat = moved.y / w * 360 * Math.cos(latRad);
     commitView({
       lng: clamp(v.lng + dLng, -180, 180),
       lat: clamp(v.lat + dLat, -85, 85),
@@ -3719,8 +3892,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const px = rect && clientX !== undefined && clientY !== undefined
       ? { x: clientX - rect.left, y: clientY - rect.top }
       : { x: W / 2, y: H / 2 };
-    const dx = px.x - W / 2;
-    const dy = px.y - H / 2;
+    const rawDx = px.x - W / 2;
+    const rawDy = px.y - H / 2;
+    const upright = uprightDelta(rawDx, rawDy, bearingRef.current);
+    const dx = upright.x;
+    const dy = upright.y;
     const world = 2 ** v.zoom * TILE;
     const world2 = 2 ** nextZoom * TILE;
     // 与 pan() 同一套小角度线性近似：先取指针相对中心的经纬度，缩放后再把中心挪到
@@ -3754,6 +3930,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ctx.drawImage(planCanvas, 0, 0);
     return encodeStageCover(composite);
   }
+
+  const scheduleBearingDraw = (): void => {
+    bearingDrawRafRef.current = coalesceAnimationFrame(
+      bearingDrawRafRef.current,
+      (callback) => requestAnimationFrame(() => {
+        bearingDrawRafRef.current = 0;
+        callback();
+      }),
+      () => { drawRef.current(); },
+    );
+  };
 
   // P2-g：对外命令句柄（室内工具排通用钮转发：撤销/重做/缩放/截图）。
   // 不写依赖数组：每次渲染重建，句柄永远拿到当帧的闭包（这些函数都读 ref，成本可忽略）。
@@ -3909,6 +4096,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       deleteFacility(id);
       return true;
     },
+    restoreFacility: (id: string) => restoreTrashedFacility(id),
     /** M5：单条设施属性改；不存在回 false。 */
     updateFacility: (id: string, patch) => {
       if (!planRef.current.facilities.some(f => f.id === id)) return false;
@@ -3916,20 +4104,45 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return true;
     },
     getView: () => currentViewport(),
+    getBearing: () => bearingRef.current,
+    orbitByDelta: (deltaTheta: number) => {
+      if (!deltaTheta || !Number.isFinite(deltaTheta)) return;
+      bearingRef.current = bearingAfterOrbit(bearingRef.current, deltaTheta);
+      scheduleBearingDraw();
+    },
+    resetNorth: () => {
+      if (!bearingRef.current) return;
+      bearingRef.current = 0;
+      scheduleBearingDraw();
+    },
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
     setMeasureKind: (kind: PlanMeasureKind) => applyMeasureKind(kind),
     getMeasureKind: () => measureKindRef.current,
     setSnapOn: (on: boolean) => setSnapOn(on),
     setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => {
-      // 2026-11-12 三张卡拆开：每张卡独立展开/收起，互不影响。
+      // 2026-11-17 用户：测量/标注不能同时用，就不该同时开；属性卡只读，保持独立。
       if (!tab) {
-        setInspectorPanels(open ? { measure: true, annotate: true, selection: true } : { measure: false, annotate: false, selection: false });
+        setInspectorPanels(open ? { measure: true, annotate: false, selection: true } : { measure: false, annotate: false, selection: false });
         setSelectionPanelEnabled(open);
         return;
       }
       // 属性卡是总开关：关闭后点选物件不再弹属性卡。
       if (tab === 'selection') { setSelectionPanelEnabled(open); return; }
+      // 打开一张工具卡时，先退出另一张卡对应的绘制模式，避免卡和画布工具各说各话。
+      if (open && tab === 'measure' && (modeRef.current === 'note' || modeRef.current === 'shape')) setMode('view');
+      if (open && tab === 'annotate') {
+        // 键盘 T/R/O/Y/L 会直接开卡；底条可能还收着，先展开底条让浮卡有锚点，再落卡。
+        window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
+        if (modeRef.current === 'measure') setMode('view');
+        // 重新开卡时清掉上次退出留下的轻提示，避免一开卡就显示旧消息。
+        setAnnotateNotice(null);
+      }
+      // 关闭标注卡等于收起标注工具；否则画布还在画、工具条却没了。
+      if (!open && tab === 'annotate') {
+        if (modeRef.current === 'note' || modeRef.current === 'shape') setMode('view');
+        setAnnotateNotice(null);
+      }
       setInspectorPanel(tab, open);
       // 从右轨重新打开时顺手展开卡身，避免「点了按钮但看不到内容」。
       if (open) setInspectorCollapsed(current => (current[tab] ? { ...current, [tab]: false } : current));
@@ -4065,6 +4278,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 2026-11-12 3D 手柄：把选中设施与可编辑态透出，3D 侧只画柄不拷贝编辑逻辑。
         selectedFacilityId: selectedFacilityRef.current,
         facilityEditable: !!onPlanChange && !layerLocked('facility') && (modeRef.current === 'view' || modeRef.current === 'select'),
+        arrangePreview: arrangePreviewRef.current?.map(facility => ({
+          templateId: facility.templateId,
+          name: facility.name,
+          position: facility.position,
+          rotationDeg: facility.rotationDeg,
+          width: facility.size.width,
+          depth: facility.size.depth,
+          ...(facility.modelOverride ? { modelOverride: facility.modelOverride } : {}),
+        })) ?? null,
         draft: {
           ring,
           ringColor: mode === "zone"
@@ -5252,9 +5474,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function updateFacility(
     id: string,
     patch: Partial<Pick<PlanFacility,
-      'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride' | 'zoneId'
+      'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride' | 'materialPreset' | 'zoneId' | 'unitPrice' | 'role'
       | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
-    >> & { size?: { width: number; depth: number } },
+    >> & { size?: { width: number; depth: number }; unitPrice?: number | undefined; role?: PlanFacility['role'] | undefined },
   ) {
     // 空名会让 plan 过不了契约校验：改名时忽略空值。
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
@@ -5278,11 +5500,428 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan({ ...current, facilities });
   }
 
+  /**
+   * 2026-11-17 一句话入口：同一行既认「改材质」，也认「按需求排道具」。
+   * 两者都走 commitPlan（可一步撤销）；解析不出来就明说，不猜。
+   */
+  async function runOneLineCommand(raw: string) {
+    const text = raw.trim();
+    if (!text) return;
+    const material = parseMaterialCommand(text);
+    const current = planRef.current;
+    if (material) {
+      const preset = material.preset === 'original' ? undefined : material.preset;
+      const targets = new Set<string>();
+      if (material.scope === 'all') {
+        for (const facility of current.facilities) targets.add(facility.id);
+      } else if (material.scope === 'type') {
+        const word = material.typeWord ?? '';
+        for (const facility of current.facilities) {
+          if (word && `${facility.name}${facility.templateId}`.includes(word)) targets.add(facility.id);
+        }
+      } else {
+        if (selectedFacilityId) targets.add(selectedFacilityId);
+        for (const id of multiSelectedFacilityIds) targets.add(id);
+      }
+      if (targets.size === 0) {
+        setEditMessage('没有命中任何物件：先选中一个，或说「全部 / 所有椅子」。');
+        return;
+      }
+      commitPlan({
+        ...current,
+        facilities: current.facilities.map(facility =>
+          targets.has(facility.id) ? { ...facility, materialPreset: preset } : facility,
+        ),
+      });
+      setEditMessage(`已把${materialScopeLabel(material)}改成「${MATERIAL_PRESETS.find(item => item.id === material.preset)?.label ?? material.preset}」，可一步撤销。`);
+      setOneLine('');
+      return;
+    }
+    const scene = parseSceneDemand(text);
+    if (scene) {
+      if (current.boundary.length < 3) {
+        setEditMessage('先画场地边界，再排场景。');
+        return;
+      }
+      setOneLineBusy(true);
+      try {
+        const { models } = await loadShippedOnlineModels();
+        const catalogue = models.map(model => ({
+          slug: model.slug,
+          name: model.name,
+          width: model.width,
+          depth: model.depth,
+          kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+        }));
+        const book = current.priceBook;
+        if (scene.kind === 'audience') {
+          const { seat } = pickSuiteFurniture(catalogue);
+          if (!seat) {
+            setEditMessage('物料库里没有可坐的座椅。');
+            return;
+          }
+          const stage = current.facilities.find(facility => facility.role === 'stage')
+            ?? current.facilities.find(facility => /舞台|主台|stage/i.test(`${facility.name} ${facility.templateId}`));
+          const placements = stage
+            ? layoutAudienceFacing({
+              boundary: current.boundary,
+              count: scene.count,
+              seatWidth: seat.width,
+              seatDepth: seat.depth,
+              stage: {
+                x: stage.position.x,
+                y: stage.position.y,
+                width: stage.size.width,
+                depth: stage.size.depth,
+              },
+              ...(scene.aisleM !== null ? { aisleM: scene.aisleM } : {}),
+            })
+            : layoutAudience({
+              boundary: current.boundary,
+              count: scene.count,
+              seatWidth: seat.width,
+              seatDepth: seat.depth,
+              ...(scene.aisleM !== null ? { aisleM: scene.aisleM } : {}),
+            });
+          if (placements.length === 0) {
+            setEditMessage(`边界放不下 ${scene.count} 个座位。`);
+            return;
+          }
+          const facilities = placements.map(point => inheritPrice({
+            id: crypto.randomUUID(),
+            templateId: 'chair',
+            name: seat.name,
+            position: { x: point.x, y: point.y },
+            rotationDeg: point.rotationDeg,
+            size: { width: seat.width, depth: seat.depth },
+            notes: '',
+            modelOverride: seat.slug,
+          }, book));
+          previewFacilities(facilities, `观礼区 ${facilities.length} 座`);
+          setEditMessage(`预览：观礼区 ${facilities.length} 座（${stage ? '面向舞台' : '未找到舞台，按默认前场'}），确认后落库。`);
+          setOneLine('');
+          return;
+        }
+        const stall = catalogue
+          .filter(item => /摊|棚|booth|stall|tent|市集/i.test(item.name))
+          .sort((a, b) => Math.abs(Math.max(a.width, a.depth) - 2) - Math.abs(Math.max(b.width, b.depth) - 2))[0]
+          ?? catalogue.find(item => item.kind === 'booth')
+          ?? null;
+        if (!stall) {
+          setEditMessage('物料库里没有摊位/棚房模型。');
+          return;
+        }
+        const placements = layoutStalls({
+          boundary: current.boundary,
+          count: scene.count,
+          stallWidth: stall.width,
+          stallDepth: stall.depth,
+          ...(scene.aisleM !== null ? { aisleM: scene.aisleM } : {}),
+          layout: scene.stallLayout ?? 'two-sided',
+          blocked: (current.buildings ?? []).map(building => {
+            const xs = building.points.map(point => point.x);
+            const ys = building.points.map(point => point.y);
+            return {
+              x: (Math.min(...xs) + Math.max(...xs)) / 2,
+              y: (Math.min(...ys) + Math.max(...ys)) / 2,
+              width: Math.max(...xs) - Math.min(...xs),
+              depth: Math.max(...ys) - Math.min(...ys),
+            };
+          }),
+        });
+        if (placements.length === 0) {
+          setEditMessage(`边界放不下 ${scene.count} 个摊位。`);
+          return;
+        }
+        const facilities = placements.map(point => inheritPrice({
+          id: crypto.randomUUID(),
+          templateId: 'booth-2x2',
+          name: stall.name,
+          position: { x: point.x, y: point.y },
+          rotationDeg: point.rotationDeg,
+          size: { width: stall.width, depth: stall.depth },
+          notes: '',
+          modelOverride: stall.slug,
+        }, book));
+        previewFacilities(facilities, `摊位 ${facilities.length} 个`);
+        setEditMessage(`预览：摊位 ${facilities.length} 个（${scene.stallLayout === 'single' ? '单侧' : scene.stallLayout === 'back-to-back' ? '背靠背' : '两侧'}，摊口朝通道），确认后落库。`);
+        setOneLine('');
+      } catch {
+        setEditMessage('物料库读取失败，稍后再试。');
+      } finally {
+        setOneLineBusy(false);
+      }
+      return;
+    }
+    const suite = parseSuiteDemand(text);
+    if (suite) {
+      if (current.boundary.length < 3) {
+        setEditMessage('先画场地边界，再成套排桌。');
+        return;
+      }
+      setOneLineBusy(true);
+      try {
+        const { models } = await loadShippedOnlineModels();
+        const catalogue = models.map(model => ({
+          slug: model.slug,
+          name: model.name,
+          width: model.width,
+          depth: model.depth,
+          kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+        }));
+        const { table, seat } = pickSuiteFurniture(catalogue);
+        if (!table || !seat) {
+          setEditMessage('物料库里缺桌子或椅子，套装排不了。');
+          return;
+        }
+        const layout = layoutBanquetSuites({
+          boundary: current.boundary,
+          groups: suite.groups,
+          perTable: suite.perTable,
+          tableSize: Math.max(table.width, table.depth),
+          seatSize: Math.max(seat.width, seat.depth),
+          ...(suite.aisleM !== null ? { aisleM: suite.aisleM } : {}),
+        });
+        if (layout.tables.length === 0) {
+          setEditMessage(`边界放不下 ${suite.groups} 组桌，先扩边界或减少组数。`);
+          return;
+        }
+        const tables = layout.tables.map(point => inheritPrice({
+          id: crypto.randomUUID(),
+          templateId: 'table',
+          name: table.name,
+          position: { x: point.x, y: point.y },
+          rotationDeg: point.rotationDeg,
+          size: { width: table.width, depth: table.depth },
+          notes: '',
+          modelOverride: table.slug,
+        }, current.priceBook));
+        const seats = layout.seats.map(point => inheritPrice({
+          id: crypto.randomUUID(),
+          templateId: 'chair',
+          name: seat.name,
+          position: { x: point.x, y: point.y },
+          rotationDeg: point.rotationDeg,
+          size: { width: seat.width, depth: seat.depth },
+          notes: '',
+          modelOverride: seat.slug,
+        }, current.priceBook));
+        previewFacilities([...tables, ...seats], `${tables.length} 桌 · ${seats.length} 椅`);
+        setEditMessage(`预览：${tables.length} 桌 · ${seats.length} 椅，确认后落库。`);
+        setOneLine('');
+      } catch {
+        setEditMessage('物料库读取失败，稍后再试。');
+      } finally {
+        setOneLineBusy(false);
+      }
+      return;
+    }
+    const demand = parseArrangeDemand(text);
+    if (!demand.capability) {
+      setEditMessage('没听出要排什么：可以说「30 人观礼要能坐，留 2 米通道」。');
+      return;
+    }
+    if (demand.count === null) {
+      setEditMessage('还差数量：请说「30 人」或「30 把」。');
+      return;
+    }
+    if (current.boundary.length < 3) {
+      setEditMessage('先画场地边界，再按需求排道具。');
+      return;
+    }
+    setOneLineBusy(true);
+    try {
+      const { models } = await loadShippedOnlineModels();
+      const items = models.map(model => ({
+        slug: model.slug,
+        name: model.name,
+        width: model.width,
+        depth: model.depth,
+        kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+      }));
+      const ranked = rankArrangeCandidates(items, demand, 3, text);
+      if (ranked.length === 0) {
+        setEditMessage('物料库里没有满足这个能力的模型。');
+        return;
+      }
+      const templateId = demand.capability === 'seat' ? 'chair' : demand.capability === 'talk' ? 'booth' : 'kiosk';
+      const options: ArrangeOption[] = [];
+      for (const entry of ranked) {
+        const positions = layoutGrid({
+          boundary: current.boundary,
+          count: demand.count,
+          width: entry.item.width,
+          depth: entry.item.depth,
+          ...(demand.aisleM !== null ? { aisleM: demand.aisleM } : {}),
+        });
+        if (positions.length < demand.count) continue;
+        options.push({
+          slug: entry.item.slug,
+          name: entry.item.name,
+          width: entry.item.width,
+          depth: entry.item.depth,
+          reason: entry.reason,
+          count: demand.count,
+          templateId,
+          material: demand.material,
+          positions,
+        });
+      }
+      if (options.length === 0) {
+        setEditMessage(`边界放不下 ${demand.count} 件，先扩边界或减少数量。`);
+        return;
+      }
+      setArrangeOptions(options);
+      setEditMessage(`给了 ${options.length} 个方案，选一个再落库（都能一步撤销）。`);
+    } catch {
+      setEditMessage('物料库读取失败，稍后再试。');
+    } finally {
+      setOneLineBusy(false);
+    }
+  }
+
+  function applyArrangeOption(option: ArrangeOption) {
+    previewFacilities(buildOptionFacilities(option), option.name);
+    setEditMessage(`预览：${option.name} · ${option.count} 件，确认后落库。`);
+  }
+
+  function buildOptionFacilities(option: ArrangeOption): PlanFacility[] {
+    const book = planRef.current.priceBook;
+    return option.positions.map(point => inheritPrice({
+      id: crypto.randomUUID(),
+      templateId: option.templateId,
+      name: option.name,
+      position: { x: point.x, y: point.y },
+      rotationDeg: point.rotationDeg,
+      size: { width: option.width, depth: option.depth },
+      notes: '',
+      modelOverride: option.slug,
+      ...(option.material ? { materialPreset: option.material } : {}),
+    }, book));
+  }
+
+  function previewFacilities(facilities: PlanFacility[], label: string) {
+    arrangePreviewRef.current = facilities;
+    setArrangePreview({ label, count: facilities.length });
+    draw();
+  }
+
+  function clearArrangePreview() {
+    arrangePreviewRef.current = null;
+    setArrangePreview(null);
+    draw();
+  }
+
+  function confirmArrangePreview() {
+    const facilities = arrangePreviewRef.current;
+    if (!facilities) return;
+    commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, ...facilities] });
+    setEditMessage(`已落库 ${facilities.length} 件，可一步撤销。`);
+    arrangePreviewRef.current = null;
+    setArrangePreview(null);
+    setArrangeOptions(null);
+    setOneLine('');
+    draw();
+  }
+
+  /** 就地换款：同能力、同尺寸带内的真实物料，位置与朝向不动。 */
+  async function loadSwapOptions(facility: PlanFacility) {
+    if (!facility.modelOverride) {
+      setEditMessage('这件还没有模型，先选一个模型再谈换款。');
+      return;
+    }
+    setSwapBusy(true);
+    try {
+      const { models } = await loadShippedOnlineModels();
+      const kind = capabilityForSlug(facility.modelOverride)?.kind ?? null;
+      const target = Math.max(facility.size.width, facility.size.depth);
+      const pool = models
+        .filter(model => model.slug !== facility.modelOverride)
+        .map(model => ({
+          slug: model.slug,
+          name: model.name,
+          width: model.width,
+          depth: model.depth,
+          kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+        }))
+        .filter(model => (kind ? model.kind === kind : true))
+        .filter(model => {
+          const span = Math.max(model.width, model.depth);
+          return span >= target * 0.65 && span <= target * 1.35;
+        })
+        .sort((a, b) => Math.abs(Math.max(a.width, a.depth) - target) - Math.abs(Math.max(b.width, b.depth) - target))
+        .slice(0, 3);
+      setSwapOptions(pool.map(({ slug, name, width, depth }) => ({ slug, name, width, depth })));
+      if (pool.length === 0) setEditMessage('同类且尺寸相近的替代款没找到。');
+    } catch {
+      setEditMessage('物料库读取失败，稍后再试。');
+    } finally {
+      setSwapBusy(false);
+    }
+  }
+
+  function swapFacilityModel(facility: PlanFacility, model: { slug: string; width: number; depth: number }) {
+    updateFacility(facility.id, {
+      modelOverride: model.slug,
+      size: { width: model.width, depth: model.depth },
+      unitPrice: priceForModel(planRef.current.priceBook, model.slug) ?? undefined,
+    });
+    setSwapOptions(null);
+    setEditMessage('已换款：位置、朝向、材质保持不动。');
+  }
+
+  function showBom() {
+    const bom = buildBom(planRef.current.facilities);
+    setBomSnapshot(bom);
+    setBomText(bomToMarkdown(bom));
+    setPriceRows(buildPriceTable(planRef.current.facilities));
+  }
+
+  /** 按型号一次定价：同款全部改价，一次 commit 可撤销。 */
+  function priceModel(slug: string | null, unitPrice: number | null) {
+    if (!slug) return;
+    const current = planRef.current;
+    const facilities = applyModelPrice(current.facilities, slug, unitPrice);
+    commitPlan({
+      ...current,
+      facilities,
+      priceBook: withModelPrice(current.priceBook, slug, unitPrice),
+    });
+    setPriceRows(buildPriceTable(facilities));
+    const bom = buildBom(facilities);
+    setBomSnapshot(bom);
+    setBomText(bomToMarkdown(bom));
+  }
+
+  function downloadText(filename: string, content: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   function deleteFacility(id: string) {
     const current = planRef.current;
-    commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) });
+    const next = moveFacilityToTrash(current, id);
+    if (!next) return;
+    commitPlan(next);
     selectFacility(null);
-    setEditMessage('设施已删除。');
+    setEditMessage('已移入回收站，可在「物料清单 → 最近删除」恢复。');
+  }
+
+  /** 2026-11-17 回收站恢复：条目 id = 原设施 id；恢复后重新选中，方便继续改。 */
+  function restoreTrashedFacility(id: string): boolean {
+    const current = planRef.current;
+    const next = restoreFacilityFromTrash(current, id);
+    if (!next) return false;
+    commitPlan(next);
+    const restored = next.facilities.find(item => item.id === id);
+    if (restored) selectFacility(restored.id);
+    setEditMessage(restored ? `已恢复「${restored.name}」。` : '已从回收站移除。');
+    return true;
   }
 
   /**
@@ -6175,6 +6814,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan({ ...current, annotations: [...(current.annotations ?? []), { ...result.value, ...activeLevelStamp() }] });
     setEditMessage(`已添加标注「${result.value.name}」；继续标注或 Esc 结束。`);
     return true;
+  }
+
+  /**
+   * 2026-11-17 用户：再点当前工具 = 退出回浏览。
+   * 未提交的草稿/文字直接取消，只给一条轻提示，不弹确认框。
+   */
+  function exitAnnotateDraw() {
+    const hadDraft = Boolean(noteInputRef.current?.value.trim()) || annotateDraftRef.current.length > 0;
+    setMode('view');
+    if (hadDraft) setAnnotateNotice('已退出标注，未提交的内容已取消。');
   }
 
   /** 形状单击收点：近已有点（<0.5 m）忽略；rect/circle/line 收满 2 点、triangle 收满 3 点自动提交。 */
@@ -8284,12 +8933,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const activeLevelIndex = Math.max(0, levelList.findIndex(level => level.id === activeLevelId));
   const activeLevelName = levelList[activeLevelIndex]?.name ?? '图层 1';
   const selectedFacility = selectedFacilityId ? plan.facilities.find(f => f.id === selectedFacilityId) ?? null : null;
+  // A3：属性卡只读露出「可交互」。真实 slug 在 modelOverride，模板在 templateId（同 A2 口径）。
+  // 2026-11-17：能力表定稿优先，属性卡与 3D 场景读同一份标签。
+  const selectedFacilityCapabilityKey = selectedFacility
+    ? selectedFacility.modelOverride ?? selectedFacility.templateId
+    : undefined;
+  const selectedFacilityInteraction = selectedFacility
+    ? propInteractionProfile({
+        ...selectedFacility,
+        ref: selectedFacilityCapabilityKey,
+        capabilities: capabilityForSlug(selectedFacilityCapabilityKey),
+      })
+    : null;
   // D 块：阵列预览评估（与画布幽灵同口径），供提交钮禁用与原因回读。
   const repeatPreview = selectedFacility
     ? evaluateRepeatPreview(selectedFacility, repeatCols, repeatRows, repeatGapX, repeatGapY, plan.facilities, plan.boundary, repeatGapMargin)
     : null;
   const repeatBlocked = !repeatPreview || repeatPreview.invalidCount > 0 || repeatPreview.overLimit;
   const selectedRoute = selectedRouteId ? plan.routes.find(r => r.id === selectedRouteId) ?? null : null;
+  const selectedFacilityRequirement = selectedFacilityInteraction
+    ? propInteractionRequirement(selectedFacilityInteraction)
+    : '';
   const selectedNode = selectedNodeId ? plan.nodes.find(n => n.id === selectedNodeId) ?? null : null;
   const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
   // 固定角色选项：可走漫游角色；与当前岗位同类的排前，其余在后。
@@ -8642,7 +9306,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     </div>
   ) : null;
 
-  /* 2026-11-11 用户指令：标注区独立成块（测量区下方）——文本 T + 形状（形状态出四类型选项），
+  /** 提示行永远占位（含未选工具），底部锚定的卡片不会因切工具/提示消息而改高度。 */
+  const annotateHint = mode === 'note'
+    ? '文本 · 点一下输入，Enter 提交'
+    : mode === 'shape'
+      ? (annotateDraftCount > 0
+        ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
+        : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)
+      : '选一个工具，在图上绘制';
+
+  /* 2026-11-11 用户指令：标注区独立成块（测量区下方）。
+     2026-11-16：T、矩形、圆形、三角形、线段平铺；颜色点在工具条下常驻。
      有 annotatePanelHost 时 portal 过去（两页签下常驻）；无宿主回落「已放置物件」面板内。 */
   const annotateZone = !readOnly ? (
     <div
@@ -8658,154 +9332,52 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{levelView.annotations?.length ?? 0}</span>
         </div>
       )}
-      {/* 2026-11-13 A2 唤出式工具条：文本 T 常驻；形状四类收进父钮白色下拉菜单；去掉两层 tab 与长说明段。 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
-        <button
-          type="button"
-          aria-pressed={mode === 'note'}
-          data-testid="annotate-type-note"
-          title="文本备注"
-          style={{ ...modeButtonStyle(mode === 'note'), width: 32, justifyContent: 'center', fontWeight: 700, fontSize: PLANNING_TYPOGRAPHY.row }}
-          onClick={() => { setMode('note'); setAnnotateMenuOpen(false); }}
-        >
-          T
-        </button>
-        {(() => {
-          const ShapeIcon = planningIcon(ANNOTATE_SHAPE_ICONS[annotateShape]);
-          return (
-            <button
-              type="button"
-              aria-haspopup="listbox"
-              aria-expanded={annotateMenuOpen}
-              aria-pressed={mode === 'shape'}
-              data-testid="annotate-type-shape"
-              style={{ ...modeButtonStyle(mode === 'shape'), flex: 1, justifyContent: 'center', gap: 6 }}
-              onClick={() => {
-                setMode('shape');
-                setAnnotateMenuOpen(open => !open);
-              }}
-            >
-              <ShapeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-              <span>{planAnnotationKindLabels[annotateShape]}</span>
-              <span aria-hidden style={{ opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.hint, display: 'inline-flex' }}>{annotateMenuOpen ? '▾' : '▸'}</span>
-            </button>
-          );
-        })()}
-      </div>
-      {annotateMenuOpen && mode === 'shape' && (
-        <div
-          role="listbox"
-          aria-label="标注形状"
-          data-testid="annotate-shape-menu"
-          onWheel={stopPanelWheel}
-          style={{
-            marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
-            background: PLANNING_SURFACE.panelBg,
-            border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-            boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
-            display: 'grid', gap: 2,
-          }}
-        >
-          {PLAN_SHAPE_KINDS.map(k => {
-            const KindIcon = planningIcon(ANNOTATE_SHAPE_ICONS[k]);
-            const active = annotateShape === k;
-            return (
-              <button
-                key={k}
-                type="button"
-                role="option"
-                aria-selected={active}
-                data-testid={`annotate-shape-${k}`}
-                onClick={() => {
-                  annotateShapeRef.current = k;
-                  setAnnotateShape(k);
-                  annotateDraftRef.current = [];
-                  annotateCursorRef.current = null;
-                  annotateDragRef.current = null;
-                  setAnnotateDraftCount(0);
-                  setEditMessage(null);
-                  setAnnotateMenuOpen(false);
-                  setMode('shape');
-                  draw();
-                }}
-                style={{
-                  all: 'unset', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 8px', borderRadius: PLANNING_RADIUS.sm,
-                  background: active ? PLANNING_SURFACE.activeBg : 'transparent',
-                  color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText,
-                  fontWeight: active ? 600 : 400,
-                  fontSize: PLANNING_TYPOGRAPHY.row, cursor: 'pointer',
-                }}
-              >
-                <span aria-hidden style={{ width: 14, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center' }}>
-                  {active ? (
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                  ) : null}
-                </span>
-                <KindIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                <span>{planAnnotationKindLabels[k]}</span>
-                <span aria-hidden style={{ marginLeft: 'auto', color: PLANNING_TEXT.muted, fontSize: PLANNING_TYPOGRAPHY.hint }}>{ANNOTATE_SHAPE_META[k]}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {/* 属性行：取色对文本/形状生效；描边档位仅形状显示。 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.sm }}>
-        <div role="radiogroup" aria-label="标注颜色" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {ANNOTATE_COLOR_SWATCHES.map(sw => {
-            const active = annotateColor === sw.value;
-            return (
-              <button
-                key={sw.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={`标注颜色 ${sw.label}`}
-                data-testid={`annotate-color-${sw.value.replace('#', '')}`}
-                title={sw.label}
-                onClick={() => { annotateColorRef.current = sw.value; setAnnotateColor(sw.value); draw(); }}
-                style={{
-                  all: 'unset', width: 16, height: 16, borderRadius: 999, cursor: 'pointer',
-                  background: sw.value,
-                  boxShadow: active ? `inset 0 0 0 2px ${PLANNING_SURFACE.panelBg}, 0 0 0 1.5px ${sw.value}` : 'inset 0 0 0 1px rgba(20, 20, 22, 0.12)',
-                }}
-              />
-            );
-          })}
-        </div>
-        {mode === 'shape' && (
-          <div role="radiogroup" aria-label="描边粗细" style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-            {(['thin', 'thick'] as const).map(w => {
-              const active = annotateStrokeWidth === w;
-              return (
-                <button
-                  key={w}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  aria-label={w === 'thin' ? '细线' : '粗线'}
-                  data-testid={`annotate-stroke-${w}`}
-                  title={w === 'thin' ? '细线' : '粗线'}
-                  onClick={() => { annotateStrokeWidthRef.current = w; setAnnotateStrokeWidth(w); draw(); }}
-                  style={{
-                    ...modeButtonStyle(active), width: 28, justifyContent: 'center',
-                  }}
-                >
-                  <svg viewBox="0 0 20 10" width="16" height="8" fill="none" stroke="currentColor" strokeLinecap="round">
-                    <line x1="2" y1="5" x2="18" y2="5" strokeWidth={w === 'thin' ? 1.5 : 3.5} />
-                  </svg>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-        {mode === 'note' && '点一下放置，就地输入（Enter 提交 / Esc 取消）'}
-        {mode === 'shape' && (annotateDraftCount > 0
-          ? `已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
-          : (annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖，或点两个点'))}
+      {/* 2026-11-16 绘图工具条：T / 矩形 / 圆形 / 三角形 / 线段平铺，颜色条另常驻。 */}
+      <AnnotateDrawTools
+        active={mode === 'note' ? 'note' : mode === 'shape' ? annotateShape : null}
+        onNote={() => {
+          if (resolveAnnotateDrawToolClick({ tool: 'note', mode, shape: annotateShape }) === 'exit') {
+            exitAnnotateDraw();
+            return;
+          }
+          setMode('note');
+        }}
+        onShape={kind => {
+          if (resolveAnnotateDrawToolClick({ tool: kind, mode, shape: annotateShape }) === 'exit') {
+            exitAnnotateDraw();
+            return;
+          }
+          annotateShapeRef.current = kind;
+          setAnnotateShape(kind);
+          setMode('shape');
+        }}
+      />
+      {/* 2026-11-16 颜色点与线宽常驻（Figma 颜色条），不收进形状下拉。文本/形状共用取色。 */}
+      <AnnotateColorBar
+        color={annotateColor}
+        strokeWidth={annotateStrokeWidth}
+        showStrokeWidth={mode !== 'note'}
+        onColor={value => { annotateColorRef.current = value; setAnnotateColor(value); draw(); }}
+        onStrokeWidth={value => { annotateStrokeWidthRef.current = value; setAnnotateStrokeWidth(value); draw(); }}
+      />
+      <div
+        data-testid="annotate-hint"
+        role={annotateNotice ? 'status' : undefined}
+        aria-live={annotateNotice ? 'polite' : undefined}
+        title={annotateNotice ?? annotateHint}
+        style={{
+          marginTop: PLANNING_SPACING.xs,
+          height: 16,
+          lineHeight: '16px',
+          fontSize: PLANNING_TYPOGRAPHY.hint,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          color: annotateNotice ? PLANNING_SURFACE.warnText : undefined,
+          opacity: annotateNotice ? 1 : 0.78,
+        }}
+      >
+        {annotateNotice ?? annotateHint}
       </div>
       {(levelView.annotations?.length ?? 0) > 0 && levelView.annotations!.map(a => renderOneplanItemRow({
         key: `annotate-${a.id}`,
@@ -9241,6 +9813,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <BenchRepeatIcon size={16} aria-hidden />
                         </button>
                       </div>
+                      {selectedFacilityInteraction && selectedFacilityInteraction.interactions.length > 0 && (
+                        <div
+                          data-testid="facility-interaction-hint"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, marginTop: 6,
+                            padding: '5px 7px', borderRadius: PLANNING_RADIUS.sm,
+                            background: PLANNING_SURFACE.fieldBg, color: PLANNING_TEXT.soft,
+                            fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: 1.4,
+                          }}
+                        >
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            {propInteractionSummary(selectedFacilityInteraction)}
+                            {/* 2026-11-17：物料说能坐/能交谈，但当前人物没对应 clip 时先讲清楚，别等按 E 才报错。 */}
+                            {selectedFacilityRequirement && (
+                              <span style={{ opacity: 0.75 }}>（{selectedFacilityRequirement}）</span>
+                            )}
+                          </span>
+                          <span style={{ flex: '0 0 auto', opacity: 0.55 }}>{selectedFacilityRequirement ? '按 E 会回退待机' : '漫游中按 E'}</span>
+                        </div>
+                      )}
                       {/* 2026-11-15 用户：位置与尺寸压成一块——标题留在上面（位置 / 尺寸两栏），
                           下面一行就是具体数字；四项都直接可改：纬/经 逆映射回米，W/L 等比缩放。
                           2026-11-15 视觉修正：属性卡实际只有 ~233 CSS px 宽（截图 DPR2），
@@ -9515,6 +10107,307 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           </button>
                         );
                       })()}
+                      {/* 2026-11-17 材质快改：只改 PBR 参数、保留贴图；色块即时生效，走同一条 undo。 */}
+                      <div role="group" aria-label="材质快改" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.7 }}>材质</span>
+                        {MATERIAL_PRESETS.map(preset => {
+                          const active = (selectedFacility.materialPreset ?? 'original') === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              aria-pressed={active}
+                              title={preset.id === 'original' ? '恢复模型自带材质' : `${preset.label}：改色调与粗糙度/金属度，保留贴图`}
+                              onClick={() => updateFacility(selectedFacility.id, { materialPreset: preset.id === 'original' ? undefined : preset.id })}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '2px 7px', borderRadius: 999, cursor: 'pointer',
+                                fontSize: PLANNING_TYPOGRAPHY.hint,
+                                border: `1px solid ${active ? PLANNING_SURFACE.panelText : 'rgba(255,255,255,0.18)'}`,
+                                background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
+                                color: PLANNING_SURFACE.panelText,
+                              }}
+                            >
+                              <span aria-hidden style={{ width: 9, height: 9, borderRadius: 999, background: preset.tint, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.25)' }} />
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {/* 2026-11-17 单价：物料库无价格字段，允许人工填；未填=未定价。 */}
+                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>单价</span>
+                        <input
+                          aria-label="单价（元）"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={selectedFacility.unitPrice ?? ''}
+                          onChange={event => updateFacility(selectedFacility.id, {
+                            unitPrice: event.target.value === '' ? undefined : Math.max(0, Number(event.target.value)),
+                          })}
+                          placeholder="未定价"
+                          style={{ width: 90, padding: '3px 6px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.18)', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}
+                        />
+                        <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>元 / 件</span>
+                      </div>
+                      {/* 2026-11-17 设施角色：观礼区找舞台优先按角色，不再靠名字猜。 */}
+                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>角色</span>
+                        <select
+                          aria-label="设施角色"
+                          value={selectedFacility.role ?? ''}
+                          onChange={event => {
+                            const value = event.target.value;
+                            updateFacility(selectedFacility.id, {
+                              role: value === '' ? undefined : value as NonNullable<PlanFacility['role']>,
+                            });
+                          }}
+                          style={{ padding: '3px 6px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.18)', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}
+                        >
+                          <option value="">未指定</option>
+                          <option value="stage">舞台</option>
+                          <option value="entrance">入口</option>
+                          <option value="exit">出口</option>
+                          <option value="booth">摊位</option>
+                          <option value="service">服务点</option>
+                        </select>
+                      </div>
+                      {/* 2026-11-17 一句话入口：改材质与按需求排道具共用同一行解析。 */}
+                      <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                        <input
+                          aria-label="一句话布置或改材质"
+                          value={oneLine}
+                          onChange={event => setOneLine(event.target.value)}
+                          onKeyDown={event => { if (event.key === 'Enter' && !oneLineBusy) void runOneLineCommand(oneLine); }}
+                          placeholder="一句话：30 人观礼要能坐 / 把这几个改成金属"
+                          style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.18)', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel }}
+                        />
+                        <button
+                          type="button"
+                          disabled={oneLineBusy || oneLine.trim().length === 0}
+                          onClick={() => void runOneLineCommand(oneLine)}
+                          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: PLANNING_SURFACE.panelText, cursor: oneLineBusy ? 'wait' : 'pointer', fontSize: PLANNING_TYPOGRAPHY.panel }}
+                        >
+                          {oneLineBusy ? '排布中…' : '执行'}
+                        </button>
+                      </div>
+                      {arrangeOptions && (
+                        <div role="group" aria-label="候选方案" style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {arrangeOptions.map(option => (
+                            <div key={option.slug} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => applyArrangeOption(option)}
+                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.panel }}
+                              >
+                                {option.name}
+                              </button>
+                              <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                                {option.reason} · {option.count} 件
+                              </span>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => { setArrangeOptions(null); setEditMessage(null); }}
+                            style={{ alignSelf: 'flex-start', padding: '2px 6px', borderRadius: 6, border: 'none', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                          >取消</button>
+                        </div>
+                      )}
+                      {arrangePreview && (
+                        <div role="group" aria-label="落位预览" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                            预览：{arrangePreview.label} · {arrangePreview.count} 件
+                          </span>
+                          <button
+                            type="button"
+                            onClick={confirmArrangePreview}
+                            style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(74,124,89,0.9)', background: 'rgba(74,124,89,0.2)', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                          >落库</button>
+                          <button
+                            type="button"
+                            onClick={() => { clearArrangePreview(); setEditMessage(null); }}
+                            style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                          >取消</button>
+                        </div>
+                      )}
+                      <div role="group" aria-label="换款候选" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          disabled={swapBusy}
+                          onClick={() => void loadSwapOptions(selectedFacility)}
+                          style={{ padding: '3px 8px', borderRadius: 6, border: '1px dashed rgba(255,255,255,0.25)', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: swapBusy ? 'wait' : 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                        >
+                          {swapBusy ? '找同款…' : '换一款'}
+                        </button>
+                        {swapOptions?.map(option => (
+                          <button
+                            key={option.slug}
+                            type="button"
+                            onClick={() => swapFacilityModel(selectedFacility, option)}
+                            style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                          >
+                            {option.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                          type="button"
+                          aria-label="物料清单"
+                          onClick={showBom}
+                          style={{ alignSelf: 'flex-start', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                        >物料清单</button>
+                        {bomText && (
+                          <div>
+                            {bomSnapshot ? (
+                              <div aria-label="清单内容" style={{ maxHeight: 260, overflow: 'auto', borderRadius: 6, border: '1px solid rgba(255,255,255,0.12)', padding: '2px 6px' }}>
+                                {bomSnapshot.lines.map((line, index) => (
+                                  <div key={line.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', columnGap: 8, alignItems: 'start', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <span style={{ opacity: 0.5, marginRight: 4 }}>{index + 1}</span>{line.name}
+                                      </div>
+                                      <div style={{ color: PLANNING_SURFACE.panelText, opacity: 0.6, fontSize: 10 }}>
+                                        {line.width} × {line.depth} m · {materialLabel(line.material)}
+                                      </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right', whiteSpace: 'nowrap', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                                      <div>×{line.count} · {line.unitPrice === null ? '未定价' : `¥${line.unitPrice}`}</div>
+                                      <div style={{ opacity: 0.62, fontSize: 10 }}>{line.subtotal === null ? '未计入金额' : `小计 ¥${line.subtotal}`}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0 3px', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600 }}>
+                                  <span>合计 {bomSnapshot.total} 件</span>
+                                  <span>
+                                    {bomSnapshot.unpricedCount > 0 ? `${bomSnapshot.unpricedCount} 件未定价` : ''}
+                                    {bomSnapshot.totalAmount > 0 ? ` · ¥${bomSnapshot.totalAmount.toFixed(2)}` : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <pre aria-label="清单内容" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflow: 'auto', padding: 8, borderRadius: 6, background: 'rgba(0,0,0,0.18)', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: 1.5 }}>{bomText}</pre>
+                            )}
+                            {bomSnapshot && (
+                              <p style={{ margin: '4px 2px 0', color: PLANNING_SURFACE.panelText, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                                {bomSnapshot.unpricedCount === bomSnapshot.total
+                                  ? '价格：物料库暂无价格字段，本清单不含金额；未定价项不虚构单价。'
+                                  : bomSnapshot.unpricedCount > 0
+                                    ? `已定价 ¥${bomSnapshot.totalAmount.toFixed(2)}；${bomSnapshot.unpricedCount} 件未定价，未计入金额。`
+                                    : `已定价合计 ¥${bomSnapshot.totalAmount.toFixed(2)}。`}
+                              </p>
+                            )}
+                            {(planRef.current.trash?.length ?? 0) > 0 && (
+                              <div style={{ marginTop: 8, borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 6 }}>
+                                <div style={{ color: PLANNING_SURFACE.panelText, opacity: 0.78, fontSize: PLANNING_TYPOGRAPHY.hint, marginBottom: 4 }}>
+                                  最近删除（{planRef.current.trash?.length ?? 0}）
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 120, overflow: 'auto' }}>
+                                  {(planRef.current.trash ?? []).map((entry: PlanTrashEntry) => (
+                                    <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                                        {entry.facility.name}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => { if (restoreTrashedFacility(entry.id)) showBom(); }}
+                                        style={{ border: '1px solid rgba(255,255,255,0.24)', background: 'transparent', color: PLANNING_SURFACE.panelText, borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                                      >
+                                        恢复
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {priceRows.map(row => (
+                                <div key={`${row.slug ?? row.name}-${row.unitPrice ?? 'x'}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ flex: 1, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                                    {row.name} × {row.count}
+                                  </span>
+                                  <input
+                                    aria-label={`单价-${row.name}`}
+                                    type="number"
+                                    min={0}
+                                    defaultValue={row.unitPrice ?? ''}
+                                    placeholder={row.unitPrice === null ? '未定价' : ''}
+                                    disabled={!row.slug}
+                                    onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                                    onBlur={event => {
+                                      const raw = event.target.value.trim();
+                                      priceModel(row.slug, raw === '' ? null : Math.max(0, Number(raw)));
+                                    }}
+                                    style={{ width: 78, padding: '2px 6px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.18)', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}
+                                  />
+                                  <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>元</span>
+                                </div>
+                              ))}
+                            </div>
+                            {/* 2026-11-17 报价单抬头：项目名/客户/有效期/报价人由用户填，未填不编造。 */}
+                            <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                              {([
+                                { key: 'projectName', label: '项目名', placeholder: '报价单抬头' },
+                                { key: 'client', label: '客户', placeholder: '客户名称' },
+                                { key: 'validUntil', label: '有效期', placeholder: '2026-12-31' },
+                                { key: 'preparedBy', label: '报价人', placeholder: '报价人 / 公司' },
+                              ] as const).map(field => (
+                                <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: PLANNING_TYPOGRAPHY.hint, color: PLANNING_SURFACE.panelText }}>
+                                  <span style={{ width: 46, flex: 'none' }}>{field.label}</span>
+                                  <input
+                                    aria-label={`报价单-${field.label}`}
+                                    value={quoteMeta[field.key]}
+                                    onChange={event => setQuoteMeta(meta => ({ ...meta, [field.key]: event.target.value }))}
+                                    placeholder={field.placeholder}
+                                    style={{ flex: 1, minWidth: 0, padding: '2px 6px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.18)', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                            <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                onClick={() => { void navigator.clipboard?.writeText(bomText).catch(() => {}); }}
+                                style={{ padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                              >复制</button>
+                              <button
+                                type="button"
+                                onClick={() => { setBomText(null); setBomSnapshot(null); }}
+                                style={{ padding: '2px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                              >关闭</button>
+                              <button
+                                type="button"
+                                onClick={() => downloadText('物料清单.csv', bomToCsv(buildBom(planRef.current.facilities)), 'text/csv;charset=utf-8')}
+                                style={{ padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                              >导出 CSV</button>
+                              <button
+                                type="button"
+                                onClick={() => downloadText('物料清单.md', bomText, 'text/markdown;charset=utf-8')}
+                                style={{ padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                              >导出 Markdown</button>
+                              <button
+                                type="button"
+                                onClick={() => downloadText(
+                                  '物料报价单.html',
+                                  buildQuoteHtml({
+                                    projectName: quoteMeta.projectName.trim() || '户外活动布置',
+                                    bom: buildBom(planRef.current.facilities),
+                                    generatedAt: new Date().toLocaleString('zh-CN'),
+                                    note: '价格为项目内定价；未定价项需补齐后出正式报价，浏览器打印可另存为 PDF。',
+                                    ...(quoteMeta.client.trim() ? { client: quoteMeta.client.trim() } : {}),
+                                    ...(quoteMeta.validUntil.trim() ? { validUntil: quoteMeta.validUntil.trim() } : {}),
+                                    ...(quoteMeta.preparedBy.trim() ? { preparedBy: quoteMeta.preparedBy.trim() } : {}),
+                                  }),
+                                  'text/html;charset=utf-8',
+                                )}
+                                style={{ padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: PLANNING_SURFACE.panelText, cursor: 'pointer', fontSize: PLANNING_TYPOGRAPHY.hint }}
+                              >导出报价单</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       {/* V-5b/c 生成中状态行：轮询到待取回任务时给一句可读进度，完成后自动消失。 */}
                       {facilityGenerateStatus && facilityGenerateStatus.facilityId === selectedFacility.id ? (
                         <div role="status" style={{ marginTop: PLANNING_SPACING.xs, fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: '16px', color: PLANNING_SURFACE.panelText, opacity: 0.75 }}>
@@ -10071,7 +10964,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 ? 'copy'
                 : scopeEdgeHover
                   ? (scopeEdgeIsHorizontal(scopeEdgeHover) ? 'ns-resize' : 'ew-resize')
-                  : mode === 'view' ? (dragging ? 'grabbing' : 'grab') : 'crosshair',
+                  : mode === 'note' ? 'text' : mode === 'view' ? (dragging ? 'grabbing' : 'grab') : 'crosshair',
       }}
       onMouseDown={handleStageMouseDown}
       onMouseMove={handleStageMouseMove}
@@ -10167,12 +11060,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
       {/* 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间顶部居中一枚轻提示，
           全部结算（含失败）即收；pointer-events 无、不挡任何画布交互。 */}
-      {basemapLoading && (
+      {(basemapLoading || basemapOffline) && (
         <div className="pc-top-chip absolute left-1/2" style={{ top: 14, transform: 'translateX(-50%)', zIndex: 26, pointerEvents: 'none' }}>
           <div className="pc-glass pc-glass--dark" role="status" aria-live="polite"
-            style={{ padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.row, letterSpacing: '0.02em', color: 'var(--pc-cyan-glow, #35624A)' }}>
-            <span className="pc-basemap-loading__spinner" aria-hidden="true" />
-            底图加载中…
+            aria-label={basemapOffline ? '底图离线，已使用纸面底图' : '底图加载中'}
+            style={{ padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.row, letterSpacing: '0.02em', color: basemapOffline ? '#8A5A12' : 'var(--pc-cyan-glow, #35624A)' }}>
+            {basemapOffline ? '底图离线 · 已用纸面' : <><span className="pc-basemap-loading__spinner" aria-hidden="true" />底图加载中…</>}
           </div>
         </div>
       )}
@@ -10182,7 +11075,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         <div
           className="pc-top-chip absolute left-1/2"
           data-testid="zone-out-of-bounds-chip"
-          style={{ top: basemapLoading ? 54 : 14, transform: 'translateX(-50%)', zIndex: 27 }}
+          style={{ top: (basemapLoading || basemapOffline) ? 54 : 14, transform: 'translateX(-50%)', zIndex: 27 }}
           onMouseDown={event => event.stopPropagation()}
           onDoubleClick={event => event.stopPropagation()}
         >
@@ -10235,7 +11128,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           className="pc-top-chip absolute left-1/2"
           data-testid="zone-overlap-chip"
           style={{
-            top: (basemapLoading ? 54 : 14) + (zoneOverflow.length > 0 || zoneUndoAvailable ? 44 : 0),
+            top: ((basemapLoading || basemapOffline) ? 54 : 14) + (zoneOverflow.length > 0 || zoneUndoAvailable ? 44 : 0),
             transform: 'translateX(-50%)',
             zIndex: 28,
             pointerEvents: 'none',
@@ -10639,7 +11532,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
           }}
         >
-          当前：{PLANNING_EDIT_MODE_LABELS[mode]} · Esc 返回浏览
+          {annotateDrawSelectionLabel(mode, annotateShape)
+            ? `当前：${annotateDrawSelectionLabel(mode, annotateShape)} · 再点一次或 Esc 退出`
+            : `当前：${PLANNING_EDIT_MODE_LABELS[mode]} · Esc 返回浏览`}
         </button>
       )}
 
@@ -11447,7 +12342,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         </PanelPortal>
       )}
       {/* 2026-11-12 用户指令「三个按钮对应的卡片要拆开」：测量 / 标注 / 属性 各自一张独立卡片，
-          各自展开收起、可同时存在；不再用一张卡 + 页签把它们绑在一起。
+          不再用一张卡 + 页签把它们绑在一起。2026-11-17：测量/标注是互斥的绘制工具，开一张收另一张；
+          属性卡只读，保持独立。
           2026-11-12 晚（用户：图标统一 / 视觉 / 好用一点的交互）：右轨与卡头共用 OUTDOOR_TOOL_ICONS，
           卡头可折叠、右上角可关闭，颜色按工具的图层色点睛。 */}
       {outdoorInspectorActive && (() => {
@@ -11557,6 +12453,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     overflow: card.key === 'annotate' ? 'visible' : 'hidden',
                     color: PLANNING_SURFACE.panelText,
                     fontSize: PLANNING_TYPOGRAPHY.panel,
+                    ...(card.key === 'annotate'
+                      ? { width: ANNOTATE_CARD_WIDTH, maxWidth: 'calc(100vw - 24px)', boxSizing: 'border-box' as const }
+                      : {}),
                     ...(card.key === 'annotate' && annotateAnchor
                       ? {
                         position: 'fixed' as const,
@@ -11566,7 +12465,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         right: 'auto',
                         transform: 'translateX(-50%)',
                         zIndex: 80,
-                        maxWidth: 'calc(100vw - 24px)',
                       }
                       : {}),
                   }}
@@ -11574,6 +12472,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   onMouseUp={stopPanelMouse}
                   onDoubleClick={stopPanelMouse}
                 >
+                  {card.key === 'annotate' && (
+                    <div
+                      data-testid="outdoor-inspector-card-annotate-head"
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 2px 10px' }}
+                    >
+                      <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: card.accent }} />
+                      <span style={{ fontWeight: 600, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{card.label}</span>
+                      {card.count > 0 && (
+                        <span
+                          aria-hidden
+                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: withAlphaHex(card.accent, 0.14), color: card.accent, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, lineHeight: '18px', textAlign: 'center' }}
+                        >
+                          {card.count}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        data-testid="outdoor-inspector-card-annotate-close"
+                        aria-label="关闭标注卡片"
+                        title="关闭标注"
+                        onClick={() => {
+                          setInspectorPanel('annotate', false);
+                          if (mode === 'note' || mode === 'shape') setMode('view');
+                          setAnnotateNotice(null);
+                        }}
+                        className="sc-outdoor-toolcard-btn"
+                        style={{ marginLeft: 'auto', cursor: 'pointer', width: 24, height: 24, flex: '0 0 auto', borderRadius: 7, display: 'grid', placeItems: 'center', color: '#3f4448' }}
+                      >
+                        <MaterialSymbol name="close" size={16} />
+                      </button>
+                    </div>
+                  )}
                   {card.key !== 'annotate' && (
                   <div data-inspector-header="" onClickCapture={onInspectorPanelHeaderClickCapture} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px', cursor: 'grab' }}>
                     <button
@@ -11627,7 +12557,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   </div>
                   )}
                   {(!collapsed || card.key === 'annotate') && (
-                    <div style={{ minHeight: 0, overflowY: 'auto', maxHeight: '46vh', padding: card.key === 'annotate' ? '8px 10px' : '0 12px 12px' }}>{card.body}</div>
+                    <div style={{ minHeight: 0, overflowY: 'auto', maxHeight: '46vh', padding: card.key === 'annotate' ? '2px 10px 10px' : '0 12px 12px' }}>{card.body}</div>
                   )}
                 </section>
               );

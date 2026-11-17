@@ -251,6 +251,45 @@ async function postAsset(source: { url: string; name: string; taskid?: string; l
   return saved;
 }
 
+type ImportedAholoAsset = AholoAsset & { url: string };
+
+const importInFlight = new Map<string, Promise<ImportedAholoAsset>>();
+
+function importDedupeKey(source: { url: string; taskid?: string }): string {
+  if (source.taskid && taskidPattern.test(source.taskid)) return `task:${source.taskid}`;
+  return `url:${source.url}`;
+}
+
+async function finishImportAholoAsset(
+  source: {
+    url: string;
+    name?: string;
+    taskid?: string;
+    meters?: { width: number; depth: number; height: number };
+    geo?: AholoAssetGeo;
+    lodUrl?: string;
+  },
+  postIfMissing: boolean,
+): Promise<ImportedAholoAsset> {
+  // 同一任务号复用本机文件；这次若带来了真实尺度或拍摄位置而旧记录没有，就补写进注册表，历史场景也能按真实尺寸回放。
+  const cached = source.taskid ? findAholoAssetByTask(source.taskid) : undefined;
+  let asset = cached ?? (postIfMissing ? await postAsset({ ...source, name: source.name ?? '' }) : undefined);
+  if (!asset) throw new Error('落盘请求已取消。');
+  const incoming = source.meters;
+  if (!validMeters(asset.meters) && validMeters(incoming)) {
+    asset = rememberAholoAsset({ ...asset, meters: incoming }) ?? asset;
+  }
+  if (!validGeo(asset.geo) && validGeo(source.geo)) {
+    asset = rememberAholoAsset({ ...asset, geo: source.geo }) ?? asset;
+  }
+  if (!validLodUrl(asset.lodUrl) && validLodUrl(source.lodUrl)) {
+    asset = rememberAholoAsset({ ...asset, lodUrl: source.lodUrl }) ?? asset;
+  }
+  const url = aholoAssetUrl(asset);
+  if (!url) throw new Error('落盘后仍无法生成本机地址。');
+  return { ...asset, url };
+}
+
 /** 把会过期的签名产物换成本机稳定地址；同一任务号已落过盘就直接复用，不再下载。 */
 export async function importAholoAsset(source: {
   url: string;
@@ -260,21 +299,14 @@ export async function importAholoAsset(source: {
   geo?: AholoAssetGeo;
   /** 本地已派生好 LOD 时一并登记，预览即可按距离换档。 */
   lodUrl?: string;
-}): Promise<AholoAsset & { url: string }> {
-  // 同一任务号复用本机文件；这次若带来了真实尺度或拍摄位置而旧记录没有，就补写进注册表，历史场景也能按真实尺寸回放。
-  const cached = findAholoAssetByTask(source.taskid);
-  let asset = cached ?? await postAsset({ ...source, name: source.name ?? '' });
-  const incoming = source.meters;
-  if (!validMeters(asset.meters) && validMeters(incoming)) {
-    asset = await rememberAholoAsset({ ...asset, meters: incoming }) ?? asset;
+}): Promise<ImportedAholoAsset> {
+  if (source.taskid && findAholoAssetByTask(source.taskid)) {
+    return finishImportAholoAsset(source, false);
   }
-  if (!validGeo(asset.geo) && validGeo(source.geo)) {
-    asset = await rememberAholoAsset({ ...asset, geo: source.geo }) ?? asset;
-  }
-  if (!validLodUrl(asset.lodUrl) && validLodUrl(source.lodUrl)) {
-    asset = await rememberAholoAsset({ ...asset, lodUrl: source.lodUrl }) ?? asset;
-  }
-  const url = aholoAssetUrl(asset);
-  if (!url) throw new Error('落盘后仍无法生成本机地址。');
-  return { ...asset, url };
+  const dedupeKey = importDedupeKey(source);
+  const active = importInFlight.get(dedupeKey);
+  if (active) return active;
+  const job = finishImportAholoAsset(source, true).finally(() => importInFlight.delete(dedupeKey));
+  importInFlight.set(dedupeKey, job);
+  return job;
 }

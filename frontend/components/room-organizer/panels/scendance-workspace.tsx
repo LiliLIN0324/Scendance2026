@@ -574,8 +574,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
   // 2026-11-16 用户指令：底部只留一颗薄把手，规划工具收进可展开的「隐藏工具栏」；
   // 初始收起，让 Google Maps 控制列与地图本身保持干净。
+  // 2026-11-17 用户：浮层工具栏不因点外部收起；只认末尾 × / Esc / 自身按钮。
   const [dockOpen, setDockOpen] = useState(false);
-  const dockRef = useRef<HTMLDivElement>(null);
   // 2026-11-16 罗盘改用 MapLibre NavigationControl 的成熟交互：拖动旋转、点击回正北。
   const [compassBearing, setCompassBearing] = useState(0);
   const [compassDragging, setCompassDragging] = useState(false);
@@ -583,6 +583,21 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const suppressCompassClick = useRef(false);
   const outdoorRef = useRef(outdoor);
   outdoorRef.current = outdoor;
+  /** 显式收起底条：标注浮卡挂在底条按钮上，一并关掉，避免留下无锚点的空卡。 */
+  const closeToolDock = useCallback(() => {
+    setDockOpen(false);
+    if (outdoorRef.current?.inspectorTabs?.annotate) outdoorRef.current.setInspector?.('annotate');
+  }, []);
+  /** 展开底条；下一帧再通知画布重算标注卡锚点（按钮刚挂上时还拿不到 rect）。 */
+  const openToolDock = useCallback(() => {
+    setDockOpen(true);
+    window.requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('scendance:outdoor-dock-opened')));
+  }, []);
+  useEffect(() => {
+    const onOpenDock = () => openToolDock();
+    window.addEventListener('scendance:open-outdoor-dock', onOpenDock);
+    return () => window.removeEventListener('scendance:open-outdoor-dock', onOpenDock);
+  }, [openToolDock]);
   const compassIs3D = outdoor?.view === '3d' && !walkPressed && Boolean(outdoor?.orbitByDelta);
 
   useEffect(() => {
@@ -609,20 +624,12 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   useEffect(() => {
     if (!dockOpen) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDockOpen(false);
+      if (event.key === 'Escape') closeToolDock();
     };
-    // 成熟浮层工具栏的关闭方式：点外部或 Esc；展开态不再放一条“工具”标题栏。
-    const onPointerDown = (event: PointerEvent) => {
-      const root = dockRef.current;
-      if (root && !root.contains(event.target as Node)) setDockOpen(false);
-    };
+    // 成熟浮层工具栏：点外部不收起；只认末尾 × 和 Esc。
     window.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [dockOpen]);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dockOpen, closeToolDock]);
 
   const handleCompassPointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     if (!compassIs3D) return;
@@ -1256,7 +1263,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         </div>
         {/* 2026-11-16 我们自己的工具栏：贴底一条，可收成一颗把手。
             Google 控制列只放地图语义钮，规划工具（选择/测量/标注/吸附/历史）全部收进这里。 */}
-        <div className={`oc-dock${dockOpen ? ' is-open' : ''}`} ref={dockRef}>
+        <div className={`oc-dock${dockOpen ? ' is-open' : ''}`}>
           {dockOpen && (
           <div id="oc-tool-dock" className="oc-cluster oc-bb" aria-label="底部工具条">
           {/* 2026-11-15 直切：户外选择/抓手不再弹二级菜单，点钮在 抓手⇄选择 之间直切；图标随当前态，H/S 快捷键保留。 */}
@@ -1316,7 +1323,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             data-tip="收起工具条 · Esc"
             aria-label="收起工具条（Esc）"
             title="收起工具条（Esc）"
-            onClick={() => setDockOpen(false)}
+            onClick={() => closeToolDock()}
           >
             <MaterialSymbol name="close" size={16} />
           </button>
@@ -1329,7 +1336,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             aria-controls="oc-tool-dock"
             aria-label="展开工具条"
             title="展开工具条"
-            onClick={() => setDockOpen(true)}
+            onClick={() => openToolDock()}
           >
             <MaterialSymbol name="keyboard_arrow_up" size={16} />
             <span>工具</span>
