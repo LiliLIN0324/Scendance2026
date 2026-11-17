@@ -2613,15 +2613,15 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-share-tabs {
   display: flex; align-items: center; gap: 2px;
-  height: 36px; padding: 3px; box-sizing: border-box;
-  border-radius: 18px; background: #F4F5F7;
+  height: 32px; padding: 2px; box-sizing: border-box;
+  border-radius: 16px; background: #EEF0F2;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab {
-  flex: 1 1 0; width: auto !important; height: 30px !important; min-height: 0 !important;
-  padding: 0 8px !important; border: 0 !important; border-radius: 15px !important;
+  flex: 1 1 0; width: auto !important; height: 28px !important; min-height: 0 !important;
+  padding: 0 8px !important; border: 0 !important; border-radius: 14px !important;
   background: transparent !important; box-shadow: none !important;
   color: var(--ink-soft, #55585F) !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; line-height: 30px;
+  font-family: inherit; font-size: 13px; font-weight: 500; line-height: 28px;
   text-align: center !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab.is-selected,
@@ -2658,7 +2658,7 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-share-bingo-status { flex: none; margin-left: auto; color: var(--ink-soft, #55585F); font-size: 12px; font-weight: 500; }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta {
   width: 100% !important; height: 32px !important; min-height: 0 !important;
-  padding: 0 12px !important; border: 0 !important; border-radius: 8px !important;
+  padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
   background: var(--green, #4A7C59) !important; box-shadow: none !important;
   color: #FFFFFF !important;
   font-family: inherit; font-size: 13px; font-weight: 600; text-align: center !important; cursor: pointer;
@@ -2676,17 +2676,18 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-key {
   flex: none; display: inline-flex !important; align-items: center; justify-content: center;
-  height: 26px !important; min-height: 0 !important; padding: 0 !important;
-  border-radius: 8px !important; border: 0.6px solid var(--hair, #E4E4E7) !important;
+  box-sizing: border-box !important;
+  height: 24px !important; min-height: 0 !important; padding: 0 !important;
+  border-radius: 6px !important; border: 0.6px solid var(--hair, #E4E4E7) !important;
   background: var(--paper, #FFFFFF) !important; box-shadow: none !important;
   color: var(--ink, #141416) !important;
   font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-copy {
-  width: auto !important; padding: 0 10px !important; text-align: center !important;
+  width: 48px !important; min-width: 48px !important; padding: 0 !important; text-align: center !important;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-qr {
-  width: 26px !important; min-width: 26px !important;
+  width: 24px !important; min-width: 24px !important; height: 24px !important;
 }
 .sc-workbench .sc-share-qrpop {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 3;
