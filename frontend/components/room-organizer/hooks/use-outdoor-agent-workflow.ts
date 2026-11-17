@@ -137,7 +137,7 @@ export interface OutdoorWorkflowProposal {
  * 这种句子不该再被反问清单——按分区用途与面积出默认方案就行。
  */
 function designerCue(message: string): boolean {
-  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的|搋好的/u.test(message);
+  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的/u.test(message);
 }
 
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
@@ -165,9 +165,11 @@ class OutdoorStepBlocked extends Error {
   }
 }
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
-  scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
-  zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
-  "main-routes": "请核对地图上蓝色标记的主通道和候选入口。选中路线后可拖动路线转折点绕开障碍（在线段上点一下就加点，点中已有折点即删掉，拖到相邻折点上就合并），也可把候选入口移到实际门口。",
+  // 2026-11-18 用户反馈「为什么要写这么多」：应用提示只保留一句真正要紧的动作话；
+  // 「边界就在眼前」「下一步是什么」分别由画布和任务卡标题承担，聊天里不重复。
+  scope: "不贴合就拖顶点调整，改完重新核对。",
+  zones: "分区不合适可拖动整块或拖顶点微调。",
+  "main-routes": "路线和候选入口可拖动微调。",
 };
 
 function changedIds<T extends { id: string }>(before: readonly T[], after: readonly T[]): string[] {
@@ -427,6 +429,12 @@ export function useOutdoorAgentWorkflow(input: {
   >();
   const [busy, setBusy] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  /**
+   * 2026-11-18 用户实测：进入手画模式后任务卡还挂着旧引导（「先说用途或手画」+手画按钮），
+   * 与通知条自相矛盾，「收起」也和内容脱节。这里记录当前绘制模式，卡上据此收掉旧内容，
+   * 让通知条成为唯一指令。任意新回合、取消、切活动都会清掉。
+   */
+  const [drawingMode, setDrawingMode] = useState<"zone" | "route" | "node" | null>(null);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
   /** 2026-11-17：画布规模并进思考卡摘要（一行），不再作为一条步骤占一行。 */
@@ -560,6 +568,7 @@ export function useOutdoorAgentWorkflow(input: {
   function cancel(options?: { preservePendingLogin?: boolean }) {
     const withdrawnCard = proposalRef.current;
     setDesignSteps([]);
+    setDrawingMode(null);
     setCanvasNote(null);
     updatePendingPlan(null);
     setAwaitingThought(false);
@@ -580,10 +589,11 @@ export function useOutdoorAgentWorkflow(input: {
       persist({ ...kept, pendingBoundary: undefined });
     }
     liveTurn.current.settle("cancelled");
-    status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
+    status("已取消当前预览/请求；已应用的规划与需求都保留。", "stopped");
   }
   useEffect(() => {
     setDesignSteps([]);
+    setDrawingMode(null);
     setThought(null);
     setThoughtMs(null);
     setThoughtRequest(null);
@@ -631,6 +641,18 @@ export function useOutdoorAgentWorkflow(input: {
       completed: stateRef.current.completed.filter((s) => s === "place"),
     });
     return false;
+  }
+  /**
+   * 2026-11-18 用户实测：画布上已有画好的红线（甚至已确认），进页任务卡却默认停在
+   * 「搜索目标地点」——流程草稿里没有这份事实，阶段就和画布脱节了。这里对账：
+   * 画布上有合法闭合边界时，阶段不退回 place，未确认的推到 scope 等确认卡。
+   * 只对账，不发言不发请求；在画布 bridge 注册时调用（进页/切活动都会重新注册）。
+   */
+  function reconcileCanvasStage() {
+    const plan = callbacks.current.bridge()?.getPlan();
+    if (!plan || !checkBoundaryRing(plan.boundary).ok) return;
+    if (stateRef.current.stage !== "place") return;
+    persist({ ...stateRef.current, stage: "scope" });
   }
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
@@ -680,7 +702,8 @@ export function useOutdoorAgentWorkflow(input: {
       callbacks.current.bridge()?.previewBoundary?.(next.anchor, next.boundary);
     }
     if (kind === "zones" || kind === "main-routes" || kind === "objects") {
-      designStep(`已生成「${label}」预览，等待核对。`);
+      // 「等待核对」由下面 status 的提示条说，运行卡只记事实，避免同一句在两个表面重复。
+      designStep(`已生成「${label}」预览。`);
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
     liveTurn.current.markPreview();
@@ -856,7 +879,7 @@ export function useOutdoorAgentWorkflow(input: {
         : "";
     status(
       mapEditHint
-        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。${packedNote}`
+        ? `已应用「${p.label}」。${mapEditHint}`
         : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。${packedNote}`,
       "done",
     );
@@ -975,7 +998,7 @@ export function useOutdoorAgentWorkflow(input: {
     const stored = objectsLayoutRef.current;
     const p = proposalRef.current;
     if (!stored || !p || p.kind !== "objects") {
-      status("没有可切换的物件排布预览；先说一次物件清单。", "blocked");
+      status("还没有可切换排法的物件预览；说一句想摆什么，或者说「随便摆」，我先出一版默认方案。", "blocked");
       return;
     }
     const job = start();
@@ -1072,6 +1095,9 @@ export function useOutdoorAgentWorkflow(input: {
     );
   }
   async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
+    // 新回合开始即视为离开「纯手画」状态：卡上旧内容恢复，或按新意图重排。
+    if (turn.action !== "draw-zone" && turn.action !== "draw-route" && turn.action !== "draw-entrance")
+      setDrawingMode(null);
     const priorUserText = priorUserTextRef.current;
     priorUserTextRef.current = message;
     if (turn.action === "cancel") {
@@ -1330,6 +1356,7 @@ export function useOutdoorAgentWorkflow(input: {
               : "node";
         if (!bridge.beginDrawing?.(mode))
           throw new Error("当前画布尚未准备好，原规划保留。");
+        setDrawingMode(mode);
         status(
           mode === "zone"
             ? "已进入手画模式。请在地图上画出分区轮廓并闭合，再补充分区名称、用途和室内外属性。"
@@ -1533,8 +1560,8 @@ export function useOutdoorAgentWorkflow(input: {
         setSelectedLibraryId(undefined);
         status(
           found.length
-            ? "已读到真实个人库候选与尺寸；选定后告诉我对应分区和数量，仍先预览。"
-            : "个人库没有可用匹配；可改名检索或在当前卡导入GLB（本机解析真实尺寸、不上传不收费）。",
+            ? "已读到真实库候选与尺寸（个人库与内置件都查过）；选定后告诉我对应分区和数量，仍先预览。"
+            : "库里没有可用匹配（个人库与内置件都查过）；可改名检索或在当前卡导入GLB（本机解析真实尺寸、不上传不收费）。",
           "ready",
         );
         return;
@@ -2606,6 +2633,7 @@ export function useOutdoorAgentWorkflow(input: {
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
+    drawingMode,
     cardRecords: state.scope === input.scope ? cardRecords : [],
     mapGap,
     /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
@@ -2629,6 +2657,7 @@ export function useOutdoorAgentWorkflow(input: {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
     },
+    reconcileCanvasStage,
     proposal,
     pendingPlan: state.scope === input.scope ? pendingPlan : null,
     approvePlan,

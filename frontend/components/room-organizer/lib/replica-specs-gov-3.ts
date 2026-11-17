@@ -14,7 +14,8 @@ export const CAROLS_IN_THE_PARK: ReplicaCaseSpec = {
   region: 'Australia & NZ',
   refImage: 'carols-in-the-park.png',
   refLink: LINK('carols-in-the-park'),
-  anchor: { lng: 115.727, lat: -32.527 },
+  anchor: { lng: 115.715119, lat: -32.534176 },
+  rotationDeg: 108,
   locationNote: '镇级锚点：Mandurah (WA) 海滨公园',
   zones: [
     { name: 'Event Lawn 活动草坪', semantic: 'audience', color: '#a8d8e8', opacity: 0.25, polygon: [[-70, 45], [20, 50], [30, -10], [-5, -35], [-60, -25]] },
@@ -50,7 +51,8 @@ export const MANDURAH_CHRISTMAS_PAGEANT: ReplicaCaseSpec = {
   region: 'Australia & NZ',
   refImage: 'mandurah-christmas-pageant.png',
   refLink: LINK('mandurah-christmas-pageant'),
-  anchor: { lng: 115.723, lat: -32.5245 },
+  anchor: { lng: 115.720312, lat: -32.532123 },
+  rotationDeg: 251,
   locationNote: '镇级锚点：Mandurah 镇中心巡游线',
   zones: [
     { name: 'Staging 花车集结带', semantic: 'queue', color: '#c0392b', opacity: 0.3, rect: { cx: -80, cy: 40, w: 18, h: 55 } },
@@ -120,7 +122,8 @@ export const SPRINGVALE_SNOW_FEST: ReplicaCaseSpec = {
   region: 'Australia & NZ',
   refImage: 'springvale-snow-fest.png',
   refLink: LINK('springvale-snow-fest'),
-  anchor: { lng: 145.153, lat: -37.95 },
+  anchor: { lng: 145.151384, lat: -37.949319 },
+  rotationDeg: 262,
   locationNote: '镇级锚点：Springvale (VIC) 商业街',
   zones: [
     { name: 'Street Market 街市带', semantic: 'reserved', color: '#f2d024', opacity: 0.15, rect: { cx: 0, cy: -12, w: 130, h: 10 } },
