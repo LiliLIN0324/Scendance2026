@@ -36,10 +36,10 @@ import { buildSessionReport } from "../lib/outdoor-session-report";
 import { defaultLedger, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import {
   bookToRecord,
-  emptyBook,
   markSeen,
   summarizeWalkthrough,
 } from "../lib/outdoor-walkthrough-book";
+import { loadBook, saveBook } from "../lib/outdoor-walkthrough-store";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
 import { downloadSessionReport } from "../lib/outdoor-report-download";
 import { assessAcceptance, formatAcceptanceStatement, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
@@ -468,8 +468,8 @@ export function useOutdoorAgentWorkflow(input: {
   // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
   const metricsBook = useRef(createMetricsBook());
   const traceBook = useRef(createTurnTraceBook());
-  /** 走查记录本：本轮页面里逐条标，标完直接进状态卡（不落盘，刷新即清）。 */
-  const walkthroughBook = useRef(emptyBook());
+  /** 走查记录本：本轮页面里逐条标，标完直接进状态卡（同时落盘，刷新后不丢）。 */
+  const walkthroughBook = useRef(loadBook());
   const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
@@ -2372,6 +2372,8 @@ export function useOutdoorAgentWorkflow(input: {
       const next = markSeen(walkthroughBook.current, id, state);
       if (next === walkthroughBook.current) return null;
       walkthroughBook.current = next;
+      // 落盘失败（隐私模式/配额）不影响本轮继续标；只是刷新后会丢。
+      saveBook(next);
       return next;
     },
     /** 走查进度一行话（只报“看了几条”，不下“可发布”结论）。 */
