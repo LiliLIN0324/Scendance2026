@@ -37,6 +37,8 @@ export interface ReleaseStatusInput {
   ledger?: readonly CaseLedgerRow[];
   /** 三类全绿的用例数（由人填；缺省 0）。给了 ledger 时以 ledger 为准。 */
   allGreen?: number;
+  /** 真实走查记录：给了就以它算浏览器那列与日期，不再用 `BROWSER_EVIDENCE`。 */
+  evidence?: WalkthroughRecord;
 }
 
 /** 证据快照日期：下面的表只代表这一天对照表的实际内容，表变了就要同步改。 */
@@ -61,6 +63,40 @@ export const BROWSER_EVIDENCE: Readonly<Record<number, 'none' | 'partial'>> = {
 };
 
 export const RELEASE_STATUS_PREFIX = '[outdoor-release]';
+
+/** 浏览器证据三态：没看 / 看了但不构成通过 / 走查通过。 */
+export type BrowserEvidence = 'none' | 'partial' | 'pass';
+
+/**
+ * 一次真实走查的记录（人写的原始材料）。
+ * 有了它，卡片和台账的浏览器那列不再手写常量，而是从记录算出来。
+ */
+export interface WalkthroughRecord {
+  /** 走查日期；不写就沿用 `EVIDENCE_AS_OF`。 */
+  asOf?: string;
+  /** 逐条状态。没写的号一律当 `none`——没记录就是没证据，不默认给 partial。 */
+  seen: Readonly<Record<number, BrowserEvidence>>;
+}
+
+/**
+ * 把走查记录摊成「编号 → 三态」。
+ * 没传记录就返回 `BROWSER_EVIDENCE`（照对照表抄的那份），这样老调用点行为不变。
+ */
+export function browserEvidenceFrom(
+  record?: WalkthroughRecord,
+): Readonly<Record<number, BrowserEvidence>> {
+  if (!record) return BROWSER_EVIDENCE;
+  const out: Record<number, BrowserEvidence> = {};
+  for (const id of CASE_IDS) {
+    out[id] = record.seen[id] ?? 'none';
+  }
+  return out;
+}
+
+/** 走查日期：有记录用记录的，没有就用常量。 */
+export function evidenceAsOf(record?: WalkthroughRecord): string {
+  return record?.asOf?.trim() || EVIDENCE_AS_OF;
+}
 
 /**
  * 把状态卡整张打到控制台（首行前缀固定，后面是多行正文），并返回卡文给调用方。
@@ -118,12 +154,14 @@ export const CASE_IDS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
  */
 export function ledgerFromEvidence(
   fixedDataIds: readonly number[],
+  evidence?: WalkthroughRecord,
 ): CaseLedgerRow[] {
   const fixed = new Set(fixedDataIds);
+  const browser = browserEvidenceFrom(evidence);
   return CASE_IDS.map((id) => ({
     id,
     fixedData: fixed.has(id),
-    browser: BROWSER_EVIDENCE[id] === 'partial' ? 'partial' : 'none',
+    browser: browser[id] ?? 'none',
     cloud: 'none',
   }));
 }
@@ -137,8 +175,8 @@ export function ledgerFromEvidence(
 export const FIXED_DATA_CASES: readonly number[] = [2, 5];
 
 /** 卡默认用的台账：直接由上面的常量生成，不给人填的余地。 */
-export function defaultLedger(): CaseLedgerRow[] {
-  return ledgerFromEvidence(FIXED_DATA_CASES);
+export function defaultLedger(evidence?: WalkthroughRecord): CaseLedgerRow[] {
+  return ledgerFromEvidence(FIXED_DATA_CASES, evidence);
 }
 
 /** 云端那列：有台账才算得出来，没台账就明说没报。 */
@@ -152,7 +190,7 @@ function cloudLine(ledger: readonly CaseLedgerRow[] | undefined): string {
 export interface StatusSnapshot {
   evidenceAsOf: string;
   cases: { total: number; ready: number; missing: number; browserOnly: number };
-  browser: { partial: number[]; none: number[] };
+  browser: { pass: number[]; partial: number[]; none: number[] };
   /** 没带台账时为 null（而不是写一串 0 冒充“都没过”）。 */
   cloud: { pass: number; unverified: number } | null;
   gate: { typecheck?: boolean; tests?: boolean; build?: boolean };
@@ -168,8 +206,10 @@ export function statusCardSnapshot(input: ReleaseStatusInput): StatusSnapshot {
   const ids = input.rows.map((row) => row.id);
   const gate = input.reading ? gateFactsForCard(input.reading) : (input.gate ?? {});
   const ledger = input.ledger;
+  const evidence = browserEvidenceFrom(input.evidence);
+  const idsOf = (state: BrowserEvidence) => ids.filter((id) => evidence[id] === state).sort((a, b) => a - b);
   return {
-    evidenceAsOf: EVIDENCE_AS_OF,
+    evidenceAsOf: evidenceAsOf(input.evidence),
     cases: {
       total: input.rows.length,
       ready: totals.ready,
@@ -177,8 +217,9 @@ export function statusCardSnapshot(input: ReleaseStatusInput): StatusSnapshot {
       browserOnly: totals.browserOnly,
     },
     browser: {
-      partial: ids.filter((id) => BROWSER_EVIDENCE[id] === 'partial').sort((a, b) => a - b),
-      none: ids.filter((id) => BROWSER_EVIDENCE[id] === 'none').sort((a, b) => a - b),
+      pass: idsOf('pass'),
+      partial: idsOf('partial'),
+      none: idsOf('none'),
     },
     cloud: ledger
       ? {
@@ -203,14 +244,16 @@ export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
   const allGreen = input.ledger ? summarizeLedger(input.ledger).allGreen : (input.allGreen ?? 0);
   const gateReady = gate.typecheck === true && gate.tests === true && gate.build === true;
   const ids = input.rows.map((row) => row.id);
-  const withEvidence = ids.filter((id) => BROWSER_EVIDENCE[id] === 'partial');
-  const withoutEvidence = ids.filter((id) => BROWSER_EVIDENCE[id] === 'none');
+  const evidence = browserEvidenceFrom(input.evidence);
+  const withEvidence = ids.filter((id) => evidence[id] === 'partial');
+  const withoutEvidence = ids.filter((id) => evidence[id] === 'none');
+  const passed = ids.filter((id) => evidence[id] === 'pass');
   return [
     '发布前状态卡',
     input.rows.length === 0
       ? '· 验收用例 0 条：还没有可判的用例（先跑一次会话再用）'
       : `· 验收用例 ${input.rows.length} 条：可判 ${totals.ready} / 缺料 ${totals.missing} / 只能浏览器 ${totals.browserOnly}`,
-    `· 浏览器证据（${EVIDENCE_AS_OF}）：有部分 ${listWithIds(withEvidence)} / 无证据 ${listWithIds(withoutEvidence)}`,
+    `· 浏览器证据（${evidenceAsOf(input.evidence)}）：${passed.length > 0 ? `已通过 ${listWithIds(passed)} / ` : ''}有部分 ${listWithIds(withEvidence)} / 无证据 ${listWithIds(withoutEvidence)}`,
     cloudLine(input.ledger),
     `· 指标：${input.metrics.text.trim() || '本次会话没有指标记录'}`,
     `· 门禁：类型 ${gateCell(gate.typecheck)} / 用例 ${gateCell(gate.tests)} / 构建 ${gateCell(gate.build)}（${gateReady ? '门禁就绪' : '门禁未齐'}）`,

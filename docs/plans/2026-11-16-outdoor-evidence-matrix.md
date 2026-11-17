@@ -9,12 +9,13 @@
 下面这段是 `statusCardSnapshot()` 在「默认台账」下的输出，**逐字段被测试钉住**，不是手抄：
 
 ```json
-{"evidenceAsOf":"2026-11-17 正式站走查第二轮","cases":{"total":11,"ready":0,"missing":5,"browserOnly":6},"browser":{"partial":[1,3,4,6,7,8,9,10,11],"none":[2,5]},"cloud":{"pass":0,"unverified":11},"gate":{},"allGreen":0}
+{"evidenceAsOf":"2026-11-17 正式站走查第二轮","cases":{"total":11,"ready":0,"missing":5,"browserOnly":6},"browser":{"pass":[],"partial":[1,3,4,6,7,8,9,10,11],"none":[2,5]},"cloud":{"pass":0,"unverified":11},"gate":{},"allGreen":0}
 ```
 
 - 复跑：`cd frontend && npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`，看用例「默认台账下的快照一字段不多一字段不少」。
 - 读法：`allGreen: 0` 是**算出来的**（三类全绿要固定数据 + 浏览器 pass + 云端 pass，目前没一条同时满足）；`gate: {}` 表示本次快照没带门禁读数，不代表门禁没跑过。
 - 用途：以后每轮只需把新快照与这段 diff，“哪些数字变了”不再靠肉眼对表格。
+- 轮次 71 起 `browser` 多了 `pass` 档：证据可以由一份 `WalkthroughRecord` 传进来（`browserEvidenceFrom()`），不传就还是照本表抄的那份常量；`pass: []` 就是“一条走查通过的都没有”，不是没这项。
 
 ## 1. 逐条对照
 
