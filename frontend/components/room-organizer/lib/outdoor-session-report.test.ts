@@ -90,3 +90,44 @@ describe('buildSessionReport', () => {
     expect(report.metrics.rows).toHaveLength(1);
   });
 });
+
+describe("报告携带发布快照（轮次 85）", () => {
+  const base = () => ({
+    turns: [],
+    metrics: {
+      totals: {
+        turns: 0,
+        modelCalls: 0,
+        mapCalls: 0,
+        confirmations: 0,
+        appliedCount: 0,
+        firstUsefulFeedbackAvgMs: null,
+        previewAvgMs: null,
+        applyAvgMs: null,
+      },
+      rows: [],
+      text: "turns=0 model=0 map=0 confirm=0 applied=0",
+    },
+  });
+
+  it("不给 release 时文本与以前逐字相同，也不凭空多出 release 字段", () => {
+    const report = buildSessionReport({ ...base(), now: 1 });
+    expect(report.release).toBeUndefined();
+    expect(report.text).not.toContain("[发布状态快照]");
+  });
+
+  it("给了 release 就多一段单行 JSON，且能原样解析回来", () => {
+    const snapshot = { cases: { total: 11 }, allGreen: 0, cloud: { pass: 0, unverified: 11 } };
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot } });
+    expect(report.text).toContain("[发布状态快照]");
+    const line = report.text.split("\n").find((row) => row.startsWith("{\"cases\""));
+    expect(line).toBeDefined();
+    expect(JSON.parse(line as string)).toEqual(snapshot);
+  });
+
+  it("带卡片时卡片原文附在快照之后，不重排、不截断", () => {
+    const card = "· 发布状态（只报事实）\n· 结论：不可发布（三类全绿 0 条）";
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: { allGreen: 0 }, card } });
+    expect(report.text.endsWith(card)).toBe(true);
+  });
+});

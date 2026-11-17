@@ -2634,6 +2634,20 @@ export function useOutdoorAgentWorkflow(input: {
     autoResumedLogin.current = key;
     void resumeAfterLogin();
   }, [state.pendingLogin, accountReady]);
+  /** 发布状态的现值：报告、卡片、快照都从这里取，避免同一轮各算一遍而说法不一。 */
+  const currentRelease = () => {
+    const metrics = summarizeMetrics(metricsBook.current);
+    const rows = assessAcceptance(
+      buildSessionReport({ turns: traceBook.current.list(), metrics }),
+    );
+    const bundle = releaseStatusBundle({
+      rows,
+      metrics,
+      evidence: bookToRecord(walkthroughBook.current),
+      cloudPass: cloudPass.current,
+    });
+    return { rows, metrics, bundle };
+  };
   return {
     state,
     designSteps,
@@ -2651,10 +2665,26 @@ export function useOutdoorAgentWorkflow(input: {
     metricsSummary: () => summarizeMetrics(metricsBook.current),
     /** 把汇总打到控制台并尽量写进剪贴板；返回值说明剪贴板是否发起成功。 */
     exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
-    /** 轨迹 + 指标一份导出（两份都是白名单字段）。 */
-    sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
+    /** 轨迹 + 指标一份导出（两份都是白名单字段）；带上发布快照，两轮报告可 diff。 */
+    sessionReport: () => {
+      const { metrics, bundle } = currentRelease();
+      return buildSessionReport({
+        turns: traceBook.current.list(),
+        metrics,
+        release: { snapshot: bundle.snapshot, card: bundle.card },
+      });
+    },
     /** 把会话报告存成本地 .txt（Web 下载）；导不出时只返回 ok:false，不抛。 */
-    downloadReport: () => downloadSessionReport(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
+    downloadReport: () => {
+      const { metrics, bundle } = currentRelease();
+      return downloadSessionReport(
+        buildSessionReport({
+          turns: traceBook.current.list(),
+          metrics,
+          release: { snapshot: bundle.snapshot, card: bundle.card },
+        }),
+      );
+    },
     /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
     acceptanceCheck: () => {
       const rows = assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }));
@@ -2667,16 +2697,7 @@ export function useOutdoorAgentWorkflow(input: {
      *  所以不会出现“卡片说 1 条、快照说 0 条”。
      */
     logReleaseStatus: () => {
-      const metrics = summarizeMetrics(metricsBook.current);
-      const rows = assessAcceptance(
-        buildSessionReport({ turns: traceBook.current.list(), metrics }),
-      );
-      const bundle = releaseStatusBundle({
-        rows,
-        metrics,
-        evidence: bookToRecord(walkthroughBook.current),
-        cloudPass: cloudPass.current,
-      });
+      const { rows, metrics, bundle } = currentRelease();
       // 用同一份台账再格式一次：日志里那段文本与 `bundle.card` 逐字相同。
       const card = logReleaseStatus({ rows, metrics, ledger: bundle.ledger });
       return { ...bundle, card };
