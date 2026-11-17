@@ -1031,7 +1031,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:3,height:3});
     render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内3×3，每2人一桌，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/需求 30 人、15 桌；本次排了 \d+ 人、\d+ 桌、\d+ 把椅子，尚缺 \d+ 人/,{},{timeout:15000})).toBeTruthy();expect(screen.getByText(/不代表场地最大容量/)).toBeTruthy();
+    expect(await screen.findByText(/需求 30 人、15 桌；本次排了 \d+ 人、\d+ 桌、\d+ 把椅子，尚缺 \d+ 人/,{},{timeout:15000})).toBeTruthy();expect(screen.getByText(/要更多位置就腾地方或换分区/)).toBeTruthy();
   },20000);
   it('uses a one-per-desk exploration assumption only when no allocation was stated',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
@@ -1562,7 +1562,7 @@ describe('T-03 review in the Agent panel', () => {
     render(ui(state.layout, onApply, onPreview));
     send('看看哪里有问题');
 
-    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+    expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
     expect(await screen.findByText(/入口通道我不猜/)).toBeTruthy();
     expect(await screen.findByText(/靠边的椅子拉不开/)).toBeTruthy();
     const before = JSON.stringify(state.layout);
@@ -2998,7 +2998,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     studioMock.generate.mockImplementation(async()=>{studioMock.preview=preview;});
     render(ui({...state.layout,width:12,height:9}));send('30 人，室内 12×9，圆桌');
     expect(await screen.findByText(/本版排了 24 \/ 30 套，尚缺 6 套/)).toBeTruthy();
-    expect(screen.getByText(/已触及云场景物件数量上限，不代表场地最大容量/)).toBeTruthy();
+    expect(screen.getByText(/已触及云场景物件数量上限。要更多位置就腾地方或减人数/)).toBeTruthy();
     expect(document.body.textContent).not.toContain('SEATING_SHORTFALL:30:24');
   });
 
@@ -4082,7 +4082,7 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     state.layout = seatLayout();
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
-    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+    expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
 
   it('假分派控件与话术全部消失，空态不再挂引导句', () => {
@@ -4127,7 +4127,7 @@ describe('S2 Bingo 审校台：三钮状态台直达', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
     // 与 T-03 口令路径同引擎、同口径声明，只是入口从 send() 换成按钮。
-    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+    expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
 
   it('点「准备客户评审」直接回调，不落气泡', () => {

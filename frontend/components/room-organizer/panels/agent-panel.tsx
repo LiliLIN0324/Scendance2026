@@ -1272,7 +1272,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', review: true, long: true, text: `检查了 ${report.checked} 件：挤、压墙、出界、挡门前留空这几项没发现问题。只看了已建模的物件，没建模的先加进来再查。${notes}` });
       return;
     }
-    say({ role: 'agent', review: true, long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
+    say({ role: 'agent', review: true, long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只查挤、压墙/柱、出界、挡门前留空和座椅拉不开这几项。${notes}` });
     const actionable = report.issues.filter(issue => !!issue.fix);
     for (const issue of actionable.slice(0, 3)) {
       say({ role: 'agent', review: true, text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
@@ -2526,7 +2526,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         shared?'每桌 2 人：用户明确选择；实际桌椅仍需核验。':allocation?.status==='one_per_desk'?'每人一桌：用户明确选择；实际桌椅仍需核验。':'每人一桌：本次探索假设，用户尚未指定，可随时修改。',
         `示意尺寸：${dimensionLine(shared?'双人桌':'单人桌',desk.value,saved?.desk)}；${dimensionLine('椅子',chair.value,saved?.chair)}；实物待核验。`,
         `示意间距：桌椅 0.1 米、${shared?'椅间 0.1 米、':''}列间 0.3 米、排间 0.5 米、距边 0.3 米；这是我取的默认值，要改就说数字。`,
-        ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，不代表场地最大容量。`]:[]),
+        ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，这一版就到这儿；要更多位置就腾地方或换分区。`]:[]),
         `${result.unknown.join('、')}仍需核验。`,...(doorNotice?[doorNotice]:[]),...routeNotices,...limitations];
       const plan:PlanProposal & {localDraftDetails:string[]}={layouts:[result.layout],added:result.placed+placedTables,removing:0,
         keptLocked:base.floors[activeFloorIndex]?.items.filter(item=>item.locked&&!isStructuralMarker(item)).length??0,
