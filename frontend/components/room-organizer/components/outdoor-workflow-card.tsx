@@ -330,7 +330,11 @@ export function OutdoorWorkflowCard({
               // 用户不知道刚才那一下已经失败。直接把结论写在标题上，阶段留后面做定位。
               : flow.noticeKind === "error"
                 ? `这一步没做成 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`
-                : `当前任务 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+                : flow.noticeSticky
+                  ? // 2026-11-17 断点修复：反问补充时标题还是「当前任务 · 主通道」，对话在问物件、
+                    // 卡在说通道，用户不知道自己卡在哪一步。标题直接说「等你补充」。
+                    `等你补充 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`
+                  : `当前任务 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
         </strong>
       </header>
       {flow.busy && (

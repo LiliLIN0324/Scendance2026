@@ -68,4 +68,73 @@ describe("mergeOutdoorFacts —— 数量依据只看「用户到底说没说」
       ),
     ).toThrow("物件/岗位数量缺少本句数字依据");
   });
+
+  // 2026-11-17 断点修复：增量改口（「再加3个」）按已确认数量折算，模型把增量当总量回也不会清场。
+  it("「再加3个」按增量折算：20→23，不是把 20 抹成 3", () => {
+    const state = emptyOutdoorFlow("d1");
+    const confirmed = {
+      ...state,
+      brief: {
+        ...state.brief,
+        items: [{ zone: "摆摊区", query: "市集摊位", count: 20, evidence: "20个摊位" }],
+      },
+    };
+    const next = mergeOutdoorFacts(
+      confirmed,
+      turnOf([{ zone: "摆摊区", query: "市集摊位", count: 3, evidence: "加3个" }]),
+      "再加3个",
+    );
+    expect(next.brief.items[0]).toMatchObject({ query: "市集摊位", count: 23 });
+  });
+
+  it("「减5个」按增量折算：20→15", () => {
+    const state = emptyOutdoorFlow("d2");
+    const confirmed = {
+      ...state,
+      brief: {
+        ...state.brief,
+        items: [{ zone: "摆摊区", query: "市集摊位", count: 20, evidence: "20个摊位" }],
+      },
+    };
+    const next = mergeOutdoorFacts(
+      confirmed,
+      turnOf([{ zone: "摆摊区", query: "市集摊位", count: 5, evidence: "减5个" }]),
+      "减5个",
+    );
+    expect(next.brief.items[0]).toMatchObject({ query: "市集摊位", count: 15 });
+  });
+
+  it("「改成2个」仍是绝对数：20→2，不折算", () => {
+    const state = emptyOutdoorFlow("d3");
+    const confirmed = {
+      ...state,
+      brief: {
+        ...state.brief,
+        items: [{ zone: "摆摊区", query: "市集摊位", count: 20, evidence: "20个摊位" }],
+      },
+    };
+    const next = mergeOutdoorFacts(
+      confirmed,
+      turnOf([{ zone: "摆摊区", query: "市集摊位", count: 2, evidence: "改成2个" }]),
+      "改成2个",
+    );
+    expect(next.brief.items[0]).toMatchObject({ query: "市集摊位", count: 2 });
+  });
+
+  it("「摊位都撤了」：count=0 凭本句原话放行，清空该区需求", () => {
+    const state = emptyOutdoorFlow("d4");
+    const confirmed = {
+      ...state,
+      brief: {
+        ...state.brief,
+        items: [{ zone: "摆摊区", query: "市集摊位", count: 20, evidence: "20个摊位" }],
+      },
+    };
+    const next = mergeOutdoorFacts(
+      confirmed,
+      turnOf([{ zone: "摆摊区", query: "市集摊位", count: 0, evidence: "都撤了" }]),
+      "摊位都撤了",
+    );
+    expect(next.brief.items[0]).toMatchObject({ query: "市集摊位", count: 0 });
+  });
 });

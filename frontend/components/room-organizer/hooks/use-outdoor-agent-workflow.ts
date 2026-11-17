@@ -848,10 +848,16 @@ export function useOutdoorAgentWorkflow(input: {
     } else nextStage(p.kind);
     const mapEditHint = MAP_EDIT_HINTS[p.kind];
     const nextStep = OUTDOOR_STAGE_LABELS[stateRef.current.stage];
+    // 2026-11-17 断点修复：硬挤预览确认后，回话必须把「需求没变、画布已到物理上限」说清，
+    // 不然下一轮用户看着 50 个摊以为自己要的 120 被悄悄改了。
+    const packedNote =
+      p.kind === "objects" && objectsLayoutRef.current?.packed
+        ? "注意：这版是「硬挤」物理极限；你记的需求数量没变，画布已塞到上限，要宽松就减数量或扩分区。"
+        : "";
     status(
       mapEditHint
-        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。`
-        : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。`,
+        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。${packedNote}`
+        : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。${packedNote}`,
       "done",
     );
     if (p.kind === "zones" || p.kind === "main-routes" || p.kind === "objects") {
@@ -1559,7 +1565,15 @@ export function useOutdoorAgentWorkflow(input: {
         try {
           result = await proposeInventoryObjects(basePlan, demandBrief, library, undefined, proposeOpts);
         } catch (error) {
-          if (!(error instanceof Error) || !/放不下/.test(error.message)) throw error;
+          if (!(error instanceof Error)) throw error;
+          // 2026-11-17 断点修复：人数粗筛类拦截（表演区无观众区/缺来宾区/面积不足）不是重放能解的，
+          // 转成带「出分区预览」下一步的红卡，别给一个只会撞墙的重试。
+          if (/观众区域|来宾活动区域|2㎡\/人/.test(error.message))
+            throw new OutdoorStepBlocked(error.message, {
+              action: "zones",
+              label: "出分区预览（补观众区/调分区）",
+            });
+          if (!/放不下/.test(error.message)) throw error;
           fitError = error.message;
           if (draft) {
             // 设计师草案：按面积反算的量放不下，缩的是我算的数，不是用户说的数。
@@ -1574,7 +1588,13 @@ export function useOutdoorAgentWorkflow(input: {
                   proposeOpts,
                 );
               } catch (shrinkError) {
-                if (!(shrinkError instanceof Error) || !/放不下/.test(shrinkError.message)) throw shrinkError;
+                if (!(shrinkError instanceof Error)) throw shrinkError;
+                if (/观众区域|来宾活动区域|2㎡\/人/.test(shrinkError.message))
+                  throw new OutdoorStepBlocked(shrinkError.message, {
+                    action: "zones",
+                    label: "出分区预览（补观众区/调分区）",
+                  });
+                if (!/放不下/.test(shrinkError.message)) throw shrinkError;
                 fitError = shrinkError.message;
                 // 只缩“放不下”的那个分区：全区减半会把本来排得下的摆摊区一起砍到 3 个摊。
                 const zoneName = /“([^”]+)”放不下/u.exec(shrinkError.message)?.[1];
