@@ -525,6 +525,39 @@ export function OutdoorWorkflowCard({
             </div>
           </div>
         </div>
+      ) : flow.state.stage === "scope" && !flow.boundaryReady ? (
+        // 2026-11-18 用户拍板：场地没有用地红线时，卡片先教怎么画，
+        // 不再挂一颗点了也只会撞红卡的「确认活动范围」。
+        <div className="ap-scope-guide">
+          <div className="ap-scope-guide-art" aria-hidden="true">
+            <svg viewBox="0 0 220 108" role="presentation" focusable="false">
+              <rect width="220" height="108" rx="10" fill="#e8f0df" />
+              <path d="M0 92c26-6 44 6 68 2s36-10 62-6 52 8 90 2v18H0z" fill="#cfe3f3" />
+              <rect x="12" y="16" width="44" height="10" rx="2" fill="#efe6d2" />
+              <rect x="122" y="14" width="58" height="9" rx="2" fill="#efe6d2" />
+              <rect x="30" y="74" width="64" height="8" rx="2" fill="#efe6d2" />
+              <rect x="56" y="27" width="96" height="52" fill="#f7f9f5" stroke="#2f7d4f" strokeWidth="2" />
+              <g fill="#fff" stroke="#2f7d4f" strokeWidth="2">
+                <rect x="51" y="22" width="10" height="10" rx="1" />
+                <rect x="147" y="22" width="10" height="10" rx="1" />
+                <rect x="51" y="74" width="10" height="10" rx="1" />
+                <rect x="147" y="74" width="10" height="10" rx="1" />
+              </g>
+            </svg>
+          </div>
+          <p className="ap-scope-guide-title">先在图上圈出这次活动用的地</p>
+          <p className="ap-scope-guide-text">
+            沿场地边缘逐点单击，点回起点就闭合；闭合后红线就是设计范围，分区、流线、物件都按它排。
+          </p>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={flow.busy}
+            onClick={() => flow.manualBoundary()}
+          >
+            在地图上手画活动范围
+          </button>
+        </div>
       ) : flow.state.stage !== "place" && !flow.drawingMode ? (
         flow.state.stage === "zones" &&
         (!flow.state.brief.zones.length ||
