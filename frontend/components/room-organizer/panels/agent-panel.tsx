@@ -4583,6 +4583,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           </div>
         </details>}
         {activity && <>
+        {/* 没有「这一版布置」也能进执行资料：只打开画布上的资料浮层，不提交生成。 */}
+        <button
+          type="button"
+          className="ap-delivery-entry"
+          onClick={() => agent.callbacks.onOpenDelivery()}
+        >
+          执行资料
+        </button>
         <button
           type="button"
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}

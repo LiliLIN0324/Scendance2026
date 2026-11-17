@@ -277,7 +277,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
     </div>
     <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
-    {layout.eventProfile && <EventProfileCard profile={layout.eventProfile} />}
+    <EventProfileCard profile={layout.eventProfile} />
     <DaySheetExport layout={layout} save={saveHtmlFile} />
     <MaterialIntakePanel operations={operations} projectId={layout.id ?? 'local'} disabled={disabled}
       onAccept={next => onUpdate(next)} />
