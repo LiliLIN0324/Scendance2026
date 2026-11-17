@@ -657,6 +657,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }, [studioProjects, query]);
   // 画布尚未对应某个已打开的云端项目时，用「草稿」卡占位（类似 Figma Drafts）。
   const draftOnCanvas = !sceneConnection && (!cloud.project || layout.id !== cloud.project.id);
+  const floorplanOnlyLocal = !layout.backendSceneV2 && !!(layout.floorPlanImage || layout.backendVenue?.floorplanAssetId);
   const draftCardName = (layout.name || '').trim() || '未命名草稿';
   const showDraftCard = draftOnCanvas && (!query.trim() || draftCardName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const draftScene = useMemo(() => {
@@ -974,6 +975,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       </section>
       {/* 项目相关提示只挂在项目页，别跟到团队 / 物料里吵。 */}
       {section === 'projects' && conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
+      {section === 'projects' && floorplanOnlyLocal && <p className="sc-cloud-message" role="status">底图只保留在本机，云端方案不包含底图；本机草稿仍保留原图。</p>}
       {section === 'projects' && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
       {section === 'projects' && (notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
       {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && notice!==cloud.error.message && <p className="sc-cloud-message" role="alert">{cloud.error.message}</p>}
