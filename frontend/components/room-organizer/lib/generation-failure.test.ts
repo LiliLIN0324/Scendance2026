@@ -68,6 +68,15 @@ describe('生成失败原因的人话', () => {
     expect(generationFailureText({ state: 'failed', provider_usage: { vendorError: 'boom' } })).toContain('重新生成');
   });
 
+  it('入库被上限挡住要说清是文件太大，而不是笼统的失败', () => {
+    // 2026-11-17 生产 C1 实跑：供应商出好了模型，我们自己的入库上限把它挡在门外，
+    // 任务落到 rejected + FILE_TOO_LARGE。用户看到的必须说得出「模型太大、没进库」，
+    // 而不是「生成失败」——后者会让人以为是描述写得不对，白跑一遍。
+    const text = generationFailureText({ state: 'rejected', error_code: 'FILE_TOO_LARGE' });
+    expect(text).toContain('入库上限');
+    expect(text).toContain('模型库');
+  });
+
   it('只有码没有文案时也要说得出话', () => {
     const text = generationFailureText({
       state: 'failed',

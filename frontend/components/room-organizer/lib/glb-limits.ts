@@ -1,5 +1,13 @@
-/** One GLB ceiling shared by the downloader and the local importer, so the two paths cannot drift. */
+/** 本机导入的 GLB 上限：用户自己挑的文件，守 10 MB（属性卡那个按钮的说明里也写着 ≤10 MB）。 */
 export const GLB_MAX_FILE_BYTES = 10 * 1024 * 1024;
+/**
+ * 云端资产的下载上限（生成服务商产出的模型走这一档）。
+ *
+ * 2026-11-17 生产实跑踩到的：Lux3D G1 的 textured.glb 实测 10.06 MiB，比 10 MB 多 59 KB，
+ * 服务端已经把它存进资产库了，前端却按 10 MB 拒收，用户只看到「GLB 超过 10 MB，未载入」。
+ * 所以下载这一档放宽到 32 MB；本机导入仍守 10 MB。
+ */
+export const GLB_MAX_CLOUD_FILE_BYTES = 32 * 1024 * 1024;
 /**
  * 试走角色：绑骨 + Idle/Walk 的模型走单独上限（普通物件仍是 10 MB）。
  * 两条路：本机资产代理（开发机）与云端资产库（lib/cloud-assets.ts）。

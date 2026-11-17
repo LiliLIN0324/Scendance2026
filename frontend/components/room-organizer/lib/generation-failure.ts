@@ -50,6 +50,7 @@ const ERROR_CODE_TEXT: Record<string, string> = {
   PROVIDER_TIMEOUT: '生成服务商响应超时，稍后再试。',
   PROVIDER_HTTP_ERROR: '生成服务商暂时不可用，稍后再试。',
   PROVIDER_NO_GLB: '生成服务商没有产出模型文件，再生成一次试试。',
+  FILE_TOO_LARGE: '生成服务商产出的模型文件超过了入库上限，这张模型没能存进模型库。',
   PROVIDER_INVALID_JSON: '生成服务商返回的内容读不出来，再生成一次试试。',
   GENERATION_POLL_FAILED: '查询生成进度失败，刷新一下任务状态。',
   TEXTURE_GEOMETRY_CHANGED: '源模型的几何已经变了，这次纹理版本作废，需要重新生成。',
