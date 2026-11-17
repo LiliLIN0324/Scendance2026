@@ -148,7 +148,12 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
         <div className="sc-assets-section-heading"><h4>{paneCopy}</h4><button type="button" disabled={!!pending || busy} onClick={() => void run('刷新物料', refreshAssets)}>刷新</button></div>
         {loading && <p role="status">正在更新物料…</p>}
         {!loading && !visibleAssets.length && <p>{pane === 'saved' ? '还没有收藏。点条目右侧的星标收藏。' : pane === 'mine' ? '还没有生成物料。' : '还没有物料。'}</p>}
-        <ul className="sc-assets-list">{visibleAssets.map(asset => <AssetRow key={asset.id} asset={asset} favorite={favorites.includes(asset.id)} pending={!!pending || busy} onToggleFavorite={() => toggleFavorite(asset.id)} onPreview={asset.format === 'glb' ? () => void run('加载模型预览', account => loadPreview(asset.id, account)) : undefined} />)}</ul>
+        <ul className="sc-assets-list">{visibleAssets.map(asset => {
+          const row = { asset, favorite: favorites.includes(asset.id), pending: !!pending || busy, onToggleFavorite: () => toggleFavorite(asset.id) };
+          return asset.format === 'glb'
+            ? <AssetRow key={asset.id} {...row} onPreview={() => { void run('加载模型预览', account => loadPreview(asset.id, account)); }} />
+            : <AssetRow key={asset.id} {...row} />;
+        })}</ul>
         {preview && <section className="sc-assets-preview" aria-label="三维素材预览">
           <div className="sc-assets-section-heading"><h4>{preview.asset.name}</h4><button type="button" onClick={() => setPreview(null)}>关闭预览</button></div>
           {previewProps && <ScenePreview {...previewProps}/>}
