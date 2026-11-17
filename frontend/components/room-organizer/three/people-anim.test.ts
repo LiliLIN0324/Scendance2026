@@ -10,11 +10,18 @@ import {
   personAnimIds,
   personIsAnimated,
   personOdometer,
+  personRoamState,
+  personWalkStates,
   registerPersonAnim,
+  setPersonSeatContext,
   setPersonWalkContext,
+  setPersonZoneContext,
+  subscribePersonRoam,
   takePersonControl,
+  workerRoamState,
 } from './people-anim';
 import { type PeopleModel, preparePeopleModel, setPeopleModelForTests } from './people-model';
+import type { SeatAnchor } from '../lib/person-behavior';
 import type { FurnitureItem, WalkRoute } from '../lib/types';
 
 let model: PeopleModel | null = null;
@@ -62,6 +69,9 @@ function buildAndMount(item: FurnitureItem): THREE.Group {
 afterEach(() => {
   scene.clear();
   setPersonWalkContext(null);
+  setPersonWalkContext(null, 'outdoor');
+  setPersonSeatContext(null);
+  setPersonZoneContext(null);
   advancePeopleAnimations(STEP); // 清空场景后走一帧，注册表把脱离的实例摘干净
 });
 
@@ -205,6 +215,230 @@ describe('rigged person animation registry', () => {
     expect(advancePeopleAnimations(STEP)).toBe(1);
     tick(2);
     expect(Math.hypot(group.position.x - 2, group.position.z - 2)).toBeGreaterThan(1);
+  });
+});
+
+// B1：自主落座。程序化小人没有 Sit_Idle_Loop，走 poseSit + 髋高反算。
+describe('自主落座（沿流线走到椅子坐下）', () => {
+  const straight: WalkRoute = { points: [{ x: 0, z: 0 }, { x: 10, z: 0 }], loop: false, pauseMs: 0 };
+  const chair: SeatAnchor = {
+    id: 'chair-1', x: 3, z: 0, approach: { x: 3, z: 0 }, facing: 0, seatHeight: 0.45,
+  };
+
+  function mount(id: string): THREE.Group {
+    const group = buildProceduralPerson({
+      THREE, item: { ...adult, id, walkRoute: straight }, hasCollision: false, baseColor: adult.color, opacity: 1,
+    }, true);
+    scene.add(group);
+    return group;
+  }
+
+  it('walks off the line to the chair, sits, then returns to the route', () => {
+    setPeopleModelForTests(null);
+    const group = mount('p1');
+    setPersonSeatContext({ seats: [chair] });
+
+    tick(4);
+    const seated = personWalkStates().find((state) => state.id === 'p1')!;
+    expect(seated.seatPhase).toBe('seated');
+    expect(seated.seatId).toBe('chair-1');
+    expect(group.position.x).toBeCloseTo(3, 2);
+    expect(group.position.z).toBeCloseTo(0, 2);
+    // 坐姿摆位：髋 0.9 m 落到 0.45 m 座面 → 整个人下沉 0.45 m。
+    expect(group.position.y).toBeLessThan(-0.3);
+
+    advancePeopleAnimations(80); // 停留到点 → 起身
+    tick(1);                     // 走回离开点，交还基准流线
+    const back = personWalkStates().find((state) => state.id === 'p1')!;
+    expect(back.seatPhase).toBe('none');
+    expect(group.position.y).toBeCloseTo(0, 3);
+    tick(2);
+    expect(personOdometer('p1')!.travelled).toBeGreaterThan(1.5);
+  });
+
+  it('gives one chair to one person', () => {
+    setPeopleModelForTests(null);
+    mount('p1');
+    mount('p2');
+    setPersonSeatContext({ seats: [chair] });
+    tick(4);
+    const states = personWalkStates();
+    expect(states.filter((state) => state.seatPhase === 'seated')).toHaveLength(1);
+    expect(states.find((state) => state.seatId === 'chair-1')).not.toBeUndefined();
+  });
+
+  it('keeps walking past the chair when no seat context is injected', () => {
+    setPeopleModelForTests(null);
+    mount('p1');
+    tick(4);
+    expect(personWalkStates().every((state) => state.seatPhase === 'none')).toBe(true);
+    expect(personWalkStates()[0]!.x).toBeGreaterThan(4);
+  });
+
+  it('does not walk to a chair it cannot reach in a straight line', () => {
+    setPeopleModelForTests(null);
+    mount('p1');
+    setPersonWalkContext({
+      colliders: [{ cx: 1.5, cz: 0, hw: 0.6, hd: 3, ax: 1, az: 0, bx: 0, bz: 1, aabbHalfW: 0.6, aabbHalfD: 3, outdoor: false }],
+      bounds: { minX: -9.7, minZ: -9.7, maxX: 9.7, maxZ: 9.7 },
+    });
+    setPersonSeatContext({ seats: [chair] });
+    tick(4);
+    expect(personWalkStates()[0]!.seatPhase).toBe('none');
+  });
+});
+
+// B2：分区漫游。流线从区外穿进区内时，人拐进去走一段再回原线。
+describe('分区漫游（进区 → 区内走动 → 回线）', () => {
+  const loop: WalkRoute = { points: [{ x: -8, z: 0 }, { x: 8, z: 0 }], loop: true, pauseMs: 0 };
+  const zone = {
+    id: 'zone-a',
+    polygon: [{ x: -2, z: -2 }, { x: 2, z: -2 }, { x: 2, z: 2 }, { x: -2, z: 2 }],
+  };
+
+  function mount(id: string): THREE.Group {
+    const group = buildProceduralPerson({
+      THREE, item: { ...adult, id, walkRoute: loop }, hasCollision: false, baseColor: adult.color, opacity: 1,
+    }, true);
+    scene.add(group);
+    return group;
+  }
+
+  it('detours into the zone, wanders, then rejoins the line without resetting the odometer', () => {
+    setPeopleModelForTests(null);
+    const group = mount('p1'); // p1 第 0 圈命中进区判定（确定性 hash）
+    setPersonZoneContext({ zones: [zone] });
+
+    const seen = new Set<string>();
+    let travelledAtEntry = 0;
+    let rejoined = false;
+    for (let i = 0; i < 400 && !rejoined; i += 1) {
+      advancePeopleAnimations(0.5);
+      const state = personWalkStates()[0]!;
+      seen.add(state.seatPhase);
+      if (state.seatPhase === 'zone' && travelledAtEntry === 0) {
+        travelledAtEntry = personOdometer('p1')!.travelled;
+      }
+      if (seen.has('zone') && state.seatPhase === 'none') rejoined = true;
+    }
+
+    expect(seen.has('toZone')).toBe(true);
+    expect(seen.has('zone')).toBe(true);
+    expect(seen.has('rejoin')).toBe(true);
+    expect(rejoined).toBe(true);
+    const back = personWalkStates()[0]!;
+    expect(back.zoneId).toBeNull();
+    // 回线后位置在流线上（z≈0），不是从区里凭空瞬移回起点。
+    expect(Math.abs(group.position.z)).toBeLessThan(0.2);
+    expect(group.position.x).toBeGreaterThan(-2.5);
+    // 里程与圈数接着算：进区前已走的 3 m 多不能因换线而归零。
+    const odometer = personOdometer('p1')!;
+    expect(odometer.travelled).toBeGreaterThanOrEqual(travelledAtEntry);
+    expect(odometer.travelled).toBeGreaterThan(3);
+  });
+
+  it('walks straight through when no zone context is injected', () => {
+    setPeopleModelForTests(null);
+    mount('p1');
+    tick(6);
+    expect(personWalkStates()[0]!.seatPhase).toBe('none');
+    expect(personWalkStates()[0]!.x).toBeGreaterThan(-2);
+  });
+
+  it('rejoins the route when the zone disappears mid-visit', () => {
+    setPeopleModelForTests(null);
+    const group = mount('p1');
+    setPersonZoneContext({ zones: [zone] });
+
+    for (let i = 0; i < 80 && personWalkStates()[0]!.seatPhase !== 'zone'; i += 1) {
+      advancePeopleAnimations(0.5);
+    }
+    expect(personWalkStates()[0]!.seatPhase).toBe('zone');
+
+    // 分区被删：不能把人留在已经没有分区的坐标里。
+    setPersonZoneContext(null);
+    for (let i = 0; i < 200 && personWalkStates()[0]!.seatPhase !== 'none'; i += 1) {
+      advancePeopleAnimations(0.5);
+    }
+    const state = personWalkStates()[0]!;
+    expect(state.seatPhase).toBe('none');
+    expect(state.zoneId).toBeNull();
+    expect(Math.abs(group.position.z)).toBeLessThan(0.2);
+  });
+
+  it('reports the roam state to the 2D layer and notifies only on real changes', () => {
+    setPeopleModelForTests(null);
+    mount('w1#0');
+    const seen: string[] = [];
+    const off = subscribePersonRoam(() => seen.push(personRoamState('w1#0') ?? 'gone'));
+    setPersonZoneContext({ zones: [zone] });
+
+    for (let i = 0; i < 80 && personRoamState('w1#0') !== 'zone'; i += 1) {
+      advancePeopleAnimations(0.5);
+    }
+    expect(personRoamState('w1#0')).toBe('zone');
+    expect(workerRoamState('w1', 1)).toBe('zone');
+    // 没有实例的岗位与 id 不编状态，画布就不会画出无主状态环。
+    expect(workerRoamState('nobody', 3)).toBeNull();
+    expect(personRoamState('missing')).toBeNull();
+
+    // 退订后不再回调（画布卸载不留悬挂重绘）。
+    off();
+    const before = seen.length;
+    advancePeopleAnimations(2);
+    expect(seen.length).toBe(before);
+    expect(seen.length).toBeGreaterThan(0);
+  });
+
+  it('marks a seated person as seated for the 2D layer', () => {
+    setPeopleModelForTests(null);
+    const chair: SeatAnchor = {
+      id: 'chair-2', x: 0, z: 0.3, approach: { x: 0, z: 0.3 }, facing: Math.PI, seatHeight: 0.45,
+    };
+    mount('w2#0');
+    setPersonSeatContext({ seats: [chair] });
+
+    tick(12);
+    expect(personRoamState('w2#0')).toBe('seated');
+    expect(workerRoamState('w2', 1)).toBe('seated');
+  });
+});
+
+// 行走上下文按 owner 分开：两套 3D 同挂时各用自己那套碰撞盒与围栏。
+describe('行走上下文按 owner 分开', () => {
+  const straight: WalkRoute = { points: [{ x: 0, z: 0 }, { x: 10, z: 0 }], loop: false, pauseMs: 0 };
+
+  function mount(id: string): THREE.Group {
+    const group = buildProceduralPerson({
+      THREE, item: { ...adult, id, walkRoute: straight }, hasCollision: false, baseColor: adult.color, opacity: 1,
+    }, true);
+    scene.add(group);
+    return group;
+  }
+
+  it('uses the owner-specific context instead of the last injected one', () => {
+    setPeopleModelForTests(null);
+    const group = mount('owner#0');
+    // 故意把室外（窄围栏）后注入：旧实现会让室内人物也吃到 maxX=2。
+    setPersonWalkContext({ bounds: { minX: -9, minZ: -9, maxX: 9, maxZ: 9 } }, 'local');
+    setPersonWalkContext({ bounds: { minX: -9, minZ: -9, maxX: 2, maxZ: 9 } }, 'outdoor');
+
+    for (let i = 0; i < 180; i += 1) advancePeopleAnimations(1 / 60, scene, 'local');
+    expect(group.position.x).toBeGreaterThan(3);
+
+    // 同一个人换到 outdoor 那套：被夹在 x ≤ 2（不再借 local 的宽围栏）。
+    for (let i = 0; i < 180; i += 1) advancePeopleAnimations(1 / 60, scene, 'outdoor');
+    expect(group.position.x).toBeLessThanOrEqual(2.05);
+  });
+
+  it('falls back to no collision when that owner never injected a context', () => {
+    setPeopleModelForTests(null);
+    const group = mount('owner#1');
+    setPersonWalkContext({ bounds: { minX: -9, minZ: -9, maxX: 2, maxZ: 9 } }, 'outdoor');
+
+    for (let i = 0; i < 180; i += 1) advancePeopleAnimations(1 / 60, scene, 'local');
+    // local 没有注入过：不避障、不夹取，而不是借 outdoor 的围栏。
+    expect(group.position.x).toBeGreaterThan(3);
   });
 });
 

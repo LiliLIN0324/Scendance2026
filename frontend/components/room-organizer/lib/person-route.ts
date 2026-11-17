@@ -1,5 +1,5 @@
-import type { Vec2, WalkRoute } from './types';
 import { resolveWalkerStep, type WalkCollider } from './walk-collision';
+import type { Vec2, WalkRoute } from './types';
 
 /**
  * PEOPLE-04：人物沿米制路线行走。纯几何 + 时间推进，不碰 three——
@@ -341,4 +341,42 @@ export function personWalkBounds(
     maxX: layout.width / 2 - margin,
     maxZ: layout.depth / 2 - margin,
   };
+}
+
+/**
+ * 把 follower 重定位到路线上的某个弧长处（B2 出区回线用）。
+ *
+ * 只改「现在在哪、下一步走向哪个点」，**不动 `travelled` / `laps`**：回线不是重置，
+ * 里程与圈数要接着算（否则验收里的「laps 不清零」不成立）。方向统一置顺行，
+ * 出区回线一律接在向前的那一段上。
+ */
+export function rebaseRouteFollower(
+  follower: RouteFollowerState,
+  route: WalkRoute,
+  along: number
+): void {
+  const points = route.points;
+  if (points.length < 2) return;
+  const total = routeLength(points, routeIsLoop(route));
+  let remaining = Math.min(Math.max(0, total), Math.max(0, along));
+  let walked = 0;
+  let segment = 1;
+  for (; segment < points.length; segment += 1) {
+    const a = points[segment - 1]!;
+    const b = points[segment]!;
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    if (length <= 1e-9) continue;
+    if (walked + length >= remaining || segment === points.length - 1) {
+      const t = Math.min(1, Math.max(0, (remaining - walked) / length));
+      follower.x = a.x + (b.x - a.x) * t;
+      follower.z = a.z + (b.z - a.z) * t;
+      follower.facing = Math.atan2(b.x - a.x, b.z - a.z);
+      break;
+    }
+    walked += length;
+  }
+  follower.segment = Math.max(0, Math.min(points.length - 1, segment));
+  follower.dir = 1;
+  follower.remainingPause = 0;
+  follower.blockedFor = 0;
 }
