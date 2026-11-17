@@ -1246,16 +1246,16 @@ describe('explicit local-only seating draft',()=>{
     state.layout=makeLayout({id:'local-seating',width:20,height:20,floors:[makeFloor({items:[door]})]});
     const onApply=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，按一人一套课桌椅生成本地草案');
-    expect((await screen.findAllByText(/图中门洞或入口未纳入本次组团净空检查/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/这次组团净空没算门洞和入口/)).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));expect(onApply).toHaveBeenCalledOnce();
-    expect(await screen.findByText(/只是探索草案，不代表安全通过或可交付/)).toBeTruthy();
+    expect(await screen.findByText(/门、路线和无障碍的实测值补进图后/)).toBeTruthy();
   },20000);
   it('does not treat an inferred default door as a hard failure',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     annotationSnapshot={revision:3,draft:{id:'draft',createdAt:1,stages:[],annotations:[{id:'inferred-door',kind:'door',label:'推测门',stageNo:1,geometry:{kind:'door',wall:'south',position:0,widthM:null,inferred:true}}]}};
     const onApply=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，按一人一套课桌椅生成本地草案');
-    expect(await screen.findByText(/图中门洞或入口未纳入本次组团净空检查/)).toBeTruthy();
+    expect(await screen.findByText(/这次组团净空没算门洞和入口/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));expect(onApply).toHaveBeenCalledOnce();
   },20000);
   it('refuses to generate when an annotation snapshot cannot be read',async()=>{
