@@ -2242,3 +2242,17 @@ it("会话报告带上发布快照：两轮导出能按行 diff", () => {
   expect(report.text).toContain("[发布状态快照]");
   expect(report.text).toContain("不可发布（三类全绿 1 条）");
 });
+
+it("待补清单：标一条并声明云端后，清单就少一条，末行只报待补", () => {
+  const before = flow.releaseGaps();
+  expect(before).toContain("共 11 条待补");
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = flow.releaseGaps();
+  expect(after).not.toContain("#2 ");
+  expect(after).toContain("共 10 条待补");
+  expect(after).toContain("三类全绿 1 条");
+  expect(after).not.toContain("可发布（");
+});

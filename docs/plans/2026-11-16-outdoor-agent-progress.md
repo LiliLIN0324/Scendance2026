@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：会话报告现在可携带发布快照——`buildSessionReport({release:{snapshot,card}})` 会在文本末尾多一段**单行 JSON** 与卡片原文；hook 的 `sessionReport()` / `downloadReport()` 都从同一个 `currentRelease()` 取，不再各算一遍。**本地 main = origin = `788b5288`（`div 0/0`，开工即齐）**；工作区仍在 `main`、脏文件 17——下轮 origin 再前进先试 `--ff-only`。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–85 十五个切片。9222 四十一轮不通。下一条：验收快照里的 `asOf`（走查时间）——现在 `browser` 三档无时间戳，两轮报告分不清后面那条是新看的还是旧的；给 `WalkthroughRecord` 加可选 `asOf` 并在卡片/报告里写出来。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-bundle.test.ts`。
+- 下一条操作：新增 `outdoor-release-gaps.ts`（`missingEvidence()` / `formatGapList()` / `missingRows()`），hook 加 `releaseGaps()`——把台账翻成“哪几条还差什么”，空台账只写“没有台账”。**本地 main = origin = `8d1b4f15`（`div 0/0`，开工即齐）**；工作区仍在 `main`、脏文件 30（人的 WIP 在长）。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–86 十六个切片。9222 四十二轮不通。**口径纠错（重要）**：#2 是「两个同名地点，地图选中其中一个」、#5 是「地图部分、离线或无路网」，两条都 `source: browser`；以前进度里写的“#2 真实搜索”是错的，后续别再找那条用例。下一条：把台账导成 CSV（11 行一列一字段，不留结论列），人能直接填进表格。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-gaps.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 20:00 · 自动轮次 86 · 待补清单（哪几条还差什么）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 20:00，自动轮次 86
+批次 / 切片 / 状态：合并（无待合）+ M7 / 待补清单 / 已交付（分支待 PR）
+开工事实：HEAD = `8d1b4f15`，分支 `main`，脏文件 30；local main = origin = `8d1b4f15`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `ddf8fd40`
+交付：`outdoor-release-gaps.ts`（`missingEvidence()` 一条一行写清缺固定数据/浏览器/云端；`formatGapList()` 空台账写“没有台账”而非“无缺口”；`missingRows()` 查少了几行）+ hook `releaseGaps()`
+验证（固定数据）：清单 6/6（首跑 1 挂：把 #2 标题手写成“真实搜索”，实际是“两个同名地点”，改用 `case2.title` 自校）；清单+hook 86/86；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十二轮 down）
+未完成：#2/#5 真实浏览器；台账 CSV 导出
+```
+
+- **标题不能手抄**：6 条用例里我凭记忆写了 “#2 真实搜索”，真值是“两个同名地点，地图选中其中一个”。断言改成用 `case2.title` 自校，以后再歪就会红。
+- **空集合的两种含义要分开**：`ledger = []` 是“没算”，不是“齐了”；所以 `formatGapList([])` 只输出“没有台账”。
 
 ### 2026-11-18 19:00 · 自动轮次 85 · 报告带发布快照（两轮导出可 diff）
 
