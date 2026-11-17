@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：云端声明也落盘了（单独键 `scendance.outdoor.walkthrough.cloud.v1`，与记录本互不覆盖），hook 开局 `loadCloud()`、声明/撤回都写回。**本地 main = origin = `9612c3c2`（`div 0/0`）**；待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–81 十一个切片。9222 三十七轮不通。下一条：把“没声明的行不能算全绿”写成卡片层提示（云端列 0 条时明说“要么没跑、要么没声明”），避免人把“空”误读成“都行”。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-walkthrough-store.test.ts`。
+- 下一条操作：卡里云端 0 条时会并列写“要么没跑、要么还没声明”，有 1 条后括注自动消失。**本地 main = origin = `712b6331`（`div 0/0`，开工即齐、无待合）**；待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–82 十二个切片。9222 三十八轮不通。下一条：把“门禁读数+卡片+快照”三者用同一次跑结果串起来（现在钩子里得分别调），先加一个 `releaseStatusBundle()` 一次返回三者。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-cloud-ledger.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 16:00 · 自动轮次 82 · 云端列为空时的提示语（把“空”和“都行”分开）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 16:00，自动轮次 82
+批次 / 切片 / 状态：合并（无待合）+ M7 / 空列提示 / 已交付（分支待 PR）
+开工事实：HEAD = `680a0b13`（`agent/outdoor-copy-pass-1`），脏文件 6；**local main 已等于 origin/main `712b6331`（`div 0/0`）——本轮无待合**
+合并（分支）：`merge --no-edit main` 零冲突 → `3a4491f9`（分支已含主干最新 6 笔）
+交付：`cloudLine()` 在 `pass === 0` 时追加“（要么没跑、要么还没声明）”；只要有 1 条通过，括注自动消失。新增 2 条用例（0 条时包含括注 / 1 条后不包含），连同状态卡与落盘 58/58
+验证（固定数据）：`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十八轮 down）——**声明仍是 0 条**
+未完成：#2 真实搜索、#5 浏览器行为；三者一次返回的 bundle
+```
+
+- **“0 条”是最容易被误读的数字**：它既可能是“没跑”，也可能是“跑了没声明”；把两种原因并列写在同一个括号里，比单独加图例有效。
 
 ### 2026-11-18 15:00 · 自动轮次 81 · 云端声明落盘（单独一个键，与记录本互不覆盖）
 

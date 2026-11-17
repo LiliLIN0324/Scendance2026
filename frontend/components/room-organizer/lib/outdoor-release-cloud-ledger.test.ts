@@ -93,3 +93,24 @@ describe('云端证据那一列', () => {
     expect(ledger.filter((row) => row.cloud === 'pass')).toHaveLength(0);
   });
 });
+
+describe("云端一列为空时的提示语（轮次 82）", () => {
+  it("0 条通过时并列写两种原因，不让人误读成“都行”", () => {
+    const text = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: defaultLedger(),
+    });
+    expect(text).toContain("云端证据：0 条通过 / 11 条未验（要么没跑、要么还没声明）");
+  });
+
+  it("有 1 条通过后就不再挂那句括注（避免每张卡都像在喊空）", () => {
+    const text = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: ledgerFromEvidence([2], undefined, [2]),
+    });
+    expect(text).toContain("云端证据：1 条通过 / 10 条未验");
+    expect(text).not.toContain("要么没跑、要么还没声明");
+  });
+});
