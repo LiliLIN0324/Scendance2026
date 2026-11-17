@@ -425,10 +425,18 @@ export async function proposeInventoryObjects(
     // 2026-11-14 消歧：子串撞上一组相近物件（指示牌/指示牌架·双面/…）时，精确同名优先收窄。
     const exact = matches.filter((m) => m.name === need.query);
     if (exact.length) matches = exact;
-    if (!matches.length)
+    if (!matches.length) {
+      // 2026-11-17 断点修复：口径差一个字（「摊位」vs「市集摊位」）就红卡，卡上却不说库里有什么。
+      // 把库里现有名称带上，用户照着说就能过，不用猜。
+      const known = [...new Set(library.filter((m) => m.available).map((m) => m.name))]
+        .slice(0, 6)
+        .join("、");
       throw new Error(
-        `你的真实物料库中尚未找到尺寸与模型可用的“${need.query}”。可改名称检索/选真实候选或上传；未自动创建收费生成。`,
+        `你的真实物料库中尚未找到尺寸与模型可用的“${need.query}”。${
+          known ? `库里现有：${known}。` : ""
+        }可改名称检索/选真实候选或上传；未自动创建收费生成。`,
       );
+    }
     if (matches.length > 1) {
       // 同名多候选（如 manifest 里 icon/scale 两条「市集摊位」）按名称归组：组内同一物件不追问；
       // 只有出现「不同名」真歧义时才要求用户给具体名称。

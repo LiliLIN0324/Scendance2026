@@ -157,6 +157,32 @@ export function mergeOutdoorFacts(
   }
   if (facts.access && !proven(facts.access))
     throw new Error("模型提取缺少本句原文依据，请重新说明；没有修改规划。");
+  // 2026-11-17 增量改口兜底：「再加2个」这种增量说法，模型常把增量当总量回——
+  // 现值 25 个回 count=2，需求就从 25 变 2，把摆好的场清掉。这里按已确认数量做确定性折算：
+  // 增/减词 + 数量不超过现值 → prev±count；「改成/换成/只要」仍是绝对数；count=0（清空）是绝对数。
+  const plusDelta =
+    /(再加?|多[放摆加]|添|补[上充])/u.test(message) && !/(改成|换成|改为|只要|就放)/u.test(message);
+  const minusDelta =
+    /(减[少去掉]?|少[放摆]|拿掉|撤掉|去掉|清空)/u.test(message) && !/(改成|换成|改为)/u.test(message);
+  const itemsAfterDelta = (facts.items ?? []).map((item) => {
+    if (typeof item.count !== "number" || typeof item.query !== "string" || item.count === 0)
+      return item;
+    if (plusDelta === minusDelta) return item; // 都不是或都是：不猜，按绝对数走原校验
+    const prev = state.brief.items.find(
+      (i) =>
+        i.query === item.query &&
+        typeof i.count === "number" &&
+        (i.zone === item.zone || !i.zone || !item.zone),
+    );
+    if (!prev || item.count > prev.count) return item;
+    return {
+      ...item,
+      count: plusDelta ? prev.count + item.count : Math.max(0, prev.count - item.count),
+    };
+  });
+  const deltaAdjusted = new Set<unknown>(
+    itemsAfterDelta.filter((item, index) => item !== (facts.items ?? [])[index]),
+  );
   // 同一分区同一物料、数量与已确认的完全一致时，视为沿用旧数字（不是在编新数字）；
   // 只有数量变了才要求本句依据。用户补一句「放在摆摊区」不该把上一句的 1000 张抹掉。
   const sameQuantity = (item: { zone?: string; query?: string; count?: number }) =>
@@ -168,8 +194,13 @@ export function mergeOutdoorFacts(
         i.count === item.count &&
         (i.zone === item.zone || !i.zone),
     );
-  for (const item of [...(facts.items ?? []), ...(facts.people ?? [])])
-    if (!evidencedCount(item.evidence, item.count) && !sameQuantity(item))
+  for (const item of [...itemsAfterDelta, ...(facts.people ?? [])])
+    if (
+      !deltaAdjusted.has(item) &&
+      item.count !== 0 &&
+      !evidencedCount(item.evidence, item.count) &&
+      !sameQuantity(item)
+    )
       throw new Error(
         "物件/岗位数量缺少本句数字依据，请明确总数量，未猜测或应用。",
       );
@@ -194,14 +225,14 @@ export function mergeOutdoorFacts(
       // 2026-11-14：分区物件清单是「整区语义」——本轮提到哪个分区，该区清单整区替换
       //（「舞台区放 1 个舞台」意味着该区就这 1 项，残留的旧物件如被撤掉的音响不清会一直报错）。
       items: (() => {
-        const touchedZones = new Set((facts.items ?? []).map((i) => i.zone));
+        const touchedZones = new Set(itemsAfterDelta.map((i) => i.zone));
         // 2026-11-17：还没定分区的占位条目（zone=""）在补上分区后被吸收，
         // 不然会留下一条「不在画布上」的幽灵需求，每轮都报同一个错。
         const absorbed = (i: { zone: string; query: string }) =>
-          !i.zone && (facts.items ?? []).some((f) => f.query === i.query);
+          !i.zone && itemsAfterDelta.some((f) => f.query === i.query);
         return [
           ...state.brief.items.filter((i) => !touchedZones.has(i.zone) && !absorbed(i)),
-          ...(facts.items ?? []),
+          ...itemsAfterDelta,
         ];
       })(),
       people: merge(
