@@ -16,8 +16,9 @@ const LUX_BASE = 'https://api.aholo.ai/global';
 const WORLD_BASE = 'https://api.aholo3d.cn';
 const MAX_BODY_BYTES = 7 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-// 物件 GLB 保持 10 MiB；3DGS 场景（SPZ/PLY）本来就是几十 MB 级，按整包上限收，落盘后才分类型复核。
-const MAX_GLB_BYTES = 10 * 1024 * 1024;
+// 物件 GLB 走 32 MiB（与生产一致）：Lux3D G1 的 textured.glb 实测 10.06 MiB，10 MiB 门槛会把它挡在门外。
+// 3DGS 场景（SPZ/PLY）本来就是几十 MB 级，按整包上限收，落盘后才分类型复核。
+const MAX_GLB_BYTES = 32 * 1024 * 1024;
 const MAX_SPLAT_BYTES = 150 * 1024 * 1024;
 // 场景包走公网 COS 可能几十 MB，60 秒会把还在下载的任务掐断。
 const ASSET_TIMEOUT_MS = 300_000;
@@ -338,8 +339,8 @@ export function createServer({
     const bytes = Buffer.concat(chunks, size);
     const kind = Object.keys(ASSET_KINDS).find(name => ASSET_KINDS[name].matches(bytes));
     if (!kind) throw new HttpError(415, '产物不是 GLB / SPZ / PLY，未落盘');
-    // 物件模型仍守着原来的 10 MiB 门槛：客户端加载器按它设计，场景包才允许更大。
-    if (kind === 'glb' && bytes.length > MAX_GLB_BYTES) throw new HttpError(413, 'GLB 超过 10 MiB，未落盘');
+    // 物件模型守 32 MiB（与生产入库上限一致）：客户端加载器与资产库都按这一档收，场景包才允许更大。
+    if (kind === 'glb' && bytes.length > MAX_GLB_BYTES) throw new HttpError(413, 'GLB 超过 32 MiB，未落盘');
     const assetId = randomUUID();
     await assets.save(assetId, kind, bytes);
     return { assetId, kind, bytes: bytes.length, url: `/asset/${assetId}.${kind}` };
