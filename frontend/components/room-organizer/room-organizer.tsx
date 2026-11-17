@@ -233,7 +233,7 @@ import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { GmCompassHost } from './components/gm-compass-host';
 import { SpacePanel } from './panels/space-panel';
-import { type ShareMenuActions } from './panels/share-menu';
+import { SHARE_READ_ONLY_LINE, sharePublishReadOnly, type ShareMenuActions } from './panels/share-menu';
 import { type ServerShare } from './lib/share-records';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
@@ -1026,7 +1026,7 @@ useEffect(() => {
     if (!snapshot.user || snapshot.user.is_anonymous) throw new Error('登录后再发布。');
     const projectId = snapshot.project?.id ?? layoutStore.getState().layout.id;
     if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
-    if (snapshot.writeBlocked) throw new Error('这个项目现在是只读，取回编辑权后再发布。');
+    if (snapshot.writeBlocked) throw new Error(SHARE_READ_ONLY_LINE);
     if (!Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再发布。');
     if (snapshot.dirty) {
       const pendingLocal = [...localAssetIdsInLayout(layoutStore.getState().layout)]
@@ -4468,6 +4468,7 @@ useEffect(() => {
     onExportCsv: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportCsv() : undefined,
     onExportGeoJson: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportGeoJson() : undefined,
     onPrintDeck: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportPdf() : undefined,
+    readOnly: sharePublishReadOnly(controller.getSnapshot(), layoutStore.getState().layout.id),
   };
 
   return (

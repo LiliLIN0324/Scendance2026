@@ -9,13 +9,16 @@
  */
 import QRCode from 'qrcode';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { readBingoSnapshot } from '../lib/bingo-status';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { convertMetres } from '../lib/display-units';
 import { REVIEW_MARK_CHANGED_EVENT } from '../lib/review-share';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
-import { SharePanel, type ShareExportEntry, type ShareTab } from './share-panel';
+import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
+
+export { SHARE_READ_ONLY_LINE };
 
 export interface PublishedLink {
   /** 手机打开即可看的只读方案页。 */
@@ -50,6 +53,46 @@ export interface ShareMenuActions {
   onRevokeShare?(shareId: string): Promise<void>;
   /** 抓当前画布真实一帧当预览（户外 2D/3D、室内各走各的抓帧句柄）；抓不到时卡片退回示意图。 */
   onCapturePreview?(): Promise<string | null>;
+  /**
+   * 已登录、方案已挂上项目、但没有编辑权。
+   * 未发布页不给绿色「发布并复制链接」，只留只读说明。
+   */
+  readOnly?: boolean;
+}
+
+/**
+ * 发布按钮要不要收成只读说明。
+ * 跟发布动作的判断同一条：没连上、没登录、方案还没挂项目时仍走各自的提示，不算这条只读。
+ */
+export function sharePublishReadOnly(snapshot: {
+  configured: boolean;
+  user: { is_anonymous?: boolean } | null;
+  project: { id?: string | null } | null;
+  writeBlocked: boolean;
+}, layoutId?: string): boolean {
+  if (!snapshot.configured || !snapshot.user || snapshot.user.is_anonymous) return false;
+  const projectId = snapshot.project?.id || layoutId;
+  if (!projectId) return false;
+  return snapshot.writeBlocked;
+}
+
+/** Bingo 行右侧用产品已有的三态，不另起「已送」。 */
+export function shareBingoStatus(
+  projectId: string | undefined,
+  sentNow: boolean,
+  storage: { getItem(key: string): string | null } | null,
+): ShareBingoStatus {
+  let returned = false;
+  let waiting = false;
+  try {
+    const snap = readBingoSnapshot(storage);
+    const mine = projectId ? snap.plans.filter(plan => plan.projectKey === projectId) : [];
+    returned = mine.some(plan => plan.returned);
+    waiting = mine.length > 0;
+  } catch { /* 读不到记录时只看这一次有没有送出 */ }
+  if (returned) return '已回执';
+  if (waiting || sentNow) return '待评';
+  return '待发';
 }
 
 export interface PlanOutline {
@@ -132,6 +175,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [bingoSent, setBingoSent] = useState(false);
+  const [bingoRev, setBingoRev] = useState(0);
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
@@ -159,11 +203,19 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   }, [projectId]);
 
   useEffect(() => {
-    const sync = () => setBingoSent(bingoMarked(projectId));
-    sync();
+    setBingoSent(false);
+    setBingoRev(value => value + 1);
+    const sync = () => setBingoRev(value => value + 1);
     window.addEventListener(REVIEW_MARK_CHANGED_EVENT, sync);
     return () => window.removeEventListener(REVIEW_MARK_CHANGED_EVENT, sync);
   }, [projectId]);
+
+  // 首屏与服务端都先待发，挂上后再读本机记录，避免注水时状态对不上。
+  const bingoStatus = shareBingoStatus(
+    projectId,
+    bingoSent,
+    bingoRev > 0 && typeof localStorage !== 'undefined' ? localStorage : null,
+  );
 
   useEffect(() => {
     if (!open) return undefined;
@@ -218,6 +270,10 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   };
 
   const publish = async () => {
+    if (actions?.readOnly) {
+      setNotice(SHARE_READ_ONLY_LINE);
+      return;
+    }
     if (!actions || busy) {
       setNotice(actions ? '' : '分享还没接到工作台。');
       return;
@@ -251,6 +307,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
       const copied = await copyText(result.url);
       setBingoSent(true);
+      setBingoRev(value => value + 1);
       setNotice(copied ? '评审链接已复制。' : '评审链接已生成，复制没成功，请再试一次。');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
@@ -292,7 +349,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       published={published}
       busy={busy}
       notice={notice}
-      bingoStatus={bingoSent ? '已送' : '待发'}
+      bingoStatus={bingoStatus}
+      readOnly={Boolean(actions?.readOnly)}
       qrOpen={qrOpen}
       qrSvg={qrSvg}
       exports={exports}
@@ -332,7 +390,6 @@ function ShareArrow(): JSX.Element {
 }
 
 const LINK_KEY = 'scendance.publishedLink.v1.';
-const MARK_KEY = 'scendance.reviewMark.v1';
 
 function readPublishedLink(projectId?: string): PublishedLink | null {
   if (!projectId) return null;
@@ -355,20 +412,6 @@ function writePublishedLink(projectId: string | undefined, link: PublishedLink):
 function clearPublishedLink(projectId: string | undefined): void {
   if (!projectId) return;
   try { localStorage.removeItem(LINK_KEY + projectId); } catch { /* 清不掉就只在这一次把卡片退回未发布 */ }
-}
-
-/** Bingo 标记写在 review-share 的本机键里。只看项目是否已有记录，不解析链接正文。 */
-function bingoMarked(projectId?: string): boolean {
-  if (!projectId) return false;
-  try {
-    const raw = localStorage.getItem(MARK_KEY);
-    if (!raw) return false;
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.some(entry => {
-      if (!entry || typeof entry !== 'object') return false;
-      return (entry as { projectKey?: unknown }).projectKey === projectId;
-    });
-  } catch { return false; }
 }
 
 function titleOf(layout?: RoomLayout): string {

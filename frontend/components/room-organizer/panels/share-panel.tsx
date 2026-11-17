@@ -17,6 +17,10 @@ export interface ShareExportEntry {
 
 const OPEN_LINE = '打开即可查看场地、分区和尺度，页里可看 3D。';
 const PUBLISH_LINE = '发布后即可查看场地、分区和尺度，页里可看 3D。';
+/** 未发布且项目只读时的页脚。有这句就不再给可点的绿色发布按钮。 */
+export const SHARE_READ_ONLY_LINE = '这个项目现在是只读，取回编辑权后再发布。';
+
+export type ShareBingoStatus = '待发' | '待评' | '已回执';
 
 /** 链接行里给人看的地址：去掉协议，超长截断。复制仍用完整 URL。 */
 export function displayShareUrl(url: string, max = 32): string {
@@ -37,6 +41,7 @@ export function SharePanel({
   busy,
   notice,
   bingoStatus,
+  readOnly = false,
   qrOpen,
   qrSvg,
   exports,
@@ -52,7 +57,9 @@ export function SharePanel({
   published: { url: string; revision: number } | null;
   busy: boolean;
   notice: string;
-  bingoStatus: '待发' | '已送';
+  bingoStatus: ShareBingoStatus;
+  /** 已登录但没有编辑权。未发布页只留只读说明，不放绿色发布按钮。 */
+  readOnly?: boolean;
   qrOpen: boolean;
   qrSvg: string;
   exports: ShareExportEntry[];
@@ -62,6 +69,7 @@ export function SharePanel({
   onCopy(): void;
   onToggleQr(): void;
 }): JSX.Element {
+  const publishBlocked = !published && (readOnly || notice === SHARE_READ_ONLY_LINE);
   return <div id="tool-share-menu" className="sc-tool-pop sc-share-panel" role="dialog" aria-label="分享、发布与导出" data-testid="share-panel">
     <div className="sc-share-tabs" role="tablist" aria-label="分享、发布、导出">
       <Tab id="share" selected={tab === 'share'} onSelect={onTab}>分享</Tab>
@@ -70,28 +78,14 @@ export function SharePanel({
     </div>
 
     {tab === 'share' && <section className="sc-share-body" role="tabpanel" aria-label="分享" id="share-panel-share">
-      <div className="sc-share-heading">
-        <MarkIcon />
-        <h2>{title}</h2>
-      </div>
+      <ShareHeading icon={<MarkIcon />} title={title} />
       <p className="sc-share-desc">{OPEN_LINE}</p>
-      <button type="button" className="sc-share-audience" aria-label="发给谁" disabled={busy} onClick={onIssueAudience}>
-        <PinIcon />
-        <span className="sc-share-audience-label">送评审方 · 可批注</span>
-        <ChevronIcon />
-      </button>
-      <button type="button" className="sc-share-audience" aria-label={`送到 Bingo，${bingoStatus}`} disabled={busy} onClick={onSendBingo}>
-        <RingIcon />
-        <span className="sc-share-audience-label">送到 Bingo</span>
-        <span className="sc-share-bingo-status">{bingoStatus}</span>
-      </button>
+      <ShareActionRow label="送评审方" status="可批注" icon={<PinIcon />} ariaLabel="发给谁" disabled={busy} onClick={onIssueAudience} />
+      <ShareActionRow label="送到 Bingo" status={bingoStatus} icon={<RingIcon />} ariaLabel={`送到 Bingo，${bingoStatus}`} disabled={busy} onClick={onSendBingo} />
     </section>}
 
-    {tab === 'publish' && <section className="sc-share-body" role="tabpanel" aria-label="发布" id="share-panel-publish" data-published={published ? 'true' : 'false'}>
-      <div className="sc-share-heading">
-        <GlobeIcon />
-        <h2>发布到网页</h2>
-      </div>
+    {tab === 'publish' && <section className="sc-share-body" role="tabpanel" aria-label="发布" id="share-panel-publish" data-published={published ? 'true' : 'false'} data-readonly={publishBlocked ? 'true' : 'false'}>
+      <ShareHeading icon={<GlobeIcon />} title="发布到网页" />
       <p className="sc-share-desc">{published ? OPEN_LINE : PUBLISH_LINE}</p>
       {published ? <div className="sc-share-link" data-testid="share-link-row">
         <span className="sc-share-link-text" title={published.url}>{displayShareUrl(published.url)}</span>
@@ -112,15 +106,16 @@ export function SharePanel({
             ? <div className="sc-share-qrpop-code" role="img" aria-label="方案二维码" dangerouslySetInnerHTML={{ __html: qrSvg }} />
             : <p className="sc-share-desc">二维码还在生成。</p>}
         </div>}
-      </div> : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onPublish}>
-        {busy ? '正在发布…' : '发布并复制链接'}
-      </button>}
+      </div> : publishBlocked ? <p className="sc-share-readonly" role="status" data-testid="share-readonly">{SHARE_READ_ONLY_LINE}</p>
+        : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onPublish}>
+          {busy ? '正在发布…' : '发布并复制链接'}
+        </button>}
     </section>}
 
     {tab === 'export' && <section className="sc-share-body" role="tabpanel" aria-label="导出" id="share-panel-export">
-      {exports.length ? <ul className="sc-share-exports">
+      {exports.length ? <ul className="sc-share-exports" data-align="start">
         {exports.map(entry => <li key={entry.id}>
-          <button type="button" className="sc-share-export" onClick={entry.onSelect}>
+          <button type="button" className="sc-share-export" data-align="start" onClick={entry.onSelect}>
             <ExportGlyph icon={entry.icon} />
             <span>{entry.label}</span>
           </button>
@@ -128,8 +123,34 @@ export function SharePanel({
       </ul> : <p className="sc-share-desc">当前方案没有可导出的文件。</p>}
     </section>}
 
-    {notice && <p className="sc-share-note" role="status">{notice}</p>}
+    {notice && notice !== SHARE_READ_ONLY_LINE && <p className="sc-share-note" role="status">{notice}</p>}
   </div>;
+}
+
+/** 图标和标题收成一组靠左，避免被分享页的 space-between 拆到卡片两端。 */
+function ShareHeading({ icon, title }: { icon: JSX.Element; title: string }): JSX.Element {
+  return <div className="sc-share-heading" data-layout="grouped">
+    <div className="sc-share-titlelock">
+      {icon}
+      <h2>{title}</h2>
+    </div>
+  </div>;
+}
+
+/** 分享页两行同一套：左图标贴标题，右侧状态。 */
+function ShareActionRow({ label, status, icon, ariaLabel, disabled, onClick }: {
+  label: string;
+  status: string;
+  icon: JSX.Element;
+  ariaLabel: string;
+  disabled: boolean;
+  onClick(): void;
+}): JSX.Element {
+  return <button type="button" className="sc-share-row" data-align="start" aria-label={ariaLabel} disabled={disabled} onClick={onClick}>
+    {icon}
+    <span className="sc-share-row-label">{label}</span>
+    <span className="sc-share-row-status">{status}</span>
+  </button>;
 }
 
 function Tab({ id, selected, onSelect, children }: {
@@ -176,12 +197,6 @@ function PinIcon(): JSX.Element {
 function RingIcon(): JSX.Element {
   return <svg className="sc-share-glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <circle cx="8" cy="8" r="4.2" stroke="currentColor" strokeWidth="1.3" />
-  </svg>;
-}
-
-function ChevronIcon(): JSX.Element {
-  return <svg className="sc-share-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-    <path d="M5.2 3.2 9 7l-3.8 3.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
 }
 
