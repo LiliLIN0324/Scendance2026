@@ -11958,9 +11958,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </>
             ) : (
             <>
-              {/* 2026-11-18 用户反馈「这里的搜索很土」：对齐画布搜地点的灵动岛视觉语言
-                  （胶囊 999 圆角、浮起双层阴影、focus 光环），排布开关收进胶囊右侧圆钮。 */}
-              <div className="sc-catalog-search" style={{ marginTop: PLANNING_SPACING.xs }}>
+              {/* 2026-11-18 用户反馈：排布切换的视觉要和顶部「添加物件/已放置物件」分段一致——
+                  直接复用同一颗分段范式 class（墨黑分段），不另造样式。 */}
+              <nav className="sc-left-context is-oneplan-tabs" aria-label="目录排布">
+                <button type="button" aria-pressed={!oneplanGrid} title="单列排布" onClick={() => setOneplanGrid(false)}>单列</button>
+                <button type="button" data-testid="catalog-grid-toggle" aria-pressed={oneplanGrid} title="一行多列排布（全目录生效）" onClick={() => setOneplanGrid(true)}>网格</button>
+              </nav>
+              {/* 灵动岛搜索：胶囊 999 圆角、浮起双层阴影、focus 光环，对齐画布搜地点的视觉语言。 */}
+              <div className="sc-catalog-search">
                 <Search size={15} aria-hidden className="sc-catalog-search-icon" />
                 <input
                   value={libraryQuery}
@@ -11968,16 +11973,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   placeholder="搜索物件（中文 / English / slug）"
                   aria-label="搜索物件"
                 />
-                <button
-                  type="button"
-                  className="sc-catalog-search-toggle"
-                  data-testid="catalog-grid-toggle"
-                  aria-pressed={oneplanGrid}
-                  title="切换目录排布：单列 / 一行多列（全目录生效）"
-                  onClick={() => setOneplanGrid(!oneplanGrid)}
-                >
-                  {oneplanGrid ? '▦' : '☰'}
-                </button>
               </div>
                 <div style={{ marginTop: PLANNING_SPACING.xs, overflowY: 'auto', overflowX: 'hidden', paddingRight: 2, ...(panelInline ? { flex: 1, minHeight: 0 } : { maxHeight: 430 }) }}>
                   {libraryQuery.trim() !== '' ? (

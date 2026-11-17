@@ -3063,29 +3063,8 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-catalog-search input:focus-visible {
   outline: 0;
 }
-.sc-catalog-search-toggle {
-  all: unset;
-  cursor: pointer;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  color: var(--sc-muted, #71767e);
-  font-size: 13px;
-  line-height: 1;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-.sc-catalog-search-toggle:hover {
-  background: rgba(20, 20, 22, 0.06);
-  color: var(--sc-ink, #141416);
-}
-.sc-catalog-search-toggle[aria-pressed='true'] {
-  background: var(--sc-ink, #141416);
-  color: #ffffff;
-}
+/* 排布开关不在这里：复用顶部「添加物件/已放置物件」的分段范式 class
+   （.sc-left-context.is-oneplan-tabs），保证视觉完全一致。 */
 .sc-plan-place-search-options {
   list-style: none;
   margin: 6px 0 0;
